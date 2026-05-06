@@ -1,0 +1,81 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/leaven",
+    "crates/leaven-core",
+    "crates/leaven-engine",
+    "crates/leaven-std",
+    "crates/leaven-workspace",
+    "crates/leaven-derive",
+]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/darinkishore/leaven"
+
+[profile.release]
+debug = "line-tables-only"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+
+# Allowed pedantic lints (mirrors papers_rs)
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+map_unwrap_or = "allow"
+implicit_hasher = "allow"
+if_not_else = "allow"
+default_trait_access = "allow"
+similar_names = "allow"
+literal_string_with_formatting_args = "allow"
+
+# Allowed nursery lints (mirrors papers_rs)
+option_if_let_else = "allow"
+suboptimal_flops = "allow"
+imprecise_flops = "allow"
+significant_drop_tightening = "allow"
+missing_const_for_fn = "allow"
+string_lit_as_bytes = "allow"
+equatable_if_let = "allow"
+
+[workspace.dependencies]
+leaven-core = { path = "crates/leaven-core", version = "0.0.0" }
+leaven-engine = { path = "crates/leaven-engine", version = "0.0.0" }
+leaven-std = { path = "crates/leaven-std", version = "0.0.0" }
+leaven-workspace = { path = "crates/leaven-workspace", version = "0.0.0" }
+leaven-derive = { path = "crates/leaven-derive", version = "0.0.0" }
+
+# error handling
+thiserror = "2"
+
+# serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["raw_value"] }
+
+# ids and time
+uuid = { version = "1", features = ["serde", "v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+
+# hashing
+sha2 = "0.10"
+hex = "0.4"
+
+# ordered maps
+indexmap = { version = "2", features = ["serde"] }
+
+# tracing
+tracing = "0.1"
+
+# testing
+proptest = "1"
+expect-test = "1"
+trybuild = "1"
