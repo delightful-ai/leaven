@@ -1223,6 +1223,10 @@ pub struct Cost {
 }
 ```
 
+`Amount` values are finite and non-negative by construction. Constructors for
+costs and budgets must reject `NaN`, infinities, and negative values before
+they can enter budget comparison or durable cost snapshots.
+
 Standard units:
 
 ```text
@@ -1646,6 +1650,10 @@ DynPreferenceRelation
 DynCallback
 DynStopper
 ```
+
+TODO(renderer-erasure): `DynRenderer` remains part of the planned registry
+surface, but it must not be exposed as an empty marker trait. Define the erased
+value/target/view contract and add stage trait contract tests before exposing it.
 
 Adapters exist from static traits to dyn traits.
 

@@ -11,4 +11,16 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
-leaven-core = { workspace = true }
+leaven-artifact-git = { workspace = true, optional = true }
+leaven-artifact-jj = { workspace = true, optional = true }
+leaven-artifacts = { workspace = true }
+leaven-evidence = { workspace = true }
+leaven-population = { workspace = true }
+leaven-preference = { workspace = true }
+leaven-render = { workspace = true }
+leaven-surface = { workspace = true }
+
+[features]
+default = []
+git = ["dep:leaven-artifact-git"]
+jj = ["dep:leaven-artifact-jj"]

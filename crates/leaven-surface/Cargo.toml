@@ -1,0 +1,16 @@
+[package]
+name = "leaven-surface"
+description = "Explicit edit and read surfaces over Leaven artifacts."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+leaven-core = { workspace = true }
+leaven-kernel = { workspace = true }
+thiserror = { workspace = true }

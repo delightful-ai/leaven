@@ -1,6 +1,6 @@
 ---
 name: leaven-type-design
-description: Use when changing Leaven domain state, IDs, enums, validated data, state transitions, option-vs-sum choices, or any API where a Rust type could preserve more truth.
+description: Use when changing Leaven domain state, IDs, enums, validated data, state transitions, option-vs-sum choices, provenance, or APIs where Rust types can preserve truth.
 ---
 
 
@@ -60,4 +60,3 @@ The homomorphism principle, but felt viscerally. Redundant representations creat
 This is your knife for carving reality at its joints. It tells you when to unify, when to split. It's not philosophy - it's empirical. Watch what your system can observe and let that tell you what's real.
 
 </principles>
-

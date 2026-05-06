@@ -1,0 +1,16 @@
+[package]
+name = "leaven-store-inline"
+description = "Leaven crate skeleton for leaven-store-inline."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+leaven-kernel = { workspace = true }
+leaven-store = { workspace = true }
+parking_lot = { workspace = true }

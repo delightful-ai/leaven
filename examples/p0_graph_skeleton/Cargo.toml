@@ -1,0 +1,14 @@
+[package]
+name = "p0_graph_skeleton"
+description = "Leaven P0 graph skeleton example."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+leaven = { workspace = true }

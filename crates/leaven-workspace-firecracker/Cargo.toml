@@ -1,0 +1,15 @@
+[package]
+name = "leaven-workspace-firecracker"
+description = "Leaven crate skeleton for leaven-workspace-firecracker."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+leaven-kernel = { workspace = true }
+leaven-workspace = { workspace = true }

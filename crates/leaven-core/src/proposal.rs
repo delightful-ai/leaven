@@ -12,15 +12,11 @@
 //! this proposal's content; [`InfoRef`] entries record what the
 //! proposer *read* without becoming lineage.
 
-use serde::{Deserialize, Serialize};
-
 use crate::artifact::Artifact;
-use crate::ids::{AssessmentId, CandidateId, ProposalBatchId, ProposalId};
-use crate::metadata::MetadataBag;
 use crate::problem::OptimizationProblem;
+use leaven_kernel::{AssessmentId, CandidateId, MetadataBag, ProposalId};
 
 /// A single proposal record.
-#[derive(Clone, Debug)]
 pub struct Proposal<P: OptimizationProblem> {
     pub effect: ProposalEffect<P>,
     pub provenance: ProposalProvenance,
@@ -28,8 +24,121 @@ pub struct Proposal<P: OptimizationProblem> {
     pub metadata: MetadataBag,
 }
 
+impl<P: OptimizationProblem> Clone for Proposal<P> {
+    fn clone(&self) -> Self {
+        Self {
+            effect: self.effect.clone(),
+            provenance: self.provenance.clone(),
+            annotations: self.annotations.clone(),
+            metadata: self.metadata.clone(),
+        }
+    }
+}
+
+impl<P: OptimizationProblem> Proposal<P> {
+    #[must_use]
+    pub fn create(artifact: P::Artifact) -> ProposalBuilder<P> {
+        ProposalBuilder {
+            effect: ProposalEffect::Create { artifact },
+            provenance: ProposalProvenance::new(CausalInputs::None),
+            annotations: None,
+            metadata: MetadataBag::new(),
+        }
+    }
+
+    #[must_use]
+    pub fn aggregate(parents: Vec<CandidateId>, artifact: P::Artifact) -> ProposalBuilder<P> {
+        ProposalBuilder {
+            effect: ProposalEffect::Create { artifact },
+            provenance: ProposalProvenance::new(CausalInputs::NAry(parents)),
+            annotations: None,
+            metadata: MetadataBag::new(),
+        }
+    }
+
+    #[must_use]
+    pub fn mutate(
+        target: CandidateId,
+        change: <P::Artifact as Artifact>::Change,
+    ) -> ProposalBuilder<P> {
+        ProposalBuilder {
+            effect: ProposalEffect::Change { target, change },
+            provenance: ProposalProvenance::new(CausalInputs::Single(target)),
+            annotations: None,
+            metadata: MetadataBag::new(),
+        }
+    }
+
+    #[must_use]
+    pub fn merge(
+        left: CandidateId,
+        right: CandidateId,
+        change: <P::Artifact as Artifact>::Change,
+    ) -> ProposalBuilder<P> {
+        ProposalBuilder {
+            effect: ProposalEffect::Change {
+                target: left,
+                change,
+            },
+            provenance: ProposalProvenance::new(CausalInputs::Pair(left, right)),
+            annotations: None,
+            metadata: MetadataBag::new(),
+        }
+    }
+}
+
+pub struct ProposalBuilder<P: OptimizationProblem> {
+    effect: ProposalEffect<P>,
+    provenance: ProposalProvenance,
+    annotations: Option<P::ProposalAnnotations>,
+    metadata: MetadataBag,
+}
+
+impl<P: OptimizationProblem> Clone for ProposalBuilder<P> {
+    fn clone(&self) -> Self {
+        Self {
+            effect: self.effect.clone(),
+            provenance: self.provenance.clone(),
+            annotations: self.annotations.clone(),
+            metadata: self.metadata.clone(),
+        }
+    }
+}
+
+impl<P: OptimizationProblem> ProposalBuilder<P> {
+    #[must_use]
+    pub fn informed_by(mut self, refs: impl IntoIterator<Item = InfoRef>) -> Self {
+        self.provenance.informed_by.extend(refs);
+        self
+    }
+
+    #[must_use]
+    pub fn annotations(mut self, annotations: P::ProposalAnnotations) -> Self {
+        self.annotations = Some(annotations);
+        self
+    }
+
+    #[must_use]
+    pub fn metadata(mut self, metadata: MetadataBag) -> Self {
+        self.metadata = metadata;
+        self
+    }
+
+    #[must_use]
+    pub fn build(self) -> Proposal<P>
+    where
+        P::ProposalAnnotations: Default,
+    {
+        Proposal {
+            effect: self.effect,
+            provenance: self.provenance,
+            annotations: self.annotations.unwrap_or_default(),
+            metadata: self.metadata,
+        }
+    }
+}
+
 /// What this proposal does to the graph if applied successfully.
-#[derive(Clone, Debug)]
 pub enum ProposalEffect<P: OptimizationProblem> {
     /// Brand-new authored artifact. Used by Meta-Harness style
     /// optimizers, fresh program synthesis, and cases where the
@@ -44,6 +153,20 @@ pub enum ProposalEffect<P: OptimizationProblem> {
         target: CandidateId,
         change: <P::Artifact as Artifact>::Change,
     },
+}
+
+impl<P: OptimizationProblem> Clone for ProposalEffect<P> {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Create { artifact } => Self::Create {
+                artifact: artifact.clone(),
+            },
+            Self::Change { target, change } => Self::Change {
+                target: *target,
+                change: change.clone(),
+            },
+        }
+    }
 }
 
 /// Provenance of a proposal.
@@ -116,12 +239,10 @@ impl CausalInputs {
 
 /// One thing the proposer read while producing the proposal. Not
 /// lineage; it never affects which candidates are considered parents.
-#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
-#[serde(tag = "kind", content = "id", rename_all = "snake_case")]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum InfoRef {
     Candidate(CandidateId),
     Proposal(ProposalId),
-    ProposalBatch(ProposalBatchId),
     Assessment(AssessmentId),
     External(ExternalRef),
 }
@@ -129,18 +250,27 @@ pub enum InfoRef {
 /// Reference to something outside the run graph (a paper, a model
 /// checkpoint, a prior run's artefact). The cold core does not
 /// interpret it; downstream tooling does.
-#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct ExternalRef {
     pub kind: String,
     pub id: String,
 }
 
 /// Sibling proposals from a single proposer call.
-#[derive(Clone, Debug)]
 pub struct ProposalBatch<P: OptimizationProblem> {
     pub proposals: Vec<Proposal<P>>,
     pub semantics: ProposalBatchSemantics,
     pub metadata: MetadataBag,
+}
+
+impl<P: OptimizationProblem> Clone for ProposalBatch<P> {
+    fn clone(&self) -> Self {
+        Self {
+            proposals: self.proposals.clone(),
+            semantics: self.semantics,
+            metadata: self.metadata.clone(),
+        }
+    }
 }
 
 /// What a sibling group of proposals means.
@@ -148,7 +278,7 @@ pub struct ProposalBatch<P: OptimizationProblem> {
 /// `Ordered` was considered and rejected: the optimizer rhythm already
 /// covers ordered dependencies via multiple optimizer steps. Re-add if
 /// a real prototype proves otherwise.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub enum ProposalBatchSemantics {
     /// Independent siblings produced from one proposer context. Any
     /// subset (or none) may be applied.
@@ -157,4 +287,10 @@ pub enum ProposalBatchSemantics {
     /// A pool the optimizer may sample from; the proposer expects only
     /// some to be applied or evaluated.
     CandidatePool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProposalEffectKind {
+    Create,
+    Change,
 }

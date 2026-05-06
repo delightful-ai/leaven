@@ -1,0 +1,21 @@
+[package]
+name = "leaven-agentic"
+description = "Leaven crate skeleton for leaven-agentic."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+leaven-kernel = { workspace = true }
+leaven-core = { workspace = true }
+leaven-surface = { workspace = true }
+leaven-store = { workspace = true }
+leaven-workspace = { workspace = true }
+leaven-engine = { workspace = true }
+leaven-agent = { workspace = true }
+leaven-render = { workspace = true }

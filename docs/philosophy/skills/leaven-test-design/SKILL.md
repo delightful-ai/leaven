@@ -1,6 +1,6 @@
 ---
 name: leaven-test-design
-description: Use when adding, moving, reviewing, or deleting Leaven tests, choosing law/example/scenario/regression coverage, designing trait contract suites, or deciding local versus full verification.
+description: Use when changing Leaven tests, proof strategy, law/example/scenario/regression coverage, trait contract suites, fixtures, test placement, or local versus full verification.
 ---
 
 # Tests: Collapsing the Remaining Space

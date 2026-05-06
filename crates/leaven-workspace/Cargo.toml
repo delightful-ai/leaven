@@ -11,4 +11,6 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
-leaven-core = { workspace = true }
+futures = { workspace = true }
+leaven-kernel = { workspace = true }
+thiserror = { workspace = true }

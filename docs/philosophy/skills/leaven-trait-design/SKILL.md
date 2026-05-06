@@ -1,6 +1,6 @@
 ---
 name: leaven-trait-design
-description: Use when adding, extracting, splitting, freezing, extending, or reviewing Leaven Rust traits, capability seams, trait laws, default methods, or shared implementations.
+description: Use when changing Leaven Rust traits, capability seams, trait laws, cold versus hot trait boundaries, default methods, shared implementations, or downstream implementability.
 ---
 **Traits are how we factor the universe of possible programs.**  
 Each trait carves reality at a joint and says: *this capability can exist independently of everything else.* Good traits reveal real seams in the world. Bad traits invent seams that aren’t there, hiding connections that should be explicit and creating dependencies that shouldn’t exist.

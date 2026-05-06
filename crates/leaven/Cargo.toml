@@ -12,3 +12,39 @@ workspace = true
 
 [dependencies]
 leaven-core = { workspace = true }
+leaven-engine = { workspace = true }
+leaven-kernel = { workspace = true }
+leaven-surface = { workspace = true }
+leaven-agentic = { workspace = true, optional = true }
+leaven-artifact-git = { workspace = true, optional = true }
+leaven-artifact-jj = { workspace = true, optional = true }
+leaven-derive = { workspace = true, optional = true }
+leaven-gepa = { workspace = true, optional = true }
+leaven-lm-anthropic = { workspace = true, optional = true }
+leaven-lm-openai = { workspace = true, optional = true }
+leaven-std = { workspace = true, optional = true }
+leaven-store-sqlite = { workspace = true, optional = true }
+leaven-workspace = { workspace = true, optional = true }
+leaven-workspace-docker = { workspace = true, optional = true }
+leaven-workspace-e2b = { workspace = true, optional = true }
+leaven-workspace-local = { workspace = true, optional = true }
+
+[features]
+default = ["std", "derive", "gepa"]
+std = ["dep:leaven-std"]
+derive = ["dep:leaven-derive"]
+gepa = ["dep:leaven-gepa"]
+workspace = ["dep:leaven-workspace"]
+agentic = ["workspace", "dep:leaven-agentic"]
+git = ["dep:leaven-artifact-git", "leaven-std?/git"]
+jj = ["dep:leaven-artifact-jj", "leaven-std?/jj"]
+store-sqlite = ["dep:leaven-store-sqlite"]
+workspace-local = ["workspace", "dep:leaven-workspace-local"]
+workspace-docker = ["workspace", "dep:leaven-workspace-docker"]
+workspace-e2b = ["workspace", "dep:leaven-workspace-e2b"]
+lm-openai = ["dep:leaven-lm-openai"]
+lm-anthropic = ["dep:leaven-lm-anthropic"]
+
+[dev-dependencies]
+futures = { workspace = true }
+leaven-store-inline = { workspace = true }

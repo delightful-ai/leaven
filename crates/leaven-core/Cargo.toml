@@ -1,6 +1,6 @@
 [package]
 name = "leaven-core"
-description = "Cold-core types, traits, and laws for the leaven optimizer library."
+description = "Cold optimizer algebra for Leaven."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,16 +11,12 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
-thiserror = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
-uuid = { workspace = true }
 chrono = { workspace = true }
-sha2 = { workspace = true }
-hex = { workspace = true }
-indexmap = { workspace = true }
-tracing = { workspace = true }
+leaven-kernel = { workspace = true }
+serde = { workspace = true }
+smol_str = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }
 expect-test = { workspace = true }
+futures = { workspace = true }

@@ -1,0 +1,23 @@
+error: #[derive(Artifact)] is reserved by leaven-derive but is not implemented yet; write the trait impl by hand until the derive contract lands.
+ --> tests/ui/reserved_derives.rs:6:17
+  |
+6 | #[derive(Clone, DeriveArtifact)]
+  |                 ^^^^^^^^^^^^^^
+  |
+  = note: this error originates in the derive macro `DeriveArtifact` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error: #[derive(ContentAddressed)] is reserved by leaven-derive but is not implemented yet; write the trait impl by hand until the derive contract lands.
+ --> tests/ui/reserved_derives.rs:9:17
+  |
+9 | #[derive(Clone, DeriveContentAddressed)]
+  |                 ^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: this error originates in the derive macro `DeriveContentAddressed` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error: #[derive(EditSurface)] is reserved by leaven-derive but is not implemented yet; write the trait impl by hand until the derive contract lands.
+  --> tests/ui/reserved_derives.rs:12:17
+   |
+12 | #[derive(Clone, DeriveEditSurface)]
+   |                 ^^^^^^^^^^^^^^^^^
+   |
+   = note: this error originates in the derive macro `DeriveEditSurface` (in Nightly builds, run with -Z macro-backtrace for more info)

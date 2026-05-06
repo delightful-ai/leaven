@@ -1,0 +1,18 @@
+[package]
+name = "leaven-population"
+description = "Leaven crate skeleton for leaven-population."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+leaven-kernel = { workspace = true }
+leaven-core = { workspace = true }
+leaven-engine = { workspace = true }
+leaven-evidence = { workspace = true }
+leaven-preference = { workspace = true }

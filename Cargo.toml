@@ -2,11 +2,54 @@
 resolver = "3"
 members = [
     "crates/leaven",
+    "crates/leaven-agent",
+    "crates/leaven-agent-claude-code",
+    "crates/leaven-agent-codex",
+    "crates/leaven-agent-opencode",
+    "crates/leaven-agentic",
+    "crates/leaven-artifact-git",
+    "crates/leaven-artifact-jj",
+    "crates/leaven-artifacts",
+    "crates/leaven-cuda",
     "crates/leaven-core",
+    "crates/leaven-dsrs",
     "crates/leaven-engine",
+    "crates/leaven-evidence",
+    "crates/leaven-gepa",
+    "crates/leaven-kernel",
+    "crates/leaven-lm",
+    "crates/leaven-lm-anthropic",
+    "crates/leaven-lm-local",
+    "crates/leaven-lm-mock",
+    "crates/leaven-lm-openai",
+    "crates/leaven-mipro",
+    "crates/leaven-population",
+    "crates/leaven-preference",
+    "crates/leaven-python",
+    "crates/leaven-render",
     "crates/leaven-std",
+    "crates/leaven-store",
+    "crates/leaven-store-file",
+    "crates/leaven-store-inline",
+    "crates/leaven-store-object",
+    "crates/leaven-store-sqlite",
+    "crates/leaven-surface",
+    "crates/leaven-textgrad",
+    "crates/leaven-trace",
     "crates/leaven-workspace",
+    "crates/leaven-workspace-docker",
+    "crates/leaven-workspace-e2b",
+    "crates/leaven-workspace-firecracker",
+    "crates/leaven-workspace-git",
+    "crates/leaven-workspace-k8s",
+    "crates/leaven-workspace-local",
     "crates/leaven-derive",
+    "examples/p0_graph_skeleton",
+    "examples/p1_keep_best",
+    "examples/p2_pairwise_tournament",
+    "examples/p3_gepa_parity",
+    "examples/p4_meta_harness_lite",
+    "xtask",
 ]
 
 [workspace.package]
@@ -49,10 +92,48 @@ equatable_if_let = "allow"
 
 [workspace.dependencies]
 leaven-core = { path = "crates/leaven-core", version = "0.0.0" }
+leaven = { path = "crates/leaven", version = "0.0.0", default-features = false }
 leaven-engine = { path = "crates/leaven-engine", version = "0.0.0" }
 leaven-std = { path = "crates/leaven-std", version = "0.0.0" }
 leaven-workspace = { path = "crates/leaven-workspace", version = "0.0.0" }
 leaven-derive = { path = "crates/leaven-derive", version = "0.0.0" }
+leaven-agent = { path = "crates/leaven-agent", version = "0.0.0" }
+leaven-agent-claude-code = { path = "crates/leaven-agent-claude-code", version = "0.0.0" }
+leaven-agent-codex = { path = "crates/leaven-agent-codex", version = "0.0.0" }
+leaven-agent-opencode = { path = "crates/leaven-agent-opencode", version = "0.0.0" }
+leaven-agentic = { path = "crates/leaven-agentic", version = "0.0.0" }
+leaven-artifact-git = { path = "crates/leaven-artifact-git", version = "0.0.0" }
+leaven-artifact-jj = { path = "crates/leaven-artifact-jj", version = "0.0.0" }
+leaven-artifacts = { path = "crates/leaven-artifacts", version = "0.0.0" }
+leaven-cuda = { path = "crates/leaven-cuda", version = "0.0.0" }
+leaven-dsrs = { path = "crates/leaven-dsrs", version = "0.0.0" }
+leaven-evidence = { path = "crates/leaven-evidence", version = "0.0.0" }
+leaven-gepa = { path = "crates/leaven-gepa", version = "0.0.0" }
+leaven-kernel = { path = "crates/leaven-kernel", version = "0.0.0" }
+leaven-lm = { path = "crates/leaven-lm", version = "0.0.0" }
+leaven-lm-anthropic = { path = "crates/leaven-lm-anthropic", version = "0.0.0" }
+leaven-lm-local = { path = "crates/leaven-lm-local", version = "0.0.0" }
+leaven-lm-mock = { path = "crates/leaven-lm-mock", version = "0.0.0" }
+leaven-lm-openai = { path = "crates/leaven-lm-openai", version = "0.0.0" }
+leaven-mipro = { path = "crates/leaven-mipro", version = "0.0.0" }
+leaven-population = { path = "crates/leaven-population", version = "0.0.0" }
+leaven-preference = { path = "crates/leaven-preference", version = "0.0.0" }
+leaven-python = { path = "crates/leaven-python", version = "0.0.0" }
+leaven-render = { path = "crates/leaven-render", version = "0.0.0" }
+leaven-store = { path = "crates/leaven-store", version = "0.0.0" }
+leaven-store-file = { path = "crates/leaven-store-file", version = "0.0.0" }
+leaven-store-inline = { path = "crates/leaven-store-inline", version = "0.0.0" }
+leaven-store-object = { path = "crates/leaven-store-object", version = "0.0.0" }
+leaven-store-sqlite = { path = "crates/leaven-store-sqlite", version = "0.0.0" }
+leaven-surface = { path = "crates/leaven-surface", version = "0.0.0" }
+leaven-textgrad = { path = "crates/leaven-textgrad", version = "0.0.0" }
+leaven-trace = { path = "crates/leaven-trace", version = "0.0.0" }
+leaven-workspace-docker = { path = "crates/leaven-workspace-docker", version = "0.0.0" }
+leaven-workspace-e2b = { path = "crates/leaven-workspace-e2b", version = "0.0.0" }
+leaven-workspace-firecracker = { path = "crates/leaven-workspace-firecracker", version = "0.0.0" }
+leaven-workspace-git = { path = "crates/leaven-workspace-git", version = "0.0.0" }
+leaven-workspace-k8s = { path = "crates/leaven-workspace-k8s", version = "0.0.0" }
+leaven-workspace-local = { path = "crates/leaven-workspace-local", version = "0.0.0" }
 
 # error handling
 thiserror = "2"
@@ -64,13 +145,22 @@ serde_json = { version = "1", features = ["raw_value"] }
 # ids and time
 uuid = { version = "1", features = ["serde", "v4"] }
 chrono = { version = "0.4", features = ["serde"] }
+smol_str = { version = "0.3", features = ["serde"] }
 
 # hashing
 sha2 = "0.10"
 hex = "0.4"
+blake3 = "1"
 
 # ordered maps
 indexmap = { version = "2", features = ["serde"] }
+ordered-float = { version = "4", features = ["serde"] }
+smallvec = { version = "1", features = ["serde"] }
+bytes = "1"
+parking_lot = "0.12"
+rand = "0.8"
+tokio = { version = "1", features = ["rt", "macros", "process", "fs", "time", "sync"] }
+async-trait = "0.1"
 
 # tracing
 tracing = "0.1"
@@ -79,3 +169,7 @@ tracing = "0.1"
 proptest = "1"
 expect-test = "1"
 trybuild = "1"
+futures = "0.3"
+proc-macro2 = "1"
+quote = "1"
+syn = "2"

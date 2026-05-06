@@ -1,6 +1,6 @@
 ---
 name: leaven-error-design
-description: Use when adding or changing Leaven Result surfaces, error enums, failure mapping, thiserror types, retry/display decisions, panics, or internal OneOf error plumbing.
+description: Use when changing Leaven fallible APIs, Result surfaces, error enums, failure mapping, retry/display decisions, panic boundaries, or internal OneOf error plumbing.
 ---
 # Errors: The Other Half of the Map
 
