@@ -10,11 +10,15 @@ use leaven_engine::{
     BudgetLedger, CachePolicy, CaseSet, EvaluationContext, EvaluationError, Evaluator,
     ProposalContext, ProposalError, Proposer, RunContext, RunGraph, TrustPolicy,
 };
-use leaven_gepa::{Gepa, ReflectiveMutation, SurfaceProposer};
+use leaven_gepa::{
+    CandidateSelector, Gate, GateDecision, Gepa, ImprovementOrEqual, NoRegression,
+    ParetoFrequencyWeighted, ReflectiveMutation, SelectBestCandidate, StrictImprovement,
+    SurfaceProposer,
+};
 use leaven_kernel::{
     Budget, ContentId, Cost, EvaluatorId, Fingerprint, MetadataBag, Metered, ProposerId, RunId,
 };
-use leaven_population::ParetoFrontier;
+use leaven_population::{KeepBest, ParetoFrontier, TournamentPopulation};
 use leaven_store_inline::InlineEvidenceStore;
 use leaven_surface::{EditSurface, Part, PartAddress, SurfaceError, SurfaceFingerprint};
 use proptest::prelude::*;
@@ -96,6 +100,96 @@ fn gepa_candidate_selector_is_population_backed() {
         Gepa::<SmokeProblem, PartMapSurface, ParetoFrontier>::new(PartMapSurface, frontier);
 
     assert_eq!(gepa.select_candidate(ctx.graph()), Some(seed));
+}
+
+#[test]
+fn gepa_gate_policies_preserve_score_admission_laws() {
+    let mut strict = StrictImprovement;
+    let mut equal = ImprovementOrEqual;
+    let mut no_regression = NoRegression;
+
+    assert_eq!(strict.decide(1.0, 2.0), GateDecision::Accept);
+    assert_eq!(strict.decide(1.0, 1.0), GateDecision::Reject);
+    assert!(GateDecision::Accept.is_accept());
+    assert!(!GateDecision::Reject.is_accept());
+    assert_eq!(equal.decide(1.0, 1.0), GateDecision::Accept);
+    assert_eq!(equal.decide(2.0, 1.0), GateDecision::Reject);
+    assert_eq!(no_regression.decide(3.0, 3.0), GateDecision::Accept);
+}
+
+#[test]
+fn gepa_explicit_strategies_are_owned_by_optimizer() {
+    let mut graph = RunGraph::<SmokeProblem>::new(RunId::new());
+    let mut budget = BudgetLedger::default();
+    let mut ctx = RunContext::new(&mut graph, &mut budget);
+    let seed = ctx
+        .insert_seed(
+            PartMapArtifact(BTreeMap::from([("answer".to_owned(), "draft".to_owned())])),
+            0,
+        )
+        .unwrap();
+    let mut frontier = ParetoFrontier::by_case().build();
+    frontier.observe_casewise_scalar(
+        seed,
+        leaven_kernel::AssessmentId::new(),
+        &leaven_evidence::CasewiseEvidence::new(vec![leaven_evidence::CaseOutcome::new(
+            leaven_kernel::CaseId::new(0),
+            leaven_evidence::ScalarEvidence::new(1.0).unwrap(),
+        )]),
+    );
+    let mut gepa = Gepa::<
+        SmokeProblem,
+        PartMapSurface,
+        ParetoFrontier,
+        SelectBestCandidate,
+        leaven_gepa::RoundRobinPart,
+        ImprovementOrEqual,
+    >::with_strategies(
+        PartMapSurface,
+        frontier,
+        SelectBestCandidate,
+        leaven_gepa::RoundRobinPart::new(),
+        ImprovementOrEqual,
+    );
+
+    assert_eq!(gepa.select_candidate(ctx.graph()), Some(seed));
+    assert_eq!(gepa.population().best(), Some(seed));
+    assert_eq!(gepa.population_mut().best(), Some(seed));
+    assert_eq!(gepa.gate_mut().decide(1.0, 1.0), GateDecision::Accept);
+    assert!(matches!(
+        gepa.select_part(&PartMapArtifact(BTreeMap::new())),
+        Err(SurfaceError::Message(message))
+            if message == "round-robin selector found no surface parts"
+    ));
+}
+
+#[test]
+fn gepa_selectors_delegate_to_population_best_candidate() {
+    let mut graph = RunGraph::<SmokeProblem>::new(RunId::new());
+    let mut budget = BudgetLedger::default();
+    let ctx = RunContext::new(&mut graph, &mut budget);
+    let candidate = leaven_kernel::CandidateId::new();
+    let right = leaven_kernel::CandidateId::new();
+    let mut keep_best = KeepBest::new();
+    keep_best.observe(
+        candidate,
+        leaven_kernel::AssessmentId::new(),
+        leaven_evidence::ScalarEvidence::new(1.0).unwrap(),
+    );
+    let mut tournament = TournamentPopulation::default();
+    tournament.observe_pairwise(
+        candidate,
+        right,
+        leaven_kernel::AssessmentId::new(),
+        &leaven_evidence::PairwiseJudgmentEvidence::new(leaven_evidence::PairwiseJudgment::Left),
+    );
+    let empty_frontier = ParetoFrontier::by_case().build();
+    let mut best = SelectBestCandidate;
+    let mut weighted = ParetoFrequencyWeighted;
+
+    assert_eq!(best.select(&keep_best, ctx.graph()), Some(candidate));
+    assert_eq!(best.select(&tournament, ctx.graph()), Some(candidate));
+    assert_eq!(weighted.select(&empty_frontier, ctx.graph()), None);
 }
 
 #[test]

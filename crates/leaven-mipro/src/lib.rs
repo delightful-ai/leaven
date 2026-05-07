@@ -1,13 +1,13 @@
 //! leaven-mipro crate skeleton.
 
-pub struct AcquisitionFunction;
-pub struct ExpectedImprovement;
-pub struct TpeAcquisition;
-pub struct Bootstrapper;
-pub struct GroundedBootstrapper;
-pub struct Mipro;
-pub struct MiproBuilder;
-pub struct MiproConfig;
-pub struct ObservationTable;
-pub struct SurrogateModel;
-pub struct TpeSurrogate;
+mod acquisition;
+mod bootstrap;
+mod observation;
+mod optimizer;
+mod surrogate;
+
+pub use acquisition::{AcquisitionFunction, ExpectedImprovement, TpeAcquisition};
+pub use bootstrap::{Bootstrapper, GroundedBootstrapper};
+pub use observation::ObservationTable;
+pub use optimizer::{Mipro, MiproBuilder, MiproConfig};
+pub use surrogate::{SurrogateModel, TpeSurrogate};

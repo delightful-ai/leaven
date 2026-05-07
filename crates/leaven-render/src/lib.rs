@@ -1,15 +1,19 @@
 //! leaven-render crate skeleton.
 
-pub struct CandidateTreeHtmlRenderer;
-pub struct RunGraphDebugRenderer;
-pub struct LineageSummaryRenderer;
-pub struct ReflectionPromptRenderer;
-pub struct StructuredPromptRenderer;
-pub struct SurfaceDiffRenderer;
-pub struct SurfacePartsRenderer;
-pub struct ArtifactMaterializer;
-pub struct HistoryMaterializer;
-pub struct SurfaceMaterializer;
+mod candidate_tree;
+mod lineage;
+mod materializer;
+mod prompt;
+mod run_graph;
+mod surface;
+
+pub use candidate_tree::CandidateTreeHtmlRenderer;
+pub use lineage::LineageSummaryRenderer;
+pub use materializer::{ArtifactMaterializer, HistoryMaterializer, SurfaceMaterializer};
+pub use prompt::{ReflectionPromptRenderer, StructuredPromptRenderer};
+pub use run_graph::RunGraphDebugRenderer;
+pub use surface::{SurfaceDiffRenderer, SurfacePartsRenderer};
+
 pub mod prelude {
     pub use crate::{
         ArtifactMaterializer, CandidateTreeHtmlRenderer, HistoryMaterializer,

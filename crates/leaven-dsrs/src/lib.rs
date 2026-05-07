@@ -1,7 +1,11 @@
 //! leaven-dsrs crate skeleton.
 
-pub struct DsrsProgramArtifact;
-pub struct DsrsProgramChange;
-pub struct DsrsEvaluator;
-pub struct DsrsSignatureBridge;
-pub struct DsrsProgramSurface;
+mod artifact;
+mod bridge;
+mod evaluator;
+mod surface;
+
+pub use artifact::{DsrsProgramArtifact, DsrsProgramChange};
+pub use bridge::DsrsSignatureBridge;
+pub use evaluator::DsrsEvaluator;
+pub use surface::DsrsProgramSurface;

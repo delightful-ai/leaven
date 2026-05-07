@@ -121,11 +121,7 @@ async fn trace2skill() -> Result<ScenarioOutcome, Box<dyn std::error::Error>> {
             .expect("artifact exists")
             .clone();
         SkillRegistryMaterializer
-            .materialize_into(
-                &artifact,
-                &mut view,
-                ctx.render_context(StageId::custom("trace2skill/materialize")),
-            )
+            .materialize_into(&artifact, &mut view, ctx.materialize_context())
             .await
     };
     workspace.cleanup().await?;
@@ -630,7 +626,7 @@ impl Materializer<SkillProblem, SkillRegistry> for SkillRegistryMaterializer {
         &self,
         value: &SkillRegistry,
         workspace: &mut WorkspaceView<'_>,
-        _ctx: leaven::RenderContext<'_, SkillProblem>,
+        _ctx: leaven::MaterializeContext<'_, SkillProblem>,
     ) -> Result<Metered<MaterializationReport>, MaterializeError> {
         let mut files_written = 0;
         let mut bytes_written = 0_u64;

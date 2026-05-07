@@ -1,8 +1,9 @@
 //! leaven-textgrad crate skeleton.
 
-pub struct FeedbackAggregator;
-pub struct PerPartFeedbackAggregator;
-pub struct TextGrad;
-pub struct TextGradBuilder;
-pub struct TextGradConfig;
-pub struct TextGradientUpdater;
+mod feedback;
+mod textgrad;
+mod updater;
+
+pub use feedback::{FeedbackAggregator, PerPartFeedbackAggregator};
+pub use textgrad::{TextGrad, TextGradBuilder, TextGradConfig};
+pub use updater::TextGradientUpdater;

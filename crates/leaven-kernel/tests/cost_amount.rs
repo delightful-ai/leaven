@@ -39,3 +39,32 @@ fn cost_combination_never_produces_non_finite_amounts() {
 
     assert_eq!(combined.seconds, Amount::new(f64::MAX).unwrap());
 }
+
+#[test]
+fn amount_conversions_preserve_valid_values() {
+    let amount = Amount::try_from(7.5).unwrap();
+    let raw: f64 = amount.into();
+
+    assert_eq!(raw.to_bits(), 7.5f64.to_bits());
+}
+
+#[test]
+fn costs_cover_builtin_and_custom_axes() {
+    let mut custom = Cost::zero();
+    custom
+        .other
+        .insert("subprocesses".to_owned(), Amount::new(2.0).unwrap());
+
+    let combined = Cost::tokens(10, 4).combine(&custom);
+    let mapped = leaven_kernel::Metered::new("candidate", combined.clone()).map(str::len);
+
+    assert_eq!(combined.prompt_tokens, 10);
+    assert_eq!(combined.completion_tokens, 4);
+    assert_eq!(
+        combined.other.get("subprocesses"),
+        Some(&Amount::new(2.0).unwrap())
+    );
+    assert!(!combined.is_zero());
+    assert_eq!(mapped.value, "candidate".len());
+    assert_eq!(mapped.cost, combined);
+}

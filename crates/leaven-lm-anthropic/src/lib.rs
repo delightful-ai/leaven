@@ -1,4 +1,7 @@
 //! leaven-lm-anthropic crate skeleton.
 
-pub struct AnthropicLm;
-pub struct AnthropicConfig;
+mod client;
+mod config;
+
+pub use client::AnthropicLm;
+pub use config::AnthropicConfig;

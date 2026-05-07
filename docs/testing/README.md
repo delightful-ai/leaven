@@ -53,16 +53,14 @@ Coverage is a ratchet. Raise `coverage_line_floor` and
 `coverage_branch_floor` in the root `Justfile` when coverage improves; do not
 lower either floor to land weaker tests.
 
-The v0.2.1b topology cutover adds many spec-listed crate skeletons and
-trait-only surfaces whose job is to enforce dependency direction before their
-behavior lands. The coverage gate now keeps a `98.0` line floor and `85.0`
-branch floor, and includes the behavior-bearing P1
-engine/context/cache/budget/trust/graph files plus scalar evidence, scalar
-preference, keep-best population, and inline evidence storage. Empty adapters,
-trait-only stage surfaces, map-only binaries, and unimplemented skeleton crates
-stay out of the denominator until they gain real runtime behavior. When a
-skeleton crate gains runtime logic, remove it from `coverage_ignore` in the
-same change that adds its contract tests.
+The v0.2.1b topology cutover adds many spec-listed crate skeletons whose job is
+to enforce dependency direction before their behavior lands. The coverage gate
+keeps a `98.5` line floor and `85.8` branch floor without a source-path ignore
+regex. It runs the workspace tests, then runs every milestone binary and
+`xtask` under `cargo llvm-cov run` before reporting. Empty map crates and
+unimplemented skeleton crates naturally add no executable denominator; once a
+crate gains runtime behavior, that behavior is part of the canonical coverage
+surface and needs contract tests in the same change.
 
 ## Test Shapes
 
@@ -118,7 +116,12 @@ Use the narrowest layer that proves the claim.
   stage adapter contracts for proposer, evaluator, preference, and stopper
   traits.
 - `crates/leaven-engine/tests/population_event_contract.rs`: public event
-  contract proving population reweighting uses finite weights.
+  contract proving population reweighting uses finite weights and population
+  observer defaults emit no events.
+- `crates/leaven-engine/tests/materializer_contract.rs`: P4 materializer
+  contracts for deterministic workspace writes, proposer-scoped read views,
+  explicit cleanup, absence of old `WorkspaceRenderer` names, and
+  `Create + None + informed_by(history)` lineage.
 - `crates/leaven-derive/tests/derive_macros.rs`: `trybuild` contract proving
   reserved derive macros fail explicitly until their real codegen contracts
   land.
@@ -134,10 +137,15 @@ Use the narrowest layer that proves the claim.
 - `crates/leaven/tests/gepa_parity.rs`: P3 end-to-end scenario for explicit
   edit-surface GEPA, per-case train evidence, train-filtered Pareto frontier
   updates, surface-edit lowering, and best-candidate result.
+- `examples/p4_meta_harness_lite` via `just milestone-p4`: P4 runnable
+  scenario for materialized workspace history, proposer-authored fresh
+  artifacts, explicit cleanup, evidence refs, hidden test filtering,
+  evaluator workspace isolation, and population update.
 - `crates/leaven/tests/topology_contract.rs`: guardrails for the full corrected
   v0.2.1b workspace member list, `src/lib.rs` skeleton presence,
   Leaven-to-Leaven dependency DAG, and cold-core leak boundaries.
 - `crates/leaven-evidence/tests/scalar.rs`,
+  `crates/leaven-evidence/tests/command.rs`,
   `crates/leaven-evidence/tests/casewise.rs`,
   `crates/leaven-evidence/tests/attribution.rs`,
   `crates/leaven-preference/tests/scalar.rs`,
@@ -149,8 +157,21 @@ Use the narrowest layer that proves the claim.
   `crates/leaven-gepa/tests/gepa_smoke.rs`: P3 casewise Pareto frontier laws,
   partition filtering, GEPA surface ownership, surface-edit lowering, candidate
   selector separation, and proposer read-scope coverage.
-- `crates/leaven-kernel/tests/finite_f64.rs`: finite signed float construction,
-  serde round trips, deserialization refusal, and metadata float coverage.
+- `crates/leaven-core/tests/proposal_contract.rs`: cold proposal constructors,
+  causal lineage, informational references, clone behavior, and batch semantics.
+- `crates/leaven-kernel/tests/finite_f64.rs`,
+  `crates/leaven-kernel/tests/cost_amount.rs`, and
+  `crates/leaven-kernel/tests/identity_metadata.rs`: finite signed floats,
+  amount/cost conversions, metered mapping, fingerprint ordering, durable error
+  records, metadata ordering, typed IDs, and stage attribution display.
+- `crates/leaven-workspace/tests/workspace_path.rs`: workspace path examples
+  and property laws proving public paths remain relative, UTF-8, traversal-free,
+  and explicit about the root path.
+- `crates/leaven-workspace/tests/workspace_view.rs` and
+  `crates/leaven-workspace-local/tests/local_workspace.rs`: P4 workspace
+  substrate coverage for scoped writes/reads, unattached command refusal,
+  backend local-mount semantics, factory allocation, unique local roots, and
+  cleanup removal plus already-removed cleanup tolerance.
 
 ## Review Rules
 

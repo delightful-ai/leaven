@@ -1,4 +1,7 @@
 //! leaven-lm-local crate skeleton.
 
-pub struct LocalLm;
-pub struct LocalLmConfig;
+mod client;
+mod config;
+
+pub use client::LocalLm;
+pub use config::LocalLmConfig;

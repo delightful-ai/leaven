@@ -1,4 +1,7 @@
 //! leaven-lm-openai crate skeleton.
 
-pub struct OpenAiLm;
-pub struct OpenAiConfig;
+mod client;
+mod config;
+
+pub use client::OpenAiLm;
+pub use config::OpenAiConfig;

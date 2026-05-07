@@ -17,14 +17,16 @@
 - `docs/specs/leaven_v0_2_1b_corrected_crate_topology_lib_rs.md`
 - `docs/specs/guiding_principles.md`
 
-## Current Baseline
+## Original Baseline
 
-- `cargo check --workspace` passes on the current working tree.
+- `cargo check --workspace` passed on the working tree when this plan was
+  written.
 - `cargo check --workspace --examples` is a no-op because the milestone examples are workspace packages, not Cargo example targets.
 - `examples/p0_graph_skeleton`, `examples/p1_keep_best`, `examples/p2_pairwise_tournament`, `examples/p3_gepa_parity`, and `examples/p4_meta_harness_lite` compile but each `main.rs` is only a type-name placeholder.
 - P1 behavior already exists as a real integration proof in `crates/leaven/tests/scalar_keep_best.rs`.
 - P2 through P4 still need real library behavior: pairwise evidence/tournament state, GEPA rhythm over an edit surface, and materializer/workspace/agentic-create flow.
-- The current code still exports `WorkspaceRenderer`; the v0.2.2 spec requires `Materializer` with no compatibility alias.
+- The plan started from a codebase that still exported `WorkspaceRenderer`; the
+  v0.2.2 spec requires `Materializer` with no compatibility alias.
 
 ## Non-Negotiables
 
@@ -33,7 +35,8 @@
 - Keep `leaven-core` cold: no graph, engine, store, workspace, renderer, GEPA, or adapter knowledge.
 - Examples may define tiny local artifacts/proposers/evaluators when they are demonstration fixtures, but reusable evidence, preference, population, workspace, and GEPA behavior belongs in the owning library crates.
 - Each milestone must have a direct command that runs the example, not only a compile check.
-- Do not lower coverage floors or broaden coverage ignores to land behavior.
+- Do not lower coverage floors or add source-path coverage ignore regexes to
+  land behavior.
 
 ## Task 1: Add The Milestone Gate
 

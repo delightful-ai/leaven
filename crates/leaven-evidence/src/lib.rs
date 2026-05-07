@@ -31,11 +31,8 @@ pub mod attribution {
     pub trait AttributionKey: Eq + std::hash::Hash + Clone + Send + Sync + 'static {}
     impl<T> AttributionKey for T where T: Eq + std::hash::Hash + Clone + Send + Sync + 'static {}
 }
-pub mod command {
-    pub struct CommandEvidence;
-    pub struct CommandRecord;
-}
 pub mod casewise;
+pub mod command;
 pub mod diff {
     pub struct DiffEvidence;
     pub struct RenderedDiff;
@@ -67,7 +64,7 @@ pub mod string {
 }
 pub use attribution::{AttributableEvidence, Attribution, AttributionKey};
 pub use casewise::{CaseOutcome, CasewiseEvidence};
-pub use command::{CommandEvidence, CommandRecord};
+pub use command::{AgentTrajectoryEvidence, CommandEvidence, CommandRecord, OutputRecord};
 pub use diff::{DiffEvidence, RenderedDiff};
 pub use json::JsonEvidence;
 pub use listwise::{ListwiseRankingEvidence, RankingItem};
@@ -78,8 +75,9 @@ pub use score_vector::{Direction, RawScoreValue, ScoreAxis, ScorePoint, ScoreVec
 pub use string::StringEvidence;
 pub mod prelude {
     pub use crate::{
-        AttributableEvidence, CaseOutcome, CasewiseEvidence, CommandEvidence, DiffEvidence,
-        Direction, JsonEvidence, ListwiseRankingEvidence, MixedEvidence, PairwiseJudgmentEvidence,
+        AgentTrajectoryEvidence, AttributableEvidence, CaseOutcome, CasewiseEvidence,
+        CommandEvidence, CommandRecord, DiffEvidence, Direction, JsonEvidence,
+        ListwiseRankingEvidence, MixedEvidence, OutputRecord, PairwiseJudgmentEvidence,
         ScalarEvidence, ScalarEvidenceError, ScoreVectorEvidence, StringEvidence,
     };
 }

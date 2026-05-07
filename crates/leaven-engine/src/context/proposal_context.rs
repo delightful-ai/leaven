@@ -3,7 +3,7 @@
 use leaven_core::OptimizationProblem;
 use leaven_kernel::BudgetSnapshot;
 
-use crate::{BudgetHandle, ReadScope, RunGraphView};
+use crate::{BudgetHandle, MaterializeContext, ReadScope, RunGraphView};
 
 pub struct ProposalContext<'a, P: OptimizationProblem> {
     graph: RunGraphView<'a, P>,
@@ -41,5 +41,14 @@ impl<'a, P: OptimizationProblem> ProposalContext<'a, P> {
 
     pub fn budget_handle(&mut self) -> &mut BudgetHandle<'a> {
         &mut self.budget
+    }
+
+    #[must_use]
+    pub fn materialize_context(&self) -> MaterializeContext<'a, P> {
+        MaterializeContext::new(
+            self.graph.clone(),
+            self.budget.snapshot(),
+            self.read_scope.clone(),
+        )
     }
 }

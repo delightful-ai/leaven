@@ -1,13 +1,17 @@
 //! leaven-agentic crate skeleton.
 
-pub struct AgentEvidence;
-pub struct AgentTrajectoryEvidence;
-pub struct AgenticProposer;
-pub struct AgenticProposerConfig;
-pub struct HistoryMaterializer;
-pub struct TranscriptMaterializer;
-pub struct RunAgentInWorkspace;
-pub struct AgentTranscriptLoader;
+mod evidence;
+mod materializer;
+mod proposer;
+mod runtime;
+mod transcript;
+
+pub use evidence::{AgentEvidence, AgentTrajectoryEvidence};
+pub use materializer::{HistoryMaterializer, TranscriptMaterializer};
+pub use proposer::{AgenticProposer, AgenticProposerConfig};
+pub use runtime::RunAgentInWorkspace;
+pub use transcript::AgentTranscriptLoader;
+
 pub mod prelude {
     pub use crate::{
         AgentEvidence, AgentTrajectoryEvidence, AgenticProposer, AgenticProposerConfig,

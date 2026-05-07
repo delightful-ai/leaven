@@ -1,3 +1,5 @@
 //! leaven-workspace-e2b crate skeleton.
 
-pub struct E2bWorkspaceFactory;
+mod factory;
+
+pub use factory::E2bWorkspaceFactory;

@@ -1,8 +1,7 @@
 set shell := ["bash", "-eu", "-o", "pipefail", "-c"]
 
-coverage_ignore := '(^|/)(tests|target)/|/src/main\.rs$|crates/leaven-(agent.*|artifact.*|artifacts|cuda|derive|dsrs|gepa|kernel|lm.*|mipro|python|render|std|store-(file|object|sqlite)|surface|textgrad|trace|workspace.*)/|crates/leaven-core/src/(evaluation|proposal)\.rs|crates/leaven-engine/src/context/render_context\.rs|crates/leaven-engine/src/stage/(evaluator|population|preference|proposer|renderer|stopper)\.rs'
-coverage_line_floor := '98.0'
-coverage_branch_floor := '85.0'
+coverage_line_floor := '98.5'
+coverage_branch_floor := '85.8'
 
 lint:
     cargo fmt --check
@@ -41,6 +40,6 @@ milestone-p5:
 milestone-examples: milestone-p0 milestone-p1 milestone-p2 milestone-p3 milestone-p4 milestone-p5
 
 coverage:
-    python3 scripts/coverage-gate.py --line-floor {{coverage_line_floor}} --branch-floor {{coverage_branch_floor}} --ignore-filename-regex '{{coverage_ignore}}'
+    python3 scripts/coverage-gate.py --line-floor {{coverage_line_floor}} --branch-floor {{coverage_branch_floor}}
 
 check: lint test coverage

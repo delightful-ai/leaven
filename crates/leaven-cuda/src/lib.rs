@@ -1,9 +1,15 @@
 //! leaven-cuda crate skeleton.
 
-pub struct CudaKernelArtifact;
-pub struct CudaKernelChange;
-pub struct CudaEvidence;
-pub struct CudaEvaluator;
-pub struct CudaProfiler;
-pub struct KernelBenchRunner;
-pub struct CudaSourceSurface;
+mod artifact;
+mod evaluator;
+mod evidence;
+mod profiler;
+mod runner;
+mod surface;
+
+pub use artifact::{CudaKernelArtifact, CudaKernelChange};
+pub use evaluator::CudaEvaluator;
+pub use evidence::CudaEvidence;
+pub use profiler::CudaProfiler;
+pub use runner::KernelBenchRunner;
+pub use surface::CudaSourceSurface;

@@ -1,3 +1,5 @@
 //! leaven-store-file crate skeleton.
 
-pub struct FileStore;
+mod store;
+
+pub use store::FileStore;

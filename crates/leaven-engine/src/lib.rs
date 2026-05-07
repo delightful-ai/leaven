@@ -18,7 +18,10 @@ mod trust;
 pub use budget::{BudgetHandle, BudgetLedger};
 pub use cache::{CachePolicy, CacheStatus, EvaluationCache, EvaluationCacheKey};
 pub use case_set::{CaseSet, CaseSetBuilder, EvaluationResolveError, UnsupportedEvaluationSet};
-pub use context::{EvaluationContext, ProposalContext, RenderContext, RunContext, RunContextError};
+pub use context::{
+    EvaluationContext, MaterializeContext, ProposalContext, RenderContext, RunContext,
+    RunContextError,
+};
 pub use engine::{Engine, EngineBuilder, RunResult, optimize};
 pub use events::{
     CausalInputsSummary, ErrorPolicy, EvaluationRequestSummary, RunEvent, StopReason,
@@ -48,9 +51,9 @@ pub mod prelude {
 
     pub use crate::{
         Arity, BudgetHandle, BudgetLedger, CachePolicy, Callback, Engine, EngineBuilder,
-        EvaluationContext, Evaluator, MaterializationReport, MaterializeError, Materializer,
-        Optimizer, Population, PreferenceRelation, ProposalContext, Proposer, ReadScope,
-        RenderContext, Renderer, RunContext, RunEvent, RunGraphView, RunResult, StepStatus,
-        Stopper, TrustPolicy, optimize,
+        EvaluationContext, Evaluator, MaterializationReport, MaterializeContext, MaterializeError,
+        Materializer, Optimizer, Population, PreferenceRelation, ProposalContext, Proposer,
+        ReadScope, RenderContext, Renderer, RunContext, RunEvent, RunGraphView, RunResult,
+        StepStatus, Stopper, TrustPolicy, optimize,
     };
 }

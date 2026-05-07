@@ -1,3 +1,5 @@
 //! leaven-workspace-firecracker crate skeleton.
 
-pub struct FirecrackerWorkspaceFactory;
+mod factory;
+
+pub use factory::FirecrackerWorkspaceFactory;

@@ -9,6 +9,16 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+RUN_PACKAGES = [
+    "p0_graph_skeleton",
+    "p1_keep_best",
+    "p2_pairwise_tournament",
+    "p3_gepa_parity",
+    "p4_meta_harness_lite",
+    "p5_skill_paper_reproductions",
+    "xtask",
+]
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(
@@ -16,7 +26,6 @@ def main() -> int:
     )
     parser.add_argument("--line-floor", type=float, required=True)
     parser.add_argument("--branch-floor", type=float, required=True)
-    parser.add_argument("--ignore-filename-regex", required=True)
     parser.add_argument(
         "--output-path",
         default="target/llvm-cov/coverage-summary.json",
@@ -26,22 +35,32 @@ def main() -> int:
     output_path = Path(args.output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    command = [
+    commands = [
+        ["cargo", "llvm-cov", "clean", "--workspace"],
+        ["cargo", "llvm-cov", "--workspace", "--no-report", "--branch"],
+        *[
+            ["cargo", "llvm-cov", "run", "--no-report", "-p", package]
+            for package in RUN_PACKAGES
+        ],
+    ]
+    for command in commands:
+        result = run(command)
+        if result.returncode != 0:
+            return result.returncode
+
+    report_command = [
         "cargo",
         "llvm-cov",
-        "--workspace",
+        "report",
         "--json",
         "--summary-only",
         "--branch",
-        "--ignore-filename-regex",
-        args.ignore_filename_regex,
         "--fail-under-lines",
         str(args.line_floor),
         "--output-path",
         str(output_path),
     ]
-    print(f"running coverage gate: {' '.join(command)}", flush=True)
-    result = subprocess.run(command, check=False)
+    result = run(report_command)
     if result.returncode != 0:
         return result.returncode
 
@@ -70,6 +89,11 @@ def main() -> int:
         )
         return 1
     return 0
+
+
+def run(command: list[str]) -> subprocess.CompletedProcess[bytes]:
+    print(f"running coverage gate: {' '.join(command)}", flush=True)
+    return subprocess.run(command, check=False)
 
 
 def load_summary(path: Path) -> dict[str, Any]:

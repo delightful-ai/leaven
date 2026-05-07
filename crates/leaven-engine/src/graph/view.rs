@@ -21,6 +21,15 @@ pub struct RunGraphView<'g, P: OptimizationProblem> {
     read_scope: ReadScope,
 }
 
+impl<P: OptimizationProblem> Clone for RunGraphView<'_, P> {
+    fn clone(&self) -> Self {
+        Self {
+            graph: self.graph,
+            read_scope: self.read_scope.clone(),
+        }
+    }
+}
+
 impl<'g, P: OptimizationProblem> RunGraphView<'g, P> {
     #[must_use]
     pub(crate) fn new(graph: &'g RunGraph<P>, read_scope: ReadScope) -> Self {

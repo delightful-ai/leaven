@@ -21,18 +21,18 @@ pub trait Materializer<P: OptimizationProblem, T>: Send + Sync {
         &self,
         value: &T,
         workspace: &mut leaven_workspace::WorkspaceView<'_>,
-        ctx: crate::RenderContext<'_, P>,
+        ctx: crate::MaterializeContext<'_, P>,
     ) -> Result<Metered<MaterializationReport>, MaterializeError>;
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct MaterializationReport {
     pub files_written: usize,
     pub bytes_written: u64,
     pub truncations: Vec<TruncationNote>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TruncationNote {
     pub path: Option<String>,
     pub reason: String,

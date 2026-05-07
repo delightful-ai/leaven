@@ -33,6 +33,14 @@ fn finite_f64_refuses_non_finite_deserialization() {
 }
 
 #[test]
+fn finite_f64_converts_to_and_from_raw_f64() {
+    let finite = FiniteF64::try_from(42.25).unwrap();
+    let raw: f64 = finite.into();
+
+    assert_eq!(raw.to_bits(), 42.25f64.to_bits());
+}
+
+#[test]
 fn metadata_float_values_are_finite_by_construction() {
     let value = MetadataValue::F64(FiniteF64::new(1.25).unwrap());
 

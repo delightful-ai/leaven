@@ -1,3 +1,5 @@
 //! leaven-workspace-docker crate skeleton.
 
-pub struct DockerWorkspaceFactory;
+mod factory;
+
+pub use factory::DockerWorkspaceFactory;

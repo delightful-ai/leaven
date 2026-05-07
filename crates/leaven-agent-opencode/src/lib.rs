@@ -1,4 +1,7 @@
 //! leaven-agent-opencode crate skeleton.
 
-pub struct OpenCodeConfig;
-pub struct OpenCodeRuntime;
+mod config;
+mod runtime;
+
+pub use config::OpenCodeConfig;
+pub use runtime::OpenCodeRuntime;

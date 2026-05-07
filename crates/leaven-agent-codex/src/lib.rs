@@ -1,4 +1,7 @@
 //! leaven-agent-codex crate skeleton.
 
-pub struct CodexConfig;
-pub struct CodexRuntime;
+mod config;
+mod runtime;
+
+pub use config::CodexConfig;
+pub use runtime::CodexRuntime;

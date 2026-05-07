@@ -813,6 +813,7 @@ version = "0.0.0"
 dependencies = [
  "futures",
  "leaven-kernel",
+ "proptest",
  "thiserror",
 ]
 
@@ -985,9 +986,13 @@ dependencies = [
  "leaven",
  "leaven-core",
  "leaven-engine",
+ "leaven-evidence",
  "leaven-kernel",
+ "leaven-population",
+ "leaven-store-inline",
  "leaven-workspace",
  "leaven-workspace-local",
+ "uuid",
 ]
 
 [[package]]

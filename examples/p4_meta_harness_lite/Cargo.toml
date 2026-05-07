@@ -15,6 +15,10 @@ futures = { workspace = true }
 leaven = { workspace = true, features = ["workspace-local"] }
 leaven-core = { workspace = true }
 leaven-engine = { workspace = true }
+leaven-evidence = { workspace = true }
 leaven-kernel = { workspace = true }
+leaven-population = { workspace = true }
+leaven-store-inline = { workspace = true }
 leaven-workspace = { workspace = true }
 leaven-workspace-local = { workspace = true }
+uuid = { workspace = true }

@@ -288,6 +288,12 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
         )
     }
 
+    /// Build the materializer-facing context for a stage.
+    pub fn materialize_context(&self) -> crate::MaterializeContext<'_, P> {
+        let scope = self.trust.renderer_read_scope();
+        crate::MaterializeContext::new(self.graph.view(scope.clone()), self.budget(), scope)
+    }
+
     /// Resolve the evaluation set inside an evaluation request.
     pub fn resolve_evaluation_request(
         &self,

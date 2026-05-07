@@ -1,4 +1,7 @@
 //! leaven-lm-mock crate skeleton.
 
-pub struct MockLm;
-pub struct MockLmScript;
+mod client;
+mod script;
+
+pub use client::MockLm;
+pub use script::MockLmScript;

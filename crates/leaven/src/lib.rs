@@ -17,10 +17,10 @@ pub use leaven_core::{
     ProposalProvenance,
 };
 pub use leaven_engine::{
-    Arity, CachePolicy, Engine, EngineBuilder, Evaluator, MaterializationReport, MaterializeError,
-    Materializer, Optimizer, Population, PreferenceRelation, ProposalContext, Proposer, ReadScope,
-    RenderContext, Renderer, RunContext, RunEvent, RunGraphView, RunResult, StepStatus, Stopper,
-    TrustPolicy, optimize,
+    Arity, CachePolicy, Engine, EngineBuilder, Evaluator, MaterializationReport,
+    MaterializeContext, MaterializeError, Materializer, Optimizer, Population, PreferenceRelation,
+    ProposalContext, Proposer, ReadScope, RenderContext, Renderer, RunContext, RunEvent,
+    RunGraphView, RunResult, StepStatus, Stopper, TrustPolicy, optimize,
 };
 pub use leaven_kernel::{
     Amount, AmountError, Budget, BudgetSnapshot, CandidateId, ContentId, Cost, CostUnit,

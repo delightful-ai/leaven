@@ -269,7 +269,7 @@ Expected crates touched:
 - `docs/testing/README.md`
   - update current suites and coverage scope
 - `Justfile`
-  - update `coverage_ignore` as behavior lands
+  - keep the one-command coverage gate aligned with the real executable surface
 
 Crates that should not be touched for this milestone unless a compile boundary
 forces it:
@@ -295,21 +295,23 @@ forces it:
 
 ## Coverage Policy
 
-The current `coverage_line_floor` remains `95.0` or higher. Do not lower it.
+The current `coverage_line_floor` and `coverage_branch_floor` live in the root
+`Justfile`. Do not lower either floor to land this milestone.
 
-The topology cutover temporarily excludes skeleton and trait-only crates from
-line coverage because they do not yet contain behavior. This milestone changes
-that rule for every crate where real code lands:
+Coverage must not use source-path ignore regexes. The gate measures the real
+workspace denominator plus each milestone binary that exercises example-only
+runtime paths.
 
-- If a crate gains runtime behavior, remove that crate or file from
-  `coverage_ignore` in the same change.
-- If a crate only contains marker traits, type aliases, pure data carriers, or
-  re-export facades, it may remain excluded until behavior lands.
+- Empty map crates, pure re-export facades, marker traits, type aliases, and
+  pure data carriers naturally add no executable denominator until behavior
+  lands.
 - Constructors, state transitions, comparison logic, cache decisions, budget
-  mutation, storage mutation, and graph mutation are behavior and need tests.
-- A file with mixed types and behavior should be covered unless the behavior is
-  trivial enough to be tested through an enclosing integration test.
-- Coverage exclusions must become narrower over time, not broader.
+  mutation, storage mutation, graph mutation, workspace side effects, and
+  command execution are behavior and need tests.
+- If a crate gains runtime behavior, add the narrow contract test or milestone
+  binary execution that proves it in the same change.
+- Coverage policy changes must make the measured surface more truthful, not
+  hide code paths.
 
 Completion requires:
 
