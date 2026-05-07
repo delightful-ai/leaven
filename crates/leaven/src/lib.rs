@@ -13,7 +13,7 @@ pub use leaven_surface as surface;
 pub use leaven_core::{
     Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, AssessmentTarget, CausalInputs,
     ContentAddressed, EvaluationRequest, EvaluationSet, Evidence, InfoRef, OptimizationProblem,
-    Preference, Proposal, ProposalBatch, ProposalBatchSemantics, ProposalEffect,
+    PairOrder, Preference, Proposal, ProposalBatch, ProposalBatchSemantics, ProposalEffect,
     ProposalProvenance,
 };
 pub use leaven_engine::{

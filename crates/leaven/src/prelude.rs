@@ -2,8 +2,8 @@
 
 pub use leaven_core::{
     Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, AssessmentTarget,
-    ContentAddressed, EvaluationRequest, EvaluationSet, Evidence, OptimizationProblem, Proposal,
-    ProposalBatch, ProposalEffect,
+    ContentAddressed, EvaluationRequest, EvaluationSet, Evidence, OptimizationProblem, PairOrder,
+    Proposal, ProposalBatch, ProposalEffect,
 };
 pub use leaven_engine::{
     Arity, CachePolicy, Engine, Evaluator, Optimizer, Population, PreferenceRelation, Proposer,

@@ -1,6 +1,8 @@
 //! Evaluator stage trait.
 
-use futures::future::LocalBoxFuture;
+use std::future::Future;
+
+use futures::future::BoxFuture;
 use leaven_core::{Assessment, OptimizationProblem, ResolvedEvaluationRequest};
 use leaven_kernel::{EvaluatorId, Fingerprint, Metered};
 
@@ -11,7 +13,6 @@ use crate::CachePolicy;
 /// Evaluators turn resolved evaluation requests into metered assessment
 /// evidence. The fingerprint and cache policy are part of the cache contract:
 /// if either changes, cached assessment IDs must not be reused.
-#[allow(async_fn_in_trait)]
 pub trait Evaluator<P: OptimizationProblem>: Send + Sync {
     /// Stable evaluator identity for events, budget accounting, and errors.
     fn id(&self) -> EvaluatorId;
@@ -24,23 +25,27 @@ pub trait Evaluator<P: OptimizationProblem>: Send + Sync {
     }
 
     /// Evaluate candidates and return metered assessments.
-    async fn evaluate(
-        &self,
+    fn evaluate<'a>(
+        &'a self,
         request: ResolvedEvaluationRequest,
-        ctx: crate::EvaluationContext<'_, P>,
-    ) -> Result<Metered<Vec<Assessment<P>>>, EvaluationError>;
+        ctx: crate::EvaluationContext<'a, P>,
+    ) -> impl Future<Output = Result<Metered<Vec<Assessment<P>>>, EvaluationError>> + Send + 'a;
 }
 
 /// Object-safe evaluator capability for heterogeneous evaluator registries.
 pub trait DynEvaluator<P: OptimizationProblem>: Send + Sync {
     /// Stable evaluator identity for events, budget accounting, and errors.
     fn id(&self) -> EvaluatorId;
+    /// Content fingerprint for cache keys.
+    fn fingerprint(&self) -> Fingerprint;
+    /// Cache policy for a resolved request.
+    fn cache_policy(&self, request: &ResolvedEvaluationRequest) -> CachePolicy;
     /// Dispatch an evaluator call through an object-safe future.
     fn evaluate_boxed<'a>(
         &'a self,
         request: ResolvedEvaluationRequest,
         ctx: crate::EvaluationContext<'a, P>,
-    ) -> LocalBoxFuture<'a, Result<Metered<Vec<Assessment<P>>>, EvaluationError>>;
+    ) -> BoxFuture<'a, Result<Metered<Vec<Assessment<P>>>, EvaluationError>>;
 }
 
 impl<P, T> DynEvaluator<P> for T
@@ -52,11 +57,19 @@ where
         Evaluator::id(self)
     }
 
+    fn fingerprint(&self) -> Fingerprint {
+        Evaluator::fingerprint(self)
+    }
+
+    fn cache_policy(&self, request: &ResolvedEvaluationRequest) -> CachePolicy {
+        Evaluator::cache_policy(self, request)
+    }
+
     fn evaluate_boxed<'a>(
         &'a self,
         request: ResolvedEvaluationRequest,
         ctx: crate::EvaluationContext<'a, P>,
-    ) -> LocalBoxFuture<'a, Result<Metered<Vec<Assessment<P>>>, EvaluationError>> {
+    ) -> BoxFuture<'a, Result<Metered<Vec<Assessment<P>>>, EvaluationError>> {
         Box::pin(self.evaluate(request, ctx))
     }
 }

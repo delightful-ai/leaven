@@ -1,6 +1,7 @@
 //! leaven-population crate skeleton.
 
 mod keep_best;
+mod tournament;
 
 pub struct BeamPopulation;
 pub struct LenientParetoFrontier;
@@ -10,11 +11,10 @@ pub struct NoPopulation;
 pub struct NoveltyPopulation;
 pub struct ParetoFrontier;
 pub struct ParetoFrontierBuilder;
-pub struct BradleyTerryFit;
 pub struct PlackettLuceFit;
 pub struct TournamentConfig;
-pub struct TournamentPopulation;
 pub use keep_best::KeepBest;
+pub use tournament::{BradleyTerryFit, TournamentPopulation};
 
 pub mod prelude {
     pub use crate::{

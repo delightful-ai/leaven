@@ -393,6 +393,13 @@ impl EvaluatorId {
     /// the evaluator without configuration. Multi-evaluator runs may still
     /// use it for the canonical task evaluator alongside specialized ones.
     pub const PRIMARY: Self = Self::new_const("primary");
+
+    /// Convention name for a pairwise judge evaluator.
+    ///
+    /// Tournament and preference-learning optimizers use this when a run has
+    /// both an ordinary task evaluator and a pairwise/listwise preference
+    /// judge.
+    pub const PAIRWISE_JUDGE: Self = Self::new_const("pairwise_judge");
 }
 
 /// Discriminated tag identifying which kind of stage is acting.

@@ -948,7 +948,12 @@ dependencies = [
 name = "p2_pairwise_tournament"
 version = "0.0.0"
 dependencies = [
+ "futures",
  "leaven",
+ "leaven-core",
+ "leaven-engine",
+ "leaven-kernel",
+ "leaven-store-inline",
 ]
 
 [[package]]

@@ -1,5 +1,7 @@
 //! `RunContext` mutation surface.
 
+use std::{collections::BTreeMap, sync::Arc};
+
 use leaven_core::{
     Assessment, EvaluationRequest, OptimizationProblem, ProposalBatch, ResolvedEvaluationRequest,
     ResolvedRequestKind,
@@ -15,10 +17,11 @@ use crate::graph::storage::AssessmentRecordTarget;
 use crate::graph::storage::{ApplyAttemptOutcome, ApplyProposalError};
 use crate::{
     ApplyOneReport, ApplyOutcome, ApplyReport, BudgetHandle, BudgetLedger, CachePolicy,
-    CacheStatus, CaseSet, DynCallback, ErrorPolicy, EvaluationCache, EvaluationCacheKey,
-    EvaluationContext, EvaluationError, EvaluationReport, EvaluationResolveError, Evaluator,
-    ProposalBatchReport, ProposalContext, ProposalError, Proposer, ReadScope, RenderContext,
-    RunEvent, RunGraph, RunGraphView, TrustPolicy, TrustViolation,
+    CacheStatus, CaseSet, DynCallback, DynEvaluator, ErrorPolicy, EvaluationCache,
+    EvaluationCacheKey, EvaluationContext, EvaluationError, EvaluationReport,
+    EvaluationResolveError, Evaluator, ProposalBatchReport, ProposalContext, ProposalError,
+    Proposer, ReadScope, RenderContext, RunEvent, RunGraph, RunGraphView, TrustPolicy,
+    TrustViolation,
 };
 
 pub struct RunContext<'a, P: OptimizationProblem> {
@@ -30,6 +33,7 @@ pub struct RunContext<'a, P: OptimizationProblem> {
     case_set: Option<&'a CaseSet<P::Case>>,
     cache: Option<&'a mut EvaluationCache>,
     evidence_store: Option<&'a dyn EvidenceStore<P::Evidence>>,
+    evaluators: Option<&'a BTreeMap<EvaluatorId, Arc<dyn DynEvaluator<P>>>>,
     callbacks: Option<&'a mut [Box<dyn DynCallback<P>>]>,
 }
 
@@ -44,6 +48,7 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
             case_set: None,
             cache: None,
             evidence_store: None,
+            evaluators: None,
             callbacks: None,
         }
     }
@@ -63,6 +68,15 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
     #[must_use]
     pub fn with_evidence_store(mut self, store: &'a dyn EvidenceStore<P::Evidence>) -> Self {
         self.evidence_store = Some(store);
+        self
+    }
+
+    #[must_use]
+    pub fn with_evaluators(
+        mut self,
+        evaluators: &'a BTreeMap<EvaluatorId, Arc<dyn DynEvaluator<P>>>,
+    ) -> Self {
+        self.evaluators = Some(evaluators);
         self
     }
 
@@ -299,6 +313,39 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
     where
         T: Evaluator<P>,
     {
+        self.evaluate_static(evaluator, request).await
+    }
+
+    /// Evaluate through the engine-owned evaluator registry.
+    pub async fn evaluate(
+        &mut self,
+        evaluator_id: EvaluatorId,
+        request: EvaluationRequest,
+    ) -> Result<EvaluationReport, RunContextError> {
+        let Some(evaluator) = self
+            .evaluators
+            .and_then(|evaluators| evaluators.get(&evaluator_id))
+            .cloned()
+        else {
+            let error = RunContextError::UnknownEvaluator(evaluator_id);
+            self.emit(RunEvent::Error {
+                stage: Some(StageId::custom("optimizer")),
+                error: ErrorRecord::from_error(ErrorKind::Evaluation, &error),
+                policy: ErrorPolicy::Continued,
+            });
+            return Err(error);
+        };
+        self.evaluate_dyn(evaluator.as_ref(), request).await
+    }
+
+    async fn evaluate_static<T>(
+        &mut self,
+        evaluator: &T,
+        request: EvaluationRequest,
+    ) -> Result<EvaluationReport, RunContextError>
+    where
+        T: Evaluator<P>,
+    {
         let evaluator_id = evaluator.id();
         if let Err(error) = self
             .trust
@@ -346,9 +393,91 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
                 self.emit_stage_error(Some(stage.clone()), ErrorKind::Evaluation, err);
             })
             .map_err(RunContextError::Evaluation)?;
+        self.complete_evaluation(
+            &evaluator_id,
+            request_id,
+            &resolved_request,
+            &policy,
+            cache_key,
+            metered,
+        )
+    }
+
+    async fn evaluate_dyn(
+        &mut self,
+        evaluator: &dyn DynEvaluator<P>,
+        request: EvaluationRequest,
+    ) -> Result<EvaluationReport, RunContextError> {
+        let evaluator_id = evaluator.id();
+        if let Err(error) = self
+            .trust
+            .check_evaluation_request(&crate::Actor::Optimizer, &request)
+        {
+            self.emit(RunEvent::Error {
+                stage: Some(StageId::custom("optimizer")),
+                error: ErrorRecord::from_error(ErrorKind::Trust, &error),
+                policy: ErrorPolicy::Continued,
+            });
+            return Err(RunContextError::TrustViolation(error));
+        }
+        let resolved_set = self.resolve_evaluation_request(&request)?;
+        let resolved_request = ResolvedEvaluationRequest {
+            kind: resolved_kind(&request),
+            set: resolved_set.clone(),
+            granularity: request_granularity(&request),
+            purpose: request_purpose(&request),
+        };
+        let policy = evaluator.cache_policy(&resolved_request);
+        let cache_key =
+            evaluation_cache_key(evaluator.fingerprint(), policy.clone(), &resolved_request);
+        let request_id = self.record_evaluation_request(
+            &evaluator_id,
+            request,
+            resolved_set.clone(),
+            candidate_count(&resolved_request),
+        );
+        if let Some(report) = self.cached_evaluation_report(
+            &evaluator_id,
+            request_id,
+            &resolved_request,
+            &policy,
+            &cache_key,
+        ) {
+            return Ok(report);
+        }
+
+        let stage = StageId::from_evaluator(evaluator_id.clone());
+        let eval_ctx = self.evaluation_context(stage.clone());
+        let metered = evaluator
+            .evaluate_boxed(resolved_request.clone(), eval_ctx)
+            .await
+            .inspect_err(|err| {
+                self.emit_stage_error(Some(stage.clone()), ErrorKind::Evaluation, err);
+            })
+            .map_err(RunContextError::Evaluation)?;
+        self.complete_evaluation(
+            &evaluator_id,
+            request_id,
+            &resolved_request,
+            &policy,
+            cache_key,
+            metered,
+        )
+    }
+
+    fn complete_evaluation(
+        &mut self,
+        evaluator_id: &EvaluatorId,
+        request_id: EvaluationRequestId,
+        resolved_request: &ResolvedEvaluationRequest,
+        policy: &CachePolicy,
+        cache_key: EvaluationCacheKey,
+        metered: leaven_kernel::Metered<Vec<Assessment<P>>>,
+    ) -> Result<EvaluationReport, RunContextError> {
+        let stage = StageId::from_evaluator(evaluator_id.clone());
         self.charge(stage, metered.cost.clone())?;
-        let assessment_ids = self.record_assessments(request_id, &evaluator_id, metered.value)?;
-        let cache = if matches!(policy, CachePolicy::Never) {
+        let assessment_ids = self.record_assessments(request_id, evaluator_id, metered.value)?;
+        let cache = if matches!(policy, &CachePolicy::Never) {
             CacheStatus::Bypassed
         } else {
             if let Some(cache) = self.cache.as_mut() {
@@ -363,7 +492,7 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
             cost: metered.cost,
             cache,
         };
-        self.emit_evaluation_completed(&evaluator_id, &report);
+        self.emit_evaluation_completed(evaluator_id, &report);
         Ok(report)
     }
 
@@ -508,6 +637,9 @@ pub enum RunContextError {
     /// The requested proposal batch is not present in the graph.
     #[error("unknown proposal batch: {0}")]
     UnknownBatch(ProposalBatchId),
+    /// The requested evaluator is not registered in the engine.
+    #[error("unknown evaluator: {0}")]
+    UnknownEvaluator(EvaluatorId),
     /// The requested assessment is not visible or not present in the graph.
     #[error("unknown assessment: {0}")]
     UnknownAssessment(AssessmentId),

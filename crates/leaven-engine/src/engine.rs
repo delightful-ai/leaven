@@ -1,19 +1,24 @@
 //! Engine shell.
 
+use std::{collections::BTreeMap, sync::Arc};
+
 use leaven_core::OptimizationProblem;
-use leaven_kernel::{Budget, CandidateId, ErrorKind, ErrorRecord, IterationId, RunId, StageId};
+use leaven_kernel::{
+    Budget, CandidateId, ErrorKind, ErrorRecord, EvaluatorId, IterationId, RunId, StageId,
+};
 use leaven_store::EvidenceStore;
 
 use crate::{
-    BudgetLedger, Callback, CaseSet, DynCallback, ErrorPolicy, EvaluationCache, Optimizer,
-    OptimizerError, ReadScope, RunContext, RunContextError, RunEvent, RunGraph, RunGraphView,
-    StepStatus, StopReason, TrustPolicy,
+    BudgetLedger, Callback, CaseSet, DynCallback, DynEvaluator, ErrorPolicy, EvaluationCache,
+    Evaluator, Optimizer, OptimizerError, ReadScope, RunContext, RunContextError, RunEvent,
+    RunGraph, RunGraphView, StepStatus, StopReason, TrustPolicy,
 };
 
 pub struct Engine<P: OptimizationProblem> {
     graph: RunGraph<P>,
     budget: BudgetLedger,
     cache: EvaluationCache,
+    evaluators: BTreeMap<EvaluatorId, Arc<dyn DynEvaluator<P>>>,
     callbacks: Vec<Box<dyn DynCallback<P>>>,
     trust: TrustPolicy,
 }
@@ -64,6 +69,7 @@ impl<P: OptimizationProblem> Engine<P> {
                 .with_case_set(case_set)
                 .with_cache(&mut self.cache)
                 .with_evidence_store(evidence_store)
+                .with_evaluators(&self.evaluators)
                 .with_trust_policy(self.trust.clone())
                 .with_callbacks(self.callbacks.as_mut_slice());
             if let Err(error) = optimizer.initialize(&mut ctx).await {
@@ -80,6 +86,7 @@ impl<P: OptimizationProblem> Engine<P> {
                     .with_case_set(case_set)
                     .with_cache(&mut self.cache)
                     .with_evidence_store(evidence_store)
+                    .with_evaluators(&self.evaluators)
                     .with_trust_policy(self.trust.clone())
                     .with_callbacks(self.callbacks.as_mut_slice())
                     .with_iteration(iteration);
@@ -148,6 +155,7 @@ const MAX_ITERATIONS: usize = 1024;
 pub struct EngineBuilder<P: OptimizationProblem> {
     run_id: RunId,
     budget: Budget,
+    evaluators: BTreeMap<EvaluatorId, Arc<dyn DynEvaluator<P>>>,
     callbacks: Vec<Box<dyn DynCallback<P>>>,
     trust: TrustPolicy,
     _problem: std::marker::PhantomData<P>,
@@ -158,6 +166,7 @@ impl<P: OptimizationProblem> Default for EngineBuilder<P> {
         Self {
             run_id: RunId::new(),
             budget: Budget::unlimited(),
+            evaluators: BTreeMap::new(),
             callbacks: Vec::new(),
             trust: TrustPolicy::default(),
             _problem: std::marker::PhantomData,
@@ -181,6 +190,16 @@ impl<P: OptimizationProblem> EngineBuilder<P> {
         self
     }
 
+    #[must_use]
+    pub fn evaluator<E>(mut self, evaluator: E) -> Self
+    where
+        E: Evaluator<P> + 'static,
+    {
+        let id = evaluator.id();
+        self.evaluators.insert(id, Arc::new(evaluator));
+        self
+    }
+
     /// Set the trust policy used for optimizer contexts and callback views.
     #[must_use]
     pub fn trust_policy(mut self, trust: TrustPolicy) -> Self {
@@ -194,6 +213,7 @@ impl<P: OptimizationProblem> EngineBuilder<P> {
             graph: RunGraph::new(self.run_id),
             budget: BudgetLedger::new(self.budget),
             cache: EvaluationCache::default(),
+            evaluators: self.evaluators,
             callbacks: self.callbacks,
             trust: self.trust,
         }

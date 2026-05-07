@@ -1,9 +1,9 @@
+use leaven::engine::{BudgetLedger, RunContext, RunGraph};
+use leaven::kernel::{RunId, StageId};
 use leaven::{
     Artifact, ArtifactIdentity, Budget, ContentId, Cost, Evidence, MetadataBag,
     OptimizationProblem, Proposal, ProposalBatch, ProposalBatchSemantics,
 };
-use leaven::engine::{BudgetLedger, RunContext, RunGraph};
-use leaven::kernel::{RunId, StageId};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut graph = RunGraph::<TextProblem>::new(RunId::new());

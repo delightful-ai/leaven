@@ -49,10 +49,7 @@ pub mod listwise {
 pub mod mixed {
     pub struct MixedEvidence;
 }
-pub mod pairwise {
-    pub struct PairwiseJudgment;
-    pub struct PairwiseJudgmentEvidence;
-}
+pub mod pairwise;
 pub mod scalar;
 pub mod score_vector {
     pub enum Direction {

@@ -30,7 +30,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         };
 
         let result = engine.run(&mut optimizer, &cases, &store).await?;
-        let best = result.best.expect("optimizer should choose a best candidate");
+        let best = result
+            .best
+            .expect("optimizer should choose a best candidate");
         let best_artifact = engine.view().artifact(best).expect("best candidate exists");
 
         assert_eq!(best_artifact.0, "aaa");
