@@ -14,8 +14,22 @@ pub enum WorkspaceError {
     Io(String),
     #[error("workspace cleanup failed: {0}")]
     Cleanup(String),
+    #[error("workspace operation is not supported by this backend: {operation}")]
+    UnsupportedOperation { operation: &'static str },
     #[error(transparent)]
     Path(#[from] WorkspacePathError),
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum WithWorkspaceError<E> {
+    #[error(transparent)]
+    Allocate(#[from] FactoryError),
+    #[error(transparent)]
+    Stage(E),
+    #[error(transparent)]
+    Cleanup(WorkspaceError),
+    #[error("workspace stage and cleanup both failed")]
+    StageAndCleanup { stage: E, cleanup: WorkspaceError },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]

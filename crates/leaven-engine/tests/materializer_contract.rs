@@ -32,8 +32,10 @@ fn materializer_writes_are_deterministic_for_same_graph_view_and_input() {
         let value = TextArtifact("artifact".to_owned());
         let left_root = temp_root("materializer-left");
         let right_root = temp_root("materializer-right");
-        let mut left = WorkspaceView::new(&left_root);
-        let mut right = WorkspaceView::new(&right_root);
+        let mut left_workspace = fs_workspace(left_root.clone());
+        let mut right_workspace = fs_workspace(right_root.clone());
+        let mut left = left_workspace.view();
+        let mut right = right_workspace.view();
 
         let left_report = materializer
             .materialize_into(&value, &mut left, ctx.materialize_context())
@@ -60,6 +62,10 @@ fn materializer_writes_are_deterministic_for_same_graph_view_and_input() {
                 .read_file(&WorkspacePath::new("history/candidates.txt").unwrap())
                 .unwrap()
         );
+        drop(left);
+        drop(right);
+        left_workspace.cleanup().await.unwrap();
+        right_workspace.cleanup().await.unwrap();
         remove_dir(&left_root);
         remove_dir(&right_root);
     });
@@ -103,7 +109,8 @@ fn materializer_invoked_from_proposer_receives_proposer_read_scope() {
             candidate,
         };
         let root = temp_root("materializer-visibility");
-        let mut workspace = WorkspaceView::new(&root);
+        let mut workspace = fs_workspace(root.clone());
+        let mut view = workspace.view();
         let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
             .with_trust_policy(TrustPolicy::default().hide_from_proposers([hidden]));
         let proposal_ctx = ctx.proposal_context(StageId::custom("p4/proposer"));
@@ -111,7 +118,7 @@ fn materializer_invoked_from_proposer_receives_proposer_read_scope() {
         let report = materializer
             .materialize_into(
                 &TextArtifact("artifact".to_owned()),
-                &mut workspace,
+                &mut view,
                 proposal_ctx.materialize_context(),
             )
             .await
@@ -119,11 +126,12 @@ fn materializer_invoked_from_proposer_receives_proposer_read_scope() {
 
         assert_eq!(report.value.files_written, 1);
         assert_eq!(
-            workspace
-                .read_file(&WorkspacePath::new("visible.txt").unwrap())
+            view.read_file(&WorkspacePath::new("visible.txt").unwrap())
                 .unwrap(),
             b"hidden assessment not visible"
         );
+        drop(view);
+        workspace.cleanup().await.unwrap();
         remove_dir(&root);
     });
 }
@@ -291,6 +299,41 @@ impl WorkspaceBackend for CountingBackend {
         }
         .boxed()
     }
+}
+
+struct FsBackend {
+    root: PathBuf,
+}
+
+impl WorkspaceBackend for FsBackend {
+    fn write_file(&mut self, path: &WorkspacePath, bytes: &[u8]) -> Result<(), WorkspaceError> {
+        let path = self.root.join(path.to_host_relative());
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|err| WorkspaceError::Io(err.to_string()))?;
+        }
+        std::fs::write(path, bytes).map_err(|err| WorkspaceError::Io(err.to_string()))
+    }
+
+    fn read_file(&mut self, path: &WorkspacePath) -> Result<Vec<u8>, WorkspaceError> {
+        std::fs::read(self.root.join(path.to_host_relative()))
+            .map_err(|err| WorkspaceError::Io(err.to_string()))
+    }
+
+    fn cleanup(self: Box<Self>) -> BoxFuture<'static, Result<(), WorkspaceError>> {
+        async move {
+            remove_dir(&self.root);
+            Ok(())
+        }
+        .boxed()
+    }
+
+    fn local_mount(&self) -> Option<&Path> {
+        Some(&self.root)
+    }
+}
+
+fn fs_workspace(root: PathBuf) -> Workspace {
+    Workspace::new(root.clone(), Box::new(FsBackend { root }))
 }
 
 fn temp_root(label: &str) -> PathBuf {

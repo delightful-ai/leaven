@@ -1,12 +1,12 @@
 //! Workspace commands.
 
-use std::path::PathBuf;
+use crate::WorkspacePath;
 
 #[derive(Clone, Debug)]
 pub struct Command {
     pub program: String,
     pub args: Vec<String>,
-    pub cwd: Option<PathBuf>,
+    pub cwd: Option<WorkspacePath>,
 }
 
 #[derive(Clone, Debug)]

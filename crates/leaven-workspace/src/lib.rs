@@ -11,18 +11,19 @@ pub mod workspace;
 
 pub use command::{Command, CommandOutput, ExitStatus};
 pub use config::WorkspaceConfig;
-pub use error::{FactoryError, WorkspaceError, WorkspacePathError};
+pub use error::{FactoryError, WithWorkspaceError, WorkspaceError, WorkspacePathError};
 pub use factory::WorkspaceFactory;
 pub use path::WorkspacePath;
 pub use policy::{FilesystemPolicy, NetworkPolicy};
 pub use view::WorkspaceView;
-pub use workspace::{Workspace, WorkspaceBackend};
+pub use workspace::{Workspace, WorkspaceBackend, with_workspace};
 
 pub mod prelude {
     //! Common workspace imports.
 
     pub use crate::{
-        Command, CommandOutput, FactoryError, Workspace, WorkspaceBackend, WorkspaceConfig,
-        WorkspaceError, WorkspaceFactory, WorkspacePath, WorkspacePathError, WorkspaceView,
+        Command, CommandOutput, FactoryError, WithWorkspaceError, Workspace, WorkspaceBackend,
+        WorkspaceConfig, WorkspaceError, WorkspaceFactory, WorkspacePath, WorkspacePathError,
+        WorkspaceView, with_workspace,
     };
 }

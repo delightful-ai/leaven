@@ -1,15 +1,22 @@
 use std::path::{Path, PathBuf};
+use std::sync::{
+    Arc, Mutex,
+    atomic::{AtomicUsize, Ordering},
+};
 
 use futures::future::{BoxFuture, FutureExt};
 use leaven_kernel::RunId;
 use leaven_workspace::{
-    Command, Workspace, WorkspaceBackend, WorkspaceError, WorkspacePath, WorkspaceView,
+    Command, CommandOutput, ExitStatus, FactoryError, WithWorkspaceError, Workspace,
+    WorkspaceBackend, WorkspaceConfig, WorkspaceError, WorkspaceFactory, WorkspacePath,
+    with_workspace,
 };
 
 #[test]
 fn workspace_view_writes_reads_and_scopes_subdirectories() {
     let root = temp_root("view-scopes");
-    let mut view = WorkspaceView::new(&root);
+    let mut workspace = Workspace::new(root.clone(), Box::new(TestBackend::mounted(&root)));
+    let mut view = workspace.view();
 
     view.write_file(&WorkspacePath::new("artifact/root.txt").unwrap(), b"root")
         .unwrap();
@@ -50,36 +57,49 @@ fn workspace_view_writes_reads_and_scopes_subdirectories() {
     assert_eq!(nested.root().as_str(), "history/visible");
     assert_eq!(deeper.root().as_str(), "history/visible/evidence");
 
+    drop(deeper);
+    drop(nested);
+    drop(view);
+    futures::executor::block_on(workspace.cleanup()).unwrap();
     remove_dir(&root);
 }
 
 #[test]
-fn workspace_view_refuses_commands_without_attached_backend() {
+fn workspace_view_delegates_commands_to_backend_with_scoped_cwd() {
     let root = temp_root("view-command");
-    let mut view = WorkspaceView::new(&root);
+    let commands = Arc::new(Mutex::new(Vec::new()));
+    let mut workspace = Workspace::new(
+        root.clone(),
+        Box::new(TestBackend::mounted_with_commands(&root, commands.clone())),
+    );
+    let mut view = workspace
+        .view()
+        .subdir(WorkspacePath::new("candidate").unwrap())
+        .unwrap();
 
-    let error = view
+    let output = view
         .run_command(Command {
-            program: "true".to_owned(),
-            args: Vec::new(),
-            cwd: None,
+            program: "echo".to_owned(),
+            args: vec!["ok".to_owned()],
+            cwd: Some(WorkspacePath::new("work").unwrap()),
         })
-        .unwrap_err();
+        .unwrap();
 
-    assert!(matches!(error, WorkspaceError::Command(_)));
+    assert_eq!(output.status.code, Some(0));
+    assert_eq!(output.stdout, b"ok");
+    let recorded = commands.lock().unwrap();
+    assert_eq!(recorded.len(), 1);
+    assert_eq!(recorded[0].cwd.as_ref().unwrap().as_str(), "candidate/work");
+    drop(recorded);
+    drop(view);
+    futures::executor::block_on(workspace.cleanup()).unwrap();
     remove_dir(&root);
 }
 
 #[test]
 fn workspace_lifecycle_exposes_root_mount_view_and_cleanup_backend() {
     let root = temp_root("workspace-lifecycle");
-    let mut workspace = Workspace::new(
-        root.clone(),
-        Box::new(MountBackend {
-            mount: root.clone(),
-            cleanup_root: root.clone(),
-        }),
-    );
+    let mut workspace = Workspace::new(root.clone(), Box::new(TestBackend::mounted(&root)));
 
     assert_eq!(workspace.root().as_str(), "");
     assert_eq!(workspace.local_mount(), Some(root.as_path()));
@@ -97,49 +117,202 @@ fn workspace_lifecycle_exposes_root_mount_view_and_cleanup_backend() {
 #[test]
 fn workspace_backend_local_mount_defaults_to_none() {
     let root = temp_root("workspace-no-mount");
-    let workspace = Workspace::new(
-        root.clone(),
-        Box::new(NoMountBackend { root: root.clone() }),
-    );
+    let mut workspace = Workspace::new(root.clone(), Box::new(TestBackend::unmounted(&root)));
 
     assert_eq!(workspace.local_mount(), None);
+    workspace
+        .view()
+        .write_file(&WorkspacePath::new("remote-only.txt").unwrap(), b"ok")
+        .unwrap();
+    assert_eq!(
+        workspace
+            .view()
+            .read_file(&WorkspacePath::new("remote-only.txt").unwrap())
+            .unwrap(),
+        b"ok"
+    );
 
     futures::executor::block_on(workspace.cleanup()).unwrap();
     assert!(!root.exists());
 }
 
-struct MountBackend {
-    mount: PathBuf,
-    cleanup_root: PathBuf,
+#[test]
+fn with_workspace_cleans_up_after_stage_error() {
+    let root = temp_root("with-workspace-stage-error");
+    let cleanup_count = Arc::new(AtomicUsize::new(0));
+    let factory = TestFactory {
+        root: root.clone(),
+        cleanup_count: cleanup_count.clone(),
+        cleanup_error: None,
+    };
+
+    let error = futures::executor::block_on(with_workspace(
+        &factory,
+        WorkspaceConfig::default(),
+        |workspace| {
+            async move {
+                workspace
+                    .view()
+                    .write_file(&WorkspacePath::new("before-error.txt").unwrap(), b"ok")
+                    .unwrap();
+                Err::<(), StageError>(StageError("stage failed"))
+            }
+            .boxed()
+        },
+    ))
+    .unwrap_err();
+
+    assert!(matches!(
+        error,
+        WithWorkspaceError::Stage(StageError("stage failed"))
+    ));
+    assert_eq!(cleanup_count.load(Ordering::SeqCst), 1);
+    assert!(!root.exists());
 }
 
-impl WorkspaceBackend for MountBackend {
+#[test]
+fn with_workspace_preserves_stage_and_cleanup_failures() {
+    let root = temp_root("with-workspace-double-error");
+    let cleanup_count = Arc::new(AtomicUsize::new(0));
+    let factory = TestFactory {
+        root: root.clone(),
+        cleanup_count: cleanup_count.clone(),
+        cleanup_error: Some("cleanup failed"),
+    };
+
+    let error = futures::executor::block_on(with_workspace(
+        &factory,
+        WorkspaceConfig::default(),
+        |_workspace| async { Err::<(), StageError>(StageError("stage failed")) }.boxed(),
+    ))
+    .unwrap_err();
+
+    assert!(matches!(
+        error,
+        WithWorkspaceError::StageAndCleanup {
+            stage: StageError("stage failed"),
+            cleanup: WorkspaceError::Cleanup(_)
+        }
+    ));
+    assert_eq!(cleanup_count.load(Ordering::SeqCst), 1);
+    remove_dir(&root);
+}
+
+struct TestBackend {
+    root: PathBuf,
+    mount: Option<PathBuf>,
+    commands: Arc<Mutex<Vec<Command>>>,
+    cleanup_count: Option<Arc<AtomicUsize>>,
+    cleanup_error: Option<&'static str>,
+}
+
+impl TestBackend {
+    fn mounted(root: &Path) -> Self {
+        Self::mounted_with_commands(root, Arc::new(Mutex::new(Vec::new())))
+    }
+
+    fn mounted_with_commands(root: &Path, commands: Arc<Mutex<Vec<Command>>>) -> Self {
+        Self {
+            root: root.to_path_buf(),
+            mount: Some(root.to_path_buf()),
+            commands,
+            cleanup_count: None,
+            cleanup_error: None,
+        }
+    }
+
+    fn unmounted(root: &Path) -> Self {
+        Self {
+            root: root.to_path_buf(),
+            mount: None,
+            commands: Arc::new(Mutex::new(Vec::new())),
+            cleanup_count: None,
+            cleanup_error: None,
+        }
+    }
+
+    fn with_cleanup(
+        root: PathBuf,
+        cleanup_count: Arc<AtomicUsize>,
+        cleanup_error: Option<&'static str>,
+    ) -> Self {
+        Self {
+            root,
+            mount: None,
+            commands: Arc::new(Mutex::new(Vec::new())),
+            cleanup_count: Some(cleanup_count),
+            cleanup_error,
+        }
+    }
+
+    fn host_path(&self, path: &WorkspacePath) -> PathBuf {
+        self.root.join(path.to_host_relative())
+    }
+}
+
+impl WorkspaceBackend for TestBackend {
+    fn write_file(&mut self, path: &WorkspacePath, bytes: &[u8]) -> Result<(), WorkspaceError> {
+        let path = self.host_path(path);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|err| WorkspaceError::Io(err.to_string()))?;
+        }
+        std::fs::write(path, bytes).map_err(|err| WorkspaceError::Io(err.to_string()))
+    }
+
+    fn read_file(&mut self, path: &WorkspacePath) -> Result<Vec<u8>, WorkspaceError> {
+        std::fs::read(self.host_path(path)).map_err(|err| WorkspaceError::Io(err.to_string()))
+    }
+
+    fn run_command(&mut self, command: Command) -> Result<CommandOutput, WorkspaceError> {
+        self.commands.lock().unwrap().push(command);
+        Ok(CommandOutput {
+            status: ExitStatus { code: Some(0) },
+            stdout: b"ok".to_vec(),
+            stderr: Vec::new(),
+        })
+    }
+
     fn cleanup(self: Box<Self>) -> BoxFuture<'static, Result<(), WorkspaceError>> {
         async move {
-            remove_dir(&self.cleanup_root);
+            if let Some(cleanup_count) = &self.cleanup_count {
+                cleanup_count.fetch_add(1, Ordering::SeqCst);
+            }
+            if let Some(message) = self.cleanup_error {
+                return Err(WorkspaceError::Cleanup(message.to_owned()));
+            }
+            remove_dir(&self.root);
             Ok(())
         }
         .boxed()
     }
 
     fn local_mount(&self) -> Option<&Path> {
-        Some(&self.mount)
+        self.mount.as_deref()
     }
 }
 
-struct NoMountBackend {
+struct TestFactory {
     root: PathBuf,
+    cleanup_count: Arc<AtomicUsize>,
+    cleanup_error: Option<&'static str>,
 }
 
-impl WorkspaceBackend for NoMountBackend {
-    fn cleanup(self: Box<Self>) -> BoxFuture<'static, Result<(), WorkspaceError>> {
-        async move {
-            remove_dir(&self.root);
-            Ok(())
-        }
-        .boxed()
+impl WorkspaceFactory for TestFactory {
+    async fn allocate(&self, _config: WorkspaceConfig) -> Result<Workspace, FactoryError> {
+        Ok(Workspace::new(
+            self.root.clone(),
+            Box::new(TestBackend::with_cleanup(
+                self.root.clone(),
+                self.cleanup_count.clone(),
+                self.cleanup_error,
+            )),
+        ))
     }
 }
+
+#[derive(Debug, Eq, PartialEq, thiserror::Error)]
+#[error("{0}")]
+struct StageError(&'static str);
 
 fn temp_root(label: &str) -> PathBuf {
     let root = std::env::temp_dir().join(format!("leaven-{label}-{}", RunId::new()));

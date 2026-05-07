@@ -76,7 +76,12 @@ impl WorkspacePath {
         &self.inner
     }
 
-    pub(crate) fn to_host_relative(&self) -> PathBuf {
+    /// Convert this workspace path into a relative host path.
+    ///
+    /// This is only for backends that expose a host filesystem layout. Pure
+    /// remote backends should keep using [`WorkspacePath`] directly.
+    #[must_use]
+    pub fn to_host_relative(&self) -> PathBuf {
         let mut path = PathBuf::new();
         for part in self.inner.split('/').filter(|part| !part.is_empty()) {
             path.push(part);
