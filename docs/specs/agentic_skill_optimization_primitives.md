@@ -371,6 +371,23 @@ Artifact validation is mandatory at graph insertion.
 Automatic repair/reproposal is stage policy, not engine policy.
 ```
 
+Current engine behavior is deliberately minimal:
+
+```text
+proposer returns ProposalBatch
+optimizer records the batch through RunContext
+optimizer applies proposals through RunContext
+artifact apply/validate failure records ApplyFailed
+no candidate is created for that proposal
+the ApplyReport tells the optimizer which proposals failed
+the engine does not call the proposer again
+```
+
+That behavior is necessary but not sufficient for agentic skill optimization.
+It prevents invalid artifacts from entering the candidate graph, cache, or
+population, while preserving the failed attempt as run evidence. It does not
+repair anything by itself.
+
 The engine should not secretly call an agent again because a proposal failed
 validation. A concrete `AgenticProposer` or paper-specific optimizer can choose
 a bounded repair loop:
@@ -380,6 +397,14 @@ pub struct ReproposalPolicy {
     pub max_attempts: NonZeroUsize,
     pub include_validation_error: bool,
     pub preserve_failed_attempts: bool,
+    pub validate_in_workspace: Option<ValidationCommand>,
+}
+
+pub struct ValidationCommand {
+    pub cwd: WorkspacePath,
+    pub argv: Vec<String>,
+    pub env: BTreeMap<String, String>,
+    pub max_attempt_output_bytes: u64,
 }
 ```
 
@@ -389,6 +414,44 @@ should still be recordable as failed proposal applications so the run graph
 preserves what happened. This is core enough to standardize in `leaven-agentic`,
 but it should remain opt-in stage composition rather than an engine-global retry
 loop.
+
+There are two useful repair-loop shapes:
+
+```text
+Parse/apply validation loop:
+  agent proposes a typed change or output file
+  parser imports it into ProposalBatch
+  stage or optimizer tries apply/validate
+  on SkillBankError, call proposer again with the error and prior attempt
+
+Workspace submit validation loop:
+  agent edits files in workspace
+  stage runs a validator command before parsing/finalizing
+  on validator failure, call the same proposer adapter again with stdout/stderr
+  on validator success, parser/finalizer imports proposals
+```
+
+The second shape covers "validate before submit" workflows: a paper-specific
+proposer or generic `AgenticProposerWithRepair` can write a validation report
+into the workspace, render it back into the next agent prompt, and let the
+agent repair before anything is admitted to the optimizer as a candidate.
+
+Provider-neutral Leaven should not require "same provider thread" semantics for
+this loop. `AgentRuntime` currently executes one session in one workspace.
+Reproposal can be modeled portably as another session over the same materialized
+workspace plus explicit context:
+
+```text
+previous transcript
+previous output/proposal
+typed validation error or validator log
+repair instructions
+```
+
+A provider adapter may use a native thread/session continuation internally if
+it has one, but the Leaven contract should not depend on that. The portable
+semantic is "bounded repair attempts with explicit prior context," not "resume
+the same chat thread."
 
 Permission portability is not a `SkillBank` validation error. A `SkillFile`
 can represent `executable: true`; if a specific workspace backend cannot

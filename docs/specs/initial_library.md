@@ -4627,6 +4627,11 @@ skill-optimization papers without baking a paper-specific loop into the engine.
 - **Design-standard checklist added.** The companion spec now records the
   type, trait, error, and test invariants that must hold before the skill
   substrate is implemented.
+- **Validation lifecycle clarified.** Apply/validate failure now has an
+  explicit lifecycle: it records an `ApplyFailed` attempt and creates no
+  candidate; bounded repair/reproposal is stage or optimizer policy, not hidden
+  engine behavior. Workspace-level submit validation and portable "new session
+  with prior context" repair loops are specified.
 
 ### v0.2.3 (2026-05-07) - agentic stage runtime contract
 
