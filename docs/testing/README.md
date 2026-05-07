@@ -85,8 +85,8 @@ Use the narrowest layer that proves the claim.
 - `crates/leaven-engine/tests/context_services.rs`: proposal/evaluation
   context scenarios for budget charging, error recording, cache policy,
   evidence references, durable evaluation-request recording on failed
-  evaluations, assessment/evaluation request views, read-scoped assessment
-  queries, and graph-backed evidence lookup.
+  evaluations, proposal/evaluation/render context views, read-scoped
+  assessment queries, and graph-backed evidence lookup.
 - `crates/leaven-engine/tests/budget_laws.rs`: budget axis and sub-stage
   charging laws, including typed refusal of invalid seconds amounts.
 - `crates/leaven-kernel/tests/cost_amount.rs`: property and regression coverage
@@ -98,8 +98,8 @@ Use the narrowest layer that proves the claim.
 - `crates/leaven-engine/tests/trust_policy.rs`: read-scope and actor-policy
   examples for hidden partitions and typed trust refusals.
 - `crates/leaven-engine/tests/engine_loop.rs`: engine run-loop scenarios for
-  continuation, optimizer completion, trust-policy wiring, and optimizer error
-  closeout.
+  continuation, optimizer completion, trust-policy wiring, callback dispatch,
+  max-iteration refusal, and optimizer error closeout.
 - `crates/leaven-engine/tests/stage_trait_contracts.rs`: static-to-dynamic
   stage adapter contracts for proposer, evaluator, preference, and stopper
   traits.

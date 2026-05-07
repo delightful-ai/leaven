@@ -4,7 +4,7 @@ use leaven_kernel::CaseId;
 
 #[test]
 fn all_and_unscoped_resolve_to_every_case() {
-    let cases = CaseSet::new(vec!["a", "b", "c"]);
+    let cases = CaseSet::builder().cases(vec!["a", "b", "c"]).build();
 
     assert_eq!(ids(&cases, &EvaluationSet::All), vec![0, 1, 2]);
     assert_eq!(ids(&cases, &EvaluationSet::Unscoped), vec![0, 1, 2]);
@@ -99,6 +99,10 @@ fn tag_index_dependent_sets_are_typed_unsupported_errors() {
         EvaluationResolveError::UnsupportedSet(UnsupportedEvaluationSet::Tagged(Tag(tag)))
             if tag.as_str() == "gold"
     ));
+    assert_eq!(
+        UnsupportedEvaluationSet::Tagged(Tag("gold".into())).to_string(),
+        "tagged:gold"
+    );
 
     let err = cases
         .resolve(&EvaluationSet::Stratified {
@@ -114,6 +118,23 @@ fn tag_index_dependent_sets_are_typed_unsupported_errors() {
         EvaluationResolveError::UnsupportedSet(UnsupportedEvaluationSet::Stratified { by: Tag(tag) })
             if tag.as_str() == "difficulty"
     ));
+    assert_eq!(
+        (UnsupportedEvaluationSet::Stratified {
+            by: Tag("difficulty".into())
+        })
+        .to_string(),
+        "stratified-by:difficulty"
+    );
+}
+
+#[test]
+fn empty_intersection_resolves_to_empty_set() {
+    let cases = CaseSet::new(vec!["a", "b"]);
+
+    assert_eq!(
+        ids(&cases, &EvaluationSet::Intersect(Vec::new())),
+        Vec::<u64>::new()
+    );
 }
 
 fn ids(cases: &CaseSet<&'static str>, set: &EvaluationSet) -> Vec<u64> {

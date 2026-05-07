@@ -1,11 +1,17 @@
 mod support;
 
+use std::sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering},
+};
+
 use futures::executor::block_on;
 use leaven_core::PartitionId;
 use leaven_engine::{
-    CaseSet, Engine, Optimizer, OptimizerError, RunContext, RunEvent, StepStatus, TrustPolicy,
+    Callback, CaseSet, Engine, Optimizer, OptimizerError, RunContext, RunEvent, RunGraphView,
+    StepStatus, TrustPolicy, optimize,
 };
-use leaven_kernel::ErrorKind;
+use leaven_kernel::{Budget, ErrorKind};
 use leaven_store_inline::InlineEvidenceStore;
 
 use support::{TestEvidence, TestProblem, TextArtifact};
@@ -47,6 +53,26 @@ fn engine_continues_until_optimizer_reports_done() {
 }
 
 #[test]
+fn optimize_builder_wires_budget_and_callbacks() {
+    block_on(async {
+        let seen = Arc::new(AtomicUsize::new(0));
+        let callback = CountingCallback { seen: seen.clone() };
+        let mut engine = optimize::<TestProblem>()
+            .budget(Budget::metric_calls(7))
+            .callback(callback)
+            .build();
+        let cases = CaseSet::new(vec!["case"]);
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let mut optimizer = ContinueThenDone { steps: 0 };
+
+        engine.run(&mut optimizer, &cases, &store).await.unwrap();
+
+        assert!(seen.load(Ordering::SeqCst) > 0);
+        assert_eq!(engine.budget().snapshot().limit.metric_calls, Some(7));
+    });
+}
+
+#[test]
 fn engine_trust_policy_reaches_optimizer_context() {
     block_on(async {
         let secret = PartitionId::from("secret");
@@ -63,6 +89,30 @@ fn engine_trust_policy_reaches_optimizer_context() {
         engine.run(&mut optimizer, &cases, &store).await.unwrap();
 
         assert!(optimizer.observed_hidden);
+    });
+}
+
+#[test]
+fn engine_stops_run_when_optimizer_never_finishes() {
+    block_on(async {
+        let mut engine = Engine::<TestProblem>::builder().build();
+        let cases = CaseSet::new(vec!["case"]);
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let mut optimizer = NeverDone;
+
+        let err = engine
+            .run(&mut optimizer, &cases, &store)
+            .await
+            .unwrap_err();
+
+        assert!(err.to_string().contains("exceeded"));
+        assert!(engine.view().events().any(|event| matches!(
+            event,
+            RunEvent::Error {
+                error,
+                ..
+            } if error.kind == ErrorKind::Optimizer
+        )));
     });
 }
 
@@ -137,6 +187,35 @@ fn engine_records_step_errors_and_ends_run() {
 
 struct ContinueThenDone {
     steps: usize,
+}
+
+struct CountingCallback {
+    seen: Arc<AtomicUsize>,
+}
+
+impl Callback<TestProblem> for CountingCallback {
+    fn on_event(&mut self, _event: &RunEvent, graph: RunGraphView<'_, TestProblem>) {
+        let _ = graph.event_count();
+        self.seen.fetch_add(1, Ordering::SeqCst);
+    }
+}
+
+struct NeverDone;
+
+impl Optimizer<TestProblem> for NeverDone {
+    async fn step(
+        &mut self,
+        _ctx: &mut RunContext<'_, TestProblem>,
+    ) -> Result<StepStatus, OptimizerError> {
+        Ok(StepStatus::Continue)
+    }
+
+    fn best_candidate(
+        &self,
+        _graph: leaven_engine::RunGraphView<'_, TestProblem>,
+    ) -> Option<leaven_kernel::CandidateId> {
+        None
+    }
 }
 
 struct TrustInspectingOptimizer {

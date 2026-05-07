@@ -2,7 +2,7 @@ mod support;
 
 use leaven_core::{CausalInputs, InfoRef, Proposal, ProposalEffect, ProposalProvenance, Window};
 use leaven_engine::{ApplyOutcome, CandidateOrigin, RunContext, RunEvent};
-use leaven_kernel::{ErrorKind, MetadataBag};
+use leaven_kernel::{Cost, ErrorKind, MetadataBag, MetadataKey, MetadataValue, StageId};
 use proptest::prelude::*;
 
 use support::{TestProblem, TextArtifact, TextChange, graph_and_budget, record_one};
@@ -64,6 +64,63 @@ fn change_proposal_creates_causal_edge() {
 }
 
 #[test]
+fn graph_views_expose_record_details_without_storage_maps() {
+    let (mut graph, mut budget) = graph_and_budget();
+    let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+    let stage = StageId::custom("detail-proposer");
+    let mut batch_metadata = MetadataBag::new();
+    batch_metadata.insert("batch", MetadataValue::Bool(true));
+    let mut proposal_metadata = MetadataBag::new();
+    proposal_metadata.insert("proposal", MetadataValue::String("detail".to_owned()));
+    let proposal = Proposal::create(TextArtifact("detailed".to_owned()))
+        .metadata(proposal_metadata)
+        .build();
+    let report = ctx
+        .record_proposal_batch(
+            stage.clone(),
+            leaven_core::ProposalBatch {
+                proposals: vec![proposal],
+                semantics: leaven_core::ProposalBatchSemantics::Alternatives,
+                metadata: batch_metadata,
+            },
+            Cost::zero(),
+        )
+        .unwrap();
+    let candidate = ctx
+        .apply_batch(report.batch_id)
+        .unwrap()
+        .successful_candidates()
+        .next()
+        .unwrap();
+
+    let view = ctx.graph();
+    let batch = view.proposal_batch(report.batch_id).unwrap();
+    let proposal = view.proposal_that_created(candidate).unwrap();
+
+    assert_eq!(batch.stage(), &stage);
+    assert!(matches!(
+        batch.metadata().get(&MetadataKey::from("batch")),
+        Some(MetadataValue::Bool(true))
+    ));
+    assert!(batch.created_at() <= leaven_kernel::now());
+    assert_eq!(batch.iteration(), None);
+    assert_eq!(proposal.batch_id(), report.batch_id);
+    assert!(matches!(
+        proposal.effect(),
+        ProposalEffect::Create {
+            artifact: TextArtifact(text)
+        } if text == "detailed"
+    ));
+    assert_eq!(proposal.provenance().causal, CausalInputs::None);
+    assert_eq!(proposal.annotations(), &());
+    assert!(matches!(
+        proposal.metadata().get(&MetadataKey::from("proposal")),
+        Some(MetadataValue::String(value)) if value == "detail"
+    ));
+    assert!(proposal.created_at() <= leaven_kernel::now());
+}
+
+#[test]
 fn invalid_change_provenance_records_failed_apply() {
     let (mut graph, mut budget) = graph_and_budget();
     let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
@@ -100,8 +157,10 @@ fn invalid_change_provenance_records_failed_apply() {
     ));
     let failures = view.recent_failures(Window { limit: 1 });
     assert_eq!(failures.len(), 1);
+    assert_eq!(failures[0].id(), report.outcomes[0].attempt_id);
     assert_eq!(failures[0].proposal_id(), proposal_id);
     assert_eq!(failures[0].error().kind, ErrorKind::GraphInvariant);
+    assert!(failures[0].created_at() <= leaven_kernel::now());
 }
 
 #[test]
@@ -266,6 +325,7 @@ fn apply_batch_reports_partial_failure_without_aborting() {
     let report = ctx.apply_batch(batch).unwrap();
 
     assert_eq!(report.outcomes.len(), 2);
+    assert_eq!(report.successful_candidates().count(), 1);
     assert!(matches!(
         report.outcomes[0].outcome,
         ApplyOutcome::Success { .. }

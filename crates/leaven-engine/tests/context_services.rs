@@ -71,6 +71,29 @@ fn proposal_context_exposes_read_scope_graph_and_budget_snapshot() {
 }
 
 #[test]
+fn render_context_exposes_renderer_scope_graph_and_budget_snapshot() {
+    let (mut graph, mut budget) = graph_and_budget();
+    let candidate = {
+        let mut seed_ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+        seed_ctx
+            .insert_seed(TextArtifact("abc".to_owned()), 0)
+            .unwrap()
+    };
+    let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget).with_trust_policy(
+        TrustPolicy::default().hide_from_optimizers([PartitionId::from("optimizer-hidden")]),
+    );
+
+    let render_ctx = ctx.render_context(StageId::custom("renderer"));
+
+    assert_eq!(
+        render_ctx.graph().candidate(candidate).unwrap().id(),
+        candidate
+    );
+    assert!(render_ctx.read_scope().hidden_partitions.is_empty());
+    assert!(render_ctx.budget().spent.is_zero());
+}
+
+#[test]
 fn proposer_error_records_stage_error_without_proposal_mutation() {
     block_on(async {
         let (mut graph, mut budget) = graph_and_budget();
@@ -130,10 +153,26 @@ fn evaluate_with_resolves_sets_stores_evidence_and_emits_events() {
         let request = ctx.graph().evaluation_request(report.request_id).unwrap();
         assert_eq!(assessment.id(), report.assessment_ids[0]);
         assert_eq!(assessment.request_id(), report.request_id);
+        assert_eq!(*assessment.evaluator(), EvaluatorId::PRIMARY);
+        assert!(assessment.metadata().is_empty());
+        assert!(assessment.created_at() <= leaven_kernel::now());
+        assert_eq!(query.len(), 1);
         assert_eq!(query.ids(), report.assessment_ids);
+        assert_eq!(
+            query
+                .iter()
+                .map(leaven_engine::AssessmentView::id)
+                .collect::<Vec<_>>(),
+            report.assessment_ids
+        );
         assert_eq!(*request.evaluator(), EvaluatorId::PRIMARY);
         assert_eq!(request.id(), report.request_id);
+        assert!(matches!(
+            request.request(),
+            EvaluationRequest::Independent { .. }
+        ));
         assert_eq!(request.resolved_set().case_ids.len(), 1);
+        assert!(request.created_at() <= leaven_kernel::now());
         assert!(matches!(assessment.target(), AssessmentTarget::Unscoped));
         assert_eq!(assessment.independent_candidate(), Some(candidate));
         assert_score(
