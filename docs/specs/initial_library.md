@@ -4618,6 +4618,15 @@ skill-optimization papers without baking a paper-specific loop into the engine.
   generic primitive requirements.
 - **Companion spec added.** See
   `docs/specs/agentic_skill_optimization_primitives.md`.
+- **Skill primitive design tightened.** Optional Agent Skills fields are not
+  baked into core skill types; extra frontmatter is generic skill metadata.
+  `SKILL.md` validity requires `name`, `description`, and non-empty body.
+  `RenameSkill`, typed validation errors, bounded reproposal policy, standalone
+  selector placement, and explicit private checkpoint state are called out as
+  implementation-facing contracts.
+- **Design-standard checklist added.** The companion spec now records the
+  type, trait, error, and test invariants that must hold before the skill
+  substrate is implemented.
 
 ### v0.2.3 (2026-05-07) - agentic stage runtime contract
 
