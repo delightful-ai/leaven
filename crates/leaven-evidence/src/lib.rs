@@ -35,6 +35,7 @@ pub mod command {
     pub struct CommandEvidence;
     pub struct CommandRecord;
 }
+pub mod casewise;
 pub mod diff {
     pub struct DiffEvidence;
     pub struct RenderedDiff;
@@ -65,6 +66,7 @@ pub mod string {
     pub struct StringEvidence;
 }
 pub use attribution::{AttributableEvidence, Attribution, AttributionKey};
+pub use casewise::{CaseOutcome, CasewiseEvidence};
 pub use command::{CommandEvidence, CommandRecord};
 pub use diff::{DiffEvidence, RenderedDiff};
 pub use json::JsonEvidence;
@@ -76,8 +78,8 @@ pub use score_vector::{Direction, RawScoreValue, ScoreAxis, ScorePoint, ScoreVec
 pub use string::StringEvidence;
 pub mod prelude {
     pub use crate::{
-        AttributableEvidence, CommandEvidence, DiffEvidence, Direction, JsonEvidence,
-        ListwiseRankingEvidence, MixedEvidence, PairwiseJudgmentEvidence, ScalarEvidence,
-        ScalarEvidenceError, ScoreVectorEvidence, StringEvidence,
+        AttributableEvidence, CaseOutcome, CasewiseEvidence, CommandEvidence, DiffEvidence,
+        Direction, JsonEvidence, ListwiseRankingEvidence, MixedEvidence, PairwiseJudgmentEvidence,
+        ScalarEvidence, ScalarEvidenceError, ScoreVectorEvidence, StringEvidence,
     };
 }

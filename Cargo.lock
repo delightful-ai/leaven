@@ -960,7 +960,16 @@ dependencies = [
 name = "p3_gepa_parity"
 version = "0.0.0"
 dependencies = [
+ "futures",
  "leaven",
+ "leaven-core",
+ "leaven-engine",
+ "leaven-evidence",
+ "leaven-gepa",
+ "leaven-kernel",
+ "leaven-population",
+ "leaven-store-inline",
+ "leaven-surface",
 ]
 
 [[package]]

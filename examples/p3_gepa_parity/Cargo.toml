@@ -11,4 +11,13 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
-leaven = { workspace = true }
+futures = { workspace = true }
+leaven = { workspace = true, features = ["std", "gepa"] }
+leaven-core = { workspace = true }
+leaven-engine = { workspace = true }
+leaven-evidence = { workspace = true }
+leaven-gepa = { workspace = true }
+leaven-kernel = { workspace = true }
+leaven-population = { workspace = true }
+leaven-store-inline = { workspace = true }
+leaven-surface = { workspace = true }
