@@ -321,10 +321,15 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
         let policy = evaluator.cache_policy(&resolved_request);
         let cache_key =
             evaluation_cache_key(evaluator.fingerprint(), policy.clone(), &resolved_request);
+        let request_id = self.record_evaluation_request(
+            &evaluator_id,
+            request,
+            resolved_set.clone(),
+            candidate_count(&resolved_request),
+        );
         if let Some(report) = self.cached_evaluation_report(
             &evaluator_id,
-            request.clone(),
-            &resolved_set,
+            request_id,
             &resolved_request,
             &policy,
             &cache_key,
@@ -342,12 +347,6 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
             })
             .map_err(RunContextError::Evaluation)?;
         self.charge(stage, metered.cost.clone())?;
-        let request_id = self.record_evaluation_request(
-            &evaluator_id,
-            request,
-            resolved_set.clone(),
-            candidate_count(&resolved_request),
-        );
         let assessment_ids = self.record_assessments(request_id, &evaluator_id, metered.value)?;
         let cache = if matches!(policy, CachePolicy::Never) {
             CacheStatus::Bypassed
@@ -371,8 +370,7 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
     fn cached_evaluation_report(
         &mut self,
         evaluator: &EvaluatorId,
-        request: EvaluationRequest,
-        resolved_set: &leaven_core::ResolvedEvaluationSet,
+        request_id: EvaluationRequestId,
         resolved_request: &ResolvedEvaluationRequest,
         policy: &CachePolicy,
         cache_key: &EvaluationCacheKey,
@@ -385,12 +383,6 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
             .as_ref()
             .and_then(|cache| cache.get(cache_key))
             .cloned()?;
-        let request_id = self.record_evaluation_request(
-            evaluator,
-            request,
-            resolved_set.clone(),
-            candidate_count(resolved_request),
-        );
         let report = EvaluationReport {
             request_id,
             resolved_set: resolved_request.set.id,

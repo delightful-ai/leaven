@@ -81,6 +81,9 @@ contract tests once the trait is public and behavior-bearing.
   at durable event boundaries, preserving debug/source chains.
 - Evidence-store failure after evaluation request recording now emits a durable
   stage error and leaves assessment mutation incomplete.
+- Evaluator and evaluation-budget failures now preserve the durable
+  `EvaluationRequested` record/event before failure, while still refusing
+  assessment mutation.
 - `ScalarEvidence` is finite-by-construction and refuses `NaN` and infinities.
 - `Amount`, `Cost`, and `Budget` no longer expose raw seconds `f64` values.
   Amount-like values are finite and non-negative by construction, serde

@@ -257,7 +257,7 @@ fn pairwise_and_listwise_evaluations_record_non_independent_targets() {
 }
 
 #[test]
-fn evaluation_error_records_stage_error_without_request_mutation() {
+fn evaluation_error_records_request_and_stage_error_without_assessment_mutation() {
     block_on(async {
         let (mut graph, mut budget) = graph_and_budget();
         let mut cache = leaven_engine::EvaluationCache::default();
@@ -280,7 +280,13 @@ fn evaluation_error_records_stage_error_without_request_mutation() {
             .unwrap_err();
 
         assert!(matches!(err, leaven_engine::RunContextError::Evaluation(_)));
-        assert_eq!(ctx.graph().evaluation_request_count(), 0);
+        assert_eq!(ctx.graph().evaluation_request_count(), 1);
+        assert!(
+            ctx.graph()
+                .events()
+                .any(|event| matches!(event, RunEvent::EvaluationRequested { .. }))
+        );
+        assert_eq!(ctx.graph().assessment_count(), 0);
         let error = ctx
             .graph()
             .events()
@@ -504,7 +510,7 @@ fn propose_budget_exhaustion_leaves_graph_unmutated() {
 }
 
 #[test]
-fn evaluate_budget_exhaustion_leaves_graph_unmutated() {
+fn evaluate_budget_exhaustion_records_request_without_assessment_mutation() {
     block_on(async {
         let mut graph = leaven_engine::RunGraph::new(leaven_kernel::RunId::new());
         let mut budget = BudgetLedger::new(Budget::metric_calls(0));
@@ -530,7 +536,7 @@ fn evaluate_budget_exhaustion_leaves_graph_unmutated() {
 
         assert!(matches!(err, leaven_engine::RunContextError::Budget(_)));
         assert_eq!(evaluator.calls(), 1);
-        assert_eq!(ctx.graph().evaluation_request_count(), 0);
+        assert_eq!(ctx.graph().evaluation_request_count(), 1);
         assert_eq!(ctx.graph().assessment_count(), 0);
         assert!(ctx.graph().events().any(|event| matches!(
             event,

@@ -84,8 +84,9 @@ Use the narrowest layer that proves the claim.
   `RunContext`, plus an append-only graph law test.
 - `crates/leaven-engine/tests/context_services.rs`: proposal/evaluation
   context scenarios for budget charging, error recording, cache policy,
-  evidence references, assessment/evaluation request views, read-scoped
-  assessment queries, and graph-backed evidence lookup.
+  evidence references, durable evaluation-request recording on failed
+  evaluations, assessment/evaluation request views, read-scoped assessment
+  queries, and graph-backed evidence lookup.
 - `crates/leaven-engine/tests/budget_laws.rs`: budget axis and sub-stage
   charging laws, including typed refusal of invalid seconds amounts.
 - `crates/leaven-kernel/tests/cost_amount.rs`: property and regression coverage
