@@ -19,7 +19,7 @@ mod trust;
 
 pub use budget::{BudgetHandle, BudgetLedger};
 pub use cache::{CachePolicy, CacheStatus, EvaluationCache, EvaluationCacheKey};
-pub use case_set::{CaseSet, CaseSetBuilder, EvaluationResolveError};
+pub use case_set::{CaseSet, CaseSetBuilder, EvaluationResolveError, UnsupportedEvaluationSet};
 pub use context::{EvaluationContext, ProposalContext, RenderContext, RunContext, RunContextError};
 pub use engine::{Engine, EngineBuilder, RunResult, optimize};
 pub use events::{

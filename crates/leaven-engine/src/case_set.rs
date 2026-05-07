@@ -1,12 +1,14 @@
 //! Case-set storage and evaluation-set resolution.
 
 use std::collections::BTreeMap;
+use std::fmt;
 
 use indexmap::IndexMap;
 use leaven_core::{CaseSetVersion, EvaluationSet, PartitionId, ResolvedEvaluationSet, Tag};
 use leaven_kernel::{CaseId, ResolvedEvaluationSetId};
 use thiserror::Error;
 
+/// Concrete case collection used to resolve evaluation-set expressions.
 pub struct CaseSet<C> {
     cases: IndexMap<CaseId, C>,
     partitions: BTreeMap<PartitionId, Vec<CaseId>>,
@@ -14,16 +16,19 @@ pub struct CaseSet<C> {
 }
 
 impl<C> CaseSet<C> {
+    /// Starts a case-set builder.
     #[must_use]
     pub fn builder() -> CaseSetBuilder<C> {
         CaseSetBuilder::default()
     }
 
+    /// Builds a case set from ordered cases.
     #[must_use]
     pub fn new(cases: Vec<C>) -> Self {
         Self::builder().cases(cases).build()
     }
 
+    /// Adds or replaces a named partition and increments the case-set version.
     #[must_use]
     pub fn with_partition(mut self, partition: PartitionId, case_ids: Vec<CaseId>) -> Self {
         self.partitions.insert(partition, case_ids);
@@ -31,6 +36,7 @@ impl<C> CaseSet<C> {
         self
     }
 
+    /// Resolves an evaluation-set expression against this case set.
     pub fn resolve(
         &self,
         set: &EvaluationSet,
@@ -63,8 +69,8 @@ impl<C> CaseSet<C> {
                 }
                 Ok(case_ids.clone())
             }
-            EvaluationSet::Tagged(Tag(tag)) => Err(EvaluationResolveError::UnsupportedSet(
-                format!("tagged:{tag}"),
+            EvaluationSet::Tagged(tag) => Err(EvaluationResolveError::UnsupportedSet(
+                UnsupportedEvaluationSet::Tagged(tag.clone()),
             )),
             EvaluationSet::Recent { window } => Ok(self
                 .cases
@@ -118,6 +124,7 @@ impl<C> CaseSet<C> {
     }
 }
 
+/// Builder for [`CaseSet`].
 pub struct CaseSetBuilder<C> {
     cases: Vec<C>,
 }
@@ -129,12 +136,14 @@ impl<C> Default for CaseSetBuilder<C> {
 }
 
 impl<C> CaseSetBuilder<C> {
+    /// Supplies ordered cases.
     #[must_use]
     pub fn cases(mut self, cases: Vec<C>) -> Self {
         self.cases = cases;
         self
     }
 
+    /// Builds the case set.
     #[must_use]
     pub fn build(self) -> CaseSet<C> {
         CaseSet {
@@ -150,14 +159,34 @@ impl<C> CaseSetBuilder<C> {
     }
 }
 
+/// Unsupported evaluation-set shape.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum UnsupportedEvaluationSet {
+    /// Tagged sets require a tag index that the current resolver does not own.
+    Tagged(Tag),
+}
+
+impl fmt::Display for UnsupportedEvaluationSet {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Tagged(tag) => write!(f, "tagged:{}", tag.0),
+        }
+    }
+}
+
+/// Error returned when resolving an evaluation-set expression.
 #[derive(Debug, Error)]
 pub enum EvaluationResolveError {
+    /// The requested partition is not present in the case set.
     #[error("unknown evaluation partition `{0:?}`")]
     UnknownPartition(PartitionId),
+    /// The requested case ID is not present in the case set.
     #[error("unknown case `{0}`")]
     UnknownCase(CaseId),
+    /// The evaluation-set expression is valid vocabulary but unsupported here.
     #[error("unsupported evaluation set: {0}")]
-    UnsupportedSet(String),
+    UnsupportedSet(UnsupportedEvaluationSet),
+    /// A case set was required but none was installed.
     #[error("case set is required to resolve evaluation set")]
     MissingCaseSet,
 }

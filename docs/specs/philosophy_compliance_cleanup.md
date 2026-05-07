@@ -91,6 +91,10 @@ contract tests once the trait is public and behavior-bearing.
   the real derive contracts are implemented.
 - UUID-backed ID macro generation now accepts doc attributes, so public
   identifier docstrings do not break the typed-ID implementation.
+- `EvaluationCacheKey` now carries `CaseSetVersion` instead of downgrading the
+  cache-critical case-set version to `String`.
+- Unsupported tagged evaluation sets now return a typed
+  `UnsupportedEvaluationSet::Tagged` refusal instead of a string payload.
 - Static-to-dynamic stage adapters for proposer, evaluator, preference, and
   stopper have explicit contract tests.
 - `DynRenderer` is not exposed as an empty marker trait. The planned surface is
@@ -130,12 +134,6 @@ Required cleanup:
 `ExternalRef { kind: String, id: String }` is intentionally open-world today,
 but this should stay under review. If the set of external reference kinds
 becomes closed or behavior-bearing, it should become a typed enum/newtype pair.
-
-### Unsupported Evaluation Sets
-
-`EvaluationResolveError::UnsupportedSet(String)` currently carries a string.
-If unsupported-set behavior grows beyond tagged sets, replace the string with a
-typed unsupported-set descriptor.
 
 ## Completion Bar
 

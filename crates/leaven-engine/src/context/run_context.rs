@@ -567,7 +567,7 @@ fn evaluation_cache_key(
     EvaluationCacheKey {
         evaluator,
         policy,
-        case_set_version: request.set.case_set_version.0.clone(),
+        case_set_version: request.set.case_set_version.clone(),
         case_ids: request.set.case_ids.clone(),
         candidates: request_candidates(request),
     }

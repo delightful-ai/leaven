@@ -1,5 +1,5 @@
 use leaven_core::{EvaluationSet, PartitionId, Tag, Window};
-use leaven_engine::{CaseSet, EvaluationResolveError};
+use leaven_engine::{CaseSet, EvaluationResolveError, UnsupportedEvaluationSet};
 use leaven_kernel::CaseId;
 
 #[test]
@@ -102,9 +102,14 @@ fn sample_recent_and_stratified_are_deterministic_subsets() {
 fn unsupported_tagged_set_is_a_typed_error() {
     let cases = CaseSet::new(vec!["a"]);
 
+    let err = cases
+        .resolve(&EvaluationSet::Tagged(Tag("gold".into())))
+        .unwrap_err();
+
     assert!(matches!(
-        cases.resolve(&EvaluationSet::Tagged(Tag("gold".into()))),
-        Err(EvaluationResolveError::UnsupportedSet(_))
+        err,
+        EvaluationResolveError::UnsupportedSet(UnsupportedEvaluationSet::Tagged(Tag(tag)))
+            if tag.as_str() == "gold"
     ));
 }
 
