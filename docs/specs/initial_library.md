@@ -4,9 +4,9 @@
 
 Project name: **leaven**. Crate: `leaven` (umbrella) + `leaven-core`, `leaven-engine`, `leaven-std`, `leaven-workspace`, `leaven-derive`. Metaphor: the small biological culture you mix into a substrate, walk away from, and come back to find transformed.
 
-> Status: v0.2.2, pre-implementation minor spec bump.  
+> Status: v0.2.3, pre-implementation minor spec bump.  
 > Date: 2026-05-07.  
-> Supersedes the v0.2.1a spec and folds in the v0.2.1b topology cutover, v0.2.1c surface/evidence/cache cleanup, and v0.2.2 renderer/workspace/GEPA selector clarification. The architecture is unchanged: cold core stays shape-neutral, surfaces are explicit optimizer/stage choices, and GEPA remains one optimizer.  
+> Supersedes the v0.2.1a spec and folds in the v0.2.1b topology cutover, v0.2.1c surface/evidence/cache cleanup, v0.2.2 renderer/workspace/GEPA selector clarification, and v0.2.3 agentic stage runtime contract. The architecture is unchanged: cold core stays shape-neutral, surfaces are explicit optimizer/stage choices, and GEPA remains one optimizer.  
 > This is still not an API lock — but it is now ready to be coded against.
 
 ---
@@ -221,6 +221,38 @@ extension seams before implementation.
     The bottom of the spec records the likely `leaven-skill` extension slots:
     skill routing, hard-case selection, skill-target selection, and skill
     admission.
+
+---
+
+## 0.6 What Changed in v0.2.3
+
+This is a minor spec bump because it fixes the public meaning of
+`leaven-agent` and `leaven-agentic` before provider adapters land.
+
+54. **Agent runtimes execute sessions, not optimizers.**  
+    `AgentRuntime` is provider-neutral execution vocabulary over a workspace:
+    request, output contract, transcript, status, cost, and capability
+    declaration. It does not know `OptimizationProblem`, `CandidateId`,
+    `ProposalBatch`, `Assessment`, `RunGraph`, or GEPA.
+
+55. **Agentic stages own the adapter semantics.**  
+    Agentic proposers and evaluators compose materializers, renderers, runtimes,
+    and parsers. They convert session outputs into typed `ProposalBatch` or
+    `Assessment` values; runtimes only report what happened.
+
+56. **Semantic agent wiring belongs in artifacts when optimized.**  
+    Harness code, skills, enabled skill lists, skill mounts, tool policy names,
+    `AGENTS.md`, and manifests are artifact state if changing them changes the
+    candidate. Workspace path layout, commands, and output contracts are
+    materializer/stage configuration.
+
+57. **Runtime workspace requirements are explicit.**  
+    Backend-neutral runtimes use `WorkspacePath`, file APIs, and `run_command`.
+    Runtimes that require `local_mount()` must declare that capability and fail
+    early on pure-remote backends such as E2B.
+
+The full companion contract is
+`docs/specs/agentic_stage_runtime.md`.
 
 ---
 
@@ -2212,6 +2244,10 @@ candidate/artifact
 `AgentRuntime` sees only the prompt/config it is handed and the workspace files
 that earlier materializers wrote. It does not receive graph access, trust
 policy, evaluation handles, or host filesystem paths.
+
+The full provider-neutral runtime and agentic-stage adapter contract lives in
+`docs/specs/agentic_stage_runtime.md`. That document is the implementation
+source of truth for `leaven-agent` and `leaven-agentic`.
 
 ---
 
@@ -4559,6 +4595,27 @@ The engine is dumb. The optimizer is smart. The types tell the truth.
 ---
 
 ## 30. Changelog
+
+### v0.2.3 (2026-05-07) - agentic stage runtime contract
+
+This pass pins the layer split for real agentic optimization over evolving
+codebases, skill libraries, harnesses, manifests, and `AGENTS.md` files.
+
+- **`AgentRuntime` narrowed to one session in one workspace.** It is
+  provider-neutral execution vocabulary and has no dependency on core, engine,
+  optimizer, graph, proposal, or assessment types.
+- **`leaven-agentic` owns the stage adapters.** Agentic proposers and evaluators
+  compose materializers, renderers, runtimes, and parsers, then return typed
+  `ProposalBatch` or `Assessment` values.
+- **Artifact semantics split from workspace layout.** Candidate-owned harness,
+  skill, manifest, and agent-doc wiring lives in the artifact. Runnable
+  filesystem layout, commands, and output contracts live in materializers and
+  stage config.
+- **Runtime capability matching is explicit.** Backends with no local mount are
+  first-class; local-mount-only providers must declare the requirement and fail
+  early when paired with remote workspaces.
+- **Companion spec added.** See
+  `docs/specs/agentic_stage_runtime.md`.
 
 ### v0.2.2 (2026-05-07) — workspace/materialization and GEPA selection minor bump
 

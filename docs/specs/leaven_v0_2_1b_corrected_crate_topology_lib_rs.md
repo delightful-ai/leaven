@@ -1,9 +1,9 @@
-# Leaven v0.2.2 — Corrected Crate Topology and `lib.rs` Maps
+# Leaven v0.2.3 - Corrected Crate Topology and `lib.rs` Maps
 
 *Topology/interface spec after fixing cold-core projection leaks, surface ownership, workspace materialization, and GEPA selector seams.*
 
 > Status: topology correction pass, pre-implementation.  
-> Target spec: Leaven v0.2.2.  
+> Target spec: Leaven v0.2.3.  
 > This supersedes the v0.2.1b crate-topology draft.  
 > Purpose: make crate boundaries enforce the real knowledge graph before P0/P1 implementation.
 
@@ -541,6 +541,7 @@ leaven-artifacts -> leaven-engine
 leaven-lm -> leaven-gepa
 leaven-lm -> concrete LLM SDKs
 
+leaven-agent -> leaven-core
 leaven-agent -> leaven-engine
 leaven-agent -> leaven-gepa
 
@@ -2139,7 +2140,12 @@ pub use mock::{MockLm, MockLmScript};
 
 ### Contract
 
-Provider-neutral agent runtime interface over workspaces.
+Provider-neutral agent runtime interface over workspaces. The detailed runtime
+contract lives in `docs/specs/agentic_stage_runtime.md`.
+
+`leaven-agent` executes one session inside an already-materialized workspace.
+It must not depend on `leaven-core`, `leaven-engine`, `leaven-gepa`, or any
+optimizer crate.
 
 ### `src/lib.rs`
 
@@ -2156,13 +2162,19 @@ pub mod transcript;
 
 pub use error::AgentRuntimeError;
 pub use runtime::AgentRuntime;
-pub use session::{AgentSessionConfig, AgentSessionResult};
-pub use transcript::{AgentTranscript, ToolCallRecord};
+pub use session::{
+    AgentContextRef, AgentInstructions, AgentLimits, AgentRunContext,
+    AgentRunRequest, AgentRuntimeCapabilities, AgentSession, AgentStatus,
+    AgentToolPolicy, OutputContract, WorkspaceAccessMode,
+};
+pub use transcript::{AgentTranscript, CommandRecord, RawProviderEvent, ToolCallRecord};
 
 pub mod prelude {
     pub use crate::{
-        AgentRuntime, AgentRuntimeError, AgentSessionConfig,
-        AgentSessionResult, AgentTranscript, ToolCallRecord,
+        AgentContextRef, AgentInstructions, AgentLimits, AgentRunContext,
+        AgentRunRequest, AgentRuntime, AgentRuntimeCapabilities,
+        AgentRuntimeError, AgentSession, AgentStatus, AgentToolPolicy,
+        AgentTranscript, OutputContract, WorkspaceAccessMode,
     };
 }
 ```
@@ -2214,6 +2226,10 @@ materializers, and engine stage traits. This is the primary consumer of
 `Materializer`; vanilla `leaven-lm` calls should not need workspace
 materialization.
 
+This crate is allowed to know both Leaven stage traits and provider-neutral
+agent sessions. It owns the conversion from agent outputs into `ProposalBatch`
+or `Assessment` values.
+
 ### `src/lib.rs`
 
 ```rust
@@ -2223,6 +2239,8 @@ materialization.
 //! Agentic stage helpers for Leaven.
 
 pub mod evidence;
+pub mod evaluator;
+pub mod parser;
 pub mod proposer;
 pub mod materializer;
 pub mod runtime_helpers;
@@ -2234,6 +2252,14 @@ pub use evidence::{
 
 pub use proposer::{
     AgenticProposer, AgenticProposerConfig,
+};
+
+pub use evaluator::{
+    AgenticEvaluator, AgenticEvaluatorConfig,
+};
+
+pub use parser::{
+    EvidenceParser, ProposalParser,
 };
 
 pub use materializer::{
@@ -2250,8 +2276,9 @@ pub use transcript::{
 
 pub mod prelude {
     pub use crate::{
-        AgentEvidence, AgentTrajectoryEvidence, AgenticProposer,
-        AgenticProposerConfig, HistoryMaterializer,
+        AgentEvidence, AgentTrajectoryEvidence, AgenticEvaluator,
+        AgenticEvaluatorConfig, AgenticProposer, AgenticProposerConfig,
+        EvidenceParser, HistoryMaterializer, ProposalParser,
         TranscriptMaterializer,
     };
 }
@@ -2889,6 +2916,8 @@ Before implementation:
 □ leaven-surface has no Engine / Workspace / Git / JJ
 □ leaven-artifacts has no Workspace / Engine
 □ leaven-workspace has no Artifact / Surface / Engine
+□ leaven-agent has no Core / Engine / GEPA / optimizer dependency
+□ AgentRuntime does not mention OptimizationProblem / CandidateId / Proposal / Assessment
 □ leaven-store has no RunGraph
 □ leaven-engine has no GEPA / std population implementations / LLM SDKs
 □ leaven-gepa depends on surface, not artifact components
