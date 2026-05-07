@@ -677,6 +677,7 @@ dependencies = [
  "leaven-evidence",
  "leaven-kernel",
  "leaven-preference",
+ "proptest",
 ]
 
 [[package]]

@@ -16,3 +16,6 @@ leaven-core = { workspace = true }
 leaven-engine = { workspace = true }
 leaven-evidence = { workspace = true }
 leaven-preference = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }

@@ -3,13 +3,15 @@ mod support;
 use futures::executor::block_on;
 use leaven_core::{
     Assessment, AssessmentGranularity, AssessmentTarget, EvaluationPurpose, EvaluationRequest,
-    ResolvedEvaluationRequest, ResolvedRequestKind,
+    PairOrder, ResolvedEvaluationRequest, ResolvedRequestKind,
 };
 use leaven_engine::{
     CachePolicy, CaseSet, EvaluationContext, EvaluationError, Evaluator, Optimizer, OptimizerError,
-    RunContext, RunContextError, StepStatus, optimize,
+    RunContext, RunContextError, RunEvent, StepStatus, optimize,
 };
-use leaven_kernel::{Budget, CandidateId, Cost, EvaluatorId, Fingerprint, MetadataBag, Metered};
+use leaven_kernel::{
+    Budget, CandidateId, Cost, ErrorKind, EvaluatorId, Fingerprint, MetadataBag, Metered,
+};
 use leaven_store::EvidenceStore;
 use leaven_store_inline::InlineEvidenceStore;
 use support::{TestEvidence, TestProblem, TextArtifact};
@@ -80,6 +82,51 @@ fn registry_evaluation_refuses_unknown_evaluator_without_mutation() {
         assert!(optimizer.saw_unknown);
         assert_eq!(engine.view().evaluation_request_count(), 0);
         assert_eq!(engine.view().assessment_count(), 0);
+        assert!(engine.view().events().any(|event| matches!(
+            event,
+            RunEvent::Error { error, .. } if error.kind == ErrorKind::Evaluation
+        )));
+    });
+}
+
+#[test]
+fn ordered_pairwise_registry_cache_keeps_reversed_pairs_distinct() {
+    block_on(async {
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let cases = CaseSet::new(vec!["case"]);
+        let mut engine = optimize::<TestProblem>()
+            .budget(Budget::metric_calls(10))
+            .evaluator(OrderedPairwiseEvaluator)
+            .build();
+        let left = engine
+            .insert_seed(TextArtifact("left".to_owned()), 0)
+            .unwrap();
+        let right = engine
+            .insert_seed(TextArtifact("right".to_owned()), 1)
+            .unwrap();
+        let mut optimizer = ReversedOrderedPairCacheOptimizer { left, right };
+
+        let result = engine.run(&mut optimizer, &cases, &store).await.unwrap();
+
+        assert_eq!(result.best, Some(right));
+        assert_eq!(engine.view().evaluation_request_count(), 2);
+        assert_eq!(engine.view().assessment_count(), 2);
+        assert_eq!(
+            engine
+                .view()
+                .pairwise_assessments(left, right)
+                .iter()
+                .count(),
+            1
+        );
+        assert_eq!(
+            engine
+                .view()
+                .pairwise_assessments(right, left)
+                .iter()
+                .count(),
+            1
+        );
     });
 }
 
@@ -161,6 +208,45 @@ impl Optimizer<TestProblem> for MissingEvaluatorOptimizer {
     }
 }
 
+struct ReversedOrderedPairCacheOptimizer {
+    left: CandidateId,
+    right: CandidateId,
+}
+
+impl Optimizer<TestProblem> for ReversedOrderedPairCacheOptimizer {
+    async fn step(
+        &mut self,
+        ctx: &mut RunContext<'_, TestProblem>,
+    ) -> Result<StepStatus, OptimizerError> {
+        let first = ctx
+            .evaluate(
+                EvaluatorId::PAIRWISE_JUDGE,
+                ordered_pairwise_request(self.left, self.right),
+            )
+            .await
+            .map_err(|err| OptimizerError::Message(err.to_string()))?;
+        let second = ctx
+            .evaluate(
+                EvaluatorId::PAIRWISE_JUDGE,
+                ordered_pairwise_request(self.right, self.left),
+            )
+            .await
+            .map_err(|err| OptimizerError::Message(err.to_string()))?;
+
+        assert_eq!(first.assessment_ids.len(), 1);
+        assert_eq!(second.assessment_ids.len(), 1);
+        assert_ne!(first.assessment_ids, second.assessment_ids);
+        Ok(StepStatus::Done)
+    }
+
+    fn best_candidate(
+        &self,
+        _graph: leaven_engine::RunGraphView<'_, TestProblem>,
+    ) -> Option<CandidateId> {
+        Some(self.right)
+    }
+}
+
 struct RegisteredEvaluator;
 
 impl Evaluator<TestProblem> for RegisteredEvaluator {
@@ -196,5 +282,56 @@ impl Evaluator<TestProblem> for RegisteredEvaluator {
             }],
             Cost::metric_calls(1),
         ))
+    }
+}
+
+struct OrderedPairwiseEvaluator;
+
+impl Evaluator<TestProblem> for OrderedPairwiseEvaluator {
+    fn id(&self) -> EvaluatorId {
+        EvaluatorId::PAIRWISE_JUDGE
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        Fingerprint::from_bytes([5; 32])
+    }
+
+    fn cache_policy(&self, _request: &ResolvedEvaluationRequest) -> CachePolicy {
+        CachePolicy::Deterministic
+    }
+
+    async fn evaluate(
+        &self,
+        request: ResolvedEvaluationRequest,
+        _ctx: EvaluationContext<'_, TestProblem>,
+    ) -> Result<Metered<Vec<Assessment<TestProblem>>>, EvaluationError> {
+        let ResolvedRequestKind::Pairwise { left, right, order } = request.kind else {
+            return Err(EvaluationError::Message(
+                "expected pairwise request".to_owned(),
+            ));
+        };
+        assert_eq!(order, PairOrder::Ordered);
+        Ok(Metered::new(
+            vec![Assessment::Pairwise {
+                left,
+                right,
+                target: AssessmentTarget::Unscoped,
+                evidence: TestEvidence { score: 1.0 },
+                cost: Cost::metric_calls(1),
+                metadata: MetadataBag::new(),
+            }],
+            Cost::metric_calls(1),
+        ))
+    }
+}
+
+fn ordered_pairwise_request(left: CandidateId, right: CandidateId) -> EvaluationRequest {
+    EvaluationRequest::Pairwise {
+        left,
+        right,
+        set: leaven_core::EvaluationSet::All,
+        granularity: AssessmentGranularity::Aggregate,
+        purpose: EvaluationPurpose::Selection,
+        order: PairOrder::Ordered,
     }
 }

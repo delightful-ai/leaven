@@ -128,6 +128,9 @@ Use the narrowest layer that proves the claim.
 - `crates/leaven/tests/scalar_keep_best.rs`: P1 end-to-end scenario from seed
   proposal through evaluation, inline evidence storage, keep-best population,
   callbacks, and best-candidate result.
+- `crates/leaven/tests/pairwise_tournament.rs`: P2 end-to-end scenario for a
+  registered pairwise judge, pairwise evidence storage by reference, fitted
+  tournament population update, and best-candidate result.
 - `crates/leaven/tests/topology_contract.rs`: guardrails for the full corrected
   v0.2.1b workspace member list, `src/lib.rs` skeleton presence,
   Leaven-to-Leaven dependency DAG, and cold-core leak boundaries.

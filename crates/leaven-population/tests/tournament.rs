@@ -1,6 +1,7 @@
 use leaven_evidence::{PairwiseJudgment, PairwiseJudgmentEvidence};
 use leaven_kernel::{AssessmentId, CandidateId, FiniteF64};
 use leaven_population::{BradleyTerryFit, TournamentPopulation};
+use proptest::prelude::*;
 
 #[test]
 fn bradley_terry_starts_unseen_candidates_at_zero() {
@@ -90,4 +91,46 @@ fn default_tournament_population_starts_empty() {
 
     assert_eq!(population.best(), None);
     assert_eq!(population.observations(), 0);
+}
+
+proptest! {
+    #[test]
+    fn generated_pairwise_updates_keep_abilities_finite(
+        rate in 0.001_f64..1.0,
+        judgments in proptest::collection::vec(any_pairwise_judgment(), 1..64),
+    ) {
+        let left = CandidateId::new();
+        let right = CandidateId::new();
+        let mut fit = BradleyTerryFit::new(FiniteF64::new(rate).unwrap());
+
+        for judgment in judgments {
+            fit.observe_pairwise(left, right, judgment);
+            prop_assert!(fit.ability(left).as_f64().is_finite());
+            prop_assert!(fit.ability(right).as_f64().is_finite());
+        }
+    }
+
+    #[test]
+    fn repeated_left_wins_never_rank_right_above_left(
+        rate in 0.001_f64..1.0,
+        observation_count in 1_usize..64,
+    ) {
+        let left = CandidateId::new();
+        let right = CandidateId::new();
+        let mut fit = BradleyTerryFit::new(FiniteF64::new(rate).unwrap());
+
+        for _ in 0..observation_count {
+            fit.observe_pairwise(left, right, PairwiseJudgment::Left);
+            prop_assert!(fit.ability(left) >= fit.ability(right));
+            prop_assert_eq!(fit.best(), Some(left));
+        }
+    }
+}
+
+fn any_pairwise_judgment() -> impl Strategy<Value = PairwiseJudgment> {
+    prop_oneof![
+        Just(PairwiseJudgment::Left),
+        Just(PairwiseJudgment::Right),
+        Just(PairwiseJudgment::Tie),
+    ]
 }
