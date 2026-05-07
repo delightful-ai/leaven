@@ -2156,25 +2156,34 @@ optimizer crate.
 //! Provider-neutral agent runtime interface.
 
 pub mod error;
+pub mod fake;
 pub mod runtime;
 pub mod session;
 pub mod transcript;
 
 pub use error::AgentRuntimeError;
+pub use fake::{FakeAgentAction, FakeAgentRuntime};
 pub use runtime::AgentRuntime;
 pub use session::{
     AgentContextRef, AgentInstructions, AgentLimits, AgentRunContext,
     AgentRunRequest, AgentRuntimeCapabilities, AgentSession, AgentStatus,
-    AgentToolPolicy, OutputContract, WorkspaceAccessMode,
+    AgentToolPolicy, CancellationRef, JsonSchemaRef, OutputContract,
+    WorkspaceAccessMode,
 };
-pub use transcript::{AgentTranscript, CommandRecord, RawProviderEvent, ToolCallRecord};
+pub use transcript::{
+    AgentTranscript, CommandRecord, RawProviderEvent, ToolCallRecord,
+    TranscriptEvent, TranscriptRole, WorkspaceReadRecord,
+};
 
 pub mod prelude {
     pub use crate::{
         AgentContextRef, AgentInstructions, AgentLimits, AgentRunContext,
         AgentRunRequest, AgentRuntime, AgentRuntimeCapabilities,
         AgentRuntimeError, AgentSession, AgentStatus, AgentToolPolicy,
-        AgentTranscript, OutputContract, WorkspaceAccessMode,
+        AgentTranscript, CancellationRef, CommandRecord, FakeAgentAction,
+        FakeAgentRuntime, JsonSchemaRef, OutputContract, RawProviderEvent,
+        ToolCallRecord, TranscriptEvent, TranscriptRole, WorkspaceAccessMode,
+        WorkspaceReadRecord,
     };
 }
 ```
@@ -2238,17 +2247,10 @@ or `Assessment` values.
 
 //! Agentic stage helpers for Leaven.
 
-pub mod evidence;
+pub mod error;
 pub mod evaluator;
 pub mod parser;
 pub mod proposer;
-pub mod materializer;
-pub mod runtime_helpers;
-pub mod transcript;
-
-pub use evidence::{
-    AgentEvidence, AgentTrajectoryEvidence,
-};
 
 pub use proposer::{
     AgenticProposer, AgenticProposerConfig,
@@ -2259,27 +2261,18 @@ pub use evaluator::{
 };
 
 pub use parser::{
+    AgentPromptTarget, AgenticRunInput, EvaluationInputBuilder,
     EvidenceParser, ProposalParser,
 };
 
-pub use materializer::{
-    HistoryMaterializer, TranscriptMaterializer,
-};
-
-pub use runtime_helpers::{
-    RunAgentInWorkspace,
-};
-
-pub use transcript::{
-    AgentTranscriptLoader,
-};
+pub use error::{AgenticAdapterError, AgenticParseError};
 
 pub mod prelude {
     pub use crate::{
-        AgentEvidence, AgentTrajectoryEvidence, AgenticEvaluator,
-        AgenticEvaluatorConfig, AgenticProposer, AgenticProposerConfig,
-        EvidenceParser, HistoryMaterializer, ProposalParser,
-        TranscriptMaterializer,
+        AgentPromptTarget, AgenticAdapterError, AgenticEvaluator,
+        AgenticEvaluatorConfig, AgenticParseError, AgenticProposer,
+        AgenticProposerConfig, AgenticRunInput, EvaluationInputBuilder,
+        EvidenceParser, ProposalParser,
     };
 }
 ```

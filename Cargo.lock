@@ -477,14 +477,17 @@ dependencies = [
 name = "leaven-agentic"
 version = "0.0.0"
 dependencies = [
+ "futures",
  "leaven-agent",
  "leaven-core",
  "leaven-engine",
  "leaven-kernel",
  "leaven-render",
  "leaven-store",
+ "leaven-store-inline",
  "leaven-surface",
  "leaven-workspace",
+ "thiserror",
 ]
 
 [[package]]

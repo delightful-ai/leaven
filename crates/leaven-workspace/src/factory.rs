@@ -1,8 +1,12 @@
 //! Workspace factories.
 
+use std::future::Future;
+
 use crate::{FactoryError, Workspace, WorkspaceConfig};
 
-#[allow(async_fn_in_trait)]
 pub trait WorkspaceFactory: Send + Sync {
-    async fn allocate(&self, config: WorkspaceConfig) -> Result<Workspace, FactoryError>;
+    fn allocate(
+        &self,
+        config: WorkspaceConfig,
+    ) -> impl Future<Output = Result<Workspace, FactoryError>> + Send + '_;
 }

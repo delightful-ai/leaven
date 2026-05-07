@@ -336,12 +336,12 @@ pub trait AgentRuntime: Send + Sync {
 
     fn capabilities(&self) -> AgentRuntimeCapabilities;
 
-    async fn run_session(
-        &self,
-        workspace: &mut WorkspaceView<'_>,
+    fn run_session<'a>(
+        &'a self,
+        workspace: &'a mut WorkspaceView<'_>,
         request: AgentRunRequest,
-        ctx: AgentRunContext<'_>,
-    ) -> Result<Metered<AgentSession>, AgentError>;
+        ctx: AgentRunContext<'a>,
+    ) -> impl Future<Output = Result<Metered<AgentSession>, AgentError>> + Send + 'a;
 }
 ```
 
@@ -515,9 +515,9 @@ adapt agent sessions into stage outputs.
 ### 5.1 Agentic proposer
 
 ```rust
-pub struct AgenticProposer<R, M, Prompt, Parse> {
+pub struct AgenticProposer<Factory, R, M, Prompt, Parse> {
     pub runtime: R,
-    pub workspace_factory: Arc<dyn WorkspaceFactory>,
+    pub workspace_factory: Factory,
     pub workspace_config: WorkspaceConfig,
     pub materializer: M,
     pub prompt_renderer: Prompt,
@@ -530,7 +530,7 @@ Canonical flow:
 ```text
 request
   -> build stage input from scoped graph view
-  -> allocate workspace with with_workspace
+  -> allocate workspace with the stage-owned WorkspaceFactory
   -> materialize allowed artifact/history/traces into workspace
   -> render AgentInstructions
   -> runtime.run_session(...)
@@ -586,7 +586,7 @@ where
                             tool_policy: AgentToolPolicy::default(),
                             limits: AgentLimits::default(),
                         },
-                        ctx.agent_run_context(),
+                        AgentRunContext::new(AgentSessionId::new(), &ctx.budget()),
                     )
                     .await?;
 
@@ -612,12 +612,17 @@ The exact implementation may avoid holding a graph borrow across `.await` by
 turning `input` into an owned snapshot before workspace allocation. That is the
 preferred implementation style.
 
+The public `with_workspace` helper remains the recommended shape for simple
+scoped workspace use. Agentic adapters may inline the same acquire/result/
+cleanup pattern when the async body captures stage state or graph-context
+borrows that make a higher-rank closure hostile to Rust's borrow checker.
+
 ### 5.2 Agentic evaluator
 
 ```rust
-pub struct AgenticEvaluator<R, M, Prompt, Parse> {
+pub struct AgenticEvaluator<Factory, R, M, Prompt, Parse> {
     pub runtime: R,
-    pub workspace_factory: Arc<dyn WorkspaceFactory>,
+    pub workspace_factory: Factory,
     pub workspace_config: WorkspaceConfig,
     pub materializer: M,
     pub prompt_renderer: Prompt,

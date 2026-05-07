@@ -26,3 +26,6 @@ pub use leaven_gepa::prelude::*;
 
 #[cfg(feature = "std")]
 pub use leaven_std::prelude::*;
+
+#[cfg(feature = "agentic")]
+pub use leaven_agentic::prelude::*;

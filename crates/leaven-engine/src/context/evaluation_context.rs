@@ -1,9 +1,9 @@
 //! Evaluator context.
 
 use leaven_core::OptimizationProblem;
-use leaven_kernel::BudgetSnapshot;
+use leaven_kernel::{BudgetSnapshot, StageId};
 
-use crate::{BudgetHandle, ReadScope, RunGraphView};
+use crate::{BudgetHandle, MaterializeContext, ReadScope, RenderContext, RunGraphView};
 
 pub struct EvaluationContext<'a, P: OptimizationProblem> {
     graph: RunGraphView<'a, P>,
@@ -41,5 +41,23 @@ impl<'a, P: OptimizationProblem> EvaluationContext<'a, P> {
 
     pub fn budget_handle(&mut self) -> &mut BudgetHandle<'a> {
         &mut self.budget
+    }
+
+    #[must_use]
+    pub fn render_context(&mut self) -> RenderContext<'_, P> {
+        RenderContext::new(
+            self.graph.clone(),
+            self.budget.sub_stage(StageId::custom("render")),
+            self.read_scope.clone(),
+        )
+    }
+
+    #[must_use]
+    pub fn materialize_context(&self) -> MaterializeContext<'a, P> {
+        MaterializeContext::new(
+            self.graph.clone(),
+            self.budget.snapshot(),
+            self.read_scope.clone(),
+        )
     }
 }

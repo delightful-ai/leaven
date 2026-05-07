@@ -1,20 +1,21 @@
-//! leaven-agentic crate skeleton.
+//! Agentic stage adapters.
 
-mod evidence;
-mod materializer;
+mod error;
+mod evaluator;
+mod parser;
 mod proposer;
-mod runtime;
-mod transcript;
 
-pub use evidence::{AgentEvidence, AgentTrajectoryEvidence};
-pub use materializer::{HistoryMaterializer, TranscriptMaterializer};
+pub use error::{AgenticAdapterError, AgenticParseError};
+pub use evaluator::{AgenticEvaluator, AgenticEvaluatorConfig};
+pub use parser::{
+    AgentPromptTarget, AgenticRunInput, EvaluationInputBuilder, EvidenceParser, ProposalParser,
+};
 pub use proposer::{AgenticProposer, AgenticProposerConfig};
-pub use runtime::RunAgentInWorkspace;
-pub use transcript::AgentTranscriptLoader;
 
 pub mod prelude {
     pub use crate::{
-        AgentEvidence, AgentTrajectoryEvidence, AgenticProposer, AgenticProposerConfig,
-        HistoryMaterializer, TranscriptMaterializer,
+        AgentPromptTarget, AgenticAdapterError, AgenticEvaluator, AgenticEvaluatorConfig,
+        AgenticParseError, AgenticProposer, AgenticProposerConfig, AgenticRunInput,
+        EvaluationInputBuilder, EvidenceParser, ProposalParser,
     };
 }

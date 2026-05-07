@@ -1,28 +1,28 @@
 //! Renderer stage traits.
 
+use std::future::Future;
+
 use leaven_core::OptimizationProblem;
 use leaven_kernel::Metered;
 
-#[allow(async_fn_in_trait)]
 pub trait Renderer<P: OptimizationProblem, T, Target>: Send + Sync {
     type View;
 
-    async fn render(
-        &self,
-        value: &T,
+    fn render<'a>(
+        &'a self,
+        value: &'a T,
         target: Target,
-        ctx: crate::RenderContext<'_, P>,
-    ) -> Result<Metered<Self::View>, RenderError>;
+        ctx: crate::RenderContext<'a, P>,
+    ) -> impl Future<Output = Result<Metered<Self::View>, RenderError>> + Send + 'a;
 }
 
-#[allow(async_fn_in_trait)]
 pub trait Materializer<P: OptimizationProblem, T>: Send + Sync {
-    async fn materialize_into(
-        &self,
-        value: &T,
-        workspace: &mut leaven_workspace::WorkspaceView<'_>,
-        ctx: crate::MaterializeContext<'_, P>,
-    ) -> Result<Metered<MaterializationReport>, MaterializeError>;
+    fn materialize_into<'a>(
+        &'a self,
+        value: &'a T,
+        workspace: &'a mut leaven_workspace::WorkspaceView<'_>,
+        ctx: crate::MaterializeContext<'a, P>,
+    ) -> impl Future<Output = Result<Metered<MaterializationReport>, MaterializeError>> + Send + 'a;
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]

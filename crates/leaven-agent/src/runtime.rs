@@ -1,5 +1,7 @@
 //! Provider-neutral runtime trait.
 
+use std::future::Future;
+
 use leaven_kernel::{AgentRuntimeId, Fingerprint, Metered};
 use leaven_workspace::WorkspaceView;
 
@@ -13,7 +15,6 @@ use crate::{
 /// know about candidates, proposals, assessments, evidence, populations, or
 /// GEPA. Stage adapters decide why a session is being run and how to parse the
 /// resulting files/transcript back into Leaven types.
-#[allow(async_fn_in_trait)]
 pub trait AgentRuntime: Send + Sync {
     fn id(&self) -> AgentRuntimeId;
 
@@ -23,10 +24,10 @@ pub trait AgentRuntime: Send + Sync {
         AgentRuntimeCapabilities::default()
     }
 
-    async fn run_session(
-        &self,
-        workspace: &mut WorkspaceView<'_>,
+    fn run_session<'a>(
+        &'a self,
+        workspace: &'a mut WorkspaceView<'_>,
         request: AgentRunRequest,
-        ctx: AgentRunContext<'_>,
-    ) -> Result<Metered<AgentSession>, AgentRuntimeError>;
+        ctx: AgentRunContext<'a>,
+    ) -> impl Future<Output = Result<Metered<AgentSession>, AgentRuntimeError>> + Send + 'a;
 }
