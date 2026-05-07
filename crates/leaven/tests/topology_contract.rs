@@ -51,6 +51,7 @@ const EXPECTED_WORKSPACE_MEMBERS: &[&str] = &[
     "examples/p2_pairwise_tournament",
     "examples/p3_gepa_parity",
     "examples/p4_meta_harness_lite",
+    "examples/p5_skill_paper_reproductions",
     "xtask",
 ];
 
@@ -106,6 +107,7 @@ const EXPECTED_BINARIES: &[&str] = &[
     "examples/p2_pairwise_tournament",
     "examples/p3_gepa_parity",
     "examples/p4_meta_harness_lite",
+    "examples/p5_skill_paper_reproductions",
     "xtask",
 ];
 

@@ -39,3 +39,19 @@ fn rationale_is_optional_context() {
     );
     assert_eq!(evidence.confidence(), None);
 }
+
+#[test]
+fn confidence_and_rationale_can_be_carried_together() {
+    let evidence = PairwiseJudgmentEvidence::with_confidence_and_rationale(
+        PairwiseJudgment::Tie,
+        FiniteF64::new(0.5).unwrap(),
+        "judge could not distinguish the candidates",
+    );
+
+    assert_eq!(evidence.judgment(), PairwiseJudgment::Tie);
+    assert_eq!(evidence.confidence(), Some(FiniteF64::new(0.5).unwrap()));
+    assert_eq!(
+        evidence.rationale(),
+        Some("judge could not distinguish the candidates")
+    );
+}

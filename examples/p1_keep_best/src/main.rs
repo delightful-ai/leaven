@@ -152,7 +152,8 @@ impl Evaluator<ScalarProblem> for TextLengthEvaluator {
                     .graph()
                     .artifact(candidate)
                     .expect("evaluation candidate exists");
-                let score = artifact.0.len() as f64;
+                let score =
+                    f64::from(u32::try_from(artifact.0.len()).expect("fixture length fits u32"));
                 Assessment::Independent {
                     candidate,
                     target: AssessmentTarget::Unscoped,

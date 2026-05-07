@@ -7,7 +7,7 @@ use leaven_core::{
 };
 use leaven_engine::{
     CachePolicy, CaseSet, EvaluationContext, EvaluationError, Evaluator, Optimizer, OptimizerError,
-    RunContext, StepStatus, optimize,
+    RunContext, RunContextError, StepStatus, optimize,
 };
 use leaven_kernel::{Budget, CandidateId, Cost, EvaluatorId, Fingerprint, MetadataBag, Metered};
 use leaven_store::EvidenceStore;
@@ -58,6 +58,31 @@ fn engine_dispatches_registered_evaluator_through_run_context() {
     });
 }
 
+#[test]
+fn registry_evaluation_refuses_unknown_evaluator_without_mutation() {
+    block_on(async {
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let cases = CaseSet::new(vec!["case"]);
+        let mut engine = optimize::<TestProblem>()
+            .budget(Budget::metric_calls(10))
+            .build();
+        let seed = engine
+            .insert_seed(TextArtifact("seed".to_owned()), 0)
+            .unwrap();
+        let mut optimizer = MissingEvaluatorOptimizer {
+            seed,
+            saw_unknown: false,
+        };
+
+        let result = engine.run(&mut optimizer, &cases, &store).await.unwrap();
+
+        assert_eq!(result.best, Some(seed));
+        assert!(optimizer.saw_unknown);
+        assert_eq!(engine.view().evaluation_request_count(), 0);
+        assert_eq!(engine.view().assessment_count(), 0);
+    });
+}
+
 struct RegistryOptimizer {
     seed: CandidateId,
     best: Option<CandidateId>,
@@ -95,6 +120,44 @@ impl Optimizer<TestProblem> for RegistryOptimizer {
         _graph: leaven_engine::RunGraphView<'_, TestProblem>,
     ) -> Option<CandidateId> {
         self.best
+    }
+}
+
+struct MissingEvaluatorOptimizer {
+    seed: CandidateId,
+    saw_unknown: bool,
+}
+
+impl Optimizer<TestProblem> for MissingEvaluatorOptimizer {
+    async fn step(
+        &mut self,
+        ctx: &mut RunContext<'_, TestProblem>,
+    ) -> Result<StepStatus, OptimizerError> {
+        let error = ctx
+            .evaluate(
+                EvaluatorId::PRIMARY,
+                EvaluationRequest::Independent {
+                    candidates: vec![self.seed],
+                    set: leaven_core::EvaluationSet::All,
+                    granularity: AssessmentGranularity::Aggregate,
+                    purpose: EvaluationPurpose::Search,
+                },
+            )
+            .await
+            .expect_err("unregistered evaluator should be refused");
+        assert!(matches!(
+            error,
+            RunContextError::UnknownEvaluator(id) if id == EvaluatorId::PRIMARY
+        ));
+        self.saw_unknown = true;
+        Ok(StepStatus::Done)
+    }
+
+    fn best_candidate(
+        &self,
+        _graph: leaven_engine::RunGraphView<'_, TestProblem>,
+    ) -> Option<CandidateId> {
+        Some(self.seed)
     }
 }
 
