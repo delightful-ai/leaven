@@ -3,6 +3,8 @@ This is the repo-wide operating contract for Leaven. It gives horizon-level guid
 
 Leaven is spec-first library work. The governing product truth starts in `docs/specs/initial_library.md`; narrower implementation slices may live beside it, such as `docs/specs/first_two_subsystems.md`.
 
+Product constraints and principles live in `docs/specs/guiding_principles.md`.
+
 NEVER: add compatibility shims, parallel old/new paths, public test holes, or ornamental docs that do not change decisions. Use hard cutovers unless the user explicitly asks otherwise.
 
 ## Map / Routing
@@ -31,12 +33,15 @@ NEVER: add compatibility shims, parallel old/new paths, public test holes, or or
 - `lib.rs` files are maps only: module declarations, curated re-exports, and optional preludes. Do not put runtime logic, domain logic, helper logic, or test-only behavior in `lib.rs`; name the owning concept and put the code in that module.
 - Types, traits, errors, and tests should preserve domain truth instead of smoothing it away.
 - Prefer ownership-native Rust APIs over clone-heavy plumbing. Pass ownership when values are consumed, borrow when the caller retains ownership, and clone only at explicit fan-out, persistence, or async/lifetime boundaries where it is clearer than contorting ownership.
-- Use `jj` for repository state, diffs, and commit boundaries. Commit coherent progress as work lands; prefer `jj describe -m "<message>"` followed by `jj new` when the current working-copy commit is ready.
+- Use `jj` for repository state, diffs, and commit boundaries. Commit coherent progress as work lands, at reasonable task-completion intervals rather than saving everything for final closeout. For multi-step work, finish a coherent slice, verify the narrow gate for that slice, then prefer `jj describe -m "<message>"` followed by `jj new` when the current working-copy commit is ready.
 - `RunContext` is the public mutation path into `RunGraph`; do not expose graph internals to satisfy callers or tests.
 - Fresh authored artifacts use `ProposalEffect::Create`; changes to existing candidates use `ProposalEffect::Change` with lineage carried by `CausalInputs` / `InfoRef`.
 - Cold core crates stay free of adapter, runtime, cloud, database, HTTP, and process dependencies.
 - Tests assert public/capability behavior unless the invariant is genuinely private and lives in a crate-local `#[cfg(test)]` module.
-- Coverage is a ratchet. Raise `coverage_line_floor` when the suite improves; do not lower it to land weaker work.
+- Coverage is a ratchet across lines and branches. Keep overall branch coverage
+  at `80%+`; the current enforced floor is `coverage_branch_floor` in the root
+  `Justfile`. Raise `coverage_line_floor` and `coverage_branch_floor` when the
+  suite improves; do not lower either floor to land weaker work.
 
 ## Decision Cards
 - when: implementing behavior from a spec
@@ -82,7 +87,7 @@ The skill descriptions own trigger routing. Do not duplicate their full routing 
 
 ## Verification Policy
 - `just test`: canonical full test suite; must finish in `<30s` and includes nextest workspace tests plus doctests.
-- `just check`: completion gate; runs formatting, production line-count lint, clippy, SLA-enforced tests, and coverage.
+- `just check`: completion gate; runs formatting, production line-count lint, clippy, SLA-enforced tests, and line/branch coverage.
 - Use narrower commands only while iterating. Before claiming behavior is complete, run `just check` unless the user explicitly requested a narrower proof.
 - Child `AGENTS.md` files should add verification deltas tied to local change types, not repeat root commands.
 

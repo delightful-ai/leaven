@@ -1,4 +1,10 @@
-Below is a v0.2.1-oriented “almost implementation” sketch for the two load-bearing subsystems:
+> Status: superseded by `docs/specs/initial_library.md` v0.2.2 and
+> `docs/specs/leaven_v0_2_1b_corrected_crate_topology_lib_rs.md`.
+> Do not implement from this file without first updating it to the current
+> artifact/cache identity split, `EditSurface` topology, `Materializer`
+> vocabulary, `WorkspacePath` workspace API, and GEPA selector/population split.
+
+Below is a v0.2.1-oriented historical “almost implementation” sketch for the two load-bearing subsystems:
 
 1. **Proposal / Candidate / RunGraph data model**
 2. **RunContext services**
@@ -2578,4 +2584,3 @@ Evidence is stored by ref; graph records remain lightweight.
 ```
 
 That is the exact substrate the rest of the optimizer library depends on.
-

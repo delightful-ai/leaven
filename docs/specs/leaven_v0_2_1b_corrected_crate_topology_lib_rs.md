@@ -1,10 +1,10 @@
-# Leaven v0.2.1b — Corrected Crate Topology and `lib.rs` Maps
+# Leaven v0.2.2 — Corrected Crate Topology and `lib.rs` Maps
 
-*Topology/interface spec after re-reading the requirements and fixing cold-core projection leaks.*
+*Topology/interface spec after fixing cold-core projection leaks, surface ownership, workspace materialization, and GEPA selector seams.*
 
 > Status: topology correction pass, pre-implementation.  
-> Target spec: Leaven v0.2.1b.  
-> This supersedes the v0.2.1a crate-topology draft.  
+> Target spec: Leaven v0.2.2.  
+> This supersedes the v0.2.1b crate-topology draft.  
 > Purpose: make crate boundaries enforce the real knowledge graph before P0/P1 implementation.
 
 ---
@@ -27,7 +27,7 @@ The correction:
 Artifact = intrinsic thing being optimized
 EditSurface = chosen projection/lens over an artifact
 Renderer = chosen way to show a value
-WorkspaceRenderer = chosen way to materialize a value into a workspace
+Materializer = chosen way to materialize a value into a workspace
 ```
 
 So:
@@ -44,8 +44,8 @@ Other corrections:
 1. **`Decomposable` leaves `leaven-core`.**  
    It is replaced by `leaven-surface::EditSurface`.
 
-2. **Evidence attribution is generic.**  
-   No `ComponentEvidence` in core. Use `AttributableEvidence<K>` where `K` may be a surface part ID, path, agent ID, changeset ID, module ID, etc.
+2. **Evidence separates casewise measurement from attribution.**  
+   No `ComponentEvidence` in core. Use `CasewiseEvidence` for per-case outcomes and `AttributableEvidence<K>` for blame/credit/routing where `K` may be a surface part ID, path, agent ID, changeset ID, module ID, etc.
 
 3. **`Materializable` is not cold core and not in artifacts.**  
    Workspace materialization is a renderer/layout concern. Standard bridge helpers live outside artifacts/core.
@@ -276,20 +276,13 @@ leaven-workspace -> [
 leaven-engine -> [
   leaven-kernel,
   leaven-core,
-  leaven-surface,
   leaven-store,
   leaven-workspace
 ]
 ```
 
-Why engine depends on surface:
-
-```text
-RunGraphView and stage traits may expose surface-aware query helpers.
-Engine still does not require any artifact to have a surface.
-```
-
-If this becomes too wide during implementation, surface-aware helpers can move to `leaven-render` or `leaven-gepa`, but not back into core.
+Engine is artifact-shape-neutral. Surface-aware query helpers belong in
+`leaven-gepa`, `leaven-render`, or optimizer/stage helper crates, not in engine.
 
 ### Derive
 
@@ -575,6 +568,7 @@ Universal mechanical primitives. No optimizer semantics.
 
 pub mod cost;
 pub mod error;
+pub mod finite;
 pub mod fingerprint;
 pub mod ids;
 pub mod metadata;
@@ -587,6 +581,10 @@ pub use cost::{
 
 pub use error::{
     ErrorKind, ErrorRecord, IntoErrorRecord, Retryability,
+};
+
+pub use finite::{
+    FiniteF64, FiniteF64Error,
 };
 
 pub use fingerprint::{
@@ -611,7 +609,8 @@ pub use time::{
 pub mod prelude {
     pub use crate::{
         Amount, AmountError, Budget, BudgetExceeded, BudgetSnapshot, Cost,
-        CostUnit, Metered, ErrorKind, ErrorRecord, Fingerprint, MetadataBag,
+        CostUnit, Metered, ErrorKind, ErrorRecord, FiniteF64,
+        FiniteF64Error, Fingerprint, MetadataBag,
     };
     pub use crate::ids::*;
 }
@@ -645,7 +644,7 @@ pub mod problem;
 pub mod proposal;
 
 pub use artifact::{
-    Artifact, ArtifactIdentity, ContentAddressed,
+    Artifact, ArtifactIdentity, CacheIdentified, CacheIdentity,
 };
 
 pub use evidence::{
@@ -676,7 +675,7 @@ pub use proposal::{
 pub mod prelude {
     pub use crate::{
         Artifact, ArtifactIdentity, Assessment, AssessmentGranularity,
-        AssessmentTarget, CausalInputs, ContentAddressed, EvaluationRequest,
+        AssessmentTarget, CacheIdentified, CacheIdentity, CausalInputs, EvaluationRequest,
         EvaluationSet, Evidence, InfoRef, OptimizationProblem, Preference,
         Proposal, ProposalBatch, ProposalBatchSemantics, ProposalEffect,
         ProposalProvenance,
@@ -702,7 +701,7 @@ pub trait Artifact: Clone + Send + Sync + 'static {
     /// Stable identity of this artifact state.
     ///
     /// This may be content-addressed or external. Deterministic evaluation
-    /// caching requires the stronger `ContentAddressed` capability.
+    /// caching uses the separate `CacheIdentified` capability.
     fn identity(&self) -> ArtifactIdentity;
 
     /// Optional validity check for newly-created artifacts.
@@ -722,14 +721,20 @@ pub enum ArtifactIdentity {
     /// Collision-resistant content identity.
     Content(ContentId),
 
-    /// Stable external identity. Not enough for deterministic caching unless
-    /// paired with an explicit user cache key.
-    External(String),
+    /// Stable external identity for graph lineage. Not automatically cache-safe.
+    External(ExternalRef),
 }
 
-/// Stronger capability for content-addressed artifacts.
-pub trait ContentAddressed: Artifact {
-    fn content_id(&self) -> ContentId;
+/// Stronger capability for deterministic evaluator caching.
+pub trait CacheIdentified: Artifact {
+    fn cache_identity(&self) -> Option<CacheIdentity>;
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+pub enum CacheIdentity {
+    Content(ContentId),
+    ExternalContent(ExternalRef),
+    User(leaven_kernel::Fingerprint),
 }
 ```
 
@@ -1119,16 +1124,26 @@ pub struct Part<Id, Address, View> {
 pub struct PartView<T> {
     pub inner: T,
 }
+
+pub enum PartSelection<Id = PartAddress> {
+    All,
+    Only(Vec<Id>),
+}
 ```
 
 ### Surface laws
 
 ```text
 Surface identity is scoped to the surface, not the artifact.
+Part IDs are scoped to `SurfaceFingerprint`.
+Consumers must not combine `S::PartId` values with evidence generated under a
+different surface fingerprint.
 Path-based surfaces preserve path identity only; rename is remove + add.
 Logical-ID surfaces may preserve identity across rename if ID extraction says so.
 SurfaceFingerprint changes when interpretation changes.
 change_part produces artifact-native Change; it does not mutate artifacts.
+Borrowed `View<'a>` values are inspection-only; async stages should convert them
+to owned request/rendering data before `.await`.
 ```
 
 ---
@@ -1148,6 +1163,7 @@ Standard evidence shapes and optional evidence capability traits. Generic, not c
 //! Standard evidence shapes and optional evidence capabilities.
 
 pub mod attribution;
+pub mod casewise;
 pub mod command;
 pub mod diff;
 pub mod json;
@@ -1159,7 +1175,11 @@ pub mod score_vector;
 pub mod string;
 
 pub use attribution::{
-    AttributableEvidence, Attribution, AttributionKey,
+    AttributableEvidence, Attribution, AttributionDomain, AttributionKey,
+};
+
+pub use casewise::{
+    CaseOutcome, CasewiseEvidence,
 };
 
 pub use command::{
@@ -1182,11 +1202,30 @@ pub use string::StringEvidence;
 
 pub mod prelude {
     pub use crate::{
-        AttributableEvidence, CommandEvidence, DiffEvidence, Direction,
-        JsonEvidence, ListwiseRankingEvidence, MixedEvidence,
+        AttributableEvidence, CaseOutcome, CasewiseEvidence, CommandEvidence,
+        DiffEvidence, Direction, JsonEvidence, ListwiseRankingEvidence, MixedEvidence,
         PairwiseJudgmentEvidence, ScalarEvidence, ScoreVectorEvidence,
         StringEvidence,
     };
+}
+```
+
+### `src/casewise.rs`
+
+```rust
+use leaven_core::Evidence;
+use leaven_kernel::{CaseId, FiniteF64};
+
+/// Evidence that exposes per-case measured outcomes.
+pub trait CasewiseEvidence: Evidence {
+    fn case_outcome(&self, case: CaseId) -> Option<CaseOutcome>;
+    fn case_outcomes(&self) -> Vec<(CaseId, CaseOutcome)>;
+}
+
+#[derive(Clone, Debug)]
+pub struct CaseOutcome {
+    pub score: Option<FiniteF64>,
+    pub passed: Option<bool>,
 }
 ```
 
@@ -1194,21 +1233,32 @@ pub mod prelude {
 
 ```rust
 use leaven_core::Evidence;
+use leaven_kernel::FiniteF64;
 
 /// Evidence that attributes behavior to arbitrary keys.
 ///
 /// Keys may be surface part IDs, paths, agents, changesets, tools, modules,
 /// conflict regions, or any user-defined key.
 pub trait AttributableEvidence<K>: Evidence {
+    fn attribution_domain(&self) -> AttributionDomain;
     fn attributions(&self) -> Vec<Attribution<K>>;
 
     fn evidence_for(&self, key: &K) -> Option<String>;
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+pub enum AttributionDomain {
+    Surface(leaven_kernel::Fingerprint),
+    ToolCalls,
+    Agents,
+    Changesets,
+    User(leaven_kernel::Fingerprint),
+}
+
 #[derive(Clone, Debug)]
 pub struct Attribution<K> {
     pub key: K,
-    pub weight: Option<f64>,
+    pub weight: Option<FiniteF64>,
     pub note: Option<String>,
 }
 
@@ -1275,6 +1325,7 @@ pub mod command;
 pub mod config;
 pub mod error;
 pub mod factory;
+pub mod path;
 pub mod policy;
 pub mod view;
 pub mod workspace;
@@ -1283,6 +1334,7 @@ pub use command::{Command, CommandOutput, ExitStatus};
 pub use config::WorkspaceConfig;
 pub use error::{FactoryError, WorkspaceError};
 pub use factory::WorkspaceFactory;
+pub use path::{WorkspacePath, WorkspacePathError};
 pub use policy::{FilesystemPolicy, NetworkPolicy};
 pub use view::WorkspaceView;
 pub use workspace::{Workspace, WorkspaceBackend};
@@ -1290,8 +1342,42 @@ pub use workspace::{Workspace, WorkspaceBackend};
 pub mod prelude {
     pub use crate::{
         Command, CommandOutput, FactoryError, Workspace, WorkspaceBackend,
-        WorkspaceConfig, WorkspaceError, WorkspaceFactory, WorkspaceView,
+        WorkspaceConfig, WorkspaceError, WorkspaceFactory, WorkspacePath,
+        WorkspacePathError, WorkspaceView,
     };
+}
+```
+
+`Workspace` is the concrete Leaven lease handle. Backend crates implement
+`WorkspaceFactory` and `WorkspaceBackend`; ordinary stage code does not implement
+or receive backend-specific workspace types.
+
+Public workspace APIs use `WorkspacePath`, a normalized relative path. They must
+not accept host `PathBuf` or backend-specific absolute paths.
+
+```rust
+pub struct WorkspacePath { /* normalized relative path */ }
+
+pub trait WorkspaceFactory: Send + Sync {
+    async fn allocate(&self, cfg: WorkspaceConfig) -> Result<Workspace, FactoryError>;
+}
+
+pub trait WorkspaceBackend: Send + Sync {
+    async fn write_file(
+        &mut self,
+        path: WorkspacePath,
+        bytes: bytes::Bytes,
+    ) -> Result<(), WorkspaceError>;
+
+    async fn read_file(
+        &mut self,
+        path: WorkspacePath,
+    ) -> Result<bytes::Bytes, WorkspaceError>;
+
+    async fn run_command(&mut self, cmd: Command) -> Result<CommandOutput, WorkspaceError>;
+    async fn cleanup(self: Box<Self>) -> Result<(), WorkspaceError>;
+    fn mark_abandoned(self: Box<Self>) {}
+    fn local_mount(&self) -> Option<&std::path::Path> { None }
 }
 ```
 
@@ -1336,7 +1422,8 @@ pub use case_set::{
 };
 
 pub use context::{
-    EvaluationContext, ProposalContext, RenderContext, RunContext,
+    EvaluationContext, MaterializeContext, ProposalContext, RenderContext,
+    RunContext,
 };
 
 pub use engine::{
@@ -1360,10 +1447,11 @@ pub use reports::{
 };
 
 pub use stage::{
-    Arity, Callback, DynCallback, DynEvaluator, DynPreferenceRelation,
+    Arity, Callback, CandidateSelection, DynCallback, DynEvaluator, DynPreferenceRelation,
     DynProposer, DynStopper, Evaluator, Optimizer, Population,
-    PopulationEvent, PopulationView, PreferenceRelation, Proposer, Renderer,
-    Stopper, WorkspaceRenderer,
+    Materializer, MaterializationReport, PopulationEvent, PopulationView,
+    PreferenceRelation, Proposer, Renderer, SelectionContext, SelectionError,
+    SelectionOutcome, SelectionRationale, Stopper,
 };
 
 pub use trust::{
@@ -1374,10 +1462,11 @@ pub use trust::{
 pub mod prelude {
     pub use crate::{
         optimize, Arity, BudgetHandle, BudgetLedger, CachePolicy, Callback,
-        Engine, EngineBuilder, EvaluationContext, Evaluator, Optimizer,
-        Population, PreferenceRelation, ProposalContext, Proposer, ReadScope,
-        RenderContext, Renderer, RunContext, RunEvent, RunGraphView,
-        RunResult, Stopper, TrustPolicy, WorkspaceRenderer,
+        CandidateSelection, Engine, EngineBuilder, EvaluationContext, Evaluator,
+        Optimizer, MaterializeContext, Materializer, Population,
+        PreferenceRelation, ProposalContext, Proposer, ReadScope, RenderContext,
+        Renderer, RunContext, RunEvent, RunGraphView, RunResult,
+        SelectionContext, Stopper, TrustPolicy,
     };
 }
 ```
@@ -1482,29 +1571,29 @@ pub trait Renderer<P: OptimizationProblem, T, Target>: Send + Sync {
     ) -> Result<Metered<Self::View>, crate::RenderError>;
 }
 
-pub trait WorkspaceRenderer<P: OptimizationProblem, T>: Send + Sync {
-    async fn render_into(
+pub trait Materializer<P: OptimizationProblem, T>: Send + Sync {
+    async fn materialize_into(
         &self,
         value: &T,
         workspace: &mut leaven_workspace::WorkspaceView<'_>,
-        ctx: crate::RenderContext<'_, P>,
-    ) -> Result<Metered<RenderReport>, crate::RenderError>;
+        ctx: crate::MaterializeContext<'_, P>,
+    ) -> Result<Metered<MaterializationReport>, crate::MaterializeError>;
 }
 
-pub struct RenderReport {
+pub struct MaterializationReport {
     pub files_written: usize,
     pub bytes_written: u64,
     pub truncations: Vec<TruncationNote>,
 }
 
 pub struct TruncationNote {
-    pub path: Option<String>,
+    pub path: Option<leaven_workspace::WorkspacePath>,
     pub reason: String,
 }
 
-// TODO(renderer-erasure): define and expose `DynRenderer` once the erased
+// No DynRenderer or DynMaterializer in v0.2.2. Define erasure only once the
 // value/target/view contract is real and covered by stage trait contract tests.
-// Do not ship an empty public marker trait as the placeholder.
+// Do not ship empty public marker traits or a universal Rendered enum.
 ```
 
 ### `src/stage/population.rs`
@@ -1521,12 +1610,6 @@ pub trait Population<P: OptimizationProblem>: Send {
         candidate: CandidateId,
         graph: crate::RunGraphView<'_, P>,
     ) -> Vec<PopulationEvent>;
-
-    fn select_candidates(
-        &mut self,
-        arity: crate::Arity,
-        graph: crate::RunGraphView<'_, P>,
-    ) -> Vec<CandidateId>;
 
     fn observe_candidate(
         &mut self,
@@ -1546,12 +1629,28 @@ pub trait Population<P: OptimizationProblem>: Send {
 
     fn best(&self, graph: crate::RunGraphView<'_, P>) -> Option<CandidateId>;
 
-    fn view(&self) -> PopulationView<'_>;
+    fn view<'a>(&'a self, graph: crate::RunGraphView<'a, P>) -> PopulationView<'a, P>;
 }
 
-pub struct PopulationView<'a> {
-    _private: std::marker::PhantomData<&'a ()>,
+pub struct PopulationView<'a, P: OptimizationProblem> {
+    pub id: PopulationId,
+    pub candidates: &'a [CandidateId],
+    pub frontier: FrontierView<'a>,
+    pub scores: ScoreView<'a, P>,
+    pub niches: Option<NicheView<'a>>,
+    pub selection_stats: SelectionStatsView<'a>,
 }
+
+pub struct FrontierView<'a> { /* members, dominated, case/niche frontier views */ }
+pub struct ScoreView<'a, P: OptimizationProblem> { /* graph-backed score queries */ }
+pub struct NicheView<'a> { /* candidate -> niche assignments */ }
+pub struct SelectionStatsView<'a> { /* attempts, successes, last selected */ }
+
+pub struct SelectionContext<'a> { /* iteration, rng, budget snapshot, arity */ }
+pub struct CandidateSelection { pub candidates: Vec<CandidateId>, /* rationale */ }
+pub struct SelectionOutcome { /* selected, proposals, applied, admitted, rejected */ }
+pub enum SelectionError { EmptyPopulation, UnsupportedArity, InsufficientCandidates, Message(String) }
+pub enum SelectionRationale { /* pareto frequency, greedy, beam, niche, exploration, user */ }
 
 #[derive(Clone, Debug)]
 pub enum PopulationEvent {
@@ -1579,7 +1678,7 @@ pub enum PopulationEvent {
     Reweighted {
         population: PopulationId,
         candidate: CandidateId,
-        weight: f64,
+        weight: leaven_kernel::FiniteF64,
         reason: String,
     },
 }
@@ -1614,8 +1713,8 @@ pub fn derive_artifact(input: TokenStream) -> TokenStream {
     artifact::derive(input)
 }
 
-#[proc_macro_derive(ContentAddressed, attributes(leaven, content_skip))]
-pub fn derive_content_addressed(input: TokenStream) -> TokenStream {
+#[proc_macro_derive(CacheIdentified, attributes(leaven, cache_skip))]
+pub fn derive_cache_identified(input: TokenStream) -> TokenStream {
     content_hash::derive(input)
 }
 
@@ -1850,21 +1949,21 @@ pub use surface::{
 };
 
 pub use workspace::{
-    ArtifactWorkspaceRenderer, HistoryWorkspaceRenderer,
-    SurfaceWorkspaceRenderer,
+    ArtifactMaterializer, HistoryMaterializer,
+    SurfaceMaterializer,
 };
 
 pub mod prelude {
     pub use crate::{
-        ArtifactWorkspaceRenderer, CandidateTreeHtmlRenderer,
-        HistoryWorkspaceRenderer, LineageSummaryRenderer,
+        ArtifactMaterializer, CandidateTreeHtmlRenderer,
+        HistoryMaterializer, LineageSummaryRenderer,
         ReflectionPromptRenderer, StructuredPromptRenderer,
-        SurfaceDiffRenderer, SurfacePartsRenderer, SurfaceWorkspaceRenderer,
+        SurfaceDiffRenderer, SurfacePartsRenderer, SurfaceMaterializer,
     };
 }
 ```
 
-This crate depends on engine because `Renderer` and `WorkspaceRenderer` traits live there.
+This crate depends on engine because `Renderer` and `Materializer` traits live there.
 
 ---
 
@@ -2107,7 +2206,8 @@ pub use runtime::OpenCodeRuntime;
 
 ### Contract
 
-Agentic stage helpers that connect agent runtimes, workspaces, renderers, and engine stage traits.
+Agentic stage helpers that connect agent runtimes, workspaces, renderers,
+materializers, and engine stage traits.
 
 ### `src/lib.rs`
 
@@ -2119,7 +2219,7 @@ Agentic stage helpers that connect agent runtimes, workspaces, renderers, and en
 
 pub mod evidence;
 pub mod proposer;
-pub mod renderer;
+pub mod materializer;
 pub mod runtime_helpers;
 pub mod transcript;
 
@@ -2131,8 +2231,8 @@ pub use proposer::{
     AgenticProposer, AgenticProposerConfig,
 };
 
-pub use renderer::{
-    HistoryWorkspaceRenderer, TranscriptWorkspaceRenderer,
+pub use materializer::{
+    HistoryMaterializer, TranscriptMaterializer,
 };
 
 pub use runtime_helpers::{
@@ -2146,8 +2246,8 @@ pub use transcript::{
 pub mod prelude {
     pub use crate::{
         AgentEvidence, AgentTrajectoryEvidence, AgenticProposer,
-        AgenticProposerConfig, HistoryWorkspaceRenderer,
-        TranscriptWorkspaceRenderer,
+        AgenticProposerConfig, HistoryMaterializer,
+        TranscriptMaterializer,
     };
 }
 ```
@@ -2183,7 +2283,9 @@ pub use batch::{
 };
 
 pub use candidate_selector::{
-    CandidateSelector, ParetoFrequencyWeighted, SelectBestCandidate,
+    BeamCandidateSelector, CandidateSelector,
+    NicheWeighted, ParetoFrequencyWeighted, RoundRobinCandidate,
+    SelectBestCandidate, UniformFrontier,
 };
 
 pub use gate::{
@@ -2191,7 +2293,8 @@ pub use gate::{
 };
 
 pub use gepa::{
-    Gepa, GepaBuilder, GepaConfig,
+    Gepa, GepaBuilder, GepaConfig, GepaMerge, GepaMutationRequest,
+    GepaProposal, GepaProposer,
 };
 
 pub use merge::{
@@ -2203,7 +2306,7 @@ pub use mutation::{
 };
 
 pub use part_selector::{
-    PartSelector, RoundRobinPart, WorstEvidencePart,
+    InvokedAndFailingPart, PartSelector, RoundRobinPart,
 };
 
 pub use validation::{
@@ -2213,11 +2316,36 @@ pub use validation::{
 pub mod prelude {
     pub use crate::{
         BatchSampler, CandidateSelector, EpochShuffled, FullValidation, Gate,
-        Gepa, ImprovementOrEqual, MinibatchThenValidation,
+        Gepa, GepaMerge, GepaMutationRequest, GepaProposal, GepaProposer,
+        ImprovementOrEqual, MinibatchThenValidation,
         ParetoFrequencyWeighted, PartSelector, ReflectiveMutation,
-        RoundRobinPart, StrictImprovement, SystemAwareMerge, ValidationPolicy,
-        WorstEvidencePart,
+        RoundRobinCandidate, RoundRobinPart, StrictImprovement,
+        SystemAwareMerge, UniformFrontier, ValidationPolicy, InvokedAndFailingPart,
     };
+}
+```
+
+GEPA's canonical shape is `Gepa<P, S, Pop = Box<dyn Population<P>>>` where
+`S: EditSurface<P::Artifact>`. `S` stays static because `S::PartId`, `S::Edit`,
+and `S::fingerprint()` connect part selection, trace attribution, and proposal
+lowering. Generic GEPA proposers may emit surface edits; GEPA lowers them
+through `S::change_part` into artifact-native changes before recording
+`ProposalEffect::Change`.
+
+GEPA keeps `Population` and `CandidateSelector` separate. Population owns
+archive/frontier/admission/fitted-state; `CandidateSelector` chooses the next
+candidate(s) from `PopulationView`.
+
+```rust
+pub trait CandidateSelector<P: OptimizationProblem>: Send {
+    fn select(
+        &mut self,
+        population: leaven_engine::PopulationView<'_, P>,
+        graph: leaven_engine::RunGraphView<'_, P>,
+        ctx: leaven_engine::SelectionContext<'_>,
+    ) -> Result<leaven_engine::CandidateSelection, leaven_engine::SelectionError>;
+
+    fn observe_selection_outcome(&mut self, _outcome: &leaven_engine::SelectionOutcome) {}
 }
 ```
 
@@ -2516,7 +2644,7 @@ pub use leaven_surface as surface;
 
 pub use leaven_core::{
     Artifact, ArtifactIdentity, Assessment, AssessmentGranularity,
-    AssessmentTarget, CausalInputs, ContentAddressed, EvaluationRequest,
+    AssessmentTarget, CacheIdentified, CacheIdentity, CausalInputs, EvaluationRequest,
     EvaluationSet, Evidence, InfoRef, OptimizationProblem, Preference,
     Proposal, ProposalBatch, ProposalBatchSemantics, ProposalEffect,
     ProposalProvenance,
@@ -2528,21 +2656,22 @@ pub use leaven_surface::{
 };
 
 pub use leaven_engine::{
-    optimize, Arity, CachePolicy, Engine, EngineBuilder, Evaluator,
-    Optimizer, Population, PreferenceRelation, ProposalContext, Proposer,
-    ReadScope, Renderer, RunContext, RunEvent, RunGraphView, RunResult,
-    Stopper, TrustPolicy, WorkspaceRenderer,
+    optimize, Arity, CachePolicy, CandidateSelection, Engine, EngineBuilder,
+    Evaluator, MaterializeContext, Materializer, Optimizer, Population,
+    PreferenceRelation, ProposalContext, Proposer, ReadScope, Renderer,
+    RunContext, RunEvent, RunGraphView, RunResult, SelectionContext, Stopper,
+    TrustPolicy,
 };
 
 pub use leaven_kernel::{
     Amount, AmountError, Budget, BudgetSnapshot, CandidateId, ContentId, Cost,
-    CostUnit, ErrorRecord, MetadataBag, ProposalId,
+    CostUnit, ErrorRecord, FiniteF64, FiniteF64Error, MetadataBag, ProposalId,
 };
 
 #[cfg(feature = "derive")]
 pub use leaven_derive::{
     Artifact as DeriveArtifact,
-    ContentAddressed as DeriveContentAddressed,
+    CacheIdentified as DeriveCacheIdentified,
     EditSurface as DeriveEditSurface,
 };
 
@@ -2566,7 +2695,7 @@ pub use leaven_agentic as agentic;
 
 pub use leaven_core::{
     Artifact, ArtifactIdentity, Assessment, AssessmentGranularity,
-    AssessmentTarget, ContentAddressed, EvaluationRequest, EvaluationSet,
+    AssessmentTarget, CacheIdentified, CacheIdentity, EvaluationRequest, EvaluationSet,
     Evidence, OptimizationProblem, Proposal, ProposalBatch, ProposalEffect,
 };
 
@@ -2575,19 +2704,21 @@ pub use leaven_surface::{
 };
 
 pub use leaven_engine::{
-    optimize, Arity, CachePolicy, Engine, Evaluator, Optimizer, Population,
-    PreferenceRelation, Proposer, Renderer, RunContext, RunGraphView,
-    Stopper, TrustPolicy, WorkspaceRenderer,
+    optimize, Arity, CachePolicy, CandidateSelection, Engine, Evaluator,
+    MaterializeContext, Materializer, Optimizer, Population, PreferenceRelation,
+    Proposer, Renderer, RunContext, RunGraphView, SelectionContext, Stopper,
+    TrustPolicy,
 };
 
 pub use leaven_kernel::{
-    Budget, CandidateId, ContentId, Cost, CostUnit, ErrorRecord, MetadataBag,
+    Budget, CandidateId, ContentId, Cost, CostUnit, ErrorRecord, FiniteF64,
+    MetadataBag,
 };
 
 #[cfg(feature = "derive")]
 pub use leaven_derive::{
     Artifact as DeriveArtifact,
-    ContentAddressed as DeriveContentAddressed,
+    CacheIdentified as DeriveCacheIdentified,
     EditSurface as DeriveEditSurface,
 };
 
@@ -2680,6 +2811,9 @@ leaven-lm
 ```
 
 GEPA operates over an `EditSurface`, not artifact-intrinsic components.
+Instance-pareto frontiers consume `CasewiseEvidence`; trace-aware part
+selectors consume `AttributableEvidence<S::PartId>` with a matching surface
+fingerprint.
 
 ### GEPA+Merge
 
@@ -2733,7 +2867,7 @@ No cold-core component assumption.
 leaven-agentic
 leaven-render
 EvidenceStore
-WorkspaceRenderer
+Materializer
 ProposalEffect::Create for fresh artifacts
 TrustPolicy hiding test partitions
 ```
@@ -2759,7 +2893,10 @@ Before implementation:
 □ RunGraph mutation methods are pub(crate)
 □ reports are ID-only
 □ Proposer::Request is associated
-□ RendererRegistry is secondary; stage-owned renderers are normal
+□ no `WorkspaceRenderer` export or alias; use `Materializer`
+□ workspace file APIs use `WorkspacePath`, not host paths
+□ GEPA candidate selection is a `CandidateSelector`, not hidden inside `Population`
+□ no renderer/materializer registry in v0.2.2; stage-owned fields are normal
 □ CI enforces dependency allowlist
 ```
 

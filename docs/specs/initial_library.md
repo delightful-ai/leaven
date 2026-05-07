@@ -4,9 +4,9 @@
 
 Project name: **leaven**. Crate: `leaven` (umbrella) + `leaven-core`, `leaven-engine`, `leaven-std`, `leaven-workspace`, `leaven-derive`. Metaphor: the small biological culture you mix into a substrate, walk away from, and come back to find transformed.
 
-> Status: v0.2.1a, pre-implementation patch.  
-> Date: 2026-05-06.  
-> Supersedes the v0.2.1 spec. Folds in the implementation-readiness review patches: lifetime fixes on `Proposer::Request`, explicit report types, `EvaluationSet` resolution boundary, Bradley-Terry rename, workspace cleanup lifecycle, `BudgetHandle` ownership shape, proposal validation laws, and assorted residual wording cleanup. The architecture is unchanged; this is the last polish before P0/P1 prototypes.  
+> Status: v0.2.2, pre-implementation minor spec bump.  
+> Date: 2026-05-07.  
+> Supersedes the v0.2.1a spec and folds in the v0.2.1b topology cutover, v0.2.1c surface/evidence/cache cleanup, and v0.2.2 renderer/workspace/GEPA selector clarification. The architecture is unchanged: cold core stays shape-neutral, surfaces are explicit optimizer/stage choices, and GEPA remains one optimizer.  
 > This is still not an API lock — but it is now ready to be coded against.
 
 ---
@@ -35,7 +35,7 @@ It tightens several places where the first v0.1 draft was still ambiguous or und
    `Cohort` and `Cell` are removed from the user vocabulary.
 
 6. **The engine has an explicit shape.**  
-   The engine owns graph, budget, evaluator registry, renderer registry, cache, callbacks, stoppers, trust policy, and run store. The optimizer owns the algorithm rhythm.
+   The engine owns graph, budget, evaluator registry, cache, callbacks, stoppers, trust policy, and run store. Stage-owned renderers/materializers are the v0.2.2 path. The optimizer owns the algorithm rhythm.
 
 7. **Evaluator registry replaces single evaluator.**  
    Simple users configure one evaluator. Advanced optimizers may call multiple evaluators by ID: task scorer, pairwise judge, human judge, verifier, etc.
@@ -61,10 +61,10 @@ The v0.1 second pass survived the conceptual stress tests. The corrections in th
 12. **`parents` moves from `ProposalBatch` to `Proposal`.**  
     Sibling proposals in a single batch can have different causal parents (cross-branch synthesis case). The batch carries `semantics + metadata`; each proposal carries its own `parents`.
 
-13. **`Parents::None` and `Arity::None` are first-class.**  
-    Brand-new authored artifacts (Meta-Harness pattern: agent writes a fresh harness from scratch each iteration) have no causal predecessor. The lineage is bibliographic via `informed_by`, not causal.
+13. **`CausalInputs::None`, `ProposalEffect::Create`, and `Arity::None` are first-class.**  
+    Brand-new authored artifacts (Meta-Harness pattern: agent writes a fresh harness from scratch each iteration) have no causal predecessor. Creation is represented by `ProposalEffect::Create`; causal lineage is `CausalInputs::None`; bibliographic influence still flows through `informed_by`.
 
-14. **`Renderer<P, T, Target>` and `WorkspaceRenderer<P, T>` are split trait families.**  
+14. **`Renderer<P, T, Target>` and `Materializer<P, T>` are split trait families.**  
     Value-returning rendering (prompt context, JSON blob, debug HTML) and side-effecting workspace population (write files into a sandbox) have different shapes. Conflating them was awkward. Resolves open question 27.1.
 
 15. **Fitted preference relations live on `Population` impls.**  
@@ -82,23 +82,23 @@ The v0.1 second pass survived the conceptual stress tests. The corrections in th
 19. **`ContentId` collision-resistance is a hard trait law.**  
     Strengthened from "observational identity" to "MUST be a cryptographic hash of all observationally-relevant state" with a derive macro for safe-by-default impls.
 
-20. **Workspace lifecycle has its own section (§16.5).**  
+20. **Workspace lifecycle has its own section (§16.6).**  
     `WorkspaceFactory`, `WorkspaceBackend`, and `Workspace` are explicit. Standard backends (Local, E2B, Docker, K8s, Git-worktree) are sketched. Agent runtimes are kept separate from workspaces — they take a workspace and run commands in it.
 
 21. **Implementation plan reorders prototypes 2 and 3.**  
     Pairwise tournament (formerly P3) runs before GEPA parity (formerly P2). Pairwise stresses what is *new* in this design (Pairwise eval requests, fitted preference relations, tournament populations) and is therefore the more informative early test.
 
 22. **Two coding-agent worked examples.**  
-    `gskill` and Meta-Harness are spelled out end-to-end in §22.4 and §22.5 to demonstrate the abstractions on real research workloads.
+    `gskill` and Meta-Harness are spelled out end-to-end in the worked-example section to demonstrate the abstractions on real research workloads. v0.2.1c adds a pairwise tournament example before them.
 
 ---
 
 ## 0.2 What Changed in v0.2.1
 
-v0.2 retained shapes from v0.1 that became lies once the new capabilities (`Parents::None`, agentic proposers, typed provenance) were added. v0.2.1 fixes those without changing the architecture.
+v0.2 retained shapes from v0.1 that became lies once the new capabilities (fresh authored proposals, agentic proposers, typed provenance) were added. v0.2.1 fixes those without changing the architecture.
 
 23. **`Proposal` carries `ProposalEffect`, not a bare `Change`.**  
-    `effect: ProposalEffect::{ Create { artifact } | Change { target, change } }`. A brand-new authored artifact is honestly `Create`, not a `Change` with `Parents::None` whose `change` field is meaningless. Kills the v0.2 awkwardness around Meta-Harness-style fresh authoring.
+    `effect: ProposalEffect::{ Create { artifact } | Change { target, change } }`. A brand-new authored artifact is honestly `Create`, not a `Change` with no apply target. Kills the v0.2 awkwardness around Meta-Harness-style fresh authoring.
 
 24. **`ProposalProvenance { causal, informed_by }` is typed.**  
     `informed_by` is no longer "metadata under the hood" — it's a structured field of typed `InfoRef`s (candidates, assessments, proposals, external refs). Graph queries derive from this directly. Removes the python-gepa-stringly-typed failure mode v0.2 was sliding back toward.
@@ -113,13 +113,13 @@ v0.2 retained shapes from v0.1 that became lies once the new capabilities (`Pare
     Multi-batch optimizer rhythm covers ordered-dependency cases. Re-add if a real prototype forces it.
 
 28. **`Materializable` moves out of cold core.**  
-    Conflicts with the rendering-separation principle. Now a stdlib convenience trait used by default `WorkspaceRenderer` impls. Custom layouts always go through `WorkspaceRenderer`.
+    Conflicts with the rendering-separation principle. Now a stdlib convenience trait used by default `Materializer` impls. Custom layouts always go through `Materializer`.
 
-29. **`RendererRegistry` is demoted; stage-owned renderers are the default.**  
-    Most stages should hold their renderers as fields. The registry exists for cross-stage shared rendering and debug, not as the primary path.
+29. **`RendererRegistry` is deferred; stage-owned renderers are the default.**  
+    Most stages should hold their renderers/materializers as fields. Add a registry only after the erased value/target/view contract is real.
 
-30. **`ContentId` law is softened (no split).**  
-    `content_id` stays mandatory on `Artifact`. Trait law clarified to "deterministic hash with negligible collision probability at run scale; the cache trusts it; user contract is don't lie." No `ArtifactId / ContentAddressed` split — premature option-creation for use cases that haven't appeared. `#[derive(Optimize)]` plus dev-mode `verify_cache_consistency` cover the safety story.
+30. **Historical note: v0.2.1 kept mandatory `content_id`; v0.2.1c supersedes this.**  
+    The earlier draft kept cache identity on `Artifact`. v0.2.1c splits graph identity from cache identity because external graph identities can be mutable while some external content references are cache-safe.
 
 31. **`Arity` is a request hint, not a law.**  
     Describes what the optimizer should provide as input when the optimizer drives parent selection. Proposers may emit fewer or more proposals than `Arity` suggests, and may set causal inputs differently per-proposal.
@@ -140,7 +140,7 @@ A pre-implementation review flagged real Rust-mechanics issues and residual word
     `P::Change` was used as shorthand in some signatures but `OptimizationProblem` doesn't define a `Change` associated type — the change lives on `Artifact`. Signatures fixed throughout. No new associated type added (would duplicate).
 
 35. **Report types defined explicitly.**  
-    `ProposalBatchReport`, `ApplyReport`, `ApplyOneReport`, `EvaluationReport` were referenced but undefined. Now spelled out in §8.3. They return IDs and graph-backed views, not graph-owned values — the graph is the durable truth.
+    `ProposalBatchReport`, `ApplyReport`, `ApplyOneReport`, `EvaluationReport` were referenced but undefined. Now spelled out in §8.4. They return IDs and graph-backed views, not graph-owned values — the graph is the durable truth.
 
 36. **`EvaluationSet` resolution boundary explicit.**  
     `RunContext::evaluate` accepts an `EvaluationRequest` containing an unresolved `EvaluationSet`; the context resolves it and passes a `ResolvedEvaluationRequest` to the evaluator. Cache keys use the resolved set ID + case-set version. The graph records both the original expression and the resolution.
@@ -159,6 +159,65 @@ A pre-implementation review flagged real Rust-mechanics issues and residual word
 
 41. **Proposal validation laws (§24).**  
     Cheap correctness checks before graph insertion: `Create + None` ok; `Create + NAry` ok (aggregate); `Create + Single` invalid; `Change + Single` requires `target == single parent`; `Change + Pair` requires `target ∈ pair`; `Change + None` invalid. These prevent bad lineage data from entering the graph.
+
+---
+
+## 0.4 What Changed in v0.2.1c
+
+The v0.2.1b topology cutover made surfaces explicit, but the long-form spec still carried v0.2.1a examples and a few underspecified seams. This pass tightens those seams before `leaven-gepa` work.
+
+42. **Artifact identity and cache identity are separate.**  
+    `ArtifactIdentity` is graph identity. `CacheIdentity` is the stronger evaluator-cache promise. Deterministic cache keys use `CacheIdentity`, not whatever identity an artifact happens to expose.
+
+43. **Artifact-intrinsic decomposition is removed.**  
+    `Decomposable` is gone from the main spec. Parts are exposed by `EditSurface<A>`, which is selected by an optimizer, proposer, renderer, or adapter. Surface part IDs are scoped to a `SurfaceFingerprint`.
+
+44. **Evidence splits measurement from attribution.**  
+    `CasewiseEvidence` expresses per-case outcomes. `AttributableEvidence<K>` expresses blame/credit/routing over a key space such as surface parts, tools, agents, files, or changesets. GEPA instance frontiers use casewise measurement; trace-aware selectors use attribution.
+
+45. **GEPA owns its edit surface and lowers surface edits.**  
+    The canonical shape is `Gepa<P, S, Pop>` where `S: EditSurface<P::Artifact>`. GEPA proposers may emit surface edits; GEPA lowers them through `S` into artifact-native changes before recording `ProposalEffect::Change`.
+
+46. **Cost arithmetic is checked by default.**  
+    `Cost` does not silently saturate through `+`. Stages use `checked_add` / `checked_add_assign` and propagate `CostOverflow`; explicit `saturating_add` exists only for non-authoritative reporting.
+
+47. **Population observation is optimizer-driven.**  
+    The engine records assessments into the graph. The optimizer decides which population or fitted model observes each assessment and records resulting population events.
+
+48. **Pairwise tournament is now a worked example.**  
+    The example exercises pairwise evaluation requests, fitted preference state, optimizer-driven observation, and a non-GEPA rhythm.
+
+---
+
+## 0.5 What Changed in v0.2.2
+
+This is a minor spec bump because it changes public vocabulary and algorithm
+extension seams before implementation.
+
+49. **`WorkspaceRenderer` is renamed to `Materializer`.**  
+    Value rendering and workspace materialization are different operations.
+    `Renderer` returns values; `Materializer` writes a workspace tree. There is
+    no compatibility alias.
+
+50. **Workspace paths are backend-neutral.**  
+    Public workspace APIs use `WorkspacePath`, not host `PathBuf` or raw
+    strings. Local and E2B-style remote backends share the same file and command
+    surface; `local_mount()` is optional and never required by examples.
+
+51. **Trust and capability scopes are enumerated by actor.**  
+    The spec now states exactly what optimizers, proposers, evaluators,
+    renderers, materializers, agent runtimes, and callbacks can read or do.
+
+52. **GEPA candidate selection is explicitly swappable.**  
+    `Population` is archive/admission/update state. `CandidateSelector` is the
+    policy that chooses what to try next from a typed `PopulationView`. This is
+    required by GEPA variants, MAP-Elites/quality-diversity, skill-library
+    evolution, and tournament optimizers.
+
+53. **Future skill-library optimizers get a named direction.**  
+    The bottom of the spec records the likely `leaven-skill` extension slots:
+    skill routing, hard-case selection, skill-target selection, and skill
+    admission.
 
 ---
 
@@ -235,7 +294,8 @@ They want to replace one part of GEPA:
 ```rust
 let gepa = Gepa::default()
     .candidate_selector(ParetoFrequencyWeighted)
-    .component_selector(WorstEvidenceComponent)
+    .surface(PartMapSurface::default())
+    .part_selector(InvokedAndFailingPart::default())
     .proposal_count(3)
     .gate(StrictImprovement)
     .population(ParetoFrontier::by_case())
@@ -328,7 +388,7 @@ Naming is not polish; it is infrastructure.
 | Chooses candidates to evolve | `CandidateSelector` | `ParentSelector` | Literature and GEPA say candidate selection. Method may return parents. |
 | Cheap pre-validation screen | `Gate` | core `Decision` | Gate is local to an optimizer, not global graph state. |
 | Full algorithm value | `Optimizer` | `SearchStrategy` | Optimizer is the domain word. |
-| Opaque-to-visible bridge | `Renderer` / `RenderedView` | `make_reflective_dataset` | Rendering is consumer-specific, not GEPA-specific. |
+| Opaque-to-visible bridge | `Renderer` / `Materializer` | `make_reflective_dataset`, global `RenderedView` | Rendering/materialization is consumer-specific, not GEPA-specific. |
 | Typed proposal payload | `ProposalAnnotations` | `Meta` / `Claims` split | One typed semantic payload. Claims are a capability on annotations. |
 | Debug/operational extras | `MetadataBag` | `Note` | Metadata is non-semantic, extensible, and not read by algorithms by default. |
 
@@ -348,7 +408,6 @@ Naming is not polish; it is infrastructure.
 RunGraph
 BudgetLedger
 EvaluatorRegistry
-RendererRegistry
 EvaluationCache
 Callback list
 Stopper list
@@ -426,57 +485,86 @@ pub trait Artifact: Clone + Send + Sync + 'static {
     type Change: Clone + Send + Sync + 'static;
     type ApplyError: std::error::Error + Send + Sync + 'static;
 
-    /// A deterministic hash that the evaluation cache trusts as identity.
-    /// Same observable content => same id (with collision probability negligible
-    /// at run scale). The cache uses content_id for dedup; lying about it
-    /// produces silently incorrect cache results. See §24 for the contract
-    /// and §17 for caching mechanics.
-    ///
-    /// Use #[derive(Optimize)] for safe-by-default field hashing. In dev mode,
-    /// enable verify_cache_consistency to catch contract violations.
-    ///
-    /// Content-addressed external handles (git commit hashes, IPFS CIDs,
-    /// docker image digests) trivially satisfy this — the handle IS the hash.
-    fn content_id(&self) -> ContentId;
+    /// Stable identity of this artifact state for graph storage and lineage.
+    /// This is not automatically an evaluation-cache key.
+    fn identity(&self) -> ArtifactIdentity;
 
     /// Apply a typed change. Must be functional: same artifact + same change
-    /// either fails the same way or produces the same content identity.
-    fn apply(&self, change: &Self::Change) -> Result<Self, Self::ApplyError>;
+    /// either fails the same way or produces the same artifact identity.
+    fn apply_change(&self, change: &Self::Change) -> Result<Self, Self::ApplyError>;
 }
 ```
 
 `Artifact` does not know about scores, evidence, traces, rationale, claims, cases, or rendering.
 
-Optional capabilities:
+Artifact identity is graph identity:
 
 ```rust
-pub trait Decomposable: Artifact {
-    type ComponentId: Eq + Hash + Clone + Send + Sync + 'static;
+pub enum ArtifactIdentity {
+    /// Collision-resistant content identity.
+    Content(ContentId),
 
-    fn components(&self) -> Vec<Component<Self::ComponentId>>;
-
-    fn change_component(
-        id: Self::ComponentId,
-        edit: ComponentEdit,
-    ) -> Self::Change;
+    /// Stable external identity used for graph lineage. This may or may not
+    /// be safe for evaluation caching.
+    External(ExternalRef),
 }
 ```
 
-`Decomposable` supports prompt modules, skill files, graph nodes, or any component-addressed artifact.
-
-**`Materializable` is not part of cold core.** Workspace materialization (writing an artifact's content into a workspace directory) is rendering, not artifact identity. The cold-core `Artifact` trait stays free of workspace concerns. A standard library `Materializable` convenience trait exists for the common case where an artifact has an obvious canonical filesystem layout, and standard `WorkspaceRenderer` impls use it when present:
+Evaluation cache identity is separate:
 
 ```rust
-// stdlib convenience (not cold core)
-pub trait Materializable: Artifact {
-    async fn materialize(
-        &self,
-        workspace: &mut WorkspaceView<'_>,
-    ) -> Result<RenderReport, MaterializeError>;
+pub trait CacheIdentified: Artifact {
+    /// Identity that the deterministic evaluator cache may trust.
+    fn cache_identity(&self) -> Option<CacheIdentity>;
+}
+
+pub enum CacheIdentity {
+    /// The artifact state is content-addressed by this digest.
+    Content(ContentId),
+
+    /// The external reference is immutable by law for this artifact type.
+    /// Examples: git commit hash, IPFS CID, OCI image digest.
+    ExternalContent(ExternalRef),
+
+    /// Caller-supplied cache fingerprint. Use only when the user has supplied
+    /// an explicit stable key for the evaluated state.
+    User(Fingerprint),
 }
 ```
 
-For artifacts without an obvious canonical layout — or where multiple consumers need different layouts — the user writes a `WorkspaceRenderer<P, ArtifactType>` directly. See §13.
+`ArtifactIdentity` answers "what state did the graph record?" `CacheIdentity`
+answers "what may an evaluator cache reuse without re-running?" Mutable external
+handles such as branch names, filesystem paths, database row IDs, or S3 keys
+without versioning are valid graph identities but must return `None` for
+`cache_identity()` unless wrapped in an immutable snapshot or explicit user key.
+
+Artifact parts are not intrinsic. Use `leaven-surface::EditSurface<A>` for any
+chosen projection over an artifact:
+
+```rust
+pub trait EditSurface<A: Artifact>: Send + Sync {
+    type PartId: Eq + Hash + Clone + Send + Sync + 'static;
+    type Address: Eq + Hash + Clone + Send + Sync + 'static;
+    type View<'a>: Send + Sync where A: 'a;
+    type Edit: Clone + Send + Sync + 'static;
+
+    fn fingerprint(&self) -> SurfaceFingerprint;
+    fn parts<'a>(&self, artifact: &'a A) -> Result<Vec<Part<Self::PartId, Self::Address, Self::View<'a>>>, SurfaceError>;
+    fn change_part(&self, artifact: &A, id: Self::PartId, edit: Self::Edit) -> Result<A::Change, SurfaceError>;
+}
+```
+
+Surface laws:
+
+- Surface identity is scoped to `SurfaceFingerprint`, not to the artifact type.
+- `S::PartId` is meaningful only for the surface fingerprint that produced it.
+- Path-based surfaces preserve path identity only; rename is remove + add.
+- Logical-ID surfaces may preserve identity across rename if their extraction rule says so.
+- Borrowed surface views must not be held across `.await`; async stages should turn them into owned request/rendering data before awaiting.
+
+Workspace materialization is separate from value rendering. Use
+`Materializer<P, ArtifactType>` or a stdlib materializer helper; do not put
+workspace layout on `Artifact`.
 
 ### 5.2 `ContentId` and `CandidateId`
 
@@ -499,7 +587,7 @@ A candidate is a graph-local artifact state.
 ```rust
 pub struct Candidate<A: Artifact> {
     pub id: CandidateId,
-    pub content_id: ContentId,
+    pub identity: ArtifactIdentity,
     pub artifact: A,
 }
 ```
@@ -614,7 +702,7 @@ pub enum InfoRef {
 }
 ```
 
-`causal` records what the proposal was *derived from* — these contributed to the new candidate's content_id. `informed_by` records what the proposer *read while deciding* — these did not contribute to the content_id. The distinction matters for cache correctness (informed-by candidates can change without invalidating downstream cache entries) and for graph queries ("what learnings are incorporated into this candidate's lineage" vs "what was used to construct it").
+`causal` records what the proposal was *derived from* — these contributed to the new candidate's artifact state. `informed_by` records what the proposer *read while deciding* — these did not become causal inputs. The distinction matters for cache correctness (informed-by candidates do not become candidate cache identities for the child) and for graph queries ("what learnings are incorporated into this candidate's lineage" vs "what was used to construct it").
 
 `informed_by` is a typed structured field, not metadata. Graph queries `graph.informed_by(c)` and `graph.informed(c)` derive directly from this. Implementations are expected to populate it honestly — agentic proposers that read prior candidates must record those reads.
 
@@ -730,6 +818,11 @@ pub struct MetadataBag {
     pub fields: BTreeMap<MetadataKey, MetadataValue>,
 }
 ```
+
+Floating-point metadata values use `FiniteF64`, not raw `f64`, so operational
+debug data cannot inject `NaN` or infinity into serialization, reporting, or
+cache-adjacent tooling. Use `Amount` for non-negative cost/budget quantities;
+use `FiniteF64` only where the sign is domain-specific.
 
 Use metadata for:
 
@@ -895,7 +988,7 @@ RunContext records the ResolvedEvaluationSet in the graph alongside the
 RunContext passes a ResolvedEvaluationRequest to the evaluator. Evaluators
   do not see EvaluationSet expressions; they see resolved case_ids.
 Cache key uses (evaluator_fingerprint, ResolvedEvaluationSetId, case_set_version,
-  candidate content_ids). Dynamic sets at different times resolve to different
+  candidate cache identities). Dynamic sets at different times resolve to different
   ResolvedEvaluationSetIds and therefore different cache entries.
 ```
 
@@ -1044,18 +1137,39 @@ Evidence is opaque to core.
 pub trait Evidence: Send + Sync + 'static {}
 ```
 
-Optional capabilities:
+Evidence does not render itself in cold core. Consumers use `Renderer` or
+`Materializer` implementations at the stage boundary.
 
 ```rust
-pub trait RenderEvidence: Evidence {
-    fn render(&self, ctx: RenderContext<'_>) -> RenderedView;
+pub trait CasewiseEvidence: Evidence {
+    fn case_outcome(&self, case: CaseId) -> Option<CaseOutcome>;
+    fn case_outcomes(&self) -> Vec<(CaseId, CaseOutcome)>;
 }
 ```
 
 ```rust
-pub trait AttributedEvidence<C>: Evidence {
-    fn invocations(&self) -> Vec<Invocation<C>>;
-    fn evidence_for(&self, component: &C) -> Option<ComponentEvidence<'_>>;
+pub trait AttributableEvidence<K>: Evidence {
+    /// The key space this attribution was produced under.
+    /// For surface-part attribution this must be
+    /// `AttributionDomain::Surface(surface.fingerprint().0)`.
+    fn attribution_domain(&self) -> AttributionDomain;
+
+    fn attributions(&self) -> Vec<Attribution<K>>;
+    fn evidence_for(&self, key: &K) -> Option<AttributionEvidence<'_>>;
+}
+
+pub enum AttributionDomain {
+    Surface(Fingerprint),
+    ToolCalls,
+    Agents,
+    Changesets,
+    User(Fingerprint),
+}
+
+pub struct Attribution<K> {
+    pub key: K,
+    pub weight: Option<FiniteF64>,
+    pub note: Option<Arc<str>>,
 }
 ```
 
@@ -1073,6 +1187,18 @@ pub trait DiffEvidence: Evidence {
 
 The core does not require these. Strategies bind what they need.
 
+Casewise measurement and attribution are deliberately separate:
+
+- `CasewiseEvidence` answers "what happened on this case?"
+- `AttributableEvidence<K>` answers "which key was responsible or relevant?"
+
+GEPA instance frontiers consume casewise outcomes. Trace-aware part selectors,
+TextGrad routing, and multi-agent credit assignment consume attribution. A
+single evidence type may implement both, but the traits say different things.
+For `AttributableEvidence<S::PartId>`, consumers must check that
+`attribution_domain() == AttributionDomain::Surface(surface.fingerprint().0)`
+before using the part IDs.
+
 ### 5.15 `PreferenceRelation`
 
 Evidence is not preference. A relation interprets evidence.
@@ -1088,6 +1214,29 @@ pub trait PreferenceRelation<P: OptimizationProblem>: Send + Sync {
     ) -> Preference;
 }
 ```
+
+```rust
+pub enum PreferenceScope {
+    /// Compare using all visible assessments.
+    All,
+
+    /// Compare using assessments from one evaluation set.
+    EvaluationSet(EvaluationSetId),
+
+    /// Compare using one case inside one evaluation set.
+    Case {
+        set: EvaluationSetId,
+        case: CaseId,
+    },
+
+    /// Compare using assessments recorded for one optimizer purpose.
+    Purpose(EvaluationPurpose),
+}
+```
+
+Composition can be added later as a separate scoped-query type if a prototype
+needs it. v0.2.1c keeps `PreferenceScope` to the cases already used by the
+spec and avoids a generic filter language inside cold preference APIs.
 
 ```rust
 pub enum Preference {
@@ -1117,7 +1266,9 @@ UserDefinedPreference
 
 ### 5.16 `Population`
 
-A population is live optimizer state.
+A population is live optimizer state: archive membership, admission/update laws,
+fitted model state, and strategy events. It is not the policy for choosing what
+to try next; selectors own that.
 
 ```rust
 pub trait Population<P: OptimizationProblem>: Send {
@@ -1126,12 +1277,6 @@ pub trait Population<P: OptimizationProblem>: Send {
         candidate: CandidateId,
         graph: RunGraphView<'_, P>,
     ) -> Vec<PopulationEvent>;
-
-    fn select_candidates(
-        &mut self,
-        arity: Arity,
-        graph: RunGraphView<'_, P>,
-    ) -> Vec<CandidateId>;
 
     fn observe_candidate(
         &mut self,
@@ -1154,7 +1299,7 @@ pub trait Population<P: OptimizationProblem>: Send {
         graph: RunGraphView<'_, P>,
     ) -> Option<CandidateId>;
 
-    fn view(&self) -> PopulationView<'_>;
+    fn view<'a>(&'a self, graph: RunGraphView<'a, P>) -> PopulationView<'a, P>;
 }
 ```
 
@@ -1164,6 +1309,7 @@ This supports:
 candidate-scored optimizers, where a population observes a candidate after validation
 tournament optimizers, where a population observes pairwise/listwise assessments
 streaming optimizers, where population changes as fresh assessments arrive
+quality-diversity optimizers, where archive state and selection policy are separate
 ```
 
 Standard populations:
@@ -1198,14 +1344,16 @@ pub trait NicheDescriptor<P: OptimizationProblem>: Send + Sync {
 
 MAP-Elites and related methods use niches. GEPA’s instance Pareto can be represented as a frontier keyed by case ID; that is a frontier partition, not an evaluation set.
 
-### 5.18 Rendering
+### 5.18 Rendering and materialization
 
-Rendering converts opaque core types into consumer-specific views — strings for prompts, JSON for typed signatures, HTML for human inspection, structured directories for agents to grep. Rendering may be async and costful.
+Rendering converts opaque core types into consumer-specific values — strings for
+prompts, JSON for typed signatures, HTML for human inspection. Materialization
+writes structured directories for agents to grep. Both may be async and costful.
 
 The library splits rendering into two trait families:
 
 - **`Renderer<P, T, Target>`** — value-returning. Used for prompts, summaries, JSON blobs, debug HTML.
-- **`WorkspaceRenderer<P, T>`** — side-effecting. Populates a workspace by writing files. Used for materializing artifacts, lineage history, traces, and any structured filesystem layout an agentic stage will read.
+- **`Materializer<P, T>`** — side-effecting. Populates a workspace by writing files. Used for materializing artifacts, lineage history, traces, and any structured filesystem layout an agentic stage will read.
 
 Full trait definitions, examples, and trait laws live in §13. The framework does not pre-render anything; consuming stages choose their renderings.
 
@@ -1226,6 +1374,25 @@ pub struct Cost {
 `Amount` values are finite and non-negative by construction. Constructors for
 costs and budgets must reject `NaN`, infinities, and negative values before
 they can enter budget comparison or durable cost snapshots.
+
+Cost arithmetic is checked by default. Authoritative accounting must not
+silently saturate or wrap:
+
+```rust
+impl Cost {
+    pub fn zero() -> Self;
+
+    pub fn checked_add(&self, other: &Self) -> Result<Self, CostOverflow>;
+    pub fn checked_add_assign(&mut self, other: &Self) -> Result<(), CostOverflow>;
+
+    /// For lossy summaries only. Do not use for budget ledger truth.
+    pub fn saturating_add(&self, other: &Self) -> Self;
+}
+```
+
+There is no default `Add<Output = Cost>` implementation in the core surface.
+Examples use `checked_add` / `checked_add_assign` so overflow remains visible to
+the stage that produced it.
 
 Standard units:
 
@@ -1284,7 +1451,8 @@ Examples:
 ```text
 Proposer produces Metered<ProposalBatch>
 Evaluator produces Metered<Vec<Assessment>>
-Renderer produces Metered<RenderedView>
+Renderer produces Metered<R::View>
+Materializer produces Metered<MaterializationReport>
 AgentRuntime produces Metered<AgentTranscript>
 ```
 
@@ -1316,8 +1484,6 @@ where
     optimizer: O,
 
     evaluators: EvaluatorRegistry<P>,
-    renderers: RendererRegistry<P>,
-
     graph: RunGraph<P>,
     budget: BudgetLedger,
     cache: EvaluationCache<P>,
@@ -1326,7 +1492,7 @@ where
     callbacks: Vec<Box<dyn DynCallback<P>>>,
 
     rng: StdRng,
-    trust: TrustPolicy<P>,
+    trust: TrustPolicy,
     store: RunStore<P>,
 }
 ```
@@ -1521,17 +1687,22 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
         relation: &dyn DynPreferenceRelation<P>,
     ) -> Preference;
 
-    pub async fn render<T, Target>(
+    pub async fn render<R, T, Target>(
         &mut self,
+        renderer: &R,
         value: &T,
         target: Target,
-    ) -> Result<RenderedView, RenderError>;
+    ) -> Result<Metered<R::View>, RenderError>
+    where
+        R: Renderer<P, T, Target>;
 
     pub fn record_population_events(
         &mut self,
         population: PopulationId,
         events: Vec<PopulationEvent>,
     );
+
+    pub fn selection_context(&mut self, arity: Arity) -> SelectionContext<'_>;
 
     pub fn emit(&mut self, event: RunEvent<P>);
 
@@ -1558,7 +1729,32 @@ persistence hooks
 
 This is what makes `Optimizer` first-class without making optimizer authors reimplement the engine.
 
-### 8.3 Report types
+### 8.3 Context capability table
+
+The context types are distinct because their trait signatures should reveal
+which powers a stage receives. They are not aliases for one god context.
+
+| Capability | `RunContext` | `ProposalContext` | `EvaluationContext` | `RenderContext` | `MaterializeContext` |
+|---|---|---|---|---|---|
+| Read graph | yes | scoped | scoped | scoped | scoped |
+| Mutate graph | yes | no | no | no | no |
+| Apply proposals | yes | no | no | no | no |
+| Request normal evaluations | yes | no | no | no | no |
+| Request probe evaluations | no | if granted by `EvalHandle` | no | no | no |
+| Charge budget | yes | yes | yes | yes | yes |
+| Allocate workspace | no | if granted | if granted | no | no |
+| Touch workspace files | no | through allocated `Workspace` | through allocated `Workspace` | no | only the provided `WorkspaceView` |
+| Run workspace commands | no | via `AgentRuntime` or explicit workspace call | via explicit workspace call | no | no by default |
+| Render values | yes | yes | yes | yes | yes |
+| Materialize workspace trees | no | yes, if a workspace was allocated | yes, if a workspace was allocated | no | yes |
+| Read hidden partitions | run policy | proposer read scope | evaluator read scope | inherited scope | inherited scope |
+
+Borrow-hostility rule: no context method should force a stage to hold borrowed
+graph/surface views across `.await`. Requests passed into async stage calls are
+owned and lightweight; rich borrowed views are constructed inside the call and
+converted to owned renderings before awaiting external work.
+
+### 8.4 Report types
 
 Context methods return small report structs. The reports carry IDs and graph-backed views — never graph-owned values — because the run graph is the durable truth and reports are read-only summaries of what was just recorded.
 
@@ -1592,7 +1788,7 @@ pub struct ApplyOneReport<P: OptimizationProblem> {
 pub enum ApplyOutcome<P: OptimizationProblem> {
     Success {
         candidate: CandidateId,
-        content_id: ContentId,
+        identity: ArtifactIdentity,
     },
     Failure {
         error: ErrorRecord,
@@ -1645,15 +1841,14 @@ Equivalent wrappers:
 
 ```text
 DynProposer
-DynRenderer
 DynPreferenceRelation
 DynCallback
 DynStopper
 ```
 
-TODO(renderer-erasure): `DynRenderer` remains part of the planned registry
-surface, but it must not be exposed as an empty marker trait. Define the erased
-value/target/view contract and add stage trait contract tests before exposing it.
+No `DynRenderer` or `DynMaterializer` ships in v0.2.2. Rendering erasure waits
+until a real registry use case defines the erased value/target/view contract and
+has stage trait contract tests. Do not expose empty marker traits as placeholders.
 
 Adapters exist from static traits to dyn traits.
 
@@ -1704,7 +1899,7 @@ impl<P: OptimizationProblem> RunGraphView<'_, P> {
 
     /// Candidates this proposal read from during reflection.
     /// Distinct from causal parents: these candidates contributed to the proposer's
-    /// decision but did not contribute to the new candidate's content_id.
+    /// decision but did not contribute to the new candidate's artifact identity.
     /// Derived from ProposalProvenance::informed_by recorded at proposal time;
     /// not from MetadataBag.
     fn informed_by(&self, id: CandidateId) -> Vec<CandidateId>;
@@ -1873,14 +2068,16 @@ Static proposers are the default; the dyn wrapper is for runtime-loaded plugins.
 
 ---
 
-## 13. Renderers
+## 13. Renderers and Materializers
 
-Rendering converts opaque values into consumer-specific views. Rendering may be async and costful.
+Rendering converts opaque values into consumer-specific values. Materialization
+writes opaque values into a workspace. Both may be async and costful, but they
+are intentionally different operations.
 
 The library splits rendering into two trait families because the side effects differ:
 
 - **`Renderer<P, T, Target>`** returns a value. Used for prompt assembly, JSON blobs, debug HTML, summary strings.
-- **`WorkspaceRenderer<P, T>`** populates a workspace by side effect. Used for materializing artifacts, lineage history, traces, and any large structured filesystem layout that an agentic stage will read.
+- **`Materializer<P, T>`** populates a workspace by side effect. Used for materializing artifacts, lineage history, traces, and any large structured filesystem layout that an agentic stage will read.
 
 Conflating the two was awkward (an `()` view type plus reliance on a `&mut Workspace` smuggled through the context). The split makes both shapes honest.
 
@@ -1909,19 +2106,19 @@ RunGraph     -> HumanDebugHtml          (View = String)
 CandidatePair -> PairwiseJudgePrompt    (View = JudgePromptDoc)
 ```
 
-### 13.2 `WorkspaceRenderer<P, T>` — side-effecting
+### 13.2 `Materializer<P, T>` — side-effecting
 
 ```rust
-pub trait WorkspaceRenderer<P: OptimizationProblem, T>: Send + Sync {
-    async fn render_into(
+pub trait Materializer<P: OptimizationProblem, T>: Send + Sync {
+    async fn materialize_into(
         &self,
         value: &T,
         workspace: &mut WorkspaceView<'_>,
-        ctx: RenderContext<'_, P>,
-    ) -> Result<Metered<RenderReport>, RenderError>;
+        ctx: MaterializeContext<'_, P>,
+    ) -> Result<Metered<MaterializationReport>, MaterializeError>;
 }
 
-pub struct RenderReport {
+pub struct MaterializationReport {
     pub files_written: usize,
     pub bytes_written: u64,
     pub truncations: Vec<TruncationNote>,
@@ -1938,15 +2135,19 @@ HistorySnapshot          -> the orchestrator that calls the above three
 GitWorktreeRendering     -> ensures the worktree is at the parent commit
 ```
 
-`WorkspaceView<'_>` is a borrowed handle into a workspace subtree, with `subdir`, `write_file`, `read_file`, and `run_command`. It respects the workspace's underlying backend (local fs, e2b sandbox, k8s container, git worktree). See §16.5 for workspace lifecycle.
+`WorkspaceView<'_>` is a borrowed handle into a workspace subtree, with
+`subdir`, `write_file`, `read_file`, and `run_command`. Paths are
+`WorkspacePath`s, not host paths. The same materializer code must work for local
+tempdirs, E2B sandboxes, k8s containers, and git worktrees. See §16.6 for
+workspace lifecycle.
 
 ### 13.3 Choosing between the two
 
-If the consumer wants a value back (string for an LLM prompt, JSON for a typed signature, HTML for a viewer), use `Renderer`. If the consumer needs a directory tree it can `grep` and `cat` (agentic proposer, sandboxed evaluator, debugger reproducing a run), use `WorkspaceRenderer`. The same artifact can have both kinds of renderers attached for it.
+If the consumer wants a value back (string for an LLM prompt, JSON for a typed signature, HTML for a viewer), use `Renderer`. If the consumer needs a directory tree it can `grep` and `cat` (agentic proposer, sandboxed evaluator, debugger reproducing a run), use `Materializer`. The same artifact can have both kinds of renderers attached for it.
 
-### 13.4 Stage-owned renderers are the default
+### 13.4 Stage-owned renderers and materializers are the default
 
-Most stages should hold their renderers as direct fields, not look them up through a registry:
+Most stages should hold their renderers/materializers as direct fields, not look them up through a registry:
 
 ```rust
 pub struct ReflectiveMutation<R, L> {
@@ -1955,14 +2156,43 @@ pub struct ReflectiveMutation<R, L> {
 }
 
 pub struct AgenticHarnessProposer<HR, AR> {
-    history_renderer: HR,           // WorkspaceRenderer<P, HistorySnapshot>
+    history_materializer: HR,       // Materializer<P, HistorySnapshot>
     agent_runtime: AR,
 }
 ```
 
-Stage-owned composition keeps understanding local — the rendering used by a particular stage is visible at the type level — and avoids action-at-a-distance through a global table.
+Stage-owned composition keeps understanding local — the rendering/materializing
+used by a particular stage is visible at the type level — and avoids
+action-at-a-distance through a global table.
 
-A `RendererRegistry` exists for cross-stage shared rendering (e.g. a debug viewer that wants to render arbitrary artifact types) and for plugin scenarios where rendering choices are made at runtime. It is not the central rendering mechanism. Most users will never touch it.
+No renderer/materializer registry ships in v0.2.2. Cross-stage shared rendering
+and debug viewers should start with explicit typed fields. Add a registry only
+after a real user needs runtime rendering choices and the erased
+value/target/view contract is covered by tests.
+
+There is no universal `Rendered` enum in core or engine. Text for LM prompts
+belongs in `leaven-lm`/`leaven-agent` value types such as `LmMessages`,
+`AgentPrompt`, or `PromptDocument`. HTML belongs in debug/viewer targets. JSON
+belongs in typed target structs. Add erasure only when a real registry needs a
+finite engine-owned set of target/view pairs.
+
+### 13.5 How materialization reaches an agent
+
+The framework does not magically pass a rendered artifact to an agent. The
+proposer or evaluator composes the pieces explicitly:
+
+```text
+candidate/artifact
+  -> materializer writes files into WorkspaceView
+  -> renderer builds prompt/messages/config for the agent runtime
+  -> AgentRuntime runs commands inside Workspace
+  -> stage reads outputs back through Workspace APIs
+  -> proposer emits ProposalEffect::Create or Change
+```
+
+`AgentRuntime` sees only the prompt/config it is handed and the workspace files
+that earlier materializers wrote. It does not receive graph access, trust
+policy, evaluation handles, or host filesystem paths.
 
 ---
 
@@ -1999,6 +2229,10 @@ Preference may be partial. `Incomparable` is a valid result.
 ## 15. Population and Frontier
 
 A population is live optimizer state. A frontier is a kind of population.
+Population owns archive membership, admission/update laws, fitted model state,
+and strategy events. It does not own the policy for "what should we try next."
+That policy is `CandidateSelector` for GEPA-shaped optimizers and analogous
+selector traits for other optimizer families.
 
 ```rust
 pub trait Population<P: OptimizationProblem>: Send {
@@ -2009,12 +2243,6 @@ pub trait Population<P: OptimizationProblem>: Send {
         candidate: CandidateId,
         graph: RunGraphView<'_, P>,
     ) -> Vec<PopulationEvent>;
-
-    fn select_candidates(
-        &mut self,
-        arity: Arity,
-        graph: RunGraphView<'_, P>,
-    ) -> Vec<CandidateId>;
 
     fn observe_candidate(
         &mut self,
@@ -2037,7 +2265,92 @@ pub trait Population<P: OptimizationProblem>: Send {
         graph: RunGraphView<'_, P>,
     ) -> Option<CandidateId>;
 
-    fn view(&self) -> PopulationView<'_>;
+    fn view<'a>(&'a self, graph: RunGraphView<'a, P>) -> PopulationView<'a, P>;
+}
+
+pub struct PopulationView<'a, P: OptimizationProblem> {
+    pub id: PopulationId,
+    pub candidates: &'a [CandidateId],
+    pub frontier: FrontierView<'a>,
+    pub scores: ScoreView<'a, P>,
+    pub niches: Option<NicheView<'a>>,
+    pub selection_stats: SelectionStatsView<'a>,
+}
+
+pub struct FrontierView<'a> {
+    pub members: &'a [CandidateId],
+    pub dominated: &'a [CandidateId],
+    pub by_case: Option<CaseFrontierView<'a>>,
+    pub by_niche: Option<NicheFrontierView<'a>>,
+}
+
+pub struct CaseFrontierView<'a> {
+    /// One row per `(case, leading candidate)`. Multiple rows for the same case
+    /// mean ties or multiple non-dominated leaders.
+    pub leaders: &'a [(CaseId, CandidateId)],
+}
+
+pub struct NicheFrontierView<'a> {
+    /// One row per `(niche, elite candidate)`. Multiple rows for the same niche
+    /// mean a pareto set inside that niche.
+    pub elites: &'a [(NicheId, CandidateId)],
+}
+
+pub struct NicheView<'a> {
+    pub assignments: &'a [(CandidateId, NicheId)],
+}
+
+pub struct ScoreView<'a, P: OptimizationProblem> {
+    graph: RunGraphView<'a, P>,
+    population: PopulationId,
+}
+
+impl<'a, P: OptimizationProblem> ScoreView<'a, P> {
+    pub fn latest_assessments(&self, candidate: CandidateId) -> impl Iterator<Item = AssessmentView<'a, P>> { /* graph query */ }
+    pub fn case_outcomes(&self, candidate: CandidateId) -> impl Iterator<Item = (CaseId, CaseOutcome)> { /* graph query */ }
+    pub fn aggregate_preference_rank(&self, candidate: CandidateId) -> Option<usize> { /* model/population query */ }
+}
+
+pub struct SelectionStatsView<'a> {
+    pub attempts: &'a [(CandidateId, u64)],
+    pub successes: &'a [(CandidateId, u64)],
+    pub last_selected: &'a [(CandidateId, IterationId)],
+}
+
+pub struct SelectionContext<'a> {
+    pub iteration: IterationId,
+    pub rng: &'a mut dyn RngCore,
+    pub budget: BudgetSnapshot,
+    pub arity: Arity,
+}
+
+pub struct CandidateSelection {
+    pub candidates: Vec<CandidateId>,
+    pub rationale: SelectionRationale,
+}
+
+pub struct SelectionOutcome {
+    pub selected: CandidateSelection,
+    pub proposals: Vec<ProposalId>,
+    pub applied: Vec<CandidateId>,
+    pub admitted: Vec<CandidateId>,
+    pub rejected: Vec<CandidateId>,
+}
+
+pub enum SelectionError {
+    EmptyPopulation,
+    UnsupportedArity { requested: Arity },
+    InsufficientCandidates { requested: usize, available: usize },
+    Message(String),
+}
+
+pub enum SelectionRationale {
+    ParetoFrequency { covered_cases: usize },
+    GreedyBest,
+    Beam { rank: usize },
+    Niche { niche: NicheId },
+    Exploration,
+    UserDefined(String),
 }
 ```
 
@@ -2073,7 +2386,7 @@ pub enum PopulationEvent {
     Reweighted {
         population: PopulationId,
         candidate: CandidateId,
-        weight: f64,
+        weight: FiniteF64,
         reason: String,
     },
 
@@ -2093,20 +2406,54 @@ Events are strategy opinions. The graph records them but does not treat them as 
 Stateful preference models (Bradley-Terry over pairwise judgments, Plackett-Luce over listwise rankings, fitted human-aggregators) are owned by `Population` impls — concretely, `TournamentPopulation` — rather than by `PreferenceRelation`. The reasoning:
 
 - The state of the model depends on the run's accumulated observations.
-- Updates fit naturally into `observe_assessment`, which the engine already calls when assessments land.
-- `select_candidates` and `best` use the fitted model directly without crossing trait boundaries.
+- Updates fit naturally into `observe_assessment`, but the optimizer calls it explicitly. The engine records assessments into the graph; it does not know which population or fitted model should observe them.
+- `best` and `view` expose the fitted model's current opinion without crossing trait boundaries.
 - `PreferenceRelation` stays stateless, simple, and `&self`-only.
 
+`TournamentPopulation` should make the fitted model explicit rather than hiding
+preference learning behind generic bookkeeping:
+
 ```rust
-pub struct TournamentPopulation<P: OptimizationProblem> {
-    model: BradleyTerryFit,           // updated in observe_assessment
+pub trait PreferenceModel<P: OptimizationProblem>: Send {
+    fn observe_pairwise(
+        &mut self,
+        left: CandidateId,
+        right: CandidateId,
+        judgment: PairwiseJudgment,
+    ) -> Vec<ModelEvent>;
+
+    fn compare(
+        &self,
+        left: CandidateId,
+        right: CandidateId,
+        scope: PreferenceScope,
+        graph: RunGraphView<'_, P>,
+    ) -> Preference;
+
+    fn score(&self, candidate: CandidateId) -> Option<FiniteF64>;
+}
+
+pub enum ModelEvent {
+    FitUpdated { observations: usize },
+    ScoreChanged {
+        candidate: CandidateId,
+        old: Option<FiniteF64>,
+        new: FiniteF64,
+    },
+}
+```
+
+```rust
+pub struct TournamentPopulation<P: OptimizationProblem, M = BradleyTerryFit> {
+    model: M,                         // updated in observe_assessment
     candidates: BTreeSet<CandidateId>,
     config: TournamentConfig,
 }
 
-impl<P: OptimizationProblem> Population<P> for TournamentPopulation<P>
+impl<P, M> Population<P> for TournamentPopulation<P, M>
 where
     P::Evidence: PairwiseEvidence,
+    M: PreferenceModel<P>,
 {
     fn observe_assessment(
         &mut self,
@@ -2115,13 +2462,16 @@ where
     ) -> Vec<PopulationEvent> {
         let a = graph.assessment(assessment);
         if let Assessment::Pairwise { left, right, evidence, .. } = a {
-            self.model.update(left, right, evidence.judgment());
+            self.model.observe_pairwise(left, right, evidence.judgment());
         }
         // …
     }
 
     fn best(&self, _graph: RunGraphView<'_, P>) -> Option<CandidateId> {
-        self.model.argmax_score()
+        self.candidates
+            .iter()
+            .copied()
+            .max_by(|a, b| self.model.score(*a).cmp(&self.model.score(*b)))
     }
 
     // …
@@ -2151,21 +2501,77 @@ Test-set assessments are still observed by the engine and recorded in the graph,
 
 Agentic stages require explicit boundaries.
 
-### 16.1 Proposal context
+### 16.1 Trust policy
+
+`TrustPolicy` is run-level configuration that derives per-stage read scopes and
+probe permissions. It is not generic over `P` unless an implementation adds
+problem-specific policy predicates; the standard policy is partition-oriented.
+
+```rust
+pub struct TrustPolicy {
+    hidden_from_proposers: BTreeSet<PartitionId>,
+    probe_policy: ProbePolicy,
+    evidence_visibility: EvidenceVisibility,
+}
+
+pub enum ProbePolicy {
+    Disabled,
+    SearchPartitionsOnly,
+    Explicit(BTreeSet<EvaluationSetId>),
+}
+
+impl TrustPolicy {
+    pub fn hide_from_proposer(
+        partitions: impl IntoIterator<Item = PartitionId>,
+    ) -> Self;
+
+    pub fn read_scope_for_proposer(&self, proposer: ProposerId) -> ReadScope;
+    pub fn read_scope_for_evaluator(&self, evaluator: EvaluatorId) -> ReadScope;
+    pub fn probe_permission(&self, proposer: ProposerId) -> EvaluationSetPermission;
+}
+```
+
+The examples use `TrustPolicy::hide_from_proposer([PartitionId::TEST])` as
+constructor sugar. Runs with multiple proposers still start from one run-level
+policy; if a future prototype needs proposer-specific hiding, add keyed entries
+inside `TrustPolicy` rather than making every stage own an unrelated policy.
+
+### 16.1.1 Actor capability table
+
+Trust is enforced at the context and rendering/materialization boundary. The
+engine owns graph truth; stages receive scoped views and explicit handles.
+
+| Actor | Receives | May do | Must not do |
+|---|---|---|---|
+| Optimizer | `RunContext` and run-scope graph views | Apply proposals, request configured evaluations, update populations, emit events | Reach around `RunContext` to mutate graph internals |
+| Candidate selector | `PopulationView`, scoped graph view, selection context | Choose candidate IDs or parent sets for the optimizer's next step | Read hidden case content or perform side-effectful work |
+| Proposer | `ProposalContext`, optional `EvalHandle`, optional workspace factory | Read allowed graph/evidence renderings, allocate workspace if granted, request probe evals if granted | See hidden validation/test content or mutate graph directly |
+| Evaluator | `EvaluationContext`, resolved request, requested artifacts/cases | Run assessments, allocate workspace if granted, write evidence | Request nested normal evaluations or update populations |
+| Renderer | `RenderContext` | Return value views from visible graph/artifact/evidence data | Touch workspace files or assume a materialized layout |
+| Materializer | `MaterializeContext` plus a `WorkspaceView` subtree | Write visible data into the provided workspace subtree | Allocate/cleanup workspaces, assume `local_mount()`, or write hidden partitions |
+| Agent runtime | Agent prompt/config plus `Workspace`/`WorkspaceView` | Run commands, read/write workspace files according to runtime policy | Receive graph handles, trust policy, evaluation handles, or host paths |
+| Callback | Event payload filtered by callback visibility | Observe/report events | Mutate graph or request evaluations |
+
+GEPA clean benchmark law: the reflective proposer may see feedback/minibatch
+case content and trace summaries allowed by its proposer read scope, but it must
+not see validation/test case content or traces. Candidate selection may use
+validation scores if the run policy exposes them, because those scores are
+selection signal rather than reflective learning text.
+
+### 16.2 Proposal context
 
 ```rust
 pub struct ProposalContext<'a, P: OptimizationProblem> {
     graph: RunGraphView<'a, P>,
-    renderers: &'a RendererRegistry<P>,
     budget: BudgetHandle<'a>,                     // unified budget access
 
     readable: ReadScope<P>,
-    workspace: Option<WorkspaceFactory<P>>,
+    workspace: Option<&'a dyn WorkspaceFactory>,
     eval: Option<EvalHandle<'a, P>>,
 }
 ```
 
-### 16.2 Eval handle
+### 16.3 Eval handle
 
 ```rust
 pub struct EvalHandle<'a, P: OptimizationProblem> {
@@ -2176,7 +2582,38 @@ pub struct EvalHandle<'a, P: OptimizationProblem> {
 }
 ```
 
-### 16.3 Budget handle
+### 16.4 Render and materialize contexts
+
+`RenderContext` and `MaterializeContext` are read-only stage contexts. They
+inherit the caller's `ReadScope`; they do not allocate workspaces or mutate the
+graph.
+
+```rust
+pub struct RenderContext<'a, P: OptimizationProblem> {
+    graph: RunGraphView<'a, P>,
+    readable: ReadScope<P>,
+    budget: BudgetHandle<'a>,
+}
+
+pub struct MaterializeContext<'a, P: OptimizationProblem> {
+    graph: RunGraphView<'a, P>,
+    readable: ReadScope<P>,
+    budget: BudgetHandle<'a>,
+    root: WorkspacePath,
+}
+
+impl<'a, P: OptimizationProblem> MaterializeContext<'a, P> {
+    pub fn render_context(&mut self) -> RenderContext<'_, P>;
+    pub fn read_scope(&self) -> &ReadScope<P>;
+    pub fn root(&self) -> &WorkspacePath;
+}
+```
+
+Materializers receive the workspace subtree separately as `&mut WorkspaceView`.
+The `root` in `MaterializeContext` is descriptive/accounting context, not a host
+path.
+
+### 16.5 Budget handle
 
 The single type stages use to charge cost. Wraps the engine's `BudgetLedger` along with the stage tag, so charges are attributed automatically.
 
@@ -2221,7 +2658,7 @@ probe candidates/assessments are tagged as probe-originated
 population eligibility is controlled by policy
 ```
 
-### 16.5 Workspace lifecycle
+### 16.6 Workspace lifecycle
 
 Agentic stages need a place to read and write files, possibly inside a sandbox. The library models this with three concepts that compose:
 
@@ -2234,13 +2671,26 @@ Agentic stages need a place to read and write files, possibly inside a sandbox. 
    ▼
 [Workspace]               a typed handle. filesystem ops + run-command.
    │                      backed by ONE sandbox of whatever flavor the factory makes.
-   ├──▶ used by [WorkspaceRenderer]   (writes files into it)
+   ├──▶ used by [Materializer]   (writes files into it)
    └──▶ used by [AgentRuntime]        (runs commands in it)
 ```
 
-The workspace is the unit. One stage call (one `propose`, one `evaluate`) gets one workspace. It lives for the duration of that call and cleans up on drop.
+`Workspace` is a Leaven-owned lease handle, not a trait users implement. Users
+choose or implement a `WorkspaceFactory`/`WorkspaceBackend`; stages receive the
+concrete `Workspace` handle and use the same API for local and remote backends.
 
-#### 16.5.1 Trait surface
+The workspace is the unit. One stage call (one `propose`, one `evaluate`) often
+gets one workspace. It lives for the duration of that call unless a custom stage
+deliberately carries it across helper boundaries. Explicit cleanup is the
+primary teardown path; `Drop` only marks abandoned resources for best-effort
+janitors.
+
+Workspace paths are always `WorkspacePath`s: normalized, relative to the
+workspace root, UTF-8, and rejecting `..`, absolute paths, drive prefixes, and
+empty components. A `WorkspacePath` is not a host path. `local_mount()` is an
+optional optimization for local-style backends, never a correctness dependency.
+
+#### 16.6.1 Trait surface
 
 ```rust
 #[async_trait]
@@ -2252,7 +2702,35 @@ pub struct Workspace {
     inner: Option<Box<dyn WorkspaceBackend>>,    // None after cleanup() consumes
 }
 
+pub struct WorkspacePath { /* normalized relative path */ }
+
+impl WorkspacePath {
+    pub fn new(path: impl AsRef<str>) -> Result<Self, WorkspacePathError>;
+    pub fn join(&self, child: impl AsRef<str>) -> Result<Self, WorkspacePathError>;
+    pub fn as_str(&self) -> &str;
+}
+
 impl Workspace {
+    pub fn view(&mut self) -> WorkspaceView<'_>;
+
+    pub async fn write_file(
+        &mut self,
+        path: WorkspacePath,
+        bytes: impl Into<bytes::Bytes>,
+    ) -> Result<(), WorkspaceError>;
+
+    pub async fn read_file(
+        &mut self,
+        path: WorkspacePath,
+    ) -> Result<bytes::Bytes, WorkspaceError>;
+
+    pub async fn run_command(
+        &mut self,
+        command: Command,
+    ) -> Result<CommandOutput, WorkspaceError>;
+
+    pub fn local_mount(&self) -> Option<&Path>;
+
     /// Explicit, awaited cleanup. Always preferred over relying on Drop.
     /// After this returns, the Workspace is consumed and its backend is gone.
     pub async fn cleanup(mut self) -> Result<(), WorkspaceError> {
@@ -2261,6 +2739,29 @@ impl Workspace {
         } else {
             Ok(())
         }
+    }
+}
+
+pub async fn with_workspace<T, E, F>(
+    factory: &dyn WorkspaceFactory,
+    cfg: WorkspaceConfig,
+    f: F,
+) -> Result<T, WorkspaceRunError<E>>
+where
+    F: for<'w> FnOnce(&'w mut Workspace) -> BoxFuture<'w, Result<T, E>>,
+{
+    let mut ws = factory.allocate(cfg).await.map_err(WorkspaceRunError::Allocate)?;
+    let result = f(&mut ws).await;
+    let cleanup = ws.cleanup().await;
+
+    match (result, cleanup) {
+        (Ok(value), Ok(())) => Ok(value),
+        (Err(err), Ok(())) => Err(WorkspaceRunError::Stage(err)),
+        (Ok(_), Err(err)) => Err(WorkspaceRunError::Cleanup { source: err }),
+        (Err(stage), Err(cleanup)) => Err(WorkspaceRunError::StageAndCleanup {
+            stage,
+            cleanup,
+        }),
     }
 }
 
@@ -2279,9 +2780,18 @@ impl Drop for Workspace {
 
 #[async_trait]
 pub trait WorkspaceBackend: Send + Sync {
-    async fn write_file(&self, rel: &str, bytes: &[u8]) -> Result<()>;
-    async fn read_file(&self, rel: &str) -> Result<Vec<u8>>;
-    async fn run_command(&self, cmd: Command) -> Result<CommandOutput>;
+    async fn write_file(
+        &mut self,
+        path: WorkspacePath,
+        bytes: bytes::Bytes,
+    ) -> Result<(), WorkspaceError>;
+
+    async fn read_file(
+        &mut self,
+        path: WorkspacePath,
+    ) -> Result<bytes::Bytes, WorkspaceError>;
+
+    async fn run_command(&mut self, cmd: Command) -> Result<CommandOutput, WorkspaceError>;
 
     /// Async cleanup. Called by Workspace::cleanup. Implementors should fully
     /// release backend resources (destroy E2B sandbox, delete K8s container,
@@ -2294,9 +2804,9 @@ pub trait WorkspaceBackend: Send + Sync {
     /// backends have a janitor; abandoned local tempdirs are usually fine).
     fn mark_abandoned(self: Box<Self>) {}
 
-    /// For renderers that need a real local path (e.g. mounting into a subprocess
+    /// For materializers that need a real local path (e.g. mounting into a subprocess
     /// running on the host). `None` for pure-remote backends like E2B without a
-    /// local sync. Renderers should not depend on this returning `Some`.
+    /// local sync. Materializers should not depend on this returning `Some`.
     fn local_mount(&self) -> Option<&Path> { None }
 }
 ```
@@ -2305,19 +2815,49 @@ pub trait WorkspaceBackend: Send + Sync {
 
 - Async work cannot be awaited inside `Drop`, so remote sandbox teardown (E2B, K8s, Firecracker) cannot happen there.
 - A factory may run a periodic janitor that reaps abandoned workspaces — useful for crashes mid-run, but not a substitute for explicit cleanup.
-- Stages with workspaces must call `cleanup()` on their workspace before returning, including in error paths. Use `?`-with-cleanup or a defer-style helper.
+- Stages with workspaces must call `cleanup()` on their workspace before returning, including in error paths. Prefer `with_workspace`; use bare `allocate()` only when the workspace lifetime genuinely crosses helper boundaries.
 
 ```rust
 // idiomatic stage code with cleanup
 async fn evaluate(&self, …) -> Result<…> {
-    let mut ws = self.workspace_factory.allocate(…).await?;
-    let outcome = self.run_evaluation(&mut ws).await;  // catch errors first
-    ws.cleanup().await.ok();                            // always cleanup
-    outcome                                             // then propagate
+    with_workspace(&*self.workspace_factory, WorkspaceConfig::default(), |ws| Box::pin(async move {
+        self.run_evaluation(ws).await
+    })).await.map_err(EvaluationError::from)
 }
 ```
 
-#### 16.5.2 Standard backends
+#### 16.6.2 Local and E2B semantics
+
+Local and remote workspaces expose the same Leaven API.
+
+Local backend shape:
+
+```text
+WorkspacePath("skills/foo.md") -> tempdir/skills/foo.md
+write_file                    -> tokio::fs::write
+read_file                     -> tokio::fs::read
+run_command                   -> local child process with cwd at the workspace root
+local_mount()                 -> Some(tempdir.path())
+cleanup()                     -> remove tempdir / git worktree
+```
+
+E2B-style backend shape:
+
+```text
+WorkspacePath("skills/foo.md") -> /workspace/leaven/<run>/skills/foo.md inside sandbox
+write_file                    -> sandbox.files().write(...)
+read_file                     -> sandbox.files().read_bytes/read_string(...)
+run_command                   -> sandbox.commands().run(...) with cwd at workspace root
+local_mount()                 -> None
+cleanup()                     -> sandbox.kill() or release to pool
+```
+
+The `Materializer` and `AgentRuntime` do not branch on backend type. They use
+`WorkspacePath`, `write_file`, `read_file`, and `run_command`. Backend crates
+translate those operations into local filesystem calls, E2B files/commands,
+Docker exec/copy calls, k8s exec/copy calls, or git-worktree operations.
+
+#### 16.6.3 Standard backends
 
 The library ships a small set of reference backends. Most users will configure one of these or write their own:
 
@@ -2330,9 +2870,9 @@ FirecrackerWorkspaceFactory      one microvm per workspace. strong isolation, sl
 GitWorktreeFactory<Inner>        wraps another factory; allocates a worktree at a parent commit.
 ```
 
-`GitWorktreeFactory` is a composition: it takes any other factory as its inner sandbox and adds git-worktree semantics on top. The agent commits inside the worktree; the framework reads `HEAD` on cleanup; cleanup removes the worktree directory but leaves commit objects in the main repo. `content_id` of the resulting artifact is the commit hash.
+`GitWorktreeFactory` is a composition: it takes any other factory as its inner sandbox and adds git-worktree semantics on top. The agent commits inside the worktree; the framework reads `HEAD` on cleanup; cleanup removes the worktree directory but leaves commit objects in the main repo. A git-backed artifact usually records the commit hash as `ArtifactIdentity::External` and may expose it as `CacheIdentity::ExternalContent`.
 
-#### 16.5.3 Ownership table
+#### 16.6.4 Ownership table
 
 | Thing | Lifetime | Owner |
 |---|---|---|
@@ -2343,7 +2883,7 @@ GitWorktreeFactory<Inner>        wraps another factory; allocates a worktree at 
 | `AgentRuntime` instance | User-defined | The proposer (or a registry) |
 | Files inside the workspace | Workspace handle | Wiped on cleanup |
 
-#### 16.5.4 What the framework does NOT manage
+#### 16.6.5 What the framework does NOT manage
 
 - **Backend choice.** The factory is yours. The library does not assume e2b, docker, or any specific sandbox.
 - **Agent processes.** That is the `AgentRuntime`'s job. The runtime uses the workspace as a substrate via `run_command`.
@@ -2364,7 +2904,7 @@ The engine owns evaluation caching.
 pub struct EvaluationCacheKey {
     pub evaluator_fingerprint: Fingerprint,
     pub request_fingerprint: Fingerprint,
-    pub candidate_content_ids: Vec<ContentId>,
+    pub candidate_cache_identities: Vec<CacheIdentity>,
     pub evaluation_set_id: EvaluationSetId,
     pub case_set_version: CaseSetVersion,
     pub seed: Option<u64>,
@@ -2372,6 +2912,11 @@ pub struct EvaluationCacheKey {
 ```
 
 For pairwise requests, ordering is preserved unless evaluator declares unordered symmetry.
+
+`EvaluationCacheKey` uses `CacheIdentity`, not `ArtifactIdentity`. External
+artifact identity is allowed in the graph, but it is not cache-safe unless the
+artifact provides `CacheIdentity::ExternalContent` or the evaluator policy
+provides `CacheIdentity::User`.
 
 ### 17.3 Cache policy
 
@@ -2385,6 +2930,14 @@ pub enum CachePolicy {
 ```
 
 Default is `Never`. Nondeterministic LLM/agent evaluators should not be cached accidentally.
+
+`Deterministic` and `DeterministicWithSeed` require every candidate in the
+resolved request to provide `Some(CacheIdentity)`. If any candidate returns
+`None`, the cache is bypassed with an explicit `CacheStatus::Bypassed` reason;
+the engine still records the evaluation normally. `UserKey` appends the supplied
+fingerprint to the request/evaluator/case-set identity and is the escape hatch
+for deterministic external systems whose immutable state is known to the user
+but not visible to the artifact type.
 
 ---
 
@@ -2443,7 +2996,7 @@ pub enum RunEvent<P: OptimizationProblem> {
     ApplySucceeded {
         proposal_id: ProposalId,
         candidate_id: CandidateId,
-        content_id: ContentId,
+        identity: ArtifactIdentity,
     },
 
     ApplyFailed {
@@ -2468,6 +3021,13 @@ pub enum RunEvent<P: OptimizationProblem> {
     RenderCompleted {
         renderer: RendererId,
         target: String,
+        cost: Cost,
+    },
+
+    MaterializationCompleted {
+        materializer: MaterializerId,
+        root: WorkspacePath,
+        files_written: usize,
         cost: Cost,
     },
 
@@ -2533,32 +3093,130 @@ This avoids forcing giant agent traces into inline run graph serialization.
 GEPA is one optimizer value.
 
 ```rust
-pub struct Gepa<P, Prop, Pop, CandSel, CompSel, Batch, Gate, Val>
+pub struct Gepa<P, S, Pop = Box<dyn Population<P>>>
 where
     P: OptimizationProblem,
+    S: EditSurface<P::Artifact>,
 {
-    proposer: Prop,
+    surface: Arc<S>,
     population: Pop,
-    candidate_selector: CandSel,
-    component_selector: CompSel,
-    batch_sampler: Batch,
-    gate: Gate,
-    validation: Val,
-    merge: Option<Box<dyn DynProposer<P>>>,
+    proposer: Box<dyn GepaProposer<P, S>>,
+    candidate_selector: Box<dyn CandidateSelector<P>>,
+    part_selector: Box<dyn PartSelector<P, S>>,
+    batch_sampler: Box<dyn BatchSampler<P>>,
+    gate: Box<dyn Gate<P>>,
+    validation: Box<dyn ValidationPolicy<P>>,
+    merge: Option<Box<dyn GepaMerge<P, S>>>,
 }
 ```
+
+`S` stays static because `S::PartId`, `S::Edit`, and `S::fingerprint()` flow
+through part selection, trace attribution, and proposal lowering. `Pop` is left
+as a generic with a boxed default because fitted populations may want concrete
+state and non-object-safe views during early implementation. Other GEPA policy
+slots are boxed trait objects by default. Do not introduce parallel `Dyn*`
+marker traits for slots that are already object-safe.
 
 GEPA components:
 
 ```text
-CandidateSelector selects candidate(s) from population.
-ComponentSelector selects artifact component(s) to mutate.
+CandidateSelector selects candidate(s) from a PopulationView.
+PartSelector selects surface part(s) to mutate.
 BatchSampler selects train/minibatch cases.
-Proposer emits proposal batch.
+Proposer emits surface edits or artifact-native proposals.
 Gate decides whether a child gets validation.
 ValidationPolicy decides validation request.
 Population maintains Pareto/frontier/live set.
 MergeScheduler decides when to call merge proposer.
+```
+
+Population and candidate selection stay separate:
+
+```text
+Population        = what exists, how observations update it, what gets admitted/replaced
+CandidateSelector = what to try next from the current population/archive view
+Gate              = whether a freshly proposed child deserves follow-up validation
+```
+
+This separation is load-bearing. GEPA's paper baseline, frequency-weighted
+instance Pareto sampling, greedy best-first, beam search, MAP-Elites-style
+archive sampling, island migration, and skill-library hard-case loops all need
+different selection policies over similar archive state.
+
+```rust
+pub trait CandidateSelector<P: OptimizationProblem>: Send {
+    fn select(
+        &mut self,
+        population: PopulationView<'_, P>,
+        graph: RunGraphView<'_, P>,
+        ctx: SelectionContext<'_>,
+    ) -> Result<CandidateSelection, SelectionError>;
+
+    fn observe_selection_outcome(&mut self, _outcome: &SelectionOutcome) {}
+}
+```
+
+GEPA proposers have a GEPA-specific request shape because the selected surface
+part is part of the contract:
+
+```rust
+pub struct GepaMutationRequest<S: EditSurface<A>, A: Artifact> {
+    pub parent: CandidateId,
+    pub part: S::PartId,
+    pub feedback_assessments: Vec<AssessmentId>,
+    pub proposal_count: usize,
+}
+
+pub enum GepaProposal<P: OptimizationProblem, S: EditSurface<P::Artifact>> {
+    SurfaceEdit {
+        target: CandidateId,
+        edit: SurfaceEdit<S, P::Artifact>,
+        annotations: P::ProposalAnnotations,
+        informed_by: Vec<InfoRef>,
+    },
+    Native(Proposal<P>),
+}
+
+pub trait GepaProposer<P, S>: Send + Sync
+where
+    P: OptimizationProblem,
+    S: EditSurface<P::Artifact>,
+{
+    fn propose<'a>(
+        &'a self,
+        request: GepaMutationRequest<S, P::Artifact>,
+        ctx: ProposalContext<'a, P>,
+    ) -> BoxFuture<'a, Result<Metered<Vec<GepaProposal<P, S>>>, ProposalError>>;
+}
+
+pub trait GepaMerge<P, S>: Send + Sync
+where
+    P: OptimizationProblem,
+    S: EditSurface<P::Artifact>,
+{
+    fn merge<'a>(
+        &'a self,
+        left: CandidateId,
+        right: CandidateId,
+        ctx: ProposalContext<'a, P>,
+    ) -> BoxFuture<'a, Result<Metered<Vec<GepaProposal<P, S>>>, ProposalError>>;
+}
+```
+
+`CandidateSelector::select` is synchronous and side-effect-light. It receives
+borrowed graph/population views and must not await. If a "selector" needs LLM
+calls, subprocesses, or remote state, model it as an optimizer step or proposer
+substage and feed the result into a normal selector/admission policy.
+
+Standard GEPA selectors:
+
+```text
+ParetoFrequencyWeighted   paper-style instance-pareto frequency sampling
+SelectBestCandidate       greedy ablation / TextGrad-like baseline
+BeamCandidateSelector     top-k beam-style parent choice
+UniformFrontier           exploration over current frontier members
+NicheWeighted             MAP-Elites/quality-diversity archive sampling
+RoundRobinCandidate       deterministic reproduction/debug selector
 ```
 
 Mapping to GEPA paper:
@@ -2568,26 +3226,95 @@ Mapping to GEPA paper:
 | candidate pool `P` | `Population` |
 | Pareto front by instance | `ParetoFrontier::by_case()` |
 | SELECTCANDIDATE | `CandidateSelector` |
-| SELECTMODULE | `ComponentSelector` |
+| SELECTMODULE | `PartSelector<P, S>` over `EditSurface<P::Artifact>` |
 | minibatch from `D_feedback` | `BatchSampler` + `EvaluationSet::Partition(TRAIN)` |
-| per-instance score table | `AssessmentGranularity::PerCase` |
+| per-instance score table | `CasewiseEvidence` + `AssessmentGranularity::PerCase` |
 | reflective prompt update | `Proposer` |
 | score improves on minibatch | `Gate` |
 | evaluate on `D_pareto` | `ValidationPolicy` |
 | add to pool | `Population::observe_candidate` |
 | merge/crossover | another `Proposer` scheduled by GEPA |
 
+Canonical GEPA step skeleton:
+
+```text
+1. view = population.view(ctx.graph())
+2. parent = candidate_selector.select(view, ctx.graph(), selection_ctx)?
+3. part = part_selector.select(parent, ctx.graph(), surface)?
+4. batch = batch_sampler.sample(...)
+5. run parent on minibatch and gather casewise/attribution evidence
+6. proposer proposes one or more surface edits for selected part
+7. GEPA lowers surface edits through S into artifact-native changes
+8. apply proposals through RunContext
+9. gate decides which children receive validation
+10. validation policy chooses validation request
+11. optimizer calls population.observe_candidate/observe_assessment
+12. selector observes outcome for its own lightweight stats
+```
+
+The paper baseline uses round-robin `SELECTMODULE`; Leaven ships that as
+`RoundRobinPart` for reproduction. Leaven may also ship trace-aware selectors
+such as `InvokedAndFailingPart`:
+
+```rust
+pub struct InvokedAndFailingPart {
+    /// Exploration weight for parts that have no current failure attribution.
+    pub unexplained_part_weight: FiniteF64,
+}
+
+impl<P, S> PartSelector<P, S> for InvokedAndFailingPart
+where
+    P: OptimizationProblem,
+    S: EditSurface<P::Artifact>,
+    P::Evidence: AttributableEvidence<S::PartId>,
+{
+    // sample from failure-attributed parts, with an exploration floor for
+    // never-invoked or never-attributed parts.
+}
+```
+
+`RoundRobinPart` is the paper algorithm. `InvokedAndFailingPart` is the
+recommended default only when the evaluator has parsed traces/evaluation
+feedback into `AttributableEvidence<S::PartId>` under the same
+`SurfaceFingerprint`.
+
+#### Surface edit lowering
+
+Generic GEPA proposers should not need to know every artifact's native
+`Change` type. A GEPA proposer may return a surface edit:
+
+```rust
+pub struct SurfaceEdit<S: EditSurface<A>, A: Artifact> {
+    pub part: S::PartId,
+    pub edit: S::Edit,
+}
+```
+
+GEPA lowers `SurfaceEdit` through `surface.change_part(artifact, part, edit)`
+to produce `<P::Artifact as Artifact>::Change`, then records
+`ProposalEffect::Change { target, change }`. Artifact-native proposals are still
+allowed for specialized proposers, but the generic path is surface-edit first.
+
 #### Merge canonicalization in GEPA
 
-GEPA's merge picks per-component "best" parts from two candidates `(a, b)`. `Artifact::apply` only sees one artifact, so the merge proposer canonicalizes: it picks one parent (say `a`) as the apply target, reads `b` from the graph to extract the components it wants to import, and constructs a `Change` that — when applied to `a` — produces the merged content (e.g. `MultiComponentEdit { component_ids: […], replacement_contents: […from b…] }`). The resulting `Proposal` has `effect: ProposalEffect::Change { target: a, change }` and `provenance.causal: CausalInputs::Pair(a, b)` so lineage queries see both contributors, but the apply step is single-parent. The constructor sugar `Proposal::merge(a, b, change)` packages this.
+GEPA's merge picks per-part "best" content from two candidates `(a, b)`.
+`Artifact::apply_change` only sees one artifact, so the merge proposer
+canonicalizes: it picks one parent (say `a`) as the apply target, reads `b`
+through the same surface to extract the parts it wants to import, and constructs
+surface edits that lower to a native `Change` against `a`. The resulting
+`Proposal` has `effect: ProposalEffect::Change { target: a, change }` and
+`provenance.causal: CausalInputs::Pair(a, b)` so lineage queries see both
+contributors, but the apply step is single-parent. The constructor sugar
+`Proposal::merge(a, b, change)` packages artifact-native merge changes.
 
 GEPA customization:
 
 ```rust
 let gepa = Gepa::default()
+    .surface(SkillDirByFrontmatterId::default())
     .proposer(ReflectiveMutation::new(lm).n_alternatives(3))
     .population(ParetoFrontier::by_case().frequency_weighted())
-    .component_selector(RoundRobin)
+    .part_selector(RoundRobinPart)
     .batch_sampler(EpochShuffled::new(4))
     .gate(StrictImprovement)
     .validation(FullValidation)
@@ -2682,9 +3409,10 @@ let result = optimize(seed_agent)
     .evaluate(RepoAgentEvaluator::new(sandbox))
     .using(
         Gepa::default()
+            .surface(RepoPathSurface::default())
             .proposer(AgenticProposer::new(runtime))
             .candidate_selector(ParetoFrequencyWeighted)
-            .component_selector(WorstEvidenceComponent)
+            .part_selector(InvokedAndFailingPart::default())
             .population(ParetoFrontier::by_case_and_axis())
             .proposal_count(3)
     )
@@ -2699,6 +3427,7 @@ let result = optimize(seed_agent)
 struct MyTournamentOptimizer {
     /// Owns the fitted Bradley-Terry model internally.
     population: TournamentPopulation<MyProblem>,
+    selector: ThompsonPairSelector,
 }
 
 impl Optimizer<MyProblem> for MyTournamentOptimizer {
@@ -2706,7 +3435,11 @@ impl Optimizer<MyProblem> for MyTournamentOptimizer {
         &mut self,
         ctx: &mut RunContext<'_, MyProblem>,
     ) -> Result<StepStatus, OptimizerError> {
-        let pair = self.population.select_candidates(Arity::Pair, ctx.graph().view());
+        let pair = self.selector.select_pair(
+            self.population.view(ctx.graph().view()),
+            ctx.graph().view(),
+            ctx.selection_context(Arity::Pair),
+        )?;
 
         let report = ctx.evaluate_with(
             EvaluatorId::PAIRWISE_JUDGE,
@@ -2738,9 +3471,236 @@ impl Optimizer<MyProblem> for MyTournamentOptimizer {
 }
 ```
 
-### 22.4 Worked example: `gskill` — agentic evaluator with workspace materialization
+### 22.4 Worked example: pairwise tournament — non-GEPA optimizer
 
-`gskill` evolves a directory of skill files. The evaluator runs an LLM-based coding agent inside a sandboxed workspace against each task; the proposer is reflective. This exercises `Materializable` (the stdlib convenience trait), `WorkspaceFactory`, and the trust boundary in §16.
+This optimizer learns from pairwise judgments. It has no part selector, no GEPA
+minibatch gate, and no validation rhythm. It uses the same engine substrate:
+propose, apply, evaluate, observe population state.
+
+```rust
+pub struct PairwisePromptProblem;
+
+impl OptimizationProblem for PairwisePromptProblem {
+    type Artifact = PromptProgram;
+    type Case = QaCase;
+    type Evidence = PairwiseJudgeEvidence;
+    type ProposalAnnotations = EditNotes;
+}
+
+#[derive(Clone)]
+pub struct PromptProgram {
+    modules: BTreeMap<ModuleId, Arc<str>>,
+    identity: ArtifactIdentity,
+}
+
+impl Artifact for PromptProgram {
+    type Change = PromptProgramEdit;
+    type ApplyError = PromptProgramError;
+
+    fn identity(&self) -> ArtifactIdentity { self.identity.clone() }
+    fn apply_change(&self, edit: &PromptProgramEdit) -> Result<Self, Self::ApplyError> {
+        /* apply one prompt edit and re-identify */
+    }
+}
+
+pub struct PairwiseJudgeEvidence {
+    judgment: PairwiseJudgment,
+    confidence: FiniteF64,
+    rationale_ref: Option<EvidenceRef>,
+}
+
+impl Evidence for PairwiseJudgeEvidence {}
+
+impl PairwiseEvidence for PairwiseJudgeEvidence {
+    fn judgment(&self) -> PairwiseJudgment { self.judgment }
+    fn confidence(&self) -> FiniteF64 { self.confidence }
+}
+```
+
+The evaluator compares two concrete candidates over the same resolved cases and
+returns one pairwise assessment:
+
+```rust
+pub struct PairwiseJudgeEvaluator<J> {
+    judge: J,
+    cases: Arc<CaseSet<QaCase>>,
+    evidence_store: Arc<dyn EvidenceStore<PairwiseJudgeEvidence>>,
+}
+
+#[async_trait]
+impl<J> Evaluator<PairwisePromptProblem> for PairwiseJudgeEvaluator<J>
+where
+    J: Judge<PairwisePromptProblem>,
+{
+    async fn evaluate(
+        &self,
+        request: EvaluationRequest,
+        mut ctx: EvaluationContext<'_, PairwisePromptProblem>,
+    ) -> Result<Metered<Vec<Assessment<PairwisePromptProblem>>>, EvaluationError> {
+        let EvaluationRequest::Pairwise { left, right, set, order, .. } = request
+            else { return Err(EvaluationError::UnsupportedRequestShape); };
+
+        let left_artifact = ctx.graph().artifact(left).unwrap().clone();
+        let right_artifact = ctx.graph().artifact(right).unwrap().clone();
+        let cases = set.resolve(&self.cases)?;
+
+        let judged = self.judge.compare_pair(
+            &left_artifact,
+            &right_artifact,
+            cases,
+            ctx.budget_handle(),
+        ).await?;
+
+        let evidence = PairwiseJudgeEvidence {
+            judgment: judged.judgment,
+            confidence: judged.confidence,
+            rationale_ref: self.evidence_store.put_blob(&judged.rationale).await?,
+        };
+
+        Ok(Metered::new(vec![Assessment::Pairwise {
+            left,
+            right,
+            order,
+            target: AssessmentTarget::EvaluationSet(set.id()),
+            evidence,
+            cost: judged.cost.clone(),
+            metadata: MetadataBag::new(),
+        }], judged.cost))
+    }
+}
+```
+
+The fitted preference model is explicit and owned by the population:
+
+```rust
+pub struct BradleyTerryFit {
+    scores: BTreeMap<CandidateId, FiniteF64>,
+    observations: usize,
+}
+
+impl PreferenceModel<PairwisePromptProblem> for BradleyTerryFit {
+    fn observe_pairwise(
+        &mut self,
+        left: CandidateId,
+        right: CandidateId,
+        judgment: PairwiseJudgment,
+    ) -> Vec<ModelEvent> {
+        self.observations += 1;
+        self.update_fit(left, right, judgment)
+    }
+
+    fn compare(
+        &self,
+        left: CandidateId,
+        right: CandidateId,
+        _scope: PreferenceScope,
+        _graph: RunGraphView<'_, PairwisePromptProblem>,
+    ) -> Preference {
+        self.compare_scores(left, right)
+    }
+
+    fn score(&self, candidate: CandidateId) -> Option<FiniteF64> {
+        self.scores.get(&candidate).copied()
+    }
+}
+```
+
+The optimizer drives observation. The engine records the assessment; it does not
+mutate `TournamentPopulation` automatically.
+
+```rust
+pub struct PairwiseTournamentOptimizer<Pr> {
+    proposer: Pr,
+    population: TournamentPopulation<PairwisePromptProblem, BradleyTerryFit>,
+    selector: ThompsonCandidateSelector,
+}
+
+#[async_trait]
+impl<Pr> Optimizer<PairwisePromptProblem> for PairwiseTournamentOptimizer<Pr>
+where
+    Pr: Proposer<PairwisePromptProblem, Request = MutateCandidate>,
+{
+    async fn step(
+        &mut self,
+        ctx: &mut RunContext<'_, PairwisePromptProblem>,
+    ) -> Result<StepStatus, OptimizerError> {
+        let parent = self.selector
+            .select(
+                self.population.view(ctx.graph()),
+                ctx.graph(),
+                ctx.selection_context(Arity::Single),
+            )?
+            .candidates
+            .pop()
+            .ok_or(OptimizerError::EmptyPopulation)?;
+
+        let proposal = ctx.propose(&self.proposer, MutateCandidate { parent }).await?;
+        let applied = ctx.apply_batch(proposal.batch).await?;
+        let Some(child) = applied.successful_candidates().next() else {
+            return Ok(StepStatus::Continue);
+        };
+
+        let events = self.population.observe_candidate(child, ctx.graph());
+        ctx.record_population_events(self.population.id(), events);
+
+        let report = ctx.evaluate_with(
+            EvaluatorId::PAIRWISE_JUDGE,
+            EvaluationRequest::Pairwise {
+                left: parent,
+                right: child,
+                set: EvaluationSet::Partition(PartitionId::TRAIN),
+                granularity: AssessmentGranularity::Aggregate,
+                purpose: EvaluationPurpose::Selection,
+                order: PairOrder::Randomized,
+            },
+        ).await?;
+
+        for assessment in report.assessments {
+            let events = self.population.observe_assessment(assessment.id, ctx.graph());
+            ctx.record_population_events(self.population.id(), events);
+        }
+
+        Ok(StepStatus::Continue)
+    }
+
+    fn best_candidate(
+        &self,
+        graph: RunGraphView<'_, PairwisePromptProblem>,
+    ) -> Option<CandidateId> {
+        self.population.best(graph)
+    }
+}
+```
+
+Driver code:
+
+```rust
+let result = optimize(seed_prompt_program)
+    .cases(train_cases)
+    .evaluator(EvaluatorId::PAIRWISE_JUDGE, PairwiseJudgeEvaluator {
+        judge: LmJudge::new(judge_lm),
+        cases: Arc::new(train_cases.clone()),
+        evidence_store: Arc::new(SqliteEvidenceStore::open("pairwise.db")?),
+    })
+    .using(PairwiseTournamentOptimizer {
+        proposer: LocalPromptEditProposer::new(edit_lm),
+        population: TournamentPopulation::new(BradleyTerryFit::default()),
+    })
+    .budget(Budget::metric_calls(500))
+    .run()
+    .await?;
+```
+
+Key takeaways:
+
+- This optimizer does not touch `leaven-gepa`.
+- Pairwise comparison is one `Assessment::Pairwise`, not two independent scores.
+- `BradleyTerryFit` is stateful model data owned by `TournamentPopulation`.
+- The optimizer explicitly decides which assessments update the fitted model.
+
+### 22.5 Worked example: `gskill` — GEPA over a skill-directory surface
+
+`gskill` evolves a directory of skill files. The evaluator runs an LLM-based coding agent inside a sandboxed workspace against each task; the proposer is reflective. This exercises `EditSurface`, `Materializer`, `WorkspaceFactory`, trace-aware attribution, and the trust boundary in §16.
 
 ```rust
 pub struct GskillProblem;
@@ -2754,40 +3714,54 @@ impl OptimizationProblem for GskillProblem {
 #[derive(Clone)]
 pub struct SkillDir {
     files: BTreeMap<SkillFileId, Arc<str>>,
-    content_id: ContentId,
+    identity: ArtifactIdentity,
 }
 
 impl Artifact for SkillDir {
     type Change = SkillEdit;                     // add/edit/remove a single file, or multi-edit
     type ApplyError = SkillError;
-    fn content_id(&self) -> ContentId { self.content_id }
-    fn apply(&self, c: &SkillEdit) -> Result<Self, _> { /* clone+mutate, rehash */ }
+    fn identity(&self) -> ArtifactIdentity { self.identity.clone() }
+    fn apply_change(&self, c: &SkillEdit) -> Result<Self, _> { /* clone+mutate, re-identify */ }
 }
 
-impl Decomposable for SkillDir {
-    type ComponentId = SkillFileId;
-    fn components(&self) -> Vec<Component<SkillFileId>> { /* one per file */ }
+pub struct SkillDirByFrontmatterId;
+
+impl EditSurface<SkillDir> for SkillDirByFrontmatterId {
+    type PartId = SkillFileId;
+    type Address = SkillPath;
+    type View<'a> = SkillFileView<'a>;
+    type Edit = SkillFileEdit;
+
+    fn fingerprint(&self) -> SurfaceFingerprint { /* parser + ID rule fingerprint */ }
+    fn parts<'a>(&self, dir: &'a SkillDir) -> Result<Vec<Part<SkillFileId, SkillPath, SkillFileView<'a>>>, SurfaceError> { /* one stable logical skill per file */ }
+    fn change_part(&self, dir: &SkillDir, id: SkillFileId, edit: SkillFileEdit) -> Result<SkillEdit, SurfaceError> { /* lower surface edit */ }
 }
 
-// stdlib convenience trait — a SkillDir has an obvious canonical layout.
-// stdlib WorkspaceRenderer impls use this when present.
-impl Materializable for SkillDir {
-    async fn materialize(
+pub struct SkillDirMaterializer;
+
+impl Materializer<GskillProblem, SkillDir> for SkillDirMaterializer {
+    async fn materialize_into(
         &self,
+        dir: &SkillDir,
         ws: &mut WorkspaceView<'_>,
-    ) -> Result<RenderReport, MaterializeError> {
+        ctx: MaterializeContext<'_, GskillProblem>,
+    ) -> Result<Metered<MaterializationReport>, MaterializeError> {
         let mut count = 0;
-        for (id, content) in &self.files {
-            ws.write_file(&format!("skills/{}.md", id), content.as_bytes()).await?;
+        for (id, content) in &dir.files {
+            ws.write_file(
+                WorkspacePath::new(format!("skills/{}.md", id))?,
+                content.as_bytes(),
+            ).await?;
             count += 1;
         }
-        Ok(RenderReport::file_count(count))
+        Ok(Metered::new(MaterializationReport::file_count(count), Cost::zero()))
     }
 }
 
 pub struct GskillEvaluator<R: AgentRuntime> {
     workspace_factory: Arc<dyn WorkspaceFactory>,
     runtime: R,
+    artifact_materializer: SkillDirMaterializer,
     cases: Arc<CaseSet<SweSmithTask>>,
     evidence_store: Arc<dyn EvidenceStore<ResolveEvidence>>,
 }
@@ -2806,31 +3780,47 @@ impl Evaluator<GskillProblem> for GskillEvaluator<MiniSweAgentRuntime> {
         let mut total_cost = Cost::zero();
 
         for cand in candidates {
-            let artifact = ctx.graph().artifact(cand).unwrap();
+            // Own the artifact before awaiting. Do not hold graph-backed views
+            // across workspace rendering or agent runtime calls.
+            let artifact = ctx.graph().artifact(cand).unwrap().clone();
             let mut per_case = BTreeMap::new();
 
             for case_id in set.resolve(&self.cases)? {
-                // fresh workspace per case (sandboxing matters here — the agent runs
-                // arbitrary tool calls against the task's repo)
-                let mut ws = self.workspace_factory.allocate(WorkspaceConfig::default()).await?;
-                artifact.materialize(&mut ws.view()).await?;
+                let case = self.cases.get(case_id).clone();
+                let artifact_for_case = artifact.clone();
 
-                let case = self.cases.get(case_id);
-                let session = self.runtime.run_session(&ws, AgentSessionConfig {
-                    task: case.task_description.clone(),
-                    repo: case.repo_url.clone(),
-                    skills_path: "/workspace/skills".into(),
-                    budget: ctx.budget_handle(),
-                }).await?;
+                // Fresh workspace per case. `with_workspace` tears down the
+                // sandbox on success and error, so a `?` below cannot leak E2B
+                // sandboxes or remote worktrees.
+                let (case_result, cost) = with_workspace(
+                    &*self.workspace_factory,
+                    WorkspaceConfig::default(),
+                    |ws| Box::pin(async move {
+                        let materialized = self.artifact_materializer.materialize_into(
+                            &artifact_for_case,
+                            &mut ws.view(),
+                            ctx.materialize_context(),
+                        ).await?;
 
-                total_cost = total_cost + session.cost;
-                let trace_ref = self.evidence_store.put_blob(&session.transcript).await?;
+                        let session = self.runtime.run_session(ws, AgentSessionConfig {
+                            task: case.task_description.clone(),
+                            repo: case.repo_url.clone(),
+                            skills_path: WorkspacePath::new("skills")?,
+                            budget: ctx.budget_handle(),
+                        }).await?;
 
-                per_case.insert(case_id, ResolveCaseResult {
-                    resolved: session.resolved,
-                    trace_ref,
-                });
-                ws.cleanup().await?;
+                        let trace_ref = self.evidence_store.put_blob(&session.transcript).await?;
+                        let cost = materialized.cost.checked_add(&session.cost)?;
+
+                        Ok((ResolveCaseResult {
+                            resolved: session.resolved,
+                            trace_ref,
+                        }, cost))
+                    }),
+                ).await?;
+
+                total_cost.checked_add_assign(&cost)?;
+                per_case.insert(case_id, case_result);
             }
 
             out.push(Assessment::Independent {
@@ -2849,6 +3839,26 @@ impl Evaluator<GskillProblem> for GskillEvaluator<MiniSweAgentRuntime> {
     fn fingerprint(&self) -> Fingerprint { /* runtime + cases versions */ }
     fn id(&self) -> EvaluatorId { EvaluatorId::PRIMARY }
 }
+
+impl CasewiseEvidence for ResolveEvidence {
+    fn case_outcome(&self, case: CaseId) -> Option<CaseOutcome> {
+        self.per_case.get(&case).map(|r| CaseOutcome::pass_fail(r.resolved))
+    }
+
+    fn case_outcomes(&self) -> Vec<(CaseId, CaseOutcome)> { /* map per_case */ }
+}
+
+impl AttributableEvidence<SkillFileId> for ResolveEvidence {
+    fn attribution_domain(&self) -> AttributionDomain {
+        AttributionDomain::Surface(SkillDirByFrontmatterId.fingerprint().0)
+    }
+
+    fn attributions(&self) -> Vec<Attribution<SkillFileId>> {
+        /* evaluator-parsed trace blame: failed tests -> skill ids */
+    }
+
+    fn evidence_for(&self, key: &SkillFileId) -> Option<AttributionEvidence<'_>> { /* trace slice */ }
+}
 ```
 
 Driver code:
@@ -2865,11 +3875,12 @@ let result = optimize(seed_skills)
     })
     .using(
         Gepa::default()
+            .surface(SkillDirByFrontmatterId)
             .proposer(ReflectiveMutation::with_lm(reflection_lm))
-            .component_selector(WorstEvidenceComponent)
+            .part_selector(InvokedAndFailingPart::default())
             .population(ParetoFrontier::by_case())
     )
-    .trust_policy(TrustPolicy::HideFromProposer(&[PartitionId::VALIDATION]))
+    .trust_policy(TrustPolicy::hide_from_proposer([PartitionId::VALIDATION]))
     .budget(Budget::usd(50.0))
     .run()
     .await?;
@@ -2877,15 +3888,17 @@ let result = optimize(seed_skills)
 
 Key takeaways:
 
-- `Materializable` (stdlib convenience) is the bridge from typed artifact to filesystem layout the agent reads. For artifacts without an obvious canonical layout, write a `WorkspaceRenderer` directly.
+- `EditSurface` is the bridge from artifact to selectable/editable skill parts.
+- `Materializer` is the bridge from typed artifact to filesystem layout the agent reads.
 - `WorkspaceFactory` (here e2b, pooled) handles sandbox topology; the evaluator uses `&Workspace` agnostically.
 - One workspace per case is the evaluator's choice — for skill evolution where the agent mutates the repo, isolation matters.
+- `CasewiseEvidence` feeds GEPA's instance Pareto frontier; `AttributableEvidence<SkillFileId>` feeds trace-aware part selection.
 - `EvidenceStore` keeps multi-MB agent transcripts out of the inline graph.
-- `TrustPolicy::HideFromProposer` ensures the reflective proposer never sees validation case content.
+- `TrustPolicy::hide_from_proposer` ensures the reflective proposer never sees validation case content.
 
-### 22.5 Worked example: Meta-Harness — agentic proposer over full graph history
+### 22.6 Worked example: Meta-Harness — agentic proposer over full graph history
 
-Meta-Harness (Lee et al. 2026) writes a fresh harness program each iteration, with a coding-agent proposer that reads the entire run history through a filesystem. This exercises `WorkspaceRenderer`, `ProposalEffect::Create`, `Arity::None`, multi-axis `ParetoFrontier`, and the rendering of large execution traces.
+Meta-Harness (Lee et al. 2026) writes a fresh harness program each iteration, with a coding-agent proposer that reads the entire run history through a filesystem. This exercises `Materializer`, `ProposalEffect::Create`, `Arity::None`, multi-axis `ParetoFrontier`, and the rendering of large execution traces.
 
 ```rust
 pub struct MetaHarness;
@@ -2897,50 +3910,53 @@ impl OptimizationProblem for MetaHarness {
 }
 
 // Artifact, Evaluator — same pattern as gskill, omitted for brevity.
-// HarnessArtifact has a stdlib Materializable impl that writes harness.py.
+// HarnessArtifact is rendered by a Materializer that writes harness.py.
 
-// The history renderer is the load-bearing piece. It populates a workspace
+// The history materializer is the load-bearing piece. It populates a workspace
 // with per-candidate directories the agent will grep.
-pub struct MetaHarnessHistoryRenderer<AR, TR> {
-    artifact_renderer:  AR,    // WorkspaceRenderer<MetaHarness, HarnessArtifact>
-    traces_renderer:    TR,    // WorkspaceRenderer<MetaHarness, HarnessEvidence>
+pub struct MetaHarnessHistoryMaterializer<AM, TM> {
+    artifact_materializer: AM,    // Materializer<MetaHarness, HarnessArtifact>
+    traces_materializer:   TM,    // Materializer<MetaHarness, HarnessEvidence>
     task_description:   Arc<str>,
     instructions:       Arc<str>,
 }
 
 #[async_trait]
-impl<AR, TR> WorkspaceRenderer<MetaHarness, HistorySnapshot<'_>>
-    for MetaHarnessHistoryRenderer<AR, TR>
+impl<AM, TM> Materializer<MetaHarness, HistorySnapshot<'_>>
+    for MetaHarnessHistoryMaterializer<AM, TM>
 where
-    AR: WorkspaceRenderer<MetaHarness, HarnessArtifact>,
-    TR: WorkspaceRenderer<MetaHarness, HarnessEvidence>,
+    AM: Materializer<MetaHarness, HarnessArtifact>,
+    TM: Materializer<MetaHarness, HarnessEvidence>,
 {
-    async fn render_into(
+    async fn materialize_into(
         &self,
         snap: &HistorySnapshot<'_>,
         ws: &mut WorkspaceView<'_>,
-        ctx: RenderContext<'_, MetaHarness>,
-    ) -> Result<Metered<RenderReport>, RenderError> {
-        ws.write_file("README.md", self.instructions.as_bytes())?;
-        ws.write_file("TASK.md",   self.task_description.as_bytes())?;
+        ctx: MaterializeContext<'_, MetaHarness>,
+    ) -> Result<Metered<MaterializationReport>, MaterializeError> {
+        ws.write_file(WorkspacePath::new("README.md")?, self.instructions.as_bytes()).await?;
+        ws.write_file(WorkspacePath::new("TASK.md")?, self.task_description.as_bytes()).await?;
 
-        let mut harnesses = ws.subdir("harnesses")?;
+        let mut harnesses = ws.subdir(WorkspacePath::new("harnesses")?)?;
         for &cand in &snap.visible_candidates {
             let cand_view = snap.graph.candidate(cand).unwrap();
-            let mut dir = harnesses.subdir(&directory_name_for(cand, &snap.graph))?;
+            let mut dir = harnesses.subdir(WorkspacePath::new(directory_name_for(cand, &snap.graph))?)?;
 
-            self.artifact_renderer.render_into(&cand_view.artifact, &mut dir, ctx.clone()).await?;
-            dir.write_file("scores.json", scores_summary_json(&snap.graph, cand).as_bytes())?;
+            self.artifact_materializer.materialize_into(&cand_view.artifact, &mut dir, ctx.clone()).await?;
+            dir.write_file(
+                WorkspacePath::new("scores.json")?,
+                scores_summary_json(&snap.graph, cand).as_bytes(),
+            ).await?;
 
-            let mut traces = dir.subdir("traces")?;
+            let mut traces = dir.subdir(WorkspacePath::new("traces")?)?;
             for assessment in snap.graph.assessments(cand) {
-                // ReadScope hides test-partition assessments; renderer respects it
+                // ReadScope hides test-partition assessments; materializer respects it
                 if !is_visible(&assessment.target, &ctx.read_scope()) { continue; }
-                self.traces_renderer.render_into(&assessment.evidence, &mut traces, ctx.clone()).await?;
+                self.traces_materializer.materialize_into(&assessment.evidence, &mut traces, ctx.clone()).await?;
             }
         }
-        let _ = ws.subdir("output")?;     // where the agent writes new harnesses
-        Ok(Metered::new(RenderReport::default(), Cost::zero()))
+        let _ = ws.subdir(WorkspacePath::new("output")?)?;     // where the agent writes new harnesses
+        Ok(Metered::new(MaterializationReport::default(), Cost::zero()))
     }
 }
 
@@ -2956,19 +3972,19 @@ pub struct HistoryProposalRequest {
 }
 
 // The agentic proposer. arity = None: no causal parents.
-// Note the renderer is a stage-owned field, not a registry lookup.
+// Note the materializer is a stage-owned field, not a registry lookup.
 pub struct AgenticHarnessProposer<R, HR> {
     runtime: R,                                            // claude-code wrapper
-    history_renderer: HR,
+    history_materializer: HR,
 }
 
 #[async_trait]
 impl<R, HR> Proposer<MetaHarness> for AgenticHarnessProposer<R, HR>
 where
     R: AgentRuntime,
-    // The renderer takes any HistorySnapshot lifetime; we'll feed it a borrow
+    // The materializer takes any HistorySnapshot lifetime; we'll feed it a borrow
     // of the graph view we hold inside propose().
-    HR: for<'a> WorkspaceRenderer<MetaHarness, HistorySnapshot<'a>>,
+    HR: for<'a> Materializer<MetaHarness, HistorySnapshot<'a>>,
 {
     type Request = HistoryProposalRequest;
 
@@ -2981,54 +3997,58 @@ where
         mut ctx: ProposalContext<'_, MetaHarness>,
     ) -> Result<Metered<ProposalBatch<MetaHarness>>, ProposalError> {
         // Build the borrowed snapshot from ctx.graph(). It lives only for this
-        // call; the renderer consumes it before the await on run_session.
+        // call; the materializer consumes it before the await on run_session.
         let snapshot = HistorySnapshot {
             graph: ctx.graph(),
             visible_candidates: &request.visible_candidates,
             current_iteration: ctx.current_iteration(),
         };
 
-        let mut ws = ctx.workspace.as_ref().unwrap().allocate(WorkspaceConfig::default()).await?;
-        let render = self.history_renderer.render_into(
-            &snapshot, &mut ws, ctx.render_context()
-        ).await?;
+        let factory = ctx.workspace.as_ref().unwrap();
+        with_workspace(factory, WorkspaceConfig::default(), |ws| Box::pin(async move {
+            let materialized = self.history_materializer.materialize_into(
+                &snapshot, &mut ws.view(), ctx.materialize_context()
+            ).await?;
 
-        let session = self.runtime.run_session(&ws, AgentSessionConfig {
-            task: HARNESS_SEARCH_PROMPT,
-            output_dir: ws.path().join("output"),
-            budget: ctx.budget_handle(),
-        }).await?;
+            let session = self.runtime.run_session(ws, AgentSessionConfig {
+                task: HARNESS_SEARCH_PROMPT,
+                output_dir: WorkspacePath::new("output")?,
+                budget: ctx.budget_handle(),
+            }).await?;
 
-        let referenced = parse_referenced_candidates(&session.transcript);
+            let referenced = parse_referenced_candidates(&session.transcript);
 
-        let mut proposals = Vec::new();
-        for i in 0..request.k {
-            let path = ws.path().join(format!("output/harness_{i}.py"));
-            let Ok(source) = tokio::fs::read_to_string(&path).await else { continue };
-            let notes = read_optional(&ws, &format!("output/notes_{i}.md")).await;
+            let mut proposals = Vec::new();
+            for i in 0..request.k {
+                let Ok(source_bytes) = ws.read_file(
+                    WorkspacePath::new(format!("output/harness_{i}.py"))?,
+                ).await else { continue };
+                let source = String::from_utf8(source_bytes)?;
+                let notes = read_optional(
+                    ws,
+                    WorkspacePath::new(format!("output/notes_{i}.md"))?,
+                ).await;
 
-            // ProposalEffect::Create — brand-new authored artifact.
-            // No "Change applied to nothing" lie; the proposal honestly says
-            // "create this artifact, here's what informed me."
-            proposals.push(
-                Proposal::create(HarnessArtifact::from_source(Arc::from(source)))
-                    .informed_by(referenced.iter().map(|&c| InfoRef::Candidate(c)))
-                    .annotations(ProposerNotes { rationale: notes })
-                    .build()
-            );
-        }
+                // ProposalEffect::Create — brand-new authored artifact.
+                // No "Change applied to nothing" lie; the proposal honestly says
+                // "create this artifact, here's what informed me."
+                proposals.push(
+                    Proposal::create(HarnessArtifact::from_source(Arc::from(source)))
+                        .informed_by(referenced.iter().map(|&c| InfoRef::Candidate(c)))
+                        .annotations(ProposerNotes { rationale: notes })
+                        .build()
+                );
+            }
 
-        // Workspace cleanup is explicit (Drop is best-effort only; see §16.5).
-        ws.cleanup().await.ok();
-
-        Ok(Metered::new(
-            ProposalBatch {
-                proposals,
-                semantics: ProposalBatchSemantics::Alternatives,
-                metadata: MetadataBag::new(),
-            },
-            render.cost + session.cost,
-        ))
+            Ok(Metered::new(
+                ProposalBatch {
+                    proposals,
+                    semantics: ProposalBatchSemantics::Alternatives,
+                    metadata: MetadataBag::new(),
+                },
+                materialized.cost.checked_add(&session.cost)?,
+            ))
+        })).await.map_err(ProposalError::from)
     }
 }
 
@@ -3043,7 +4063,7 @@ pub struct MetaHarnessOptimizer<R, HR, Axes> {
 impl<R, HR, Axes> Optimizer<MetaHarness> for MetaHarnessOptimizer<R, HR, Axes>
 where
     R: AgentRuntime,
-    HR: WorkspaceRenderer<MetaHarness, HistorySnapshot<'static>>,
+    HR: Materializer<MetaHarness, HistorySnapshot<'static>>,
     Axes: ParetoAxes<MetaHarness>,
 {
     async fn step(&mut self, ctx: &mut RunContext<'_, MetaHarness>)
@@ -3109,10 +4129,10 @@ let result = optimize(seed_harnesses)
     .using(MetaHarnessOptimizer {
         proposer: AgenticHarnessProposer { /* claude code in firecracker */ },
         population: frontier,
-        history_renderer: history_renderer.clone(),
+        history_materializer: history_materializer.clone(),
         k_per_iter: 2,
     })
-    .trust_policy(TrustPolicy::HideFromProposer(&[PartitionId::TEST]))
+    .trust_policy(TrustPolicy::hide_from_proposer([PartitionId::TEST]))
     .budget(Budget::new().iterations(20).usd(500.0))
     .run()
     .await?;
@@ -3121,9 +4141,9 @@ let result = optimize(seed_harnesses)
 Key takeaways:
 
 - **`ProposalEffect::Create` and `Arity::None`** are essential for this style: the agent authors fresh harnesses each iteration; the proposal is honestly a `Create`, not a `Change` whose target is meaningless. Lineage is bibliographic via `informed_by`, never causal.
-- **`WorkspaceRenderer`** is the load-bearing primitive. The orchestrator renderer composes per-artifact and per-evidence sub-renderers into the candidate-per-directory layout the agent greps.
+- **`Materializer`** is the load-bearing primitive. The orchestrator materializer composes per-artifact and per-evidence sub-materializers into the candidate-per-directory layout the agent greps.
 - **`ParetoFrontier::partition_filter`** keeps the test partition out of the frontier even though it's still observable to post-run evaluation.
-- **`TrustPolicy::HideFromProposer`** combines with the renderer's `read_scope` check to ensure test-partition traces never appear in the agent's workspace.
+- **`TrustPolicy::hide_from_proposer`** combines with the materializer's `read_scope` check to ensure test-partition traces never appear in the agent's workspace.
 - **`EvidenceStore`** is non-optional at this scale — execution traces can hit 10M tokens; only refs live in the graph.
 
 ---
@@ -3186,8 +4206,8 @@ NoPopulation
 ReflectiveMutation
 SystemAwareMerge
 ParetoFrequencyWeighted
-RoundRobinComponent
-WorstEvidenceComponent
+RoundRobinPart
+InvokedAndFailingPart
 EpochShuffled
 StrictImprovement
 ImprovementOrEqual
@@ -3218,47 +4238,61 @@ EnsembleProposer
 apply is functional.
 failed apply does not mutate artifact state.
 
-content_id is a deterministic hash that satisfies:
-  same observationally-equivalent content => same id, with collision
-  probability negligible at the run's scale.
+identity is stable for the artifact state recorded in the graph.
+same artifact state under the artifact's own identity law => same
+  ArtifactIdentity.
 
-the cache trusts content_id absolutely. lying about it produces
-  silently incorrect cache results.
+ArtifactIdentity is not automatically cache identity.
 
 contract on the user (not framework-enforced):
   - artifacts are observationally immutable; no interior mutability
     that affects library-visible behavior.
-  - content_id encodes everything an evaluator/renderer/change
-    might depend on for this run's configuration.
-  - hash is deterministic across machines (canonicalize maps, sets,
-    floats, unicode).
+  - identity is deterministic across machines when the run is durable.
+  - external mutable handles are allowed as graph identity, but must not
+    be returned as CacheIdentity.
+```
 
-content-addressed external handles satisfy these trivially:
-  - git commit hash IS a hash of the underlying tree
-  - IPFS CID IS a hash of the content
-  - docker image digest IS a hash of the layers
-  use these as content_id directly; no further hashing needed.
+### CacheIdentified
 
-safety:
-  - prefer #[derive(Optimize)]; it generates safe-by-default field
-    hashing with explicit opt-out via #[content_skip].
-  - in dev mode, set verify_cache_consistency = true to catch contract
-    violations by re-evaluating on cache hits and comparing results.
+```text
+CacheIdentity encodes everything a deterministic evaluator may depend on:
+  artifact state, immutable external content reference, or explicit user key.
+
+the cache trusts CacheIdentity absolutely. lying about it produces
+  silently incorrect cache results.
+
+content-addressed external handles may be CacheIdentity::ExternalContent:
+  - git commit hash
+  - IPFS CID
+  - OCI/docker image digest
+
+mutable external handles must return None:
+  - branch name
+  - filesystem path
+  - unversioned S3 key
+  - database row ID without version/ETag
 
 hash strength:
-  - blake3 or sha-256 recommended for any cross-run / cross-machine
-    use (durable cache, content-addressed evidence storage).
-  - 128-bit non-cryptographic hashes (xxh3-128) acceptable for
-    in-process caching only.
+  - blake3 or sha-256 recommended for durable cross-run cache keys.
+  - 128-bit non-cryptographic hashes acceptable for in-process cache only.
   - 64-bit hashes are unsafe at typical run scales (>10^5 candidates).
 ```
 
-### Decomposable
+### EditSurface
 
 ```text
-component IDs are stable unless a change explicitly removes/replaces that component.
+surface fingerprint changes when interpretation changes:
+  parsing rules, filters, ignored files, ID extraction, layout policy.
+
+part IDs are scoped to SurfaceFingerprint.
 if identity is path-based, rename is remove + add.
-if rename continuity matters, artifact must encode stable IDs.
+if rename continuity matters, the surface must encode stable logical IDs.
+
+AttributableEvidence<S::PartId> may be consumed only when its attribution
+domain matches the surface fingerprint.
+
+borrowed surface views are inspection-only. async stages turn them into
+owned request/rendering data before awaiting external work.
 ```
 
 ### Evaluator
@@ -3282,7 +4316,7 @@ must not silently treat missing evidence as zero unless explicitly documented.
 ### Population
 
 ```text
-select_candidates returns existing candidates.
+PopulationView exposes only existing candidates.
 best may return None.
 population events are strategy opinions, not graph truth.
 population must not erase graph history.
@@ -3325,19 +4359,19 @@ informed_by has no validation constraints — it's a free-form bibliography of
 candidates, assessments, proposals, or external references the proposer read.
 Empty informed_by is fine. Self-referential informed_by (where the proposer
 records reading evidence about a candidate it later created) is also fine
-because content_id determines whether they're the same.
+because artifact identity determines whether they're the same graph state.
 
-### Renderer / WorkspaceRenderer
+### Renderer / Materializer
 
 ```text
 rendering is a view, not a transformation of truth.
 lossy rendering must be explicit.
 target (or workspace contents) determines rendering shape.
 costful rendering reports cost via Metered.
-WorkspaceRenderers must respect the caller's read_scope:
+Materializers must respect the caller's read_scope:
   do not write evidence from forbidden partitions into the workspace.
-WorkspaceRenderers should be idempotent within a single workspace
-  (calling the same renderer twice with the same value is a no-op or
+Materializers should be idempotent within a single workspace
+  (calling the same materializer twice with the same value is a no-op or
   produces the same files).
 ```
 
@@ -3413,12 +4447,14 @@ Goal: reproduce Python GEPA shape naturally on top of the surface validated by P
 
 ```text
 PartMapArtifact
+PartMapSurface
 ReflectiveMutation
 ProposalBatch::Alternatives
 AssessmentGranularity::PerCase
+CasewiseEvidence
 ParetoFrontier::by_case
 ParetoFrequencyWeighted
-RoundRobinComponent
+RoundRobinPart
 StrictImprovement
 train/validation partitions
 ```
@@ -3429,7 +4465,7 @@ Goal: prove rendering, materialization, trust boundaries, and the workspace life
 
 ```text
 GitArtifact + GitWorktreeFactory
-WorkspaceRenderer composition (artifact + traces + history orchestrator)
+Materializer composition (artifact + traces + history orchestrator)
 agentic proposer with ProposalEffect::Create
 repo-task evaluator with isolated workspaces
 AgentTrajectoryEvidence via EvidenceStore
@@ -3440,9 +4476,9 @@ budget and sandbox hooks
 
 ## 27. Open Questions
 
-### 27.1 Renderer registry typing — RESOLVED
+### 27.1 Renderer registry typing — DEFERRED
 
-Resolved by splitting rendering into two trait families: `Renderer<P, T, Target>` (value-returning) and `WorkspaceRenderer<P, T>` (side-effecting workspace population). See §13. The value-returning case can use a typed registry keyed by `(T, Target, View)`; the workspace case has no `View` ambiguity because the side effect *is* the output. Common renderers are still typically fields on stages (composition over registry); the registry is for cross-stage shared rendering and debug/inspection paths.
+Rendering is split into two trait families: `Renderer<P, T, Target>` (value-returning) and `Materializer<P, T>` (side-effecting workspace population). See §13. v0.2.2 does not ship a renderer/materializer registry or erased renderer traits. Stage-owned typed fields are the implementation path. Revisit a registry only after a real plugin/debug user needs runtime rendering choices.
 
 ### 27.2 Evidence persistence
 
@@ -3462,11 +4498,11 @@ Default no-cache. Deterministic cache only with explicit evaluator fingerprint a
 
 ### 27.6 Preference relation state — RESOLVED
 
-Resolved by placing fitted/stateful preference models on `Population` impls (concretely `TournamentPopulation`) rather than on `PreferenceRelation`. The state of a fitted model depends on accumulated observations; updates fit naturally into `observe_assessment`; `select_candidates` and `best` use the fit directly. `PreferenceRelation` stays stateless and `&self`-only. See §14 and §15.1.
+Resolved by placing fitted/stateful preference models on `Population` impls (concretely `TournamentPopulation`) rather than on `PreferenceRelation`. The state of a fitted model depends on accumulated observations; updates fit naturally into `observe_assessment`; `best` and `view` expose the fit to selectors without making `PreferenceRelation` stateful. See §14 and §15.1.
 
 ### 27.7 Renderer registry vs stage-owned composition
 
-Surfaced by the Meta-Harness walkthrough: a complex `WorkspaceRenderer` (e.g. `MetaHarnessHistoryRenderer`) is a composition of smaller renderers (`ArtifactRenderer`, `TracesRenderer`). Today these compose by holding `Arc<dyn WorkspaceRenderer<…>>` fields. A typed registry could replace these fields with lookups, but the field-based composition is more explicit and easier to typecheck. Recommend deferring a registry until a real second user wants different sub-renderers without recompiling.
+Surfaced by the Meta-Harness walkthrough: a complex `Materializer` (e.g. `MetaHarnessHistoryMaterializer`) is a composition of smaller materializers (`ArtifactMaterializer`, `TracesMaterializer`). Today these compose as generic stage-owned fields. A typed registry or object-safe adapter could replace these fields later, but field-based composition is more explicit and easier to typecheck. Defer a registry until a real second user wants different sub-materializers without recompiling.
 
 ---
 
@@ -3503,6 +4539,47 @@ The engine is dumb. The optimizer is smart. The types tell the truth.
 
 ## 30. Changelog
 
+### v0.2.2 (2026-05-07) — workspace/materialization and GEPA selection minor bump
+
+This pass records the decisions needed before implementing agentic stages and
+`leaven-gepa`.
+
+- **`WorkspaceRenderer` renamed to `Materializer`.** The side-effecting
+  workspace trait now has workspace-native vocabulary and no compatibility
+  alias. `Renderer` remains value-returning.
+- **Workspace API made backend-neutral.** `Workspace` is a concrete Leaven lease
+  handle; users implement factories/backends. File APIs use `WorkspacePath`.
+  Examples no longer rely on `local_mount()` or backend-specific absolute paths.
+- **Actor trust table added.** Optimizer, selector, proposer, evaluator,
+  renderer, materializer, agent runtime, and callback capabilities are spelled
+  out directly.
+- **GEPA candidate selection split from population.** Populations expose
+  archive/frontier/model state through `PopulationView`; `CandidateSelector`
+  chooses what to try next and is explicitly swappable.
+- **Future skill-library direction captured.** The spec names likely extension
+  points for skill routing, hard-case selection, target selection, and admission
+  without pulling them into core.
+
+### v0.2.1c (2026-05-06) — surface/evidence/cache finishing pass
+
+This pass folds the v0.2.1b topology correction into the long-form spec and
+settles the load-bearing seams before `leaven-gepa` implementation.
+
+- **Artifact identity and cache identity split.** `Artifact::identity()` is graph
+  truth; `CacheIdentified::cache_identity()` is the stronger deterministic cache
+  promise. Mutable external handles are graph-valid but not cache-valid.
+- **`Decomposable` removed from the main spec.** Parts now come from
+  `EditSurface<A>` with explicit `SurfaceFingerprint` laws.
+- **Evidence measurement and attribution split.** `CasewiseEvidence` feeds
+  instance-pareto frontiers; `AttributableEvidence<K>` feeds trace-aware
+  routing and credit assignment.
+- **GEPA now owns `S: EditSurface<P::Artifact>`.** Generic GEPA proposers may
+  emit surface edits; GEPA lowers them to artifact-native changes.
+- **Workspace cleanup examples use `with_workspace`.** Examples no longer rely
+  on `Drop` or local filesystem paths for remote workspaces.
+- **Pairwise tournament worked example added.** It demonstrates a non-GEPA
+  optimizer rhythm with pairwise assessments and a fitted Bradley-Terry model.
+
 ### v0.2.1a (2026-05-06) — pre-implementation patch
 
 Project name locked: **leaven**. A pre-implementation review of v0.2.1 flagged real Rust-mechanics issues (lifetime-on-trait, async-Drop, scattered `&mut BudgetLedger`) and residual wording inconsistencies from the v0.2 → v0.2.1 edit pass. v0.2.1a is the last polish before P0/P1 prototypes.
@@ -3514,7 +4591,7 @@ Project name locked: **leaven**. A pre-implementation review of v0.2.1 flagged r
 
 #### New explicit machinery
 
-- **§8.3 Report types defined explicitly.** `ProposalBatchReport`, `ApplyReport`, `ApplyOneReport`, `EvaluationReport`. Reports return IDs and graph-backed views, not graph-owned values. Includes `ApplyOutcome::{Success, Failure}` for per-proposal outcome tracking.
+- **§8.4 Report types defined explicitly.** `ProposalBatchReport`, `ApplyReport`, `ApplyOneReport`, `EvaluationReport`. Reports return IDs and graph-backed views, not graph-owned values. Includes `ApplyOutcome::{Success, Failure}` for per-proposal outcome tracking.
 - **§5.9 `ResolvedEvaluationRequest` and resolution boundary.** RunContext resolves dynamic sets (`Recent`, `Sample`, `Stratified`) before passing to evaluators; cache key uses `ResolvedEvaluationSetId`. Evaluators never see unresolved expressions. Both expressions are recorded in the graph.
 - **§16.3 `BudgetHandle<'a>` is the single budget access type.** Replaces scattered `&'a mut BudgetLedger` references on `ProposalContext` and `EvalHandle`. Wraps ledger + stage tag; one mutable borrow path; `sub_stage()` for nested attribution. Prevents borrow-hostile multi-handle situations.
 
@@ -3543,7 +4620,7 @@ External review of v0.2 (sharp, terse, mostly fair) flagged that v0.2 retained s
 #### Proposal model
 
 - **`Proposal::effect: ProposalEffect`** replaces bare `change + parents` (§5.5). `ProposalEffect::Create { artifact }` for fresh authoring; `ProposalEffect::Change { target, change }` for mutation. Removes the "Change applied to nothing" lie that `Parents::None` produced.
-- **`Proposal::provenance: ProposalProvenance`** replaces inline `parents` and stringly-typed informed_by (§5.5). `causal: CausalInputs` records lineage that contributed to `content_id`; `informed_by: Vec<InfoRef>` records bibliographic influence that did not. Both are typed structured fields.
+- **`Proposal::provenance: ProposalProvenance`** replaces inline `parents` and stringly-typed informed_by (§5.5). `causal: CausalInputs` records lineage that contributed to artifact state; `informed_by: Vec<InfoRef>` records bibliographic influence that did not. Both are typed structured fields.
 - **Constructor sugar** (`Proposal::mutate / merge / create / aggregate` + `ProposalBuilder`) keeps common cases one-line. Verbosity tax paid by the spec, not by users.
 - **Merge canonicalization** documented inline: `Proposal::merge(a, b, change)` produces `effect: Change { target: a, change }` with `causal: Pair(a, b)`. The change embeds content sourced from `b`.
 
@@ -3560,15 +4637,15 @@ External review of v0.2 (sharp, terse, mostly fair) flagged that v0.2 retained s
 
 - **`Parents` enum.** Subsumed by `CausalInputs` (variant names match) plus `ProposalEffect` (which captures the apply target, not the parent).
 - **`ProposalBatchSemantics::Ordered`** (§5.7). Multi-batch optimizer rhythm covers ordered-dependency cases. Re-add if a real prototype forces it.
-- **`Materializable` from cold core** (§5.1). Moved to standard library as a convenience trait used by default `WorkspaceRenderer` impls. Cold-core `Artifact` stays free of workspace concerns.
+- **`Materializable` from cold core** (§5.1). Moved to standard library as a convenience trait used by default `Materializer` impls. Cold-core `Artifact` stays free of workspace concerns.
 
-#### Renderer policy
+#### Renderer/materializer policy
 
-- **Stage-owned renderers are the default** (§13.4). Most stages should hold renderers as fields (`pub renderer: R`). `RendererRegistry` exists for cross-stage shared rendering and debug, not as the central path.
+- **Stage-owned renderers/materializers are the default** (§13.4). Most stages should hold them as fields (`pub renderer: R`, `pub materializer: M`). Renderer/materializer registries are deferred until a real erased contract exists.
 
 #### Trait law softening
 
-- **`ContentId` law no longer says "MUST be a cryptographic hash of all observationally-relevant state"** (§24). Reframed as: "deterministic hash, same content => same id, collision probability negligible at run scale, the cache trusts it, lying produces silently wrong cache results." Content-addressed external handles (git commit hashes, IPFS CIDs, docker digests) trivially satisfy this. Contract on the user; framework not enforcing. Dev-mode `verify_cache_consistency` catches violations by re-evaluating on cache hits. No `Artifact / ContentAddressed` trait split — premature option-creation for use cases that haven't appeared.
+- **Historical cache note superseded by v0.2.1c.** v0.2.1 kept cache identity on `Artifact`; v0.2.1c splits graph identity from cache identity.
 
 #### Event shapes refreshed
 
@@ -3576,7 +4653,7 @@ External review of v0.2 (sharp, terse, mostly fair) flagged that v0.2 retained s
 
 #### Open questions
 
-- **27.7 Renderer registry vs stage-owned composition** is now answered: stage-owned by default, registry for plugin/debug. Removed from open questions.
+- **27.7 Renderer registry vs stage-owned composition** is now answered: stage-owned by default, registry deferred. Removed from open questions.
 
 #### Stress tests re-run
 
@@ -3596,7 +4673,7 @@ The v0.1 second-pass spec survived the conceptual stress tests. The corrections 
 
 - **Renderer split into two trait families (§13).**
   - `Renderer<P, T, Target>` — value-returning, for prompt assembly, JSON, debug HTML.
-  - `WorkspaceRenderer<P, T>` — side-effecting, for materializing artifacts, lineage, traces into a workspace.
+  - `Materializer<P, T>` — side-effecting, for materializing artifacts, lineage, traces into a workspace.
   - Resolves open question 27.1.
 - **`PreferenceRelation` is stateless (§14).** Fitted/stateful models (Bradley-Terry, Plackett-Luce) live on `Population` impls instead — concretely `TournamentPopulation`. Updates happen in `observe_assessment`. Resolves open question 27.6.
 - **`ParetoFrontier::partition_filter` builder method (§15.2).** Frontiers can declaratively ignore observations from specific case-set partitions (e.g. only update from `SEARCH`, never from `TEST`). Replaces ad-hoc filter logic in optimizer step bodies.
@@ -3611,7 +4688,7 @@ The v0.1 second-pass spec survived the conceptual stress tests. The corrections 
 
 #### Documentation additions
 
-- **`16.5 Workspace lifecycle.`** New full section. `WorkspaceFactory`, `WorkspaceBackend`, `Workspace`, ownership table, standard backends (Local, E2B, Docker, K8s, Firecracker, GitWorktree). Agent runtimes are kept separate from workspaces — they take a workspace and run commands in it.
+- **`16.6 Workspace lifecycle.`** New full section. `WorkspaceFactory`, `WorkspaceBackend`, `Workspace`, ownership table, standard backends (Local, E2B, Docker, K8s, Firecracker, GitWorktree). Agent runtimes are kept separate from workspaces — they take a workspace and run commands in it.
 - **Merge canonicalization (§5.5, §20).** `Artifact::apply` only sees one artifact, so for `Parents::Pair(a, b)` the change canonicalizes to one parent and embeds cross-parent content. Spelled out so readers don't expect the framework to magically combine two artifacts.
 - **`ProposalBatchSemantics::Alternatives` cost behavior (§5.7).** All alternatives are evaluated independently if applied successfully. Cost is N×eval, not amortized — the framework does not deduplicate.
 
@@ -3620,7 +4697,7 @@ The v0.1 second-pass spec survived the conceptual stress tests. The corrections 
 - **Implementation plan reorders prototypes 2 and 3 (§26).** Pairwise tournament now runs before GEPA parity. Pairwise stresses what is *new* in this design (Pairwise eval requests, fitted preference relations, tournament populations) and is therefore the more informative early test.
 - **Two coding-agent worked examples added (§22.4, §22.5).**
   - `gskill`: agentic SWE-smith evaluator with workspace materialization and a reflective proposer.
-  - Meta-Harness: agentic proposer reading full graph history via `WorkspaceRenderer`, `Parents::None`, `Arity::None`, multi-axis pareto with `partition_filter`.
+  - Meta-Harness: agentic proposer reading full graph history via `Materializer`, `Parents::None`, `Arity::None`, multi-axis pareto with `partition_filter`.
 
 #### Stress tests passed
 
@@ -3628,8 +4705,8 @@ The v0.2 surface was verified against:
 
 1. **Cross-branch synthesis** — proposer reads evidence across two branches, emits a fix as a single proposal with one causal parent and many `informed_by` entries; or two sibling proposals with different parents in one batch.
 2. **Meta-Harness end-to-end** — agentic harness search, multi-MB execution traces via `EvidenceStore`, fresh artifacts via `Parents::None`, multi-axis pareto with declarative test-partition filtering.
-3. **Workspace lifecycle under k8s and git-worktree backends** — pod-shared, per-workspace containers; worktree-per-workspace with content_id = commit hash; agent commits inside the worktree, framework reads HEAD on cleanup.
-4. **Composite multi-agent artifact** — four-agents-and-substrate as one artifact; component-addressed via `Decomposable`; per-component blame attribution via `AttributedEvidence<ComponentId>`. No new primitives required.
+3. **Workspace lifecycle under k8s and git-worktree backends** — pod-shared, per-workspace containers; worktree-per-workspace with git commit identity; agent commits inside the worktree, framework reads HEAD on cleanup.
+4. **Composite multi-agent artifact** — four-agents-and-substrate as one artifact; surface-addressed via `EditSurface`; per-part blame attribution via `AttributableEvidence<S::PartId>`. No new primitives required.
 
 20 literature targets from §25 were mentally implemented against this surface. All expressible. The pressure tests surfaced exactly the changes listed above and no others.
 
@@ -3644,3 +4721,28 @@ First post-reset draft. Replaced by the second pass.
 ### v1.0 design lock (2026-05-03, deprecated)
 
 Pre-reset attempt. Six strategy traits, four capability traits, 35+ stdlib impls, multiple coexisting archives, cardinal-only `Score`, capability traits on `Evidence`. Critique surfaced architectural over-engineering; full reset to v0.1.
+
+---
+
+## 31. Future Note: Skill-Library Optimizers
+
+Do not force skill-library evolution into GEPA just because it also mutates
+natural-language artifacts. The likely future crate is `leaven-skill` or an
+agentic optimizer crate that reuses engine, surface, evidence, population,
+workspace, and materializer primitives while owning its own rhythm.
+
+Likely extension slots:
+
+```text
+SkillRouter            chooses which existing skills an agent receives for a task
+HardCaseSelector       chooses failures or near-misses worth turning into skill updates
+SkillTargetSelector    chooses which skill/artifact part should be rewritten or created
+SkillAdmissionPolicy   accepts, rolls back, merges, or retires skill changes
+SkillLibraryPopulation stores skill versions, utilities, snapshots, and transfer stats
+```
+
+These are not cold-core traits. They belong in an optimizer/strategy crate once
+a real skill-library implementation needs them. The core lesson to preserve now:
+selection policy is swappable, population/archive state is separate, and
+workspace materialization is the bridge from typed skill artifacts to the agent
+runtime.
