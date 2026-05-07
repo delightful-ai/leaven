@@ -49,10 +49,10 @@ pub use error::{ErrorKind, ErrorRecord, IntoErrorRecord, Retryability};
 pub use fingerprint::{Fingerprint, FingerprintBuilder};
 pub use finite::{FiniteF64, FiniteF64Error};
 pub use ids::{
-    ApplyAttemptId, AssessmentId, BlobRef, CandidateId, CaseId, CheckpointId, ContentId,
-    EvaluationRequestId, EvaluationSetId, EvaluatorId, EvidenceRef, IterationId, PopulationId,
-    ProposalBatchId, ProposalId, ProposerId, RenderId, RendererId, ResolvedEvaluationSetId, RunId,
-    StageId, StopperId,
+    AgentRuntimeId, AgentSessionId, ApplyAttemptId, AssessmentId, BlobRef, CandidateId, CaseId,
+    CheckpointId, ContentId, EvaluationRequestId, EvaluationSetId, EvaluatorId, EvidenceRef,
+    IterationId, PopulationId, ProposalBatchId, ProposalId, ProposerId, RenderId, RendererId,
+    ResolvedEvaluationSetId, RunId, StageId, StopperId,
 };
 pub use metadata::{MetadataBag, MetadataKey, MetadataValue};
 pub use time::{Timestamp, now};

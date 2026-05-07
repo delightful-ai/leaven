@@ -1,18 +1,30 @@
-//! leaven-agent crate skeleton.
+//! Provider-neutral agent runtime contracts.
 
 mod error;
+mod fake;
 mod runtime;
 mod session;
 mod transcript;
 
 pub use error::AgentRuntimeError;
+pub use fake::{FakeAgentAction, FakeAgentRuntime};
 pub use runtime::AgentRuntime;
-pub use session::{AgentSessionConfig, AgentSessionResult};
-pub use transcript::{AgentTranscript, ToolCallRecord};
+pub use session::{
+    AgentContextRef, AgentInstructions, AgentLimits, AgentRunContext, AgentRunRequest,
+    AgentRuntimeCapabilities, AgentSession, AgentStatus, AgentToolPolicy, CancellationRef,
+    JsonSchemaRef, OutputContract, WorkspaceAccessMode,
+};
+pub use transcript::{
+    AgentTranscript, CommandRecord, RawProviderEvent, ToolCallRecord, TranscriptEvent,
+    TranscriptRole, WorkspaceReadRecord,
+};
 
 pub mod prelude {
     pub use crate::{
-        AgentRuntime, AgentRuntimeError, AgentSessionConfig, AgentSessionResult, AgentTranscript,
-        ToolCallRecord,
+        AgentContextRef, AgentInstructions, AgentLimits, AgentRunContext, AgentRunRequest,
+        AgentRuntime, AgentRuntimeCapabilities, AgentRuntimeError, AgentSession, AgentStatus,
+        AgentToolPolicy, AgentTranscript, CancellationRef, CommandRecord, FakeAgentAction,
+        FakeAgentRuntime, JsonSchemaRef, OutputContract, RawProviderEvent, ToolCallRecord,
+        TranscriptEvent, TranscriptRole, WorkspaceAccessMode, WorkspaceReadRecord,
     };
 }

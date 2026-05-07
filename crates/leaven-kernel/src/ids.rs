@@ -14,8 +14,8 @@
 //! - **Content-addressed** ([`ContentId`]) — a 32-byte hash treated as
 //!   identity by the evaluation cache. See [`ContentId`] for the trust
 //!   contract.
-//! - **Name-backed** ([`ProposerId`], [`EvaluatorId`], [`RendererId`],
-//!   [`StopperId`], plus [`StageId::Custom`]) — human-meaningful strings used
+//! - **Name-backed** ([`AgentRuntimeId`], [`ProposerId`], [`EvaluatorId`],
+//!   [`RendererId`], [`StopperId`], plus [`StageId::Custom`]) — human-meaningful strings used
 //!   for stage attribution in budgets, events, and error records. Backed by
 //!   `Cow<'static, str>` so `const`-known names are zero-allocation.
 
@@ -170,6 +170,15 @@ uuid_id!(
     /// Used to correlate renderer events with the rendered output and to
     /// charge cost back to the originating render call.
     RenderId
+);
+
+uuid_id!(
+    /// Identifier for one provider-agent runtime session.
+    ///
+    /// Agent sessions are outside the optimizer graph. This ID correlates the
+    /// runtime transcript, workspace command records, and raw provider events
+    /// emitted during one call to an agent runtime.
+    AgentSessionId
 );
 
 uuid_id!(
@@ -346,6 +355,15 @@ macro_rules! name_id {
         }
     };
 }
+
+name_id!(
+    /// Identifier for one provider-neutral agent runtime implementation.
+    ///
+    /// Runtime IDs name the execution substrate (`codex/app-server`,
+    /// `claude-code/cli`, `fake`) without implying anything about proposals,
+    /// assessments, candidates, or optimizer rhythm.
+    AgentRuntimeId
+);
 
 name_id!(
     /// Identifier for one [`Proposer`] implementation.

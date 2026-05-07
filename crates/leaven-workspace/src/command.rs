@@ -2,14 +2,14 @@
 
 use crate::WorkspacePath;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Command {
     pub program: String,
     pub args: Vec<String>,
     pub cwd: Option<WorkspacePath>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CommandOutput {
     pub status: ExitStatus,
     pub stdout: Vec<u8>,

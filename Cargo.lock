@@ -440,6 +440,7 @@ dependencies = [
 name = "leaven-agent"
 version = "0.0.0"
 dependencies = [
+ "futures",
  "leaven-kernel",
  "leaven-workspace",
  "thiserror",
