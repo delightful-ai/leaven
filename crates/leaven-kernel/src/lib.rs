@@ -36,6 +36,7 @@
 pub mod cost;
 pub mod error;
 pub mod fingerprint;
+pub mod finite;
 pub mod ids;
 pub mod metadata;
 pub mod time;
@@ -46,6 +47,7 @@ pub use cost::{
 };
 pub use error::{ErrorKind, ErrorRecord, IntoErrorRecord, Retryability};
 pub use fingerprint::{Fingerprint, FingerprintBuilder};
+pub use finite::{FiniteF64, FiniteF64Error};
 pub use ids::{
     ApplyAttemptId, AssessmentId, BlobRef, CandidateId, CaseId, CheckpointId, ContentId,
     EvaluationRequestId, EvaluationSetId, EvaluatorId, EvidenceRef, IterationId, PopulationId,
@@ -65,6 +67,6 @@ pub mod prelude {
     pub use crate::ids::*;
     pub use crate::{
         Amount, AmountError, Budget, BudgetExceeded, BudgetSnapshot, Cost, CostUnit, ErrorKind,
-        ErrorRecord, Fingerprint, MetadataBag, Metered,
+        ErrorRecord, Fingerprint, FiniteF64, FiniteF64Error, MetadataBag, Metered,
     };
 }

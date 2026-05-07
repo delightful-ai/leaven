@@ -9,7 +9,9 @@ pub use leaven_engine::{
     Arity, CachePolicy, Engine, Evaluator, Optimizer, Population, PreferenceRelation, Proposer,
     Renderer, RunContext, RunGraphView, Stopper, TrustPolicy, WorkspaceRenderer, optimize,
 };
-pub use leaven_kernel::{Budget, CandidateId, ContentId, Cost, CostUnit, ErrorRecord, MetadataBag};
+pub use leaven_kernel::{
+    Budget, CandidateId, ContentId, Cost, CostUnit, ErrorRecord, FiniteF64, MetadataBag,
+};
 pub use leaven_surface::{EditSurface, Part, PartAddress, PartSelection};
 
 #[cfg(feature = "derive")]

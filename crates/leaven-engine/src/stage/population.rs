@@ -1,7 +1,7 @@
 //! Population stage traits.
 
 use leaven_core::OptimizationProblem;
-use leaven_kernel::{AssessmentId, CandidateId, PopulationId};
+use leaven_kernel::{AssessmentId, CandidateId, FiniteF64, PopulationId};
 
 use crate::{Arity, RunGraphView};
 
@@ -67,7 +67,7 @@ pub enum PopulationEvent {
     Reweighted {
         population: PopulationId,
         candidate: CandidateId,
-        weight: f64,
+        weight: FiniteF64,
         reason: String,
     },
 }

@@ -13,8 +13,8 @@ just check
 ```
 
 `just check` runs formatting, the production line-count lint, clippy with
-workspace targets, the nextest workspace suite, doctests, and the coverage
-summary. Use narrower recipes only while iterating:
+workspace targets, the nextest workspace suite, doctests, and the line/branch
+coverage summary. Use narrower recipes only while iterating:
 
 ```bash
 just lint
@@ -37,18 +37,20 @@ and workspace doctests together. If the suite crosses the line, do not add a
 second slow lane; reduce fixture cost, property-test case count, setup work, or
 assertion altitude until the default suite is back under the SLA.
 
-Coverage is a ratchet. Raise `coverage_line_floor` in the root `Justfile` when
-coverage improves; do not lower it to land weaker tests.
+Coverage is a ratchet. Raise `coverage_line_floor` and
+`coverage_branch_floor` in the root `Justfile` when coverage improves; do not
+lower either floor to land weaker tests.
 
 The v0.2.1b topology cutover adds many spec-listed crate skeletons and
 trait-only surfaces whose job is to enforce dependency direction before their
-behavior lands. The coverage gate now keeps a `98.0` line floor and includes
-the behavior-bearing P1 engine/context/cache/budget/trust/graph files plus
-scalar evidence, scalar preference, keep-best population, and inline evidence
-storage. Empty adapters, trait-only stage surfaces, map-only binaries, and
-unimplemented skeleton crates stay out of the denominator until they gain real
-runtime behavior. When a skeleton crate gains runtime logic, remove it from
-`coverage_ignore` in the same change that adds its contract tests.
+behavior lands. The coverage gate now keeps a `98.0` line floor and `85.0`
+branch floor, and includes the behavior-bearing P1
+engine/context/cache/budget/trust/graph files plus scalar evidence, scalar
+preference, keep-best population, and inline evidence storage. Empty adapters,
+trait-only stage surfaces, map-only binaries, and unimplemented skeleton crates
+stay out of the denominator until they gain real runtime behavior. When a
+skeleton crate gains runtime logic, remove it from `coverage_ignore` in the
+same change that adds its contract tests.
 
 ## Test Shapes
 
@@ -103,6 +105,8 @@ Use the narrowest layer that proves the claim.
 - `crates/leaven-engine/tests/stage_trait_contracts.rs`: static-to-dynamic
   stage adapter contracts for proposer, evaluator, preference, and stopper
   traits.
+- `crates/leaven-engine/tests/population_event_contract.rs`: public event
+  contract proving population reweighting uses finite weights.
 - `crates/leaven-derive/tests/derive_macros.rs`: `trybuild` contract proving
   reserved derive macros fail explicitly until their real codegen contracts
   land.
@@ -116,11 +120,14 @@ Use the narrowest layer that proves the claim.
   v0.2.1b workspace member list, `src/lib.rs` skeleton presence,
   Leaven-to-Leaven dependency DAG, and cold-core leak boundaries.
 - `crates/leaven-evidence/tests/scalar.rs`,
+  `crates/leaven-evidence/tests/attribution.rs`,
   `crates/leaven-preference/tests/scalar.rs`,
   `crates/leaven-population/tests/keep_best.rs`, and
-  `crates/leaven-store-inline/tests/evidence.rs`: finite scalar evidence,
-  scalar preference, keep-best, and inline store behavior now covered by the
-  canonical coverage gate.
+  `crates/leaven-store-inline/tests/evidence.rs`: finite scalar and
+  attribution evidence, scalar preference, keep-best, and inline store behavior
+  now covered by the canonical coverage gate.
+- `crates/leaven-kernel/tests/finite_f64.rs`: finite signed float construction,
+  serde round trips, deserialization refusal, and metadata float coverage.
 
 ## Review Rules
 

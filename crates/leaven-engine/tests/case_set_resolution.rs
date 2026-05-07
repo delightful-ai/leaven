@@ -84,6 +84,17 @@ fn sample_and_recent_are_deterministic_subsets() {
         ),
         vec![1, 2]
     );
+    assert_eq!(
+        ids(
+            &cases,
+            &EvaluationSet::Sample {
+                of: Box::new(EvaluationSet::Intersect(Vec::new())),
+                n: 2,
+                seed: 1,
+            }
+        ),
+        Vec::<u64>::new()
+    );
 }
 
 #[test]

@@ -459,6 +459,38 @@ Leaven implication:
   well, a SkillReducer-like optimizer is just another optimizer over
   `SkillDir` with validation gates and workspace execution.
 
+### April 2026 watchlist — abstract-level only so far
+
+These came from arXiv/web because paperclip had zero-line content for several
+April papers. Treat as discovery notes until full text is read.
+
+- Graph of Skills (`arx_2604.05333`) builds an offline executable skill graph
+  and performs inference-time dependency-aware retrieval with semantic/lexical
+  seeding, graph ranking, and budgeted hydration. This suggests dependencies
+  among skills are a retrieval concern, not just flat top-k routing.
+- How Well Do Agentic Skills Work in the Wild (`arx_2604.04323`) reports that
+  skill gains degrade as retrieval settings become more realistic, with a
+  34k-skill corpus and query-specific refinement recovering some lost utility.
+  This reinforces "retrieval realism" as a required worked-example/evaluator
+  axis.
+- SkillX (`arx_2604.04804`) builds a reusable skill KB with multi-level skills
+  (strategic plans, functional skills, atomic skills), iterative refinement,
+  and exploratory expansion. This points toward hierarchical surfaces over
+  skill libraries.
+- SkillFoundry (`arx_2604.03964`) converts heterogeneous scientific resources
+  into validated skill packages with task scope, inputs/outputs, execution
+  steps, environment assumptions, provenance, and tests. This is a strong
+  signal that skill artifacts should include contracts/tests/provenance, not
+  only instructions.
+- SkillLearnBench (`arx_2604.20087`) and SkillFlow (`arx_2604.17308`) are
+  benchmarks for continual skill generation/discovery/repair/maintenance. The
+  abstract-level signal is that no method dominates all tasks/models, external
+  feedback matters, and self-feedback alone can drift.
+- From Skill Text to Skill Structure (`arx_2604.24026`) explicitly decomposes
+  skills into scheduling, structural, and logical representations for discovery
+  and risk assessment. This supports structured views over skill artifacts, but
+  not necessarily a cold-core skill trait.
+
 ## Current Design Pressure
 
 Things that look more important after the literature pass:

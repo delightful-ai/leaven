@@ -1,4 +1,10 @@
 //! Common cold-core imports.
+//!
+//! Pull in this prelude when implementing optimizers, proposers, or
+//! evaluators that need the full algebra without enumerating each
+//! item. For consumers that only need a slice (e.g. analysis tooling
+//! that touches assessments), prefer importing directly from the
+//! per-concept modules.
 
 pub use crate::artifact::{Artifact, ArtifactIdentity, ContentAddressed};
 pub use crate::evaluation::{

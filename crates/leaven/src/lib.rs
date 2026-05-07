@@ -23,7 +23,7 @@ pub use leaven_engine::{
 };
 pub use leaven_kernel::{
     Amount, AmountError, Budget, BudgetSnapshot, CandidateId, ContentId, Cost, CostUnit,
-    ErrorRecord, MetadataBag, ProposalId,
+    ErrorRecord, FiniteF64, FiniteF64Error, MetadataBag, ProposalId,
 };
 pub use leaven_surface::{
     EditSurface, Part, PartAddress, PartSelection, SurfaceError, SurfaceFingerprint,

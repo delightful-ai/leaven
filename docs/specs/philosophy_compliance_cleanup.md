@@ -117,6 +117,11 @@ contract tests once the trait is public and behavior-bearing.
 - `PartKind` and `Part::kind` were removed from `leaven-surface`; part
   semantics now live in the surface-defined `View<'a>` or downstream
   capability traits instead of a closed framework-wide taxonomy.
+- Raw public weights and metadata floats now use `FiniteF64`, preserving signed
+  values while making `NaN` and infinity unrepresentable in attribution,
+  population events, and metadata.
+- The canonical coverage recipe now enables branch coverage and enforces a
+  branch floor alongside the existing line floor.
 - `DynRenderer` is not exposed as an empty marker trait. The planned surface is
   preserved as a TODO until the erased value/target/view contract exists.
 - `RunPersistence` moved out of `engine.rs` into a named persistence capability
@@ -181,4 +186,5 @@ This audit is not complete until:
 - Every open finding above is fixed or has an explicit milestone-level deferral
   with a reason.
 - `docs/testing/README.md` names any new suites added by the cleanup.
-- `just check` passes without lowering `coverage_line_floor`.
+- `just check` passes without lowering `coverage_line_floor` or
+  `coverage_branch_floor`.
