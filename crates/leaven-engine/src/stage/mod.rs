@@ -15,5 +15,5 @@ pub use optimizer::{Optimizer, OptimizerError, StepStatus};
 pub use population::{Population, PopulationEvent, PopulationView};
 pub use preference::{DynPreferenceRelation, PreferenceRelation};
 pub use proposer::{Arity, DynProposer, ProposalError, Proposer};
-pub use renderer::{RenderError, RenderReport, Renderer, WorkspaceRenderer};
+pub use renderer::{MaterializationReport, MaterializeError, Materializer, RenderError, Renderer};
 pub use stopper::{DynStopper, Stopper};

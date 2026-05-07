@@ -856,6 +856,7 @@ dependencies = [
 name = "leaven-workspace-local"
 version = "0.0.0"
 dependencies = [
+ "futures",
  "leaven-kernel",
  "leaven-workspace",
 ]
@@ -976,7 +977,13 @@ dependencies = [
 name = "p4_meta_harness_lite"
 version = "0.0.0"
 dependencies = [
+ "futures",
  "leaven",
+ "leaven-core",
+ "leaven-engine",
+ "leaven-kernel",
+ "leaven-workspace",
+ "leaven-workspace-local",
 ]
 
 [[package]]

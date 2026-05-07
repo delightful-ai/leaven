@@ -16,17 +16,17 @@ pub trait Renderer<P: OptimizationProblem, T, Target>: Send + Sync {
 }
 
 #[allow(async_fn_in_trait)]
-pub trait WorkspaceRenderer<P: OptimizationProblem, T>: Send + Sync {
-    async fn render_into(
+pub trait Materializer<P: OptimizationProblem, T>: Send + Sync {
+    async fn materialize_into(
         &self,
         value: &T,
         workspace: &mut leaven_workspace::WorkspaceView<'_>,
         ctx: crate::RenderContext<'_, P>,
-    ) -> Result<Metered<RenderReport>, RenderError>;
+    ) -> Result<Metered<MaterializationReport>, MaterializeError>;
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct RenderReport {
+pub struct MaterializationReport {
     pub files_written: usize,
     pub bytes_written: u64,
     pub truncations: Vec<TruncationNote>,
@@ -42,4 +42,14 @@ pub struct TruncationNote {
 pub enum RenderError {
     #[error("render failed: {0}")]
     Message(String),
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum MaterializeError {
+    #[error("materialize failed: {0}")]
+    Message(String),
+    #[error(transparent)]
+    Workspace(#[from] leaven_workspace::WorkspaceError),
+    #[error(transparent)]
+    Path(#[from] leaven_workspace::WorkspacePathError),
 }

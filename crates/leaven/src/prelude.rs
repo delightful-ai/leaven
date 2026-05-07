@@ -6,8 +6,9 @@ pub use leaven_core::{
     Proposal, ProposalBatch, ProposalEffect,
 };
 pub use leaven_engine::{
-    Arity, CachePolicy, Engine, Evaluator, Optimizer, Population, PreferenceRelation, Proposer,
-    Renderer, RunContext, RunGraphView, Stopper, TrustPolicy, WorkspaceRenderer, optimize,
+    Arity, CachePolicy, Engine, Evaluator, MaterializationReport, MaterializeError, Materializer,
+    Optimizer, Population, PreferenceRelation, Proposer, Renderer, RunContext, RunGraphView,
+    Stopper, TrustPolicy, optimize,
 };
 pub use leaven_kernel::{
     Budget, CandidateId, ContentId, Cost, CostUnit, ErrorRecord, FiniteF64, MetadataBag,

@@ -11,5 +11,6 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
+futures = { workspace = true }
 leaven-kernel = { workspace = true }
 leaven-workspace = { workspace = true }

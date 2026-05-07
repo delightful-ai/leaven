@@ -35,9 +35,9 @@ pub use reports::{
 };
 pub use stage::{
     Arity, Callback, DynCallback, DynEvaluator, DynPreferenceRelation, DynProposer, DynStopper,
-    EvaluationError, Evaluator, Optimizer, OptimizerError, Population, PopulationEvent,
-    PopulationView, PreferenceRelation, ProposalError, Proposer, RenderError, RenderReport,
-    Renderer, StepStatus, Stopper, WorkspaceRenderer,
+    EvaluationError, Evaluator, MaterializationReport, MaterializeError, Materializer, Optimizer,
+    OptimizerError, Population, PopulationEvent, PopulationView, PreferenceRelation, ProposalError,
+    Proposer, RenderError, Renderer, StepStatus, Stopper,
 };
 pub use trust::{
     Actor, EvalHandle, EvidenceVisibility, ProbeRecorder, ReadScope, TrustPolicy, TrustViolation,
@@ -48,8 +48,9 @@ pub mod prelude {
 
     pub use crate::{
         Arity, BudgetHandle, BudgetLedger, CachePolicy, Callback, Engine, EngineBuilder,
-        EvaluationContext, Evaluator, Optimizer, Population, PreferenceRelation, ProposalContext,
-        Proposer, ReadScope, RenderContext, Renderer, RunContext, RunEvent, RunGraphView,
-        RunResult, StepStatus, Stopper, TrustPolicy, WorkspaceRenderer, optimize,
+        EvaluationContext, Evaluator, MaterializationReport, MaterializeError, Materializer,
+        Optimizer, Population, PreferenceRelation, ProposalContext, Proposer, ReadScope,
+        RenderContext, Renderer, RunContext, RunEvent, RunGraphView, RunResult, StepStatus,
+        Stopper, TrustPolicy, optimize,
     };
 }

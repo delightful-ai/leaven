@@ -7,14 +7,13 @@ pub struct ReflectionPromptRenderer;
 pub struct StructuredPromptRenderer;
 pub struct SurfaceDiffRenderer;
 pub struct SurfacePartsRenderer;
-pub struct ArtifactWorkspaceRenderer;
-pub struct HistoryWorkspaceRenderer;
-pub struct SurfaceWorkspaceRenderer;
+pub struct ArtifactMaterializer;
+pub struct HistoryMaterializer;
+pub struct SurfaceMaterializer;
 pub mod prelude {
     pub use crate::{
-        ArtifactWorkspaceRenderer, CandidateTreeHtmlRenderer, HistoryWorkspaceRenderer,
+        ArtifactMaterializer, CandidateTreeHtmlRenderer, HistoryMaterializer,
         LineageSummaryRenderer, ReflectionPromptRenderer, RunGraphDebugRenderer,
-        StructuredPromptRenderer, SurfaceDiffRenderer, SurfacePartsRenderer,
-        SurfaceWorkspaceRenderer,
+        StructuredPromptRenderer, SurfaceDiffRenderer, SurfaceMaterializer, SurfacePartsRenderer,
     };
 }

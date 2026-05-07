@@ -14,4 +14,18 @@ pub enum WorkspaceError {
     Io(String),
     #[error("workspace cleanup failed: {0}")]
     Cleanup(String),
+    #[error(transparent)]
+    Path(#[from] WorkspacePathError),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
+pub enum WorkspacePathError {
+    #[error("workspace path cannot be empty")]
+    Empty,
+    #[error("workspace path must be relative: {0}")]
+    Absolute(String),
+    #[error("workspace path escapes the workspace: {0}")]
+    ParentTraversal(String),
+    #[error("workspace path contains an empty component: {0}")]
+    EmptyComponent(String),
 }

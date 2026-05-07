@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use futures::future::BoxFuture;
 
-use crate::{WorkspaceError, WorkspaceView};
+use crate::{WorkspaceError, WorkspacePath, WorkspaceView};
 
 pub struct Workspace {
     root: PathBuf,
@@ -18,8 +18,13 @@ impl Workspace {
     }
 
     #[must_use]
-    pub fn root(&self) -> &Path {
-        &self.root
+    pub fn root(&self) -> WorkspacePath {
+        WorkspacePath::root()
+    }
+
+    #[must_use]
+    pub fn local_mount(&self) -> Option<&Path> {
+        self.backend.local_mount()
     }
 
     #[must_use]
@@ -34,4 +39,8 @@ impl Workspace {
 
 pub trait WorkspaceBackend: Send + Sync {
     fn cleanup(self: Box<Self>) -> BoxFuture<'static, Result<(), WorkspaceError>>;
+
+    fn local_mount(&self) -> Option<&Path> {
+        None
+    }
 }
