@@ -22,7 +22,18 @@ just test
 just test-one <nextest selector>
 just test-stress 20 <nextest selector>
 just coverage
+just milestone-p0
+just milestone-p1
+just milestone-p2
+just milestone-p3
+just milestone-p4
+just milestone-examples
 ```
+
+The milestone examples are workspace packages under `examples/p*/`, not Cargo
+example targets. `cargo check --workspace --examples` is therefore not the
+proof command for them. Use the `just milestone-*` recipes, which run each
+example binary directly.
 
 ## Runtime SLA
 

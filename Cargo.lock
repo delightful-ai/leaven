@@ -936,7 +936,12 @@ dependencies = [
 name = "p1_keep_best"
 version = "0.0.0"
 dependencies = [
+ "futures",
  "leaven",
+ "leaven-core",
+ "leaven-engine",
+ "leaven-kernel",
+ "leaven-store-inline",
 ]
 
 [[package]]
