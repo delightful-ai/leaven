@@ -78,6 +78,37 @@ impl ParetoFrontier {
         _assessment: AssessmentId,
         evidence: &CasewiseEvidence<ScalarEvidence>,
     ) -> Vec<PopulationEvent> {
+        self.observe_casewise_scalar_inner(None, candidate, evidence)
+    }
+
+    /// Observe sparse casewise scalar evidence from a named partition.
+    ///
+    /// If this frontier was built with a partition filter, non-matching
+    /// observations are ignored before candidate scores or frontier membership
+    /// can change.
+    pub fn observe_partitioned_casewise_scalar(
+        &mut self,
+        partition: &PartitionId,
+        candidate: CandidateId,
+        _assessment: AssessmentId,
+        evidence: &CasewiseEvidence<ScalarEvidence>,
+    ) -> Vec<PopulationEvent> {
+        self.observe_casewise_scalar_inner(Some(partition), candidate, evidence)
+    }
+
+    fn observe_casewise_scalar_inner(
+        &mut self,
+        partition: Option<&PartitionId>,
+        candidate: CandidateId,
+        evidence: &CasewiseEvidence<ScalarEvidence>,
+    ) -> Vec<PopulationEvent> {
+        if !self.accepts_partition(partition) {
+            return vec![PopulationEvent::Ignored {
+                population: self.id,
+                candidate,
+                reason: "observation excluded by pareto frontier partition filter".to_owned(),
+            }];
+        }
         let before = self.frontier.clone();
         let candidate_scores = self.scores.entry(candidate).or_default();
         for outcome in evidence.outcomes() {
@@ -146,6 +177,13 @@ impl ParetoFrontier {
     #[must_use]
     pub const fn partition_filter(&self) -> &PartitionFilter {
         &self.partition_filter
+    }
+
+    fn accepts_partition(&self, partition: Option<&PartitionId>) -> bool {
+        match &self.partition_filter {
+            PartitionFilter::All => true,
+            PartitionFilter::Only(allowed) => partition.is_some_and(|id| allowed.contains(id)),
+        }
     }
 
     fn recompute_frontier(&mut self) {

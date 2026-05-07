@@ -20,3 +20,8 @@ leaven-preference = { workspace = true }
 leaven-population = { workspace = true }
 leaven-render = { workspace = true }
 leaven-lm = { workspace = true }
+
+[dev-dependencies]
+futures = { workspace = true }
+leaven-store-inline = { workspace = true }
+proptest = { workspace = true }

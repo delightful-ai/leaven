@@ -131,16 +131,24 @@ Use the narrowest layer that proves the claim.
 - `crates/leaven/tests/pairwise_tournament.rs`: P2 end-to-end scenario for a
   registered pairwise judge, pairwise evidence storage by reference, fitted
   tournament population update, and best-candidate result.
+- `crates/leaven/tests/gepa_parity.rs`: P3 end-to-end scenario for explicit
+  edit-surface GEPA, per-case train evidence, train-filtered Pareto frontier
+  updates, surface-edit lowering, and best-candidate result.
 - `crates/leaven/tests/topology_contract.rs`: guardrails for the full corrected
   v0.2.1b workspace member list, `src/lib.rs` skeleton presence,
   Leaven-to-Leaven dependency DAG, and cold-core leak boundaries.
 - `crates/leaven-evidence/tests/scalar.rs`,
+  `crates/leaven-evidence/tests/casewise.rs`,
   `crates/leaven-evidence/tests/attribution.rs`,
   `crates/leaven-preference/tests/scalar.rs`,
   `crates/leaven-population/tests/keep_best.rs`, and
   `crates/leaven-store-inline/tests/evidence.rs`: finite scalar and
   attribution evidence, scalar preference, keep-best, and inline store behavior
   now covered by the canonical coverage gate.
+- `crates/leaven-population/tests/pareto_frontier.rs` and
+  `crates/leaven-gepa/tests/gepa_smoke.rs`: P3 casewise Pareto frontier laws,
+  partition filtering, GEPA surface ownership, surface-edit lowering, candidate
+  selector separation, and proposer read-scope coverage.
 - `crates/leaven-kernel/tests/finite_f64.rs`: finite signed float construction,
   serde round trips, deserialization refusal, and metadata float coverage.
 

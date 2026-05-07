@@ -1,11 +1,23 @@
 use std::collections::BTreeMap;
 
-use leaven_core::{Artifact, ArtifactIdentity, Evidence, OptimizationProblem};
-use leaven_engine::{BudgetLedger, RunContext, RunGraph};
+use futures::executor::block_on;
+use leaven_core::{
+    Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, AssessmentTarget,
+    EvaluationPurpose, EvaluationRequest, EvaluationSet, Evidence, OptimizationProblem,
+    ProposalBatch, ProposalBatchSemantics, ResolvedEvaluationRequest, ResolvedRequestKind,
+};
+use leaven_engine::{
+    BudgetLedger, CachePolicy, CaseSet, EvaluationContext, EvaluationError, Evaluator,
+    ProposalContext, ProposalError, Proposer, RunContext, RunGraph, TrustPolicy,
+};
 use leaven_gepa::{Gepa, ReflectiveMutation, SurfaceProposer};
-use leaven_kernel::{ContentId, RunId};
+use leaven_kernel::{
+    Budget, ContentId, Cost, EvaluatorId, Fingerprint, MetadataBag, Metered, ProposerId, RunId,
+};
 use leaven_population::ParetoFrontier;
+use leaven_store_inline::InlineEvidenceStore;
 use leaven_surface::{EditSurface, Part, PartAddress, SurfaceError, SurfaceFingerprint};
+use proptest::prelude::*;
 
 #[test]
 fn gepa_owns_surface_and_lowers_selected_part_edits() {
@@ -32,6 +44,37 @@ fn gepa_owns_surface_and_lowers_selected_part_edits() {
     assert_eq!(changed.0.get("search").unwrap(), "query");
 }
 
+proptest! {
+    #[test]
+    fn surface_lowering_then_apply_changes_only_selected_part(
+        mutate_answer in any::<bool>(),
+        answer in "[a-z]{0,16}",
+        search in "[a-z]{0,16}",
+        edit in "[a-z]{0,16}",
+    ) {
+        let artifact = PartMapArtifact(BTreeMap::from([
+            ("answer".to_owned(), answer.clone()),
+            ("search".to_owned(), search.clone()),
+        ]));
+        let gepa = Gepa::<SmokeProblem, PartMapSurface, ParetoFrontier>::new(
+            PartMapSurface,
+            ParetoFrontier::by_case().build(),
+        );
+        let selected = if mutate_answer { "answer" } else { "search" };
+        let untouched = if mutate_answer { "search" } else { "answer" };
+        let untouched_before = artifact.0.get(untouched).cloned();
+
+        let change = gepa
+            .change_part(&artifact, selected.to_owned(), edit.clone())
+            .unwrap();
+        let changed = artifact.apply_change(&change).unwrap();
+
+        prop_assert_eq!(artifact.0.get(selected), Some(if mutate_answer { &answer } else { &search }));
+        prop_assert_eq!(changed.0.get(selected), Some(&edit));
+        prop_assert_eq!(changed.0.get(untouched), untouched_before.as_ref());
+    }
+}
+
 #[test]
 fn gepa_candidate_selector_is_population_backed() {
     let mut graph = RunGraph::<SmokeProblem>::new(RunId::new());
@@ -53,6 +96,56 @@ fn gepa_candidate_selector_is_population_backed() {
         Gepa::<SmokeProblem, PartMapSurface, ParetoFrontier>::new(PartMapSurface, frontier);
 
     assert_eq!(gepa.select_candidate(ctx.graph()), Some(seed));
+}
+
+#[test]
+fn hidden_validation_partitions_are_not_visible_to_gepa_proposers() {
+    block_on(async {
+        let mut graph = RunGraph::<SmokeProblem>::new(RunId::new());
+        let mut budget = BudgetLedger::new(Budget::unlimited());
+        let store = InlineEvidenceStore::<SmokeEvidence>::new("inline");
+        let validation = leaven_core::PartitionId::from("VALIDATION");
+        let case_set = CaseSet::new(vec![()])
+            .with_partition(validation.clone(), vec![leaven_kernel::CaseId::new(0)]);
+        let candidate = {
+            let mut ctx = RunContext::<SmokeProblem>::new(&mut graph, &mut budget);
+            ctx.insert_seed(
+                PartMapArtifact(BTreeMap::from([("answer".to_owned(), "draft".to_owned())])),
+                0,
+            )
+            .unwrap()
+        };
+        let assessment = {
+            let evaluator = VisibilityEvaluator;
+            let mut ctx = RunContext::<SmokeProblem>::new(&mut graph, &mut budget)
+                .with_case_set(&case_set)
+                .with_evidence_store(&store);
+            ctx.evaluate_with(
+                &evaluator,
+                EvaluationRequest::Independent {
+                    candidates: vec![candidate],
+                    set: EvaluationSet::Partition(validation.clone()),
+                    granularity: AssessmentGranularity::Aggregate,
+                    purpose: EvaluationPurpose::Validation,
+                },
+            )
+            .await
+            .unwrap()
+            .assessment_ids[0]
+        };
+        let proposer = HiddenPartitionInspectingProposer {
+            hidden: validation.clone(),
+            assessment,
+            candidate,
+        };
+        let mut ctx = RunContext::<SmokeProblem>::new(&mut graph, &mut budget)
+            .with_trust_policy(TrustPolicy::default().hide_from_proposers([validation]));
+
+        let report = ctx.propose(&proposer, ()).await.unwrap();
+
+        assert!(report.proposal_ids.is_empty());
+        assert_eq!(report.cost, Cost::zero());
+    });
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -107,9 +200,83 @@ impl OptimizationProblem for SmokeProblem {
     type ProposalAnnotations = ();
 }
 
+#[derive(Clone, Debug)]
 struct SmokeEvidence;
 
 impl Evidence for SmokeEvidence {}
+
+struct VisibilityEvaluator;
+
+impl Evaluator<SmokeProblem> for VisibilityEvaluator {
+    fn id(&self) -> EvaluatorId {
+        EvaluatorId::PRIMARY
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        Fingerprint::from_bytes([7; 32])
+    }
+
+    fn cache_policy(&self, _request: &ResolvedEvaluationRequest) -> CachePolicy {
+        CachePolicy::Never
+    }
+
+    async fn evaluate(
+        &self,
+        request: ResolvedEvaluationRequest,
+        _ctx: EvaluationContext<'_, SmokeProblem>,
+    ) -> Result<Metered<Vec<Assessment<SmokeProblem>>>, EvaluationError> {
+        let ResolvedRequestKind::Independent { candidates } = request.kind else {
+            return Err(EvaluationError::Message(
+                "expected independent request".to_owned(),
+            ));
+        };
+        Ok(Metered::new(
+            candidates
+                .into_iter()
+                .map(|candidate| Assessment::Independent {
+                    candidate,
+                    target: AssessmentTarget::EvaluationSet(leaven_kernel::EvaluationSetId::new()),
+                    evidence: SmokeEvidence,
+                    cost: Cost::metric_calls(1),
+                    metadata: MetadataBag::new(),
+                })
+                .collect(),
+            Cost::metric_calls(1),
+        ))
+    }
+}
+
+struct HiddenPartitionInspectingProposer {
+    hidden: leaven_core::PartitionId,
+    assessment: leaven_kernel::AssessmentId,
+    candidate: leaven_kernel::CandidateId,
+}
+
+impl Proposer<SmokeProblem> for HiddenPartitionInspectingProposer {
+    type Request = ();
+
+    fn id(&self) -> ProposerId {
+        ProposerId::from("gepa-reflection")
+    }
+
+    async fn propose(
+        &self,
+        _request: Self::Request,
+        ctx: ProposalContext<'_, SmokeProblem>,
+    ) -> Result<Metered<ProposalBatch<SmokeProblem>>, ProposalError> {
+        assert!(ctx.read_scope().hidden_partitions.contains(&self.hidden));
+        assert!(ctx.graph().assessment(self.assessment).is_none());
+        assert!(ctx.graph().assessments(self.candidate).is_empty());
+        Ok(Metered::new(
+            ProposalBatch {
+                proposals: Vec::new(),
+                semantics: ProposalBatchSemantics::Alternatives,
+                metadata: MetadataBag::new(),
+            },
+            Cost::zero(),
+        ))
+    }
+}
 
 #[derive(Clone, Debug)]
 struct PartMapSurface;

@@ -1,27 +1,33 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use futures::executor::block_on;
+use leaven::prelude::{Gepa, ReflectiveMutation, SurfaceProposer};
+use leaven::stdlib::{
+    evidence::{CaseOutcome, CasewiseEvidence, ScalarEvidence},
+    populations::ParetoFrontier,
+};
 use leaven::{
     Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, AssessmentTarget, Budget,
-    CachePolicy, CandidateId, ContentId, Cost, EvaluationRequest, Evaluator, Optimizer, Proposal,
-    ProposalBatch, ProposalBatchSemantics, RunEvent, TrustPolicy,
+    CachePolicy, CandidateId, ContentId, Cost, EvaluationRequest, Evaluator, InfoRef, Optimizer,
+    Proposal, ProposalBatch, ProposalBatchSemantics, ProposalEffect, RunEvent, TrustPolicy,
 };
 use leaven_core::{
     EvaluationPurpose, EvaluationSet, OptimizationProblem, PartitionId, ResolvedEvaluationRequest,
     ResolvedRequestKind,
 };
 use leaven_engine::{CaseSet, EvaluationContext, EvaluationError, OptimizerError, RunContext};
-use leaven_evidence::{CaseOutcome, CasewiseEvidence, ScalarEvidence};
-use leaven_gepa::{GateDecision, Gepa, ReflectiveMutation, SurfaceProposer};
-use leaven_kernel::{CaseId, EvaluatorId, Fingerprint, MetadataBag, Metered, StageId};
-use leaven_population::ParetoFrontier;
+use leaven_kernel::{
+    AssessmentId, CaseId, EvaluationRequestId, EvaluatorId, Fingerprint, MetadataBag, Metered,
+    StageId,
+};
 use leaven_store_inline::InlineEvidenceStore;
 use leaven_surface::{EditSurface, Part, PartAddress, SurfaceError, SurfaceFingerprint};
 
 const TRAIN: &str = "TRAIN";
 const VALIDATION: &str = "VALIDATION";
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+#[test]
+fn engine_runs_gepa_parity_end_to_end() {
     block_on(async {
         let store = InlineEvidenceStore::<CasewiseEvidence<ScalarEvidence>>::new("inline");
         let cases = CaseSet::new(vec![CaseSpec, CaseSpec, CaseSpec])
@@ -39,13 +45,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             )
             .evaluator(PartMapEvaluator)
             .build();
-        let seed = engine.insert_seed(
-            PartMapArtifact(BTreeMap::from([
-                ("answer".to_owned(), "draft answer".to_owned()),
-                ("search".to_owned(), "stable search query".to_owned()),
-            ])),
-            0,
-        )?;
+        let seed = engine
+            .insert_seed(
+                PartMapArtifact(BTreeMap::from([
+                    ("answer".to_owned(), "draft answer".to_owned()),
+                    ("search".to_owned(), "stable search query".to_owned()),
+                ])),
+                0,
+            )
+            .unwrap();
         let mut optimizer = GepaParityOptimizer {
             gepa: Gepa::new(
                 PartMapSurface,
@@ -56,14 +64,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             proposer: ReflectiveMutation::new(PartMapEdit::Replace("improved answer".to_owned())),
             seed,
             best: None,
+            candidate: None,
+            requests: Vec::new(),
+            assessments: Vec::new(),
+            evidence_cases: Vec::new(),
             done: false,
         };
 
-        let result = engine.run(&mut optimizer, &cases, &store).await?;
+        let result = engine.run(&mut optimizer, &cases, &store).await.unwrap();
+
         let best = result.best.expect("gepa parity should choose a winner");
         let best_artifact = engine.view().artifact(best).expect("best exists");
-
         assert_eq!(optimizer.best, Some(best));
+        assert_eq!(optimizer.candidate, Some(best));
         assert_eq!(best_artifact.0.get("answer").unwrap(), "improved answer");
         assert_eq!(
             best_artifact.0.get("search").unwrap(),
@@ -71,13 +84,45 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
         assert_eq!(engine.view().evaluation_request_count(), 2);
         assert_eq!(engine.view().assessment_count(), 2);
-
-        println!(
-            "p3 gepa parity: seed={seed} best={best} answer={}",
-            best_artifact.0.get("answer").unwrap()
+        assert_eq!(optimizer.requests.len(), 2);
+        assert_eq!(optimizer.assessments.len(), 2);
+        assert_eq!(
+            optimizer.evidence_cases,
+            vec![
+                vec![CaseId::new(0), CaseId::new(1)],
+                vec![CaseId::new(0), CaseId::new(1)]
+            ]
         );
-        Ok(())
-    })
+        for request in &optimizer.requests {
+            let request = engine.view().evaluation_request(*request).unwrap();
+            assert_train_per_case_request(&request);
+        }
+        let proposal = engine
+            .view()
+            .proposal_that_created(best)
+            .expect("best should be proposal-created");
+        assert!(matches!(
+            proposal.effect(),
+            ProposalEffect::Change { target, .. } if *target == seed
+        ));
+        assert_event_subsequence(
+            &engine.view().events().collect::<Vec<_>>(),
+            &[
+                EventKind::OptimizationStarted,
+                EventKind::IterationStarted,
+                EventKind::EvaluationRequested,
+                EventKind::EvaluationCompleted,
+                EventKind::PopulationUpdated,
+                EventKind::ProposalBatchProduced,
+                EventKind::ProposalRecorded,
+                EventKind::ApplySucceeded,
+                EventKind::EvaluationRequested,
+                EventKind::EvaluationCompleted,
+                EventKind::PopulationUpdated,
+                EventKind::OptimizationEnded,
+            ],
+        );
+    });
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -188,6 +233,10 @@ struct GepaParityOptimizer {
     proposer: ReflectiveMutation<PartMapEdit>,
     seed: CandidateId,
     best: Option<CandidateId>,
+    candidate: Option<CandidateId>,
+    requests: Vec<EvaluationRequestId>,
+    assessments: Vec<AssessmentId>,
+    evidence_cases: Vec<Vec<CaseId>>,
     done: bool,
 }
 
@@ -206,6 +255,7 @@ impl Optimizer<PartMapProblem> for GepaParityOptimizer {
         let baseline_evidence = ctx
             .assessment_evidence(baseline.assessment)
             .map_err(|err| OptimizerError::Message(err.to_string()))?;
+        self.record_observation(baseline.request, baseline.assessment, &baseline_evidence);
         let baseline_events = self
             .gepa
             .population_mut()
@@ -247,7 +297,7 @@ impl Optimizer<PartMapProblem> for GepaParityOptimizer {
                 ProposalBatch {
                     proposals: vec![
                         Proposal::mutate(parent, change)
-                            .informed_by([leaven::InfoRef::Candidate(parent)])
+                            .informed_by([InfoRef::Candidate(parent)])
                             .build(),
                     ],
                     semantics: ProposalBatchSemantics::Alternatives,
@@ -270,10 +320,12 @@ impl Optimizer<PartMapProblem> for GepaParityOptimizer {
         let candidate_evidence = ctx
             .assessment_evidence(screened.assessment)
             .map_err(|err| OptimizerError::Message(err.to_string()))?;
-        let decision = self
-            .gepa
-            .decide(baseline.average_score, screened.average_score);
-        assert_eq!(decision, GateDecision::Accept);
+        self.record_observation(screened.request, screened.assessment, &candidate_evidence);
+        assert!(
+            self.gepa
+                .decide(baseline.average_score, screened.average_score)
+                .is_accept()
+        );
         let events = self
             .gepa
             .population_mut()
@@ -288,6 +340,7 @@ impl Optimizer<PartMapProblem> for GepaParityOptimizer {
             events,
         });
         self.best = self.gepa.population().best();
+        self.candidate = Some(candidate);
         self.done = true;
         Ok(leaven::StepStatus::Done)
     }
@@ -323,16 +376,29 @@ impl GepaParityOptimizer {
         let evidence = ctx
             .assessment_evidence(assessment)
             .map_err(|err| OptimizerError::Message(err.to_string()))?;
-        let average_score = average_score(&evidence);
         Ok(CasewiseReport {
+            request: report.request_id,
             assessment,
-            average_score,
+            average_score: average_score(&evidence),
         })
+    }
+
+    fn record_observation(
+        &mut self,
+        request: EvaluationRequestId,
+        assessment: AssessmentId,
+        evidence: &CasewiseEvidence<ScalarEvidence>,
+    ) {
+        self.requests.push(request);
+        self.assessments.push(assessment);
+        self.evidence_cases
+            .push(evidence.outcomes().iter().map(CaseOutcome::case).collect());
     }
 }
 
 struct CasewiseReport {
-    assessment: leaven_kernel::AssessmentId,
+    request: EvaluationRequestId,
+    assessment: AssessmentId,
     average_score: f64,
 }
 
@@ -390,6 +456,77 @@ impl Evaluator<PartMapProblem> for PartMapEvaluator {
             });
         }
         Ok(Metered::new(assessments, Cost::metric_calls(1)))
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum EventKind {
+    OptimizationStarted,
+    IterationStarted,
+    EvaluationRequested,
+    EvaluationCompleted,
+    PopulationUpdated,
+    ProposalBatchProduced,
+    ProposalRecorded,
+    ApplySucceeded,
+    OptimizationEnded,
+}
+
+impl EventKind {
+    fn from_event(event: &RunEvent) -> Option<Self> {
+        match event {
+            RunEvent::OptimizationStarted { .. } => Some(Self::OptimizationStarted),
+            RunEvent::IterationStarted { .. } => Some(Self::IterationStarted),
+            RunEvent::EvaluationRequested { .. } => Some(Self::EvaluationRequested),
+            RunEvent::EvaluationCompleted { .. } => Some(Self::EvaluationCompleted),
+            RunEvent::PopulationUpdated { .. } => Some(Self::PopulationUpdated),
+            RunEvent::ProposalBatchProduced { .. } => Some(Self::ProposalBatchProduced),
+            RunEvent::ProposalRecorded { .. } => Some(Self::ProposalRecorded),
+            RunEvent::ApplySucceeded { .. } => Some(Self::ApplySucceeded),
+            RunEvent::OptimizationEnded { .. } => Some(Self::OptimizationEnded),
+            RunEvent::ApplyFailed { .. }
+            | RunEvent::BudgetCharged { .. }
+            | RunEvent::Error { .. }
+            | RunEvent::IterationEnded { .. }
+            | RunEvent::OptimizationStopping { .. } => None,
+        }
+    }
+}
+
+fn assert_event_subsequence(events: &[&RunEvent], expected: &[EventKind]) {
+    let mut cursor = 0;
+    for event in events {
+        if EventKind::from_event(event).is_some_and(|actual| actual == expected[cursor]) {
+            cursor += 1;
+            if cursor == expected.len() {
+                return;
+            }
+        }
+    }
+    panic!("missing expected event subsequence at index {cursor}");
+}
+
+fn assert_train_per_case_request(request: &leaven_engine::EvaluationRequestView<'_>) {
+    match request.request() {
+        EvaluationRequest::Independent {
+            set,
+            granularity,
+            purpose,
+            ..
+        } => {
+            assert!(matches!(
+                set,
+                EvaluationSet::Partition(partition) if partition == &PartitionId::from(TRAIN)
+            ));
+            assert_eq!(*granularity, AssessmentGranularity::PerCase);
+            assert!(matches!(
+                purpose,
+                EvaluationPurpose::SeedBaseline | EvaluationPurpose::Search
+            ));
+        }
+        EvaluationRequest::Pairwise { .. } | EvaluationRequest::Listwise { .. } => {
+            panic!("expected independent GEPA parity evaluation")
+        }
     }
 }
 

@@ -592,6 +592,7 @@ dependencies = [
 name = "leaven-gepa"
 version = "0.0.0"
 dependencies = [
+ "futures",
  "leaven-core",
  "leaven-engine",
  "leaven-evidence",
@@ -600,7 +601,9 @@ dependencies = [
  "leaven-population",
  "leaven-preference",
  "leaven-render",
+ "leaven-store-inline",
  "leaven-surface",
+ "proptest",
 ]
 
 [[package]]
