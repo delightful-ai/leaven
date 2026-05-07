@@ -61,7 +61,7 @@ fn set_combinators_resolve_stably() {
 }
 
 #[test]
-fn sample_recent_and_stratified_are_deterministic_subsets() {
+fn sample_and_recent_are_deterministic_subsets() {
     let cases = CaseSet::new(vec!["a", "b", "c", "d"]);
 
     assert_eq!(
@@ -84,22 +84,10 @@ fn sample_recent_and_stratified_are_deterministic_subsets() {
         ),
         vec![1, 2]
     );
-    assert_eq!(
-        ids(
-            &cases,
-            &EvaluationSet::Stratified {
-                of: Box::new(EvaluationSet::All),
-                k: 2,
-                by: Tag("unused".into()),
-                seed: 0,
-            }
-        ),
-        vec![0, 1]
-    );
 }
 
 #[test]
-fn unsupported_tagged_set_is_a_typed_error() {
+fn tag_index_dependent_sets_are_typed_unsupported_errors() {
     let cases = CaseSet::new(vec!["a"]);
 
     let err = cases
@@ -110,6 +98,21 @@ fn unsupported_tagged_set_is_a_typed_error() {
         err,
         EvaluationResolveError::UnsupportedSet(UnsupportedEvaluationSet::Tagged(Tag(tag)))
             if tag.as_str() == "gold"
+    ));
+
+    let err = cases
+        .resolve(&EvaluationSet::Stratified {
+            of: Box::new(EvaluationSet::All),
+            k: 1,
+            by: Tag("difficulty".into()),
+            seed: 0,
+        })
+        .unwrap_err();
+
+    assert!(matches!(
+        err,
+        EvaluationResolveError::UnsupportedSet(UnsupportedEvaluationSet::Stratified { by: Tag(tag) })
+            if tag.as_str() == "difficulty"
     ));
 }
 

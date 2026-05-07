@@ -95,6 +95,9 @@ contract tests once the trait is public and behavior-bearing.
   cache-critical case-set version to `String`.
 - Unsupported tagged evaluation sets now return a typed
   `UnsupportedEvaluationSet::Tagged` refusal instead of a string payload.
+- Stratified evaluation sets now return a typed unsupported-set refusal until
+  the case set owns a real tag index; the resolver no longer silently truncates
+  cases while ignoring the requested stratum key.
 - `RunGraphView` now exposes the spec-required read-scoped assessment query and
   evaluation-request view surface, backed by the existing
   `assessments_by_candidate` index instead of public graph internals.

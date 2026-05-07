@@ -93,7 +93,7 @@ Use the narrowest layer that proves the claim.
   saturating cost combination.
 - `crates/leaven-engine/tests/case_set_resolution.rs`: evaluation-set
   resolution examples for partitions, explicit cases, set combinators,
-  deterministic sampling, and typed refusal.
+  deterministic sampling, and typed refusal for tag-index-dependent sets.
 - `crates/leaven-engine/tests/trust_policy.rs`: read-scope and actor-policy
   examples for hidden partitions and typed trust refusals.
 - `crates/leaven-engine/tests/engine_loop.rs`: engine run-loop scenarios for

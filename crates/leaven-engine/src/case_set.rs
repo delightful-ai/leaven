@@ -89,11 +89,9 @@ impl<C> CaseSet<C> {
                 ids.truncate(*n);
                 Ok(ids)
             }
-            EvaluationSet::Stratified { of, k, .. } => {
-                let mut ids = self.resolve_ids(of)?;
-                ids.truncate(*k);
-                Ok(ids)
-            }
+            EvaluationSet::Stratified { by, .. } => Err(EvaluationResolveError::UnsupportedSet(
+                UnsupportedEvaluationSet::Stratified { by: by.clone() },
+            )),
             EvaluationSet::Union(sets) => {
                 let mut ids = Vec::new();
                 for set in sets {
@@ -164,12 +162,15 @@ impl<C> CaseSetBuilder<C> {
 pub enum UnsupportedEvaluationSet {
     /// Tagged sets require a tag index that the current resolver does not own.
     Tagged(Tag),
+    /// Stratified sets require a tag index that the current resolver does not own.
+    Stratified { by: Tag },
 }
 
 impl fmt::Display for UnsupportedEvaluationSet {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Tagged(tag) => write!(f, "tagged:{}", tag.0),
+            Self::Stratified { by } => write!(f, "stratified-by:{}", by.0),
         }
     }
 }
