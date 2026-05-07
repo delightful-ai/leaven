@@ -1385,7 +1385,7 @@ pub use stage::{
 
 pub use trust::{
     Actor, EvalHandle, EvidenceVisibility, ProbeRecorder, ReadScope,
-    TrustPolicy,
+    TrustPolicy, TrustViolation,
 };
 
 pub mod prelude {

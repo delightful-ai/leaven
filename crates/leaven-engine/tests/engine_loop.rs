@@ -1,7 +1,10 @@
 mod support;
 
 use futures::executor::block_on;
-use leaven_engine::{CaseSet, Engine, Optimizer, OptimizerError, RunContext, RunEvent, StepStatus};
+use leaven_core::PartitionId;
+use leaven_engine::{
+    CaseSet, Engine, Optimizer, OptimizerError, RunContext, RunEvent, StepStatus, TrustPolicy,
+};
 use leaven_kernel::ErrorKind;
 use leaven_store_inline::InlineEvidenceStore;
 
@@ -40,6 +43,26 @@ fn engine_continues_until_optimizer_reports_done() {
                 .count(),
             2
         );
+    });
+}
+
+#[test]
+fn engine_trust_policy_reaches_optimizer_context() {
+    block_on(async {
+        let secret = PartitionId::from("secret");
+        let mut engine = Engine::<TestProblem>::builder()
+            .trust_policy(TrustPolicy::default().hide_from_optimizers([secret.clone()]))
+            .build();
+        let cases = CaseSet::new(vec!["case"]);
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let mut optimizer = TrustInspectingOptimizer {
+            expected_hidden: secret,
+            observed_hidden: false,
+        };
+
+        engine.run(&mut optimizer, &cases, &store).await.unwrap();
+
+        assert!(optimizer.observed_hidden);
     });
 }
 
@@ -114,6 +137,32 @@ fn engine_records_step_errors_and_ends_run() {
 
 struct ContinueThenDone {
     steps: usize,
+}
+
+struct TrustInspectingOptimizer {
+    expected_hidden: PartitionId,
+    observed_hidden: bool,
+}
+
+impl Optimizer<TestProblem> for TrustInspectingOptimizer {
+    async fn step(
+        &mut self,
+        ctx: &mut RunContext<'_, TestProblem>,
+    ) -> Result<StepStatus, OptimizerError> {
+        self.observed_hidden = ctx
+            .graph()
+            .read_scope()
+            .hidden_partitions
+            .contains(&self.expected_hidden);
+        Ok(StepStatus::Done)
+    }
+
+    fn best_candidate(
+        &self,
+        _graph: leaven_engine::RunGraphView<'_, TestProblem>,
+    ) -> Option<leaven_kernel::CandidateId> {
+        None
+    }
 }
 
 impl Optimizer<TestProblem> for ContinueThenDone {

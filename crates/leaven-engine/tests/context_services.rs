@@ -12,11 +12,13 @@ use leaven_core::{
     ResolvedEvaluationRequest,
 };
 use leaven_engine::{
-    BudgetLedger, CachePolicy, CacheStatus, CaseSet, EvaluationContext, EvaluationError, Evaluator,
-    ProposalContext, ProposalError, Proposer, RunContext, RunEvent, TrustPolicy,
+    BudgetLedger, CachePolicy, CacheStatus, Callback, CaseSet, EvaluationContext, EvaluationError,
+    Evaluator, ProposalContext, ProposalError, Proposer, RunContext, RunEvent, RunGraphView,
+    TrustPolicy,
 };
 use leaven_kernel::{
-    Budget, Cost, ErrorKind, EvaluatorId, Fingerprint, MetadataBag, Metered, ProposerId, StageId,
+    Budget, Cost, ErrorKind, EvaluatorId, Fingerprint, MetadataBag, Metered, ProposerId, RunId,
+    StageId,
 };
 use leaven_store::{EvidenceStore, StoreError};
 use leaven_store_inline::InlineEvidenceStore;
@@ -587,6 +589,114 @@ fn read_scope_hides_assessments_from_forbidden_partitions() {
 }
 
 #[test]
+fn hidden_partition_evaluation_request_records_trust_violation_without_mutation() {
+    block_on(async {
+        let (mut graph, mut budget) = graph_and_budget();
+        let mut cache = leaven_engine::EvaluationCache::default();
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let secret = PartitionId::from("secret");
+        let candidate = {
+            let mut seed_ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+            seed_ctx
+                .insert_seed(TextArtifact("abc".to_owned()), 0)
+                .unwrap()
+        };
+        let evaluator = CountingEvaluator::new(CachePolicy::Never);
+        let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
+            .with_cache(&mut cache)
+            .with_evidence_store(&store)
+            .with_trust_policy(TrustPolicy::default().hide_from_optimizers([secret.clone()]));
+
+        let err = ctx
+            .evaluate_with(
+                &evaluator,
+                EvaluationRequest::Independent {
+                    candidates: vec![candidate],
+                    set: EvaluationSet::Partition(secret.clone()),
+                    granularity: AssessmentGranularity::Aggregate,
+                    purpose: EvaluationPurpose::Search,
+                },
+            )
+            .await
+            .unwrap_err();
+
+        assert!(matches!(
+            err,
+            leaven_engine::RunContextError::TrustViolation(
+                leaven_engine::TrustViolation::HiddenEvaluationPartitions { .. }
+            )
+        ));
+        assert_eq!(evaluator.calls(), 0);
+        assert_eq!(ctx.graph().evaluation_request_count(), 0);
+        assert_eq!(ctx.graph().assessment_count(), 0);
+        assert!(ctx.graph().events().any(|event| matches!(
+            event,
+            RunEvent::Error {
+                error,
+                ..
+            } if error.kind == ErrorKind::Trust
+        )));
+    });
+}
+
+#[test]
+fn callbacks_receive_callback_read_scope() {
+    block_on(async {
+        let (mut graph, mut budget) = graph_and_budget();
+        let mut cache = leaven_engine::EvaluationCache::default();
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let secret = PartitionId::from("secret");
+        let case_set = CaseSet::new(vec!["case"])
+            .with_partition(secret.clone(), vec![leaven_kernel::CaseId::from_index(0)]);
+        let candidate = {
+            let mut seed_ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+            seed_ctx
+                .insert_seed(TextArtifact("abc".to_owned()), 0)
+                .unwrap()
+        };
+        let assessment_id = {
+            let evaluator = CountingEvaluator::new(CachePolicy::Never);
+            let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
+                .with_case_set(&case_set)
+                .with_cache(&mut cache)
+                .with_evidence_store(&store);
+            ctx.evaluate_with(
+                &evaluator,
+                EvaluationRequest::Independent {
+                    candidates: vec![candidate],
+                    set: EvaluationSet::Partition(secret.clone()),
+                    granularity: AssessmentGranularity::Aggregate,
+                    purpose: EvaluationPurpose::FinalTest,
+                },
+            )
+            .await
+            .unwrap()
+            .assessment_ids[0]
+        };
+        let hidden_observations = Arc::new(AtomicUsize::new(0));
+        let visible_observations = Arc::new(AtomicUsize::new(0));
+        let callback = VisibilityCallback {
+            assessment_id,
+            hidden_partition: secret.clone(),
+            hidden_observations: hidden_observations.clone(),
+            visible_observations: visible_observations.clone(),
+        };
+        let mut callbacks: Vec<Box<dyn leaven_engine::DynCallback<TestProblem>>> =
+            vec![Box::new(callback)];
+        let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
+            .with_trust_policy(TrustPolicy::default().hide_from_callbacks([secret]))
+            .with_callbacks(callbacks.as_mut_slice());
+
+        ctx.emit(RunEvent::OptimizationStarted {
+            run_id: RunId::new(),
+        });
+
+        assert_eq!(hidden_observations.load(Ordering::SeqCst), 1);
+        assert_eq!(visible_observations.load(Ordering::SeqCst), 0);
+    });
+}
+
+#[test]
 fn read_scope_hides_nested_assessment_sets_that_reference_forbidden_partitions() {
     block_on(async {
         let (mut graph, mut budget) = graph_and_budget();
@@ -656,6 +766,29 @@ fn read_scope_hides_nested_assessment_sets_that_reference_forbidden_partitions()
 
 struct InspectingProposer {
     hidden: PartitionId,
+}
+
+struct VisibilityCallback {
+    assessment_id: leaven_kernel::AssessmentId,
+    hidden_partition: PartitionId,
+    hidden_observations: Arc<AtomicUsize>,
+    visible_observations: Arc<AtomicUsize>,
+}
+
+impl Callback<TestProblem> for VisibilityCallback {
+    fn on_event(&mut self, _event: &RunEvent, graph: RunGraphView<'_, TestProblem>) {
+        assert!(
+            graph
+                .read_scope()
+                .hidden_partitions
+                .contains(&self.hidden_partition)
+        );
+        if graph.assessment(self.assessment_id).is_none() {
+            self.hidden_observations.fetch_add(1, Ordering::SeqCst);
+        } else {
+            self.visible_observations.fetch_add(1, Ordering::SeqCst);
+        }
+    }
 }
 
 impl Proposer<TestProblem> for InspectingProposer {

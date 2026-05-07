@@ -5,110 +5,227 @@ use std::collections::BTreeSet;
 use leaven_core::{EvaluationRequest, EvaluationSet, PartitionId};
 use leaven_kernel::{EvaluatorId, ProposerId, RendererId};
 
+/// Read authority carried by graph views and stage contexts.
+///
+/// Hidden partitions are excluded from assessment and evaluation-request
+/// queries. Evidence visibility is carried separately so renderers and future
+/// evidence-loading APIs can degrade what they expose without changing which
+/// graph records are visible.
 #[derive(Clone, Debug, Default)]
 pub struct ReadScope {
+    /// Case-set partitions hidden from this actor.
     pub hidden_partitions: BTreeSet<PartitionId>,
+    /// Level of evidence detail visible to this actor.
     pub visible_evidence: EvidenceVisibility,
 }
 
+/// Evidence detail an actor may observe through read-scoped surfaces.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash)]
 pub enum EvidenceVisibility {
+    /// Full evidence records may be rendered or loaded.
     #[default]
     Full,
+    /// Only score-like evidence projections may be exposed.
     ScoresOnly,
+    /// Only summary evidence projections may be exposed.
     SummariesOnly,
+    /// No evidence payload should be exposed.
     None,
 }
 
+/// Trust policy for actor-specific read scopes and evaluation requests.
 #[derive(Clone, Debug, Default)]
 pub struct TrustPolicy {
-    hidden_from_proposers: Vec<PartitionId>,
-    hidden_from_optimizers: Vec<PartitionId>,
+    hidden: HiddenPartitions,
+}
+
+#[derive(Clone, Debug, Default)]
+struct HiddenPartitions {
+    proposers: Vec<PartitionId>,
+    optimizers: Vec<PartitionId>,
+    callbacks: Vec<PartitionId>,
 }
 
 impl TrustPolicy {
+    /// Hide partitions from proposer contexts.
     #[must_use]
     pub fn hide_from_proposers(
         mut self,
         partitions: impl IntoIterator<Item = PartitionId>,
     ) -> Self {
-        self.hidden_from_proposers.extend(partitions);
+        self.hidden.proposers.extend(partitions);
         self
     }
 
+    /// Hide partitions from optimizer contexts.
     #[must_use]
     pub fn hide_from_optimizers(
         mut self,
         partitions: impl IntoIterator<Item = PartitionId>,
     ) -> Self {
-        self.hidden_from_optimizers.extend(partitions);
+        self.hidden.optimizers.extend(partitions);
         self
     }
 
+    /// Hide partitions from callback graph views.
+    #[must_use]
+    pub fn hide_from_callbacks(
+        mut self,
+        partitions: impl IntoIterator<Item = PartitionId>,
+    ) -> Self {
+        self.hidden.callbacks.extend(partitions);
+        self
+    }
+
+    /// Read scope for proposer contexts.
     #[must_use]
     pub fn proposer_read_scope(&self) -> ReadScope {
         ReadScope {
-            hidden_partitions: self.hidden_from_proposers.iter().cloned().collect(),
+            hidden_partitions: self.hidden.proposers.iter().cloned().collect(),
             visible_evidence: EvidenceVisibility::Full,
         }
     }
 
+    /// Read scope for optimizer contexts.
     #[must_use]
     pub fn optimizer_read_scope(&self) -> ReadScope {
         ReadScope {
-            hidden_partitions: self.hidden_from_optimizers.iter().cloned().collect(),
+            hidden_partitions: self.hidden.optimizers.iter().cloned().collect(),
             visible_evidence: EvidenceVisibility::Full,
         }
     }
 
+    /// Read scope for evaluator contexts.
     #[must_use]
     pub fn evaluator_read_scope(&self) -> ReadScope {
         ReadScope::default()
     }
 
-    pub fn check_evaluation_request(&self, actor: &Actor, request: &EvaluationRequest) -> bool {
+    /// Read scope for renderer contexts.
+    #[must_use]
+    pub fn renderer_read_scope(&self) -> ReadScope {
+        ReadScope::default()
+    }
+
+    /// Read scope for callback graph views.
+    #[must_use]
+    pub fn callback_read_scope(&self) -> ReadScope {
+        ReadScope {
+            hidden_partitions: self.hidden.callbacks.iter().cloned().collect(),
+            visible_evidence: EvidenceVisibility::Full,
+        }
+    }
+
+    /// Refuse an evaluation request that references partitions hidden from the actor.
+    pub fn check_evaluation_request(
+        &self,
+        actor: &Actor,
+        request: &EvaluationRequest,
+    ) -> Result<(), TrustViolation> {
         let hidden = match actor {
-            Actor::Optimizer => &self.hidden_from_optimizers,
-            Actor::Proposer(_) => &self.hidden_from_proposers,
-            Actor::Evaluator(_) | Actor::Renderer(_) | Actor::Callback => return true,
+            Actor::Optimizer => &self.hidden.optimizers,
+            Actor::Proposer(_) => &self.hidden.proposers,
+            Actor::Callback => &self.hidden.callbacks,
+            Actor::Evaluator(_) | Actor::Renderer(_) => return Ok(()),
         };
         let set = match request {
             EvaluationRequest::Independent { set, .. }
             | EvaluationRequest::Pairwise { set, .. }
             | EvaluationRequest::Listwise { set, .. } => set,
         };
-        !references_hidden_partition(set, hidden)
+        let partitions = hidden_partitions_referenced(set, hidden);
+        if partitions.is_empty() {
+            Ok(())
+        } else {
+            Err(TrustViolation::HiddenEvaluationPartitions {
+                actor: actor.clone(),
+                partitions,
+            })
+        }
     }
 }
 
-fn references_hidden_partition(set: &EvaluationSet, hidden: &[PartitionId]) -> bool {
+fn hidden_partitions_referenced(set: &EvaluationSet, hidden: &[PartitionId]) -> Vec<PartitionId> {
+    let mut partitions = BTreeSet::new();
+    collect_hidden_partitions(set, hidden, &mut partitions);
+    partitions.into_iter().collect()
+}
+
+fn collect_hidden_partitions(
+    set: &EvaluationSet,
+    hidden: &[PartitionId],
+    partitions: &mut BTreeSet<PartitionId>,
+) {
     match set {
-        EvaluationSet::Partition(partition) => hidden.contains(partition),
-        EvaluationSet::All => !hidden.is_empty(),
-        EvaluationSet::Sample { of, .. } | EvaluationSet::Stratified { of, .. } => {
-            references_hidden_partition(of, hidden)
+        EvaluationSet::Partition(partition) => {
+            if hidden.contains(partition) {
+                partitions.insert(partition.clone());
+            }
         }
-        EvaluationSet::Union(sets) | EvaluationSet::Intersect(sets) => sets
-            .iter()
-            .any(|set| references_hidden_partition(set, hidden)),
+        EvaluationSet::All => partitions.extend(hidden.iter().cloned()),
+        EvaluationSet::Sample { of, .. } | EvaluationSet::Stratified { of, .. } => {
+            collect_hidden_partitions(of, hidden, partitions);
+        }
+        EvaluationSet::Union(sets) | EvaluationSet::Intersect(sets) => {
+            for set in sets {
+                collect_hidden_partitions(set, hidden, partitions);
+            }
+        }
         EvaluationSet::Difference(left, right) => {
-            references_hidden_partition(left, hidden) || references_hidden_partition(right, hidden)
+            collect_hidden_partitions(left, hidden, partitions);
+            collect_hidden_partitions(right, hidden, partitions);
         }
         EvaluationSet::Unscoped
         | EvaluationSet::Cases(_)
         | EvaluationSet::Tagged(_)
-        | EvaluationSet::Recent { .. } => false,
+        | EvaluationSet::Recent { .. } => {}
     }
 }
 
+/// Actor whose read or evaluation authority is being checked.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum Actor {
+    /// The optimizer loop itself.
     Optimizer,
+    /// A proposer stage.
     Proposer(ProposerId),
+    /// An evaluator stage.
     Evaluator(EvaluatorId),
+    /// A renderer stage.
     Renderer(RendererId),
+    /// A callback observing run events.
     Callback,
 }
 
-pub struct EvalHandle;
-pub struct ProbeRecorder;
+/// Trust-policy refusal for an actor operation.
+#[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
+pub enum TrustViolation {
+    /// The actor requested evaluation over one or more hidden partitions.
+    #[error("{actor:?} cannot evaluate hidden partitions: {partitions:?}")]
+    HiddenEvaluationPartitions {
+        /// Actor that made the request.
+        actor: Actor,
+        /// Hidden partitions referenced by the request.
+        partitions: Vec<PartitionId>,
+    },
+}
+
+/// Reserved probe-evaluation handle.
+///
+/// The type is public because the topology reserves the capability, but it is
+/// intentionally not constructible until the probe evaluation contract lands.
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct EvalHandle {
+    _private: (),
+}
+
+/// Reserved graph recorder for probe evaluations.
+///
+/// This becomes constructible only when probe-originated candidates and
+/// assessments have their durable graph contract.
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct ProbeRecorder {
+    _private: (),
+}

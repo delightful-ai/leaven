@@ -39,7 +39,9 @@ pub use stage::{
     PopulationView, PreferenceRelation, ProposalError, Proposer, RenderError, RenderReport,
     Renderer, StepStatus, Stopper, WorkspaceRenderer,
 };
-pub use trust::{Actor, EvalHandle, EvidenceVisibility, ProbeRecorder, ReadScope, TrustPolicy};
+pub use trust::{
+    Actor, EvalHandle, EvidenceVisibility, ProbeRecorder, ReadScope, TrustPolicy, TrustViolation,
+};
 
 pub mod prelude {
     //! Common engine imports.

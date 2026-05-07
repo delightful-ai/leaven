@@ -94,9 +94,10 @@ Use the narrowest layer that proves the claim.
   resolution examples for partitions, explicit cases, set combinators,
   deterministic sampling, and typed refusal.
 - `crates/leaven-engine/tests/trust_policy.rs`: read-scope and actor-policy
-  examples for hidden partitions.
+  examples for hidden partitions and typed trust refusals.
 - `crates/leaven-engine/tests/engine_loop.rs`: engine run-loop scenarios for
-  continuation, optimizer completion, and optimizer error closeout.
+  continuation, optimizer completion, trust-policy wiring, and optimizer error
+  closeout.
 - `crates/leaven-engine/tests/stage_trait_contracts.rs`: static-to-dynamic
   stage adapter contracts for proposer, evaluator, preference, and stopper
   traits.

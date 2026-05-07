@@ -7,7 +7,7 @@ use leaven_store::EvidenceStore;
 use crate::{
     BudgetLedger, Callback, CaseSet, DynCallback, ErrorPolicy, EvaluationCache, Optimizer,
     OptimizerError, ReadScope, RunContext, RunContextError, RunEvent, RunGraph, RunGraphView,
-    StepStatus, StopReason,
+    StepStatus, StopReason, TrustPolicy,
 };
 
 pub struct Engine<P: OptimizationProblem> {
@@ -15,6 +15,7 @@ pub struct Engine<P: OptimizationProblem> {
     budget: BudgetLedger,
     cache: EvaluationCache,
     callbacks: Vec<Box<dyn DynCallback<P>>>,
+    trust: TrustPolicy,
 }
 
 impl<P: OptimizationProblem> Engine<P> {
@@ -63,6 +64,7 @@ impl<P: OptimizationProblem> Engine<P> {
                 .with_case_set(case_set)
                 .with_cache(&mut self.cache)
                 .with_evidence_store(evidence_store)
+                .with_trust_policy(self.trust.clone())
                 .with_callbacks(self.callbacks.as_mut_slice());
             if let Err(error) = optimizer.initialize(&mut ctx).await {
                 self.record_optimizer_error(&error);
@@ -78,6 +80,7 @@ impl<P: OptimizationProblem> Engine<P> {
                     .with_case_set(case_set)
                     .with_cache(&mut self.cache)
                     .with_evidence_store(evidence_store)
+                    .with_trust_policy(self.trust.clone())
                     .with_callbacks(self.callbacks.as_mut_slice())
                     .with_iteration(iteration);
                 optimizer.step(&mut ctx).await
@@ -135,7 +138,7 @@ impl<P: OptimizationProblem> Engine<P> {
             .last()
             .expect("event was just recorded before callback dispatch");
         for callback in &mut self.callbacks {
-            callback.on_event_dyn(event, self.graph.view(ReadScope::default()));
+            callback.on_event_dyn(event, self.graph.view(self.trust.callback_read_scope()));
         }
     }
 }
@@ -146,6 +149,7 @@ pub struct EngineBuilder<P: OptimizationProblem> {
     run_id: RunId,
     budget: Budget,
     callbacks: Vec<Box<dyn DynCallback<P>>>,
+    trust: TrustPolicy,
     _problem: std::marker::PhantomData<P>,
 }
 
@@ -155,6 +159,7 @@ impl<P: OptimizationProblem> Default for EngineBuilder<P> {
             run_id: RunId::new(),
             budget: Budget::unlimited(),
             callbacks: Vec::new(),
+            trust: TrustPolicy::default(),
             _problem: std::marker::PhantomData,
         }
     }
@@ -176,6 +181,13 @@ impl<P: OptimizationProblem> EngineBuilder<P> {
         self
     }
 
+    /// Set the trust policy used for optimizer contexts and callback views.
+    #[must_use]
+    pub fn trust_policy(mut self, trust: TrustPolicy) -> Self {
+        self.trust = trust;
+        self
+    }
+
     #[must_use]
     pub fn build(self) -> Engine<P> {
         Engine {
@@ -183,6 +195,7 @@ impl<P: OptimizationProblem> EngineBuilder<P> {
             budget: BudgetLedger::new(self.budget),
             cache: EvaluationCache::default(),
             callbacks: self.callbacks,
+            trust: self.trust,
         }
     }
 }

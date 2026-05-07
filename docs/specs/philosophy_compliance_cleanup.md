@@ -99,6 +99,10 @@ contract tests once the trait is public and behavior-bearing.
   evaluation-request view surface, backed by the existing
   `assessments_by_candidate` index instead of public graph internals.
 - `leaven-engine` no longer uses a crate-wide `allow(dead_code)` blanket.
+- `TrustPolicy` now carries callback-specific hidden partitions, returns typed
+  `TrustViolation` refusals for hidden-partition evaluation requests, records
+  durable trust errors before evaluation mutation, and is wired through
+  `EngineBuilder` into optimizer contexts and callback graph views.
 - Static-to-dynamic stage adapters for proposer, evaluator, preference, and
   stopper have explicit contract tests.
 - `DynRenderer` is not exposed as an empty marker trait. The planned surface is
@@ -132,6 +136,25 @@ Required cleanup:
   `content_skip`, unsupported items, and error messages.
 - Keep proc-macro entrypoints in `lib.rs` as thin delegates; parsing and codegen
   belong in named modules.
+
+### Probe Evaluation Handles
+
+`EvalHandle` and `ProbeRecorder` remain reserved but intentionally
+non-constructible.
+
+The current specs state the intent: clean benchmark mode refuses validation/test
+probe evals, exploratory mode allows graph-recorded probes, and probe-originated
+candidates/assessments are tagged. They do not yet define the evaluator
+registry, permission algebra, recording contract, or population eligibility
+interface required to implement that honestly.
+
+Required cleanup:
+
+- Specify `EvaluationSetPermission` / probe policy as typed data.
+- Define how proposer-owned probe requests select evaluators and consume budget.
+- Define durable graph tagging for probe candidates and assessments.
+- Add scenario tests for refused hidden probes, allowed exploratory probes, and
+  population exclusion before making the handles constructible.
 
 ### Stringly External References
 

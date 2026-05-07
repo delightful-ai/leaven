@@ -18,7 +18,7 @@ use crate::{
     CacheStatus, CaseSet, DynCallback, ErrorPolicy, EvaluationCache, EvaluationCacheKey,
     EvaluationContext, EvaluationError, EvaluationReport, EvaluationResolveError, Evaluator,
     ProposalBatchReport, ProposalContext, ProposalError, Proposer, ReadScope, RenderContext,
-    RunEvent, RunGraph, RunGraphView, TrustPolicy,
+    RunEvent, RunGraph, RunGraphView, TrustPolicy, TrustViolation,
 };
 
 pub struct RunContext<'a, P: OptimizationProblem> {
@@ -266,7 +266,7 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
 
     /// Build the renderer-facing context for a stage.
     pub fn render_context(&mut self, stage: StageId) -> RenderContext<'_, P> {
-        let scope = self.trust.evaluator_read_scope();
+        let scope = self.trust.renderer_read_scope();
         RenderContext::new(
             self.graph.view(scope.clone()),
             BudgetHandle::new(self.budget, stage),
@@ -300,6 +300,17 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
         T: Evaluator<P>,
     {
         let evaluator_id = evaluator.id();
+        if let Err(error) = self
+            .trust
+            .check_evaluation_request(&crate::Actor::Optimizer, &request)
+        {
+            self.emit(RunEvent::Error {
+                stage: Some(StageId::custom("optimizer")),
+                error: ErrorRecord::from_error(ErrorKind::Trust, &error),
+                policy: ErrorPolicy::Continued,
+            });
+            return Err(RunContextError::TrustViolation(error));
+        }
         let resolved_set = self.resolve_evaluation_request(&request)?;
         let resolved_request = ResolvedEvaluationRequest {
             kind: resolved_kind(&request),
@@ -467,13 +478,14 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
     pub fn emit(&mut self, event: RunEvent) {
         self.graph.record_event(event);
         if let Some(callbacks) = self.callbacks.as_deref_mut() {
+            let read_scope = self.trust.callback_read_scope();
             let event = self
                 .graph
                 .events
                 .last()
                 .expect("event was just recorded before callback dispatch");
             for callback in callbacks.iter_mut() {
-                callback.on_event_dyn(event, self.graph.view(self.read_scope.clone()));
+                callback.on_event_dyn(event, self.graph.view(read_scope.clone()));
             }
         }
     }
@@ -519,6 +531,9 @@ pub enum RunContextError {
     /// Evidence or checkpoint storage refused an operation.
     #[error(transparent)]
     Store(#[from] StoreError),
+    /// Trust policy refused a request.
+    #[error(transparent)]
+    TrustViolation(#[from] TrustViolation),
     /// Evaluation was requested without a case set.
     #[error("case set is required")]
     MissingCaseSet,
