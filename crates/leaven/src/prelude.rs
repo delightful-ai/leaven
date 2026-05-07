@@ -10,7 +10,7 @@ pub use leaven_engine::{
     Renderer, RunContext, RunGraphView, Stopper, TrustPolicy, WorkspaceRenderer, optimize,
 };
 pub use leaven_kernel::{Budget, CandidateId, ContentId, Cost, CostUnit, ErrorRecord, MetadataBag};
-pub use leaven_surface::{EditSurface, Part, PartAddress, PartKind, PartSelection};
+pub use leaven_surface::{EditSurface, Part, PartAddress, PartSelection};
 
 #[cfg(feature = "derive")]
 pub use leaven_derive::{

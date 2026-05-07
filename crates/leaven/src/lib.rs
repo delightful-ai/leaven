@@ -26,7 +26,7 @@ pub use leaven_kernel::{
     ErrorRecord, MetadataBag, ProposalId,
 };
 pub use leaven_surface::{
-    EditSurface, Part, PartAddress, PartKind, PartSelection, SurfaceError, SurfaceFingerprint,
+    EditSurface, Part, PartAddress, PartSelection, SurfaceError, SurfaceFingerprint,
 };
 
 #[cfg(feature = "derive")]

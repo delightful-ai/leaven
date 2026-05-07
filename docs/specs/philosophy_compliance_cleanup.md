@@ -114,6 +114,9 @@ contract tests once the trait is public and behavior-bearing.
   `EngineBuilder` into optimizer contexts and callback graph views.
 - Static-to-dynamic stage adapters for proposer, evaluator, preference, and
   stopper have explicit contract tests.
+- `PartKind` and `Part::kind` were removed from `leaven-surface`; part
+  semantics now live in the surface-defined `View<'a>` or downstream
+  capability traits instead of a closed framework-wide taxonomy.
 - `DynRenderer` is not exposed as an empty marker trait. The planned surface is
   preserved as a TODO until the erased value/target/view contract exists.
 - `RunPersistence` moved out of `engine.rs` into a named persistence capability

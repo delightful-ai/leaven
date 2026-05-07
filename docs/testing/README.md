@@ -106,6 +106,9 @@ Use the narrowest layer that proves the claim.
 - `crates/leaven-derive/tests/derive_macros.rs`: `trybuild` contract proving
   reserved derive macros fail explicitly until their real codegen contracts
   land.
+- `crates/leaven-surface/tests/part_contract.rs`: public surface example
+  coverage proving `Part` carries identity, address, and typed view semantics
+  without a framework-wide kind taxonomy.
 - `crates/leaven/tests/scalar_keep_best.rs`: P1 end-to-end scenario from seed
   proposal through evaluation, inline evidence storage, keep-best population,
   callbacks, and best-candidate result.

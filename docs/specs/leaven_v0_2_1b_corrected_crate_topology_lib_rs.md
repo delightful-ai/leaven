@@ -1046,7 +1046,7 @@ pub use error::{
 };
 
 pub use part::{
-    Part, PartKind, PartView,
+    Part, PartView,
 };
 
 pub use path_surface::{
@@ -1059,8 +1059,8 @@ pub use selection::{
 
 pub mod prelude {
     pub use crate::{
-        EditSurface, Part, PartAddress, PartKind, PartSelection, PartView,
-        SurfaceError, SurfaceFingerprint,
+        EditSurface, Part, PartAddress, PartSelection, PartView, SurfaceError,
+        SurfaceFingerprint,
     };
 }
 ```
@@ -1113,24 +1113,7 @@ pub struct SurfaceFingerprint(pub leaven_kernel::Fingerprint);
 pub struct Part<Id, Address, View> {
     pub id: Id,
     pub address: Address,
-    pub kind: PartKind,
     pub view: View,
-}
-
-#[derive(Clone, Debug)]
-pub enum PartKind {
-    Text,
-    File,
-    Directory,
-    Prompt,
-    Skill,
-    Script,
-    Config,
-    CodeModule,
-    ConflictRegion,
-    Changeset,
-    Agent,
-    Opaque,
 }
 
 pub struct PartView<T> {
@@ -2540,8 +2523,8 @@ pub use leaven_core::{
 };
 
 pub use leaven_surface::{
-    EditSurface, Part, PartAddress, PartKind, PartSelection,
-    SurfaceError, SurfaceFingerprint,
+    EditSurface, Part, PartAddress, PartSelection, SurfaceError,
+    SurfaceFingerprint,
 };
 
 pub use leaven_engine::{
@@ -2588,7 +2571,7 @@ pub use leaven_core::{
 };
 
 pub use leaven_surface::{
-    EditSurface, Part, PartAddress, PartKind, PartSelection,
+    EditSurface, Part, PartAddress, PartSelection,
 };
 
 pub use leaven_engine::{
