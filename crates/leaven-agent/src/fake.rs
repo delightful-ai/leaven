@@ -151,7 +151,7 @@ impl AgentRuntime for FakeAgentRuntime {
 }
 
 fn validate_output_contract(
-    workspace: &mut WorkspaceView<'_>,
+    workspace: &WorkspaceView<'_>,
     contract: &OutputContract,
     session: &AgentSession,
 ) -> Result<(), AgentRuntimeError> {

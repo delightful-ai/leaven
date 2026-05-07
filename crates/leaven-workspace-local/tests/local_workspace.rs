@@ -1,5 +1,5 @@
 use leaven_kernel::RunId;
-use leaven_workspace::{WorkspaceConfig, WorkspaceFactory, WorkspacePath};
+use leaven_workspace::{Command, WorkspaceConfig, WorkspaceFactory, WorkspacePath};
 use leaven_workspace_local::LocalWorkspaceFactory;
 
 #[test]
@@ -76,6 +76,36 @@ fn cleanup_succeeds_when_mount_was_already_removed() {
         remove_dir(&mount);
 
         workspace.cleanup().await.unwrap();
+        remove_dir(&parent);
+    });
+}
+
+#[test]
+fn local_workspace_runs_commands_inside_scoped_workspace_paths() {
+    futures::executor::block_on(async {
+        let parent = temp_parent("local-command");
+        let factory = LocalWorkspaceFactory::new(&parent);
+        let mut workspace = factory.allocate(WorkspaceConfig::default()).await.unwrap();
+        let mount = workspace.local_mount().unwrap().to_path_buf();
+        let mut view = workspace.view();
+        view.write_file(&WorkspacePath::new("work/input.txt").unwrap(), b"hello")
+            .unwrap();
+
+        let output = view
+            .run_command(Command {
+                program: "cat".to_owned(),
+                args: vec!["input.txt".to_owned()],
+                cwd: Some(WorkspacePath::new("work").unwrap()),
+            })
+            .unwrap();
+
+        assert_eq!(output.status.code, Some(0));
+        assert_eq!(output.stdout, b"hello");
+        assert!(output.stderr.is_empty());
+
+        drop(view);
+        workspace.cleanup().await.unwrap();
+        assert!(!mount.exists());
         remove_dir(&parent);
     });
 }

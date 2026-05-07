@@ -7,8 +7,9 @@ use std::sync::{
 use futures::future::{BoxFuture, FutureExt};
 use leaven_agent::{AgentInstructions, AgentSession, FakeAgentAction, FakeAgentRuntime};
 use leaven_agentic::{
-    AgentPromptTarget, AgenticEvaluator, AgenticEvaluatorConfig, AgenticProposer,
-    AgenticProposerConfig, AgenticRunInput, EvaluationInputBuilder, EvidenceParser, ProposalParser,
+    AgentPromptTarget, AgenticEvaluator, AgenticEvaluatorConfig, AgenticParseError,
+    AgenticProposer, AgenticProposerConfig, AgenticRunInput, EvaluationInputBuilder,
+    EvidenceParser, ProposalParser,
 };
 use leaven_core::{
     Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, AssessmentTarget,
@@ -17,11 +18,12 @@ use leaven_core::{
 };
 use leaven_engine::{
     BudgetLedger, CaseSet, MaterializationReport, MaterializeContext, MaterializeError,
-    Materializer, RenderContext, RenderError, Renderer, RunContext, RunGraph,
+    Materializer, ProposalError, RenderContext, RenderError, Renderer, RunContext, RunContextError,
+    RunGraph,
 };
 use leaven_kernel::{
-    CandidateId, ContentId, Cost, EvaluationSetId, EvaluatorId, Fingerprint, MetadataBag, Metered,
-    ProposerId, RunId,
+    Amount, CandidateId, ContentId, Cost, EvaluationSetId, EvaluatorId, Fingerprint, MetadataBag,
+    Metered, ProposerId, RunId,
 };
 use leaven_store_inline::InlineEvidenceStore;
 use leaven_workspace::{
@@ -37,6 +39,8 @@ fn agentic_proposer_runs_runtime_parses_proposals_and_cleans_workspace() {
             AgenticProposerConfig::new(ProposerId::from("agentic/test")),
             TestWorkspaceFactory {
                 cleanup_count: cleanup_count.clone(),
+                cleanup_error: None,
+                allocate_error: None,
             },
             FakeAgentRuntime::new(vec![FakeAgentAction::WriteFile {
                 path: WorkspacePath::new("output/proposal.txt").unwrap(),
@@ -50,6 +54,10 @@ fn agentic_proposer_runs_runtime_parses_proposals_and_cleans_workspace() {
         let mut graph = RunGraph::<TestProblem>::new(RunId::new());
         let mut budget = BudgetLedger::default();
         let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+        assert_eq!(
+            leaven_engine::Proposer::<TestProblem>::arity(&proposer),
+            leaven_engine::Arity::Single
+        );
 
         let report = ctx
             .propose(
@@ -85,6 +93,8 @@ fn agentic_evaluator_runs_runtime_parses_evidence_and_cleans_workspace() {
             ),
             TestWorkspaceFactory {
                 cleanup_count: cleanup_count.clone(),
+                cleanup_error: None,
+                allocate_error: None,
             },
             FakeAgentRuntime::new(vec![FakeAgentAction::WriteFile {
                 path: WorkspacePath::new("output/evidence.txt").unwrap(),
@@ -132,6 +142,487 @@ fn agentic_evaluator_runs_runtime_parses_evidence_and_cleans_workspace() {
     });
 }
 
+#[test]
+fn agentic_proposer_surfaces_cleanup_failures_after_success() {
+    futures::executor::block_on(async {
+        let cleanup_count = Arc::new(AtomicUsize::new(0));
+        let proposer = AgenticProposer::new(
+            AgenticProposerConfig::new(ProposerId::from("agentic/cleanup")),
+            TestWorkspaceFactory {
+                cleanup_count: cleanup_count.clone(),
+                cleanup_error: Some("cleanup failed"),
+                allocate_error: None,
+            },
+            FakeAgentRuntime::new(vec![FakeAgentAction::WriteFile {
+                path: WorkspacePath::new("output/proposal.txt").unwrap(),
+                bytes: b"agent-authored".to_vec(),
+            }]),
+            TestMaterializer,
+            TestRenderer,
+            ProposalFileParser,
+        );
+        let mut graph = RunGraph::<TestProblem>::new(RunId::new());
+        let mut budget = BudgetLedger::default();
+        let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+
+        let error = ctx
+            .propose(
+                &proposer,
+                AgenticRunInput::new(
+                    ProposalInput {
+                        prompt: "author proposal".to_owned(),
+                    },
+                    OutputContract::file("output/proposal.txt"),
+                ),
+            )
+            .await
+            .unwrap_err();
+
+        assert!(matches!(
+            error,
+            RunContextError::Proposal(ProposalError::WithSource { .. })
+        ));
+        assert!(error.to_string().contains("agentic proposer failed"));
+        assert_eq!(cleanup_count.load(Ordering::SeqCst), 1);
+    });
+}
+
+#[test]
+fn agentic_proposer_preserves_stage_and_cleanup_failures() {
+    futures::executor::block_on(async {
+        let cleanup_count = Arc::new(AtomicUsize::new(0));
+        let proposer = AgenticProposer::new(
+            AgenticProposerConfig::new(ProposerId::from("agentic/stage-cleanup")),
+            TestWorkspaceFactory {
+                cleanup_count: cleanup_count.clone(),
+                cleanup_error: Some("cleanup failed"),
+                allocate_error: None,
+            },
+            FakeAgentRuntime::new(vec![FakeAgentAction::WriteFile {
+                path: WorkspacePath::new("output/proposal.txt").unwrap(),
+                bytes: b"agent-authored".to_vec(),
+            }]),
+            TestMaterializer,
+            TestRenderer,
+            FailingProposalParser,
+        );
+        let mut graph = RunGraph::<TestProblem>::new(RunId::new());
+        let mut budget = BudgetLedger::default();
+        let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+
+        let error = ctx
+            .propose(
+                &proposer,
+                AgenticRunInput::new(
+                    ProposalInput {
+                        prompt: "author proposal".to_owned(),
+                    },
+                    OutputContract::file("output/proposal.txt"),
+                ),
+            )
+            .await
+            .unwrap_err();
+
+        let RunContextError::Proposal(ProposalError::WithSource { source, .. }) = error else {
+            panic!("unexpected error: {error:?}");
+        };
+        assert!(
+            source
+                .to_string()
+                .contains("stage failed and workspace cleanup also failed")
+        );
+        assert_eq!(cleanup_count.load(Ordering::SeqCst), 1);
+    });
+}
+
+#[test]
+fn agentic_proposer_surfaces_workspace_allocation_failures() {
+    futures::executor::block_on(async {
+        let proposer = AgenticProposer::new(
+            AgenticProposerConfig::new(ProposerId::from("agentic/allocate")),
+            TestWorkspaceFactory {
+                cleanup_count: Arc::new(AtomicUsize::new(0)),
+                cleanup_error: None,
+                allocate_error: Some("no workspace"),
+            },
+            FakeAgentRuntime::new(Vec::new()),
+            TestMaterializer,
+            TestRenderer,
+            ProposalFileParser,
+        );
+        let mut graph = RunGraph::<TestProblem>::new(RunId::new());
+        let mut budget = BudgetLedger::default();
+        let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+
+        let error = ctx
+            .propose(
+                &proposer,
+                AgenticRunInput::new(
+                    ProposalInput {
+                        prompt: "author proposal".to_owned(),
+                    },
+                    OutputContract::file("output/proposal.txt"),
+                ),
+            )
+            .await
+            .unwrap_err();
+
+        assert!(matches!(
+            error,
+            RunContextError::Proposal(ProposalError::WithSource { .. })
+        ));
+        assert!(error.to_string().contains("agentic proposer failed"));
+    });
+}
+
+#[test]
+fn agentic_proposer_refuses_cost_overflow() {
+    futures::executor::block_on(async {
+        let cleanup_count = Arc::new(AtomicUsize::new(0));
+        let proposer = AgenticProposer::new(
+            AgenticProposerConfig::new(ProposerId::from("agentic/cost-overflow")),
+            TestWorkspaceFactory {
+                cleanup_count: cleanup_count.clone(),
+                cleanup_error: None,
+                allocate_error: None,
+            },
+            FakeAgentRuntime::new(vec![FakeAgentAction::WriteFile {
+                path: WorkspacePath::new("output/proposal.txt").unwrap(),
+                bytes: b"agent-authored".to_vec(),
+            }])
+            .with_cost(Cost {
+                llm_calls: u64::MAX,
+                ..Cost::zero()
+            }),
+            TestMaterializer,
+            TestRenderer,
+            ExpensiveProposalParser,
+        );
+        let mut graph = RunGraph::<TestProblem>::new(RunId::new());
+        let mut budget = BudgetLedger::default();
+        let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+
+        let error = ctx
+            .propose(
+                &proposer,
+                AgenticRunInput::new(
+                    ProposalInput {
+                        prompt: "author proposal".to_owned(),
+                    },
+                    OutputContract::file("output/proposal.txt"),
+                ),
+            )
+            .await
+            .unwrap_err();
+
+        let RunContextError::Proposal(ProposalError::WithSource { source, .. }) = error else {
+            panic!("unexpected error: {error:?}");
+        };
+        assert!(source.to_string().contains("agentic cost overflow"));
+        assert_eq!(cleanup_count.load(Ordering::SeqCst), 1);
+    });
+}
+
+#[test]
+fn agentic_parse_errors_can_preserve_sources() {
+    let error = AgenticParseError::with_source(
+        "could not parse proposals",
+        WorkspaceError::Io("bad file".to_owned()),
+    );
+
+    assert!(error.to_string().contains("could not parse proposals"));
+    assert!(
+        matches!(std::error::Error::source(&error), Some(source) if source.to_string().contains("bad file"))
+    );
+}
+
+#[test]
+fn agentic_evaluator_surfaces_workspace_allocation_failures() {
+    futures::executor::block_on(async {
+        let evaluator = AgenticEvaluator::new(
+            AgenticEvaluatorConfig::new(
+                EvaluatorId::from("agentic/eval-allocate"),
+                Fingerprint::from_bytes([9; 32]),
+            ),
+            TestWorkspaceFactory {
+                cleanup_count: Arc::new(AtomicUsize::new(0)),
+                cleanup_error: None,
+                allocate_error: Some("no workspace"),
+            },
+            FakeAgentRuntime::new(Vec::new()),
+            IndependentInputBuilder,
+            TestMaterializer,
+            TestRenderer,
+            EvidenceFileParser,
+        );
+        let (mut graph, mut budget, candidate) = graph_with_seed();
+        let mut cache = leaven_engine::EvaluationCache::default();
+        let case_set = CaseSet::new(vec!["case"]);
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
+            .with_case_set(&case_set)
+            .with_cache(&mut cache)
+            .with_evidence_store(&store);
+
+        let error = ctx
+            .evaluate_with(&evaluator, independent_request(candidate))
+            .await
+            .unwrap_err();
+
+        assert!(matches!(error, RunContextError::Evaluation(_)));
+        assert!(error.to_string().contains("agentic evaluator failed"));
+    });
+}
+
+#[test]
+fn agentic_evaluator_surfaces_cleanup_failures_after_success() {
+    futures::executor::block_on(async {
+        let cleanup_count = Arc::new(AtomicUsize::new(0));
+        let evaluator = AgenticEvaluator::new(
+            AgenticEvaluatorConfig::new(
+                EvaluatorId::from("agentic/eval-cleanup"),
+                Fingerprint::from_bytes([10; 32]),
+            ),
+            TestWorkspaceFactory {
+                cleanup_count: cleanup_count.clone(),
+                cleanup_error: Some("cleanup failed"),
+                allocate_error: None,
+            },
+            FakeAgentRuntime::new(vec![FakeAgentAction::WriteFile {
+                path: WorkspacePath::new("output/evidence.txt").unwrap(),
+                bytes: b"0.25".to_vec(),
+            }]),
+            IndependentInputBuilder,
+            TestMaterializer,
+            TestRenderer,
+            EvidenceFileParser,
+        );
+        let (mut graph, mut budget, candidate) = graph_with_seed();
+        let mut cache = leaven_engine::EvaluationCache::default();
+        let case_set = CaseSet::new(vec!["case"]);
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
+            .with_case_set(&case_set)
+            .with_cache(&mut cache)
+            .with_evidence_store(&store);
+
+        let error = ctx
+            .evaluate_with(&evaluator, independent_request(candidate))
+            .await
+            .unwrap_err();
+
+        assert!(matches!(error, RunContextError::Evaluation(_)));
+        assert_eq!(cleanup_count.load(Ordering::SeqCst), 1);
+    });
+}
+
+#[test]
+fn agentic_evaluator_preserves_stage_and_cleanup_failures() {
+    futures::executor::block_on(async {
+        let cleanup_count = Arc::new(AtomicUsize::new(0));
+        let evaluator = AgenticEvaluator::new(
+            AgenticEvaluatorConfig::new(
+                EvaluatorId::from("agentic/eval-stage-cleanup"),
+                Fingerprint::from_bytes([11; 32]),
+            ),
+            TestWorkspaceFactory {
+                cleanup_count: cleanup_count.clone(),
+                cleanup_error: Some("cleanup failed"),
+                allocate_error: None,
+            },
+            FakeAgentRuntime::new(vec![FakeAgentAction::WriteFile {
+                path: WorkspacePath::new("output/evidence.txt").unwrap(),
+                bytes: b"0.25".to_vec(),
+            }]),
+            IndependentInputBuilder,
+            TestMaterializer,
+            TestRenderer,
+            FailingEvidenceParser,
+        );
+        let (mut graph, mut budget, candidate) = graph_with_seed();
+        let mut cache = leaven_engine::EvaluationCache::default();
+        let case_set = CaseSet::new(vec!["case"]);
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
+            .with_case_set(&case_set)
+            .with_cache(&mut cache)
+            .with_evidence_store(&store);
+
+        let error = ctx
+            .evaluate_with(&evaluator, independent_request(candidate))
+            .await
+            .unwrap_err();
+
+        let RunContextError::Evaluation(leaven_engine::EvaluationError::WithSource {
+            source, ..
+        }) = error
+        else {
+            panic!("unexpected error: {error:?}");
+        };
+        assert!(
+            source
+                .to_string()
+                .contains("stage failed and workspace cleanup also failed")
+        );
+        assert_eq!(cleanup_count.load(Ordering::SeqCst), 1);
+    });
+}
+
+#[test]
+fn agentic_evaluator_surfaces_runtime_failures_before_parse() {
+    futures::executor::block_on(async {
+        let cleanup_count = Arc::new(AtomicUsize::new(0));
+        let evaluator = AgenticEvaluator::new(
+            AgenticEvaluatorConfig::new(
+                EvaluatorId::from("agentic/eval-runtime"),
+                Fingerprint::from_bytes([12; 32]),
+            ),
+            TestWorkspaceFactory {
+                cleanup_count: cleanup_count.clone(),
+                cleanup_error: None,
+                allocate_error: None,
+            },
+            FakeAgentRuntime::new(Vec::new()),
+            IndependentInputBuilder,
+            TestMaterializer,
+            TestRenderer,
+            EvidenceFileParser,
+        );
+        let (mut graph, mut budget, candidate) = graph_with_seed();
+        let mut cache = leaven_engine::EvaluationCache::default();
+        let case_set = CaseSet::new(vec!["case"]);
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
+            .with_case_set(&case_set)
+            .with_cache(&mut cache)
+            .with_evidence_store(&store);
+
+        let error = ctx
+            .evaluate_with(&evaluator, independent_request(candidate))
+            .await
+            .unwrap_err();
+
+        assert!(matches!(error, RunContextError::Evaluation(_)));
+        assert_eq!(cleanup_count.load(Ordering::SeqCst), 1);
+    });
+}
+
+#[test]
+fn agentic_evaluator_refuses_cost_overflow() {
+    futures::executor::block_on(async {
+        let cleanup_count = Arc::new(AtomicUsize::new(0));
+        let evaluator = AgenticEvaluator::new(
+            AgenticEvaluatorConfig::new(
+                EvaluatorId::from("agentic/eval-cost-overflow"),
+                Fingerprint::from_bytes([13; 32]),
+            ),
+            TestWorkspaceFactory {
+                cleanup_count: cleanup_count.clone(),
+                cleanup_error: None,
+                allocate_error: None,
+            },
+            FakeAgentRuntime::new(vec![FakeAgentAction::WriteFile {
+                path: WorkspacePath::new("output/evidence.txt").unwrap(),
+                bytes: b"0.25".to_vec(),
+            }])
+            .with_cost(Cost {
+                llm_calls: u64::MAX,
+                ..Cost::zero()
+            }),
+            IndependentInputBuilder,
+            TestMaterializer,
+            TestRenderer,
+            ExpensiveEvidenceParser,
+        );
+        let (mut graph, mut budget, candidate) = graph_with_seed();
+        let mut cache = leaven_engine::EvaluationCache::default();
+        let case_set = CaseSet::new(vec!["case"]);
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
+            .with_case_set(&case_set)
+            .with_cache(&mut cache)
+            .with_evidence_store(&store);
+
+        let error = ctx
+            .evaluate_with(&evaluator, independent_request(candidate))
+            .await
+            .unwrap_err();
+
+        assert!(matches!(error, RunContextError::Evaluation(_)));
+        assert_eq!(cleanup_count.load(Ordering::SeqCst), 1);
+    });
+}
+
+#[test]
+fn agentic_evaluator_surfaces_input_builder_failures() {
+    futures::executor::block_on(async {
+        let evaluator = AgenticEvaluator::new(
+            AgenticEvaluatorConfig::new(
+                EvaluatorId::from("agentic/input-failure"),
+                Fingerprint::from_bytes([8; 32]),
+            ),
+            TestWorkspaceFactory {
+                cleanup_count: Arc::new(AtomicUsize::new(0)),
+                cleanup_error: None,
+                allocate_error: None,
+            },
+            FakeAgentRuntime::new(Vec::new()),
+            FailingInputBuilder,
+            TestMaterializer,
+            TestRenderer,
+            EvidenceFileParser,
+        );
+        let mut graph = RunGraph::<TestProblem>::new(RunId::new());
+        let mut budget = BudgetLedger::default();
+        let mut cache = leaven_engine::EvaluationCache::default();
+        let case_set = CaseSet::new(vec!["case"]);
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let candidate = {
+            let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+            ctx.insert_seed(TestArtifact("seed".to_owned()), 0).unwrap()
+        };
+        let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
+            .with_case_set(&case_set)
+            .with_cache(&mut cache)
+            .with_evidence_store(&store);
+
+        let error = ctx
+            .evaluate_with(
+                &evaluator,
+                EvaluationRequest::Independent {
+                    candidates: vec![candidate],
+                    set: EvaluationSet::All,
+                    granularity: AssessmentGranularity::Aggregate,
+                    purpose: EvaluationPurpose::Search,
+                },
+            )
+            .await
+            .unwrap_err();
+
+        assert!(matches!(error, RunContextError::Evaluation(_)));
+        assert!(error.to_string().contains("agentic evaluator failed"));
+    });
+}
+
+fn graph_with_seed() -> (RunGraph<TestProblem>, BudgetLedger, CandidateId) {
+    let mut graph = RunGraph::<TestProblem>::new(RunId::new());
+    let mut budget = BudgetLedger::default();
+    let candidate = {
+        let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+        ctx.insert_seed(TestArtifact("seed".to_owned()), 0).unwrap()
+    };
+    (graph, budget, candidate)
+}
+
+fn independent_request(candidate: CandidateId) -> EvaluationRequest {
+    EvaluationRequest::Independent {
+        candidates: vec![candidate],
+        set: EvaluationSet::All,
+        granularity: AssessmentGranularity::Aggregate,
+        purpose: EvaluationPurpose::Search,
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct TestArtifact(String);
 
@@ -140,7 +631,8 @@ impl Artifact for TestArtifact {
     type ApplyError = TestApplyError;
 
     fn identity(&self) -> ArtifactIdentity {
-        ArtifactIdentity::Content(ContentId::from_bytes([self.0.len() as u8; 32]))
+        let byte = u8::try_from(self.0.len()).unwrap_or(u8::MAX);
+        ArtifactIdentity::Content(ContentId::from_bytes([byte; 32]))
     }
 
     fn apply_change(&self, change: &Self::Change) -> Result<Self, Self::ApplyError> {
@@ -245,6 +737,49 @@ impl ProposalParser<TestProblem, ProposalInput> for ProposalFileParser {
     }
 }
 
+struct FailingProposalParser;
+
+impl ProposalParser<TestProblem, ProposalInput> for FailingProposalParser {
+    async fn parse_proposals(
+        &self,
+        _workspace: &mut leaven_workspace::WorkspaceView<'_>,
+        _session: &AgentSession,
+        _input: &ProposalInput,
+        _graph: leaven_engine::RunGraphView<'_, TestProblem>,
+    ) -> Result<Metered<ProposalBatch<TestProblem>>, leaven_agentic::AgenticParseError> {
+        Err(leaven_agentic::AgenticParseError::Message(
+            "parser refused output".to_owned(),
+        ))
+    }
+}
+
+struct ExpensiveProposalParser;
+
+impl ProposalParser<TestProblem, ProposalInput> for ExpensiveProposalParser {
+    async fn parse_proposals(
+        &self,
+        workspace: &mut leaven_workspace::WorkspaceView<'_>,
+        _session: &AgentSession,
+        _input: &ProposalInput,
+        _graph: leaven_engine::RunGraphView<'_, TestProblem>,
+    ) -> Result<Metered<ProposalBatch<TestProblem>>, leaven_agentic::AgenticParseError> {
+        let bytes = workspace.read_file(&WorkspacePath::new("output/proposal.txt").unwrap())?;
+        let artifact = TestArtifact(String::from_utf8(bytes).unwrap());
+        Ok(Metered::new(
+            ProposalBatch {
+                proposals: vec![Proposal::create(artifact).build()],
+                semantics: ProposalBatchSemantics::Alternatives,
+                metadata: MetadataBag::new(),
+            },
+            Cost {
+                llm_calls: 1,
+                seconds: Amount::new(0.25).unwrap(),
+                ..Cost::zero()
+            },
+        ))
+    }
+}
+
 struct IndependentInputBuilder;
 
 impl EvaluationInputBuilder<TestProblem, EvaluationInput> for IndependentInputBuilder {
@@ -270,6 +805,20 @@ impl EvaluationInputBuilder<TestProblem, EvaluationInput> for IndependentInputBu
                 )
             })
             .collect())
+    }
+}
+
+struct FailingInputBuilder;
+
+impl EvaluationInputBuilder<TestProblem, EvaluationInput> for FailingInputBuilder {
+    fn build_inputs(
+        &self,
+        _request: &ResolvedEvaluationRequest,
+        _graph: leaven_engine::RunGraphView<'_, TestProblem>,
+    ) -> Result<Vec<AgenticRunInput<EvaluationInput>>, leaven_agentic::AgenticAdapterError> {
+        Err(leaven_agentic::AgenticAdapterError::Input(
+            "builder refused request".to_owned(),
+        ))
     }
 }
 
@@ -302,18 +851,70 @@ impl EvidenceParser<TestProblem, EvaluationInput> for EvidenceFileParser {
     }
 }
 
+struct FailingEvidenceParser;
+
+impl EvidenceParser<TestProblem, EvaluationInput> for FailingEvidenceParser {
+    async fn parse_evidence(
+        &self,
+        _workspace: &mut leaven_workspace::WorkspaceView<'_>,
+        _session: &AgentSession,
+        _input: &EvaluationInput,
+        _request: &ResolvedEvaluationRequest,
+        _graph: leaven_engine::RunGraphView<'_, TestProblem>,
+    ) -> Result<Metered<Vec<Assessment<TestProblem>>>, leaven_agentic::AgenticParseError> {
+        Err(leaven_agentic::AgenticParseError::Message(
+            "evidence parser refused output".to_owned(),
+        ))
+    }
+}
+
+struct ExpensiveEvidenceParser;
+
+impl EvidenceParser<TestProblem, EvaluationInput> for ExpensiveEvidenceParser {
+    async fn parse_evidence(
+        &self,
+        workspace: &mut leaven_workspace::WorkspaceView<'_>,
+        _session: &AgentSession,
+        input: &EvaluationInput,
+        _request: &ResolvedEvaluationRequest,
+        _graph: leaven_engine::RunGraphView<'_, TestProblem>,
+    ) -> Result<Metered<Vec<Assessment<TestProblem>>>, leaven_agentic::AgenticParseError> {
+        let bytes = workspace.read_file(&WorkspacePath::new("output/evidence.txt").unwrap())?;
+        let score: f64 = String::from_utf8(bytes).unwrap().parse().unwrap();
+        Ok(Metered::new(
+            vec![Assessment::Independent {
+                candidate: input.candidate,
+                target: AssessmentTarget::EvaluationSet(EvaluationSetId::new()),
+                evidence: TestEvidence { score },
+                cost: Cost::metric_calls(1),
+                metadata: MetadataBag::new(),
+            }],
+            Cost {
+                llm_calls: 1,
+                ..Cost::zero()
+            },
+        ))
+    }
+}
+
 struct TestWorkspaceFactory {
     cleanup_count: Arc<AtomicUsize>,
+    cleanup_error: Option<&'static str>,
+    allocate_error: Option<&'static str>,
 }
 
 impl WorkspaceFactory for TestWorkspaceFactory {
     async fn allocate(&self, _config: WorkspaceConfig) -> Result<Workspace, FactoryError> {
+        if let Some(message) = self.allocate_error {
+            return Err(FactoryError::Allocate(message.to_owned()));
+        }
         let root = temp_root("agentic-adapter");
         Ok(Workspace::new(
             root.clone(),
             Box::new(TestWorkspaceBackend {
                 root,
                 cleanup_count: self.cleanup_count.clone(),
+                cleanup_error: self.cleanup_error,
             }),
         ))
     }
@@ -322,6 +923,7 @@ impl WorkspaceFactory for TestWorkspaceFactory {
 struct TestWorkspaceBackend {
     root: PathBuf,
     cleanup_count: Arc<AtomicUsize>,
+    cleanup_error: Option<&'static str>,
 }
 
 impl WorkspaceBackend for TestWorkspaceBackend {
@@ -351,6 +953,9 @@ impl WorkspaceBackend for TestWorkspaceBackend {
         async move {
             self.cleanup_count.fetch_add(1, Ordering::SeqCst);
             remove_dir(&self.root);
+            if let Some(message) = self.cleanup_error {
+                return Err(WorkspaceError::Cleanup(message.to_owned()));
+            }
             Ok(())
         }
         .boxed()

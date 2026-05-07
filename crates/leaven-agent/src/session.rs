@@ -164,7 +164,7 @@ impl<'a> AgentRunContext<'a> {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct CancellationRef<'a> {
     flag: Option<&'a AtomicBool>,
 }
@@ -179,12 +179,6 @@ impl<'a> CancellationRef<'a> {
     pub fn is_cancelled(self) -> bool {
         self.flag
             .is_some_and(|flag| flag.load(std::sync::atomic::Ordering::SeqCst))
-    }
-}
-
-impl Default for CancellationRef<'_> {
-    fn default() -> Self {
-        Self { flag: None }
     }
 }
 

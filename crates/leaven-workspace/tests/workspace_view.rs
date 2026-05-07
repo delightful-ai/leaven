@@ -49,6 +49,7 @@ fn workspace_view_writes_reads_and_scopes_subdirectories() {
             .unwrap(),
         b"candidate"
     );
+    assert!(nested.read_file(&WorkspacePath::root()).is_err());
     assert_eq!(
         view.read_file(&WorkspacePath::new("history/visible/evidence/ref.txt").unwrap())
             .unwrap(),
@@ -91,6 +92,21 @@ fn workspace_view_delegates_commands_to_backend_with_scoped_cwd() {
     assert_eq!(recorded.len(), 1);
     assert_eq!(recorded[0].cwd.as_ref().unwrap().as_str(), "candidate/work");
     drop(recorded);
+
+    let output = view
+        .run_command(Command {
+            program: "pwd".to_owned(),
+            args: Vec::new(),
+            cwd: None,
+        })
+        .unwrap();
+
+    assert_eq!(output.status.code, Some(0));
+    let recorded = commands.lock().unwrap();
+    assert_eq!(recorded.len(), 2);
+    assert_eq!(recorded[1].cwd.as_ref().unwrap().as_str(), "candidate");
+    drop(recorded);
+
     drop(view);
     futures::executor::block_on(workspace.cleanup()).unwrap();
     remove_dir(&root);
@@ -137,6 +153,69 @@ fn workspace_backend_local_mount_defaults_to_none() {
 }
 
 #[test]
+fn workspace_backend_default_operations_are_explicitly_unsupported() {
+    let mut workspace = Workspace::new(PathBuf::new(), Box::new(UnsupportedBackend));
+    let mut view = workspace.view();
+
+    assert!(matches!(
+        view.write_file(&WorkspacePath::new("out.txt").unwrap(), b"no"),
+        Err(WorkspaceError::UnsupportedOperation {
+            operation: "write_file"
+        })
+    ));
+    assert!(matches!(
+        view.read_file(&WorkspacePath::new("out.txt").unwrap()),
+        Err(WorkspaceError::UnsupportedOperation {
+            operation: "read_file"
+        })
+    ));
+    assert!(matches!(
+        view.run_command(Command {
+            program: "true".to_owned(),
+            args: Vec::new(),
+            cwd: None,
+        }),
+        Err(WorkspaceError::UnsupportedOperation {
+            operation: "run_command"
+        })
+    ));
+
+    drop(view);
+    futures::executor::block_on(workspace.cleanup()).unwrap();
+}
+
+#[test]
+fn with_workspace_returns_success_value_after_cleanup() {
+    let root = temp_root("with-workspace-success");
+    let cleanup_count = Arc::new(AtomicUsize::new(0));
+    let factory = TestFactory {
+        root: root.clone(),
+        cleanup_count: cleanup_count.clone(),
+        cleanup_error: None,
+    };
+
+    let value = futures::executor::block_on(with_workspace(
+        &factory,
+        WorkspaceConfig::default(),
+        |workspace| {
+            async move {
+                workspace
+                    .view()
+                    .write_file(&WorkspacePath::new("ok.txt").unwrap(), b"ok")
+                    .unwrap();
+                Ok::<_, StageError>(42)
+            }
+            .boxed()
+        },
+    ))
+    .unwrap();
+
+    assert_eq!(value, 42);
+    assert_eq!(cleanup_count.load(Ordering::SeqCst), 1);
+    assert!(!root.exists());
+}
+
+#[test]
 fn with_workspace_cleans_up_after_stage_error() {
     let root = temp_root("with-workspace-stage-error");
     let cleanup_count = Arc::new(AtomicUsize::new(0));
@@ -168,6 +247,31 @@ fn with_workspace_cleans_up_after_stage_error() {
     ));
     assert_eq!(cleanup_count.load(Ordering::SeqCst), 1);
     assert!(!root.exists());
+}
+
+#[test]
+fn with_workspace_reports_cleanup_failure_after_success() {
+    let root = temp_root("with-workspace-cleanup-error");
+    let cleanup_count = Arc::new(AtomicUsize::new(0));
+    let factory = TestFactory {
+        root: root.clone(),
+        cleanup_count: cleanup_count.clone(),
+        cleanup_error: Some("cleanup failed"),
+    };
+
+    let error = futures::executor::block_on(with_workspace(
+        &factory,
+        WorkspaceConfig::default(),
+        |_workspace| async { Ok::<_, StageError>(()) }.boxed(),
+    ))
+    .unwrap_err();
+
+    assert!(matches!(
+        error,
+        WithWorkspaceError::Cleanup(WorkspaceError::Cleanup(_))
+    ));
+    assert_eq!(cleanup_count.load(Ordering::SeqCst), 1);
+    remove_dir(&root);
 }
 
 #[test]
@@ -295,6 +399,14 @@ struct TestFactory {
     root: PathBuf,
     cleanup_count: Arc<AtomicUsize>,
     cleanup_error: Option<&'static str>,
+}
+
+struct UnsupportedBackend;
+
+impl WorkspaceBackend for UnsupportedBackend {
+    fn cleanup(self: Box<Self>) -> BoxFuture<'static, Result<(), WorkspaceError>> {
+        async { Ok(()) }.boxed()
+    }
 }
 
 impl WorkspaceFactory for TestFactory {

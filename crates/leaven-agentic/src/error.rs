@@ -58,9 +58,7 @@ impl AgenticParseError {
     }
 }
 
-pub(crate) fn map_workspace_error(
-    error: WithWorkspaceError<AgenticAdapterError>,
-) -> AgenticAdapterError {
+pub fn map_workspace_error(error: WithWorkspaceError<AgenticAdapterError>) -> AgenticAdapterError {
     match error {
         WithWorkspaceError::Allocate(error) => AgenticAdapterError::WorkspaceAllocate(error),
         WithWorkspaceError::Stage(error) => error,
@@ -74,7 +72,7 @@ pub(crate) fn map_workspace_error(
     }
 }
 
-pub(crate) fn checked_add_cost(mut total: Cost, next: &Cost) -> Result<Cost, AgenticAdapterError> {
+pub fn checked_add_cost(mut total: Cost, next: &Cost) -> Result<Cost, AgenticAdapterError> {
     total.metric_calls = total.metric_calls.checked_add(next.metric_calls).ok_or(
         AgenticAdapterError::CostOverflow {
             axis: "metric_calls",
@@ -106,4 +104,98 @@ pub(crate) fn checked_add_cost(mut total: Cost, next: &Cost) -> Result<Cost, Age
         })?;
     }
     Ok(total)
+}
+
+#[cfg(test)]
+mod tests {
+    use leaven_kernel::Amount;
+
+    use super::*;
+
+    #[test]
+    fn workspace_error_mapping_preserves_all_variants() {
+        assert!(matches!(
+            map_workspace_error(WithWorkspaceError::Allocate(FactoryError::Allocate(
+                "no slot".to_owned()
+            ))),
+            AgenticAdapterError::WorkspaceAllocate(_)
+        ));
+        assert!(matches!(
+            map_workspace_error(WithWorkspaceError::Stage(AgenticAdapterError::Input(
+                "bad request".to_owned()
+            ))),
+            AgenticAdapterError::Input(message) if message == "bad request"
+        ));
+    }
+
+    #[test]
+    fn checked_cost_adds_custom_axes_and_rejects_each_overflow_family() {
+        let mut total = Cost::metric_calls(u64::MAX);
+        let mut next = Cost::metric_calls(1);
+        assert!(matches!(
+            checked_add_cost(total.clone(), &next),
+            Err(AgenticAdapterError::CostOverflow {
+                axis: "metric_calls"
+            })
+        ));
+
+        total = Cost {
+            prompt_tokens: u64::MAX,
+            ..Cost::zero()
+        };
+        next = Cost::tokens(1, 0);
+        assert!(matches!(
+            checked_add_cost(total.clone(), &next),
+            Err(AgenticAdapterError::CostOverflow {
+                axis: "prompt_tokens"
+            })
+        ));
+
+        total = Cost {
+            completion_tokens: u64::MAX,
+            ..Cost::zero()
+        };
+        next = Cost::tokens(0, 1);
+        assert!(matches!(
+            checked_add_cost(total.clone(), &next),
+            Err(AgenticAdapterError::CostOverflow {
+                axis: "completion_tokens"
+            })
+        ));
+
+        total = Cost {
+            seconds: Amount::new(f64::MAX).unwrap(),
+            ..Cost::zero()
+        };
+        next = Cost {
+            seconds: Amount::new(f64::MAX).unwrap(),
+            ..Cost::zero()
+        };
+        assert!(matches!(
+            checked_add_cost(total.clone(), &next),
+            Err(AgenticAdapterError::CostOverflow { axis: "seconds" })
+        ));
+
+        total = Cost::zero();
+        total
+            .other
+            .insert("gpu_seconds".to_owned(), Amount::new(1.5).unwrap());
+        next = Cost::zero();
+        next.other
+            .insert("gpu_seconds".to_owned(), Amount::new(2.5).unwrap());
+        let combined = checked_add_cost(total.clone(), &next).unwrap();
+        assert_eq!(combined.other["gpu_seconds"], Amount::new(4.0).unwrap());
+
+        total
+            .other
+            .insert("gpu_seconds".to_owned(), Amount::new(f64::MAX).unwrap());
+        next.other
+            .insert("gpu_seconds".to_owned(), Amount::new(f64::MAX).unwrap());
+        assert!(matches!(
+            checked_add_cost(total, &next),
+            Err(AgenticAdapterError::CostOverflow {
+                axis: "custom axis"
+            })
+        ));
+    }
 }

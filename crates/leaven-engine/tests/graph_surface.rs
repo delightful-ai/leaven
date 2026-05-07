@@ -164,6 +164,34 @@ fn invalid_change_provenance_records_failed_apply() {
 }
 
 #[test]
+fn create_proposals_reject_causal_single_parent_provenance() {
+    let (mut graph, mut budget) = graph_and_budget();
+    let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+    let seed = ctx.insert_seed(TextArtifact("seed".to_owned()), 0).unwrap();
+    let proposal = Proposal {
+        effect: ProposalEffect::Create {
+            artifact: TextArtifact("fresh".to_owned()),
+        },
+        provenance: ProposalProvenance::new(CausalInputs::Single(seed)),
+        annotations: (),
+        metadata: MetadataBag::new(),
+    };
+
+    let batch = record_one(&mut ctx, proposal);
+    let report = ctx.apply_batch(batch).unwrap();
+
+    assert!(matches!(
+        report.outcomes[0].outcome,
+        ApplyOutcome::Failure { .. }
+    ));
+    assert!(
+        ctx.graph()
+            .events()
+            .any(|event| matches!(event, RunEvent::ApplyFailed { .. }))
+    );
+}
+
+#[test]
 fn informed_by_does_not_affect_lineage() {
     let (mut graph, mut budget) = graph_and_budget();
     let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
