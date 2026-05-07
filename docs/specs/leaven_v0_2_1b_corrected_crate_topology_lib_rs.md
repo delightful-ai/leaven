@@ -1366,8 +1366,9 @@ pub use events::{
 };
 
 pub use graph::{
-    AssessmentQuery, AssessmentView, CandidateTree, CandidateView, FailureRef,
-    Lineage, ProposalBatchView, ProposalView, RunGraph, RunGraphView,
+    AssessmentQuery, AssessmentView, CandidateTree, CandidateView,
+    EvaluationRequestView, FailureRef, Lineage, ProposalBatchView,
+    ProposalView, RunGraph, RunGraphView,
 };
 
 pub use reports::{

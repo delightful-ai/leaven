@@ -378,6 +378,13 @@ impl<P: OptimizationProblem> RunGraph<P> {
         evidence: EvidenceRef,
     ) -> AssessmentId {
         let id = AssessmentId::new();
+        for candidate in target.candidates() {
+            self.indices
+                .assessments_by_candidate
+                .entry(candidate)
+                .or_default()
+                .push(id);
+        }
         self.assessments.insert(
             id,
             AssessmentRecord {
@@ -397,6 +404,16 @@ impl<P: OptimizationProblem> RunGraph<P> {
         match effect {
             ProposalEffect::Create { .. } => ProposalEffectKind::Create,
             ProposalEffect::Change { .. } => ProposalEffectKind::Change,
+        }
+    }
+}
+
+impl AssessmentRecordTarget {
+    pub(crate) fn candidates(&self) -> Vec<CandidateId> {
+        match self {
+            Self::Independent { candidate, .. } => vec![*candidate],
+            Self::Pairwise { left, right, .. } => vec![*left, *right],
+            Self::Listwise { candidates, .. } => candidates.clone(),
         }
     }
 }

@@ -7,6 +7,6 @@ mod view;
 
 pub use storage::{CandidateOrigin, RunGraph};
 pub use view::{
-    AssessmentQuery, AssessmentView, CandidateTree, CandidateView, FailureRef, Lineage,
-    ProposalBatchView, ProposalView, RunGraphView,
+    AssessmentQuery, AssessmentView, CandidateTree, CandidateView, EvaluationRequestView,
+    FailureRef, Lineage, ProposalBatchView, ProposalView, RunGraphView,
 };

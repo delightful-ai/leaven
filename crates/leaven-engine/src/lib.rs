@@ -3,8 +3,6 @@
 //! External code cannot mutate `RunGraph` directly. All mutation goes through
 //! `RunContext`.
 
-#![allow(dead_code)]
-
 mod budget;
 mod cache;
 mod case_set;
@@ -27,8 +25,9 @@ pub use events::{
 };
 pub use graph::storage::ApplyProposalError;
 pub use graph::{
-    AssessmentQuery, AssessmentView, CandidateOrigin, CandidateTree, CandidateView, FailureRef,
-    Lineage, ProposalBatchView, ProposalView, RunGraph, RunGraphView,
+    AssessmentQuery, AssessmentView, CandidateOrigin, CandidateTree, CandidateView,
+    EvaluationRequestView, FailureRef, Lineage, ProposalBatchView, ProposalView, RunGraph,
+    RunGraphView,
 };
 pub use persistence::{RunPersistence, RunPersistenceError};
 pub use reports::{

@@ -124,8 +124,14 @@ fn evaluate_with_resolves_sets_stores_evidence_and_emits_events() {
         assert_eq!(report.assessment_ids.len(), 1);
         assert_eq!(evaluator.calls(), 1);
         let assessment = ctx.graph().assessment(report.assessment_ids[0]).unwrap();
+        let query = ctx.graph().assessments(candidate);
+        let request = ctx.graph().evaluation_request(report.request_id).unwrap();
         assert_eq!(assessment.id(), report.assessment_ids[0]);
         assert_eq!(assessment.request_id(), report.request_id);
+        assert_eq!(query.ids(), report.assessment_ids);
+        assert_eq!(*request.evaluator(), EvaluatorId::PRIMARY);
+        assert_eq!(request.id(), report.request_id);
+        assert_eq!(request.resolved_set().case_ids.len(), 1);
         assert!(matches!(assessment.target(), AssessmentTarget::Unscoped));
         assert_eq!(assessment.independent_candidate(), Some(candidate));
         assert_score(
@@ -202,7 +208,7 @@ fn pairwise_and_listwise_evaluations_record_non_independent_targets() {
             .evaluate_with(
                 &evaluator,
                 EvaluationRequest::Listwise {
-                    candidates,
+                    candidates: candidates.clone(),
                     set: EvaluationSet::All,
                     granularity: AssessmentGranularity::Aggregate,
                     purpose: EvaluationPurpose::Selection,
@@ -213,8 +219,26 @@ fn pairwise_and_listwise_evaluations_record_non_independent_targets() {
 
         let pair_assessment = ctx.graph().assessment(pairwise.assessment_ids[0]).unwrap();
         let list_assessment = ctx.graph().assessment(listwise.assessment_ids[0]).unwrap();
+        let pair_query = ctx
+            .graph()
+            .pairwise_assessments(candidates[0], candidates[1]);
+        let reversed_pair_query = ctx
+            .graph()
+            .pairwise_assessments(candidates[1], candidates[0]);
+        let list_query = ctx.graph().assessments(candidates[2]);
         assert_eq!(pair_assessment.independent_candidate(), None);
         assert_eq!(list_assessment.independent_candidate(), None);
+        assert_eq!(
+            pair_assessment.pairwise_candidates(),
+            Some((candidates[0], candidates[1]))
+        );
+        assert_eq!(
+            list_assessment.listwise_candidates(),
+            Some(candidates.as_slice())
+        );
+        assert_eq!(pair_query.ids(), pairwise.assessment_ids);
+        assert!(reversed_pair_query.is_empty());
+        assert_eq!(list_query.ids(), listwise.assessment_ids);
         assert_score(
             ctx.assessment_evidence(pairwise.assessment_ids[0])
                 .unwrap()
@@ -534,7 +558,7 @@ fn read_scope_hides_assessments_from_forbidden_partitions() {
                 .unwrap()
         };
         let evaluator = CountingEvaluator::new(CachePolicy::Never);
-        let assessment_id = {
+        let report = {
             let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
                 .with_case_set(&case_set)
                 .with_cache(&mut cache)
@@ -550,13 +574,15 @@ fn read_scope_hides_assessments_from_forbidden_partitions() {
             )
             .await
             .unwrap()
-            .assessment_ids[0]
         };
+        let assessment_id = report.assessment_ids[0];
 
         let ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
             .with_trust_policy(TrustPolicy::default().hide_from_optimizers([test_partition]));
 
         assert!(ctx.graph().assessment(assessment_id).is_none());
+        assert!(ctx.graph().assessments(candidate).is_empty());
+        assert!(ctx.graph().evaluation_request(report.request_id).is_none());
     });
 }
 

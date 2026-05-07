@@ -17,8 +17,8 @@ use crate::{
     ApplyOneReport, ApplyOutcome, ApplyReport, BudgetHandle, BudgetLedger, CachePolicy,
     CacheStatus, CaseSet, DynCallback, ErrorPolicy, EvaluationCache, EvaluationCacheKey,
     EvaluationContext, EvaluationError, EvaluationReport, EvaluationResolveError, Evaluator,
-    ProposalBatchReport, ProposalContext, ProposalError, Proposer, ReadScope, RunEvent, RunGraph,
-    RunGraphView, TrustPolicy,
+    ProposalBatchReport, ProposalContext, ProposalError, Proposer, ReadScope, RenderContext,
+    RunEvent, RunGraph, RunGraphView, TrustPolicy,
 };
 
 pub struct RunContext<'a, P: OptimizationProblem> {
@@ -258,6 +258,16 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
     pub fn evaluation_context(&mut self, stage: StageId) -> EvaluationContext<'_, P> {
         let scope = self.trust.evaluator_read_scope();
         EvaluationContext::new(
+            self.graph.view(scope.clone()),
+            BudgetHandle::new(self.budget, stage),
+            scope,
+        )
+    }
+
+    /// Build the renderer-facing context for a stage.
+    pub fn render_context(&mut self, stage: StageId) -> RenderContext<'_, P> {
+        let scope = self.trust.evaluator_read_scope();
+        RenderContext::new(
             self.graph.view(scope.clone()),
             BudgetHandle::new(self.budget, stage),
             scope,

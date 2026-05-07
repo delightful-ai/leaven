@@ -95,6 +95,10 @@ contract tests once the trait is public and behavior-bearing.
   cache-critical case-set version to `String`.
 - Unsupported tagged evaluation sets now return a typed
   `UnsupportedEvaluationSet::Tagged` refusal instead of a string payload.
+- `RunGraphView` now exposes the spec-required read-scoped assessment query and
+  evaluation-request view surface, backed by the existing
+  `assessments_by_candidate` index instead of public graph internals.
+- `leaven-engine` no longer uses a crate-wide `allow(dead_code)` blanket.
 - Static-to-dynamic stage adapters for proposer, evaluator, preference, and
   stopper have explicit contract tests.
 - `DynRenderer` is not exposed as an empty marker trait. The planned surface is

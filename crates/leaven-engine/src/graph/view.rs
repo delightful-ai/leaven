@@ -1,16 +1,18 @@
 //! Read-only graph views.
 
 use leaven_core::{
-    ArtifactIdentity, AssessmentTarget, EvaluationSet, InfoRef, OptimizationProblem,
-    ProposalBatchSemantics,
+    ArtifactIdentity, AssessmentTarget, EvaluationRequest, EvaluationSet, InfoRef,
+    OptimizationProblem, ProposalBatchSemantics, ProposalEffect, ProposalProvenance,
+    ResolvedEvaluationSet,
 };
 use leaven_kernel::{
-    AssessmentId, CandidateId, EvidenceRef, ProposalBatchId, ProposalId, Timestamp,
+    AssessmentId, CandidateId, EvaluationRequestId, EvaluatorId, EvidenceRef, IterationId,
+    MetadataBag, ProposalBatchId, ProposalId, StageId, Timestamp,
 };
 
 use super::storage::{
-    AssessmentRecord, AssessmentRecordTarget, CandidateOrigin, ProposalBatchRecord, ProposalRecord,
-    RunGraph,
+    AssessmentRecord, AssessmentRecordTarget, CandidateOrigin, EvaluationRequestRecord,
+    ProposalBatchRecord, ProposalRecord, RunGraph,
 };
 use crate::{ReadScope, RunEvent};
 
@@ -152,15 +154,63 @@ impl<'g, P: OptimizationProblem> RunGraphView<'g, P> {
     #[must_use]
     pub fn assessment(&self, id: AssessmentId) -> Option<AssessmentView<'g>> {
         let record = self.graph.assessments.get(&id)?;
-        let request = self.graph.evaluation_requests.get(&record.request_id)?;
-        if !self.allows_evaluation_set(&request.resolved_set.expr) {
+        if !self.allows_assessment(record) {
             return None;
         }
         Some(AssessmentView { record })
     }
 
+    #[must_use]
+    pub fn assessments(&self, id: CandidateId) -> AssessmentQuery<'g> {
+        let assessments = self
+            .graph
+            .indices
+            .assessments_by_candidate
+            .get(&id)
+            .into_iter()
+            .flatten()
+            .filter_map(|assessment_id| self.assessment(*assessment_id))
+            .collect();
+        AssessmentQuery { assessments }
+    }
+
+    #[must_use]
+    pub fn pairwise_assessments(
+        &self,
+        left: CandidateId,
+        right: CandidateId,
+    ) -> AssessmentQuery<'g> {
+        let assessments = self
+            .graph
+            .indices
+            .assessments_by_candidate
+            .get(&left)
+            .into_iter()
+            .flatten()
+            .filter_map(|assessment_id| self.assessment(*assessment_id))
+            .filter(|assessment| assessment.pairwise_candidates() == Some((left, right)))
+            .collect();
+        AssessmentQuery { assessments }
+    }
+
+    #[must_use]
+    pub fn evaluation_request(&self, id: EvaluationRequestId) -> Option<EvaluationRequestView<'g>> {
+        self.graph
+            .evaluation_requests
+            .get(&id)
+            .filter(|record| self.allows_evaluation_set(&record.resolved_set.expr))
+            .map(|record| EvaluationRequestView { record })
+    }
+
     pub fn events(&self) -> impl Iterator<Item = &'g RunEvent> {
         self.graph.events.iter()
+    }
+
+    fn allows_assessment(&self, record: &AssessmentRecord) -> bool {
+        self.graph
+            .evaluation_requests
+            .get(&record.request_id)
+            .is_some_and(|request| self.allows_evaluation_set(&request.resolved_set.expr))
     }
 
     fn allows_evaluation_set(&self, set: &EvaluationSet) -> bool {
@@ -213,6 +263,26 @@ impl ProposalBatchView<'_> {
     pub fn proposal_ids(&self) -> &[ProposalId] {
         &self.record.proposal_ids
     }
+
+    #[must_use]
+    pub fn stage(&self) -> &StageId {
+        &self.record.stage
+    }
+
+    #[must_use]
+    pub fn metadata(&self) -> &MetadataBag {
+        &self.record.metadata
+    }
+
+    #[must_use]
+    pub fn created_at(&self) -> Timestamp {
+        self.record.created_at
+    }
+
+    #[must_use]
+    pub const fn iteration(&self) -> Option<IterationId> {
+        self.record.iteration
+    }
 }
 
 pub struct ProposalView<'g, P: OptimizationProblem> {
@@ -223,6 +293,36 @@ impl<P: OptimizationProblem> ProposalView<'_, P> {
     #[must_use]
     pub fn id(&self) -> ProposalId {
         self.record.id
+    }
+
+    #[must_use]
+    pub fn batch_id(&self) -> ProposalBatchId {
+        self.record.batch_id
+    }
+
+    #[must_use]
+    pub fn effect(&self) -> &ProposalEffect<P> {
+        &self.record.effect
+    }
+
+    #[must_use]
+    pub fn provenance(&self) -> &ProposalProvenance {
+        &self.record.provenance
+    }
+
+    #[must_use]
+    pub fn annotations(&self) -> &P::ProposalAnnotations {
+        &self.record.annotations
+    }
+
+    #[must_use]
+    pub fn metadata(&self) -> &MetadataBag {
+        &self.record.metadata
+    }
+
+    #[must_use]
+    pub fn created_at(&self) -> Timestamp {
+        self.record.created_at
     }
 }
 
@@ -247,6 +347,21 @@ impl AssessmentView<'_> {
     }
 
     #[must_use]
+    pub fn evaluator(&self) -> &EvaluatorId {
+        &self.record.evaluator
+    }
+
+    #[must_use]
+    pub fn metadata(&self) -> &MetadataBag {
+        &self.record.metadata
+    }
+
+    #[must_use]
+    pub fn created_at(&self) -> Timestamp {
+        self.record.created_at
+    }
+
+    #[must_use]
     pub fn independent_candidate(&self) -> Option<CandidateId> {
         match &self.record.target {
             AssessmentRecordTarget::Independent { candidate, .. } => Some(*candidate),
@@ -264,8 +379,82 @@ impl AssessmentView<'_> {
             | AssessmentRecordTarget::Listwise { target, .. } => target,
         }
     }
+
+    #[must_use]
+    pub fn pairwise_candidates(&self) -> Option<(CandidateId, CandidateId)> {
+        match &self.record.target {
+            AssessmentRecordTarget::Pairwise { left, right, .. } => Some((*left, *right)),
+            AssessmentRecordTarget::Independent { .. }
+            | AssessmentRecordTarget::Listwise { .. } => None,
+        }
+    }
+
+    #[must_use]
+    pub fn listwise_candidates(&self) -> Option<&[CandidateId]> {
+        match &self.record.target {
+            AssessmentRecordTarget::Listwise { candidates, .. } => Some(candidates),
+            AssessmentRecordTarget::Independent { .. }
+            | AssessmentRecordTarget::Pairwise { .. } => None,
+        }
+    }
 }
-pub struct AssessmentQuery;
+
+pub struct AssessmentQuery<'g> {
+    assessments: Vec<AssessmentView<'g>>,
+}
+
+impl<'g> AssessmentQuery<'g> {
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.assessments.len()
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.assessments.is_empty()
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &AssessmentView<'g>> {
+        self.assessments.iter()
+    }
+
+    #[must_use]
+    pub fn ids(&self) -> Vec<AssessmentId> {
+        self.assessments.iter().map(AssessmentView::id).collect()
+    }
+}
+
+pub struct EvaluationRequestView<'g> {
+    record: &'g EvaluationRequestRecord,
+}
+
+impl EvaluationRequestView<'_> {
+    #[must_use]
+    pub fn id(&self) -> EvaluationRequestId {
+        self.record.id
+    }
+
+    #[must_use]
+    pub fn evaluator(&self) -> &EvaluatorId {
+        &self.record.evaluator
+    }
+
+    #[must_use]
+    pub fn request(&self) -> &EvaluationRequest {
+        &self.record.request
+    }
+
+    #[must_use]
+    pub fn resolved_set(&self) -> &ResolvedEvaluationSet {
+        &self.record.resolved_set
+    }
+
+    #[must_use]
+    pub fn created_at(&self) -> Timestamp {
+        self.record.created_at
+    }
+}
+
 pub struct CandidateTree;
 pub struct FailureRef;
 pub struct Lineage;
