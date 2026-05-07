@@ -49,8 +49,9 @@ behavior belongs in `leaven-engine`.
 
 ## v0.2.2 Follow-Up Decisions
 
-- Use `Materializer<P, T>` for side-effecting workspace population. Do not
-  implement or export `WorkspaceRenderer`.
+- Use `Materializer<P, T>` for side-effecting workspace population in
+  agentic/sandboxed stages. Do not implement or export `WorkspaceRenderer`.
+  Ordinary LM prompt assembly remains a `Renderer` concern.
 - Use `WorkspacePath` for workspace file addresses. Stage examples must not
   rely on `Workspace::local_mount()` or backend-specific absolute paths.
 - `Workspace` is a concrete Leaven lease handle. Backend crates implement

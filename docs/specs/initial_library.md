@@ -65,7 +65,7 @@ The v0.1 second pass survived the conceptual stress tests. The corrections in th
     Brand-new authored artifacts (Meta-Harness pattern: agent writes a fresh harness from scratch each iteration) have no causal predecessor. Creation is represented by `ProposalEffect::Create`; causal lineage is `CausalInputs::None`; bibliographic influence still flows through `informed_by`.
 
 14. **`Renderer<P, T, Target>` and `Materializer<P, T>` are split trait families.**  
-    Value-returning rendering (prompt context, JSON blob, debug HTML) and side-effecting workspace population (write files into a sandbox) have different shapes. Conflating them was awkward. Resolves open question 27.1.
+    Value-returning rendering (LM prompt context, JSON blob, debug HTML) and agentic/sandbox workspace population (write files into a workspace for an agent or subprocess to read) have different shapes. Conflating them was awkward. Resolves open question 27.1.
 
 15. **Fitted preference relations live on `Population` impls.**  
     Stateless preferences (cardinal-pareto, scalar, lexicographic, copeland) implement `PreferenceRelation`. Stateful/fitted preferences (Bradley-Terry over accumulated pairwise judgments) are owned by `TournamentPopulation` which fits its model in `observe_assessment`. The `PreferenceRelation` trait stays simple. Resolves open question 27.6.
@@ -196,8 +196,11 @@ extension seams before implementation.
 
 49. **`WorkspaceRenderer` is renamed to `Materializer`.**  
     Value rendering and workspace materialization are different operations.
-    `Renderer` returns values; `Materializer` writes a workspace tree. There is
-    no compatibility alias.
+    `Renderer` returns values for ordinary LM calls, debug views, and typed
+    blobs. `Materializer` is the v0.2.2 workspace bridge for agents, sandboxed
+    evaluators, and subprocess tools. It is not deferred; only erased
+    registry/dyn dispatch for renderers/materializers is deferred. There is no
+    compatibility alias.
 
 50. **Workspace paths are backend-neutral.**  
     Public workspace APIs use `WorkspacePath`, not host `PathBuf` or raw
@@ -1348,12 +1351,18 @@ MAP-Elites and related methods use niches. GEPA’s instance Pareto can be repre
 
 Rendering converts opaque core types into consumer-specific values — strings for
 prompts, JSON for typed signatures, HTML for human inspection. Materialization
-writes structured directories for agents to grep. Both may be async and costful.
+writes structured workspace trees for agents, sandboxed evaluators, and
+subprocess-backed tools. Both may be async and costful.
+
+Vanilla LM stages do not need a `Materializer`; they should use `Renderer` to
+produce `LmMessages`, prompt strings, typed signature inputs, or other
+provider-facing values. Reach for `Materializer` only when the consumer's native
+interface is a workspace/filesystem plus commands.
 
 The library splits rendering into two trait families:
 
 - **`Renderer<P, T, Target>`** — value-returning. Used for prompts, summaries, JSON blobs, debug HTML.
-- **`Materializer<P, T>`** — side-effecting. Populates a workspace by writing files. Used for materializing artifacts, lineage history, traces, and any structured filesystem layout an agentic stage will read.
+- **`Materializer<P, T>`** — side-effecting. Populates a workspace by writing files. Used for materializing artifacts, lineage history, traces, and any structured filesystem layout an agentic or sandboxed stage will read.
 
 Full trait definitions, examples, and trait laws live in §13. The framework does not pre-render anything; consuming stages choose their renderings.
 
@@ -2071,13 +2080,19 @@ Static proposers are the default; the dyn wrapper is for runtime-loaded plugins.
 ## 13. Renderers and Materializers
 
 Rendering converts opaque values into consumer-specific values. Materialization
-writes opaque values into a workspace. Both may be async and costful, but they
-are intentionally different operations.
+writes opaque values into a workspace for an agent, sandboxed evaluator, or
+subprocess-backed tool. Both may be async and costful, but they are
+intentionally different operations.
 
 The library splits rendering into two trait families because the side effects differ:
 
 - **`Renderer<P, T, Target>`** returns a value. Used for prompt assembly, JSON blobs, debug HTML, summary strings.
-- **`Materializer<P, T>`** populates a workspace by side effect. Used for materializing artifacts, lineage history, traces, and any large structured filesystem layout that an agentic stage will read.
+- **`Materializer<P, T>`** populates a workspace by side effect. Used for materializing artifacts, lineage history, traces, and any large structured filesystem layout that an agentic or sandboxed stage will read.
+
+Materializer is not the normal path for a vanilla LLM call. If a stage is just
+assembling messages for an LM provider, use `Renderer`. If a stage is preparing
+files for an agent runtime, code runner, repo task, or remote sandbox, use
+`Materializer`.
 
 Conflating the two was awkward (an `()` view type plus reliance on a `&mut Workspace` smuggled through the context). The split makes both shapes honest.
 
@@ -2143,7 +2158,11 @@ workspace lifecycle.
 
 ### 13.3 Choosing between the two
 
-If the consumer wants a value back (string for an LLM prompt, JSON for a typed signature, HTML for a viewer), use `Renderer`. If the consumer needs a directory tree it can `grep` and `cat` (agentic proposer, sandboxed evaluator, debugger reproducing a run), use `Materializer`. The same artifact can have both kinds of renderers attached for it.
+If the consumer wants a value back (string for an LLM prompt, `LmMessages`, JSON
+for a typed signature, HTML for a viewer), use `Renderer`. If the consumer needs
+a directory tree it can `grep`, `cat`, execute, or mutate (agentic proposer,
+sandboxed evaluator, debugger reproducing a run), use `Materializer`. The same
+artifact can have both kinds attached for different consumers.
 
 ### 13.4 Stage-owned renderers and materializers are the default
 
@@ -2547,8 +2566,8 @@ engine owns graph truth; stages receive scoped views and explicit handles.
 | Candidate selector | `PopulationView`, scoped graph view, selection context | Choose candidate IDs or parent sets for the optimizer's next step | Read hidden case content or perform side-effectful work |
 | Proposer | `ProposalContext`, optional `EvalHandle`, optional workspace factory | Read allowed graph/evidence renderings, allocate workspace if granted, request probe evals if granted | See hidden validation/test content or mutate graph directly |
 | Evaluator | `EvaluationContext`, resolved request, requested artifacts/cases | Run assessments, allocate workspace if granted, write evidence | Request nested normal evaluations or update populations |
-| Renderer | `RenderContext` | Return value views from visible graph/artifact/evidence data | Touch workspace files or assume a materialized layout |
-| Materializer | `MaterializeContext` plus a `WorkspaceView` subtree | Write visible data into the provided workspace subtree | Allocate/cleanup workspaces, assume `local_mount()`, or write hidden partitions |
+| Renderer | `RenderContext` | Return value views from visible graph/artifact/evidence data, including LM-facing prompt/messages | Touch workspace files or assume a materialized layout |
+| Materializer | `MaterializeContext` plus a `WorkspaceView` subtree | Write visible data into the provided workspace subtree for an agent/sandbox consumer | Allocate/cleanup workspaces, assume `local_mount()`, or write hidden partitions |
 | Agent runtime | Agent prompt/config plus `Workspace`/`WorkspaceView` | Run commands, read/write workspace files according to runtime policy | Receive graph handles, trust policy, evaluation handles, or host paths |
 | Callback | Event payload filtered by callback visibility | Observe/report events | Mutate graph or request evaluations |
 
@@ -4365,6 +4384,8 @@ because artifact identity determines whether they're the same graph state.
 
 ```text
 rendering is a view, not a transformation of truth.
+renderer is the ordinary LM/debug/value path.
+materializer is the workspace path for agents, sandboxes, and subprocess tools.
 lossy rendering must be explicit.
 target (or workspace contents) determines rendering shape.
 costful rendering reports cost via Metered.
@@ -4546,7 +4567,10 @@ This pass records the decisions needed before implementing agentic stages and
 
 - **`WorkspaceRenderer` renamed to `Materializer`.** The side-effecting
   workspace trait now has workspace-native vocabulary and no compatibility
-  alias. `Renderer` remains value-returning.
+  alias. `Renderer` remains the value-returning path for ordinary LM calls;
+  `Materializer` is the workspace path for agents, sandboxed evaluators, and
+  subprocess-backed tools. `Materializer` itself is in scope for v0.2.2;
+  only renderer/materializer registry erasure is deferred.
 - **Workspace API made backend-neutral.** `Workspace` is a concrete Leaven lease
   handle; users implement factories/backends. File APIs use `WorkspacePath`.
   Examples no longer rely on `local_mount()` or backend-specific absolute paths.

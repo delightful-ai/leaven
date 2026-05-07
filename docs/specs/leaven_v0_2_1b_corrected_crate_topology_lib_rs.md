@@ -26,8 +26,8 @@ The correction:
 ```text
 Artifact = intrinsic thing being optimized
 EditSurface = chosen projection/lens over an artifact
-Renderer = chosen way to show a value
-Materializer = chosen way to materialize a value into a workspace
+Renderer = chosen way to show/serialize a value for LM calls, debug, or typed views
+Materializer = chosen way to materialize a value into a workspace for agents/sandboxes
 ```
 
 So:
@@ -48,7 +48,7 @@ Other corrections:
    No `ComponentEvidence` in core. Use `CasewiseEvidence` for per-case outcomes and `AttributableEvidence<K>` for blame/credit/routing where `K` may be a surface part ID, path, agent ID, changeset ID, module ID, etc.
 
 3. **`Materializable` is not cold core and not in artifacts.**  
-   Workspace materialization is a renderer/layout concern. Standard bridge helpers live outside artifacts/core.
+   Workspace materialization is an agentic/sandbox layout concern. Standard bridge helpers live outside artifacts/core.
 
 4. **`leaven-store` does not own `RunStore<P>`.**  
    It owns generic blob/evidence/checkpoint-byte stores. Engine owns graph persistence codec.
@@ -1913,7 +1913,8 @@ This is why surfaces exist.
 
 ### Contract
 
-Standard renderers. Not cold core. Stage-owned renderers remain the normal composition pattern.
+Standard value renderers and workspace materializers. Not cold core. Stage-owned
+renderers/materializers remain the normal composition pattern.
 
 ### `src/lib.rs`
 
@@ -1921,10 +1922,12 @@ Standard renderers. Not cold core. Stage-owned renderers remain the normal compo
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
-//! Standard value and workspace renderers.
+//! Standard value renderers and workspace materializers.
 //!
-//! Most stages should own their renderers directly. This crate provides
-//! reusable renderer implementations, not a mandatory global rendering system.
+//! Most stages should own their renderers/materializers directly. This crate
+//! provides reusable implementations, not a mandatory global rendering system.
+//! Materializers are for agentic/sandboxed workspace consumers; ordinary LM
+//! provider calls use value renderers.
 
 pub mod graph;
 pub mod history;
@@ -2206,8 +2209,10 @@ pub use runtime::OpenCodeRuntime;
 
 ### Contract
 
-Agentic stage helpers that connect agent runtimes, workspaces, renderers,
-materializers, and engine stage traits.
+Agentic stage helpers that connect agent runtimes, workspaces, value renderers,
+materializers, and engine stage traits. This is the primary consumer of
+`Materializer`; vanilla `leaven-lm` calls should not need workspace
+materialization.
 
 ### `src/lib.rs`
 
