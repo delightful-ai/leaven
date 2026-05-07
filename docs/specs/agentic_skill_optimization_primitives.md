@@ -389,8 +389,11 @@ population, while preserving the failed attempt as run evidence. It does not
 repair anything by itself.
 
 The engine should not secretly call an agent again because a proposal failed
-validation. A concrete `AgenticProposer` or paper-specific optimizer can choose
-a bounded repair loop:
+validation. A concrete `AgenticProposer`, optimizer, or optimizer helper can
+choose a bounded repair loop, but the repair target is the same proposer stage
+that authored the invalid proposal. Repair is not a fallback to some global
+"fixer" unless the optimizer explicitly chose such a proposer as the original
+stage.
 
 ```rust
 pub struct ReproposalPolicy {
@@ -408,12 +411,18 @@ pub struct ValidationCommand {
 }
 ```
 
-When enabled, the proposer receives the typed validation error plus the prior
-candidate/proposal context and authors a revised proposal. Failed attempts
-should still be recordable as failed proposal applications so the run graph
-preserves what happened. This is core enough to standardize in `leaven-agentic`,
-but it should remain opt-in stage composition rather than an engine-global retry
-loop.
+When enabled, the same proposer receives the typed validation error plus the
+prior candidate/proposal context and authors a revised proposal. "Same" means
+same proposer identity, same configured backend/runtime, same parser/finalizer,
+and same optimization stage. It does not require the provider to resume the same
+chat/session thread. Provider adapters may use native continuation when
+available, but portable Leaven semantics are explicit prior context plus a new
+bounded attempt.
+
+Failed graph-apply attempts should still be recordable as failed proposal
+applications so the run graph preserves what happened. This is core enough to
+standardize as proposal-stage orchestration, but it should remain opt-in stage
+composition rather than an engine-global retry loop.
 
 There are two useful repair-loop shapes:
 
@@ -421,13 +430,15 @@ There are two useful repair-loop shapes:
 Parse/apply validation loop:
   agent proposes a typed change or output file
   parser imports it into ProposalBatch
-  stage or optimizer tries apply/validate
-  on SkillBankError, call proposer again with the error and prior attempt
+  optimizer records and applies the batch
+  artifact apply/validate fails
+  run graph records ApplyFailed
+  optimizer calls the same proposer again with the error and prior attempt
 
 Workspace submit validation loop:
   agent edits files in workspace
-  stage runs a validator command before parsing/finalizing
-  on validator failure, call the same proposer adapter again with stdout/stderr
+  proposer stage runs a validator command before parsing/finalizing
+  on validator failure, route stdout/stderr back to the same proposer adapter
   on validator success, parser/finalizer imports proposals
 ```
 
@@ -439,7 +450,7 @@ agent repair before anything is admitted to the optimizer as a candidate.
 Provider-neutral Leaven should not require "same provider thread" semantics for
 this loop. `AgentRuntime` currently executes one session in one workspace.
 Reproposal can be modeled portably as another session over the same materialized
-workspace plus explicit context:
+workspace or an equivalent rematerialized workspace plus explicit context:
 
 ```text
 previous transcript
@@ -452,6 +463,62 @@ A provider adapter may use a native thread/session continuation internally if
 it has one, but the Leaven contract should not depend on that. The portable
 semantic is "bounded repair attempts with explicit prior context," not "resume
 the same chat thread."
+
+### 4.2 Proposal-stage scope
+
+The reusable primitive should be proposal-stage scoped. Its job is to keep
+invalid authored artifacts out of the graph while giving the same authoring
+stage a chance to repair before the optimizer gives up on that proposal.
+
+It should not become a generic "retry anything during running" mechanism.
+During evaluation, a candidate agent may fail a task, call the wrong tool, or
+produce bad output; that is usually evidence about candidate quality, not a
+reason for Leaven to re-enter the proposer. Evaluators may have their own
+runtime reliability retries or self-correction loops, but those are evaluator
+implementation details and should return evidence/cost, not mutate the
+candidate graph.
+
+The likely generic helper shape is:
+
+```rust
+pub struct ProposalRepairFeedback<'a, P: OptimizationProblem> {
+    pub attempt_index: NonZeroUsize,
+    pub batch_id: ProposalBatchId,
+    pub outcomes: Vec<ApplyOneReport>,
+    pub validator_report: Option<ValidatorReport>,
+    pub graph: RunGraphView<'a, P>,
+}
+
+pub trait ReproposalPlanner<P, Prop>
+where
+    P: OptimizationProblem,
+    Prop: Proposer<P>,
+{
+    fn next_request(
+        &mut self,
+        original: &Prop::Request,
+        feedback: &ProposalRepairFeedback<'_, P>,
+    ) -> Option<Prop::Request>;
+}
+```
+
+An optimizer can then use a standard loop:
+
+```text
+request = original request
+for attempt in 1..=max_attempts:
+  batch = ctx.propose(&same_proposer, request).await?
+  apply = ctx.apply_batch(batch.batch_id)?
+  if any acceptable candidate exists: return candidates
+  request = planner.next_request(original, apply feedback)?
+return record/expose exhausted repair
+```
+
+This helper is general enough for skill folders, code-editing agents, harness
+generation, config synthesis, and any artifact whose proposal can fail local
+structural validation. It is intentionally not a replacement for GEPA's
+selection/gate/validation policy; it is the "make the proposed artifact
+well-formed enough to enter the graph" loop.
 
 Permission portability is not a `SkillBank` validation error. A `SkillFile`
 can represent `executable: true`; if a specific workspace backend cannot

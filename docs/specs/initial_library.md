@@ -4632,6 +4632,10 @@ skill-optimization papers without baking a paper-specific loop into the engine.
   candidate; bounded repair/reproposal is stage or optimizer policy, not hidden
   engine behavior. Workspace-level submit validation and portable "new session
   with prior context" repair loops are specified.
+- **Reproposal scoped to same proposer.** Proposal repair now routes back to
+  the same proposer stage that authored the invalid proposal. The reusable
+  primitive is proposal-stage scoped, suitable for skills, code-editing agents,
+  harness generation, and config synthesis, not a generic evaluator retry loop.
 
 ### v0.2.3 (2026-05-07) - agentic stage runtime contract
 
