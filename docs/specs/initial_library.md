@@ -4,9 +4,9 @@
 
 Project name: **leaven**. Crate: `leaven` (umbrella) + `leaven-core`, `leaven-engine`, `leaven-std`, `leaven-workspace`, `leaven-derive`. Metaphor: the small biological culture you mix into a substrate, walk away from, and come back to find transformed.
 
-> Status: v0.2.3, pre-implementation minor spec bump.  
+> Status: v0.2.4, pre-implementation minor spec bump.  
 > Date: 2026-05-07.  
-> Supersedes the v0.2.1a spec and folds in the v0.2.1b topology cutover, v0.2.1c surface/evidence/cache cleanup, v0.2.2 renderer/workspace/GEPA selector clarification, and v0.2.3 agentic stage runtime contract. The architecture is unchanged: cold core stays shape-neutral, surfaces are explicit optimizer/stage choices, and GEPA remains one optimizer.  
+> Supersedes the v0.2.1a spec and folds in the v0.2.1b topology cutover, v0.2.1c surface/evidence/cache cleanup, v0.2.2 renderer/workspace/GEPA selector clarification, v0.2.3 agentic stage runtime contract, and v0.2.4 agentic skill optimization primitive spec. The architecture is unchanged: cold core stays shape-neutral, surfaces are explicit optimizer/stage choices, and GEPA remains one optimizer.  
 > This is still not an API lock — but it is now ready to be coded against.
 
 ---
@@ -4595,6 +4595,29 @@ The engine is dumb. The optimizer is smart. The types tell the truth.
 ---
 
 ## 30. Changelog
+
+### v0.2.4 (2026-05-07) - agentic skill optimization primitives
+
+This pass records the generic substrate needed to reproduce current
+skill-optimization papers without baking a paper-specific loop into the engine.
+
+- **Skill folders are first-class artifacts.** A valid skill is an arbitrary
+  directory with mandatory `SKILL.md` frontmatter (`name`, `description`) and
+  optional scripts, references, assets, and extra files.
+- **Skill changes are filesystem-native.** `ReplaceSkill` means replacing the
+  whole folder; rewriting `SKILL.md` is a file write or patch. File permissions
+  are preserved without making executable files semantically special.
+- **Skill surfaces are explicit.** Folder, file, manifest/frontmatter, and
+  future Markdown-section surfaces are named as standard lenses over a
+  `SkillBank`.
+- **Git is first-class but not default.** Git stores immutable artifact state;
+  Leaven stores optimization causality. Checkout/finalization strategies are
+  operational details.
+- **Paper pressure map added.** EvoSkill is the first reproduction target, while
+  Trace2Skill, Memento-Skills, D2Skill, and SkillReducer define the remaining
+  generic primitive requirements.
+- **Companion spec added.** See
+  `docs/specs/agentic_skill_optimization_primitives.md`.
 
 ### v0.2.3 (2026-05-07) - agentic stage runtime contract
 
