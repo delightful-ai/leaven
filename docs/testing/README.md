@@ -79,8 +79,9 @@ Use the narrowest layer that proves the claim.
 ## Current Suites
 
 - `crates/leaven-engine/tests/graph_surface.rs`: scenario and example coverage
-  for proposal application, lineage, informed-by edges, and failed apply
-  attempts through `RunContext`, plus an append-only graph law test.
+  for proposal application, lineage, sibling/candidate-tree views,
+  informed-by edges, failed apply attempts, and recent failure refs through
+  `RunContext`, plus an append-only graph law test.
 - `crates/leaven-engine/tests/context_services.rs`: proposal/evaluation
   context scenarios for budget charging, error recording, cache policy,
   evidence references, assessment/evaluation request views, read-scoped

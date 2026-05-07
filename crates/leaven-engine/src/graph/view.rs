@@ -3,11 +3,11 @@
 use leaven_core::{
     ArtifactIdentity, AssessmentTarget, EvaluationRequest, EvaluationSet, InfoRef,
     OptimizationProblem, ProposalBatchSemantics, ProposalEffect, ProposalProvenance,
-    ResolvedEvaluationSet,
+    ResolvedEvaluationSet, Window,
 };
 use leaven_kernel::{
-    AssessmentId, CandidateId, EvaluationRequestId, EvaluatorId, EvidenceRef, IterationId,
-    MetadataBag, ProposalBatchId, ProposalId, StageId, Timestamp,
+    ApplyAttemptId, AssessmentId, CandidateId, ErrorRecord, EvaluationRequestId, EvaluatorId,
+    EvidenceRef, IterationId, MetadataBag, ProposalBatchId, ProposalId, StageId, Timestamp,
 };
 
 use super::storage::{
@@ -81,6 +81,27 @@ impl<'g, P: OptimizationProblem> RunGraphView<'g, P> {
             .get(&id)
             .cloned()
             .unwrap_or_default()
+    }
+
+    #[must_use]
+    pub fn lineage(&self, id: CandidateId) -> Lineage<'g, P> {
+        Lineage {
+            graph: self.graph,
+            root: id,
+        }
+    }
+
+    #[must_use]
+    pub fn siblings(&self, id: CandidateId) -> Vec<CandidateId> {
+        let mut siblings = Vec::new();
+        for parent in self.parents(id) {
+            for child in self.children(parent) {
+                if child != id && !siblings.contains(&child) {
+                    siblings.push(child);
+                }
+            }
+        }
+        siblings
     }
 
     #[must_use]
@@ -204,6 +225,26 @@ impl<'g, P: OptimizationProblem> RunGraphView<'g, P> {
 
     pub fn events(&self) -> impl Iterator<Item = &'g RunEvent> {
         self.graph.events.iter()
+    }
+
+    #[must_use]
+    pub fn recent_failures(&self, window: Window) -> Vec<FailureRef<'g>> {
+        let limit = std::convert::identity(window).limit;
+        self.graph
+            .apply_attempts
+            .values()
+            .rev()
+            .filter_map(|record| match &record.outcome {
+                super::storage::ApplyAttemptOutcome::Failure { .. } => Some(FailureRef { record }),
+                super::storage::ApplyAttemptOutcome::Success { .. } => None,
+            })
+            .take(limit)
+            .collect()
+    }
+
+    #[must_use]
+    pub fn candidate_tree(&self) -> CandidateTree<'g, P> {
+        CandidateTree { graph: self.graph }
     }
 
     fn allows_assessment(&self, record: &AssessmentRecord) -> bool {
@@ -455,9 +496,128 @@ impl EvaluationRequestView<'_> {
     }
 }
 
-pub struct CandidateTree;
-pub struct FailureRef;
-pub struct Lineage;
+pub struct CandidateTree<'g, P: OptimizationProblem> {
+    graph: &'g RunGraph<P>,
+}
+
+impl<P: OptimizationProblem> CandidateTree<'_, P> {
+    #[must_use]
+    pub fn contains(&self, id: CandidateId) -> bool {
+        self.graph.candidates.contains_key(&id)
+    }
+
+    #[must_use]
+    pub fn roots(&self) -> Vec<CandidateId> {
+        self.graph
+            .candidates
+            .keys()
+            .filter(|id| {
+                self.graph
+                    .indices
+                    .causal_parents
+                    .get(id)
+                    .is_none_or(Vec::is_empty)
+            })
+            .copied()
+            .collect()
+    }
+
+    #[must_use]
+    pub fn parents(&self, id: CandidateId) -> Vec<CandidateId> {
+        self.graph
+            .indices
+            .causal_parents
+            .get(&id)
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    #[must_use]
+    pub fn children(&self, id: CandidateId) -> Vec<CandidateId> {
+        self.graph
+            .indices
+            .causal_children
+            .get(&id)
+            .cloned()
+            .unwrap_or_default()
+    }
+}
+
+pub struct FailureRef<'g> {
+    record: &'g super::storage::ApplyAttemptRecord,
+}
+
+impl FailureRef<'_> {
+    #[must_use]
+    pub fn id(&self) -> ApplyAttemptId {
+        self.record.id
+    }
+
+    #[must_use]
+    pub fn proposal_id(&self) -> ProposalId {
+        self.record.proposal_id
+    }
+
+    #[must_use]
+    pub fn error(&self) -> &ErrorRecord {
+        match &self.record.outcome {
+            super::storage::ApplyAttemptOutcome::Failure { error } => error,
+            super::storage::ApplyAttemptOutcome::Success { .. } => {
+                unreachable!("FailureRef is only constructed from failed apply attempts")
+            }
+        }
+    }
+
+    #[must_use]
+    pub fn created_at(&self) -> Timestamp {
+        self.record.created_at
+    }
+}
+
+pub struct Lineage<'g, P: OptimizationProblem> {
+    graph: &'g RunGraph<P>,
+    root: CandidateId,
+}
+
+impl<P: OptimizationProblem> Lineage<'_, P> {
+    #[must_use]
+    pub fn root(&self) -> CandidateId {
+        self.root
+    }
+
+    #[must_use]
+    pub fn parents(&self) -> Vec<CandidateId> {
+        self.graph
+            .indices
+            .causal_parents
+            .get(&self.root)
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    #[must_use]
+    pub fn ancestors(&self) -> Vec<CandidateId> {
+        let mut ancestors = Vec::new();
+        let mut queue = self.parents();
+        let mut index = 0;
+        while let Some(id) = queue.get(index).copied() {
+            index += 1;
+            if ancestors.contains(&id) {
+                continue;
+            }
+            ancestors.push(id);
+            if let Some(parents) = self.graph.indices.causal_parents.get(&id) {
+                queue.extend(parents.iter().copied());
+            }
+        }
+        ancestors
+    }
+
+    #[must_use]
+    pub fn contains(&self, id: CandidateId) -> bool {
+        self.root == id || self.ancestors().contains(&id)
+    }
+}
 
 fn references_hidden_partition(
     set: &EvaluationSet,

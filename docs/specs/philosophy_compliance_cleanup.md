@@ -98,6 +98,9 @@ contract tests once the trait is public and behavior-bearing.
 - `RunGraphView` now exposes the spec-required read-scoped assessment query and
   evaluation-request view surface, backed by the existing
   `assessments_by_candidate` index instead of public graph internals.
+- `Lineage`, `CandidateTree`, and `FailureRef` are no longer public empty graph
+  placeholders. They now expose causal lineage, sibling/tree navigation, and
+  recent apply-failure refs from existing graph records.
 - `leaven-engine` no longer uses a crate-wide `allow(dead_code)` blanket.
 - `TrustPolicy` now carries callback-specific hidden partitions, returns typed
   `TrustViolation` refusals for hidden-partition evaluation requests, records

@@ -1,6 +1,6 @@
 mod support;
 
-use leaven_core::{CausalInputs, InfoRef, Proposal, ProposalEffect, ProposalProvenance};
+use leaven_core::{CausalInputs, InfoRef, Proposal, ProposalEffect, ProposalProvenance, Window};
 use leaven_engine::{ApplyOutcome, CandidateOrigin, RunContext, RunEvent};
 use leaven_kernel::{ErrorKind, MetadataBag};
 use proptest::prelude::*;
@@ -51,6 +51,16 @@ fn change_proposal_creates_causal_edge() {
     let view = ctx.graph();
     assert_eq!(view.parents(child), [seed]);
     assert_eq!(view.children(seed), [child]);
+    let lineage = view.lineage(child);
+    assert_eq!(lineage.root(), child);
+    assert_eq!(lineage.parents(), [seed]);
+    assert_eq!(lineage.ancestors(), [seed]);
+    assert!(lineage.contains(seed));
+    let tree = view.candidate_tree();
+    assert!(tree.contains(seed));
+    assert_eq!(tree.roots(), [seed]);
+    assert_eq!(tree.parents(child), [seed]);
+    assert_eq!(tree.children(seed), [child]);
 }
 
 #[test]
@@ -69,6 +79,7 @@ fn invalid_change_provenance_records_failed_apply() {
     };
 
     let batch = record_one(&mut ctx, proposal);
+    let proposal_id = ctx.graph().proposal_batch(batch).unwrap().proposal_ids()[0];
     let report = ctx.apply_batch(batch).unwrap();
 
     assert!(matches!(
@@ -87,6 +98,10 @@ fn invalid_change_provenance_records_failed_apply() {
             RunEvent::Error { .. },
         ]
     ));
+    let failures = view.recent_failures(Window { limit: 1 });
+    assert_eq!(failures.len(), 1);
+    assert_eq!(failures[0].proposal_id(), proposal_id);
+    assert_eq!(failures[0].error().kind, ErrorKind::GraphInvariant);
 }
 
 #[test]
@@ -132,6 +147,39 @@ fn merge_proposal_records_pair_lineage_but_applies_to_one_target() {
     assert_eq!(view.parents(child), [left, right]);
     assert_eq!(view.children(left), [child]);
     assert_eq!(view.children(right), [child]);
+    assert_eq!(view.lineage(child).parents(), [left, right]);
+}
+
+#[test]
+fn siblings_are_candidates_that_share_causal_parents() {
+    let (mut graph, mut budget) = graph_and_budget();
+    let mut ctx = leaven_engine::RunContext::<TestProblem>::new(&mut graph, &mut budget);
+    let seed = ctx.insert_seed(TextArtifact("seed".to_owned()), 0).unwrap();
+
+    let first_batch = record_one(
+        &mut ctx,
+        Proposal::mutate(seed, TextChange::Append("+a")).build(),
+    );
+    let second_batch = record_one(
+        &mut ctx,
+        Proposal::mutate(seed, TextChange::Append("+b")).build(),
+    );
+    let first = ctx
+        .apply_batch(first_batch)
+        .unwrap()
+        .successful_candidates()
+        .next()
+        .unwrap();
+    let second = ctx
+        .apply_batch(second_batch)
+        .unwrap()
+        .successful_candidates()
+        .next()
+        .unwrap();
+
+    let view = ctx.graph();
+    assert_eq!(view.siblings(first), [second]);
+    assert_eq!(view.siblings(second), [first]);
 }
 
 #[test]
