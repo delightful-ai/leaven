@@ -1,7 +1,7 @@
 # Milestone 5: Skill Paper Reproductions
 
-Status: execution plan for reproducing the five selected skill-optimization
-papers through Leaven primitives.
+Status: deterministic reproduction scenarios implemented in
+`examples/p5_skill_paper_reproductions`; live-agent smoke remains deferred.
 Date: 2026-05-07.
 
 This milestone sits on top of the milestone examples contract:
@@ -15,6 +15,12 @@ This milestone sits on top of the milestone examples contract:
 P5 is the pressure test: the library is not done until the five papers below
 can be expressed as small, deterministic Leaven reproductions before any live
 agent/provider smoke is attempted.
+
+Runnable proof:
+
+```bash
+just milestone-p5
+```
 
 ## Flywheel Control
 

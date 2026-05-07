@@ -987,6 +987,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "p5_skill_paper_reproductions"
+version = "0.0.0"
+dependencies = [
+ "futures",
+ "leaven",
+ "leaven-core",
+ "leaven-engine",
+ "leaven-evidence",
+ "leaven-kernel",
+ "leaven-population",
+ "leaven-store-inline",
+ "leaven-surface",
+ "leaven-workspace",
+ "leaven-workspace-local",
+]
+
+[[package]]
 name = "parking_lot"
 version = "0.12.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"

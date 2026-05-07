@@ -1071,11 +1071,13 @@ just milestone-p1
 just milestone-p2
 just milestone-p3
 just milestone-p4
+just milestone-p5
 just milestone-examples
 ```
 
-`just milestone-examples` runs all five package binaries in order. It is a
-behavior gate, not a replacement for tests.
+`just milestone-examples` runs all milestone package binaries in order,
+including the P5 paper-reproduction pressure test. It is a behavior gate, not a
+replacement for tests.
 
 Completion gate:
 

@@ -35,7 +35,10 @@ milestone-p3:
 milestone-p4:
     cargo run -p p4_meta_harness_lite
 
-milestone-examples: milestone-p0 milestone-p1 milestone-p2 milestone-p3 milestone-p4
+milestone-p5:
+    cargo run -p p5_skill_paper_reproductions
+
+milestone-examples: milestone-p0 milestone-p1 milestone-p2 milestone-p3 milestone-p4 milestone-p5
 
 coverage:
     python3 scripts/coverage-gate.py --line-floor {{coverage_line_floor}} --branch-floor {{coverage_branch_floor}} --ignore-filename-regex '{{coverage_ignore}}'
