@@ -95,7 +95,35 @@ another artifact that contains skills. They are not the root abstraction.
 The common user should define a workload and plug the resulting evaluator into
 an optimizer.
 
-Example shape:
+The API should support tiers:
+
+```text
+Tier 1: data-shaped workload
+  user provides cases, a stock presentation preset, and a stock scorer
+
+Tier 2: custom scoring
+  user provides cases plus an AgentCaseScorer
+
+Tier 3: custom presentation
+  user controls how candidate + case become an agent workspace/request
+
+Tier 4: custom stages/optimizer
+  user drops to raw Proposer, Evaluator, Optimizer, Population pieces
+```
+
+Tier 1 should not require users to implement traits. For example:
+
+```rust
+let workload = AgentWorkload::builder()
+    .cases(CaseSuite::from_jsonl("cases/train.jsonl")?)
+    .validation_cases(CaseSuite::from_jsonl("cases/valid.jsonl")?)
+    .presentation(AgentPresentationPreset::repo_task())
+    .scorer(ScorerPreset::exact_match("answer"))
+    .limits(AgentCaseLimits::default())
+    .build()?;
+```
+
+Tier 3 uses the same substrate with a custom presenter:
 
 ```rust
 let workload = AgentWorkload::builder()
@@ -460,7 +488,7 @@ Scoring laws:
 
 ---
 
-## 7. Provider Dialects
+## 8. Provider Dialects
 
 `AgentRuntime` runs one session. It should not know candidates, cases,
 optimizers, GEPA, or skills.
@@ -514,7 +542,46 @@ Dialect laws:
 
 ---
 
-## 8. Agent-Authored Proposals
+## 9. Tool Approval and Trust
+
+Inspect treats tool approval as a first-class decision with outcomes like
+approve, modify, reject, terminate, and escalate. Leaven needs the same concept
+at the runtime/stage boundary, not hidden inside provider-specific code.
+
+```rust
+pub enum ToolApprovalDecision {
+    Approve,
+    Modify { replacement: ToolCall },
+    Reject { reason: DiagnosticText },
+    Terminate { reason: DiagnosticText },
+    Escalate { reason: DiagnosticText },
+}
+
+pub struct ToolApprovalRecord {
+    pub call: ToolCall,
+    pub decision: ToolApprovalDecision,
+    pub approver: ApproverId,
+    pub metadata: Metadata,
+    pub trace: Option<TraceRef>,
+}
+```
+
+Approval policy belongs with stage/runtime configuration and trust policy. It
+is not an artifact property unless the candidate being optimized is itself a
+tool policy or agent manifest.
+
+Approval laws:
+
+- every modified/rejected/terminated tool call is preserved in evidence
+- termination is a case-run outcome, not a candidate graph mutation
+- approval decisions participate in evaluator/runtime fingerprinting when they
+  can affect observed behavior
+- provider adapters may offer native approval hooks, but normalized evidence
+  must still be available to Leaven stages
+
+---
+
+## 10. Agent-Authored Proposals
 
 The same substrate also supports proposers that run agents to author changes.
 This is separate from evaluation.
@@ -546,7 +613,7 @@ Repair laws:
 
 ---
 
-## 9. GEPA Integration
+## 11. GEPA Integration
 
 GEPA should consume the general stage adapters exactly like any other
 optimizer.
@@ -575,7 +642,7 @@ GEPA remains GEPA. The agentic task substrate gives it evaluators/proposers.
 
 ---
 
-## 10. Crate Placement
+## 12. Crate Placement
 
 Likely ownership:
 
@@ -607,7 +674,7 @@ artifacts and skill-specific adapters.
 
 ---
 
-## 11. Test Contract
+## 13. Test Contract
 
 General case/evaluator tests:
 
@@ -615,9 +682,14 @@ General case/evaluator tests:
   and partition changes.
 - deterministic sampler resumes the same sequence after checkpoint restore.
 - hidden targets are not materialized by default.
+- case-local workspace requirements refine workspace selection without changing
+  candidate artifact identity.
 - presenter writes expected workspace files without graph mutation.
 - runtime failure returns/preserves available session evidence.
 - scorer failure preserves case id, candidate id where known, and retryability.
+- score-on-error records both the runtime error and scorer output.
+- completed case reuse fails closed on identity mismatch.
+- recovered partial records do not become completed assessments by accident.
 - `AgentCaseEvaluator` can be used by GEPA and a non-GEPA optimizer without
   depending on either crate.
 
@@ -635,22 +707,31 @@ Proposer tests:
 - locally valid proposals still go through `RunContext` for final admission.
 - graph admission failure does not secretly call the provider again.
 
+Approval/trust tests:
+
+- approve/modify/reject/terminate decisions are persisted as case-run evidence.
+- modified tool calls preserve both original and replacement calls.
+- terminated case runs do not mutate the candidate graph.
+- approval policy fingerprint changes cache identity for affected evaluations.
+
 Skill-specific tests belong in the skill companion spec and should reuse these
 general contract suites rather than duplicating fake local agent-task types.
 
 ---
 
-## 12. Short Form
+## 14. Short Form
 
 ```text
 AgentWorkload = cases + presentation + scorer + limits.
-AgentCase = input, target, metadata, files, setup.
+AgentCase = input, target, metadata, files, setup, workspace requirement.
 AgentCaseEvaluator = stock Evaluator<P> over candidate artifacts and cases.
 AgentCasePresenter = candidate + case -> workspace + AgentRunRequest.
 AgentRuntime = one session, no optimizer knowledge.
 AgentProviderDialect = provider transcript/event normalization.
 SkillEventDialect = optional overlay for skill-use telemetry.
 AgentCaseScorer = user-owned task semantics -> P::Evidence.
+AgentCaseRunPolicy = retries, score-on-error, fail-on-error, limits, approval.
+AgentCaseRunRecord = durable attempted case execution evidence.
 AgentAuthoredProposer = stock proposer skeleton for agent-authored changes.
 GEPA consumes these as stages; it is not renamed.
 Skills specialize the artifact/presenter/parser/evidence pieces.

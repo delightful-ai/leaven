@@ -57,360 +57,63 @@ Evidence preserves what happened.
 The skill substrate must not assume GEPA, EvoSkill, Claude Code, Codex, git,
 or a single skill format beyond the Agent Skills folder contract.
 
-### 1.1 Product surface thesis
+### 1.1 Relationship to the agentic task substrate
 
-The common path must be task-shaped, not infrastructure-shaped.
+The end-user-facing agent workload contract lives in
+`docs/specs/agentic_task_execution_substrate.md`.
 
-An end user should define:
-
-```text
-what skills to start from
-what cases to optimize against
-what agent backend to run
-how to score a completed case
-what budget to spend
-where to store resumable evidence
-```
-
-They should not define:
+This document specializes that general substrate for skills:
 
 ```text
-candidate ids
-graph admission
-workspace cleanup
-skill validation plumbing
-proposal repair control flow
-transcript storage
-skill-use transcript parsing
-population bookkeeping
-checkpoint envelopes
-cache identity
+AgentWorkload / AgentCaseEvaluator
+  are generic agent execution/evaluation infrastructure.
+
+SkillBank / SkillBankSurface / SkillUseEvent
+  are skill-specific artifact, surface, and evidence vocabulary.
+
+GEPA or another Optimizer
+  consumes both through ordinary proposer/evaluator stages.
 ```
 
-Those are Leaven product responsibilities. If a user has to hand-roll them for
-each skill-optimization task, Leaven has failed as an agentic optimization
-library.
-
-The intended ergonomic surface is roughly:
-
-```rust
-let report = SkillOptimization::builder()
-    .seed_skills(SkillBank::from_dir("skills")?)
-    .cases(CaseSuite::from_jsonl("cases/train.jsonl")?)
-    .validation_cases(CaseSuite::from_jsonl("cases/valid.jsonl")?)
-    .agent(CodexSkillAgent::new(codex_config))
-    .objective(MyObjective::new(...))
-    .budget(Budget::iterations(20).or_cost(Cost::usd(50)?))
-    .store(store)
-    .run()
-    .await?;
-```
-
-This is a facade over lower-level Leaven primitives, not a new engine. The
-facade may live in `leaven-agentic-skill` or a similarly named product crate.
-It composes artifact validation, materialization, runtime execution, scoring,
-proposer repair, graph admission, population updates, and checkpointing.
-
-Advanced users can drop below the facade and implement custom optimizers,
-proposers, evaluators, populations, materializers, or provider adapters. The
-default product path must still be real enough to reproduce a skill-learning
-paper without replacing Leaven's generic substrate.
-
-### 1.2 User-owned inputs
-
-The end-user contract has five required concepts.
-
-#### Seed skill bank
-
-The seed is a real folder-shaped `SkillBank`, not a list of prompt snippets.
-Leaven reads, normalizes, validates, fingerprints, and persists it.
-
-```rust
-pub struct SkillOptimizationSeed {
-    pub bank: SkillBank,
-}
-```
-
-The seed may be loaded from a local directory, store snapshot, git checkout, or
-paper-specific fixture loader. The resulting value is still the same
-`SkillBank` artifact.
-
-#### Case suite
-
-Cases are the task definition. They are the closest Leaven analogue to
-Inspect/AISI `Sample`s, with the additional requirement that they participate
-in optimizer partitions and reproducible sampling.
-
-```rust
-pub struct CaseSuite {
-    pub cases: BTreeMap<CaseId, SkillCase>,
-    pub partitions: CasePartitions,
-    pub fingerprint: Fingerprint,
-}
-
-pub struct SkillCase {
-    pub id: CaseId,
-    pub input: CaseInput,
-    pub target: CaseTarget,
-    pub metadata: Metadata,
-    pub files: CaseFiles,
-    pub setup: Option<SetupScript>,
-}
-
-pub enum CaseInput {
-    Text(String),
-    Messages(Vec<Message>),
-    FileRef(ContentId),
-    Structured(serde_json::Value),
-}
-
-pub enum CaseTarget {
-    Text(String),
-    Structured(serde_json::Value),
-    Hidden(ContentId),
-    None,
-}
-```
-
-`CaseFiles` are files to place in the workspace for that case. `SetupScript`
-is a case-local setup action run inside the workspace backend before the agent
-session when the chosen materializer supports it.
-
-Case laws:
-
-- case ids are stable within a suite
-- suite fingerprint changes when any case input, target, metadata, file, setup,
-  or partition changes
-- deterministic samplers over the same suite fingerprint and seed produce the
-  same case sequence
-- hidden targets may be visible to scorers but must not be materialized into
-  the candidate agent's workspace unless the task explicitly requests that
-
-#### Agent skill backend
-
-The user selects an agent backend/product adapter. They do not implement the
-runtime protocol on the common path.
-
-```rust
-pub trait AgentSkillBackend: Send + Sync {
-    fn id(&self) -> BackendId;
-    fn fingerprint(&self) -> Fingerprint;
-    fn dialect(&self) -> &dyn AgentSkillDialect;
-    fn runtime(&self) -> &dyn AgentRuntime;
-}
-```
-
-Provider-specific crates expose concrete backends:
-
-```rust
-CodexSkillAgent
-ClaudeSkillAgent
-InspectSkillAgent
-```
-
-Only the Codex path is required for the first implementation milestone. Other
-names describe the intended extension shape, not mandatory initial work.
-
-#### Objective
-
-The objective is the main user extension point. It scores an already completed
-case run. It must not apply proposals or mutate the candidate graph.
-
-```rust
-pub trait SkillObjective: Send + Sync {
-    async fn score(
-        &self,
-        case: &SkillCase,
-        session: &AgentSession,
-        outputs: &WorkspaceOutputs,
-    ) -> Result<SkillAssessment, SkillObjectiveError>;
-}
-
-pub struct SkillAssessment {
-    pub score: FiniteScore,
-    pub outcome: CaseOutcome,
-    pub explanation: Option<String>,
-    pub metadata: Metadata,
-    pub attribution: AttributionSet,
-}
-```
-
-Objective laws:
-
-- score values are finite; no NaN, infinities, or implicit sentinel values
-- objective failure is structured evidence or `SkillObjectiveError`, never a
-  panic for user/data/runtime-caused failure
-- a low score is not validation failure
-- scorer output is persisted with the assessment so later populations,
-  selectors, reducers, or reflectors can use it without rerunning the case
-
-#### Budget and store
-
-Skill optimization runs are expensive and long-lived. A product run requires a
-budget and a resumable store.
-
-```rust
-pub struct SkillOptimizationLimits {
-    pub iteration_limit: Option<NonZeroUsize>,
-    pub case_run_limit: Option<NonZeroUsize>,
-    pub cost_limit: Option<Cost>,
-    pub wall_clock_limit: Option<Duration>,
-    pub repair_attempt_limit: NonZeroUsize,
-}
-
-pub struct SkillOptimizationStorage {
-    pub store: Arc<dyn Store>,
-    pub checkpoint_policy: CheckpointPolicy,
-}
-```
-
-The default store can be local, but the API should not make "local directory"
-the semantic model.
-
-### 1.3 Leaven-owned infrastructure
-
-The facade owns the default run skeleton:
+Skill optimization should not introduce a separate `SkillOptimizer` concept
+that competes with `Gepa` or `Optimizer<P>`. For GEPA-shaped skill learning,
+the composition is:
 
 ```text
-load and validate seed SkillBank
-create or resume RunGraph and optimizer private state
-select parent candidate and target part according to policy
-run proposer with bounded same-proposer repair
-preflight apply/validate proposed SkillBank
-submit valid ProposalBatch to RunContext
-materialize candidate + case into workspace
-run selected AgentSkillBackend
-parse provider transcript into normalized session and skill events
-score with user SkillObjective
-persist AgentSkillEvidence
-update population/frontier/private optimizer state
-checkpoint graph + private state
-stop on budget/stoppers
+P::Artifact = SkillBank or AgentKit
+S = SkillBankSurface or AgentKitSurface
+Evaluator = AgentCaseEvaluator<P> with a skill-aware presenter/scorer
+Proposer = AgentAuthoredProposer<P> with a SkillBank proposal parser
+PartSelector = skill/file selector
+Population = reusable frontier/population policy
+Runtime = stage dependency
 ```
 
-The user may override pieces, but the default path must provide working
-implementations for:
+The skill-specific product crate, if any, should provide convenience
+constructors for these pieces. It must not own the optimizer rhythm, provider
+runtime semantics, graph admission, or generic case execution substrate.
 
-- valid skill loading and normalization
-- deterministic case sampling
-- Codex skill layout materialization
-- Codex session execution through the selected Codex runtime adapter
-- provider-dialect skill event parsing
-- simple GEPA-like skill mutation proposer wiring
-- bounded proposal repair
-- top-k/Pareto-ish population and parent selection
-- assessment/evidence persistence
-- checkpoint/resume
+### 1.2 Skill-specific responsibilities
 
-### 1.4 Agent skill dialects
+Leaven's skill-specific layer owns:
 
-Every serious agent product exposes skills differently. Codex, Claude Code,
-Inspect's explicit `skill` tool, and future agent harnesses do not share one
-portable transcript or activation protocol. Leaven should therefore split
-skill ownership from provider dialects:
+- `SkillBank` and `SkillFolder` artifacts
+- Agent Skills validation
+- skill edit surfaces
+- skill materializers/presenters over the general `AgentCasePresenter` seam
+- skill proposal parsers for agent-authored changes
+- skill-use event parsing overlays for provider dialects
+- `AgentSkillEvidence` helpers and attribution impls
+- skill-specific tests over the general agent workload contract
 
-```text
-SkillBank owns candidate state.
-Materializer projects SkillBank into a provider-readable layout.
-AgentSkillDialect tells Leaven how that provider exposes and reports skills.
-AgentRuntime executes one session and preserves raw provider output.
-Dialect parser normalizes provider-specific skill events after the session.
-```
+It does not own:
 
-Provider dialect trait:
-
-```rust
-pub trait AgentSkillDialect: Send + Sync {
-    fn id(&self) -> SkillDialectId;
-    fn fingerprint(&self) -> Fingerprint;
-
-    fn validate_bank_for_backend(
-        &self,
-        bank: &SkillBank,
-    ) -> Result<(), SkillDialectError>;
-
-    async fn materialize_bank(
-        &self,
-        bank: &SkillBank,
-        workspace: &mut WorkspaceView<'_>,
-    ) -> Result<SkillMountReport, SkillDialectError>;
-
-    fn parse_skill_events(
-        &self,
-        session: &AgentSession,
-    ) -> Result<Vec<SkillUseEvent>, SkillDialectError>;
-}
-```
-
-`validate_bank_for_backend` is a backend compatibility check, not artifact
-validation. A bank can be a valid Leaven artifact and still be incompatible
-with a provider's current skill loader.
-
-Two activation families are expected:
-
-```text
-NativeLayout
-  Materialize skills into the provider's expected project layout.
-  The provider decides when to load/use them.
-  Leaven parses raw transcript/runtime events afterward.
-
-ExplicitSkillTool
-  Give the agent an explicit skill tool that lists name/description pairs,
-  installs/loads the selected skill, and returns instructions/base path.
-  Leaven can instrument this directly when the runtime supports tools.
-```
-
-Codex-native skill discovery should start as `NativeLayout`. Inspect/AISI's
-skill tool is the reference shape for `ExplicitSkillTool`, but Leaven should
-not copy its strict optional-field schema into the generic artifact type.
-
-Dialect laws:
-
-- dialect parsing must preserve raw provider evidence through `TraceRef`
-- absence of a parsed skill event means unknown, not "skill was not used"
-- provider-specific failures are `SkillDialectError`, not `SkillBankError`,
-  unless the bank violates the generic skill artifact contract
-- dialect materialization is deterministic for the same bank, dialect config,
-  workspace backend capabilities, and materializer fingerprint
-- dialects may expose weaker telemetry than others; generic policies must
-  branch on evidence capability/confidence, not assume observability
-
-### 1.5 Default product policy
-
-The default skill optimizer should be intentionally opinionated:
-
-```text
-artifact: SkillBank
-surface: skill folder + SKILL.md + file parts
-proposer: same-proposer bounded repair
-candidate selection: standalone Pareto/frontier selector, not GEPA-owned
-admission: valid proposal beats no proposal; invalid proposal repairs or fails
-evaluation: deterministic case sampler over train/validation partitions
-evidence: AgentSkillEvidence
-checkpoint: after every accepted proposal and after every evaluation batch
-resume: restore graph, population, sampler position, and private optimizer state
-```
-
-Defaults are not frozen architecture. They are the stable "bring your task"
-path. Paper reproductions may swap strategies, but if they need to replace
-skill artifacts, case materialization, evidence, checkpointing, or graph
-admission with fake local equivalents, the generic substrate is underbuilt.
-
-### 1.6 Product invariants
-
-The product path is done only when these properties are mechanically enforced:
-
-- invalid skill mutations never enter the graph
-- every accepted candidate is replayable from stored artifact state
-- every evaluation records case id, candidate id, session transcript, score,
-  cost, outcome, and structured errors
-- repair attempts are bounded, costed, and persisted
-- resume never reuses ambiguous sampler/population/proposer state
-- provider skill events normalize into optional `SkillUseEvent` evidence
-- `SkillBank` round-trips without losing files, metadata, or executable bits
-- scoring failure is recorded as evidence/error, not silent candidate failure
-- low-quality candidate behavior is evaluator evidence, not artifact invalidity
-- provider runtime details do not leak into cold artifact APIs
+- case suites
+- generic agent workload execution
+- generic run policy, retry, approval, recovery, or scoring contracts
+- provider runtime traits
+- GEPA candidate selection or optimizer rhythm
+- graph admission or checkpoint/restore
 
 ---
 
@@ -1732,11 +1435,7 @@ SkillBankChange      = filesystem-native artifact mutation
 RenameSkill          = identity rename with continuity
 SkillCard            = derived retrieval/index view, not source truth
 SkillRegistryArtifact = optional future semantic registry state
-CaseSuite            = stable task cases plus partitions and fingerprint
-SkillCase            = one optimizable task instance
-SkillObjective       = user-owned scoring capability
-AgentSkillBackend    = selected product backend/runtime/dialect bundle
-AgentSkillDialect    = provider skill-layout and skill-telemetry adapter
+SkillEventDialect    = optional provider dialect overlay for skill telemetry
 ```
 
 Essential type invariants:
@@ -1753,12 +1452,8 @@ Essential type invariants:
 - `SkillBank` has no duplicate skill names.
 - `SkillCard` is recomputable from `SkillBank` plus evidence/registry stats.
 - `CacheIdentity` is derived from normalized content, never from `CandidateId`.
-- `CaseSuite` fingerprint covers cases, targets, files, setup, metadata, and
-  partitions.
-- hidden case targets are unavailable to materializers unless explicitly
-  configured as candidate-visible task input.
-- `AgentSkillDialect` errors are backend compatibility/runtime interpretation
-  errors, not cold artifact validity errors.
+- skill-use telemetry is optional and provider-derived; absence of telemetry is
+  unknown, not false.
 
 Things to resist:
 
@@ -1806,9 +1501,9 @@ Likely trait additions or moves:
   that do not depend on GEPA.
 - `leaven-agentic`: bounded proposer-owned repair adapter over existing
   proposer/runtime/parser seams.
-- `leaven-agentic-skill`: product facade over real artifact, case, objective,
-  runtime, evidence, population, and checkpoint primitives; no private fake
-  graph or fake skill model.
+- `leaven-agentic-skill`: skill-specific presenters, proposal parsers,
+  skill-event dialect overlays, and convenience constructors over
+  `leaven-agentic`; no private fake graph, fake case model, or fake skill model.
 - `leaven-store` or `leaven-engine`: checkpoint traits and snapshot references,
   with concrete formats kept behind store/backend boundaries.
 
@@ -1836,14 +1531,9 @@ ReproposalError
   tells proposer/stage callers whether repair exhausted attempts, validation
   kept failing, runtime failed, or parsing failed.
 
-SkillObjectiveError
-  tells evaluator/product callers whether scoring failed due to user scorer
-  logic, missing outputs, invalid target data, model judge failure, or an
-  unsupported case shape.
-
 SkillDialectError
-  tells materializer/evaluator callers whether a valid SkillBank could not be
-  presented to or interpreted from a specific agent backend.
+  tells dialect callers whether skill-use telemetry could not be parsed or a
+  valid SkillBank could not be projected into a provider-specific skill layout.
 ```
 
 Important split:
@@ -1858,14 +1548,11 @@ Important split:
   validation failure
 - inability to parse skill-use telemetry is dialect evidence quality loss or a
   dialect error, not proof that no skill was used
-- objective/scorer failure is persisted with the case run and classified by
-  retryability; it must not silently drop the case from aggregate evidence
 
 Every public error should preserve:
 
 - skill name or folder where known
 - path where relevant
-- case id where relevant
 - backend/dialect id where relevant
 - attempted change when small enough, or blob reference when large
 - source parser/backend/runtime error
@@ -1900,25 +1587,17 @@ Surface contract tests:
 - part IDs are stable across equivalent content
 - surface-lowered edits validate through `SkillBank::apply_change`
 
-Case/objective law tests:
-
-- `CaseSuite` fingerprint changes when input, target, metadata, files, setup,
-  or partitions change
-- deterministic sampling over the same suite fingerprint and seed returns the
-  same case sequence
-- hidden targets are visible to scorers but not materialized into candidate
-  workspaces by the default materializer
-- `SkillObjective` cannot return NaN, infinities, or implicit unscored sentinel
-  values
-- objective errors preserve case id and retryability classification
-
-Dialect contract tests:
+Skill dialect overlay tests:
 
 - dialect materialization of the same valid bank is deterministic for the same
   backend config and workspace capability set
 - a dialect incompatibility does not become `SkillBankError`
 - transcript parser preserves raw provider evidence through a trace reference
 - missing telemetry produces unknown evidence, not a negative skill-use event
+
+General case, objective, retry, approval, and recovery law tests live in
+`docs/specs/agentic_task_execution_substrate.md`; skill-specific tests should
+reuse those suites instead of redefining local task/evaluator types.
 
 Scenario tests:
 
@@ -1927,9 +1606,9 @@ Scenario tests:
   paths without changing artifact state
 - proposer-owned repair loop feeds typed validation/workspace-parse feedback to a
   fake runtime and records failed attempts in stage output or events
-- product facade runs one fake-runtime iteration from seed skills and cases
-  through proposal, validation, evaluation, evidence, population update, and
-  checkpoint
+- GEPA can run one fake-runtime iteration from `SkillBank` seed through
+  proposal, validation, agent-case evaluation, evidence, population update, and
+  checkpoint using the general agentic task substrate
 - selector/admission primitives can be reused by GEPA and a non-GEPA skill
   optimizer without dependency inversion
 - checkpoint/restore resumes frontier membership, selector state, and cached
@@ -2091,16 +1770,14 @@ Implementation status:
 
 Detailed enough to implement now:
 
-- product-facing `SkillOptimization` facade contract
-- `CaseSuite` / `SkillCase` end-user task shape
-- user-owned `SkillObjective` scoring seam
-- `AgentSkillBackend` and `AgentSkillDialect` split
-- native-layout vs explicit-skill-tool activation families
 - `SkillFolder` required format and validation
 - `SkillBankError` validation family
 - `SkillBankChange` folder/file/permission changes
 - first-class `RenameSkill`
 - derived `SkillManifest` / `SkillCard`
+- skill-specific presenters over the general `AgentCasePresenter` seam
+- skill-specific proposal parsers over the general `AgentAuthoredProposer` seam
+- skill-event dialect overlays over the general `AgentProviderDialect` seam
 - proposer-owned validation/reproposal loop
 - `ValidatorReport` minimum shape
 - workspace proposal parser contract and laws
@@ -2122,8 +1799,10 @@ Needs design tightening before implementation:
 
 Known implementation blockers for paper reproduction:
 
+- real `leaven-agentic` agent workload substrate from
+  `docs/specs/agentic_task_execution_substrate.md`
 - real `leaven-artifact-skill`
-- real `leaven-agentic-skill` product facade
+- real `leaven-agentic-skill` skill-specific adapters over that substrate
 - real `leaven-artifact-git`
 - workspace proposal parser / snapshot parser
 - cache identity code cutover
@@ -2142,12 +1821,13 @@ Known implementation blockers for paper reproduction:
 1. Implement `leaven-artifact-skill` with validation, content identity, and
    law tests.
 2. Implement skill folder/file/manifest surfaces.
-3. Implement `CaseSuite`, `SkillCase`, and deterministic case sampling for the
-   skill-optimization product path.
-4. Implement `SkillObjective`, `SkillAssessment`, and the default evaluator
-   composition that turns sessions into assessments.
-5. Implement `AgentSkillBackend` / `AgentSkillDialect` with a Codex-native
-   layout dialect first.
+3. Implement the general agent workload substrate in `leaven-agentic`:
+   `CaseSuite`, `AgentCase`, deterministic sampling, `AgentCaseEvaluator`,
+   `AgentCasePresenter`, `AgentCaseScorer`, run policy, and case-run records.
+4. Implement skill-specific presenters, proposal parsers, and skill-event
+   dialect overlays in `leaven-agentic-skill`.
+5. Implement a Codex-native skill layout overlay using the Codex runtime and
+   the general provider dialect/event model.
 6. Implement typed skill validation errors and a bounded reproposal adapter in
    `leaven-agentic`.
 7. Implement local skill materializer and workspace proposal-parser smoke tests.
@@ -2156,8 +1836,8 @@ Known implementation blockers for paper reproduction:
 9. Implement `TopKFrontier`, `KeepIfAboveWeakest`, and parent selectors outside
    `leaven-gepa`.
 10. Implement `AgentSkillEvidence` and attribution traits.
-11. Implement the `SkillOptimization` facade over the generic pieces, using a
-    fake runtime first.
+11. Prove GEPA consumes the generic agent evaluator/proposer plus `SkillBank`
+    without a skill-specific optimizer facade, using a fake runtime first.
 12. Finish cache identity cutover.
 13. Add minimal checkpoint/restore for graph + explicit optimizer/population
    state.
