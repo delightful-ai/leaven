@@ -10,6 +10,9 @@ pub mod artifacts {
 
     #[cfg(feature = "jj")]
     pub use leaven_artifact_jj::*;
+
+    #[cfg(feature = "skill")]
+    pub use leaven_artifact_skill::*;
 }
 
 pub mod evidence {
@@ -51,4 +54,7 @@ pub mod prelude {
     pub use leaven_preference::prelude::*;
     pub use leaven_render::prelude::*;
     pub use leaven_surface::prelude::*;
+
+    #[cfg(feature = "skill")]
+    pub use leaven_artifact_skill::*;
 }

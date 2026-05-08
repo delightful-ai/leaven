@@ -13,6 +13,7 @@ workspace = true
 [dependencies]
 leaven-artifact-git = { workspace = true, optional = true }
 leaven-artifact-jj = { workspace = true, optional = true }
+leaven-artifact-skill = { workspace = true, optional = true }
 leaven-artifacts = { workspace = true }
 leaven-evidence = { workspace = true }
 leaven-population = { workspace = true }
@@ -24,3 +25,4 @@ leaven-surface = { workspace = true }
 default = []
 git = ["dep:leaven-artifact-git"]
 jj = ["dep:leaven-artifact-jj"]
+skill = ["dep:leaven-artifact-skill"]

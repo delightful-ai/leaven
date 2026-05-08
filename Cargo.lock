@@ -739,6 +739,7 @@ version = "0.0.0"
 dependencies = [
  "leaven-artifact-git",
  "leaven-artifact-jj",
+ "leaven-artifact-skill",
  "leaven-artifacts",
  "leaven-evidence",
  "leaven-population",

@@ -295,6 +295,7 @@ const EXPECTED_DEPENDENCIES: &[(&str, &[&str])] = &[
         &[
             "leaven-artifact-git",
             "leaven-artifact-jj",
+            "leaven-artifact-skill",
             "leaven-artifacts",
             "leaven-evidence",
             "leaven-population",
