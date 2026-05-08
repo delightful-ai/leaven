@@ -17,7 +17,8 @@ Stages may run agents.
 Materializers make agent-readable worlds.
 Renderers build prompt/config values.
 Agent runtimes execute one session inside an already-built world.
-Parsers import session outputs back into typed proposals or assessments.
+Parsers/finalizers import session outputs or workspace changes back into typed
+proposals or assessments.
 ```
 
 The main design pressure is agentic optimization over evolving codebases,
@@ -60,7 +61,7 @@ It is not inside the engine, not inside the artifact, and not inside
 | `leaven-core` | artifact, proposal, evidence, evaluation vocabulary | workspaces, agents, renderers, graph, surfaces |
 | `leaven-workspace` | backend-neutral files/commands/cleanup | artifacts, proposals, evidence, graph, agents |
 | `leaven-agent` | one runtime session over a workspace | candidates, assessments, proposals, optimizer rhythm |
-| `leaven-engine` | graph, contexts, stages, trust, budget | provider SDKs, Codex/Claude/OpenCode details |
+| `leaven-engine` | graph, contexts, stages, trust, budget | provider SDK details |
 | `leaven-agentic` | reusable adapters from agents to stages | provider internals, optimizer-specific search policy |
 | optimizer crate | when and why to call stages | provider-specific runtime mechanics |
 
@@ -431,7 +432,7 @@ pub enum OutputContract {
 }
 ```
 
-Parsing is stage-owned:
+Import is stage-owned:
 
 ```text
 OutputContract::JsonFile("output/proposals.json")
@@ -441,7 +442,16 @@ OutputContract::JsonFile("output/proposals.json")
 OutputContract::Files(["output/evidence.json", "output/transcript.json"])
   -> EvidenceParser<P>
   -> Vec<Assessment<P>>
+
+OutputContract::WorkspaceDiff(".")
+  -> WorkspaceFinalizer<P, I>
+  -> ProposalBatch<P>
 ```
+
+`OutputContract::WorkspaceDiff` does not make the runtime understand Leaven
+artifacts. It only tells the runtime/stage that changed workspace state is an
+expected output. The stage-owned finalizer imports those changes into typed
+proposal data.
 
 ### 4.4 Run context
 
@@ -515,13 +525,13 @@ adapt agent sessions into stage outputs.
 ### 5.1 Agentic proposer
 
 ```rust
-pub struct AgenticProposer<Factory, R, M, Prompt, Parse> {
+pub struct AgenticProposer<Factory, R, M, Prompt, Import> {
     pub runtime: R,
     pub workspace_factory: Factory,
     pub workspace_config: WorkspaceConfig,
     pub materializer: M,
     pub prompt_renderer: Prompt,
-    pub parser: Parse,
+    pub importer: Import,
 }
 ```
 
@@ -534,7 +544,7 @@ request
   -> materialize allowed artifact/history/traces into workspace
   -> render AgentInstructions
   -> runtime.run_session(...)
-  -> parser reads session/workspace output
+  -> parser/finalizer imports session or workspace output
   -> return Metered<ProposalBatch<P>>
 ```
 
@@ -654,9 +664,9 @@ the candidate unless it is explicitly part of the artifact. Its prompt, model,
 and parser are fixed stage configuration and contribute to the evaluator
 fingerprint.
 
-### 5.3 Parser ownership
+### 5.3 Parser and finalizer ownership
 
-Parsers are separate from runtimes:
+Parsers and finalizers are separate from runtimes:
 
 ```rust
 pub trait ProposalParser<P: OptimizationProblem>: Send + Sync {
@@ -676,6 +686,16 @@ pub trait EvidenceParser<P: OptimizationProblem>: Send + Sync {
         session: &AgentSession,
         unit: &EvaluationWorkUnit,
     ) -> Result<Vec<Assessment<P>>, EvidenceParseError>;
+}
+
+pub trait WorkspaceFinalizer<P: OptimizationProblem, I>: Send + Sync {
+    async fn finalize(
+        &self,
+        workspace: &mut WorkspaceView<'_>,
+        session: &AgentSession,
+        input: &I,
+        graph: RunGraphView<'_, P>,
+    ) -> Result<ProposalBatch<P>, FinalizeError>;
 }
 ```
 
@@ -789,7 +809,7 @@ leaven-agent
   OutputContract
   runtime capability declarations
 
-leaven-agent-codex / leaven-agent-claude-code / leaven-agent-opencode
+provider-specific runtime crates, starting with leaven-agent-codex
   provider-specific AgentRuntime impls
   provider config
   transcript normalization
@@ -798,7 +818,7 @@ leaven-agent-codex / leaven-agent-claude-code / leaven-agent-opencode
 leaven-agentic
   AgenticProposer
   AgenticEvaluator
-  ProposalParser / EvidenceParser helpers
+  ProposalParser / EvidenceParser / WorkspaceFinalizer helpers
   common agent materializer compositions
   runtime capability checks
 
@@ -841,8 +861,8 @@ provider adapters:
    `leaven-agentic::AgenticEvaluator` against the fake runtime.
 4. Move one milestone example from handwritten deterministic plumbing to the
    agentic adapters.
-5. Add a real provider adapter, starting with Codex or Claude Code, behind an
-   optional feature.
+5. Add a real provider adapter in its own provider spec and crate, starting with
+   Codex.
 6. Pair provider adapters with capability tests that prove local-vs-remote
    workspace behavior fails early when unsupported.
 

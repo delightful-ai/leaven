@@ -4605,11 +4605,10 @@ skill-optimization papers without baking a paper-specific loop into the engine.
   directory with mandatory `SKILL.md` frontmatter (`name`, `description`) and
   optional scripts, references, assets, and extra files.
 - **Skill changes are filesystem-native.** `ReplaceSkill` means replacing the
-  whole folder; rewriting `SKILL.md` is a file write or patch. File permissions
-  are preserved without making executable files semantically special.
+  whole folder; rewriting `SKILL.md` is a file write. File permissions are
+  preserved without making executable files semantically special.
 - **Skill surfaces are explicit.** Folder, file, manifest/frontmatter, and
-  future Markdown-section surfaces are named as standard lenses over a
-  `SkillBank`.
+  retrieval/index surfaces are named as standard lenses over a `SkillBank`.
 - **Git is first-class but not default.** Git stores immutable artifact state;
   Leaven stores optimization causality. Checkout/finalization strategies are
   operational details.
@@ -4629,13 +4628,22 @@ skill-optimization papers without baking a paper-specific loop into the engine.
   substrate is implemented.
 - **Validation lifecycle clarified.** Apply/validate failure now has an
   explicit lifecycle: it records an `ApplyFailed` attempt and creates no
-  candidate; bounded repair/reproposal is stage or optimizer policy, not hidden
-  engine behavior. Workspace-level submit validation and portable "new session
-  with prior context" repair loops are specified.
+  candidate. Bounded repair/reproposal is proposer-owned stage policy before a
+  `ProposalBatch` is returned, not hidden engine behavior.
 - **Reproposal scoped to same proposer.** Proposal repair now routes back to
   the same proposer stage that authored the invalid proposal. The reusable
   primitive is proposal-stage scoped, suitable for skills, code-editing agents,
   harness generation, and config synthesis, not a generic evaluator retry loop.
+- **Workspace finalization specified.** Agentic proposers may import edited
+  workspaces into typed `ProposalBatch` values through a stage-owned finalizer.
+  Finalizers do not mutate the graph; `RunContext` remains graph authority.
+- **Skill telemetry and utility state scoped.** Skill-use telemetry is optional
+  evidence capability, not mandatory trajectory modeling. Skill utility is
+  population/private optimizer state by default and becomes artifact state only
+  when it changes candidate behavior.
+- **Checkpoint restore laws expanded.** Checkpoints must preserve graph truth,
+  explicit private optimizer/population/selector state, cache state, clean stage
+  boundaries, and abandoned workspace facts without replaying committed work.
 
 ### v0.2.3 (2026-05-07) - agentic stage runtime contract
 

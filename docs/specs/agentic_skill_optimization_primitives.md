@@ -77,7 +77,7 @@ Generic Leaven/library pieces:
 Paper-specific reproduction pieces:
 
 - EvoSkill loop, prompts, OfficeQA/SealQA scorers, train/val/test splitting
-- Trace2Skill analyst prompts, patch consolidation, merge hierarchy
+- Trace2Skill analyst prompts, consolidation, merge hierarchy
 - Memento-Skills read-write loop, router training, utility threshold policy
 - D2Skill dual-granularity RL coupling, baseline/skill rollout pairing
 - SkillReducer delta-debugging oracle, body classifier, faithfulness gates
@@ -234,15 +234,15 @@ continuity is preserved across the rename event
 ```
 
 If the rename also changes the description, model that as an atomic rename plus
-`SKILL.md` write/patch. This keeps "what changed identity?" separate from
-"what changed routing semantics?" while still allowing one proposal to do both.
+a `SKILL.md` write. This keeps "what changed identity?" separate from "what
+changed routing semantics?" while still allowing one proposal to do both.
 
 ---
 
 ## 4. Skill Bank Changes
 
-Skill mutations should be filesystem-native but not patch-only. Total rewrites
-must be ordinary changes.
+Skill mutations should be filesystem-native. Total rewrites must be ordinary
+changes.
 
 ```rust
 pub enum SkillBankChange {
@@ -274,12 +274,6 @@ pub enum SkillBankChange {
         file: SkillFile,
     },
 
-    PatchFile {
-        skill: SkillName,
-        path: SkillPath,
-        patch: TextPatch,
-    },
-
     RemoveFile {
         skill: SkillName,
         path: SkillPath,
@@ -307,7 +301,6 @@ Important naming decisions:
 - `RenameSkill` means identity rename and must update folder name plus
   `SKILL.md` frontmatter `name` together.
 - Rewriting `SKILL.md` is `WriteFile { path: "SKILL.md", ... }`.
-- Patching `SKILL.md` is `PatchFile { path: "SKILL.md", ... }`.
 - Changing `description` normally means editing `SKILL.md` frontmatter.
 - `SkillCard` or retrieval index records are derived from the folder, not
   separate canonical artifact truth.
@@ -362,13 +355,13 @@ pub enum SkillBankError {
 ```
 
 The open library gap is not validation itself. The gap is the standard
-reproposal control flow above it.
+proposal-stage control flow above it.
 
 Initial rule:
 
 ```text
 Artifact validation is mandatory at graph insertion.
-Automatic repair/reproposal is stage policy, not engine policy.
+Proposer repair is stage policy, not engine policy.
 ```
 
 Current engine behavior is deliberately minimal:
@@ -385,15 +378,15 @@ the engine does not call the proposer again
 
 That behavior is necessary but not sufficient for agentic skill optimization.
 It prevents invalid artifacts from entering the candidate graph, cache, or
-population, while preserving the failed attempt as run evidence. It does not
-repair anything by itself.
+population, while preserving the failed graph-apply attempt as run history. It
+does not repair anything by itself.
 
 The engine should not secretly call an agent again because a proposal failed
-validation. A concrete `AgenticProposer`, optimizer, or optimizer helper can
-choose a bounded repair loop, but the repair target is the same proposer stage
-that authored the invalid proposal. Repair is not a fallback to some global
-"fixer" unless the optimizer explicitly chose such a proposer as the original
-stage.
+validation. The standard repair primitive lives inside the proposer stage: the
+same proposer may iterate until it can return a proposal batch that is locally
+valid against the graph snapshot it was given, or until it exhausts attempts.
+Repair is not a fallback to some global "fixer" unless the optimizer explicitly
+chose such a proposer as the original stage.
 
 ```rust
 pub struct ReproposalPolicy {
@@ -411,41 +404,42 @@ pub struct ValidationCommand {
 }
 ```
 
-When enabled, the same proposer receives the typed validation error plus the
-prior candidate/proposal context and authors a revised proposal. "Same" means
-same proposer identity, same configured backend/runtime, same parser/finalizer,
-and same optimization stage. It does not require the provider to resume the same
-chat/session thread. Provider adapters may use native continuation when
-available, but portable Leaven semantics are explicit prior context plus a new
-bounded attempt.
+When enabled, the same proposer receives the typed validation error, validator
+output, finalizer error, or local apply/validate error plus the prior attempt
+context and authors a revised proposal. "Same" means same proposer identity,
+same configured backend/runtime, same parser/finalizer, and same optimization
+stage. It does not require the provider to resume the same chat/session thread.
+Provider adapters may use native continuation when available, but portable
+Leaven semantics are explicit prior context plus a bounded next attempt.
 
-Failed graph-apply attempts should still be recordable as failed proposal
-applications so the run graph preserves what happened. This is core enough to
-standardize as proposal-stage orchestration, but it should remain opt-in stage
-composition rather than an engine-global retry loop.
-
-There are two useful repair-loop shapes:
+The proposer-owned loop has one shape:
 
 ```text
-Parse/apply validation loop:
-  agent proposes a typed change or output file
-  parser imports it into ProposalBatch
-  optimizer records and applies the batch
-  artifact apply/validate fails
-  run graph records ApplyFailed
-  optimizer calls the same proposer again with the error and prior attempt
-
-Workspace submit validation loop:
-  agent edits files in workspace
-  proposer stage runs a validator command before parsing/finalizing
-  on validator failure, route stdout/stderr back to the same proposer adapter
-  on validator success, parser/finalizer imports proposals
+request enters proposer
+for attempt in 1..=max_attempts:
+  materialize allowed context
+  run authoring agent or deterministic authoring step
+  run optional workspace validators
+  import output/workspace diff into a ProposalBatch
+  locally apply/validate proposed artifacts against the input graph snapshot
+  if locally valid: return ProposalBatch
+  render repair feedback back to the same proposer attempt loop
+return ProposalError::repair_exhausted(...)
 ```
 
-The second shape covers "validate before submit" workflows: a paper-specific
-proposer or generic `AgenticProposerWithRepair` can write a validation report
-into the workspace, render it back into the next agent prompt, and let the
-agent repair before anything is admitted to the optimizer as a candidate.
+The graph remains the final admission authority. A proposal that was locally
+valid inside the proposer may still fail at `RunContext::apply_batch` because
+the graph changed, storage refused a write, or the proposer/finalizer had a bug.
+That failed graph-apply attempt is recorded as `ApplyFailed`; the engine still
+does not call the proposer again.
+
+This is the key simplification:
+
+```text
+repair before returning ProposalBatch = proposer responsibility
+admit returned ProposalBatch to graph = RunContext responsibility
+retry after graph admission failure = optimizer-specific, not a standard primitive
+```
 
 Provider-neutral Leaven should not require "same provider thread" semantics for
 this loop. `AgentRuntime` currently executes one session in one workspace.
@@ -478,47 +472,74 @@ runtime reliability retries or self-correction loops, but those are evaluator
 implementation details and should return evidence/cost, not mutate the
 candidate graph.
 
-The likely generic helper shape is:
+The likely generic stage-local feedback shape is:
 
 ```rust
-pub struct ProposalRepairFeedback<'a, P: OptimizationProblem> {
+pub struct ProposalRepairFeedback {
     pub attempt_index: NonZeroUsize,
-    pub batch_id: ProposalBatchId,
-    pub outcomes: Vec<ApplyOneReport>,
+    pub prior_transcript: Option<TraceRef>,
+    pub prior_output: Option<WorkspacePath>,
+    pub import_error: Option<FinalizeErrorRecord>,
+    pub local_validation_error: Option<DurableErrorRecord>,
     pub validator_report: Option<ValidatorReport>,
-    pub graph: RunGraphView<'a, P>,
 }
 
-pub trait ReproposalPlanner<P, Prop>
-where
-    P: OptimizationProblem,
-    Prop: Proposer<P>,
-{
+pub trait RepairPromptBuilder<I>: Send + Sync {
     fn next_request(
-        &mut self,
-        original: &Prop::Request,
-        feedback: &ProposalRepairFeedback<'_, P>,
-    ) -> Option<Prop::Request>;
+        &self,
+        original_input: &I,
+        feedback: &ProposalRepairFeedback,
+    ) -> Result<AgentInstructions, RepairPromptError>;
 }
 ```
 
-An optimizer can then use a standard loop:
+The exact helper may be an `AgenticProposer` wrapper or a reusable component
+inside `leaven-agentic`. It should not require optimizers to own the repair loop
+unless an optimizer wants a non-standard policy.
+
+### 4.3 Validator reports
+
+Validator reports should be intentionally small. The report exists for two
+callers:
 
 ```text
-request = original request
-for attempt in 1..=max_attempts:
-  batch = ctx.propose(&same_proposer, request).await?
-  apply = ctx.apply_batch(batch.batch_id)?
-  if any acceptable candidate exists: return candidates
-  request = planner.next_request(original, apply feedback)?
-return record/expose exhausted repair
+the same proposer, which needs enough detail to repair
+the run recorder, which needs enough detail to audit what happened
 ```
 
-This helper is general enough for skill folders, code-editing agents, harness
-generation, config synthesis, and any artifact whose proposal can fail local
-structural validation. It is intentionally not a replacement for GEPA's
-selection/gate/validation policy; it is the "make the proposed artifact
-well-formed enough to enter the graph" loop.
+Minimum shape:
+
+```rust
+pub struct ValidatorReport {
+    pub checks: Vec<ValidatorCheckReport>,
+}
+
+pub struct ValidatorCheckReport {
+    pub name: String,
+    pub cwd: WorkspacePath,
+    pub argv: Vec<String>,
+    pub exit_code: Option<i32>,
+    pub stdout: DiagnosticText,
+    pub stderr: DiagnosticText,
+}
+
+pub struct DiagnosticText {
+    pub text: String,
+    pub truncated: bool,
+}
+```
+
+Laws:
+
+- validator commands run inside the stage workspace through `WorkspaceView`, not
+  through host paths
+- a failed validator check is repair feedback, not evaluator evidence and not
+  candidate quality evidence
+- truncation must be explicit when output is shortened
+- validators must not read hidden partitions unless the proposer has read scope
+  for them
+- validator success means only "the configured checks passed"; graph admission
+  and artifact validation still remain authoritative
 
 Permission portability is not a `SkillBank` validation error. A `SkillFile`
 can represent `executable: true`; if a specific workspace backend cannot
@@ -583,24 +604,7 @@ frontmatter fields are not individual generic parts; they are metadata paths.
 Paper-specific crates can define typed views over their own metadata keys when
 those keys become semantic.
 
-### 5.4 Section surface
-
-Potential later surface over Markdown headings inside `SKILL.md`:
-
-```rust
-pub enum SkillDocPart {
-    Section {
-        skill: SkillName,
-        heading_path: Vec<String>,
-    },
-}
-```
-
-This is useful for Trace2Skill-style "insert after section" patches and
-SkillReducer body restructuring. It is more parser-sensitive and can be
-deferred until file-level patches become too blunt.
-
-### 5.5 Retrieval/index surface
+### 5.4 Retrieval/index surface
 
 `SkillCard` is a derived index:
 
@@ -626,20 +630,19 @@ state as optimized memory rather than derived bookkeeping.
 
 ## 6. Materialization and Progressive Disclosure
 
-Skill folders materialize differently for different agent runtimes.
+Skill folders materialize differently for different agent runtimes. This spec
+only defines the generic layout choice; provider-specific paths belong in
+provider adapter specs.
 
-Common layouts:
+Common generic layouts:
 
 ```text
-Codex:
-  .agents/skills/<skill-name>/SKILL.md
-
-Claude Code:
-  .claude/skills/<skill-name>/SKILL.md
-
 Provider-neutral workspace:
   skills/<skill-name>/SKILL.md
   agent.toml maps provider layout to skill root
+
+Provider-native workspace:
+  provider adapter chooses the runtime-specific skill root
 ```
 
 The materializer owns layout. `SkillBank` does not.
@@ -651,9 +654,8 @@ pub struct SkillBankMaterializer {
 }
 
 pub enum SkillLayout {
-    CodexAgents,
-    ClaudeCode,
     ProviderNeutral,
+    ProviderNative { name: String },
     Custom(SkillLayoutSpec),
 }
 ```
@@ -818,8 +820,8 @@ Skill-specific materializer/parser helpers should not live in `leaven-core` or
 adapter crate rather than fattening `leaven-agentic`:
 
 ```text
-leaven-agentic-skill
-  owns skill-layout materializers, skill workspace diff import,
+  leaven-agentic-skill
+  owns skill-layout materializers, skill workspace finalizers,
   provider-specific skill layout helpers, and common skill parsers
   depends on leaven-agentic, leaven-artifact-skill, leaven-workspace
 ```
@@ -827,11 +829,112 @@ leaven-agentic-skill
 This crate is optional. Do not add it until the helpers are large enough to
 hide a real decision.
 
+### 8.1 Workspace finalization
+
+Agentic proposers often do not produce `output/proposals.json`. The natural
+shape for code and skill agents is:
+
+```text
+materialize parent artifact into a workspace
+agent edits files
+stage imports the edited workspace back into typed Leaven proposals
+```
+
+That import step is **workspace finalization**. It is stage-owned import logic,
+not runtime logic and not graph mutation.
+
+```rust
+pub trait WorkspaceFinalizer<P, I>: Send + Sync
+where
+    P: OptimizationProblem,
+{
+    async fn finalize(
+        &self,
+        workspace: &mut WorkspaceView<'_>,
+        session: &AgentSession,
+        input: &I,
+        graph: RunGraphView<'_, P>,
+    ) -> Result<Metered<ProposalBatch<P>>, FinalizeError>;
+}
+```
+
+For `SkillBank`, a finalizer reads the materialized skill directory, parses and
+validates every `SKILL.md`, compares the resulting `SkillBank` to the parent
+artifact, and emits one of the standard `SkillBankChange` proposal forms. For
+git-backed artifacts, a finalizer imports a stable revision, snapshot, or diff
+summary and emits the corresponding git artifact change. In both cases, the
+finalizer converts workspace side effects into immutable proposal data.
+
+The standard `AgenticProposer` should support two import modes:
+
+```text
+structured output:
+  runtime satisfies OutputContract::JsonFile or OutputContract::Files
+  ProposalParser imports those files into ProposalBatch
+
+workspace finalization:
+  runtime satisfies OutputContract::WorkspaceDiff or stage-owned equivalent
+  WorkspaceFinalizer imports changed workspace state into ProposalBatch
+```
+
+Both modes feed the same proposer-owned validity loop in §4. The proposer should
+not return a batch until the imported proposal has passed local validation
+against the graph snapshot visible to that proposer.
+
+Finalizer laws:
+
+- **No graph mutation.** A finalizer returns `ProposalBatch`; only `RunContext`
+  records and applies it.
+- **Typed import.** A finalizer must return artifact-native changes or fresh
+  artifacts, not opaque workspace paths.
+- **Workspace paths only.** A finalizer uses `WorkspacePath` and `WorkspaceView`;
+  host `PathBuf` access is backend-specific and belongs behind a workspace
+  backend or adapter.
+- **Local validity check.** A finalizer or wrapping proposer validates the
+  resulting proposal against the relevant parent artifact before returning it.
+- **Graph admission remains authoritative.** Local validity is a preflight, not
+  a substitute for `RunContext::apply_batch`.
+- **Identity discipline.** Workspace paths, branch names, and mutable refs are
+  not artifact identity or cache identity.
+- **Read-scope discipline.** Finalizers may import only data the proposer was
+  allowed to materialize or observe.
+- **Deterministic import.** Given the same parent artifact, finalizer config,
+  session output, and workspace bytes, finalization should produce the same
+  proposal batch or the same error.
+
+Minimum error shape:
+
+```rust
+pub enum FinalizeError {
+    MissingExpectedPath { path: WorkspacePath },
+    ReadFailed { path: WorkspacePath, source: WorkspaceError },
+    ParseFailed { path: WorkspacePath, source: DurableErrorRecord },
+    InvalidArtifact { source: DurableErrorRecord },
+    NoChanges,
+    UnsupportedWorkspace { reason: String },
+}
+```
+
+`NoChanges` is not automatically an error in every optimizer. A proposer that is
+allowed to return "no proposal" may map it to an empty batch; a proposer that
+was explicitly asked to author a mutation should surface it as repair feedback
+or `ProposalError`.
+
 ---
 
 ## 9. Evidence for Skill Optimization
 
-Skill papers need more than scalar scores. Standard evidence should preserve:
+Skill papers need more than scalar scores, but Leaven should not make
+"trajectory" a mandatory cold-core concept. The base rule is:
+
+```text
+runtime/session crates preserve raw transcripts and provider events
+evaluator/parser code derives typed evidence when it can
+skill-use telemetry is an optional evidence capability
+absence of telemetry means unknown, not false
+```
+
+Standard evidence should be able to preserve:
 
 - case id / task id
 - partition and evaluation purpose
@@ -847,7 +950,7 @@ Skill papers need more than scalar scores. Standard evidence should preserve:
 - attribution records
 - cost
 
-Proposed standard shape:
+Proposed standard shape for agent-skill evaluations:
 
 ```rust
 pub struct AgentSkillEvidence {
@@ -855,11 +958,38 @@ pub struct AgentSkillEvidence {
     pub scores: ScoreVector,
     pub transcript: TraceRef,
     pub scorer_output: ScorerOutput,
-    pub active_skills: Vec<SkillName>,
-    pub retrieved_skills: Vec<SkillName>,
-    pub file_reads: Vec<SkillFileRead>,
+    pub skill_events: Vec<SkillUseEvent>,
     pub failures: Vec<FailureRecord>,
     pub attributions: AttributionSet,
+}
+
+pub struct SkillUseEvent {
+    pub skill: SkillName,
+    pub kind: SkillUseKind,
+    pub source: SkillUseSource,
+    pub confidence: SkillUseConfidence,
+    pub evidence: Option<TraceRef>,
+}
+
+pub enum SkillUseKind {
+    Available,
+    Retrieved,
+    Loaded,
+    ReferencedFile { path: SkillPath },
+    RanScript { path: SkillPath },
+    CitedOrParaphrased,
+}
+
+pub enum SkillUseSource {
+    RuntimeTelemetry,
+    TranscriptParser,
+    EvaluatorInstrumentation,
+    PaperSpecificInference,
+}
+
+pub enum SkillUseConfidence {
+    Observed,
+    Inferred,
 }
 ```
 
@@ -872,18 +1002,33 @@ impl AttributableEvidence<SkillFilePart> for AgentSkillEvidence
 impl AttributableEvidence<FailureClusterId> for AgentSkillEvidence
 ```
 
+Optional capability trait:
+
+```rust
+pub trait SkillUseEvidence {
+    fn skill_events(&self) -> &[SkillUseEvent];
+}
+```
+
 Why this matters:
 
 - EvoSkill needs failures below threshold and active-skill context.
-- Trace2Skill needs success/failure memories and patch support counts.
+- Trace2Skill needs success/failure memories and consolidation support counts.
 - Memento-Skills needs skill-level failure attribution.
 - D2Skill needs utility updates based on retrieved skills.
 - SkillReducer needs route-trigger evidence and task-retention evidence.
 
-Open question: how much skill-use telemetry can be observed provider-neutrally.
-Some runtimes expose skill activation and file reads; others may only expose
-transcripts and final files. Evidence must represent both precise telemetry and
-best-effort inferred telemetry without lying.
+Telemetry laws:
+
+- `Observed` means the runtime, instrumentation, or evaluator directly observed
+  the event.
+- `Inferred` means a parser or paper-specific analysis inferred the event from a
+  transcript, final answer, filesystem output, or scorer result.
+- an implementation must not convert "not observed" into "did not happen"
+- evidence should keep a `TraceRef` or other durable pointer when the event is
+  derived from a larger transcript
+- generic retrieval and utility policies may consume `SkillUseEvidence`, but
+  paper-specific inference stays in the evaluator or reproduction crate
 
 ---
 
@@ -898,7 +1043,6 @@ best parent selection
 random parent selection
 utility-ranked skill bank
 capacity-bounded pruning
-patch-set consolidation
 train/validation/test partition filtering
 ```
 
@@ -981,6 +1125,54 @@ This split keeps `ParetoFrequencyWeighted`, `BestParent`, `RoundRobinParent`,
 and `TopKByPreference` reusable for EvoSkill, GEPA, beam baselines, and
 non-GEPA skill optimizers.
 
+### 10.1 Utility state ownership
+
+Skill utility is learned run state by default. It should not be baked into
+`SkillBank` just because several papers maintain utility tables.
+
+Ownership rule:
+
+```text
+skill content and routing description = Artifact
+frontier/admission/retrieval utility = Population or optimizer private state
+deployed registry visible to the candidate agent = Artifact
+fixed evaluator-side retrieval model = Evaluator config/fingerprint
+```
+
+Start with population-owned utility state:
+
+```rust
+pub struct SkillUtilityState {
+    pub utilities: BTreeMap<SkillName, SkillUtility>,
+    pub observations: BTreeMap<SkillName, SkillUtilityStats>,
+}
+```
+
+Promote utility state into an artifact only when changing that utility state
+changes the candidate being evaluated. Examples:
+
+- the agent receives a materialized `skill_registry.json` containing utility
+  scores and uses it at task time
+- the optimizer mutates a router policy as part of the candidate
+- the paper explicitly treats the learned registry as the deployed artifact
+
+Keep utility outside the artifact when it is only optimizer bookkeeping:
+
+- parent selection weights
+- admission/pruning thresholds
+- retrospective analysis of which skills helped
+- evaluator-side routing held fixed across candidates
+
+Laws:
+
+- if utility changes candidate behavior, it must participate in artifact and
+  cache identity
+- if utility is population/private state, checkpoint/restore must preserve it
+- if utility belongs to evaluator config, evaluator fingerprint/cache key must
+  include it
+- `RenameSkill` must either transfer utility state or record an explicit
+  discontinuity; remove/create must not silently preserve utility
+
 ---
 
 ## 11. Cache Identity
@@ -1027,21 +1219,47 @@ The cache must never key deterministic evaluation on `CandidateId`.
 
 ## 12. Durable Checkpoint and Restore
 
-Agentic skill runs are long and expensive. Minimum resume support:
+Agentic skill runs are long and expensive. Checkpointing is not just graph
+serialization: the graph records public optimization facts, while optimizers,
+populations, selectors, repair loops, and caches may hold private state needed
+to continue without changing behavior.
+
+Minimum envelope:
 
 ```rust
 pub struct RunCheckpoint {
+    pub format_version: u32,
     pub run_id: RunId,
+    pub created_at: Timestamp,
     pub graph_snapshot: GraphSnapshotRef,
-    pub optimizer_state: OptimizerStateRef,
-    pub population_state: PopulationStateRef,
+    pub optimizer_state: Option<OptimizerStateSnapshot>,
+    pub population_states: BTreeMap<PopulationId, PopulationStateSnapshot>,
+    pub selector_states: BTreeMap<StageId, StageStateSnapshot>,
+    pub admission_states: BTreeMap<StageId, StageStateSnapshot>,
     pub budget_ledger: BudgetLedgerSnapshot,
-    pub cache_index: CacheIndexSnapshot,
+    pub cache_index: Option<CacheIndexSnapshot>,
     pub artifact_refs: Vec<ArtifactRef>,
     pub evidence_refs: Vec<EvidenceRef>,
-    pub workspace_journal: WorkspaceJournalRef,
+    pub stage_journal: StageJournalSnapshot,
+    pub workspace_journal: WorkspaceJournalSnapshot,
 }
 ```
+
+Checkpoint boundaries:
+
+```text
+after seed insertion
+after proposal batch recording
+after proposal application
+after assessment recording
+after population update
+after cache write
+after repair attempt completes
+```
+
+Do not require mid-session checkpointing inside an agent turn. If a process
+crashes mid-agent-run, restore may mark that workspace abandoned and rerun the
+stage from the last clean boundary.
 
 Required restore behavior:
 
@@ -1051,6 +1269,11 @@ Required restore behavior:
 - preserve feedback history used by agentic proposers
 - preserve artifact revisions or content blobs
 - mark abandoned workspaces and run janitors where possible
+- preserve private counters, RNG state, round-robin cursors, utility tables, and
+  repair-attempt state when those are not graph-derived
+- never replay committed graph mutations
+- never charge budget twice for restored completed stage outputs
+- detect schema/fingerprint mismatches before continuing
 
 Open question: exact serialization boundary for optimizer state. Some
 optimizers can derive state from the graph; others need explicit private state.
@@ -1093,10 +1316,40 @@ where
 }
 ```
 
-The same pattern applies to populations and long-lived selector/admission state
-when they are not reconstructible from graph events. An optimizer may choose
-"derived from graph only," but that should be an explicit state schema, not an
-accident. Resume must be able to answer:
+The same pattern applies to populations, selectors, admission policies, and
+long-lived repair state when they are not reconstructible from graph events. An
+optimizer may choose "derived from graph only," but that should be an explicit
+state schema, not an accident.
+
+```rust
+pub enum PrivateStatePolicy {
+    DerivedFromGraph,
+    ExplicitSnapshot {
+        schema: Fingerprint,
+        format: StateFormat,
+    },
+}
+```
+
+Restore laws:
+
+- **Graph truth first.** The restored graph is the source of public candidate,
+  proposal, assessment, event, and cost truth.
+- **Private state must line up.** Restored optimizer/population/private state
+  must reference candidates and assessments that exist in the restored graph.
+- **No hidden replay.** Restore must not replay proposal application,
+  assessment recording, cache writes, or population events that were already
+  committed before the checkpoint.
+- **No silent state loss.** If an optimizer declares explicit private state and
+  it is missing or schema-incompatible, restore fails.
+- **Derived means checked.** If state is declared `DerivedFromGraph`, restore
+  recomputes it deterministically from graph events and should test that this
+  matches the live state in checkpoint round-trip tests.
+- **In-flight sessions are abandoned.** Workspaces or agent sessions that did
+  not reach a clean checkpoint boundary are not resumed as if completed; they
+  are abandoned, cleaned up when possible, and may be rerun by the owning stage.
+
+Resume must be able to answer:
 
 ```text
 which candidate/frontier was active?
@@ -1190,8 +1443,8 @@ Likely trait additions or moves:
   validation, parser, and surface implementations.
 - `leaven-population`: reusable selector/admission traits and implementations
   that do not depend on GEPA.
-- `leaven-agentic`: bounded reproposal adapter over existing proposer/runtime
-  seams.
+- `leaven-agentic`: bounded proposer-owned repair adapter over existing
+  proposer/runtime/finalizer seams.
 - `leaven-store` or `leaven-engine`: checkpoint traits and snapshot references,
   with concrete formats kept behind store/backend boundaries.
 
@@ -1216,7 +1469,7 @@ SkillFinalizeError
   into immutable artifact state.
 
 ReproposalError
-  tells optimizer/stage callers whether repair exhausted attempts, validation
+  tells proposer/stage callers whether repair exhausted attempts, validation
   kept failing, runtime failed, or parsing failed.
 ```
 
@@ -1271,10 +1524,10 @@ Surface contract tests:
 Scenario tests:
 
 - local materializer writes provider-neutral skill layout
-- Codex/Claude layout adapters map the same artifact into provider-specific
+- provider-specific layout adapters map the same artifact into provider-specific
   paths without changing artifact state
-- reproposal loop feeds typed validation error to a fake agent and records
-  failed attempts
+- proposer-owned repair loop feeds typed validation/finalization feedback to a
+  fake runtime and records failed attempts in stage output or events
 - selector/admission primitives can be reused by GEPA and a non-GEPA skill
   optimizer without dependency inversion
 - checkpoint/restore resumes frontier membership, selector state, and cached
@@ -1284,8 +1537,10 @@ Paper reproduction gates:
 
 - EvoSkill fake-runtime smoke proves create/edit/validate/select/admit without
   paid agent calls
-- EvoSkill real-runtime sample proves materialization/runtime/finalization
-- Trace2Skill second gate pressures patch consolidation and section surfaces
+- EvoSkill finalization smoke proves materialization/workspace import without
+  provider-specific runtime assumptions
+- Trace2Skill second gate pressures many-trace consolidation and file-level
+  skill import
 - Memento/D2Skill gates pressure utility state and retrieval telemetry
 - SkillReducer gate pressures description/body split and route-retention
   evidence
@@ -1330,8 +1585,8 @@ Implementation status:
 Generic primitives used:
 
 - file-level skill surface
-- patch import and application
-- many-to-one patch consolidation
+- workspace finalization into valid skill folders
+- many-to-one lesson consolidation
 - support counts from success/failure memories
 - references file creation plus `SKILL.md` link edits
 - final skill directory materialization
@@ -1346,8 +1601,10 @@ Paper-specific pieces:
 
 Implementation status:
 
-- Leaven needs `SkillPatchSet` or equivalent helper vocabulary.
-- Section-level Markdown surface is probably needed for ergonomic patches.
+- Leaven needs the basic skill artifact and workspace finalization primitives
+  first.
+- Structure-aware document editing is deliberately deferred until the file-level
+  artifact path is implemented and pressure-tested.
 - Consolidation can be a custom proposer before it becomes standard library.
 
 ### 14.3 Memento-Skills
@@ -1424,7 +1681,6 @@ Paper-specific pieces:
 Implementation status:
 
 - Description and body mutation should be easy once `SkillBank` exists.
-- A section-level Markdown surface would make body restructuring cleaner.
 - Real skill activation telemetry is runtime-dependent and remains a risk.
 
 ---
@@ -1434,9 +1690,15 @@ Implementation status:
 Detailed enough to implement now:
 
 - `SkillFolder` required format and validation
+- `SkillBankError` validation family
 - `SkillBankChange` folder/file/permission changes
 - first-class `RenameSkill`
 - derived `SkillManifest` / `SkillCard`
+- proposer-owned validation/reproposal loop
+- `ValidatorReport` minimum shape
+- workspace finalizer contract and laws
+- utility state ownership rule
+- checkpoint envelope and restore laws
 - provider-neutral runtime split
 - agentic proposer/evaluator adapter shape
 - cache identity law
@@ -1444,18 +1706,11 @@ Detailed enough to implement now:
 
 Needs design tightening before implementation:
 
-- exact `SkillBankError` variants and validation-report shape
-- reusable validation/reproposal policy in `leaven-agentic`
-- whether utility/retrieval state lives in population state, derived registry,
-  or a separate `SkillRegistryArtifact`
-- exact `TextPatch` representation
-- exact Markdown section parser/surface contract
 - provider-neutral skill activation telemetry model
 - executable permission portability across local, git, and remote sandboxes
 - security policy for scripts and provider-specific metadata keys such as
   `allowed-tools`
-- standard patch-consolidation vocabulary for Trace2Skill
-- optimizer/population/selector-state checkpoint traits and schema policy
+- exact private-state checkpoint trait placement
 - crate placement for reusable selection/admission policies so GEPA does not
   own generic candidate selection
 
@@ -1463,14 +1718,15 @@ Known implementation blockers for paper reproduction:
 
 - real `leaven-artifact-skill`
 - real `leaven-artifact-git`
-- git finalizer / snapshot importer
+- workspace finalizer / snapshot importer
 - cache identity code cutover
 - top-k frontier and standalone parent selectors
 - skill evidence types
 - durable checkpoint/restore with explicit private optimizer/population state
-- bounded validation/reproposal loop for agentic proposers
+- bounded proposer-owned validation/reproposal loop for agentic proposers
 - EvoSkill reproduction crate
-- real provider adapter for Codex/Claude/OpenCode
+- provider adapter spec and implementation, starting with Codex, in a separate
+  document
 
 ---
 
@@ -1481,27 +1737,76 @@ Known implementation blockers for paper reproduction:
 2. Implement skill folder/file/manifest surfaces.
 3. Implement typed skill validation errors and a bounded reproposal adapter in
    `leaven-agentic`.
-4. Implement local skill materializer and fake-runtime parser smoke tests.
-5. Implement `TopKFrontier`, `KeepIfAboveWeakest`, and parent selectors outside
+4. Implement local skill materializer and workspace finalizer smoke tests.
+5. Implement fake-runtime agentic proposer/evaluator tests over real
+   `SkillBank`.
+6. Implement `TopKFrontier`, `KeepIfAboveWeakest`, and parent selectors outside
    `leaven-gepa`.
-6. Implement `AgentSkillEvidence` and attribution traits.
-7. Finish cache identity cutover.
-8. Add minimal checkpoint/restore for graph + explicit optimizer/population
+7. Implement `AgentSkillEvidence` and attribution traits.
+8. Finish cache identity cutover.
+9. Add minimal checkpoint/restore for graph + explicit optimizer/population
    state.
-9. Implement git `GitArtifact` and `GitChange::AdvanceTo`.
-10. Implement snapshot-import finalization for local workspaces.
-11. Reproduce EvoSkill OfficeQA sample with fake runtime.
-12. Reproduce EvoSkill OfficeQA sample with real Codex runtime.
-13. Scale to full OfficeQA split.
-14. Use Trace2Skill as the second reproduction to pressure-test patch
-    consolidation and section-level surfaces.
+10. Implement git `GitArtifact` and `GitChange::AdvanceTo`.
+11. Implement snapshot-import finalization for local workspaces.
+12. Reproduce EvoSkill OfficeQA sample with fake runtime and real Leaven
+    primitives.
+13. Write the separate Codex provider-adapter spec before real Codex runtime
+    reproduction.
+14. Scale to the full OfficeQA split after the provider adapter is proven.
+15. Use Trace2Skill as the second reproduction to pressure-test many-trace
+    consolidation and file-level skill import.
 
 The ladder intentionally starts with artifact law and fake-runtime tests. The
 goal is to make the skill substrate correct before paying for real agent runs.
 
 ---
 
-## 17. Non-Goals
+## 17. Paper Reproduction Acceptance Contract
+
+The paper reproduction crates are the forcing function for whether Leaven's
+primitives are properly shaped. A reproduction is only accepted as a Leaven
+pressure test when paper-specific code uses real library primitives for the
+generic substrate.
+
+Paper-specific crates may own:
+
+- prompts and reflection templates
+- dataset loaders and train/validation/test split definitions
+- scorers, judges, environment adapters, and task harnesses
+- paper-specific equations, thresholds, ablations, and merge policies
+- paper-specific renderers, materializers, finalizers, and parsers when the
+  paper's presentation format is genuinely unique
+
+Paper-specific crates must not define substitutes for these generic primitives:
+
+- fake `SkillRegistry` / fake skill folder types
+- fake skill validation
+- fake candidate graph or proposal application
+- fake workspace finalization/import
+- fake frontier/admission/parent selection when a standard primitive exists
+- fake cache identity
+- fake checkpoint/restore substrate for long runs
+- fake skill-use evidence when the standard optional capability applies
+
+Done-done for EvoSkill means:
+
+```text
+EvoSkill reproduction uses real SkillBank.
+EvoSkill reproduction creates and edits real skill folders with SKILL.md.
+EvoSkill reproduction uses real materializer/finalizer import.
+EvoSkill reproduction uses real proposer-owned validation/reproposal.
+EvoSkill reproduction uses real selection/admission primitives.
+EvoSkill reproduction records real evidence and costs.
+EvoSkill reproduction can checkpoint and resume without changing the result.
+```
+
+If a paper reproduction needs a new public Leaven trait to express its generic
+mechanism, that is a design gap. If it needs only paper-specific prompts,
+datasets, scorers, or adapters, that is expected user code.
+
+---
+
+## 18. Non-Goals
 
 - Do not make git the default artifact model.
 - Do not make worktrees the semantic primitive.
@@ -1515,7 +1820,7 @@ goal is to make the skill substrate correct before paying for real agent runs.
 
 ---
 
-## 18. Short Form
+## 19. Short Form
 
 ```text
 Skill = valid folder with mandatory SKILL.md.
@@ -1525,13 +1830,14 @@ SkillBank = collection of valid skill folders.
 SkillCard = derived retrieval/index state.
 ReplaceSkill = replace the whole folder.
 RenameSkill = preserve identity continuity across folder/name changes.
-Rewrite SKILL.md = WriteFile/PatchFile at SKILL.md.
+Rewrite SKILL.md = WriteFile at SKILL.md.
 Scripts/references/assets/other files are first-class.
-Artifact validation is mandatory; automatic reproposal is stage policy.
+Artifact validation is mandatory.
+Proposer-owned repair may iterate before returning ProposalBatch.
 Git is first-class revision support, not the default artifact model.
 Workspaces are temporary execution state.
 Finalizers import workspace mutations into immutable artifact changes.
-Evidence records traces, failures, scores, skill use, and attribution.
+Evidence records scores, failures, trace refs, optional skill use, and attribution.
 Populations/frontiers/selectors decide what survives and what gets tried next.
 Checkpointing must preserve explicit private optimizer/population state.
 Optimizers decide the paper-specific rhythm.
