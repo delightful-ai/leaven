@@ -14,7 +14,7 @@ use crate::{
 };
 
 /// Preflight report for an agentic run configuration.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct AgentRunPreflightReport {
     findings: Vec<PreflightFinding>,
 }
@@ -65,7 +65,7 @@ impl AgentRunPreflightReport {
 }
 
 /// One actionable preflight finding.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct PreflightFinding {
     pub severity: PreflightSeverity,
     pub check: String,
@@ -73,7 +73,8 @@ pub struct PreflightFinding {
 }
 
 /// Severity of a preflight finding.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum PreflightSeverity {
     Ok,
     Warning,
@@ -225,49 +226,30 @@ impl AgentRunPreflight {
     /// Checks blob and checkpoint write/read capability without touching a
     /// graph or running a provider session.
     #[must_use]
-    pub fn store<S>(mut self, store: &S) -> Self
+    pub fn store<S>(self, store: &S) -> Self
     where
         S: BlobStore + CheckpointStore,
     {
-        match BlobStore::put(
-            store,
-            BlobWrite {
-                bytes: bytes::Bytes::from_static(b"leaven preflight blob"),
-                content_type: Some("text/plain".to_owned()),
-            },
-        )
-        .and_then(|reference| BlobStore::get(store, &reference).map(|_| reference))
-        {
-            Ok(reference) => {
-                self.report.ok(
-                    "store-blob",
-                    format!("blob store wrote and read `{}`", reference.key),
-                );
-            }
-            Err(error) => {
-                self.report
-                    .error("store-blob", format!("blob store check failed: {error}"));
-            }
-        }
+        self.blob_store(store).checkpoint_store(store)
+    }
 
-        match CheckpointStore::put(
-            store,
-            CheckpointBytes(bytes::Bytes::from_static(b"leaven preflight checkpoint")),
-        )
-        .and_then(|id| CheckpointStore::get(store, id).map(|_| id))
-        {
-            Ok(id) => {
-                self.report
-                    .ok("store-checkpoint", format!("checkpoint store wrote `{id}`"));
-            }
-            Err(error) => {
-                self.report.error(
-                    "store-checkpoint",
-                    format!("checkpoint store check failed: {error}"),
-                );
-            }
-        }
+    /// Checks blob write/read capability.
+    #[must_use]
+    pub fn blob_store<S>(mut self, store: &S) -> Self
+    where
+        S: BlobStore,
+    {
+        check_blob_store(&mut self.report, store);
+        self
+    }
 
+    /// Checks checkpoint write/read capability.
+    #[must_use]
+    pub fn checkpoint_store<S>(mut self, store: &S) -> Self
+    where
+        S: CheckpointStore,
+    {
+        check_checkpoint_store(&mut self.report, store);
         self
     }
 
@@ -477,6 +459,53 @@ fn check_output_contract(report: &mut AgentRunPreflightReport, contract: &Output
                     format!("workspace diff over {} root(s)", roots.len()),
                 );
             }
+        }
+    }
+}
+
+fn check_blob_store<S>(report: &mut AgentRunPreflightReport, store: &S)
+where
+    S: BlobStore,
+{
+    match BlobStore::put(
+        store,
+        BlobWrite {
+            bytes: bytes::Bytes::from_static(b"leaven preflight blob"),
+            content_type: Some("text/plain".to_owned()),
+        },
+    )
+    .and_then(|reference| BlobStore::get(store, &reference).map(|_| reference))
+    {
+        Ok(reference) => {
+            report.ok(
+                "store-blob",
+                format!("blob store wrote and read `{}`", reference.key),
+            );
+        }
+        Err(error) => {
+            report.error("store-blob", format!("blob store check failed: {error}"));
+        }
+    }
+}
+
+fn check_checkpoint_store<S>(report: &mut AgentRunPreflightReport, store: &S)
+where
+    S: CheckpointStore,
+{
+    match CheckpointStore::put(
+        store,
+        CheckpointBytes(bytes::Bytes::from_static(b"leaven preflight checkpoint")),
+    )
+    .and_then(|id| CheckpointStore::get(store, id).map(|_| id))
+    {
+        Ok(id) => {
+            report.ok("store-checkpoint", format!("checkpoint store wrote `{id}`"));
+        }
+        Err(error) => {
+            report.error(
+                "store-checkpoint",
+                format!("checkpoint store check failed: {error}"),
+            );
         }
     }
 }

@@ -15,9 +15,9 @@ use leaven_agent::{
     TranscriptEvent, TranscriptRole,
 };
 use leaven_agentic::{
-    AgentPromptTarget, AgenticParseError, AgenticRepairError, AgenticRunInspection, ProposalParser,
-    ProposalRepairFeedback, ProposalRepairPromptBuilder, RepairingAgenticProposer,
-    RepairingAgenticProposerConfig,
+    AgentPromptTarget, AgentRunPreflight, AgenticParseError, AgenticRepairError,
+    AgenticRunInspection, PreflightSeverity, ProposalParser, ProposalRepairFeedback,
+    ProposalRepairPromptBuilder, RepairingAgenticProposer, RepairingAgenticProposerConfig,
 };
 use leaven_agentic_skill::{
     SkillBankChangeReport, SkillBankMaterializer, SkillBankProposalInput,
@@ -41,7 +41,7 @@ use leaven_kernel::{
 };
 use leaven_population::KeepBest;
 use leaven_store::EvidenceStore;
-use leaven_store_file::{FileEvidenceStore, FileJsonCheckpointStore};
+use leaven_store_file::{FileCheckpointStore, FileEvidenceStore, FileJsonCheckpointStore};
 use leaven_workspace::{Workspace, WorkspaceConfig, WorkspaceFactory, WorkspacePath};
 use leaven_workspace_local::LocalWorkspaceFactory;
 use serde::de::DeserializeOwned;
@@ -127,6 +127,33 @@ impl RunStores {
     }
 }
 
+fn write_preflight_report(
+    stores: &RunStores,
+    seed_bank: &SkillBank,
+    evaluator: &EvoSkillEvaluator,
+) -> Result<()> {
+    let report = AgentRunPreflight::new()
+        .artifact(seed_bank)
+        .runtime(&evaluator.runtime)
+        .output_contract(&OutputContract::FinalMessage)
+        .cache_identity(seed_bank, &CachePolicy::Never)
+        .checkpoint_store(&FileCheckpointStore::open(
+            stores.run_root.join("preflight-checkpoints"),
+        )?)
+        .check();
+    let path = stores.run_root.join("preflight_report.json");
+    std::fs::write(&path, serde_json::to_vec_pretty(&report)?)?;
+    if report.has_errors() {
+        for finding in report.findings() {
+            if finding.severity == PreflightSeverity::Error {
+                eprintln!("preflight error [{}]: {}", finding.check, finding.message);
+            }
+        }
+        return Err(msg(format!("preflight failed; report={}", path.display())));
+    }
+    Ok(())
+}
+
 async fn run_iteration(stores: RunStores, resume: ResumeState) -> Result<()> {
     let cases = resume.cases.unwrap_or_else(load_fixture_cases);
     let run_id = resume.run_id.unwrap_or_default();
@@ -138,6 +165,7 @@ async fn run_iteration(stores: RunStores, resume: ResumeState) -> Result<()> {
     let mut population = KeepBest::new();
     let workspace_factory = LocalWorkspaceFactory::new(stores.run_root.join("workspaces"));
     let evaluator = new_executor_evaluator(&cases, &workspace_factory);
+    write_preflight_report(&stores, &seed_bank, &evaluator)?;
 
     let mut ctx = RunContext::<EvoSkillProblem>::new(&mut graph, &mut budget)
         .with_case_set(&case_set)
