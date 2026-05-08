@@ -14,7 +14,11 @@ use leaven_agent::{
     AgentInstructions, AgentLimits, AgentRunContext, AgentRunRequest, AgentRuntime, OutputContract,
     TranscriptEvent, TranscriptRole,
 };
-use leaven_agentic::ProposalParser;
+use leaven_agentic::{
+    AgentPromptTarget, AgenticParseError, AgenticRepairError, ProposalParser,
+    ProposalRepairFeedback, ProposalRepairPromptBuilder, RepairingAgenticProposer,
+    RepairingAgenticProposerConfig,
+};
 use leaven_agentic_skill::{
     SkillBankMaterializer, SkillBankProposalInput, SkillBankWorkspaceProposalParser,
     SkillWorkspaceLayout,
@@ -26,8 +30,9 @@ use leaven_core::{
     ResolvedEvaluationRequest, ResolvedRequestKind,
 };
 use leaven_engine::{
-    BudgetLedger, CachePolicy, EvaluationContext, EvaluationError, Evaluator, Materializer,
-    RunContext, RunEvent, RunGraph,
+    BudgetLedger, CachePolicy, EvaluationContext, EvaluationError, Evaluator,
+    MaterializationReport, MaterializeContext, MaterializeError, Materializer, RenderContext,
+    RenderError, Renderer, RunContext, RunEvent, RunGraph,
 };
 use leaven_evidence::ScalarEvidence;
 use leaven_kernel::{
@@ -40,6 +45,7 @@ use leaven_store_file::{FileEvidenceStore, FileJsonCheckpointStore};
 use leaven_workspace::{Workspace, WorkspaceConfig, WorkspaceFactory, WorkspacePath};
 use leaven_workspace_local::LocalWorkspaceFactory;
 use serde::de::DeserializeOwned;
+use std::num::NonZeroUsize;
 
 use crate::checkpoint::EvoSkillCheckpoint;
 use crate::codex::{LiveCodexRuntime, live_codex_runtime, require_live_codex};
@@ -907,29 +913,72 @@ async fn run_skill_builder(
 ) -> Result<BuiltCandidate> {
     let developer_instructions = skill_builder_developer_instructions();
     let runtime = live_codex_runtime(developer_instructions.clone());
-    let mut workspace = factory.allocate(WorkspaceConfig::default()).await?;
-    let stage_result = async {
-        let mut view = workspace.view();
-        prepare_builder_workspace(&mut view, ctx.materialize_context(), parent, proposal).await?;
-        let parser =
-            SkillBankWorkspaceProposalParser::new(SkillWorkspaceLayout::new(".agents/skills")?);
-        run_builder_repair_loop(
-            &mut view,
-            ctx,
-            BuilderLoop {
-                runtime: &runtime,
-                evidence_store,
-                developer_instructions: &developer_instructions,
-                parser: &parser,
-                parent,
-                proposal,
-                proposer_evidence,
-            },
-        )
-        .await
-    }
-    .await;
-    finish_workspace(workspace, stage_result).await
+    let recording_runtime = RecordingBuilderRuntime {
+        inner: &runtime,
+        evidence_store,
+        developer_instructions: &developer_instructions,
+    };
+    let proposer = RepairingAgenticProposer::new(
+        RepairingAgenticProposerConfig::new(
+            ProposerId::new_const("evoskill/skill-builder"),
+            NonZeroUsize::new(2).expect("two repair attempts is non-zero"),
+        ),
+        factory.clone(),
+        recording_runtime,
+        SkillBuilderMaterializer,
+        SkillBuilderRenderer {
+            developer_instructions: developer_instructions.clone(),
+        },
+        SkillBuilderRepairPrompt {
+            developer_instructions: developer_instructions.clone(),
+        },
+        SkillBuilderParser {
+            inner: SkillBankWorkspaceProposalParser::new(SkillWorkspaceLayout::new(
+                ".agents/skills",
+            )?),
+        },
+    );
+    let mut request = leaven_agentic::AgenticRunInput::new(
+        SkillBuilderInput {
+            parent,
+            proposal: proposal.clone(),
+            proposer_evidence: proposer_evidence.clone(),
+        },
+        OutputContract::FinalMessage,
+    );
+    request.limits = AgentLimits {
+        timeout: Some(Duration::from_secs(240)),
+        ..AgentLimits::default()
+    };
+
+    let recorded = ctx.propose(&proposer, request).await?;
+    let proposal_id = *recorded
+        .proposal_ids
+        .first()
+        .ok_or_else(|| msg("skill builder returned no proposal"))?;
+    let change = ctx
+        .graph()
+        .proposal(proposal_id)
+        .and_then(|proposal| match proposal.effect() {
+            leaven_core::ProposalEffect::Change { change, .. } => Some(change.clone()),
+            leaven_core::ProposalEffect::Create { .. } => None,
+        })
+        .ok_or_else(|| msg("builder parser returned no skill-bank change"))?;
+    let applied = ctx.apply_batch(recorded.batch_id)?;
+    let child = applied
+        .successful_candidates()
+        .next()
+        .ok_or_else(|| msg("skill proposal did not apply"))?;
+    let child_bank = ctx
+        .graph()
+        .artifact(child)
+        .ok_or_else(|| msg("applied child artifact missing"))?
+        .clone();
+    Ok(BuiltCandidate {
+        child,
+        child_bank,
+        change,
+    })
 }
 
 async fn prepare_builder_workspace(
@@ -954,137 +1003,158 @@ async fn prepare_builder_workspace(
     write_json(view, "task/proposal.json", proposal)
 }
 
-struct BuilderLoop<'a> {
-    runtime: &'a LiveCodexRuntime,
+#[derive(Clone, Debug)]
+struct SkillBuilderInput {
+    parent: CandidateId,
+    proposal: SkillProposal,
+    proposer_evidence: EvidenceRef,
+}
+
+struct SkillBuilderMaterializer;
+
+impl Materializer<EvoSkillProblem, SkillBuilderInput> for SkillBuilderMaterializer {
+    async fn materialize_into(
+        &self,
+        value: &SkillBuilderInput,
+        workspace: &mut leaven_workspace::WorkspaceView<'_>,
+        ctx: MaterializeContext<'_, EvoSkillProblem>,
+    ) -> std::result::Result<Metered<MaterializationReport>, MaterializeError> {
+        prepare_builder_workspace(workspace, ctx, value.parent, &value.proposal)
+            .await
+            .map_err(|error| MaterializeError::Message(error.to_string()))?;
+        Ok(Metered::new(MaterializationReport::default(), Cost::zero()))
+    }
+}
+
+struct SkillBuilderRenderer {
+    developer_instructions: String,
+}
+
+impl Renderer<EvoSkillProblem, SkillBuilderInput, AgentPromptTarget> for SkillBuilderRenderer {
+    type View = AgentInstructions;
+
+    async fn render(
+        &self,
+        value: &SkillBuilderInput,
+        _target: AgentPromptTarget,
+        _ctx: RenderContext<'_, EvoSkillProblem>,
+    ) -> std::result::Result<Metered<Self::View>, RenderError> {
+        let mut instructions = AgentInstructions::task(
+            builder_task(&value.proposal, 1, None)
+                .map_err(|error| RenderError::Message(error.to_string()))?,
+        );
+        instructions.system = Some(self.developer_instructions.clone());
+        Ok(Metered::new(instructions, Cost::zero()))
+    }
+}
+
+struct SkillBuilderRepairPrompt {
+    developer_instructions: String,
+}
+
+impl ProposalRepairPromptBuilder<SkillBuilderInput> for SkillBuilderRepairPrompt {
+    fn build_repair(
+        &self,
+        input: &SkillBuilderInput,
+        feedback: ProposalRepairFeedback<'_>,
+    ) -> std::result::Result<AgentInstructions, AgenticRepairError> {
+        let mut instructions = AgentInstructions::task(
+            builder_task(
+                &input.proposal,
+                feedback.failed_attempt.get() + 1,
+                Some(&feedback.parse_error.to_string()),
+            )
+            .map_err(|error| AgenticRepairError::Prompt(error.to_string()))?,
+        );
+        instructions.system = Some(self.developer_instructions.clone());
+        Ok(instructions)
+    }
+}
+
+struct RecordingBuilderRuntime<'a> {
+    inner: &'a LiveCodexRuntime,
     evidence_store: &'a FileEvidenceStore<EvoSkillEvidence>,
     developer_instructions: &'a str,
-    parser: &'a SkillBankWorkspaceProposalParser,
-    parent: CandidateId,
-    proposal: &'a SkillProposal,
-    proposer_evidence: &'a EvidenceRef,
 }
 
-async fn run_builder_repair_loop(
-    view: &mut leaven_workspace::WorkspaceView<'_>,
-    ctx: &mut RunContext<'_, EvoSkillProblem>,
-    loop_state: BuilderLoop<'_>,
-) -> Result<BuiltCandidate> {
-    let mut last_error = None;
-    for attempt in 1..=2 {
-        let session = run_builder_attempt(
-            view,
-            ctx.budget(),
-            &loop_state,
-            attempt,
-            last_error.as_deref(),
-        )
-        .await?;
-        store_builder_session(&session.value, &loop_state)?;
-        let generated: GeneratedSkill = final_json(&session.value)?;
-        write_generated_skill(view, &generated)?;
-        write_json(view, "output/skill-builder.json", &generated)?;
-
-        match parse_builder_session(view, ctx, &session, &loop_state).await {
-            Ok(candidate) => return Ok(candidate),
-            Err(error) if attempt == 1 => last_error = Some(error.to_string()),
-            Err(error) => return Err(msg(format!("skill builder exhausted repair: {error}"))),
-        }
+impl AgentRuntime for RecordingBuilderRuntime<'_> {
+    fn id(&self) -> leaven_kernel::AgentRuntimeId {
+        self.inner.id()
     }
-    Err(msg("skill builder exhausted repair"))
+
+    fn fingerprint(&self) -> Fingerprint {
+        self.inner.fingerprint()
+    }
+
+    fn capabilities(&self) -> leaven_agent::AgentRuntimeCapabilities {
+        self.inner.capabilities()
+    }
+
+    async fn run_session(
+        &self,
+        workspace: &mut leaven_workspace::WorkspaceView<'_>,
+        request: AgentRunRequest,
+        ctx: AgentRunContext<'_>,
+    ) -> std::result::Result<Metered<leaven_agent::AgentSession>, leaven_agent::AgentRuntimeError>
+    {
+        let session = self.inner.run_session(workspace, request, ctx).await?;
+        self.evidence_store
+            .put(EvoSkillEvidence::AgentRoleSession {
+                role: AgentRole::SkillBuilder,
+                developer_instructions: self.developer_instructions.to_owned(),
+                session: session.value.clone(),
+            })
+            .map_err(|error| {
+                leaven_agent::AgentRuntimeError::with_source(
+                    "failed to store skill-builder session evidence",
+                    error,
+                )
+            })?;
+        Ok(session)
+    }
 }
 
-async fn run_builder_attempt(
-    view: &mut leaven_workspace::WorkspaceView<'_>,
-    budget: leaven_kernel::BudgetSnapshot,
-    loop_state: &BuilderLoop<'_>,
-    attempt: usize,
-    last_error: Option<&str>,
-) -> Result<Metered<leaven_agent::AgentSession>> {
-    let mut instructions =
-        AgentInstructions::task(builder_task(loop_state.proposal, attempt, last_error)?);
-    instructions.system = Some(loop_state.developer_instructions.to_owned());
-    let mut request = AgentRunRequest::new(instructions, OutputContract::FinalMessage);
-    request.limits = AgentLimits {
-        timeout: Some(Duration::from_secs(240)),
-        ..AgentLimits::default()
-    };
-    Ok(loop_state
-        .runtime
-        .run_session(
-            view,
-            request,
-            AgentRunContext::new(AgentSessionId::new(), &budget),
-        )
-        .await?)
+struct SkillBuilderParser {
+    inner: SkillBankWorkspaceProposalParser,
 }
 
-fn store_builder_session(
-    session: &leaven_agent::AgentSession,
-    loop_state: &BuilderLoop<'_>,
-) -> Result<EvidenceRef> {
-    Ok(loop_state
-        .evidence_store
-        .put(EvoSkillEvidence::AgentRoleSession {
-            role: AgentRole::SkillBuilder,
-            developer_instructions: loop_state.developer_instructions.to_owned(),
-            session: session.clone(),
-        })?)
-}
-
-async fn parse_builder_session(
-    view: &mut leaven_workspace::WorkspaceView<'_>,
-    ctx: &mut RunContext<'_, EvoSkillProblem>,
-    session: &Metered<leaven_agent::AgentSession>,
-    loop_state: &BuilderLoop<'_>,
-) -> Result<BuiltCandidate> {
-    let mut parsed = loop_state
-        .parser
-        .parse_proposals(
-            view,
-            &session.value,
-            &SkillBankProposalInput::new(loop_state.parent),
-            ctx.graph(),
-        )
-        .await
-        .map_err(|error| msg(error.to_string()))?;
-    annotate_builder_proposals(&mut parsed.value.proposals, loop_state);
-    let change = parsed
-        .value
-        .proposals
-        .first()
-        .and_then(proposal_change)
-        .ok_or_else(|| msg("builder parser returned no skill-bank change"))?;
-    parsed.value.semantics = ProposalBatchSemantics::Alternatives;
-    let recorded = ctx.record_proposal_batch(
-        StageId::from_proposer(ProposerId::new_const("evoskill/skill-builder")),
-        parsed.value,
-        session.cost.clone().combine(&parsed.cost),
-    )?;
-    let applied = ctx.apply_batch(recorded.batch_id)?;
-    let child = applied
-        .successful_candidates()
-        .next()
-        .ok_or_else(|| msg("skill proposal did not apply"))?;
-    let child_bank = ctx
-        .graph()
-        .artifact(child)
-        .ok_or_else(|| msg("applied child artifact missing"))?
-        .clone();
-    Ok(BuiltCandidate {
-        child,
-        child_bank,
-        change,
-    })
+impl ProposalParser<EvoSkillProblem, SkillBuilderInput> for SkillBuilderParser {
+    async fn parse_proposals(
+        &self,
+        workspace: &mut leaven_workspace::WorkspaceView<'_>,
+        session: &leaven_agent::AgentSession,
+        input: &SkillBuilderInput,
+        graph: leaven_engine::RunGraphView<'_, EvoSkillProblem>,
+    ) -> std::result::Result<Metered<leaven_core::ProposalBatch<EvoSkillProblem>>, AgenticParseError>
+    {
+        let generated: GeneratedSkill =
+            final_json(session).map_err(|error| AgenticParseError::Message(error.to_string()))?;
+        write_generated_skill(workspace, &generated)
+            .and_then(|()| write_json(workspace, "output/skill-builder.json", &generated))
+            .map_err(|error| AgenticParseError::Message(error.to_string()))?;
+        let mut parsed = self
+            .inner
+            .parse_proposals(
+                workspace,
+                session,
+                &SkillBankProposalInput::new(input.parent),
+                graph,
+            )
+            .await?;
+        annotate_builder_proposals(&mut parsed.value.proposals, input);
+        parsed.value.semantics = ProposalBatchSemantics::Alternatives;
+        Ok(parsed)
+    }
 }
 
 fn annotate_builder_proposals(
     proposals: &mut [leaven_core::Proposal<EvoSkillProblem>],
-    loop_state: &BuilderLoop<'_>,
+    input: &SkillBuilderInput,
 ) {
     for item in proposals {
         item.annotations = EvoSkillProposalAnnotations {
-            proposal: Some(loop_state.proposal.clone()),
-            proposer_evidence: Some(loop_state.proposer_evidence.clone()),
+            proposal: Some(input.proposal.clone()),
+            proposer_evidence: Some(input.proposer_evidence.clone()),
         };
         let _proposal_payload_present = item.annotations.proposal.is_some();
         item.provenance
@@ -1093,7 +1163,7 @@ fn annotate_builder_proposals(
                 kind: "evidence".to_owned(),
                 id: format!(
                     "{}:{}",
-                    loop_state.proposer_evidence.store, loop_state.proposer_evidence.key
+                    input.proposer_evidence.store, input.proposer_evidence.key
                 ),
             }));
     }
@@ -1206,13 +1276,6 @@ fn extract_json_object(message: &str) -> Result<&str> {
         .rfind('}')
         .ok_or_else(|| msg("assistant final message did not contain a complete JSON object"))?;
     Ok(&trimmed[start..=end])
-}
-
-fn proposal_change(proposal: &leaven_core::Proposal<EvoSkillProblem>) -> Option<SkillBankChange> {
-    match &proposal.effect {
-        leaven_core::ProposalEffect::Change { change, .. } => Some(change.clone()),
-        leaven_core::ProposalEffect::Create { .. } => None,
-    }
 }
 
 fn record_skill_change(

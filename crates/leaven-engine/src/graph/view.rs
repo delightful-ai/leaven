@@ -147,6 +147,14 @@ impl<'g, P: OptimizationProblem> RunGraphView<'g, P> {
     }
 
     #[must_use]
+    pub fn proposal(&self, id: ProposalId) -> Option<ProposalView<'g, P>> {
+        self.graph
+            .proposals
+            .get(&id)
+            .map(|record| ProposalView { record })
+    }
+
+    #[must_use]
     pub fn proposal_that_created(&self, id: CandidateId) -> Option<ProposalView<'g, P>> {
         self.graph
             .indices
