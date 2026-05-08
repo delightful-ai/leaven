@@ -4,9 +4,9 @@
 
 Project name: **leaven**. Crate: `leaven` (umbrella) + `leaven-core`, `leaven-engine`, `leaven-std`, `leaven-workspace`, `leaven-derive`. Metaphor: the small biological culture you mix into a substrate, walk away from, and come back to find transformed.
 
-> Status: v0.2.4, pre-implementation minor spec bump.  
+> Status: v0.2.5, pre-implementation minor spec bump.  
 > Date: 2026-05-07.  
-> Supersedes the v0.2.1a spec and folds in the v0.2.1b topology cutover, v0.2.1c surface/evidence/cache cleanup, v0.2.2 renderer/workspace/GEPA selector clarification, v0.2.3 agentic stage runtime contract, and v0.2.4 agentic skill optimization primitive spec. The architecture is unchanged: cold core stays shape-neutral, surfaces are explicit optimizer/stage choices, and GEPA remains one optimizer.  
+> Supersedes the v0.2.1a spec and folds in the v0.2.1b topology cutover, v0.2.1c surface/evidence/cache cleanup, v0.2.2 renderer/workspace/GEPA selector clarification, v0.2.3 agentic stage runtime contract, v0.2.4 agentic skill optimization primitive spec, and v0.2.5 Codex app-server provider adapter spec. The architecture is unchanged: cold core stays shape-neutral, surfaces are explicit optimizer/stage choices, and GEPA remains one optimizer.  
 > This is still not an API lock — but it is now ready to be coded against.
 
 ---
@@ -253,6 +253,71 @@ This is a minor spec bump because it fixes the public meaning of
 
 The full companion contract is
 `docs/specs/agentic_stage_runtime.md`.
+
+---
+
+## 0.7 What Changed in v0.2.4
+
+This is a minor spec bump because agentic skill optimization needs real
+folder-shaped artifacts, validation, and finalization contracts before paper
+reproduction work can be meaningful.
+
+58. **Agent Skills folders are first-class artifacts.**  
+    A skill is a directory with mandatory `SKILL.md` frontmatter (`name`,
+    `description`) and non-empty Markdown body. Optional and provider-specific
+    frontmatter lives in a generic metadata bag rather than baked-in fields.
+
+59. **Skill mutations are filesystem-native.**  
+    Skills may contain scripts, references, assets, and arbitrary files.
+    Rewrites are allowed; `RenameSkill` and `ReplaceSkill` are explicit
+    changes; executable bits are preserved as file metadata without making
+    executable files a separate semantic type.
+
+60. **Invalid proposals do not create candidates.**  
+    Apply/validation failure records an attempt and returns a typed error.
+    Bounded repair/reproposal is same-proposer stage policy before a
+    `ProposalBatch` is returned, not hidden engine behavior.
+
+61. **Workspace finalization is stage-owned.**  
+    Agentic proposers may import edited workspaces into typed proposals through
+    finalizers, but finalizers do not mutate the graph.
+
+The full companion contract is
+`docs/specs/agentic_skill_optimization_primitives.md`.
+
+---
+
+## 0.8 What Changed in v0.2.5
+
+This is a minor spec bump because the first real provider adapter needs a
+precise boundary before implementation.
+
+62. **Codex is a provider runtime, not an engine concept.**  
+    `leaven-agent-codex` implements `AgentRuntime` over an already materialized
+    workspace. It does not know optimizer, graph, proposal, assessment, skill,
+    or git vocabulary.
+
+63. **Codex app-server dependencies are leaf-only.**  
+    `codex-app-server-protocol` is confined to `leaven-agent-codex` and is
+    feature-gated from umbrella/facade crates.
+
+64. **The first Codex launch mode requires a local mount.**  
+    `StdioAppServer` fails early on pure-remote workspaces. Backend-neutral
+    remote Codex execution waits for a real transport that can run app-server
+    inside the backend or import a provider-managed snapshot.
+
+65. **Transcript and output-contract mapping are specified.**  
+    Assistant messages, commands, tool calls, raw provider events, output
+    files, status, and provider errors now have a concrete mapping into
+    `AgentSession`.
+
+66. **Codex skill layout has a provider owner.**  
+    Codex-specific workspace layout and `UserInput::Skill` references are
+    provider ABI owned by `leaven-agent-codex`; `SkillBank`, `SKILL.md`
+    validation, and skill mutations remain outside the runtime.
+
+The full companion contract is
+`docs/specs/codex_app_server_agent_runtime.md`.
 
 ---
 
@@ -4595,6 +4660,38 @@ The engine is dumb. The optimizer is smart. The types tell the truth.
 ---
 
 ## 30. Changelog
+
+### v0.2.5 (2026-05-07) - Codex app-server provider adapter
+
+This pass specifies the first real provider runtime adapter needed for
+agentic-skill paper reproduction while keeping provider code out of generic
+Leaven layers.
+
+- **Codex is a leaf runtime adapter.** `leaven-agent-codex` implements
+  provider-neutral `AgentRuntime`; it does not know candidates, proposals,
+  assessments, `RunGraph`, GEPA, git artifacts, or skill banks.
+- **Codex protocol dependencies are contained.** `codex-app-server-protocol`
+  and process/protocol dependencies are confined to `leaven-agent-codex` and
+  feature-gated from umbrella/facade crates.
+- **Stdio app-server requires a local mount.** The first Codex runtime launch
+  mode is honest about workspace semantics: pure-remote workspaces fail before
+  launch unless they expose a real local mount.
+- **Request mapping is explicit.** `AgentRunRequest` maps to Codex
+  `thread/start` and `turn/start`; output-contract validation remains runtime-
+  level and finalization remains stage-owned.
+- **Transcript normalization is specified.** The adapter records assistant
+  messages, commands, tool calls, output files, status, and raw provider events
+  without leaking Codex protocol types into `leaven-agent`.
+- **Codex skill layout has an owner without owning skills.** Codex-specific
+  workspace layout and skill-reference ABI live in the provider crate, while
+  skill folder validation, materialization, mutation, and finalization stay in
+  artifact/agentic layers.
+- **DSRs copy path recorded.** The reusable pieces are the app-server
+  transport/client/session/history patterns; DSRs repo materialization,
+  steering policy, Firkin setup, and git finalization stay out of the provider
+  runtime.
+- **Companion spec added.** See
+  `docs/specs/codex_app_server_agent_runtime.md`.
 
 ### v0.2.4 (2026-05-07) - agentic skill optimization primitives
 

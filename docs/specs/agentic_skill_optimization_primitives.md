@@ -1725,8 +1725,8 @@ Known implementation blockers for paper reproduction:
 - durable checkpoint/restore with explicit private optimizer/population state
 - bounded proposer-owned validation/reproposal loop for agentic proposers
 - EvoSkill reproduction crate
-- provider adapter spec and implementation, starting with Codex, in a separate
-  document
+- Codex provider adapter implementation from
+  `docs/specs/codex_app_server_agent_runtime.md`
 
 ---
 
@@ -1750,8 +1750,8 @@ Known implementation blockers for paper reproduction:
 11. Implement snapshot-import finalization for local workspaces.
 12. Reproduce EvoSkill OfficeQA sample with fake runtime and real Leaven
     primitives.
-13. Write the separate Codex provider-adapter spec before real Codex runtime
-    reproduction.
+13. Implement the Codex provider adapter from
+    `docs/specs/codex_app_server_agent_runtime.md`.
 14. Scale to the full OfficeQA split after the provider adapter is proven.
 15. Use Trace2Skill as the second reproduction to pressure-test many-trace
     consolidation and file-level skill import.

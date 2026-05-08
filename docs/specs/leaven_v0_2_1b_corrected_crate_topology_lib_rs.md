@@ -2207,6 +2207,9 @@ pub use runtime::ClaudeCodeRuntime;
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 //! Codex agent runtime adapter.
+//!
+//! Provider-adapter contract:
+//! `docs/specs/codex_app_server_agent_runtime.md`.
 pub mod config;
 pub mod runtime;
 pub use config::CodexConfig;

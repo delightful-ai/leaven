@@ -861,8 +861,8 @@ provider adapters:
    `leaven-agentic::AgenticEvaluator` against the fake runtime.
 4. Move one milestone example from handwritten deterministic plumbing to the
    agentic adapters.
-5. Add a real provider adapter in its own provider spec and crate, starting with
-   Codex.
+5. Add the real Codex provider adapter from
+   `docs/specs/codex_app_server_agent_runtime.md` in its own provider crate.
 6. Pair provider adapters with capability tests that prove local-vs-remote
    workspace behavior fails early when unsupported.
 
