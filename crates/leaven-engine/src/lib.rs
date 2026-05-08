@@ -36,9 +36,9 @@ pub use graph::{
     RunGraphRestoreError, RunGraphSnapshot, RunGraphView,
 };
 pub use persistence::{
-    CacheIndexSnapshot, GraphSnapshotRef, RunCheckpoint, RunCheckpointRequest, RunPersistence,
-    RunPersistenceError, StageJournalSnapshot, StageStateSnapshot, StoreRunPersistence,
-    WorkspaceJournalSnapshot,
+    CacheIndexSnapshot, GraphSnapshotRef, RestoredRunState, RunCheckpoint, RunCheckpointRequest,
+    RunPersistence, RunPersistenceError, StageJournalSnapshot, StageStateSnapshot,
+    StoreRunPersistence, WorkspaceJournalSnapshot,
 };
 pub use reports::{
     ApplyOneReport, ApplyOutcome, ApplyReport, EvaluationReport, ProposalBatchReport,
@@ -67,7 +67,8 @@ pub mod prelude {
         MaterializationReport, MaterializeContext, MaterializeError, Materializer, Optimizer,
         OptimizerStateSnapshot, Population, PreferenceRelation, PrivateStatePolicy,
         ProposalContext, Proposer, ReadScope, RenderContext, Renderer, RestoreContext,
-        RunCheckpoint, RunContext, RunEvent, RunGraphRestoreError, RunGraphSnapshot, RunGraphView,
-        RunResult, StateFormat, StepStatus, Stopper, StoreRunPersistence, TrustPolicy, optimize,
+        RestoredRunState, RunCheckpoint, RunContext, RunEvent, RunGraphRestoreError,
+        RunGraphSnapshot, RunGraphView, RunResult, StateFormat, StepStatus, Stopper,
+        StoreRunPersistence, TrustPolicy, optimize,
     };
 }

@@ -107,6 +107,10 @@ impl CheckpointStore for FileStore {
     fn get(&self, id: CheckpointId) -> Result<CheckpointBytes, StoreError> {
         self.checkpoints.get(id)
     }
+
+    fn latest(&self) -> Result<Option<CheckpointId>, StoreError> {
+        self.checkpoints.latest()
+    }
 }
 
 fn blob_path(root: &Path, key: &str) -> Result<PathBuf, StoreError> {

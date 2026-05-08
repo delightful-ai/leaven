@@ -12,6 +12,7 @@ pub struct InlineStore {
     name: String,
     blobs: Mutex<HashMap<String, Bytes>>,
     checkpoints: Mutex<HashMap<CheckpointId, CheckpointBytes>>,
+    latest_checkpoint: Mutex<Option<CheckpointId>>,
 }
 
 impl InlineStore {
@@ -21,6 +22,7 @@ impl InlineStore {
             name: name.into(),
             blobs: Mutex::new(HashMap::new()),
             checkpoints: Mutex::new(HashMap::new()),
+            latest_checkpoint: Mutex::new(None),
         }
     }
 }
@@ -58,6 +60,7 @@ impl CheckpointStore for InlineStore {
     fn put(&self, checkpoint: CheckpointBytes) -> Result<CheckpointId, StoreError> {
         let id = CheckpointId::new();
         self.checkpoints.lock().insert(id, checkpoint);
+        *self.latest_checkpoint.lock() = Some(id);
         Ok(id)
     }
 
@@ -72,5 +75,9 @@ impl CheckpointStore for InlineStore {
                 reason: format!("checkpoint `{id}` was not found"),
                 retryable: Some(false),
             })
+    }
+
+    fn latest(&self) -> Result<Option<CheckpointId>, StoreError> {
+        Ok(*self.latest_checkpoint.lock())
     }
 }

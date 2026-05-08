@@ -11,4 +11,5 @@ pub struct CheckpointBytes(pub Bytes);
 pub trait CheckpointStore: Send + Sync {
     fn put(&self, checkpoint: CheckpointBytes) -> Result<CheckpointId, StoreError>;
     fn get(&self, id: CheckpointId) -> Result<CheckpointBytes, StoreError>;
+    fn latest(&self) -> Result<Option<CheckpointId>, StoreError>;
 }

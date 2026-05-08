@@ -172,6 +172,10 @@ impl CheckpointStore for FileCheckpointStore {
         })?;
         Ok(CheckpointBytes(Bytes::from(bytes)))
     }
+
+    fn latest(&self) -> Result<Option<CheckpointId>, StoreError> {
+        FileCheckpointStore::latest(self)
+    }
 }
 
 impl<E> FileEvidenceStore<E> {

@@ -8,9 +8,12 @@ use leaven_kernel::{
     BlobRef, BudgetSnapshot, EvidenceRef, Fingerprint, PopulationId, RunId, StageId, Timestamp, now,
 };
 use leaven_store::{BlobStore, BlobWrite, CheckpointBytes, CheckpointStore, StoreError};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
-use crate::{BudgetLedger, EvaluationCache, OptimizerStateSnapshot, RunGraph, StateFormat};
+use crate::{
+    BudgetLedger, EvaluationCache, EvaluationCacheSnapshot, OptimizerStateSnapshot, RunGraph,
+    RunGraphRestoreError, RunGraphSnapshot, StateFormat,
+};
 
 /// Capability for durable run checkpoints.
 ///
@@ -42,6 +45,103 @@ impl<S> StoreRunPersistence<S> {
     pub fn store(&self) -> &S {
         &self.store
     }
+}
+
+impl<S> StoreRunPersistence<S>
+where
+    S: BlobStore + CheckpointStore,
+{
+    pub fn latest_checkpoint<P>(&self) -> Result<Option<RestoredRunState<P>>, RunPersistenceError>
+    where
+        P: OptimizationProblem,
+        P::Artifact: DeserializeOwned,
+        <P::Artifact as leaven_core::Artifact>::Change: DeserializeOwned,
+        P::ProposalAnnotations: DeserializeOwned,
+    {
+        let Some(id) =
+            CheckpointStore::latest(&self.store).map_err(|source| RunPersistenceError::Store {
+                operation: "read latest checkpoint pointer",
+                source,
+            })?
+        else {
+            return Ok(None);
+        };
+        self.load_checkpoint(id).map(Some)
+    }
+
+    pub fn load_checkpoint<P>(
+        &self,
+        id: leaven_kernel::CheckpointId,
+    ) -> Result<RestoredRunState<P>, RunPersistenceError>
+    where
+        P: OptimizationProblem,
+        P::Artifact: DeserializeOwned,
+        <P::Artifact as leaven_core::Artifact>::Change: DeserializeOwned,
+        P::ProposalAnnotations: DeserializeOwned,
+    {
+        let checkpoint_bytes =
+            CheckpointStore::get(&self.store, id).map_err(|source| RunPersistenceError::Store {
+                operation: "read checkpoint envelope",
+                source,
+            })?;
+        let checkpoint: RunCheckpoint =
+            serde_json::from_slice(&checkpoint_bytes.0).map_err(|err| {
+                RunPersistenceError::Serialization {
+                    state: "run checkpoint envelope",
+                    reason: err.to_string(),
+                }
+            })?;
+        let graph_bytes =
+            BlobStore::get(&self.store, &checkpoint.graph_snapshot.bytes).map_err(|source| {
+                RunPersistenceError::Store {
+                    operation: "read graph snapshot blob",
+                    source,
+                }
+            })?;
+        let graph_snapshot: RunGraphSnapshot<P> =
+            serde_json::from_slice(&graph_bytes).map_err(|err| {
+                RunPersistenceError::Serialization {
+                    state: "graph snapshot",
+                    reason: err.to_string(),
+                }
+            })?;
+        let graph = RunGraph::from_snapshot(graph_snapshot)
+            .map_err(|source| RunPersistenceError::RestoreGraph { source })?;
+        let cache = checkpoint
+            .cache_index
+            .as_ref()
+            .map(|cache_ref| {
+                let cache_bytes =
+                    BlobStore::get(&self.store, &cache_ref.bytes).map_err(|source| {
+                        RunPersistenceError::Store {
+                            operation: "read evaluation cache blob",
+                            source,
+                        }
+                    })?;
+                let snapshot: EvaluationCacheSnapshot = serde_json::from_slice(&cache_bytes)
+                    .map_err(|err| RunPersistenceError::Serialization {
+                        state: "evaluation cache index",
+                        reason: err.to_string(),
+                    })?;
+                Ok(EvaluationCache::from_snapshot(snapshot))
+            })
+            .transpose()?;
+        let budget = BudgetLedger::from_snapshot(checkpoint.budget_ledger.clone());
+
+        Ok(RestoredRunState {
+            checkpoint,
+            graph,
+            budget,
+            cache,
+        })
+    }
+}
+
+pub struct RestoredRunState<P: OptimizationProblem> {
+    pub checkpoint: RunCheckpoint,
+    pub graph: RunGraph<P>,
+    pub budget: BudgetLedger,
+    pub cache: Option<EvaluationCache>,
 }
 
 impl<P, S> RunPersistence<P> for StoreRunPersistence<S>
@@ -268,6 +368,12 @@ pub enum RunPersistenceError {
         operation: &'static str,
         #[source]
         source: StoreError,
+    },
+    /// Stored graph truth could not be restored into a valid run graph.
+    #[error("run persistence restored invalid graph truth")]
+    RestoreGraph {
+        #[source]
+        source: RunGraphRestoreError,
     },
 }
 

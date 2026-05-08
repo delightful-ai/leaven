@@ -162,6 +162,16 @@ fn store_run_persistence_writes_graph_cache_and_checkpoint_envelope() {
     let cache_bytes = BlobStore::get(&store, &cache_ref.bytes).unwrap();
     let cache_snapshot: EvaluationCacheSnapshot = serde_json::from_slice(&cache_bytes).unwrap();
     assert_eq!(cache_snapshot.entries.len(), 1);
+
+    let restored = persistence
+        .latest_checkpoint::<TestProblem>()
+        .unwrap()
+        .unwrap();
+    let mut restored_graph = restored.graph;
+    let mut restored_budget = restored.budget;
+    let restored_ctx = RunContext::<TestProblem>::new(&mut restored_graph, &mut restored_budget);
+    assert!(restored_ctx.graph().candidate(seed).is_some());
+    assert_eq!(restored.cache.unwrap().len(), 1);
 }
 
 #[test]
@@ -421,6 +431,7 @@ struct RecordingStore {
 struct RecordingStoreInner {
     blobs: Mutex<Vec<(BlobRef, Bytes)>>,
     latest_checkpoint: Mutex<Option<CheckpointBytes>>,
+    latest_checkpoint_id: Mutex<Option<leaven_kernel::CheckpointId>>,
 }
 
 impl RecordingStore {
@@ -464,8 +475,10 @@ impl BlobStore for RecordingStore {
 
 impl CheckpointStore for RecordingStore {
     fn put(&self, checkpoint: CheckpointBytes) -> Result<leaven_kernel::CheckpointId, StoreError> {
+        let id = leaven_kernel::CheckpointId::new();
         *self.inner.latest_checkpoint.lock().unwrap() = Some(checkpoint);
-        Ok(leaven_kernel::CheckpointId::new())
+        *self.inner.latest_checkpoint_id.lock().unwrap() = Some(id);
+        Ok(id)
     }
 
     fn get(&self, _id: leaven_kernel::CheckpointId) -> Result<CheckpointBytes, StoreError> {
@@ -476,6 +489,10 @@ impl CheckpointStore for RecordingStore {
                 reason: "no checkpoint has been recorded".to_owned(),
                 retryable: Some(false),
             })
+    }
+
+    fn latest(&self) -> Result<Option<leaven_kernel::CheckpointId>, StoreError> {
+        Ok(*self.inner.latest_checkpoint_id.lock().unwrap())
     }
 }
 

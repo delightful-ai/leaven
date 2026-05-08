@@ -22,6 +22,15 @@ impl BudgetLedger {
     }
 
     #[must_use]
+    pub fn from_snapshot(snapshot: BudgetSnapshot) -> Self {
+        Self {
+            limit: snapshot.limit,
+            spent: snapshot.spent,
+            stages: snapshot.stages,
+        }
+    }
+
+    #[must_use]
     pub fn snapshot(&self) -> BudgetSnapshot {
         BudgetSnapshot {
             spent: self.spent.clone(),
