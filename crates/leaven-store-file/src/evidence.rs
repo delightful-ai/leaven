@@ -174,7 +174,7 @@ impl CheckpointStore for FileCheckpointStore {
     }
 
     fn latest(&self) -> Result<Option<CheckpointId>, StoreError> {
-        FileCheckpointStore::latest(self)
+        Self::latest(self)
     }
 }
 

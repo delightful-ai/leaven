@@ -525,6 +525,14 @@ impl<P: OptimizationProblem> RunGraph<P> {
     }
 
     fn validate_restored_references(&self) -> Result<(), RunGraphRestoreError> {
+        self.validate_restored_batches()?;
+        self.validate_restored_proposals()?;
+        self.validate_restored_apply_attempts()?;
+        self.validate_restored_candidate_origins()?;
+        self.validate_restored_assessments()
+    }
+
+    fn validate_restored_batches(&self) -> Result<(), RunGraphRestoreError> {
         for (batch_id, batch) in &self.proposal_batches {
             for proposal_id in &batch.proposal_ids {
                 if !self.proposals.contains_key(proposal_id) {
@@ -535,7 +543,10 @@ impl<P: OptimizationProblem> RunGraph<P> {
                 }
             }
         }
+        Ok(())
+    }
 
+    fn validate_restored_proposals(&self) -> Result<(), RunGraphRestoreError> {
         for (proposal_id, proposal) in &self.proposals {
             let batch = self.proposal_batches.get(&proposal.batch_id).ok_or(
                 RunGraphRestoreError::MissingBatchForProposal {
@@ -555,7 +566,10 @@ impl<P: OptimizationProblem> RunGraph<P> {
                     reason: source.to_string(),
                 })?;
         }
+        Ok(())
+    }
 
+    fn validate_restored_apply_attempts(&self) -> Result<(), RunGraphRestoreError> {
         for (attempt_id, attempt) in &self.apply_attempts {
             if !self.proposals.contains_key(&attempt.proposal_id) {
                 return Err(RunGraphRestoreError::MissingProposalForApplyAttempt {
@@ -584,7 +598,10 @@ impl<P: OptimizationProblem> RunGraph<P> {
                 }
             }
         }
+        Ok(())
+    }
 
+    fn validate_restored_candidate_origins(&self) -> Result<(), RunGraphRestoreError> {
         for (candidate_id, candidate) in &self.candidates {
             if let CandidateOrigin::Proposal {
                 proposal_id,
@@ -611,7 +628,10 @@ impl<P: OptimizationProblem> RunGraph<P> {
                 }
             }
         }
+        Ok(())
+    }
 
+    fn validate_restored_assessments(&self) -> Result<(), RunGraphRestoreError> {
         for (assessment_id, assessment) in &self.assessments {
             if !self
                 .evaluation_requests
@@ -633,7 +653,6 @@ impl<P: OptimizationProblem> RunGraph<P> {
                 }
             }
         }
-
         Ok(())
     }
 

@@ -574,7 +574,8 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
         policy: CachePolicy,
         request: &ResolvedEvaluationRequest,
     ) -> Result<EvaluationCacheKey, CacheBypassReason> {
-        evaluation_cache_key(evaluator, policy, request, self.graph())
+        let graph = self.graph();
+        evaluation_cache_key(evaluator, policy, request, &graph)
     }
 
     fn record_evaluation_request(
@@ -781,7 +782,7 @@ fn evaluation_cache_key<P: OptimizationProblem>(
     evaluator: leaven_kernel::Fingerprint,
     policy: CachePolicy,
     request: &ResolvedEvaluationRequest,
-    graph: RunGraphView<'_, P>,
+    graph: &RunGraphView<'_, P>,
 ) -> Result<EvaluationCacheKey, CacheBypassReason> {
     let candidates = request_candidate_cache_identities(&policy, request, graph)?;
     Ok(EvaluationCacheKey {
@@ -796,7 +797,7 @@ fn evaluation_cache_key<P: OptimizationProblem>(
 fn request_candidate_cache_identities<P: OptimizationProblem>(
     policy: &CachePolicy,
     request: &ResolvedEvaluationRequest,
-    graph: RunGraphView<'_, P>,
+    graph: &RunGraphView<'_, P>,
 ) -> Result<Vec<CacheIdentity>, CacheBypassReason> {
     match policy {
         CachePolicy::Never => Err(CacheBypassReason::DisabledByPolicy),
