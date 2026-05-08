@@ -299,6 +299,41 @@ fn agent_case_evaluator_runs_independent_per_case_sessions() {
     });
 }
 
+#[test]
+fn agent_case_evaluator_fingerprint_includes_runtime_presenter_scorer_and_cases() {
+    let suite = CaseSuite::from_cases([AgentCase::text(
+        CaseId::new(0),
+        "question",
+        CaseTarget::None,
+    )])
+    .unwrap();
+    let config = AgentCaseEvaluatorConfig::new(
+        EvaluatorId::from("agent-case/fingerprint"),
+        Fingerprint::from_bytes([4; 32]),
+    );
+    let base = AgentCaseEvaluator::<CaseProblem, _, _, _, _>::new(
+        config.clone(),
+        suite.clone(),
+        LocalWorkspaceFactory::temp(),
+        FakeAgentRuntime::new(Vec::new()),
+        TestPresenter,
+        TestScorer,
+    );
+    let changed_scorer = AgentCaseEvaluator::<CaseProblem, _, _, _, _>::new(
+        config,
+        suite,
+        LocalWorkspaceFactory::temp(),
+        FakeAgentRuntime::new(Vec::new()),
+        TestPresenter,
+        OtherScorer,
+    );
+
+    assert_ne!(
+        leaven_engine::Evaluator::<CaseProblem>::fingerprint(&base),
+        leaven_engine::Evaluator::<CaseProblem>::fingerprint(&changed_scorer)
+    );
+}
+
 #[derive(Clone)]
 struct ValidArtifact;
 
@@ -429,5 +464,21 @@ impl AgentCaseScorer<CaseProblem> for TestScorer {
             },
             Cost::metric_calls(1),
         ))
+    }
+}
+
+struct OtherScorer;
+
+impl AgentCaseScorer<CaseProblem> for OtherScorer {
+    fn fingerprint(&self) -> Fingerprint {
+        Fingerprint::from_bytes([7; 32])
+    }
+
+    async fn score(
+        &self,
+        input: AgentCaseScoreInput<'_, CaseProblem>,
+        workspace: &WorkspaceView<'_>,
+    ) -> Result<Metered<CaseEvidence>, AgenticAdapterError> {
+        TestScorer.score(input, workspace).await
     }
 }

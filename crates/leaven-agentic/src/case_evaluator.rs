@@ -10,7 +10,8 @@ use leaven_core::{
 };
 use leaven_engine::{CachePolicy, EvaluationContext, EvaluationError, Evaluator};
 use leaven_kernel::{
-    AgentSessionId, CandidateId, Cost, EvaluationSetId, EvaluatorId, Fingerprint, Metered,
+    AgentSessionId, CandidateId, Cost, EvaluationSetId, EvaluatorId, Fingerprint,
+    FingerprintBuilder, Metered,
 };
 use leaven_workspace::{
     WithWorkspaceError, WorkspaceConfig, WorkspaceFactory, WorkspacePath, WorkspaceView,
@@ -159,7 +160,15 @@ where
     }
 
     fn fingerprint(&self) -> Fingerprint {
-        self.config.fingerprint
+        let mut builder = FingerprintBuilder::new();
+        builder
+            .update(b"leaven.agentic.agent-case-evaluator.v1")
+            .update(self.config.fingerprint.0)
+            .update(self.cases.fingerprint().0)
+            .update(self.runtime.fingerprint().0)
+            .update(self.presenter.fingerprint().0)
+            .update(self.scorer.fingerprint().0);
+        builder.finish()
     }
 
     fn cache_policy(&self, _request: &ResolvedEvaluationRequest) -> CachePolicy {
