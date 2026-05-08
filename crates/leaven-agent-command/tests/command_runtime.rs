@@ -166,6 +166,49 @@ fn command_runtime_passes_request_env_and_template_args() {
     });
 }
 
+#[test]
+fn command_runtime_can_pass_rendered_instructions_to_stdin() {
+    futures::executor::block_on(async {
+        let parent = temp_parent("command-runtime-rendered-instructions");
+        let factory = LocalWorkspaceFactory::new(&parent);
+        let mut workspace = factory.allocate(WorkspaceConfig::default()).await.unwrap();
+        let runtime = runtime_with_run(CommandTemplate {
+            program: "cat".to_owned(),
+            args: Vec::new(),
+            cwd: None,
+            env: BTreeMap::new(),
+            stdin: CommandPromptMode::StdinInstructions,
+            limits: CommandLimits::default(),
+            user: None,
+        });
+        let mut instructions = AgentInstructions::task("complete the task");
+        instructions.system = Some("developer constraints".to_owned());
+        instructions.context.push(leaven_agent::AgentContextRef {
+            label: "case".to_owned(),
+            path: WorkspacePath::new("task/case.json").unwrap(),
+            media_type: Some("application/json".to_owned()),
+        });
+
+        let session = runtime
+            .run_session(
+                &mut workspace.view(),
+                AgentRunRequest::new(instructions, OutputContract::FinalMessage),
+                AgentRunContext::new(AgentSessionId::new(), &BudgetSnapshot::default()),
+            )
+            .await
+            .unwrap();
+        let stdout = String::from_utf8(session.value.commands[0].output.stdout.bytes.clone())
+            .expect("rendered instructions are utf8");
+
+        assert!(stdout.contains("System:\ndeveloper constraints"));
+        assert!(stdout.contains("Task:\ncomplete the task"));
+        assert!(stdout.contains("- case: task/case.json (application/json)"));
+
+        workspace.cleanup().await.unwrap();
+        remove_dir(&parent);
+    });
+}
+
 fn runtime_with_run(run: CommandTemplate) -> CommandAgentRuntime<StdoutSessionParser> {
     CommandAgentRuntime::new(
         CommandAgentConfig {

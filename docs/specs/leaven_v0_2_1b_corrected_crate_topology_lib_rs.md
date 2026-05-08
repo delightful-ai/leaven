@@ -116,6 +116,7 @@ leaven/
 │   ├── leaven-agent-claude-code/
 │   ├── leaven-agent-codex/
 │   ├── leaven-agent-codex-app-server/
+│   ├── leaven-agent-codex-cli/
 │   ├── leaven-agent-opencode/
 │   ├── leaven-agentic/
 │   ├── leaven-agentic-skill/
@@ -191,6 +192,7 @@ members = [
     "crates/leaven-agent-claude-code",
     "crates/leaven-agent-codex",
     "crates/leaven-agent-codex-app-server",
+    "crates/leaven-agent-codex-cli",
     "crates/leaven-agent-opencode",
     "crates/leaven-agentic",
     "crates/leaven-agentic-skill",
@@ -409,13 +411,21 @@ leaven-agent-claude-code -> [
 ]
 
 leaven-agent-codex -> [
-  leaven-agent-codex-app-server
+  leaven-agent-codex-app-server,
+  leaven-agent-codex-cli
 ]
 
 leaven-agent-codex-app-server -> [
   leaven-kernel,
   leaven-workspace,
   leaven-agent
+]
+
+leaven-agent-codex-cli -> [
+  leaven-kernel,
+  leaven-workspace,
+  leaven-agent,
+  leaven-agent-command
 ]
 
 leaven-agent-opencode -> [
@@ -2243,6 +2253,27 @@ pub use runtime::ClaudeCodeRuntime;
 pub mod app_server {
     pub use leaven_agent_codex_app_server::*;
 }
+
+#[cfg(feature = "cli")]
+pub mod cli {
+    pub use leaven_agent_codex_cli::*;
+}
+```
+
+```rust
+// leaven-agent-codex-cli/src/lib.rs
+#![forbid(unsafe_code)]
+#![warn(missing_docs)]
+//! Codex CLI runtime adapter.
+pub mod config;
+pub mod parser;
+pub mod runtime;
+pub use config::{
+    CodexCliApproval, CodexCliConfig, CodexCliReasoningEffort,
+    CodexCliSandbox,
+};
+pub use parser::CodexCliSessionParser;
+pub use runtime::CodexCliRuntime;
 ```
 
 ```rust

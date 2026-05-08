@@ -14,7 +14,7 @@ workspace = true
 bytes = { workspace = true }
 leaven = { workspace = true, features = ["std", "workspace-local"] }
 leaven-agent = { workspace = true }
-leaven-agent-codex-app-server = { workspace = true, features = ["stdio"] }
+leaven-agent-codex-cli = { workspace = true }
 leaven-agentic = { workspace = true }
 leaven-agentic-skill = { workspace = true }
 leaven-artifact-skill = { workspace = true }

@@ -13,8 +13,10 @@ workspace = true
 [features]
 default = []
 app-server = ["dep:leaven-agent-codex-app-server", "leaven-agent-codex-app-server/app-server"]
+cli = ["dep:leaven-agent-codex-cli"]
 stdio = ["app-server", "leaven-agent-codex-app-server/stdio"]
 live-codex-tests = ["stdio", "leaven-agent-codex-app-server/live-codex-tests"]
 
 [dependencies]
 leaven-agent-codex-app-server = { workspace = true, optional = true, default-features = false }
+leaven-agent-codex-cli = { workspace = true, optional = true }

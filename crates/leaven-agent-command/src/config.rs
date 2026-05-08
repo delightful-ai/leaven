@@ -59,8 +59,11 @@ impl CommandTemplate {
             CommandPromptMode::StdinTask => {
                 CommandStdin::Bytes(request.instructions.task.as_bytes().to_vec())
             }
+            CommandPromptMode::StdinInstructions => {
+                CommandStdin::Bytes(render_instructions(request).into_bytes())
+            }
         };
-        command.limits = self.limits.clone();
+        command.limits = merge_limits(&self.limits, &request.limits);
         command.user = self.user.clone();
         command
     }
@@ -91,11 +94,60 @@ impl CommandTemplateArg {
 pub enum CommandPromptMode {
     None,
     StdinTask,
+    StdinInstructions,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CommandSessionLayout {
     pub artifacts_root: WorkspacePath,
+}
+
+fn render_instructions(request: &leaven_agent::AgentRunRequest) -> String {
+    let mut rendered = String::new();
+    if let Some(system) = &request.instructions.system {
+        rendered.push_str("System:\n");
+        rendered.push_str(system);
+        rendered.push_str("\n\n");
+    }
+
+    rendered.push_str("Task:\n");
+    rendered.push_str(&request.instructions.task);
+
+    if !request.instructions.context.is_empty() {
+        rendered.push_str("\n\nContext:\n");
+        for context in &request.instructions.context {
+            rendered.push_str("- ");
+            rendered.push_str(&context.label);
+            rendered.push_str(": ");
+            rendered.push_str(context.path.as_str());
+            if let Some(media_type) = &context.media_type {
+                rendered.push_str(" (");
+                rendered.push_str(media_type);
+                rendered.push(')');
+            }
+            rendered.push('\n');
+        }
+    }
+
+    rendered
+}
+
+fn merge_limits(template: &CommandLimits, request: &leaven_agent::AgentLimits) -> CommandLimits {
+    let mut limits = template.clone();
+    limits.timeout = min_option(limits.timeout, request.timeout);
+    if let Some(max_output_bytes) = request.max_output_bytes {
+        limits.max_stdout_bytes = min_option(limits.max_stdout_bytes, Some(max_output_bytes));
+        limits.max_stderr_bytes = min_option(limits.max_stderr_bytes, Some(max_output_bytes));
+    }
+    limits
+}
+
+fn min_option<T: Ord + Copy>(left: Option<T>, right: Option<T>) -> Option<T> {
+    match (left, right) {
+        (Some(left), Some(right)) => Some(left.min(right)),
+        (Some(value), None) | (None, Some(value)) => Some(value),
+        (None, None) => None,
+    }
 }
 
 impl Default for CommandSessionLayout {

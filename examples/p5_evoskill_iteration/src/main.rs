@@ -760,10 +760,9 @@ impl EvoSkillEvaluator {
                 .await
                 .map_err(|error| msg(error.to_string()))?;
             write_json(&mut view, "task/case.json", case)?;
-            let mut request = AgentRunRequest::new(
-                AgentInstructions::task(executor_task(case)),
-                OutputContract::FinalMessage,
-            );
+            let mut instructions = AgentInstructions::task(executor_task(case));
+            instructions.system = Some(self.developer_instructions.clone());
+            let mut request = AgentRunRequest::new(instructions, OutputContract::FinalMessage);
             request.limits = AgentLimits {
                 timeout: Some(Duration::from_secs(240)),
                 ..AgentLimits::default()
@@ -838,10 +837,9 @@ async fn run_skill_proposer(
             "task/existing-skills.md",
             existing_skills_markdown(bank).as_bytes(),
         )?;
-        let mut request = AgentRunRequest::new(
-            AgentInstructions::task(proposer_task(failures, bank)?),
-            OutputContract::FinalMessage,
-        );
+        let mut instructions = AgentInstructions::task(proposer_task(failures, bank)?);
+        instructions.system = Some(developer_instructions.clone());
+        let mut request = AgentRunRequest::new(instructions, OutputContract::FinalMessage);
         request.limits = AgentLimits {
             timeout: Some(Duration::from_secs(240)),
             ..AgentLimits::default()
@@ -990,10 +988,10 @@ async fn run_builder_attempt(
     attempt: usize,
     last_error: Option<&str>,
 ) -> Result<Metered<leaven_agent::AgentSession>> {
-    let mut request = AgentRunRequest::new(
-        AgentInstructions::task(builder_task(loop_state.proposal, attempt, last_error)?),
-        OutputContract::FinalMessage,
-    );
+    let mut instructions =
+        AgentInstructions::task(builder_task(loop_state.proposal, attempt, last_error)?);
+    instructions.system = Some(loop_state.developer_instructions.to_owned());
+    let mut request = AgentRunRequest::new(instructions, OutputContract::FinalMessage);
     request.limits = AgentLimits {
         timeout: Some(Duration::from_secs(240)),
         ..AgentLimits::default()

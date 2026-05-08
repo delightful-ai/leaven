@@ -872,7 +872,7 @@ leaven-agent
   OutputContract
   runtime capability declarations
 
-provider-specific runtime crates, starting with leaven-agent-codex-app-server
+provider-specific runtime crates, starting with leaven-agent-codex-cli
   provider-specific AgentRuntime impls
   provider config
   transcript normalization
@@ -924,8 +924,10 @@ provider adapters:
    `leaven-agentic::AgenticEvaluator` against the fake runtime.
 4. Move one milestone example from handwritten deterministic plumbing to the
    agentic adapters.
-5. Add the real Codex provider adapter from
-   `docs/specs/codex_app_server_agent_runtime.md` in its own provider crate.
+5. Add the real Codex CLI provider adapter from
+   `docs/specs/codex_cli_agent_runtime.md` in its own provider crate. Keep
+   app-server support in `leaven-agent-codex-app-server` as a separate local
+   compatibility adapter.
 6. Pair provider adapters with capability tests that prove local-vs-remote
    workspace behavior fails early when unsupported.
 

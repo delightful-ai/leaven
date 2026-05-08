@@ -335,8 +335,8 @@ EvoSkill-shaped proof path, not only a design contract.
     population update, and checkpoint/resume.
 
 68. **Live Codex is part of the P5 gate.**  
-    `just milestone-p5` runs Codex app-server with `gpt-5.4-mini` and low
-    reasoning when `LEAVEN_CODEX_LIVE=1` is set. The gate must include
+    `just milestone-p5` runs Codex CLI with `gpt-5.4-mini` and low reasoning
+    when `LEAVEN_CODEX_LIVE=1` is set. The gate must include
     developer instructions and stored session evidence.
 
 69. **Source-prompt fidelity is explicit.**  
@@ -374,7 +374,13 @@ host-mounted app-server experiments.
     compatibility path, not the backend-neutral Codex path for E2B, K8s,
     Firkin, Firecracker, or other remote/container backends.
 
-73. **Workspace command execution is now a first-class law surface.**  
+73. **Codex CLI is the implemented backend-neutral Codex path.**  
+    `leaven-agent-codex-cli` delegates to `leaven-agent-command`, invokes
+    `codex exec` through `WorkspaceView::run_command`, captures
+    `--output-last-message` as the normalized final response, and retains JSONL
+    stdout/stderr as raw provider events. It does not own skill layout.
+
+74. **Workspace command execution is now a first-class law surface.**  
     Commands carry workspace cwd, env, stdin, timeout/output limits, optional
     user identity, exit status, duration, and truncation facts. Backends must
     either honor requested semantics or refuse with typed errors.
@@ -4792,8 +4798,8 @@ EvoSkill-shaped iteration that exercises the real agentic skill substrate.
   workspace proposal parsing, `RunContext` proposal application, child
   evaluation, `KeepBest` observation, evidence persistence, and checkpoint
   completion.
-- **Codex execution is mandatory for the gate.** The milestone uses Codex
-  app-server with `gpt-5.4-mini`, low reasoning, and developer instructions.
+- **Codex execution is mandatory for the gate.** The milestone uses Codex CLI
+  with `gpt-5.4-mini`, low reasoning, and developer instructions.
   The run is opt-in through `LEAVEN_CODEX_LIVE=1` because it spends live model
   calls.
 - **Prompt fidelity is documented.** The example uses EvoSkill source prompts

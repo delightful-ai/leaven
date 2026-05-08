@@ -7,3 +7,8 @@
 pub mod app_server {
     pub use leaven_agent_codex_app_server::*;
 }
+
+#[cfg(feature = "cli")]
+pub mod cli {
+    pub use leaven_agent_codex_cli::*;
+}

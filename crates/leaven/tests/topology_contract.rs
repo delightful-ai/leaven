@@ -9,6 +9,7 @@ const EXPECTED_WORKSPACE_MEMBERS: &[&str] = &[
     "crates/leaven-agent-claude-code",
     "crates/leaven-agent-codex",
     "crates/leaven-agent-codex-app-server",
+    "crates/leaven-agent-codex-cli",
     "crates/leaven-agent-opencode",
     "crates/leaven-agentic",
     "crates/leaven-agentic-skill",
@@ -66,6 +67,7 @@ const EXPECTED_CRATES: &[&str] = &[
     "leaven-agent-claude-code",
     "leaven-agent-codex",
     "leaven-agent-codex-app-server",
+    "leaven-agent-codex-cli",
     "leaven-agent-opencode",
     "leaven-agentic",
     "leaven-agentic-skill",
@@ -151,10 +153,22 @@ const EXPECTED_DEPENDENCIES: &[(&str, &[&str])] = &[
         "leaven-agent-claude-code",
         &["leaven-agent", "leaven-kernel", "leaven-workspace"],
     ),
-    ("leaven-agent-codex", &["leaven-agent-codex-app-server"]),
+    (
+        "leaven-agent-codex",
+        &["leaven-agent-codex-app-server", "leaven-agent-codex-cli"],
+    ),
     (
         "leaven-agent-codex-app-server",
         &["leaven-agent", "leaven-kernel", "leaven-workspace"],
+    ),
+    (
+        "leaven-agent-codex-cli",
+        &[
+            "leaven-agent",
+            "leaven-agent-command",
+            "leaven-kernel",
+            "leaven-workspace",
+        ],
     ),
     (
         "leaven-agent-opencode",

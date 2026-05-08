@@ -1,25 +1,14 @@
 use std::path::PathBuf;
 
-use leaven_agent_codex_app_server::{
-    CodexAppServerConfig, CodexAppServerRuntime, CodexReasoningEffort, CodexSandboxMode,
-    StdioCodexAppServerConnector,
-};
+use leaven_agent_codex_cli::{CodexCliApproval, CodexCliConfig, CodexCliRuntime};
 
-pub type LiveCodexRuntime = CodexAppServerRuntime<StdioCodexAppServerConnector>;
+pub type LiveCodexRuntime = CodexCliRuntime;
 
-pub fn live_codex_runtime(developer_instructions: String) -> LiveCodexRuntime {
-    let mut config = CodexAppServerConfig::default();
-    config.thread.model = Some("gpt-5.4-mini".to_owned());
-    config.thread.sandbox = Some(CodexSandboxMode::DangerFullAccess);
-    config.thread.developer_instructions = Some(developer_instructions);
-    config.turn.effort = Some(CodexReasoningEffort::Low);
-    CodexAppServerRuntime::new(
-        config,
-        StdioCodexAppServerConnector {
-            codex_bin: bun_codex_bin(),
-            config_overrides: vec!["features.unified_exec=false".to_owned()],
-        },
-    )
+pub fn live_codex_runtime(_developer_instructions: String) -> LiveCodexRuntime {
+    let mut config = CodexCliConfig::new(bun_codex_bin().to_string_lossy().into_owned());
+    config.model = "gpt-5.4-mini".to_owned();
+    config.approval = CodexCliApproval::BypassSandboxAndApprovals;
+    CodexCliRuntime::new(config)
 }
 
 pub fn require_live_codex() -> crate::error::Result<()> {

@@ -2328,6 +2328,7 @@ name = "leaven-agent-codex"
 version = "0.0.0"
 dependencies = [
  "leaven-agent-codex-app-server",
+ "leaven-agent-codex-cli",
 ]
 
 [[package]]
@@ -2346,6 +2347,19 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.18",
  "tokio",
+]
+
+[[package]]
+name = "leaven-agent-codex-cli"
+version = "0.0.0"
+dependencies = [
+ "futures",
+ "leaven-agent",
+ "leaven-agent-command",
+ "leaven-kernel",
+ "leaven-workspace",
+ "leaven-workspace-local",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -3311,7 +3325,7 @@ dependencies = [
  "bytes",
  "leaven",
  "leaven-agent",
- "leaven-agent-codex-app-server",
+ "leaven-agent-codex-cli",
  "leaven-agentic",
  "leaven-agentic-skill",
  "leaven-artifact-skill",
