@@ -11,7 +11,7 @@ use leaven_store::EvidenceStore;
 use crate::{
     BudgetLedger, Callback, CaseSet, DynCallback, DynEvaluator, ErrorPolicy, EvaluationCache,
     Evaluator, Optimizer, OptimizerError, ReadScope, RunContext, RunContextError, RunEvent,
-    RunGraph, RunGraphView, StepStatus, StopReason, TrustPolicy,
+    RunGraph, RunGraphView, RunPersistence, StepStatus, StopReason, TrustPolicy,
 };
 
 pub struct Engine<P: OptimizationProblem> {
@@ -20,6 +20,7 @@ pub struct Engine<P: OptimizationProblem> {
     cache: EvaluationCache,
     evaluators: BTreeMap<EvaluatorId, Arc<dyn DynEvaluator<P>>>,
     callbacks: Vec<Box<dyn DynCallback<P>>>,
+    persistence: Option<Arc<dyn RunPersistence<P>>>,
     trust: TrustPolicy,
 }
 
@@ -49,7 +50,10 @@ impl<P: OptimizationProblem> Engine<P> {
         artifact: P::Artifact,
         seed_index: usize,
     ) -> Result<CandidateId, RunContextError> {
-        RunContext::new(&mut self.graph, &mut self.budget).insert_seed(artifact, seed_index)
+        let candidate =
+            RunContext::new(&mut self.graph, &mut self.budget).insert_seed(artifact, seed_index)?;
+        self.checkpoint().map_err(RunContextError::Persistence)?;
+        Ok(candidate)
     }
 
     pub async fn run<O>(
@@ -77,6 +81,12 @@ impl<P: OptimizationProblem> Engine<P> {
                 return Err(error);
             }
         }
+        self.checkpoint().map_err(|error| {
+            let error =
+                OptimizerError::with_source("run checkpoint failed after initialize", error);
+            self.record_optimizer_error(&error);
+            error
+        })?;
 
         for _ in 0..MAX_ITERATIONS {
             let iteration = IterationId::new();
@@ -93,6 +103,12 @@ impl<P: OptimizationProblem> Engine<P> {
                 optimizer.step(&mut ctx).await
             };
             self.emit(RunEvent::IterationEnded { iteration });
+            self.checkpoint().map_err(|error| {
+                let error =
+                    OptimizerError::with_source("run checkpoint failed after iteration", error);
+                self.record_optimizer_error(&error);
+                error
+            })?;
             match status {
                 Ok(StepStatus::Continue) => {}
                 Ok(StepStatus::Done) => {
@@ -122,7 +138,15 @@ impl<P: OptimizationProblem> Engine<P> {
             best,
             budget,
         });
+        let _ = self.checkpoint();
         RunResult { run_id, best }
+    }
+
+    fn checkpoint(&self) -> Result<(), crate::RunPersistenceError> {
+        if let Some(persistence) = &self.persistence {
+            persistence.checkpoint(&self.graph)?;
+        }
+        Ok(())
     }
 
     fn record_optimizer_error(&mut self, error: &OptimizerError) {
@@ -157,6 +181,7 @@ pub struct EngineBuilder<P: OptimizationProblem> {
     budget: Budget,
     evaluators: BTreeMap<EvaluatorId, Arc<dyn DynEvaluator<P>>>,
     callbacks: Vec<Box<dyn DynCallback<P>>>,
+    persistence: Option<Arc<dyn RunPersistence<P>>>,
     trust: TrustPolicy,
     _problem: std::marker::PhantomData<P>,
 }
@@ -168,6 +193,7 @@ impl<P: OptimizationProblem> Default for EngineBuilder<P> {
             budget: Budget::unlimited(),
             evaluators: BTreeMap::new(),
             callbacks: Vec::new(),
+            persistence: None,
             trust: TrustPolicy::default(),
             _problem: std::marker::PhantomData,
         }
@@ -200,6 +226,15 @@ impl<P: OptimizationProblem> EngineBuilder<P> {
         self
     }
 
+    #[must_use]
+    pub fn persistence<R>(mut self, persistence: R) -> Self
+    where
+        R: RunPersistence<P> + 'static,
+    {
+        self.persistence = Some(Arc::new(persistence));
+        self
+    }
+
     /// Set the trust policy used for optimizer contexts and callback views.
     #[must_use]
     pub fn trust_policy(mut self, trust: TrustPolicy) -> Self {
@@ -215,6 +250,7 @@ impl<P: OptimizationProblem> EngineBuilder<P> {
             cache: EvaluationCache::default(),
             evaluators: self.evaluators,
             callbacks: self.callbacks,
+            persistence: self.persistence,
             trust: self.trust,
         }
     }

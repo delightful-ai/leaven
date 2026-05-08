@@ -671,6 +671,9 @@ pub enum RunContextError {
     /// Evidence or checkpoint storage refused an operation.
     #[error(transparent)]
     Store(#[from] StoreError),
+    /// Run persistence refused a checkpoint.
+    #[error(transparent)]
+    Persistence(#[from] crate::RunPersistenceError),
     /// Trust policy refused a request.
     #[error(transparent)]
     TrustViolation(#[from] TrustViolation),

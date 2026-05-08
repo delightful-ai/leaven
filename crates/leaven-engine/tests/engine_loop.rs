@@ -9,7 +9,7 @@ use futures::executor::block_on;
 use leaven_core::PartitionId;
 use leaven_engine::{
     Callback, CaseSet, Engine, Optimizer, OptimizerError, RunContext, RunEvent, RunGraphView,
-    StepStatus, TrustPolicy, optimize,
+    RunPersistence, RunPersistenceError, StepStatus, TrustPolicy, optimize,
 };
 use leaven_kernel::{Budget, ErrorKind};
 use leaven_store_inline::InlineEvidenceStore;
@@ -89,6 +89,51 @@ fn engine_trust_policy_reaches_optimizer_context() {
         engine.run(&mut optimizer, &cases, &store).await.unwrap();
 
         assert!(optimizer.observed_hidden);
+    });
+}
+
+#[test]
+fn engine_checkpoints_clean_run_boundaries() {
+    block_on(async {
+        let checkpoints = Arc::new(AtomicUsize::new(0));
+        let persistence = CountingPersistence {
+            checkpoints: checkpoints.clone(),
+        };
+        let mut engine = Engine::<TestProblem>::builder()
+            .persistence(persistence)
+            .build();
+        let cases = CaseSet::new(vec!["case"]);
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let mut optimizer = ContinueThenDone { steps: 0 };
+
+        engine.run(&mut optimizer, &cases, &store).await.unwrap();
+
+        assert_eq!(checkpoints.load(Ordering::SeqCst), 4);
+    });
+}
+
+#[test]
+fn engine_surfaces_checkpoint_failures_as_run_errors() {
+    block_on(async {
+        let mut engine = Engine::<TestProblem>::builder()
+            .persistence(FailingPersistence)
+            .build();
+        let cases = CaseSet::new(vec!["case"]);
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let mut optimizer = ContinueThenDone { steps: 0 };
+
+        let err = engine
+            .run(&mut optimizer, &cases, &store)
+            .await
+            .unwrap_err();
+
+        assert!(err.to_string().contains("run checkpoint failed"));
+        assert!(
+            engine
+                .view()
+                .events()
+                .any(|event| matches!(event, RunEvent::OptimizationEnded { best: None, .. }))
+        );
     });
 }
 
@@ -191,6 +236,34 @@ struct ContinueThenDone {
 
 struct CountingCallback {
     seen: Arc<AtomicUsize>,
+}
+
+struct CountingPersistence {
+    checkpoints: Arc<AtomicUsize>,
+}
+
+impl RunPersistence<TestProblem> for CountingPersistence {
+    fn checkpoint(
+        &self,
+        _graph: &leaven_engine::RunGraph<TestProblem>,
+    ) -> Result<(), RunPersistenceError> {
+        self.checkpoints.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }
+}
+
+struct FailingPersistence;
+
+impl RunPersistence<TestProblem> for FailingPersistence {
+    fn checkpoint(
+        &self,
+        _graph: &leaven_engine::RunGraph<TestProblem>,
+    ) -> Result<(), RunPersistenceError> {
+        Err(RunPersistenceError::CheckpointFailed {
+            reason: "disk full".to_owned(),
+            retryable: Some(true),
+        })
+    }
 }
 
 impl Callback<TestProblem> for CountingCallback {
