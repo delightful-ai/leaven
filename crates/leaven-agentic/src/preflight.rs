@@ -2,9 +2,11 @@
 
 use leaven_agent::{AgentRuntime, OutputContract};
 use leaven_core::Artifact;
-use leaven_kernel::Fingerprint;
+use leaven_engine::MaterializeContext;
+use leaven_kernel::{CandidateId, Fingerprint};
+use leaven_workspace::{WithWorkspaceError, WorkspaceConfig, WorkspaceFactory};
 
-use crate::{AgentWorkload, CaseSuite};
+use crate::{AgentCase, AgentCasePresentationInput, AgentCasePresenter, AgentWorkload, CaseSuite};
 
 /// Preflight report for an agentic run configuration.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -181,49 +183,87 @@ impl AgentRunPreflight {
     /// Checks output-contract shape without reading workspace outputs.
     #[must_use]
     pub fn output_contract(mut self, contract: &OutputContract) -> Self {
-        match contract {
-            OutputContract::Files { paths } => {
-                if paths.is_empty() {
-                    self.report
-                        .error("output-contract", "file output contract has no paths");
-                } else {
-                    self.report.ok(
-                        "output-contract",
-                        format!("{} required output file(s)", paths.len()),
-                    );
-                }
-            }
-            OutputContract::JsonFile { path, schema } => {
-                if schema.is_some() {
-                    self.report.ok(
-                        "output-contract",
-                        format!("JSON output `{}` with schema", path.as_str()),
-                    );
-                } else {
-                    self.report.ok(
-                        "output-contract",
-                        format!("JSON output `{}` without schema", path.as_str()),
-                    );
-                }
-            }
-            OutputContract::FinalMessage => {
+        check_output_contract(&mut self.report, contract);
+        self
+    }
+
+    /// Runs the presenter on a representative candidate/case without invoking
+    /// the agent runtime.
+    pub async fn presenter_dry_run<P, Factory, Presenter>(
+        mut self,
+        candidate_id: CandidateId,
+        candidate: &P::Artifact,
+        case: &AgentCase,
+        factory: &Factory,
+        workspace_config: WorkspaceConfig,
+        presenter: &Presenter,
+        ctx: MaterializeContext<'_, P>,
+    ) -> Self
+    where
+        P: leaven_core::OptimizationProblem,
+        Factory: WorkspaceFactory + ?Sized,
+        Presenter: AgentCasePresenter<P>,
+    {
+        let mut workspace = match factory.allocate(workspace_config).await {
+            Ok(workspace) => workspace,
+            Err(error) => {
                 self.report
-                    .ok("output-contract", "final assistant message required");
+                    .error("presenter", format!("workspace allocation failed: {error}"));
+                return self;
             }
-            OutputContract::WorkspaceDiff { roots } => {
-                if roots.is_empty() {
-                    self.report.warn(
-                        "output-contract",
-                        "workspace-diff contract has no explicit roots",
-                    );
-                } else {
-                    self.report.ok(
-                        "output-contract",
-                        format!("workspace diff over {} root(s)", roots.len()),
-                    );
-                }
+        };
+
+        let stage_result = async {
+            let mut view = workspace.view();
+            presenter
+                .present(
+                    AgentCasePresentationInput {
+                        candidate_id,
+                        candidate,
+                        case,
+                        graph: ctx.graph().clone(),
+                    },
+                    &mut view,
+                    ctx,
+                )
+                .await
+        }
+        .await;
+        let cleanup_result = workspace.cleanup().await;
+
+        match (stage_result, cleanup_result) {
+            (Ok(presentation), Ok(())) => {
+                self.report.ok(
+                    "presenter",
+                    format!(
+                        "presenter wrote {} materialized ref(s)",
+                        presentation.value.materialized_refs.len()
+                    ),
+                );
+                check_output_contract(
+                    &mut self.report,
+                    &presentation.value.request.output_contract,
+                );
+            }
+            (Ok(_), Err(cleanup)) => {
+                self.report.error(
+                    "presenter-cleanup",
+                    format!("workspace cleanup failed: {cleanup}"),
+                );
+            }
+            (Err(error), Ok(())) => {
+                self.report
+                    .error("presenter", format!("presenter dry run failed: {error}"));
+            }
+            (Err(stage), Err(cleanup)) => {
+                let combined = WithWorkspaceError::StageAndCleanup { stage, cleanup };
+                self.report.error(
+                    "presenter",
+                    format!("presenter and cleanup failed: {combined}"),
+                );
             }
         }
+
         self
     }
 
@@ -231,6 +271,50 @@ impl AgentRunPreflight {
     #[must_use]
     pub fn check(self) -> AgentRunPreflightReport {
         self.report
+    }
+}
+
+fn check_output_contract(report: &mut AgentRunPreflightReport, contract: &OutputContract) {
+    match contract {
+        OutputContract::Files { paths } => {
+            if paths.is_empty() {
+                report.error("output-contract", "file output contract has no paths");
+            } else {
+                report.ok(
+                    "output-contract",
+                    format!("{} required output file(s)", paths.len()),
+                );
+            }
+        }
+        OutputContract::JsonFile { path, schema } => {
+            if schema.is_some() {
+                report.ok(
+                    "output-contract",
+                    format!("JSON output `{}` with schema", path.as_str()),
+                );
+            } else {
+                report.ok(
+                    "output-contract",
+                    format!("JSON output `{}` without schema", path.as_str()),
+                );
+            }
+        }
+        OutputContract::FinalMessage => {
+            report.ok("output-contract", "final assistant message required");
+        }
+        OutputContract::WorkspaceDiff { roots } => {
+            if roots.is_empty() {
+                report.warn(
+                    "output-contract",
+                    "workspace-diff contract has no explicit roots",
+                );
+            } else {
+                report.ok(
+                    "output-contract",
+                    format!("workspace diff over {} root(s)", roots.len()),
+                );
+            }
+        }
     }
 }
 

@@ -16,7 +16,7 @@ use leaven_core::{
 use leaven_engine::{BudgetLedger, CaseSet, MaterializeContext, RunContext, RunGraph};
 use leaven_kernel::{CaseId, ContentId, Cost, EvaluatorId, Fingerprint, Metered, RunId};
 use leaven_store_inline::InlineEvidenceStore;
-use leaven_workspace::{WorkspacePath, WorkspaceView};
+use leaven_workspace::{WorkspaceConfig, WorkspacePath, WorkspaceView};
 use leaven_workspace_local::LocalWorkspaceFactory;
 
 #[test]
@@ -142,6 +142,45 @@ fn preflight_checks_output_contract_shape_without_running_runtime() {
             && finding.check == "output-contract"
             && finding.message.contains("no explicit roots")
     }));
+}
+
+#[test]
+fn preflight_dry_runs_presenter_without_running_runtime() {
+    futures::executor::block_on(async {
+        let case = AgentCase::text(CaseId::new(0), "question", CaseTarget::None);
+        let artifact = CaseArtifact("seed".to_owned());
+        let mut graph = RunGraph::<CaseProblem>::new(RunId::new());
+        let mut budget = BudgetLedger::default();
+        let mut ctx = RunContext::<CaseProblem>::new(&mut graph, &mut budget);
+        let candidate = ctx.insert_seed(artifact.clone(), 0).unwrap();
+
+        let report = AgentRunPreflight::new()
+            .presenter_dry_run(
+                candidate,
+                &artifact,
+                &case,
+                &LocalWorkspaceFactory::temp(),
+                WorkspaceConfig::default(),
+                &TestPresenter,
+                ctx.materialize_context(),
+            )
+            .await
+            .check();
+
+        assert!(!report.has_errors());
+        assert!(
+            report
+                .findings()
+                .iter()
+                .any(|finding| finding.check == "presenter")
+        );
+        assert!(
+            report
+                .findings()
+                .iter()
+                .any(|finding| finding.check == "output-contract")
+        );
+    });
 }
 
 #[test]
