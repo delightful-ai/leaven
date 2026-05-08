@@ -8,15 +8,47 @@ use leaven_kernel::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{OptimizerStateSnapshot, RunGraph, StateFormat};
+use crate::{BudgetLedger, EvaluationCache, OptimizerStateSnapshot, RunGraph, StateFormat};
 
-/// Capability for durable run graph checkpoints.
+/// Capability for durable run checkpoints.
 ///
 /// Persistence adapters own the world-facing details. The engine only depends
 /// on this capability and its structured refusal modes.
 pub trait RunPersistence<P: OptimizationProblem>: Send + Sync {
-    /// Persist a checkpoint of the current run graph.
-    fn checkpoint(&self, graph: &RunGraph<P>) -> Result<(), RunPersistenceError>;
+    /// Persist a checkpoint at a clean run boundary.
+    fn checkpoint(&self, request: RunCheckpointRequest<'_, P>) -> Result<(), RunPersistenceError>;
+}
+
+/// Borrowed state available to a persistence adapter at a clean boundary.
+///
+/// The request borrows instead of cloning so persistence backends can decide
+/// what to serialize, deduplicate, or ignore without forcing hot-path copies on
+/// runs that do not use persistence.
+#[derive(Clone, Copy)]
+pub struct RunCheckpointRequest<'a, P: OptimizationProblem> {
+    pub graph: &'a RunGraph<P>,
+    pub budget: &'a BudgetLedger,
+    pub cache: Option<&'a EvaluationCache>,
+}
+
+impl<'a, P: OptimizationProblem> RunCheckpointRequest<'a, P> {
+    #[must_use]
+    pub fn new(
+        graph: &'a RunGraph<P>,
+        budget: &'a BudgetLedger,
+        cache: Option<&'a EvaluationCache>,
+    ) -> Self {
+        Self {
+            graph,
+            budget,
+            cache,
+        }
+    }
+
+    #[must_use]
+    pub fn run_id(&self) -> RunId {
+        self.graph.run_id
+    }
 }
 
 /// Durable checkpoint envelope for one clean run boundary.

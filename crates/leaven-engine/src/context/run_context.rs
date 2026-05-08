@@ -20,8 +20,8 @@ use crate::{
     CachePolicy, CacheStatus, CaseSet, DynCallback, DynEvaluator, ErrorPolicy, EvaluationCache,
     EvaluationCacheKey, EvaluationContext, EvaluationError, EvaluationReport,
     EvaluationResolveError, Evaluator, ProposalBatchReport, ProposalContext, ProposalError,
-    Proposer, ReadScope, RenderContext, RunEvent, RunGraph, RunGraphView, RunPersistence,
-    TrustPolicy, TrustViolation,
+    Proposer, ReadScope, RenderContext, RunCheckpointRequest, RunEvent, RunGraph, RunGraphView,
+    RunPersistence, TrustPolicy, TrustViolation,
 };
 
 pub struct RunContext<'a, P: OptimizationProblem> {
@@ -644,7 +644,11 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
 
     fn checkpoint(&self) -> Result<(), RunContextError> {
         if let Some(persistence) = self.persistence {
-            persistence.checkpoint(self.graph)?;
+            persistence.checkpoint(RunCheckpointRequest::new(
+                self.graph,
+                self.budget,
+                self.cache.as_deref(),
+            ))?;
         }
         Ok(())
     }

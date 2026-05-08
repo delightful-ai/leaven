@@ -9,9 +9,9 @@ use futures::executor::block_on;
 use leaven_core::{PartitionId, Proposal};
 use leaven_engine::{
     Callback, CaseSet, CheckpointContext, CheckpointError, CheckpointableOptimizer, Engine,
-    Optimizer, OptimizerError, PrivateStatePolicy, RestoreContext, RunContext, RunEvent,
-    RunGraphView, RunPersistence, RunPersistenceError, StateFormat, StepStatus, TrustPolicy,
-    optimize,
+    Optimizer, OptimizerError, PrivateStatePolicy, RestoreContext, RunCheckpointRequest,
+    RunContext, RunEvent, RunGraphView, RunPersistence, RunPersistenceError, StateFormat,
+    StepStatus, TrustPolicy, optimize,
 };
 use leaven_kernel::{Budget, CandidateId, ErrorKind, Fingerprint};
 use leaven_store_inline::InlineEvidenceStore;
@@ -98,8 +98,11 @@ fn engine_trust_policy_reaches_optimizer_context() {
 fn engine_checkpoints_clean_run_boundaries() {
     block_on(async {
         let checkpoints = Arc::new(AtomicUsize::new(0));
+        let cache_present = Arc::new(AtomicUsize::new(0));
         let persistence = CountingPersistence {
             checkpoints: checkpoints.clone(),
+            cache_present: Some(cache_present.clone()),
+            cache_absent: None,
         };
         let mut engine = Engine::<TestProblem>::builder()
             .persistence(persistence)
@@ -111,6 +114,7 @@ fn engine_checkpoints_clean_run_boundaries() {
         engine.run(&mut optimizer, &cases, &store).await.unwrap();
 
         assert_eq!(checkpoints.load(Ordering::SeqCst), 4);
+        assert_eq!(cache_present.load(Ordering::SeqCst), 4);
     });
 }
 
@@ -182,8 +186,11 @@ fn engine_surfaces_final_checkpoint_failures_after_end_event() {
 #[test]
 fn run_context_checkpoints_after_graph_mutation_boundaries() {
     let checkpoints = Arc::new(AtomicUsize::new(0));
+    let cache_absent = Arc::new(AtomicUsize::new(0));
     let persistence = CountingPersistence {
         checkpoints: checkpoints.clone(),
+        cache_present: None,
+        cache_absent: Some(cache_absent.clone()),
     };
     let (mut graph, mut budget) = graph_and_budget();
     let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
@@ -197,6 +204,7 @@ fn run_context_checkpoints_after_graph_mutation_boundaries() {
     ctx.apply_batch(batch).unwrap();
 
     assert_eq!(checkpoints.load(Ordering::SeqCst), 3);
+    assert_eq!(cache_absent.load(Ordering::SeqCst), 3);
 }
 
 #[test]
@@ -353,13 +361,24 @@ struct CountingCallback {
 
 struct CountingPersistence {
     checkpoints: Arc<AtomicUsize>,
+    cache_present: Option<Arc<AtomicUsize>>,
+    cache_absent: Option<Arc<AtomicUsize>>,
 }
 
 impl RunPersistence<TestProblem> for CountingPersistence {
     fn checkpoint(
         &self,
-        _graph: &leaven_engine::RunGraph<TestProblem>,
+        request: RunCheckpointRequest<'_, TestProblem>,
     ) -> Result<(), RunPersistenceError> {
+        let _ = request.run_id();
+        let _ = request.budget.snapshot();
+        if request.cache.is_some() {
+            if let Some(cache_present) = &self.cache_present {
+                cache_present.fetch_add(1, Ordering::SeqCst);
+            }
+        } else if let Some(cache_absent) = &self.cache_absent {
+            cache_absent.fetch_add(1, Ordering::SeqCst);
+        }
         self.checkpoints.fetch_add(1, Ordering::SeqCst);
         Ok(())
     }
@@ -370,7 +389,7 @@ struct FailingPersistence;
 impl RunPersistence<TestProblem> for FailingPersistence {
     fn checkpoint(
         &self,
-        _graph: &leaven_engine::RunGraph<TestProblem>,
+        _request: RunCheckpointRequest<'_, TestProblem>,
     ) -> Result<(), RunPersistenceError> {
         Err(RunPersistenceError::CheckpointFailed {
             reason: "disk full".to_owned(),
@@ -387,7 +406,7 @@ struct FailOnCheckpoint {
 impl RunPersistence<TestProblem> for FailOnCheckpoint {
     fn checkpoint(
         &self,
-        _graph: &leaven_engine::RunGraph<TestProblem>,
+        _request: RunCheckpointRequest<'_, TestProblem>,
     ) -> Result<(), RunPersistenceError> {
         let call = self.calls.fetch_add(1, Ordering::SeqCst) + 1;
         if call == self.fail_on {

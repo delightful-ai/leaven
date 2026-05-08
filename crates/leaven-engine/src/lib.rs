@@ -33,8 +33,8 @@ pub use graph::{
     RunGraphView,
 };
 pub use persistence::{
-    CacheIndexSnapshot, GraphSnapshotRef, RunCheckpoint, RunPersistence, RunPersistenceError,
-    StageJournalSnapshot, StageStateSnapshot, WorkspaceJournalSnapshot,
+    CacheIndexSnapshot, GraphSnapshotRef, RunCheckpoint, RunCheckpointRequest, RunPersistence,
+    RunPersistenceError, StageJournalSnapshot, StageStateSnapshot, WorkspaceJournalSnapshot,
 };
 pub use reports::{
     ApplyOneReport, ApplyOutcome, ApplyReport, EvaluationReport, ProposalBatchReport,

@@ -10,8 +10,9 @@ use leaven_store::EvidenceStore;
 
 use crate::{
     BudgetLedger, Callback, CaseSet, DynCallback, DynEvaluator, ErrorPolicy, EvaluationCache,
-    Evaluator, Optimizer, OptimizerError, ReadScope, RunContext, RunContextError, RunEvent,
-    RunGraph, RunGraphView, RunPersistence, StepStatus, StopReason, TrustPolicy,
+    Evaluator, Optimizer, OptimizerError, ReadScope, RunCheckpointRequest, RunContext,
+    RunContextError, RunEvent, RunGraph, RunGraphView, RunPersistence, StepStatus, StopReason,
+    TrustPolicy,
 };
 
 pub struct Engine<P: OptimizationProblem> {
@@ -165,7 +166,11 @@ impl<P: OptimizationProblem> Engine<P> {
 
     fn checkpoint(&self) -> Result<(), crate::RunPersistenceError> {
         if let Some(persistence) = &self.persistence {
-            persistence.checkpoint(&self.graph)?;
+            persistence.checkpoint(RunCheckpointRequest::new(
+                &self.graph,
+                &self.budget,
+                Some(&self.cache),
+            ))?;
         }
         Ok(())
     }
