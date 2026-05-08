@@ -2495,17 +2495,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "leaven-dsrs"
-version = "0.0.0"
-dependencies = [
- "leaven-core",
- "leaven-engine",
- "leaven-kernel",
- "leaven-lm",
- "leaven-surface",
-]
-
-[[package]]
 name = "leaven-engine"
 version = "0.0.0"
 dependencies = [

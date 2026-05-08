@@ -17,7 +17,6 @@ members = [
     "crates/leaven-artifacts",
     "crates/leaven-cuda",
     "crates/leaven-core",
-    "crates/leaven-dsrs",
     "crates/leaven-engine",
     "crates/leaven-evidence",
     "crates/leaven-gepa",
@@ -119,7 +118,6 @@ leaven-artifact-jj = { path = "crates/leaven-artifact-jj", version = "0.0.0" }
 leaven-artifact-skill = { path = "crates/leaven-artifact-skill", version = "0.0.0" }
 leaven-artifacts = { path = "crates/leaven-artifacts", version = "0.0.0" }
 leaven-cuda = { path = "crates/leaven-cuda", version = "0.0.0" }
-leaven-dsrs = { path = "crates/leaven-dsrs", version = "0.0.0" }
 leaven-evidence = { path = "crates/leaven-evidence", version = "0.0.0" }
 leaven-gepa = { path = "crates/leaven-gepa", version = "0.0.0" }
 leaven-kernel = { path = "crates/leaven-kernel", version = "0.0.0" }

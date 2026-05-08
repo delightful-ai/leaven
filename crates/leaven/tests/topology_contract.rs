@@ -20,7 +20,6 @@ const EXPECTED_WORKSPACE_MEMBERS: &[&str] = &[
     "crates/leaven-core",
     "crates/leaven-cuda",
     "crates/leaven-derive",
-    "crates/leaven-dsrs",
     "crates/leaven-engine",
     "crates/leaven-evidence",
     "crates/leaven-gepa",
@@ -80,7 +79,6 @@ const EXPECTED_CRATES: &[&str] = &[
     "leaven-core",
     "leaven-cuda",
     "leaven-derive",
-    "leaven-dsrs",
     "leaven-engine",
     "leaven-evidence",
     "leaven-gepa",
@@ -243,16 +241,6 @@ const EXPECTED_DEPENDENCIES: &[(&str, &[&str])] = &[
     (
         "leaven-derive",
         &["leaven-core", "leaven-kernel", "leaven-surface"],
-    ),
-    (
-        "leaven-dsrs",
-        &[
-            "leaven-core",
-            "leaven-engine",
-            "leaven-kernel",
-            "leaven-lm",
-            "leaven-surface",
-        ],
     ),
     (
         "leaven-engine",
