@@ -7,7 +7,7 @@ use leaven_core::{
 };
 use leaven_kernel::{
     ApplyAttemptId, AssessmentId, CandidateId, ErrorRecord, EvaluationRequestId, EvaluatorId,
-    EvidenceRef, IterationId, MetadataBag, ProposalBatchId, ProposalId, StageId, Timestamp,
+    EvidenceRef, IterationId, MetadataBag, ProposalBatchId, ProposalId, RunId, StageId, Timestamp,
 };
 
 use super::storage::{
@@ -39,6 +39,11 @@ impl<'g, P: OptimizationProblem> RunGraphView<'g, P> {
     #[must_use]
     pub fn read_scope(&self) -> &ReadScope {
         &self.read_scope
+    }
+
+    #[must_use]
+    pub const fn run_id(&self) -> RunId {
+        self.graph.run_id
     }
 
     #[must_use]

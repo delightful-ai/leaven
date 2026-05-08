@@ -11,7 +11,7 @@ use leaven_core::{
 use leaven_engine::{CachePolicy, EvaluationContext, EvaluationError, Evaluator};
 use leaven_kernel::{
     AgentSessionId, CandidateId, Cost, EvaluationSetId, EvaluatorId, Fingerprint,
-    FingerprintBuilder, Metered,
+    FingerprintBuilder, MetadataBag, MetadataValue, Metered,
 };
 use leaven_workspace::{
     WithWorkspaceError, WorkspaceConfig, WorkspaceFactory, WorkspacePath, WorkspaceView,
@@ -19,6 +19,7 @@ use leaven_workspace::{
 
 use crate::AgenticAdapterError;
 use crate::case::{AgentCase, CaseSuite};
+use crate::case_record::{AgentCaseRunRecord, CASE_RUN_RECORD_METADATA_KEY};
 use crate::error::{checked_add_cost, map_workspace_error};
 
 /// Presenter input for one candidate/case execution.
@@ -300,15 +301,34 @@ where
             let run_total = checked_add_cost(Cost::zero(), &presented.cost)?;
             let run_total = checked_add_cost(run_total, &session.cost)?;
             let run_total = checked_add_cost(run_total, &scored.cost)?;
+            let partition = EvaluationSetId::from_uuid(request.set.id.as_uuid());
+            let run_record = AgentCaseRunRecord::scored(
+                ctx.graph().run_id(),
+                candidate_id,
+                case.id,
+                partition,
+                session.value.session_id,
+                session.value.output_files.clone(),
+                run_total.clone(),
+            );
+            let mut metadata = MetadataBag::new();
+            metadata.insert(
+                CASE_RUN_RECORD_METADATA_KEY,
+                MetadataValue::Json(serde_json::to_value(&run_record).map_err(|error| {
+                    AgenticAdapterError::Input(format!(
+                        "case run record serialization failed: {error}"
+                    ))
+                })?),
+            );
             let assessment = Assessment::Independent {
                 candidate: candidate_id,
                 target: AssessmentTarget::Case {
-                    set: EvaluationSetId::from_uuid(request.set.id.as_uuid()),
+                    set: partition,
                     case: case.id,
                 },
                 evidence: scored.value,
                 cost: run_total.clone(),
-                metadata: leaven_kernel::MetadataBag::new(),
+                metadata,
             };
             drop(view);
             Ok(Metered::new(assessment, run_total))

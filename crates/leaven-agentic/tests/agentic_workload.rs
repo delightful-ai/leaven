@@ -7,8 +7,8 @@ use leaven_agent::{
 use leaven_agentic::{
     AgentCase, AgentCaseEvaluator, AgentCaseEvaluatorConfig, AgentCasePresentation,
     AgentCasePresentationInput, AgentCasePresenter, AgentCaseScoreInput, AgentCaseScorer,
-    AgentRunPreflight, AgentWorkload, AgenticAdapterError, CasePartitionId, CasePartitions,
-    CaseSuite, CaseTarget, PreflightSeverity,
+    AgentRunPreflight, AgentWorkload, AgenticAdapterError, CASE_RUN_RECORD_METADATA_KEY,
+    CasePartitionId, CasePartitions, CaseSuite, CaseTarget, PreflightSeverity,
 };
 use leaven_core::{
     Artifact, ArtifactIdentity, AssessmentGranularity, AssessmentTarget, EvaluationPurpose,
@@ -16,7 +16,8 @@ use leaven_core::{
 };
 use leaven_engine::{BudgetLedger, CaseSet, MaterializeContext, RunContext, RunGraph};
 use leaven_kernel::{
-    AgentSessionId, CaseId, ContentId, Cost, EvaluatorId, Fingerprint, Metered, RunId,
+    AgentSessionId, CaseId, ContentId, Cost, EvaluatorId, Fingerprint, MetadataKey, MetadataValue,
+    Metered, RunId,
 };
 use leaven_store_inline::InlineEvidenceStore;
 use leaven_workspace::{WorkspaceConfig, WorkspacePath, WorkspaceView};
@@ -296,6 +297,16 @@ fn agent_case_evaluator_runs_independent_per_case_sessions() {
         ));
         let evidence = ctx.assessment_evidence(report.assessment_ids[0]).unwrap();
         assert_eq!(evidence.output, "observed");
+        let record = assessment
+            .metadata()
+            .get(&MetadataKey::from(CASE_RUN_RECORD_METADATA_KEY))
+            .expect("case run record metadata");
+        let MetadataValue::Json(record) = record else {
+            panic!("case run record metadata should be JSON");
+        };
+        assert_eq!(record["case"], serde_json::json!(0));
+        assert_eq!(record["score_recorded"], serde_json::json!(true));
+        assert_eq!(record["outputs"], serde_json::json!(["output/result.txt"]));
     });
 }
 
