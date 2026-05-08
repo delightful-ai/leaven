@@ -617,6 +617,101 @@ fn skill_bank_change_report_covers_file_and_skill_lifecycle_variants() {
     }));
 }
 
+#[test]
+fn skill_bank_change_report_distinguishes_permissions_noops_and_replacement_deltas() {
+    let parent = bank_with_alpha(
+        "Edits Rust tests. Use when Rust test failures need diagnosis.",
+        "Read the failing test output and patch the narrow code path.",
+        false,
+    );
+    let alpha = SkillName::new("alpha").unwrap();
+    let script = SkillPath::new("scripts/run.sh").unwrap();
+
+    let write_permission_report = SkillBankChangeReport::from_change(
+        &parent,
+        &SkillBankChange::WriteFile {
+            skill: alpha.clone(),
+            path: script.clone(),
+            file: SkillFile::with_permissions(
+                b"#!/bin/sh\necho alpha\n".to_vec(),
+                SkillFilePermissions { executable: true },
+            ),
+        },
+    )
+    .unwrap();
+    assert!(write_permission_report.files_changed.iter().any(|file| {
+        file.skill == alpha
+            && file.path == script
+            && file.kind == SkillFileChangeKind::ExecutableChanged { executable: true }
+    }));
+
+    let unchanged_report = SkillBankChangeReport::from_change(
+        &parent,
+        &SkillBankChange::WriteFile {
+            skill: alpha.clone(),
+            path: script.clone(),
+            file: SkillFile::with_permissions(
+                b"#!/bin/sh\necho alpha\n".to_vec(),
+                SkillFilePermissions { executable: false },
+            ),
+        },
+    )
+    .unwrap();
+    assert!(unchanged_report.files_changed.is_empty());
+
+    let remove_file_report = SkillBankChangeReport::from_change(
+        &parent,
+        &SkillBankChange::RemoveFile {
+            skill: alpha.clone(),
+            path: script.clone(),
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        remove_file_report.files_changed[0].kind,
+        SkillFileChangeKind::Removed
+    );
+
+    let mut replacement_entries = BTreeMap::new();
+    replacement_entries.insert(
+        SkillPath::skill_md(),
+        SkillFile::text(skill_md(
+            "alpha",
+            "Edits Rust tests. Use when Rust test failures need diagnosis.",
+            "Read the failing test output and patch the narrow code path.",
+        )),
+    );
+    replacement_entries.insert(
+        script.clone(),
+        SkillFile::with_permissions(
+            b"#!/bin/sh\necho alpha\n".to_vec(),
+            SkillFilePermissions { executable: true },
+        ),
+    );
+    replacement_entries.insert(
+        SkillPath::new("references/checklist.md").unwrap(),
+        SkillFile::text("Checklist.\n"),
+    );
+    let replacement = SkillFolder::from_entries(alpha.clone(), replacement_entries).unwrap();
+    let replacement_report = SkillBankChangeReport::from_change(
+        &parent,
+        &SkillBankChange::ReplaceSkill {
+            name: alpha,
+            folder: replacement,
+        },
+    )
+    .unwrap();
+
+    assert!(replacement_report.files_changed.iter().any(|file| {
+        file.path == script
+            && file.kind == SkillFileChangeKind::ExecutableChanged { executable: true }
+    }));
+    assert!(replacement_report.files_changed.iter().any(|file| {
+        file.path == SkillPath::new("references/checklist.md").unwrap()
+            && file.kind == SkillFileChangeKind::Added
+    }));
+}
+
 struct SkillPromptRenderer;
 
 impl Renderer<SkillProblem, SkillBankProposalInput, AgentPromptTarget> for SkillPromptRenderer {
