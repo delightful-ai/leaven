@@ -1,0 +1,23 @@
+[package]
+name = "leaven-agentic-skill"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+leaven-agent = { workspace = true }
+leaven-agentic = { workspace = true }
+leaven-artifact-skill = { workspace = true }
+leaven-core = { workspace = true }
+leaven-engine = { workspace = true }
+leaven-kernel = { workspace = true }
+leaven-workspace = { workspace = true }
+
+[dev-dependencies]
+leaven-workspace-local = { workspace = true }
+futures = { workspace = true }
+
+[lints]
+workspace = true

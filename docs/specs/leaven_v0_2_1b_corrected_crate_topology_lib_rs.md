@@ -116,6 +116,7 @@ leaven/
 │   ├── leaven-agent-codex/
 │   ├── leaven-agent-opencode/
 │   ├── leaven-agentic/
+│   ├── leaven-agentic-skill/
 │   │
 │   ├── leaven-gepa/
 │   ├── leaven-mipro/
@@ -189,6 +190,7 @@ members = [
     "crates/leaven-agent-codex",
     "crates/leaven-agent-opencode",
     "crates/leaven-agentic",
+    "crates/leaven-agentic-skill",
 
     "crates/leaven-gepa",
     "crates/leaven-mipro",
@@ -418,6 +420,16 @@ leaven-agentic -> [
   leaven-engine,
   leaven-agent,
   leaven-render
+]
+
+leaven-agentic-skill -> [
+  leaven-kernel,
+  leaven-core,
+  leaven-workspace,
+  leaven-engine,
+  leaven-agent,
+  leaven-agentic,
+  leaven-artifact-skill
 ]
 ```
 
@@ -2282,6 +2294,42 @@ pub mod prelude {
         EvidenceParser, ProposalParser,
     };
 }
+```
+
+---
+
+## 20.1 `leaven-agentic-skill`
+
+### Contract
+
+Skill-specific agentic helpers that connect `SkillBank` artifacts to the
+generic `leaven-agentic` stage adapters. This crate owns skill-bank workspace
+layouts, skill materializers, and proposal parsers that read an edited skill
+workspace back into `SkillBankChange`.
+
+It must not know provider protocols. Codex, Claude Code, OpenCode, and future
+agent providers stay in `leaven-agent-*`; this crate only knows provider-neutral
+agent sessions through `leaven-agentic` parser contracts.
+
+### `src/lib.rs`
+
+```rust
+#![forbid(unsafe_code)]
+#![warn(missing_docs)]
+
+//! Skill-specific agentic stage helpers.
+
+mod diff;
+mod input;
+mod layout;
+mod materializer;
+mod parser;
+
+pub use diff::SkillBankDiff;
+pub use input::SkillBankProposalInput;
+pub use layout::SkillWorkspaceLayout;
+pub use materializer::SkillBankMaterializer;
+pub use parser::SkillBankWorkspaceProposalParser;
 ```
 
 ---

@@ -7,6 +7,7 @@ members = [
     "crates/leaven-agent-codex",
     "crates/leaven-agent-opencode",
     "crates/leaven-agentic",
+    "crates/leaven-agentic-skill",
     "crates/leaven-artifact-git",
     "crates/leaven-artifact-jj",
     "crates/leaven-artifact-skill",
@@ -104,6 +105,7 @@ leaven-agent-claude-code = { path = "crates/leaven-agent-claude-code", version =
 leaven-agent-codex = { path = "crates/leaven-agent-codex", version = "0.0.0" }
 leaven-agent-opencode = { path = "crates/leaven-agent-opencode", version = "0.0.0" }
 leaven-agentic = { path = "crates/leaven-agentic", version = "0.0.0" }
+leaven-agentic-skill = { path = "crates/leaven-agentic-skill", version = "0.0.0" }
 leaven-artifact-git = { path = "crates/leaven-artifact-git", version = "0.0.0" }
 leaven-artifact-jj = { path = "crates/leaven-artifact-jj", version = "0.0.0" }
 leaven-artifact-skill = { path = "crates/leaven-artifact-skill", version = "0.0.0" }

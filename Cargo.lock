@@ -491,6 +491,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "leaven-agentic-skill"
+version = "0.0.0"
+dependencies = [
+ "futures",
+ "leaven-agent",
+ "leaven-agentic",
+ "leaven-artifact-skill",
+ "leaven-core",
+ "leaven-engine",
+ "leaven-kernel",
+ "leaven-workspace",
+ "leaven-workspace-local",
+]
+
+[[package]]
 name = "leaven-artifact-git"
 version = "0.0.0"
 dependencies = [
