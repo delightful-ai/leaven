@@ -2661,8 +2661,13 @@ dependencies = [
 name = "leaven-store-file"
 version = "0.0.0"
 dependencies = [
+ "bytes",
  "leaven-kernel",
  "leaven-store",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "uuid",
 ]
 
 [[package]]

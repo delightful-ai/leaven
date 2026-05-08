@@ -11,5 +11,10 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
+bytes = { workspace = true }
 leaven-kernel = { workspace = true }
 leaven-store = { workspace = true }
+parking_lot = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
