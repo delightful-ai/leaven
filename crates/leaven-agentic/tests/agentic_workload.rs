@@ -1,9 +1,11 @@
 use std::collections::BTreeMap;
+use std::path::PathBuf;
 use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
 };
 
+use futures::future::{BoxFuture, FutureExt};
 use leaven_agent::{
     AgentInstructions, AgentRunRequest, AgentSession, FakeAgentAction, FakeAgentRuntime,
     JsonSchemaRef, OutputContract,
@@ -24,10 +26,14 @@ use leaven_engine::{
     RunContext, RunGraph,
 };
 use leaven_kernel::{
-    AgentSessionId, CaseId, ContentId, Cost, EvaluatorId, Fingerprint, MetadataKey, MetadataValue,
-    Metered, RunId,
+    AgentSessionId, BlobRef, CaseId, CheckpointId, ContentId, Cost, EvaluatorId, Fingerprint,
+    MetadataKey, MetadataValue, Metered, RunId,
 };
+use leaven_store::{BlobStore, BlobWrite, CheckpointBytes, CheckpointStore, StoreError};
 use leaven_store_inline::{InlineEvidenceStore, InlineStore};
+use leaven_workspace::{
+    FactoryError, Workspace, WorkspaceBackend, WorkspaceError, WorkspaceFactory,
+};
 use leaven_workspace::{WorkspaceConfig, WorkspacePath, WorkspaceView};
 use leaven_workspace_local::LocalWorkspaceFactory;
 
@@ -226,6 +232,16 @@ fn preflight_checks_store_capabilities_and_cache_identity_policy() {
             && finding.check == "cache"
             && finding.message.contains("available")
     }));
+
+    let failing_store = FailingStore;
+    let store_errors = AgentRunPreflight::new().store(&failing_store).check();
+    assert!(store_errors.has_errors());
+    assert!(store_errors.findings().iter().any(|finding| {
+        finding.severity == PreflightSeverity::Error && finding.check == "store-blob"
+    }));
+    assert!(store_errors.findings().iter().any(|finding| {
+        finding.severity == PreflightSeverity::Error && finding.check == "store-checkpoint"
+    }));
 }
 
 #[test]
@@ -312,6 +328,166 @@ fn preflight_dry_runs_scorer_with_seeded_workspace() {
                 .iter()
                 .any(|finding| finding.check == "scorer")
         );
+    });
+}
+
+#[test]
+fn preflight_dry_runs_report_presenter_failure_modes() {
+    futures::executor::block_on(async {
+        let case = AgentCase::text(CaseId::new(0), "question", CaseTarget::None);
+        let artifact = CaseArtifact("seed".to_owned());
+        let mut graph = RunGraph::<CaseProblem>::new(RunId::new());
+        let mut budget = BudgetLedger::default();
+        let mut ctx = RunContext::<CaseProblem>::new(&mut graph, &mut budget);
+        let candidate = ctx.insert_seed(artifact.clone(), 0).unwrap();
+
+        let allocate = AgentRunPreflight::new()
+            .presenter_dry_run(PresenterDryRun {
+                candidate_id: candidate,
+                candidate: &artifact,
+                case: &case,
+                factory: &RejectingFactory,
+                workspace_config: WorkspaceConfig::default(),
+                presenter: &TestPresenter,
+                ctx: ctx.materialize_context(),
+            })
+            .await
+            .check();
+        assert_error_finding(&allocate, "presenter", "allocation failed");
+
+        let stage = AgentRunPreflight::new()
+            .presenter_dry_run(PresenterDryRun {
+                candidate_id: candidate,
+                candidate: &artifact,
+                case: &case,
+                factory: &LocalWorkspaceFactory::temp(),
+                workspace_config: WorkspaceConfig::default(),
+                presenter: &FailingPresenter,
+                ctx: ctx.materialize_context(),
+            })
+            .await
+            .check();
+        assert_error_finding(&stage, "presenter", "dry run failed");
+
+        let cleanup = AgentRunPreflight::new()
+            .presenter_dry_run(PresenterDryRun {
+                candidate_id: candidate,
+                candidate: &artifact,
+                case: &case,
+                factory: &CleanupFailureFactory,
+                workspace_config: WorkspaceConfig::default(),
+                presenter: &TestPresenter,
+                ctx: ctx.materialize_context(),
+            })
+            .await
+            .check();
+        assert_error_finding(&cleanup, "presenter-cleanup", "cleanup failed");
+
+        let stage_and_cleanup = AgentRunPreflight::new()
+            .presenter_dry_run(PresenterDryRun {
+                candidate_id: candidate,
+                candidate: &artifact,
+                case: &case,
+                factory: &CleanupFailureFactory,
+                workspace_config: WorkspaceConfig::default(),
+                presenter: &FailingPresenter,
+                ctx: ctx.materialize_context(),
+            })
+            .await
+            .check();
+        assert_error_finding(&stage_and_cleanup, "presenter", "cleanup failed");
+    });
+}
+
+#[test]
+fn preflight_dry_runs_report_scorer_failure_modes() {
+    futures::executor::block_on(async {
+        let case = AgentCase::text(CaseId::new(0), "question", CaseTarget::None);
+        let artifact = CaseArtifact("seed".to_owned());
+        let mut graph = RunGraph::<CaseProblem>::new(RunId::new());
+        let mut budget = BudgetLedger::default();
+        let mut ctx = RunContext::<CaseProblem>::new(&mut graph, &mut budget);
+        let candidate = ctx.insert_seed(artifact, 0).unwrap();
+        let presentation = AgentCasePresentation {
+            request: AgentRunRequest::new(
+                AgentInstructions::task("synthetic"),
+                OutputContract::Files {
+                    paths: vec![WorkspacePath::new("output/result.txt").unwrap()],
+                },
+            ),
+            materialized_refs: Vec::new(),
+        };
+        let session = AgentSession::succeeded(AgentSessionId::new());
+        let files = || {
+            vec![(
+                WorkspacePath::new("output/result.txt").unwrap(),
+                b"observed".to_vec(),
+            )]
+        };
+
+        let allocate = AgentRunPreflight::new()
+            .scorer_dry_run(ScorerDryRun {
+                candidate_id: candidate,
+                case: &case,
+                presentation: &presentation,
+                session: &session,
+                workspace_files: files(),
+                factory: &RejectingFactory,
+                workspace_config: WorkspaceConfig::default(),
+                scorer: &TestScorer,
+                graph: ctx.graph(),
+            })
+            .await
+            .check();
+        assert_error_finding(&allocate, "scorer", "allocation failed");
+
+        let stage = AgentRunPreflight::new()
+            .scorer_dry_run(ScorerDryRun {
+                candidate_id: candidate,
+                case: &case,
+                presentation: &presentation,
+                session: &session,
+                workspace_files: Vec::new(),
+                factory: &LocalWorkspaceFactory::temp(),
+                workspace_config: WorkspaceConfig::default(),
+                scorer: &TestScorer,
+                graph: ctx.graph(),
+            })
+            .await
+            .check();
+        assert_error_finding(&stage, "scorer", "dry run failed");
+
+        let cleanup = AgentRunPreflight::new()
+            .scorer_dry_run(ScorerDryRun {
+                candidate_id: candidate,
+                case: &case,
+                presentation: &presentation,
+                session: &session,
+                workspace_files: files(),
+                factory: &CleanupFailureFactory,
+                workspace_config: WorkspaceConfig::default(),
+                scorer: &TestScorer,
+                graph: ctx.graph(),
+            })
+            .await
+            .check();
+        assert_error_finding(&cleanup, "scorer-cleanup", "cleanup failed");
+
+        let stage_and_cleanup = AgentRunPreflight::new()
+            .scorer_dry_run(ScorerDryRun {
+                candidate_id: candidate,
+                case: &case,
+                presentation: &presentation,
+                session: &session,
+                workspace_files: Vec::new(),
+                factory: &CleanupFailureFactory,
+                workspace_config: WorkspaceConfig::default(),
+                scorer: &TestScorer,
+                graph: ctx.graph(),
+            })
+            .await
+            .check();
+        assert_error_finding(&stage_and_cleanup, "scorer", "cleanup failed");
     });
 }
 
@@ -555,6 +731,56 @@ fn agent_case_evaluator_exhausted_retries_surface_attempt_records() {
 }
 
 #[test]
+fn agent_case_evaluator_records_allocate_presentation_runtime_and_cleanup_failures() {
+    futures::executor::block_on(async {
+        let allocate = evaluate_with_case_evaluator(
+            RejectingFactory,
+            FakeAgentRuntime::new(Vec::new()),
+            TestPresenter,
+            TestScorer,
+        )
+        .await
+        .unwrap_err();
+        assert_case_run_error(allocate, "presentation");
+
+        let presentation = evaluate_with_case_evaluator(
+            LocalWorkspaceFactory::temp(),
+            FakeAgentRuntime::new(Vec::new()),
+            FailingPresenter,
+            TestScorer,
+        )
+        .await
+        .unwrap_err();
+        assert_case_run_error(presentation, "presentation");
+
+        let runtime = evaluate_with_case_evaluator(
+            LocalWorkspaceFactory::temp(),
+            FakeAgentRuntime::new(vec![FakeAgentAction::ReadFile {
+                path: WorkspacePath::new("missing.txt").unwrap(),
+            }]),
+            TestPresenter,
+            TestScorer,
+        )
+        .await
+        .unwrap_err();
+        assert_case_run_error(runtime, "runtime");
+
+        let cleanup = evaluate_with_case_evaluator(
+            CleanupFailureFactory,
+            FakeAgentRuntime::new(vec![FakeAgentAction::WriteFile {
+                path: WorkspacePath::new("output/result.txt").unwrap(),
+                bytes: b"observed".to_vec(),
+            }]),
+            TestPresenter,
+            TestScorer,
+        )
+        .await
+        .unwrap_err();
+        assert_case_run_error(cleanup, "cleanup");
+    });
+}
+
+#[test]
 fn agent_case_evaluator_fingerprint_includes_runtime_presenter_scorer_and_cases() {
     let suite = CaseSuite::from_cases([AgentCase::text(
         CaseId::new(0),
@@ -587,6 +813,94 @@ fn agent_case_evaluator_fingerprint_includes_runtime_presenter_scorer_and_cases(
         leaven_engine::Evaluator::<CaseProblem>::fingerprint(&base),
         leaven_engine::Evaluator::<CaseProblem>::fingerprint(&changed_scorer)
     );
+}
+
+async fn evaluate_with_case_evaluator<Factory, Runtime, Presenter, Scorer>(
+    factory: Factory,
+    runtime: Runtime,
+    presenter: Presenter,
+    scorer: Scorer,
+) -> Result<leaven_engine::EvaluationReport, leaven_engine::RunContextError>
+where
+    Factory: WorkspaceFactory,
+    Runtime: leaven_agent::AgentRuntime,
+    Presenter: AgentCasePresenter<CaseProblem>,
+    Scorer: AgentCaseScorer<CaseProblem>,
+{
+    let suite = CaseSuite::from_cases([AgentCase::text(
+        CaseId::new(0),
+        "question",
+        CaseTarget::Text("expected".to_owned()),
+    )])
+    .unwrap();
+    let evaluator = AgentCaseEvaluator::new(
+        AgentCaseEvaluatorConfig::new(
+            EvaluatorId::from("agent-case/failure"),
+            Fingerprint::from_bytes([4; 32]),
+        ),
+        suite,
+        factory,
+        runtime,
+        presenter,
+        scorer,
+    );
+    let mut graph = RunGraph::<CaseProblem>::new(RunId::new());
+    let mut budget = BudgetLedger::default();
+    let store = InlineEvidenceStore::<CaseEvidence>::new("case-evidence");
+    let case_set = CaseSet::new(vec!["case-0"]);
+    let candidate = {
+        let mut ctx = RunContext::<CaseProblem>::new(&mut graph, &mut budget);
+        ctx.insert_seed(CaseArtifact("seed".to_owned()), 0).unwrap()
+    };
+    let mut ctx = RunContext::<CaseProblem>::new(&mut graph, &mut budget)
+        .with_case_set(&case_set)
+        .with_evidence_store(&store);
+
+    ctx.evaluate_with(
+        &evaluator,
+        EvaluationRequest::Independent {
+            candidates: vec![candidate],
+            set: EvaluationSet::All,
+            granularity: AssessmentGranularity::PerCase,
+            purpose: EvaluationPurpose::Search,
+        },
+    )
+    .await
+}
+
+fn assert_case_run_error(error: leaven_engine::RunContextError, expected_kind: &str) {
+    let leaven_engine::RunContextError::Evaluation(leaven_engine::EvaluationError::WithSource {
+        source,
+        ..
+    }) = error
+    else {
+        panic!("expected sourced evaluation error");
+    };
+    let source = source
+        .downcast_ref::<AgenticAdapterError>()
+        .expect("agentic adapter source");
+    let AgenticAdapterError::CaseRunFailed {
+        records_len,
+        records,
+        ..
+    } = source
+    else {
+        panic!("expected case-run failure");
+    };
+    assert_eq!(*records_len, 1);
+    assert_eq!(records.len(), 1);
+    assert_eq!(
+        serde_json::to_value(&records[0].error).unwrap()["kind"],
+        serde_json::json!(expected_kind)
+    );
+}
+
+fn assert_error_finding(report: &leaven_agentic::AgentRunPreflightReport, check: &str, text: &str) {
+    assert!(report.findings().iter().any(|finding| {
+        finding.severity == PreflightSeverity::Error
+            && finding.check == check
+            && finding.message.contains(text)
+    }));
 }
 
 #[test]
@@ -822,6 +1136,23 @@ impl AgentCasePresenter<CaseProblem> for TestPresenter {
     }
 }
 
+struct FailingPresenter;
+
+impl AgentCasePresenter<CaseProblem> for FailingPresenter {
+    fn fingerprint(&self) -> Fingerprint {
+        Fingerprint::from_bytes([10; 32])
+    }
+
+    async fn present(
+        &self,
+        _input: AgentCasePresentationInput<'_, CaseProblem>,
+        _workspace: &mut WorkspaceView<'_>,
+        _ctx: MaterializeContext<'_, CaseProblem>,
+    ) -> Result<Metered<AgentCasePresentation>, AgenticAdapterError> {
+        Err(AgenticAdapterError::Input("presenter failed".to_owned()))
+    }
+}
+
 struct TestScorer;
 
 impl AgentCaseScorer<CaseProblem> for TestScorer {
@@ -899,5 +1230,89 @@ impl AgentCaseScorer<CaseProblem> for OtherScorer {
         workspace: &WorkspaceView<'_>,
     ) -> Result<Metered<CaseEvidence>, AgenticAdapterError> {
         TestScorer.score(input, workspace).await
+    }
+}
+
+struct RejectingFactory;
+
+impl WorkspaceFactory for RejectingFactory {
+    async fn allocate(&self, _config: WorkspaceConfig) -> Result<Workspace, FactoryError> {
+        Err(FactoryError::Allocate("no workspace".to_owned()))
+    }
+}
+
+struct CleanupFailureFactory;
+
+impl WorkspaceFactory for CleanupFailureFactory {
+    async fn allocate(&self, _config: WorkspaceConfig) -> Result<Workspace, FactoryError> {
+        Ok(Workspace::new(
+            PathBuf::new(),
+            Box::new(CleanupFailureBackend {
+                files: BTreeMap::new(),
+            }),
+        ))
+    }
+}
+
+struct CleanupFailureBackend {
+    files: BTreeMap<WorkspacePath, Vec<u8>>,
+}
+
+impl WorkspaceBackend for CleanupFailureBackend {
+    fn write_file(&mut self, path: &WorkspacePath, bytes: &[u8]) -> Result<(), WorkspaceError> {
+        self.files.insert(path.clone(), bytes.to_vec());
+        Ok(())
+    }
+
+    fn read_file(&mut self, path: &WorkspacePath) -> Result<Vec<u8>, WorkspaceError> {
+        self.files
+            .get(path)
+            .cloned()
+            .ok_or_else(|| WorkspaceError::Io(format!("missing {}", path.as_str())))
+    }
+
+    fn cleanup(self: Box<Self>) -> BoxFuture<'static, Result<(), WorkspaceError>> {
+        async { Err(WorkspaceError::Cleanup("cleanup failed".to_owned())) }.boxed()
+    }
+}
+
+struct FailingStore;
+
+impl BlobStore for FailingStore {
+    fn put(&self, _write: BlobWrite) -> Result<BlobRef, StoreError> {
+        Err(StoreError::OperationFailed {
+            store: "failing".to_owned(),
+            operation: "put_blob",
+            reason: "blob offline".to_owned(),
+            retryable: Some(true),
+        })
+    }
+
+    fn get(&self, reference: &BlobRef) -> Result<bytes::Bytes, StoreError> {
+        Err(StoreError::BlobNotFound(reference.clone()))
+    }
+}
+
+impl CheckpointStore for FailingStore {
+    fn put(&self, _checkpoint: CheckpointBytes) -> Result<CheckpointId, StoreError> {
+        Err(StoreError::OperationFailed {
+            store: "failing".to_owned(),
+            operation: "put_checkpoint",
+            reason: "checkpoint offline".to_owned(),
+            retryable: Some(true),
+        })
+    }
+
+    fn get(&self, id: CheckpointId) -> Result<CheckpointBytes, StoreError> {
+        Err(StoreError::OperationFailed {
+            store: "failing".to_owned(),
+            operation: "get_checkpoint",
+            reason: format!("missing {id}"),
+            retryable: Some(false),
+        })
+    }
+
+    fn latest(&self) -> Result<Option<CheckpointId>, StoreError> {
+        Ok(None)
     }
 }
