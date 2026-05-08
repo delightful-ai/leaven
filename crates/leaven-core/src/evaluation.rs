@@ -160,7 +160,9 @@ pub struct ResolvedEvaluationSet {
 /// removed, retagged). Cache keys include the version so resolutions
 /// against a stale case set don't accidentally hit cache entries from
 /// a newer one.
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(
+    Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd, serde::Serialize, serde::Deserialize,
+)]
 pub struct CaseSetVersion(pub String);
 
 /// What an optimizer wants from an evaluator.

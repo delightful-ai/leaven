@@ -16,7 +16,10 @@ mod stage;
 mod trust;
 
 pub use budget::{BudgetHandle, BudgetLedger};
-pub use cache::{CacheBypassReason, CachePolicy, CacheStatus, EvaluationCache, EvaluationCacheKey};
+pub use cache::{
+    CacheBypassReason, CachePolicy, CacheStatus, EvaluationCache, EvaluationCacheEntry,
+    EvaluationCacheKey, EvaluationCacheSnapshot,
+};
 pub use case_set::{CaseSet, CaseSetBuilder, EvaluationResolveError, UnsupportedEvaluationSet};
 pub use context::{
     EvaluationContext, MaterializeContext, ProposalContext, RenderContext, RunContext,
@@ -57,12 +60,13 @@ pub mod prelude {
     //! Common engine imports.
 
     pub use crate::{
-        Arity, BudgetHandle, BudgetLedger, CachePolicy, Callback, CheckpointContext,
-        CheckpointError, CheckpointableOptimizer, Engine, EngineBuilder, EvaluationContext,
-        Evaluator, GraphSnapshotRef, MaterializationReport, MaterializeContext, MaterializeError,
-        Materializer, Optimizer, OptimizerStateSnapshot, Population, PreferenceRelation,
-        PrivateStatePolicy, ProposalContext, Proposer, ReadScope, RenderContext, Renderer,
-        RestoreContext, RunCheckpoint, RunContext, RunEvent, RunGraphView, RunResult, StateFormat,
-        StepStatus, Stopper, TrustPolicy, optimize,
+        Arity, BudgetHandle, BudgetLedger, CacheBypassReason, CachePolicy, CacheStatus, Callback,
+        CheckpointContext, CheckpointError, CheckpointableOptimizer, Engine, EngineBuilder,
+        EvaluationCacheSnapshot, EvaluationContext, Evaluator, GraphSnapshotRef,
+        MaterializationReport, MaterializeContext, MaterializeError, Materializer, Optimizer,
+        OptimizerStateSnapshot, Population, PreferenceRelation, PrivateStatePolicy,
+        ProposalContext, Proposer, ReadScope, RenderContext, Renderer, RestoreContext,
+        RunCheckpoint, RunContext, RunEvent, RunGraphView, RunResult, StateFormat, StepStatus,
+        Stopper, TrustPolicy, optimize,
     };
 }

@@ -135,7 +135,9 @@ pub enum ArtifactIdentity {
 }
 
 /// Cache-safe identity for deterministic evaluator reuse.
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(
+    Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd, serde::Serialize, serde::Deserialize,
+)]
 pub enum CacheIdentity {
     /// The artifact state is content-addressed by this digest.
     Content(ContentId),
