@@ -1,8 +1,9 @@
 //! Provider-neutral transcript records.
 
 use leaven_workspace::{Command, CommandOutput, WorkspacePath};
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 pub struct AgentTranscript {
     pub events: Vec<TranscriptEvent>,
 }
@@ -16,7 +17,7 @@ impl AgentTranscript {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum TranscriptEvent {
     Message {
         role: TranscriptRole,
@@ -27,7 +28,7 @@ pub enum TranscriptEvent {
     },
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum TranscriptRole {
     System,
     User,
@@ -35,26 +36,26 @@ pub enum TranscriptRole {
     Tool,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ToolCallRecord {
     pub name: String,
     pub input: String,
     pub output: Option<String>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct CommandRecord {
     pub command: Command,
     pub output: CommandOutput,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct RawProviderEvent {
     pub kind: String,
     pub payload: String,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct WorkspaceReadRecord {
     pub path: WorkspacePath,
     pub bytes: usize,

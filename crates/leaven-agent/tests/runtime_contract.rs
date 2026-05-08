@@ -5,13 +5,14 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use futures::future::{BoxFuture, FutureExt};
 use leaven_agent::{
     AgentInstructions, AgentRunContext, AgentRunRequest, AgentRuntime, AgentRuntimeCapabilities,
-    AgentRuntimeError, CancellationRef, FakeAgentAction, FakeAgentRuntime, OutputContract,
+    AgentRuntimeError, AgentSession, AgentSessionArtifact, AgentSessionArtifactKind,
+    CancellationRef, FakeAgentAction, FakeAgentRuntime, OutputContract, RawProviderEvent,
     TranscriptEvent, TranscriptRole, WorkspaceAccessMode,
 };
 use leaven_kernel::{AgentRuntimeId, AgentSessionId, BudgetSnapshot, Cost, Fingerprint};
 use leaven_workspace::{
-    CapturedOutput, Command, CommandOutput, ExitStatus, Workspace, WorkspaceBackend,
-    WorkspaceError, WorkspacePath, WorkspaceView,
+    CapturedOutput, Command, CommandLimits, CommandOutput, CommandStdin, ExitStatus, Workspace,
+    WorkspaceBackend, WorkspaceError, WorkspacePath, WorkspaceView,
 };
 
 #[test]
@@ -337,6 +338,61 @@ fn fake_runtime_records_backend_commands_without_host_paths() {
         drop(view);
         workspace.cleanup().await.unwrap();
     });
+}
+
+#[test]
+fn agent_session_round_trips_for_durable_evidence() {
+    let session_id = AgentSessionId::new();
+    let mut command = Command::new("codex");
+    command.args = vec!["exec".to_owned(), "--json".to_owned()];
+    command.cwd = Some(WorkspacePath::new(".leaven/run").unwrap());
+    command.stdin = CommandStdin::Bytes(b"task prompt".to_vec());
+    command.limits = CommandLimits {
+        timeout: Some(std::time::Duration::from_secs(30)),
+        max_stdout_bytes: Some(8),
+        max_stderr_bytes: Some(4),
+    };
+
+    let mut session = AgentSession::succeeded(session_id);
+    session
+        .transcript
+        .push_message(TranscriptRole::Assistant, "created skill");
+    session.commands.push(leaven_agent::CommandRecord {
+        command,
+        output: CommandOutput {
+            status: ExitStatus { code: Some(0) },
+            stdout: CapturedOutput {
+                bytes: b"skill ok".to_vec(),
+                truncated: true,
+            },
+            stderr: CapturedOutput::empty(),
+            duration: std::time::Duration::from_millis(42),
+        },
+    });
+    session
+        .output_files
+        .push(WorkspacePath::new("output/proposal.json").unwrap());
+    session.artifact_files.push(AgentSessionArtifact {
+        kind: AgentSessionArtifactKind::NativeLog,
+        path: WorkspacePath::new(".leaven/codex/stdout.jsonl").unwrap(),
+        media_type: Some("application/jsonl".to_owned()),
+    });
+    session.raw_provider_events.push(RawProviderEvent {
+        kind: "codex.turn.completed".to_owned(),
+        payload: r#"{"turn_id":"turn-1"}"#.to_owned(),
+    });
+
+    let encoded = serde_json::to_vec(&session).unwrap();
+    let decoded: AgentSession = serde_json::from_slice(&encoded).unwrap();
+
+    assert_eq!(decoded, session);
+    assert_eq!(decoded.commands[0].output.stdout.bytes, b"skill ok");
+    assert!(decoded.commands[0].output.stdout.truncated);
+    assert_eq!(
+        decoded.artifact_files[0].kind,
+        AgentSessionArtifactKind::NativeLog
+    );
+    assert_eq!(decoded.raw_provider_events.len(), 1);
 }
 
 #[test]

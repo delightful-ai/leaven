@@ -6,13 +6,14 @@ use std::time::Duration;
 
 use leaven_kernel::{AgentSessionId, BudgetSnapshot};
 use leaven_workspace::{WorkspacePath, WorkspaceView};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     AgentRuntimeError, AgentTranscript, CommandRecord, RawProviderEvent, TranscriptEvent,
     TranscriptRole,
 };
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct AgentRunRequest {
     pub instructions: AgentInstructions,
     pub cwd: WorkspacePath,
@@ -36,7 +37,7 @@ impl AgentRunRequest {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct AgentInstructions {
     pub system: Option<String>,
     pub task: String,
@@ -54,14 +55,14 @@ impl AgentInstructions {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct AgentContextRef {
     pub label: String,
     pub path: WorkspacePath,
     pub media_type: Option<String>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum OutputContract {
     Files {
         paths: Vec<WorkspacePath>,
@@ -76,13 +77,13 @@ pub enum OutputContract {
     },
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct JsonSchemaRef {
     pub name: String,
     pub schema: String,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct AgentToolPolicy {
     pub allow_shell: bool,
     pub allowed_tools: Vec<String>,
@@ -97,21 +98,21 @@ impl Default for AgentToolPolicy {
     }
 }
 
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 pub struct AgentLimits {
     pub timeout: Option<Duration>,
     pub max_turns: Option<u32>,
     pub max_output_bytes: Option<u64>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum WorkspaceAccessMode {
     BackendNeutral,
     RequiresLocalMount,
     ProviderManaged,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct AgentRuntimeCapabilities {
     pub workspace_access: WorkspaceAccessMode,
     pub supports_commands: bool,
@@ -185,13 +186,14 @@ impl<'a> CancellationRef<'a> {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct AgentSession {
     pub session_id: AgentSessionId,
     pub status: AgentStatus,
     pub transcript: AgentTranscript,
     pub commands: Vec<CommandRecord>,
     pub output_files: Vec<WorkspacePath>,
+    pub artifact_files: Vec<AgentSessionArtifact>,
     pub raw_provider_events: Vec<RawProviderEvent>,
 }
 
@@ -204,12 +206,29 @@ impl AgentSession {
             transcript: AgentTranscript::default(),
             commands: Vec::new(),
             output_files: Vec::new(),
+            artifact_files: Vec::new(),
             raw_provider_events: Vec::new(),
         }
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct AgentSessionArtifact {
+    pub kind: AgentSessionArtifactKind,
+    pub path: WorkspacePath,
+    pub media_type: Option<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum AgentSessionArtifactKind {
+    NativeLog,
+    ProviderSession,
+    NormalizedTrajectory,
+    Debug,
+    Other(String),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum AgentStatus {
     Succeeded,
     Failed { reason: String },

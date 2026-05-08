@@ -2309,6 +2309,7 @@ dependencies = [
  "futures",
  "leaven-kernel",
  "leaven-workspace",
+ "serde",
  "serde_json",
  "thiserror 2.0.18",
 ]
@@ -2737,6 +2738,7 @@ dependencies = [
  "leaven-kernel",
  "parking_lot",
  "proptest",
+ "serde",
  "thiserror 2.0.18",
 ]
 

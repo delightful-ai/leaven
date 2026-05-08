@@ -45,7 +45,7 @@ use crate::checkpoint::{Checkpoints, EvoSkillCheckpoint};
 use crate::codex::{LiveCodexRuntime, live_codex_runtime, require_live_codex};
 use crate::data::{EvoSkillCase, TRAIN, VALIDATION, case_by_id, case_set, load_cases};
 use crate::error::{ExampleError, Result, msg};
-use crate::evidence::{AgentRole, CaseExecution, EvoSkillEvidence, StoredAgentSession};
+use crate::evidence::{AgentRole, CaseExecution, EvoSkillEvidence};
 use crate::proposal::{EvoSkillProposalAnnotations, SkillProposal};
 use crate::roles::{
     brainstorming_meta_skill, executor_developer_instructions, proposer_developer_instructions,
@@ -788,7 +788,7 @@ impl EvoSkillEvaluator {
                     score,
                     passed: score >= 0.8,
                     developer_instructions: self.developer_instructions.clone(),
-                    session: StoredAgentSession::from_session(&session.value),
+                    session: session.value.clone(),
                 },
                 session.cost,
             ))
@@ -858,7 +858,7 @@ async fn run_skill_proposer(
         let evidence = evidence_store.put(EvoSkillEvidence::AgentRoleSession {
             role: AgentRole::Proposer,
             developer_instructions: developer_instructions.clone(),
-            evidence: StoredAgentSession::from_session(&session.value),
+            session: session.value.clone(),
         })?;
         Ok(StoredProposal {
             value: proposal,
@@ -1017,7 +1017,7 @@ fn store_builder_session(
         .put(EvoSkillEvidence::AgentRoleSession {
             role: AgentRole::SkillBuilder,
             developer_instructions: loop_state.developer_instructions.to_owned(),
-            evidence: StoredAgentSession::from_session(session),
+            session: session.clone(),
         })?)
 }
 

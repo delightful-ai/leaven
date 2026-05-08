@@ -3,9 +3,11 @@
 use std::collections::BTreeMap;
 use std::time::Duration;
 
+use serde::{Deserialize, Serialize};
+
 use crate::WorkspacePath;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Command {
     pub program: String,
     pub args: Vec<String>,
@@ -31,26 +33,26 @@ impl Command {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum CommandStdin {
     Empty,
     Bytes(Vec<u8>),
 }
 
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 pub struct CommandLimits {
     pub timeout: Option<Duration>,
     pub max_stdout_bytes: Option<u64>,
     pub max_stderr_bytes: Option<u64>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum CommandUser {
     Name(String),
     Uid(u32),
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct CommandOutput {
     pub status: ExitStatus,
     pub stdout: CapturedOutput,
@@ -58,7 +60,7 @@ pub struct CommandOutput {
     pub duration: Duration,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct CapturedOutput {
     pub bytes: Vec<u8>,
     pub truncated: bool,
@@ -95,7 +97,7 @@ impl CapturedOutput {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct ExitStatus {
     pub code: Option<i32>,
 }

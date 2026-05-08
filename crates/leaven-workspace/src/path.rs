@@ -2,10 +2,13 @@
 
 use std::path::{Component, Path, PathBuf};
 
+use serde::{Deserialize, Serialize};
+
 use crate::WorkspacePathError;
 
 /// Normalized relative path inside a workspace.
-#[derive(Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct WorkspacePath {
     inner: String,
 }
