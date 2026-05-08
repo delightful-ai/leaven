@@ -173,6 +173,10 @@ fn evoskill_state_write(state: &EvoSkillCheckpoint) -> Result<OptimizerStateWrit
     )?)
 }
 
+#[expect(
+    clippy::future_not_send,
+    reason = "preflight dry-runs borrow RunContext capability views across awaits in this single-threaded example"
+)]
 async fn write_preflight_report(
     stores: &RunStores,
     workload: &AgentWorkload,
@@ -243,6 +247,14 @@ async fn write_preflight_report(
     Ok(())
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "P5 keeps the one-iteration checkpoint/resume flow visible as the paper-reproduction proof"
+)]
+#[expect(
+    clippy::future_not_send,
+    reason = "the example intentionally carries RunContext capability views through async stage calls"
+)]
 async fn run_iteration(
     stores: RunStores,
     resume: ResumeState,
@@ -335,7 +347,7 @@ async fn run_iteration(
     }
 
     let (skill_proposal, proposer_evidence) = ensure_proposal(
-        &mut ctx,
+        &ctx,
         &workspace_factory,
         &stores.evidence_store,
         ProposalRequest {
@@ -481,8 +493,12 @@ struct ProposalRequest<'a> {
     resume_evidence: Option<EvidenceRef>,
 }
 
+#[expect(
+    clippy::future_not_send,
+    reason = "checkpointing after the proposer awaits borrows the RunContext view in this example"
+)]
 async fn ensure_proposal(
-    ctx: &mut RunContext<'_, EvoSkillProblem>,
+    ctx: &RunContext<'_, EvoSkillProblem>,
     workspace_factory: &LocalWorkspaceFactory,
     evidence_store: &FileEvidenceStore<EvoSkillEvidence>,
     request: ProposalRequest<'_>,
