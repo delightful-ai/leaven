@@ -768,6 +768,14 @@ verify transcript contains command/tool evidence when Codex used tools
 verify no graph/engine dependency is involved
 ```
 
+That provider-adapter proof is separate from an agentic paper gate. A paper gate
+may intentionally use `OutputContract::FinalMessage` and no shell tools when the
+stage contract is "return a typed proposal/evidence object." In that case the
+runtime proof is the live Codex session, developer-instruction bootstrap,
+transcript capture, output-contract validation, and durable stage evidence. Tool
+and command evidence should be required only for stages that actually grant and
+expect tool use.
+
 Git commit/readback live tests belong in the stage/parser crate, not in
 `leaven-agent-codex-app-server`.
 

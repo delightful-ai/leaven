@@ -1743,12 +1743,17 @@ Known implementation blockers for paper reproduction:
    state.
 10. Implement git `GitArtifact` and `GitChange::AdvanceTo`.
 11. Implement snapshot proposal parsing for local workspaces.
-12. Reproduce EvoSkill OfficeQA sample with fake runtime and real Leaven
-    primitives.
+12. Reproduce one EvoSkill-shaped iteration with a real `SkillBank`, real
+    workspace materialization/readback, stored evidence, checkpoint/resume, and
+    a fake runtime.
 13. Implement the Codex provider adapter from
     `docs/specs/codex_app_server_agent_runtime.md`.
-14. Scale to the full OfficeQA split after the provider adapter is proven.
-15. Use Trace2Skill as the second reproduction to pressure-test many-trace
+14. Run the same one-iteration EvoSkill gate through live Codex app-server with
+    `gpt-5.4-mini` low. This is the first product proof that the generic Leaven
+    substrate can drive a real agentic skill mutation.
+15. Scale EvoSkill from the fixture to the paper OfficeQA/SealQA setup after
+    the provider adapter and one-iteration gate are proven.
+16. Use Trace2Skill as the second reproduction to pressure-test many-trace
     consolidation and file-level skill parsing.
 
 The ladder intentionally starts with artifact law and fake-runtime tests. The
@@ -1794,6 +1799,12 @@ EvoSkill reproduction uses real selection/admission primitives.
 EvoSkill reproduction records real evidence and costs.
 EvoSkill reproduction can checkpoint and resume without changing the result.
 ```
+
+The first accepted EvoSkill gate may use a small fixture, but it must run the
+real proposer/build/evaluate/admit loop through Leaven and at least one live
+Codex app-server session. That gate proves product wiring. It is not the full
+paper reproduction until the paper's task loaders, splits, frontier loop,
+feedback history, graders, and ablations are present.
 
 If a paper reproduction needs a new public Leaven trait to express its generic
 mechanism, that is a design gap. If it needs only paper-specific prompts,

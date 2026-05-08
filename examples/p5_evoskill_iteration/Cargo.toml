@@ -1,0 +1,35 @@
+[package]
+name = "p5_evoskill_iteration"
+description = "Leaven P5 live EvoSkill one-iteration reproduction."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+bytes = { workspace = true }
+leaven = { workspace = true, features = ["std", "workspace-local"] }
+leaven-agent = { workspace = true }
+leaven-agent-codex-app-server = { workspace = true, features = ["stdio"] }
+leaven-agentic = { workspace = true }
+leaven-agentic-skill = { workspace = true }
+leaven-artifact-skill = { workspace = true }
+leaven-core = { workspace = true }
+leaven-engine = { workspace = true }
+leaven-evidence = { workspace = true }
+leaven-kernel = { workspace = true }
+leaven-population = { workspace = true }
+leaven-store = { workspace = true }
+leaven-store-file = { workspace = true }
+leaven-surface = { workspace = true }
+leaven-workspace = { workspace = true }
+leaven-workspace-local = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+uuid = { workspace = true }

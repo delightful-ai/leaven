@@ -54,9 +54,8 @@ where
                     workspace.set_executable(&workspace_path, true)?;
                 }
                 files_written += 1;
-                bytes_written += u64::try_from(file.bytes().len()).map_err(|_err| {
-                    MaterializeError::Message("skill file byte length overflowed u64".to_owned())
-                })?;
+                bytes_written += u64::try_from(file.bytes().len())
+                    .expect("usize fits into u64 on supported Leaven targets");
             }
         }
 

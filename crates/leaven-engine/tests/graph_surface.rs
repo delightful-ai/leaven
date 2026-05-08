@@ -161,6 +161,14 @@ fn invalid_change_provenance_records_failed_apply() {
     assert_eq!(failures[0].proposal_id(), proposal_id);
     assert_eq!(failures[0].error().kind, ErrorKind::GraphInvariant);
     assert!(failures[0].created_at() <= leaven_kernel::now());
+
+    let successful_batch = record_one(
+        &mut ctx,
+        Proposal::mutate(seed, TextChange::Append("c")).build(),
+    );
+    let successful_report = ctx.apply_batch(successful_batch).unwrap();
+    assert_eq!(successful_report.successful_candidates().count(), 1);
+    assert_eq!(ctx.graph().recent_failures(Window { limit: 10 }).len(), 1);
 }
 
 #[test]
@@ -189,6 +197,41 @@ fn create_proposals_reject_causal_single_parent_provenance() {
             .events()
             .any(|event| matches!(event, RunEvent::ApplyFailed { .. }))
     );
+}
+
+#[test]
+fn aggregate_create_records_nary_lineage_and_rejects_unknown_parents() {
+    let (mut graph, mut budget) = graph_and_budget();
+    let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+    let left = ctx.insert_seed(TextArtifact("left".to_owned()), 0).unwrap();
+    let right = ctx
+        .insert_seed(TextArtifact("right".to_owned()), 1)
+        .unwrap();
+
+    let ok_batch = record_one(
+        &mut ctx,
+        Proposal::aggregate(vec![left, right], TextArtifact("joined".to_owned())).build(),
+    );
+    let ok = ctx.apply_batch(ok_batch).unwrap();
+    let child = ok.successful_candidates().next().unwrap();
+
+    assert_eq!(ctx.graph().parents(child), [left, right]);
+    assert_eq!(ctx.graph().lineage(child).ancestors(), [left, right]);
+
+    let bad_batch = record_one(
+        &mut ctx,
+        Proposal::aggregate(
+            vec![leaven_kernel::CandidateId::new()],
+            TextArtifact("bad".to_owned()),
+        )
+        .build(),
+    );
+    let bad = ctx.apply_batch(bad_batch).unwrap();
+
+    assert!(matches!(
+        bad.outcomes[0].outcome,
+        ApplyOutcome::Failure { .. }
+    ));
 }
 
 #[test]
@@ -235,6 +278,48 @@ fn merge_proposal_records_pair_lineage_but_applies_to_one_target() {
     assert_eq!(view.children(left), [child]);
     assert_eq!(view.children(right), [child]);
     assert_eq!(view.lineage(child).parents(), [left, right]);
+}
+
+#[test]
+fn lineage_ancestors_deduplicate_diamonds_without_dropping_parents() {
+    let (mut graph, mut budget) = graph_and_budget();
+    let mut ctx = leaven_engine::RunContext::<TestProblem>::new(&mut graph, &mut budget);
+    let seed = ctx.insert_seed(TextArtifact("seed".to_owned()), 0).unwrap();
+
+    let left_batch = record_one(
+        &mut ctx,
+        Proposal::mutate(seed, TextChange::Append("+left")).build(),
+    );
+    let right_batch = record_one(
+        &mut ctx,
+        Proposal::mutate(seed, TextChange::Append("+right")).build(),
+    );
+    let left = ctx
+        .apply_batch(left_batch)
+        .unwrap()
+        .successful_candidates()
+        .next()
+        .unwrap();
+    let right = ctx
+        .apply_batch(right_batch)
+        .unwrap()
+        .successful_candidates()
+        .next()
+        .unwrap();
+    let merge_batch = record_one(
+        &mut ctx,
+        Proposal::merge(left, right, TextChange::Append("+merged")).build(),
+    );
+    let merged = ctx
+        .apply_batch(merge_batch)
+        .unwrap()
+        .successful_candidates()
+        .next()
+        .unwrap();
+
+    let lineage = ctx.graph().lineage(merged);
+    assert_eq!(lineage.parents(), [left, right]);
+    assert_eq!(lineage.ancestors(), [left, right, seed]);
 }
 
 #[test]

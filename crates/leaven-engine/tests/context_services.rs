@@ -269,10 +269,20 @@ fn pairwise_and_listwise_evaluations_record_non_independent_targets() {
         let list_query = ctx.graph().assessments(candidates[2]);
         assert_eq!(pair_assessment.independent_candidate(), None);
         assert_eq!(list_assessment.independent_candidate(), None);
+        assert!(matches!(
+            pair_assessment.target(),
+            AssessmentTarget::Unscoped
+        ));
+        assert!(matches!(
+            list_assessment.target(),
+            AssessmentTarget::Unscoped
+        ));
         assert_eq!(
             pair_assessment.pairwise_candidates(),
             Some((candidates[0], candidates[1]))
         );
+        assert_eq!(pair_assessment.listwise_candidates(), None);
+        assert_eq!(list_assessment.pairwise_candidates(), None);
         assert_eq!(
             list_assessment.listwise_candidates(),
             Some(candidates.as_slice())

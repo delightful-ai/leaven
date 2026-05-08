@@ -3291,20 +3291,31 @@ dependencies = [
 ]
 
 [[package]]
-name = "p5_skill_paper_reproductions"
+name = "p5_evoskill_iteration"
 version = "0.0.0"
 dependencies = [
- "futures",
+ "bytes",
  "leaven",
+ "leaven-agent",
+ "leaven-agent-codex-app-server",
+ "leaven-agentic",
+ "leaven-agentic-skill",
+ "leaven-artifact-skill",
  "leaven-core",
  "leaven-engine",
  "leaven-evidence",
  "leaven-kernel",
  "leaven-population",
- "leaven-store-inline",
+ "leaven-store",
+ "leaven-store-file",
  "leaven-surface",
  "leaven-workspace",
  "leaven-workspace-local",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "uuid",
 ]
 
 [[package]]

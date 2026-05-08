@@ -130,3 +130,60 @@ fn parse_skill_md_for_folder(
         source,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{SkillDescription, SkillManifest};
+
+    #[test]
+    fn validate_reparses_skill_md_and_rejects_late_manifest_drift() {
+        let declared = SkillName::new("declared").unwrap();
+        let actual = SkillName::new("actual").unwrap();
+        let mut entries = BTreeMap::new();
+        entries.insert(
+            SkillPath::skill_md(),
+            SkillFile::text(
+                "---\nname: actual\ndescription: Use when testing folder validation.\n---\nBody.\n",
+            ),
+        );
+        let folder = SkillFolder {
+            name: declared,
+            manifest: SkillManifest::new(
+                actual,
+                SkillDescription::new("Use when constructing a private invalid folder.").unwrap(),
+                BTreeMap::new(),
+            ),
+            body: crate::SkillBody::new("Body.").unwrap(),
+            entries,
+        };
+
+        assert!(matches!(
+            folder.validate().unwrap_err(),
+            SkillBankError::NameMismatch {
+                folder,
+                manifest_name
+            } if folder == "declared" && manifest_name == "actual"
+        ));
+    }
+
+    #[test]
+    fn rename_to_reports_missing_skill_md_when_private_entries_are_corrupt() {
+        let name = SkillName::new("declared").unwrap();
+        let folder = SkillFolder {
+            name: name.clone(),
+            manifest: SkillManifest::new(
+                name,
+                SkillDescription::new("Use when constructing a private invalid folder.").unwrap(),
+                BTreeMap::new(),
+            ),
+            body: crate::SkillBody::new("Body.").unwrap(),
+            entries: BTreeMap::new(),
+        };
+
+        assert!(matches!(
+            folder.rename_to(SkillName::new("renamed").unwrap()).unwrap_err(),
+            SkillBankError::MissingSkillMd { skill } if skill == "declared"
+        ));
+    }
+}

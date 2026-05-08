@@ -1,13 +1,18 @@
 mod support;
 
+use std::sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering},
+};
+
 use futures::executor::block_on;
 use leaven_core::{
     Assessment, AssessmentGranularity, AssessmentTarget, EvaluationPurpose, EvaluationRequest,
-    PairOrder, ResolvedEvaluationRequest, ResolvedRequestKind,
+    EvaluationSet, PairOrder, PartitionId, ResolvedEvaluationRequest, ResolvedRequestKind,
 };
 use leaven_engine::{
     CachePolicy, CaseSet, EvaluationContext, EvaluationError, Evaluator, Optimizer, OptimizerError,
-    RunContext, RunContextError, RunEvent, StepStatus, optimize,
+    RunContext, RunContextError, RunEvent, StepStatus, TrustPolicy, optimize,
 };
 use leaven_kernel::{
     Budget, CandidateId, Cost, ErrorKind, EvaluatorId, Fingerprint, MetadataBag, Metered,
@@ -130,6 +135,89 @@ fn ordered_pairwise_registry_cache_keeps_reversed_pairs_distinct() {
     });
 }
 
+#[test]
+fn registered_deterministic_evaluator_reuses_cache_for_identical_request() {
+    block_on(async {
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let cases = CaseSet::new(vec!["case"]);
+        let calls = Arc::new(AtomicUsize::new(0));
+        let mut engine = optimize::<TestProblem>()
+            .budget(Budget::metric_calls(10))
+            .evaluator(CountingRegisteredEvaluator {
+                calls: calls.clone(),
+                cache_policy: CachePolicy::Deterministic,
+            })
+            .build();
+        let seed = engine
+            .insert_seed(TextArtifact("seed".to_owned()), 0)
+            .unwrap();
+        let mut optimizer = RepeatRegisteredEvaluation { seed };
+
+        let result = engine.run(&mut optimizer, &cases, &store).await.unwrap();
+
+        assert_eq!(result.best, Some(seed));
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert_eq!(engine.view().evaluation_request_count(), 2);
+        assert_eq!(engine.view().assessment_count(), 1);
+    });
+}
+
+#[test]
+fn registered_evaluator_error_records_dyn_stage_error() {
+    block_on(async {
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let cases = CaseSet::new(vec!["case"]);
+        let mut engine = optimize::<TestProblem>()
+            .budget(Budget::metric_calls(10))
+            .evaluator(FailingRegisteredEvaluator)
+            .build();
+        let seed = engine
+            .insert_seed(TextArtifact("seed".to_owned()), 0)
+            .unwrap();
+        let mut optimizer = FailingRegisteredEvaluation { seed };
+
+        let result = engine.run(&mut optimizer, &cases, &store).await.unwrap();
+
+        assert_eq!(result.best, Some(seed));
+        assert!(engine.view().events().any(|event| matches!(
+            event,
+            RunEvent::Error {
+                error,
+                ..
+            } if error.kind == ErrorKind::Evaluation
+                && error.source_chain == vec!["registered metric backend offline"]
+        )));
+    });
+}
+
+#[test]
+fn registered_evaluation_hidden_partition_is_refused_before_request_recording() {
+    block_on(async {
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let secret = PartitionId::from("secret");
+        let cases = CaseSet::new(vec!["case"]);
+        let mut engine = optimize::<TestProblem>()
+            .budget(Budget::metric_calls(10))
+            .trust_policy(TrustPolicy::default().hide_from_optimizers([secret.clone()]))
+            .evaluator(RegisteredEvaluator)
+            .build();
+        let seed = engine
+            .insert_seed(TextArtifact("seed".to_owned()), 0)
+            .unwrap();
+        let mut optimizer = HiddenPartitionRegistryEvaluation {
+            seed,
+            secret,
+            saw_refusal: false,
+        };
+
+        let result = engine.run(&mut optimizer, &cases, &store).await.unwrap();
+
+        assert_eq!(result.best, Some(seed));
+        assert!(optimizer.saw_refusal);
+        assert_eq!(engine.view().evaluation_request_count(), 0);
+    });
+}
+
 struct RegistryOptimizer {
     seed: CandidateId,
     best: Option<CandidateId>,
@@ -167,6 +255,97 @@ impl Optimizer<TestProblem> for RegistryOptimizer {
         _graph: leaven_engine::RunGraphView<'_, TestProblem>,
     ) -> Option<CandidateId> {
         self.best
+    }
+}
+
+struct RepeatRegisteredEvaluation {
+    seed: CandidateId,
+}
+
+impl Optimizer<TestProblem> for RepeatRegisteredEvaluation {
+    async fn step(
+        &mut self,
+        ctx: &mut RunContext<'_, TestProblem>,
+    ) -> Result<StepStatus, OptimizerError> {
+        let first = ctx
+            .evaluate(EvaluatorId::PRIMARY, independent_request(self.seed))
+            .await
+            .map_err(|err| OptimizerError::Message(err.to_string()))?;
+        let second = ctx
+            .evaluate(EvaluatorId::PRIMARY, independent_request(self.seed))
+            .await
+            .map_err(|err| OptimizerError::Message(err.to_string()))?;
+
+        assert_eq!(first.assessment_ids, second.assessment_ids);
+        Ok(StepStatus::Done)
+    }
+
+    fn best_candidate(
+        &self,
+        _graph: leaven_engine::RunGraphView<'_, TestProblem>,
+    ) -> Option<CandidateId> {
+        Some(self.seed)
+    }
+}
+
+struct FailingRegisteredEvaluation {
+    seed: CandidateId,
+}
+
+impl Optimizer<TestProblem> for FailingRegisteredEvaluation {
+    async fn step(
+        &mut self,
+        ctx: &mut RunContext<'_, TestProblem>,
+    ) -> Result<StepStatus, OptimizerError> {
+        let error = ctx
+            .evaluate(EvaluatorId::PRIMARY, independent_request(self.seed))
+            .await
+            .expect_err("registered evaluator failure should reach optimizer");
+        assert!(matches!(error, RunContextError::Evaluation(_)));
+        Ok(StepStatus::Done)
+    }
+
+    fn best_candidate(
+        &self,
+        _graph: leaven_engine::RunGraphView<'_, TestProblem>,
+    ) -> Option<CandidateId> {
+        Some(self.seed)
+    }
+}
+
+struct HiddenPartitionRegistryEvaluation {
+    seed: CandidateId,
+    secret: PartitionId,
+    saw_refusal: bool,
+}
+
+impl Optimizer<TestProblem> for HiddenPartitionRegistryEvaluation {
+    async fn step(
+        &mut self,
+        ctx: &mut RunContext<'_, TestProblem>,
+    ) -> Result<StepStatus, OptimizerError> {
+        let error = ctx
+            .evaluate(
+                EvaluatorId::PRIMARY,
+                EvaluationRequest::Independent {
+                    candidates: vec![self.seed],
+                    set: EvaluationSet::Partition(self.secret.clone()),
+                    granularity: AssessmentGranularity::Aggregate,
+                    purpose: EvaluationPurpose::Search,
+                },
+            )
+            .await
+            .expect_err("hidden partition should be refused before evaluator dispatch");
+        assert!(matches!(error, RunContextError::TrustViolation(_)));
+        self.saw_refusal = true;
+        Ok(StepStatus::Done)
+    }
+
+    fn best_candidate(
+        &self,
+        _graph: leaven_engine::RunGraphView<'_, TestProblem>,
+    ) -> Option<CandidateId> {
+        Some(self.seed)
     }
 }
 
@@ -244,6 +423,71 @@ impl Optimizer<TestProblem> for ReversedOrderedPairCacheOptimizer {
         _graph: leaven_engine::RunGraphView<'_, TestProblem>,
     ) -> Option<CandidateId> {
         Some(self.right)
+    }
+}
+
+struct CountingRegisteredEvaluator {
+    calls: Arc<AtomicUsize>,
+    cache_policy: CachePolicy,
+}
+
+impl Evaluator<TestProblem> for CountingRegisteredEvaluator {
+    fn id(&self) -> EvaluatorId {
+        EvaluatorId::PRIMARY
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        Fingerprint::from_bytes([6; 32])
+    }
+
+    fn cache_policy(&self, _request: &ResolvedEvaluationRequest) -> CachePolicy {
+        self.cache_policy.clone()
+    }
+
+    async fn evaluate(
+        &self,
+        request: ResolvedEvaluationRequest,
+        _ctx: EvaluationContext<'_, TestProblem>,
+    ) -> Result<Metered<Vec<Assessment<TestProblem>>>, EvaluationError> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        let ResolvedRequestKind::Independent { candidates } = request.kind else {
+            return Err(EvaluationError::Message(
+                "expected independent request".to_owned(),
+            ));
+        };
+        Ok(Metered::new(
+            vec![Assessment::Independent {
+                candidate: candidates[0],
+                target: AssessmentTarget::Unscoped,
+                evidence: TestEvidence { score: 5.0 },
+                cost: Cost::metric_calls(1),
+                metadata: MetadataBag::new(),
+            }],
+            Cost::metric_calls(1),
+        ))
+    }
+}
+
+struct FailingRegisteredEvaluator;
+
+impl Evaluator<TestProblem> for FailingRegisteredEvaluator {
+    fn id(&self) -> EvaluatorId {
+        EvaluatorId::PRIMARY
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        Fingerprint::from_bytes([7; 32])
+    }
+
+    async fn evaluate(
+        &self,
+        _request: ResolvedEvaluationRequest,
+        _ctx: EvaluationContext<'_, TestProblem>,
+    ) -> Result<Metered<Vec<Assessment<TestProblem>>>, EvaluationError> {
+        Err(EvaluationError::with_source(
+            "registered evaluation failed",
+            StaticTestError("registered metric backend offline"),
+        ))
     }
 }
 
@@ -335,3 +579,23 @@ fn ordered_pairwise_request(left: CandidateId, right: CandidateId) -> Evaluation
         order: PairOrder::Ordered,
     }
 }
+
+fn independent_request(candidate: CandidateId) -> EvaluationRequest {
+    EvaluationRequest::Independent {
+        candidates: vec![candidate],
+        set: EvaluationSet::All,
+        granularity: AssessmentGranularity::Aggregate,
+        purpose: EvaluationPurpose::Search,
+    }
+}
+
+#[derive(Debug)]
+struct StaticTestError(&'static str);
+
+impl std::fmt::Display for StaticTestError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.0)
+    }
+}
+
+impl std::error::Error for StaticTestError {}

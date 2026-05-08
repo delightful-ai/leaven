@@ -1,18 +1,20 @@
 use std::error::Error;
 use std::num::NonZeroUsize;
+use std::path::PathBuf;
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicUsize, Ordering},
 };
 
+use futures::future::{BoxFuture, FutureExt};
 use leaven_agent::{
     AgentInstructions, AgentRunContext, AgentRunRequest, AgentRuntime, AgentRuntimeCapabilities,
     AgentRuntimeError, AgentSession,
 };
 use leaven_agentic::{
     AgentPromptTarget, AgenticParseError, AgenticRepairError, AgenticRunInput, ProposalParser,
-    ProposalRepairFeedback, ProposalRepairPromptBuilder, RepairingAgenticProposer,
-    RepairingAgenticProposerConfig,
+    ProposalRepairFeedback, ProposalRepairPolicy, ProposalRepairPromptBuilder,
+    RepairingAgenticProposer, RepairingAgenticProposerConfig,
 };
 use leaven_core::{
     Artifact, ArtifactIdentity, Evidence, OptimizationProblem, Proposal, ProposalBatch,
@@ -25,8 +27,16 @@ use leaven_engine::{
 use leaven_kernel::{
     AgentRuntimeId, ContentId, Cost, Fingerprint, MetadataBag, Metered, ProposerId, RunId,
 };
-use leaven_workspace::{WorkspacePath, WorkspaceView};
+use leaven_workspace::{
+    FactoryError, Workspace, WorkspaceBackend, WorkspaceConfig, WorkspaceError, WorkspaceFactory,
+    WorkspacePath, WorkspaceView,
+};
 use leaven_workspace_local::LocalWorkspaceFactory;
+
+#[test]
+fn default_repair_policy_is_two_attempts() {
+    assert_eq!(ProposalRepairPolicy::default().max_attempts.get(), 2);
+}
 
 #[test]
 fn repairing_proposer_routes_parse_failure_back_to_same_runtime_loop() {
@@ -50,6 +60,10 @@ fn repairing_proposer_routes_parse_failure_back_to_same_runtime_loop() {
                 errors: repair_errors.clone(),
             },
             ProposalFileParser,
+        );
+        assert_eq!(
+            leaven_engine::Proposer::<TestProblem>::arity(&proposer),
+            leaven_engine::Arity::Single
         );
         let mut graph = RunGraph::<TestProblem>::new(RunId::new());
         let mut budget = BudgetLedger::default();
@@ -118,6 +132,162 @@ fn repairing_proposer_exhausts_after_bounded_attempts() {
 
         assert_eq!(runtime_calls.load(Ordering::SeqCst), 2);
         assert!(error_chain_contains(&error, "proposal repair exhausted"));
+    });
+}
+
+#[test]
+fn repairing_proposer_surfaces_repair_prompt_failure() {
+    futures::executor::block_on(async {
+        let proposer = RepairingAgenticProposer::new(
+            RepairingAgenticProposerConfig::new(
+                ProposerId::from("agentic/repair-prompt-fail"),
+                NonZeroUsize::new(2).unwrap(),
+            ),
+            LocalWorkspaceFactory::temp(),
+            AlwaysInvalidRuntime {
+                calls: Arc::new(AtomicUsize::new(0)),
+            },
+            TestMaterializer,
+            TestRenderer,
+            FailingRepairPrompt,
+            ProposalFileParser,
+        );
+        let mut graph = RunGraph::<TestProblem>::new(RunId::new());
+        let mut budget = BudgetLedger::default();
+        let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+
+        let error = ctx
+            .propose(
+                &proposer,
+                AgenticRunInput::new(
+                    ProposalInput,
+                    leaven_agent::OutputContract::Files {
+                        paths: vec![WorkspacePath::new("output/proposal.txt").unwrap()],
+                    },
+                ),
+            )
+            .await
+            .unwrap_err();
+
+        assert!(error_chain_contains(&error, "repair prompt failed"));
+    });
+}
+
+#[test]
+fn repairing_proposer_reports_workspace_allocation_failure() {
+    futures::executor::block_on(async {
+        let proposer = RepairingAgenticProposer::new(
+            RepairingAgenticProposerConfig::new(
+                ProposerId::from("agentic/repair-allocate"),
+                NonZeroUsize::new(2).unwrap(),
+            ),
+            RejectingFactory,
+            AlwaysInvalidRuntime {
+                calls: Arc::new(AtomicUsize::new(0)),
+            },
+            TestMaterializer,
+            TestRenderer,
+            StaticRepairPrompt,
+            ProposalFileParser,
+        );
+        let mut graph = RunGraph::<TestProblem>::new(RunId::new());
+        let mut budget = BudgetLedger::default();
+        let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+
+        let error = ctx
+            .propose(
+                &proposer,
+                AgenticRunInput::new(
+                    ProposalInput,
+                    leaven_agent::OutputContract::Files {
+                        paths: vec![WorkspacePath::new("output/proposal.txt").unwrap()],
+                    },
+                ),
+            )
+            .await
+            .unwrap_err();
+
+        assert!(error_chain_contains(&error, "workspace allocation failed"));
+    });
+}
+
+#[test]
+fn repairing_proposer_reports_cleanup_failure_after_success() {
+    futures::executor::block_on(async {
+        let proposer = RepairingAgenticProposer::new(
+            RepairingAgenticProposerConfig::new(
+                ProposerId::from("agentic/repair-cleanup-success"),
+                NonZeroUsize::new(2).unwrap(),
+            ),
+            CleanupFailingFactory,
+            TwoAttemptRuntime {
+                calls: Arc::new(AtomicUsize::new(0)),
+                tasks: Arc::new(Mutex::new(Vec::new())),
+            },
+            TestMaterializer,
+            TestRenderer,
+            StaticRepairPrompt,
+            ProposalFileParser,
+        );
+        let mut graph = RunGraph::<TestProblem>::new(RunId::new());
+        let mut budget = BudgetLedger::default();
+        let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+
+        let error = ctx
+            .propose(
+                &proposer,
+                AgenticRunInput::new(
+                    ProposalInput,
+                    leaven_agent::OutputContract::Files {
+                        paths: vec![WorkspacePath::new("output/proposal.txt").unwrap()],
+                    },
+                ),
+            )
+            .await
+            .unwrap_err();
+
+        assert!(error_chain_contains(&error, "workspace cleanup failed"));
+    });
+}
+
+#[test]
+fn repairing_proposer_preserves_stage_and_cleanup_failure() {
+    futures::executor::block_on(async {
+        let proposer = RepairingAgenticProposer::new(
+            RepairingAgenticProposerConfig::new(
+                ProposerId::from("agentic/repair-cleanup-stage"),
+                NonZeroUsize::new(1).unwrap(),
+            ),
+            CleanupFailingFactory,
+            AlwaysInvalidRuntime {
+                calls: Arc::new(AtomicUsize::new(0)),
+            },
+            TestMaterializer,
+            TestRenderer,
+            StaticRepairPrompt,
+            ProposalFileParser,
+        );
+        let mut graph = RunGraph::<TestProblem>::new(RunId::new());
+        let mut budget = BudgetLedger::default();
+        let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+
+        let error = ctx
+            .propose(
+                &proposer,
+                AgenticRunInput::new(
+                    ProposalInput,
+                    leaven_agent::OutputContract::Files {
+                        paths: vec![WorkspacePath::new("output/proposal.txt").unwrap()],
+                    },
+                ),
+            )
+            .await
+            .unwrap_err();
+
+        assert!(error_chain_contains(
+            &error,
+            "agentic stage failed and workspace cleanup also failed"
+        ));
     });
 }
 
@@ -259,6 +429,20 @@ impl ProposalRepairPromptBuilder<ProposalInput> for StaticRepairPrompt {
     }
 }
 
+struct FailingRepairPrompt;
+
+impl ProposalRepairPromptBuilder<ProposalInput> for FailingRepairPrompt {
+    fn build_repair(
+        &self,
+        _input: &ProposalInput,
+        _feedback: ProposalRepairFeedback<'_>,
+    ) -> Result<AgentInstructions, AgenticRepairError> {
+        Err(AgenticRepairError::Prompt(
+            "prompt renderer broke".to_owned(),
+        ))
+    }
+}
+
 struct TwoAttemptRuntime {
     calls: Arc<AtomicUsize>,
     tasks: Arc<Mutex<Vec<String>>>,
@@ -344,5 +528,47 @@ impl AgentRuntime for AlwaysInvalidRuntime {
             b"still invalid",
         )?;
         Ok(Metered::new(session, Cost::llm_calls(1)))
+    }
+}
+
+struct RejectingFactory;
+
+impl WorkspaceFactory for RejectingFactory {
+    async fn allocate(&self, _config: WorkspaceConfig) -> Result<Workspace, FactoryError> {
+        Err(FactoryError::Allocate("no workspace".to_owned()))
+    }
+}
+
+struct CleanupFailingFactory;
+
+impl WorkspaceFactory for CleanupFailingFactory {
+    async fn allocate(&self, _config: WorkspaceConfig) -> Result<Workspace, FactoryError> {
+        Ok(Workspace::new(
+            PathBuf::new(),
+            Box::<MemoryCleanupBackend>::default(),
+        ))
+    }
+}
+
+#[derive(Default)]
+struct MemoryCleanupBackend {
+    files: std::collections::BTreeMap<WorkspacePath, Vec<u8>>,
+}
+
+impl WorkspaceBackend for MemoryCleanupBackend {
+    fn write_file(&mut self, path: &WorkspacePath, bytes: &[u8]) -> Result<(), WorkspaceError> {
+        self.files.insert(path.clone(), bytes.to_vec());
+        Ok(())
+    }
+
+    fn read_file(&mut self, path: &WorkspacePath) -> Result<Vec<u8>, WorkspaceError> {
+        self.files
+            .get(path)
+            .cloned()
+            .ok_or_else(|| WorkspaceError::Io(format!("missing {}", path.as_str())))
+    }
+
+    fn cleanup(self: Box<Self>) -> BoxFuture<'static, Result<(), WorkspaceError>> {
+        async { Err(WorkspaceError::Cleanup("cleanup failed".to_owned())) }.boxed()
     }
 }

@@ -135,6 +135,28 @@ fn workspace_view_delegates_commands_to_backend_with_scoped_cwd() {
 }
 
 #[test]
+fn workspace_view_rejects_backend_file_paths_outside_subdir_prefix() {
+    let mut workspace = Workspace::new(PathBuf::new(), Box::new(OutsidePrefixBackend));
+    let view = workspace
+        .view()
+        .subdir(WorkspacePath::new("candidate").unwrap())
+        .unwrap();
+
+    let error = view.list_files(&WorkspacePath::root()).unwrap_err();
+
+    assert!(matches!(
+        error,
+        WorkspaceError::Path(leaven_workspace::WorkspacePathError::OutsideView {
+            path,
+            prefix,
+        }) if path == "other/file.txt" && prefix == "candidate"
+    ));
+
+    drop(view);
+    futures::executor::block_on(workspace.cleanup()).unwrap();
+}
+
+#[test]
 fn workspace_lifecycle_exposes_root_mount_view_and_cleanup_backend() {
     let root = temp_root("workspace-lifecycle");
     let mut workspace = Workspace::new(root.clone(), Box::new(TestBackend::mounted(&root)));
@@ -464,6 +486,22 @@ struct TestFactory {
 struct UnsupportedBackend;
 
 impl WorkspaceBackend for UnsupportedBackend {
+    fn cleanup(self: Box<Self>) -> BoxFuture<'static, Result<(), WorkspaceError>> {
+        async { Ok(()) }.boxed()
+    }
+}
+
+struct OutsidePrefixBackend;
+
+impl WorkspaceBackend for OutsidePrefixBackend {
+    fn list_files(&mut self, path: &WorkspacePath) -> Result<Vec<WorkspacePath>, WorkspaceError> {
+        assert_eq!(path.as_str(), "candidate");
+        Ok(vec![
+            WorkspacePath::new("candidate").unwrap(),
+            WorkspacePath::new("other/file.txt").unwrap(),
+        ])
+    }
+
     fn cleanup(self: Box<Self>) -> BoxFuture<'static, Result<(), WorkspaceError>> {
         async { Ok(()) }.boxed()
     }

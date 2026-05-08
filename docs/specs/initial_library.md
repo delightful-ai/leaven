@@ -4,9 +4,9 @@
 
 Project name: **leaven**. Crate: `leaven` (umbrella) + `leaven-core`, `leaven-engine`, `leaven-std`, `leaven-workspace`, `leaven-derive`. Metaphor: the small biological culture you mix into a substrate, walk away from, and come back to find transformed.
 
-> Status: v0.2.5, pre-implementation minor spec bump.  
+> Status: v0.2.6, implementation-backed minor spec bump.  
 > Date: 2026-05-07.  
-> Supersedes the v0.2.1a spec and folds in the v0.2.1b topology cutover, v0.2.1c surface/evidence/cache cleanup, v0.2.2 renderer/workspace/GEPA selector clarification, v0.2.3 agentic stage runtime contract, v0.2.4 agentic skill optimization primitive spec, and v0.2.5 Codex app-server provider adapter spec. The architecture is unchanged: cold core stays shape-neutral, surfaces are explicit optimizer/stage choices, and GEPA remains one optimizer.  
+> Supersedes the v0.2.1a spec and folds in the v0.2.1b topology cutover, v0.2.1c surface/evidence/cache cleanup, v0.2.2 renderer/workspace/GEPA selector clarification, v0.2.3 agentic stage runtime contract, v0.2.4 agentic skill optimization primitive spec, v0.2.5 Codex app-server provider adapter spec, and v0.2.6 live EvoSkill iteration proof. The architecture is unchanged: cold core stays shape-neutral, surfaces are explicit optimizer/stage choices, and GEPA remains one optimizer.  
 > This is still not an API lock — but it is now ready to be coded against.
 
 ---
@@ -320,6 +320,39 @@ precise boundary before implementation.
 
 The full companion contract is
 `docs/specs/codex_app_server_agent_runtime.md`.
+
+---
+
+## 0.9 What Changed in v0.2.6
+
+This is a minor spec bump because the agentic-skill substrate now has a live
+EvoSkill-shaped proof path, not only a design contract.
+
+67. **P5 is a live EvoSkill iteration, not a toy paper map.**  
+    `examples/p5_evoskill_iteration` must run one real create/edit skill
+    iteration over `SkillBank`, materialized Agent Skills folders, workspace
+    proposal parsing, `RunContext` proposal application, evaluator evidence,
+    population update, and checkpoint/resume.
+
+68. **Live Codex is part of the P5 gate.**  
+    `just milestone-p5` runs Codex app-server with `gpt-5.4-mini` and low
+    reasoning when `LEAVEN_CODEX_LIVE=1` is set. The gate must include
+    developer instructions and stored session evidence.
+
+69. **Source-prompt fidelity is explicit.**  
+    Paper role prompts may be copied from source and wrapped with a small
+    Leaven/Codex ABI contract. That is source-prompt faithful; it is not a
+    claim of full paper reproduction until the paper datasets, splits, frontier
+    loop, feedback history, graders, and ablations are present.
+
+70. **Provider no-shell stages are valid.**  
+    Codex-backed stages may use `OutputContract::FinalMessage` and no shell
+    tools when the stage contract is typed proposal/evidence output. Tool and
+    command evidence are required only for stages that actually grant and expect
+    tool use.
+
+The live proof and remaining paper gaps are tracked in
+`docs/plans/2026-05-07-milestone-5-skill-paper-reproductions.md`.
 
 ---
 
@@ -4683,6 +4716,33 @@ The engine is dumb. The optimizer is smart. The types tell the truth.
 ---
 
 ## 30. Changelog
+
+### v0.2.6 (2026-05-07) - live EvoSkill iteration proof
+
+This pass replaces the rejected toy P5 skill-paper map with a live
+EvoSkill-shaped iteration that exercises the real agentic skill substrate.
+
+- **P5 now runs one live EvoSkill iteration.**
+  `examples/p5_evoskill_iteration` drives an empty `SkillBank` through executor
+  failure, proposer diagnosis, skill-builder output, skill-folder validation,
+  workspace proposal parsing, `RunContext` proposal application, child
+  evaluation, `KeepBest` observation, evidence persistence, and checkpoint
+  completion.
+- **Codex execution is mandatory for the gate.** The milestone uses Codex
+  app-server with `gpt-5.4-mini`, low reasoning, and developer instructions.
+  The run is opt-in through `LEAVEN_CODEX_LIVE=1` because it spends live model
+  calls.
+- **Prompt fidelity is documented.** The example uses EvoSkill source prompts
+  for the executor, proposer, and skill-builder, with a small Leaven/Codex
+  wrapper that defines the skill mount and JSON output contract.
+- **The proof is intentionally scoped.** The live gate proves Leaven product
+  wiring; it is not yet a full OfficeQA/SealQA paper reproduction.
+- **Paper-reproduction acceptance is tightened.** Future examples may own
+  prompts, datasets, scorers, and harnesses, but must not reimplement generic
+  skill artifacts, graph application, workspace parsing, evidence stores,
+  checkpoint/restore, repair, runtime, or population substrate.
+- **Companion plan updated.** See
+  `docs/plans/2026-05-07-milestone-5-skill-paper-reproductions.md`.
 
 ### v0.2.5 (2026-05-07) - Codex app-server provider adapter
 

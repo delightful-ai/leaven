@@ -1,0 +1,18 @@
+[
+  {
+    "id": "train-bond-quote-32nds",
+    "split": "train",
+    "category": "treasury-notation",
+    "question": "A Treasury quote is 99.16 in 32nds notation. What decimal price does it represent?",
+    "answer": "99.5",
+    "source": "Treasury price quotes can use a whole-number part followed by a fractional part. In this case the quoted fractional part is 16 thirty-seconds."
+  },
+  {
+    "id": "validation-bond-quote-plus",
+    "split": "validation",
+    "category": "treasury-notation",
+    "question": "A Treasury quote is 101.08+ in 32nds notation. What decimal price does it represent?",
+    "answer": "101.265625",
+    "source": "Treasury price quotes can use a plus suffix to denote an extra half of one thirty-second. The quote 101.08+ has whole part 101 and fractional part 8.5 thirty-seconds."
+  }
+]

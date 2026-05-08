@@ -408,4 +408,172 @@ mod tests {
     fn default_threads_are_materialized_for_evidence_replay() {
         assert!(!CodexAppServerConfig::default().thread.ephemeral);
     }
+
+    #[test]
+    fn wire_values_cover_all_public_config_variants() {
+        assert_eq!(CodexAppServerApprovalMode::Error.as_wire(), "error");
+        assert_eq!(CodexAppServerApprovalMode::Accept.as_wire(), "accept");
+        assert_eq!(CodexAppServerApprovalMode::Decline.as_wire(), "decline");
+        assert_eq!(CodexAppServerApprovalMode::Cancel.as_wire(), "cancel");
+        assert_eq!(CodexApprovalPolicy::UnlessTrusted.as_wire(), "untrusted");
+        assert_eq!(CodexApprovalPolicy::OnFailure.as_wire(), "on-failure");
+        assert_eq!(CodexApprovalPolicy::OnRequest.as_wire(), "on-request");
+        assert_eq!(CodexApprovalPolicy::Never.as_wire(), "never");
+        assert_eq!(CodexApprovalsReviewer::User.as_wire(), "user");
+        assert_eq!(CodexApprovalsReviewer::AutoReview.as_wire(), "auto-review");
+        assert_eq!(CodexSandboxMode::ReadOnly.as_wire(), "read-only");
+        assert_eq!(
+            CodexSandboxMode::WorkspaceWrite.as_wire(),
+            "workspace-write"
+        );
+        assert_eq!(
+            CodexSandboxMode::DangerFullAccess.as_wire(),
+            "danger-full-access"
+        );
+        assert_eq!(CodexReasoningEffort::None.as_wire(), "none");
+        assert_eq!(CodexReasoningEffort::Minimal.as_wire(), "minimal");
+        assert_eq!(CodexReasoningEffort::Low.as_wire(), "low");
+        assert_eq!(CodexReasoningEffort::Medium.as_wire(), "medium");
+        assert_eq!(CodexReasoningEffort::High.as_wire(), "high");
+        assert_eq!(CodexReasoningEffort::XHigh.as_wire(), "xhigh");
+        assert_eq!(CodexReasoningSummary::Auto.as_wire(), "auto");
+        assert_eq!(CodexReasoningSummary::Concise.as_wire(), "concise");
+        assert_eq!(CodexReasoningSummary::Detailed.as_wire(), "detailed");
+        assert_eq!(CodexReasoningSummary::None.as_wire(), "none");
+        assert_eq!(CodexRawEventPolicy::Drop.as_wire(), "drop");
+        assert_eq!(CodexRawEventPolicy::Retain.as_wire(), "retain");
+        assert!(!CodexRawEventPolicy::Drop.retains());
+        assert!(CodexRawEventPolicy::Retain.retains());
+    }
+
+    #[test]
+    fn fingerprint_includes_optional_and_policy_configuration() {
+        let mut configured = CodexAppServerConfig::default();
+        configured.initialize.client_title = None;
+        configured.initialize.experimental_api = false;
+        configured.initialize.opt_out_notification_methods =
+            Some(vec!["codex/event".to_owned(), "codex/status".to_owned()]);
+        configured.thread.model_provider = Some("openai".to_owned());
+        configured.thread.service_tier = Some("default".to_owned());
+        configured.thread.sandbox = Some(CodexSandboxMode::DangerFullAccess);
+        configured.thread.approval_policy = Some(CodexApprovalPolicy::OnRequest);
+        configured.thread.approvals_reviewer = Some(CodexApprovalsReviewer::AutoReview);
+        configured.thread.base_instructions = Some("base".to_owned());
+        configured.thread.developer_instructions = Some("developer".to_owned());
+        configured.thread.ephemeral = true;
+        configured.thread.service_name = Some("codex".to_owned());
+        configured.turn.model = Some("gpt-5.4-mini".to_owned());
+        configured.turn.service_tier = Some("flex".to_owned());
+        configured.turn.summary = Some(CodexReasoningSummary::Concise);
+        configured.turn.approval_policy = Some(CodexApprovalPolicy::OnFailure);
+        configured.turn.approvals_reviewer = Some(CodexApprovalsReviewer::User);
+        configured.approval_mode = CodexAppServerApprovalMode::Accept;
+        configured.retain_raw_events = CodexRawEventPolicy::Drop;
+
+        assert_ne!(
+            CodexAppServerConfig::default().fingerprint(),
+            configured.fingerprint()
+        );
+    }
+
+    #[cfg(feature = "app-server")]
+    #[test]
+    fn protocol_mappings_cover_all_variants() {
+        use codex_app_server_protocol::{ApprovalsReviewer, AskForApproval, SandboxMode};
+        use codex_protocol::config_types::ReasoningSummary;
+        use codex_protocol::openai_models::ReasoningEffort;
+
+        assert!(matches!(
+            crate::client::ApprovalMode::from(CodexAppServerApprovalMode::Error),
+            crate::client::ApprovalMode::Error
+        ));
+        assert!(matches!(
+            crate::client::ApprovalMode::from(CodexAppServerApprovalMode::Accept),
+            crate::client::ApprovalMode::Accept
+        ));
+        assert!(matches!(
+            crate::client::ApprovalMode::from(CodexAppServerApprovalMode::Decline),
+            crate::client::ApprovalMode::Decline
+        ));
+        assert!(matches!(
+            crate::client::ApprovalMode::from(CodexAppServerApprovalMode::Cancel),
+            crate::client::ApprovalMode::Cancel
+        ));
+        assert!(matches!(
+            AskForApproval::from(CodexApprovalPolicy::UnlessTrusted),
+            AskForApproval::UnlessTrusted
+        ));
+        assert!(matches!(
+            AskForApproval::from(CodexApprovalPolicy::OnFailure),
+            AskForApproval::OnFailure
+        ));
+        assert!(matches!(
+            AskForApproval::from(CodexApprovalPolicy::OnRequest),
+            AskForApproval::OnRequest
+        ));
+        assert!(matches!(
+            AskForApproval::from(CodexApprovalPolicy::Never),
+            AskForApproval::Never
+        ));
+        assert!(matches!(
+            ApprovalsReviewer::from(CodexApprovalsReviewer::User),
+            ApprovalsReviewer::User
+        ));
+        assert!(matches!(
+            ApprovalsReviewer::from(CodexApprovalsReviewer::AutoReview),
+            ApprovalsReviewer::AutoReview
+        ));
+        assert!(matches!(
+            SandboxMode::from(CodexSandboxMode::ReadOnly),
+            SandboxMode::ReadOnly
+        ));
+        assert!(matches!(
+            SandboxMode::from(CodexSandboxMode::WorkspaceWrite),
+            SandboxMode::WorkspaceWrite
+        ));
+        assert!(matches!(
+            SandboxMode::from(CodexSandboxMode::DangerFullAccess),
+            SandboxMode::DangerFullAccess
+        ));
+        assert!(matches!(
+            ReasoningEffort::from(CodexReasoningEffort::None),
+            ReasoningEffort::None
+        ));
+        assert!(matches!(
+            ReasoningEffort::from(CodexReasoningEffort::Minimal),
+            ReasoningEffort::Minimal
+        ));
+        assert!(matches!(
+            ReasoningEffort::from(CodexReasoningEffort::Low),
+            ReasoningEffort::Low
+        ));
+        assert!(matches!(
+            ReasoningEffort::from(CodexReasoningEffort::Medium),
+            ReasoningEffort::Medium
+        ));
+        assert!(matches!(
+            ReasoningEffort::from(CodexReasoningEffort::High),
+            ReasoningEffort::High
+        ));
+        assert!(matches!(
+            ReasoningEffort::from(CodexReasoningEffort::XHigh),
+            ReasoningEffort::XHigh
+        ));
+        assert!(matches!(
+            ReasoningSummary::from(CodexReasoningSummary::Auto),
+            ReasoningSummary::Auto
+        ));
+        assert!(matches!(
+            ReasoningSummary::from(CodexReasoningSummary::Concise),
+            ReasoningSummary::Concise
+        ));
+        assert!(matches!(
+            ReasoningSummary::from(CodexReasoningSummary::Detailed),
+            ReasoningSummary::Detailed
+        ));
+        assert!(matches!(
+            ReasoningSummary::from(CodexReasoningSummary::None),
+            ReasoningSummary::None
+        ));
+    }
 }

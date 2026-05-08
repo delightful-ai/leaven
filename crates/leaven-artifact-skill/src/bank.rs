@@ -286,3 +286,41 @@ fn feed(hasher: &mut blake3::Hasher, bytes: &[u8]) {
     hasher.update(&(bytes.len() as u64).to_le_bytes());
     hasher.update(bytes);
 }
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use super::*;
+    use crate::{SkillFile, SkillFolder};
+
+    fn folder(name: &str) -> SkillFolder {
+        let name = SkillName::new(name).unwrap();
+        let mut entries = BTreeMap::new();
+        entries.insert(
+            SkillPath::skill_md(),
+            SkillFile::text(format!(
+                "---\nname: {name}\ndescription: Use when testing private bank invariants.\n---\nBody.\n"
+            )),
+        );
+        SkillFolder::from_entries(name, entries).unwrap()
+    }
+
+    #[test]
+    fn validate_rejects_folder_key_that_disagrees_with_manifest_name() {
+        let mut folders = BTreeMap::new();
+        folders.insert(
+            SkillName::new("declared-name").unwrap(),
+            folder("actual-name"),
+        );
+        let bank = SkillBank { folders };
+
+        assert!(matches!(
+            bank.validate().unwrap_err(),
+            SkillBankError::NameMismatch {
+                folder,
+                manifest_name
+            } if folder == "declared-name" && manifest_name == "actual-name"
+        ));
+    }
+}

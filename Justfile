@@ -35,7 +35,7 @@ milestone-p4:
     cargo run -p p4_meta_harness_lite
 
 milestone-p5:
-    cargo run -p p5_skill_paper_reproductions
+    LEAVEN_CODEX_LIVE=1 cargo run -p p5_evoskill_iteration -- --live-codex
 
 milestone-examples: milestone-p0 milestone-p1 milestone-p2 milestone-p3 milestone-p4 milestone-p5
 

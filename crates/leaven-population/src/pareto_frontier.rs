@@ -243,3 +243,20 @@ impl Default for ParetoFrontier {
         Self::by_case().build()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dominance_refuses_candidates_with_missing_score_records() {
+        let mut frontier = ParetoFrontier::default();
+        let left = CandidateId::new();
+        let right = CandidateId::new();
+
+        assert!(!frontier.dominates(left, right));
+
+        frontier.scores.insert(left, BTreeMap::new());
+        assert!(!frontier.dominates(left, right));
+    }
+}

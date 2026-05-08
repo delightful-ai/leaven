@@ -15,8 +15,11 @@ RUN_PACKAGES = [
     "p2_pairwise_tournament",
     "p3_gepa_parity",
     "p4_meta_harness_lite",
-    "p5_skill_paper_reproductions",
     "xtask",
+]
+
+LIVE_PACKAGES = [
+    "p5_evoskill_iteration",
 ]
 
 
@@ -37,7 +40,14 @@ def main() -> int:
 
     commands = [
         ["cargo", "llvm-cov", "clean", "--workspace"],
-        ["cargo", "llvm-cov", "--workspace", "--no-report", "--branch"],
+        [
+            "cargo",
+            "llvm-cov",
+            "--workspace",
+            "--no-report",
+            "--branch",
+            *exclude_args(),
+        ],
         *[
             ["cargo", "llvm-cov", "run", "--no-report", "-p", package]
             for package in RUN_PACKAGES
@@ -94,6 +104,13 @@ def main() -> int:
 def run(command: list[str]) -> subprocess.CompletedProcess[bytes]:
     print(f"running coverage gate: {' '.join(command)}", flush=True)
     return subprocess.run(command, check=False)
+
+
+def exclude_args() -> list[str]:
+    args: list[str] = []
+    for package in LIVE_PACKAGES:
+        args.extend(["--exclude", package])
+    return args
 
 
 def load_summary(path: Path) -> dict[str, Any]:

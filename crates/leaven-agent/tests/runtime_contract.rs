@@ -69,6 +69,36 @@ fn fake_runtime_executes_actions_and_validates_file_contract() {
 }
 
 #[test]
+fn fake_runtime_backfills_preexisting_output_files_from_contract() {
+    futures::executor::block_on(async {
+        let mut workspace = memory_workspace();
+        let mut view = workspace.view();
+        let output_path = WorkspacePath::new("output/preexisting.txt").unwrap();
+        view.write_file(&output_path, b"already there").unwrap();
+        let runtime = FakeAgentRuntime::new(Vec::new());
+
+        let metered = runtime
+            .run_session(
+                &mut view,
+                AgentRunRequest::new(
+                    AgentInstructions::task("use existing output"),
+                    OutputContract::Files {
+                        paths: vec![output_path.clone()],
+                    },
+                ),
+                AgentRunContext::new(AgentSessionId::new(), &BudgetSnapshot::default()),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(metered.value.output_files, vec![output_path]);
+
+        drop(view);
+        workspace.cleanup().await.unwrap();
+    });
+}
+
+#[test]
 fn fake_runtime_exposes_identity_capabilities_system_prompt_reads_and_status() {
     futures::executor::block_on(async {
         let mut workspace = memory_workspace();
@@ -221,6 +251,45 @@ fn fake_runtime_reports_output_contract_violations_with_sources() {
             drop(view);
             workspace.cleanup().await.unwrap();
         }
+    });
+}
+
+#[test]
+fn fake_runtime_rejects_invalid_json_output_files() {
+    futures::executor::block_on(async {
+        let mut workspace = memory_workspace();
+        let mut view = workspace.view();
+        let output_path = WorkspacePath::new("output/result.json").unwrap();
+        let runtime = FakeAgentRuntime::new(vec![FakeAgentAction::WriteFile {
+            path: output_path.clone(),
+            bytes: b"{not-json".to_vec(),
+        }]);
+
+        let error = runtime
+            .run_session(
+                &mut view,
+                AgentRunRequest::new(
+                    AgentInstructions::task("write invalid json"),
+                    OutputContract::JsonFile {
+                        path: output_path.clone(),
+                        schema: None,
+                    },
+                ),
+                AgentRunContext::new(AgentSessionId::new(), &BudgetSnapshot::default()),
+            )
+            .await
+            .unwrap_err();
+
+        match error {
+            AgentRuntimeError::WithSource { message, source } => {
+                assert!(message.contains(output_path.as_str()));
+                assert!(!source.to_string().is_empty());
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
+
+        drop(view);
+        workspace.cleanup().await.unwrap();
     });
 }
 

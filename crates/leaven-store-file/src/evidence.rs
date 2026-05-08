@@ -41,7 +41,7 @@ impl FileCheckpointStore {
     /// Returns [`StoreError`] if the root directory cannot be created.
     pub fn open(root: impl Into<PathBuf>) -> Result<Self, StoreError> {
         let root = root.into();
-        std::fs::create_dir_all(&root).map_err(|err| operation_failed("open", &root, err))?;
+        std::fs::create_dir_all(&root).map_err(|err| operation_failed("open", &root, &err))?;
         Ok(Self { root })
     }
 
@@ -62,7 +62,7 @@ impl FileCheckpointStore {
             return Ok(None);
         }
         let raw = std::fs::read_to_string(&latest)
-            .map_err(|err| operation_failed("latest", &latest, err))?;
+            .map_err(|err| operation_failed("latest", &latest, &err))?;
         let uuid = uuid::Uuid::parse_str(raw.trim())
             .map_err(|err| StoreError::Serialization(err.to_string()))?;
         Ok(Some(CheckpointId::from_uuid(uuid)))
@@ -73,10 +73,10 @@ impl CheckpointStore for FileCheckpointStore {
     fn put(&self, checkpoint: CheckpointBytes) -> Result<CheckpointId, StoreError> {
         let id = CheckpointId::new();
         let path = checkpoint_path(&self.root, id);
-        std::fs::write(&path, checkpoint.0).map_err(|err| operation_failed("put", &path, err))?;
+        std::fs::write(&path, checkpoint.0).map_err(|err| operation_failed("put", &path, &err))?;
         let latest = self.root.join("LATEST");
         std::fs::write(&latest, id.to_string())
-            .map_err(|err| operation_failed("latest", &latest, err))?;
+            .map_err(|err| operation_failed("latest", &latest, &err))?;
         Ok(id)
     }
 
@@ -100,7 +100,7 @@ impl<E> FileEvidenceStore<E> {
     /// Returns [`StoreError`] if the root directory cannot be created or read.
     pub fn open(name: impl Into<String>, root: impl Into<PathBuf>) -> Result<Self, StoreError> {
         let root = root.into();
-        std::fs::create_dir_all(&root).map_err(|err| operation_failed("open", &root, err))?;
+        std::fs::create_dir_all(&root).map_err(|err| operation_failed("open", &root, &err))?;
         let next_key = next_key(&root)?;
         Ok(Self {
             name: name.into(),
@@ -127,7 +127,7 @@ where
         let path = evidence_path(&self.root, &key)?;
         let bytes = serde_json::to_vec_pretty(&evidence)
             .map_err(|err| StoreError::Serialization(err.to_string()))?;
-        std::fs::write(&path, bytes).map_err(|err| operation_failed("put", &path, err))?;
+        std::fs::write(&path, bytes).map_err(|err| operation_failed("put", &path, &err))?;
         *guard += 1;
         Ok(EvidenceRef {
             store: self.name.clone(),
@@ -148,8 +148,8 @@ where
 
 fn next_key(root: &Path) -> Result<u64, StoreError> {
     let mut max_key = None;
-    for entry in std::fs::read_dir(root).map_err(|err| operation_failed("scan", root, err))? {
-        let entry = entry.map_err(|err| operation_failed("scan", root, err))?;
+    for entry in std::fs::read_dir(root).map_err(|err| operation_failed("scan", root, &err))? {
+        let entry = entry.map_err(|err| operation_failed("scan", root, &err))?;
         let path = entry.path();
         if path.extension().and_then(|ext| ext.to_str()) != Some("json") {
             continue;
@@ -181,7 +181,7 @@ fn checkpoint_path(root: &Path, id: CheckpointId) -> PathBuf {
     root.join(format!("{id}.checkpoint"))
 }
 
-fn operation_failed(operation: &'static str, path: &Path, err: std::io::Error) -> StoreError {
+fn operation_failed(operation: &'static str, path: &Path, err: &std::io::Error) -> StoreError {
     StoreError::OperationFailed {
         store: path.display().to_string(),
         operation,

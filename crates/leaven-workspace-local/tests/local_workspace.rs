@@ -110,6 +110,116 @@ fn local_workspace_runs_commands_inside_scoped_workspace_paths() {
     });
 }
 
+#[test]
+fn local_workspace_can_toggle_executable_permissions_off_again() {
+    futures::executor::block_on(async {
+        let parent = temp_parent("local-executable-toggle");
+        let factory = LocalWorkspaceFactory::new(&parent);
+        let mut workspace = factory.allocate(WorkspaceConfig::default()).await.unwrap();
+        let script = WorkspacePath::new("scripts/run.sh").unwrap();
+        let mut view = workspace.view();
+        view.write_file(&script, b"#!/bin/sh\nexit 0\n").unwrap();
+
+        view.set_executable(&script, true).unwrap();
+        assert!(view.is_executable(&script).unwrap());
+        view.set_executable(&script, false).unwrap();
+        assert!(!view.is_executable(&script).unwrap());
+
+        drop(view);
+        workspace.cleanup().await.unwrap();
+        remove_dir(&parent);
+    });
+}
+
+#[test]
+fn local_workspace_lists_recursive_files_from_root_and_subdir() {
+    futures::executor::block_on(async {
+        let parent = temp_parent("local-list-files");
+        let factory = LocalWorkspaceFactory::new(&parent);
+        let mut workspace = factory.allocate(WorkspaceConfig::default()).await.unwrap();
+        let mut view = workspace.view();
+        view.write_file(&WorkspacePath::new("alpha/root.txt").unwrap(), b"root")
+            .unwrap();
+        view.write_file(
+            &WorkspacePath::new("alpha/nested/leaf.txt").unwrap(),
+            b"leaf",
+        )
+        .unwrap();
+        view.write_file(&WorkspacePath::new("beta.txt").unwrap(), b"beta")
+            .unwrap();
+
+        assert_eq!(
+            view.list_files(&WorkspacePath::root()).unwrap(),
+            vec![
+                WorkspacePath::new("alpha/nested/leaf.txt").unwrap(),
+                WorkspacePath::new("alpha/root.txt").unwrap(),
+                WorkspacePath::new("beta.txt").unwrap(),
+            ]
+        );
+        assert_eq!(
+            view.list_files(&WorkspacePath::new("alpha").unwrap())
+                .unwrap(),
+            vec![
+                WorkspacePath::new("alpha/nested/leaf.txt").unwrap(),
+                WorkspacePath::new("alpha/root.txt").unwrap(),
+            ]
+        );
+
+        drop(view);
+        workspace.cleanup().await.unwrap();
+        remove_dir(&parent);
+    });
+}
+
+#[test]
+fn local_workspace_write_fails_when_parent_path_is_file() {
+    futures::executor::block_on(async {
+        let parent = temp_parent("local-file-parent");
+        let factory = LocalWorkspaceFactory::new(&parent);
+        let mut workspace = factory.allocate(WorkspaceConfig::default()).await.unwrap();
+        let mut view = workspace.view();
+        view.write_file(&WorkspacePath::new("blocked").unwrap(), b"file")
+            .unwrap();
+
+        let error = view
+            .write_file(&WorkspacePath::new("blocked/child.txt").unwrap(), b"child")
+            .unwrap_err();
+
+        assert!(matches!(error, leaven_workspace::WorkspaceError::Io(_)));
+        drop(view);
+        workspace.cleanup().await.unwrap();
+        remove_dir(&parent);
+    });
+}
+
+#[cfg(unix)]
+#[test]
+fn local_workspace_write_reports_directory_creation_failure() {
+    use std::os::unix::fs::PermissionsExt;
+
+    futures::executor::block_on(async {
+        let parent = temp_parent("local-readonly-parent");
+        let factory = LocalWorkspaceFactory::new(&parent);
+        let mut workspace = factory.allocate(WorkspaceConfig::default()).await.unwrap();
+        let mount = workspace.local_mount().unwrap().to_path_buf();
+        let mut permissions = std::fs::metadata(&mount).unwrap().permissions();
+        permissions.set_mode(0o500);
+        std::fs::set_permissions(&mount, permissions).unwrap();
+
+        let error = workspace
+            .view()
+            .write_file(&WorkspacePath::new("blocked/child.txt").unwrap(), b"child")
+            .unwrap_err();
+
+        assert!(matches!(error, leaven_workspace::WorkspaceError::Io(_)));
+        let mut permissions = std::fs::metadata(&mount).unwrap().permissions();
+        permissions.set_mode(0o700);
+        std::fs::set_permissions(&mount, permissions).unwrap();
+        workspace.cleanup().await.unwrap();
+        remove_dir(&parent);
+    });
+}
+
 fn temp_parent(label: &str) -> std::path::PathBuf {
     let root = std::env::temp_dir().join(format!("leaven-{label}-{}", RunId::new()));
     remove_dir(&root);

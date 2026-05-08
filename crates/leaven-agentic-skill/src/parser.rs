@@ -56,9 +56,9 @@ where
         let change = SkillBankDiff::diff(parent, &child).ok_or_else(|| {
             AgenticParseError::Message("skill workspace had no changes".to_owned())
         })?;
-        parent.apply_skill_change(&change).map_err(|err| {
-            AgenticParseError::with_source("parsed skill proposal did not apply", err)
-        })?;
+        let _verified_child = parent
+            .apply_skill_change(&change)
+            .expect("skill-bank diff applies to the parent it was computed from");
         let proposal = Proposal::mutate(input.parent, change).build();
         Ok(Metered::new(
             ProposalBatch {
