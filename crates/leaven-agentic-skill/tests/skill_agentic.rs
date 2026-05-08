@@ -500,7 +500,7 @@ fn skill_bank_change_report_marks_total_folder_rewrites() {
     )
     .unwrap();
 
-    assert_eq!(report.skills_rewritten, [alpha.clone()]);
+    assert_eq!(report.skills_rewritten, std::slice::from_ref(&alpha));
     assert_eq!(report.descriptions_changed[0].skill, alpha);
     assert!(report.files_changed.iter().any(|file| {
         file.path.as_str() == "scripts/run.sh" && file.kind == SkillFileChangeKind::Removed

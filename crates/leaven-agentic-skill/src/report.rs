@@ -67,20 +67,17 @@ fn record_and_apply(
     change: &SkillBankChange,
     report: &mut SkillBankChangeReport,
 ) -> Result<(), SkillBankError> {
-    match change {
-        SkillBankChange::Atomic(changes) => {
-            for change in changes {
-                record_and_apply(current, change, report)?;
-            }
-            Ok(())
+    if let SkillBankChange::Atomic(changes) = change {
+        for change in changes {
+            record_and_apply(current, change, report)?;
         }
-        _ => {
-            let next = current.apply_skill_change(change)?;
-            record_transition(current, &next, change, report);
-            *current = next;
-            Ok(())
-        }
+        return Ok(());
     }
+
+    let next = current.apply_skill_change(change)?;
+    record_transition(current, &next, change, report);
+    *current = next;
+    Ok(())
 }
 
 fn record_transition(
