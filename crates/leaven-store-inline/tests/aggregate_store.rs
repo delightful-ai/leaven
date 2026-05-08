@@ -58,3 +58,28 @@ fn missing_blob_and_checkpoint_are_typed_store_errors() {
         }
     ));
 }
+
+#[test]
+fn default_store_uses_inline_namespace_and_rejects_wrong_blob_namespace() {
+    let store = InlineStore::default();
+
+    let reference = BlobStore::put(
+        &store,
+        BlobWrite {
+            bytes: Bytes::from_static(b"blob"),
+            content_type: None,
+        },
+    )
+    .unwrap();
+    assert_eq!(reference.store, "inline");
+
+    let wrong_namespace = BlobStore::get(
+        &store,
+        &BlobRef {
+            store: "other".to_owned(),
+            key: reference.key,
+        },
+    )
+    .unwrap_err();
+    assert!(matches!(wrong_namespace, StoreError::BlobNotFound(_)));
+}
