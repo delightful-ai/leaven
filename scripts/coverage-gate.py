@@ -15,6 +15,7 @@ RUN_PACKAGES = [
     "p2_pairwise_tournament",
     "p3_gepa_parity",
     "p4_meta_harness_lite",
+    "p6_optimizer_policy_self_opt",
     "xtask",
 ]
 

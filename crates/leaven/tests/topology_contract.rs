@@ -57,6 +57,7 @@ const EXPECTED_WORKSPACE_MEMBERS: &[&str] = &[
     "examples/p3_gepa_parity",
     "examples/p4_meta_harness_lite",
     "examples/p5_evoskill_iteration",
+    "examples/p6_optimizer_policy_self_opt",
     "xtask",
 ];
 
@@ -118,6 +119,7 @@ const EXPECTED_BINARIES: &[&str] = &[
     "examples/p3_gepa_parity",
     "examples/p4_meta_harness_lite",
     "examples/p5_evoskill_iteration",
+    "examples/p6_optimizer_policy_self_opt",
     "xtask",
 ];
 
