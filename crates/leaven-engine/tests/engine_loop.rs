@@ -9,12 +9,12 @@ use bytes::Bytes;
 use futures::executor::block_on;
 use leaven_core::{CacheIdentity, CaseSetVersion, PartitionId, Proposal};
 use leaven_engine::{
-    CachePolicy, Callback, CaseSet, CheckpointContext, CheckpointError, CheckpointableOptimizer,
-    Engine, EvaluationCache, EvaluationCacheKey, EvaluationCacheSnapshot, GraphSnapshotRef,
-    Optimizer, OptimizerError, OptimizerStateSnapshot, OptimizerStateWrite, PrivateStatePolicy,
-    RestoreContext, RunCheckpoint, RunCheckpointRequest, RunContext, RunEvent, RunGraph,
-    RunGraphSnapshot, RunGraphView, RunPersistence, RunPersistenceError, StateFormat, StepStatus,
-    StoreRunPersistence, TrustPolicy, optimize,
+    CacheIndexSnapshot, CachePolicy, Callback, CaseSet, CheckpointContext, CheckpointError,
+    CheckpointableOptimizer, Engine, EvaluationCache, EvaluationCacheKey, EvaluationCacheSnapshot,
+    GraphSnapshotRef, Optimizer, OptimizerError, OptimizerStateSnapshot, OptimizerStateWrite,
+    PrivateStatePolicy, RestoreContext, RunCheckpoint, RunCheckpointRequest, RunContext, RunEvent,
+    RunGraph, RunGraphSnapshot, RunGraphView, RunPersistence, RunPersistenceError, StateFormat,
+    StepStatus, StoreRunPersistence, TrustPolicy, optimize,
 };
 use leaven_kernel::{
     AssessmentId, BlobRef, Budget, CandidateId, CaseId, ContentId, ErrorKind, Fingerprint, RunId,
@@ -276,6 +276,68 @@ fn store_run_persistence_reports_missing_and_corrupt_referenced_blobs() {
 }
 
 #[test]
+fn store_run_persistence_reports_missing_and_corrupt_cache_indexes() {
+    let store = RecordingStore::new("recording");
+    let persistence = StoreRunPersistence::new(store);
+    let (graph, budget) = graph_and_budget();
+    persistence
+        .checkpoint(RunCheckpointRequest::new(&graph, &budget, None))
+        .unwrap();
+    let mut checkpoint: RunCheckpoint =
+        serde_json::from_slice(&persistence.store().latest_checkpoint().unwrap().0).unwrap();
+    checkpoint.cache_index = Some(CacheIndexSnapshot {
+        schema: Fingerprint::from_bytes([12; 32]),
+        format: StateFormat::Json,
+        bytes: BlobRef {
+            store: "recording".to_owned(),
+            key: "missing-cache".to_owned(),
+        },
+    });
+    CheckpointStore::put(
+        persistence.store(),
+        CheckpointBytes(Bytes::from(serde_json::to_vec(&checkpoint).unwrap())),
+    )
+    .unwrap();
+
+    let missing = latest_checkpoint_err(&persistence);
+    assert!(matches!(
+        missing,
+        RunPersistenceError::Store {
+            operation: "read evaluation cache blob",
+            ..
+        }
+    ));
+
+    let corrupt_cache = BlobStore::put(
+        persistence.store(),
+        BlobWrite {
+            bytes: Bytes::from_static(b"{not cache json"),
+            content_type: Some("application/json".to_owned()),
+        },
+    )
+    .unwrap();
+    checkpoint.cache_index = Some(CacheIndexSnapshot {
+        schema: Fingerprint::from_bytes([12; 32]),
+        format: StateFormat::Json,
+        bytes: corrupt_cache,
+    });
+    CheckpointStore::put(
+        persistence.store(),
+        CheckpointBytes(Bytes::from(serde_json::to_vec(&checkpoint).unwrap())),
+    )
+    .unwrap();
+
+    let corrupt = latest_checkpoint_err(&persistence);
+    assert!(matches!(
+        corrupt,
+        RunPersistenceError::Serialization {
+            state: "evaluation cache index",
+            ..
+        }
+    ));
+}
+
+#[test]
 fn store_run_persistence_validates_optimizer_state_identity_and_format() {
     let store = RecordingStore::new("recording");
     let persistence = StoreRunPersistence::new(store.clone());
@@ -414,6 +476,45 @@ fn store_run_persistence_reports_corrupt_optimizer_state_payload() {
         corrupt_payload,
         RunPersistenceError::Serialization {
             state: "optimizer state",
+            ..
+        }
+    ));
+}
+
+#[test]
+fn store_run_persistence_reports_missing_optimizer_state_payload() {
+    let store = RecordingStore::new("recording");
+    let persistence = StoreRunPersistence::new(store);
+    let (graph, budget) = graph_and_budget();
+    persistence
+        .checkpoint(RunCheckpointRequest::new(&graph, &budget, None))
+        .unwrap();
+    let mut restored = persistence
+        .latest_checkpoint::<TestProblem>()
+        .unwrap()
+        .unwrap()
+        .checkpoint;
+    restored.optimizer_state = Some(OptimizerStateSnapshot {
+        optimizer: Fingerprint::from_bytes([5; 32]),
+        schema: Fingerprint::from_bytes([6; 32]),
+        format: StateFormat::Json,
+        bytes: BlobRef {
+            store: "recording".to_owned(),
+            key: "missing-optimizer".to_owned(),
+        },
+    });
+
+    let missing = persistence
+        .load_optimizer_state::<StatefulOptimizerState>(
+            &restored,
+            Fingerprint::from_bytes([5; 32]),
+            Fingerprint::from_bytes([6; 32]),
+        )
+        .unwrap_err();
+    assert!(matches!(
+        missing,
+        RunPersistenceError::Store {
+            operation: "read optimizer state blob",
             ..
         }
     ));

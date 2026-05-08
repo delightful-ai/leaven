@@ -16,9 +16,10 @@ use leaven_agentic::{
     AgentCasePresentationInput, AgentCasePresenter, AgentCaseRetryRecord, AgentCaseRunError,
     AgentCaseRunPolicy, AgentCaseRunRecord, AgentCaseScoreInput, AgentCaseScorer,
     AgentRunPreflight, AgentWorkload, AgenticAdapterError, AgenticInspectionWarning,
-    AgenticRunInspection, CASE_RUN_RECORD_METADATA_KEY, CaseCheckpointPolicy, CasePartitionId,
-    CasePartitions, CaseSuite, CaseTarget, FailOnError, FailedAgentCaseRun, FiniteRatio,
-    PreflightSeverity, PresenterDryRun, ScoredAgentCaseRun, ScorerDryRun, ToolApprovalPolicy,
+    AgenticRunInspection, CASE_RUN_RECORD_METADATA_KEY, CaseCheckpointPolicy, CaseFiles, CaseInput,
+    CaseMessage, CasePartitionId, CasePartitions, CaseSuite, CaseTarget, FailOnError,
+    FailedAgentCaseRun, FiniteRatio, PreflightSeverity, PresenterDryRun, ScoredAgentCaseRun,
+    ScorerDryRun, SetupScript, ToolApprovalPolicy, WorkspaceRequirement,
 };
 use leaven_core::{
     Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, AssessmentTarget, CacheIdentity,
@@ -78,6 +79,41 @@ fn case_suite_rejects_duplicate_ids_and_missing_partition_targets() {
 
     let missing = CaseSuite::new(cases, partitions).unwrap_err();
     assert!(missing.to_string().contains("references missing case"));
+}
+
+#[test]
+fn agent_case_vocabulary_preserves_files_messages_setup_and_workspace_requirements() {
+    let mut files = CaseFiles::default();
+    files.insert(
+        WorkspacePath::new("input/problem.txt").unwrap(),
+        b"problem".to_vec(),
+    );
+    assert_eq!(
+        files.files()[&WorkspacePath::new("input/problem.txt").unwrap()],
+        b"problem".to_vec()
+    );
+
+    let case = AgentCase {
+        id: CaseId::new(22),
+        input: CaseInput::Messages(vec![CaseMessage {
+            role: "user".to_owned(),
+            content: "Convert the fraction.".to_owned(),
+        }]),
+        target: CaseTarget::Structured(serde_json::json!({ "answer": "1/16" })),
+        metadata: leaven_kernel::MetadataBag::new(),
+        files,
+        setup: Some(SetupScript {
+            command: vec!["python".to_owned(), "setup.py".to_owned()],
+        }),
+        workspace: Some(WorkspaceRequirement::RequiresCommands),
+    };
+    let suite = CaseSuite::from_cases([case]).unwrap();
+    let workload = AgentWorkload::new(suite);
+    assert_eq!(workload.cases().cases().len(), 1);
+    assert!(CaseTarget::Hidden(ContentId::from_bytes([7; 32])).is_hidden());
+
+    let empty_partition = CasePartitionId::new("").unwrap_err();
+    assert!(empty_partition.to_string().contains("cannot be empty"));
 }
 
 #[test]
@@ -719,6 +755,27 @@ fn agentic_run_inspection_reports_best_lineage_costs_and_malformed_case_metadata
 }
 
 #[test]
+fn agentic_run_inspection_warns_when_best_candidate_is_not_in_graph() {
+    let mut graph = RunGraph::<CaseProblem>::new(RunId::new());
+    let mut budget = BudgetLedger::default();
+    let mut ctx = RunContext::<CaseProblem>::new(&mut graph, &mut budget);
+    let missing = leaven_kernel::CandidateId::new();
+    ctx.emit(RunEvent::OptimizationEnded {
+        run_id: ctx.graph().run_id(),
+        best: Some(missing),
+        budget: ctx.budget(),
+    });
+
+    let inspection = AgenticRunInspection::from_graph(&ctx.graph());
+    assert_eq!(inspection.best_candidate, Some(missing));
+    assert!(inspection.best_lineage.is_empty());
+    assert!(inspection.warnings.iter().any(|warning| matches!(
+        warning,
+        AgenticInspectionWarning::BestCandidateMissing { candidate } if *candidate == missing
+    )));
+}
+
+#[test]
 fn agent_case_evaluator_retries_case_errors_and_records_attempt_history() {
     futures::executor::block_on(async {
         let case = AgentCase::text(
@@ -917,6 +974,16 @@ fn agent_case_evaluator_records_allocate_presentation_runtime_and_cleanup_failur
         .await
         .unwrap_err();
         assert_case_run_error(cleanup, "cleanup");
+
+        let stage_and_cleanup = evaluate_with_case_evaluator(
+            CleanupFailureFactory,
+            FakeAgentRuntime::new(Vec::new()),
+            FailingPresenter,
+            TestScorer,
+        )
+        .await
+        .unwrap_err();
+        assert_case_run_error(stage_and_cleanup, "cleanup");
     });
 }
 
