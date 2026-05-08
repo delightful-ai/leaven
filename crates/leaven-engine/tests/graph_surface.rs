@@ -1,7 +1,9 @@
 mod support;
 
 use leaven_core::{CausalInputs, InfoRef, Proposal, ProposalEffect, ProposalProvenance, Window};
-use leaven_engine::{ApplyOutcome, CandidateOrigin, RunContext, RunEvent};
+use leaven_engine::{
+    ApplyOutcome, CandidateOrigin, RunContext, RunEvent, RunGraph, RunGraphRestoreError,
+};
 use leaven_kernel::{Cost, ErrorKind, MetadataBag, MetadataKey, MetadataValue, StageId};
 use proptest::prelude::*;
 
@@ -43,7 +45,7 @@ fn change_proposal_creates_causal_edge() {
     let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
     let seed = ctx.insert_seed(TextArtifact("a".to_owned()), 0).unwrap();
 
-    let proposal = Proposal::mutate(seed, TextChange::Append("b")).build();
+    let proposal = Proposal::mutate(seed, TextChange::Append("b".to_owned())).build();
     let batch = record_one(&mut ctx, proposal);
     let report = ctx.apply_batch(batch).unwrap();
     let child = report.successful_candidates().next().unwrap();
@@ -61,6 +63,61 @@ fn change_proposal_creates_causal_edge() {
     assert_eq!(tree.roots(), [seed]);
     assert_eq!(tree.parents(child), [seed]);
     assert_eq!(tree.children(seed), [child]);
+}
+
+#[test]
+fn graph_snapshot_round_trips_and_rebuilds_lineage_indices() {
+    let (mut graph, mut budget) = graph_and_budget();
+    let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+    let seed = ctx.insert_seed(TextArtifact("a".to_owned()), 0).unwrap();
+    let proposal = Proposal::mutate(seed, TextChange::Append("b".to_owned())).build();
+    let batch = record_one(&mut ctx, proposal);
+    let report = ctx.apply_batch(batch).unwrap();
+    let child = report.successful_candidates().next().unwrap();
+    drop(ctx);
+
+    let encoded = serde_json::to_vec(&graph.snapshot()).unwrap();
+    let decoded = serde_json::from_slice(&encoded).unwrap();
+    let mut restored = RunGraph::<TestProblem>::from_snapshot(decoded).unwrap();
+    let mut restored_budget = leaven_engine::BudgetLedger::new(leaven_kernel::Budget::unlimited());
+    let restored_ctx = RunContext::<TestProblem>::new(&mut restored, &mut restored_budget);
+    let view = restored_ctx.graph();
+
+    assert_eq!(view.parents(child), [seed]);
+    assert_eq!(view.children(seed), [child]);
+    assert_eq!(view.proposal_that_created(child).unwrap().batch_id(), batch);
+}
+
+#[test]
+fn graph_snapshot_restore_rejects_dangling_references() {
+    let (mut graph, mut budget) = graph_and_budget();
+    let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+    let seed = ctx.insert_seed(TextArtifact("a".to_owned()), 0).unwrap();
+    let proposal = Proposal::mutate(seed, TextChange::Append("b".to_owned())).build();
+    let batch = record_one(&mut ctx, proposal);
+    let report = ctx.apply_batch(batch).unwrap();
+    report.successful_candidates().next().unwrap();
+    drop(ctx);
+
+    let snapshot = graph.snapshot();
+    let proposal_id = snapshot.proposals[0].id;
+    let attempt_id = snapshot.apply_attempts[0].id;
+
+    let mut missing_proposal = snapshot.clone();
+    missing_proposal.proposals.clear();
+    assert!(matches!(
+        RunGraph::<TestProblem>::from_snapshot(missing_proposal),
+        Err(RunGraphRestoreError::MissingProposalInBatch { proposal, .. })
+            if proposal == proposal_id
+    ));
+
+    let mut missing_attempt = snapshot;
+    missing_attempt.apply_attempts.clear();
+    assert!(matches!(
+        RunGraph::<TestProblem>::from_snapshot(missing_attempt),
+        Err(RunGraphRestoreError::MissingApplyAttemptForCandidate { attempt, .. })
+            if attempt == attempt_id
+    ));
 }
 
 #[test]
@@ -134,7 +191,7 @@ fn invalid_change_provenance_records_failed_apply() {
     let proposal = Proposal {
         effect: ProposalEffect::Change {
             target: seed,
-            change: TextChange::Append("b"),
+            change: TextChange::Append("b".to_owned()),
         },
         provenance: ProposalProvenance::new(CausalInputs::None),
         annotations: (),
@@ -170,7 +227,7 @@ fn invalid_change_provenance_records_failed_apply() {
 
     let successful_batch = record_one(
         &mut ctx,
-        Proposal::mutate(seed, TextChange::Append("c")).build(),
+        Proposal::mutate(seed, TextChange::Append("c".to_owned())).build(),
     );
     let successful_report = ctx.apply_batch(successful_batch).unwrap();
     assert_eq!(successful_report.successful_candidates().count(), 1);
@@ -251,7 +308,7 @@ fn informed_by_does_not_affect_lineage() {
         .insert_seed(TextArtifact("target".to_owned()), 1)
         .unwrap();
 
-    let proposal = Proposal::mutate(target, TextChange::Append("!"))
+    let proposal = Proposal::mutate(target, TextChange::Append("!".to_owned()))
         .informed_by([InfoRef::Candidate(source)])
         .build();
     let batch = record_one(&mut ctx, proposal);
@@ -273,7 +330,7 @@ fn merge_proposal_records_pair_lineage_but_applies_to_one_target() {
         .insert_seed(TextArtifact("right".to_owned()), 1)
         .unwrap();
 
-    let proposal = Proposal::merge(left, right, TextChange::Append("+merged")).build();
+    let proposal = Proposal::merge(left, right, TextChange::Append("+merged".to_owned())).build();
     let batch = record_one(&mut ctx, proposal);
     let report = ctx.apply_batch(batch).unwrap();
     let child = report.successful_candidates().next().unwrap();
@@ -294,11 +351,11 @@ fn lineage_ancestors_deduplicate_diamonds_without_dropping_parents() {
 
     let left_batch = record_one(
         &mut ctx,
-        Proposal::mutate(seed, TextChange::Append("+left")).build(),
+        Proposal::mutate(seed, TextChange::Append("+left".to_owned())).build(),
     );
     let right_batch = record_one(
         &mut ctx,
-        Proposal::mutate(seed, TextChange::Append("+right")).build(),
+        Proposal::mutate(seed, TextChange::Append("+right".to_owned())).build(),
     );
     let left = ctx
         .apply_batch(left_batch)
@@ -314,7 +371,7 @@ fn lineage_ancestors_deduplicate_diamonds_without_dropping_parents() {
         .unwrap();
     let merge_batch = record_one(
         &mut ctx,
-        Proposal::merge(left, right, TextChange::Append("+merged")).build(),
+        Proposal::merge(left, right, TextChange::Append("+merged".to_owned())).build(),
     );
     let merged = ctx
         .apply_batch(merge_batch)
@@ -336,11 +393,11 @@ fn siblings_are_candidates_that_share_causal_parents() {
 
     let first_batch = record_one(
         &mut ctx,
-        Proposal::mutate(seed, TextChange::Append("+a")).build(),
+        Proposal::mutate(seed, TextChange::Append("+a".to_owned())).build(),
     );
     let second_batch = record_one(
         &mut ctx,
-        Proposal::mutate(seed, TextChange::Append("+b")).build(),
+        Proposal::mutate(seed, TextChange::Append("+b".to_owned())).build(),
     );
     let first = ctx
         .apply_batch(first_batch)
@@ -430,7 +487,7 @@ fn apply_batch_reports_partial_failure_without_aborting() {
             leaven_kernel::StageId::custom("test"),
             leaven_core::ProposalBatch {
                 proposals: vec![
-                    Proposal::mutate(seed, TextChange::Append("+ok")).build(),
+                    Proposal::mutate(seed, TextChange::Append("+ok".to_owned())).build(),
                     Proposal::mutate(seed, TextChange::Fail).build(),
                 ],
                 semantics: leaven_core::ProposalBatchSemantics::Alternatives,
@@ -470,7 +527,8 @@ proptest! {
             let proposal = if create {
                 Proposal::create(TextArtifact("fresh".to_owned())).build()
             } else {
-                Proposal::mutate(*known.last().unwrap(), TextChange::Append("x")).build()
+                Proposal::mutate(*known.last().unwrap(), TextChange::Append("x".to_owned()))
+                    .build()
             };
             let batch = record_one(&mut ctx, proposal);
             let report = ctx.apply_batch(batch).unwrap();

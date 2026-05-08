@@ -33,7 +33,7 @@ pub use graph::storage::ApplyProposalError;
 pub use graph::{
     AssessmentQuery, AssessmentView, CandidateOrigin, CandidateTree, CandidateView,
     EvaluationRequestView, FailureRef, Lineage, ProposalBatchView, ProposalView, RunGraph,
-    RunGraphView,
+    RunGraphRestoreError, RunGraphSnapshot, RunGraphView,
 };
 pub use persistence::{
     CacheIndexSnapshot, GraphSnapshotRef, RunCheckpoint, RunCheckpointRequest, RunPersistence,
@@ -66,7 +66,7 @@ pub mod prelude {
         MaterializationReport, MaterializeContext, MaterializeError, Materializer, Optimizer,
         OptimizerStateSnapshot, Population, PreferenceRelation, PrivateStatePolicy,
         ProposalContext, Proposer, ReadScope, RenderContext, Renderer, RestoreContext,
-        RunCheckpoint, RunContext, RunEvent, RunGraphView, RunResult, StateFormat, StepStatus,
-        Stopper, TrustPolicy, optimize,
+        RunCheckpoint, RunContext, RunEvent, RunGraphRestoreError, RunGraphSnapshot, RunGraphView,
+        RunResult, StateFormat, StepStatus, Stopper, TrustPolicy, optimize,
     };
 }

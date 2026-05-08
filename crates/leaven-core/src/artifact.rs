@@ -125,7 +125,7 @@ pub trait Artifact: Clone + Send + Sync + 'static {
 ///   lives in an external system that already has stable identity, but
 ///   the framework cannot use it as a cache key without an explicit
 ///   user-supplied cache key alongside.
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum ArtifactIdentity {
     /// 32-byte content hash. Cache-friendly.
     Content(ContentId),

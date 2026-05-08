@@ -46,7 +46,7 @@ use crate::OptimizationProblem;
 /// Cache keys use [`ResolvedEvaluationSetId`], not the unresolved
 /// expression. Two identical `Recent { window }` requests issued at
 /// different iterations resolve to different IDs and do not pool.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub enum EvaluationSet {
     /// No dataset scope (single-task or evaluator-internal).
     Unscoped,
@@ -98,7 +98,9 @@ pub enum EvaluationSet {
 /// strings so a run can carve its case set however it needs (e.g.
 /// `SEARCH`, `HOLDOUT`, `PROBE`). Trust policies and frontier filters
 /// often key on partition identity.
-#[derive(Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
+#[derive(
+    Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd, serde::Serialize, serde::Deserialize,
+)]
 pub struct PartitionId(pub smol_str::SmolStr);
 
 impl PartitionId {
@@ -120,7 +122,7 @@ impl From<&'static str> for PartitionId {
 /// Tags label cases for ad-hoc filtering and stratification — language,
 /// difficulty class, source corpus, anything user-meaningful. Many
 /// cases may share a tag and one case may carry multiple tags.
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct Tag(pub smol_str::SmolStr);
 
 /// Recency window for [`EvaluationSet::Recent`].
@@ -128,7 +130,7 @@ pub struct Tag(pub smol_str::SmolStr);
 /// Currently a count-based bound. Future variants (time-based, version-
 /// based) can extend the type without breaking call sites that only
 /// care about the count.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Window {
     /// Maximum number of recent cases to include.
     pub limit: usize,
@@ -140,7 +142,7 @@ pub struct Window {
 /// resolved against the current case-set version. Evaluators always
 /// see resolved sets, never expressions — caching, comparison, and
 /// reproduction all key on the resolved id.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct ResolvedEvaluationSet {
     /// Stable id for this resolution.
     pub id: ResolvedEvaluationSetId,
@@ -180,7 +182,7 @@ pub struct CaseSetVersion(pub String);
 /// Independent over `[A, B]` is *not* the same as Pairwise over
 /// `(A, B)`. Choosing the wrong shape produces evidence the optimizer
 /// can't use; the framework will not silently coerce one into another.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub enum EvaluationRequest {
     /// Score each candidate independently.
     Independent {
@@ -228,7 +230,7 @@ pub enum EvaluationRequest {
 /// granularity and purpose the requester specified. Evaluators do not
 /// see the original (possibly dynamic) expression; the run graph
 /// records both for retrospective analysis.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct ResolvedEvaluationRequest {
     /// Shape of the request after resolution.
     pub kind: ResolvedRequestKind,
@@ -243,7 +245,7 @@ pub struct ResolvedEvaluationRequest {
 /// Resolved counterpart of [`EvaluationRequest`]. The variants mirror
 /// the unresolved shapes, minus the [`EvaluationSet`] (which has been
 /// resolved into [`ResolvedEvaluationRequest::set`]).
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub enum ResolvedRequestKind {
     /// Independent scoring of each candidate.
     Independent {
@@ -275,7 +277,7 @@ pub enum ResolvedRequestKind {
 /// evaluator that cannot satisfy the requested granularity should
 /// surface that as an explicit error rather than silently substituting
 /// a different shape.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum AssessmentGranularity {
     /// One assessment per candidate over the whole resolved set.
     Aggregate,
@@ -292,7 +294,7 @@ pub enum AssessmentGranularity {
 /// reconstructing intent from event order. Trust policies and
 /// frontier filters often key on purpose (e.g. "frontier ignores
 /// `Probe`-purpose assessments").
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum EvaluationPurpose {
     /// Initial scoring of seed candidates.
     SeedBaseline,
@@ -321,7 +323,7 @@ pub enum EvaluationPurpose {
 /// on order (LLM judges often have positional bias). `Unordered`
 /// means the evaluator declares its judgment is symmetric, which lets
 /// the cache pool both orderings.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum PairOrder {
     /// Order matters; the evaluator may be asymmetric.
     Ordered,
@@ -334,7 +336,7 @@ pub enum PairOrder {
 /// `Unscoped` is the single-task case (no dataset). `EvaluationSet`
 /// targets the whole resolved set. `Case` targets one case within a
 /// set — used for per-case evidence in `PerCase` granularity.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub enum AssessmentTarget {
     /// No dataset scope.
     Unscoped,

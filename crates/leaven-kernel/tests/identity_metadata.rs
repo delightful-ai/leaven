@@ -111,6 +111,27 @@ fn stage_ids_keep_stage_kind_in_display() {
     assert_eq!(format!("{custom}"), "custom:coverage-audit");
 }
 
+#[test]
+fn stage_ids_are_json_map_keys() {
+    use std::collections::BTreeMap;
+
+    let mut stages = BTreeMap::new();
+    stages.insert(StageId::from_proposer(ProposerId::from("p")), 1_u64);
+    stages.insert(StageId::custom("coverage-audit"), 2_u64);
+
+    let encoded = serde_json::to_string(&stages).unwrap();
+    assert!(encoded.contains("\"proposer:p\""));
+    assert!(encoded.contains("\"custom:coverage-audit\""));
+
+    let decoded: BTreeMap<StageId, u64> = serde_json::from_str(&encoded).unwrap();
+
+    assert_eq!(
+        decoded.get(&StageId::from_proposer(ProposerId::from("p"))),
+        Some(&1)
+    );
+    assert_eq!(decoded.get(&StageId::custom("coverage-audit")), Some(&2));
+}
+
 #[derive(Debug)]
 struct ChainError {
     layer: usize,

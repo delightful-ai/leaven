@@ -8,12 +8,12 @@ use leaven_engine::{BudgetLedger, RunContext, RunGraph};
 use leaven_kernel::{Budget, ContentId, Cost, MetadataBag, ProposalBatchId, RunId, StageId};
 use thiserror::Error;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct TextArtifact(pub String);
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub enum TextChange {
-    Append(&'static str),
+    Append(String),
     Fail,
 }
 

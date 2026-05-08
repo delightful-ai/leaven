@@ -8,12 +8,12 @@ use leaven_kernel::{
 
 use crate::PopulationEvent;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct CausalInputsSummary {
     pub inputs: CausalInputs,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum StopReason {
     OptimizerDone,
     BudgetExceeded,
@@ -22,19 +22,19 @@ pub enum StopReason {
     Error,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum ErrorPolicy {
     Continued,
     Retried,
     StoppedRun,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct EvaluationRequestSummary {
     pub candidate_count: usize,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub enum RunEvent {
     OptimizationStarted {
         run_id: RunId,

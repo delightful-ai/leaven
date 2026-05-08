@@ -429,7 +429,7 @@ impl EvaluatorId {
 /// `Custom` exists for stages that don't fit the four named categories
 /// (e.g. an optimizer's bookkeeping pass that wants to spend cost without
 /// being a proposer/evaluator/renderer/stopper).
-#[derive(Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub enum StageId {
     /// A proposer stage (produces proposals).
     Proposer(ProposerId),
@@ -478,6 +478,44 @@ impl fmt::Display for StageId {
             Self::Stopper(id) => write!(f, "stopper:{id}"),
             Self::Custom(name) => write!(f, "custom:{name}"),
         }
+    }
+}
+
+impl Serialize for StageId {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for StageId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let raw = String::deserialize(deserializer)?;
+        Self::parse_wire(&raw).map_err(serde::de::Error::custom)
+    }
+}
+
+impl StageId {
+    fn parse_wire(raw: &str) -> Result<Self, String> {
+        let (kind, name) = raw
+            .split_once(':')
+            .ok_or_else(|| format!("stage id `{raw}` is missing a kind prefix"))?;
+        if name.is_empty() {
+            return Err(format!("stage id `{raw}` has an empty stage name"));
+        }
+        Ok(match kind {
+            "proposer" => Self::Proposer(ProposerId::from(name.to_owned())),
+            "evaluator" => Self::Evaluator(EvaluatorId::from(name.to_owned())),
+            "renderer" => Self::Renderer(RendererId::from(name.to_owned())),
+            "stopper" => Self::Stopper(StopperId::from(name.to_owned())),
+            "custom" => Self::Custom(Cow::Owned(name.to_owned())),
+            _ => return Err(format!("stage id `{raw}` has unknown kind `{kind}`")),
+        })
     }
 }
 

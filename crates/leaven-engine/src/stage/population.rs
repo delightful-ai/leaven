@@ -41,7 +41,7 @@ pub struct PopulationView<'a> {
     _private: std::marker::PhantomData<&'a ()>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub enum PopulationEvent {
     Inserted {
         population: PopulationId,

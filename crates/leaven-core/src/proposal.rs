@@ -244,6 +244,11 @@ impl<P: OptimizationProblem> ProposalBuilder<P> {
 ///   merge-style proposals take this shape: pick a canonical apply
 ///   target and embed any cross-parent content into the change itself.
 ///   `Artifact::apply_change` only ever sees one artifact, by design.
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(bound(
+    serialize = "P::Artifact: serde::Serialize, <P::Artifact as Artifact>::Change: serde::Serialize",
+    deserialize = "P::Artifact: serde::Deserialize<'de>, <P::Artifact as Artifact>::Change: serde::Deserialize<'de>"
+))]
 pub enum ProposalEffect<P: OptimizationProblem> {
     /// Author a brand-new artifact with no apply target.
     Create {
@@ -290,7 +295,7 @@ impl<P: OptimizationProblem> Clone for ProposalEffect<P> {
 /// correctness honest — `informed_by` candidates can change without
 /// invalidating downstream cache entries — and gives lineage queries
 /// well-defined semantics.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct ProposalProvenance {
     /// Candidates whose content contributed to the proposal.
     pub causal: CausalInputs,
@@ -328,7 +333,7 @@ impl ProposalProvenance {
 /// - `Pair` — merge / crossover (paired with `Change` whose target is
 ///   one of the two parents).
 /// - `NAry` — N→1 aggregate (typically paired with `Create`).
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum CausalInputs {
     /// No causal predecessor.
     None,
@@ -369,7 +374,7 @@ impl CausalInputs {
 /// References are typed so graph queries know what they're pointing at
 /// and so storage and visibility policies can treat candidates,
 /// proposals, assessments, and external refs differently.
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum InfoRef {
     /// Reference to another candidate in the run graph.
     Candidate(CandidateId),
@@ -388,7 +393,7 @@ pub enum InfoRef {
 /// knows what `kind`/`id` pairs mean for its purposes. Examples:
 /// `kind = "paper"`, `id = "arxiv:2403.12345"`; `kind = "checkpoint"`,
 /// `id = "blake3:abcd..."`.
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct ExternalRef {
     /// Reference category.
     pub kind: String,
@@ -432,7 +437,7 @@ impl<P: OptimizationProblem> Clone for ProposalBatch<P> {
 /// ones) are not expressible — express ordered dependencies by issuing
 /// multiple batches across optimizer steps, applying intermediate
 /// results before proposing the next batch.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum ProposalBatchSemantics {
     /// Independent siblings; any subset (or none) may be applied. Each
     /// surviving alternative is evaluated separately — there is no
@@ -447,7 +452,7 @@ pub enum ProposalBatchSemantics {
 
 /// Discriminant tag for [`ProposalEffect`] used by graph events and
 /// reports that don't need to carry the full effect payload.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum ProposalEffectKind {
     /// Corresponds to [`ProposalEffect::Create`].
     Create,
