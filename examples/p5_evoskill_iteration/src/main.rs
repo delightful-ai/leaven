@@ -484,7 +484,7 @@ impl CliArgs {
 }
 
 fn default_run_dir() -> PathBuf {
-    PathBuf::from("tmp/p5_evoskill_iteration/live")
+    PathBuf::from("tmp/p5_evoskill_iteration/live-cli")
 }
 
 fn load_fixture_cases() -> Vec<EvoSkillCase> {
@@ -750,6 +750,10 @@ impl EvoSkillEvaluator {
             .allocate(WorkspaceConfig::default())
             .await?;
         let stage_result = async {
+            let has_relevant_skill = materialize_context
+                .graph()
+                .artifact(candidate)
+                .is_some_and(|bank| !bank.is_empty());
             let mut view = workspace.view();
             SkillBankMaterializer::new(SkillWorkspaceLayout::new(".agents/skills")?)
                 .materialize_into(
@@ -777,7 +781,7 @@ impl EvoSkillEvaluator {
                 )
                 .await?;
             let answer: AgentAnswer = final_json(&session.value)?;
-            let score = multi_tolerance_score(&case.answer, &answer.final_answer);
+            let score = skill_gated_score(has_relevant_skill, &case.answer, &answer.final_answer);
             Ok(Metered::new(
                 CaseExecution {
                     case_id: case.id.clone(),
@@ -802,9 +806,17 @@ struct AgentAnswer {
     final_answer: String,
 }
 
+fn skill_gated_score(has_relevant_skill: bool, expected: &str, predicted: &str) -> f64 {
+    if has_relevant_skill {
+        multi_tolerance_score(expected, predicted)
+    } else {
+        0.0
+    }
+}
+
 fn executor_task(case: &EvoSkillCase) -> String {
     format!(
-        "Answer this case.\n\nQuestion:\n{}\n\nSource:\n{}\n\nInspect `.agents/skills` mentally from the task context and use a relevant skill when one exists. If no relevant skill exists for the specialized reusable conversion procedure, final_answer must be exactly `NOT_ATTEMPTED`.\n\nDo not call tools. Reply with JSON only: {{\"final_answer\":\"...\",\"reasoning\":\"...\"}}.",
+        "Answer this case.\n\nQuestion:\n{}\n\nSource:\n{}\n\nThis fixture is skill-gated. Inspect `.agents/skills` mentally from the task context and use a relevant skill when one exists. If no relevant skill exists for the specialized reusable conversion procedure, final_answer must be exactly `NOT_ATTEMPTED`; do not answer from prior knowledge or source arithmetic without a relevant mounted skill.\n\nDo not call tools. Reply with JSON only: {{\"final_answer\":\"...\",\"reasoning\":\"...\"}}.",
         case.question, case.source
     )
 }
@@ -1287,6 +1299,18 @@ fn existing_skills_markdown(bank: &SkillBank) -> String {
         out.push('\n');
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::skill_gated_score;
+
+    #[test]
+    fn skill_gated_score_rejects_model_prior_without_skill() {
+        assert_eq!(skill_gated_score(false, "99.5", "99.5"), 0.0);
+        assert_eq!(skill_gated_score(false, "99.5", "NOT_ATTEMPTED"), 0.0);
+        assert_eq!(skill_gated_score(true, "99.5", "99.5"), 1.0);
+    }
 }
 
 fn write_json<T: serde::Serialize + ?Sized>(
