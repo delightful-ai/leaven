@@ -135,6 +135,56 @@ where
             cache,
         })
     }
+
+    pub fn load_optimizer_state<T>(
+        &self,
+        checkpoint: &RunCheckpoint,
+        optimizer: Fingerprint,
+        schema: Fingerprint,
+    ) -> Result<Option<T>, RunPersistenceError>
+    where
+        T: DeserializeOwned,
+    {
+        let Some(state) = &checkpoint.optimizer_state else {
+            return Ok(None);
+        };
+        if state.optimizer != optimizer {
+            return Err(RunPersistenceError::IncompatibleState {
+                state: "optimizer state",
+                reason: format!(
+                    "checkpoint optimizer fingerprint {:?} does not match requested {:?}",
+                    state.optimizer, optimizer
+                ),
+            });
+        }
+        if state.schema != schema {
+            return Err(RunPersistenceError::IncompatibleState {
+                state: "optimizer state",
+                reason: format!(
+                    "checkpoint optimizer state schema {:?} does not match requested {:?}",
+                    state.schema, schema
+                ),
+            });
+        }
+        if state.format != StateFormat::Json {
+            return Err(RunPersistenceError::IncompatibleState {
+                state: "optimizer state",
+                reason: format!("unsupported state format {:?}", state.format),
+            });
+        }
+        let bytes = BlobStore::get(&self.store, &state.bytes).map_err(|source| {
+            RunPersistenceError::Store {
+                operation: "read optimizer state blob",
+                source,
+            }
+        })?;
+        serde_json::from_slice(&bytes)
+            .map(Some)
+            .map_err(|err| RunPersistenceError::Serialization {
+                state: "optimizer state",
+                reason: err.to_string(),
+            })
+    }
 }
 
 pub struct RestoredRunState<P: OptimizationProblem> {
@@ -170,6 +220,26 @@ where
             },
             request.budget.snapshot(),
         );
+
+        if let Some(state) = request.optimizer_state {
+            let bytes = BlobStore::put(
+                &self.store,
+                BlobWrite {
+                    bytes: state.bytes,
+                    content_type: Some(state.content_type),
+                },
+            )
+            .map_err(|source| RunPersistenceError::Store {
+                operation: "write optimizer state blob",
+                source,
+            })?;
+            checkpoint.optimizer_state = Some(OptimizerStateSnapshot {
+                optimizer: state.optimizer,
+                schema: state.schema,
+                format: state.format,
+                bytes,
+            });
+        }
 
         if let Some(cache) = request.cache {
             if !cache.is_empty() {
@@ -232,11 +302,12 @@ where
 /// The request borrows instead of cloning so persistence backends can decide
 /// what to serialize, deduplicate, or ignore without forcing hot-path copies on
 /// runs that do not use persistence.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct RunCheckpointRequest<'a, P: OptimizationProblem> {
     pub graph: &'a RunGraph<P>,
     pub budget: &'a BudgetLedger,
     pub cache: Option<&'a EvaluationCache>,
+    pub optimizer_state: Option<OptimizerStateWrite>,
 }
 
 const RUN_GRAPH_SNAPSHOT_SCHEMA: Fingerprint = Fingerprint::from_bytes([11; 32]);
@@ -253,12 +324,53 @@ impl<'a, P: OptimizationProblem> RunCheckpointRequest<'a, P> {
             graph,
             budget,
             cache,
+            optimizer_state: None,
         }
+    }
+
+    #[must_use]
+    pub fn with_optimizer_state(mut self, state: OptimizerStateWrite) -> Self {
+        self.optimizer_state = Some(state);
+        self
     }
 
     #[must_use]
     pub fn run_id(&self) -> RunId {
         self.graph.run_id
+    }
+}
+
+/// Private optimizer state to persist with the next run checkpoint.
+#[derive(Clone, Debug)]
+pub struct OptimizerStateWrite {
+    pub optimizer: Fingerprint,
+    pub schema: Fingerprint,
+    pub format: StateFormat,
+    pub bytes: Bytes,
+    pub content_type: String,
+}
+
+impl OptimizerStateWrite {
+    pub fn json<T>(
+        optimizer: Fingerprint,
+        schema: Fingerprint,
+        value: &T,
+    ) -> Result<Self, RunPersistenceError>
+    where
+        T: Serialize,
+    {
+        let bytes =
+            serde_json::to_vec(value).map_err(|err| RunPersistenceError::Serialization {
+                state: "optimizer state",
+                reason: err.to_string(),
+            })?;
+        Ok(Self {
+            optimizer,
+            schema,
+            format: StateFormat::Json,
+            bytes: Bytes::from(bytes),
+            content_type: "application/json".to_owned(),
+        })
     }
 }
 
@@ -362,6 +474,9 @@ pub enum RunPersistenceError {
     /// A checkpoint payload could not be serialized.
     #[error("run persistence could not serialize {state}: {reason}")]
     Serialization { state: &'static str, reason: String },
+    /// A stored private-state payload does not match the requesting component.
+    #[error("run persistence restored incompatible {state}: {reason}")]
+    IncompatibleState { state: &'static str, reason: String },
     /// The backing store refused a persistence operation.
     #[error("run persistence store refused {operation}")]
     Store {

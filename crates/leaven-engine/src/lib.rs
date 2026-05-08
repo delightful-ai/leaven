@@ -36,9 +36,9 @@ pub use graph::{
     RunGraphRestoreError, RunGraphSnapshot, RunGraphView,
 };
 pub use persistence::{
-    CacheIndexSnapshot, GraphSnapshotRef, RestoredRunState, RunCheckpoint, RunCheckpointRequest,
-    RunPersistence, RunPersistenceError, StageJournalSnapshot, StageStateSnapshot,
-    StoreRunPersistence, WorkspaceJournalSnapshot,
+    CacheIndexSnapshot, GraphSnapshotRef, OptimizerStateWrite, RestoredRunState, RunCheckpoint,
+    RunCheckpointRequest, RunPersistence, RunPersistenceError, StageJournalSnapshot,
+    StageStateSnapshot, StoreRunPersistence, WorkspaceJournalSnapshot,
 };
 pub use reports::{
     ApplyOneReport, ApplyOutcome, ApplyReport, EvaluationReport, ProposalBatchReport,

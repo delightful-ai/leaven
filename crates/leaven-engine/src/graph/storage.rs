@@ -193,6 +193,11 @@ impl<P: OptimizationProblem> RunGraph<P> {
     }
 
     #[must_use]
+    pub fn candidate_count(&self) -> usize {
+        self.candidates.len()
+    }
+
+    #[must_use]
     pub fn snapshot(&self) -> RunGraphSnapshot<P>
     where
         P::Artifact: Serialize,

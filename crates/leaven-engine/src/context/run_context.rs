@@ -19,9 +19,9 @@ use crate::{
     ApplyOneReport, ApplyOutcome, ApplyReport, BudgetHandle, BudgetLedger, CacheBypassReason,
     CachePolicy, CacheStatus, CaseSet, DynCallback, DynEvaluator, ErrorPolicy, EvaluationCache,
     EvaluationCacheKey, EvaluationContext, EvaluationError, EvaluationReport,
-    EvaluationResolveError, Evaluator, ProposalBatchReport, ProposalContext, ProposalError,
-    Proposer, ReadScope, RenderContext, RunCheckpointRequest, RunEvent, RunGraph, RunGraphView,
-    RunPersistence, TrustPolicy, TrustViolation,
+    EvaluationResolveError, Evaluator, OptimizerStateWrite, ProposalBatchReport, ProposalContext,
+    ProposalError, Proposer, ReadScope, RenderContext, RunCheckpointRequest, RunEvent, RunGraph,
+    RunGraphView, RunPersistence, TrustPolicy, TrustViolation,
 };
 
 pub struct RunContext<'a, P: OptimizationProblem> {
@@ -120,6 +120,24 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
     #[must_use]
     pub fn budget(&self) -> BudgetSnapshot {
         self.budget.snapshot()
+    }
+
+    /// Persist a clean checkpoint with explicit optimizer/private state.
+    ///
+    /// Graph truth, budget, and cache state still come from the live context.
+    /// The extra state is only the optimizer-owned continuation data that
+    /// cannot be derived from graph events alone.
+    pub fn checkpoint_with_optimizer_state(
+        &self,
+        state: OptimizerStateWrite,
+    ) -> Result<(), RunContextError> {
+        if let Some(persistence) = self.persistence {
+            persistence.checkpoint(
+                RunCheckpointRequest::new(&*self.graph, &*self.budget, self.cache.as_deref())
+                    .with_optimizer_state(state),
+            )?;
+        }
+        Ok(())
     }
 
     pub fn insert_seed(

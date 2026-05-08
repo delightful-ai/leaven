@@ -11,9 +11,10 @@ use leaven_core::{CacheIdentity, CaseSetVersion, PartitionId, Proposal};
 use leaven_engine::{
     CachePolicy, Callback, CaseSet, CheckpointContext, CheckpointError, CheckpointableOptimizer,
     Engine, EvaluationCache, EvaluationCacheKey, EvaluationCacheSnapshot, Optimizer,
-    OptimizerError, PrivateStatePolicy, RestoreContext, RunCheckpoint, RunCheckpointRequest,
-    RunContext, RunEvent, RunGraph, RunGraphSnapshot, RunGraphView, RunPersistence,
-    RunPersistenceError, StateFormat, StepStatus, StoreRunPersistence, TrustPolicy, optimize,
+    OptimizerError, OptimizerStateWrite, PrivateStatePolicy, RestoreContext, RunCheckpoint,
+    RunCheckpointRequest, RunContext, RunEvent, RunGraph, RunGraphSnapshot, RunGraphView,
+    RunPersistence, RunPersistenceError, StateFormat, StepStatus, StoreRunPersistence, TrustPolicy,
+    optimize,
 };
 use leaven_kernel::{
     AssessmentId, BlobRef, Budget, CandidateId, CaseId, ContentId, ErrorKind, Fingerprint,
@@ -145,7 +146,19 @@ fn store_run_persistence_writes_graph_cache_and_checkpoint_envelope() {
     );
 
     persistence
-        .checkpoint(RunCheckpointRequest::new(&graph, &budget, Some(&cache)))
+        .checkpoint(
+            RunCheckpointRequest::new(&graph, &budget, Some(&cache)).with_optimizer_state(
+                OptimizerStateWrite::json(
+                    Fingerprint::from_bytes([5; 32]),
+                    Fingerprint::from_bytes([6; 32]),
+                    &StatefulOptimizerState {
+                        selected: Some(seed),
+                        cursor: 42,
+                    },
+                )
+                .unwrap(),
+            ),
+        )
         .unwrap();
 
     let checkpoint: RunCheckpoint =
@@ -162,11 +175,22 @@ fn store_run_persistence_writes_graph_cache_and_checkpoint_envelope() {
     let cache_bytes = BlobStore::get(&store, &cache_ref.bytes).unwrap();
     let cache_snapshot: EvaluationCacheSnapshot = serde_json::from_slice(&cache_bytes).unwrap();
     assert_eq!(cache_snapshot.entries.len(), 1);
+    assert!(checkpoint.optimizer_state.is_some());
 
     let restored = persistence
         .latest_checkpoint::<TestProblem>()
         .unwrap()
         .unwrap();
+    let restored_state: StatefulOptimizerState = persistence
+        .load_optimizer_state(
+            &restored.checkpoint,
+            Fingerprint::from_bytes([5; 32]),
+            Fingerprint::from_bytes([6; 32]),
+        )
+        .unwrap()
+        .unwrap();
+    assert_eq!(restored_state.cursor, 42);
+    assert_eq!(restored_state.selected, Some(seed));
     let mut restored_graph = restored.graph;
     let mut restored_budget = restored.budget;
     let restored_ctx = RunContext::<TestProblem>::new(&mut restored_graph, &mut restored_budget);
