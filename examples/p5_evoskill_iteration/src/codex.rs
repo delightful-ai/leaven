@@ -6,7 +6,7 @@ pub type LiveCodexRuntime = CodexCliRuntime;
 
 pub fn live_codex_runtime(_developer_instructions: String) -> LiveCodexRuntime {
     let mut config = CodexCliConfig::new(bun_codex_bin().to_string_lossy().into_owned());
-    config.model = "gpt-5.4-mini".to_owned();
+    "gpt-5.4-mini".clone_into(&mut config.model);
     config.approval = CodexCliApproval::BypassSandboxAndApprovals;
     CodexCliRuntime::new(config)
 }

@@ -865,10 +865,11 @@ async fn run_skill_proposer(
             )
             .await?;
         let proposal: SkillProposal = final_json(&session.value)?;
+        let session = session.value;
         let evidence = evidence_store.put(EvoSkillEvidence::AgentRoleSession {
             role: AgentRole::Proposer,
             developer_instructions: developer_instructions.clone(),
-            session: session.value.clone(),
+            session,
         })?;
         Ok(StoredProposal {
             value: proposal,
@@ -1301,18 +1302,6 @@ fn existing_skills_markdown(bank: &SkillBank) -> String {
     out
 }
 
-#[cfg(test)]
-mod tests {
-    use super::skill_gated_score;
-
-    #[test]
-    fn skill_gated_score_rejects_model_prior_without_skill() {
-        assert_eq!(skill_gated_score(false, "99.5", "99.5"), 0.0);
-        assert_eq!(skill_gated_score(false, "99.5", "NOT_ATTEMPTED"), 0.0);
-        assert_eq!(skill_gated_score(true, "99.5", "99.5"), 1.0);
-    }
-}
-
 fn write_json<T: serde::Serialize + ?Sized>(
     view: &mut leaven_workspace::WorkspaceView<'_>,
     path: &str,
@@ -1339,5 +1328,21 @@ async fn finish_workspace<T>(workspace: Workspace, stage_result: Result<T>) -> R
         (Err(stage), Err(cleanup)) => Err(msg(format!(
             "stage failed and workspace cleanup failed: {stage}; cleanup: {cleanup}"
         ))),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::skill_gated_score;
+
+    #[test]
+    fn skill_gated_score_rejects_model_prior_without_skill() {
+        assert_float_eq(skill_gated_score(false, "99.5", "99.5"), 0.0);
+        assert_float_eq(skill_gated_score(false, "99.5", "NOT_ATTEMPTED"), 0.0);
+        assert_float_eq(skill_gated_score(true, "99.5", "99.5"), 1.0);
+    }
+
+    fn assert_float_eq(left: f64, right: f64) {
+        assert!((left - right).abs() < f64::EPSILON);
     }
 }

@@ -64,7 +64,7 @@ impl CommandTemplate {
             }
         };
         command.limits = merge_limits(&self.limits, &request.limits);
-        command.user = self.user.clone();
+        command.user.clone_from(&self.user);
         command
     }
 }

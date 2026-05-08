@@ -1,5 +1,5 @@
 use leaven_agent::{
-    AgentInstructions, AgentRunContext, AgentRunRequest, AgentRuntime, OutputContract,
+    AgentInstructions, AgentRunContext, AgentRunRequest, AgentRuntime, AgentStatus, OutputContract,
     TranscriptEvent, TranscriptRole,
 };
 use leaven_agent_codex_cli::{
@@ -50,6 +50,65 @@ fn codex_cli_config_leaves_repo_skills_native() {
     assert!(!setup_text.contains(".agents/skills"));
     assert!(!setup_text.contains("cp -R"));
     assert!(setup_text.contains("mkdir"));
+}
+
+#[test]
+fn codex_cli_config_covers_wire_variants_env_and_parser_construction() {
+    assert_eq!(CodexCliReasoningEffort::Minimal.as_wire(), "minimal");
+    assert_eq!(CodexCliReasoningEffort::Low.as_wire(), "low");
+    assert_eq!(CodexCliReasoningEffort::Medium.as_wire(), "medium");
+    assert_eq!(CodexCliReasoningEffort::High.as_wire(), "high");
+    assert_eq!(CodexCliReasoningEffort::XHigh.as_wire(), "xhigh");
+    assert_eq!(CodexCliSandbox::ReadOnly.as_wire(), "read-only");
+    assert_eq!(CodexCliSandbox::WorkspaceWrite.as_wire(), "workspace-write");
+    assert_eq!(
+        CodexCliSandbox::DangerFullAccess.as_wire(),
+        "danger-full-access"
+    );
+
+    let default_config = CodexCliConfig::default();
+    assert_eq!(default_config.command_config().run.program, "codex");
+
+    let mut config = CodexCliConfig::new("codex");
+    config.codex_home = Some("/tmp/leaven-codex-home".to_owned());
+    config.reasoning_effort = CodexCliReasoningEffort::XHigh;
+    config.approval = CodexCliApproval::Sandbox(CodexCliSandbox::ReadOnly);
+    let command_config = config.command_config();
+    let parser = config.session_parser();
+
+    assert_eq!(
+        command_config.run.env["CODEX_HOME"],
+        "/tmp/leaven-codex-home"
+    );
+    assert!(
+        command_config
+            .run
+            .args
+            .contains(&CommandTemplateArg::literal(
+                "model_reasoning_effort=\"xhigh\""
+            ))
+    );
+    assert!(
+        command_config
+            .run
+            .args
+            .contains(&CommandTemplateArg::literal("read-only"))
+    );
+    assert_eq!(
+        parser.last_message_path,
+        WorkspacePath::new(".leaven/codex-last-message.txt").unwrap()
+    );
+}
+
+#[test]
+fn codex_cli_runtime_delegates_identity_fingerprint_and_capabilities() {
+    let runtime = CodexCliRuntime::new(CodexCliConfig::new("codex"));
+
+    assert_eq!(runtime.id().as_str(), "codex-cli");
+    assert_ne!(format!("{:?}", runtime.fingerprint()), "");
+    let capabilities = runtime.capabilities();
+    assert!(capabilities.supports_commands);
+    assert!(capabilities.supports_raw_provider_events);
 }
 
 #[test]
@@ -112,6 +171,115 @@ printf '{"final_answer":"42"}' > "$out"
                     role: TranscriptRole::Assistant,
                     content,
                 } if content == "{\"final_answer\":\"42\"}"
+            )
+        }));
+
+        drop(view);
+        workspace.cleanup().await.unwrap();
+        remove_dir(&parent);
+    });
+}
+
+#[test]
+fn codex_cli_parser_falls_back_to_stdout_when_last_message_is_absent() {
+    futures::executor::block_on(async {
+        let parent = temp_parent("codex-cli-stdout-fallback");
+        let factory = LocalWorkspaceFactory::new(&parent);
+        let mut workspace = factory.allocate(WorkspaceConfig::default()).await.unwrap();
+        let mut view = workspace.view();
+        view.write_file(
+            &WorkspacePath::new("bin/codex").unwrap(),
+            br"#!/bin/sh
+cat >/dev/null
+printf 'assistant from stdout'
+",
+        )
+        .unwrap();
+        view.set_executable(&WorkspacePath::new("bin/codex").unwrap(), true)
+            .unwrap();
+
+        let runtime = CodexCliRuntime::new(CodexCliConfig::new("bin/codex"));
+        let session = runtime
+            .run_session(
+                &mut view,
+                AgentRunRequest::new(
+                    AgentInstructions::task("stdout fallback"),
+                    OutputContract::FinalMessage,
+                ),
+                AgentRunContext::new(AgentSessionId::new(), &BudgetSnapshot::default()),
+            )
+            .await
+            .unwrap();
+
+        assert!(session.value.transcript.events.iter().any(|event| {
+            matches!(
+                event,
+                TranscriptEvent::Message {
+                    role: TranscriptRole::Assistant,
+                    content,
+                } if content == "assistant from stdout"
+            )
+        }));
+
+        drop(view);
+        workspace.cleanup().await.unwrap();
+        remove_dir(&parent);
+    });
+}
+
+#[test]
+fn codex_cli_parser_reports_nonzero_exit_and_ignores_empty_last_message() {
+    futures::executor::block_on(async {
+        let parent = temp_parent("codex-cli-nonzero");
+        let factory = LocalWorkspaceFactory::new(&parent);
+        let mut workspace = factory.allocate(WorkspaceConfig::default()).await.unwrap();
+        let mut view = workspace.view();
+        view.write_file(
+            &WorkspacePath::new("bin/codex").unwrap(),
+            br#"#!/bin/sh
+out=""
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "--output-last-message" ]; then
+    shift
+    out="$1"
+  fi
+  shift
+done
+mkdir -p "$(dirname "$out")"
+: > "$out"
+printf 'bad provider state' >&2
+exit 9
+"#,
+        )
+        .unwrap();
+        view.set_executable(&WorkspacePath::new("bin/codex").unwrap(), true)
+            .unwrap();
+
+        let runtime = CodexCliRuntime::new(CodexCliConfig::new("bin/codex"));
+        let session = runtime
+            .run_session(
+                &mut view,
+                AgentRunRequest::new(
+                    AgentInstructions::task("nonzero"),
+                    OutputContract::WorkspaceDiff { roots: vec![] },
+                ),
+                AgentRunContext::new(AgentSessionId::new(), &BudgetSnapshot::default()),
+            )
+            .await
+            .unwrap();
+
+        assert!(matches!(
+            session.value.status,
+            AgentStatus::Failed { ref reason }
+                if reason.contains("Some(9)") && reason.contains("bad provider state")
+        ));
+        assert!(!session.value.transcript.events.iter().any(|event| {
+            matches!(
+                event,
+                TranscriptEvent::Message {
+                    role: TranscriptRole::Assistant,
+                    ..
+                }
             )
         }));
 
