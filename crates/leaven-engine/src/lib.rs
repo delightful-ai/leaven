@@ -32,7 +32,10 @@ pub use graph::{
     EvaluationRequestView, FailureRef, Lineage, ProposalBatchView, ProposalView, RunGraph,
     RunGraphView,
 };
-pub use persistence::{RunPersistence, RunPersistenceError};
+pub use persistence::{
+    CacheIndexSnapshot, GraphSnapshotRef, RunCheckpoint, RunPersistence, RunPersistenceError,
+    StageJournalSnapshot, StageStateSnapshot, WorkspaceJournalSnapshot,
+};
 pub use reports::{
     ApplyOneReport, ApplyOutcome, ApplyReport, EvaluationReport, ProposalBatchReport,
 };
@@ -56,9 +59,10 @@ pub mod prelude {
     pub use crate::{
         Arity, BudgetHandle, BudgetLedger, CachePolicy, Callback, CheckpointContext,
         CheckpointError, CheckpointableOptimizer, Engine, EngineBuilder, EvaluationContext,
-        Evaluator, MaterializationReport, MaterializeContext, MaterializeError, Materializer,
-        Optimizer, OptimizerStateSnapshot, Population, PreferenceRelation, PrivateStatePolicy,
-        ProposalContext, Proposer, ReadScope, RenderContext, Renderer, RestoreContext, RunContext,
-        RunEvent, RunGraphView, RunResult, StateFormat, StepStatus, Stopper, TrustPolicy, optimize,
+        Evaluator, GraphSnapshotRef, MaterializationReport, MaterializeContext, MaterializeError,
+        Materializer, Optimizer, OptimizerStateSnapshot, Population, PreferenceRelation,
+        PrivateStatePolicy, ProposalContext, Proposer, ReadScope, RenderContext, Renderer,
+        RestoreContext, RunCheckpoint, RunContext, RunEvent, RunGraphView, RunResult, StateFormat,
+        StepStatus, Stopper, TrustPolicy, optimize,
     };
 }

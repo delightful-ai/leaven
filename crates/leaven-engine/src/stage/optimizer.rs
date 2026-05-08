@@ -53,7 +53,7 @@ where
 }
 
 /// Format metadata for serialized private state.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, serde::Deserialize)]
 pub enum StateFormat {
     Json,
     Postcard,
@@ -61,7 +61,7 @@ pub enum StateFormat {
 }
 
 /// How a stage's private state participates in checkpoint/restore.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, serde::Deserialize)]
 pub enum PrivateStatePolicy {
     DerivedFromGraph,
     ExplicitSnapshot {
@@ -71,7 +71,7 @@ pub enum PrivateStatePolicy {
 }
 
 /// Stored reference to optimizer private state.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, serde::Deserialize)]
 pub struct OptimizerStateSnapshot {
     pub optimizer: Fingerprint,
     pub schema: Fingerprint,
