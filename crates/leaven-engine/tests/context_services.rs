@@ -7,18 +7,18 @@ use std::sync::{
 
 use futures::executor::block_on;
 use leaven_core::{
-    Assessment, AssessmentGranularity, AssessmentTarget, EvaluationPurpose, EvaluationRequest,
-    EvaluationSet, PairOrder, PartitionId, Proposal, ProposalBatch, ProposalBatchSemantics,
-    ResolvedEvaluationRequest,
+    Assessment, AssessmentGranularity, AssessmentTarget, CacheIdentity, CaseSetVersion,
+    EvaluationPurpose, EvaluationRequest, EvaluationSet, PairOrder, PartitionId, Proposal,
+    ProposalBatch, ProposalBatchSemantics, ResolvedEvaluationRequest,
 };
 use leaven_engine::{
     BudgetLedger, CacheBypassReason, CachePolicy, CacheStatus, Callback, CaseSet,
-    EvaluationContext, EvaluationError, Evaluator, ProposalContext, ProposalError, Proposer,
-    RunContext, RunEvent, RunGraphView, TrustPolicy,
+    EvaluationCacheKey, EvaluationContext, EvaluationError, Evaluator, ProposalContext,
+    ProposalError, Proposer, RunContext, RunEvent, RunGraphView, TrustPolicy,
 };
 use leaven_kernel::{
-    Budget, Cost, ErrorKind, EvaluatorId, Fingerprint, MetadataBag, Metered, ProposerId, RunId,
-    StageId,
+    AssessmentId, Budget, ContentId, Cost, ErrorKind, EvaluatorId, Fingerprint, MetadataBag,
+    Metered, ProposerId, RunId, StageId,
 };
 use leaven_store::{EvidenceStore, StoreError};
 use leaven_store_inline::InlineEvidenceStore;
@@ -488,6 +488,49 @@ fn deterministic_evaluation_cache_skips_second_evaluator_call() {
         assert_eq!(first.cache, CacheStatus::Miss);
         assert_eq!(second.cache, CacheStatus::Hit);
         assert_eq!(first.assessment_ids, second.assessment_ids);
+        assert_eq!(evaluator.calls(), 1);
+    });
+}
+
+#[test]
+fn deterministic_evaluation_ignores_cache_entries_with_missing_graph_assessments() {
+    block_on(async {
+        let (mut graph, mut budget) = graph_and_budget();
+        let mut cache = leaven_engine::EvaluationCache::default();
+        let case_set = CaseSet::new(vec!["case"]);
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let candidate = {
+            let mut seed_ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+            seed_ctx
+                .insert_seed(TextArtifact("abcd".to_owned()), 0)
+                .unwrap()
+        };
+        let mut content = [0; 32];
+        content[..4].copy_from_slice(b"abcd");
+        cache.insert(
+            EvaluationCacheKey {
+                evaluator: Fingerprint::from_bytes([7; 32]),
+                policy: CachePolicy::Deterministic,
+                case_set_version: CaseSetVersion("0".to_owned()),
+                case_ids: vec![leaven_kernel::CaseId::from_index(0)],
+                candidates: vec![CacheIdentity::Content(ContentId::from_bytes(content))],
+            },
+            vec![AssessmentId::new()],
+        );
+        let evaluator = CountingEvaluator::new(CachePolicy::Deterministic);
+
+        let report = {
+            let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
+                .with_case_set(&case_set)
+                .with_cache(&mut cache)
+                .with_evidence_store(&store);
+            ctx.evaluate_with(&evaluator, independent_request(candidate))
+                .await
+                .unwrap()
+        };
+
+        assert_eq!(report.cache, CacheStatus::Miss);
+        assert_eq!(report.assessment_ids.len(), 1);
         assert_eq!(evaluator.calls(), 1);
     });
 }

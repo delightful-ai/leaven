@@ -533,6 +533,12 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
             .as_ref()
             .and_then(|cache| cache.get(cache_key))
             .cloned()?;
+        if assessment_ids
+            .iter()
+            .any(|assessment_id| !self.graph.assessments.contains_key(assessment_id))
+        {
+            return None;
+        }
         let report = EvaluationReport {
             request_id,
             resolved_set: resolved_request.set.id,
