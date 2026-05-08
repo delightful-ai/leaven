@@ -19,12 +19,12 @@ use leaven_core::{
     Artifact, ArtifactIdentity, AssessmentGranularity, AssessmentTarget, EvaluationPurpose,
     EvaluationRequest, EvaluationSet, OptimizationProblem,
 };
-use leaven_engine::{BudgetLedger, CaseSet, MaterializeContext, RunContext, RunGraph};
+use leaven_engine::{BudgetLedger, CachePolicy, CaseSet, MaterializeContext, RunContext, RunGraph};
 use leaven_kernel::{
     AgentSessionId, CaseId, ContentId, Cost, EvaluatorId, Fingerprint, MetadataKey, MetadataValue,
     Metered, RunId,
 };
-use leaven_store_inline::InlineEvidenceStore;
+use leaven_store_inline::{InlineEvidenceStore, InlineStore};
 use leaven_workspace::{WorkspaceConfig, WorkspacePath, WorkspaceView};
 use leaven_workspace_local::LocalWorkspaceFactory;
 
@@ -150,6 +150,37 @@ fn preflight_checks_output_contract_shape_without_running_runtime() {
         finding.severity == PreflightSeverity::Warning
             && finding.check == "output-contract"
             && finding.message.contains("no explicit roots")
+    }));
+}
+
+#[test]
+fn preflight_checks_store_capabilities_and_cache_identity_policy() {
+    let store = InlineStore::new("preflight");
+
+    let ok = AgentRunPreflight::new()
+        .store(&store)
+        .cache_identity(&ValidArtifact, &CachePolicy::Never)
+        .cache_identity(
+            &ValidArtifact,
+            &CachePolicy::UserKey(Fingerprint::from_bytes([9; 32])),
+        )
+        .check();
+
+    assert!(!ok.has_errors());
+    assert!(ok.findings().iter().any(|finding| {
+        finding.severity == PreflightSeverity::Ok && finding.check == "store-blob"
+    }));
+    assert!(ok.findings().iter().any(|finding| {
+        finding.severity == PreflightSeverity::Ok && finding.check == "store-checkpoint"
+    }));
+
+    let missing_identity = AgentRunPreflight::new()
+        .cache_identity(&ValidArtifact, &CachePolicy::Deterministic)
+        .check();
+
+    assert!(missing_identity.has_errors());
+    assert!(missing_identity.findings().iter().any(|finding| {
+        finding.severity == PreflightSeverity::Error && finding.check == "cache"
     }));
 }
 
@@ -389,6 +420,85 @@ fn agent_case_evaluator_retries_case_errors_and_records_attempt_history() {
 }
 
 #[test]
+fn agent_case_evaluator_exhausted_retries_surface_attempt_records() {
+    futures::executor::block_on(async {
+        let case = AgentCase::text(
+            CaseId::new(0),
+            "question",
+            CaseTarget::Text("expected".to_owned()),
+        );
+        let suite = CaseSuite::from_cases([case]).unwrap();
+        let config = AgentCaseEvaluatorConfig::new(
+            EvaluatorId::from("agent-case/retry-exhausted"),
+            Fingerprint::from_bytes([4; 32]),
+        )
+        .with_run_policy(AgentCaseRunPolicy {
+            retry_on_error: 1,
+            ..AgentCaseRunPolicy::default()
+        });
+        let evaluator = AgentCaseEvaluator::new(
+            config,
+            suite,
+            LocalWorkspaceFactory::temp(),
+            FakeAgentRuntime::new(vec![FakeAgentAction::WriteFile {
+                path: WorkspacePath::new("output/result.txt").unwrap(),
+                bytes: b"observed".to_vec(),
+            }])
+            .with_cost(Cost::llm_calls(1)),
+            TestPresenter,
+            AlwaysFailingScorer,
+        );
+        let mut graph = RunGraph::<CaseProblem>::new(RunId::new());
+        let mut budget = BudgetLedger::default();
+        let store = InlineEvidenceStore::<CaseEvidence>::new("case-evidence");
+        let case_set = CaseSet::new(vec!["case-0"]);
+        let candidate = {
+            let mut ctx = RunContext::<CaseProblem>::new(&mut graph, &mut budget);
+            ctx.insert_seed(CaseArtifact("seed".to_owned()), 0).unwrap()
+        };
+        let mut ctx = RunContext::<CaseProblem>::new(&mut graph, &mut budget)
+            .with_case_set(&case_set)
+            .with_evidence_store(&store);
+
+        let error = ctx
+            .evaluate_with(
+                &evaluator,
+                EvaluationRequest::Independent {
+                    candidates: vec![candidate],
+                    set: EvaluationSet::All,
+                    granularity: AssessmentGranularity::PerCase,
+                    purpose: EvaluationPurpose::Search,
+                },
+            )
+            .await
+            .unwrap_err();
+
+        let leaven_engine::RunContextError::Evaluation(
+            leaven_engine::EvaluationError::WithSource { source, .. },
+        ) = error
+        else {
+            panic!("expected sourced evaluation error");
+        };
+        let source = source
+            .downcast_ref::<AgenticAdapterError>()
+            .expect("agentic adapter source");
+        let AgenticAdapterError::CaseRunFailed {
+            records_len,
+            records,
+            ..
+        } = source
+        else {
+            panic!("expected case-run failure");
+        };
+        assert_eq!(*records_len, 2);
+        assert_eq!(records.len(), 2);
+        assert_eq!(records[0].attempt.get(), 1);
+        assert_eq!(records[1].attempt.get(), 2);
+        assert!(records.iter().all(|record| !record.score_recorded));
+    });
+}
+
+#[test]
 fn agent_case_evaluator_fingerprint_includes_runtime_presenter_scorer_and_cases() {
     let suite = CaseSuite::from_cases([AgentCase::text(
         CaseId::new(0),
@@ -577,6 +687,24 @@ impl AgentCaseScorer<CaseProblem> for FlakyScorer {
             ));
         }
         TestScorer.score(input, workspace).await
+    }
+}
+
+struct AlwaysFailingScorer;
+
+impl AgentCaseScorer<CaseProblem> for AlwaysFailingScorer {
+    fn fingerprint(&self) -> Fingerprint {
+        Fingerprint::from_bytes([9; 32])
+    }
+
+    async fn score(
+        &self,
+        _input: AgentCaseScoreInput<'_, CaseProblem>,
+        _workspace: &WorkspaceView<'_>,
+    ) -> Result<Metered<CaseEvidence>, AgenticAdapterError> {
+        Err(AgenticAdapterError::Input(
+            "synthetic permanent scorer failure".to_owned(),
+        ))
     }
 }
 

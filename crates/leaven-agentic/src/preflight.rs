@@ -2,8 +2,10 @@
 
 use leaven_agent::{AgentRuntime, AgentSession, OutputContract};
 use leaven_core::Artifact;
+use leaven_engine::CachePolicy;
 use leaven_engine::{MaterializeContext, RunGraphView};
 use leaven_kernel::{CandidateId, Fingerprint};
+use leaven_store::{BlobStore, BlobWrite, CheckpointBytes, CheckpointStore};
 use leaven_workspace::{WithWorkspaceError, WorkspaceConfig, WorkspaceFactory, WorkspacePath};
 
 use crate::{
@@ -187,6 +189,85 @@ impl AgentRunPreflight {
     #[must_use]
     pub fn output_contract(mut self, contract: &OutputContract) -> Self {
         check_output_contract(&mut self.report, contract);
+        self
+    }
+
+    /// Checks that deterministic caching has a cache-safe artifact identity or
+    /// is explicitly disabled/user-keyed.
+    #[must_use]
+    pub fn cache_identity<A>(mut self, artifact: &A, policy: &CachePolicy) -> Self
+    where
+        A: Artifact,
+    {
+        match policy {
+            CachePolicy::Never => {
+                self.report
+                    .ok("cache", "evaluation cache explicitly disabled");
+            }
+            CachePolicy::UserKey(_) => {
+                self.report
+                    .ok("cache", "evaluation cache uses explicit user key");
+            }
+            CachePolicy::Deterministic | CachePolicy::DeterministicWithSeed(_) => {
+                if artifact.cache_identity().is_some() {
+                    self.report.ok("cache", "artifact cache identity available");
+                } else {
+                    self.report.error(
+                        "cache",
+                        "deterministic cache requested but artifact has no cache identity",
+                    );
+                }
+            }
+        }
+        self
+    }
+
+    /// Checks blob and checkpoint write/read capability without touching a
+    /// graph or running a provider session.
+    #[must_use]
+    pub fn store<S>(mut self, store: &S) -> Self
+    where
+        S: BlobStore + CheckpointStore,
+    {
+        match BlobStore::put(
+            store,
+            BlobWrite {
+                bytes: bytes::Bytes::from_static(b"leaven preflight blob"),
+                content_type: Some("text/plain".to_owned()),
+            },
+        )
+        .and_then(|reference| BlobStore::get(store, &reference).map(|_| reference))
+        {
+            Ok(reference) => {
+                self.report.ok(
+                    "store-blob",
+                    format!("blob store wrote and read `{}`", reference.key),
+                );
+            }
+            Err(error) => {
+                self.report
+                    .error("store-blob", format!("blob store check failed: {error}"));
+            }
+        }
+
+        match CheckpointStore::put(
+            store,
+            CheckpointBytes(bytes::Bytes::from_static(b"leaven preflight checkpoint")),
+        )
+        .and_then(|id| CheckpointStore::get(store, id).map(|_| id))
+        {
+            Ok(id) => {
+                self.report
+                    .ok("store-checkpoint", format!("checkpoint store wrote `{id}`"));
+            }
+            Err(error) => {
+                self.report.error(
+                    "store-checkpoint",
+                    format!("checkpoint store check failed: {error}"),
+                );
+            }
+        }
+
         self
     }
 
