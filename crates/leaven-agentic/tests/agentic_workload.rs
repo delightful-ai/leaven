@@ -691,6 +691,64 @@ fn agent_case_evaluator_runs_independent_per_case_sessions() {
 }
 
 #[test]
+fn agent_case_evaluator_exposes_cases_and_refuses_success_cost_overflow() {
+    futures::executor::block_on(async {
+        let case = AgentCase::text(
+            CaseId::new(0),
+            "question",
+            CaseTarget::Text("expected".to_owned()),
+        );
+        let suite = CaseSuite::from_cases([case]).unwrap();
+        let evaluator = AgentCaseEvaluator::new(
+            AgentCaseEvaluatorConfig::new(
+                EvaluatorId::from("agent-case/success-cost-overflow"),
+                Fingerprint::from_bytes([4; 32]),
+            ),
+            suite,
+            LocalWorkspaceFactory::temp(),
+            FakeAgentRuntime::new(vec![FakeAgentAction::WriteFile {
+                path: WorkspacePath::new("output/result.txt").unwrap(),
+                bytes: b"observed".to_vec(),
+            }])
+            .with_cost(Cost {
+                metric_calls: u64::MAX,
+                ..Cost::zero()
+            }),
+            TestPresenter,
+            TestScorer,
+        );
+        assert_eq!(evaluator.cases().cases().len(), 1);
+
+        let mut graph = RunGraph::<CaseProblem>::new(RunId::new());
+        let mut budget = BudgetLedger::default();
+        let store = InlineEvidenceStore::<CaseEvidence>::new("case-evidence");
+        let case_set = CaseSet::new(vec!["case-0"]);
+        let candidate = {
+            let mut ctx = RunContext::<CaseProblem>::new(&mut graph, &mut budget);
+            ctx.insert_seed(CaseArtifact("seed".to_owned()), 0).unwrap()
+        };
+        let mut ctx = RunContext::<CaseProblem>::new(&mut graph, &mut budget)
+            .with_case_set(&case_set)
+            .with_evidence_store(&store);
+
+        let error = ctx
+            .evaluate_with(
+                &evaluator,
+                EvaluationRequest::Independent {
+                    candidates: vec![candidate],
+                    set: EvaluationSet::All,
+                    granularity: AssessmentGranularity::PerCase,
+                    purpose: EvaluationPurpose::Search,
+                },
+            )
+            .await
+            .unwrap_err();
+
+        assert_case_run_error(error, "scoring");
+    });
+}
+
+#[test]
 fn agentic_run_inspection_reports_best_lineage_costs_and_malformed_case_metadata() {
     futures::executor::block_on(async {
         let mut graph = RunGraph::<CaseProblem>::new(RunId::new());
