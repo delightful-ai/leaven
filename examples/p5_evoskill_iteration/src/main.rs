@@ -460,6 +460,8 @@ struct P5ResultSummary {
     proposal_repair_batches: usize,
     proposal_repair_attempts: usize,
     case_execution_records: usize,
+    cache_events: usize,
+    cache_bypasses: usize,
     child_evaluation_cost: Cost,
     warnings: Vec<String>,
 }
@@ -519,6 +521,12 @@ async fn complete_iteration(
         proposal_repair_batches: inspection.proposal_repairs.len(),
         proposal_repair_attempts,
         case_execution_records: child_eval.evidence.cases.len(),
+        cache_events: inspection.cache_events.len(),
+        cache_bypasses: inspection
+            .cache_events
+            .iter()
+            .filter(|event| matches!(event.cache, leaven_engine::CacheStatus::Bypassed(_)))
+            .count(),
         child_evaluation_cost: child_eval.cost.clone(),
         warnings,
     };

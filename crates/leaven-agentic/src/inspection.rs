@@ -1,10 +1,10 @@
 //! Read-only inspection helpers for agentic run graphs.
 
 use leaven_core::OptimizationProblem;
-use leaven_engine::{RunEvent, RunGraphView};
+use leaven_engine::{CacheStatus, RunEvent, RunGraphView};
 use leaven_kernel::{
-    AssessmentId, BudgetSnapshot, CandidateId, Cost, MetadataKey, MetadataValue, ProposalBatchId,
-    RunId, StageId,
+    AssessmentId, BudgetSnapshot, CandidateId, Cost, EvaluationRequestId, EvaluatorId, MetadataKey,
+    MetadataValue, ProposalBatchId, RunId, StageId,
 };
 use serde::{Deserialize, Serialize};
 
@@ -26,6 +26,7 @@ pub struct AgenticRunInspection {
     pub best_lineage: Vec<CandidateId>,
     pub proposal_repairs: Vec<ProposalRepairInspection>,
     pub case_runs: Vec<AgentCaseRunRecord>,
+    pub cache_events: Vec<AgenticCacheInspection>,
     pub costs: AgenticCostInspection,
     pub warnings: Vec<AgenticInspectionWarning>,
 }
@@ -103,6 +104,7 @@ impl AgenticRunInspection {
                 .iter()
                 .fold(Cost::zero(), |total, record| total.combine(&record.cost)),
         };
+        let cache_events = cache_events(&graph);
 
         Self {
             run_id,
@@ -110,6 +112,7 @@ impl AgenticRunInspection {
             best_lineage,
             proposal_repairs,
             case_runs,
+            cache_events,
             costs,
             warnings,
         }
@@ -122,6 +125,14 @@ pub struct ProposalRepairInspection {
     pub batch_id: ProposalBatchId,
     pub stage: StageId,
     pub attempts: Vec<ProposalRepairAttemptRecord>,
+}
+
+/// Cache decision attached to one completed evaluation event.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct AgenticCacheInspection {
+    pub request_id: EvaluationRequestId,
+    pub evaluator: EvaluatorId,
+    pub cache: CacheStatus,
 }
 
 /// Cost rollups available from graph events and agentic case records.
@@ -185,6 +196,28 @@ where
             RunEvent::EvaluationCompleted { cost, .. } => total.combine(cost),
             _ => total,
         })
+}
+
+fn cache_events<P>(graph: &RunGraphView<'_, P>) -> Vec<AgenticCacheInspection>
+where
+    P: OptimizationProblem,
+{
+    graph
+        .events()
+        .filter_map(|event| match event {
+            RunEvent::EvaluationCompleted {
+                request_id,
+                evaluator,
+                cache,
+                ..
+            } => Some(AgenticCacheInspection {
+                request_id: *request_id,
+                evaluator: evaluator.clone(),
+                cache: *cache,
+            }),
+            _ => None,
+        })
+        .collect()
 }
 
 fn parse_metadata<T>(value: &MetadataValue) -> Result<T, String>

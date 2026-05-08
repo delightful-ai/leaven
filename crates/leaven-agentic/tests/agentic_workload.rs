@@ -19,7 +19,10 @@ use leaven_core::{
     Artifact, ArtifactIdentity, AssessmentGranularity, AssessmentTarget, EvaluationPurpose,
     EvaluationRequest, EvaluationSet, OptimizationProblem,
 };
-use leaven_engine::{BudgetLedger, CachePolicy, CaseSet, MaterializeContext, RunContext, RunGraph};
+use leaven_engine::{
+    BudgetLedger, CacheBypassReason, CachePolicy, CacheStatus, CaseSet, MaterializeContext,
+    RunContext, RunGraph,
+};
 use leaven_kernel::{
     AgentSessionId, CaseId, ContentId, Cost, EvaluatorId, Fingerprint, MetadataKey, MetadataValue,
     Metered, RunId,
@@ -347,6 +350,11 @@ fn agent_case_evaluator_runs_independent_per_case_sessions() {
         assert_eq!(inspection.case_runs.len(), 1);
         assert_eq!(inspection.case_runs[0].candidate, candidate);
         assert_eq!(inspection.case_runs[0].case, CaseId::new(0));
+        assert_eq!(inspection.cache_events.len(), 1);
+        assert_eq!(
+            inspection.cache_events[0].cache,
+            CacheStatus::Bypassed(CacheBypassReason::DisabledByPolicy)
+        );
         assert_eq!(inspection.costs.case_run_records.llm_calls, 1);
         assert_eq!(inspection.costs.case_run_records.metric_calls, 1);
         assert!(inspection.warnings.is_empty());
