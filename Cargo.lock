@@ -2693,6 +2693,7 @@ dependencies = [
 name = "leaven-store-inline"
 version = "0.0.0"
 dependencies = [
+ "bytes",
  "leaven-kernel",
  "leaven-store",
  "parking_lot",

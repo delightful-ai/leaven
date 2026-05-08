@@ -5,6 +5,7 @@ use leaven_kernel::CheckpointId;
 
 use crate::StoreError;
 
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CheckpointBytes(pub Bytes);
 
 pub trait CheckpointStore: Send + Sync {
