@@ -1,7 +1,8 @@
 use std::collections::BTreeMap;
 
 use leaven_agent::{
-    AgentInstructions, AgentRunRequest, FakeAgentAction, FakeAgentRuntime, OutputContract,
+    AgentInstructions, AgentRunRequest, AgentSession, FakeAgentAction, FakeAgentRuntime,
+    OutputContract,
 };
 use leaven_agentic::{
     AgentCase, AgentCaseEvaluator, AgentCaseEvaluatorConfig, AgentCasePresentation,
@@ -14,7 +15,9 @@ use leaven_core::{
     EvaluationRequest, EvaluationSet, OptimizationProblem,
 };
 use leaven_engine::{BudgetLedger, CaseSet, MaterializeContext, RunContext, RunGraph};
-use leaven_kernel::{CaseId, ContentId, Cost, EvaluatorId, Fingerprint, Metered, RunId};
+use leaven_kernel::{
+    AgentSessionId, CaseId, ContentId, Cost, EvaluatorId, Fingerprint, Metered, RunId,
+};
 use leaven_store_inline::InlineEvidenceStore;
 use leaven_workspace::{WorkspaceConfig, WorkspacePath, WorkspaceView};
 use leaven_workspace_local::LocalWorkspaceFactory;
@@ -179,6 +182,54 @@ fn preflight_dry_runs_presenter_without_running_runtime() {
                 .findings()
                 .iter()
                 .any(|finding| finding.check == "output-contract")
+        );
+    });
+}
+
+#[test]
+fn preflight_dry_runs_scorer_with_seeded_workspace() {
+    futures::executor::block_on(async {
+        let case = AgentCase::text(CaseId::new(0), "question", CaseTarget::None);
+        let artifact = CaseArtifact("seed".to_owned());
+        let mut graph = RunGraph::<CaseProblem>::new(RunId::new());
+        let mut budget = BudgetLedger::default();
+        let mut ctx = RunContext::<CaseProblem>::new(&mut graph, &mut budget);
+        let candidate = ctx.insert_seed(artifact, 0).unwrap();
+        let presentation = AgentCasePresentation {
+            request: AgentRunRequest::new(
+                AgentInstructions::task("synthetic"),
+                OutputContract::Files {
+                    paths: vec![WorkspacePath::new("output/result.txt").unwrap()],
+                },
+            ),
+            materialized_refs: Vec::new(),
+        };
+        let session = AgentSession::succeeded(AgentSessionId::new());
+
+        let report = AgentRunPreflight::new()
+            .scorer_dry_run(
+                candidate,
+                &case,
+                &presentation,
+                &session,
+                [(
+                    WorkspacePath::new("output/result.txt").unwrap(),
+                    b"observed".to_vec(),
+                )],
+                &LocalWorkspaceFactory::temp(),
+                WorkspaceConfig::default(),
+                &TestScorer,
+                ctx.graph(),
+            )
+            .await
+            .check();
+
+        assert!(!report.has_errors());
+        assert!(
+            report
+                .findings()
+                .iter()
+                .any(|finding| finding.check == "scorer")
         );
     });
 }

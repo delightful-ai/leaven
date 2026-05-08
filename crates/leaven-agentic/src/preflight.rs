@@ -1,12 +1,15 @@
 //! Deterministic preflight checks for agentic runs.
 
-use leaven_agent::{AgentRuntime, OutputContract};
+use leaven_agent::{AgentRuntime, AgentSession, OutputContract};
 use leaven_core::Artifact;
-use leaven_engine::MaterializeContext;
+use leaven_engine::{MaterializeContext, RunGraphView};
 use leaven_kernel::{CandidateId, Fingerprint};
-use leaven_workspace::{WithWorkspaceError, WorkspaceConfig, WorkspaceFactory};
+use leaven_workspace::{WithWorkspaceError, WorkspaceConfig, WorkspaceFactory, WorkspacePath};
 
-use crate::{AgentCase, AgentCasePresentationInput, AgentCasePresenter, AgentWorkload, CaseSuite};
+use crate::{
+    AgentCase, AgentCasePresentation, AgentCasePresentationInput, AgentCasePresenter,
+    AgentCaseScoreInput, AgentCaseScorer, AgentWorkload, CaseSuite,
+};
 
 /// Preflight report for an agentic run configuration.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -261,6 +264,85 @@ impl AgentRunPreflight {
                     "presenter",
                     format!("presenter and cleanup failed: {combined}"),
                 );
+            }
+        }
+
+        self
+    }
+
+    /// Runs the scorer on a synthetic session and seeded workspace without
+    /// invoking the agent runtime.
+    pub async fn scorer_dry_run<P, Factory, Scorer>(
+        mut self,
+        candidate_id: CandidateId,
+        case: &AgentCase,
+        presentation: &AgentCasePresentation,
+        session: &AgentSession,
+        workspace_files: impl IntoIterator<Item = (WorkspacePath, Vec<u8>)>,
+        factory: &Factory,
+        workspace_config: WorkspaceConfig,
+        scorer: &Scorer,
+        graph: RunGraphView<'_, P>,
+    ) -> Self
+    where
+        P: leaven_core::OptimizationProblem,
+        Factory: WorkspaceFactory + ?Sized,
+        Scorer: AgentCaseScorer<P>,
+    {
+        let mut workspace = match factory.allocate(workspace_config).await {
+            Ok(workspace) => workspace,
+            Err(error) => {
+                self.report
+                    .error("scorer", format!("workspace allocation failed: {error}"));
+                return self;
+            }
+        };
+
+        let stage_result = async {
+            let mut view = workspace.view();
+            for (path, bytes) in workspace_files {
+                view.write_file(&path, &bytes)?;
+            }
+            scorer
+                .score(
+                    AgentCaseScoreInput {
+                        candidate_id,
+                        case,
+                        presentation,
+                        session,
+                        graph,
+                    },
+                    &view,
+                )
+                .await
+        }
+        .await;
+        let cleanup_result = workspace.cleanup().await;
+
+        match (stage_result, cleanup_result) {
+            (Ok(scored), Ok(())) => {
+                self.report.ok(
+                    "scorer",
+                    format!(
+                        "scorer dry run produced evidence with cost {:?}",
+                        scored.cost
+                    ),
+                );
+            }
+            (Ok(_), Err(cleanup)) => {
+                self.report.error(
+                    "scorer-cleanup",
+                    format!("workspace cleanup failed: {cleanup}"),
+                );
+            }
+            (Err(error), Ok(())) => {
+                self.report
+                    .error("scorer", format!("scorer dry run failed: {error}"));
+            }
+            (Err(stage), Err(cleanup)) => {
+                let combined = WithWorkspaceError::StageAndCleanup { stage, cleanup };
+                self.report
+                    .error("scorer", format!("scorer and cleanup failed: {combined}"));
             }
         }
 
