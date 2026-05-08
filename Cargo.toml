@@ -9,6 +9,7 @@ members = [
     "crates/leaven-agentic",
     "crates/leaven-artifact-git",
     "crates/leaven-artifact-jj",
+    "crates/leaven-artifact-skill",
     "crates/leaven-artifacts",
     "crates/leaven-cuda",
     "crates/leaven-core",
@@ -105,6 +106,7 @@ leaven-agent-opencode = { path = "crates/leaven-agent-opencode", version = "0.0.
 leaven-agentic = { path = "crates/leaven-agentic", version = "0.0.0" }
 leaven-artifact-git = { path = "crates/leaven-artifact-git", version = "0.0.0" }
 leaven-artifact-jj = { path = "crates/leaven-artifact-jj", version = "0.0.0" }
+leaven-artifact-skill = { path = "crates/leaven-artifact-skill", version = "0.0.0" }
 leaven-artifacts = { path = "crates/leaven-artifacts", version = "0.0.0" }
 leaven-cuda = { path = "crates/leaven-cuda", version = "0.0.0" }
 leaven-dsrs = { path = "crates/leaven-dsrs", version = "0.0.0" }
@@ -142,6 +144,7 @@ thiserror = "2"
 # serialization
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["raw_value"] }
+serde_yml = "0.0.12"
 
 # ids and time
 uuid = { version = "1", features = ["serde", "v4"] }

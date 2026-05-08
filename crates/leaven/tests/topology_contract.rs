@@ -11,6 +11,7 @@ const EXPECTED_WORKSPACE_MEMBERS: &[&str] = &[
     "crates/leaven-agentic",
     "crates/leaven-artifact-git",
     "crates/leaven-artifact-jj",
+    "crates/leaven-artifact-skill",
     "crates/leaven-artifacts",
     "crates/leaven-core",
     "crates/leaven-cuda",
@@ -64,6 +65,7 @@ const EXPECTED_CRATES: &[&str] = &[
     "leaven-agentic",
     "leaven-artifact-git",
     "leaven-artifact-jj",
+    "leaven-artifact-skill",
     "leaven-artifacts",
     "leaven-core",
     "leaven-cuda",
@@ -177,6 +179,10 @@ const EXPECTED_DEPENDENCIES: &[(&str, &[&str])] = &[
             "leaven-kernel",
             "leaven-surface",
         ],
+    ),
+    (
+        "leaven-artifact-skill",
+        &["leaven-core", "leaven-kernel", "leaven-surface"],
     ),
     (
         "leaven-artifacts",
