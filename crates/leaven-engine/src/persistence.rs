@@ -2,10 +2,12 @@
 
 use std::collections::BTreeMap;
 
+use bytes::Bytes;
 use leaven_core::OptimizationProblem;
 use leaven_kernel::{
-    BlobRef, BudgetSnapshot, EvidenceRef, Fingerprint, PopulationId, RunId, StageId, Timestamp,
+    BlobRef, BudgetSnapshot, EvidenceRef, Fingerprint, PopulationId, RunId, StageId, Timestamp, now,
 };
+use leaven_store::{BlobStore, BlobWrite, CheckpointBytes, CheckpointStore, StoreError};
 use serde::{Deserialize, Serialize};
 
 use crate::{BudgetLedger, EvaluationCache, OptimizerStateSnapshot, RunGraph, StateFormat};
@@ -19,6 +21,112 @@ pub trait RunPersistence<P: OptimizationProblem>: Send + Sync {
     fn checkpoint(&self, request: RunCheckpointRequest<'_, P>) -> Result<(), RunPersistenceError>;
 }
 
+/// [`RunPersistence`] implementation backed by Leaven's blob and checkpoint
+/// store capabilities.
+///
+/// Graph truth and cache indexes are serialized as blobs; the checkpoint
+/// envelope stores references to those blobs. This keeps checkpoint records
+/// small while preserving enough durable state for resume/replay paths.
+#[derive(Clone, Debug)]
+pub struct StoreRunPersistence<S> {
+    store: S,
+}
+
+impl<S> StoreRunPersistence<S> {
+    #[must_use]
+    pub fn new(store: S) -> Self {
+        Self { store }
+    }
+
+    #[must_use]
+    pub fn store(&self) -> &S {
+        &self.store
+    }
+}
+
+impl<P, S> RunPersistence<P> for StoreRunPersistence<S>
+where
+    P: OptimizationProblem,
+    P::Artifact: Serialize,
+    <P::Artifact as leaven_core::Artifact>::Change: Serialize,
+    P::ProposalAnnotations: Serialize,
+    S: BlobStore + CheckpointStore,
+{
+    fn checkpoint(&self, request: RunCheckpointRequest<'_, P>) -> Result<(), RunPersistenceError> {
+        let graph_snapshot = request.graph.snapshot();
+        let graph_ref = put_json_blob(
+            &self.store,
+            "graph snapshot",
+            &graph_snapshot,
+            RUN_GRAPH_SNAPSHOT_SCHEMA,
+        )?;
+        let mut checkpoint = RunCheckpoint::new(
+            request.run_id(),
+            now(),
+            GraphSnapshotRef {
+                schema: RUN_GRAPH_SNAPSHOT_SCHEMA,
+                format: StateFormat::Json,
+                bytes: graph_ref,
+            },
+            request.budget.snapshot(),
+        );
+
+        if let Some(cache) = request.cache {
+            if !cache.is_empty() {
+                let cache_ref = put_json_blob(
+                    &self.store,
+                    "evaluation cache index",
+                    &cache.snapshot(),
+                    EVALUATION_CACHE_SCHEMA,
+                )?;
+                checkpoint.cache_index = Some(CacheIndexSnapshot {
+                    schema: EVALUATION_CACHE_SCHEMA,
+                    format: StateFormat::Json,
+                    bytes: cache_ref,
+                });
+            }
+        }
+
+        let bytes = serde_json::to_vec_pretty(&checkpoint).map_err(|err| {
+            RunPersistenceError::Serialization {
+                state: "run checkpoint envelope",
+                reason: err.to_string(),
+            }
+        })?;
+        CheckpointStore::put(&self.store, CheckpointBytes(Bytes::from(bytes)))
+            .map(|_| ())
+            .map_err(|source| RunPersistenceError::Store {
+                operation: "write checkpoint envelope",
+                source,
+            })
+    }
+}
+
+fn put_json_blob<S, T>(
+    store: &S,
+    state: &'static str,
+    value: &T,
+    _schema: Fingerprint,
+) -> Result<BlobRef, RunPersistenceError>
+where
+    S: BlobStore,
+    T: Serialize,
+{
+    let bytes = serde_json::to_vec(value).map_err(|err| RunPersistenceError::Serialization {
+        state,
+        reason: err.to_string(),
+    })?;
+    store
+        .put(BlobWrite {
+            bytes: Bytes::from(bytes),
+            content_type: Some("application/json".to_owned()),
+        })
+        .map_err(|source| RunPersistenceError::Store {
+            operation: "write checkpoint blob",
+            source,
+        })
+}
+
 /// Borrowed state available to a persistence adapter at a clean boundary.
 ///
 /// The request borrows instead of cloning so persistence backends can decide
@@ -30,6 +138,9 @@ pub struct RunCheckpointRequest<'a, P: OptimizationProblem> {
     pub budget: &'a BudgetLedger,
     pub cache: Option<&'a EvaluationCache>,
 }
+
+const RUN_GRAPH_SNAPSHOT_SCHEMA: Fingerprint = Fingerprint::from_bytes([11; 32]);
+const EVALUATION_CACHE_SCHEMA: Fingerprint = Fingerprint::from_bytes([12; 32]);
 
 impl<'a, P: OptimizationProblem> RunCheckpointRequest<'a, P> {
     #[must_use]
@@ -147,6 +258,16 @@ pub enum RunPersistenceError {
     CheckpointFailed {
         reason: String,
         retryable: Option<bool>,
+    },
+    /// A checkpoint payload could not be serialized.
+    #[error("run persistence could not serialize {state}: {reason}")]
+    Serialization { state: &'static str, reason: String },
+    /// The backing store refused a persistence operation.
+    #[error("run persistence store refused {operation}")]
+    Store {
+        operation: &'static str,
+        #[source]
+        source: StoreError,
     },
 }
 

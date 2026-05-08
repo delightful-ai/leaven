@@ -1,19 +1,24 @@
 mod support;
 
 use std::sync::{
-    Arc,
+    Arc, Mutex,
     atomic::{AtomicUsize, Ordering},
 };
 
+use bytes::Bytes;
 use futures::executor::block_on;
-use leaven_core::{PartitionId, Proposal};
+use leaven_core::{CacheIdentity, CaseSetVersion, PartitionId, Proposal};
 use leaven_engine::{
-    Callback, CaseSet, CheckpointContext, CheckpointError, CheckpointableOptimizer, Engine,
-    Optimizer, OptimizerError, PrivateStatePolicy, RestoreContext, RunCheckpointRequest,
-    RunContext, RunEvent, RunGraphView, RunPersistence, RunPersistenceError, StateFormat,
-    StepStatus, TrustPolicy, optimize,
+    CachePolicy, Callback, CaseSet, CheckpointContext, CheckpointError, CheckpointableOptimizer,
+    Engine, EvaluationCache, EvaluationCacheKey, EvaluationCacheSnapshot, Optimizer,
+    OptimizerError, PrivateStatePolicy, RestoreContext, RunCheckpoint, RunCheckpointRequest,
+    RunContext, RunEvent, RunGraph, RunGraphSnapshot, RunGraphView, RunPersistence,
+    RunPersistenceError, StateFormat, StepStatus, StoreRunPersistence, TrustPolicy, optimize,
 };
-use leaven_kernel::{Budget, CandidateId, ErrorKind, Fingerprint};
+use leaven_kernel::{
+    AssessmentId, BlobRef, Budget, CandidateId, CaseId, ContentId, ErrorKind, Fingerprint,
+};
+use leaven_store::{BlobStore, BlobWrite, CheckpointBytes, CheckpointStore, StoreError};
 use leaven_store_inline::InlineEvidenceStore;
 
 use support::{TestEvidence, TestProblem, TextArtifact, graph_and_budget, record_one};
@@ -116,6 +121,47 @@ fn engine_checkpoints_clean_run_boundaries() {
         assert_eq!(checkpoints.load(Ordering::SeqCst), 4);
         assert_eq!(cache_present.load(Ordering::SeqCst), 4);
     });
+}
+
+#[test]
+fn store_run_persistence_writes_graph_cache_and_checkpoint_envelope() {
+    let store = RecordingStore::new("recording");
+    let persistence = StoreRunPersistence::new(store.clone());
+    let (mut graph, mut budget) = graph_and_budget();
+    let seed = {
+        let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+        ctx.insert_seed(TextArtifact("seed".to_owned()), 0).unwrap()
+    };
+    let mut cache = EvaluationCache::default();
+    cache.insert(
+        EvaluationCacheKey {
+            evaluator: Fingerprint::from_bytes([3; 32]),
+            policy: CachePolicy::Deterministic,
+            case_set_version: CaseSetVersion("v1".to_owned()),
+            case_ids: vec![CaseId::new(0)],
+            candidates: vec![CacheIdentity::Content(ContentId::from_bytes([4; 32]))],
+        },
+        vec![AssessmentId::new()],
+    );
+
+    persistence
+        .checkpoint(RunCheckpointRequest::new(&graph, &budget, Some(&cache)))
+        .unwrap();
+
+    let checkpoint: RunCheckpoint =
+        serde_json::from_slice(&store.latest_checkpoint().unwrap().0).unwrap();
+    let graph_bytes = BlobStore::get(&store, &checkpoint.graph_snapshot.bytes).unwrap();
+    let graph_snapshot: RunGraphSnapshot<TestProblem> =
+        serde_json::from_slice(&graph_bytes).unwrap();
+    let mut restored = RunGraph::<TestProblem>::from_snapshot(graph_snapshot).unwrap();
+    let mut restored_budget = leaven_engine::BudgetLedger::new(Budget::unlimited());
+    let restored_ctx = RunContext::<TestProblem>::new(&mut restored, &mut restored_budget);
+    assert!(restored_ctx.graph().candidate(seed).is_some());
+
+    let cache_ref = checkpoint.cache_index.as_ref().unwrap();
+    let cache_bytes = BlobStore::get(&store, &cache_ref.bytes).unwrap();
+    let cache_snapshot: EvaluationCacheSnapshot = serde_json::from_slice(&cache_bytes).unwrap();
+    assert_eq!(cache_snapshot.entries.len(), 1);
 }
 
 #[test]
@@ -363,6 +409,74 @@ struct CountingPersistence {
     checkpoints: Arc<AtomicUsize>,
     cache_present: Option<Arc<AtomicUsize>>,
     cache_absent: Option<Arc<AtomicUsize>>,
+}
+
+#[derive(Clone)]
+struct RecordingStore {
+    name: String,
+    inner: Arc<RecordingStoreInner>,
+}
+
+#[derive(Default)]
+struct RecordingStoreInner {
+    blobs: Mutex<Vec<(BlobRef, Bytes)>>,
+    latest_checkpoint: Mutex<Option<CheckpointBytes>>,
+}
+
+impl RecordingStore {
+    fn new(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            inner: Arc::default(),
+        }
+    }
+
+    fn latest_checkpoint(&self) -> Option<CheckpointBytes> {
+        self.inner.latest_checkpoint.lock().unwrap().clone()
+    }
+}
+
+impl BlobStore for RecordingStore {
+    fn put(&self, write: BlobWrite) -> Result<BlobRef, StoreError> {
+        let mut blobs = self.inner.blobs.lock().unwrap();
+        let reference = BlobRef {
+            store: self.name.clone(),
+            key: blobs.len().to_string(),
+        };
+        blobs.push((reference.clone(), write.bytes));
+        Ok(reference)
+    }
+
+    fn get(&self, reference: &BlobRef) -> Result<Bytes, StoreError> {
+        if reference.store != self.name {
+            return Err(StoreError::BlobNotFound(reference.clone()));
+        }
+        self.inner
+            .blobs
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|(stored, _)| stored.key == reference.key)
+            .map(|(_, bytes)| bytes.clone())
+            .ok_or_else(|| StoreError::BlobNotFound(reference.clone()))
+    }
+}
+
+impl CheckpointStore for RecordingStore {
+    fn put(&self, checkpoint: CheckpointBytes) -> Result<leaven_kernel::CheckpointId, StoreError> {
+        *self.inner.latest_checkpoint.lock().unwrap() = Some(checkpoint);
+        Ok(leaven_kernel::CheckpointId::new())
+    }
+
+    fn get(&self, _id: leaven_kernel::CheckpointId) -> Result<CheckpointBytes, StoreError> {
+        self.latest_checkpoint()
+            .ok_or_else(|| StoreError::OperationFailed {
+                store: self.name.clone(),
+                operation: "get_checkpoint",
+                reason: "no checkpoint has been recorded".to_owned(),
+                retryable: Some(false),
+            })
+    }
 }
 
 impl RunPersistence<TestProblem> for CountingPersistence {

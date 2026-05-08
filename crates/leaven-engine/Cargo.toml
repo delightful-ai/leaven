@@ -16,10 +16,12 @@ leaven-kernel = { workspace = true }
 leaven-store = { workspace = true }
 leaven-surface = { workspace = true }
 leaven-workspace = { workspace = true }
+bytes = { workspace = true }
 futures = { workspace = true }
 thiserror = { workspace = true }
 indexmap = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 
 [dev-dependencies]
 leaven-store-inline = { workspace = true }

@@ -1,7 +1,11 @@
 use bytes::Bytes;
 use leaven_kernel::EvidenceRef;
-use leaven_store::{CheckpointBytes, CheckpointStore, Evidence, EvidenceStore, StoreError};
-use leaven_store_file::{FileCheckpointStore, FileEvidenceStore, FileJsonCheckpointStore};
+use leaven_store::{
+    BlobStore, BlobWrite, CheckpointBytes, CheckpointStore, Evidence, EvidenceStore, StoreError,
+};
+use leaven_store_file::{
+    FileCheckpointStore, FileEvidenceStore, FileJsonCheckpointStore, FileStore,
+};
 
 #[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 struct TestEvidence {
@@ -189,6 +193,48 @@ fn file_json_checkpoint_round_trips_latest_typed_checkpoint() {
             phase: "second".to_owned(),
             count: 2,
         })
+    );
+}
+
+#[test]
+fn aggregate_file_store_round_trips_blobs_and_checkpoints() {
+    let root = temp_root("aggregate");
+    let store = FileStore::open(&root).unwrap();
+    assert_eq!(store.root(), root.as_path());
+
+    let blob = BlobStore::put(
+        &store,
+        BlobWrite {
+            bytes: Bytes::from_static(b"graph"),
+            content_type: Some("application/json".to_owned()),
+        },
+    )
+    .unwrap();
+    assert_eq!(blob.store, "file");
+    assert_eq!(
+        BlobStore::get(&store, &blob).unwrap(),
+        Bytes::from_static(b"graph")
+    );
+
+    let checkpoint = CheckpointStore::put(
+        &store,
+        CheckpointBytes(Bytes::from_static(br#"{"checkpoint":true}"#)),
+    )
+    .unwrap();
+    assert_eq!(
+        CheckpointStore::get(&store, checkpoint).unwrap().0,
+        Bytes::from_static(br#"{"checkpoint":true}"#)
+    );
+    assert_eq!(store.checkpoint_store().latest().unwrap(), Some(checkpoint));
+
+    let reopened = FileStore::open(root).unwrap();
+    assert_eq!(
+        reopened.checkpoint_store().latest().unwrap(),
+        Some(checkpoint)
+    );
+    assert_eq!(
+        BlobStore::get(&reopened, &blob).unwrap(),
+        Bytes::from_static(b"graph")
     );
 }
 

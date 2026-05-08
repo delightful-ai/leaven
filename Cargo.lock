@@ -2505,6 +2505,7 @@ dependencies = [
 name = "leaven-engine"
 version = "0.0.0"
 dependencies = [
+ "bytes",
  "futures",
  "indexmap 2.14.0",
  "leaven-core",
