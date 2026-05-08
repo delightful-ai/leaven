@@ -75,7 +75,8 @@ impl<P: OptimizationProblem> Engine<P> {
                 .with_evidence_store(evidence_store)
                 .with_evaluators(&self.evaluators)
                 .with_trust_policy(self.trust.clone())
-                .with_callbacks(self.callbacks.as_mut_slice());
+                .with_callbacks(self.callbacks.as_mut_slice())
+                .with_persistence(self.persistence.as_deref());
             if let Err(error) = optimizer.initialize(&mut ctx).await {
                 self.record_optimizer_error(&error);
                 return Err(error);
@@ -99,6 +100,7 @@ impl<P: OptimizationProblem> Engine<P> {
                     .with_evaluators(&self.evaluators)
                     .with_trust_policy(self.trust.clone())
                     .with_callbacks(self.callbacks.as_mut_slice())
+                    .with_persistence(self.persistence.as_deref())
                     .with_iteration(iteration);
                 optimizer.step(&mut ctx).await
             };

@@ -20,8 +20,8 @@ use crate::{
     CacheStatus, CaseSet, DynCallback, DynEvaluator, ErrorPolicy, EvaluationCache,
     EvaluationCacheKey, EvaluationContext, EvaluationError, EvaluationReport,
     EvaluationResolveError, Evaluator, ProposalBatchReport, ProposalContext, ProposalError,
-    Proposer, ReadScope, RenderContext, RunEvent, RunGraph, RunGraphView, TrustPolicy,
-    TrustViolation,
+    Proposer, ReadScope, RenderContext, RunEvent, RunGraph, RunGraphView, RunPersistence,
+    TrustPolicy, TrustViolation,
 };
 
 pub struct RunContext<'a, P: OptimizationProblem> {
@@ -35,6 +35,7 @@ pub struct RunContext<'a, P: OptimizationProblem> {
     evidence_store: Option<&'a dyn EvidenceStore<P::Evidence>>,
     evaluators: Option<&'a BTreeMap<EvaluatorId, Arc<dyn DynEvaluator<P>>>>,
     callbacks: Option<&'a mut [Box<dyn DynCallback<P>>]>,
+    persistence: Option<&'a dyn RunPersistence<P>>,
 }
 
 impl<'a, P: OptimizationProblem> RunContext<'a, P> {
@@ -50,6 +51,7 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
             evidence_store: None,
             evaluators: None,
             callbacks: None,
+            persistence: None,
         }
     }
 
@@ -87,6 +89,12 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
     }
 
     #[must_use]
+    pub fn with_persistence(mut self, persistence: Option<&'a dyn RunPersistence<P>>) -> Self {
+        self.persistence = persistence;
+        self
+    }
+
+    #[must_use]
     pub fn with_trust_policy(mut self, trust: TrustPolicy) -> Self {
         self.read_scope = trust.optimizer_read_scope();
         self.trust = trust;
@@ -119,9 +127,12 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
         artifact: P::Artifact,
         seed_index: usize,
     ) -> Result<CandidateId, RunContextError> {
-        self.graph
+        let candidate = self
+            .graph
             .insert_seed(artifact, seed_index)
-            .map_err(Into::into)
+            .map_err(RunContextError::Graph)?;
+        self.checkpoint()?;
+        Ok(candidate)
     }
 
     pub fn record_proposal_batch(
@@ -151,6 +162,7 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
                 informed_by_count: proposal.provenance.informed_by.len(),
             });
         }
+        self.checkpoint()?;
         Ok(ProposalBatchReport {
             batch_id,
             proposal_ids,
@@ -192,6 +204,7 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
         for proposal_id in proposal_ids {
             outcomes.push(self.apply_proposal(proposal_id)?);
         }
+        self.checkpoint()?;
         Ok(ApplyReport { batch_id, outcomes })
     }
 
@@ -488,6 +501,7 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
         } else {
             if let (Some(cache), Some(cache_key)) = (self.cache.as_mut(), cache_key) {
                 cache.insert(cache_key, assessment_ids.clone());
+                self.checkpoint()?;
             }
             CacheStatus::Miss
         };
@@ -594,6 +608,7 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
                 reference,
             ));
         }
+        self.checkpoint()?;
         Ok(ids)
     }
 
@@ -625,6 +640,13 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
                 callback.on_event_dyn(event, self.graph.view(read_scope.clone()));
             }
         }
+    }
+
+    fn checkpoint(&self) -> Result<(), RunContextError> {
+        if let Some(persistence) = self.persistence {
+            persistence.checkpoint(self.graph)?;
+        }
+        Ok(())
     }
 
     fn emit_stage_error(

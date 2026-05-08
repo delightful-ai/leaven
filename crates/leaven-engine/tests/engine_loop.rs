@@ -6,7 +6,7 @@ use std::sync::{
 };
 
 use futures::executor::block_on;
-use leaven_core::PartitionId;
+use leaven_core::{PartitionId, Proposal};
 use leaven_engine::{
     Callback, CaseSet, CheckpointContext, CheckpointError, CheckpointableOptimizer, Engine,
     Optimizer, OptimizerError, PrivateStatePolicy, RestoreContext, RunContext, RunEvent,
@@ -16,7 +16,7 @@ use leaven_engine::{
 use leaven_kernel::{Budget, CandidateId, ErrorKind, Fingerprint};
 use leaven_store_inline::InlineEvidenceStore;
 
-use support::{TestEvidence, TestProblem, TextArtifact};
+use support::{TestEvidence, TestProblem, TextArtifact, graph_and_budget, record_one};
 
 #[test]
 fn engine_getters_expose_read_only_state() {
@@ -177,6 +177,26 @@ fn engine_surfaces_final_checkpoint_failures_after_end_event() {
             } if error.kind == ErrorKind::Optimizer
         )));
     });
+}
+
+#[test]
+fn run_context_checkpoints_after_graph_mutation_boundaries() {
+    let checkpoints = Arc::new(AtomicUsize::new(0));
+    let persistence = CountingPersistence {
+        checkpoints: checkpoints.clone(),
+    };
+    let (mut graph, mut budget) = graph_and_budget();
+    let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
+        .with_persistence(Some(&persistence));
+
+    ctx.insert_seed(TextArtifact("seed".to_owned()), 0).unwrap();
+    let batch = record_one(
+        &mut ctx,
+        Proposal::create(TextArtifact("child".to_owned())).build(),
+    );
+    ctx.apply_batch(batch).unwrap();
+
+    assert_eq!(checkpoints.load(Ordering::SeqCst), 3);
 }
 
 #[test]
