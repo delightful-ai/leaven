@@ -96,6 +96,10 @@ where
         self.config.arity
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "proposal repair is a single ordered workspace lifecycle with cleanup/error preservation"
+    )]
     async fn propose(
         &self,
         request: Self::Request,

@@ -87,6 +87,40 @@ pub struct AgentRunPreflight {
     report: AgentRunPreflightReport,
 }
 
+/// Inputs for a presenter preflight dry run.
+pub struct PresenterDryRun<'a, P, Factory, Presenter>
+where
+    P: leaven_core::OptimizationProblem,
+    Factory: WorkspaceFactory + ?Sized,
+    Presenter: AgentCasePresenter<P>,
+{
+    pub candidate_id: CandidateId,
+    pub candidate: &'a P::Artifact,
+    pub case: &'a AgentCase,
+    pub factory: &'a Factory,
+    pub workspace_config: WorkspaceConfig,
+    pub presenter: &'a Presenter,
+    pub ctx: MaterializeContext<'a, P>,
+}
+
+/// Inputs for a scorer preflight dry run.
+pub struct ScorerDryRun<'a, P, Factory, Scorer>
+where
+    P: leaven_core::OptimizationProblem,
+    Factory: WorkspaceFactory + ?Sized,
+    Scorer: AgentCaseScorer<P>,
+{
+    pub candidate_id: CandidateId,
+    pub case: &'a AgentCase,
+    pub presentation: &'a AgentCasePresentation,
+    pub session: &'a AgentSession,
+    pub workspace_files: Vec<(WorkspacePath, Vec<u8>)>,
+    pub factory: &'a Factory,
+    pub workspace_config: WorkspaceConfig,
+    pub scorer: &'a Scorer,
+    pub graph: RunGraphView<'a, P>,
+}
+
 impl AgentRunPreflight {
     /// Starts an empty preflight.
     #[must_use]
@@ -257,20 +291,14 @@ impl AgentRunPreflight {
     /// the agent runtime.
     pub async fn presenter_dry_run<P, Factory, Presenter>(
         mut self,
-        candidate_id: CandidateId,
-        candidate: &P::Artifact,
-        case: &AgentCase,
-        factory: &Factory,
-        workspace_config: WorkspaceConfig,
-        presenter: &Presenter,
-        ctx: MaterializeContext<'_, P>,
+        input: PresenterDryRun<'_, P, Factory, Presenter>,
     ) -> Self
     where
         P: leaven_core::OptimizationProblem,
         Factory: WorkspaceFactory + ?Sized,
         Presenter: AgentCasePresenter<P>,
     {
-        let mut workspace = match factory.allocate(workspace_config).await {
+        let mut workspace = match input.factory.allocate(input.workspace_config).await {
             Ok(workspace) => workspace,
             Err(error) => {
                 self.report
@@ -281,16 +309,17 @@ impl AgentRunPreflight {
 
         let stage_result = async {
             let mut view = workspace.view();
-            presenter
+            input
+                .presenter
                 .present(
                     AgentCasePresentationInput {
-                        candidate_id,
-                        candidate,
-                        case,
-                        graph: ctx.graph().clone(),
+                        candidate_id: input.candidate_id,
+                        candidate: input.candidate,
+                        case: input.case,
+                        graph: input.ctx.graph().clone(),
                     },
                     &mut view,
-                    ctx,
+                    input.ctx,
                 )
                 .await
         }
@@ -337,22 +366,14 @@ impl AgentRunPreflight {
     /// invoking the agent runtime.
     pub async fn scorer_dry_run<P, Factory, Scorer>(
         mut self,
-        candidate_id: CandidateId,
-        case: &AgentCase,
-        presentation: &AgentCasePresentation,
-        session: &AgentSession,
-        workspace_files: impl IntoIterator<Item = (WorkspacePath, Vec<u8>)>,
-        factory: &Factory,
-        workspace_config: WorkspaceConfig,
-        scorer: &Scorer,
-        graph: RunGraphView<'_, P>,
+        input: ScorerDryRun<'_, P, Factory, Scorer>,
     ) -> Self
     where
         P: leaven_core::OptimizationProblem,
         Factory: WorkspaceFactory + ?Sized,
         Scorer: AgentCaseScorer<P>,
     {
-        let mut workspace = match factory.allocate(workspace_config).await {
+        let mut workspace = match input.factory.allocate(input.workspace_config).await {
             Ok(workspace) => workspace,
             Err(error) => {
                 self.report
@@ -363,17 +384,18 @@ impl AgentRunPreflight {
 
         let stage_result = async {
             let mut view = workspace.view();
-            for (path, bytes) in workspace_files {
+            for (path, bytes) in input.workspace_files {
                 view.write_file(&path, &bytes)?;
             }
-            scorer
+            input
+                .scorer
                 .score(
                     AgentCaseScoreInput {
-                        candidate_id,
-                        case,
-                        presentation,
-                        session,
-                        graph,
+                        candidate_id: input.candidate_id,
+                        case: input.case,
+                        presentation: input.presentation,
+                        session: input.session,
+                        graph: input.graph,
                     },
                     &view,
                 )

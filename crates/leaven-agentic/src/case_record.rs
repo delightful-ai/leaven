@@ -29,59 +29,65 @@ pub struct AgentCaseRunRecord {
 impl AgentCaseRunRecord {
     /// Constructs a successful scored run record.
     #[must_use]
-    pub fn scored_attempt(
-        run_id: RunId,
-        candidate: CandidateId,
-        case: CaseId,
-        partition: EvaluationSetId,
-        attempt: NonZeroUsize,
-        session: AgentSessionId,
-        outputs: Vec<WorkspacePath>,
-        retries: Vec<AgentCaseRetryRecord>,
-        cost: Cost,
-    ) -> Self {
+    pub fn scored_attempt(input: ScoredAgentCaseRun) -> Self {
         Self {
-            run_id,
-            candidate,
-            case,
-            partition,
-            attempt,
-            session: Some(session),
-            outputs,
+            run_id: input.run_id,
+            candidate: input.candidate,
+            case: input.case,
+            partition: input.partition,
+            attempt: input.attempt,
+            session: Some(input.session),
+            outputs: input.outputs,
             score_recorded: true,
             error: None,
-            retries,
-            cost,
+            retries: input.retries,
+            cost: input.cost,
         }
     }
 
     /// Constructs an unscored failed run record.
     #[must_use]
-    pub fn failed_attempt(
-        run_id: RunId,
-        candidate: CandidateId,
-        case: CaseId,
-        partition: EvaluationSetId,
-        attempt: NonZeroUsize,
-        session: Option<AgentSessionId>,
-        outputs: Vec<WorkspacePath>,
-        error: AgentCaseRunError,
-        cost: Cost,
-    ) -> Self {
+    pub fn failed_attempt(input: FailedAgentCaseRun) -> Self {
         Self {
-            run_id,
-            candidate,
-            case,
-            partition,
-            attempt,
-            session,
-            outputs,
+            run_id: input.run_id,
+            candidate: input.candidate,
+            case: input.case,
+            partition: input.partition,
+            attempt: input.attempt,
+            session: input.session,
+            outputs: input.outputs,
             score_recorded: false,
-            error: Some(error),
+            error: Some(input.error),
             retries: Vec::new(),
-            cost,
+            cost: input.cost,
         }
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ScoredAgentCaseRun {
+    pub run_id: RunId,
+    pub candidate: CandidateId,
+    pub case: CaseId,
+    pub partition: EvaluationSetId,
+    pub attempt: NonZeroUsize,
+    pub session: AgentSessionId,
+    pub outputs: Vec<WorkspacePath>,
+    pub retries: Vec<AgentCaseRetryRecord>,
+    pub cost: Cost,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct FailedAgentCaseRun {
+    pub run_id: RunId,
+    pub candidate: CandidateId,
+    pub case: CaseId,
+    pub partition: EvaluationSetId,
+    pub attempt: NonZeroUsize,
+    pub session: Option<AgentSessionId>,
+    pub outputs: Vec<WorkspacePath>,
+    pub error: AgentCaseRunError,
+    pub cost: Cost,
 }
 
 /// Compact retry history embedded in the completed case-run record.

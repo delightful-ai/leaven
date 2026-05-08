@@ -23,7 +23,7 @@ pub use case_evaluator::{
 pub use case_record::{
     AgentCaseLimits, AgentCaseRetryRecord, AgentCaseRunError, AgentCaseRunPolicy,
     AgentCaseRunRecord, CASE_RUN_RECORD_METADATA_KEY, CaseCheckpointPolicy, FailOnError,
-    FiniteRatio, ToolApprovalPolicy,
+    FailedAgentCaseRun, FiniteRatio, ScoredAgentCaseRun, ToolApprovalPolicy,
 };
 pub use error::{AgenticAdapterError, AgenticParseError, AgenticRepairError};
 pub use evaluator::{AgenticEvaluator, AgenticEvaluatorConfig};
@@ -35,6 +35,7 @@ pub use parser::{
 };
 pub use preflight::{
     AgentRunPreflight, AgentRunPreflightReport, PreflightFinding, PreflightSeverity,
+    PresenterDryRun, ScorerDryRun,
 };
 pub use proposer::{AgenticProposer, AgenticProposerConfig};
 pub use repair::{
@@ -55,11 +56,11 @@ pub mod prelude {
         AgenticProposer, AgenticProposerConfig, AgenticRepairError, AgenticRunInput,
         AgenticRunInspection, CASE_RUN_RECORD_METADATA_KEY, CaseCheckpointPolicy, CaseFiles,
         CaseInput, CaseMessage, CasePartitionId, CasePartitions, CaseSuite, CaseTarget,
-        EvaluationInputBuilder, EvidenceParser, FailOnError, FiniteRatio,
-        PROPOSAL_REPAIR_ATTEMPTS_METADATA_KEY, PreflightFinding, PreflightSeverity, ProposalParser,
-        ProposalRepairAttemptOutcome, ProposalRepairAttemptRecord, ProposalRepairFeedback,
-        ProposalRepairInspection, ProposalRepairPolicy, ProposalRepairPromptBuilder,
-        RepairingAgenticProposer, RepairingAgenticProposerConfig, SetupScript, ToolApprovalPolicy,
-        WorkspaceRequirement,
+        EvaluationInputBuilder, EvidenceParser, FailOnError, FailedAgentCaseRun, FiniteRatio,
+        PROPOSAL_REPAIR_ATTEMPTS_METADATA_KEY, PreflightFinding, PreflightSeverity,
+        PresenterDryRun, ProposalParser, ProposalRepairAttemptOutcome, ProposalRepairAttemptRecord,
+        ProposalRepairFeedback, ProposalRepairInspection, ProposalRepairPolicy,
+        ProposalRepairPromptBuilder, RepairingAgenticProposer, RepairingAgenticProposerConfig,
+        ScoredAgentCaseRun, ScorerDryRun, SetupScript, ToolApprovalPolicy, WorkspaceRequirement,
     };
 }

@@ -22,7 +22,7 @@ use crate::AgenticAdapterError;
 use crate::case::{AgentCase, CaseSuite};
 use crate::case_record::{
     AgentCaseRetryRecord, AgentCaseRunError, AgentCaseRunPolicy, AgentCaseRunRecord,
-    CASE_RUN_RECORD_METADATA_KEY,
+    CASE_RUN_RECORD_METADATA_KEY, FailedAgentCaseRun, ScoredAgentCaseRun,
 };
 use crate::error::{checked_add_cost, map_workspace_error};
 
@@ -192,7 +192,7 @@ where
     async fn evaluate(
         &self,
         request: ResolvedEvaluationRequest,
-        mut ctx: EvaluationContext<'_, P>,
+        ctx: EvaluationContext<'_, P>,
     ) -> Result<Metered<Vec<Assessment<P>>>, EvaluationError> {
         if request.granularity != AssessmentGranularity::PerCase {
             return Err(EvaluationError::with_source(
@@ -234,7 +234,7 @@ where
                     )
                 })?;
                 let metered = self
-                    .evaluate_one(candidate_id, &candidate, case, &request, &mut ctx)
+                    .evaluate_one(candidate_id, &candidate, case, &request, &ctx)
                     .await?;
                 total = checked_add_cost(total, &metered.cost).map_err(|error| {
                     EvaluationError::with_source("agent case evaluator failed", error)
@@ -261,7 +261,7 @@ where
         candidate: &P::Artifact,
         case: &AgentCase,
         request: &ResolvedEvaluationRequest,
-        ctx: &mut EvaluationContext<'_, P>,
+        ctx: &EvaluationContext<'_, P>,
     ) -> Result<Metered<Assessment<P>>, EvaluationError> {
         let max_attempts = self.config.run_policy.retry_on_error.saturating_add(1);
         let mut failed_records = Vec::new();
@@ -299,17 +299,32 @@ where
         unreachable!("attempt loop always returns")
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "attempt execution keeps candidate, case, request, context, and retry history explicit"
+    )]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "attempt execution is one linear workspace lifecycle; splitting it would obscure cleanup/error preservation"
+    )]
     async fn evaluate_attempt(
         &self,
         candidate_id: CandidateId,
         candidate: &P::Artifact,
         case: &AgentCase,
         request: &ResolvedEvaluationRequest,
-        ctx: &mut EvaluationContext<'_, P>,
+        ctx: &EvaluationContext<'_, P>,
         attempt: NonZeroUsize,
         failed_records: &[AgentCaseRunRecord],
     ) -> Result<Metered<Assessment<P>>, CaseAttemptFailure> {
         let partition = EvaluationSetId::from_uuid(request.set.id.as_uuid());
+        let scope = CaseAttemptScope {
+            run_id: ctx.graph().run_id(),
+            candidate: candidate_id,
+            case: case.id,
+            partition,
+            attempt,
+        };
         let mut workspace = self
             .workspace_factory
             .allocate(self.config.workspace.clone())
@@ -317,12 +332,7 @@ where
             .map_err(|error| {
                 let source = AgenticAdapterError::WorkspaceAllocate(error);
                 CaseAttemptFailure::new(
-                    AgentCaseRunRecord::failed_attempt(
-                        ctx.graph().run_id(),
-                        candidate_id,
-                        case.id,
-                        partition,
-                        attempt,
+                    scope.failed(
                         None,
                         Vec::new(),
                         AgentCaseRunError::Presentation(source.to_string()),
@@ -348,12 +358,7 @@ where
                 .await
                 .map_err(|source| {
                     CaseAttemptFailure::new(
-                        AgentCaseRunRecord::failed_attempt(
-                            ctx.graph().run_id(),
-                            candidate_id,
-                            case.id,
-                            partition,
-                            attempt,
+                        scope.failed(
                             None,
                             Vec::new(),
                             AgentCaseRunError::Presentation(source.to_string()),
@@ -374,12 +379,7 @@ where
                 .map_err(AgenticAdapterError::Runtime)
                 .map_err(|source| {
                     CaseAttemptFailure::new(
-                        AgentCaseRunRecord::failed_attempt(
-                            ctx.graph().run_id(),
-                            candidate_id,
-                            case.id,
-                            partition,
-                            attempt,
+                        scope.failed(
                             None,
                             Vec::new(),
                             AgentCaseRunError::Runtime(source.to_string()),
@@ -406,12 +406,7 @@ where
                         .and_then(|total| checked_add_cost(total, &session.cost))
                         .unwrap_or_else(|_| Cost::zero());
                     CaseAttemptFailure::new(
-                        AgentCaseRunRecord::failed_attempt(
-                            ctx.graph().run_id(),
-                            candidate_id,
-                            case.id,
-                            partition,
-                            attempt,
+                        scope.failed(
                             Some(session.value.session_id),
                             session.value.output_files.clone(),
                             AgentCaseRunError::Scoring(source.to_string()),
@@ -425,12 +420,7 @@ where
                 .and_then(|total| checked_add_cost(total, &scored.cost))
                 .map_err(|source| {
                     CaseAttemptFailure::new(
-                        AgentCaseRunRecord::failed_attempt(
-                            ctx.graph().run_id(),
-                            candidate_id,
-                            case.id,
-                            partition,
-                            attempt,
+                        scope.failed(
                             Some(session.value.session_id),
                             session.value.output_files.clone(),
                             AgentCaseRunError::Scoring(source.to_string()),
@@ -447,12 +437,7 @@ where
                 .and_then(|total| checked_add_cost(total, &run_total))
                 .map_err(|source| {
                     CaseAttemptFailure::new(
-                        AgentCaseRunRecord::failed_attempt(
-                            ctx.graph().run_id(),
-                            candidate_id,
-                            case.id,
-                            partition,
-                            attempt,
+                        scope.failed(
                             Some(session.value.session_id),
                             session.value.output_files.clone(),
                             AgentCaseRunError::Scoring(source.to_string()),
@@ -465,12 +450,7 @@ where
                 .iter()
                 .filter_map(AgentCaseRetryRecord::from_failed_run)
                 .collect();
-            let run_record = AgentCaseRunRecord::scored_attempt(
-                ctx.graph().run_id(),
-                candidate_id,
-                case.id,
-                partition,
-                attempt,
+            let run_record = scope.scored(
                 session.value.session_id,
                 session.value.output_files.clone(),
                 retries,
@@ -485,12 +465,7 @@ where
                 })
                 .map_err(|source| {
                     CaseAttemptFailure::new(
-                        AgentCaseRunRecord::failed_attempt(
-                            ctx.graph().run_id(),
-                            candidate_id,
-                            case.id,
-                            partition,
-                            attempt,
+                        scope.failed(
                             Some(session.value.session_id),
                             session.value.output_files.clone(),
                             AgentCaseRunError::Scoring(source.to_string()),
@@ -523,12 +498,7 @@ where
             (Ok(metered), Err(cleanup)) => {
                 let source = map_workspace_error(WithWorkspaceError::Cleanup(cleanup));
                 Err(CaseAttemptFailure::new(
-                    AgentCaseRunRecord::failed_attempt(
-                        ctx.graph().run_id(),
-                        candidate_id,
-                        case.id,
-                        partition,
-                        attempt,
+                    scope.failed(
                         None,
                         Vec::new(),
                         AgentCaseRunError::Cleanup(source.to_string()),
@@ -544,12 +514,7 @@ where
                     cleanup,
                 });
                 Err(CaseAttemptFailure::new(
-                    AgentCaseRunRecord::failed_attempt(
-                        ctx.graph().run_id(),
-                        candidate_id,
-                        case.id,
-                        partition,
-                        attempt,
+                    scope.failed(
                         stage.record.session,
                         stage.record.outputs,
                         AgentCaseRunError::Cleanup(source.to_string()),
@@ -565,6 +530,57 @@ where
 struct CaseAttemptFailure {
     record: AgentCaseRunRecord,
     source: AgenticAdapterError,
+}
+
+#[derive(Clone, Copy)]
+struct CaseAttemptScope {
+    run_id: leaven_kernel::RunId,
+    candidate: CandidateId,
+    case: leaven_kernel::CaseId,
+    partition: EvaluationSetId,
+    attempt: NonZeroUsize,
+}
+
+impl CaseAttemptScope {
+    fn failed(
+        self,
+        session: Option<AgentSessionId>,
+        outputs: Vec<WorkspacePath>,
+        error: AgentCaseRunError,
+        cost: Cost,
+    ) -> AgentCaseRunRecord {
+        AgentCaseRunRecord::failed_attempt(FailedAgentCaseRun {
+            run_id: self.run_id,
+            candidate: self.candidate,
+            case: self.case,
+            partition: self.partition,
+            attempt: self.attempt,
+            session,
+            outputs,
+            error,
+            cost,
+        })
+    }
+
+    fn scored(
+        self,
+        session: AgentSessionId,
+        outputs: Vec<WorkspacePath>,
+        retries: Vec<AgentCaseRetryRecord>,
+        cost: Cost,
+    ) -> AgentCaseRunRecord {
+        AgentCaseRunRecord::scored_attempt(ScoredAgentCaseRun {
+            run_id: self.run_id,
+            candidate: self.candidate,
+            case: self.case,
+            partition: self.partition,
+            attempt: self.attempt,
+            session,
+            outputs,
+            retries,
+            cost,
+        })
+    }
 }
 
 impl CaseAttemptFailure {

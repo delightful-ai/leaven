@@ -13,7 +13,7 @@ use leaven_agentic::{
     AgentCasePresentationInput, AgentCasePresenter, AgentCaseRunPolicy, AgentCaseScoreInput,
     AgentCaseScorer, AgentRunPreflight, AgentWorkload, AgenticAdapterError, AgenticRunInspection,
     CASE_RUN_RECORD_METADATA_KEY, CasePartitionId, CasePartitions, CaseSuite, CaseTarget,
-    PreflightSeverity,
+    PreflightSeverity, PresenterDryRun, ScorerDryRun,
 };
 use leaven_core::{
     Artifact, ArtifactIdentity, AssessmentGranularity, AssessmentTarget, EvaluationPurpose,
@@ -198,15 +198,15 @@ fn preflight_dry_runs_presenter_without_running_runtime() {
         let candidate = ctx.insert_seed(artifact.clone(), 0).unwrap();
 
         let report = AgentRunPreflight::new()
-            .presenter_dry_run(
-                candidate,
-                &artifact,
-                &case,
-                &LocalWorkspaceFactory::temp(),
-                WorkspaceConfig::default(),
-                &TestPresenter,
-                ctx.materialize_context(),
-            )
+            .presenter_dry_run(PresenterDryRun {
+                candidate_id: candidate,
+                candidate: &artifact,
+                case: &case,
+                factory: &LocalWorkspaceFactory::temp(),
+                workspace_config: WorkspaceConfig::default(),
+                presenter: &TestPresenter,
+                ctx: ctx.materialize_context(),
+            })
             .await
             .check();
 
@@ -247,20 +247,20 @@ fn preflight_dry_runs_scorer_with_seeded_workspace() {
         let session = AgentSession::succeeded(AgentSessionId::new());
 
         let report = AgentRunPreflight::new()
-            .scorer_dry_run(
-                candidate,
-                &case,
-                &presentation,
-                &session,
-                [(
+            .scorer_dry_run(ScorerDryRun {
+                candidate_id: candidate,
+                case: &case,
+                presentation: &presentation,
+                session: &session,
+                workspace_files: vec![(
                     WorkspacePath::new("output/result.txt").unwrap(),
                     b"observed".to_vec(),
                 )],
-                &LocalWorkspaceFactory::temp(),
-                WorkspaceConfig::default(),
-                &TestScorer,
-                ctx.graph(),
-            )
+                factory: &LocalWorkspaceFactory::temp(),
+                workspace_config: WorkspaceConfig::default(),
+                scorer: &TestScorer,
+                graph: ctx.graph(),
+            })
             .await
             .check();
 
@@ -346,7 +346,7 @@ fn agent_case_evaluator_runs_independent_per_case_sessions() {
         assert_eq!(record["case"], serde_json::json!(0));
         assert_eq!(record["score_recorded"], serde_json::json!(true));
         assert_eq!(record["outputs"], serde_json::json!(["output/result.txt"]));
-        let inspection = AgenticRunInspection::from_graph(ctx.graph());
+        let inspection = AgenticRunInspection::from_graph(&ctx.graph());
         assert_eq!(inspection.case_runs.len(), 1);
         assert_eq!(inspection.case_runs[0].candidate, candidate);
         assert_eq!(inspection.case_runs[0].case, CaseId::new(0));

@@ -113,7 +113,7 @@ fn repairing_proposer_routes_parse_failure_back_to_same_runtime_loop() {
         let applied = ctx.apply_batch(report.batch_id).unwrap();
         let child = applied.successful_candidates().next().unwrap();
         assert_eq!(ctx.graph().artifact(child).unwrap().0, "fixed");
-        let inspection = AgenticRunInspection::from_graph(ctx.graph());
+        let inspection = AgenticRunInspection::from_graph(&ctx.graph());
         assert_eq!(inspection.proposal_repairs.len(), 1);
         assert_eq!(inspection.proposal_repairs[0].batch_id, report.batch_id);
         assert_eq!(inspection.proposal_repairs[0].attempts.len(), 2);
@@ -173,7 +173,7 @@ fn agentic_run_inspection_warns_on_malformed_repair_metadata() {
             .await
             .unwrap();
 
-        let inspection = AgenticRunInspection::from_graph(ctx.graph());
+        let inspection = AgenticRunInspection::from_graph(&ctx.graph());
         assert!(inspection.proposal_repairs.is_empty());
         assert_eq!(inspection.warnings.len(), 1);
         assert!(matches!(

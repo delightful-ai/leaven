@@ -34,13 +34,13 @@ pub struct AgenticRunInspection {
 impl AgenticRunInspection {
     /// Builds an inspection view from the visible portion of a run graph.
     #[must_use]
-    pub fn from_graph<P>(graph: RunGraphView<'_, P>) -> Self
+    pub fn from_graph<P>(graph: &RunGraphView<'_, P>) -> Self
     where
         P: OptimizationProblem,
     {
         let run_id = graph.run_id();
         let mut warnings = Vec::new();
-        let (best_candidate, final_budget) = latest_run_end(&graph);
+        let (best_candidate, final_budget) = latest_run_end(graph);
         let best_lineage = match best_candidate {
             Some(best) if graph.candidate(best).is_some() => {
                 let mut lineage = vec![best];
@@ -98,13 +98,13 @@ impl AgenticRunInspection {
 
         let costs = AgenticCostInspection {
             final_budget,
-            charged_events: charged_event_cost(&graph),
-            evaluation_events: evaluation_event_cost(&graph),
+            charged_events: charged_event_cost(graph),
+            evaluation_events: evaluation_event_cost(graph),
             case_run_records: case_runs
                 .iter()
                 .fold(Cost::zero(), |total, record| total.combine(&record.cost)),
         };
-        let cache_events = cache_events(&graph);
+        let cache_events = cache_events(graph);
 
         Self {
             run_id,
@@ -120,7 +120,7 @@ impl AgenticRunInspection {
 }
 
 /// Proposal repair attempts attached to one proposal batch.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ProposalRepairInspection {
     pub batch_id: ProposalBatchId,
     pub stage: StageId,

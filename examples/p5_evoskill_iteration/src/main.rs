@@ -20,9 +20,9 @@ use leaven_agentic::{
     AgentCasePresentationInput, AgentCasePresenter, AgentCaseRunRecord, AgentCaseScoreInput,
     AgentCaseScorer, AgentPromptTarget, AgentRunPreflight, AgentWorkload, AgenticAdapterError,
     AgenticCostInspection, AgenticParseError, AgenticRepairError, AgenticRunInspection, CaseInput,
-    CaseSuite, CaseTarget, PreflightSeverity, ProposalParser, ProposalRepairFeedback,
-    ProposalRepairInspection, ProposalRepairPromptBuilder, RepairingAgenticProposer,
-    RepairingAgenticProposerConfig,
+    CaseSuite, CaseTarget, PreflightSeverity, PresenterDryRun, ProposalParser,
+    ProposalRepairFeedback, ProposalRepairInspection, ProposalRepairPromptBuilder,
+    RepairingAgenticProposer, RepairingAgenticProposerConfig, ScorerDryRun,
 };
 use leaven_agentic_skill::{
     SkillBankChangeReport, SkillBankMaterializer, SkillBankProposalInput,
@@ -207,27 +207,27 @@ async fn write_preflight_report(
         .checkpoint_store(&FileCheckpointStore::open(
             stores.run_root.join("preflight-checkpoints"),
         )?)
-        .presenter_dry_run(
-            seed,
-            seed_bank,
-            sample_case,
-            workspace_factory,
-            WorkspaceConfig::default(),
-            &stack.presenter,
-            ctx.materialize_context(),
-        )
+        .presenter_dry_run(PresenterDryRun {
+            candidate_id: seed,
+            candidate: seed_bank,
+            case: sample_case,
+            factory: workspace_factory,
+            workspace_config: WorkspaceConfig::default(),
+            presenter: &stack.presenter,
+            ctx: ctx.materialize_context(),
+        })
         .await
-        .scorer_dry_run(
-            seed,
-            sample_case,
-            &synthetic_presentation,
-            &synthetic_session,
-            Vec::new(),
-            workspace_factory,
-            WorkspaceConfig::default(),
-            &stack.scorer,
-            ctx.graph(),
-        )
+        .scorer_dry_run(ScorerDryRun {
+            candidate_id: seed,
+            case: sample_case,
+            presentation: &synthetic_presentation,
+            session: &synthetic_session,
+            workspace_files: Vec::new(),
+            factory: workspace_factory,
+            workspace_config: WorkspaceConfig::default(),
+            scorer: &stack.scorer,
+            graph: ctx.graph(),
+        })
         .await
         .check();
     let path = stores.run_root.join("preflight_report.json");
@@ -663,7 +663,7 @@ async fn complete_iteration(
             best_bank,
         },
     )?;
-    let inspection = AgenticRunInspection::from_graph(ctx.graph());
+    let inspection = AgenticRunInspection::from_graph(&ctx.graph());
     let proposal_repair_attempts = inspection
         .proposal_repairs
         .iter()
