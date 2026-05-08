@@ -172,6 +172,7 @@ where
             .await
             .map_err(map_runtime_error)?;
         let thread_id = thread.thread.id.clone();
+        let thread_is_ephemeral = thread.thread.ephemeral;
         let mut history = CodexHistory::new(&thread_id);
         history.record_thread(&thread.thread);
 
@@ -203,7 +204,8 @@ where
         if matches!(
             turn.items_view,
             codex_app_server_protocol::TurnItemsView::NotLoaded
-        ) {
+        ) && !thread_is_ephemeral
+        {
             let refreshed = client
                 .thread_read(ThreadReadParams {
                     thread_id,
@@ -331,8 +333,8 @@ mod tests {
     use std::path::PathBuf;
 
     use codex_app_server_protocol::{
-        JSONRPCMessage, JSONRPCResponse, RequestId, ServerNotification, ThreadStartResponse,
-        TurnCompletedNotification,
+        ItemCompletedNotification, JSONRPCMessage, JSONRPCResponse, RequestId, ServerNotification,
+        ThreadStartResponse, TurnCompletedNotification,
     };
     use leaven_agent::{AgentInstructions, OutputContract};
     use leaven_kernel::{AgentSessionId, BudgetSnapshot};
@@ -385,13 +387,26 @@ mod tests {
                         "platformOs": "macos"
                     }),
                 ),
-                json_response("leaven-codex-2", thread_start_response()),
+                json_response("leaven-codex-2", thread_start_response(false)),
                 json_response(
                     "leaven-codex-3",
                     serde_json::json!({
                         "turn": turn_payload("turn-1", "inProgress", [])
                     }),
                 ),
+                json_notification(ServerNotification::ItemCompleted(
+                    ItemCompletedNotification {
+                        thread_id: "thread-1".to_owned(),
+                        turn_id: "turn-1".to_owned(),
+                        item: serde_json::from_value(serde_json::json!({
+                            "type": "agentMessage",
+                            "id": "msg-1",
+                            "text": "done"
+                        }))
+                        .unwrap(),
+                        completed_at_ms: 0,
+                    },
+                )),
                 json_notification(ServerNotification::TurnCompleted(
                     TurnCompletedNotification {
                         thread_id: "thread-1".to_owned(),
@@ -443,6 +458,66 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn ephemeral_runtime_does_not_refresh_not_loaded_turns() {
+        let connector = MockConnector {
+            inbound: vec![
+                json_response(
+                    "leaven-codex-1",
+                    serde_json::json!({
+                        "userAgent": "test",
+                        "codexHome": "/tmp/codex-home",
+                        "platformFamily": "unix",
+                        "platformOs": "macos"
+                    }),
+                ),
+                json_response("leaven-codex-2", thread_start_response(true)),
+                json_response(
+                    "leaven-codex-3",
+                    serde_json::json!({
+                        "turn": turn_payload("turn-1", "inProgress", [])
+                    }),
+                ),
+                json_notification(ServerNotification::TurnCompleted(
+                    TurnCompletedNotification {
+                        thread_id: "thread-1".to_owned(),
+                        turn: serde_json::from_value(turn_payload_not_loaded(
+                            "turn-1",
+                            "completed",
+                        ))
+                        .unwrap(),
+                    },
+                )),
+            ],
+            workspace_access: WorkspaceAccessMode::BackendNeutral,
+        };
+        let mut config = CodexAppServerConfig::default();
+        config.thread.ephemeral = true;
+        let runtime = CodexAppServerRuntime::new(config, connector);
+        let mut workspace = LocalWorkspaceFactory::temp()
+            .allocate(Default::default())
+            .await
+            .unwrap();
+        let mut view = workspace.view();
+        let request = AgentRunRequest::new(
+            AgentInstructions::task("finish"),
+            OutputContract::WorkspaceDiff { roots: Vec::new() },
+        );
+        let budget = BudgetSnapshot::default();
+
+        let session = runtime
+            .run_session(
+                &mut view,
+                request,
+                AgentRunContext::new(AgentSessionId::new(), &budget),
+            )
+            .await
+            .unwrap()
+            .value;
+
+        assert_eq!(session.status, AgentStatus::Succeeded);
+    }
+
+    #[tokio::test]
     async fn local_mount_requirement_is_reported_by_runtime_capability() {
         let connector = MockConnector {
             inbound: Vec::new(),
@@ -487,14 +562,14 @@ mod tests {
         .unwrap()
     }
 
-    fn thread_start_response() -> serde_json::Value {
+    fn thread_start_response(ephemeral: bool) -> serde_json::Value {
         serde_json::to_value(ThreadStartResponse {
             thread: serde_json::from_value(serde_json::json!({
                 "id": "thread-1",
                 "sessionId": "session-1",
                 "forkedFromId": null,
                 "preview": "",
-                "ephemeral": true,
+                "ephemeral": ephemeral,
                 "modelProvider": "openai",
                 "createdAt": 0,
                 "updatedAt": 0,
@@ -537,6 +612,19 @@ mod tests {
             "id": id,
             "items": items,
             "itemsView": "full",
+            "status": status,
+            "error": null,
+            "startedAt": null,
+            "completedAt": null,
+            "durationMs": null
+        })
+    }
+
+    fn turn_payload_not_loaded(id: &str, status: &str) -> serde_json::Value {
+        serde_json::json!({
+            "id": id,
+            "items": [],
+            "itemsView": "notLoaded",
             "status": status,
             "error": null,
             "startedAt": null,

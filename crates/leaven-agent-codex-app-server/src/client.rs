@@ -193,7 +193,14 @@ where
         loop {
             match self.read_jsonrpc_message().await? {
                 JSONRPCMessage::Response(JSONRPCResponse { id, result }) if id == request_id => {
-                    return serde_json::from_value(result).map_err(Into::into);
+                    let payload = result.to_string();
+                    return serde_json::from_value(result).map_err(|source| {
+                        CodexAppServerError::ResponseDecode {
+                            method: method.to_owned(),
+                            payload,
+                            source,
+                        }
+                    });
                 }
                 JSONRPCMessage::Error(JSONRPCError { id, error }) if id == request_id => {
                     return Err(CodexAppServerError::JsonRpc {

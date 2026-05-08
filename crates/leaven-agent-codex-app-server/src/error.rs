@@ -14,6 +14,15 @@ pub enum CodexAppServerError {
     #[error("codex app-server JSON failed: {0}")]
     Json(#[from] serde_json::Error),
 
+    #[cfg(feature = "app-server")]
+    #[error("codex app-server failed to decode `{method}` response: {source}; payload: {payload}")]
+    ResponseDecode {
+        method: String,
+        payload: String,
+        #[source]
+        source: serde_json::Error,
+    },
+
     #[error("codex app-server closed the connection")]
     ConnectionClosed,
 

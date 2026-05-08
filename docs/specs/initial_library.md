@@ -4702,6 +4702,11 @@ Leaven layers.
   about workspace semantics: pure-remote workspaces fail before launch unless
   they expose a real local mount. Non-stdio app-server execution should be a
   separate connector.
+- **Codex app-server sessions are materialized by default.** Provider thread
+  history is evidence and replay/debug substrate. Ephemeral sessions remain an
+  explicit opt-in for throwaway runs, and the runtime does not call
+  `thread/read includeTurns` for them because app-server intentionally refuses
+  that operation on unmaterialized threads.
 - **Request mapping is explicit.** `AgentRunRequest` maps to Codex
   `thread/start` and `turn/start`; output-contract validation remains runtime-
   level and proposal parsing remains stage-owned.

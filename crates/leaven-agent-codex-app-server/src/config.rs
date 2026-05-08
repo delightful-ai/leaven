@@ -88,7 +88,7 @@ impl Default for CodexAppServerThreadConfig {
             approvals_reviewer: Some(CodexApprovalsReviewer::User),
             base_instructions: None,
             developer_instructions: None,
-            ephemeral: true,
+            ephemeral: false,
             service_name: None,
         }
     }
@@ -402,5 +402,10 @@ mod tests {
         config.thread.model = Some("gpt-5.5".to_owned());
 
         assert_ne!(before, config.fingerprint());
+    }
+
+    #[test]
+    fn default_threads_are_materialized_for_evidence_replay() {
+        assert!(!CodexAppServerConfig::default().thread.ephemeral);
     }
 }

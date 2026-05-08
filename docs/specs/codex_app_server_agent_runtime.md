@@ -253,6 +253,13 @@ pub enum CodexAppServerApprovalMode {
 and is the right optimization default: an unattended optimization run should
 not silently grant extra permissions when a provider asks.
 
+`CodexAppServerThreadConfig::ephemeral` defaults to `false`. Leaven optimization
+runs should preserve provider thread history by default because transcripts are
+evidence, debugging material, and checkpoint/replay substrate. Ephemeral threads
+remain available for explicit throwaway sessions, but the runtime must not call
+`thread/read includeTurns` for them; Codex app-server intentionally refuses that
+operation for unmaterialized threads.
+
 The first implementation ships `StdioCodexAppServerConnector`, but the runtime
 is generic over `CodexAppServerConnector`. Remote/container transports should
 be new connector implementations, not new meanings for stdio.
@@ -741,8 +748,12 @@ Add or extend crate topology tests to prove:
 Live Codex tests are opt-in:
 
 ```text
-LEAVEN_CODEX_LIVE=1 cargo test -p leaven-agent-codex-app-server --features live-codex-tests
+LEAVEN_CODEX_LIVE=1 cargo test -p leaven-agent-codex-app-server --features live-codex-tests -- --ignored
 ```
+
+The live smoke defaults to `$HOME/.bun/bin/codex` so it does not accidentally
+use a multi-account wrapper that resolves earlier on `PATH`; set
+`LEAVEN_CODEX_BIN=/path/to/codex` to override. It requires local Codex auth.
 
 They should be signed/ignored by default and must use a temporary workspace.
 
