@@ -7,6 +7,7 @@ mod proposal;
 mod roles;
 mod scorer;
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -15,9 +16,12 @@ use leaven_agent::{
     TranscriptEvent, TranscriptRole,
 };
 use leaven_agentic::{
-    AgentPromptTarget, AgentRunPreflight, AgenticParseError, AgenticRepairError,
-    AgenticRunInspection, PreflightSeverity, ProposalParser, ProposalRepairFeedback,
-    ProposalRepairPromptBuilder, RepairingAgenticProposer, RepairingAgenticProposerConfig,
+    AgentCase, AgentCaseEvaluator, AgentCaseEvaluatorConfig, AgentCasePresentation,
+    AgentCasePresentationInput, AgentCasePresenter, AgentCaseScoreInput, AgentCaseScorer,
+    AgentPromptTarget, AgentRunPreflight, AgentWorkload, AgenticAdapterError, AgenticParseError,
+    AgenticRepairError, AgenticRunInspection, CaseInput, CaseSuite, CaseTarget, PreflightSeverity,
+    ProposalParser, ProposalRepairFeedback, ProposalRepairPromptBuilder, RepairingAgenticProposer,
+    RepairingAgenticProposerConfig,
 };
 use leaven_agentic_skill::{
     SkillBankChangeReport, SkillBankMaterializer, SkillBankProposalInput,
@@ -25,20 +29,18 @@ use leaven_agentic_skill::{
 };
 use leaven_artifact_skill::{SkillBank, SkillBankChange};
 use leaven_core::{
-    Artifact, Assessment, AssessmentGranularity, AssessmentTarget, EvaluationPurpose,
-    EvaluationRequest, EvaluationSet, ExternalRef, InfoRef, OptimizationProblem,
-    ProposalBatchSemantics, ResolvedEvaluationRequest, ResolvedRequestKind,
+    Artifact, AssessmentGranularity, EvaluationPurpose, EvaluationRequest, EvaluationSet,
+    ExternalRef, InfoRef, OptimizationProblem, ProposalBatchSemantics,
 };
 use leaven_engine::{
-    BudgetLedger, CachePolicy, EvaluationCache, EvaluationContext, EvaluationError, Evaluator,
-    MaterializationReport, MaterializeContext, MaterializeError, Materializer, OptimizerStateWrite,
-    RenderContext, RenderError, Renderer, RestoredRunState, RunContext, RunEvent, RunGraph,
-    StoreRunPersistence,
+    BudgetLedger, CachePolicy, EvaluationCache, MaterializationReport, MaterializeContext,
+    MaterializeError, Materializer, OptimizerStateWrite, RenderContext, RenderError, Renderer,
+    RestoredRunState, RunContext, RunEvent, RunGraph, StoreRunPersistence,
 };
 use leaven_evidence::ScalarEvidence;
 use leaven_kernel::{
-    AgentSessionId, Budget, CandidateId, Cost, EvaluationSetId, EvaluatorId, EvidenceRef,
-    Fingerprint, MetadataBag, Metered, ProposerId, RunId, StageId,
+    AgentSessionId, Budget, CandidateId, CaseId, Cost, EvaluatorId, EvidenceRef, Fingerprint,
+    MetadataBag, Metered, ProposerId, RunId, StageId,
 };
 use leaven_population::KeepBest;
 use leaven_store::EvidenceStore;
@@ -50,7 +52,7 @@ use std::num::NonZeroUsize;
 
 use crate::checkpoint::EvoSkillCheckpoint;
 use crate::codex::{LiveCodexRuntime, live_codex_runtime, require_live_codex};
-use crate::data::{EvoSkillCase, TRAIN, VALIDATION, case_by_id, case_set, load_cases};
+use crate::data::{EvoSkillCase, Split, TRAIN, VALIDATION, case_set, load_cases};
 use crate::error::{ExampleError, Result, msg};
 use crate::evidence::{AgentRole, CaseExecution, EvoSkillEvidence};
 use crate::proposal::{EvoSkillProposalAnnotations, SkillProposal};
@@ -170,19 +172,62 @@ fn evoskill_state_write(state: &EvoSkillCheckpoint) -> Result<OptimizerStateWrit
     )?)
 }
 
-fn write_preflight_report(
+async fn write_preflight_report(
     stores: &RunStores,
+    workload: &AgentWorkload,
     seed_bank: &SkillBank,
-    evaluator: &EvoSkillEvaluator,
+    seed: CandidateId,
+    workspace_factory: &LocalWorkspaceFactory,
+    stack: &ExecutorStack,
+    ctx: &RunContext<'_, EvoSkillProblem>,
 ) -> Result<()> {
+    let Some(sample_case) = workload.cases().cases().values().next() else {
+        return Err(msg("preflight workload has no cases"));
+    };
+    let mut synthetic_session = leaven_agent::AgentSession::succeeded(AgentSessionId::new());
+    synthetic_session.transcript.push_message(
+        TranscriptRole::Assistant,
+        synthetic_answer_for(sample_case)?,
+    );
+    let synthetic_presentation = AgentCasePresentation {
+        request: AgentRunRequest::new(
+            AgentInstructions::task("synthetic scorer preflight"),
+            OutputContract::FinalMessage,
+        ),
+        materialized_refs: Vec::new(),
+    };
     let report = AgentRunPreflight::new()
         .artifact(seed_bank)
-        .runtime(&evaluator.runtime)
+        .workload(workload)
+        .runtime(&stack.runtime)
         .output_contract(&OutputContract::FinalMessage)
         .cache_identity(seed_bank, &CachePolicy::Never)
+        .store(stores.run_persistence.store())
         .checkpoint_store(&FileCheckpointStore::open(
             stores.run_root.join("preflight-checkpoints"),
         )?)
+        .presenter_dry_run(
+            seed,
+            seed_bank,
+            sample_case,
+            workspace_factory,
+            WorkspaceConfig::default(),
+            &stack.presenter,
+            ctx.materialize_context(),
+        )
+        .await
+        .scorer_dry_run(
+            seed,
+            sample_case,
+            &synthetic_presentation,
+            &synthetic_session,
+            Vec::new(),
+            workspace_factory,
+            WorkspaceConfig::default(),
+            &stack.scorer,
+            ctx.graph(),
+        )
+        .await
         .check();
     let path = stores.run_root.join("preflight_report.json");
     std::fs::write(&path, serde_json::to_vec_pretty(&report)?)?;
@@ -236,8 +281,7 @@ async fn run_iteration(
     };
     let mut population = KeepBest::new();
     let workspace_factory = LocalWorkspaceFactory::new(stores.run_root.join("workspaces"));
-    let evaluator = new_executor_evaluator(&cases, &workspace_factory);
-    write_preflight_report(&stores, &seed_bank, &evaluator)?;
+    let executor = new_executor_stack(&cases, &workspace_factory)?;
 
     let mut ctx = RunContext::<EvoSkillProblem>::new(&mut graph, &mut budget)
         .with_case_set(&case_set)
@@ -245,10 +289,20 @@ async fn run_iteration(
         .with_evidence_store(&stores.evidence_store)
         .with_persistence(Some(&stores.run_persistence));
     let seed = ensure_seed_candidate(&mut ctx, &seed_bank)?;
+    write_preflight_report(
+        &stores,
+        &executor.workload,
+        &seed_bank,
+        seed,
+        &workspace_factory,
+        &executor,
+        &ctx,
+    )
+    .await?;
 
     let baseline = ensure_baseline(
         &mut ctx,
-        &evaluator,
+        &executor.evaluator,
         &mut population,
         BaselineRequest {
             run_id,
@@ -261,7 +315,7 @@ async fn run_iteration(
     .await?;
     let failures = ensure_failures(
         &mut ctx,
-        &evaluator,
+        &executor.evaluator,
         FailureRequest {
             run_id,
             cases: &cases,
@@ -315,7 +369,7 @@ async fn run_iteration(
 
     complete_iteration(
         &mut ctx,
-        &evaluator,
+        &executor.evaluator,
         &mut population,
         &stores,
         CompletionRequest {
@@ -690,15 +744,82 @@ fn load_fixture_cases() -> Vec<EvoSkillCase> {
     .expect("fixture cases load")
 }
 
-fn new_executor_evaluator(
+type EvoSkillEvaluator = AgentCaseEvaluator<
+    EvoSkillProblem,
+    LocalWorkspaceFactory,
+    LiveCodexRuntime,
+    EvoSkillPresenter,
+    EvoSkillScorer,
+>;
+
+struct ExecutorStack {
+    workload: AgentWorkload,
+    runtime: LiveCodexRuntime,
+    presenter: EvoSkillPresenter,
+    scorer: EvoSkillScorer,
+    evaluator: EvoSkillEvaluator,
+}
+
+fn new_executor_stack(
     cases: &[EvoSkillCase],
     workspace_factory: &LocalWorkspaceFactory,
-) -> EvoSkillEvaluator {
-    EvoSkillEvaluator {
-        cases: cases.to_vec(),
-        workspace_factory: workspace_factory.clone(),
-        runtime: live_codex_runtime(executor_developer_instructions()),
+) -> Result<ExecutorStack> {
+    let mut agent_cases = BTreeMap::new();
+    let mut train = Vec::new();
+    let mut validation = Vec::new();
+    for (index, case) in cases.iter().enumerate() {
+        let id = CaseId::from_index(index);
+        match case.split {
+            Split::Train => train.push(id),
+            Split::Validation => validation.push(id),
+        }
+        agent_cases.insert(id, agent_case_from_evo(index, case));
+    }
+    let partitions =
+        leaven_agentic::CasePartitions::with_all(agent_cases.keys().copied().collect())
+            .with_partition(leaven_agentic::CasePartitionId::from(TRAIN), train)
+            .with_partition(
+                leaven_agentic::CasePartitionId::from(VALIDATION),
+                validation,
+            );
+    let workload = AgentWorkload::new(CaseSuite::new(agent_cases, partitions)?);
+    let runtime = live_codex_runtime(executor_developer_instructions());
+    let presenter = EvoSkillPresenter {
         developer_instructions: executor_developer_instructions(),
+    };
+    let scorer = EvoSkillScorer {
+        developer_instructions: executor_developer_instructions(),
+    };
+    let evaluator = AgentCaseEvaluator::new(
+        AgentCaseEvaluatorConfig::new(EvaluatorId::PRIMARY, Fingerprint::from_bytes([41; 32])),
+        workload.cases().clone(),
+        workspace_factory.clone(),
+        runtime.clone(),
+        presenter.clone(),
+        scorer.clone(),
+    );
+    Ok(ExecutorStack {
+        workload,
+        runtime,
+        presenter,
+        scorer,
+        evaluator,
+    })
+}
+
+fn agent_case_from_evo(index: usize, case: &EvoSkillCase) -> AgentCase {
+    AgentCase {
+        id: CaseId::from_index(index),
+        input: CaseInput::Structured(serde_json::json!({
+            "id": case.id,
+            "question": case.question,
+            "source": case.source,
+        })),
+        target: CaseTarget::Text(case.answer.clone()),
+        metadata: MetadataBag::new(),
+        files: Default::default(),
+        setup: None,
+        workspace: None,
     }
 }
 
@@ -835,27 +956,31 @@ async fn evaluate_one(
             EvaluationRequest::Independent {
                 candidates: vec![candidate],
                 set: EvaluationSet::Partition(leaven_core::PartitionId::from(partition)),
-                granularity: AssessmentGranularity::Aggregate,
+                granularity: AssessmentGranularity::PerCase,
                 purpose,
             },
         )
         .await?;
-    let assessment = report
+    let first_assessment = report
         .assessment_ids
         .first()
         .copied()
         .ok_or_else(|| msg("evaluator returned no assessment"))?;
-    let evidence = ctx.assessment_evidence(assessment)?;
-    let EvoSkillEvidence::Evaluation {
-        average_score,
-        cases,
-        ..
-    } = evidence
-    else {
-        return Err(msg("expected evaluation evidence"));
-    };
+    let mut cases = Vec::new();
+    for assessment in &report.assessment_ids {
+        let evidence = ctx.assessment_evidence(*assessment)?;
+        let EvoSkillEvidence::Evaluation {
+            cases: mut case_records,
+            ..
+        } = evidence
+        else {
+            return Err(msg("expected evaluation evidence"));
+        };
+        cases.append(&mut case_records);
+    }
+    let average_score = average_case_score(&cases);
     Ok(EvaluationOutcome {
-        assessment,
+        assessment: first_assessment,
         average_score,
         cost: report.cost,
         evidence: EvaluationEvidence { cases },
@@ -877,141 +1002,138 @@ fn observe_keep_best(
     Ok(())
 }
 
-struct EvoSkillEvaluator {
-    cases: Vec<EvoSkillCase>,
-    workspace_factory: LocalWorkspaceFactory,
-    runtime: LiveCodexRuntime,
+#[derive(Clone)]
+struct EvoSkillPresenter {
     developer_instructions: String,
 }
 
-impl Evaluator<EvoSkillProblem> for EvoSkillEvaluator {
-    fn id(&self) -> EvaluatorId {
-        EvaluatorId::PRIMARY
-    }
-
+impl AgentCasePresenter<EvoSkillProblem> for EvoSkillPresenter {
     fn fingerprint(&self) -> Fingerprint {
-        self.runtime.fingerprint()
+        Fingerprint::from_bytes([42; 32])
     }
 
-    fn cache_policy(&self, _request: &ResolvedEvaluationRequest) -> CachePolicy {
-        CachePolicy::Never
-    }
-
-    async fn evaluate(
-        &self,
-        request: ResolvedEvaluationRequest,
-        ctx: EvaluationContext<'_, EvoSkillProblem>,
-    ) -> std::result::Result<Metered<Vec<Assessment<EvoSkillProblem>>>, EvaluationError> {
-        let ResolvedRequestKind::Independent { candidates } = request.kind else {
-            return Err(EvaluationError::Message(
-                "expected independent request".to_owned(),
-            ));
+    async fn present<'a>(
+        &'a self,
+        input: AgentCasePresentationInput<'a, EvoSkillProblem>,
+        workspace: &'a mut leaven_workspace::WorkspaceView<'_>,
+        ctx: leaven_engine::MaterializeContext<'a, EvoSkillProblem>,
+    ) -> std::result::Result<Metered<AgentCasePresentation>, AgenticAdapterError> {
+        let case = presented_case(input.case)?;
+        SkillBankMaterializer::new(
+            SkillWorkspaceLayout::new(".agents/skills")
+                .map_err(|error| AgenticAdapterError::Input(error.to_string()))?,
+        )
+        .materialize_into(
+            &SkillBankProposalInput::new(input.candidate_id),
+            workspace,
+            ctx,
+        )
+        .await
+        .map_err(|error| AgenticAdapterError::Input(error.to_string()))?;
+        write_json(workspace, "task/case.json", &case)
+            .map_err(|error| AgenticAdapterError::Input(error.to_string()))?;
+        let mut instructions = AgentInstructions::task(executor_task(&case));
+        instructions.system = Some(self.developer_instructions.clone());
+        let mut request = AgentRunRequest::new(instructions, OutputContract::FinalMessage);
+        request.limits = AgentLimits {
+            timeout: Some(Duration::from_secs(240)),
+            ..AgentLimits::default()
         };
-        let mut assessments = Vec::new();
-        let case_ids = request.set.case_ids.clone();
-        for candidate in candidates {
-            let mut executions = Vec::new();
-            let mut cost = Cost::zero();
-            for case_id in &case_ids {
-                let case = case_by_id(&self.cases, *case_id).ok_or_else(|| {
-                    EvaluationError::Message(format!("unknown case id {case_id}"))
-                })?;
-                let execution = self
-                    .run_case(candidate, case, ctx.materialize_context())
-                    .await
-                    .map_err(|error| {
-                        EvaluationError::with_source("executor agent failed", error)
-                    })?;
-                cost = cost.combine(&execution.cost);
-                executions.push(execution.value);
-            }
-            let average_score = average_case_score(&executions);
-            assessments.push(Assessment::Independent {
-                candidate,
-                target: AssessmentTarget::EvaluationSet(EvaluationSetId::new()),
-                evidence: EvoSkillEvidence::Evaluation {
-                    candidate,
-                    split: format!("{:?}", request.purpose),
-                    average_score,
-                    cases: executions,
-                },
-                cost: cost.clone(),
-                metadata: MetadataBag::new(),
-            });
-        }
         Ok(Metered::new(
-            assessments,
-            Cost::llm_calls(case_ids.len() as u64),
+            AgentCasePresentation {
+                request,
+                materialized_refs: vec![
+                    WorkspacePath::new("task/case.json")
+                        .map_err(|error| AgenticAdapterError::Input(error.to_string()))?,
+                ],
+            },
+            Cost::zero(),
         ))
     }
 }
 
-impl EvoSkillEvaluator {
-    async fn run_case(
-        &self,
-        candidate: CandidateId,
-        case: &EvoSkillCase,
-        materialize_context: leaven_engine::MaterializeContext<'_, EvoSkillProblem>,
-    ) -> Result<Metered<CaseExecution>> {
-        let mut workspace = self
-            .workspace_factory
-            .allocate(WorkspaceConfig::default())
-            .await?;
-        let stage_result = async {
-            let has_relevant_skill = materialize_context
-                .graph()
-                .artifact(candidate)
-                .is_some_and(|bank| !bank.is_empty());
-            let mut view = workspace.view();
-            SkillBankMaterializer::new(SkillWorkspaceLayout::new(".agents/skills")?)
-                .materialize_into(
-                    &SkillBankProposalInput::new(candidate),
-                    &mut view,
-                    materialize_context,
-                )
-                .await
-                .map_err(|error| msg(error.to_string()))?;
-            write_json(&mut view, "task/case.json", case)?;
-            let mut instructions = AgentInstructions::task(executor_task(case));
-            instructions.system = Some(self.developer_instructions.clone());
-            let mut request = AgentRunRequest::new(instructions, OutputContract::FinalMessage);
-            request.limits = AgentLimits {
-                timeout: Some(Duration::from_secs(240)),
-                ..AgentLimits::default()
-            };
-            let budget = leaven_kernel::BudgetSnapshot::default();
-            let session = self
-                .runtime
-                .run_session(
-                    &mut view,
-                    request,
-                    AgentRunContext::new(AgentSessionId::new(), &budget),
-                )
-                .await?;
-            let answer: AgentAnswer = final_json(&session.value)?;
-            let score = skill_gated_score(has_relevant_skill, &case.answer, &answer.final_answer);
-            Ok(Metered::new(
-                CaseExecution {
-                    case_id: case.id.clone(),
-                    question: case.question.clone(),
-                    expected_answer: case.answer.clone(),
+#[derive(Clone)]
+struct EvoSkillScorer {
+    developer_instructions: String,
+}
+
+impl AgentCaseScorer<EvoSkillProblem> for EvoSkillScorer {
+    fn fingerprint(&self) -> Fingerprint {
+        Fingerprint::from_bytes([43; 32])
+    }
+
+    async fn score<'a>(
+        &'a self,
+        input: AgentCaseScoreInput<'a, EvoSkillProblem>,
+        _workspace: &'a leaven_workspace::WorkspaceView<'_>,
+    ) -> std::result::Result<Metered<EvoSkillEvidence>, AgenticAdapterError> {
+        let case = presented_case(input.case)?;
+        let expected = expected_answer(input.case)?;
+        let answer: AgentAnswer = final_json(input.session)
+            .map_err(|error| AgenticAdapterError::Input(error.to_string()))?;
+        let has_relevant_skill = input
+            .graph
+            .artifact(input.candidate_id)
+            .is_some_and(|bank| !bank.is_empty());
+        let score = skill_gated_score(has_relevant_skill, &expected, &answer.final_answer);
+        Ok(Metered::new(
+            EvoSkillEvidence::Evaluation {
+                candidate: input.candidate_id,
+                split: "case".to_owned(),
+                average_score: score,
+                cases: vec![CaseExecution {
+                    case_id: case.id,
+                    question: case.question,
+                    expected_answer: expected,
                     predicted_answer: answer.final_answer,
                     score,
                     passed: score >= 0.8,
                     developer_instructions: self.developer_instructions.clone(),
-                    session: session.value.clone(),
-                },
-                session.cost,
-            ))
-        }
-        .await;
-        finish_workspace(workspace, stage_result).await
+                    session: input.session.clone(),
+                }],
+            },
+            Cost::zero(),
+        ))
     }
 }
 
 #[derive(serde::Deserialize)]
 struct AgentAnswer {
     final_answer: String,
+}
+
+#[derive(serde::Deserialize, serde::Serialize)]
+struct PresentedCase {
+    id: String,
+    question: String,
+    source: String,
+}
+
+fn presented_case(case: &AgentCase) -> std::result::Result<PresentedCase, AgenticAdapterError> {
+    let CaseInput::Structured(value) = &case.input else {
+        return Err(AgenticAdapterError::Input(
+            "EvoSkill presenter requires structured case input".to_owned(),
+        ));
+    };
+    serde_json::from_value(value.clone()).map_err(|error| {
+        AgenticAdapterError::Input(format!("invalid EvoSkill case input: {error}"))
+    })
+}
+
+fn expected_answer(case: &AgentCase) -> std::result::Result<String, AgenticAdapterError> {
+    let CaseTarget::Text(answer) = &case.target else {
+        return Err(AgenticAdapterError::Input(
+            "EvoSkill scorer requires text targets".to_owned(),
+        ));
+    };
+    Ok(answer.clone())
+}
+
+fn synthetic_answer_for(case: &AgentCase) -> Result<String> {
+    Ok(format!(
+        "{{\"final_answer\":{}}}",
+        serde_json::to_string(&expected_answer(case).map_err(|error| msg(error.to_string()))?)?
+    ))
 }
 
 fn skill_gated_score(has_relevant_skill: bool, expected: &str, predicted: &str) -> f64 {
@@ -1022,7 +1144,7 @@ fn skill_gated_score(has_relevant_skill: bool, expected: &str, predicted: &str) 
     }
 }
 
-fn executor_task(case: &EvoSkillCase) -> String {
+fn executor_task(case: &PresentedCase) -> String {
     format!(
         "Answer this case.\n\nQuestion:\n{}\n\nSource:\n{}\n\nThis fixture is skill-gated. Inspect `.agents/skills` mentally from the task context and use a relevant skill when one exists. If no relevant skill exists for the specialized reusable conversion procedure, final_answer must be exactly `NOT_ATTEMPTED`; do not answer from prior knowledge or source arithmetic without a relevant mounted skill.\n\nDo not call tools. Reply with JSON only: {{\"final_answer\":\"...\",\"reasoning\":\"...\"}}.",
         case.question, case.source

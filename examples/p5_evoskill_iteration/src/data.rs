@@ -39,12 +39,6 @@ pub fn case_set(cases: &[EvoSkillCase]) -> CaseSet<EvoSkillCase> {
         .with_partition(PartitionId::from(VALIDATION), validation)
 }
 
-pub fn case_by_id(cases: &[EvoSkillCase], id: CaseId) -> Option<&EvoSkillCase> {
-    usize::try_from(id.0)
-        .ok()
-        .and_then(|index| cases.get(index))
-}
-
 fn case_ids(cases: &[EvoSkillCase], split: Split) -> Vec<CaseId> {
     cases
         .iter()
