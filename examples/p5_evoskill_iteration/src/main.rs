@@ -17,10 +17,11 @@ use leaven_agent::{
 };
 use leaven_agentic::{
     AgentCase, AgentCaseEvaluator, AgentCaseEvaluatorConfig, AgentCasePresentation,
-    AgentCasePresentationInput, AgentCasePresenter, AgentCaseScoreInput, AgentCaseScorer,
-    AgentPromptTarget, AgentRunPreflight, AgentWorkload, AgenticAdapterError, AgenticParseError,
-    AgenticRepairError, AgenticRunInspection, CaseInput, CaseSuite, CaseTarget, PreflightSeverity,
-    ProposalParser, ProposalRepairFeedback, ProposalRepairPromptBuilder, RepairingAgenticProposer,
+    AgentCasePresentationInput, AgentCasePresenter, AgentCaseRunRecord, AgentCaseScoreInput,
+    AgentCaseScorer, AgentPromptTarget, AgentRunPreflight, AgentWorkload, AgenticAdapterError,
+    AgenticCostInspection, AgenticParseError, AgenticRepairError, AgenticRunInspection, CaseInput,
+    CaseSuite, CaseTarget, PreflightSeverity, ProposalParser, ProposalRepairFeedback,
+    ProposalRepairInspection, ProposalRepairPromptBuilder, RepairingAgenticProposer,
     RepairingAgenticProposerConfig,
 };
 use leaven_agentic_skill::{
@@ -597,15 +598,21 @@ struct P5ResultSummary {
     admitted: bool,
     best_score: f64,
     best_candidate: CandidateId,
+    best_lineage: Vec<CandidateId>,
     proposal_action: String,
     proposal: String,
     skill_change_report: SkillBankChangeReport,
     proposal_repair_batches: usize,
     proposal_repair_attempts: usize,
-    case_execution_records: usize,
+    proposal_repairs: Vec<ProposalRepairInspection>,
+    child_case_executions: Vec<CaseExecution>,
+    case_run_records: Vec<AgentCaseRunRecord>,
     cache_events: usize,
     cache_bypasses: usize,
     child_evaluation_cost: Cost,
+    costs: AgenticCostInspection,
+    latest_checkpoint: Option<String>,
+    checkpoint_files: Vec<String>,
     warnings: Vec<String>,
 }
 
@@ -640,6 +647,22 @@ async fn complete_iteration(
     };
     let skill_change_report =
         SkillBankChangeReport::from_change(&request.seed_bank, &request.change)?;
+    ctx.emit(RunEvent::OptimizationEnded {
+        run_id: request.run_id,
+        best: Some(best_candidate),
+        budget: ctx.budget(),
+    });
+    checkpoint_phase(
+        ctx,
+        &EvoSkillCheckpoint::IterationComplete {
+            run_id: request.run_id,
+            baseline_score: request.baseline_score,
+            child_score: child_eval.average_score,
+            admitted,
+            best_score,
+            best_bank,
+        },
+    )?;
     let inspection = AgenticRunInspection::from_graph(ctx.graph());
     let proposal_repair_attempts = inspection
         .proposal_repairs
@@ -661,9 +684,12 @@ async fn complete_iteration(
         proposal_action: format!("{:?}", request.skill_proposal.action),
         proposal: request.skill_proposal.proposed_skill.clone(),
         skill_change_report,
+        best_lineage: inspection.best_lineage.clone(),
         proposal_repair_batches: inspection.proposal_repairs.len(),
         proposal_repair_attempts,
-        case_execution_records: child_eval.evidence.cases.len(),
+        proposal_repairs: inspection.proposal_repairs,
+        child_case_executions: child_eval.evidence.cases.clone(),
+        case_run_records: inspection.case_runs,
         cache_events: inspection.cache_events.len(),
         cache_bypasses: inspection
             .cache_events
@@ -671,21 +697,13 @@ async fn complete_iteration(
             .filter(|event| matches!(event.cache, leaven_engine::CacheStatus::Bypassed(_)))
             .count(),
         child_evaluation_cost: child_eval.cost.clone(),
+        costs: inspection.costs,
+        latest_checkpoint: latest_run_checkpoint(&stores.run_root)?,
+        checkpoint_files: list_run_checkpoints(&stores.run_root)?,
         warnings,
     };
     let summary_path = stores.run_root.join("result_summary.json");
     std::fs::write(&summary_path, serde_json::to_vec_pretty(&summary)?)?;
-    checkpoint_phase(
-        ctx,
-        &EvoSkillCheckpoint::IterationComplete {
-            run_id: request.run_id,
-            baseline_score: request.baseline_score,
-            child_score: child_eval.average_score,
-            admitted,
-            best_score,
-            best_bank,
-        },
-    )?;
 
     println!(
         "evoskill iteration complete baseline={:.4} child={:.4} admitted={} best={:.4}",
@@ -698,6 +716,38 @@ async fn complete_iteration(
     println!("run_root={}", stores.run_root.display());
     println!("evidence_root={}", stores.evidence_store.root().display());
     Ok(())
+}
+
+fn list_run_checkpoints(run_root: &Path) -> Result<Vec<String>> {
+    let checkpoints = run_root.join("run-store").join("checkpoints");
+    if !checkpoints.exists() {
+        return Ok(Vec::new());
+    }
+    let mut files = Vec::new();
+    for entry in std::fs::read_dir(&checkpoints)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path
+            .extension()
+            .is_some_and(|extension| extension == "checkpoint")
+        {
+            files.push(entry.file_name().to_string_lossy().into_owned());
+        }
+    }
+    files.sort();
+    Ok(files)
+}
+
+fn latest_run_checkpoint(run_root: &Path) -> Result<Option<String>> {
+    let latest = run_root
+        .join("run-store")
+        .join("checkpoints")
+        .join("LATEST");
+    if !latest.exists() {
+        return Ok(None);
+    }
+    let value = std::fs::read_to_string(latest)?;
+    Ok(Some(value.trim().to_owned()))
 }
 
 fn checkpoint_phase(
