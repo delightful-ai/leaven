@@ -1,6 +1,6 @@
 use leaven_agent::AgentRuntimeError;
 use leaven_agentic::AgenticAdapterError;
-use leaven_engine::RunContextError;
+use leaven_engine::{RunContextError, RunPersistenceError};
 use leaven_store::StoreError;
 use leaven_workspace::{FactoryError, WorkspaceError, WorkspacePathError};
 
@@ -24,6 +24,8 @@ pub enum ExampleError {
     Runtime(#[from] AgentRuntimeError),
     #[error(transparent)]
     RunContext(#[from] RunContextError),
+    #[error(transparent)]
+    RunPersistence(#[from] RunPersistenceError),
     #[error(transparent)]
     Agentic(#[from] AgenticAdapterError),
     #[error(transparent)]

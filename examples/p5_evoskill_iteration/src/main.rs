@@ -25,14 +25,14 @@ use leaven_agentic_skill::{
 };
 use leaven_artifact_skill::{SkillBank, SkillBankChange};
 use leaven_core::{
-    Assessment, AssessmentGranularity, AssessmentTarget, EvaluationPurpose, EvaluationRequest,
-    EvaluationSet, ExternalRef, InfoRef, OptimizationProblem, ProposalBatchSemantics,
-    ResolvedEvaluationRequest, ResolvedRequestKind,
+    Artifact, Assessment, AssessmentGranularity, AssessmentTarget, EvaluationPurpose,
+    EvaluationRequest, EvaluationSet, ExternalRef, InfoRef, OptimizationProblem,
+    ProposalBatchSemantics, ResolvedEvaluationRequest, ResolvedRequestKind,
 };
 use leaven_engine::{
-    BudgetLedger, CachePolicy, EvaluationContext, EvaluationError, Evaluator,
+    BudgetLedger, CachePolicy, EvaluationCache, EvaluationContext, EvaluationError, Evaluator,
     MaterializationReport, MaterializeContext, MaterializeError, Materializer, RenderContext,
-    RenderError, Renderer, RunContext, RunEvent, RunGraph,
+    RenderError, Renderer, RestoredRunState, RunContext, RunEvent, RunGraph, StoreRunPersistence,
 };
 use leaven_evidence::ScalarEvidence;
 use leaven_kernel::{
@@ -41,7 +41,9 @@ use leaven_kernel::{
 };
 use leaven_population::KeepBest;
 use leaven_store::EvidenceStore;
-use leaven_store_file::{FileCheckpointStore, FileEvidenceStore, FileJsonCheckpointStore};
+use leaven_store_file::{
+    FileCheckpointStore, FileEvidenceStore, FileJsonCheckpointStore, FileStore,
+};
 use leaven_workspace::{Workspace, WorkspaceConfig, WorkspaceFactory, WorkspacePath};
 use leaven_workspace_local::LocalWorkspaceFactory;
 use serde::de::DeserializeOwned;
@@ -80,14 +82,18 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
+    let restored_run = stores
+        .run_persistence
+        .latest_checkpoint::<EvoSkillProblem>()?;
     let resume = ResumeState::from_checkpoint(stores.checkpoints.latest()?)?;
-    run_iteration(stores, resume).await
+    run_iteration(stores, resume, restored_run).await
 }
 
 struct RunStores {
     run_root: PathBuf,
     evidence_store: FileEvidenceStore<EvoSkillEvidence>,
     checkpoints: FileJsonCheckpointStore<EvoSkillCheckpoint>,
+    run_persistence: StoreRunPersistence<FileStore>,
 }
 
 impl RunStores {
@@ -98,10 +104,13 @@ impl RunStores {
             run_root.join("evidence"),
         )?;
         let checkpoints = FileJsonCheckpointStore::open(run_root.join("checkpoints"))?;
+        let run_persistence =
+            StoreRunPersistence::new(FileStore::open(run_root.join("run-store"))?);
         Ok(Self {
             run_root,
             evidence_store,
             checkpoints,
+            run_persistence,
         })
     }
 
@@ -154,14 +163,43 @@ fn write_preflight_report(
     Ok(())
 }
 
-async fn run_iteration(stores: RunStores, resume: ResumeState) -> Result<()> {
+async fn run_iteration(
+    stores: RunStores,
+    resume: ResumeState,
+    restored_run: Option<RestoredRunState<EvoSkillProblem>>,
+) -> Result<()> {
     let cases = resume.cases.unwrap_or_else(load_fixture_cases);
-    let run_id = resume.run_id.unwrap_or_default();
+    let run_id = resume
+        .run_id
+        .or_else(|| {
+            restored_run
+                .as_ref()
+                .map(|restored| restored.checkpoint.run_id)
+        })
+        .unwrap_or_default();
     let seed_bank = resume.seed_bank.unwrap_or_default();
     let case_set = case_set(&cases);
 
-    let mut graph = RunGraph::<EvoSkillProblem>::new(run_id);
-    let mut budget = BudgetLedger::new(Budget::unlimited());
+    let (mut graph, mut budget, mut cache) = match restored_run {
+        Some(restored) => {
+            let restored_run_id = restored.checkpoint.run_id;
+            if restored_run_id != run_id {
+                return Err(msg(format!(
+                    "phase checkpoint run_id {run_id} does not match restored run graph {restored_run_id}"
+                )));
+            }
+            (
+                restored.graph,
+                restored.budget,
+                restored.cache.unwrap_or_default(),
+            )
+        }
+        None => (
+            RunGraph::<EvoSkillProblem>::new(run_id),
+            BudgetLedger::new(Budget::unlimited()),
+            EvaluationCache::default(),
+        ),
+    };
     let mut population = KeepBest::new();
     let workspace_factory = LocalWorkspaceFactory::new(stores.run_root.join("workspaces"));
     let evaluator = new_executor_evaluator(&cases, &workspace_factory);
@@ -169,8 +207,10 @@ async fn run_iteration(stores: RunStores, resume: ResumeState) -> Result<()> {
 
     let mut ctx = RunContext::<EvoSkillProblem>::new(&mut graph, &mut budget)
         .with_case_set(&case_set)
-        .with_evidence_store(&stores.evidence_store);
-    let seed = ctx.insert_seed(seed_bank.clone(), 0)?;
+        .with_cache(&mut cache)
+        .with_evidence_store(&stores.evidence_store)
+        .with_persistence(Some(&stores.run_persistence));
+    let seed = ensure_seed_candidate(&mut ctx, &seed_bank)?;
 
     let baseline = ensure_baseline(
         &mut ctx,
@@ -402,6 +442,15 @@ async fn ensure_child(
     request: ChildRequest<'_>,
 ) -> Result<(CandidateId, SkillBank, SkillBankChange)> {
     if let (Some(child_bank), Some(change)) = (request.resume_child_bank, request.resume_change) {
+        let identity = child_bank.identity();
+        if let Some(child) = ctx
+            .graph()
+            .candidates_with_identity(&identity)
+            .first()
+            .copied()
+        {
+            return Ok((child, child_bank, change));
+        }
         let report = record_skill_change(
             ctx,
             request.seed,
@@ -602,6 +651,18 @@ fn new_executor_evaluator(
         runtime: live_codex_runtime(executor_developer_instructions()),
         developer_instructions: executor_developer_instructions(),
     }
+}
+
+fn ensure_seed_candidate(
+    ctx: &mut RunContext<'_, EvoSkillProblem>,
+    seed_bank: &SkillBank,
+) -> Result<CandidateId> {
+    let identity = seed_bank.identity();
+    let existing = ctx.graph().candidates_with_identity(&identity);
+    if let Some(seed) = existing.first().copied() {
+        return Ok(seed);
+    }
+    Ok(ctx.insert_seed(seed_bank.clone(), 0)?)
 }
 
 #[derive(Default)]

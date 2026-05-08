@@ -1,6 +1,6 @@
 use leaven_kernel::EvidenceRef;
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, serde::Deserialize, serde::Serialize)]
 pub struct EvoSkillProposalAnnotations {
     pub proposal: Option<SkillProposal>,
     pub proposer_evidence: Option<EvidenceRef>,
