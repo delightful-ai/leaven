@@ -10,8 +10,8 @@ use leaven_agent::{
 };
 use leaven_kernel::{AgentRuntimeId, AgentSessionId, BudgetSnapshot, Cost, Fingerprint};
 use leaven_workspace::{
-    Command, CommandOutput, ExitStatus, Workspace, WorkspaceBackend, WorkspaceError, WorkspacePath,
-    WorkspaceView,
+    CapturedOutput, Command, CommandOutput, ExitStatus, Workspace, WorkspaceBackend,
+    WorkspaceError, WorkspacePath, WorkspaceView,
 };
 
 #[test]
@@ -301,10 +301,11 @@ fn fake_runtime_records_backend_commands_without_host_paths() {
             .view()
             .subdir(WorkspacePath::new("case").unwrap())
             .unwrap();
-        let runtime = FakeAgentRuntime::new(vec![FakeAgentAction::RunCommand(Command {
-            program: "compile".to_owned(),
-            args: vec!["--check".to_owned()],
-            cwd: Some(WorkspacePath::new("repo").unwrap()),
+        let runtime = FakeAgentRuntime::new(vec![FakeAgentAction::RunCommand({
+            let mut command = Command::new("compile");
+            command.args = vec!["--check".to_owned()];
+            command.cwd = Some(WorkspacePath::new("repo").unwrap());
+            command
         })]);
 
         let metered = runtime
@@ -322,10 +323,7 @@ fn fake_runtime_records_backend_commands_without_host_paths() {
             .unwrap();
 
         assert_eq!(metered.value.commands.len(), 1);
-        assert_eq!(
-            metered.value.commands[0].output.stdout,
-            b"compiled".as_slice()
-        );
+        assert_eq!(metered.value.commands[0].output.stdout.bytes, b"compiled");
         assert_eq!(
             metered.value.commands[0]
                 .command
@@ -424,8 +422,9 @@ impl WorkspaceBackend for MemoryBackend {
         let _ = command;
         Ok(CommandOutput {
             status: ExitStatus { code: Some(0) },
-            stdout: b"compiled".to_vec(),
-            stderr: Vec::new(),
+            stdout: CapturedOutput::new(b"compiled".to_vec(), None),
+            stderr: CapturedOutput::empty(),
+            duration: std::time::Duration::ZERO,
         })
     }
 

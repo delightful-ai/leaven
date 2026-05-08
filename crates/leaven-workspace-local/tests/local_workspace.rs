@@ -1,5 +1,11 @@
 use leaven_kernel::RunId;
-use leaven_workspace::{Command, WorkspaceConfig, WorkspaceFactory, WorkspacePath};
+use std::collections::BTreeMap;
+use std::time::Duration;
+
+use leaven_workspace::{
+    Command, CommandLimits, CommandStdin, CommandUser, WorkspaceConfig, WorkspaceFactory,
+    WorkspacePath,
+};
 use leaven_workspace_local::LocalWorkspaceFactory;
 
 #[test]
@@ -96,16 +102,165 @@ fn local_workspace_runs_commands_inside_scoped_workspace_paths() {
                 program: "cat".to_owned(),
                 args: vec!["input.txt".to_owned()],
                 cwd: Some(WorkspacePath::new("work").unwrap()),
+                env: BTreeMap::new(),
+                stdin: CommandStdin::Empty,
+                limits: CommandLimits::default(),
+                user: None,
             })
             .unwrap();
 
         assert_eq!(output.status.code, Some(0));
-        assert_eq!(output.stdout, b"hello");
-        assert!(output.stderr.is_empty());
+        assert_eq!(output.stdout.bytes, b"hello");
+        assert!(!output.stdout.truncated);
+        assert!(output.stderr.bytes.is_empty());
+        assert!(!output.stderr.truncated);
+        assert!(output.duration >= Duration::ZERO);
 
         drop(view);
         workspace.cleanup().await.unwrap();
         assert!(!mount.exists());
+        remove_dir(&parent);
+    });
+}
+
+#[test]
+fn local_workspace_passes_env_and_stdin_to_commands() {
+    futures::executor::block_on(async {
+        let parent = temp_parent("local-command-env-stdin");
+        let factory = LocalWorkspaceFactory::new(&parent);
+        let mut workspace = factory.allocate(WorkspaceConfig::default()).await.unwrap();
+        let mut view = workspace.view();
+
+        let output = view
+            .run_command(Command {
+                program: "sh".to_owned(),
+                args: vec![
+                    "-c".to_owned(),
+                    "printf '%s:' \"$LEAVEN_TEST_VALUE\"; cat".to_owned(),
+                ],
+                cwd: None,
+                env: BTreeMap::from([("LEAVEN_TEST_VALUE".to_owned(), "from-env".to_owned())]),
+                stdin: CommandStdin::Bytes(b"from-stdin".to_vec()),
+                limits: CommandLimits::default(),
+                user: None,
+            })
+            .unwrap();
+
+        assert_eq!(output.status.code, Some(0));
+        assert_eq!(output.stdout.bytes, b"from-env:from-stdin");
+        assert!(!output.stdout.truncated);
+        assert!(output.stderr.bytes.is_empty());
+        assert!(output.duration >= Duration::ZERO);
+
+        drop(view);
+        workspace.cleanup().await.unwrap();
+        remove_dir(&parent);
+    });
+}
+
+#[test]
+fn local_workspace_truncates_stdout_and_stderr_independently() {
+    futures::executor::block_on(async {
+        let parent = temp_parent("local-command-truncate");
+        let factory = LocalWorkspaceFactory::new(&parent);
+        let mut workspace = factory.allocate(WorkspaceConfig::default()).await.unwrap();
+        let mut view = workspace.view();
+
+        let output = view
+            .run_command(Command {
+                program: "sh".to_owned(),
+                args: vec![
+                    "-c".to_owned(),
+                    "printf stdout-long; printf stderr-long >&2".to_owned(),
+                ],
+                cwd: None,
+                env: BTreeMap::new(),
+                stdin: CommandStdin::Empty,
+                limits: CommandLimits {
+                    timeout: None,
+                    max_stdout_bytes: Some(6),
+                    max_stderr_bytes: Some(6),
+                },
+                user: None,
+            })
+            .unwrap();
+
+        assert_eq!(output.status.code, Some(0));
+        assert_eq!(output.stdout.bytes, b"stdout");
+        assert!(output.stdout.truncated);
+        assert_eq!(output.stderr.bytes, b"stderr");
+        assert!(output.stderr.truncated);
+
+        drop(view);
+        workspace.cleanup().await.unwrap();
+        remove_dir(&parent);
+    });
+}
+
+#[test]
+fn local_workspace_refuses_command_user_instead_of_ignoring_it() {
+    futures::executor::block_on(async {
+        let parent = temp_parent("local-command-user");
+        let factory = LocalWorkspaceFactory::new(&parent);
+        let mut workspace = factory.allocate(WorkspaceConfig::default()).await.unwrap();
+        let mut view = workspace.view();
+
+        let error = view
+            .run_command(Command {
+                program: "true".to_owned(),
+                args: Vec::new(),
+                cwd: None,
+                env: BTreeMap::new(),
+                stdin: CommandStdin::Empty,
+                limits: CommandLimits::default(),
+                user: Some(CommandUser::Name("nobody".to_owned())),
+            })
+            .unwrap_err();
+
+        assert!(matches!(
+            error,
+            leaven_workspace::WorkspaceError::UnsupportedOperation {
+                operation: "run_command.user"
+            }
+        ));
+
+        drop(view);
+        workspace.cleanup().await.unwrap();
+        remove_dir(&parent);
+    });
+}
+
+#[test]
+fn local_workspace_times_out_commands_without_hanging() {
+    futures::executor::block_on(async {
+        let parent = temp_parent("local-command-timeout");
+        let factory = LocalWorkspaceFactory::new(&parent);
+        let mut workspace = factory.allocate(WorkspaceConfig::default()).await.unwrap();
+        let mut view = workspace.view();
+
+        let error = view
+            .run_command(Command {
+                program: "sh".to_owned(),
+                args: vec!["-c".to_owned(), "sleep 2; printf done".to_owned()],
+                cwd: None,
+                env: BTreeMap::new(),
+                stdin: CommandStdin::Empty,
+                limits: CommandLimits {
+                    timeout: Some(Duration::from_millis(50)),
+                    max_stdout_bytes: None,
+                    max_stderr_bytes: None,
+                },
+                user: None,
+            })
+            .unwrap_err();
+
+        assert!(matches!(
+            error,
+            leaven_workspace::WorkspaceError::CommandTimedOut { .. }
+        ));
+
+        drop(view);
+        workspace.cleanup().await.unwrap();
         remove_dir(&parent);
     });
 }

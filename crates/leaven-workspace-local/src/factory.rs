@@ -1,4 +1,7 @@
+use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::process::Stdio;
+use std::time::{Duration, Instant};
 
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
@@ -6,8 +9,8 @@ use std::os::unix::fs::PermissionsExt;
 use futures::future::{BoxFuture, FutureExt};
 use leaven_kernel::RunId;
 use leaven_workspace::{
-    Command, CommandOutput, ExitStatus, FactoryError, Workspace, WorkspaceBackend, WorkspaceConfig,
-    WorkspaceError, WorkspaceFactory, WorkspacePath,
+    CapturedOutput, Command, CommandOutput, CommandStdin, ExitStatus, FactoryError, Workspace,
+    WorkspaceBackend, WorkspaceConfig, WorkspaceError, WorkspaceFactory, WorkspacePath,
 };
 
 /// Allocates local tempdir-backed workspaces.
@@ -87,21 +90,53 @@ impl WorkspaceBackend for LocalWorkspaceBackend {
     }
 
     fn run_command(&mut self, command: Command) -> Result<CommandOutput, WorkspaceError> {
+        if command.user.is_some() {
+            return Err(WorkspaceError::UnsupportedOperation {
+                operation: "run_command.user",
+            });
+        }
+
         let cwd = command
             .cwd
             .as_ref()
             .map_or_else(|| self.root.clone(), |path| self.host_path(path));
-        let output = std::process::Command::new(&command.program)
+
+        let start = Instant::now();
+        let mut process = std::process::Command::new(&command.program);
+        process
             .args(&command.args)
             .current_dir(cwd)
-            .output()
+            .envs(&command.env)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        match &command.stdin {
+            CommandStdin::Empty => {
+                process.stdin(Stdio::null());
+            }
+            CommandStdin::Bytes(_) => {
+                process.stdin(Stdio::piped());
+            }
+        }
+
+        let mut child = process
+            .spawn()
             .map_err(|err| WorkspaceError::Command(err.to_string()))?;
+        if let CommandStdin::Bytes(bytes) = &command.stdin
+            && let Some(mut stdin) = child.stdin.take()
+        {
+            stdin
+                .write_all(bytes)
+                .map_err(|err| WorkspaceError::Command(err.to_string()))?;
+        }
+
+        let output = wait_for_output(child, command.limits.timeout, &command.program, start)?;
         Ok(CommandOutput {
             status: ExitStatus {
                 code: output.status.code(),
             },
-            stdout: output.stdout,
-            stderr: output.stderr,
+            stdout: CapturedOutput::new(output.stdout, command.limits.max_stdout_bytes),
+            stderr: CapturedOutput::new(output.stderr, command.limits.max_stderr_bytes),
+            duration: start.elapsed(),
         })
     }
 
@@ -118,6 +153,42 @@ impl WorkspaceBackend for LocalWorkspaceBackend {
 
     fn local_mount(&self) -> Option<&Path> {
         Some(&self.root)
+    }
+}
+
+fn wait_for_output(
+    mut child: std::process::Child,
+    timeout: Option<Duration>,
+    program: &str,
+    start: Instant,
+) -> Result<std::process::Output, WorkspaceError> {
+    let Some(timeout) = timeout else {
+        return child
+            .wait_with_output()
+            .map_err(|err| WorkspaceError::Command(err.to_string()));
+    };
+
+    loop {
+        if child
+            .try_wait()
+            .map_err(|err| WorkspaceError::Command(err.to_string()))?
+            .is_some()
+        {
+            return child
+                .wait_with_output()
+                .map_err(|err| WorkspaceError::Command(err.to_string()));
+        }
+
+        if start.elapsed() >= timeout {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(WorkspaceError::CommandTimedOut {
+                program: program.to_owned(),
+                timeout,
+            });
+        }
+
+        std::thread::sleep(Duration::from_millis(5));
     }
 }
 

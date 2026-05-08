@@ -1,5 +1,7 @@
 //! Workspace errors.
 
+use std::time::Duration;
+
 #[derive(Debug, thiserror::Error)]
 pub enum FactoryError {
     #[error("workspace allocation failed: {0}")]
@@ -10,6 +12,8 @@ pub enum FactoryError {
 pub enum WorkspaceError {
     #[error("workspace command failed: {0}")]
     Command(String),
+    #[error("workspace command `{program}` timed out after {timeout:?}")]
+    CommandTimedOut { program: String, timeout: Duration },
     #[error("workspace io failed: {0}")]
     Io(String),
     #[error("workspace cleanup failed: {0}")]

@@ -27,8 +27,8 @@ use leaven_kernel::{
 };
 use leaven_store_inline::InlineEvidenceStore;
 use leaven_workspace::{
-    Command, CommandOutput, ExitStatus, FactoryError, Workspace, WorkspaceBackend, WorkspaceConfig,
-    WorkspaceError, WorkspaceFactory, WorkspacePath,
+    CapturedOutput, Command, CommandOutput, ExitStatus, FactoryError, Workspace, WorkspaceBackend,
+    WorkspaceConfig, WorkspaceError, WorkspaceFactory, WorkspacePath,
 };
 
 #[test]
@@ -944,8 +944,9 @@ impl WorkspaceBackend for TestWorkspaceBackend {
         let _ = command;
         Ok(CommandOutput {
             status: ExitStatus { code: Some(0) },
-            stdout: Vec::new(),
-            stderr: Vec::new(),
+            stdout: CapturedOutput::empty(),
+            stderr: CapturedOutput::empty(),
+            duration: std::time::Duration::ZERO,
         })
     }
 

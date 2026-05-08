@@ -7,8 +7,8 @@ use std::sync::{
 use futures::future::{BoxFuture, FutureExt};
 use leaven_kernel::RunId;
 use leaven_workspace::{
-    Command, CommandOutput, ExitStatus, FactoryError, WithWorkspaceError, Workspace,
-    WorkspaceBackend, WorkspaceConfig, WorkspaceError, WorkspaceFactory, WorkspacePath,
+    CapturedOutput, Command, CommandOutput, ExitStatus, FactoryError, WithWorkspaceError,
+    Workspace, WorkspaceBackend, WorkspaceConfig, WorkspaceError, WorkspaceFactory, WorkspacePath,
     with_workspace,
 };
 
@@ -101,27 +101,22 @@ fn workspace_view_delegates_commands_to_backend_with_scoped_cwd() {
         .unwrap();
 
     let output = view
-        .run_command(Command {
-            program: "echo".to_owned(),
-            args: vec!["ok".to_owned()],
-            cwd: Some(WorkspacePath::new("work").unwrap()),
+        .run_command({
+            let mut command = Command::new("echo");
+            command.args = vec!["ok".to_owned()];
+            command.cwd = Some(WorkspacePath::new("work").unwrap());
+            command
         })
         .unwrap();
 
     assert_eq!(output.status.code, Some(0));
-    assert_eq!(output.stdout, b"ok");
+    assert_eq!(output.stdout.bytes, b"ok");
     let recorded = commands.lock().unwrap();
     assert_eq!(recorded.len(), 1);
     assert_eq!(recorded[0].cwd.as_ref().unwrap().as_str(), "candidate/work");
     drop(recorded);
 
-    let output = view
-        .run_command(Command {
-            program: "pwd".to_owned(),
-            args: Vec::new(),
-            cwd: None,
-        })
-        .unwrap();
+    let output = view.run_command(Command::new("pwd")).unwrap();
 
     assert_eq!(output.status.code, Some(0));
     let recorded = commands.lock().unwrap();
@@ -232,11 +227,7 @@ fn workspace_backend_default_operations_are_explicitly_unsupported() {
         })
     ));
     assert!(matches!(
-        view.run_command(Command {
-            program: "true".to_owned(),
-            args: Vec::new(),
-            cwd: None,
-        }),
+        view.run_command(Command::new("true")),
         Err(WorkspaceError::UnsupportedOperation {
             operation: "run_command"
         })
@@ -453,8 +444,9 @@ impl WorkspaceBackend for TestBackend {
         self.commands.lock().unwrap().push(command);
         Ok(CommandOutput {
             status: ExitStatus { code: Some(0) },
-            stdout: b"ok".to_vec(),
-            stderr: Vec::new(),
+            stdout: CapturedOutput::new(b"ok".to_vec(), None),
+            stderr: CapturedOutput::empty(),
+            duration: std::time::Duration::ZERO,
         })
     }
 

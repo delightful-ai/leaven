@@ -9,7 +9,9 @@ pub mod policy;
 pub mod view;
 pub mod workspace;
 
-pub use command::{Command, CommandOutput, ExitStatus};
+pub use command::{
+    CapturedOutput, Command, CommandLimits, CommandOutput, CommandStdin, CommandUser, ExitStatus,
+};
 pub use config::WorkspaceConfig;
 pub use error::{FactoryError, WithWorkspaceError, WorkspaceError, WorkspacePathError};
 pub use factory::WorkspaceFactory;
@@ -22,8 +24,9 @@ pub mod prelude {
     //! Common workspace imports.
 
     pub use crate::{
-        Command, CommandOutput, FactoryError, WithWorkspaceError, Workspace, WorkspaceBackend,
-        WorkspaceConfig, WorkspaceError, WorkspaceFactory, WorkspacePath, WorkspacePathError,
-        WorkspaceView, with_workspace,
+        CapturedOutput, Command, CommandLimits, CommandOutput, CommandStdin, CommandUser,
+        FactoryError, WithWorkspaceError, Workspace, WorkspaceBackend, WorkspaceConfig,
+        WorkspaceError, WorkspaceFactory, WorkspacePath, WorkspacePathError, WorkspaceView,
+        with_workspace,
     };
 }
