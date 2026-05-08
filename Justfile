@@ -40,7 +40,10 @@ milestone-p5:
 milestone-p6:
     cargo run -p p6_optimizer_policy_self_opt
 
-milestone-examples: milestone-p0 milestone-p1 milestone-p2 milestone-p3 milestone-p4 milestone-p5 milestone-p6
+milestone-p7:
+    cargo run -p p7_self_optimization_kernel
+
+milestone-examples: milestone-p0 milestone-p1 milestone-p2 milestone-p3 milestone-p4 milestone-p5 milestone-p6 milestone-p7
 
 coverage:
     python3 scripts/coverage-gate.py --line-floor {{coverage_line_floor}} --branch-floor {{coverage_branch_floor}}

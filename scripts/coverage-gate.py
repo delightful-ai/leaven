@@ -16,6 +16,7 @@ RUN_PACKAGES = [
     "p3_gepa_parity",
     "p4_meta_harness_lite",
     "p6_optimizer_policy_self_opt",
+    "p7_self_optimization_kernel",
     "xtask",
 ]
 

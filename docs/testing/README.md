@@ -29,6 +29,7 @@ just milestone-p3
 just milestone-p4
 just milestone-p5
 just milestone-p6
+just milestone-p7
 just milestone-examples
 ```
 
