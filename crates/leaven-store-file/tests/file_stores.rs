@@ -239,6 +239,124 @@ fn aggregate_file_store_round_trips_blobs_and_checkpoints() {
 }
 
 #[test]
+fn aggregate_file_store_preserves_custom_blob_namespace_and_latest_trait() {
+    let root = temp_root("aggregate-named");
+    let store = FileStore::open_named("agent-run", &root).unwrap();
+
+    let blob = BlobStore::put(
+        &store,
+        BlobWrite {
+            bytes: Bytes::from_static(b"transcript"),
+            content_type: None,
+        },
+    )
+    .unwrap();
+    assert_eq!(blob.store, "agent-run");
+
+    let checkpoint =
+        CheckpointStore::put(&store, CheckpointBytes(Bytes::from_static(b"state"))).unwrap();
+    assert_eq!(CheckpointStore::latest(&store).unwrap(), Some(checkpoint));
+
+    let reopened = FileStore::open_named("agent-run", root).unwrap();
+    assert_eq!(
+        BlobStore::get(&reopened, &blob).unwrap(),
+        Bytes::from_static(b"transcript")
+    );
+    assert_eq!(
+        CheckpointStore::latest(&reopened).unwrap(),
+        Some(checkpoint)
+    );
+}
+
+#[test]
+fn aggregate_file_store_rejects_wrong_blob_namespace_invalid_keys_and_missing_blobs() {
+    let root = temp_root("aggregate-refusals");
+    let store = FileStore::open(&root).unwrap();
+    let blob = BlobStore::put(
+        &store,
+        BlobWrite {
+            bytes: Bytes::from_static(b"payload"),
+            content_type: None,
+        },
+    )
+    .unwrap();
+
+    let wrong_store = BlobStore::get(
+        &store,
+        &leaven_kernel::BlobRef {
+            store: "other".to_owned(),
+            key: blob.key,
+        },
+    )
+    .unwrap_err();
+    assert!(matches!(wrong_store, StoreError::BlobNotFound(_)));
+
+    for key in ["../escape", r"nested\path", ".", ".."] {
+        let invalid = BlobStore::get(
+            &store,
+            &leaven_kernel::BlobRef {
+                store: "file".to_owned(),
+                key: key.to_owned(),
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(
+            invalid,
+            StoreError::OperationFailed {
+                operation: "blob_path",
+                ..
+            }
+        ));
+    }
+
+    let missing = BlobStore::get(
+        &store,
+        &leaven_kernel::BlobRef {
+            store: "file".to_owned(),
+            key: "00000000-0000-0000-0000-000000000000.blob".to_owned(),
+        },
+    )
+    .unwrap_err();
+    assert!(matches!(missing, StoreError::BlobNotFound(_)));
+}
+
+#[test]
+fn aggregate_file_store_reports_open_and_blob_write_refusals() {
+    let root = temp_root("aggregate-open-file");
+    let file_path = root.join("not-a-directory");
+    std::fs::write(&file_path, b"file").unwrap();
+    let open_err = FileStore::open(file_path).unwrap_err();
+    assert!(matches!(
+        open_err,
+        StoreError::OperationFailed {
+            operation: "open",
+            ..
+        }
+    ));
+
+    let root = temp_root("aggregate-blob-file");
+    let store = FileStore::open(&root).unwrap();
+    std::fs::remove_dir_all(root.join("blobs")).unwrap();
+    std::fs::write(root.join("blobs"), b"not a directory").unwrap();
+
+    let put_err = BlobStore::put(
+        &store,
+        BlobWrite {
+            bytes: Bytes::from_static(b"payload"),
+            content_type: None,
+        },
+    )
+    .unwrap_err();
+    assert!(matches!(
+        put_err,
+        StoreError::OperationFailed {
+            operation: "put_blob",
+            ..
+        }
+    ));
+}
+
+#[test]
 fn file_checkpoint_open_reports_directory_creation_failure() {
     let root = temp_root("checkpoint-open-file");
     let file_path = root.join("not-a-directory");
@@ -264,6 +382,79 @@ fn file_checkpoint_latest_reports_absent_and_malformed_pointers() {
     std::fs::write(root.join("LATEST"), "not-a-uuid").unwrap();
     let err = store.latest().unwrap_err();
     assert!(matches!(err, StoreError::Serialization(_)));
+}
+
+#[test]
+fn file_json_checkpoint_reports_absent_latest_missing_payload_and_bad_payload() {
+    let root = temp_root("checkpoint-json-refusals");
+    let store = FileJsonCheckpointStore::<TestCheckpoint>::open(&root).unwrap();
+    assert_eq!(store.raw_store().root(), root.as_path());
+    assert_eq!(store.latest().unwrap(), None);
+
+    let missing = leaven_kernel::CheckpointId::new();
+    std::fs::write(root.join("LATEST"), missing.to_string()).unwrap();
+    let missing_payload = store.latest().unwrap_err();
+    assert!(matches!(
+        missing_payload,
+        StoreError::OperationFailed {
+            operation: "get",
+            ..
+        }
+    ));
+
+    let id = store
+        .raw_store()
+        .put(CheckpointBytes(Bytes::from_static(b"{not json")))
+        .unwrap();
+    assert!(matches!(
+        store.get(id).unwrap_err(),
+        StoreError::Serialization(_)
+    ));
+    assert!(matches!(
+        store.latest().unwrap_err(),
+        StoreError::Serialization(_)
+    ));
+}
+
+#[test]
+fn file_evidence_reports_missing_empty_key_and_scan_refusals() {
+    let root = temp_root("evidence-refusals");
+    let store = FileEvidenceStore::<TestEvidence>::open("evidence", &root).unwrap();
+
+    let missing = store
+        .get(&EvidenceRef {
+            store: "evidence".to_owned(),
+            key: "7".to_owned(),
+        })
+        .unwrap_err();
+    assert!(matches!(missing, StoreError::EvidenceNotFound(_)));
+
+    let empty_key = store
+        .get(&EvidenceRef {
+            store: "evidence".to_owned(),
+            key: String::new(),
+        })
+        .unwrap_err();
+    assert!(matches!(
+        empty_key,
+        StoreError::OperationFailed {
+            operation: "evidence_path",
+            ..
+        }
+    ));
+
+    let file_path = temp_root("evidence-scan-file").join("not-a-directory");
+    std::fs::write(&file_path, b"file").unwrap();
+    let Err(scan) = FileEvidenceStore::<TestEvidence>::open("evidence", file_path) else {
+        panic!("opening a file path as an evidence store unexpectedly succeeded");
+    };
+    assert!(matches!(
+        scan,
+        StoreError::OperationFailed {
+            operation: "open",
+            ..
+        }
+    ));
 }
 
 #[test]
