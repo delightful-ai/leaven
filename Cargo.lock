@@ -2420,6 +2420,7 @@ dependencies = [
  "leaven-kernel",
  "leaven-workspace",
  "leaven-workspace-local",
+ "serde",
 ]
 
 [[package]]

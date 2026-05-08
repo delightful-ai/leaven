@@ -3,8 +3,8 @@ use std::collections::BTreeMap;
 use leaven_agent::{AgentInstructions, FakeAgentAction, FakeAgentRuntime, OutputContract};
 use leaven_agentic::{AgentPromptTarget, AgenticProposer, AgenticProposerConfig, AgenticRunInput};
 use leaven_agentic_skill::{
-    SkillBankDiff, SkillBankMaterializer, SkillBankProposalInput, SkillBankWorkspaceProposalParser,
-    SkillWorkspaceLayout,
+    SkillBankChangeReport, SkillBankDiff, SkillBankMaterializer, SkillBankProposalInput,
+    SkillBankWorkspaceProposalParser, SkillFileChangeKind, SkillWorkspaceLayout,
 };
 use leaven_artifact_skill::{
     SkillBank, SkillBankChange, SkillFile, SkillFilePermissions, SkillFolder, SkillName, SkillPath,
@@ -436,6 +436,75 @@ fn skill_bank_diff_handles_file_add_remove_and_all_mention_variants() {
     assert!(SkillBankDiff::mentions(&rename_file, &alpha));
     let atomic = SkillBankChange::Atomic(vec![rename, write_file]);
     assert!(SkillBankDiff::mentions(&atomic, &alpha));
+}
+
+#[test]
+fn skill_bank_change_report_preserves_rename_description_and_file_changes() {
+    let parent = bank_with_alpha(
+        "Edits Rust tests. Use when Rust test failures need diagnosis.",
+        "Read the failing test output and patch the narrow code path.",
+        false,
+    );
+    let alpha = SkillName::new("alpha").unwrap();
+    let beta = SkillName::new("beta").unwrap();
+    let change = SkillBankChange::Atomic(vec![
+        SkillBankChange::RenameSkill {
+            from: alpha.clone(),
+            to: beta.clone(),
+        },
+        SkillBankChange::WriteFile {
+            skill: beta.clone(),
+            path: SkillPath::skill_md(),
+            file: SkillFile::text(skill_md(
+                "beta",
+                "Edits Rust tests and fixtures. Use when fixture drift needs diagnosis.",
+                "Read failing output, inspect fixtures, and patch the narrow code path.",
+            )),
+        },
+    ]);
+
+    let report = SkillBankChangeReport::from_change(&parent, &change).unwrap();
+
+    assert_eq!(report.skills_renamed[0].from, alpha);
+    assert_eq!(report.skills_renamed[0].to, beta);
+    assert_eq!(report.descriptions_changed.len(), 1);
+    assert_eq!(
+        report.descriptions_changed[0].after,
+        "Edits Rust tests and fixtures. Use when fixture drift needs diagnosis."
+    );
+    assert!(report.files_changed.iter().any(|file| {
+        file.skill == beta && file.path.is_skill_md() && file.kind == SkillFileChangeKind::Modified
+    }));
+}
+
+#[test]
+fn skill_bank_change_report_marks_total_folder_rewrites() {
+    let parent = bank_with_alpha(
+        "Edits Rust tests. Use when Rust test failures need diagnosis.",
+        "Read the failing test output and patch the narrow code path.",
+        false,
+    );
+    let alpha = SkillName::new("alpha").unwrap();
+    let replacement = folder_without_script(
+        "alpha",
+        "Edits Rust tests and fixtures. Use when fixture drift needs diagnosis.",
+        "Use fixture-aware debugging steps.",
+    );
+
+    let report = SkillBankChangeReport::from_change(
+        &parent,
+        &SkillBankChange::ReplaceSkill {
+            name: alpha.clone(),
+            folder: replacement,
+        },
+    )
+    .unwrap();
+
+    assert_eq!(report.skills_rewritten, [alpha.clone()]);
+    assert_eq!(report.descriptions_changed[0].skill, alpha);
+    assert!(report.files_changed.iter().any(|file| {
+        file.path.as_str() == "scripts/run.sh" && file.kind == SkillFileChangeKind::Removed
+    }));
 }
 
 struct SkillPromptRenderer;
