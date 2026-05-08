@@ -10,14 +10,15 @@ use futures::executor::block_on;
 use leaven_core::{CacheIdentity, CaseSetVersion, PartitionId, Proposal};
 use leaven_engine::{
     CachePolicy, Callback, CaseSet, CheckpointContext, CheckpointError, CheckpointableOptimizer,
-    Engine, EvaluationCache, EvaluationCacheKey, EvaluationCacheSnapshot, Optimizer,
-    OptimizerError, OptimizerStateWrite, PrivateStatePolicy, RestoreContext, RunCheckpoint,
-    RunCheckpointRequest, RunContext, RunEvent, RunGraph, RunGraphSnapshot, RunGraphView,
-    RunPersistence, RunPersistenceError, StateFormat, StepStatus, StoreRunPersistence, TrustPolicy,
-    optimize,
+    Engine, EvaluationCache, EvaluationCacheKey, EvaluationCacheSnapshot, GraphSnapshotRef,
+    Optimizer, OptimizerError, OptimizerStateSnapshot, OptimizerStateWrite, PrivateStatePolicy,
+    RestoreContext, RunCheckpoint, RunCheckpointRequest, RunContext, RunEvent, RunGraph,
+    RunGraphSnapshot, RunGraphView, RunPersistence, RunPersistenceError, StateFormat, StepStatus,
+    StoreRunPersistence, TrustPolicy, optimize,
 };
 use leaven_kernel::{
-    AssessmentId, BlobRef, Budget, CandidateId, CaseId, ContentId, ErrorKind, Fingerprint,
+    AssessmentId, BlobRef, Budget, CandidateId, CaseId, ContentId, ErrorKind, Fingerprint, RunId,
+    now,
 };
 use leaven_store::{BlobStore, BlobWrite, CheckpointBytes, CheckpointStore, StoreError};
 use leaven_store_inline::InlineEvidenceStore;
@@ -199,6 +200,226 @@ fn store_run_persistence_writes_graph_cache_and_checkpoint_envelope() {
 }
 
 #[test]
+fn store_run_persistence_reports_absent_and_corrupt_checkpoints_explicitly() {
+    let store = RecordingStore::new("recording");
+    let persistence = StoreRunPersistence::new(store.clone());
+
+    assert!(
+        persistence
+            .latest_checkpoint::<TestProblem>()
+            .unwrap()
+            .is_none()
+    );
+
+    CheckpointStore::put(
+        &store,
+        CheckpointBytes(Bytes::from_static(b"not a checkpoint")),
+    )
+    .unwrap();
+    let err = latest_checkpoint_err(&persistence);
+    assert!(matches!(
+        err,
+        RunPersistenceError::Serialization {
+            state: "run checkpoint envelope",
+            ..
+        }
+    ));
+}
+
+#[test]
+fn store_run_persistence_reports_missing_and_corrupt_referenced_blobs() {
+    let missing_graph_store = RecordingStore::new("recording");
+    let persistence = StoreRunPersistence::new(missing_graph_store.clone());
+    let checkpoint = checkpoint_referencing_graph(BlobRef {
+        store: "recording".to_owned(),
+        key: "missing".to_owned(),
+    });
+    CheckpointStore::put(
+        &missing_graph_store,
+        CheckpointBytes(Bytes::from(serde_json::to_vec(&checkpoint).unwrap())),
+    )
+    .unwrap();
+    let err = latest_checkpoint_err(&persistence);
+    assert!(matches!(
+        err,
+        RunPersistenceError::Store {
+            operation: "read graph snapshot blob",
+            ..
+        }
+    ));
+
+    let corrupt_graph_store = RecordingStore::new("recording");
+    let graph_ref = BlobStore::put(
+        &corrupt_graph_store,
+        BlobWrite {
+            bytes: Bytes::from_static(b"{not graph json"),
+            content_type: Some("application/json".to_owned()),
+        },
+    )
+    .unwrap();
+    let persistence = StoreRunPersistence::new(corrupt_graph_store.clone());
+    CheckpointStore::put(
+        &corrupt_graph_store,
+        CheckpointBytes(Bytes::from(
+            serde_json::to_vec(&checkpoint_referencing_graph(graph_ref)).unwrap(),
+        )),
+    )
+    .unwrap();
+    let err = latest_checkpoint_err(&persistence);
+    assert!(matches!(
+        err,
+        RunPersistenceError::Serialization {
+            state: "graph snapshot",
+            ..
+        }
+    ));
+}
+
+#[test]
+fn store_run_persistence_validates_optimizer_state_identity_and_format() {
+    let store = RecordingStore::new("recording");
+    let persistence = StoreRunPersistence::new(store.clone());
+    let (graph, budget) = graph_and_budget();
+    persistence
+        .checkpoint(RunCheckpointRequest::new(&graph, &budget, None))
+        .unwrap();
+    let mut restored = persistence
+        .latest_checkpoint::<TestProblem>()
+        .unwrap()
+        .unwrap()
+        .checkpoint;
+    assert!(
+        persistence
+            .load_optimizer_state::<StatefulOptimizerState>(
+                &restored,
+                Fingerprint::from_bytes([5; 32]),
+                Fingerprint::from_bytes([6; 32]),
+            )
+            .unwrap()
+            .is_none()
+    );
+
+    let state_ref = BlobStore::put(
+        &store,
+        BlobWrite {
+            bytes: Bytes::from_static(br#"{"selected":null,"cursor":9}"#),
+            content_type: Some("application/json".to_owned()),
+        },
+    )
+    .unwrap();
+    restored.optimizer_state = Some(OptimizerStateSnapshot {
+        optimizer: Fingerprint::from_bytes([5; 32]),
+        schema: Fingerprint::from_bytes([6; 32]),
+        format: StateFormat::Json,
+        bytes: state_ref.clone(),
+    });
+    let ok: StatefulOptimizerState = persistence
+        .load_optimizer_state(
+            &restored,
+            Fingerprint::from_bytes([5; 32]),
+            Fingerprint::from_bytes([6; 32]),
+        )
+        .unwrap()
+        .unwrap();
+    assert_eq!(ok.cursor, 9);
+
+    let wrong_optimizer = persistence
+        .load_optimizer_state::<StatefulOptimizerState>(
+            &restored,
+            Fingerprint::from_bytes([7; 32]),
+            Fingerprint::from_bytes([6; 32]),
+        )
+        .unwrap_err();
+    assert!(matches!(
+        wrong_optimizer,
+        RunPersistenceError::IncompatibleState {
+            state: "optimizer state",
+            ..
+        }
+    ));
+
+    let wrong_schema = persistence
+        .load_optimizer_state::<StatefulOptimizerState>(
+            &restored,
+            Fingerprint::from_bytes([5; 32]),
+            Fingerprint::from_bytes([8; 32]),
+        )
+        .unwrap_err();
+    assert!(matches!(
+        wrong_schema,
+        RunPersistenceError::IncompatibleState {
+            state: "optimizer state",
+            ..
+        }
+    ));
+
+    restored.optimizer_state = Some(OptimizerStateSnapshot {
+        optimizer: Fingerprint::from_bytes([5; 32]),
+        schema: Fingerprint::from_bytes([6; 32]),
+        format: StateFormat::Postcard,
+        bytes: state_ref,
+    });
+    let wrong_format = persistence
+        .load_optimizer_state::<StatefulOptimizerState>(
+            &restored,
+            Fingerprint::from_bytes([5; 32]),
+            Fingerprint::from_bytes([6; 32]),
+        )
+        .unwrap_err();
+    assert!(matches!(
+        wrong_format,
+        RunPersistenceError::IncompatibleState {
+            state: "optimizer state",
+            ..
+        }
+    ));
+}
+
+#[test]
+fn store_run_persistence_reports_corrupt_optimizer_state_payload() {
+    let store = RecordingStore::new("recording");
+    let persistence = StoreRunPersistence::new(store.clone());
+    let (graph, budget) = graph_and_budget();
+    persistence
+        .checkpoint(RunCheckpointRequest::new(&graph, &budget, None))
+        .unwrap();
+    let mut restored = persistence
+        .latest_checkpoint::<TestProblem>()
+        .unwrap()
+        .unwrap()
+        .checkpoint;
+
+    let corrupt_ref = BlobStore::put(
+        &store,
+        BlobWrite {
+            bytes: Bytes::from_static(b"{not optimizer json"),
+            content_type: Some("application/json".to_owned()),
+        },
+    )
+    .unwrap();
+    restored.optimizer_state = Some(OptimizerStateSnapshot {
+        optimizer: Fingerprint::from_bytes([5; 32]),
+        schema: Fingerprint::from_bytes([6; 32]),
+        format: StateFormat::Json,
+        bytes: corrupt_ref,
+    });
+    let corrupt_payload = persistence
+        .load_optimizer_state::<StatefulOptimizerState>(
+            &restored,
+            Fingerprint::from_bytes([5; 32]),
+            Fingerprint::from_bytes([6; 32]),
+        )
+        .unwrap_err();
+    assert!(matches!(
+        corrupt_payload,
+        RunPersistenceError::Serialization {
+            state: "optimizer state",
+            ..
+        }
+    ));
+}
+
+#[test]
 fn engine_surfaces_checkpoint_failures_as_run_errors() {
     block_on(async {
         let mut engine = Engine::<TestProblem>::builder()
@@ -285,6 +506,29 @@ fn run_context_checkpoints_after_graph_mutation_boundaries() {
 
     assert_eq!(checkpoints.load(Ordering::SeqCst), 3);
     assert_eq!(cache_absent.load(Ordering::SeqCst), 3);
+}
+
+fn checkpoint_referencing_graph(graph: BlobRef) -> RunCheckpoint {
+    RunCheckpoint::new(
+        RunId::new(),
+        now(),
+        GraphSnapshotRef {
+            schema: Fingerprint::from_bytes([11; 32]),
+            format: StateFormat::Json,
+            bytes: graph,
+        },
+        leaven_engine::BudgetLedger::new(Budget::unlimited()).snapshot(),
+    )
+}
+
+fn latest_checkpoint_err<S>(persistence: &StoreRunPersistence<S>) -> RunPersistenceError
+where
+    S: BlobStore + CheckpointStore,
+{
+    match persistence.latest_checkpoint::<TestProblem>() {
+        Ok(_) => panic!("checkpoint load unexpectedly succeeded"),
+        Err(error) => error,
+    }
 }
 
 #[test]
