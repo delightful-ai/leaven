@@ -115,7 +115,23 @@ impl<P: OptimizationProblem> Engine<P> {
                     self.emit(RunEvent::OptimizationStopping {
                         reason: StopReason::OptimizerDone,
                     });
-                    return Ok(self.finish(optimizer.best_candidate(self.view())));
+                    return self
+                        .finish(optimizer.best_candidate(self.view()))
+                        .map_err(|error| {
+                            let error = OptimizerError::with_source(
+                                "run checkpoint failed after finish",
+                                error,
+                            );
+                            self.emit(RunEvent::Error {
+                                stage: Some(StageId::custom("optimizer")),
+                                error: ErrorRecord::from_error(ErrorKind::Optimizer, &error),
+                                policy: ErrorPolicy::StoppedRun,
+                            });
+                            self.emit(RunEvent::OptimizationStopping {
+                                reason: StopReason::Error,
+                            });
+                            error
+                        });
                 }
                 Err(error) => {
                     self.record_optimizer_error(&error);
@@ -130,7 +146,10 @@ impl<P: OptimizationProblem> Engine<P> {
         Err(error)
     }
 
-    fn finish(&mut self, best: Option<CandidateId>) -> RunResult {
+    fn finish(
+        &mut self,
+        best: Option<CandidateId>,
+    ) -> Result<RunResult, crate::RunPersistenceError> {
         let run_id = self.graph.run_id;
         let budget = self.budget.snapshot();
         self.emit(RunEvent::OptimizationEnded {
@@ -138,8 +157,8 @@ impl<P: OptimizationProblem> Engine<P> {
             best,
             budget,
         });
-        let _ = self.checkpoint();
-        RunResult { run_id, best }
+        self.checkpoint()?;
+        Ok(RunResult { run_id, best })
     }
 
     fn checkpoint(&self) -> Result<(), crate::RunPersistenceError> {

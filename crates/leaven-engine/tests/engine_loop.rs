@@ -140,6 +140,46 @@ fn engine_surfaces_checkpoint_failures_as_run_errors() {
 }
 
 #[test]
+fn engine_surfaces_final_checkpoint_failures_after_end_event() {
+    block_on(async {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let mut engine = Engine::<TestProblem>::builder()
+            .persistence(FailOnCheckpoint {
+                calls: calls.clone(),
+                fail_on: 4,
+            })
+            .build();
+        let cases = CaseSet::new(vec!["case"]);
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let mut optimizer = ContinueThenDone { steps: 0 };
+
+        let err = engine
+            .run(&mut optimizer, &cases, &store)
+            .await
+            .unwrap_err();
+
+        assert!(
+            err.to_string()
+                .contains("run checkpoint failed after finish")
+        );
+        assert_eq!(calls.load(Ordering::SeqCst), 4);
+        assert!(
+            engine
+                .view()
+                .events()
+                .any(|event| matches!(event, RunEvent::OptimizationEnded { best: None, .. }))
+        );
+        assert!(engine.view().events().any(|event| matches!(
+            event,
+            RunEvent::Error {
+                error,
+                ..
+            } if error.kind == ErrorKind::Optimizer
+        )));
+    });
+}
+
+#[test]
 fn checkpointable_optimizer_round_trips_explicit_private_state_against_graph() {
     let mut engine = Engine::<TestProblem>::builder().build();
     let seed = engine
@@ -316,6 +356,27 @@ impl RunPersistence<TestProblem> for FailingPersistence {
             reason: "disk full".to_owned(),
             retryable: Some(true),
         })
+    }
+}
+
+struct FailOnCheckpoint {
+    calls: Arc<AtomicUsize>,
+    fail_on: usize,
+}
+
+impl RunPersistence<TestProblem> for FailOnCheckpoint {
+    fn checkpoint(
+        &self,
+        _graph: &leaven_engine::RunGraph<TestProblem>,
+    ) -> Result<(), RunPersistenceError> {
+        let call = self.calls.fetch_add(1, Ordering::SeqCst) + 1;
+        if call == self.fail_on {
+            return Err(RunPersistenceError::CheckpointFailed {
+                reason: format!("checkpoint {call} failed"),
+                retryable: Some(true),
+            });
+        }
+        Ok(())
     }
 }
 
