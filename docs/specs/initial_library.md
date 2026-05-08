@@ -4,9 +4,9 @@
 
 Project name: **leaven**. Crate: `leaven` (umbrella) + `leaven-core`, `leaven-engine`, `leaven-std`, `leaven-workspace`, `leaven-derive`. Metaphor: the small biological culture you mix into a substrate, walk away from, and come back to find transformed.
 
-> Status: v0.2.6, implementation-backed minor spec bump.  
+> Status: v0.2.7, pre-implementation command-backed runtime bump.  
 > Date: 2026-05-07.  
-> Supersedes the v0.2.1a spec and folds in the v0.2.1b topology cutover, v0.2.1c surface/evidence/cache cleanup, v0.2.2 renderer/workspace/GEPA selector clarification, v0.2.3 agentic stage runtime contract, v0.2.4 agentic skill optimization primitive spec, v0.2.5 Codex app-server provider adapter spec, and v0.2.6 live EvoSkill iteration proof. The architecture is unchanged: cold core stays shape-neutral, surfaces are explicit optimizer/stage choices, and GEPA remains one optimizer.  
+> Supersedes the v0.2.1a spec and folds in the v0.2.1b topology cutover, v0.2.1c surface/evidence/cache cleanup, v0.2.2 renderer/workspace/GEPA selector clarification, v0.2.3 agentic stage runtime contract, v0.2.4 agentic skill optimization primitive spec, v0.2.5 Codex app-server provider adapter spec, v0.2.6 live EvoSkill iteration proof, and v0.2.7 command-backed provider runtime cutover. The architecture is unchanged: cold core stays shape-neutral, surfaces are explicit optimizer/stage choices, and GEPA remains one optimizer.  
 > This is still not an API lock — but it is now ready to be coded against.
 
 ---
@@ -353,6 +353,45 @@ EvoSkill-shaped proof path, not only a design contract.
 
 The live proof and remaining paper gaps are tracked in
 `docs/plans/2026-05-07-milestone-5-skill-paper-reproductions.md`.
+
+---
+
+## 0.10 What Changed in v0.2.7
+
+This is a minor spec bump because backend-neutral agent execution must be the
+default product path before paper reproduction work can scale beyond local
+host-mounted app-server experiments.
+
+71. **Provider CLIs run through the workspace backend.**  
+    The default product path is materialize workspace, write provider-native
+    setup files, run the provider CLI through `WorkspaceView::run_command`,
+    capture native logs/session files, validate the output contract, and let a
+    stage parser translate the result into proposal or evidence.
+
+72. **Codex app-server stdio is not the container default.**  
+    `leaven-agent-codex-app-server` remains a leaf provider adapter. Its stdio
+    connector requires a host-local mount and is therefore a local
+    compatibility path, not the backend-neutral Codex path for E2B, K8s,
+    Firkin, Firecracker, or other remote/container backends.
+
+73. **Workspace command execution is now a first-class law surface.**  
+    Commands carry workspace cwd, env, stdin, timeout/output limits, optional
+    user identity, exit status, duration, and truncation facts. Backends must
+    either honor requested semantics or refuse with typed errors.
+
+74. **Runtime setup files are not artifact state by default.**  
+    Provider homes, skill registrations, MCP config, stdout/stderr logs, and
+    native session files are operational presentation unless materialized from
+    candidate state or parsed back into typed proposals.
+
+75. **Durable session data is required for resume.**  
+    `AgentSession`, transcript, command records, output paths, artifact files,
+    and raw provider event counts must be serializable enough for stored
+    evidence and checkpoints. Examples should stop inventing bespoke session
+    persistence once this lands.
+
+The implementation plan is
+`docs/plans/2026-05-07-harbor-style-agent-runtime.md`.
 
 ---
 
@@ -4716,6 +4755,31 @@ The engine is dumb. The optimizer is smart. The types tell the truth.
 ---
 
 ## 30. Changelog
+
+### v0.2.7 (2026-05-07) - command-backed provider runtime cutover
+
+This pass makes command-backed execution through `WorkspaceView::run_command`
+the default product path for provider CLIs and demotes app-server-over-stdio to
+a local-mount adapter.
+
+- **Provider CLIs run inside the workspace backend.** The runtime writes
+  provider setup files, invokes the CLI through workspace command APIs, captures
+  native logs/session artifacts, validates output contracts, and returns a
+  durable `AgentSession`.
+- **Codex app-server stdio is a local compatibility path.** It stays useful
+  for local app-server sessions, but it requires `local_mount()` and must not be
+  presented as backend-neutral for containers or remote sandboxes.
+- **Workspace command semantics are specified.** Command cwd, env, stdin,
+  timeouts, output limits, optional user identity, exit status, duration, and
+  truncation are part of the workspace capability contract.
+- **Runtime setup files are operational presentation.** Provider homes, skill
+  registrations, MCP config, native logs, and session files become graph state
+  only when materialized from artifacts or parsed back into typed proposals.
+- **Session durability becomes implementation-facing.** Agent sessions and
+  transcripts must be serializable enough for evidence stores and checkpoint
+  resume so milestone examples stop hand-rolling persistence.
+- **Companion plan added.** See
+  `docs/plans/2026-05-07-harbor-style-agent-runtime.md`.
 
 ### v0.2.6 (2026-05-07) - live EvoSkill iteration proof
 

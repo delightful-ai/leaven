@@ -311,15 +311,74 @@ pub enum WorkspaceAccessMode {
 
 pub struct AgentRuntimeCapabilities {
     pub workspace_access: WorkspaceAccessMode,
-    pub supports_interactive_sessions: bool,
-    pub supports_structured_output_contracts: bool,
-    pub supports_cancellation: bool,
+    pub supports_commands: bool,
+    pub supports_raw_provider_events: bool,
 }
 ```
 
 An adapter with `RequiresLocalMount` may be useful, but it must fail early with
-`AgentStatus::UnsupportedCapability` if paired with E2B, K8s, Firecracker, or
-any backend whose `local_mount()` is `None`.
+`AgentRuntimeError::LocalMountRequired` if paired with E2B, K8s, Firecracker,
+or any backend whose `local_mount()` is `None`.
+
+### 3.4 Harbor-style command-backed provider path
+
+The default product path for provider CLIs is command-backed execution inside
+the workspace backend:
+
+```text
+stage allocates workspace
+  -> materializer writes artifact/task/data into workspace
+  -> provider runtime writes native config, home, skill, or MCP setup files
+  -> provider runtime calls WorkspaceView::run_command(...)
+  -> backend runs the provider CLI in the requested workspace cwd
+  -> runtime captures stdout/stderr/native logs/session files
+  -> runtime validates OutputContract
+  -> stage parser turns session/workspace output into proposal or evidence
+```
+
+This is the path used for container, E2B, K8s, Firkin, Firecracker, and local
+execution when a provider can be launched as a CLI process in the candidate
+world. It is backend-neutral because the runtime never asks for a host path; it
+only asks the workspace backend to write files, run commands, and read files
+back.
+
+Provider setup files are operational presentation, not artifact state:
+
+```text
+.leaven/codex-home/config.toml
+.agents/skills/<skill>/SKILL.md
+.mcp.json
+provider session jsonl
+native stdout/stderr logs
+```
+
+They become optimized artifact state only when they are materialized from the
+candidate artifact or parsed back into a typed proposal. A runtime may create
+or modify operational files during execution, but those mutations do not enter
+the run graph until a stage parser explicitly translates them.
+
+The command-backed path is deliberately separate from app-server-over-stdio
+paths. A stdio app-server connector can be a useful local adapter, but it is
+`RequiresLocalMount`; it is not the container default and must not be hidden
+behind a backend-neutral runtime claim.
+
+### 3.5 Command execution laws
+
+`WorkspaceBackend::run_command` is a capability with stronger laws than "spawn
+a process":
+
+- `cwd` is always a `WorkspacePath` resolved by the backend, never a host path
+  supplied by a stage.
+- `env` values are passed to the child process and are not written into the
+  workspace unless stage code explicitly writes them.
+- `stdin` is explicit. Empty stdin and byte stdin are distinguishable.
+- timeouts and output limits are enforced by the backend or rejected with a
+  typed unsupported error before an unbounded run can start.
+- if a requested `CommandUser` cannot be honored, the backend returns an
+  unsupported-operation error instead of silently running as the wrong user.
+- captured stdout and stderr preserve bytes plus a truncation flag.
+- duration and exit status are session facts and should be retained in
+  transcript/evidence surfaces when available.
 
 ---
 
@@ -344,7 +403,7 @@ pub trait AgentRuntime: Send + Sync {
         workspace: &'a mut WorkspaceView<'_>,
         request: AgentRunRequest,
         ctx: AgentRunContext<'a>,
-    ) -> impl Future<Output = Result<Metered<AgentSession>, AgentError>> + Send + 'a;
+    ) -> impl Future<Output = Result<Metered<AgentSession>, AgentRuntimeError>> + Send + 'a;
 }
 ```
 
@@ -441,7 +500,12 @@ OutputContract::JsonFile("output/proposals.json")
   -> ProposalParser<P>
   -> ProposalBatch<P>
 
-OutputContract::Files(["output/evidence.json", "output/transcript.json"])
+OutputContract::Files {
+    paths: vec![
+        WorkspacePath::new("output/evidence.json")?,
+        WorkspacePath::new("output/transcript.json")?,
+    ],
+}
   -> EvidenceParser<P>
   -> Vec<Assessment<P>>
 
@@ -491,7 +555,6 @@ pub enum AgentStatus {
     Cancelled,
     PolicyViolation { message: String },
     OutputContractViolation { message: String },
-    UnsupportedCapability { message: String },
 }
 ```
 

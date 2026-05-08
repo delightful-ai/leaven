@@ -28,6 +28,18 @@ and return a Metered<AgentSession>.
 Everything else remains outside the provider adapter. Codex does not become a
 core concept, an engine concept, a skill concept, or a GEPA concept.
 
+This document does not define the default container path for Codex-backed
+agentic optimization. The default product path is a command-backed Codex CLI
+runtime that runs inside the workspace backend through
+`WorkspaceView::run_command`, registers provider-native config and skills in
+that workspace, captures native session artifacts, and returns a durable
+`AgentSession`.
+
+`leaven-agent-codex-app-server` stays valuable, but it is the app-server
+adapter. The stdio connector in this crate requires a host-local mount and is
+therefore a local compatibility path, not the backend-neutral path for E2B,
+K8s, Firkin, Firecracker, or other remote/container backends.
+
 ---
 
 ## 1. Layer Boundary
