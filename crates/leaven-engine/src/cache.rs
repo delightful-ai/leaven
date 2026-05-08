@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use leaven_core::{CacheIdentity, CaseSetVersion};
-use leaven_kernel::{AssessmentId, CaseId, Fingerprint};
+use leaven_kernel::{AssessmentId, CandidateId, CaseId, Fingerprint};
 
 /// Cache behavior requested for an evaluation.
 #[derive(Clone, Debug, Default, Eq, PartialEq, Hash)]
@@ -27,7 +27,19 @@ pub enum CacheStatus {
     /// Cache was checked and no entry existed.
     Miss,
     /// Cache was not consulted.
-    Bypassed,
+    Bypassed(CacheBypassReason),
+}
+
+/// Why an evaluation did not consult the cache.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+pub enum CacheBypassReason {
+    /// The evaluator declared [`CachePolicy::Never`].
+    DisabledByPolicy,
+    /// The run context has no attached evaluation cache.
+    CacheUnavailable,
+    /// Deterministic caching was requested, but a candidate did not provide
+    /// a cache-safe identity.
+    MissingCandidateIdentity { candidate: CandidateId },
 }
 
 /// Key used for engine-owned evaluation caching.

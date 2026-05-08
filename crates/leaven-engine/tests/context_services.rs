@@ -12,9 +12,9 @@ use leaven_core::{
     ResolvedEvaluationRequest,
 };
 use leaven_engine::{
-    BudgetLedger, CachePolicy, CacheStatus, Callback, CaseSet, EvaluationContext, EvaluationError,
-    Evaluator, ProposalContext, ProposalError, Proposer, RunContext, RunEvent, RunGraphView,
-    TrustPolicy,
+    BudgetLedger, CacheBypassReason, CachePolicy, CacheStatus, Callback, CaseSet,
+    EvaluationContext, EvaluationError, Evaluator, ProposalContext, ProposalError, Proposer,
+    RunContext, RunEvent, RunGraphView, TrustPolicy,
 };
 use leaven_kernel::{
     Budget, Cost, ErrorKind, EvaluatorId, Fingerprint, MetadataBag, Metered, ProposerId, RunId,
@@ -145,7 +145,10 @@ fn evaluate_with_resolves_sets_stores_evidence_and_emits_events() {
             .await
             .unwrap();
 
-        assert_eq!(report.cache, CacheStatus::Bypassed);
+        assert_eq!(
+            report.cache,
+            CacheStatus::Bypassed(CacheBypassReason::DisabledByPolicy)
+        );
         assert_eq!(report.assessment_ids.len(), 1);
         assert_eq!(evaluator.calls(), 1);
         let assessment = ctx.graph().assessment(report.assessment_ids[0]).unwrap();
@@ -197,7 +200,7 @@ fn evaluate_with_resolves_sets_stores_evidence_and_emits_events() {
         assert!(ctx.graph().events().any(|event| matches!(
             event,
             RunEvent::EvaluationCompleted {
-                cache: CacheStatus::Bypassed,
+                cache: CacheStatus::Bypassed(CacheBypassReason::DisabledByPolicy),
                 ..
             }
         )));
@@ -490,6 +493,50 @@ fn deterministic_evaluation_cache_skips_second_evaluator_call() {
 }
 
 #[test]
+fn deterministic_evaluation_without_cache_store_reports_unavailable_bypass() {
+    block_on(async {
+        let (mut graph, mut budget) = graph_and_budget();
+        let case_set = CaseSet::new(vec!["case"]);
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let candidate = {
+            let mut seed_ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+            seed_ctx
+                .insert_seed(TextArtifact("abcd".to_owned()), 0)
+                .unwrap()
+        };
+        let evaluator = CountingEvaluator::new(CachePolicy::Deterministic);
+
+        let first = {
+            let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
+                .with_case_set(&case_set)
+                .with_evidence_store(&store);
+            ctx.evaluate_with(&evaluator, independent_request(candidate))
+                .await
+                .unwrap()
+        };
+        let second = {
+            let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
+                .with_case_set(&case_set)
+                .with_evidence_store(&store);
+            ctx.evaluate_with(&evaluator, independent_request(candidate))
+                .await
+                .unwrap()
+        };
+
+        assert_eq!(
+            first.cache,
+            CacheStatus::Bypassed(CacheBypassReason::CacheUnavailable)
+        );
+        assert_eq!(
+            second.cache,
+            CacheStatus::Bypassed(CacheBypassReason::CacheUnavailable)
+        );
+        assert_ne!(first.assessment_ids, second.assessment_ids);
+        assert_eq!(evaluator.calls(), 2);
+    });
+}
+
+#[test]
 fn deterministic_evaluation_cache_bypasses_external_artifacts_without_cache_identity() {
     block_on(async {
         let (mut graph, mut budget) = graph_and_budget();
@@ -523,8 +570,14 @@ fn deterministic_evaluation_cache_bypasses_external_artifacts_without_cache_iden
                 .unwrap()
         };
 
-        assert_eq!(first.cache, CacheStatus::Bypassed);
-        assert_eq!(second.cache, CacheStatus::Bypassed);
+        assert_eq!(
+            first.cache,
+            CacheStatus::Bypassed(CacheBypassReason::MissingCandidateIdentity { candidate })
+        );
+        assert_eq!(
+            second.cache,
+            CacheStatus::Bypassed(CacheBypassReason::MissingCandidateIdentity { candidate })
+        );
         assert_ne!(first.assessment_ids, second.assessment_ids);
         assert_eq!(evaluator.calls(), 2);
     });
@@ -565,8 +618,14 @@ fn no_cache_policy_invokes_evaluator_and_records_each_request() {
         };
         let ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
 
-        assert_eq!(first.cache, CacheStatus::Bypassed);
-        assert_eq!(second.cache, CacheStatus::Bypassed);
+        assert_eq!(
+            first.cache,
+            CacheStatus::Bypassed(CacheBypassReason::DisabledByPolicy)
+        );
+        assert_eq!(
+            second.cache,
+            CacheStatus::Bypassed(CacheBypassReason::DisabledByPolicy)
+        );
         assert_ne!(first.assessment_ids, second.assessment_ids);
         assert_eq!(evaluator.calls(), 2);
         assert_eq!(ctx.graph().evaluation_request_count(), 2);

@@ -16,7 +16,7 @@ mod stage;
 mod trust;
 
 pub use budget::{BudgetHandle, BudgetLedger};
-pub use cache::{CachePolicy, CacheStatus, EvaluationCache, EvaluationCacheKey};
+pub use cache::{CacheBypassReason, CachePolicy, CacheStatus, EvaluationCache, EvaluationCacheKey};
 pub use case_set::{CaseSet, CaseSetBuilder, EvaluationResolveError, UnsupportedEvaluationSet};
 pub use context::{
     EvaluationContext, MaterializeContext, ProposalContext, RenderContext, RunContext,

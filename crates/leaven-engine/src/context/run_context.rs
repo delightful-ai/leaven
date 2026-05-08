@@ -16,8 +16,8 @@ use thiserror::Error;
 use crate::graph::storage::AssessmentRecordTarget;
 use crate::graph::storage::{ApplyAttemptOutcome, ApplyProposalError};
 use crate::{
-    ApplyOneReport, ApplyOutcome, ApplyReport, BudgetHandle, BudgetLedger, CachePolicy,
-    CacheStatus, CaseSet, DynCallback, DynEvaluator, ErrorPolicy, EvaluationCache,
+    ApplyOneReport, ApplyOutcome, ApplyReport, BudgetHandle, BudgetLedger, CacheBypassReason,
+    CachePolicy, CacheStatus, CaseSet, DynCallback, DynEvaluator, ErrorPolicy, EvaluationCache,
     EvaluationCacheKey, EvaluationContext, EvaluationError, EvaluationReport,
     EvaluationResolveError, Evaluator, ProposalBatchReport, ProposalContext, ProposalError,
     Proposer, ReadScope, RenderContext, RunEvent, RunGraph, RunGraphView, RunPersistence,
@@ -398,7 +398,7 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
             request_id,
             &resolved_request,
             &policy,
-            cache_key.as_ref(),
+            cache_key.as_ref().ok(),
         ) {
             return Ok(report);
         }
@@ -416,7 +416,6 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
             &evaluator_id,
             request_id,
             &resolved_request,
-            &policy,
             cache_key,
             metered,
         )
@@ -460,7 +459,7 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
             request_id,
             &resolved_request,
             &policy,
-            cache_key.as_ref(),
+            cache_key.as_ref().ok(),
         ) {
             return Ok(report);
         }
@@ -478,7 +477,6 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
             &evaluator_id,
             request_id,
             &resolved_request,
-            &policy,
             cache_key,
             metered,
         )
@@ -489,21 +487,23 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
         evaluator_id: &EvaluatorId,
         request_id: EvaluationRequestId,
         resolved_request: &ResolvedEvaluationRequest,
-        policy: &CachePolicy,
-        cache_key: Option<EvaluationCacheKey>,
+        cache_key: Result<EvaluationCacheKey, CacheBypassReason>,
         metered: leaven_kernel::Metered<Vec<Assessment<P>>>,
     ) -> Result<EvaluationReport, RunContextError> {
         let stage = StageId::from_evaluator(evaluator_id.clone());
         self.charge(stage, metered.cost.clone())?;
         let assessment_ids = self.record_assessments(request_id, evaluator_id, metered.value)?;
-        let cache = if matches!(policy, &CachePolicy::Never) || cache_key.is_none() {
-            CacheStatus::Bypassed
-        } else {
-            if let (Some(cache), Some(cache_key)) = (self.cache.as_mut(), cache_key) {
-                cache.insert(cache_key, assessment_ids.clone());
-                self.checkpoint()?;
+        let cache = match cache_key {
+            Ok(cache_key) => {
+                if let Some(cache) = self.cache.as_mut() {
+                    cache.insert(cache_key, assessment_ids.clone());
+                    self.checkpoint()?;
+                    CacheStatus::Miss
+                } else {
+                    CacheStatus::Bypassed(CacheBypassReason::CacheUnavailable)
+                }
             }
-            CacheStatus::Miss
+            Err(reason) => CacheStatus::Bypassed(reason),
         };
         let report = EvaluationReport {
             request_id,
@@ -549,7 +549,7 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
         evaluator: leaven_kernel::Fingerprint,
         policy: CachePolicy,
         request: &ResolvedEvaluationRequest,
-    ) -> Option<EvaluationCacheKey> {
+    ) -> Result<EvaluationCacheKey, CacheBypassReason> {
         evaluation_cache_key(evaluator, policy, request, self.graph())
     }
 
@@ -754,9 +754,9 @@ fn evaluation_cache_key<P: OptimizationProblem>(
     policy: CachePolicy,
     request: &ResolvedEvaluationRequest,
     graph: RunGraphView<'_, P>,
-) -> Option<EvaluationCacheKey> {
+) -> Result<EvaluationCacheKey, CacheBypassReason> {
     let candidates = request_candidate_cache_identities(&policy, request, graph)?;
-    Some(EvaluationCacheKey {
+    Ok(EvaluationCacheKey {
         evaluator,
         policy,
         case_set_version: request.set.case_set_version.clone(),
@@ -769,14 +769,19 @@ fn request_candidate_cache_identities<P: OptimizationProblem>(
     policy: &CachePolicy,
     request: &ResolvedEvaluationRequest,
     graph: RunGraphView<'_, P>,
-) -> Option<Vec<CacheIdentity>> {
+) -> Result<Vec<CacheIdentity>, CacheBypassReason> {
     match policy {
-        CachePolicy::Never => Some(Vec::new()),
-        CachePolicy::UserKey(fingerprint) => Some(vec![CacheIdentity::User(*fingerprint)]),
+        CachePolicy::Never => Err(CacheBypassReason::DisabledByPolicy),
+        CachePolicy::UserKey(fingerprint) => Ok(vec![CacheIdentity::User(*fingerprint)]),
         CachePolicy::Deterministic | CachePolicy::DeterministicWithSeed(_) => {
             request_candidates(request)
                 .into_iter()
-                .map(|candidate| graph.artifact(candidate)?.cache_identity())
+                .map(|candidate| {
+                    graph
+                        .artifact(candidate)
+                        .and_then(Artifact::cache_identity)
+                        .ok_or(CacheBypassReason::MissingCandidateIdentity { candidate })
+                })
                 .collect()
         }
     }
