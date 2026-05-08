@@ -507,6 +507,116 @@ fn skill_bank_change_report_marks_total_folder_rewrites() {
     }));
 }
 
+#[test]
+fn skill_bank_change_report_covers_file_and_skill_lifecycle_variants() {
+    let parent = bank_with_alpha(
+        "Edits Rust tests. Use when Rust test failures need diagnosis.",
+        "Read the failing test output and patch the narrow code path.",
+        false,
+    );
+    let alpha = SkillName::new("alpha").unwrap();
+
+    let create_report = SkillBankChangeReport::from_change(
+        &parent,
+        &SkillBankChange::CreateSkill {
+            folder: folder_for(
+                "beta",
+                "Reviews generated skills. Use when proposed skills need validation.",
+                "Validate the skill folder and report concrete schema problems.",
+                true,
+            ),
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        create_report.skills_added,
+        [SkillName::new("beta").unwrap()]
+    );
+    assert!(create_report.files_changed.iter().any(|file| {
+        file.skill == SkillName::new("beta").unwrap()
+            && file.path.is_skill_md()
+            && file.kind == SkillFileChangeKind::Added
+    }));
+
+    let remove_report = SkillBankChangeReport::from_change(
+        &parent,
+        &SkillBankChange::RemoveSkill {
+            name: alpha.clone(),
+        },
+    )
+    .unwrap();
+    assert_eq!(remove_report.skills_removed, std::slice::from_ref(&alpha));
+    assert!(remove_report.files_changed.iter().any(|file| {
+        file.skill == alpha
+            && file.path.as_str() == "scripts/run.sh"
+            && file.kind == SkillFileChangeKind::Removed
+    }));
+
+    let added_ref = SkillPath::new("references/guide.md").unwrap();
+    let add_file_report = SkillBankChangeReport::from_change(
+        &parent,
+        &SkillBankChange::WriteFile {
+            skill: alpha.clone(),
+            path: added_ref.clone(),
+            file: SkillFile::text("Reference material.\n"),
+        },
+    )
+    .unwrap();
+    assert!(add_file_report.files_changed.iter().any(|file| {
+        file.skill == alpha && file.path == added_ref && file.kind == SkillFileChangeKind::Added
+    }));
+
+    let script = SkillPath::new("scripts/run.sh").unwrap();
+    let modify_report = SkillBankChangeReport::from_change(
+        &parent,
+        &SkillBankChange::WriteFile {
+            skill: alpha.clone(),
+            path: script.clone(),
+            file: SkillFile::with_permissions(
+                b"#!/bin/sh\necho changed\n".to_vec(),
+                SkillFilePermissions { executable: false },
+            ),
+        },
+    )
+    .unwrap();
+    assert!(modify_report.files_changed.iter().any(|file| {
+        file.skill == alpha && file.path == script && file.kind == SkillFileChangeKind::Modified
+    }));
+
+    let executable_report = SkillBankChangeReport::from_change(
+        &parent,
+        &SkillBankChange::SetExecutable {
+            skill: alpha.clone(),
+            path: script.clone(),
+            executable: true,
+        },
+    )
+    .unwrap();
+    assert!(executable_report.files_changed.iter().any(|file| {
+        file.skill == alpha
+            && file.path == script
+            && file.kind == SkillFileChangeKind::ExecutableChanged { executable: true }
+    }));
+
+    let rename_file_report = SkillBankChangeReport::from_change(
+        &parent,
+        &SkillBankChange::RenameFile {
+            skill: alpha.clone(),
+            from: script.clone(),
+            to: SkillPath::new("scripts/debug.sh").unwrap(),
+        },
+    )
+    .unwrap();
+    assert!(rename_file_report.files_changed.iter().any(|file| {
+        file.skill == alpha
+            && file.path == script
+            && file.kind
+                == SkillFileChangeKind::Renamed {
+                    to: SkillPath::new("scripts/debug.sh").unwrap(),
+                }
+    }));
+}
+
 struct SkillPromptRenderer;
 
 impl Renderer<SkillProblem, SkillBankProposalInput, AgentPromptTarget> for SkillPromptRenderer {

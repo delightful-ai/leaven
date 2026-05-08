@@ -6,7 +6,7 @@ use std::sync::{
 
 use leaven_agent::{
     AgentInstructions, AgentRunRequest, AgentSession, FakeAgentAction, FakeAgentRuntime,
-    OutputContract,
+    JsonSchemaRef, OutputContract,
 };
 use leaven_agentic::{
     AgentCase, AgentCaseEvaluator, AgentCaseEvaluatorConfig, AgentCasePresentation,
@@ -16,8 +16,8 @@ use leaven_agentic::{
     PreflightSeverity, PresenterDryRun, ScorerDryRun,
 };
 use leaven_core::{
-    Artifact, ArtifactIdentity, AssessmentGranularity, AssessmentTarget, EvaluationPurpose,
-    EvaluationRequest, EvaluationSet, OptimizationProblem,
+    Artifact, ArtifactIdentity, AssessmentGranularity, AssessmentTarget, CacheIdentity,
+    EvaluationPurpose, EvaluationRequest, EvaluationSet, OptimizationProblem, PairOrder,
 };
 use leaven_engine::{
     BudgetLedger, CacheBypassReason, CachePolicy, CacheStatus, CaseSet, MaterializeContext,
@@ -154,6 +154,37 @@ fn preflight_checks_output_contract_shape_without_running_runtime() {
             && finding.check == "output-contract"
             && finding.message.contains("no explicit roots")
     }));
+
+    let json_with_schema = AgentRunPreflight::new()
+        .output_contract(&OutputContract::JsonFile {
+            path: WorkspacePath::new("output/result.json").unwrap(),
+            schema: Some(JsonSchemaRef {
+                name: "result".to_owned(),
+                schema: "{}".to_owned(),
+            }),
+        })
+        .check();
+    assert!(!json_with_schema.has_errors());
+
+    let json_without_schema = AgentRunPreflight::new()
+        .output_contract(&OutputContract::JsonFile {
+            path: WorkspacePath::new("output/result.json").unwrap(),
+            schema: None,
+        })
+        .check();
+    assert!(!json_without_schema.has_errors());
+
+    let final_message = AgentRunPreflight::new()
+        .output_contract(&OutputContract::FinalMessage)
+        .check();
+    assert!(!final_message.has_errors());
+
+    let diff_roots = AgentRunPreflight::new()
+        .output_contract(&OutputContract::WorkspaceDiff {
+            roots: vec![WorkspacePath::new("skills").unwrap()],
+        })
+        .check();
+    assert!(!diff_roots.has_errors());
 }
 
 #[test]
@@ -184,6 +215,16 @@ fn preflight_checks_store_capabilities_and_cache_identity_policy() {
     assert!(missing_identity.has_errors());
     assert!(missing_identity.findings().iter().any(|finding| {
         finding.severity == PreflightSeverity::Error && finding.check == "cache"
+    }));
+
+    let cacheable = AgentRunPreflight::new()
+        .cache_identity(&CacheableArtifact, &CachePolicy::DeterministicWithSeed(7))
+        .check();
+    assert!(!cacheable.has_errors());
+    assert!(cacheable.findings().iter().any(|finding| {
+        finding.severity == PreflightSeverity::Ok
+            && finding.check == "cache"
+            && finding.message.contains("available")
     }));
 }
 
@@ -548,6 +589,108 @@ fn agent_case_evaluator_fingerprint_includes_runtime_presenter_scorer_and_cases(
     );
 }
 
+#[test]
+fn agent_case_evaluator_rejects_unsupported_request_shapes_and_missing_inputs() {
+    futures::executor::block_on(async {
+        let suite = CaseSuite::from_cases([AgentCase::text(
+            CaseId::new(0),
+            "question",
+            CaseTarget::None,
+        )])
+        .unwrap();
+        let evaluator = AgentCaseEvaluator::new(
+            AgentCaseEvaluatorConfig::new(
+                EvaluatorId::from("agent-case/rejections"),
+                Fingerprint::from_bytes([4; 32]),
+            ),
+            suite,
+            LocalWorkspaceFactory::temp(),
+            FakeAgentRuntime::new(Vec::new()),
+            TestPresenter,
+            TestScorer,
+        );
+        let mut graph = RunGraph::<CaseProblem>::new(RunId::new());
+        let mut budget = BudgetLedger::default();
+        let case_set = CaseSet::new(vec!["case-0", "case-1"]);
+        let candidate = {
+            let mut ctx = RunContext::<CaseProblem>::new(&mut graph, &mut budget);
+            ctx.insert_seed(CaseArtifact("seed".to_owned()), 0).unwrap()
+        };
+        let mut ctx =
+            RunContext::<CaseProblem>::new(&mut graph, &mut budget).with_case_set(&case_set);
+
+        let aggregate = ctx
+            .evaluate_with(
+                &evaluator,
+                EvaluationRequest::Independent {
+                    candidates: vec![candidate],
+                    set: EvaluationSet::All,
+                    granularity: AssessmentGranularity::Aggregate,
+                    purpose: EvaluationPurpose::Search,
+                },
+            )
+            .await
+            .unwrap_err();
+        assert!(
+            aggregate
+                .to_string()
+                .contains("agent case evaluator failed")
+        );
+
+        let pairwise = ctx
+            .evaluate_with(
+                &evaluator,
+                EvaluationRequest::Pairwise {
+                    left: candidate,
+                    right: candidate,
+                    set: EvaluationSet::All,
+                    granularity: AssessmentGranularity::PerCase,
+                    purpose: EvaluationPurpose::Search,
+                    order: PairOrder::Unordered,
+                },
+            )
+            .await
+            .unwrap_err();
+        assert!(pairwise.to_string().contains("agent case evaluator failed"));
+
+        let unknown_candidate = ctx
+            .evaluate_with(
+                &evaluator,
+                EvaluationRequest::Independent {
+                    candidates: vec![leaven_kernel::CandidateId::new()],
+                    set: EvaluationSet::All,
+                    granularity: AssessmentGranularity::PerCase,
+                    purpose: EvaluationPurpose::Search,
+                },
+            )
+            .await
+            .unwrap_err();
+        assert!(
+            unknown_candidate
+                .to_string()
+                .contains("agent case evaluator failed")
+        );
+
+        let missing_case = ctx
+            .evaluate_with(
+                &evaluator,
+                EvaluationRequest::Independent {
+                    candidates: vec![candidate],
+                    set: EvaluationSet::All,
+                    granularity: AssessmentGranularity::PerCase,
+                    purpose: EvaluationPurpose::Search,
+                },
+            )
+            .await
+            .unwrap_err();
+        assert!(
+            missing_case
+                .to_string()
+                .contains("agent case evaluator failed")
+        );
+    });
+}
+
 #[derive(Clone)]
 struct ValidArtifact;
 
@@ -557,6 +700,26 @@ impl Artifact for ValidArtifact {
 
     fn identity(&self) -> ArtifactIdentity {
         ArtifactIdentity::External("valid".to_owned())
+    }
+
+    fn apply_change(&self, _change: &Self::Change) -> Result<Self, Self::ApplyError> {
+        Ok(Self)
+    }
+}
+
+#[derive(Clone)]
+struct CacheableArtifact;
+
+impl Artifact for CacheableArtifact {
+    type Change = ();
+    type ApplyError = TestArtifactError;
+
+    fn identity(&self) -> ArtifactIdentity {
+        ArtifactIdentity::External("cacheable".to_owned())
+    }
+
+    fn cache_identity(&self) -> Option<CacheIdentity> {
+        Some(CacheIdentity::Content(ContentId::from_bytes([3; 32])))
     }
 
     fn apply_change(&self, _change: &Self::Change) -> Result<Self, Self::ApplyError> {
