@@ -1,6 +1,6 @@
 //! Deterministic preflight checks for agentic runs.
 
-use leaven_agent::AgentRuntime;
+use leaven_agent::{AgentRuntime, OutputContract};
 use leaven_core::Artifact;
 use leaven_kernel::Fingerprint;
 
@@ -175,6 +175,55 @@ impl AgentRunPreflight {
             "runtime-capabilities",
             format!("workspace access {:?}", capabilities.workspace_access),
         );
+        self
+    }
+
+    /// Checks output-contract shape without reading workspace outputs.
+    #[must_use]
+    pub fn output_contract(mut self, contract: &OutputContract) -> Self {
+        match contract {
+            OutputContract::Files { paths } => {
+                if paths.is_empty() {
+                    self.report
+                        .error("output-contract", "file output contract has no paths");
+                } else {
+                    self.report.ok(
+                        "output-contract",
+                        format!("{} required output file(s)", paths.len()),
+                    );
+                }
+            }
+            OutputContract::JsonFile { path, schema } => {
+                if schema.is_some() {
+                    self.report.ok(
+                        "output-contract",
+                        format!("JSON output `{}` with schema", path.as_str()),
+                    );
+                } else {
+                    self.report.ok(
+                        "output-contract",
+                        format!("JSON output `{}` without schema", path.as_str()),
+                    );
+                }
+            }
+            OutputContract::FinalMessage => {
+                self.report
+                    .ok("output-contract", "final assistant message required");
+            }
+            OutputContract::WorkspaceDiff { roots } => {
+                if roots.is_empty() {
+                    self.report.warn(
+                        "output-contract",
+                        "workspace-diff contract has no explicit roots",
+                    );
+                } else {
+                    self.report.ok(
+                        "output-contract",
+                        format!("workspace diff over {} root(s)", roots.len()),
+                    );
+                }
+            }
+        }
         self
     }
 

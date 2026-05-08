@@ -121,6 +121,30 @@ fn preflight_flags_empty_case_suite_and_artifact_validation_errors() {
 }
 
 #[test]
+fn preflight_checks_output_contract_shape_without_running_runtime() {
+    let ok = AgentRunPreflight::new()
+        .output_contract(&OutputContract::Files {
+            paths: vec![WorkspacePath::new("output/result.txt").unwrap()],
+        })
+        .check();
+    assert!(!ok.has_errors());
+
+    let empty_files = AgentRunPreflight::new()
+        .output_contract(&OutputContract::Files { paths: Vec::new() })
+        .check();
+    assert!(empty_files.has_errors());
+
+    let empty_diff = AgentRunPreflight::new()
+        .output_contract(&OutputContract::WorkspaceDiff { roots: Vec::new() })
+        .check();
+    assert!(empty_diff.findings().iter().any(|finding| {
+        finding.severity == PreflightSeverity::Warning
+            && finding.check == "output-contract"
+            && finding.message.contains("no explicit roots")
+    }));
+}
+
+#[test]
 fn agent_case_evaluator_runs_independent_per_case_sessions() {
     futures::executor::block_on(async {
         let case = AgentCase::text(
