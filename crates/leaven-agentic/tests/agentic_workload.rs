@@ -1,12 +1,23 @@
 use std::collections::BTreeMap;
 
-use leaven_agent::FakeAgentRuntime;
-use leaven_agentic::{
-    AgentCase, AgentRunPreflight, AgentWorkload, CasePartitionId, CasePartitions, CaseSuite,
-    CaseTarget, PreflightSeverity,
+use leaven_agent::{
+    AgentInstructions, AgentRunRequest, FakeAgentAction, FakeAgentRuntime, OutputContract,
 };
-use leaven_core::{Artifact, ArtifactIdentity};
-use leaven_kernel::{CaseId, ContentId};
+use leaven_agentic::{
+    AgentCase, AgentCaseEvaluator, AgentCaseEvaluatorConfig, AgentCasePresentation,
+    AgentCasePresentationInput, AgentCasePresenter, AgentCaseScoreInput, AgentCaseScorer,
+    AgentRunPreflight, AgentWorkload, AgenticAdapterError, CasePartitionId, CasePartitions,
+    CaseSuite, CaseTarget, PreflightSeverity,
+};
+use leaven_core::{
+    Artifact, ArtifactIdentity, AssessmentGranularity, AssessmentTarget, EvaluationPurpose,
+    EvaluationRequest, EvaluationSet, OptimizationProblem,
+};
+use leaven_engine::{BudgetLedger, CaseSet, MaterializeContext, RunContext, RunGraph};
+use leaven_kernel::{CaseId, ContentId, Cost, EvaluatorId, Fingerprint, Metered, RunId};
+use leaven_store_inline::InlineEvidenceStore;
+use leaven_workspace::{WorkspacePath, WorkspaceView};
+use leaven_workspace_local::LocalWorkspaceFactory;
 
 #[test]
 fn case_suite_fingerprint_changes_when_case_content_or_partitions_change() {
@@ -109,6 +120,71 @@ fn preflight_flags_empty_case_suite_and_artifact_validation_errors() {
     }));
 }
 
+#[test]
+fn agent_case_evaluator_runs_independent_per_case_sessions() {
+    futures::executor::block_on(async {
+        let case = AgentCase::text(
+            CaseId::new(0),
+            "question",
+            CaseTarget::Text("expected".to_owned()),
+        );
+        let suite = CaseSuite::from_cases([case]).unwrap();
+        let evaluator = AgentCaseEvaluator::new(
+            AgentCaseEvaluatorConfig::new(
+                EvaluatorId::from("agent-case/test"),
+                Fingerprint::from_bytes([4; 32]),
+            ),
+            suite,
+            LocalWorkspaceFactory::temp(),
+            FakeAgentRuntime::new(vec![FakeAgentAction::WriteFile {
+                path: WorkspacePath::new("output/result.txt").unwrap(),
+                bytes: b"observed".to_vec(),
+            }])
+            .with_cost(Cost::llm_calls(1)),
+            TestPresenter,
+            TestScorer,
+        );
+        let mut graph = RunGraph::<CaseProblem>::new(RunId::new());
+        let mut budget = BudgetLedger::default();
+        let store = InlineEvidenceStore::<CaseEvidence>::new("case-evidence");
+        let case_set = CaseSet::new(vec!["case-0"]);
+        let candidate = {
+            let mut ctx = RunContext::<CaseProblem>::new(&mut graph, &mut budget);
+            ctx.insert_seed(CaseArtifact("seed".to_owned()), 0).unwrap()
+        };
+        let mut ctx = RunContext::<CaseProblem>::new(&mut graph, &mut budget)
+            .with_case_set(&case_set)
+            .with_evidence_store(&store);
+
+        let report = ctx
+            .evaluate_with(
+                &evaluator,
+                EvaluationRequest::Independent {
+                    candidates: vec![candidate],
+                    set: EvaluationSet::All,
+                    granularity: AssessmentGranularity::PerCase,
+                    purpose: EvaluationPurpose::Search,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(report.assessment_ids.len(), 1);
+        assert_eq!(report.cost.llm_calls, 1);
+        assert_eq!(report.cost.metric_calls, 1);
+        let assessment = ctx.graph().assessment(report.assessment_ids[0]).unwrap();
+        assert!(matches!(
+            assessment.target(),
+            AssessmentTarget::Case {
+                case,
+                ..
+            } if *case == CaseId::new(0)
+        ));
+        let evidence = ctx.assessment_evidence(report.assessment_ids[0]).unwrap();
+        assert_eq!(evidence.output, "observed");
+    });
+}
+
 #[derive(Clone)]
 struct ValidArtifact;
 
@@ -148,3 +224,96 @@ impl Artifact for InvalidArtifact {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
 #[error("invalid artifact")]
 struct TestArtifactError;
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct CaseArtifact(String);
+
+impl Artifact for CaseArtifact {
+    type Change = String;
+    type ApplyError = TestArtifactError;
+
+    fn identity(&self) -> ArtifactIdentity {
+        ArtifactIdentity::External(self.0.clone())
+    }
+
+    fn apply_change(&self, change: &Self::Change) -> Result<Self, Self::ApplyError> {
+        Ok(Self(change.clone()))
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct CaseEvidence {
+    output: String,
+}
+
+impl leaven_core::Evidence for CaseEvidence {}
+
+struct CaseProblem;
+
+impl OptimizationProblem for CaseProblem {
+    type Artifact = CaseArtifact;
+    type Case = &'static str;
+    type Evidence = CaseEvidence;
+    type ProposalAnnotations = ();
+}
+
+struct TestPresenter;
+
+impl AgentCasePresenter<CaseProblem> for TestPresenter {
+    fn fingerprint(&self) -> Fingerprint {
+        Fingerprint::from_bytes([5; 32])
+    }
+
+    async fn present(
+        &self,
+        input: AgentCasePresentationInput<'_, CaseProblem>,
+        workspace: &mut WorkspaceView<'_>,
+        _ctx: MaterializeContext<'_, CaseProblem>,
+    ) -> Result<Metered<AgentCasePresentation>, AgenticAdapterError> {
+        workspace.write_file(
+            &WorkspacePath::new("candidate.txt").unwrap(),
+            input.candidate.0.as_bytes(),
+        )?;
+        workspace.write_file(
+            &WorkspacePath::new("case.txt").unwrap(),
+            format!("{:?}", input.case.input).as_bytes(),
+        )?;
+        Ok(Metered::new(
+            AgentCasePresentation {
+                request: AgentRunRequest::new(
+                    AgentInstructions::task("write output"),
+                    OutputContract::Files {
+                        paths: vec![WorkspacePath::new("output/result.txt").unwrap()],
+                    },
+                ),
+                materialized_refs: vec![
+                    WorkspacePath::new("candidate.txt").unwrap(),
+                    WorkspacePath::new("case.txt").unwrap(),
+                ],
+            },
+            Cost::zero(),
+        ))
+    }
+}
+
+struct TestScorer;
+
+impl AgentCaseScorer<CaseProblem> for TestScorer {
+    fn fingerprint(&self) -> Fingerprint {
+        Fingerprint::from_bytes([6; 32])
+    }
+
+    async fn score(
+        &self,
+        _input: AgentCaseScoreInput<'_, CaseProblem>,
+        workspace: &WorkspaceView<'_>,
+    ) -> Result<Metered<CaseEvidence>, AgenticAdapterError> {
+        let output = workspace.read_file(&WorkspacePath::new("output/result.txt").unwrap())?;
+        Ok(Metered::new(
+            CaseEvidence {
+                output: String::from_utf8(output).unwrap(),
+            },
+            Cost::metric_calls(1),
+        ))
+    }
+}

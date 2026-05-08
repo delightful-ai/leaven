@@ -11,6 +11,8 @@ pub enum AgenticAdapterError {
     WorkspaceAllocate(#[from] FactoryError),
     #[error(transparent)]
     WorkspaceCleanup(WorkspaceError),
+    #[error(transparent)]
+    Workspace(#[from] WorkspaceError),
     #[error("agentic stage failed and workspace cleanup also failed")]
     StageAndCleanup {
         #[source]
