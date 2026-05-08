@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::sync::{
     Arc,
@@ -12,18 +13,21 @@ use leaven_agent::{
 };
 use leaven_agentic::{
     AgentCase, AgentCaseEvaluator, AgentCaseEvaluatorConfig, AgentCasePresentation,
-    AgentCasePresentationInput, AgentCasePresenter, AgentCaseRunPolicy, AgentCaseScoreInput,
-    AgentCaseScorer, AgentRunPreflight, AgentWorkload, AgenticAdapterError, AgenticRunInspection,
-    CASE_RUN_RECORD_METADATA_KEY, CasePartitionId, CasePartitions, CaseSuite, CaseTarget,
-    PreflightSeverity, PresenterDryRun, ScorerDryRun,
+    AgentCasePresentationInput, AgentCasePresenter, AgentCaseRetryRecord, AgentCaseRunError,
+    AgentCaseRunPolicy, AgentCaseRunRecord, AgentCaseScoreInput, AgentCaseScorer,
+    AgentRunPreflight, AgentWorkload, AgenticAdapterError, AgenticInspectionWarning,
+    AgenticRunInspection, CASE_RUN_RECORD_METADATA_KEY, CaseCheckpointPolicy, CasePartitionId,
+    CasePartitions, CaseSuite, CaseTarget, FailOnError, FailedAgentCaseRun, FiniteRatio,
+    PreflightSeverity, PresenterDryRun, ScoredAgentCaseRun, ScorerDryRun, ToolApprovalPolicy,
 };
 use leaven_core::{
-    Artifact, ArtifactIdentity, AssessmentGranularity, AssessmentTarget, CacheIdentity,
+    Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, AssessmentTarget, CacheIdentity,
     EvaluationPurpose, EvaluationRequest, EvaluationSet, OptimizationProblem, PairOrder,
+    ResolvedEvaluationRequest,
 };
 use leaven_engine::{
-    BudgetLedger, CacheBypassReason, CachePolicy, CacheStatus, CaseSet, MaterializeContext,
-    RunContext, RunGraph,
+    BudgetLedger, CacheBypassReason, CachePolicy, CacheStatus, CaseSet, EvaluationContext,
+    EvaluationError, Evaluator, MaterializeContext, RunContext, RunEvent, RunGraph,
 };
 use leaven_kernel::{
     AgentSessionId, BlobRef, CaseId, CheckpointId, ContentId, Cost, EvaluatorId, Fingerprint,
@@ -74,6 +78,78 @@ fn case_suite_rejects_duplicate_ids_and_missing_partition_targets() {
 
     let missing = CaseSuite::new(cases, partitions).unwrap_err();
     assert!(missing.to_string().contains("references missing case"));
+}
+
+#[test]
+fn case_run_records_preserve_scored_failed_retry_and_policy_state() {
+    let attempt = NonZeroUsize::new(1).unwrap();
+    let retry_attempt = NonZeroUsize::new(2).unwrap();
+    let retry = AgentCaseRetryRecord {
+        attempt: retry_attempt,
+        session: Some(AgentSessionId::new()),
+        error: AgentCaseRunError::Runtime("first attempt failed".to_owned()),
+        cost: Cost::llm_calls(1),
+    };
+    let scored = AgentCaseRunRecord::scored_attempt(ScoredAgentCaseRun {
+        run_id: RunId::new(),
+        candidate: leaven_kernel::CandidateId::new(),
+        case: CaseId::new(7),
+        partition: leaven_kernel::EvaluationSetId::new(),
+        attempt,
+        session: AgentSessionId::new(),
+        outputs: vec![WorkspacePath::new("output/result.json").unwrap()],
+        retries: vec![retry.clone()],
+        cost: Cost::metric_calls(1),
+    });
+
+    assert!(scored.score_recorded);
+    assert!(scored.error.is_none());
+    assert_eq!(scored.retries, vec![retry.clone()]);
+    assert!(AgentCaseRetryRecord::from_failed_run(&scored).is_none());
+
+    let failed = AgentCaseRunRecord::failed_attempt(FailedAgentCaseRun {
+        run_id: scored.run_id,
+        candidate: scored.candidate,
+        case: scored.case,
+        partition: scored.partition,
+        attempt: retry_attempt,
+        session: retry.session,
+        outputs: Vec::new(),
+        error: AgentCaseRunError::Scoring("not parseable".to_owned()),
+        cost: Cost::llm_calls(2),
+    });
+    let retry_from_failure = AgentCaseRetryRecord::from_failed_run(&failed).unwrap();
+    assert_eq!(retry_from_failure.attempt, retry_attempt);
+    assert_eq!(
+        retry_from_failure.error,
+        AgentCaseRunError::Scoring("not parseable".to_owned())
+    );
+
+    let ratio = FiniteRatio::new(NonZeroUsize::new(1).unwrap(), NonZeroUsize::new(3).unwrap());
+    let policy = AgentCaseRunPolicy {
+        retry_on_error: 2,
+        score_on_error: true,
+        fail_on_error: FailOnError::Fraction(ratio),
+        max_parallel_cases: Some(NonZeroUsize::new(4).unwrap()),
+        max_parallel_workspaces: Some(NonZeroUsize::new(2).unwrap()),
+        limits: leaven_agentic::AgentCaseLimits {
+            message_limit: Some(NonZeroUsize::new(12).unwrap()),
+            token_limit: Some(NonZeroUsize::new(2048).unwrap()),
+            time_limit: Some(std::time::Duration::from_secs(30)),
+            working_time_limit: Some(std::time::Duration::from_secs(20)),
+            cost_limit: Some(Cost::llm_calls(3)),
+        },
+        approval: Some(ToolApprovalPolicy {
+            require_approval: true,
+            allowed_tools: vec!["Bash(git:*)".to_owned()],
+        }),
+        checkpoint: CaseCheckpointPolicy::BestEffort,
+    };
+
+    assert_eq!(ratio.numerator().get(), 1);
+    assert_eq!(ratio.denominator().get(), 3);
+    assert!(matches!(policy.fail_on_error, FailOnError::Fraction(_)));
+    assert_eq!(policy.approval.unwrap().allowed_tools, ["Bash(git:*)"]);
 }
 
 #[test]
@@ -575,6 +651,70 @@ fn agent_case_evaluator_runs_independent_per_case_sessions() {
         assert_eq!(inspection.costs.case_run_records.llm_calls, 1);
         assert_eq!(inspection.costs.case_run_records.metric_calls, 1);
         assert!(inspection.warnings.is_empty());
+    });
+}
+
+#[test]
+fn agentic_run_inspection_reports_best_lineage_costs_and_malformed_case_metadata() {
+    futures::executor::block_on(async {
+        let mut graph = RunGraph::<CaseProblem>::new(RunId::new());
+        let mut budget = BudgetLedger::default();
+        let store = InlineEvidenceStore::<CaseEvidence>::new("case-evidence");
+        let case_set = CaseSet::new(vec!["case-0"]);
+        let (seed, child) = {
+            let mut ctx = RunContext::<CaseProblem>::new(&mut graph, &mut budget);
+            let seed = ctx.insert_seed(CaseArtifact("seed".to_owned()), 0).unwrap();
+            let proposal = leaven_core::Proposal::mutate(seed, "child".to_owned()).build();
+            let batch = ctx
+                .record_proposal_batch(
+                    leaven_kernel::StageId::custom("inspection"),
+                    leaven_core::ProposalBatch {
+                        proposals: vec![proposal],
+                        semantics: leaven_core::ProposalBatchSemantics::Alternatives,
+                        metadata: leaven_kernel::MetadataBag::new(),
+                    },
+                    Cost::zero(),
+                )
+                .unwrap()
+                .batch_id;
+            let child = ctx
+                .apply_batch(batch)
+                .unwrap()
+                .successful_candidates()
+                .next()
+                .unwrap();
+            (seed, child)
+        };
+        let mut ctx = RunContext::<CaseProblem>::new(&mut graph, &mut budget)
+            .with_case_set(&case_set)
+            .with_evidence_store(&store);
+
+        ctx.evaluate_with(
+            &MalformedMetadataEvaluator,
+            EvaluationRequest::Independent {
+                candidates: vec![child],
+                set: EvaluationSet::All,
+                granularity: AssessmentGranularity::Aggregate,
+                purpose: EvaluationPurpose::Search,
+            },
+        )
+        .await
+        .unwrap();
+        ctx.emit(RunEvent::OptimizationEnded {
+            run_id: ctx.graph().run_id(),
+            best: Some(child),
+            budget: ctx.budget(),
+        });
+
+        let inspection = AgenticRunInspection::from_graph(&ctx.graph());
+        assert_eq!(inspection.best_candidate, Some(child));
+        assert_eq!(inspection.best_lineage, vec![child, seed]);
+        assert_eq!(inspection.costs.evaluation_events.metric_calls, 1);
+        assert!(inspection.case_runs.is_empty());
+        assert!(inspection.warnings.iter().any(|warning| matches!(
+            warning,
+            AgenticInspectionWarning::MalformedCaseRunRecordMetadata { .. }
+        )));
     });
 }
 
@@ -1170,6 +1310,49 @@ impl AgentCaseScorer<CaseProblem> for TestScorer {
             CaseEvidence {
                 output: String::from_utf8(output).unwrap(),
             },
+            Cost::metric_calls(1),
+        ))
+    }
+}
+
+struct MalformedMetadataEvaluator;
+
+impl Evaluator<CaseProblem> for MalformedMetadataEvaluator {
+    fn id(&self) -> EvaluatorId {
+        EvaluatorId::from("malformed-metadata")
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        Fingerprint::from_bytes([12; 32])
+    }
+
+    fn cache_policy(&self, _request: &ResolvedEvaluationRequest) -> CachePolicy {
+        CachePolicy::Never
+    }
+
+    async fn evaluate(
+        &self,
+        request: ResolvedEvaluationRequest,
+        _ctx: EvaluationContext<'_, CaseProblem>,
+    ) -> Result<Metered<Vec<Assessment<CaseProblem>>>, EvaluationError> {
+        let leaven_core::ResolvedRequestKind::Independent { candidates } = request.kind else {
+            return Err(EvaluationError::Message("expected independent".to_owned()));
+        };
+        let mut metadata = leaven_kernel::MetadataBag::new();
+        metadata.insert(
+            CASE_RUN_RECORD_METADATA_KEY,
+            MetadataValue::String("not json".to_owned()),
+        );
+        Ok(Metered::new(
+            vec![Assessment::Independent {
+                candidate: candidates[0],
+                target: AssessmentTarget::Unscoped,
+                evidence: CaseEvidence {
+                    output: "observed".to_owned(),
+                },
+                cost: Cost::metric_calls(1),
+                metadata,
+            }],
             Cost::metric_calls(1),
         ))
     }
