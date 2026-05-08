@@ -6,13 +6,15 @@ use std::num::NonZeroUsize;
 use leaven_agent::{AgentInstructions, AgentRunContext, AgentRunRequest, AgentRuntime};
 use leaven_core::{OptimizationProblem, ProposalBatch};
 use leaven_engine::{Arity, Materializer, ProposalContext, ProposalError, Proposer, Renderer};
-use leaven_kernel::{AgentSessionId, Cost, Metered, ProposerId};
+use leaven_kernel::{AgentSessionId, Cost, MetadataValue, Metered, ProposerId};
 use leaven_workspace::{WithWorkspaceError, WorkspaceConfig, WorkspaceFactory};
 
 use crate::error::{checked_add_cost, map_workspace_error};
 use crate::{
-    AgentPromptTarget, AgenticAdapterError, AgenticRepairError, AgenticRunInput, ProposalParser,
-    ProposalRepairFeedback, ProposalRepairPolicy, ProposalRepairPromptBuilder,
+    AgentPromptTarget, AgenticAdapterError, AgenticRepairError, AgenticRunInput,
+    PROPOSAL_REPAIR_ATTEMPTS_METADATA_KEY, ProposalParser, ProposalRepairAttemptOutcome,
+    ProposalRepairAttemptRecord, ProposalRepairFeedback, ProposalRepairPolicy,
+    ProposalRepairPromptBuilder,
 };
 
 pub struct RepairingAgenticProposer<Factory, Runtime, Materialize, Render, Repair, Parse, Input> {
@@ -125,6 +127,7 @@ where
             total = checked_add_cost(total, &rendered.cost)?;
             let mut instructions = rendered.value;
             let max_attempts = self.config.repair.max_attempts.get();
+            let mut records = Vec::new();
 
             for attempt in 1..=max_attempts {
                 let budget = ctx.budget();
@@ -157,10 +160,24 @@ where
                 {
                     Ok(parsed) => {
                         total = checked_add_cost(total, &parsed.cost)?;
+                        records.push(ProposalRepairAttemptRecord {
+                            attempt,
+                            session: session.value.session_id,
+                            outcome: ProposalRepairAttemptOutcome::Accepted,
+                        });
+                        let mut batch = parsed.value;
+                        attach_repair_metadata(&mut batch, &records)?;
                         drop(view);
-                        return Ok(Metered::new(parsed.value, total));
+                        return Ok(Metered::new(batch, total));
                     }
                     Err(parse_error) if attempt < max_attempts => {
+                        records.push(ProposalRepairAttemptRecord {
+                            attempt,
+                            session: session.value.session_id,
+                            outcome: ProposalRepairAttemptOutcome::ParseFailed {
+                                error: parse_error.to_string(),
+                            },
+                        });
                         let failed_attempt =
                             NonZeroUsize::new(attempt).expect("attempt starts at one");
                         instructions = self.repair.build_repair(
@@ -174,8 +191,16 @@ where
                         )?;
                     }
                     Err(parse_error) => {
+                        records.push(ProposalRepairAttemptRecord {
+                            attempt,
+                            session: session.value.session_id,
+                            outcome: ProposalRepairAttemptOutcome::ParseFailed {
+                                error: parse_error.to_string(),
+                            },
+                        });
                         return Err(AgenticAdapterError::Repair(AgenticRepairError::Exhausted {
                             attempts: max_attempts,
+                            records,
                             source: Box::new(parse_error),
                         }));
                     }
@@ -199,4 +224,17 @@ where
         }
         .map_err(|error| ProposalError::with_source("agentic proposer failed", error))
     }
+}
+
+fn attach_repair_metadata<P: OptimizationProblem>(
+    batch: &mut ProposalBatch<P>,
+    records: &[ProposalRepairAttemptRecord],
+) -> Result<(), AgenticAdapterError> {
+    let value = serde_json::to_value(records)
+        .map_err(|error| AgenticAdapterError::Input(error.to_string()))?;
+    batch.metadata.insert(
+        PROPOSAL_REPAIR_ATTEMPTS_METADATA_KEY,
+        MetadataValue::Json(value),
+    );
+    Ok(())
 }

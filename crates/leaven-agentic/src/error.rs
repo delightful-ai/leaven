@@ -5,7 +5,7 @@ use leaven_engine::{MaterializeError, RenderError};
 use leaven_kernel::{Amount, Cost};
 use leaven_workspace::{FactoryError, WithWorkspaceError, WorkspaceError};
 
-use crate::AgentCaseRunRecord;
+use crate::{AgentCaseRunRecord, ProposalRepairAttemptRecord};
 
 #[derive(Debug, thiserror::Error)]
 pub enum AgenticAdapterError {
@@ -51,6 +51,7 @@ pub enum AgenticRepairError {
     #[error("proposal repair exhausted after {attempts} attempt(s)")]
     Exhausted {
         attempts: usize,
+        records: Vec<ProposalRepairAttemptRecord>,
         #[source]
         source: Box<AgenticParseError>,
     },

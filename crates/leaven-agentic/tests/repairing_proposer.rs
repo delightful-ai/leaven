@@ -12,9 +12,10 @@ use leaven_agent::{
     AgentRuntimeError, AgentSession,
 };
 use leaven_agentic::{
-    AgentPromptTarget, AgenticParseError, AgenticRepairError, AgenticRunInput, ProposalParser,
-    ProposalRepairFeedback, ProposalRepairPolicy, ProposalRepairPromptBuilder,
-    RepairingAgenticProposer, RepairingAgenticProposerConfig,
+    AgentPromptTarget, AgenticParseError, AgenticRepairError, AgenticRunInput,
+    PROPOSAL_REPAIR_ATTEMPTS_METADATA_KEY, ProposalParser, ProposalRepairFeedback,
+    ProposalRepairPolicy, ProposalRepairPromptBuilder, RepairingAgenticProposer,
+    RepairingAgenticProposerConfig,
 };
 use leaven_core::{
     Artifact, ArtifactIdentity, Evidence, OptimizationProblem, Proposal, ProposalBatch,
@@ -25,7 +26,8 @@ use leaven_engine::{
     RenderContext, RenderError, Renderer, RunContext, RunGraph,
 };
 use leaven_kernel::{
-    AgentRuntimeId, ContentId, Cost, Fingerprint, MetadataBag, Metered, ProposerId, RunId,
+    AgentRuntimeId, ContentId, Cost, Fingerprint, MetadataBag, MetadataKey, MetadataValue, Metered,
+    ProposerId, RunId,
 };
 use leaven_workspace::{
     FactoryError, Workspace, WorkspaceBackend, WorkspaceConfig, WorkspaceError, WorkspaceFactory,
@@ -89,6 +91,24 @@ fn repairing_proposer_routes_parse_failure_back_to_same_runtime_loop() {
         );
         assert_eq!(repair_errors.lock().unwrap().as_slice(), ["bad proposal"]);
         assert_eq!(report.cost.llm_calls, 2);
+        let batch = ctx.graph().proposal_batch(report.batch_id).unwrap();
+        let repair_metadata = batch
+            .metadata()
+            .get(&MetadataKey::from(PROPOSAL_REPAIR_ATTEMPTS_METADATA_KEY))
+            .expect("repair attempt metadata");
+        let MetadataValue::Json(repair_records) = repair_metadata else {
+            panic!("repair attempt metadata should be JSON");
+        };
+        assert_eq!(repair_records[0]["attempt"], serde_json::json!(1));
+        assert_eq!(
+            repair_records[0]["outcome"]["kind"],
+            serde_json::json!("parse_failed")
+        );
+        assert_eq!(repair_records[1]["attempt"], serde_json::json!(2));
+        assert_eq!(
+            repair_records[1]["outcome"]["kind"],
+            serde_json::json!("accepted")
+        );
         let applied = ctx.apply_batch(report.batch_id).unwrap();
         let child = applied.successful_candidates().next().unwrap();
         assert_eq!(ctx.graph().artifact(child).unwrap().0, "fixed");

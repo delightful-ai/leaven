@@ -33,6 +33,10 @@ pub use preflight::{
     AgentRunPreflight, AgentRunPreflightReport, PreflightFinding, PreflightSeverity,
 };
 pub use proposer::{AgenticProposer, AgenticProposerConfig};
+pub use repair::{
+    PROPOSAL_REPAIR_ATTEMPTS_METADATA_KEY, ProposalRepairAttemptOutcome,
+    ProposalRepairAttemptRecord,
+};
 pub use repair::{ProposalRepairFeedback, ProposalRepairPolicy, ProposalRepairPromptBuilder};
 pub use repairing_proposer::{RepairingAgenticProposer, RepairingAgenticProposerConfig};
 
@@ -46,9 +50,10 @@ pub mod prelude {
         AgenticEvaluatorConfig, AgenticParseError, AgenticProposer, AgenticProposerConfig,
         AgenticRepairError, AgenticRunInput, CASE_RUN_RECORD_METADATA_KEY, CaseCheckpointPolicy,
         CaseFiles, CaseInput, CaseMessage, CasePartitionId, CasePartitions, CaseSuite, CaseTarget,
-        EvaluationInputBuilder, EvidenceParser, FailOnError, FiniteRatio, PreflightFinding,
-        PreflightSeverity, ProposalParser, ProposalRepairFeedback, ProposalRepairPolicy,
-        ProposalRepairPromptBuilder, RepairingAgenticProposer, RepairingAgenticProposerConfig,
-        SetupScript, ToolApprovalPolicy, WorkspaceRequirement,
+        EvaluationInputBuilder, EvidenceParser, FailOnError, FiniteRatio,
+        PROPOSAL_REPAIR_ATTEMPTS_METADATA_KEY, PreflightFinding, PreflightSeverity, ProposalParser,
+        ProposalRepairAttemptOutcome, ProposalRepairAttemptRecord, ProposalRepairFeedback,
+        ProposalRepairPolicy, ProposalRepairPromptBuilder, RepairingAgenticProposer,
+        RepairingAgenticProposerConfig, SetupScript, ToolApprovalPolicy, WorkspaceRequirement,
     };
 }
