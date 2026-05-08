@@ -1,7 +1,9 @@
-//! leaven-agent-codex crate skeleton.
+//! Codex provider-family facade.
+//!
+//! This crate intentionally does not own a single `CodexRuntime`. Codex has
+//! multiple operational surfaces; concrete adapters live in narrower crates.
 
-mod config;
-mod runtime;
-
-pub use config::CodexConfig;
-pub use runtime::CodexRuntime;
+#[cfg(feature = "app-server")]
+pub mod app_server {
+    pub use leaven_agent_codex_app_server::*;
+}

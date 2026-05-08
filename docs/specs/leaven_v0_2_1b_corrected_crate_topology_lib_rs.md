@@ -114,6 +114,7 @@ leaven/
 │   ├── leaven-agent/
 │   ├── leaven-agent-claude-code/
 │   ├── leaven-agent-codex/
+│   ├── leaven-agent-codex-app-server/
 │   ├── leaven-agent-opencode/
 │   ├── leaven-agentic/
 │   ├── leaven-agentic-skill/
@@ -188,6 +189,7 @@ members = [
     "crates/leaven-agent",
     "crates/leaven-agent-claude-code",
     "crates/leaven-agent-codex",
+    "crates/leaven-agent-codex-app-server",
     "crates/leaven-agent-opencode",
     "crates/leaven-agentic",
     "crates/leaven-agentic-skill",
@@ -400,6 +402,10 @@ leaven-agent-claude-code -> [
 ]
 
 leaven-agent-codex -> [
+  leaven-agent-codex-app-server
+]
+
+leaven-agent-codex-app-server -> [
   leaven-kernel,
   leaven-workspace,
   leaven-agent
@@ -2222,14 +2228,30 @@ pub use runtime::ClaudeCodeRuntime;
 // leaven-agent-codex/src/lib.rs
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
-//! Codex agent runtime adapter.
+//! Codex provider-family facade.
 //!
-//! Provider-adapter contract:
+//! Concrete provider-adapter contract:
 //! `docs/specs/codex_app_server_agent_runtime.md`.
+#[cfg(feature = "app-server")]
+pub mod app_server {
+    pub use leaven_agent_codex_app_server::*;
+}
+```
+
+```rust
+// leaven-agent-codex-app-server/src/lib.rs
+#![forbid(unsafe_code)]
+#![warn(missing_docs)]
+//! Codex app-server runtime adapter.
+//!
+//! Owns app-server protocol, connector/transport seams, transcript
+//! normalization, and `CodexAppServerRuntime`.
 pub mod config;
+pub mod error;
+#[cfg(feature = "app-server")]
 pub mod runtime;
-pub use config::CodexConfig;
-pub use runtime::CodexRuntime;
+#[cfg(feature = "app-server")]
+pub mod transport;
 ```
 
 ```rust

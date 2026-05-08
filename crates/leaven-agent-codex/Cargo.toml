@@ -1,6 +1,6 @@
 [package]
 name = "leaven-agent-codex"
-description = "Leaven crate skeleton for leaven-agent-codex."
+description = "Codex provider-family facade for Leaven agent runtimes."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -10,7 +10,11 @@ repository.workspace = true
 [lints]
 workspace = true
 
+[features]
+default = []
+app-server = ["dep:leaven-agent-codex-app-server", "leaven-agent-codex-app-server/app-server"]
+stdio = ["app-server", "leaven-agent-codex-app-server/stdio"]
+live-codex-tests = ["stdio", "leaven-agent-codex-app-server/live-codex-tests"]
+
 [dependencies]
-leaven-kernel = { workspace = true }
-leaven-workspace = { workspace = true }
-leaven-agent = { workspace = true }
+leaven-agent-codex-app-server = { workspace = true, optional = true, default-features = false }

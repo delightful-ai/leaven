@@ -5,8 +5,8 @@ use leaven_workspace::{Command, WorkspacePath, WorkspaceView};
 
 use crate::{
     AgentRunContext, AgentRunRequest, AgentRuntime, AgentRuntimeCapabilities, AgentRuntimeError,
-    AgentSession, AgentStatus, CommandRecord, OutputContract, RawProviderEvent, TranscriptRole,
-    WorkspaceAccessMode,
+    AgentSession, AgentStatus, CommandRecord, RawProviderEvent, TranscriptRole,
+    WorkspaceAccessMode, validate_output_contract,
 };
 
 #[derive(Clone, Debug)]
@@ -144,56 +144,12 @@ impl AgentRuntime for FakeAgentRuntime {
             }
         }
 
-        validate_output_contract(workspace, &request.output_contract, &session)?;
+        for path in validate_output_contract(workspace, &request.output_contract, &session)? {
+            if !session.output_files.contains(&path) {
+                session.output_files.push(path);
+            }
+        }
 
         Ok(Metered::new(session, self.cost.clone()))
-    }
-}
-
-fn validate_output_contract(
-    workspace: &WorkspaceView<'_>,
-    contract: &OutputContract,
-    session: &AgentSession,
-) -> Result<(), AgentRuntimeError> {
-    match contract {
-        OutputContract::Files { paths } => {
-            for path in paths {
-                workspace.read_file(path).map_err(|source| {
-                    AgentRuntimeError::with_source(
-                        format!("required output file `{}` was not readable", path.as_str()),
-                        source,
-                    )
-                })?;
-            }
-            Ok(())
-        }
-        OutputContract::JsonFile { path, schema: _ } => {
-            workspace.read_file(path).map_err(|source| {
-                AgentRuntimeError::with_source(
-                    format!("required JSON output `{}` was not readable", path.as_str()),
-                    source,
-                )
-            })?;
-            Ok(())
-        }
-        OutputContract::FinalMessage => {
-            let has_assistant_message = session.transcript.events.iter().any(|event| {
-                matches!(
-                    event,
-                    crate::TranscriptEvent::Message {
-                        role: TranscriptRole::Assistant,
-                        ..
-                    }
-                )
-            });
-            if has_assistant_message {
-                Ok(())
-            } else {
-                Err(AgentRuntimeError::OutputContract(
-                    "final assistant message was required".to_owned(),
-                ))
-            }
-        }
-        OutputContract::WorkspaceDiff { roots: _ } => Ok(()),
     }
 }

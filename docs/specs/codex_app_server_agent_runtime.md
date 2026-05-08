@@ -8,8 +8,12 @@
 > Reference implementation read: `/Users/darin/src/personal/DSRs/crates/dsrs-codex-agent`
 > and `/Users/darin/src/personal/DSRs/crates/dsrs-repo-agent`.
 
-This document specifies the first real agent provider adapter for Leaven:
-`leaven-agent-codex`.
+This document specifies the first real Codex provider adapter for Leaven:
+`leaven-agent-codex-app-server`.
+
+`leaven-agent-codex` is only the Codex provider-family facade. It must not
+own app-server protocol code directly because Codex app-server, Codex CLI,
+and future hosted/container transports have different operational semantics.
 
 The purpose is narrow:
 
@@ -36,9 +40,13 @@ leaven-agent
   owns provider-neutral AgentRuntime, AgentRunRequest, AgentSession
 
 leaven-agent-codex
-  owns CodexRuntime: AgentRuntime
-  owns Codex app-server launch, protocol, transcript normalization, errors
-  owns Codex workspace and skill presentation ABI
+  owns Codex provider-family facade and optional re-exports
+
+leaven-agent-codex-app-server
+  owns CodexAppServerRuntime: AgentRuntime
+  owns Codex app-server protocol, transcript normalization, errors
+  owns CodexAppServerConnector / CodexAppServerTransport seams
+  owns stdio only as one connector, not as the adapter identity
 
 leaven-agentic
   owns AgenticProposer, AgenticEvaluator, parsers
@@ -50,7 +58,7 @@ optimizer crates
   own search rhythm, candidate selection, repair policy, population updates
 ```
 
-`leaven-agent-codex` must not know:
+`leaven-agent-codex-app-server` must not know:
 
 ```text
 OptimizationProblem
@@ -77,8 +85,8 @@ WorkspacePath
 Cost
 Fingerprint
 Codex app-server protocol types
-CodexWorkspaceLayout
-CodexSkillRef
+CodexAppServerConnector
+CodexAppServerTransport
 ```
 
 This keeps the provider copyable. The DSRs code combines Codex app-server
@@ -90,28 +98,31 @@ boundary.
 
 ## 2. Crate and Feature Shape
 
-`leaven-agent-codex` is a leaf provider crate.
+`leaven-agent-codex-app-server` is the concrete app-server leaf provider
+crate. `leaven-agent-codex` is a facade crate and may depend optionally on
+`leaven-agent-codex-app-server` only for re-export ergonomics.
 
 Allowed dependencies:
 
 ```text
-leaven-agent-codex
+leaven-agent-codex-app-server
   -> leaven-agent
   -> leaven-kernel
   -> leaven-workspace
   -> codex-app-server-protocol   // leaf-only, feature-gated
+  -> codex-protocol              // leaf-only, feature-gated typed config fields
   -> serde / serde_json          // provider protocol/config only
-  -> tokio process/io/time       // provider launch only
+  -> tokio process/io/time       // provider connection only
 ```
 
 Forbidden dependencies:
 
 ```text
-leaven-agent-codex -> leaven-core
-leaven-agent-codex -> leaven-engine
-leaven-agent-codex -> leaven-agentic
-leaven-agent-codex -> leaven-artifact-skill
-leaven-agent-codex -> leaven-gepa
+leaven-agent-codex-app-server -> leaven-core
+leaven-agent-codex-app-server -> leaven-engine
+leaven-agent-codex-app-server -> leaven-agentic
+leaven-agent-codex-app-server -> leaven-artifact-skill
+leaven-agent-codex-app-server -> leaven-gepa
 leaven-agent -> codex-app-server-protocol
 leaven-agentic -> codex-app-server-protocol
 leaven-workspace -> codex-app-server-protocol
@@ -124,23 +135,27 @@ Feature policy:
 default = []
 app-server = [
   "dep:codex-app-server-protocol",
+  "dep:codex-protocol",
   "dep:serde",
   "dep:serde_json",
   "dep:tokio",
 ]
-live-codex-tests = ["app-server"]
+stdio = ["app-server"]
+live-codex-tests = ["stdio"]
 ```
 
 The exact dependency list may change during implementation, but the rule does
-not: Codex protocol dependencies are confined to the provider crate and are
-not enabled by the umbrella `leaven` crate unless the user opts into a provider
-feature such as `agent-codex`.
+not: Codex protocol dependencies are confined to
+`leaven-agent-codex-app-server` and are not enabled by the umbrella `leaven`
+crate unless the user opts into a concrete provider feature.
 
 The crate must compile with:
 
 ```text
 cargo check -p leaven-agent-codex --no-default-features
-cargo check -p leaven-agent-codex --features app-server
+cargo check -p leaven-agent-codex-app-server --no-default-features
+cargo check -p leaven-agent-codex-app-server --features app-server
+cargo check -p leaven-agent-codex-app-server --features stdio
 ```
 
 The no-default-features build may expose config vocabulary and a clear
@@ -154,11 +169,12 @@ protocol crate.
 The provider implementation should be boring:
 
 ```rust
-pub struct CodexRuntime {
-    config: CodexConfig,
+pub struct CodexAppServerRuntime<C> {
+    config: CodexAppServerConfig,
+    connector: C,
 }
 
-impl AgentRuntime for CodexRuntime {
+impl<C: CodexAppServerConnector> AgentRuntime for CodexAppServerRuntime<C> {
     fn id(&self) -> AgentRuntimeId;
     fn fingerprint(&self) -> Fingerprint;
     fn capabilities(&self) -> AgentRuntimeCapabilities;
@@ -172,36 +188,40 @@ impl AgentRuntime for CodexRuntime {
 }
 ```
 
-`CodexRuntime` has no type parameter for `OptimizationProblem`, artifact,
+`CodexAppServerRuntime` has no type parameter for `OptimizationProblem`, artifact,
 surface, evidence, or parser.
+
+The runtime is generic over a connector because "app-server over stdio on the
+host" and "app-server reached inside a container/sandbox" are not the same
+workspace problem. Stdio is just `StdioCodexAppServerConnector`, which
+advertises `WorkspaceAccessMode::RequiresLocalMount`; container or backend
+connectors can later return a transport and app-server cwd without forcing a
+host-local path.
 
 Suggested config shape:
 
 ```rust
-pub struct CodexConfig {
-    pub launch: CodexLaunch,
-    pub initialize: CodexInitializeConfig,
-    pub thread: CodexThreadConfig,
-    pub turn: CodexTurnConfig,
-    pub approval_mode: CodexApprovalMode,
-    pub retain_raw_events: RawEventPolicy,
+pub struct CodexAppServerConfig {
+    pub initialize: CodexAppServerInitializeConfig,
+    pub thread: CodexAppServerThreadConfig,
+    pub turn: CodexAppServerTurnConfig,
+    pub approval_mode: CodexAppServerApprovalMode,
+    pub retain_raw_events: CodexRawEventPolicy,
 }
 
-pub enum CodexLaunch {
-    StdioAppServer {
-        codex_bin: PathBuf,
-        config_overrides: Vec<String>,
-    },
+pub struct StdioCodexAppServerConnector {
+    pub codex_bin: PathBuf,
+    pub config_overrides: Vec<String>,
 }
 
-pub struct CodexInitializeConfig {
+pub struct CodexAppServerInitializeConfig {
     pub client_name: String,
     pub client_title: Option<String>,
     pub experimental_api: bool,
     pub opt_out_notification_methods: Option<Vec<String>>,
 }
 
-pub struct CodexThreadConfig {
+pub struct CodexAppServerThreadConfig {
     pub model: Option<String>,
     pub model_provider: Option<String>,
     pub service_tier: Option<String>,
@@ -212,7 +232,7 @@ pub struct CodexThreadConfig {
     pub service_name: Option<String>,
 }
 
-pub struct CodexTurnConfig {
+pub struct CodexAppServerTurnConfig {
     pub model: Option<String>,
     pub effort: Option<CodexReasoningEffort>,
     pub summary: Option<CodexReasoningSummary>,
@@ -221,7 +241,7 @@ pub struct CodexTurnConfig {
     pub approvals_reviewer: Option<CodexApprovalsReviewer>,
 }
 
-pub enum CodexApprovalMode {
+pub enum CodexAppServerApprovalMode {
     Error,
     Accept,
     Decline,
@@ -229,19 +249,19 @@ pub enum CodexApprovalMode {
 }
 ```
 
-`CodexApprovalMode::Error` is the default. It matches the DSRs default and is
-the right optimization default: an unattended optimization run should not
-silently grant extra permissions when a provider asks.
+`CodexAppServerApprovalMode::Error` is the default. It matches the DSRs default
+and is the right optimization default: an unattended optimization run should
+not silently grant extra permissions when a provider asks.
 
-The first implementation only needs `StdioAppServer`. Remote or provider-
-managed transports can be added later as additional `CodexLaunch` variants if
-their workspace semantics are real.
+The first implementation ships `StdioCodexAppServerConnector`, but the runtime
+is generic over `CodexAppServerConnector`. Remote/container transports should
+be new connector implementations, not new meanings for stdio.
 
 ---
 
 ## 4. Workspace Semantics
 
-`StdioAppServer` requires a local mount.
+`StdioCodexAppServerConnector` requires a local mount.
 
 ```rust
 fn capabilities(&self) -> AgentRuntimeCapabilities {
@@ -253,7 +273,7 @@ fn capabilities(&self) -> AgentRuntimeCapabilities {
 }
 ```
 
-At `run_session` entry:
+For the stdio connector at `run_session` entry:
 
 1. Resolve `request.cwd` against `workspace.local_mount()`.
 2. If no local mount exists, return
@@ -265,7 +285,7 @@ At `run_session` entry:
    echo them into transcripts.
 
 This means a pure-remote workspace backend such as E2B, Kubernetes, or
-Firecracker is not supported by the first Codex adapter unless it can present a
+Firecracker is not supported by the stdio connector unless it can present a
 real local mount usable by the host-side Codex CLI. That is honest and better
 than pretending `ws.path()` exists for every backend.
 
@@ -507,15 +527,16 @@ lets evaluators preserve failed trajectories as evidence.
 The runtime must not invent token costs.
 
 If Codex exposes token/cost usage in protocol metadata, map it into `Cost`.
-If not, return `Cost::zero()` and preserve provider metadata in raw events.
-Stages may add external cost accounting later, but the runtime should not guess.
+If not, charge the mechanical `llm_calls` axis for the session and leave token
+axes at zero. Preserve provider metadata in raw events. Stages may add external
+cost accounting later, but the runtime should not guess token or dollar costs.
 
-`CodexRuntime::fingerprint()` must include stable execution-shaping inputs:
+`CodexAppServerRuntime::fingerprint()` must include stable execution-shaping inputs:
 
 - provider adapter name and crate version
 - transcript normalization version
-- Codex launch mode
-- Codex binary path or configured binary identity
+- app-server connector kind
+- connector binary path or configured endpoint identity
 - Codex CLI version if cheaply available
 - app-server protocol feature/version if available
 - model, model provider, reasoning effort, service tier
@@ -540,9 +561,9 @@ proofs cheap and aligned with the Leaven operator contract.
 
 Codex sees files. Leaven decides what those files mean.
 
-Leaven cannot leave Codex skill layout ownerless. If Codex expects a specific
-workspace layout or app-server `UserInput::Skill` shape, that is provider ABI
-and should be recorded in `leaven-agent-codex`.
+Leaven cannot leave Codex skill layout ownerless. If Codex app-server expects a
+specific workspace layout or `UserInput::Skill` shape, that is app-server
+provider ABI and should be recorded in `leaven-agent-codex-app-server`.
 
 The distinction:
 
@@ -559,7 +580,7 @@ Skill artifact semantics:
   how skill mutations become proposals
 ```
 
-The first belongs to `leaven-agent-codex`. The second belongs to
+The first belongs to `leaven-agent-codex-app-server`. The second belongs to
 `leaven-artifact-skill`, `leaven-agentic-skill`, or paper-specific stages.
 
 Suggested provider ABI types:
@@ -579,7 +600,7 @@ pub struct CodexSkillRef {
 These types describe how an already-materialized skill is presented to Codex.
 They do not validate, parse, or mutate the skill itself.
 
-`CodexRuntime` does not materialize a skill bank, clone a repo, parse
+`CodexAppServerRuntime` does not materialize a skill bank, clone a repo, parse
 `SKILL.md`, or commit changes. Those responsibilities belong to
 materializers, parsers, and paper-specific stages.
 
@@ -589,7 +610,7 @@ Typical Codex-backed proposer:
 AgenticProposer
   -> skill materializer writes SkillBank to workspace
   -> task/history renderer builds AgentInstructions
-  -> CodexRuntime runs one session
+  -> CodexAppServerRuntime runs one session
   -> validator checks edited skill folders
   -> workspace proposal parser returns ProposalBatch
 ```
@@ -600,7 +621,7 @@ Typical Codex-backed evaluator:
 AgenticEvaluator
   -> artifact materializer writes candidate agent world
   -> task materializer writes evaluation case
-  -> CodexRuntime runs one session
+  -> CodexAppServerRuntime runs one session
   -> evidence parser reads transcript/files
   -> evaluator returns Assessment
 ```
@@ -628,16 +649,16 @@ The runtime returns session facts. It does not decide graph causality.
 
 ### 11.1 Provider containment law
 
-No crate below `leaven-agent-codex` may import Codex protocol types.
+No crate below `leaven-agent-codex-app-server` may import Codex protocol types.
 
 ```text
 Codex protocol type appears in public API
-  => the owning crate must be leaven-agent-codex or a Codex-specific helper crate
+  => the owning crate must be leaven-agent-codex-app-server or a Codex-specific helper crate
 ```
 
 ### 11.2 Workspace honesty law
 
-If the configured Codex launch needs a local path, it must fail before launch
+If the configured Codex connector needs a local path, it must fail before launch
 when `WorkspaceView::local_mount()` is `None`.
 
 No provider adapter may reconstruct a host path by string concatenation or
@@ -645,7 +666,7 @@ assume that workspace-relative paths are host filesystem paths.
 
 ### 11.3 Request ownership law
 
-`CodexRuntime` may consume `AgentRunRequest`, but it must not retain borrowed
+`CodexAppServerRuntime` may consume `AgentRunRequest`, but it must not retain borrowed
 workspace views, graph views, or stage contexts after `run_session` returns.
 
 ### 11.4 Transcript totality law
@@ -709,15 +730,18 @@ Add or extend crate topology tests to prove:
 
 - no non-provider crate depends on `codex-app-server-protocol`
 - `leaven-agent-codex --no-default-features` does not enable provider deps
+- `leaven-agent-codex-app-server --no-default-features` does not enable provider deps
 - umbrella `leaven` does not enable Codex by default
-- enabling `leaven/agent-codex` is the only umbrella path to the provider
+- no umbrella Codex feature exists until the import-experience design explicitly
+  names one. Users depend on `leaven-agent-codex-app-server` directly, or on the
+  `leaven-agent-codex` facade with a concrete provider feature.
 
 ### 12.4 Live tests
 
 Live Codex tests are opt-in:
 
 ```text
-LEAVEN_CODEX_LIVE=1 cargo test -p leaven-agent-codex --features live-codex-tests
+LEAVEN_CODEX_LIVE=1 cargo test -p leaven-agent-codex-app-server --features live-codex-tests
 ```
 
 They should be signed/ignored by default and must use a temporary workspace.
@@ -734,20 +758,21 @@ verify no graph/engine dependency is involved
 ```
 
 Git commit/readback live tests belong in the stage/parser crate, not in
-`leaven-agent-codex`.
+`leaven-agent-codex-app-server`.
 
 ---
 
 ## 13. Implementation Ladder
 
-1. Port DSRs-style `AppServerTransport` into `leaven-agent-codex` behind the
-   `app-server` feature.
+1. Port DSRs-style `CodexAppServerTransport` into
+   `leaven-agent-codex-app-server` behind the `app-server` feature.
 2. Port the typed JSON-RPC client methods needed for one-session execution:
    `initialize`, `thread/start`, `turn/start`, `turn/interrupt`,
    `thread/read`, notification streaming, shutdown.
 3. Port the history accumulator without DSRs-specific derives or transcript
    templating.
-4. Implement `CodexRuntime::capabilities()` as `RequiresLocalMount`.
+4. Implement `CodexAppServerRuntime::capabilities()` from the configured
+   `CodexAppServerConnector`; stdio reports `RequiresLocalMount`.
 5. Implement `CodexWorkspaceLayout` and `CodexSkillRef` as provider ABI
    vocabulary.
 6. Implement request mapping from `AgentRunRequest` to Codex params.
@@ -806,8 +831,9 @@ runtime fails closed.
    should use it through `CodexSkillRef` values over already-materialized
    paths, not through runtime ownership of `SkillBank`.
 4. **Remote app-server transport.** If E2B/Firkin/K8s can run Codex app-server
-   inside the sandbox and expose stdio/JSON-RPC, add a new launch variant. Do
-   not fake backend neutrality in `StdioAppServer`.
+   inside the sandbox and expose JSON-RPC, add a new
+   `CodexAppServerConnector`. Do not fake backend neutrality in
+   `StdioCodexAppServerConnector`.
 5. **Cost metadata.** If Codex starts emitting stable token usage through the
    app-server stream, map it into `Cost` and add tests. Until then, cost is
-   zero plus raw metadata.
+   one `llm_calls` charge plus raw metadata, with token axes at zero.

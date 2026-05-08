@@ -5,9 +5,12 @@ use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 
 use leaven_kernel::{AgentSessionId, BudgetSnapshot};
-use leaven_workspace::WorkspacePath;
+use leaven_workspace::{WorkspacePath, WorkspaceView};
 
-use crate::{AgentTranscript, CommandRecord, RawProviderEvent};
+use crate::{
+    AgentRuntimeError, AgentTranscript, CommandRecord, RawProviderEvent, TranscriptEvent,
+    TranscriptRole,
+};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AgentRunRequest {
@@ -213,4 +216,61 @@ pub enum AgentStatus {
     Cancelled,
     TimedOut,
     OutputContractViolation { message: String },
+}
+
+pub fn validate_output_contract(
+    workspace: &WorkspaceView<'_>,
+    contract: &OutputContract,
+    session: &AgentSession,
+) -> Result<Vec<WorkspacePath>, AgentRuntimeError> {
+    match contract {
+        OutputContract::Files { paths } => {
+            for path in paths {
+                workspace.read_file(path).map_err(|source| {
+                    AgentRuntimeError::with_source(
+                        format!("required output file `{}` was not readable", path.as_str()),
+                        source,
+                    )
+                })?;
+            }
+            Ok(paths.clone())
+        }
+        OutputContract::JsonFile { path, schema: _ } => {
+            let bytes = workspace.read_file(path).map_err(|source| {
+                AgentRuntimeError::with_source(
+                    format!("required JSON output `{}` was not readable", path.as_str()),
+                    source,
+                )
+            })?;
+            serde_json::from_slice::<serde_json::Value>(&bytes).map_err(|source| {
+                AgentRuntimeError::with_source(
+                    format!(
+                        "required JSON output `{}` was not valid JSON",
+                        path.as_str()
+                    ),
+                    source,
+                )
+            })?;
+            Ok(vec![path.clone()])
+        }
+        OutputContract::FinalMessage => {
+            let has_assistant_message = session.transcript.events.iter().any(|event| {
+                matches!(
+                    event,
+                    TranscriptEvent::Message {
+                        role: TranscriptRole::Assistant,
+                        ..
+                    }
+                )
+            });
+            if has_assistant_message {
+                Ok(Vec::new())
+            } else {
+                Err(AgentRuntimeError::OutputContract(
+                    "final assistant message was required".to_owned(),
+                ))
+            }
+        }
+        OutputContract::WorkspaceDiff { roots: _ } => Ok(Vec::new()),
+    }
 }

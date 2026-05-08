@@ -809,7 +809,7 @@ leaven-agent
   OutputContract
   runtime capability declarations
 
-provider-specific runtime crates, starting with leaven-agent-codex
+provider-specific runtime crates, starting with leaven-agent-codex-app-server
   provider-specific AgentRuntime impls
   provider config
   transcript normalization

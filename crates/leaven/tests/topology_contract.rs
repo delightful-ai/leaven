@@ -7,6 +7,7 @@ const EXPECTED_WORKSPACE_MEMBERS: &[&str] = &[
     "crates/leaven-agent",
     "crates/leaven-agent-claude-code",
     "crates/leaven-agent-codex",
+    "crates/leaven-agent-codex-app-server",
     "crates/leaven-agent-opencode",
     "crates/leaven-agentic",
     "crates/leaven-agentic-skill",
@@ -62,6 +63,7 @@ const EXPECTED_CRATES: &[&str] = &[
     "leaven-agent",
     "leaven-agent-claude-code",
     "leaven-agent-codex",
+    "leaven-agent-codex-app-server",
     "leaven-agent-opencode",
     "leaven-agentic",
     "leaven-agentic-skill",
@@ -143,8 +145,9 @@ const EXPECTED_DEPENDENCIES: &[(&str, &[&str])] = &[
         "leaven-agent-claude-code",
         &["leaven-agent", "leaven-kernel", "leaven-workspace"],
     ),
+    ("leaven-agent-codex", &["leaven-agent-codex-app-server"]),
     (
-        "leaven-agent-codex",
+        "leaven-agent-codex-app-server",
         &["leaven-agent", "leaven-kernel", "leaven-workspace"],
     ),
     (
@@ -433,6 +436,34 @@ fn cold_core_has_no_projection_or_engine_leaks() {
     }
 }
 
+#[test]
+fn codex_app_server_protocol_is_leaf_only() {
+    let root = workspace_root();
+    let allowed = "crates/leaven-agent-codex-app-server/Cargo.toml";
+
+    for manifest in cargo_manifests(&root) {
+        let relative = manifest.strip_prefix(&root).unwrap();
+        let relative = relative.to_string_lossy();
+        let text = fs::read_to_string(&manifest).unwrap();
+
+        if relative == allowed {
+            continue;
+        }
+
+        assert!(
+            !text.contains("codex-app-server-protocol") && !text.contains("codex-protocol"),
+            "Codex app-server protocol crates must stay leaf-only, but `{relative}` depends on them"
+        );
+    }
+
+    let umbrella = fs::read_to_string(root.join("crates/leaven/Cargo.toml")).unwrap();
+    assert!(
+        !umbrella.contains("leaven-agent-codex")
+            && !umbrella.contains("leaven-agent-codex-app-server"),
+        "umbrella leaven must not expose a Codex provider feature until import-experience design names one"
+    );
+}
+
 fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -514,4 +545,14 @@ fn collect_rust_files(path: &Path, files: &mut Vec<PathBuf>) {
     for entry in fs::read_dir(path).unwrap() {
         collect_rust_files(&entry.unwrap().path(), files);
     }
+}
+
+fn cargo_manifests(root: &Path) -> Vec<PathBuf> {
+    std::iter::once(root.join("Cargo.toml"))
+        .chain(
+            EXPECTED_WORKSPACE_MEMBERS
+                .iter()
+                .map(|member| root.join(member).join("Cargo.toml")),
+        )
+        .collect()
 }

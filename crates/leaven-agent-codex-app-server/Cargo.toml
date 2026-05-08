@@ -1,0 +1,41 @@
+[package]
+name = "leaven-agent-codex-app-server"
+description = "Codex app-server runtime adapter for Leaven agent stages."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = []
+app-server = [
+    "dep:async-trait",
+    "dep:codex-app-server-protocol",
+    "dep:codex-protocol",
+    "dep:serde",
+    "dep:serde_json",
+    "dep:tokio",
+]
+stdio = ["app-server"]
+live-codex-tests = ["stdio"]
+
+[dependencies]
+leaven-agent = { workspace = true }
+leaven-kernel = { workspace = true }
+leaven-workspace = { workspace = true }
+thiserror = { workspace = true }
+
+async-trait = { workspace = true, optional = true }
+codex-app-server-protocol = { path = "../../../../../vendor/github.com/openai/codex/codex-rs/app-server-protocol", optional = true }
+codex-protocol = { path = "../../../../../vendor/github.com/openai/codex/codex-rs/protocol", optional = true }
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true, features = ["io-util"] }
+
+[dev-dependencies]
+futures = { workspace = true }
+leaven-workspace-local = { workspace = true }

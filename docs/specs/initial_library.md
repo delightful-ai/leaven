@@ -292,19 +292,21 @@ The full companion contract is
 This is a minor spec bump because the first real provider adapter needs a
 precise boundary before implementation.
 
-62. **Codex is a provider runtime, not an engine concept.**  
-    `leaven-agent-codex` implements `AgentRuntime` over an already materialized
-    workspace. It does not know optimizer, graph, proposal, assessment, skill,
+62. **Codex app-server is a concrete provider runtime, not an engine concept.**  
+    `leaven-agent-codex-app-server` implements `AgentRuntime` over an already
+    materialized workspace. `leaven-agent-codex` is only the Codex provider
+    facade. Neither crate knows optimizer, graph, proposal, assessment, skill,
     or git vocabulary.
 
 63. **Codex app-server dependencies are leaf-only.**  
-    `codex-app-server-protocol` is confined to `leaven-agent-codex` and is
-    feature-gated from umbrella/facade crates.
+    `codex-app-server-protocol` is confined to
+    `leaven-agent-codex-app-server` and is feature-gated from
+    umbrella/facade crates.
 
-64. **The first Codex launch mode requires a local mount.**  
-    `StdioAppServer` fails early on pure-remote workspaces. Backend-neutral
-    remote Codex execution waits for a real transport that can run app-server
-    inside the backend or read back a provider-managed snapshot.
+64. **The stdio Codex connector requires a local mount.**  
+    `StdioCodexAppServerConnector` fails early on pure-remote workspaces.
+    Backend-neutral remote Codex execution waits for a real connector that can
+    run app-server inside the backend or read back a provider-managed snapshot.
 
 65. **Transcript and output-contract mapping are specified.**  
     Assistant messages, commands, tool calls, raw provider events, output
@@ -313,8 +315,8 @@ precise boundary before implementation.
 
 66. **Codex skill layout has a provider owner.**  
     Codex-specific workspace layout and `UserInput::Skill` references are
-    provider ABI owned by `leaven-agent-codex`; `SkillBank`, `SKILL.md`
-    validation, and skill mutations remain outside the runtime.
+    provider ABI owned by `leaven-agent-codex-app-server`; `SkillBank`,
+    `SKILL.md` validation, and skill mutations remain outside the runtime.
 
 The full companion contract is
 `docs/specs/codex_app_server_agent_runtime.md`.
@@ -4688,15 +4690,18 @@ This pass specifies the first real provider runtime adapter needed for
 agentic-skill paper reproduction while keeping provider code out of generic
 Leaven layers.
 
-- **Codex is a leaf runtime adapter.** `leaven-agent-codex` implements
-  provider-neutral `AgentRuntime`; it does not know candidates, proposals,
-  assessments, `RunGraph`, GEPA, git artifacts, or skill banks.
+- **Codex app-server is a leaf runtime adapter.**
+  `leaven-agent-codex-app-server` implements provider-neutral `AgentRuntime`;
+  `leaven-agent-codex` remains a thin facade. Neither knows candidates,
+  proposals, assessments, `RunGraph`, GEPA, git artifacts, or skill banks.
 - **Codex protocol dependencies are contained.** `codex-app-server-protocol`
-  and process/protocol dependencies are confined to `leaven-agent-codex` and
-  feature-gated from umbrella/facade crates.
-- **Stdio app-server requires a local mount.** The first Codex runtime launch
-  mode is honest about workspace semantics: pure-remote workspaces fail before
-  launch unless they expose a real local mount.
+  and process/protocol dependencies are confined to
+  `leaven-agent-codex-app-server` and feature-gated from umbrella/facade
+  crates.
+- **Stdio app-server requires a local mount.** The stdio connector is honest
+  about workspace semantics: pure-remote workspaces fail before launch unless
+  they expose a real local mount. Non-stdio app-server execution should be a
+  separate connector.
 - **Request mapping is explicit.** `AgentRunRequest` maps to Codex
   `thread/start` and `turn/start`; output-contract validation remains runtime-
   level and proposal parsing remains stage-owned.
