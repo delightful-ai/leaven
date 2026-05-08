@@ -19,6 +19,7 @@ leaven-workspace = { workspace = true }
 futures = { workspace = true }
 thiserror = { workspace = true }
 indexmap = { workspace = true }
+serde = { workspace = true }
 
 [dev-dependencies]
 leaven-store-inline = { workspace = true }

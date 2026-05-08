@@ -8,10 +8,12 @@ use std::sync::{
 use futures::executor::block_on;
 use leaven_core::PartitionId;
 use leaven_engine::{
-    Callback, CaseSet, Engine, Optimizer, OptimizerError, RunContext, RunEvent, RunGraphView,
-    RunPersistence, RunPersistenceError, StepStatus, TrustPolicy, optimize,
+    Callback, CaseSet, CheckpointContext, CheckpointError, CheckpointableOptimizer, Engine,
+    Optimizer, OptimizerError, PrivateStatePolicy, RestoreContext, RunContext, RunEvent,
+    RunGraphView, RunPersistence, RunPersistenceError, StateFormat, StepStatus, TrustPolicy,
+    optimize,
 };
-use leaven_kernel::{Budget, ErrorKind};
+use leaven_kernel::{Budget, CandidateId, ErrorKind, Fingerprint};
 use leaven_store_inline::InlineEvidenceStore;
 
 use support::{TestEvidence, TestProblem, TextArtifact};
@@ -135,6 +137,57 @@ fn engine_surfaces_checkpoint_failures_as_run_errors() {
                 .any(|event| matches!(event, RunEvent::OptimizationEnded { best: None, .. }))
         );
     });
+}
+
+#[test]
+fn checkpointable_optimizer_round_trips_explicit_private_state_against_graph() {
+    let mut engine = Engine::<TestProblem>::builder().build();
+    let seed = engine
+        .insert_seed(TextArtifact("seed".to_owned()), 0)
+        .unwrap();
+    let optimizer = StatefulOptimizer {
+        selected: Some(seed),
+        cursor: 7,
+    };
+
+    assert!(matches!(
+        optimizer.private_state_policy(),
+        PrivateStatePolicy::ExplicitSnapshot { .. }
+    ));
+    let state = optimizer
+        .checkpoint_state(CheckpointContext::new(engine.view()))
+        .unwrap();
+
+    let mut restored = StatefulOptimizer {
+        selected: None,
+        cursor: 0,
+    };
+    restored
+        .restore_state(state, RestoreContext::new(engine.view()))
+        .unwrap();
+
+    assert_eq!(restored.selected, Some(seed));
+    assert_eq!(restored.cursor, 7);
+}
+
+#[test]
+fn checkpointable_optimizer_restore_rejects_missing_graph_truth() {
+    let engine = Engine::<TestProblem>::builder().build();
+    let mut optimizer = StatefulOptimizer {
+        selected: None,
+        cursor: 0,
+    };
+    let err = optimizer
+        .restore_state(
+            StatefulOptimizerState {
+                selected: Some(CandidateId::new()),
+                cursor: 1,
+            },
+            RestoreContext::new(engine.view()),
+        )
+        .unwrap_err();
+
+    assert!(matches!(err, CheckpointError::MissingGraphTruth { .. }));
 }
 
 #[test]
@@ -336,6 +389,75 @@ impl Optimizer<TestProblem> for ContinueThenDone {
         _graph: leaven_engine::RunGraphView<'_, TestProblem>,
     ) -> Option<leaven_kernel::CandidateId> {
         None
+    }
+}
+
+struct StatefulOptimizer {
+    selected: Option<CandidateId>,
+    cursor: u64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+struct StatefulOptimizerState {
+    selected: Option<CandidateId>,
+    cursor: u64,
+}
+
+impl Optimizer<TestProblem> for StatefulOptimizer {
+    async fn step(
+        &mut self,
+        _ctx: &mut RunContext<'_, TestProblem>,
+    ) -> Result<StepStatus, OptimizerError> {
+        Ok(StepStatus::Done)
+    }
+
+    fn best_candidate(&self, _graph: RunGraphView<'_, TestProblem>) -> Option<CandidateId> {
+        self.selected
+    }
+}
+
+impl CheckpointableOptimizer<TestProblem> for StatefulOptimizer {
+    type State = StatefulOptimizerState;
+
+    fn private_state_policy(&self) -> PrivateStatePolicy {
+        PrivateStatePolicy::ExplicitSnapshot {
+            schema: Fingerprint::from_bytes([5; 32]),
+            format: StateFormat::Json,
+        }
+    }
+
+    fn checkpoint_state(
+        &self,
+        ctx: CheckpointContext<'_, TestProblem>,
+    ) -> Result<Self::State, CheckpointError> {
+        if let Some(selected) = self.selected
+            && ctx.graph().candidate(selected).is_none()
+        {
+            return Err(CheckpointError::MissingGraphTruth {
+                reason: format!("selected candidate `{selected}` is not in the graph"),
+            });
+        }
+        Ok(StatefulOptimizerState {
+            selected: self.selected,
+            cursor: self.cursor,
+        })
+    }
+
+    fn restore_state(
+        &mut self,
+        state: Self::State,
+        ctx: RestoreContext<'_, TestProblem>,
+    ) -> Result<(), CheckpointError> {
+        if let Some(selected) = state.selected
+            && ctx.graph().candidate(selected).is_none()
+        {
+            return Err(CheckpointError::MissingGraphTruth {
+                reason: format!("selected candidate `{selected}` is not in the graph"),
+            });
+        }
+        self.selected = state.selected;
+        self.cursor = state.cursor;
+        Ok(())
     }
 }
 

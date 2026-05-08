@@ -2514,6 +2514,7 @@ dependencies = [
  "leaven-surface",
  "leaven-workspace",
  "proptest",
+ "serde",
  "thiserror 2.0.18",
 ]
 

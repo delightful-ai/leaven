@@ -42,6 +42,10 @@ pub use stage::{
     OptimizerError, Population, PopulationEvent, PopulationView, PreferenceRelation, ProposalError,
     Proposer, RenderError, Renderer, StepStatus, Stopper,
 };
+pub use stage::{
+    CheckpointContext, CheckpointError, CheckpointableOptimizer, OptimizerStateSnapshot,
+    PrivateStatePolicy, RestoreContext, StateFormat,
+};
 pub use trust::{
     Actor, EvalHandle, EvidenceVisibility, ProbeRecorder, ReadScope, TrustPolicy, TrustViolation,
 };
@@ -50,10 +54,11 @@ pub mod prelude {
     //! Common engine imports.
 
     pub use crate::{
-        Arity, BudgetHandle, BudgetLedger, CachePolicy, Callback, Engine, EngineBuilder,
-        EvaluationContext, Evaluator, MaterializationReport, MaterializeContext, MaterializeError,
-        Materializer, Optimizer, Population, PreferenceRelation, ProposalContext, Proposer,
-        ReadScope, RenderContext, Renderer, RunContext, RunEvent, RunGraphView, RunResult,
-        StepStatus, Stopper, TrustPolicy, optimize,
+        Arity, BudgetHandle, BudgetLedger, CachePolicy, Callback, CheckpointContext,
+        CheckpointError, CheckpointableOptimizer, Engine, EngineBuilder, EvaluationContext,
+        Evaluator, MaterializationReport, MaterializeContext, MaterializeError, Materializer,
+        Optimizer, OptimizerStateSnapshot, Population, PreferenceRelation, PrivateStatePolicy,
+        ProposalContext, Proposer, ReadScope, RenderContext, Renderer, RestoreContext, RunContext,
+        RunEvent, RunGraphView, RunResult, StateFormat, StepStatus, Stopper, TrustPolicy, optimize,
     };
 }
