@@ -60,7 +60,7 @@ pub mod prelude;
 pub mod problem;
 pub mod proposal;
 
-pub use artifact::{Artifact, ArtifactIdentity, ContentAddressed};
+pub use artifact::{Artifact, ArtifactIdentity, CacheIdentity, ContentAddressed};
 pub use evaluation::{
     Assessment, AssessmentGranularity, AssessmentTarget, CaseSetVersion, EvaluationPurpose,
     EvaluationRequest, EvaluationSet, PairOrder, PartitionId, ResolvedEvaluationRequest,

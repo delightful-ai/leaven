@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use leaven_core::{Artifact, ArtifactIdentity, ContentAddressed};
+use leaven_core::{Artifact, ArtifactIdentity, CacheIdentity, ContentAddressed};
 use leaven_kernel::ContentId;
 
 use crate::{SkillBankChange, SkillBankError, SkillFile, SkillFolder, SkillName, SkillPath};
@@ -242,6 +242,10 @@ impl Artifact for SkillBank {
 
     fn identity(&self) -> ArtifactIdentity {
         ArtifactIdentity::Content(self.content_id())
+    }
+
+    fn cache_identity(&self) -> Option<CacheIdentity> {
+        Some(CacheIdentity::Content(self.content_id()))
     }
 
     fn validate(&self) -> Result<(), Self::ApplyError> {

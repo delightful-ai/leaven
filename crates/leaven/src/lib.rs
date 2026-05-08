@@ -11,10 +11,10 @@ pub use leaven_kernel as kernel;
 pub use leaven_surface as surface;
 
 pub use leaven_core::{
-    Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, AssessmentTarget, CausalInputs,
-    ContentAddressed, EvaluationRequest, EvaluationSet, Evidence, InfoRef, OptimizationProblem,
-    PairOrder, Preference, Proposal, ProposalBatch, ProposalBatchSemantics, ProposalEffect,
-    ProposalProvenance,
+    Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, AssessmentTarget, CacheIdentity,
+    CausalInputs, ContentAddressed, EvaluationRequest, EvaluationSet, Evidence, InfoRef,
+    OptimizationProblem, PairOrder, Preference, Proposal, ProposalBatch, ProposalBatchSemantics,
+    ProposalEffect, ProposalProvenance,
 };
 pub use leaven_engine::{
     Arity, CachePolicy, Engine, EngineBuilder, Evaluator, MaterializationReport,

@@ -1,8 +1,8 @@
 #![allow(dead_code)]
 
 use leaven_core::{
-    Artifact, ArtifactIdentity, Evidence, OptimizationProblem, Proposal, ProposalBatch,
-    ProposalBatchSemantics,
+    Artifact, ArtifactIdentity, CacheIdentity, Evidence, OptimizationProblem, Proposal,
+    ProposalBatch, ProposalBatchSemantics,
 };
 use leaven_engine::{BudgetLedger, RunContext, RunGraph};
 use leaven_kernel::{Budget, ContentId, Cost, MetadataBag, ProposalBatchId, RunId, StageId};
@@ -26,11 +26,17 @@ impl Artifact for TextArtifact {
     type ApplyError = TextError;
 
     fn identity(&self) -> ArtifactIdentity {
-        let mut bytes = [0; 32];
-        let raw = self.0.as_bytes();
-        let len = raw.len().min(32);
-        bytes[..len].copy_from_slice(&raw[..len]);
-        ArtifactIdentity::Content(ContentId::from_bytes(bytes))
+        if let Some(label) = self.0.strip_prefix("external:") {
+            return ArtifactIdentity::External(label.to_owned());
+        }
+        ArtifactIdentity::Content(text_content_id(&self.0))
+    }
+
+    fn cache_identity(&self) -> Option<CacheIdentity> {
+        if self.0.starts_with("external:") {
+            return None;
+        }
+        Some(CacheIdentity::Content(text_content_id(&self.0)))
     }
 
     fn apply_change(&self, change: &Self::Change) -> Result<Self, Self::ApplyError> {
@@ -39,6 +45,14 @@ impl Artifact for TextArtifact {
             TextChange::Fail => Err(TextError),
         }
     }
+}
+
+fn text_content_id(text: &str) -> ContentId {
+    let mut bytes = [0; 32];
+    let raw = text.as_bytes();
+    let len = raw.len().min(32);
+    bytes[..len].copy_from_slice(&raw[..len]);
+    ContentId::from_bytes(bytes)
 }
 
 #[derive(Clone, Debug, PartialEq)]

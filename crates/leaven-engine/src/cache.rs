@@ -2,8 +2,8 @@
 
 use std::collections::HashMap;
 
-use leaven_core::CaseSetVersion;
-use leaven_kernel::{AssessmentId, CandidateId, CaseId, Fingerprint};
+use leaven_core::{CacheIdentity, CaseSetVersion};
+use leaven_kernel::{AssessmentId, CaseId, Fingerprint};
 
 /// Cache behavior requested for an evaluation.
 #[derive(Clone, Debug, Default, Eq, PartialEq, Hash)]
@@ -41,8 +41,8 @@ pub struct EvaluationCacheKey {
     pub case_set_version: CaseSetVersion,
     /// Resolved case IDs.
     pub case_ids: Vec<CaseId>,
-    /// Candidate IDs in request order.
-    pub candidates: Vec<CandidateId>,
+    /// Candidate cache identities in request order.
+    pub candidates: Vec<CacheIdentity>,
 }
 
 /// In-memory evaluation cache.

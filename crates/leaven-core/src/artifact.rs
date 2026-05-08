@@ -1,6 +1,6 @@
 //! Artifact contract.
 
-use leaven_kernel::ContentId;
+use leaven_kernel::{ContentId, Fingerprint};
 
 /// The domain value being optimized.
 ///
@@ -59,6 +59,17 @@ pub trait Artifact: Clone + Send + Sync + 'static {
     /// [`ArtifactIdentity::External`] only when the underlying state has
     /// no addressable content but does have a stable external label.
     fn identity(&self) -> ArtifactIdentity;
+
+    /// Identity that deterministic evaluator caches may trust.
+    ///
+    /// This is deliberately separate from [`Artifact::identity`]. Graph
+    /// identity may be an external mutable handle such as a branch name,
+    /// workspace path, or database row. Returning a cache identity promises
+    /// that the value identifies immutable evaluation-relevant content.
+    #[must_use]
+    fn cache_identity(&self) -> Option<CacheIdentity> {
+        None
+    }
 
     /// Check artifact-level invariants and surface any violation as
     /// feedback for the proposer.
@@ -121,6 +132,17 @@ pub enum ArtifactIdentity {
     /// Stable external label without a hash guarantee. Not enough on
     /// its own for deterministic caching.
     External(String),
+}
+
+/// Cache-safe identity for deterministic evaluator reuse.
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+pub enum CacheIdentity {
+    /// The artifact state is content-addressed by this digest.
+    Content(ContentId),
+    /// The external reference is immutable by law for this artifact type.
+    ExternalContent(String),
+    /// Caller-supplied stable cache fingerprint.
+    User(Fingerprint),
 }
 
 /// Stronger capability for artifacts that are intrinsically content-addressed.

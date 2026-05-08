@@ -490,6 +490,47 @@ fn deterministic_evaluation_cache_skips_second_evaluator_call() {
 }
 
 #[test]
+fn deterministic_evaluation_cache_bypasses_external_artifacts_without_cache_identity() {
+    block_on(async {
+        let (mut graph, mut budget) = graph_and_budget();
+        let mut cache = leaven_engine::EvaluationCache::default();
+        let case_set = CaseSet::new(vec!["case"]);
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let candidate = {
+            let mut seed_ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+            seed_ctx
+                .insert_seed(TextArtifact("external:branch-main".to_owned()), 0)
+                .unwrap()
+        };
+        let evaluator = CountingEvaluator::new(CachePolicy::Deterministic);
+
+        let first = {
+            let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
+                .with_case_set(&case_set)
+                .with_cache(&mut cache)
+                .with_evidence_store(&store);
+            ctx.evaluate_with(&evaluator, independent_request(candidate))
+                .await
+                .unwrap()
+        };
+        let second = {
+            let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
+                .with_case_set(&case_set)
+                .with_cache(&mut cache)
+                .with_evidence_store(&store);
+            ctx.evaluate_with(&evaluator, independent_request(candidate))
+                .await
+                .unwrap()
+        };
+
+        assert_eq!(first.cache, CacheStatus::Bypassed);
+        assert_eq!(second.cache, CacheStatus::Bypassed);
+        assert_ne!(first.assessment_ids, second.assessment_ids);
+        assert_eq!(evaluator.calls(), 2);
+    });
+}
+
+#[test]
 fn no_cache_policy_invokes_evaluator_and_records_each_request() {
     block_on(async {
         let (mut graph, mut budget) = graph_and_budget();

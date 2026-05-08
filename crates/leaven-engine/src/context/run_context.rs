@@ -3,8 +3,8 @@
 use std::{collections::BTreeMap, sync::Arc};
 
 use leaven_core::{
-    Assessment, EvaluationRequest, OptimizationProblem, ProposalBatch, ResolvedEvaluationRequest,
-    ResolvedRequestKind,
+    Artifact, Assessment, CacheIdentity, EvaluationRequest, OptimizationProblem, ProposalBatch,
+    ResolvedEvaluationRequest, ResolvedRequestKind,
 };
 use leaven_kernel::{
     AssessmentId, BudgetExceeded, BudgetSnapshot, CandidateId, Cost, ErrorKind, ErrorRecord,
@@ -373,7 +373,7 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
         };
         let policy = evaluator.cache_policy(&resolved_request);
         let cache_key =
-            evaluation_cache_key(evaluator.fingerprint(), policy.clone(), &resolved_request);
+            self.evaluation_cache_key(evaluator.fingerprint(), policy.clone(), &resolved_request);
         let request_id = self.record_evaluation_request(
             &evaluator_id,
             request,
@@ -385,7 +385,7 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
             request_id,
             &resolved_request,
             &policy,
-            &cache_key,
+            cache_key.as_ref(),
         ) {
             return Ok(report);
         }
@@ -435,7 +435,7 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
         };
         let policy = evaluator.cache_policy(&resolved_request);
         let cache_key =
-            evaluation_cache_key(evaluator.fingerprint(), policy.clone(), &resolved_request);
+            self.evaluation_cache_key(evaluator.fingerprint(), policy.clone(), &resolved_request);
         let request_id = self.record_evaluation_request(
             &evaluator_id,
             request,
@@ -447,7 +447,7 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
             request_id,
             &resolved_request,
             &policy,
-            &cache_key,
+            cache_key.as_ref(),
         ) {
             return Ok(report);
         }
@@ -477,16 +477,16 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
         request_id: EvaluationRequestId,
         resolved_request: &ResolvedEvaluationRequest,
         policy: &CachePolicy,
-        cache_key: EvaluationCacheKey,
+        cache_key: Option<EvaluationCacheKey>,
         metered: leaven_kernel::Metered<Vec<Assessment<P>>>,
     ) -> Result<EvaluationReport, RunContextError> {
         let stage = StageId::from_evaluator(evaluator_id.clone());
         self.charge(stage, metered.cost.clone())?;
         let assessment_ids = self.record_assessments(request_id, evaluator_id, metered.value)?;
-        let cache = if matches!(policy, &CachePolicy::Never) {
+        let cache = if matches!(policy, &CachePolicy::Never) || cache_key.is_none() {
             CacheStatus::Bypassed
         } else {
-            if let Some(cache) = self.cache.as_mut() {
+            if let (Some(cache), Some(cache_key)) = (self.cache.as_mut(), cache_key) {
                 cache.insert(cache_key, assessment_ids.clone());
             }
             CacheStatus::Miss
@@ -508,11 +508,12 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
         request_id: EvaluationRequestId,
         resolved_request: &ResolvedEvaluationRequest,
         policy: &CachePolicy,
-        cache_key: &EvaluationCacheKey,
+        cache_key: Option<&EvaluationCacheKey>,
     ) -> Option<EvaluationReport> {
         if matches!(policy, CachePolicy::Never) {
             return None;
         }
+        let cache_key = cache_key?;
         let assessment_ids = self
             .cache
             .as_ref()
@@ -527,6 +528,15 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
         };
         self.emit_evaluation_completed(evaluator, &report);
         Some(report)
+    }
+
+    fn evaluation_cache_key(
+        &self,
+        evaluator: leaven_kernel::Fingerprint,
+        policy: CachePolicy,
+        request: &ResolvedEvaluationRequest,
+    ) -> Option<EvaluationCacheKey> {
+        evaluation_cache_key(evaluator, policy, request, self.graph())
     }
 
     fn record_evaluation_request(
@@ -714,17 +724,36 @@ fn candidate_count(request: &ResolvedEvaluationRequest) -> usize {
     }
 }
 
-fn evaluation_cache_key(
+fn evaluation_cache_key<P: OptimizationProblem>(
     evaluator: leaven_kernel::Fingerprint,
     policy: CachePolicy,
     request: &ResolvedEvaluationRequest,
-) -> EvaluationCacheKey {
-    EvaluationCacheKey {
+    graph: RunGraphView<'_, P>,
+) -> Option<EvaluationCacheKey> {
+    let candidates = request_candidate_cache_identities(&policy, request, graph)?;
+    Some(EvaluationCacheKey {
         evaluator,
         policy,
         case_set_version: request.set.case_set_version.clone(),
         case_ids: request.set.case_ids.clone(),
-        candidates: request_candidates(request),
+        candidates,
+    })
+}
+
+fn request_candidate_cache_identities<P: OptimizationProblem>(
+    policy: &CachePolicy,
+    request: &ResolvedEvaluationRequest,
+    graph: RunGraphView<'_, P>,
+) -> Option<Vec<CacheIdentity>> {
+    match policy {
+        CachePolicy::Never => Some(Vec::new()),
+        CachePolicy::UserKey(fingerprint) => Some(vec![CacheIdentity::User(*fingerprint)]),
+        CachePolicy::Deterministic | CachePolicy::DeterministicWithSeed(_) => {
+            request_candidates(request)
+                .into_iter()
+                .map(|candidate| graph.artifact(candidate)?.cache_identity())
+                .collect()
+        }
     }
 }
 
