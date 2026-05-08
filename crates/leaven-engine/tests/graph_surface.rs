@@ -1,13 +1,22 @@
 mod support;
 
-use leaven_core::{CausalInputs, InfoRef, Proposal, ProposalEffect, ProposalProvenance, Window};
-use leaven_engine::{
-    ApplyOutcome, CandidateOrigin, RunContext, RunEvent, RunGraph, RunGraphRestoreError,
+use leaven_core::{
+    Assessment, AssessmentGranularity, AssessmentTarget, CausalInputs, EvaluationPurpose,
+    EvaluationRequest, EvaluationSet, InfoRef, Proposal, ProposalEffect, ProposalProvenance,
+    ResolvedEvaluationRequest, Window,
 };
-use leaven_kernel::{Cost, ErrorKind, MetadataBag, MetadataKey, MetadataValue, StageId};
+use leaven_engine::{
+    ApplyOutcome, CachePolicy, CandidateOrigin, EvaluationContext, EvaluationError, Evaluator,
+    RunContext, RunEvent, RunGraph, RunGraphRestoreError,
+};
+use leaven_kernel::{
+    ApplyAttemptId, Cost, ErrorKind, EvaluatorId, Fingerprint, MetadataBag, MetadataKey,
+    MetadataValue, Metered, StageId,
+};
+use leaven_store_inline::InlineEvidenceStore;
 use proptest::prelude::*;
 
-use support::{TestProblem, TextArtifact, TextChange, graph_and_budget, record_one};
+use support::{TestEvidence, TestProblem, TextArtifact, TextChange, graph_and_budget, record_one};
 
 #[test]
 fn create_proposal_creates_candidate_without_causal_parent() {
@@ -117,6 +126,213 @@ fn graph_snapshot_restore_rejects_dangling_references() {
         RunGraph::<TestProblem>::from_snapshot(missing_attempt),
         Err(RunGraphRestoreError::MissingApplyAttemptForCandidate { attempt, .. })
             if attempt == attempt_id
+    ));
+}
+
+#[test]
+fn graph_snapshot_restore_rejects_duplicate_record_ids() {
+    let snapshot = snapshot_with_proposal_and_assessment();
+
+    let mut duplicate_candidate = snapshot.clone();
+    duplicate_candidate
+        .candidates
+        .push(duplicate_candidate.candidates[0].clone());
+    assert!(matches!(
+        RunGraph::<TestProblem>::from_snapshot(duplicate_candidate),
+        Err(RunGraphRestoreError::DuplicateCandidate(_))
+    ));
+
+    let mut duplicate_batch = snapshot.clone();
+    duplicate_batch
+        .proposal_batches
+        .push(duplicate_batch.proposal_batches[0].clone());
+    assert!(matches!(
+        RunGraph::<TestProblem>::from_snapshot(duplicate_batch),
+        Err(RunGraphRestoreError::DuplicateProposalBatch(_))
+    ));
+
+    let mut duplicate_proposal = snapshot.clone();
+    duplicate_proposal
+        .proposals
+        .push(duplicate_proposal.proposals[0].clone());
+    assert!(matches!(
+        RunGraph::<TestProblem>::from_snapshot(duplicate_proposal),
+        Err(RunGraphRestoreError::DuplicateProposal(_))
+    ));
+
+    let mut duplicate_attempt = snapshot.clone();
+    duplicate_attempt
+        .apply_attempts
+        .push(duplicate_attempt.apply_attempts[0].clone());
+    assert!(matches!(
+        RunGraph::<TestProblem>::from_snapshot(duplicate_attempt),
+        Err(RunGraphRestoreError::DuplicateApplyAttempt(_))
+    ));
+
+    let mut duplicate_request = snapshot.clone();
+    duplicate_request
+        .evaluation_requests
+        .push(duplicate_request.evaluation_requests[0].clone());
+    assert!(matches!(
+        RunGraph::<TestProblem>::from_snapshot(duplicate_request),
+        Err(RunGraphRestoreError::DuplicateEvaluationRequest(_))
+    ));
+
+    let mut duplicate_assessment = snapshot;
+    duplicate_assessment
+        .assessments
+        .push(duplicate_assessment.assessments[0].clone());
+    assert!(matches!(
+        RunGraph::<TestProblem>::from_snapshot(duplicate_assessment),
+        Err(RunGraphRestoreError::DuplicateAssessment(_))
+    ));
+}
+
+#[test]
+fn graph_snapshot_restore_rejects_proposal_batch_inconsistencies() {
+    let snapshot = snapshot_with_proposal_and_assessment();
+    let proposal_id = snapshot.proposals[0].id;
+    let batch_id = snapshot.proposal_batches[0].id;
+
+    let mut missing_batch = snapshot.clone();
+    missing_batch.proposal_batches.clear();
+    assert!(matches!(
+        RunGraph::<TestProblem>::from_snapshot(missing_batch),
+        Err(RunGraphRestoreError::MissingBatchForProposal { proposal, batch })
+            if proposal == proposal_id && batch == batch_id
+    ));
+
+    let mut proposal_not_listed = snapshot.clone();
+    proposal_not_listed.proposal_batches[0].proposal_ids.clear();
+    assert!(matches!(
+        RunGraph::<TestProblem>::from_snapshot(proposal_not_listed),
+        Err(RunGraphRestoreError::ProposalNotListedInBatch { proposal, batch })
+            if proposal == proposal_id && batch == batch_id
+    ));
+
+    let mut invalid_proposal = snapshot;
+    invalid_proposal.proposals[0].provenance = ProposalProvenance::new(CausalInputs::None);
+    assert!(matches!(
+        RunGraph::<TestProblem>::from_snapshot(invalid_proposal),
+        Err(RunGraphRestoreError::InvalidRestoredProposal { proposal, .. })
+            if proposal == proposal_id
+    ));
+}
+
+#[test]
+fn graph_snapshot_restore_rejects_apply_and_candidate_origin_inconsistencies() {
+    let snapshot = snapshot_with_proposal_and_assessment();
+    let proposal_id = snapshot.proposals[0].id;
+    let attempt_id = snapshot.apply_attempts[0].id;
+    let child = snapshot
+        .candidates
+        .iter()
+        .find(|candidate| matches!(candidate.origin, CandidateOrigin::Proposal { .. }))
+        .unwrap()
+        .id;
+
+    let mut missing_proposal_for_attempt = snapshot.clone();
+    missing_proposal_for_attempt.proposals.clear();
+    missing_proposal_for_attempt.proposal_batches[0]
+        .proposal_ids
+        .clear();
+    missing_proposal_for_attempt
+        .candidates
+        .retain(|candidate| candidate.id != child);
+    assert!(matches!(
+        RunGraph::<TestProblem>::from_snapshot(missing_proposal_for_attempt),
+        Err(RunGraphRestoreError::MissingProposalForApplyAttempt { attempt, proposal })
+            if attempt == attempt_id && proposal == proposal_id
+    ));
+
+    let mut missing_candidate_for_attempt = snapshot.clone();
+    missing_candidate_for_attempt
+        .candidates
+        .retain(|candidate| candidate.id != child);
+    assert!(matches!(
+        RunGraph::<TestProblem>::from_snapshot(missing_candidate_for_attempt),
+        Err(RunGraphRestoreError::MissingCandidateForSuccessfulApplyAttempt {
+            attempt,
+            candidate,
+        }) if attempt == attempt_id && candidate == child
+    ));
+
+    let mut apply_candidate_mismatch = snapshot.clone();
+    apply_candidate_mismatch.candidates[1].origin = CandidateOrigin::Seed { seed_index: 99 };
+    assert!(matches!(
+        RunGraph::<TestProblem>::from_snapshot(apply_candidate_mismatch),
+        Err(RunGraphRestoreError::ApplyAttemptCandidateMismatch { attempt, candidate })
+            if attempt == attempt_id && candidate == child
+    ));
+
+    let mut missing_proposal_for_candidate = snapshot.clone();
+    missing_proposal_for_candidate.proposals.clear();
+    missing_proposal_for_candidate.proposal_batches[0]
+        .proposal_ids
+        .clear();
+    missing_proposal_for_candidate.apply_attempts.clear();
+    assert!(matches!(
+        RunGraph::<TestProblem>::from_snapshot(missing_proposal_for_candidate),
+        Err(RunGraphRestoreError::MissingProposalForCandidate {
+            candidate,
+            proposal,
+        }) if candidate == child && proposal == proposal_id
+    ));
+
+    let mut missing_attempt_for_candidate = snapshot.clone();
+    missing_attempt_for_candidate.apply_attempts.clear();
+    assert!(matches!(
+        RunGraph::<TestProblem>::from_snapshot(missing_attempt_for_candidate),
+        Err(RunGraphRestoreError::MissingApplyAttemptForCandidate { candidate, attempt })
+            if candidate == child && attempt == attempt_id
+    ));
+
+    let mut candidate_attempt_mismatch = snapshot;
+    candidate_attempt_mismatch
+        .apply_attempts
+        .push(candidate_attempt_mismatch.apply_attempts[0].clone());
+    let replacement_attempt = ApplyAttemptId::new();
+    candidate_attempt_mismatch.apply_attempts[1].id = replacement_attempt;
+    let child_record = candidate_attempt_mismatch
+        .candidates
+        .iter_mut()
+        .find(|candidate| candidate.id == child)
+        .unwrap();
+    child_record.origin = CandidateOrigin::Proposal {
+        proposal_id,
+        apply_attempt_id: replacement_attempt,
+    };
+    assert!(matches!(
+        RunGraph::<TestProblem>::from_snapshot(candidate_attempt_mismatch),
+        Err(RunGraphRestoreError::ApplyAttemptCandidateMismatch { .. })
+    ));
+}
+
+#[test]
+fn graph_snapshot_restore_rejects_assessment_inconsistencies() {
+    let snapshot = snapshot_with_seed_assessment();
+    let assessment_id = snapshot.assessments[0].id;
+    let request_id = snapshot.evaluation_requests[0].id;
+    let candidate_id = snapshot.candidates[0].id;
+
+    let mut missing_request = snapshot.clone();
+    missing_request.evaluation_requests.clear();
+    assert!(matches!(
+        RunGraph::<TestProblem>::from_snapshot(missing_request),
+        Err(RunGraphRestoreError::MissingEvaluationRequestForAssessment {
+            assessment,
+            request,
+        }) if assessment == assessment_id && request == request_id
+    ));
+
+    let mut missing_candidate = snapshot;
+    missing_candidate.candidates.clear();
+    assert!(matches!(
+        RunGraph::<TestProblem>::from_snapshot(missing_candidate),
+        Err(RunGraphRestoreError::MissingCandidateForAssessment {
+            assessment,
+            candidate,
+        }) if assessment == assessment_id && candidate == candidate_id
     ));
 }
 
@@ -563,5 +779,98 @@ fn graph_counts(ctx: &RunContext<'_, TestProblem>) -> GraphCounts {
         proposals: graph.proposal_count(),
         apply_attempts: graph.apply_attempt_count(),
         events: graph.event_count(),
+    }
+}
+
+fn snapshot_with_proposal_and_assessment() -> leaven_engine::RunGraphSnapshot<TestProblem> {
+    futures::executor::block_on(async {
+        let (mut graph, mut budget) = graph_and_budget();
+        let store = InlineEvidenceStore::<TestEvidence>::new("graph-restore");
+        let case_set = leaven_engine::CaseSet::new(vec!["case"]);
+        let child = {
+            let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+            let seed = ctx.insert_seed(TextArtifact("a".to_owned()), 0).unwrap();
+            let proposal = Proposal::mutate(seed, TextChange::Append("b".to_owned())).build();
+            let batch = record_one(&mut ctx, proposal);
+            ctx.apply_batch(batch)
+                .unwrap()
+                .successful_candidates()
+                .next()
+                .unwrap()
+        };
+        let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
+            .with_case_set(&case_set)
+            .with_evidence_store(&store);
+        ctx.evaluate_with(&GraphRestoreEvaluator, independent_request(child))
+            .await
+            .unwrap();
+        graph.snapshot()
+    })
+}
+
+fn snapshot_with_seed_assessment() -> leaven_engine::RunGraphSnapshot<TestProblem> {
+    futures::executor::block_on(async {
+        let (mut graph, mut budget) = graph_and_budget();
+        let store = InlineEvidenceStore::<TestEvidence>::new("graph-restore");
+        let case_set = leaven_engine::CaseSet::new(vec!["case"]);
+        let seed = {
+            let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+            ctx.insert_seed(TextArtifact("a".to_owned()), 0).unwrap()
+        };
+        let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
+            .with_case_set(&case_set)
+            .with_evidence_store(&store);
+        ctx.evaluate_with(&GraphRestoreEvaluator, independent_request(seed))
+            .await
+            .unwrap();
+        graph.snapshot()
+    })
+}
+
+fn independent_request(candidate: leaven_kernel::CandidateId) -> EvaluationRequest {
+    EvaluationRequest::Independent {
+        candidates: vec![candidate],
+        set: EvaluationSet::All,
+        granularity: AssessmentGranularity::Aggregate,
+        purpose: EvaluationPurpose::Search,
+    }
+}
+
+struct GraphRestoreEvaluator;
+
+impl Evaluator<TestProblem> for GraphRestoreEvaluator {
+    fn id(&self) -> EvaluatorId {
+        EvaluatorId::from("graph-restore")
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        Fingerprint::from_bytes([11; 32])
+    }
+
+    fn cache_policy(&self, _request: &ResolvedEvaluationRequest) -> CachePolicy {
+        CachePolicy::Never
+    }
+
+    async fn evaluate(
+        &self,
+        request: ResolvedEvaluationRequest,
+        _ctx: EvaluationContext<'_, TestProblem>,
+    ) -> Result<Metered<Vec<Assessment<TestProblem>>>, EvaluationError> {
+        let leaven_core::ResolvedRequestKind::Independent { candidates } = request.kind else {
+            return Err(EvaluationError::Message("expected independent".to_owned()));
+        };
+        Ok(Metered::new(
+            candidates
+                .into_iter()
+                .map(|candidate| Assessment::Independent {
+                    candidate,
+                    target: AssessmentTarget::Unscoped,
+                    evidence: TestEvidence { score: 1.0 },
+                    cost: Cost::metric_calls(1),
+                    metadata: MetadataBag::new(),
+                })
+                .collect(),
+            Cost::metric_calls(1),
+        ))
     }
 }
