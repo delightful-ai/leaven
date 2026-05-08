@@ -2388,6 +2388,7 @@ name = "leaven-agentic"
 version = "0.0.0"
 dependencies = [
  "futures",
+ "hex",
  "leaven-agent",
  "leaven-core",
  "leaven-engine",
@@ -2398,6 +2399,8 @@ dependencies = [
  "leaven-surface",
  "leaven-workspace",
  "leaven-workspace-local",
+ "serde",
+ "serde_json",
  "thiserror 2.0.18",
 ]
 

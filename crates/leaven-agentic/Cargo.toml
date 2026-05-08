@@ -21,6 +21,9 @@ leaven-agent = { workspace = true }
 leaven-render = { workspace = true }
 futures = { workspace = true }
 thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+hex = { workspace = true }
 
 [dev-dependencies]
 leaven-store-inline = { workspace = true }
