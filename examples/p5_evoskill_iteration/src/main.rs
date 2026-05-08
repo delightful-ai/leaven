@@ -15,13 +15,13 @@ use leaven_agent::{
     TranscriptEvent, TranscriptRole,
 };
 use leaven_agentic::{
-    AgentPromptTarget, AgenticParseError, AgenticRepairError, ProposalParser,
+    AgentPromptTarget, AgenticParseError, AgenticRepairError, AgenticRunInspection, ProposalParser,
     ProposalRepairFeedback, ProposalRepairPromptBuilder, RepairingAgenticProposer,
     RepairingAgenticProposerConfig,
 };
 use leaven_agentic_skill::{
-    SkillBankMaterializer, SkillBankProposalInput, SkillBankWorkspaceProposalParser,
-    SkillWorkspaceLayout,
+    SkillBankChangeReport, SkillBankMaterializer, SkillBankProposalInput,
+    SkillBankWorkspaceProposalParser, SkillWorkspaceLayout,
 };
 use leaven_artifact_skill::{SkillBank, SkillBankChange};
 use leaven_core::{
@@ -222,6 +222,7 @@ async fn run_iteration(stores: RunStores, resume: ResumeState) -> Result<()> {
         CompletionRequest {
             run_id,
             seed_bank,
+            seed,
             baseline_score: baseline.score,
             child,
             child_bank,
@@ -409,11 +410,30 @@ async fn ensure_child(
 struct CompletionRequest {
     run_id: RunId,
     seed_bank: SkillBank,
+    seed: CandidateId,
     baseline_score: f64,
     child: CandidateId,
     child_bank: SkillBank,
     skill_proposal: SkillProposal,
     change: SkillBankChange,
+}
+
+#[derive(serde::Serialize)]
+struct P5ResultSummary {
+    run_id: RunId,
+    baseline_score: f64,
+    child_score: f64,
+    admitted: bool,
+    best_score: f64,
+    best_candidate: CandidateId,
+    proposal_action: String,
+    proposal: String,
+    skill_change_report: SkillBankChangeReport,
+    proposal_repair_batches: usize,
+    proposal_repair_attempts: usize,
+    case_execution_records: usize,
+    child_evaluation_cost: Cost,
+    warnings: Vec<String>,
 }
 
 async fn complete_iteration(
@@ -435,11 +455,47 @@ async fn complete_iteration(
 
     let admitted = true;
     let best_score = request.baseline_score.max(child_eval.average_score);
-    let best_bank = if child_eval.average_score >= request.baseline_score {
-        request.child_bank
+    let best_candidate = if child_eval.average_score >= request.baseline_score {
+        request.child
     } else {
-        request.seed_bank
+        request.seed
     };
+    let best_bank = if child_eval.average_score >= request.baseline_score {
+        request.child_bank.clone()
+    } else {
+        request.seed_bank.clone()
+    };
+    let skill_change_report =
+        SkillBankChangeReport::from_change(&request.seed_bank, &request.change)?;
+    let inspection = AgenticRunInspection::from_graph(ctx.graph());
+    let proposal_repair_attempts = inspection
+        .proposal_repairs
+        .iter()
+        .map(|repair| repair.attempts.len())
+        .sum();
+    let warnings = inspection
+        .warnings
+        .iter()
+        .map(|warning| format!("{warning:?}"))
+        .collect::<Vec<_>>();
+    let summary = P5ResultSummary {
+        run_id: request.run_id,
+        baseline_score: request.baseline_score,
+        child_score: child_eval.average_score,
+        admitted,
+        best_score,
+        best_candidate,
+        proposal_action: format!("{:?}", request.skill_proposal.action),
+        proposal: request.skill_proposal.proposed_skill.clone(),
+        skill_change_report,
+        proposal_repair_batches: inspection.proposal_repairs.len(),
+        proposal_repair_attempts,
+        case_execution_records: child_eval.evidence.cases.len(),
+        child_evaluation_cost: child_eval.cost.clone(),
+        warnings,
+    };
+    let summary_path = stores.run_root.join("result_summary.json");
+    std::fs::write(&summary_path, serde_json::to_vec_pretty(&summary)?)?;
     stores
         .checkpoints
         .put(&EvoSkillCheckpoint::IterationComplete {
@@ -458,6 +514,7 @@ async fn complete_iteration(
     println!("proposal_action={:?}", request.skill_proposal.action);
     println!("proposal={}", request.skill_proposal.proposed_skill);
     println!("change={:?}", request.change);
+    println!("result_summary={}", summary_path.display());
     println!("run_root={}", stores.run_root.display());
     println!("evidence_root={}", stores.evidence_store.root().display());
     Ok(())
@@ -613,6 +670,7 @@ struct ExistingBaseline {
 struct EvaluationOutcome {
     assessment: leaven_kernel::AssessmentId,
     average_score: f64,
+    cost: Cost,
     evidence: EvaluationEvidence,
 }
 
@@ -655,6 +713,7 @@ async fn evaluate_one(
     Ok(EvaluationOutcome {
         assessment,
         average_score,
+        cost: report.cost,
         evidence: EvaluationEvidence { cases },
     })
 }
