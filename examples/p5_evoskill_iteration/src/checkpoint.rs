@@ -1,11 +1,7 @@
-use bytes::Bytes;
 use leaven_artifact_skill::{SkillBank, SkillBankChange};
-use leaven_kernel::{CheckpointId, EvidenceRef, RunId};
-use leaven_store::{CheckpointBytes, CheckpointStore};
-use leaven_store_file::FileCheckpointStore;
+use leaven_kernel::{EvidenceRef, RunId};
 
 use crate::data::EvoSkillCase;
-use crate::error::Result;
 use crate::evidence::CaseExecution;
 use crate::proposal::SkillProposal;
 
@@ -53,32 +49,4 @@ pub enum EvoSkillCheckpoint {
         best_score: f64,
         best_bank: SkillBank,
     },
-}
-
-pub struct Checkpoints {
-    store: FileCheckpointStore,
-}
-
-impl Checkpoints {
-    pub fn open(store: FileCheckpointStore) -> Self {
-        Self { store }
-    }
-
-    pub fn latest(&self) -> Result<Option<(CheckpointId, EvoSkillCheckpoint)>> {
-        let Some(id) = self.store.latest()? else {
-            return Ok(None);
-        };
-        let checkpoint = self.get(id)?;
-        Ok(Some((id, checkpoint)))
-    }
-
-    pub fn save(&self, checkpoint: &EvoSkillCheckpoint) -> Result<CheckpointId> {
-        let bytes = serde_json::to_vec_pretty(checkpoint)?;
-        Ok(self.store.put(CheckpointBytes(Bytes::from(bytes)))?)
-    }
-
-    fn get(&self, id: CheckpointId) -> Result<EvoSkillCheckpoint> {
-        let bytes = self.store.get(id)?;
-        Ok(serde_json::from_slice(&bytes.0)?)
-    }
 }

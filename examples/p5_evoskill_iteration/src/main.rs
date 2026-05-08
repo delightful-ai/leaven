@@ -36,12 +36,12 @@ use leaven_kernel::{
 };
 use leaven_population::KeepBest;
 use leaven_store::EvidenceStore;
-use leaven_store_file::{FileCheckpointStore, FileEvidenceStore};
+use leaven_store_file::{FileEvidenceStore, FileJsonCheckpointStore};
 use leaven_workspace::{Workspace, WorkspaceConfig, WorkspaceFactory, WorkspacePath};
 use leaven_workspace_local::LocalWorkspaceFactory;
 use serde::de::DeserializeOwned;
 
-use crate::checkpoint::{Checkpoints, EvoSkillCheckpoint};
+use crate::checkpoint::EvoSkillCheckpoint;
 use crate::codex::{LiveCodexRuntime, live_codex_runtime, require_live_codex};
 use crate::data::{EvoSkillCase, TRAIN, VALIDATION, case_by_id, case_set, load_cases};
 use crate::error::{ExampleError, Result, msg};
@@ -81,7 +81,7 @@ async fn main() -> Result<()> {
 struct RunStores {
     run_root: PathBuf,
     evidence_store: FileEvidenceStore<EvoSkillEvidence>,
-    checkpoints: Checkpoints,
+    checkpoints: FileJsonCheckpointStore<EvoSkillCheckpoint>,
 }
 
 impl RunStores {
@@ -91,8 +91,7 @@ impl RunStores {
             "p5-evoskill-evidence",
             run_root.join("evidence"),
         )?;
-        let checkpoints =
-            Checkpoints::open(FileCheckpointStore::open(run_root.join("checkpoints"))?);
+        let checkpoints = FileJsonCheckpointStore::open(run_root.join("checkpoints"))?;
         Ok(Self {
             run_root,
             evidence_store,
@@ -239,7 +238,7 @@ async fn ensure_baseline(
     ctx: &mut RunContext<'_, EvoSkillProblem>,
     evaluator: &EvoSkillEvaluator,
     population: &mut KeepBest,
-    checkpoints: &Checkpoints,
+    checkpoints: &FileJsonCheckpointStore<EvoSkillCheckpoint>,
     request: BaselineRequest<'_>,
 ) -> Result<ExistingBaseline> {
     if let Some(score) = request.resume_score {
@@ -254,7 +253,7 @@ async fn ensure_baseline(
     )
     .await?;
     observe_keep_best(ctx, population, request.seed, &validation)?;
-    checkpoints.save(&EvoSkillCheckpoint::BaselineComplete {
+    checkpoints.put(&EvoSkillCheckpoint::BaselineComplete {
         run_id: request.run_id,
         cases: request.cases.to_vec(),
         seed_bank: request.seed_bank.clone(),
@@ -277,7 +276,7 @@ struct FailureRequest<'a> {
 async fn ensure_failures(
     ctx: &mut RunContext<'_, EvoSkillProblem>,
     evaluator: &EvoSkillEvaluator,
-    checkpoints: &Checkpoints,
+    checkpoints: &FileJsonCheckpointStore<EvoSkillCheckpoint>,
     request: FailureRequest<'_>,
 ) -> Result<Vec<CaseExecution>> {
     if let Some(failures) = request.resume_failures {
@@ -297,7 +296,7 @@ async fn ensure_failures(
         .into_iter()
         .filter(|case| !case.passed)
         .collect::<Vec<_>>();
-    checkpoints.save(&EvoSkillCheckpoint::FailuresCollected {
+    checkpoints.put(&EvoSkillCheckpoint::FailuresCollected {
         run_id: request.run_id,
         cases: request.cases.to_vec(),
         seed_bank: request.seed_bank.clone(),
@@ -320,7 +319,7 @@ struct ProposalRequest<'a> {
 async fn ensure_proposal(
     workspace_factory: &LocalWorkspaceFactory,
     evidence_store: &FileEvidenceStore<EvoSkillEvidence>,
-    checkpoints: &Checkpoints,
+    checkpoints: &FileJsonCheckpointStore<EvoSkillCheckpoint>,
     request: ProposalRequest<'_>,
 ) -> Result<(SkillProposal, EvidenceRef)> {
     if let (Some(proposal), Some(proposer_evidence)) =
@@ -335,7 +334,7 @@ async fn ensure_proposal(
         request.failures,
     )
     .await?;
-    checkpoints.save(&EvoSkillCheckpoint::ProposalComplete {
+    checkpoints.put(&EvoSkillCheckpoint::ProposalComplete {
         run_id: request.run_id,
         cases: request.cases.to_vec(),
         seed_bank: request.seed_bank.clone(),
@@ -363,7 +362,7 @@ struct ChildRequest<'a> {
 async fn ensure_child(
     workspace_factory: &LocalWorkspaceFactory,
     evidence_store: &FileEvidenceStore<EvoSkillEvidence>,
-    checkpoints: &Checkpoints,
+    checkpoints: &FileJsonCheckpointStore<EvoSkillCheckpoint>,
     ctx: &mut RunContext<'_, EvoSkillProblem>,
     request: ChildRequest<'_>,
 ) -> Result<(CandidateId, SkillBank, SkillBankChange)> {
@@ -387,7 +386,7 @@ async fn ensure_child(
         request.proposer_evidence,
     )
     .await?;
-    checkpoints.save(&EvoSkillCheckpoint::CandidateBuilt {
+    checkpoints.put(&EvoSkillCheckpoint::CandidateBuilt {
         run_id: request.run_id,
         cases: request.cases.to_vec(),
         seed_bank: request.seed_bank.clone(),
@@ -437,7 +436,7 @@ async fn complete_iteration(
     };
     stores
         .checkpoints
-        .save(&EvoSkillCheckpoint::IterationComplete {
+        .put(&EvoSkillCheckpoint::IterationComplete {
             run_id: request.run_id,
             baseline_score: request.baseline_score,
             child_score: child_eval.average_score,

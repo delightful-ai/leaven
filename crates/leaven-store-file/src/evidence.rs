@@ -33,6 +33,17 @@ pub struct FileCheckpointStore {
     root: PathBuf,
 }
 
+/// JSON-encoded typed checkpoints over a [`FileCheckpointStore`].
+///
+/// This is a convenience layer for long-running local examples and operator
+/// paths. The durable store remains byte-oriented; the type parameter names the
+/// explicit checkpoint schema the caller owns.
+#[derive(Clone, Debug)]
+pub struct FileJsonCheckpointStore<T> {
+    store: FileCheckpointStore,
+    marker: PhantomData<T>,
+}
+
 impl FileCheckpointStore {
     /// Opens or creates a checkpoint store root.
     ///
@@ -66,6 +77,77 @@ impl FileCheckpointStore {
         let uuid = uuid::Uuid::parse_str(raw.trim())
             .map_err(|err| StoreError::Serialization(err.to_string()))?;
         Ok(Some(CheckpointId::from_uuid(uuid)))
+    }
+}
+
+impl<T> FileJsonCheckpointStore<T> {
+    /// Opens or creates a typed JSON checkpoint store root.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError`] if the root directory cannot be created.
+    pub fn open(root: impl Into<PathBuf>) -> Result<Self, StoreError> {
+        Ok(Self::from_store(FileCheckpointStore::open(root)?))
+    }
+
+    /// Wraps an existing byte checkpoint store.
+    #[must_use]
+    pub fn from_store(store: FileCheckpointStore) -> Self {
+        Self {
+            store,
+            marker: PhantomData,
+        }
+    }
+
+    /// Returns the underlying byte checkpoint store.
+    #[must_use]
+    pub fn raw_store(&self) -> &FileCheckpointStore {
+        &self.store
+    }
+
+    /// Returns the local root directory.
+    #[must_use]
+    pub fn root(&self) -> &Path {
+        self.store.root()
+    }
+}
+
+impl<T> FileJsonCheckpointStore<T>
+where
+    T: Serialize + DeserializeOwned,
+{
+    /// Writes a typed checkpoint as pretty JSON and marks it latest.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError`] when serialization or storage fails.
+    pub fn put(&self, checkpoint: &T) -> Result<CheckpointId, StoreError> {
+        let bytes = serde_json::to_vec_pretty(checkpoint)
+            .map_err(|err| StoreError::Serialization(err.to_string()))?;
+        self.store.put(CheckpointBytes(Bytes::from(bytes)))
+    }
+
+    /// Reads a typed checkpoint by id.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError`] when storage or deserialization fails.
+    pub fn get(&self, id: CheckpointId) -> Result<T, StoreError> {
+        let bytes = self.store.get(id)?;
+        serde_json::from_slice(&bytes.0).map_err(|err| StoreError::Serialization(err.to_string()))
+    }
+
+    /// Reads the checkpoint named by `LATEST`, when present.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError`] when the latest pointer or typed checkpoint cannot
+    /// be read.
+    pub fn latest(&self) -> Result<Option<(CheckpointId, T)>, StoreError> {
+        let Some(id) = self.store.latest()? else {
+            return Ok(None);
+        };
+        Ok(Some((id, self.get(id)?)))
     }
 }
 

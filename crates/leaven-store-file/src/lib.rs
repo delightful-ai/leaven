@@ -3,11 +3,11 @@
 mod evidence;
 mod store;
 
-pub use evidence::{FileCheckpointStore, FileEvidenceStore};
+pub use evidence::{FileCheckpointStore, FileEvidenceStore, FileJsonCheckpointStore};
 pub use store::FileStore;
 
 pub mod prelude {
     //! Common file-store imports.
 
-    pub use crate::{FileCheckpointStore, FileEvidenceStore, FileStore};
+    pub use crate::{FileCheckpointStore, FileEvidenceStore, FileJsonCheckpointStore, FileStore};
 }

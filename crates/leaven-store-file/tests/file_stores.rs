@@ -1,7 +1,7 @@
 use bytes::Bytes;
 use leaven_kernel::EvidenceRef;
 use leaven_store::{CheckpointBytes, CheckpointStore, Evidence, EvidenceStore, StoreError};
-use leaven_store_file::{FileCheckpointStore, FileEvidenceStore};
+use leaven_store_file::{FileCheckpointStore, FileEvidenceStore, FileJsonCheckpointStore};
 
 #[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 struct TestEvidence {
@@ -9,6 +9,12 @@ struct TestEvidence {
 }
 
 impl Evidence for TestEvidence {}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+struct TestCheckpoint {
+    phase: String,
+    count: usize,
+}
 
 #[test]
 fn file_evidence_round_trips_and_reopens_without_overwrite() {
@@ -134,6 +140,56 @@ fn file_checkpoint_round_trips_latest_pointer() {
 
     let reopened = FileCheckpointStore::open(root).unwrap();
     assert_eq!(reopened.latest().unwrap(), Some(second));
+}
+
+#[test]
+fn file_json_checkpoint_round_trips_latest_typed_checkpoint() {
+    let root = temp_root("checkpoint-json");
+    let store = FileJsonCheckpointStore::<TestCheckpoint>::open(&root).unwrap();
+    assert_eq!(store.root(), root.as_path());
+
+    let first = store
+        .put(&TestCheckpoint {
+            phase: "first".to_owned(),
+            count: 1,
+        })
+        .unwrap();
+    let second = store
+        .put(&TestCheckpoint {
+            phase: "second".to_owned(),
+            count: 2,
+        })
+        .unwrap();
+
+    assert_eq!(
+        store.get(first).unwrap(),
+        TestCheckpoint {
+            phase: "first".to_owned(),
+            count: 1,
+        }
+    );
+    assert_eq!(
+        store.latest().unwrap(),
+        Some((
+            second,
+            TestCheckpoint {
+                phase: "second".to_owned(),
+                count: 2,
+            },
+        ))
+    );
+
+    let reopened = FileJsonCheckpointStore::<TestCheckpoint>::open(root).unwrap();
+    assert_eq!(
+        reopened
+            .latest()
+            .unwrap()
+            .map(|(_id, checkpoint)| checkpoint),
+        Some(TestCheckpoint {
+            phase: "second".to_owned(),
+            count: 2,
+        })
+    );
 }
 
 #[test]
