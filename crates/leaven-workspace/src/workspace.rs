@@ -77,6 +77,24 @@ pub trait WorkspaceBackend: Send + Sync {
         })
     }
 
+    fn set_executable(
+        &mut self,
+        path: &WorkspacePath,
+        executable: bool,
+    ) -> Result<(), WorkspaceError> {
+        let _ = (path, executable);
+        Err(WorkspaceError::UnsupportedOperation {
+            operation: "set_executable",
+        })
+    }
+
+    fn is_executable(&mut self, path: &WorkspacePath) -> Result<bool, WorkspaceError> {
+        let _ = path;
+        Err(WorkspaceError::UnsupportedOperation {
+            operation: "is_executable",
+        })
+    }
+
     fn run_command(&mut self, command: Command) -> Result<CommandOutput, WorkspaceError> {
         let _ = command;
         Err(WorkspaceError::UnsupportedOperation {

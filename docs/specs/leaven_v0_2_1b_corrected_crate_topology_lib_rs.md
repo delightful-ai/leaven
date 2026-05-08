@@ -1375,6 +1375,10 @@ pub trait WorkspaceBackend: Send + Sync {
         path: WorkspacePath,
     ) -> Result<bytes::Bytes, WorkspaceError>;
 
+    async fn list_files(&mut self, path: WorkspacePath) -> Result<Vec<WorkspacePath>, WorkspaceError>;
+    async fn set_executable(&mut self, path: WorkspacePath, executable: bool) -> Result<(), WorkspaceError>;
+    async fn is_executable(&mut self, path: WorkspacePath) -> Result<bool, WorkspaceError>;
+
     async fn run_command(&mut self, cmd: Command) -> Result<CommandOutput, WorkspaceError>;
     async fn cleanup(self: Box<Self>) -> Result<(), WorkspaceError>;
     fn mark_abandoned(self: Box<Self>) {}

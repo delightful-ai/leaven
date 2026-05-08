@@ -17,7 +17,7 @@ Stages may run agents.
 Materializers make agent-readable worlds.
 Renderers build prompt/config values.
 Agent runtimes execute one session inside an already-built world.
-Parsers/finalizers import session outputs or workspace changes back into typed
+Parsers translate session outputs or workspace changes back into typed
 proposals or assessments.
 ```
 
@@ -70,7 +70,8 @@ It is not inside the engine, not inside the artifact, and not inside
 An agent may edit files, generate skills, rewrite a harness, create commits, or
 leave outputs in a workspace. None of that mutates the run graph by itself.
 
-Durable graph mutation happens only when a stage imports the result:
+Durable graph mutation happens only when a stage returns typed proposal or
+assessment data:
 
 ```text
 workspace/session output
@@ -228,7 +229,8 @@ The backend-neutral law:
 
 ```text
 Materializer and AgentRuntime code should use WorkspacePath, write_file,
-read_file, and run_command. They should not require host PathBufs.
+read_file, list_files, executable-bit helpers, and run_command. They should not
+require host PathBufs.
 ```
 
 ### 3.1 Local backend scenario
@@ -444,14 +446,14 @@ OutputContract::Files(["output/evidence.json", "output/transcript.json"])
   -> Vec<Assessment<P>>
 
 OutputContract::WorkspaceDiff(".")
-  -> WorkspaceFinalizer<P, I>
+  -> ProposalParser<P, I>
   -> ProposalBatch<P>
 ```
 
 `OutputContract::WorkspaceDiff` does not make the runtime understand Leaven
 artifacts. It only tells the runtime/stage that changed workspace state is an
-expected output. The stage-owned finalizer imports those changes into typed
-proposal data.
+expected output. The stage-owned proposal parser translates those changes into
+typed proposal data.
 
 ### 4.4 Run context
 
@@ -525,13 +527,13 @@ adapt agent sessions into stage outputs.
 ### 5.1 Agentic proposer
 
 ```rust
-pub struct AgenticProposer<Factory, R, M, Prompt, Import> {
+pub struct AgenticProposer<Factory, R, M, Prompt, Parse> {
     pub runtime: R,
     pub workspace_factory: Factory,
     pub workspace_config: WorkspaceConfig,
     pub materializer: M,
     pub prompt_renderer: Prompt,
-    pub importer: Import,
+    pub parser: Parse,
 }
 ```
 
@@ -544,7 +546,7 @@ request
   -> materialize allowed artifact/history/traces into workspace
   -> render AgentInstructions
   -> runtime.run_session(...)
-  -> parser/finalizer imports session or workspace output
+  -> parser translates session or workspace output
   -> return Metered<ProposalBatch<P>>
 ```
 
@@ -664,9 +666,9 @@ the candidate unless it is explicitly part of the artifact. Its prompt, model,
 and parser are fixed stage configuration and contribute to the evaluator
 fingerprint.
 
-### 5.3 Parser and finalizer ownership
+### 5.3 Parser Ownership
 
-Parsers and finalizers are separate from runtimes:
+Parsers are separate from runtimes:
 
 ```rust
 pub trait ProposalParser<P: OptimizationProblem>: Send + Sync {
@@ -688,19 +690,17 @@ pub trait EvidenceParser<P: OptimizationProblem>: Send + Sync {
     ) -> Result<Vec<Assessment<P>>, EvidenceParseError>;
 }
 
-pub trait WorkspaceFinalizer<P: OptimizationProblem, I>: Send + Sync {
-    async fn finalize(
-        &self,
-        workspace: &mut WorkspaceView<'_>,
-        session: &AgentSession,
-        input: &I,
-        graph: RunGraphView<'_, P>,
-    ) -> Result<ProposalBatch<P>, FinalizeError>;
-}
 ```
 
-This is the seam that prevents provider-specific runtime code from knowing
-Leaven optimizer types.
+The same `ProposalParser` trait covers structured-output parsers and workspace
+mutation parsers. Concrete parser types should say what they interpret, for
+example `JsonProposalFileParser`, `SkillBankWorkspaceProposalParser`, or
+`GitSnapshotProposalParser`. Do not add a second generic workspace-readback
+trait unless a later implementation exposes real polymorphism and independent
+laws that `ProposalParser` cannot express.
+
+This parser seam prevents provider-specific runtime code from knowing Leaven
+optimizer types.
 
 ---
 
@@ -818,7 +818,7 @@ provider-specific runtime crates, starting with leaven-agent-codex
 leaven-agentic
   AgenticProposer
   AgenticEvaluator
-  ProposalParser / EvidenceParser / WorkspaceFinalizer helpers
+  ProposalParser / EvidenceParser helpers
   common agent materializer compositions
   runtime capability checks
 

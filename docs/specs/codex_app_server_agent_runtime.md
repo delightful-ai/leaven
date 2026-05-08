@@ -41,7 +41,7 @@ leaven-agent-codex
   owns Codex workspace and skill presentation ABI
 
 leaven-agentic
-  owns AgenticProposer, AgenticEvaluator, parsers, finalizers
+  owns AgenticProposer, AgenticEvaluator, parsers
 
 leaven-artifact-skill / leaven-agentic-skill
   own skill folders, validation, materialization layouts
@@ -82,7 +82,7 @@ CodexSkillRef
 ```
 
 This keeps the provider copyable. The DSRs code combines Codex app-server
-threads with repo materialization and git finalization. Leaven should copy the
+threads with repo materialization and git readback. Leaven should copy the
 transport/client/session/history ideas, not the DSRs repo-agent ownership
 boundary.
 
@@ -173,7 +173,7 @@ impl AgentRuntime for CodexRuntime {
 ```
 
 `CodexRuntime` has no type parameter for `OptimizationProblem`, artifact,
-surface, evidence, parser, or finalizer.
+surface, evidence, or parser.
 
 Suggested config shape:
 
@@ -276,7 +276,7 @@ Future backend-neutral Codex execution would require one of:
 - a workspace backend that can spawn a long-lived stdio process and stream
   JSON-RPC
 - a provider-managed workspace mode where Codex owns the workspace and Leaven
-  imports a snapshot afterward
+  reads back a snapshot afterward
 
 None of those are part of v0.2.5.
 
@@ -326,8 +326,8 @@ Mapping:
 | `WorkspaceDiff { roots }` | require the roots to exist; do not compute or parse the diff |
 
 `WorkspaceDiff` is intentionally weak at the runtime layer. A stage-owned
-workspace finalizer decides how to import a diff, git commit, snapshot, or
-folder replacement into `ProposalBatch`.
+stage-owned proposal parser decides how to turn a diff, git commit, snapshot,
+or folder replacement into `ProposalBatch`.
 
 Codex `TurnStartParams::outputSchema` constrains final assistant messages, not
 workspace files. The first Leaven adapter must not misuse it for `JsonFile`.
@@ -536,7 +536,7 @@ proofs cheap and aligned with the Leaven operator contract.
 
 ---
 
-## 10. Materializers, Finalizers, Skills, and Git
+## 10. Materializers, Parsers, Skills, and Git
 
 Codex sees files. Leaven decides what those files mean.
 
@@ -581,7 +581,7 @@ They do not validate, parse, or mutate the skill itself.
 
 `CodexRuntime` does not materialize a skill bank, clone a repo, parse
 `SKILL.md`, or commit changes. Those responsibilities belong to
-materializers, finalizers, and paper-specific stages.
+materializers, parsers, and paper-specific stages.
 
 Typical Codex-backed proposer:
 
@@ -591,7 +591,7 @@ AgenticProposer
   -> task/history renderer builds AgentInstructions
   -> CodexRuntime runs one session
   -> validator checks edited skill folders
-  -> workspace finalizer imports changes as ProposalBatch
+  -> workspace proposal parser returns ProposalBatch
 ```
 
 Typical Codex-backed evaluator:
@@ -610,12 +610,12 @@ layout is a Codex provider ABI value. A materializer targets that ABI; the
 runtime may use the resulting `CodexSkillRef`s to build `UserInput::Skill`
 items, but it must not own `SkillBank` or skill validation.
 
-If a Codex-backed proposer uses git, git finalization still belongs to a
-stage-owned finalizer:
+If a Codex-backed proposer uses git, git readback still belongs to a
+stage-owned parser:
 
 ```text
 workspace diff / commit
-  -> GitWorkspaceFinalizer
+  -> GitSnapshotProposalParser
   -> GitChange::AdvanceTo or SkillBankChange
   -> ProposalBatch
 ```
@@ -666,7 +666,7 @@ runtime-level validation. If the output contract fails, success is forbidden.
 
 ### 11.7 Graph purity law
 
-Running Codex cannot mutate Leaven's graph. Only the caller stage can import
+Running Codex cannot mutate Leaven's graph. Only the caller stage can translate
 runtime outputs into proposals or assessments through engine stage APIs.
 
 ---
@@ -733,7 +733,7 @@ verify transcript contains command/tool evidence when Codex used tools
 verify no graph/engine dependency is involved
 ```
 
-Git commit/finalization live tests belong in the stage/finalizer crate, not in
+Git commit/readback live tests belong in the stage/parser crate, not in
 `leaven-agent-codex`.
 
 ---
@@ -778,8 +778,8 @@ Skills remain artifact/materializer concerns.
 
 ### 14.3 Runtime-owned git commits
 
-Rejected. Git commit, snapshot import, and artifact finalization are stage
-finalizer responsibilities.
+Rejected. Git commit, snapshot readback, and artifact proposal construction are
+stage parser responsibilities.
 
 ### 14.4 First-class thread continuation in v0.2.5
 

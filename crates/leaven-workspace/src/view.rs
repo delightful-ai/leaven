@@ -73,6 +73,20 @@ impl<'a> WorkspaceView<'a> {
             .collect::<Result<Vec<_>, _>>()
     }
 
+    pub fn set_executable(
+        &mut self,
+        path: &WorkspacePath,
+        executable: bool,
+    ) -> Result<(), WorkspaceError> {
+        let path = self.scoped(path)?;
+        self.backend.lock().set_executable(&path, executable)
+    }
+
+    pub fn is_executable(&self, path: &WorkspacePath) -> Result<bool, WorkspaceError> {
+        let path = self.scoped(path)?;
+        self.backend.lock().is_executable(&path)
+    }
+
     pub fn run_command(&mut self, mut command: Command) -> Result<CommandOutput, WorkspaceError> {
         command.cwd = match command.cwd.as_ref() {
             Some(path) => Some(self.scoped(path)?),

@@ -1,5 +1,8 @@
 use std::path::{Path, PathBuf};
 
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
+
 use futures::future::{BoxFuture, FutureExt};
 use leaven_kernel::RunId;
 use leaven_workspace::{
@@ -71,6 +74,18 @@ impl WorkspaceBackend for LocalWorkspaceBackend {
         Ok(files)
     }
 
+    fn set_executable(
+        &mut self,
+        path: &WorkspacePath,
+        executable: bool,
+    ) -> Result<(), WorkspaceError> {
+        set_host_executable(&self.host_path(path), executable)
+    }
+
+    fn is_executable(&mut self, path: &WorkspacePath) -> Result<bool, WorkspaceError> {
+        is_host_executable(&self.host_path(path))
+    }
+
     fn run_command(&mut self, command: Command) -> Result<CommandOutput, WorkspaceError> {
         let cwd = command
             .cwd
@@ -137,4 +152,43 @@ fn collect_files(
         collect_files(&entry.path(), child_path, files)?;
     }
     Ok(())
+}
+
+#[cfg(unix)]
+fn set_host_executable(path: &Path, executable: bool) -> Result<(), WorkspaceError> {
+    let mut permissions = std::fs::metadata(path)
+        .map_err(|err| WorkspaceError::Io(err.to_string()))?
+        .permissions();
+    let mut mode = permissions.mode();
+    if executable {
+        mode |= 0o111;
+    } else {
+        mode &= !0o111;
+    }
+    permissions.set_mode(mode);
+    std::fs::set_permissions(path, permissions).map_err(|err| WorkspaceError::Io(err.to_string()))
+}
+
+#[cfg(not(unix))]
+fn set_host_executable(path: &Path, executable: bool) -> Result<(), WorkspaceError> {
+    let _ = (path, executable);
+    Err(WorkspaceError::UnsupportedOperation {
+        operation: "set_executable",
+    })
+}
+
+#[cfg(unix)]
+fn is_host_executable(path: &Path) -> Result<bool, WorkspaceError> {
+    let permissions = std::fs::metadata(path)
+        .map_err(|err| WorkspaceError::Io(err.to_string()))?
+        .permissions();
+    Ok(permissions.mode() & 0o111 != 0)
+}
+
+#[cfg(not(unix))]
+fn is_host_executable(path: &Path) -> Result<bool, WorkspaceError> {
+    let _ = path;
+    Err(WorkspaceError::UnsupportedOperation {
+        operation: "is_executable",
+    })
 }

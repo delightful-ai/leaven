@@ -48,7 +48,7 @@ Artifacts hold candidate state.
 Surfaces expose targetable parts.
 Materializers project artifacts into workspaces.
 Agent runtimes execute sessions in those workspaces.
-Parsers import workspace/session results into proposals or assessments.
+Parsers translate workspace/session results into proposals or assessments.
 Optimizers decide rhythm.
 Populations decide what survives.
 Evidence preserves what happened.
@@ -68,7 +68,7 @@ Generic Leaven/library pieces:
 - skill edit surfaces
 - skill materialization layouts for agent runtimes
 - provider-neutral agent runtime and agentic stage adapters
-- git-backed artifact/finalization support
+- git-backed artifact readback support
 - evidence types for traces, failures, skill use, scorer output, and attribution
 - population/frontier/select/admit primitives
 - deterministic cache identity
@@ -405,9 +405,9 @@ pub struct ValidationCommand {
 ```
 
 When enabled, the same proposer receives the typed validation error, validator
-output, finalizer error, or local apply/validate error plus the prior attempt
+output, parser error, or local apply/validate error plus the prior attempt
 context and authors a revised proposal. "Same" means same proposer identity,
-same configured backend/runtime, same parser/finalizer, and same optimization
+same configured backend/runtime, same parser, and same optimization
 stage. It does not require the provider to resume the same chat/session thread.
 Provider adapters may use native continuation when available, but portable
 Leaven semantics are explicit prior context plus a bounded next attempt.
@@ -420,7 +420,7 @@ for attempt in 1..=max_attempts:
   materialize allowed context
   run authoring agent or deterministic authoring step
   run optional workspace validators
-  import output/workspace diff into a ProposalBatch
+  parse output/workspace changes into a ProposalBatch
   locally apply/validate proposed artifacts against the input graph snapshot
   if locally valid: return ProposalBatch
   render repair feedback back to the same proposer attempt loop
@@ -429,7 +429,7 @@ return ProposalError::repair_exhausted(...)
 
 The graph remains the final admission authority. A proposal that was locally
 valid inside the proposer may still fail at `RunContext::apply_batch` because
-the graph changed, storage refused a write, or the proposer/finalizer had a bug.
+the graph changed, storage refused a write, or the proposer/parser had a bug.
 That failed graph-apply attempt is recorded as `ApplyFailed`; the engine still
 does not call the proposer again.
 
@@ -479,7 +479,7 @@ pub struct ProposalRepairFeedback {
     pub attempt_index: NonZeroUsize,
     pub prior_transcript: Option<TraceRef>,
     pub prior_output: Option<WorkspacePath>,
-    pub import_error: Option<FinalizeErrorRecord>,
+    pub parse_error: Option<ProposalParseErrorRecord>,
     pub local_validation_error: Option<DurableErrorRecord>,
     pub validator_report: Option<ValidatorReport>,
 }
@@ -544,7 +544,7 @@ Laws:
 Permission portability is not a `SkillBank` validation error. A `SkillFile`
 can represent `executable: true`; if a specific workspace backend cannot
 materialize or preserve that bit, the failure belongs to materialization or
-workspace finalization, with the backend and path preserved in that error.
+workspace readback, with the backend and path preserved in that error.
 
 ---
 
@@ -756,7 +756,7 @@ Mutable refs are never graph truth. Branch names, worktree paths, and checkout
 directories are labels or workspace state, not artifact identity and not cache
 identity.
 
-### 7.3 Checkout and finalization
+### 7.3 Checkout and readback
 
 Checkout strategy is operational, not semantic:
 
@@ -766,17 +766,17 @@ pub enum GitCheckoutStrategy {
     Worktree,
     BareCheckout,
     Bundle,
-    SnapshotImport,
+    SnapshotReadback,
 }
 
-pub enum FinalizePolicy {
+pub enum GitReadbackPolicy {
     Commit,
     DiffOnly,
     Snapshot,
 }
 ```
 
-`SnapshotImport` is important for containers: materialize files into a sandbox,
+`SnapshotReadback` is important for containers: materialize files into a sandbox,
 let the agent mutate them, read changed files back, and create the git commit
 outside the sandbox.
 
@@ -786,8 +786,7 @@ Agentic stage flow:
 parent candidate = GitArtifact { revision: abc }
 materialize checkout/snapshot from abc
 agent edits workspace
-finalizer imports result and creates commit def
-parser returns GitChange::AdvanceTo { expected_parent: abc, child: def }
+parser reads workspace result and creates GitChange::AdvanceTo { expected_parent: abc, child: def }
 RunContext applies ProposalEffect::Change
 child candidate = GitArtifact { revision: def }
 ```
@@ -803,7 +802,7 @@ spec depends on that split:
 Materializer writes the skill world.
 Renderer builds prompt/config.
 AgentRuntime runs one session.
-Parser imports files/transcript into typed result.
+Parser turns files/transcript/workspace state into typed result.
 ```
 
 Generic adapters already belong in `leaven-agentic`:
@@ -821,7 +820,7 @@ adapter crate rather than fattening `leaven-agentic`:
 
 ```text
   leaven-agentic-skill
-  owns skill-layout materializers, skill workspace finalizers,
+  owns skill-layout materializers, skill workspace proposal parsers,
   provider-specific skill layout helpers, and common skill parsers
   depends on leaven-agentic, leaven-artifact-skill, leaven-workspace
 ```
@@ -829,7 +828,7 @@ adapter crate rather than fattening `leaven-agentic`:
 This crate is optional. Do not add it until the helpers are large enough to
 hide a real decision.
 
-### 8.1 Workspace finalization
+### 8.1 Workspace proposal parsing
 
 Agentic proposers often do not produce `output/proposals.json`. The natural
 shape for code and skill agents is:
@@ -837,75 +836,80 @@ shape for code and skill agents is:
 ```text
 materialize parent artifact into a workspace
 agent edits files
-stage imports the edited workspace back into typed Leaven proposals
+stage parses the edited workspace back into typed Leaven proposals
 ```
 
-That import step is **workspace finalization**. It is stage-owned import logic,
-not runtime logic and not graph mutation.
+That readback step is proposal parsing. It is stage-owned parsing logic, not
+runtime logic and not graph mutation. Do not add a second generic workspace
+readback trait for this unless a later implementation exposes real polymorphism
+and independent laws that `ProposalParser` cannot express.
 
 ```rust
-pub trait WorkspaceFinalizer<P, I>: Send + Sync
+pub trait ProposalParser<P, I>: Send + Sync
 where
     P: OptimizationProblem,
 {
-    async fn finalize(
+    async fn parse_proposals(
         &self,
         workspace: &mut WorkspaceView<'_>,
         session: &AgentSession,
         input: &I,
         graph: RunGraphView<'_, P>,
-    ) -> Result<Metered<ProposalBatch<P>>, FinalizeError>;
+    ) -> Result<Metered<ProposalBatch<P>>, AgenticParseError>;
 }
 ```
 
-For `SkillBank`, a finalizer reads the materialized skill directory, parses and
-validates every `SKILL.md`, compares the resulting `SkillBank` to the parent
-artifact, and emits one of the standard `SkillBankChange` proposal forms. For
-git-backed artifacts, a finalizer imports a stable revision, snapshot, or diff
-summary and emits the corresponding git artifact change. In both cases, the
-finalizer converts workspace side effects into immutable proposal data.
+For `SkillBank`, a concrete `SkillBankWorkspaceProposalParser` reads the
+materialized skill directory, parses and validates every `SKILL.md`, compares
+the resulting `SkillBank` to the parent artifact, and emits one of the standard
+`SkillBankChange` proposal forms. For git-backed artifacts, a concrete
+`GitSnapshotProposalParser` reads a stable revision, snapshot, or diff summary
+and emits the corresponding git artifact change. In both cases, the parser
+converts workspace side effects into immutable proposal data.
 
-The standard `AgenticProposer` should support two import modes:
+The standard `AgenticProposer` has one proposal parsing seam with multiple
+concrete parser implementations:
 
 ```text
 structured output:
   runtime satisfies OutputContract::JsonFile or OutputContract::Files
-  ProposalParser imports those files into ProposalBatch
+  JsonProposalFileParser reads those files into ProposalBatch
 
-workspace finalization:
+workspace readback:
   runtime satisfies OutputContract::WorkspaceDiff or stage-owned equivalent
-  WorkspaceFinalizer imports changed workspace state into ProposalBatch
+  SkillBankWorkspaceProposalParser / GitSnapshotProposalParser reads changed
+  workspace state into ProposalBatch
 ```
 
 Both modes feed the same proposer-owned validity loop in §4. The proposer should
-not return a batch until the imported proposal has passed local validation
+not return a batch until the parsed proposal has passed local validation
 against the graph snapshot visible to that proposer.
 
-Finalizer laws:
+Parser laws for workspace readback:
 
-- **No graph mutation.** A finalizer returns `ProposalBatch`; only `RunContext`
+- **No graph mutation.** A parser returns `ProposalBatch`; only `RunContext`
   records and applies it.
-- **Typed import.** A finalizer must return artifact-native changes or fresh
+- **Typed proposal data.** A parser must return artifact-native changes or fresh
   artifacts, not opaque workspace paths.
-- **Workspace paths only.** A finalizer uses `WorkspacePath` and `WorkspaceView`;
+- **Workspace paths only.** A parser uses `WorkspacePath` and `WorkspaceView`;
   host `PathBuf` access is backend-specific and belongs behind a workspace
   backend or adapter.
-- **Local validity check.** A finalizer or wrapping proposer validates the
+- **Local validity check.** A parser or wrapping proposer validates the
   resulting proposal against the relevant parent artifact before returning it.
 - **Graph admission remains authoritative.** Local validity is a preflight, not
   a substitute for `RunContext::apply_batch`.
 - **Identity discipline.** Workspace paths, branch names, and mutable refs are
   not artifact identity or cache identity.
-- **Read-scope discipline.** Finalizers may import only data the proposer was
+- **Read-scope discipline.** Parsers may read only data the proposer was
   allowed to materialize or observe.
-- **Deterministic import.** Given the same parent artifact, finalizer config,
-  session output, and workspace bytes, finalization should produce the same
+- **Deterministic parsing.** Given the same parent artifact, parser config,
+  session output, and workspace bytes, parsing should produce the same
   proposal batch or the same error.
 
 Minimum error shape:
 
 ```rust
-pub enum FinalizeError {
+pub enum AgenticParseError {
     MissingExpectedPath { path: WorkspacePath },
     ReadFailed { path: WorkspacePath, source: WorkspaceError },
     ParseFailed { path: WorkspacePath, source: DurableErrorRecord },
@@ -1356,7 +1360,7 @@ which candidate/frontier was active?
 which private counters/RNG seeds/router weights/utility tables existed?
 which validation/reproposal attempts already happened?
 which cached evaluations are safe to reuse?
-which agent workspaces were abandoned or finalized?
+which agent workspaces were abandoned or consumed by a parser?
 ```
 
 ---
@@ -1444,7 +1448,7 @@ Likely trait additions or moves:
 - `leaven-population`: reusable selector/admission traits and implementations
   that do not depend on GEPA.
 - `leaven-agentic`: bounded proposer-owned repair adapter over existing
-  proposer/runtime/finalizer seams.
+  proposer/runtime/parser seams.
 - `leaven-store` or `leaven-engine`: checkpoint traits and snapshot references,
   with concrete formats kept behind store/backend boundaries.
 
@@ -1464,9 +1468,9 @@ SkillMaterializeError
   tells stage callers whether a valid artifact could not be projected into a
   specific workspace/provider layout.
 
-SkillFinalizeError
-  tells stage callers whether workspace changes could not be imported back
-  into immutable artifact state.
+SkillWorkspaceParseError
+  tells stage callers whether workspace changes could not be parsed back into
+  immutable artifact state.
 
 ReproposalError
   tells proposer/stage callers whether repair exhausted attempts, validation
@@ -1478,7 +1482,7 @@ Important split:
 - missing `SKILL.md`, invalid frontmatter, empty body, name mismatch, duplicate
   names, and escaping paths are artifact validation errors
 - backend inability to preserve executable bits is a materialization or
-  finalization error
+  workspace parse error
 - script execution failures are evaluator evidence or runtime/session errors,
   not skill artifact errors
 - low score, bad behavior, or irrelevant routing is evidence/preference, not
@@ -1526,7 +1530,7 @@ Scenario tests:
 - local materializer writes provider-neutral skill layout
 - provider-specific layout adapters map the same artifact into provider-specific
   paths without changing artifact state
-- proposer-owned repair loop feeds typed validation/finalization feedback to a
+- proposer-owned repair loop feeds typed validation/workspace-parse feedback to a
   fake runtime and records failed attempts in stage output or events
 - selector/admission primitives can be reused by GEPA and a non-GEPA skill
   optimizer without dependency inversion
@@ -1537,10 +1541,10 @@ Paper reproduction gates:
 
 - EvoSkill fake-runtime smoke proves create/edit/validate/select/admit without
   paid agent calls
-- EvoSkill finalization smoke proves materialization/workspace import without
+- EvoSkill workspace-parse smoke proves materialization/readback without
   provider-specific runtime assumptions
 - Trace2Skill second gate pressures many-trace consolidation and file-level
-  skill import
+  skill parsing
 - Memento/D2Skill gates pressure utility state and retrieval telemetry
 - SkillReducer gate pressures description/body split and route-retention
   evidence
@@ -1576,7 +1580,7 @@ Implementation status:
 
 - Runtime/stage boundary is mostly specced.
 - Skill artifact/surface/materializer is not implemented.
-- Git finalization is not implemented.
+- Git snapshot proposal parsing is not implemented.
 - Top-k frontier/parent selectors are not fully implemented.
 - OfficeQA reproduction crate is not implemented.
 
@@ -1585,7 +1589,7 @@ Implementation status:
 Generic primitives used:
 
 - file-level skill surface
-- workspace finalization into valid skill folders
+- workspace parsing into valid skill folders
 - many-to-one lesson consolidation
 - support counts from success/failure memories
 - references file creation plus `SKILL.md` link edits
@@ -1601,7 +1605,7 @@ Paper-specific pieces:
 
 Implementation status:
 
-- Leaven needs the basic skill artifact and workspace finalization primitives
+- Leaven needs the basic skill artifact and workspace parsing primitives
   first.
 - Structure-aware document editing is deliberately deferred until the file-level
   artifact path is implemented and pressure-tested.
@@ -1696,7 +1700,7 @@ Detailed enough to implement now:
 - derived `SkillManifest` / `SkillCard`
 - proposer-owned validation/reproposal loop
 - `ValidatorReport` minimum shape
-- workspace finalizer contract and laws
+- workspace proposal parser contract and laws
 - utility state ownership rule
 - checkpoint envelope and restore laws
 - provider-neutral runtime split
@@ -1718,7 +1722,7 @@ Known implementation blockers for paper reproduction:
 
 - real `leaven-artifact-skill`
 - real `leaven-artifact-git`
-- workspace finalizer / snapshot importer
+- workspace proposal parser / snapshot parser
 - cache identity code cutover
 - top-k frontier and standalone parent selectors
 - skill evidence types
@@ -1737,7 +1741,7 @@ Known implementation blockers for paper reproduction:
 2. Implement skill folder/file/manifest surfaces.
 3. Implement typed skill validation errors and a bounded reproposal adapter in
    `leaven-agentic`.
-4. Implement local skill materializer and workspace finalizer smoke tests.
+4. Implement local skill materializer and workspace proposal-parser smoke tests.
 5. Implement fake-runtime agentic proposer/evaluator tests over real
    `SkillBank`.
 6. Implement `TopKFrontier`, `KeepIfAboveWeakest`, and parent selectors outside
@@ -1747,14 +1751,14 @@ Known implementation blockers for paper reproduction:
 9. Add minimal checkpoint/restore for graph + explicit optimizer/population
    state.
 10. Implement git `GitArtifact` and `GitChange::AdvanceTo`.
-11. Implement snapshot-import finalization for local workspaces.
+11. Implement snapshot proposal parsing for local workspaces.
 12. Reproduce EvoSkill OfficeQA sample with fake runtime and real Leaven
     primitives.
 13. Implement the Codex provider adapter from
     `docs/specs/codex_app_server_agent_runtime.md`.
 14. Scale to the full OfficeQA split after the provider adapter is proven.
 15. Use Trace2Skill as the second reproduction to pressure-test many-trace
-    consolidation and file-level skill import.
+    consolidation and file-level skill parsing.
 
 The ladder intentionally starts with artifact law and fake-runtime tests. The
 goal is to make the skill substrate correct before paying for real agent runs.
@@ -1774,7 +1778,7 @@ Paper-specific crates may own:
 - dataset loaders and train/validation/test split definitions
 - scorers, judges, environment adapters, and task harnesses
 - paper-specific equations, thresholds, ablations, and merge policies
-- paper-specific renderers, materializers, finalizers, and parsers when the
+- paper-specific renderers, materializers, and parsers when the
   paper's presentation format is genuinely unique
 
 Paper-specific crates must not define substitutes for these generic primitives:
@@ -1782,7 +1786,7 @@ Paper-specific crates must not define substitutes for these generic primitives:
 - fake `SkillRegistry` / fake skill folder types
 - fake skill validation
 - fake candidate graph or proposal application
-- fake workspace finalization/import
+- fake workspace proposal parsing
 - fake frontier/admission/parent selection when a standard primitive exists
 - fake cache identity
 - fake checkpoint/restore substrate for long runs
@@ -1793,7 +1797,7 @@ Done-done for EvoSkill means:
 ```text
 EvoSkill reproduction uses real SkillBank.
 EvoSkill reproduction creates and edits real skill folders with SKILL.md.
-EvoSkill reproduction uses real materializer/finalizer import.
+EvoSkill reproduction uses real materializer/workspace-parser paths.
 EvoSkill reproduction uses real proposer-owned validation/reproposal.
 EvoSkill reproduction uses real selection/admission primitives.
 EvoSkill reproduction records real evidence and costs.
@@ -1836,7 +1840,7 @@ Artifact validation is mandatory.
 Proposer-owned repair may iterate before returning ProposalBatch.
 Git is first-class revision support, not the default artifact model.
 Workspaces are temporary execution state.
-Finalizers import workspace mutations into immutable artifact changes.
+Workspace proposal parsers turn workspace mutations into immutable artifact changes.
 Evidence records scores, failures, trace refs, optional skill use, and attribution.
 Populations/frontiers/selectors decide what survives and what gets tried next.
 Checkpointing must preserve explicit private optimizer/population state.

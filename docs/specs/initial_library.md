@@ -259,7 +259,7 @@ The full companion contract is
 ## 0.7 What Changed in v0.2.4
 
 This is a minor spec bump because agentic skill optimization needs real
-folder-shaped artifacts, validation, and finalization contracts before paper
+folder-shaped artifacts, validation, and workspace parsing contracts before paper
 reproduction work can be meaningful.
 
 58. **Agent Skills folders are first-class artifacts.**  
@@ -278,9 +278,9 @@ reproduction work can be meaningful.
     Bounded repair/reproposal is same-proposer stage policy before a
     `ProposalBatch` is returned, not hidden engine behavior.
 
-61. **Workspace finalization is stage-owned.**  
-    Agentic proposers may import edited workspaces into typed proposals through
-    finalizers, but finalizers do not mutate the graph.
+61. **Workspace proposal parsing is stage-owned.**  
+    Agentic proposers may parse edited workspaces into typed proposals through
+    their `ProposalParser`; parsers do not mutate the graph.
 
 The full companion contract is
 `docs/specs/agentic_skill_optimization_primitives.md`.
@@ -304,7 +304,7 @@ precise boundary before implementation.
 64. **The first Codex launch mode requires a local mount.**  
     `StdioAppServer` fails early on pure-remote workspaces. Backend-neutral
     remote Codex execution waits for a real transport that can run app-server
-    inside the backend or import a provider-managed snapshot.
+    inside the backend or read back a provider-managed snapshot.
 
 65. **Transcript and output-contract mapping are specified.**  
     Assistant messages, commands, tool calls, raw provider events, output
@@ -2248,7 +2248,8 @@ GitWorktreeRendering     -> ensures the worktree is at the parent commit
 ```
 
 `WorkspaceView<'_>` is a borrowed handle into a workspace subtree, with
-`subdir`, `write_file`, `read_file`, and `run_command`. Paths are
+`subdir`, `write_file`, `read_file`, `list_files`, executable-bit helpers, and
+`run_command`. Paths are
 `WorkspacePath`s, not host paths. The same materializer code must work for local
 tempdirs, E2B sandboxes, k8s containers, and git worktrees. See §16.6 for
 workspace lifecycle.
@@ -2844,6 +2845,22 @@ impl Workspace {
         path: WorkspacePath,
     ) -> Result<bytes::Bytes, WorkspaceError>;
 
+    pub async fn list_files(
+        &mut self,
+        path: WorkspacePath,
+    ) -> Result<Vec<WorkspacePath>, WorkspaceError>;
+
+    pub async fn set_executable(
+        &mut self,
+        path: WorkspacePath,
+        executable: bool,
+    ) -> Result<(), WorkspaceError>;
+
+    pub async fn is_executable(
+        &mut self,
+        path: WorkspacePath,
+    ) -> Result<bool, WorkspaceError>;
+
     pub async fn run_command(
         &mut self,
         command: Command,
@@ -2910,6 +2927,10 @@ pub trait WorkspaceBackend: Send + Sync {
         &mut self,
         path: WorkspacePath,
     ) -> Result<bytes::Bytes, WorkspaceError>;
+
+    async fn list_files(&mut self, path: WorkspacePath) -> Result<Vec<WorkspacePath>, WorkspaceError>;
+    async fn set_executable(&mut self, path: WorkspacePath, executable: bool) -> Result<(), WorkspaceError>;
+    async fn is_executable(&mut self, path: WorkspacePath) -> Result<bool, WorkspaceError>;
 
     async fn run_command(&mut self, cmd: Command) -> Result<CommandOutput, WorkspaceError>;
 
@@ -4678,17 +4699,17 @@ Leaven layers.
   launch unless they expose a real local mount.
 - **Request mapping is explicit.** `AgentRunRequest` maps to Codex
   `thread/start` and `turn/start`; output-contract validation remains runtime-
-  level and finalization remains stage-owned.
+  level and proposal parsing remains stage-owned.
 - **Transcript normalization is specified.** The adapter records assistant
   messages, commands, tool calls, output files, status, and raw provider events
   without leaking Codex protocol types into `leaven-agent`.
 - **Codex skill layout has an owner without owning skills.** Codex-specific
   workspace layout and skill-reference ABI live in the provider crate, while
-  skill folder validation, materialization, mutation, and finalization stay in
+  skill folder validation, materialization, mutation, and proposal parsing stay in
   artifact/agentic layers.
 - **DSRs copy path recorded.** The reusable pieces are the app-server
   transport/client/session/history patterns; DSRs repo materialization,
-  steering policy, Firkin setup, and git finalization stay out of the provider
+  steering policy, Firkin setup, and git readback stay out of the provider
   runtime.
 - **Companion spec added.** See
   `docs/specs/codex_app_server_agent_runtime.md`.
@@ -4707,7 +4728,7 @@ skill-optimization papers without baking a paper-specific loop into the engine.
 - **Skill surfaces are explicit.** Folder, file, manifest/frontmatter, and
   retrieval/index surfaces are named as standard lenses over a `SkillBank`.
 - **Git is first-class but not default.** Git stores immutable artifact state;
-  Leaven stores optimization causality. Checkout/finalization strategies are
+  Leaven stores optimization causality. Checkout/readback strategies are
   operational details.
 - **Paper pressure map added.** EvoSkill is the first reproduction target, while
   Trace2Skill, Memento-Skills, D2Skill, and SkillReducer define the remaining
@@ -4731,9 +4752,10 @@ skill-optimization papers without baking a paper-specific loop into the engine.
   the same proposer stage that authored the invalid proposal. The reusable
   primitive is proposal-stage scoped, suitable for skills, code-editing agents,
   harness generation, and config synthesis, not a generic evaluator retry loop.
-- **Workspace finalization specified.** Agentic proposers may import edited
-  workspaces into typed `ProposalBatch` values through a stage-owned finalizer.
-  Finalizers do not mutate the graph; `RunContext` remains graph authority.
+- **Workspace proposal parsing specified.** Agentic proposers may parse edited
+  workspaces into typed `ProposalBatch` values through their stage-owned
+  `ProposalParser`. Parsers do not mutate the graph; `RunContext` remains
+  graph authority.
 - **Skill telemetry and utility state scoped.** Skill-use telemetry is optional
   evidence capability, not mandatory trajectory modeling. Skill utility is
   population/private optimizer state by default and becomes artifact state only
