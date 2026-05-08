@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 const EXPECTED_WORKSPACE_MEMBERS: &[&str] = &[
     "crates/leaven",
     "crates/leaven-agent",
+    "crates/leaven-agent-command",
     "crates/leaven-agent-claude-code",
     "crates/leaven-agent-codex",
     "crates/leaven-agent-codex-app-server",
@@ -61,6 +62,7 @@ const EXPECTED_WORKSPACE_MEMBERS: &[&str] = &[
 const EXPECTED_CRATES: &[&str] = &[
     "leaven",
     "leaven-agent",
+    "leaven-agent-command",
     "leaven-agent-claude-code",
     "leaven-agent-codex",
     "leaven-agent-codex-app-server",
@@ -141,6 +143,10 @@ const EXPECTED_DEPENDENCIES: &[(&str, &[&str])] = &[
         ],
     ),
     ("leaven-agent", &["leaven-kernel", "leaven-workspace"]),
+    (
+        "leaven-agent-command",
+        &["leaven-agent", "leaven-kernel", "leaven-workspace"],
+    ),
     (
         "leaven-agent-claude-code",
         &["leaven-agent", "leaven-kernel", "leaven-workspace"],

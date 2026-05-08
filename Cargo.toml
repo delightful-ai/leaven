@@ -3,6 +3,7 @@ resolver = "3"
 members = [
     "crates/leaven",
     "crates/leaven-agent",
+    "crates/leaven-agent-command",
     "crates/leaven-agent-claude-code",
     "crates/leaven-agent-codex",
     "crates/leaven-agent-codex-app-server",
@@ -102,6 +103,7 @@ leaven-std = { path = "crates/leaven-std", version = "0.0.0" }
 leaven-workspace = { path = "crates/leaven-workspace", version = "0.0.0" }
 leaven-derive = { path = "crates/leaven-derive", version = "0.0.0" }
 leaven-agent = { path = "crates/leaven-agent", version = "0.0.0" }
+leaven-agent-command = { path = "crates/leaven-agent-command", version = "0.0.0" }
 leaven-agent-claude-code = { path = "crates/leaven-agent-claude-code", version = "0.0.0" }
 leaven-agent-codex = { path = "crates/leaven-agent-codex", version = "0.0.0" }
 leaven-agent-codex-app-server = { path = "crates/leaven-agent-codex-app-server", version = "0.0.0", default-features = false }

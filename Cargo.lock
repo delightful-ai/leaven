@@ -2349,6 +2349,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "leaven-agent-command"
+version = "0.0.0"
+dependencies = [
+ "futures",
+ "leaven-agent",
+ "leaven-kernel",
+ "leaven-workspace",
+ "leaven-workspace-local",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "leaven-agent-opencode"
 version = "0.0.0"
 dependencies = [

@@ -1,0 +1,21 @@
+[package]
+name = "leaven-agent-command"
+description = "Command-backed agent runtime substrate for Leaven provider adapters."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+leaven-agent = { workspace = true }
+leaven-kernel = { workspace = true }
+leaven-workspace = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+futures = { workspace = true }
+leaven-workspace-local = { workspace = true }

@@ -112,6 +112,7 @@ leaven/
 │   ├── leaven-lm-mock/
 │   │
 │   ├── leaven-agent/
+│   ├── leaven-agent-command/
 │   ├── leaven-agent-claude-code/
 │   ├── leaven-agent-codex/
 │   ├── leaven-agent-codex-app-server/
@@ -393,6 +394,12 @@ leaven-lm-mock -> [
 leaven-agent -> [
   leaven-kernel,
   leaven-workspace
+]
+
+leaven-agent-command -> [
+  leaven-kernel,
+  leaven-workspace,
+  leaven-agent
 ]
 
 leaven-agent-claude-code -> [
@@ -2236,6 +2243,24 @@ pub use runtime::ClaudeCodeRuntime;
 pub mod app_server {
     pub use leaven_agent_codex_app_server::*;
 }
+```
+
+```rust
+// leaven-agent-command/src/lib.rs
+#![forbid(unsafe_code)]
+#![warn(missing_docs)]
+//! Command-backed agent runtime substrate.
+pub mod config;
+pub mod error;
+pub mod parser;
+pub mod runtime;
+pub use config::{
+    CommandAgentConfig, CommandPromptMode, CommandSessionLayout,
+    CommandTemplate, CommandTemplateArg,
+};
+pub use error::CommandAgentError;
+pub use parser::{CommandSessionParser, StdoutSessionParser};
+pub use runtime::CommandAgentRuntime;
 ```
 
 ```rust
