@@ -39,6 +39,21 @@ fn workspace_view_writes_reads_and_scopes_subdirectories() {
         b"root"
     );
     assert_eq!(
+        view.list_files(&WorkspacePath::root()).unwrap(),
+        vec![
+            WorkspacePath::new("artifact/root.txt").unwrap(),
+            WorkspacePath::new("history/visible/candidate.txt").unwrap(),
+            WorkspacePath::new("history/visible/evidence/ref.txt").unwrap(),
+        ]
+    );
+    assert_eq!(
+        nested.list_files(&WorkspacePath::root()).unwrap(),
+        vec![
+            WorkspacePath::new("candidate.txt").unwrap(),
+            WorkspacePath::new("evidence/ref.txt").unwrap(),
+        ]
+    );
+    assert_eq!(
         view.read_file(&WorkspacePath::new("history/visible/candidate.txt").unwrap())
             .unwrap(),
         b"candidate"
@@ -167,6 +182,12 @@ fn workspace_backend_default_operations_are_explicitly_unsupported() {
         view.read_file(&WorkspacePath::new("out.txt").unwrap()),
         Err(WorkspaceError::UnsupportedOperation {
             operation: "read_file"
+        })
+    ));
+    assert!(matches!(
+        view.list_files(&WorkspacePath::root()),
+        Err(WorkspaceError::UnsupportedOperation {
+            operation: "list_files"
         })
     ));
     assert!(matches!(
@@ -367,6 +388,14 @@ impl WorkspaceBackend for TestBackend {
         std::fs::read(self.host_path(path)).map_err(|err| WorkspaceError::Io(err.to_string()))
     }
 
+    fn list_files(&mut self, path: &WorkspacePath) -> Result<Vec<WorkspacePath>, WorkspaceError> {
+        let root = self.host_path(path);
+        let mut files = Vec::new();
+        collect_files(&root, path.clone(), &mut files)?;
+        files.sort();
+        Ok(files)
+    }
+
     fn run_command(&mut self, command: Command) -> Result<CommandOutput, WorkspaceError> {
         self.commands.lock().unwrap().push(command);
         Ok(CommandOutput {
@@ -437,4 +466,31 @@ fn remove_dir(path: &Path) {
     if path.exists() {
         std::fs::remove_dir_all(path).unwrap();
     }
+}
+
+fn collect_files(
+    host_path: &Path,
+    workspace_path: WorkspacePath,
+    files: &mut Vec<WorkspacePath>,
+) -> Result<(), WorkspaceError> {
+    let metadata =
+        std::fs::metadata(host_path).map_err(|err| WorkspaceError::Io(err.to_string()))?;
+    if metadata.is_file() {
+        files.push(workspace_path);
+        return Ok(());
+    }
+    for entry in std::fs::read_dir(host_path).map_err(|err| WorkspaceError::Io(err.to_string()))? {
+        let entry = entry.map_err(|err| WorkspaceError::Io(err.to_string()))?;
+        let name = entry
+            .file_name()
+            .into_string()
+            .map_err(|_| WorkspaceError::Io("workspace path is not UTF-8".to_owned()))?;
+        let child_path = if workspace_path.as_str().is_empty() {
+            WorkspacePath::new(name)?
+        } else {
+            workspace_path.join(name)?
+        };
+        collect_files(&entry.path(), child_path, files)?;
+    }
+    Ok(())
 }

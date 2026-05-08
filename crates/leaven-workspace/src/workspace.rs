@@ -70,6 +70,13 @@ pub trait WorkspaceBackend: Send + Sync {
         })
     }
 
+    fn list_files(&mut self, path: &WorkspacePath) -> Result<Vec<WorkspacePath>, WorkspaceError> {
+        let _ = path;
+        Err(WorkspaceError::UnsupportedOperation {
+            operation: "list_files",
+        })
+    }
+
     fn run_command(&mut self, command: Command) -> Result<CommandOutput, WorkspaceError> {
         let _ = command;
         Err(WorkspaceError::UnsupportedOperation {

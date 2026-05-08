@@ -64,6 +64,15 @@ impl<'a> WorkspaceView<'a> {
         self.backend.lock().read_file(&path)
     }
 
+    pub fn list_files(&self, path: &WorkspacePath) -> Result<Vec<WorkspacePath>, WorkspaceError> {
+        let scoped = self.scoped(path)?;
+        let files = self.backend.lock().list_files(&scoped)?;
+        files
+            .into_iter()
+            .map(|path| self.unscoped(path))
+            .collect::<Result<Vec<_>, _>>()
+    }
+
     pub fn run_command(&mut self, mut command: Command) -> Result<CommandOutput, WorkspaceError> {
         command.cwd = match command.cwd.as_ref() {
             Some(path) => Some(self.scoped(path)?),
@@ -80,6 +89,28 @@ impl<'a> WorkspaceView<'a> {
             Ok(self.prefix.clone())
         } else {
             Ok(self.prefix.join(path.as_str())?)
+        }
+    }
+
+    fn unscoped(&self, path: WorkspacePath) -> Result<WorkspacePath, WorkspaceError> {
+        let prefix = self.prefix.as_str();
+        if prefix.is_empty() {
+            return Ok(path);
+        }
+        let raw = path.as_str();
+        let Some(stripped) = raw.strip_prefix(prefix) else {
+            return Err(WorkspaceError::Path(
+                crate::WorkspacePathError::OutsideView {
+                    path: raw.to_owned(),
+                    prefix: prefix.to_owned(),
+                },
+            ));
+        };
+        let stripped = stripped.strip_prefix('/').unwrap_or(stripped);
+        if stripped.is_empty() {
+            Ok(WorkspacePath::root())
+        } else {
+            Ok(WorkspacePath::new(stripped)?)
         }
     }
 }

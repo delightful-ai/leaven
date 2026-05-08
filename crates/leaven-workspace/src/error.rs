@@ -42,4 +42,6 @@ pub enum WorkspacePathError {
     ParentTraversal(String),
     #[error("workspace path contains an empty component: {0}")]
     EmptyComponent(String),
+    #[error("workspace path {path} is outside view prefix {prefix}")]
+    OutsideView { path: String, prefix: String },
 }
