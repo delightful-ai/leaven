@@ -29,3 +29,9 @@ pub use leaven_std::prelude::*;
 
 #[cfg(feature = "agentic")]
 pub use leaven_agentic::prelude::*;
+
+#[cfg(all(feature = "skill", not(feature = "std")))]
+pub use leaven_artifact_skill::*;
+
+#[cfg(feature = "agentic-skill")]
+pub use leaven_agentic_skill::*;

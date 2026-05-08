@@ -47,3 +47,9 @@ pub use leaven_workspace as workspace;
 
 #[cfg(feature = "agentic")]
 pub use leaven_agentic as agentic;
+
+#[cfg(feature = "skill")]
+pub use leaven_artifact_skill as skill;
+
+#[cfg(feature = "agentic-skill")]
+pub use leaven_agentic_skill as agentic_skill;

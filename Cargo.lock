@@ -2283,8 +2283,10 @@ version = "0.0.0"
 dependencies = [
  "futures",
  "leaven-agentic",
+ "leaven-agentic-skill",
  "leaven-artifact-git",
  "leaven-artifact-jj",
+ "leaven-artifact-skill",
  "leaven-core",
  "leaven-derive",
  "leaven-engine",

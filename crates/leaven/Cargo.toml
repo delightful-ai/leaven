@@ -16,8 +16,10 @@ leaven-engine = { workspace = true }
 leaven-kernel = { workspace = true }
 leaven-surface = { workspace = true }
 leaven-agentic = { workspace = true, optional = true }
+leaven-agentic-skill = { workspace = true, optional = true }
 leaven-artifact-git = { workspace = true, optional = true }
 leaven-artifact-jj = { workspace = true, optional = true }
+leaven-artifact-skill = { workspace = true, optional = true }
 leaven-derive = { workspace = true, optional = true }
 leaven-gepa = { workspace = true, optional = true }
 leaven-lm-anthropic = { workspace = true, optional = true }
@@ -38,7 +40,8 @@ workspace = ["dep:leaven-workspace"]
 agentic = ["workspace", "dep:leaven-agentic"]
 git = ["dep:leaven-artifact-git", "leaven-std?/git"]
 jj = ["dep:leaven-artifact-jj", "leaven-std?/jj"]
-skill = ["leaven-std?/skill"]
+skill = ["dep:leaven-artifact-skill", "leaven-std?/skill"]
+agentic-skill = ["agentic", "skill", "dep:leaven-agentic-skill"]
 store-sqlite = ["dep:leaven-store-sqlite"]
 workspace-local = ["workspace", "dep:leaven-workspace-local"]
 workspace-docker = ["workspace", "dep:leaven-workspace-docker"]

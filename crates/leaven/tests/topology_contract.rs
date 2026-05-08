@@ -128,8 +128,10 @@ const EXPECTED_DEPENDENCIES: &[(&str, &[&str])] = &[
         "leaven",
         &[
             "leaven-agentic",
+            "leaven-agentic-skill",
             "leaven-artifact-git",
             "leaven-artifact-jj",
+            "leaven-artifact-skill",
             "leaven-core",
             "leaven-derive",
             "leaven-engine",
