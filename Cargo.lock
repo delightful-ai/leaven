@@ -487,6 +487,7 @@ dependencies = [
  "leaven-store-inline",
  "leaven-surface",
  "leaven-workspace",
+ "leaven-workspace-local",
  "thiserror",
 ]
 

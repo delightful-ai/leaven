@@ -389,18 +389,8 @@ Repair is not a fallback to some global "fixer" unless the optimizer explicitly
 chose such a proposer as the original stage.
 
 ```rust
-pub struct ReproposalPolicy {
+pub struct ProposalRepairPolicy {
     pub max_attempts: NonZeroUsize,
-    pub include_validation_error: bool,
-    pub preserve_failed_attempts: bool,
-    pub validate_in_workspace: Option<ValidationCommand>,
-}
-
-pub struct ValidationCommand {
-    pub cwd: WorkspacePath,
-    pub argv: Vec<String>,
-    pub env: BTreeMap<String, String>,
-    pub max_attempt_output_bytes: u64,
 }
 ```
 
@@ -416,10 +406,10 @@ The proposer-owned loop has one shape:
 
 ```text
 request enters proposer
+materialize allowed context into one workspace
+render initial instructions
 for attempt in 1..=max_attempts:
-  materialize allowed context
   run authoring agent or deterministic authoring step
-  run optional workspace validators
   parse output/workspace changes into a ProposalBatch
   locally apply/validate proposed artifacts against the input graph snapshot
   if locally valid: return ProposalBatch
@@ -475,27 +465,28 @@ candidate graph.
 The likely generic stage-local feedback shape is:
 
 ```rust
-pub struct ProposalRepairFeedback {
-    pub attempt_index: NonZeroUsize,
-    pub prior_transcript: Option<TraceRef>,
-    pub prior_output: Option<WorkspacePath>,
-    pub parse_error: Option<ProposalParseErrorRecord>,
-    pub local_validation_error: Option<DurableErrorRecord>,
-    pub validator_report: Option<ValidatorReport>,
+pub struct ProposalRepairFeedback<'a> {
+    pub failed_attempt: NonZeroUsize,
+    pub max_attempts: NonZeroUsize,
+    pub parse_error: &'a AgenticParseError,
+    pub previous_session: &'a AgentSession,
 }
 
-pub trait RepairPromptBuilder<I>: Send + Sync {
-    fn next_request(
+pub trait ProposalRepairPromptBuilder<I>: Send + Sync {
+    fn build_repair(
         &self,
         original_input: &I,
-        feedback: &ProposalRepairFeedback,
-    ) -> Result<AgentInstructions, RepairPromptError>;
+        feedback: ProposalRepairFeedback<'_>,
+    ) -> Result<AgentInstructions, AgenticRepairError>;
 }
 ```
 
-The exact helper may be an `AgenticProposer` wrapper or a reusable component
-inside `leaven-agentic`. It should not require optimizers to own the repair loop
-unless an optimizer wants a non-standard policy.
+`leaven-agentic` provides `RepairingAgenticProposer` for this standard path. It
+materializes once, keeps the same workspace across attempts, reruns the same
+provider-neutral runtime with repair instructions, and only returns a
+`ProposalBatch` after the parser/local validity checks succeed. It should not
+require optimizers to own the repair loop unless an optimizer wants a
+non-standard policy.
 
 ### 4.3 Validator reports
 

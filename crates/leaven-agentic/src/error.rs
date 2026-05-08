@@ -25,10 +25,24 @@ pub enum AgenticAdapterError {
     Runtime(#[from] AgentRuntimeError),
     #[error(transparent)]
     Parse(#[from] AgenticParseError),
+    #[error(transparent)]
+    Repair(#[from] AgenticRepairError),
     #[error("agentic input build failed: {0}")]
     Input(String),
     #[error("agentic cost overflow while adding {axis}")]
     CostOverflow { axis: &'static str },
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum AgenticRepairError {
+    #[error("repair prompt failed: {0}")]
+    Prompt(String),
+    #[error("proposal repair exhausted after {attempts} attempt(s)")]
+    Exhausted {
+        attempts: usize,
+        #[source]
+        source: Box<AgenticParseError>,
+    },
 }
 
 #[derive(Debug, thiserror::Error)]

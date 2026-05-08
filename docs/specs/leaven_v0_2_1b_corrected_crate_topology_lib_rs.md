@@ -2270,9 +2270,15 @@ pub mod error;
 pub mod evaluator;
 pub mod parser;
 pub mod proposer;
+pub mod repair;
+pub mod repairing_proposer;
 
 pub use proposer::{
     AgenticProposer, AgenticProposerConfig,
+};
+
+pub use repairing_proposer::{
+    RepairingAgenticProposer, RepairingAgenticProposerConfig,
 };
 
 pub use evaluator::{
@@ -2284,14 +2290,21 @@ pub use parser::{
     EvidenceParser, ProposalParser,
 };
 
-pub use error::{AgenticAdapterError, AgenticParseError};
+pub use repair::{
+    ProposalRepairFeedback, ProposalRepairPolicy, ProposalRepairPromptBuilder,
+};
+
+pub use error::{AgenticAdapterError, AgenticParseError, AgenticRepairError};
 
 pub mod prelude {
     pub use crate::{
         AgentPromptTarget, AgenticAdapterError, AgenticEvaluator,
         AgenticEvaluatorConfig, AgenticParseError, AgenticProposer,
-        AgenticProposerConfig, AgenticRunInput, EvaluationInputBuilder,
-        EvidenceParser, ProposalParser,
+        AgenticProposerConfig, AgenticRepairError, AgenticRunInput,
+        EvaluationInputBuilder, EvidenceParser, ProposalParser,
+        ProposalRepairFeedback, ProposalRepairPolicy,
+        ProposalRepairPromptBuilder, RepairingAgenticProposer,
+        RepairingAgenticProposerConfig,
     };
 }
 ```

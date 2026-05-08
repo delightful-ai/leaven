@@ -24,3 +24,4 @@ thiserror = { workspace = true }
 
 [dev-dependencies]
 leaven-store-inline = { workspace = true }
+leaven-workspace-local = { workspace = true }
