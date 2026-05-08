@@ -2,6 +2,7 @@
 
 use std::future::Future;
 use std::marker::PhantomData;
+use std::num::NonZeroUsize;
 
 use leaven_agent::{AgentRunContext, AgentRunRequest, AgentRuntime, AgentSession};
 use leaven_core::{
@@ -19,7 +20,10 @@ use leaven_workspace::{
 
 use crate::AgenticAdapterError;
 use crate::case::{AgentCase, CaseSuite};
-use crate::case_record::{AgentCaseRunRecord, CASE_RUN_RECORD_METADATA_KEY};
+use crate::case_record::{
+    AgentCaseRetryRecord, AgentCaseRunError, AgentCaseRunPolicy, AgentCaseRunRecord,
+    CASE_RUN_RECORD_METADATA_KEY,
+};
 use crate::error::{checked_add_cost, map_workspace_error};
 
 /// Presenter input for one candidate/case execution.
@@ -133,6 +137,7 @@ pub struct AgentCaseEvaluatorConfig {
     pub fingerprint: Fingerprint,
     pub workspace: WorkspaceConfig,
     pub cache_policy: CachePolicy,
+    pub run_policy: AgentCaseRunPolicy,
 }
 
 impl AgentCaseEvaluatorConfig {
@@ -143,7 +148,14 @@ impl AgentCaseEvaluatorConfig {
             fingerprint,
             workspace: WorkspaceConfig::default(),
             cache_policy: CachePolicy::Never,
+            run_policy: AgentCaseRunPolicy::default(),
         }
+    }
+
+    #[must_use]
+    pub fn with_run_policy(mut self, run_policy: AgentCaseRunPolicy) -> Self {
+        self.run_policy = run_policy;
+        self
     }
 }
 
@@ -165,6 +177,7 @@ where
         builder
             .update(b"leaven.agentic.agent-case-evaluator.v1")
             .update(self.config.fingerprint.0)
+            .update(format!("{:?}", self.config.run_policy).as_bytes())
             .update(self.cases.fingerprint().0)
             .update(self.runtime.fingerprint().0)
             .update(self.presenter.fingerprint().0)
@@ -250,14 +263,72 @@ where
         request: &ResolvedEvaluationRequest,
         ctx: &mut EvaluationContext<'_, P>,
     ) -> Result<Metered<Assessment<P>>, EvaluationError> {
+        let max_attempts = self.config.run_policy.retry_on_error.saturating_add(1);
+        let mut failed_records = Vec::new();
+        for attempt_index in 1..=max_attempts {
+            let attempt = NonZeroUsize::new(attempt_index).expect("attempt index starts at one");
+            match self
+                .evaluate_attempt(
+                    candidate_id,
+                    candidate,
+                    case,
+                    request,
+                    ctx,
+                    attempt,
+                    &failed_records,
+                )
+                .await
+            {
+                Ok(metered) => return Ok(metered),
+                Err(failure) => {
+                    failed_records.push(failure.record);
+                    if attempt_index < max_attempts {
+                        continue;
+                    }
+                    return Err(EvaluationError::with_source(
+                        "agent case evaluator failed",
+                        AgenticAdapterError::CaseRunFailed {
+                            records_len: failed_records.len(),
+                            records: failed_records,
+                            source: Box::new(failure.source),
+                        },
+                    ));
+                }
+            }
+        }
+        unreachable!("attempt loop always returns")
+    }
+
+    async fn evaluate_attempt(
+        &self,
+        candidate_id: CandidateId,
+        candidate: &P::Artifact,
+        case: &AgentCase,
+        request: &ResolvedEvaluationRequest,
+        ctx: &mut EvaluationContext<'_, P>,
+        attempt: NonZeroUsize,
+        failed_records: &[AgentCaseRunRecord],
+    ) -> Result<Metered<Assessment<P>>, CaseAttemptFailure> {
+        let partition = EvaluationSetId::from_uuid(request.set.id.as_uuid());
         let mut workspace = self
             .workspace_factory
             .allocate(self.config.workspace.clone())
             .await
             .map_err(|error| {
-                EvaluationError::with_source(
-                    "agent case evaluator failed",
-                    AgenticAdapterError::WorkspaceAllocate(error),
+                let source = AgenticAdapterError::WorkspaceAllocate(error);
+                CaseAttemptFailure::new(
+                    AgentCaseRunRecord::failed_attempt(
+                        ctx.graph().run_id(),
+                        candidate_id,
+                        case.id,
+                        partition,
+                        attempt,
+                        None,
+                        Vec::new(),
+                        AgentCaseRunError::Presentation(source.to_string()),
+                        Cost::zero(),
+                    ),
+                    source,
                 )
             })?;
         let stage_result = async {
@@ -274,7 +345,23 @@ where
                     &mut view,
                     ctx.materialize_context(),
                 )
-                .await?;
+                .await
+                .map_err(|source| {
+                    CaseAttemptFailure::new(
+                        AgentCaseRunRecord::failed_attempt(
+                            ctx.graph().run_id(),
+                            candidate_id,
+                            case.id,
+                            partition,
+                            attempt,
+                            None,
+                            Vec::new(),
+                            AgentCaseRunError::Presentation(source.to_string()),
+                            Cost::zero(),
+                        ),
+                        source,
+                    )
+                })?;
             let budget = ctx.budget();
             let session = self
                 .runtime
@@ -284,7 +371,23 @@ where
                     AgentRunContext::new(AgentSessionId::new(), &budget),
                 )
                 .await
-                .map_err(AgenticAdapterError::Runtime)?;
+                .map_err(AgenticAdapterError::Runtime)
+                .map_err(|source| {
+                    CaseAttemptFailure::new(
+                        AgentCaseRunRecord::failed_attempt(
+                            ctx.graph().run_id(),
+                            candidate_id,
+                            case.id,
+                            partition,
+                            attempt,
+                            None,
+                            Vec::new(),
+                            AgentCaseRunError::Runtime(source.to_string()),
+                            presented.cost.clone(),
+                        ),
+                        source,
+                    )
+                })?;
             let scored = self
                 .scorer
                 .score(
@@ -297,28 +400,108 @@ where
                     },
                     &view,
                 )
-                .await?;
-            let run_total = checked_add_cost(Cost::zero(), &presented.cost)?;
-            let run_total = checked_add_cost(run_total, &session.cost)?;
-            let run_total = checked_add_cost(run_total, &scored.cost)?;
-            let partition = EvaluationSetId::from_uuid(request.set.id.as_uuid());
-            let run_record = AgentCaseRunRecord::scored(
+                .await
+                .map_err(|source| {
+                    let run_total = checked_add_cost(Cost::zero(), &presented.cost)
+                        .and_then(|total| checked_add_cost(total, &session.cost))
+                        .unwrap_or_else(|_| Cost::zero());
+                    CaseAttemptFailure::new(
+                        AgentCaseRunRecord::failed_attempt(
+                            ctx.graph().run_id(),
+                            candidate_id,
+                            case.id,
+                            partition,
+                            attempt,
+                            Some(session.value.session_id),
+                            session.value.output_files.clone(),
+                            AgentCaseRunError::Scoring(source.to_string()),
+                            run_total,
+                        ),
+                        source,
+                    )
+                })?;
+            let run_total = checked_add_cost(Cost::zero(), &presented.cost)
+                .and_then(|total| checked_add_cost(total, &session.cost))
+                .and_then(|total| checked_add_cost(total, &scored.cost))
+                .map_err(|source| {
+                    CaseAttemptFailure::new(
+                        AgentCaseRunRecord::failed_attempt(
+                            ctx.graph().run_id(),
+                            candidate_id,
+                            case.id,
+                            partition,
+                            attempt,
+                            Some(session.value.session_id),
+                            session.value.output_files.clone(),
+                            AgentCaseRunError::Scoring(source.to_string()),
+                            Cost::zero(),
+                        ),
+                        source,
+                    )
+                })?;
+            let case_total = failed_records
+                .iter()
+                .try_fold(Cost::zero(), |total, record| {
+                    checked_add_cost(total, &record.cost)
+                })
+                .and_then(|total| checked_add_cost(total, &run_total))
+                .map_err(|source| {
+                    CaseAttemptFailure::new(
+                        AgentCaseRunRecord::failed_attempt(
+                            ctx.graph().run_id(),
+                            candidate_id,
+                            case.id,
+                            partition,
+                            attempt,
+                            Some(session.value.session_id),
+                            session.value.output_files.clone(),
+                            AgentCaseRunError::Scoring(source.to_string()),
+                            Cost::zero(),
+                        ),
+                        source,
+                    )
+                })?;
+            let retries = failed_records
+                .iter()
+                .filter_map(AgentCaseRetryRecord::from_failed_run)
+                .collect();
+            let run_record = AgentCaseRunRecord::scored_attempt(
                 ctx.graph().run_id(),
                 candidate_id,
                 case.id,
                 partition,
+                attempt,
                 session.value.session_id,
                 session.value.output_files.clone(),
-                run_total.clone(),
+                retries,
+                case_total.clone(),
             );
             let mut metadata = MetadataBag::new();
-            metadata.insert(
-                CASE_RUN_RECORD_METADATA_KEY,
-                MetadataValue::Json(serde_json::to_value(&run_record).map_err(|error| {
+            let record_json = serde_json::to_value(&run_record)
+                .map_err(|error| {
                     AgenticAdapterError::Input(format!(
                         "case run record serialization failed: {error}"
                     ))
-                })?),
+                })
+                .map_err(|source| {
+                    CaseAttemptFailure::new(
+                        AgentCaseRunRecord::failed_attempt(
+                            ctx.graph().run_id(),
+                            candidate_id,
+                            case.id,
+                            partition,
+                            attempt,
+                            Some(session.value.session_id),
+                            session.value.output_files.clone(),
+                            AgentCaseRunError::Scoring(source.to_string()),
+                            case_total.clone(),
+                        ),
+                        source,
+                    )
+                })?;
+            metadata.insert(
+                CASE_RUN_RECORD_METADATA_KEY,
+                MetadataValue::Json(record_json),
             );
             let assessment = Assessment::Independent {
                 candidate: candidate_id,
@@ -327,25 +510,65 @@ where
                     case: case.id,
                 },
                 evidence: scored.value,
-                cost: run_total.clone(),
+                cost: case_total.clone(),
                 metadata,
             };
             drop(view);
-            Ok(Metered::new(assessment, run_total))
+            Ok(Metered::new(assessment, case_total))
         }
         .await;
         let cleanup_result = workspace.cleanup().await;
         match (stage_result, cleanup_result) {
             (Ok(metered), Ok(())) => Ok(metered),
-            (Ok(_), Err(cleanup)) => Err(map_workspace_error(WithWorkspaceError::Cleanup(cleanup))),
+            (Ok(metered), Err(cleanup)) => {
+                let source = map_workspace_error(WithWorkspaceError::Cleanup(cleanup));
+                Err(CaseAttemptFailure::new(
+                    AgentCaseRunRecord::failed_attempt(
+                        ctx.graph().run_id(),
+                        candidate_id,
+                        case.id,
+                        partition,
+                        attempt,
+                        None,
+                        Vec::new(),
+                        AgentCaseRunError::Cleanup(source.to_string()),
+                        metered.cost,
+                    ),
+                    source,
+                ))
+            }
             (Err(stage), Ok(())) => Err(stage),
             (Err(stage), Err(cleanup)) => {
-                Err(map_workspace_error(WithWorkspaceError::StageAndCleanup {
-                    stage,
+                let source = map_workspace_error(WithWorkspaceError::StageAndCleanup {
+                    stage: stage.source,
                     cleanup,
-                }))
+                });
+                Err(CaseAttemptFailure::new(
+                    AgentCaseRunRecord::failed_attempt(
+                        ctx.graph().run_id(),
+                        candidate_id,
+                        case.id,
+                        partition,
+                        attempt,
+                        stage.record.session,
+                        stage.record.outputs,
+                        AgentCaseRunError::Cleanup(source.to_string()),
+                        stage.record.cost,
+                    ),
+                    source,
+                ))
             }
         }
-        .map_err(|error| EvaluationError::with_source("agent case evaluator failed", error))
+    }
+}
+
+struct CaseAttemptFailure {
+    record: AgentCaseRunRecord,
+    source: AgenticAdapterError,
+}
+
+impl CaseAttemptFailure {
+    fn new(record: AgentCaseRunRecord, source: AgenticAdapterError) -> Self {
+        Self { record, source }
     }
 }

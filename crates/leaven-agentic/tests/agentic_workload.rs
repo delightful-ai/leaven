@@ -1,4 +1,8 @@
 use std::collections::BTreeMap;
+use std::sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering},
+};
 
 use leaven_agent::{
     AgentInstructions, AgentRunRequest, AgentSession, FakeAgentAction, FakeAgentRuntime,
@@ -6,9 +10,10 @@ use leaven_agent::{
 };
 use leaven_agentic::{
     AgentCase, AgentCaseEvaluator, AgentCaseEvaluatorConfig, AgentCasePresentation,
-    AgentCasePresentationInput, AgentCasePresenter, AgentCaseScoreInput, AgentCaseScorer,
-    AgentRunPreflight, AgentWorkload, AgenticAdapterError, CASE_RUN_RECORD_METADATA_KEY,
-    CasePartitionId, CasePartitions, CaseSuite, CaseTarget, PreflightSeverity,
+    AgentCasePresentationInput, AgentCasePresenter, AgentCaseRunPolicy, AgentCaseScoreInput,
+    AgentCaseScorer, AgentRunPreflight, AgentWorkload, AgenticAdapterError,
+    CASE_RUN_RECORD_METADATA_KEY, CasePartitionId, CasePartitions, CaseSuite, CaseTarget,
+    PreflightSeverity,
 };
 use leaven_core::{
     Artifact, ArtifactIdentity, AssessmentGranularity, AssessmentTarget, EvaluationPurpose,
@@ -311,6 +316,79 @@ fn agent_case_evaluator_runs_independent_per_case_sessions() {
 }
 
 #[test]
+fn agent_case_evaluator_retries_case_errors_and_records_attempt_history() {
+    futures::executor::block_on(async {
+        let case = AgentCase::text(
+            CaseId::new(0),
+            "question",
+            CaseTarget::Text("expected".to_owned()),
+        );
+        let suite = CaseSuite::from_cases([case]).unwrap();
+        let config = AgentCaseEvaluatorConfig::new(
+            EvaluatorId::from("agent-case/retry"),
+            Fingerprint::from_bytes([4; 32]),
+        )
+        .with_run_policy(AgentCaseRunPolicy {
+            retry_on_error: 1,
+            ..AgentCaseRunPolicy::default()
+        });
+        let evaluator = AgentCaseEvaluator::new(
+            config,
+            suite,
+            LocalWorkspaceFactory::temp(),
+            FakeAgentRuntime::new(vec![FakeAgentAction::WriteFile {
+                path: WorkspacePath::new("output/result.txt").unwrap(),
+                bytes: b"observed".to_vec(),
+            }])
+            .with_cost(Cost::llm_calls(1)),
+            TestPresenter,
+            FlakyScorer::default(),
+        );
+        let mut graph = RunGraph::<CaseProblem>::new(RunId::new());
+        let mut budget = BudgetLedger::default();
+        let store = InlineEvidenceStore::<CaseEvidence>::new("case-evidence");
+        let case_set = CaseSet::new(vec!["case-0"]);
+        let candidate = {
+            let mut ctx = RunContext::<CaseProblem>::new(&mut graph, &mut budget);
+            ctx.insert_seed(CaseArtifact("seed".to_owned()), 0).unwrap()
+        };
+        let mut ctx = RunContext::<CaseProblem>::new(&mut graph, &mut budget)
+            .with_case_set(&case_set)
+            .with_evidence_store(&store);
+
+        let report = ctx
+            .evaluate_with(
+                &evaluator,
+                EvaluationRequest::Independent {
+                    candidates: vec![candidate],
+                    set: EvaluationSet::All,
+                    granularity: AssessmentGranularity::PerCase,
+                    purpose: EvaluationPurpose::Search,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(report.cost.llm_calls, 2);
+        assert_eq!(report.cost.metric_calls, 1);
+        let assessment = ctx.graph().assessment(report.assessment_ids[0]).unwrap();
+        let record = assessment
+            .metadata()
+            .get(&MetadataKey::from(CASE_RUN_RECORD_METADATA_KEY))
+            .expect("case run record metadata");
+        let MetadataValue::Json(record) = record else {
+            panic!("case run record metadata should be JSON");
+        };
+        assert_eq!(record["attempt"], serde_json::json!(2));
+        assert_eq!(record["retries"][0]["attempt"], serde_json::json!(1));
+        assert_eq!(
+            record["retries"][0]["error"]["kind"],
+            serde_json::json!("scoring")
+        );
+    });
+}
+
+#[test]
 fn agent_case_evaluator_fingerprint_includes_runtime_presenter_scorer_and_cases() {
     let suite = CaseSuite::from_cases([AgentCase::text(
         CaseId::new(0),
@@ -475,6 +553,30 @@ impl AgentCaseScorer<CaseProblem> for TestScorer {
             },
             Cost::metric_calls(1),
         ))
+    }
+}
+
+#[derive(Clone, Default)]
+struct FlakyScorer {
+    attempts: Arc<AtomicUsize>,
+}
+
+impl AgentCaseScorer<CaseProblem> for FlakyScorer {
+    fn fingerprint(&self) -> Fingerprint {
+        Fingerprint::from_bytes([8; 32])
+    }
+
+    async fn score(
+        &self,
+        input: AgentCaseScoreInput<'_, CaseProblem>,
+        workspace: &WorkspaceView<'_>,
+    ) -> Result<Metered<CaseEvidence>, AgenticAdapterError> {
+        if self.attempts.fetch_add(1, Ordering::SeqCst) == 0 {
+            return Err(AgenticAdapterError::Input(
+                "synthetic scorer failure".to_owned(),
+            ));
+        }
+        TestScorer.score(input, workspace).await
     }
 }
 

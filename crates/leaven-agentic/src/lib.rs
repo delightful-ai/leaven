@@ -19,7 +19,11 @@ pub use case_evaluator::{
     AgentCaseEvaluator, AgentCaseEvaluatorConfig, AgentCasePresentation,
     AgentCasePresentationInput, AgentCasePresenter, AgentCaseScoreInput, AgentCaseScorer,
 };
-pub use case_record::{AgentCaseRunError, AgentCaseRunRecord, CASE_RUN_RECORD_METADATA_KEY};
+pub use case_record::{
+    AgentCaseLimits, AgentCaseRetryRecord, AgentCaseRunError, AgentCaseRunPolicy,
+    AgentCaseRunRecord, CASE_RUN_RECORD_METADATA_KEY, CaseCheckpointPolicy, FailOnError,
+    FiniteRatio, ToolApprovalPolicy,
+};
 pub use error::{AgenticAdapterError, AgenticParseError, AgenticRepairError};
 pub use evaluator::{AgenticEvaluator, AgenticEvaluatorConfig};
 pub use parser::{
@@ -34,16 +38,17 @@ pub use repairing_proposer::{RepairingAgenticProposer, RepairingAgenticProposerC
 
 pub mod prelude {
     pub use crate::{
-        AgentCase, AgentCaseEvaluator, AgentCaseEvaluatorConfig, AgentCasePresentation,
-        AgentCasePresentationInput, AgentCasePresenter, AgentCaseRunError, AgentCaseRunRecord,
+        AgentCase, AgentCaseEvaluator, AgentCaseEvaluatorConfig, AgentCaseLimits,
+        AgentCasePresentation, AgentCasePresentationInput, AgentCasePresenter,
+        AgentCaseRetryRecord, AgentCaseRunError, AgentCaseRunPolicy, AgentCaseRunRecord,
         AgentCaseScoreInput, AgentCaseScorer, AgentPromptTarget, AgentRunPreflight,
         AgentRunPreflightReport, AgentWorkload, AgenticAdapterError, AgenticEvaluator,
         AgenticEvaluatorConfig, AgenticParseError, AgenticProposer, AgenticProposerConfig,
-        AgenticRepairError, AgenticRunInput, CASE_RUN_RECORD_METADATA_KEY, CaseFiles, CaseInput,
-        CaseMessage, CasePartitionId, CasePartitions, CaseSuite, CaseTarget,
-        EvaluationInputBuilder, EvidenceParser, PreflightFinding, PreflightSeverity,
-        ProposalParser, ProposalRepairFeedback, ProposalRepairPolicy, ProposalRepairPromptBuilder,
-        RepairingAgenticProposer, RepairingAgenticProposerConfig, SetupScript,
-        WorkspaceRequirement,
+        AgenticRepairError, AgenticRunInput, CASE_RUN_RECORD_METADATA_KEY, CaseCheckpointPolicy,
+        CaseFiles, CaseInput, CaseMessage, CasePartitionId, CasePartitions, CaseSuite, CaseTarget,
+        EvaluationInputBuilder, EvidenceParser, FailOnError, FiniteRatio, PreflightFinding,
+        PreflightSeverity, ProposalParser, ProposalRepairFeedback, ProposalRepairPolicy,
+        ProposalRepairPromptBuilder, RepairingAgenticProposer, RepairingAgenticProposerConfig,
+        SetupScript, ToolApprovalPolicy, WorkspaceRequirement,
     };
 }

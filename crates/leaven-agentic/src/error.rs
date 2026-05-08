@@ -5,6 +5,8 @@ use leaven_engine::{MaterializeError, RenderError};
 use leaven_kernel::{Amount, Cost};
 use leaven_workspace::{FactoryError, WithWorkspaceError, WorkspaceError};
 
+use crate::AgentCaseRunRecord;
+
 #[derive(Debug, thiserror::Error)]
 pub enum AgenticAdapterError {
     #[error(transparent)]
@@ -29,6 +31,13 @@ pub enum AgenticAdapterError {
     Parse(#[from] AgenticParseError),
     #[error(transparent)]
     Repair(#[from] AgenticRepairError),
+    #[error("agentic case run failed after {records_len} recorded attempt(s)")]
+    CaseRunFailed {
+        records_len: usize,
+        records: Vec<AgentCaseRunRecord>,
+        #[source]
+        source: Box<Self>,
+    },
     #[error("agentic input build failed: {0}")]
     Input(String),
     #[error("agentic cost overflow while adding {axis}")]
