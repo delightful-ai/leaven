@@ -59,10 +59,13 @@ The v0.2.1b topology cutover adds many spec-listed crate skeletons whose job is
 to enforce dependency direction before their behavior lands. The coverage gate
 keeps a `98.5` line floor and `85.8` branch floor without a source-path ignore
 regex. It runs the workspace tests, then runs every milestone binary and
-`xtask` under `cargo llvm-cov run` before reporting. Empty map crates and
-unimplemented skeleton crates naturally add no executable denominator; once a
-crate gains runtime behavior, that behavior is part of the canonical coverage
-surface and needs contract tests in the same change.
+`xtask` under `cargo llvm-cov run` before reporting. Line coverage is enforced
+from the lcov source-line report so generic monomorphizations do not create
+duplicate missed-line denominators; branch coverage is enforced from the
+branch-enabled JSON summary. Empty map crates and unimplemented skeleton crates
+naturally add no executable denominator; once a crate gains runtime behavior,
+that behavior is part of the canonical coverage surface and needs contract
+tests in the same change.
 
 ## Test Shapes
 

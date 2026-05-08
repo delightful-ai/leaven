@@ -60,6 +60,20 @@ def main() -> int:
         if result.returncode != 0:
             return result.returncode
 
+    lcov_path = output_path.with_suffix(".lcov")
+    lcov_command = [
+        "cargo",
+        "llvm-cov",
+        "report",
+        "--lcov",
+        "--branch",
+        "--output-path",
+        str(lcov_path),
+    ]
+    result = run(lcov_command)
+    if result.returncode != 0:
+        return result.returncode
+
     report_command = [
         "cargo",
         "llvm-cov",
@@ -67,8 +81,6 @@ def main() -> int:
         "--json",
         "--summary-only",
         "--branch",
-        "--fail-under-lines",
-        str(args.line_floor),
         "--output-path",
         str(output_path),
     ]
@@ -77,7 +89,7 @@ def main() -> int:
         return result.returncode
 
     summary = load_summary(output_path)
-    lines = summary["lines"]
+    lines = load_lcov_lines(lcov_path)
     branches = summary["branches"]
 
     print(
@@ -91,6 +103,15 @@ def main() -> int:
         f"({branches['covered']}/{branches['count']}, floor {args.branch_floor:.2f}%)"
     )
 
+    if lines["count"] == 0:
+        print("error: line coverage produced no line denominator")
+        return 1
+    if lines["percent"] < args.line_floor:
+        print(
+            "error: line coverage below floor "
+            f"({lines['percent']:.2f}% < {args.line_floor:.2f}%)"
+        )
+        return 1
     if branches["count"] == 0:
         print("error: branch coverage produced no branch denominator")
         return 1
@@ -124,6 +145,20 @@ def load_summary(path: Path) -> dict[str, Any]:
     if not isinstance(totals, dict):
         raise ValueError(f"coverage summary at {path} has no totals")
     return totals
+
+
+def load_lcov_lines(path: Path) -> dict[str, Any]:
+    count = 0
+    covered = 0
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.startswith("DA:"):
+            continue
+        count += 1
+        _, hits, *_ = line[3:].split(",")
+        if int(hits) > 0:
+            covered += 1
+    percent = 100.0 * covered / count if count else 0.0
+    return {"count": count, "covered": covered, "percent": percent}
 
 
 if __name__ == "__main__":
