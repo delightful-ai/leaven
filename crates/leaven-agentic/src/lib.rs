@@ -5,6 +5,7 @@ mod case_evaluator;
 mod case_record;
 mod error;
 mod evaluator;
+mod inspection;
 mod parser;
 mod preflight;
 mod proposer;
@@ -26,6 +27,9 @@ pub use case_record::{
 };
 pub use error::{AgenticAdapterError, AgenticParseError, AgenticRepairError};
 pub use evaluator::{AgenticEvaluator, AgenticEvaluatorConfig};
+pub use inspection::{
+    AgenticCostInspection, AgenticInspectionWarning, AgenticRunInspection, ProposalRepairInspection,
+};
 pub use parser::{
     AgentPromptTarget, AgenticRunInput, EvaluationInputBuilder, EvidenceParser, ProposalParser,
 };
@@ -46,14 +50,16 @@ pub mod prelude {
         AgentCasePresentation, AgentCasePresentationInput, AgentCasePresenter,
         AgentCaseRetryRecord, AgentCaseRunError, AgentCaseRunPolicy, AgentCaseRunRecord,
         AgentCaseScoreInput, AgentCaseScorer, AgentPromptTarget, AgentRunPreflight,
-        AgentRunPreflightReport, AgentWorkload, AgenticAdapterError, AgenticEvaluator,
-        AgenticEvaluatorConfig, AgenticParseError, AgenticProposer, AgenticProposerConfig,
-        AgenticRepairError, AgenticRunInput, CASE_RUN_RECORD_METADATA_KEY, CaseCheckpointPolicy,
-        CaseFiles, CaseInput, CaseMessage, CasePartitionId, CasePartitions, CaseSuite, CaseTarget,
+        AgentRunPreflightReport, AgentWorkload, AgenticAdapterError, AgenticCostInspection,
+        AgenticEvaluator, AgenticEvaluatorConfig, AgenticInspectionWarning, AgenticParseError,
+        AgenticProposer, AgenticProposerConfig, AgenticRepairError, AgenticRunInput,
+        AgenticRunInspection, CASE_RUN_RECORD_METADATA_KEY, CaseCheckpointPolicy, CaseFiles,
+        CaseInput, CaseMessage, CasePartitionId, CasePartitions, CaseSuite, CaseTarget,
         EvaluationInputBuilder, EvidenceParser, FailOnError, FiniteRatio,
         PROPOSAL_REPAIR_ATTEMPTS_METADATA_KEY, PreflightFinding, PreflightSeverity, ProposalParser,
         ProposalRepairAttemptOutcome, ProposalRepairAttemptRecord, ProposalRepairFeedback,
-        ProposalRepairPolicy, ProposalRepairPromptBuilder, RepairingAgenticProposer,
-        RepairingAgenticProposerConfig, SetupScript, ToolApprovalPolicy, WorkspaceRequirement,
+        ProposalRepairInspection, ProposalRepairPolicy, ProposalRepairPromptBuilder,
+        RepairingAgenticProposer, RepairingAgenticProposerConfig, SetupScript, ToolApprovalPolicy,
+        WorkspaceRequirement,
     };
 }

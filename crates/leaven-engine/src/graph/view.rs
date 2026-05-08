@@ -146,6 +146,13 @@ impl<'g, P: OptimizationProblem> RunGraphView<'g, P> {
             .map(|record| ProposalBatchView { record })
     }
 
+    pub fn proposal_batches(&self) -> impl Iterator<Item = ProposalBatchView<'g>> + '_ {
+        self.graph
+            .proposal_batches
+            .values()
+            .map(|record| ProposalBatchView { record })
+    }
+
     #[must_use]
     pub fn proposal(&self, id: ProposalId) -> Option<ProposalView<'g, P>> {
         self.graph
@@ -201,6 +208,14 @@ impl<'g, P: OptimizationProblem> RunGraphView<'g, P> {
             return None;
         }
         Some(AssessmentView { record })
+    }
+
+    pub fn all_assessments(&self) -> impl Iterator<Item = AssessmentView<'g>> + '_ {
+        self.graph
+            .assessments
+            .values()
+            .filter(|record| self.allows_assessment(record))
+            .map(|record| AssessmentView { record })
     }
 
     #[must_use]

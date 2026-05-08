@@ -97,6 +97,12 @@ fn graph_views_expose_record_details_without_storage_maps() {
     let batch = view.proposal_batch(report.batch_id).unwrap();
     let proposal = view.proposal_that_created(candidate).unwrap();
 
+    assert_eq!(
+        view.proposal_batches()
+            .map(|batch| batch.id())
+            .collect::<Vec<_>>(),
+        [report.batch_id]
+    );
     assert_eq!(batch.stage(), &stage);
     assert!(matches!(
         batch.metadata().get(&MetadataKey::from("batch")),

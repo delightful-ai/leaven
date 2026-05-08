@@ -13,9 +13,9 @@ use leaven_agent::{
 };
 use leaven_agentic::{
     AgentPromptTarget, AgenticParseError, AgenticRepairError, AgenticRunInput,
-    PROPOSAL_REPAIR_ATTEMPTS_METADATA_KEY, ProposalParser, ProposalRepairFeedback,
-    ProposalRepairPolicy, ProposalRepairPromptBuilder, RepairingAgenticProposer,
-    RepairingAgenticProposerConfig,
+    AgenticRunInspection, PROPOSAL_REPAIR_ATTEMPTS_METADATA_KEY, ProposalParser,
+    ProposalRepairFeedback, ProposalRepairPolicy, ProposalRepairPromptBuilder,
+    RepairingAgenticProposer, RepairingAgenticProposerConfig,
 };
 use leaven_core::{
     Artifact, ArtifactIdentity, Evidence, OptimizationProblem, Proposal, ProposalBatch,
@@ -23,7 +23,8 @@ use leaven_core::{
 };
 use leaven_engine::{
     BudgetLedger, MaterializationReport, MaterializeContext, MaterializeError, Materializer,
-    RenderContext, RenderError, Renderer, RunContext, RunGraph,
+    ProposalContext, ProposalError, Proposer, RenderContext, RenderError, Renderer, RunContext,
+    RunGraph,
 };
 use leaven_kernel::{
     AgentRuntimeId, ContentId, Cost, Fingerprint, MetadataBag, MetadataKey, MetadataValue, Metered,
@@ -112,6 +113,11 @@ fn repairing_proposer_routes_parse_failure_back_to_same_runtime_loop() {
         let applied = ctx.apply_batch(report.batch_id).unwrap();
         let child = applied.successful_candidates().next().unwrap();
         assert_eq!(ctx.graph().artifact(child).unwrap().0, "fixed");
+        let inspection = AgenticRunInspection::from_graph(ctx.graph());
+        assert_eq!(inspection.proposal_repairs.len(), 1);
+        assert_eq!(inspection.proposal_repairs[0].batch_id, report.batch_id);
+        assert_eq!(inspection.proposal_repairs[0].attempts.len(), 2);
+        assert!(inspection.warnings.is_empty());
     });
 }
 
@@ -152,6 +158,31 @@ fn repairing_proposer_exhausts_after_bounded_attempts() {
 
         assert_eq!(runtime_calls.load(Ordering::SeqCst), 2);
         assert!(error_chain_contains(&error, "proposal repair exhausted"));
+    });
+}
+
+#[test]
+fn agentic_run_inspection_warns_on_malformed_repair_metadata() {
+    futures::executor::block_on(async {
+        let mut graph = RunGraph::<TestProblem>::new(RunId::new());
+        let mut budget = BudgetLedger::default();
+        let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+
+        let report = ctx
+            .propose(&MalformedRepairMetadataProposer, ())
+            .await
+            .unwrap();
+
+        let inspection = AgenticRunInspection::from_graph(ctx.graph());
+        assert!(inspection.proposal_repairs.is_empty());
+        assert_eq!(inspection.warnings.len(), 1);
+        assert!(matches!(
+            &inspection.warnings[0],
+            leaven_agentic::AgenticInspectionWarning::MalformedProposalRepairMetadata {
+                batch_id,
+                ..
+            } if *batch_id == report.batch_id
+        ));
     });
 }
 
@@ -348,6 +379,36 @@ impl OptimizationProblem for TestProblem {
 
 #[derive(Clone, Debug)]
 struct ProposalInput;
+
+struct MalformedRepairMetadataProposer;
+
+impl Proposer<TestProblem> for MalformedRepairMetadataProposer {
+    type Request = ();
+
+    fn id(&self) -> ProposerId {
+        ProposerId::from("agentic/malformed-repair-metadata")
+    }
+
+    async fn propose(
+        &self,
+        _request: Self::Request,
+        _ctx: ProposalContext<'_, TestProblem>,
+    ) -> Result<Metered<ProposalBatch<TestProblem>>, ProposalError> {
+        let mut metadata = MetadataBag::new();
+        metadata.insert(
+            PROPOSAL_REPAIR_ATTEMPTS_METADATA_KEY,
+            MetadataValue::String("not-json".to_owned()),
+        );
+        Ok(Metered::new(
+            ProposalBatch {
+                proposals: vec![Proposal::create(TestArtifact("child".to_owned())).build()],
+                semantics: ProposalBatchSemantics::Alternatives,
+                metadata,
+            },
+            Cost::zero(),
+        ))
+    }
+}
 
 struct TestMaterializer;
 
