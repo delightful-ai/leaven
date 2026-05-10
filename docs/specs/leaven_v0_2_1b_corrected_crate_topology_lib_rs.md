@@ -1326,11 +1326,11 @@ This is the corrected replacement for `ComponentEvidence`.
 
 ### Contract
 
-Shared evaluation protocol infrastructure. Owns eval protocols, optional case
-catalog helpers, train/validation/test split manifests, split-use policy
-summaries, suite fingerprints, eval reports, and provider-neutral helper
-adapters for casewise evaluators. It is warm product infrastructure, not cold
-core.
+Shared evaluation plan/report infrastructure. Owns declarative eval protocols
+or plans, optional case catalog helpers, train/validation/test split manifests,
+split-use policy summaries, suite fingerprints, eval reports, and
+provider-neutral helper adapters for casewise evaluators. It is warm product
+infrastructure, not cold core.
 
 Evaluation protocols, datasets, and environments are separate:
 
@@ -1343,6 +1343,10 @@ Environment          = optional execution substrate for an evaluator or agent.
 An eval protocol may run without a dataset. A dataset may be reused by multiple
 eval protocols. An environment belongs to workspace/agentic/runtime crates, not
 to `leaven-eval`.
+
+For maintainability, `leaven-eval` owns protocol-shaped product data, not
+execution authority. It must not define a replacement for `Evaluator`, an
+environment lifecycle trait, or an optimizer rhythm.
 
 It may depend on `leaven-engine` for evaluator helper adapters, but it must not
 know GEPA rhythm, concrete LM providers, concrete workspace backends, DSRs, or

@@ -408,11 +408,27 @@ These are related but not interchangeable.
 - A pairwise preference optimizer has an eval protocol even when the "cases"
   are candidate pairs produced online.
 
-`leaven-eval` should live at the evaluation protocol/report layer. It may
-provide optional case-catalog helpers because train/validation/test split
-semantics are reusable, but it must not become the environment crate.
+`leaven-eval` should live at the evaluation plan/report layer. It may provide
+optional case-catalog helpers because train/validation/test split semantics are
+reusable, but it must not become the environment crate or a second engine.
 Workspaces stay in `leaven-workspace`; agent sessions stay in `leaven-agent`;
 agentic task semantics stay in `leaven-agentic`.
+
+For maintainability and `scatter.md`, keep the protocol concept local to
+`leaven-eval` as a module/type, not as a separate crate:
+
+```text
+leaven-core    owns cold request algebra: EvaluationRequest, EvaluationSet.
+leaven-engine  owns execution capability: Evaluator, registry, cache, RunContext.
+leaven-eval    owns product eval plans/reports: split use, leakage, report axes.
+domain crates  own domain cases/environments and lower into leaven-eval plans.
+optimizers     own search rhythm and strategy state.
+```
+
+That means an `EvalProtocol`/`EvalPlan` is declarative data: request shape,
+granularity, split-use policy, report axes, leakage summary, and optional case
+catalog identity. It is not a trait that runs evaluations and it is not an
+environment abstraction.
 
 ### 7.1 Common Eval Surface
 
@@ -1099,9 +1115,9 @@ ergonomics depend on them.
 
 Scope:
 
-- scaffold `leaven-eval` with `EvalSuite`, `SplitManifest`, `SplitRole`,
-  `EvalProtocol`, `EvalSuite`, `CaseCatalog`, `SplitManifest`, `SplitRole`,
-  `SplitPolicy`, and `EvalRunReport`;
+- scaffold `leaven-eval` with `EvalProtocol`/`EvalPlan`, `EvalSuite`,
+  `CaseCatalog`, `SplitManifest`, `SplitRole`, `SplitPolicy`, and
+  `EvalRunReport`;
 - map product-builder `.cases`, `.validation_cases`, and `.test_cases` into
   stable partitions;
 - add leakage-policy helpers that hide validation/test content from proposers
@@ -1263,6 +1279,7 @@ It should modify:
 
 ```text
 crates/leaven-eval/src/lib.rs
+crates/leaven-eval/src/protocol.rs
 crates/leaven-eval/src/suite.rs
 crates/leaven-eval/src/split.rs
 crates/leaven-eval/src/report.rs
