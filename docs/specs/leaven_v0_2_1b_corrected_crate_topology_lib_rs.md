@@ -1332,6 +1332,8 @@ split-use policy summaries, suite fingerprints, eval reports, and
 provider-neutral helper adapters for casewise evaluators. It is warm product
 infrastructure, not cold core.
 
+The detailed type-level contract lives in `docs/specs/eval_protocol_detail.md`.
+
 Evaluation protocols, datasets, and environments are separate:
 
 ```text

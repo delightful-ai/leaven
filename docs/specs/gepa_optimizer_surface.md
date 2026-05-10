@@ -14,6 +14,7 @@ It is subordinate to:
 - `docs/specs/agentic_skill_optimization_primitives.md`
 - `docs/specs/agentic_task_execution_substrate.md`
 - `docs/specs/agentic_library_user_journey.md`
+- `docs/specs/eval_protocol_detail.md`
 - `docs/testing/README.md`
 
 When this document conflicts with those specs, preserve the current Leaven
@@ -1175,13 +1176,16 @@ cargo run -p p8_gepa_prompt_optimizer
 
 ### Milestone C: Product Entry Builder
 
-Goal: make the short user path work.
+Goal: make the short user path work without making `leaven-engine` depend on
+`leaven-eval`.
 
 Scope:
 
-- engine builder accepts seed/cases/evaluator/optimizer ergonomically;
-- builder exposes `.cases`, `.validation_cases`, `.test_cases`, and
+- umbrella/product builder accepts seed/cases/evaluator/optimizer ergonomically;
+- product builder exposes `.cases`, `.validation_cases`, `.test_cases`, and
   `.eval_suite`;
+- engine builder remains limited to cold engine inputs: evaluators, optimizer,
+  case set, trust policy, budget, callbacks, and persistence;
 - `leaven_gepa::optimize(seed, surface)` wrapper lowers to engine builder;
 - single-task, multi-task, and generalization modes are explicit;
 - result summary available.
