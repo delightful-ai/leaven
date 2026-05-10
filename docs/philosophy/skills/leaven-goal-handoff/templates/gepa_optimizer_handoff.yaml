@@ -1,0 +1,187 @@
+version: 1
+artifact_kind: leaven_goal_handoff
+status: draft
+
+goal:
+  slug: gepa_off_the_shelf_optimizer
+  original_intent:
+    user_question: >-
+      Can Leaven run GEPA as an off-the-shelf optimizer library, through the
+      high-level public surface, for LM-program and agentic task workflows?
+    user_should_be_able_to:
+      - >-
+        Start from a seed program or artifact and run GEPA through
+        leaven::optimize without writing a hand-rolled optimizer loop.
+      - >-
+        Provide train, validation, and test work with clear split semantics.
+      - >-
+        Pass a scoring function or evaluator that can return score, feedback,
+        traces, and external evidence references.
+      - >-
+        Run an AIME-shaped example with a mocked LM, then swap to an OpenAI LM
+        provider with minimal code changes.
+
+spec_package:
+  package_name: gepa_optimizer_and_eval_surface
+  governing_docs:
+    - path: docs/specs/initial_library.md
+      role: Overall product architecture and optimizer algebra.
+    - path: docs/specs/guiding_principles.md
+      role: Repo principles and hard-cutover design constraints.
+    - path: docs/specs/leaven_v0_2_1b_corrected_crate_topology_lib_rs.md
+      role: Crate graph, lib.rs topology, and ownership boundaries.
+    - path: docs/testing/README.md
+      role: Canonical verification contract and suite expectations.
+  detail_docs:
+    - path: docs/specs/gepa_public_private_surface.md
+      role: Public GEPA UX and private/lowered layer separation.
+    - path: docs/specs/gepa_optimizer_surface.md
+      role: GEPA optimizer value, strategy slots, and product milestone.
+    - path: docs/specs/eval_nomenclature.md
+      role: User-facing names and concepts for scoring/eval/datasets.
+    - path: docs/specs/eval_lowering_detail.md
+      role: Lowered eval data, split semantics, reports, and errors.
+    - path: docs/specs/lm_runtime_and_response_cache.md
+      role: LM trait, provider crates, and reusable response cache.
+    - path: docs/specs/milestone_examples_behavioral_contract.md
+      role: Example behavior that must prove user-visible product claims.
+
+designed_surface:
+  public_surface:
+    - name: leaven::optimize
+      user_interaction: >-
+        Builder accepts seed, train/validation/test inputs, score or evaluator,
+        optimizer choice, budget, and returns best/report.
+    - name: Gepa
+      user_interaction: >-
+        Reusable optimizer value with defaults and strategy-slot customization.
+    - name: score_fn_or_evaluator
+      user_interaction: >-
+        User passes ordinary scoring/evaluation logic; lowered requests,
+        graph scopes, and evidence plumbing stay behind the public surface.
+    - name: lm_provider_and_cache
+      user_interaction: >-
+        GEPA reflection consumes provider-neutral impl Lm; cache and concrete
+        OpenAI provider are optional/facade features, not GEPA dependencies.
+  private_machinery_relevant_to_handoff:
+    - RunContext and RunGraph stay the only graph mutation authority.
+    - leaven-eval owns lowered datasets, split plans, and eval reports.
+    - leaven-engine owns evaluator execution, budget, cache, trust, and events.
+    - leaven-gepa owns GEPA rhythm and strategy state.
+    - leaven-lm-cache owns reusable LM response caching outside engine eval cache.
+
+intent_preservation:
+  verdict: preserved
+  reason: >-
+    The designed surface preserves the original library goal only if users run
+    GEPA through leaven::optimize/Gepa and the examples prove that path, not a
+    local P3 optimizer loop or internal eval substrate alone.
+
+misleading_proxy_proofs:
+  - proxy: A P3 parity example runs.
+    why_insufficient: It proves substrate shape, not reusable off-the-shelf GEPA.
+    forbidden_as_completion_evidence: true
+  - proxy: A hand-written optimizer loop improves a candidate.
+    why_insufficient: Users still have to implement the optimizer rhythm.
+    forbidden_as_completion_evidence: true
+  - proxy: Eval lowering types are precise.
+    why_insufficient: Ordinary users may still face awkward scoring/dataset UX.
+    forbidden_as_completion_evidence: true
+  - proxy: A mocked AIME fixture improves.
+    why_insufficient: It does not prove the provider swap path or LM cache seam.
+    forbidden_as_completion_evidence: true
+  - proxy: The foundational crate DAG compiles.
+    why_insufficient: It does not prove the full planned public surface works.
+    forbidden_as_completion_evidence: true
+
+spec_revisions_before_goal: []
+
+acceptance:
+  - id: public_builder_runs_gepa
+    claim: >-
+      A user can run GEPA through leaven::optimize(...).using(Gepa::default()).
+    status: pending
+    proof_required:
+      kind: example_or_integration_test
+      must_exercise:
+        - public builder API
+        - reusable Gepa optimizer value
+        - no hand-written optimizer loop in user code
+    evidence: []
+    closeout_check: Completion cannot cite P3 parity alone.
+
+  - id: train_validation_test_semantics
+    claim: Train, validation, and test inputs have explicit public semantics.
+    status: pending
+    proof_required:
+      kind: tests_and_docs
+      must_exercise:
+        - train-only optimization decisions
+        - optional validation cadence
+        - held-out test reporting outside optimizer admission
+    evidence: []
+    closeout_check: Test split must not update GEPA population/frontier.
+
+  - id: scoring_contract_is_ordinary
+    claim: Users can pass a score function or evaluator without learning graph internals.
+    status: pending
+    proof_required:
+      kind: api_usage_and_contract_tests
+      must_exercise:
+        - scalar score
+        - natural-language feedback
+        - optional trace or evidence reference
+        - no public Actor/ReadScope/EvaluationRequest requirement
+    evidence: []
+    closeout_check: Public examples must not mention private eval machinery.
+
+  - id: lm_cache_and_provider_swap
+    claim: GEPA reflection can use mock LM now and OpenAI LM via optional feature.
+    status: pending
+    proof_required:
+      kind: tests_or_live_smoke
+      must_exercise:
+        - leaven-lm trait
+        - leaven-lm-cache wrapper
+        - leaven-lm-mock deterministic test path
+        - feature-gated leaven-lm-openai construction path
+    evidence: []
+    closeout_check: Swapping mock to OpenAI should not change GEPA crate code.
+
+  - id: aime_end_to_end_example
+    claim: An AIME-shaped example runs end to end through the high-level surface.
+    status: pending
+    proof_required:
+      kind: example
+      must_exercise:
+        - dataset loading or fixture path
+        - public scoring/evaluator surface
+        - mocked LM by default
+        - result report with best candidate and final scores
+    evidence: []
+    closeout_check: The example must prove public UX, not only engine internals.
+
+  - id: repo_standards_hold
+    claim: Implementation follows Leaven topology, type, error, and test doctrine.
+    status: pending
+    proof_required:
+      kind: repo_gate
+      must_exercise:
+        - crate topology contract
+        - relevant trait/type/error contracts
+        - behavioral tests for public acceptance claims
+        - just check unless explicitly narrowed by user
+    evidence: []
+    closeout_check: No compatibility shim or parallel old/new path is introduced.
+
+explicit_non_goals:
+  - Full Python GEPA API compatibility.
+  - Claiming live AIME accuracy improvement without a live provider run.
+  - Making leaven-gepa depend on OpenAI, cache backends, or concrete workspaces.
+  - Exposing RunGraph, Actor, ReadScope, or EvaluationRequest as Layer 1 concepts.
+
+decision:
+  status: set_goal
+  reason: >-
+    The specs are sufficient to implement if the goal points at this artifact
+    and closeout requires every non-dropped acceptance item to be proven.

@@ -9,8 +9,12 @@ Use this skill at the node after planning/spec alignment and before starting a
 durable implementation goal.
 
 The job is to preserve intent across handoff. Do not turn this into another big
-planning phase. Produce a short handoff frame, then either set/draft the goal or
-return to planning.
+planning phase. Produce a short handoff artifact, then either set/draft the goal
+or return to planning.
+
+For a checkable artifact, use `templates/gepa_optimizer_handoff.yaml` as the
+filled example. Copy its shape for new goal packages and update acceptance
+statuses/evidence as implementation progresses.
 
 ## Core Failure To Prevent
 
@@ -58,11 +62,11 @@ Common proxies:
 6. Decide.
    - If the design is wrong or incomplete for the intent: return to planning.
    - If the design preserves intent: draft or set the goal against this handoff
-     frame.
+     artifact.
 
-## Handoff Frame
+## Handoff Artifact
 
-Use this compact shape:
+Use a compact YAML artifact with this shape:
 
 ```text
 Original intent:
@@ -76,13 +80,22 @@ Explicit non-goals:
 Decision:
 ```
 
-Keep it short. The frame is not the implementation spec. It is the translation
-from specification to goal.
+Keep it short. The artifact is not the implementation spec. It packages the
+governing specs, translates them into acceptance claims, and stays live during
+implementation and closeout.
+
+Status values for acceptance items:
+
+- `pending`: no implementation proof yet;
+- `in_progress`: implementation or verification is underway;
+- `proven`: evidence exists and is linked in the artifact;
+- `blocked`: cannot be proven without a decision or missing dependency;
+- `dropped`: explicitly removed from scope before the goal was set.
 
 ## Goal Guidance
 
-When drafting the `/goal`, do not paste the whole handoff frame unless the user
-explicitly asks. Compress it:
+When drafting the `/goal`, do not paste the whole handoff artifact unless the
+user explicitly asks. Compress it:
 
 - point to the governing specs;
 - name the intended user-facing outcome;
@@ -90,12 +103,12 @@ explicitly asks. Compress it:
 - require verification against the proof denominator;
 - require honest closeout for explicit non-goals.
 
-If the user asks to activate the goal, use the goal tool only after this frame
+If the user asks to activate the goal, use the goal tool only after the artifact
 has a clear `Decision: set goal`.
 
 ## Closeout Reminder
 
-Before marking a goal complete, compare the final work to the handoff frame:
+Before marking a goal complete, compare the final work to the handoff artifact:
 
 - user-facing outcome exists;
 - proof denominator actually covered the intended surface;
