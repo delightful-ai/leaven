@@ -53,7 +53,7 @@ Current inventory and move decision:
 - split-use rules that say which split may drive optimization decisions;
 - final-test defaults;
 - request templates for optimizers/builders;
-- graph-backed evaluation reports.
+- report schemas that cite graph ids and evidence refs.
 
 `leaven-eval` does not own:
 
@@ -215,26 +215,24 @@ pub struct Dataset<C = Case> {
     metadata: MetadataBag,
 }
 
-pub struct Case {
+pub enum NoTarget {}
+
+pub struct Case<I = serde_json::Value, T = NoTarget> {
     pub id: CaseId,
-    pub input: serde_json::Value,
-    pub expected: Option<serde_json::Value>,
+    pub input: I,
+    pub target: Option<T>,
     pub metadata: MetadataBag,
 }
 
-pub struct LmCase<I = serde_json::Value, O = serde_json::Value> {
-    pub id: CaseId,
-    pub input: I,
-    pub expected: Option<O>,
-    pub metadata: MetadataBag,
-}
+pub type JsonCase = Case<serde_json::Value, serde_json::Value>;
+pub type LmCase<I = serde_json::Value, T = serde_json::Value> = Case<I, T>;
 ```
 
 Datasets are optional. Single-task search, live human evals, scalar score
 functions, and online pairwise tournaments may have no stable dataset and still
 use engine evaluation.
 
-A dataset case means "unit of work", not "labeled example". `expected` is
+A dataset case means "unit of work", not "labeled example". `target` is
 optional by design. Fixed references, hidden verifier targets, LLM judges,
 human judgments, environment score, and open-ended task scoring all lower
 through scorer/evaluator execution without making gold labels a dataset
@@ -334,8 +332,9 @@ unscored diagnostic records
 Score normalization must preserve information until a caller explicitly
 chooses a report projection. In particular:
 
-1. scalar scores normalize to a `Score` with one primary score;
-2. rich scores normalize to graph assessments plus evidence references;
+1. scalar scores normalize to a zero-cost `Score` with one primary score;
+2. rich or `Metered<Score>` returns normalize to graph assessments, evidence
+   references, and budget charges;
 3. attachments are staged into the evidence/artifact store before reports cite
    them;
 4. runtime paths are not durable report truth;
@@ -448,7 +447,7 @@ erase into `Case` when they need richer typed shape.
 
 Expected implementations:
 
-- `Vec<LmCase<I, O>>` in `leaven-eval`;
+- `Vec<LmCase<I, T>>` in `leaven-eval`;
 - `Dataset<C>` in `leaven-eval`;
 - `leaven_agentic::CaseSuite` in `leaven-agentic`, not in `leaven-eval`;
 - future DSRS case/program fixtures in `leaven-dsrs`, not in `leaven-eval`.
@@ -599,8 +598,11 @@ pub struct EvaluationReport {
 }
 ```
 
-Reports are views over graph truth plus immutable plan/dataset/split summaries.
-They must not duplicate artifacts or evidence payloads.
+`leaven-eval` defines the report schema only. Report construction from
+`RunGraphView` belongs in `leaven-run`, an optimizer crate, or an engine-side
+adapter that already depends on `leaven-engine`. Reports cite graph truth plus
+immutable plan/dataset/split summaries; they must not duplicate artifacts or
+evidence payloads.
 
 ### 6.2 Split Report
 
@@ -758,7 +760,7 @@ DSRS and LM-program adapters must:
 ### 8.3 Dataset Invariants
 
 - `Dataset` case ids are unique.
-- `Dataset` fingerprint changes when any case input, expected value, metadata,
+- `Dataset` fingerprint changes when any case input, target value, metadata,
   or dataset metadata changes.
 - Empty concrete datasets are rejected; no-dataset evals use `None`.
 - Domain case data is preserved until the adapter consciously lowers it.
@@ -830,11 +832,13 @@ Extend `crates/leaven/tests/topology_contract.rs` so:
 
 ## 10. Implementation Order
 
-1. Scaffold `leaven-eval` crate with empty modules and topology tests.
+1. Scaffold `leaven-eval` and `leaven-run` crates, add them to the workspace
+   manifest, and update the topology contract expected crate set before adding
+   public API.
 2. Implement `split.rs` and `dataset.rs` with law tests.
 3. Implement `use_policy.rs`, `plan.rs`, and `request.rs` with arity/use-policy
    tests.
-4. Implement report structs as graph-backed summaries with mocked IDs.
+4. Implement report structs as ID/ref schemas with mocked IDs.
 5. Scaffold `leaven-run` builder and lower train/validation/test into
    dataset/splits/case-set/trust policy.
 6. Add GEPA split-use integration over `PartitionId`s.

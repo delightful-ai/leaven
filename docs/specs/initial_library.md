@@ -211,9 +211,9 @@ extension seams before implementation.
     The spec now states exactly what optimizers, proposers, evaluators,
     renderers, materializers, agent runtimes, and callbacks can read or do.
 
-52. **GEPA candidate selection is explicitly swappable.**  
-    `Population` is archive/admission/update state. `CandidateSelector` is the
-    policy that chooses what to try next from a typed `PopulationView`. This is
+52. **GEPA parent selection is explicitly swappable.**
+    `Population` is archive/admission/update state. `ParentSelector` is the
+    policy that chooses which parent candidate to mutate next from a typed `PopulationView`. This is
     required by GEPA variants, MAP-Elites/quality-diversity, skill-library
     evolution, and tournament optimizers.
 
@@ -440,7 +440,7 @@ trust/capability boundaries for agentic stages
 a first-class Optimizer trait for algorithm authors
 ```
 
-GEPA is one optimizer value, not the engine. It is composed from smaller GEPA-specific strategies: candidate selector, component selector, batch sampler, proposer, gate, validation policy, population/frontier, and optional merge proposer.
+GEPA is one optimizer value, not the engine. It is composed from smaller GEPA-specific strategies: parent selector, part selector, batch sampler, reflector/proposer, acceptance policy, validation policy, population/frontier, and optional merge proposer.
 
 ---
 
@@ -456,10 +456,10 @@ They want a short, obvious path:
 
 ```rust
 let result = optimize(seed)
-    .cases(train_cases)
-    .holdout(validation_cases)
-    .evaluate(my_evaluator)
-    .using(Gepa::default().with_lm(reflection_lm))
+    .train(train_cases)
+    .validation(validation_cases)
+    .score(my_scoring_function)
+    .using(Gepa::default().with_reflection_lm(reflection_lm))
     .budget(Budget::metric_calls(500))
     .run()
     .await?;
@@ -473,11 +473,11 @@ They want to replace one part of GEPA:
 
 ```rust
 let gepa = Gepa::default()
-    .candidate_selector(ParetoFrequencyWeighted)
+    .parent_selector(ParetoFrequencyWeighted)
     .surface(PartMapSurface::default())
     .part_selector(InvokedAndFailingPart::default())
-    .proposal_count(3)
-    .gate(StrictImprovement)
+    .batch_sampler(EpochShuffled::new(4))
+    .acceptance(StrictImprovement)
     .population(ParetoFrontier::by_case())
     .merge(SystemAwareMerge::adaptive());
 ```
@@ -533,7 +533,7 @@ The core should be small, but not artificially tiny. A few sharp concepts are be
 A competent model should be able to read a paper and map its concepts to library concepts:
 
 ```text
-candidate selection -> CandidateSelector
+parent selection -> ParentSelector
 Pareto frontier -> ParetoFrontier
 niche -> NicheDescriptor / MapElites
 pairwise judge -> EvaluationRequest::Pairwise
@@ -565,8 +565,8 @@ Naming is not polish; it is infrastructure.
 | Non-dominated live set | `Frontier`, `ParetoFrontier` | generic `ArchivePolicy` | If it is a Pareto frontier, say so. |
 | Frontier partition | `Niche` | `Cell`, `Slice::Niche` | Niche is the MAP-Elites / quality-diversity term. |
 | Where to evaluate | `EvaluationSet` | `Slice`, `Cohort` | EvaluationSet is direct. Cohort is removed. |
-| Chooses candidates to evolve | `CandidateSelector` | `ParentSelector` | Literature and GEPA say candidate selection. Method may return parents. |
-| Cheap pre-validation screen | `Gate` | core `Decision` | Gate is local to an optimizer, not global graph state. |
+| Chooses parent candidates to evolve | `ParentSelector` | `CandidateSelector` in GEPA-facing APIs | GEPA mutates parents; general optimizers may still use candidate selection internally. |
+| Acceptance/admission decision | `Acceptance` | `Gate`, core `Decision` | Acceptance is optimizer-local and says whether the child is good enough to keep or validate. |
 | Full algorithm value | `Optimizer` | `SearchStrategy` | Optimizer is the domain word. |
 | Opaque-to-visible bridge | `Renderer` / `Materializer` | `make_reflective_dataset`, global `RenderedView` | Rendering/materialization is consumer-specific, not GEPA-specific. |
 | Typed proposal payload | `ProposalAnnotations` | `Meta` / `Claims` split | One typed semantic payload. Claims are a capability on annotations. |
@@ -1687,7 +1687,7 @@ Simple builders install one primary evaluator:
 
 ```rust
 optimize(seed)
-    .evaluate(my_evaluator)
+    .evaluator(my_evaluator)
 ```
 
 Advanced users install multiple evaluators:
@@ -2432,7 +2432,7 @@ Preference may be partial. `Incomparable` is a valid result.
 A population is live optimizer state. A frontier is a kind of population.
 Population owns archive membership, admission/update laws, fitted model state,
 and strategy events. It does not own the policy for "what should we try next."
-That policy is `CandidateSelector` for GEPA-shaped optimizers and analogous
+That policy is `ParentSelector` for GEPA-shaped optimizers and analogous
 selector traits for other optimizer families.
 
 ```rust
@@ -3322,10 +3322,10 @@ where
     surface: Arc<S>,
     population: Pop,
     proposer: Box<dyn GepaProposer<P, S>>,
-    candidate_selector: Box<dyn CandidateSelector<P>>,
+    parent_selector: Box<dyn ParentSelector<P>>,
     part_selector: Box<dyn PartSelector<P, S>>,
     batch_sampler: Box<dyn BatchSampler<P>>,
-    gate: Box<dyn Gate<P>>,
+    acceptance: Box<dyn Acceptance<P>>,
     validation: Box<dyn ValidationPolicy<P>>,
     merge: Option<Box<dyn GepaMerge<P, S>>>,
 }
@@ -3341,11 +3341,11 @@ marker traits for slots that are already object-safe.
 GEPA components:
 
 ```text
-CandidateSelector selects candidate(s) from a PopulationView.
+ParentSelector selects parent candidate(s) from a PopulationView.
 PartSelector selects surface part(s) to mutate.
 BatchSampler selects train/minibatch cases.
 Proposer emits surface edits or artifact-native proposals.
-Gate decides whether a child gets validation.
+Acceptance decides whether a child gets validation/admission.
 ValidationPolicy decides validation request.
 Population maintains Pareto/frontier/live set.
 MergeScheduler decides when to call merge proposer.
@@ -3355,8 +3355,8 @@ Population and candidate selection stay separate:
 
 ```text
 Population        = what exists, how observations update it, what gets admitted/replaced
-CandidateSelector = what to try next from the current population/archive view
-Gate              = whether a freshly proposed child deserves follow-up validation
+ParentSelector = what parent to mutate next from the current population/archive view
+Acceptance     = whether a freshly proposed child deserves follow-up validation
 ```
 
 This separation is load-bearing. GEPA's paper baseline, frequency-weighted
@@ -3365,7 +3365,7 @@ archive sampling, island migration, and skill-library hard-case loops all need
 different selection policies over similar archive state.
 
 ```rust
-pub trait CandidateSelector<P: OptimizationProblem>: Send {
+pub trait ParentSelector<P: OptimizationProblem>: Send {
     fn select(
         &mut self,
         population: PopulationView<'_, P>,
@@ -3424,7 +3424,7 @@ where
 }
 ```
 
-`CandidateSelector::select` is synchronous and side-effect-light. It receives
+`ParentSelector::select` is synchronous and side-effect-light. It receives
 borrowed graph/population views and must not await. If a "selector" needs LLM
 calls, subprocesses, or remote state, model it as an optimizer step or proposer
 substage and feed the result into a normal selector/admission policy.
@@ -3433,11 +3433,11 @@ Standard GEPA selectors:
 
 ```text
 ParetoFrequencyWeighted   paper-style instance-pareto frequency sampling
-SelectBestCandidate       greedy ablation / TextGrad-like baseline
-BeamCandidateSelector     top-k beam-style parent choice
+SelectBestParent          greedy ablation / TextGrad-like baseline
+BeamParentSelector        top-k beam-style parent choice
 UniformFrontier           exploration over current frontier members
 NicheWeighted             MAP-Elites/quality-diversity archive sampling
-RoundRobinCandidate       deterministic reproduction/debug selector
+RoundRobinParent          deterministic reproduction/debug selector
 ```
 
 Mapping to GEPA paper:
@@ -3446,12 +3446,12 @@ Mapping to GEPA paper:
 |---|---|
 | candidate pool `P` | `Population` |
 | Pareto front by instance | `ParetoFrontier::by_case()` |
-| SELECTCANDIDATE | `CandidateSelector` |
+| SELECTCANDIDATE | `ParentSelector` |
 | SELECTMODULE | `PartSelector<P, S>` over `EditSurface<P::Artifact>` |
 | minibatch from `D_feedback` | `BatchSampler` + `EvaluationSet::Partition(TRAIN)` |
 | per-instance score table | `CasewiseEvidence` + `AssessmentGranularity::PerCase` |
 | reflective prompt update | `Proposer` |
-| score improves on minibatch | `Gate` |
+| score improves on minibatch | `Acceptance` |
 | evaluate on `D_pareto` | `ValidationPolicy` |
 | add to pool | `Population::observe_candidate` |
 | merge/crossover | another `Proposer` scheduled by GEPA |
@@ -3460,7 +3460,7 @@ Canonical GEPA step skeleton:
 
 ```text
 1. view = population.view(ctx.graph())
-2. parent = candidate_selector.select(view, ctx.graph(), selection_ctx)?
+2. parent = parent_selector.select(view, ctx.graph(), selection_ctx)?
 3. part = part_selector.select(parent, ctx.graph(), surface)?
 4. batch = batch_sampler.sample(...)
 5. run parent on minibatch and gather casewise/attribution evidence
@@ -3537,7 +3537,7 @@ let gepa = Gepa::default()
     .population(ParetoFrontier::by_case().frequency_weighted())
     .part_selector(RoundRobinPart)
     .batch_sampler(EpochShuffled::new(4))
-    .gate(StrictImprovement)
+    .acceptance(StrictImprovement)
     .validation(FullValidation)
     .merge(SystemAwareMerge::adaptive());
 ```
@@ -3570,32 +3570,32 @@ pub trait HasBehavioralClaims {
 }
 ```
 
-Gate:
+Acceptance:
 
 ```rust
-pub struct ClaimsHeldGate<J> {
+pub struct ClaimsHeldAcceptance<J> {
     judge: J,
 }
 
-impl<P, J> Gate<P> for ClaimsHeldGate<J>
+impl<P, J> Acceptance<P> for ClaimsHeldAcceptance<J>
 where
     P: OptimizationProblem<ProposalAnnotations = EditAnnotations>,
     J: ClaimJudge<P>,
 {
-    fn admit(
+    fn decide(
         &self,
         candidate: CandidateId,
         parent: CandidateId,
         scope: PreferenceScope,
         graph: RunGraphView<'_, P>,
-    ) -> GateDecision {
+    ) -> AcceptanceDecision {
         let proposal = graph.proposal_that_created(candidate);
         let claims = &proposal.annotations;
 
         if self.judge.claims_held(parent, candidate, claims, scope, graph) {
-            GateDecision::Promote
+            AcceptanceDecision::Promote
         } else {
-            GateDecision::RecordOnly
+            AcceptanceDecision::RecordOnly
         }
     }
 }
@@ -3611,11 +3611,11 @@ MuF/Edit is natural but not core-shaped. `should_fix` does not become a universa
 
 ```rust
 let result = optimize(seed_prompt)
-    .cases(train_cases)
-    .evaluate(|artifact, case| async move {
+    .train(train_cases)
+    .score(|ctx| async move {
         // returns scalar evidence through an adapter
     })
-    .using(Gepa::default().with_lm(lm))
+    .using(Gepa::default().with_reflection_lm(lm))
     .budget(Budget::metric_calls(500))
     .run()
     .await?;
@@ -3625,17 +3625,17 @@ let result = optimize(seed_prompt)
 
 ```rust
 let result = optimize(seed_agent)
-    .cases(repo_tasks)
-    .holdout(heldout_repo_tasks)
-    .evaluate(RepoAgentEvaluator::new(sandbox))
+    .train(repo_tasks)
+    .validation(heldout_repo_tasks)
+    .evaluator(RepoAgentEvaluator::new(sandbox))
     .using(
         Gepa::default()
             .surface(RepoPathSurface::default())
             .proposer(AgenticProposer::new(runtime))
-            .candidate_selector(ParetoFrequencyWeighted)
+            .parent_selector(ParetoFrequencyWeighted)
             .part_selector(InvokedAndFailingPart::default())
             .population(ParetoFrontier::by_case_and_axis())
-            .proposal_count(3)
+            .batch_sampler(EpochShuffled::new(4))
     )
     .budget(Budget::usd(100.0))
     .run()
@@ -3897,7 +3897,7 @@ Driver code:
 
 ```rust
 let result = optimize(seed_prompt_program)
-    .cases(train_cases)
+    .train(train_cases)
     .evaluator(EvaluatorId::PAIRWISE_JUDGE, PairwiseJudgeEvaluator {
         judge: LmJudge::new(judge_lm),
         cases: Arc::new(train_cases.clone()),
@@ -4086,7 +4086,7 @@ Driver code:
 
 ```rust
 let result = optimize(seed_skills)
-    .cases(swe_smith_tasks)
+    .train(swe_smith_tasks)
     .partitions(&[(PartitionId::TRAIN, train_ids), (PartitionId::VALIDATION, val_ids)])
     .evaluator(GskillEvaluator {
         workspace_factory: Arc::new(E2BFactory::pooled(/* … */)),
@@ -4344,7 +4344,7 @@ let frontier = ParetoFrontier::<MetaHarness, _>::builder()
     .build();
 
 let result = optimize(seed_harnesses)
-    .cases(text_classification_tasks)
+    .train(text_classification_tasks)
     .partitions(&[(PartitionId::SEARCH, search_ids), (PartitionId::TEST, test_ids)])
     .evaluator(HarnessEvaluator { /* … */ })
     .using(MetaHarnessOptimizer {
@@ -4942,9 +4942,9 @@ This pass records the decisions needed before implementing agentic stages and
 - **Actor trust table added.** Optimizer, selector, proposer, evaluator,
   renderer, materializer, agent runtime, and callback capabilities are spelled
   out directly.
-- **GEPA candidate selection split from population.** Populations expose
-  archive/frontier/model state through `PopulationView`; `CandidateSelector`
-  chooses what to try next and is explicitly swappable.
+- **GEPA parent selection split from population.** Populations expose
+  archive/frontier/model state through `PopulationView`; `ParentSelector`
+  chooses which parent candidate to mutate next and is explicitly swappable.
 - **Future skill-library direction captured.** The spec names likely extension
   points for skill routing, hard-case selection, target selection, and admission
   without pulling them into core.

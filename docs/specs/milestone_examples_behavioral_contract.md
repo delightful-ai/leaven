@@ -793,10 +793,10 @@ Requirements:
 crates/leaven-gepa/src/
   lib.rs
   optimizer.rs
-  selector.rs
+  parent_selector.rs
   part_selector.rs
   proposer.rs
-  gate.rs
+  acceptance.rs
   validation.rs
 ```
 
@@ -810,10 +810,10 @@ where
 {
     surface: S,
     population: Pop,
-    // selector/proposer/gate policy fields
+    // parent-selector/proposer/acceptance policy fields
 }
 
-pub trait CandidateSelector<P: OptimizationProblem, Pop> {
+pub trait ParentSelector<P: OptimizationProblem, Pop> {
     type Selection;
     fn select(&mut self, population: &Pop, graph: RunGraphView<'_, P>) -> Self::Selection;
 }
@@ -825,12 +825,12 @@ pub trait PartSelector<A: Artifact, S: EditSurface<A>> {
 
 Requirements:
 
-- `Population` and `CandidateSelector` are separate.
+- `Population` and `ParentSelector` are separate.
 - GEPA owns the chosen `EditSurface`.
 - GEPA proposers may emit surface-native edits.
 - GEPA lowers surface edits through `S::change_part(...)` before recording
   `ProposalEffect::Change`.
-- The engine does not know part selectors, GEPA gates, reflective mutation, or
+- The engine does not know part selectors, GEPA acceptance policies, reflective mutation, or
   Pareto-frequency weighting.
 - P3 uses deterministic fake reflection; no LLM/provider dependency is allowed.
 

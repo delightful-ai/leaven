@@ -1480,14 +1480,20 @@ pub mod score;
 
 pub use builder::{optimize, OptimizeBuilder};
 pub use error::{OptimizeBuildError, OptimizeRunError};
+pub use leaven_eval::{Case, NoTarget};
 pub use result::{Optimized, RunOutput};
-pub use score::{CandidateRunner, Score, ScoreContext, ScoreError, Scorer};
+pub use score::{
+    CandidateRun, CandidateRunCtx, CandidateRunError, CandidateRunner,
+    IntoScore, PartialCandidateRun, Score, ScoreAttachment,
+    ScoreContext, ScoreError, Scorer,
+};
 
 pub mod prelude {
     pub use crate::{
         optimize, Optimized, OptimizeBuildError, OptimizeBuilder,
-        CandidateRunner, OptimizeRunError, Score, ScoreContext, ScoreError,
-        Scorer, RunOutput,
+        CandidateRun, CandidateRunCtx, CandidateRunError, CandidateRunner, Case,
+        IntoScore, NoTarget, OptimizeRunError, PartialCandidateRun, RunOutput,
+        Score, ScoreAttachment, ScoreContext, ScoreError, Scorer,
     };
 }
 ```
@@ -3217,7 +3223,7 @@ subgraph-as-code renderer
 
 ```text
 typed annotations in application or helper crate
-ClaimsHeldGate in GEPA or user optimizer
+ClaimsHeldAcceptance in GEPA or user optimizer
 ```
 
 ### Git/JJ repos

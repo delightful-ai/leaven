@@ -67,7 +67,7 @@ let result = leaven::optimize(seed_program)
     .run()
     .await?;
 
-let best = result.best().expect("at least seed candidate");
+let best = result.best();
 ```
 
 The GEPA customizer path:
@@ -217,7 +217,7 @@ parent_selector.rs  ParentSelector, ParetoFrequencyWeighted, SelectBestParent, U
 part_selector.rs    PartSelector, RoundRobinPart, InvokedAndFailingPart
 proposal.rs         GepaMutationRequest, GepaProposal, SurfaceEdit
 reflection.rs       ReflectiveMutation, reflection prompt construction, ASI rendering
-result.rs           GepaResult, candidate summaries, frontier summaries
+result.rs           GepaSummary, candidate summaries, frontier summaries
 split_policy.rs     GepaSplitPolicy, train/validation/test defaults over PartitionId
 validation.rs       ValidationPolicy, FullValidation, MinibatchThenValidation
 ```
@@ -299,6 +299,20 @@ run starts:
 - validation/test partitions overlap train unless split policy permits overlap;
 - batch sampler cannot draw from the configured search set;
 - merge enabled without enough candidate lineage/support requirements.
+
+Default surface derivation is explicit:
+
+```rust
+pub trait DefaultEditSurface<A: Artifact> {
+    type Surface: EditSurface<A>;
+    fn default_surface() -> Self::Surface;
+}
+```
+
+`Gepa::default()` may be used in public examples only when the artifact/domain
+adapter supplies this contract or the product builder supplies a surface. There
+is no implicit string split, prompt-section split, or whole-artifact mutation
+fallback unless a concrete surface type implements it.
 
 ## 8. GEPA Step Contract
 
@@ -472,13 +486,13 @@ core behavior.
 
 ## 12. Result Contract
 
-`GepaResult` is a typed view over graph truth plus optimizer state, not a second
-source of truth.
+`GepaSummary` is an ID/ref-only summary over graph truth plus optimizer state,
+not a second source of truth.
 
 Minimum shape:
 
 ```rust
-pub struct GepaResult {
+pub struct GepaSummary {
     pub best: Option<CandidateId>,
     pub seed: CandidateId,
     pub population_id: PopulationId,
@@ -765,9 +779,7 @@ just check
 
 1. Whether closure evaluator helpers live in `leaven-run` only or also get
    optimizer-specific helpers in `leaven-gepa`.
-2. Whether `GepaResult` is a concrete struct or a renderer over graph +
-   optimizer state.
-3. Whether single-task GEPA defaults to `KeepBest` or a degenerate
+2. Whether single-task GEPA defaults to `KeepBest` or a degenerate
    single-axis `ParetoFrontier`.
-4. Whether validation scores may influence default selection. The conservative
+3. Whether validation scores may influence default selection. The conservative
    default is report-only unless the user selects a validation-aware policy.

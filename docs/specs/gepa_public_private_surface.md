@@ -95,7 +95,7 @@ let result = leaven::optimize(seed_program)
     .run()
     .await?;
 
-let best = result.best().expect("seed candidate exists");
+let best = result.best();
 ```
 
 Single-task search should feel just as native:
@@ -156,6 +156,18 @@ let result = leaven::optimize(seed_agent)
 Domain adapters may package `.runner(...)`, `.score(...)`, surfaces, and case
 presentation defaults into one helper, but the public primitive remains
 runner-plus-score.
+
+Examples that use `Gepa::default()` rely on a derivable edit surface. The
+surface resolution order is:
+
+```text
+explicit GepaBuilder::surface(...)
+domain adapter supplied surface
+artifact-provided DefaultEditSurface<A>
+```
+
+If no surface is available, the builder must reject before the run starts. It
+must not silently invent a string or part decomposition.
 
 ### 2.2 Layer 2: Customize GEPA
 
@@ -296,7 +308,7 @@ proposal.
 | Budget | `.budget(...)` | stopper/budget policy | `BudgetLedger`, stage charges | `leaven-kernel`, `leaven-engine` |
 | Events | `.on_event(...)` | callbacks | `RunEvent`, scoped graph views | `leaven-run`, `leaven-engine` |
 | Persistence | `.store(...)` / `.resume(...)` | checkpoint policy | run graph + optimizer state snapshots | `leaven-run`, `leaven-engine`, `leaven-store` |
-| Report | `result.report()` | report options | graph-backed summaries, no copied truth | `leaven-run`, `leaven-eval`, `leaven-gepa` |
+| Report | `result.report()` | report options | graph-backed report construction over eval/gepa schemas | `leaven-run`, `leaven-eval`, `leaven-gepa` |
 
 ## 5. What We Need To Add
 
@@ -466,7 +478,7 @@ Ordinary-public:
 Artifact or seed value
 Gepa
 Budget
-scorer/evaluator
+scoring function / evaluator
 runner when not domain-derived
 train/validation/test
 RunOutput / Optimized result
@@ -655,8 +667,30 @@ Public methods:
 - both primary scorer and primary evaluator installed;
 - runner required by scorer/domain adapter but absent;
 - case id duplication or default-disallowed split overlap;
+- non-finite, negative, or otherwise invalid budget caps;
 - resume checkpoint fingerprint mismatch;
 - store configuration that cannot persist declared attachments.
+
+Minimum `OptimizeBuildError` decision classes:
+
+```rust
+pub enum OptimizeBuildError {
+    MissingOptimizer,
+    MissingScorerOrEvaluator,
+    MissingBudget,
+    ConflictingPrimaryEvaluation,
+    RunnerRequired,
+    DuplicateCaseId { split: SplitRole, id: CaseId },
+    SplitOverlap { id: CaseId, first: SplitRole, second: SplitRole },
+    InvalidBudget(BudgetError),
+    ResumeFingerprintMismatch { expected: Fingerprint, actual: Fingerprint },
+    StoreCannotPersistAttachments,
+}
+```
+
+The exact enum may grow as implementation discovers new refusals. It must not
+collapse these decision classes into a string error; callers need to know
+whether to add config, change input data, repair storage, or abandon resume.
 
 The public builder must lower:
 
@@ -731,6 +765,112 @@ when to stop
 
 The ordinary builder supplies defaults. It does not remove the slots.
 
+### 8.5 Case And Split Contract
+
+Layer 1 cases are work items. They are not synonymous with datasets, labels, or
+environments.
+
+Minimum public case shape, defined once in `leaven-eval` and re-exported by
+`leaven-run`/`leaven`:
+
+```rust
+pub struct Case<I, T = NoTarget> {
+    pub id: CaseId,
+    pub input: I,
+    pub target: Option<T>,
+    pub metadata: MetadataBag,
+}
+
+pub enum NoTarget {}
+```
+
+Builder conveniences may accept plain `I` values and synthesize stable case ids,
+but the lowered form is always an ordered set of `Case<I, T>` values assigned to
+one split. Domain adapters may wrap richer task/environment records, but they
+must still lower to case ids plus split roles before reaching the engine.
+
+Case rules:
+
+1. `input` is the thing the runner/scorer needs to do the work.
+2. `target` is optional and scorer-visible by default; it is not proposer-visible
+   unless split policy explicitly allows that.
+3. `metadata` is report/debug context. It does not affect scoring or split
+   policy unless user code reads it.
+4. Case order is preserved for deterministic samplers, but samplers may choose a
+   different evaluation order.
+5. Case ids are unique across all default splits. If overlap is desired, the user
+   must opt into an overlap policy that says which split role each use receives.
+6. Empty train is valid only for explicit single-task mode. Empty validation/test
+   sets are no-ops and should be rejected only if the caller explicitly required
+   them.
+
+Default split semantics:
+
+```text
+train       in-loop search work; may update population and proposer feedback
+validation held-out model-selection work; may affect selected best only by policy
+test        final-report work; never affects optimizer state by default
+```
+
+The report may show test scores for all candidates selected for final testing,
+but test scores must not retroactively mutate population state or reflection
+history under the default policy.
+
+### 8.6 Scoring Call Cardinality
+
+The ordinary `.score(...)` path is cardinal and case-oriented:
+
+```text
+for each candidate selected by GEPA
+  for each selected case, or once if no case set exists
+    run candidate when a runner is installed
+    call scorer with typed output/trace/error context
+    normalize Score into assessment/evidence
+```
+
+`leaven-run` may batch work internally for efficiency, but the public semantics
+are as if each candidate/case pair produced an independent `Score`. A scorer
+must not rely on call order. If the user needs true batch, pairwise, listwise, or
+tournament semantics, they should install a typed `.evaluator(...)` or write an
+optimizer-stage evaluator instead of forcing that through `.score(...)`.
+
+### 8.7 Budget Contract
+
+`Budget` is a set of caps over cost axes, not a stopper and not just a number.
+
+Layer 1 constructors should include the common caps:
+
+```rust
+Budget::metric_calls(500)
+Budget::usd(50.0)
+Budget::wall_time(Duration::from_secs(1800))
+Budget::new().metric_calls(500).usd(50.0).tokens(2_000_000)
+Budget::unlimited()
+```
+
+These are required product constructors for the `leaven-run` slice, not aliases
+that already exist in the current kernel. The implementation slice that exposes
+these examples must expand `Budget` to cap the first-class `Cost` axes it
+advertises, including LLM calls, token counts, seconds/wall time, and explicit
+money axes such as USD.
+
+Budget rules:
+
+1. Product builders require either a finite budget or explicit
+   `Budget::unlimited()`.
+2. Every cap is finite and non-negative at construction time.
+3. Every stage that spends money, time, tokens, calls, or user-defined units
+   charges the central budget ledger through the engine.
+4. Charging is monotone. Refunds or compensating adjustments must be explicit
+   events, not negative costs.
+5. A run stops when any hard cap is exceeded or a stopper decides to stop from a
+   budget snapshot.
+6. `BudgetExceeded` reports the axis, cap, already-spent amount, attempted
+   charge, and stage id.
+7. Budget bookkeeping is independent of stopping strategy: GEPA may stop because
+   it is done even with budget remaining, and budget may stop a run in the middle
+   of runner, scorer, reflector, or evaluator work.
+
 ## 9. Documentation Rules
 
 When revising the companion specs:
@@ -761,8 +901,7 @@ let result = leaven::optimize(seed_program)
             .metric("exact_match", MetricValue::maximize(1.0))
             .metric("latency_ms", MetricValue::minimize(184.0))
             .feedback("The final answer is correct, but retrieval used the wrong source.")
-            .attach_file("trace", ctx.trace_file())
-            .attach_dir("workspace", ctx.workspace_dir())
+            .attach_evidence("trace", ctx.trace().evidence_ref())
             .metadata("judge", "gpt-5.2")
     })
     .using(Gepa::default())
@@ -774,7 +913,9 @@ let result = leaven::optimize(seed_program)
 Scalar scores are lifted into `Score`:
 
 ```rust
-.score(|ctx| ctx.output().passed() as i32 as f64)
+.score(|ctx| {
+    if ctx.output().is_some_and(|output| output.passed()) { 1.0 } else { 0.0 }
+})
 ```
 
 Typed evaluators remain the power-user escape hatch:
@@ -783,24 +924,42 @@ Typed evaluators remain the power-user escape hatch:
 .evaluator(my_typed_evaluator)
 ```
 
-`ScoreContext` is the public trace/state object. It may expose:
+`ScoreContext` is the public trace/state object. It is a typed view, not a graph
+handle. Public examples may use method syntax (`ctx.output()`, `ctx.trace()`),
+and implementations should prefer accessors over public fields so the view can
+remain graph-backed.
 
 ```rust
-pub struct ScoreContext<'a, P: OptimizationProblem, C = ()> {
-    pub candidate: CandidateView<'a, P::Artifact>,
-    pub case: Option<CaseView<'a, C>>,
-    pub output: Option<OutputView<'a>>,
-    pub run_error: Option<RunErrorView<'a>>,
-    pub trace: TraceView<'a>,
-    pub history: ScoreHistoryView<'a, P>,
+pub struct ScoreContext<'a, P: OptimizationProblem, I = (), T = NoTarget, O = ()> {
+    /* private fields */
 }
 
-pub struct CaseView<'a, C> {
+impl<'a, P, I, T, O> ScoreContext<'a, P, I, T, O>
+where
+    P: OptimizationProblem,
+{
+    pub fn candidate(&self) -> CandidateView<'a, P::Artifact>;
+    pub fn case(&self) -> Option<CaseView<'a, I, T>>;
+    pub fn output(&self) -> Option<&'a O>;
+    pub fn run_error(&self) -> Option<RunErrorView<'a, O>>;
+    pub fn trace(&self) -> TraceView<'a>;
+    pub fn history(&self) -> ScoreHistoryView<'a, P>;
+    pub fn budget(&self) -> BudgetSnapshot;
+}
+
+pub struct CaseView<'a, I, T = NoTarget> {
     pub id: CaseId,
-    pub input: &'a C,
-    pub target: Option<TargetView<'a>>,
+    pub input: &'a I,
+    pub target: Option<&'a T>,
     pub split: Option<SplitRole>,
     pub metadata: &'a MetadataBag,
+}
+
+impl<'a, I, T> CaseView<'a, I, T> {
+    pub fn input(&self) -> &'a I;
+    pub fn target(&self) -> Option<&'a T>;
+    pub fn split(&self) -> Option<SplitRole>;
+    pub fn metadata(&self) -> &'a MetadataBag;
 }
 ```
 
@@ -826,20 +985,23 @@ When `.runner(...)` is installed, it adapts to this candidate-execution
 contract:
 
 ```rust
-pub trait CandidateRunner<P: OptimizationProblem, C>: Send + Sync + 'static {
+pub trait CandidateRunner<P: OptimizationProblem, I, T = NoTarget, O = ()>:
+    Send + Sync + 'static
+{
     fn run(
         &self,
-        ctx: CandidateRunCtx<'_, P, C>,
-    ) -> impl Future<Output = Result<CandidateRun, CandidateRunError>> + Send;
+        ctx: CandidateRunCtx<'_, P, I, T>,
+    ) -> impl Future<Output = Result<CandidateRun<O>, CandidateRunError<O>>> + Send;
 }
 
-pub struct CandidateRunCtx<'a, P: OptimizationProblem, C> {
+pub struct CandidateRunCtx<'a, P: OptimizationProblem, I, T = NoTarget> {
     pub candidate: CandidateView<'a, P::Artifact>,
-    pub case: Option<CaseView<'a, C>>,
+    pub case: Option<CaseView<'a, I, T>>,
+    pub budget: BudgetSnapshot,
 }
 
-pub struct CandidateRun {
-    pub output: Option<OutputValue>,
+pub struct CandidateRun<O = ()> {
+    pub output: O,
     pub trace: TraceBundle,
     pub attachments: Vec<ScoreAttachment>,
     pub cost: Cost,
@@ -857,26 +1019,35 @@ Runner rules:
    score for compiler errors, verifier failures, or agent crashes.
 5. A self-contained scoring function may omit `.runner(...)`; then it owns
    execution and must attach any produced trace/evidence itself.
+6. Generic runners capture their own environment handles. Workspace, sandbox,
+   process, and agent runners live in adapter crates such as `leaven-agentic` or
+   domain crates; `leaven-run` must not grow a hidden environment abstraction.
 
 Every public scoring function is adapted to this canonical contract:
 
 ```rust
-pub trait Scorer<P: OptimizationProblem, C>: Send + Sync + 'static {
+pub trait Scorer<P: OptimizationProblem, I, T = NoTarget, O = ()>:
+    Send + Sync + 'static
+{
     fn call(
         &self,
-        ctx: ScoreContext<'_, P, C>,
-    ) -> impl Future<Output = Result<Score, ScoreError>> + Send;
+        ctx: ScoreContext<'_, P, I, T, O>,
+    ) -> impl Future<Output = Result<Metered<Score>, ScoreError>> + Send;
 }
 ```
 
 Builder overloads may accept simpler closures, but they all lower to that shape:
 
 ```text
-Fn(ScoreContext<'_, P, C>) -> impl IntoScore
-Fn(ScoreContext<'_, P, C>) -> Result<impl IntoScore, ScoreError>
-async Fn(ScoreContext<'_, P, C>) -> impl IntoScore
-async Fn(ScoreContext<'_, P, C>) -> Result<impl IntoScore, ScoreError>
+Fn(ScoreContext<'_, P, I, T, O>) -> impl IntoScore
+Fn(ScoreContext<'_, P, I, T, O>) -> Result<impl IntoScore, ScoreError>
+async Fn(ScoreContext<'_, P, I, T, O>) -> impl IntoScore
+async Fn(ScoreContext<'_, P, I, T, O>) -> Result<impl IntoScore, ScoreError>
 ```
+
+The generic names in examples may be elided, but the contract must stay typed:
+runner output is not a stringly `serde_json::Value` unless the user's runner
+chooses that as `O`.
 
 Scalar convenience forms may exist only if they are unambiguous. They still
 normalize as if the user had received a full `ScoreContext`.
@@ -885,6 +1056,7 @@ normalize as if the user had received a full `ScoreContext`.
 
 ```text
 Score                 rich score
+Metered<Score>        rich score plus scoring-stage cost
 FiniteF64 / f64        primary higher-is-better score after finite validation
 bool                   1.0 for true, 0.0 for false
 ```
@@ -892,11 +1064,50 @@ bool                   1.0 for true, 0.0 for false
 Do not support `Option<Score>` as a public return. Use `Score::unscored(...)`
 for diagnostics without a comparable value, so absence is explicit.
 
+Plain scalar/bool/`Score` returns are metered as zero additional scoring cost.
+If a scoring function calls an LLM judge, subprocess, external verifier, or
+human-review system, it must return `Metered<Score>` with the cost it incurred.
+The adapter charges that cost exactly once after successful scoring. Score
+errors may also carry `BudgetExceeded` when scoring stopped before producing a
+score.
+
 Errors are not scores. A `ScoreError` means the scoring function failed to
 produce an assessment. The adapter must record the failure as evaluation error
 evidence and then follow the configured failure policy. It must not silently
 turn score errors, panics, non-finite scores, missing attachments, or invalid
 metric directions into score `0.0`.
+
+Minimum scoring/runner error decision classes:
+
+```rust
+pub enum CandidateRunError<O = ()> {
+    Failed { source: BoxError, partial: Option<PartialCandidateRun<O>> },
+    TimedOut { partial: Option<PartialCandidateRun<O>> },
+    BudgetExceeded(BudgetExceeded),
+    PanicCaptured { message: String, partial: Option<PartialCandidateRun<O>> },
+    InvalidOutput { reason: String },
+}
+
+pub struct PartialCandidateRun<O = ()> {
+    pub output: Option<O>,
+    pub trace: TraceBundle,
+    pub attachments: Vec<ScoreAttachment>,
+    pub cost: Cost,
+}
+
+pub enum ScoreError {
+    InvalidScore(InvalidScore),
+    Attachment(AttachmentStageError),
+    TimedOut,
+    BudgetExceeded(BudgetExceeded),
+    PanicCaptured { message: String },
+    Failed { source: BoxError },
+}
+```
+
+These errors describe refusal points. Failure policy decides whether to continue,
+retry, mark the candidate/case failed, or abort the run. The scorer itself does
+not decide optimizer admission by failing.
 
 `Score` carries:
 
@@ -940,6 +1151,16 @@ pub enum ScoreAttachment {
 Attachments are staged into the evidence/artifact store and become durable
 references. Runtime paths are never the durable score payload.
 
+Attachment rules:
+
+1. File and directory attachments are captured before runner/scorer temporary
+   resources are released.
+2. Missing paths, unreadable paths, unsupported symlinks, or paths outside the
+   allowed workspace become `AttachmentStageError`; they are not ignored.
+3. Directory staging must be deterministic: traversal order, path normalization,
+   and ignored file rules are part of the store fingerprint.
+4. Reports cite staged attachment refs, never host-local runtime paths.
+
 The invariants:
 
 1. A score may contain arbitrary feedback evidence.
@@ -980,7 +1201,7 @@ Required methods:
 best_id() -> Option<CandidateId>
 best() -> Option<&P::Artifact> when the result owns an in-memory graph snapshot
 report() -> &EvaluationReport
-gepa() -> Option<&GepaResult> when the optimizer supplied a GEPA summary
+gepa() -> Option<&GepaSummary> when the optimizer supplied a GEPA summary
 events() -> public event summaries, not mutable graph access
 graph() / into_graph() only on an explicitly advanced result type or feature
 ```
@@ -988,11 +1209,13 @@ graph() / into_graph() only on an explicitly advanced result type or feature
 Result invariants:
 
 1. `best` comes from `Optimizer::best_candidate` after the optimizer stops and
-   after any product-policy final evaluation that can affect public best.
+   after any explicit validation policy that is allowed to affect model
+   selection.
 2. `report()` is graph-backed. It cites assessment ids, evidence refs, metric
    summaries, and attachment refs; it does not copy blobs or hidden targets.
 3. Test split outputs are marked final-report-only unless policy explicitly
-   allowed in-loop use.
+   allowed in-loop use. Under the default policy, test results never change
+   `best`.
 4. If no candidate has a comparable score, `best` is `None`; the seed does not
    win by default unless it has admissible evidence or the optimizer declares a
    seed-as-best policy.

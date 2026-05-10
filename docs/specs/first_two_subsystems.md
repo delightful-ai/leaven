@@ -21,7 +21,7 @@ Workspace/rendering exists but stays outside this specific core pass
 Content-addressing is a capability, not a lie every artifact must tell
 ```
 
-The design goal is: the types should preserve causal truth, prevent accidental information loss, and make graph-writing, budget-charging, cache, events, and trust boundaries hard to bypass. That follows the type-design rule that information should hold its shape until consciously reshaped, and that time/causality should be explicit in types.  The API should also minimize scatter, implicit conventions, lies, drift, translation, and noise, so optimizer authors navigate by concepts rather than storage mechanics.  Traits below are kept cold only where the capability is real and independently useful; anything GEPA-specific stays warm. 
+The design goal is: the types should preserve causal truth, prevent accidental information loss, and make graph-writing, budget-charging, cache, events, and trust boundaries hard to bypass. That follows the type-design rule that information should hold its shape until consciously reshaped, and that time/causality should be explicit in types.  The API should also minimize scatter, implicit conventions, lies, drift, translation, and noise, so optimizer authors navigate by concepts rather than storage mechanics.  Traits below are kept cold only where the capability is real and independently useful; anything GEPA-specific stays warm.
 
 ---
 
@@ -105,10 +105,10 @@ optimize-gepa
     Gepa
     ReflectiveMutation
     SystemAwareMerge
-    CandidateSelector
-    ComponentSelector
+    ParentSelector
+    PartSelector
     BatchSampler
-    Gate
+    Acceptance
     ValidationPolicy
 
 optimize-agent
@@ -2369,14 +2369,14 @@ Assert callback saw monotonic event order and graph view was readable.
 
 Use `trybuild`.
 
-## 30.1 Cannot use component selector without Decomposable
+## 30.1 Cannot use part selector without an edit surface
 
 ```rust
 Gepa::default()
-    .component_selector(RoundRobinComponent)
+    .part_selector(RoundRobinPart)
 ```
 
-with artifact not implementing `Decomposable` should fail at the GEPA builder bound.
+with no compatible `EditSurface` should fail at the GEPA builder bound.
 
 ## 30.2 Cannot use deterministic cache with non-content-addressed artifact unless UserKey
 
@@ -2409,7 +2409,7 @@ P::Evidence: PairwiseEvidence
 ## 30.4 Cannot use typed claim gate without matching annotations
 
 ```rust
-ClaimsHeldGate<EditAnnotations>
+ClaimsHeldAcceptance<EditAnnotations>
 ```
 
 should require:
