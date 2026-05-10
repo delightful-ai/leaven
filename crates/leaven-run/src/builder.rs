@@ -29,6 +29,13 @@ use crate::{
 type Runner<A, C> = Arc<dyn Fn(&A, &C) -> RunOutput + Send + Sync>;
 type Scorer<A, C> = Arc<dyn for<'a> Fn(ScoreContext<'a, A, C>) -> Score + Send + Sync>;
 
+struct FinalEvaluations {
+    baseline_validation: Option<CandidateEvaluationSummary>,
+    validation: Option<CandidateEvaluationSummary>,
+    baseline_test: Option<CandidateEvaluationSummary>,
+    test: Option<CandidateEvaluationSummary>,
+}
+
 /// Problem type used by the public run builder.
 pub struct RunProblem<A, C> {
     _marker: PhantomData<(A, C)>,
@@ -211,102 +218,25 @@ where
             )
         })?;
 
-        let baseline_validation_score = if self.validation.is_empty() {
-            None
-        } else {
-            Some(
-                final_eval(
-                    &mut engine,
-                    &case_set,
-                    &store,
-                    seed,
-                    PartitionId::from("VALIDATION"),
-                    EvaluationPurpose::Validation,
-                )
-                .await?,
-            )
-        };
-        let validation_score = if self.validation.is_empty() {
-            None
-        } else {
-            Some(
-                final_eval(
-                    &mut engine,
-                    &case_set,
-                    &store,
-                    best,
-                    PartitionId::from("VALIDATION"),
-                    EvaluationPurpose::Validation,
-                )
-                .await?,
-            )
-        };
-        let baseline_test_score = if self.test.is_empty() {
-            None
-        } else {
-            Some(
-                final_eval(
-                    &mut engine,
-                    &case_set,
-                    &store,
-                    seed,
-                    PartitionId::from("TEST"),
-                    EvaluationPurpose::FinalTest,
-                )
-                .await?,
-            )
-        };
-        let test_score = if self.test.is_empty() {
-            None
-        } else {
-            Some(
-                final_eval(
-                    &mut engine,
-                    &case_set,
-                    &store,
-                    best,
-                    PartitionId::from("TEST"),
-                    EvaluationPurpose::FinalTest,
-                )
-                .await?,
-            )
-        };
-
-        let view = engine.view();
-        let train_partition = PartitionId::from("TRAIN");
-        let baseline_train =
-            latest_average_for_partition(&view, &store, seed, &train_partition)?.unwrap_or(0.0);
-        let optimized_train =
-            latest_average_for_partition(&view, &store, best, &train_partition)?.unwrap_or(0.0);
-        let events = view.events().map(event_name).collect::<Vec<_>>();
-        let best_artifact = view.artifact(best).expect("best exists").clone();
-        let split_reports = split_reports_for(&view, &store, &splits)?;
-        let cost = engine.budget().snapshot().spent;
-        let report = OptimizationReport {
-            dataset: dataset.fingerprint(),
-            splits: splits.fingerprint(),
-            budget: engine.budget().snapshot(),
-            cost: cost.clone(),
-            baseline_train_score: baseline_train,
-            optimized_train_score: optimized_train,
-            baseline_validation_score: baseline_validation_score
-                .as_ref()
-                .map(|summary| summary.average_score),
-            validation_score: validation_score
-                .as_ref()
-                .map(|summary| summary.average_score),
-            baseline_test_score: baseline_test_score
-                .as_ref()
-                .map(|summary| summary.average_score),
-            test_score: test_score.as_ref().map(|summary| summary.average_score),
-            evaluation: EvaluationReport {
-                dataset: dataset.fingerprint(),
-                splits: splits.fingerprint(),
-                cost,
-                splits_reported: split_reports,
-            },
-            events,
-        };
+        let final_evaluations = run_final_evaluations(
+            &mut engine,
+            &case_set,
+            &store,
+            seed,
+            best,
+            !self.validation.is_empty(),
+            !self.test.is_empty(),
+        )
+        .await?;
+        let (best_artifact, report) = build_report(
+            &engine,
+            &store,
+            &dataset,
+            &splits,
+            seed,
+            best,
+            &final_evaluations,
+        )?;
         Ok(OptimizeResult {
             run_id: run.run_id,
             best,
@@ -384,6 +314,142 @@ fn dataset_splits(train: usize, validation: usize, test: usize) -> DatasetSplits
         SplitPolicy::DisjointRequired,
     )
     .expect("builder constructs disjoint split ids")
+}
+
+async fn run_final_evaluations<A, C>(
+    engine: &mut leaven_engine::Engine<RunProblem<A, C>>,
+    case_set: &leaven_engine::CaseSet<C>,
+    store: &InlineEvidenceStore<CasewiseEvidence<ScoredFeedbackEvidence>>,
+    seed: leaven_kernel::CandidateId,
+    best: leaven_kernel::CandidateId,
+    has_validation: bool,
+    has_test: bool,
+) -> Result<FinalEvaluations, leaven_engine::OptimizerError>
+where
+    A: Artifact,
+    C: Clone + Send + Sync + 'static,
+{
+    let baseline_validation = if has_validation {
+        Some(
+            final_eval(
+                engine,
+                case_set,
+                store,
+                seed,
+                PartitionId::from("VALIDATION"),
+                EvaluationPurpose::Validation,
+            )
+            .await?,
+        )
+    } else {
+        None
+    };
+    let validation = if has_validation {
+        Some(
+            final_eval(
+                engine,
+                case_set,
+                store,
+                best,
+                PartitionId::from("VALIDATION"),
+                EvaluationPurpose::Validation,
+            )
+            .await?,
+        )
+    } else {
+        None
+    };
+    let baseline_test = if has_test {
+        Some(
+            final_eval(
+                engine,
+                case_set,
+                store,
+                seed,
+                PartitionId::from("TEST"),
+                EvaluationPurpose::FinalTest,
+            )
+            .await?,
+        )
+    } else {
+        None
+    };
+    let test = if has_test {
+        Some(
+            final_eval(
+                engine,
+                case_set,
+                store,
+                best,
+                PartitionId::from("TEST"),
+                EvaluationPurpose::FinalTest,
+            )
+            .await?,
+        )
+    } else {
+        None
+    };
+    Ok(FinalEvaluations {
+        baseline_validation,
+        validation,
+        baseline_test,
+        test,
+    })
+}
+
+fn build_report<A, C>(
+    engine: &leaven_engine::Engine<RunProblem<A, C>>,
+    store: &InlineEvidenceStore<CasewiseEvidence<ScoredFeedbackEvidence>>,
+    dataset: &Dataset<C>,
+    splits: &DatasetSplits,
+    seed: leaven_kernel::CandidateId,
+    best: leaven_kernel::CandidateId,
+    final_evaluations: &FinalEvaluations,
+) -> Result<(A, OptimizationReport), leaven_engine::OptimizerError>
+where
+    A: Artifact,
+    C: Clone + Send + Sync + 'static,
+{
+    let view = engine.view();
+    let train_partition = PartitionId::from("TRAIN");
+    let baseline_train =
+        latest_average_for_partition(&view, store, seed, &train_partition)?.unwrap_or(0.0);
+    let optimized_train =
+        latest_average_for_partition(&view, store, best, &train_partition)?.unwrap_or(0.0);
+    let best_artifact = view.artifact(best).expect("best exists").clone();
+    let cost = engine.budget().snapshot().spent;
+    let report = OptimizationReport {
+        dataset: dataset.fingerprint(),
+        splits: splits.fingerprint(),
+        budget: engine.budget().snapshot(),
+        cost: cost.clone(),
+        baseline_train_score: baseline_train,
+        optimized_train_score: optimized_train,
+        baseline_validation_score: final_evaluations
+            .baseline_validation
+            .as_ref()
+            .map(|summary| summary.average_score),
+        validation_score: final_evaluations
+            .validation
+            .as_ref()
+            .map(|summary| summary.average_score),
+        baseline_test_score: final_evaluations
+            .baseline_test
+            .as_ref()
+            .map(|summary| summary.average_score),
+        test_score: final_evaluations
+            .test
+            .as_ref()
+            .map(|summary| summary.average_score),
+        evaluation: EvaluationReport {
+            dataset: dataset.fingerprint(),
+            splits: splits.fingerprint(),
+            cost,
+            splits_reported: split_reports_for(&view, store, splits)?,
+        },
+        events: view.events().map(event_name).collect(),
+    };
+    Ok((best_artifact, report))
 }
 
 async fn final_eval<A, C>(

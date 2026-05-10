@@ -61,7 +61,7 @@ pub struct OptimizationReport {
     pub events: Vec<String>,
 }
 
-pub(crate) fn average(cases: &[leaven_eval::ReportScore]) -> f64 {
+pub fn average(cases: &[leaven_eval::ReportScore]) -> f64 {
     if cases.is_empty() {
         return 0.0;
     }
