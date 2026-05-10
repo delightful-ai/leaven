@@ -9,12 +9,14 @@ Use this skill at the node after planning/spec alignment and before starting a
 durable implementation goal.
 
 The job is to preserve intent across handoff. Do not turn this into another big
-planning phase. Produce a short handoff artifact, then either set/draft the goal
-or return to planning.
+planning phase or a user-authored form. First synthesize the load-bearing
+interpretation in plain language, align on the few claims that matter, then
+write the handoff artifact as the durable record.
 
-For a checkable artifact, use `templates/gepa_optimizer_handoff.yaml` as the
-filled example. Copy its shape for new goal packages and update acceptance
-statuses/evidence as implementation progresses.
+For a checkable artifact after alignment, use
+`templates/gepa_optimizer_handoff.yaml` as the filled example. Copy its shape for
+new goal packages and update acceptance statuses/evidence as implementation
+progresses.
 
 ## Core Failure To Prevent
 
@@ -33,7 +35,7 @@ Common proxies:
 
 ## Workflow
 
-1. Restate the original intent in one sentence.
+1. Synthesize the original intent in one sentence.
    - Use the user's product question, not the latest internal abstraction.
    - If the intent is unclear, ask one focused question.
 
@@ -59,10 +61,21 @@ Common proxies:
      docs, or API imports must exercise the intended surface.
    - State explicit non-goals.
 
-6. Decide.
+6. Run the alignment checkpoint.
+   - Present only the load-bearing interpretation, not the whole artifact.
+   - Ask for corrections to intent, proxy risks, acceptance proof, and
+     non-goals.
+   - If the user corrects the interpretation, incorporate it before writing the
+     artifact.
+
+7. Decide.
    - If the design is wrong or incomplete for the intent: return to planning.
    - If the design preserves intent: draft or set the goal against this handoff
      artifact.
+
+Do not silently fill and commit the artifact before this checkpoint. The agent
+should have a strong synthesis by now; the checkpoint exists to catch subtle
+intent drift, not to make the user re-plan the work.
 
 ## Handoff Artifact
 
@@ -83,6 +96,8 @@ Decision:
 Keep it short. The artifact is not the implementation spec. It packages the
 governing specs, translates them into acceptance claims, and stays live during
 implementation and closeout.
+
+The artifact records alignment. It is not the place where alignment happens.
 
 Status values for acceptance items:
 
