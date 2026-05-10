@@ -13,3 +13,8 @@ workspace = true
 [dependencies]
 leaven-kernel = { workspace = true }
 leaven-lm = { workspace = true }
+reqwest = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }

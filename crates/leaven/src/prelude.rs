@@ -14,6 +14,10 @@ pub use leaven_kernel::{
     Budget, CandidateId, ContentId, Cost, CostUnit, ErrorRecord, Fingerprint, FiniteF64,
     MetadataBag,
 };
+pub use leaven_lm::{
+    Lm, LmContinuation, LmError, LmId, LmRequest, LmResponse, Message, Messages, ModelName,
+    OutputMode, ProviderHints, ProviderName, ReasoningEffort, Role, SamplingOptions, TokenUsage,
+};
 pub use leaven_run::{
     IntoOptimizeStore, OptimizationReport, OptimizeError, OptimizeResult, OptimizeStore, RunOutput,
     Score, ScoreContext, optimize,
@@ -40,3 +44,6 @@ pub use leaven_artifact_skill::*;
 
 #[cfg(feature = "agentic-skill")]
 pub use leaven_agentic_skill::*;
+
+#[cfg(feature = "lm-cache")]
+pub use leaven_lm_cache::prelude::*;

@@ -9,6 +9,7 @@ pub use leaven_core as core;
 pub use leaven_engine as engine;
 pub use leaven_eval as eval;
 pub use leaven_kernel as kernel;
+pub use leaven_lm as lm;
 pub use leaven_run as run;
 pub use leaven_surface as surface;
 
@@ -27,6 +28,10 @@ pub use leaven_engine::{
 pub use leaven_kernel::{
     Amount, AmountError, Budget, BudgetSnapshot, CandidateId, ContentId, Cost, CostUnit,
     ErrorRecord, Fingerprint, FiniteF64, FiniteF64Error, MetadataBag, ProposalId,
+};
+pub use leaven_lm::{
+    Lm, LmContinuation, LmError, LmId, LmRequest, LmResponse, Message, Messages, ModelName,
+    OutputMode, ProviderHints, ProviderName, ReasoningEffort, Role, SamplingOptions, TokenUsage,
 };
 pub use leaven_run::{
     IntoOptimizeStore, OptimizationReport, OptimizeBuilder, OptimizeError, OptimizeResult,
@@ -59,3 +64,12 @@ pub use leaven_artifact_skill as skill;
 
 #[cfg(feature = "agentic-skill")]
 pub use leaven_agentic_skill as agentic_skill;
+
+#[cfg(feature = "lm-cache")]
+pub use leaven_lm_cache as lm_cache;
+
+#[cfg(feature = "lm-openai")]
+pub use leaven_lm_openai as lm_openai;
+
+#[cfg(feature = "lm-anthropic")]
+pub use leaven_lm_anthropic as lm_anthropic;

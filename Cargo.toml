@@ -24,6 +24,7 @@ members = [
     "crates/leaven-kernel",
     "crates/leaven-lm",
     "crates/leaven-lm-anthropic",
+    "crates/leaven-lm-cache",
     "crates/leaven-lm-local",
     "crates/leaven-lm-mock",
     "crates/leaven-lm-openai",
@@ -127,6 +128,7 @@ leaven-gepa = { path = "crates/leaven-gepa", version = "0.0.0" }
 leaven-kernel = { path = "crates/leaven-kernel", version = "0.0.0" }
 leaven-lm = { path = "crates/leaven-lm", version = "0.0.0" }
 leaven-lm-anthropic = { path = "crates/leaven-lm-anthropic", version = "0.0.0" }
+leaven-lm-cache = { path = "crates/leaven-lm-cache", version = "0.0.0" }
 leaven-lm-local = { path = "crates/leaven-lm-local", version = "0.0.0" }
 leaven-lm-mock = { path = "crates/leaven-lm-mock", version = "0.0.0" }
 leaven-lm-openai = { path = "crates/leaven-lm-openai", version = "0.0.0" }
@@ -178,6 +180,7 @@ parking_lot = "0.12"
 rand = "0.8"
 tokio = { version = "1", features = ["rt", "macros", "process", "fs", "time", "sync"] }
 async-trait = "0.1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
 # tracing
 tracing = "0.1"

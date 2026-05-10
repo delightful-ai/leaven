@@ -1,6 +1,6 @@
 [package]
-name = "leaven-lm"
-description = "Leaven crate skeleton for leaven-lm."
+name = "leaven-lm-cache"
+description = "Provider-neutral Leaven response cache for LM calls."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -12,6 +12,11 @@ workspace = true
 
 [dependencies]
 leaven-kernel = { workspace = true }
+leaven-lm = { workspace = true }
+parking_lot = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }

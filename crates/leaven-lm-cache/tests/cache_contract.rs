@@ -1,0 +1,191 @@
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+use leaven_kernel::{Cost, Fingerprint, Metered};
+use leaven_lm::{
+    Lm, LmContinuation, LmError, LmId, LmRequest, LmResponse, Message, Messages, ModelName,
+    ProviderName, TokenUsage,
+};
+use leaven_lm_cache::{
+    CachedLm, InMemoryLmCache, LmCacheEntry, LmCacheError, LmCacheKey, LmCachePolicy, LmCacheStore,
+};
+
+#[derive(Clone)]
+struct CountingLm {
+    calls: Arc<AtomicUsize>,
+}
+
+struct FailingCache;
+
+impl LmCacheStore for FailingCache {
+    async fn get(&self, _key: LmCacheKey) -> Result<Option<LmCacheEntry>, LmCacheError> {
+        Err(LmCacheError::Backend {
+            operation: "get",
+            message: "read refused".to_owned(),
+        })
+    }
+
+    async fn put(&self, _key: LmCacheKey, _entry: LmCacheEntry) -> Result<(), LmCacheError> {
+        Err(LmCacheError::Backend {
+            operation: "put",
+            message: "write refused".to_owned(),
+        })
+    }
+}
+
+impl CountingLm {
+    fn new() -> Self {
+        Self {
+            calls: Arc::new(AtomicUsize::new(0)),
+        }
+    }
+
+    fn calls(&self) -> usize {
+        self.calls.load(Ordering::SeqCst)
+    }
+}
+
+impl Lm for CountingLm {
+    fn id(&self) -> LmId {
+        LmId::new("counting")
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        Fingerprint::from_bytes([7; 32])
+    }
+
+    async fn complete(&self, _request: LmRequest) -> Result<Metered<LmResponse>, LmError> {
+        let n = self.calls.fetch_add(1, Ordering::SeqCst) + 1;
+        let usage = TokenUsage {
+            input_tokens: 3,
+            cached_input_tokens: 0,
+            output_tokens: 2,
+            reasoning_tokens: 0,
+        };
+        Ok(Metered::new(
+            LmResponse::new(Message::assistant(format!("call {n}")), usage.clone()).unwrap(),
+            usage.to_cost(),
+        ))
+    }
+}
+
+fn request() -> LmRequest {
+    LmRequest::new(ModelName::new("mock-model"), Messages::from_user("hello"))
+}
+
+#[tokio::test]
+async fn read_write_policy_serves_second_call_from_cache() {
+    let inner = CountingLm::new();
+    let lm = CachedLm::new(
+        inner.clone(),
+        InMemoryLmCache::default(),
+        LmCachePolicy::ReadWrite,
+    );
+
+    let first = lm.complete(request()).await.unwrap();
+    let second = lm.complete(request()).await.unwrap();
+
+    assert_eq!(first.value.assistant.content(), "call 1");
+    assert_eq!(second.value.assistant.content(), "call 1");
+    assert_eq!(first.cost.llm_calls, 1);
+    assert_eq!(second.cost, Cost::zero());
+    assert_eq!(inner.calls(), 1);
+}
+
+#[tokio::test]
+async fn never_policy_bypasses_cache_and_accessors_expose_parts() {
+    let inner = CountingLm::new();
+    let cache = InMemoryLmCache::default();
+    let lm = CachedLm::read_write(inner.clone(), cache.clone());
+
+    assert_eq!(lm.inner().id().as_str(), "counting");
+    assert_eq!(lm.fingerprint(), Fingerprint::from_bytes([7; 32]));
+    assert!(lm.cache().is_empty());
+
+    let first = lm
+        .complete_with_policy(request(), LmCachePolicy::Never)
+        .await
+        .unwrap();
+    let second = lm
+        .complete_with_policy(request(), LmCachePolicy::Never)
+        .await
+        .unwrap();
+
+    assert_eq!(first.value.assistant.content(), "call 1");
+    assert_eq!(second.value.assistant.content(), "call 2");
+    assert_eq!(inner.calls(), 2);
+    assert_eq!(cache.len(), 0);
+}
+
+#[tokio::test]
+async fn refresh_policy_bypasses_read_and_updates_entry() {
+    let inner = CountingLm::new();
+    let cache = InMemoryLmCache::default();
+    let read_write = CachedLm::new(inner.clone(), cache.clone(), LmCachePolicy::ReadWrite);
+    let refresh = CachedLm::new(inner.clone(), cache.clone(), LmCachePolicy::Refresh);
+
+    let cached = read_write.complete(request()).await.unwrap();
+    let refreshed = refresh.complete(request()).await.unwrap();
+    let after_refresh = read_write.complete(request()).await.unwrap();
+
+    assert_eq!(cached.value.assistant.content(), "call 1");
+    assert_eq!(refreshed.value.assistant.content(), "call 2");
+    assert_eq!(after_refresh.value.assistant.content(), "call 2");
+    assert_eq!(inner.calls(), 2);
+}
+
+#[tokio::test]
+async fn read_only_policy_reads_but_does_not_write() {
+    let inner = CountingLm::new();
+    let lm = CachedLm::new(
+        inner.clone(),
+        InMemoryLmCache::default(),
+        LmCachePolicy::ReadOnly,
+    );
+
+    let first = lm.complete(request()).await.unwrap();
+    let second = lm.complete(request()).await.unwrap();
+
+    assert_eq!(first.value.assistant.content(), "call 1");
+    assert_eq!(second.value.assistant.content(), "call 2");
+    assert_eq!(inner.calls(), 2);
+}
+
+#[tokio::test]
+async fn cache_backend_failures_are_lifted_to_lm_errors() {
+    let read_failure = CachedLm::new(CountingLm::new(), FailingCache, LmCachePolicy::ReadOnly)
+        .complete(request())
+        .await
+        .unwrap_err();
+    assert_eq!(
+        read_failure.to_string(),
+        "lm response cache failed: lm cache backend failed during get: read refused"
+    );
+
+    let put_failure = CachedLm::new(CountingLm::new(), FailingCache, LmCachePolicy::Refresh)
+        .complete(request())
+        .await
+        .unwrap_err();
+    assert_eq!(
+        put_failure.to_string(),
+        "lm response cache failed: lm cache backend failed during put: write refused"
+    );
+
+    let codec = LmCacheError::codec("bad key");
+    assert_eq!(codec.to_string(), "lm cache codec failed: bad key");
+}
+
+#[test]
+fn cache_key_ignores_provider_continuation_tokens() {
+    let base = request();
+    let with_continuation = base.clone().with_continuation(LmContinuation {
+        provider: ProviderName::new("openai"),
+        response_id: "resp_1".to_owned(),
+        covered_messages: 1,
+    });
+
+    assert_eq!(
+        LmCacheKey::for_request(Fingerprint::from_bytes([1; 32]), &base),
+        LmCacheKey::for_request(Fingerprint::from_bytes([1; 32]), &with_continuation)
+    );
+}

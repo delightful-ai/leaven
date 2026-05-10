@@ -16,6 +16,7 @@ leaven-engine = { workspace = true }
 leaven-eval = { workspace = true }
 leaven-run = { workspace = true }
 leaven-kernel = { workspace = true }
+leaven-lm = { workspace = true }
 leaven-surface = { workspace = true }
 leaven-agentic = { workspace = true, optional = true }
 leaven-agentic-skill = { workspace = true, optional = true }
@@ -25,6 +26,7 @@ leaven-artifact-skill = { workspace = true, optional = true }
 leaven-derive = { workspace = true, optional = true }
 leaven-gepa = { workspace = true, optional = true }
 leaven-lm-anthropic = { workspace = true, optional = true }
+leaven-lm-cache = { workspace = true, optional = true }
 leaven-lm-openai = { workspace = true, optional = true }
 leaven-std = { workspace = true, optional = true }
 leaven-store-sqlite = { workspace = true, optional = true }
@@ -50,6 +52,7 @@ workspace-docker = ["workspace", "dep:leaven-workspace-docker"]
 workspace-e2b = ["workspace", "dep:leaven-workspace-e2b"]
 lm-openai = ["dep:leaven-lm-openai"]
 lm-anthropic = ["dep:leaven-lm-anthropic"]
+lm-cache = ["dep:leaven-lm-cache"]
 
 [dev-dependencies]
 futures = { workspace = true }

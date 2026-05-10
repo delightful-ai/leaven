@@ -164,7 +164,8 @@ The GEPA-facing API name is `parent_selector`. General lower-level code may use
 | `leaven-evidence` | scalar/casewise/attribution/pairwise evidence shapes | graph mutation, GEPA rhythm |
 | `leaven-population` | `KeepBest`, `ParetoFrontier`, `TournamentPopulation`, population events | GEPA selectors, graph mutation internals |
 | `leaven-render` | renderers/materializers over typed values | optimizer rhythm, GEPA policy |
-| `leaven-lm` | provider-neutral LM request/response vocabulary | GEPA, engine graph |
+| `leaven-lm` | provider-neutral LM request/response vocabulary | GEPA, engine graph, response-cache stores |
+| `leaven-lm-cache` | reusable Leaven response-cache policy, keys, stores, and `CachedLm` wrapper | GEPA rhythm, engine evaluation cache, concrete providers |
 | `leaven-gepa` | GEPA optimizer, strategy slots, GEPA request/result types | concrete providers, concrete workspace backends, domain internals |
 | `leaven` | umbrella re-exports only | implementation logic |
 
@@ -183,6 +184,7 @@ leaven-preference
 leaven-population
 leaven-render
 leaven-lm
+leaven-lm-cache
 ```
 
 `leaven-gepa` must not depend on:
@@ -191,6 +193,7 @@ leaven-lm
 leaven-lm-openai
 leaven-lm-anthropic
 leaven-lm-local
+leaven-lm-cache
 leaven-agent
 leaven-agentic
 leaven-workspace-*

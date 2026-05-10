@@ -108,6 +108,7 @@ leaven/
 │   ├── leaven-std/
 │   │
 │   ├── leaven-lm/
+│   ├── leaven-lm-cache/
 │   ├── leaven-lm-openai/
 │   ├── leaven-lm-anthropic/
 │   ├── leaven-lm-local/
@@ -186,6 +187,7 @@ members = [
     "crates/leaven-std",
 
     "crates/leaven-lm",
+    "crates/leaven-lm-cache",
     "crates/leaven-lm-openai",
     "crates/leaven-lm-anthropic",
     "crates/leaven-lm-local",
@@ -397,6 +399,11 @@ leaven-std -> [
 ```text
 leaven-lm -> [
   leaven-kernel
+]
+
+leaven-lm-cache -> [
+  leaven-kernel,
+  leaven-lm
 ]
 
 leaven-lm-openai -> [
@@ -2292,7 +2299,8 @@ pub mod prelude {
 
 ### Contract
 
-Provider-neutral LLM calls.
+Provider-neutral LM request/response vocabulary and `Lm` trait. Response-cache
+policy and stores live in `leaven-lm-cache`, not here.
 
 ### `src/lib.rs`
 
@@ -2300,26 +2308,60 @@ Provider-neutral LLM calls.
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
-//! Provider-neutral LLM interface.
+//! Provider-neutral language-model vocabulary and capability.
 
-pub mod completion;
-pub mod error;
-pub mod messages;
-pub mod model;
-pub mod usage;
+mod error;
+mod message;
+mod model;
+mod output;
+mod request;
+mod response;
+mod sampling;
+mod usage;
 
-pub use completion::{Completion, CompletionBatch};
-pub use error::LmError;
-pub use messages::{Message, Messages, Role};
-pub use model::{Lm, SamplingOptions};
+pub use error::{InvalidLmResponse, LmError};
+pub use message::{Message, Messages, Role};
+pub use model::{Lm, LmId, ModelName, ProviderName};
+pub use output::{JsonSchemaOutput, OutputMode};
+pub use request::{LmContinuation, LmRequest, ProviderHints};
+pub use response::LmResponse;
+pub use sampling::{ReasoningEffort, SamplingOptions};
 pub use usage::TokenUsage;
 
 pub mod prelude {
     pub use crate::{
-        Completion, CompletionBatch, Lm, LmError, Message, Messages,
-        Role, SamplingOptions, TokenUsage,
+        InvalidLmResponse, JsonSchemaOutput, Lm, LmContinuation, LmError,
+        LmId, LmRequest, LmResponse, Message, Messages, ModelName,
+        OutputMode, ProviderHints, ProviderName, ReasoningEffort, Role,
+        SamplingOptions, TokenUsage,
     };
 }
+```
+
+## 18.1 `leaven-lm-cache`
+
+### Contract
+
+Reusable Leaven response cache for provider-neutral LM calls. Owns cache policy,
+key construction, cache-store trait, in-memory backend, and `CachedLm<M, C>`.
+It depends on `leaven-lm`; provider crates do not depend on it.
+
+### `src/lib.rs`
+
+```rust
+//! Provider-neutral Leaven response cache for LM calls.
+
+mod cached;
+mod error;
+mod key;
+mod policy;
+mod store;
+
+pub use cached::CachedLm;
+pub use error::LmCacheError;
+pub use key::{LmCacheEntry, LmCacheKey};
+pub use policy::LmCachePolicy;
+pub use store::{InMemoryLmCache, LmCacheStore};
 ```
 
 Backends:
@@ -2987,6 +3029,7 @@ workspace-e2b = ["workspace", "dep:leaven-workspace-e2b"]
 
 lm-openai = ["dep:leaven-lm-openai"]
 lm-anthropic = ["dep:leaven-lm-anthropic"]
+lm-cache = ["dep:leaven-lm-cache"]
 ```
 
 ### `src/lib.rs`
