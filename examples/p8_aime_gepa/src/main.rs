@@ -77,7 +77,7 @@ async fn run_aime(
         .validation(validation)
         .test(test)
         .runner(run_solver)
-        .score(score_answer)
+        .score(|ctx| score_answer(&ctx))
         .using(
             Gepa::builder()
                 .surface(AimePromptSurface)
@@ -336,10 +336,10 @@ fn run_openai_solver(prompt: &AimePrompt, case: &AimeCase) -> RunOutput {
 }
 
 fn openai_model_name() -> String {
-    std::env::var("LEAVEN_OPENAI_MODEL").unwrap_or_else(|_| "gpt-5-mini".to_owned())
+    std::env::var("LEAVEN_OPENAI_MODEL").unwrap_or_else(|_| "gpt-4.1-mini".to_owned())
 }
 
-fn score_answer(ctx: ScoreContext<'_, AimePrompt, AimeCase>) -> Score {
+fn score_answer(ctx: &ScoreContext<'_, AimePrompt, AimeCase>) -> Score {
     let parsed = ctx.output.output.parse::<i64>();
     match parsed {
         Ok(answer) if answer == ctx.case.answer => Score::new(
@@ -384,16 +384,27 @@ fn content_id(bytes: &[u8]) -> ContentId {
 mod tests {
     use super::*;
 
+    fn assert_score(actual: f64, expected: f64) {
+        assert!(
+            (actual - expected).abs() < f64::EPSILON,
+            "expected {expected}, got {actual}"
+        );
+    }
+
+    fn assert_optional_score(actual: Option<f64>, expected: f64) {
+        assert_score(actual.expect("score is present"), expected);
+    }
+
     #[test]
     fn deterministic_aime_acceptance_shows_public_gepa_improvement() {
         let result = block_on(run_deterministic_aime());
 
-        assert_eq!(result.report.baseline_train_score, 0.0);
-        assert_eq!(result.report.optimized_train_score, 1.0);
-        assert_eq!(result.report.baseline_validation_score, Some(0.0));
-        assert_eq!(result.report.validation_score, Some(1.0));
-        assert_eq!(result.report.baseline_test_score, Some(0.0));
-        assert_eq!(result.report.test_score, Some(1.0));
+        assert_score(result.report.baseline_train_score, 0.0);
+        assert_score(result.report.optimized_train_score, 1.0);
+        assert_optional_score(result.report.baseline_validation_score, 0.0);
+        assert_optional_score(result.report.validation_score, 1.0);
+        assert_optional_score(result.report.baseline_test_score, 0.0);
+        assert_optional_score(result.report.test_score, 1.0);
         assert_eq!(result.report.evaluation.splits_reported.len(), 3);
         assert!(result.report.budget.spent.metric_calls > 0);
         assert!(
