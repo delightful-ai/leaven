@@ -1,9 +1,14 @@
-use std::collections::BTreeMap;
+use std::{
+    collections::BTreeMap,
+    path::Path,
+    process::{Command, Stdio},
+};
 
 use futures::executor::block_on;
 use leaven::prelude::*;
 use leaven::stdlib::populations::ParetoFrontier;
 use leaven::{SurfaceError, SurfaceFingerprint};
+use serde::{Deserialize, Serialize};
 
 const BASELINE: &str =
     "Solve the math problem carefully. Provide the final answer as a single number.";
@@ -11,7 +16,7 @@ const OPTIMIZED: &str = "Solve with modular arithmetic when useful. Verify arith
 
 fn main() {
     block_on(async {
-        let result = run_deterministic_aime().await;
+        let result = run_configured_aime().await;
         println!(
             "baseline_train_score={:.3}",
             result.report.baseline_train_score
@@ -28,16 +33,45 @@ fn main() {
                 .expect("validation is configured")
         );
         println!(
+            "baseline_heldout_test_score={:.3}",
+            result
+                .report
+                .baseline_test_score
+                .expect("test is configured")
+        );
+        println!(
             "heldout_test_score={:.3}",
             result.report.test_score.expect("test is configured")
+        );
+        println!(
+            "report_splits={}",
+            result.report.evaluation.splits_reported.len()
+        );
+        println!(
+            "budget_metric_calls={}",
+            result.report.budget.spent.metric_calls
         );
         println!("best_system_prompt={}", result.best().system);
         println!("events={}", result.report.events.join(","));
     });
 }
 
+#[cfg(test)]
 async fn run_deterministic_aime() -> OptimizeResult<AimePrompt> {
     let (train, validation, test) = deterministic_cases();
+    run_aime(train, validation, test).await
+}
+
+async fn run_configured_aime() -> OptimizeResult<AimePrompt> {
+    let (train, validation, test) = configured_cases();
+    run_aime(train, validation, test).await
+}
+
+async fn run_aime(
+    train: Vec<AimeCase>,
+    validation: Vec<AimeCase>,
+    test: Vec<AimeCase>,
+) -> OptimizeResult<AimePrompt> {
     leaven::optimize(AimePrompt::new(BASELINE))
         .train(train)
         .validation(validation)
@@ -59,7 +93,7 @@ async fn run_deterministic_aime() -> OptimizeResult<AimePrompt> {
                 )))
                 .max_iterations(1),
         )
-        .budget(Budget::metric_calls(64))
+        .budget(Budget::metric_calls(512))
         .run()
         .await
         .expect("deterministic AIME GEPA run succeeds")
@@ -152,52 +186,82 @@ impl EditSurface<AimePrompt> for AimePromptSurface {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 struct AimeCase {
-    problem: &'static str,
+    problem: String,
     answer: i64,
-    solution: &'static str,
+    solution: String,
     needs_modular: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct AimeDatasetCache {
+    train: Vec<AimeCase>,
+    validation: Vec<AimeCase>,
+    test: Vec<AimeCase>,
+}
+
+fn configured_cases() -> (Vec<AimeCase>, Vec<AimeCase>, Vec<AimeCase>) {
+    match std::env::var("LEAVEN_AIME_CACHE") {
+        Ok(path) => cases_from_cache(Path::new(&path)),
+        Err(_) => deterministic_cases(),
+    }
+}
+
+fn cases_from_cache(path: &Path) -> (Vec<AimeCase>, Vec<AimeCase>, Vec<AimeCase>) {
+    let bytes = std::fs::read(path).unwrap_or_else(|source| {
+        panic!(
+            "failed to read LEAVEN_AIME_CACHE={}: {source}",
+            path.display()
+        )
+    });
+    let cache: AimeDatasetCache = serde_json::from_slice(&bytes).unwrap_or_else(|source| {
+        panic!(
+            "failed to parse LEAVEN_AIME_CACHE={}: {source}",
+            path.display()
+        )
+    });
+    (cache.train, cache.validation, cache.test)
 }
 
 fn deterministic_cases() -> (Vec<AimeCase>, Vec<AimeCase>, Vec<AimeCase>) {
     let train = vec![
         AimeCase {
-            problem: "Find the remainder when 2^10 is divided by 7.",
+            problem: "Find the remainder when 2^10 is divided by 7.".to_owned(),
             answer: 2,
-            solution: "2^3 = 8 == 1 mod 7, so 2^10 == 2 mod 7.",
+            solution: "2^3 = 8 == 1 mod 7, so 2^10 == 2 mod 7.".to_owned(),
             needs_modular: true,
         },
         AimeCase {
-            problem: "What is 19 + 23?",
+            problem: "What is 19 + 23?".to_owned(),
             answer: 42,
-            solution: "19 + 23 = 42.",
+            solution: "19 + 23 = 42.".to_owned(),
             needs_modular: false,
         },
         AimeCase {
-            problem: "Find the remainder when 5^4 is divided by 13.",
+            problem: "Find the remainder when 5^4 is divided by 13.".to_owned(),
             answer: 1,
-            solution: "5^2 = 25 == -1 mod 13, so 5^4 == 1.",
+            solution: "5^2 = 25 == -1 mod 13, so 5^4 == 1.".to_owned(),
             needs_modular: true,
         },
     ];
     let validation = vec![AimeCase {
-        problem: "Find the remainder when 3^6 is divided by 7.",
+        problem: "Find the remainder when 3^6 is divided by 7.".to_owned(),
         answer: 1,
-        solution: "3^6 = 729 == 1 mod 7.",
+        solution: "3^6 = 729 == 1 mod 7.".to_owned(),
         needs_modular: true,
     }];
     let test = vec![
         AimeCase {
-            problem: "Find the remainder when 4^5 is divided by 9.",
+            problem: "Find the remainder when 4^5 is divided by 9.".to_owned(),
             answer: 7,
-            solution: "4^3 == 1 mod 9, so 4^5 == 4^2 == 7.",
+            solution: "4^3 == 1 mod 9, so 4^5 == 4^2 == 7.".to_owned(),
             needs_modular: true,
         },
         AimeCase {
-            problem: "What is 31 - 8?",
+            problem: "What is 31 - 8?".to_owned(),
             answer: 23,
-            solution: "31 - 8 = 23.",
+            solution: "31 - 8 = 23.".to_owned(),
             needs_modular: false,
         },
     ];
@@ -205,6 +269,9 @@ fn deterministic_cases() -> (Vec<AimeCase>, Vec<AimeCase>, Vec<AimeCase>) {
 }
 
 fn run_solver(prompt: &AimePrompt, case: &AimeCase) -> RunOutput {
+    if std::env::var_os("LEAVEN_AIME_LIVE_OPENAI").is_some() {
+        return run_openai_solver(prompt, case);
+    }
     let has_modular = prompt.system.contains("modular arithmetic");
     let verifies = prompt.system.contains("Verify arithmetic");
     let correct = (!case.needs_modular || has_modular) && verifies;
@@ -221,6 +288,55 @@ fn run_solver(prompt: &AimePrompt, case: &AimeCase) -> RunOutput {
             format!("solver_answer: {answer}"),
         ],
     )
+}
+
+fn run_openai_solver(prompt: &AimePrompt, case: &AimeCase) -> RunOutput {
+    let python = std::env::var("LEAVEN_OPENAI_PYTHON").unwrap_or_else(|_| "python3".to_owned());
+    let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/openai_solver.py");
+    let output = Command::new(&python)
+        .arg(script)
+        .env("LEAVEN_AIME_SYSTEM_PROMPT", &prompt.system)
+        .env("LEAVEN_AIME_PROBLEM", &case.problem)
+        .stdin(Stdio::null())
+        .output();
+    match output {
+        Ok(output) if output.status.success() => {
+            let answer = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+            RunOutput::new(
+                answer.clone(),
+                vec![
+                    "provider: openai-responses".to_owned(),
+                    format!("model: {}", openai_model_name()),
+                    format!("problem: {}", case.problem),
+                    format!("system_prompt: {}", prompt.system),
+                    format!("solver_answer: {answer}"),
+                ],
+            )
+        }
+        Ok(output) => RunOutput::new(
+            String::new(),
+            vec![
+                "provider: openai-responses".to_owned(),
+                format!("model: {}", openai_model_name()),
+                format!("problem: {}", case.problem),
+                format!("openai_status: {}", output.status),
+                format!("openai_stderr: {}", String::from_utf8_lossy(&output.stderr)),
+            ],
+        ),
+        Err(source) => RunOutput::new(
+            String::new(),
+            vec![
+                "provider: openai-responses".to_owned(),
+                format!("model: {}", openai_model_name()),
+                format!("problem: {}", case.problem),
+                format!("openai_spawn_error: {source}"),
+            ],
+        ),
+    }
+}
+
+fn openai_model_name() -> String {
+    std::env::var("LEAVEN_OPENAI_MODEL").unwrap_or_else(|_| "gpt-5-mini".to_owned())
 }
 
 fn score_answer(ctx: ScoreContext<'_, AimePrompt, AimeCase>) -> Score {
@@ -274,8 +390,22 @@ mod tests {
 
         assert_eq!(result.report.baseline_train_score, 0.0);
         assert_eq!(result.report.optimized_train_score, 1.0);
+        assert_eq!(result.report.baseline_validation_score, Some(0.0));
         assert_eq!(result.report.validation_score, Some(1.0));
+        assert_eq!(result.report.baseline_test_score, Some(0.0));
         assert_eq!(result.report.test_score, Some(1.0));
+        assert_eq!(result.report.evaluation.splits_reported.len(), 3);
+        assert!(result.report.budget.spent.metric_calls > 0);
+        assert!(
+            result
+                .report
+                .evaluation
+                .splits_reported
+                .iter()
+                .flat_map(|split| &split.candidates)
+                .flat_map(|candidate| &candidate.cases)
+                .any(|case| !case.feedback.is_empty() && !case.trace.is_empty())
+        );
         assert!(result.best().system.contains("modular arithmetic"));
         assert!(
             result
@@ -298,5 +428,39 @@ mod tests {
                 .iter()
                 .any(|event| event == "optimization_ended")
         );
+    }
+
+    #[test]
+    fn aime_cache_loading_preserves_train_validation_test_roles() {
+        let path =
+            std::env::temp_dir().join(format!("leaven-aime-cache-{}.json", std::process::id()));
+        let cache = AimeDatasetCache {
+            train: vec![AimeCase {
+                problem: "train".to_owned(),
+                answer: 1,
+                solution: "train solution".to_owned(),
+                needs_modular: true,
+            }],
+            validation: vec![AimeCase {
+                problem: "validation".to_owned(),
+                answer: 2,
+                solution: "validation solution".to_owned(),
+                needs_modular: true,
+            }],
+            test: vec![AimeCase {
+                problem: "test".to_owned(),
+                answer: 3,
+                solution: "test solution".to_owned(),
+                needs_modular: true,
+            }],
+        };
+        std::fs::write(&path, serde_json::to_vec(&cache).unwrap()).unwrap();
+
+        let (train, validation, test) = cases_from_cache(&path);
+
+        assert_eq!(train[0].problem, "train");
+        assert_eq!(validation[0].problem, "validation");
+        assert_eq!(test[0].problem, "test");
+        std::fs::remove_file(path).unwrap();
     }
 }

@@ -6,20 +6,25 @@ use leaven_core::{
     AssessmentGranularity, EvaluationPurpose, EvaluationRequest, EvaluationSet, InfoRef,
     OptimizationProblem, PartitionId, Proposal, ProposalBatch, ProposalBatchSemantics,
 };
-use leaven_engine::{Optimizer, OptimizerError, PopulationEvent, RunContext, RunGraphView};
+use leaven_engine::{
+    CheckpointContext, CheckpointError, CheckpointableOptimizer, Optimizer, OptimizerError,
+    PopulationEvent, PrivateStatePolicy, RestoreContext, RunContext, RunGraphView, StateFormat,
+};
 use leaven_evidence::{CaseOutcome, CasewiseEvidence, ScalarEvidence, ScoredFeedbackEvidence};
 use leaven_kernel::{
-    AssessmentId, CandidateId, Cost, EvaluatorId, MetadataBag, PopulationId, StageId,
+    AssessmentId, CandidateId, Cost, EvaluatorId, Fingerprint, MetadataBag, PopulationId, StageId,
 };
 use leaven_population::{KeepBest, ParetoFrontier};
 use leaven_surface::{EditSurface, SurfaceError};
+use serde::{Deserialize, Serialize};
 
 use crate::{
-    CandidateSelector, Gate, GateDecision, ParetoFrequencyWeighted, PartSelector, RoundRobinPart,
-    StrictImprovement, SurfaceProposer,
+    CandidateSelector, CheckpointPartSelector, Gate, GateDecision, ParetoFrequencyWeighted,
+    PartSelector, RoundRobinPart, StrictImprovement, SurfaceProposer,
 };
 
 const DEFAULT_MAX_ITERATIONS: usize = 1;
+const GEPA_CHECKPOINT_SCHEMA: Fingerprint = Fingerprint::from_bytes([7; 32]);
 
 /// Evidence shape GEPA can compare as casewise scalar scores.
 pub trait GepaScoreEvidence: leaven_core::Evidence {
@@ -152,6 +157,17 @@ pub struct Gepa<
     completed_iterations: usize,
     best: Option<CandidateId>,
     observed: BTreeSet<CandidateId>,
+}
+
+/// Serializable GEPA private state.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct GepaCheckpointState<PartSelectorState> {
+    train_partition: PartitionId,
+    max_iterations: usize,
+    completed_iterations: usize,
+    best: Option<CandidateId>,
+    observed: BTreeSet<CandidateId>,
+    part_selector: PartSelectorState,
 }
 
 /// Private helper trait used only to give `Gepa` a default generic slot.
@@ -419,6 +435,57 @@ where
 
     fn best_candidate(&self, _graph: RunGraphView<'_, P>) -> Option<CandidateId> {
         self.best.or_else(|| self.population.best())
+    }
+}
+
+impl<P, S, Pop, Reflect, ParentSel, PartSel, GatePol> CheckpointableOptimizer<P>
+    for Gepa<S, Pop, Reflect, ParentSel, PartSel, GatePol>
+where
+    P: OptimizationProblem,
+    P::Evidence: GepaScoreEvidence,
+    P::ProposalAnnotations: Default,
+    S: EditSurface<P::Artifact> + Send,
+    Pop: GepaPopulation + Send,
+    Reflect: SurfaceProposer<P::Artifact, S> + Send,
+    ParentSel: CandidateSelector<P, Pop, Selection = Option<CandidateId>> + Send,
+    PartSel: PartSelector<P::Artifact, S> + CheckpointPartSelector + Send,
+    GatePol: Gate + Send,
+{
+    type State = GepaCheckpointState<PartSel::State>;
+
+    fn private_state_policy(&self) -> PrivateStatePolicy {
+        PrivateStatePolicy::ExplicitSnapshot {
+            schema: GEPA_CHECKPOINT_SCHEMA,
+            format: StateFormat::Json,
+        }
+    }
+
+    fn checkpoint_state(
+        &self,
+        _ctx: CheckpointContext<'_, P>,
+    ) -> Result<Self::State, CheckpointError> {
+        Ok(GepaCheckpointState {
+            train_partition: self.train_partition.clone(),
+            max_iterations: self.max_iterations,
+            completed_iterations: self.completed_iterations,
+            best: self.best,
+            observed: self.observed.clone(),
+            part_selector: self.part_selector.checkpoint_state(),
+        })
+    }
+
+    fn restore_state(
+        &mut self,
+        state: Self::State,
+        _ctx: RestoreContext<'_, P>,
+    ) -> Result<(), CheckpointError> {
+        self.train_partition = state.train_partition;
+        self.max_iterations = state.max_iterations;
+        self.completed_iterations = state.completed_iterations;
+        self.best = state.best;
+        self.observed = state.observed;
+        self.part_selector.restore_state(state.part_selector);
+        Ok(())
     }
 }
 

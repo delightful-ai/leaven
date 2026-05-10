@@ -8,8 +8,10 @@ pub mod selector;
 pub mod validation;
 
 pub use gate::{Gate, GateDecision, ImprovementOrEqual, NoRegression, StrictImprovement};
-pub use optimizer::{Gepa, GepaBuilder, GepaConfig, MergeScheduler};
-pub use part_selector::{PartSelector, RoundRobinPart, WorstEvidencePart};
+pub use optimizer::{
+    Gepa, GepaBuilder, GepaCheckpointState, GepaConfig, GepaScoreEvidence, MergeScheduler,
+};
+pub use part_selector::{CheckpointPartSelector, PartSelector, RoundRobinPart, WorstEvidencePart};
 pub use proposer::{
     ReflectiveMutation, ReflectiveMutationConfig, SurfaceProposer, SystemAwareMerge,
 };

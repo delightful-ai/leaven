@@ -47,8 +47,12 @@ pub struct OptimizationReport {
     pub baseline_train_score: f64,
     /// Optimized train score.
     pub optimized_train_score: f64,
+    /// Optional validation score for the seed candidate.
+    pub baseline_validation_score: Option<f64>,
     /// Optional validation score for best candidate.
     pub validation_score: Option<f64>,
+    /// Optional final held-out test score for the seed candidate.
+    pub baseline_test_score: Option<f64>,
     /// Optional final held-out test score for best candidate.
     pub test_score: Option<f64>,
     /// Split-aware report.

@@ -659,13 +659,15 @@ examples/p3_gepa_parity
 New product examples:
 
 ```text
-examples/p8_gepa_prompt_optimizer
+examples/p8_aime_gepa
 examples/p9_gepa_skill_surface_smoke
 examples/p10_eval_suite_train_val_test
 ```
 
-`p8` should be the minimal off-the-shelf prompt optimizer. `p9` should prove
-GEPA over a folder/skill-like surface with mock LM/runtime only.
+`p8` is the minimal off-the-shelf AIME prompt optimizer: deterministic scripted
+runner by default, optional HuggingFace AIME cache, and opt-in live OpenAI
+runner. `p9` should prove GEPA over a folder/skill-like surface with mock
+LM/runtime only.
 
 ## 18. Implementation Milestones
 
@@ -686,7 +688,8 @@ Scope:
 
 ### Milestone A: Real GEPA Loop, Deterministic Proposer
 
-Goal: replace example-local GEPA rhythm with reusable `Gepa<P, S, Pop>`.
+Goal: replace example-local GEPA rhythm with reusable `Gepa<S, Pop, ...>` that
+does not require Layer 1 callers to name the lowered problem type.
 
 Scope:
 

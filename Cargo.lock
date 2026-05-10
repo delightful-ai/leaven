@@ -2562,6 +2562,7 @@ dependencies = [
  "leaven-store-inline",
  "leaven-surface",
  "proptest",
+ "serde",
 ]
 
 [[package]]
@@ -3414,6 +3415,8 @@ dependencies = [
  "leaven-kernel",
  "leaven-population",
  "leaven-surface",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

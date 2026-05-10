@@ -7,9 +7,11 @@ use leaven_core::{
     ProposalBatch, ProposalBatchSemantics, ResolvedEvaluationRequest, ResolvedRequestKind,
 };
 use leaven_engine::{
-    BudgetLedger, CachePolicy, CaseSet, EvaluationContext, EvaluationError, Evaluator,
-    ProposalContext, ProposalError, Proposer, RunContext, RunGraph, TrustPolicy,
+    BudgetLedger, CachePolicy, CaseSet, CheckpointContext, CheckpointableOptimizer,
+    EvaluationContext, EvaluationError, Evaluator, PrivateStatePolicy, ProposalContext,
+    ProposalError, Proposer, RestoreContext, RunContext, RunGraph, TrustPolicy,
 };
+use leaven_evidence::{CasewiseEvidence, ScalarEvidence};
 use leaven_gepa::{
     CandidateSelector, Gate, GateDecision, Gepa, ImprovementOrEqual, NoRegression,
     ParetoFrequencyWeighted, ReflectiveMutation, SelectBestCandidate, StrictImprovement,
@@ -170,6 +172,46 @@ fn gepa_explicit_strategies_are_owned_by_optimizer() {
 }
 
 #[test]
+fn gepa_checkpoint_state_restores_loop_and_selector_cursor() {
+    let artifact = PartMapArtifact(BTreeMap::from([
+        ("answer".to_owned(), "draft".to_owned()),
+        ("search".to_owned(), "query".to_owned()),
+    ]));
+    let mut graph = RunGraph::<SmokeProblem>::new(RunId::new());
+    let mut budget = BudgetLedger::default();
+    let mut ctx = RunContext::new(&mut graph, &mut budget);
+    ctx.insert_seed(artifact.clone(), 0).unwrap();
+    let mut gepa = Gepa::new(
+        PartMapSurface,
+        ParetoFrontier::by_case().build(),
+        ReflectiveMutation::new("unused".to_owned()),
+    );
+
+    assert_eq!(gepa.select_part(&artifact).unwrap(), "answer");
+    let state = gepa
+        .checkpoint_state(CheckpointContext::new(ctx.graph()))
+        .unwrap();
+    let policy = <Gepa<PartMapSurface, ParetoFrontier, ReflectiveMutation<String>> as CheckpointableOptimizer<
+        SmokeProblem,
+    >>::private_state_policy(&gepa);
+    assert!(matches!(
+        policy,
+        PrivateStatePolicy::ExplicitSnapshot { .. }
+    ));
+
+    let mut restored = Gepa::new(
+        PartMapSurface,
+        ParetoFrontier::by_case().build(),
+        ReflectiveMutation::new("unused".to_owned()),
+    );
+    restored
+        .restore_state(state, RestoreContext::new(ctx.graph()))
+        .unwrap();
+
+    assert_eq!(restored.select_part(&artifact).unwrap(), "search");
+}
+
+#[test]
 fn gepa_selectors_delegate_to_population_best_candidate() {
     let mut graph = RunGraph::<SmokeProblem>::new(RunId::new());
     let mut budget = BudgetLedger::default();
@@ -304,6 +346,12 @@ impl OptimizationProblem for SmokeProblem {
 struct SmokeEvidence;
 
 impl Evidence for SmokeEvidence {}
+
+impl leaven_gepa::GepaScoreEvidence for SmokeEvidence {
+    fn scalar_casewise(&self) -> CasewiseEvidence<ScalarEvidence> {
+        CasewiseEvidence::new(Vec::new())
+    }
+}
 
 struct VisibilityEvaluator;
 

@@ -16,3 +16,5 @@ leaven-kernel = { workspace = true }
 leaven-population = { workspace = true }
 leaven-surface = { workspace = true }
 futures = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }

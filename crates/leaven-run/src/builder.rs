@@ -11,9 +11,12 @@ use leaven_core::{
     OptimizationProblem, PartitionId,
 };
 use leaven_engine::{Callback, Optimizer, TrustPolicy};
-use leaven_eval::{Dataset, DatasetSplits, EvaluationReport, SplitPolicy, SplitRole};
+use leaven_eval::{
+    CandidateEvaluationSummary, Dataset, DatasetSplits, EvaluationReport, ReportScore, SplitPolicy,
+    SplitReport, SplitRole,
+};
 use leaven_evidence::{CasewiseEvidence, ScoredFeedbackEvidence};
-use leaven_kernel::{Budget, CaseId, Cost, EvaluatorId};
+use leaven_kernel::{Budget, CaseId, EvaluatorId};
 use leaven_store::EvidenceStore;
 use leaven_store_inline::InlineEvidenceStore;
 
@@ -208,6 +211,21 @@ where
             )
         })?;
 
+        let baseline_validation_score = if self.validation.is_empty() {
+            None
+        } else {
+            Some(
+                final_eval(
+                    &mut engine,
+                    &case_set,
+                    &store,
+                    seed,
+                    PartitionId::from("VALIDATION"),
+                    EvaluationPurpose::Validation,
+                )
+                .await?,
+            )
+        };
         let validation_score = if self.validation.is_empty() {
             None
         } else {
@@ -219,6 +237,21 @@ where
                     best,
                     PartitionId::from("VALIDATION"),
                     EvaluationPurpose::Validation,
+                )
+                .await?,
+            )
+        };
+        let baseline_test_score = if self.test.is_empty() {
+            None
+        } else {
+            Some(
+                final_eval(
+                    &mut engine,
+                    &case_set,
+                    &store,
+                    seed,
+                    PartitionId::from("TEST"),
+                    EvaluationPurpose::FinalTest,
                 )
                 .await?,
             )
@@ -240,24 +273,36 @@ where
         };
 
         let view = engine.view();
-        let baseline_train = latest_average_for(&view, &store, seed).unwrap_or(0.0);
-        let optimized_train = latest_average_for(&view, &store, best).unwrap_or(0.0);
+        let train_partition = PartitionId::from("TRAIN");
+        let baseline_train =
+            latest_average_for_partition(&view, &store, seed, &train_partition)?.unwrap_or(0.0);
+        let optimized_train =
+            latest_average_for_partition(&view, &store, best, &train_partition)?.unwrap_or(0.0);
         let events = view.events().map(event_name).collect::<Vec<_>>();
         let best_artifact = view.artifact(best).expect("best exists").clone();
-        let split_reports = Vec::new();
+        let split_reports = split_reports_for(&view, &store, &splits)?;
+        let cost = engine.budget().snapshot().spent;
         let report = OptimizationReport {
             dataset: dataset.fingerprint(),
             splits: splits.fingerprint(),
             budget: engine.budget().snapshot(),
-            cost: Cost::zero(),
+            cost: cost.clone(),
             baseline_train_score: baseline_train,
             optimized_train_score: optimized_train,
-            validation_score,
-            test_score,
+            baseline_validation_score: baseline_validation_score
+                .as_ref()
+                .map(|summary| summary.average_score),
+            validation_score: validation_score
+                .as_ref()
+                .map(|summary| summary.average_score),
+            baseline_test_score: baseline_test_score
+                .as_ref()
+                .map(|summary| summary.average_score),
+            test_score: test_score.as_ref().map(|summary| summary.average_score),
             evaluation: EvaluationReport {
                 dataset: dataset.fingerprint(),
                 splits: splits.fingerprint(),
-                cost: Cost::zero(),
+                cost,
                 splits_reported: split_reports,
             },
             events,
@@ -348,7 +393,7 @@ async fn final_eval<A, C>(
     candidate: leaven_kernel::CandidateId,
     partition: PartitionId,
     purpose: EvaluationPurpose,
-) -> Result<f64, leaven_engine::OptimizerError>
+) -> Result<CandidateEvaluationSummary, leaven_engine::OptimizerError>
 where
     A: Artifact,
     C: Clone + Send + Sync + 'static,
@@ -369,56 +414,131 @@ where
         .map_err(|source| {
             leaven_engine::OptimizerError::with_source("final evaluation failed", source)
         })?;
-    let evidence = store
-        .get(
-            engine
-                .view()
-                .assessment(report.assessment_ids[0])
-                .expect("final assessment exists")
-                .evidence_ref(),
-        )
-        .map_err(|source| {
-            leaven_engine::OptimizerError::with_source("final evidence lookup failed", source)
-        })?;
-    Ok(average(
-        &evidence
-            .outcomes()
-            .iter()
-            .map(|outcome| leaven_eval::ReportScore {
-                score: outcome.evidence().score().score(),
-                feedback: outcome.evidence().feedback().to_owned(),
-                trace: outcome.evidence().trace().to_vec(),
-            })
-            .collect::<Vec<_>>(),
-    ))
+    let view = engine.view();
+    assessment_summary(&view, store, report.assessment_ids[0])
 }
 
-fn latest_average_for<A, C>(
+fn latest_average_for_partition<A, C>(
     view: &leaven_engine::RunGraphView<'_, RunProblem<A, C>>,
     store: &InlineEvidenceStore<CasewiseEvidence<ScoredFeedbackEvidence>>,
     candidate: leaven_kernel::CandidateId,
-) -> Option<f64>
+    partition: &PartitionId,
+) -> Result<Option<f64>, leaven_engine::OptimizerError>
 where
     A: Artifact,
     C: Clone + Send + Sync + 'static,
 {
-    view.assessments(candidate)
+    let mut latest = None;
+    for assessment in view.assessments(candidate).iter() {
+        let Some((assessment_partition, _role)) = assessment_split(view, assessment.id()) else {
+            continue;
+        };
+        if &assessment_partition != partition {
+            continue;
+        }
+        latest = Some(assessment_summary(view, store, assessment.id())?.average_score);
+    }
+    Ok(latest)
+}
+
+fn split_reports_for<A, C>(
+    view: &leaven_engine::RunGraphView<'_, RunProblem<A, C>>,
+    store: &InlineEvidenceStore<CasewiseEvidence<ScoredFeedbackEvidence>>,
+    splits: &DatasetSplits,
+) -> Result<Vec<SplitReport>, leaven_engine::OptimizerError>
+where
+    A: Artifact,
+    C: Clone + Send + Sync + 'static,
+{
+    let mut reports = BTreeMap::<PartitionId, SplitReport>::new();
+    for assessment in view.all_assessments() {
+        let Some((partition, role)) = assessment_split(view, assessment.id()) else {
+            continue;
+        };
+        if splits.role(&partition).is_none() {
+            continue;
+        }
+        let summary = assessment_summary(view, store, assessment.id())?;
+        reports
+            .entry(partition.clone())
+            .or_insert_with(|| SplitReport {
+                role,
+                partition,
+                candidates: Vec::new(),
+            })
+            .candidates
+            .push(summary);
+    }
+    Ok(reports.into_values().collect())
+}
+
+fn assessment_split<A, C>(
+    view: &leaven_engine::RunGraphView<'_, RunProblem<A, C>>,
+    assessment: leaven_kernel::AssessmentId,
+) -> Option<(PartitionId, SplitRole)>
+where
+    A: Artifact,
+    C: Clone + Send + Sync + 'static,
+{
+    let request_id = view.assessment(assessment)?.request_id();
+    let evaluation_request = view.evaluation_request(request_id)?;
+    let request = evaluation_request.request();
+    let partition = match request {
+        EvaluationRequest::Independent {
+            set: EvaluationSet::Partition(partition),
+            ..
+        } => partition.clone(),
+        _ => return None,
+    };
+    let role = match partition.0.as_str() {
+        "TRAIN" => SplitRole::Train,
+        "VALIDATION" => SplitRole::Validation,
+        "TEST" => SplitRole::Test,
+        other => SplitRole::Custom(other.to_owned().into()),
+    };
+    Some((partition, role))
+}
+
+fn assessment_summary<A, C>(
+    view: &leaven_engine::RunGraphView<'_, RunProblem<A, C>>,
+    store: &InlineEvidenceStore<CasewiseEvidence<ScoredFeedbackEvidence>>,
+    assessment: leaven_kernel::AssessmentId,
+) -> Result<CandidateEvaluationSummary, leaven_engine::OptimizerError>
+where
+    A: Artifact,
+    C: Clone + Send + Sync + 'static,
+{
+    let assessment_view = view.assessment(assessment).ok_or_else(|| {
+        leaven_engine::OptimizerError::Message("assessment missing from graph".to_owned())
+    })?;
+    let candidate = assessment_view.independent_candidate().ok_or_else(|| {
+        leaven_engine::OptimizerError::Message("report expected independent assessment".to_owned())
+    })?;
+    let evidence = store
+        .get(assessment_view.evidence_ref())
+        .map_err(|source| {
+            leaven_engine::OptimizerError::with_source("report evidence lookup failed", source)
+        })?;
+    let cases = report_scores(&evidence);
+    Ok(CandidateEvaluationSummary {
+        candidate,
+        request: assessment_view.request_id(),
+        assessment,
+        average_score: average(&cases),
+        cases,
+    })
+}
+
+fn report_scores(evidence: &CasewiseEvidence<ScoredFeedbackEvidence>) -> Vec<ReportScore> {
+    evidence
+        .outcomes()
         .iter()
-        .last()
-        .map(|assessment| {
-            let evidence = store.get(assessment.evidence_ref()).ok()?;
-            Some(average(
-                &evidence
-                    .outcomes()
-                    .iter()
-                    .map(|outcome| leaven_eval::ReportScore {
-                        score: outcome.evidence().score().score(),
-                        feedback: outcome.evidence().feedback().to_owned(),
-                        trace: outcome.evidence().trace().to_vec(),
-                    })
-                    .collect::<Vec<_>>(),
-            ))
-        })?
+        .map(|outcome| ReportScore {
+            score: outcome.evidence().score().score(),
+            feedback: outcome.evidence().feedback().to_owned(),
+            trace: outcome.evidence().trace().to_vec(),
+        })
+        .collect()
 }
 
 fn event_name(event: &leaven_engine::RunEvent) -> String {
