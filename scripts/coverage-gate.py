@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -15,8 +16,10 @@ RUN_PACKAGES = [
     "p2_pairwise_tournament",
     "p3_gepa_parity",
     "p4_meta_harness_lite",
+    "p5_evoskill_iteration",
     "p6_optimizer_policy_self_opt",
     "p7_self_optimization_kernel",
+    "p8_aime_gepa",
     "xtask",
 ]
 
@@ -39,6 +42,8 @@ def main() -> int:
     args = parser.parse_args()
     output_path = Path(args.output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    p5_run_dir = Path("target/llvm-cov-p5-evoskill")
+    shutil.rmtree(p5_run_dir, ignore_errors=True)
 
     commands = [
         ["cargo", "llvm-cov", "clean", "--workspace"],
@@ -50,10 +55,7 @@ def main() -> int:
             "--branch",
             *exclude_args(),
         ],
-        *[
-            ["cargo", "llvm-cov", "run", "--no-report", "-p", package]
-            for package in RUN_PACKAGES
-        ],
+        *[run_package_command(package, p5_run_dir) for package in RUN_PACKAGES],
     ]
     for command in commands:
         result = run(command)
@@ -127,6 +129,13 @@ def main() -> int:
 def run(command: list[str]) -> subprocess.CompletedProcess[bytes]:
     print(f"running coverage gate: {' '.join(command)}", flush=True)
     return subprocess.run(command, check=False)
+
+
+def run_package_command(package: str, p5_run_dir: Path) -> list[str]:
+    command = ["cargo", "llvm-cov", "run", "--no-report", "-p", package]
+    if package == "p5_evoskill_iteration":
+        command.extend(["--", "--run-dir", str(p5_run_dir)])
+    return command
 
 
 def exclude_args() -> list[str]:

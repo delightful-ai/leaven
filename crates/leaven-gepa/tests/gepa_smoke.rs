@@ -7,15 +7,15 @@ use leaven_core::{
     ProposalBatch, ProposalBatchSemantics, ResolvedEvaluationRequest, ResolvedRequestKind,
 };
 use leaven_engine::{
-    BudgetLedger, CachePolicy, CaseSet, CheckpointContext, CheckpointableOptimizer,
+    BudgetLedger, CachePolicy, CaseSet, CheckpointContext, CheckpointableOptimizer, Engine,
     EvaluationContext, EvaluationError, Evaluator, PrivateStatePolicy, ProposalContext,
     ProposalError, Proposer, RestoreContext, RunContext, RunGraph, TrustPolicy,
 };
-use leaven_evidence::{CasewiseEvidence, ScalarEvidence};
+use leaven_evidence::{CaseOutcome, CasewiseEvidence, ScalarEvidence, ScoredFeedbackEvidence};
 use leaven_gepa::{
     CandidateSelector, Gate, GateDecision, Gepa, ImprovementOrEqual, NoRegression,
     ParetoFrequencyWeighted, ReflectiveMutation, SelectBestCandidate, StrictImprovement,
-    SurfaceProposer,
+    SurfaceProposer, optimizer::GepaPopulation,
 };
 use leaven_kernel::{
     Budget, ContentId, Cost, EvaluatorId, Fingerprint, MetadataBag, Metered, ProposerId, RunId,
@@ -241,6 +241,169 @@ fn gepa_selectors_delegate_to_population_best_candidate() {
 }
 
 #[test]
+fn gepa_score_evidence_projects_feedback_scores_to_scalar_casewise() {
+    let scored = CasewiseEvidence::new(vec![
+        CaseOutcome::new(
+            leaven_kernel::CaseId::new(0),
+            ScoredFeedbackEvidence::new(
+                ScalarEvidence::new(1.0).unwrap(),
+                "correct".to_owned(),
+                vec!["trace".to_owned()],
+            ),
+        ),
+        CaseOutcome::new(
+            leaven_kernel::CaseId::new(1),
+            ScoredFeedbackEvidence::new(
+                ScalarEvidence::new(0.5).unwrap(),
+                "partial".to_owned(),
+                vec!["trace".to_owned()],
+            ),
+        ),
+    ]);
+    let scalar = leaven_gepa::GepaScoreEvidence::scalar_casewise(&scored);
+
+    assert_eq!(
+        leaven_gepa::GepaScoreEvidence::average_score(&scored),
+        Some(0.75)
+    );
+    assert_eq!(scalar.outcomes()[0].evidence().score(), 1.0);
+    assert_eq!(scalar.outcomes()[1].evidence().score(), 0.5);
+    assert_eq!(
+        leaven_gepa::GepaScoreEvidence::average_score(&CasewiseEvidence::<ScalarEvidence>::new(
+            Vec::new()
+        )),
+        None
+    );
+}
+
+#[test]
+fn keep_best_gepa_population_ignores_empty_casewise_and_averages_scores() {
+    let candidate = leaven_kernel::CandidateId::new();
+    let assessment = leaven_kernel::AssessmentId::new();
+    let empty = CasewiseEvidence::<ScalarEvidence>::new(Vec::new());
+    let mut keep_best = KeepBest::new();
+
+    assert_eq!(GepaPopulation::id(&keep_best), keep_best.id());
+    let ignored = GepaPopulation::observe_gepa(
+        &mut keep_best,
+        Some(&leaven_core::PartitionId::from("TRAIN")),
+        candidate,
+        assessment,
+        &empty,
+    );
+
+    assert!(matches!(
+        &ignored[..],
+        [leaven_engine::PopulationEvent::Ignored { candidate: observed, .. }]
+            if *observed == candidate
+    ));
+    assert_eq!(GepaPopulation::best(&keep_best), None);
+
+    let scored = CasewiseEvidence::new(vec![
+        CaseOutcome::new(
+            leaven_kernel::CaseId::new(0),
+            ScalarEvidence::new(0.25).unwrap(),
+        ),
+        CaseOutcome::new(
+            leaven_kernel::CaseId::new(1),
+            ScalarEvidence::new(0.75).unwrap(),
+        ),
+    ]);
+    let events = GepaPopulation::observe_gepa(&mut keep_best, None, candidate, assessment, &scored);
+
+    assert!(!events.is_empty());
+    assert_eq!(GepaPopulation::best(&keep_best), Some(candidate));
+
+    let mut frontier = ParetoFrontier::by_case().build();
+    let frontier_events =
+        GepaPopulation::observe_gepa(&mut frontier, None, candidate, assessment, &scored);
+    assert!(!frontier_events.is_empty());
+}
+
+#[test]
+fn gepa_builder_default_reflector_path_uses_pareto_frontier_defaults() {
+    let gepa = Gepa::builder()
+        .surface(PartMapSurface)
+        .reflector(ReflectiveMutation::new("improved".to_owned()))
+        .max_iterations(2);
+
+    assert_eq!(gepa.population().best(), None);
+}
+
+#[test]
+fn gepa_run_reports_missing_seed_before_evaluation() {
+    block_on(async {
+        let case_set = train_case_set();
+        let store = InlineEvidenceStore::<SmokeEvidence>::new("inline");
+        let mut engine = Engine::<SmokeProblem>::builder()
+            .evaluator(VisibilityEvaluator)
+            .build();
+        let mut gepa = Gepa::new(
+            PartMapSurface,
+            ParetoFrontier::by_case().build(),
+            ReflectiveMutation::new("unused".to_owned()),
+        );
+
+        let error = engine.run(&mut gepa, &case_set, &store).await.unwrap_err();
+
+        assert!(error.to_string().contains("at least one seed candidate"));
+    });
+}
+
+#[test]
+fn gepa_run_reports_empty_casewise_scores() {
+    block_on(async {
+        let case_set = train_case_set();
+        let store = InlineEvidenceStore::<SmokeEvidence>::new("inline");
+        let mut engine = Engine::<SmokeProblem>::builder()
+            .evaluator(VisibilityEvaluator)
+            .build();
+        engine
+            .insert_seed(
+                PartMapArtifact(BTreeMap::from([("answer".to_owned(), "draft".to_owned())])),
+                0,
+            )
+            .unwrap();
+        let mut gepa = Gepa::new(
+            PartMapSurface,
+            ParetoFrontier::by_case().build(),
+            ReflectiveMutation::new("unused".to_owned()),
+        );
+
+        let error = engine.run(&mut gepa, &case_set, &store).await.unwrap_err();
+
+        assert!(error.to_string().contains("casewise scores"));
+    });
+}
+
+#[test]
+fn gepa_zero_iterations_finishes_without_best_candidate() {
+    block_on(async {
+        let case_set = train_case_set();
+        let store = InlineEvidenceStore::<SmokeEvidence>::new("inline");
+        let mut engine = Engine::<SmokeProblem>::builder()
+            .evaluator(VisibilityEvaluator)
+            .build();
+        engine
+            .insert_seed(
+                PartMapArtifact(BTreeMap::from([("answer".to_owned(), "draft".to_owned())])),
+                0,
+            )
+            .unwrap();
+        let mut gepa = Gepa::new(
+            PartMapSurface,
+            ParetoFrontier::by_case().build(),
+            ReflectiveMutation::new("unused".to_owned()),
+        )
+        .max_iterations(0);
+
+        let run = engine.run(&mut gepa, &case_set, &store).await.unwrap();
+
+        assert_eq!(run.best, None);
+    });
+}
+
+#[test]
 fn hidden_validation_partitions_are_not_visible_to_gepa_proposers() {
     block_on(async {
         let mut graph = RunGraph::<SmokeProblem>::new(RunId::new());
@@ -288,6 +451,13 @@ fn hidden_validation_partitions_are_not_visible_to_gepa_proposers() {
         assert!(report.proposal_ids.is_empty());
         assert_eq!(report.cost, Cost::zero());
     });
+}
+
+fn train_case_set() -> CaseSet<()> {
+    CaseSet::new(vec![()]).with_partition(
+        leaven_core::PartitionId::from("TRAIN"),
+        vec![leaven_kernel::CaseId::new(0)],
+    )
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

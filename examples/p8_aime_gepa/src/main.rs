@@ -442,6 +442,40 @@ mod tests {
     }
 
     #[test]
+    fn train_only_run_reports_absent_validation_and_test_scores() {
+        let (train, _, _) = deterministic_cases();
+        let result = block_on(run_aime(train, Vec::new(), Vec::new()));
+
+        assert_score(result.report.baseline_train_score, 0.0);
+        assert_score(result.report.optimized_train_score, 1.0);
+        assert_eq!(result.report.baseline_validation_score, None);
+        assert_eq!(result.report.validation_score, None);
+        assert_eq!(result.report.baseline_test_score, None);
+        assert_eq!(result.report.test_score, None);
+        assert_eq!(result.report().events.len(), result.report.events.len());
+        assert!(std::ptr::eq(result.best(), &result.best_artifact));
+    }
+
+    #[test]
+    fn run_builder_requires_score_function() {
+        let (train, _, _) = deterministic_cases();
+        let error = block_on(async {
+            leaven::optimize(AimePrompt::new(BASELINE))
+                .train(train)
+                .runner(run_solver)
+                .using(Gepa::builder().surface(AimePromptSurface).reflector(
+                    ReflectiveMutation::new(AimePromptEdit::ReplaceSystem(OPTIMIZED.to_owned())),
+                ))
+                .budget(Budget::metric_calls(8))
+                .run()
+                .await
+        })
+        .unwrap_err();
+
+        assert!(error.to_string().contains("score function is required"));
+    }
+
+    #[test]
     fn aime_cache_loading_preserves_train_validation_test_roles() {
         let path =
             std::env::temp_dir().join(format!("leaven-aime-cache-{}.json", std::process::id()));

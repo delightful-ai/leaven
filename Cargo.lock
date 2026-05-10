@@ -2679,6 +2679,7 @@ dependencies = [
 name = "leaven-run"
 version = "0.0.0"
 dependencies = [
+ "futures",
  "leaven-core",
  "leaven-engine",
  "leaven-eval",

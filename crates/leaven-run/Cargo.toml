@@ -19,3 +19,6 @@ leaven-kernel = { workspace = true }
 leaven-store = { workspace = true }
 leaven-store-inline = { workspace = true }
 thiserror = { workspace = true }
+
+[dev-dependencies]
+futures = { workspace = true }
