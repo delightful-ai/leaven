@@ -8,6 +8,7 @@ NEVER: use these essays as substitutes for crate-local ownership docs, protocol 
 - Read `error_design.md` before adding a new `Result` surface, capability error enum, or cross-module error mapping. It is the operational guide for caller decision surfaces, evidence preservation, and `OneOf` staying internal.
 - Read `test_design.md` before adding new tests or moving tests across layers. Use it to choose between law, example, scenario, and regression coverage, and to keep proof at the lowest clean layer.
 - Read `scatter.md` when code placement, source-of-truth, or “why is this hard to navigate?” questions feel diffuse. It is the guide for killing scatter, drift, translation, and noise.
+- Read `goal_handoff.md` after substantial planning/spec work and before setting a long-running goal when user intent could be replaced by a nearby provable proxy.
 
 ## Local rules
 - These docs are for durable design pressure, not point-in-time status. Do not add release notes, implementation plans, audits, or incident writeups here.
