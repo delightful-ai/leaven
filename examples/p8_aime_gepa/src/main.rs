@@ -158,7 +158,7 @@ impl EditSurface<AimePrompt> for AimePromptSurface {
     type Edit = AimePromptEdit;
 
     fn fingerprint(&self) -> SurfaceFingerprint {
-        SurfaceFingerprint(leaven_kernel::Fingerprint::from_bytes([8; 32]))
+        SurfaceFingerprint(Fingerprint::from_bytes([8; 32]))
     }
 
     fn parts<'a>(

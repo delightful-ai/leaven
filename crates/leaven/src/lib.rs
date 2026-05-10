@@ -26,7 +26,7 @@ pub use leaven_engine::{
 };
 pub use leaven_kernel::{
     Amount, AmountError, Budget, BudgetSnapshot, CandidateId, ContentId, Cost, CostUnit,
-    ErrorRecord, FiniteF64, FiniteF64Error, MetadataBag, ProposalId,
+    ErrorRecord, Fingerprint, FiniteF64, FiniteF64Error, MetadataBag, ProposalId,
 };
 pub use leaven_run::{
     OptimizationReport, OptimizeBuilder, OptimizeResult, RunOutput, Score, ScoreContext, optimize,

@@ -11,7 +11,8 @@ pub use leaven_engine::{
     RunContext, RunGraphView, Stopper, TrustPolicy,
 };
 pub use leaven_kernel::{
-    Budget, CandidateId, ContentId, Cost, CostUnit, ErrorRecord, FiniteF64, MetadataBag,
+    Budget, CandidateId, ContentId, Cost, CostUnit, ErrorRecord, Fingerprint, FiniteF64,
+    MetadataBag,
 };
 pub use leaven_run::{
     OptimizationReport, OptimizeResult, RunOutput, Score, ScoreContext, optimize,

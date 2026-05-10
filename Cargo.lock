@@ -3411,10 +3411,6 @@ version = "0.0.0"
 dependencies = [
  "futures",
  "leaven",
- "leaven-evidence",
- "leaven-kernel",
- "leaven-population",
- "leaven-surface",
  "serde",
  "serde_json",
 ]
