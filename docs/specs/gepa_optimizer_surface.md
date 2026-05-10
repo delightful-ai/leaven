@@ -12,6 +12,8 @@ It is subordinate to:
 - `docs/specs/milestone_examples_behavioral_contract.md`
 - `docs/specs/agentic_stage_runtime.md`
 - `docs/specs/agentic_skill_optimization_primitives.md`
+- `docs/specs/agentic_task_execution_substrate.md`
+- `docs/specs/agentic_library_user_journey.md`
 - `docs/testing/README.md`
 
 When this document conflicts with those specs, preserve the current Leaven
@@ -104,7 +106,8 @@ The end-user path should look like this:
 let result = leaven::optimize::<MyProblem>()
     .seed(seed_artifact)
     .cases(train_cases)
-    .holdout(validation_cases)
+    .validation_cases(validation_cases)
+    .test_cases(test_cases)
     .evaluator(my_evaluator)
     .using(
         Gepa::builder()
@@ -130,7 +133,8 @@ let gepa = Gepa::builder()
     .batch_sampler(EpochShuffled::new(4))
     .proposer(ReflectiveMutation::with_lm(reflection_lm))
     .gate(StrictImprovement)
-    .validation(FullValidation::new(PartitionId::from("TRAIN")))
+    .data_policy(GepaDataPolicy::default_generalization())
+    .validation(FullValidation::new(PartitionId::from("VALIDATION")))
     .population(
         ParetoFrontier::by_case()
             .partition_filter(BTreeSet::from([PartitionId::from("TRAIN")]))
@@ -165,15 +169,17 @@ P3 example's local optimizer loop.
 
 ## 4. Crate Graph
 
-### 4.1 Existing Ownership
+### 4.1 Existing And Planned Ownership
 
-Keep the current crate ownership:
+Keep the current crate ownership and add `leaven-eval` as the shared eval
+substrate crate:
 
 | Crate | Owns | Must not know |
 | --- | --- | --- |
 | `leaven-core` | artifact/problem/proposal/evaluation/evidence algebra | graph, engine, GEPA, surface, LLMs |
 | `leaven-surface` | `EditSurface`, `Part`, surface errors/fingerprints | graph, GEPA, stores, workspaces |
 | `leaven-engine` | `RunContext`, `RunGraph`, budget, cache, stage traits, engine loop | GEPA policy, concrete populations, concrete LLM SDKs |
+| `leaven-eval` | eval protocols, optional case catalogs, train/validation/test split manifests, leakage policies, casewise result adapters, eval reports | graph mutation, GEPA rhythm, concrete agent/provider/workspace backends, environment execution |
 | `leaven-evidence` | scalar/casewise/attribution/pairwise evidence shapes | graph mutation, GEPA rhythm |
 | `leaven-population` | `KeepBest`, `ParetoFrontier`, `TournamentPopulation`, population events | GEPA selectors, graph mutation internals |
 | `leaven-render` | renderers/materializers over typed values | optimizer rhythm, GEPA policy |
@@ -191,6 +197,7 @@ leaven-kernel
 leaven-core
 leaven-surface
 leaven-engine
+leaven-eval
 leaven-evidence
 leaven-preference
 leaven-population
@@ -213,6 +220,21 @@ leaven-cuda
 leaven-python
 ```
 
+`leaven-eval` is a warm product-support crate, not cold core. Its initial
+dependency direction should be:
+
+```text
+leaven-eval -> leaven-kernel
+leaven-eval -> leaven-core
+leaven-eval -> leaven-evidence
+leaven-eval -> leaven-engine   # only for evaluator/helper adapters
+```
+
+It must not depend on GEPA, concrete LM/provider crates, concrete workspace
+backends, DSRs, or agentic domain crates. Agentic and LM-program adapters may
+depend on `leaven-eval` to lower their domain case suites into the common eval
+suite shape.
+
 Domain adapters such as DSRs, CUDA, Python, skill banks, git artifacts, and
 agentic workflows provide artifacts, surfaces, evaluators, renderers, and
 optional convenience constructors. They do not own GEPA's rhythm.
@@ -231,6 +253,7 @@ part_selector.rs      PartSelector, RoundRobinPart, InvokedAndFailingPart
 proposal.rs           GepaMutationRequest, GepaProposal, SurfaceEdit
 reflection.rs         ReflectiveMutation, reflection prompt construction, ASI rendering
 result.rs             GepaResult, candidate summaries, frontier summaries
+data_policy.rs        GepaDataPolicy, split-use rules, leakage defaults
 validation.rs         ValidationPolicy, FullValidation, MinibatchThenValidation
 ```
 
@@ -290,6 +313,7 @@ seed(u64)
 proposal_count(usize)
 track_best_outputs(bool)
 track_candidate_history(bool)
+data_policy(...)
 ```
 
 The builder must reject incomplete configurations before the run starts:
@@ -297,6 +321,9 @@ The builder must reject incomplete configurations before the run starts:
 - no surface,
 - no proposer and no reflection LM default path,
 - validation policy references a missing partition,
+- train/search partition is empty when the sampler needs cases,
+- validation/test partitions overlap train unless the split policy explicitly
+  permits overlap,
 - batch sampler cannot draw from the configured search set,
 - `skip_perfect_score` without a perfect-score definition,
 - merge enabled without enough candidate lineage/support requirements.
@@ -327,7 +354,7 @@ One ordinary reflective mutation iteration is:
 2. Build a population view from the current graph.
 3. CandidateSelector chooses parent candidate(s).
 4. PartSelector chooses one or more surface parts on the parent artifact.
-5. BatchSampler chooses a feedback minibatch from the search partition.
+5. BatchSampler chooses a feedback minibatch from the train/search partition.
 6. GEPA evaluates the parent on the minibatch with per-case granularity.
 7. GEPA extracts/captures feedback assessment IDs.
 8. GepaProposer proposes one or more edits/native proposals.
@@ -357,11 +384,262 @@ Required invariants:
   or screening assessment;
 - population events are opinions, not graph truth.
 
-## 7. Modes
+## 7. Evaluation Protocol Semantics
+
+Evals are first-class library infrastructure. GEPA is one consumer of that
+infrastructure; LM-program optimizers, future DSRs adapters, Harbor/AISI-like
+agentic suites, pairwise optimizers, and non-GEPA optimizers must be able to
+reuse the same split and report semantics.
+
+Layering rule:
+
+```text
+Evaluation protocol  = what is measured, when, by whom, and how results count.
+Dataset/case catalog = optional source of examples, tasks, prompts, fixtures, ids.
+Environment          = optional execution substrate for an evaluator or agent.
+```
+
+These are related but not interchangeable.
+
+- A scalar reward evaluator may have no dataset and no environment.
+- A prompt benchmark has a dataset but may not need a workspace environment.
+- An agentic SWE task has a dataset-like task catalog and an environment.
+- A live web/human eval may have an environment and no fixed case catalog.
+- A pairwise preference optimizer has an eval protocol even when the "cases"
+  are candidate pairs produced online.
+
+`leaven-eval` should live at the evaluation protocol/report layer. It may
+provide optional case-catalog helpers because train/validation/test split
+semantics are reusable, but it must not become the environment crate.
+Workspaces stay in `leaven-workspace`; agent sessions stay in `leaven-agent`;
+agentic task semantics stay in `leaven-agentic`.
+
+### 7.1 Common Eval Surface
+
+`leaven-eval` should introduce a reusable eval surface over the cold
+`EvaluationSet` algebra and engine evaluator trait:
+
+```rust
+pub struct EvalProtocol {
+    pub id: EvalProtocolId,
+    pub request_shape: EvalRequestShape,
+    pub granularity: AssessmentGranularity,
+    pub split_uses: SplitUsePolicy,
+    pub report_axes: Vec<ScoreAxis>,
+    pub metadata: MetadataBag,
+}
+
+pub struct EvalSuite<C = EvalCase> {
+    pub protocol: EvalProtocol,
+    pub catalog: Option<CaseCatalog<C>>,
+    pub splits: Option<SplitManifest>,
+    pub fingerprint: Fingerprint,
+    pub metadata: MetadataBag,
+}
+
+pub struct CaseCatalog<C = EvalCase> {
+    pub cases: BTreeMap<CaseId, C>,
+    pub fingerprint: Fingerprint,
+    pub metadata: MetadataBag,
+}
+
+pub struct SplitManifest {
+    pub version: CaseSetVersion,
+    pub roles: BTreeMap<PartitionId, SplitRole>,
+    pub cases: BTreeMap<PartitionId, Vec<CaseId>>,
+    pub policy: SplitPolicy,
+}
+
+pub enum SplitRole {
+    Train,
+    Validation,
+    Test,
+    Probe,
+    Search,
+    ReportOnly,
+    Custom(String),
+}
+
+pub enum SplitPolicy {
+    DisjointRequired,
+    OverlapAllowed { reason: String },
+}
+```
+
+The exact type names may change during implementation, but the product promise
+must not:
+
+- eval protocols are valid without an attached dataset or environment;
+- case catalogs are reusable data sources, not the eval itself;
+- environments are referenced by evaluator/domain config and represented in
+  evidence, not owned by `leaven-eval`;
+- train/search cases are the default feedback source for proposal and
+  minibatch screening;
+- validation/dev cases are for model selection, checkpoint selection, and
+  generalization reporting;
+- test cases are final-report-only by default and are not used for proposer
+  feedback, candidate admission, or frontier selection;
+- split membership is fingerprinted and versioned, so a run report can state
+  exactly what data it optimized on and what data it held out;
+- dynamic evaluation sets resolve through `RunContext` before evaluator calls,
+  preserving the existing `ResolvedEvaluationSet` boundary.
+
+### 7.2 Split Use Policy
+
+GEPA should own a small `GepaDataPolicy` over `PartitionId`s. `leaven-eval`
+maps user-facing `EvalSuite` splits into that policy, but `leaven-gepa` should
+not need to know a concrete suite type to run.
+
+Default GEPA split use:
+
+| Split role | Proposer feedback | Batch sampler | Gate/admission | Population default | Final report |
+| --- | --- | --- | --- | --- | --- |
+| Train/Search | yes | yes | yes | yes | yes |
+| Validation | no case content; scores only if policy exposes them | no | optional | no by default | yes |
+| Test | no | no | no | no | yes, post-loop only |
+| Probe | only through explicit `EvalHandle` permission | no by default | no by default | no by default | optional |
+
+This preserves a hard leakage boundary:
+
+```text
+proposer-visible data <= train/search evidence + exposed aggregate summaries
+selector-visible data <= population policy + exposed scores
+evaluator-visible data <= requested resolved cases
+test data <= final/reporting evaluators unless explicitly overridden
+```
+
+Any override that lets validation influence selection or exposes validation
+scores to selectors must be explicit in run config and recorded in the run
+summary. Any override that exposes test content or test traces to proposers is
+not a GEPA product default.
+
+### 7.3 Optimizer Fit Matrix
+
+The shared eval layer must fit every optimizer surface already sketched, not
+just GEPA:
+
+| Optimizer surface | Needs from `leaven-eval` | Must remain optimizer-owned |
+| --- | --- | --- |
+| GEPA | train/search minibatches, validation/test policy, per-case reports | candidate/part selection, reflection, merge, GEPA data policy |
+| MIPRO | train/eval trials, metric axes, bootstrap/eval protocol reports | surrogate model, acquisition, proposal search |
+| TextGrad | feedback aggregation by case/part, reportable held-out evals | gradient/critique propagation and update rule |
+| Trace-style optimizers | trace/evidence protocol and split-aware reports | trace capture strategy and credit assignment |
+| Pairwise tournament | pairwise request protocol, selection/eval split reports | fitted preference model and pair selector |
+| Agentic/Harbor/AISI | task split manifests, scorer-visible hidden targets, final test reports | workspace/runtime execution, task presentation, transcript parsing |
+| Future DSRs/LM programs | typed case catalogs, closure/program evaluator adapters, train/val/test reports | DSRs program artifact semantics and module surfaces |
+
+This keeps the layer honest: `leaven-eval` standardizes how evaluations are
+declared, split, executed through evaluators, and reported. Optimizers still
+own their search rhythm and strategy state.
+
+### 7.4 LM Program Cases
+
+For LM programs, including a future DSRs adapter, `leaven-eval` should provide
+plain typed case vocabulary and closure/evaluator adapters:
+
+```rust
+pub struct LmCase<I = serde_json::Value, O = serde_json::Value> {
+    pub id: CaseId,
+    pub input: I,
+    pub expected: Option<O>,
+    pub metadata: MetadataBag,
+}
+
+pub struct CaseOutcome<E> {
+    pub case: CaseId,
+    pub score: ScalarEvidence,
+    pub feedback: Option<E>,
+    pub evidence: Vec<EvidenceRef>,
+}
+```
+
+The LM-program adapter's job is:
+
+```text
+EvalSuite<LmCase> or EvalProtocol + candidate artifact + evaluator closure/program runner
+-> Evaluator<P>
+-> per-case Assessment<P> records with structured evidence
+```
+
+DSRs should plug in here as a domain adapter. It should not own the common
+train/validation/test semantics and it should not force GEPA to know DSRs
+program types.
+
+### 7.5 Agentic Harbor/AISI-Like Cases
+
+The current `leaven-agentic::CaseSuite` proves the shape: cases may contain
+text/messages, hidden targets, workspace files, setup requirements, and
+workspace capability requirements. That should remain the agentic domain
+vocabulary, but the split/reporting semantics should converge with
+`leaven-eval`.
+
+Agentic adapters should lower:
+
+```text
+AgentCase/HarborTask/AISI-like task suite
+-> EvalSuite<AgentCaseLike> for split/report protocol
+-> AgenticEvaluator
+-> casewise assessments + transcript/command/workspace evidence
+```
+
+Required semantics:
+
+- case input files and prompts may be candidate-visible when the case role
+  permits it;
+- hidden targets, graders, reference outputs, and test traces are
+  scorer-visible only;
+- each case run records workspace allocation, setup, agent session, command
+  outputs, parse/scoring outcomes, cleanup status, and cost;
+- the evaluator chooses workspace isolation granularity, commonly one fresh
+  workspace per candidate-case pair for mutable agent tasks;
+- split policy decides which assessments can feed the frontier, not the
+  evaluator implementation;
+- Harbor/AISI-like suites can use the same post-loop test report surface as
+  prompt/program suites.
+
+`leaven-agentic` may keep rich domain case records. `leaven-eval` should own
+only the shared eval-suite contract, split manifest, leakage policy, helper
+adapters, and report summaries that are useful outside agentic tasks too.
+
+`leaven-eval` must not own environment execution. An agentic evaluator may
+record environment identity, workspace config fingerprints, setup results, and
+cleanup status as evidence/report fields, but the actual environment lifecycle
+belongs to `leaven-workspace` and `leaven-agentic`.
+
+### 7.6 Eval Reports
+
+The product result should include a graph-backed eval report, not just a GEPA
+candidate summary:
+
+```rust
+pub struct EvalRunReport {
+    pub suite_fingerprint: Fingerprint,
+    pub split_manifest: SplitManifest,
+    pub train: Option<SplitReport>,
+    pub validation: Option<SplitReport>,
+    pub test: Option<SplitReport>,
+    pub policy: SplitUseSummary,
+}
+```
+
+Reports must answer:
+
+```text
+what cases existed?
+was there a case catalog at all?
+which environment, if any, produced the assessment evidence?
+which cases were used for proposal feedback?
+which cases were used for selection/admission?
+which cases were held out until final reporting?
+which evaluator/scorer produced each assessment?
+which candidate won under which split policy?
+```
+
+## 8. Modes
 
 Leaven GEPA must feel native in the three upstream `optimize_anything` modes.
 
-### 7.1 Single-Task Search
+### 8.1 Single-Task Search
 
 Shape:
 
@@ -376,7 +654,7 @@ Implementation:
 - default batch sampler returns the unscoped/single case every iteration;
 - result still records proposal/evaluation/cost lineage normally.
 
-### 7.2 Multi-Task Search
+### 8.2 Multi-Task Search
 
 Shape:
 
@@ -387,11 +665,13 @@ seed artifact + train cases + no holdout
 Implementation:
 
 - map provided cases to `PartitionId::TRAIN`;
+- record an `EvalSuite`/split manifest when the product builder receives
+  concrete cases rather than an already-registered case set;
 - default population is `ParetoFrontier::by_case()` for GEPA;
 - validation policy defaults to evaluating on the same train/search partition;
 - trust policy does not invent hidden validation data.
 
-### 7.3 Generalization
+### 8.3 Generalization
 
 Shape:
 
@@ -406,10 +686,12 @@ Implementation:
 - trust policy hides validation/test from proposer-facing views by default;
 - population partition filter should default to search/train unless configured
   otherwise.
+- optional test partition is evaluated after the optimization loop against the
+  selected candidates/frontier and remains outside admission by default.
 
-## 8. Surface And Proposal Contract
+## 9. Surface And Proposal Contract
 
-### 8.1 Surface Edit
+### 9.1 Surface Edit
 
 ```rust
 pub struct SurfaceEdit<S, A>
@@ -425,7 +707,7 @@ where
 Surface edits are GEPA's default proposal payload. Artifact-native proposals
 remain allowed for specialized proposers.
 
-### 8.2 GEPA Proposal
+### 9.2 GEPA Proposal
 
 ```rust
 pub enum GepaProposal<P, S>
@@ -450,7 +732,7 @@ GEPA lowers `SurfaceEdit` into `Proposal::mutate(...)` or
 surface.change_part(parent_artifact, part, edit)
 ```
 
-### 8.3 Merge Canonicalization
+### 9.3 Merge Canonicalization
 
 GEPA merge reads two parent artifacts through the same surface. It picks one
 parent as the apply target and lowers imported content into that target's
@@ -466,7 +748,7 @@ informed_by: [Candidate(left), Candidate(right), ...]
 
 There is no magical two-artifact `apply_change`.
 
-## 9. Reflection And ASI
+## 10. Reflection And ASI
 
 Python GEPA's `make_reflective_dataset` becomes a renderer/proposer concern,
 not a universal adapter contract.
@@ -511,7 +793,7 @@ stage/evaluator evidence policy. A closure-based evaluator helper may provide
 ergonomic stdout/log capture later, but that belongs as a helper over
 `Evaluator<P>`, not as GEPA core behavior.
 
-## 10. Result Contract
+## 11. Result Contract
 
 `GepaResult` should be a typed view over graph truth plus optimizer state, not
 a second source of truth.
@@ -529,6 +811,7 @@ pub struct GepaResult {
     pub parents: Vec<GepaLineageSummary>,
     pub frontier: GepaFrontierSummary,
     pub rejected: Vec<GepaRejectionSummary>,
+    pub eval_report: Option<EvalRunReport>,
 }
 ```
 
@@ -554,9 +837,9 @@ The umbrella `leaven::optimize(...).run()` result remains the engine-level
 run result. GEPA-specific summaries should be exposed through optimizer
 reports or graph renderers without duplicating artifacts/evidence.
 
-## 11. Off-The-Shelf Entry Points
+## 12. Off-The-Shelf Entry Points
 
-### 11.1 Generic Leaven Entry
+### 12.1 Generic Leaven Entry
 
 The preferred user entry remains:
 
@@ -564,6 +847,8 @@ The preferred user entry remains:
 leaven::optimize::<P>()
     .seed(...)
     .cases(...)
+    .validation_cases(...)
+    .test_cases(...)
     .evaluator(...)
     .using(Gepa::builder().surface(...).reflection_lm(...).build())
     .run()
@@ -572,7 +857,7 @@ leaven::optimize::<P>()
 
 This keeps GEPA as one optimizer under the engine.
 
-### 11.2 Convenience `leaven_gepa::optimize`
+### 12.2 Convenience `leaven_gepa::optimize`
 
 `leaven-gepa` may also provide a thin convenience wrapper:
 
@@ -589,7 +874,7 @@ where
 This wrapper must lower to the same engine builder. It must not own a second
 engine path.
 
-### 11.3 Closure Evaluator Helper
+### 12.3 Closure Evaluator Helper
 
 A later ergonomic helper may adapt closures into `Evaluator<P>`:
 
@@ -604,9 +889,9 @@ gepa::closure_evaluator(|artifact, case| async move {
 
 This is a helper, not the core evaluator trait. It should live where the
 closure helper belongs after trait bounds are clear, likely `leaven-std` or
-`leaven-gepa::helpers`.
+`leaven-eval`.
 
-## 12. Stop, Budget, Cache, And Checkpoint
+## 13. Stop, Budget, Cache, And Checkpoint
 
 Required standard controls:
 
@@ -643,7 +928,7 @@ Checkpoint rules:
   selection stats, merge scheduler state, and population state if not fully
   derivable from graph events.
 
-## 13. Trust Requirements
+## 14. Trust Requirements
 
 Default GEPA generalization mode must hide holdout/test data from proposer
 views.
@@ -661,31 +946,33 @@ Actor access:
 Trust enforcement must happen through `RunGraphView`/context scopes, not only
 through convention.
 
-## 14. Concrete Requirements
+## 15. Concrete Requirements
 
-### 14.1 Functional Requirements
+### 15.1 Functional Requirements
 
 The first product-grade GEPA implementation must:
 
 1. implement `Optimizer<P>` for `Gepa<P, S, Pop>`;
 2. support seed insertion and seed baseline evaluation;
 3. support train-only, unscoped, and train+validation runs;
-4. select candidates through a swappable `CandidateSelector`;
-5. select parts through a swappable `PartSelector`;
-6. sample minibatches through a swappable `BatchSampler`;
-7. propose surface edits through `ReflectiveMutation`;
-8. lower surface edits into typed artifact changes;
-9. record proposal batches with typed causal and informational provenance;
-10. apply proposals through `RunContext`;
-11. screen children on minibatches;
-12. gate children through a swappable `Gate`;
-13. validate/admit through a swappable `ValidationPolicy`;
-14. update population explicitly;
-15. return best candidate through population state;
-16. expose a result summary;
-17. respect budget and trust scopes.
+4. support explicit test partitions as final-report-only by default;
+5. record split manifests/fingerprints for product-builder case inputs;
+6. select candidates through a swappable `CandidateSelector`;
+7. select parts through a swappable `PartSelector`;
+8. sample minibatches through a swappable `BatchSampler`;
+9. propose surface edits through `ReflectiveMutation`;
+10. lower surface edits into typed artifact changes;
+11. record proposal batches with typed causal and informational provenance;
+12. apply proposals through `RunContext`;
+13. screen children on minibatches;
+14. gate children through a swappable `Gate`;
+15. validate/admit through a swappable `ValidationPolicy`;
+16. update population explicitly;
+17. return best candidate through population state;
+18. expose a result summary with train/validation/test report slots;
+19. respect budget and trust scopes.
 
-### 14.2 Default Policies
+### 15.2 Default Policies
 
 Defaults:
 
@@ -696,6 +983,7 @@ part selector:        RoundRobinPart
 batch sampler:        EpochShuffled { minibatch_size: 3 }
 gate:                 StrictImprovement
 validation:           MinibatchThenValidation or FullValidation over search partition
+data policy:          train/search for feedback, validation for optional selection/reporting, test for final report only
 merge:                disabled
 proposal count:       1
 track best outputs:   true where evidence/output shape supports it
@@ -704,7 +992,7 @@ track best outputs:   true where evidence/output shape supports it
 Single-task defaults may use `KeepBest` instead of `ParetoFrontier` when no
 case axis exists.
 
-### 14.3 Error Requirements
+### 15.3 Error Requirements
 
 GEPA must return typed errors for:
 
@@ -718,18 +1006,22 @@ GEPA must return typed errors for:
 - evaluator does not support requested granularity;
 - expected casewise evidence missing;
 - gate cannot compare requested evidence shape;
+- split manifest references unknown cases;
+- required train/search split is empty;
+- disjoint split policy is violated;
 - validation policy requests forbidden partition;
+- test partition is requested for proposer feedback or admission under default policy;
 - trust policy denies proposer read;
 - budget exhausted before proposal/evaluation mutation.
 
 Do not use `OptimizerError::Message` for known public failures once the error
 shape is known.
 
-## 15. Tests And Acceptance
+## 16. Tests And Acceptance
 
 Each test must name a claim and live at the lowest clean layer.
 
-### 15.1 `leaven-gepa` Law/Example Tests
+### 16.1 `leaven-gepa` Law/Example Tests
 
 Required tests:
 
@@ -744,9 +1036,10 @@ Required tests:
   `leaven-lm-mock`;
 - invalid proposer output becomes typed proposal error, not panic;
 - merge canonicalizes to one target while preserving pair causal lineage;
+- data policy refuses test partition as proposer feedback/admission by default;
 - private checkpoint state captures/restores RNG and sampler cursor.
 
-### 15.2 Umbrella Scenario Tests
+### 16.2 Umbrella Scenario Tests
 
 Required tests under `crates/leaven/tests/`:
 
@@ -754,12 +1047,14 @@ Required tests under `crates/leaven/tests/`:
 - multi-task GEPA improves a two-part artifact through `ParetoFrontier`;
 - generalization GEPA hides validation from proposer and still reports
   validation evaluation;
+- test cases run only in post-loop final reporting under default policy;
+- split manifest fingerprint changes when case membership changes;
 - rejected candidates remain visible in graph but absent from population;
 - result best candidate matches population best;
 - callback/event order includes proposal, apply, evaluation, population, and
   optimization end events.
 
-### 15.3 Example Packages
+### 16.3 Example Packages
 
 Existing:
 
@@ -772,17 +1067,19 @@ New product examples:
 ```text
 examples/p8_gepa_prompt_optimizer
 examples/p9_gepa_skill_surface_smoke
+examples/p10_eval_suite_train_val_test
 ```
 
 `p8` should be the minimal off-the-shelf prompt optimizer. `p9` should prove
 GEPA over a folder/skill-like surface with mock LM/runtime only.
 
-### 15.4 Verification Commands
+### 16.4 Verification Commands
 
 During implementation:
 
 ```bash
 cargo nextest run -p leaven-gepa
+cargo nextest run -p leaven-eval
 cargo nextest run -p leaven --test gepa_parity
 cargo run -p p3_gepa_parity
 ```
@@ -793,7 +1090,35 @@ Completion:
 just check
 ```
 
-## 16. Implementation Milestones
+## 17. Implementation Milestones
+
+### Milestone 0: Shared Eval Suite Substrate
+
+Goal: make train/validation/test semantics reusable before GEPA product
+ergonomics depend on them.
+
+Scope:
+
+- scaffold `leaven-eval` with `EvalSuite`, `SplitManifest`, `SplitRole`,
+  `EvalProtocol`, `EvalSuite`, `CaseCatalog`, `SplitManifest`, `SplitRole`,
+  `SplitPolicy`, and `EvalRunReport`;
+- map product-builder `.cases`, `.validation_cases`, and `.test_cases` into
+  stable partitions;
+- add leakage-policy helpers that hide validation/test content from proposers
+  and mark test final-report-only by default;
+- provide one closure evaluator helper for typed LM-program-style cases;
+- prove an eval protocol can run without a case catalog and without an
+  environment;
+- add one adapter path from `leaven-agentic::CaseSuite` into the shared split
+  manifest without moving agentic case internals into `leaven-eval`.
+
+Exit tests:
+
+```bash
+cargo nextest run -p leaven-eval
+cargo nextest run -p leaven-agentic case_suite
+cargo run -p p10_eval_suite_train_val_test
+```
 
 ### Milestone A: Real GEPA Loop, Deterministic Proposer
 
@@ -839,6 +1164,8 @@ Goal: make the short user path work.
 Scope:
 
 - engine builder accepts seed/cases/evaluator/optimizer ergonomically;
+- builder exposes `.cases`, `.validation_cases`, `.test_cases`, and
+  `.eval_suite`;
 - `leaven_gepa::optimize(seed, surface)` wrapper lowers to engine builder;
 - single-task, multi-task, and generalization modes are explicit;
 - result summary available.
@@ -876,6 +1203,8 @@ Scope:
 - mock agentic evaluator;
 - trace attribution feeds `InvokedAndFailingPart`;
 - validation partition hidden from proposer;
+- test partition final-report-only by default;
+- shared eval report summarizes train/validation/test outcomes;
 - no concrete provider/network dependency.
 
 Exit tests:
@@ -885,7 +1214,7 @@ cargo run -p p9_gepa_skill_surface_smoke
 cargo nextest run -p leaven-agentic-skill
 ```
 
-## 17. Non-Goals
+## 18. Non-Goals
 
 Do not do these in the GEPA surface work:
 
@@ -896,50 +1225,67 @@ Do not do these in the GEPA surface work:
 - GEPA-specific hooks inside `leaven-engine`.
 - Concrete OpenAI/Anthropic dependencies in `leaven-gepa`.
 - Hidden validation leakage for convenience.
+- Test-set feedback in the optimization loop by default.
+- Moving rich agentic case/workspace semantics into `leaven-eval`.
 - Compatibility aliases for old names.
 - Public test holes.
 
-## 18. Open Decisions
+## 19. Open Decisions
 
 1. Whether the default product entrypoint lives only on `leaven::optimize` or
    also as `leaven_gepa::optimize`.
 2. Whether `CandidateSelector` moves from `leaven-gepa` into
    `leaven-population` once non-GEPA optimizers reuse it.
-3. Whether closure evaluator helpers live in `leaven-std` or `leaven-gepa`.
+3. Whether closure evaluator helpers live in `leaven-eval`, `leaven-std`, or
+   `leaven-gepa`. This spec prefers `leaven-eval` once that crate exists.
 4. Whether `GepaResult` is a concrete struct or a renderer over graph +
    optimizer state.
 5. Whether single-task GEPA defaults to `KeepBest` or a degenerate
    single-axis `ParetoFrontier`.
+6. Whether the crate is named `leaven-eval` or `leaven-evals`; this spec uses
+   singular because the crate owns evaluation infrastructure, not a benchmark
+   catalog.
+7. Whether validation scores may influence default selection. The conservative
+   default is report-only unless the user selects a validation-aware policy.
 
-These are implementation-shaping decisions, not blockers for Milestone A.
+These are implementation-shaping decisions, not blockers for Milestone 0/A.
 
-## 19. First Implementation Slice
+## 20. First Implementation Slice
 
 The first coherent slice should be:
 
 ```text
-Implement reusable deterministic Gepa<P, S, Pop> as Optimizer<P>.
+Scaffold shared eval-suite semantics, then implement reusable deterministic
+Gepa<P, S, Pop> as Optimizer<P>.
 ```
 
 It should modify:
 
 ```text
+crates/leaven-eval/src/lib.rs
+crates/leaven-eval/src/suite.rs
+crates/leaven-eval/src/split.rs
+crates/leaven-eval/src/report.rs
+crates/leaven-eval/tests/split_policy.rs
 crates/leaven-gepa/src/gepa.rs
 crates/leaven-gepa/src/optimizer.rs
+crates/leaven-gepa/src/data_policy.rs
 crates/leaven-gepa/src/proposal.rs
 crates/leaven-gepa/src/batch.rs
 crates/leaven-gepa/src/validation.rs
 crates/leaven-gepa/src/lib.rs
 crates/leaven-gepa/tests/gepa_smoke.rs
+crates/leaven/tests/eval_suite_surface.rs
 crates/leaven/tests/gepa_parity.rs
+examples/p10_eval_suite_train_val_test/src/main.rs
 examples/p3_gepa_parity/src/main.rs
 ```
 
 It should not touch:
 
 ```text
-leaven-core
-leaven-engine graph internals
+leaven-core evaluation algebra except for missing public constants/errors
+leaven-engine graph internals except product-builder wiring if needed
 concrete LM provider crates
 DSRs
 ```

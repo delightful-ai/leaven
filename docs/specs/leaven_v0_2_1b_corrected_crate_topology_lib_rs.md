@@ -100,6 +100,7 @@ leaven/
 │   ├── leaven-artifact-git/
 │   ├── leaven-artifact-jj/
 │   ├── leaven-evidence/
+│   ├── leaven-eval/
 │   ├── leaven-preference/
 │   ├── leaven-population/
 │   ├── leaven-render/
@@ -177,6 +178,7 @@ members = [
     "crates/leaven-artifact-git",
     "crates/leaven-artifact-jj",
     "crates/leaven-evidence",
+    "crates/leaven-eval",
     "crates/leaven-preference",
     "crates/leaven-population",
     "crates/leaven-render",
@@ -331,6 +333,13 @@ leaven-evidence -> [
   leaven-core
 ]
 
+leaven-eval -> [
+  leaven-kernel,
+  leaven-core,
+  leaven-evidence,
+  leaven-engine
+]
+
 leaven-preference -> [
   leaven-kernel,
   leaven-core,
@@ -360,6 +369,7 @@ leaven-render -> [
 leaven-std -> [
   leaven-artifacts,
   leaven-evidence,
+  leaven-eval,
   leaven-preference,
   leaven-population,
   leaven-render
@@ -441,6 +451,7 @@ leaven-agentic -> [
   leaven-store,
   leaven-workspace,
   leaven-engine,
+  leaven-eval,
   leaven-agent,
   leaven-render
 ]
@@ -464,6 +475,7 @@ leaven-gepa -> [
   leaven-core,
   leaven-surface,
   leaven-engine,
+  leaven-eval,
   leaven-evidence,
   leaven-preference,
   leaven-population,
@@ -507,6 +519,7 @@ leaven-dsrs -> [
   leaven-core,
   leaven-surface,
   leaven-engine,
+  leaven-eval,
   leaven-lm
 ]
 
@@ -533,6 +546,7 @@ leaven -> [
   leaven-core,
   leaven-surface,
   leaven-engine,
+  leaven-eval,
   leaven-derive,
   leaven-std,
   leaven-gepa,
@@ -548,6 +562,7 @@ leaven-core -> leaven-surface
 leaven-core -> leaven-engine
 leaven-core -> leaven-workspace
 leaven-core -> leaven-store
+leaven-core -> leaven-eval
 leaven-core -> leaven-gepa
 
 leaven-surface -> leaven-engine
@@ -564,6 +579,7 @@ leaven-workspace -> leaven-engine
 leaven-workspace -> leaven-surface
 
 leaven-engine -> leaven-gepa
+leaven-engine -> leaven-eval
 leaven-engine -> leaven-std
 leaven-engine -> leaven-population
 leaven-engine -> leaven-preference
@@ -1303,6 +1319,73 @@ impl<T> AttributionKey for T where T: Eq + std::hash::Hash + Clone + Send + Sync
 ```
 
 This is the corrected replacement for `ComponentEvidence`.
+
+---
+
+## 7.1 `leaven-eval`
+
+### Contract
+
+Shared evaluation protocol infrastructure. Owns eval protocols, optional case
+catalog helpers, train/validation/test split manifests, split-use policy
+summaries, suite fingerprints, eval reports, and provider-neutral helper
+adapters for casewise evaluators. It is warm product infrastructure, not cold
+core.
+
+Evaluation protocols, datasets, and environments are separate:
+
+```text
+Evaluation protocol  = what is measured, when, by whom, and how results count.
+Dataset/case catalog = optional source of examples, tasks, prompts, fixtures, ids.
+Environment          = optional execution substrate for an evaluator or agent.
+```
+
+An eval protocol may run without a dataset. A dataset may be reused by multiple
+eval protocols. An environment belongs to workspace/agentic/runtime crates, not
+to `leaven-eval`.
+
+It may depend on `leaven-engine` for evaluator helper adapters, but it must not
+know GEPA rhythm, concrete LM providers, concrete workspace backends, DSRs, or
+agentic workspace/task internals. Agentic and LM-program adapters lower their
+domain cases into this shared protocol/suite/report shape.
+
+### `src/lib.rs`
+
+```rust
+#![forbid(unsafe_code)]
+#![warn(missing_docs)]
+
+//! Shared evaluation-suite and split semantics.
+
+pub mod protocol;
+pub mod report;
+pub mod split;
+pub mod suite;
+
+pub use report::{
+    EvalRunReport, SplitReport, SplitUseSummary,
+};
+
+pub use protocol::{
+    EvalProtocol, EvalProtocolId, EvalRequestShape,
+};
+
+pub use split::{
+    SplitManifest, SplitPolicy, SplitRole,
+};
+
+pub use suite::{
+    CaseCatalog, EvalCase, EvalSuite, LmCase,
+};
+
+pub mod prelude {
+    pub use crate::{
+        CaseCatalog, EvalCase, EvalProtocol, EvalProtocolId, EvalRequestShape,
+        EvalRunReport, EvalSuite, LmCase, SplitManifest, SplitPolicy,
+        SplitReport, SplitRole, SplitUseSummary,
+    };
+}
+```
 
 ---
 
