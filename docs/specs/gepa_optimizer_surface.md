@@ -387,9 +387,9 @@ Required invariants:
 ## 7. Evaluation Protocol Semantics
 
 Evals are first-class library infrastructure. GEPA is one consumer of that
-infrastructure; LM-program optimizers, future DSRs adapters, Harbor/AISI-like
-agentic suites, pairwise optimizers, and non-GEPA optimizers must be able to
-reuse the same split and report semantics.
+infrastructure; LM-program optimizers, future DSRs adapters, Leaven-native
+agentic task suites, pairwise optimizers, and non-GEPA optimizers must be able
+to reuse the same split and report semantics.
 
 Layering rule:
 
@@ -541,7 +541,7 @@ just GEPA:
 | TextGrad | feedback aggregation by case/part, reportable held-out evals | gradient/critique propagation and update rule |
 | Trace-style optimizers | trace/evidence protocol and split-aware reports | trace capture strategy and credit assignment |
 | Pairwise tournament | pairwise request protocol, selection/eval split reports | fitted preference model and pair selector |
-| Agentic/Harbor/AISI | task split manifests, scorer-visible hidden targets, final test reports | workspace/runtime execution, task presentation, transcript parsing |
+| Agentic task suites | task split manifests, scorer-visible hidden targets, final test reports | workspace/runtime execution, task presentation, transcript parsing |
 | Future DSRs/LM programs | typed case catalogs, closure/program evaluator adapters, train/val/test reports | DSRs program artifact semantics and module surfaces |
 
 This keeps the layer honest: `leaven-eval` standardizes how evaluations are
@@ -581,7 +581,7 @@ DSRs should plug in here as a domain adapter. It should not own the common
 train/validation/test semantics and it should not force GEPA to know DSRs
 program types.
 
-### 7.5 Agentic Harbor/AISI-Like Cases
+### 7.5 Agentic Task Suite Cases
 
 The current `leaven-agentic::CaseSuite` proves the shape: cases may contain
 text/messages, hidden targets, workspace files, setup requirements, and
@@ -592,7 +592,7 @@ vocabulary, but the split/reporting semantics should converge with
 Agentic adapters should lower:
 
 ```text
-AgentCase/HarborTask/AISI-like task suite
+AgentCase/task-suite case
 -> EvalSuite<AgentCaseLike> for split/report protocol
 -> AgenticEvaluator
 -> casewise assessments + transcript/command/workspace evidence
@@ -610,8 +610,8 @@ Required semantics:
   workspace per candidate-case pair for mutable agent tasks;
 - split policy decides which assessments can feed the frontier, not the
   evaluator implementation;
-- Harbor/AISI-like suites can use the same post-loop test report surface as
-  prompt/program suites.
+- Leaven-native agentic suites can use the same post-loop test report surface
+  as prompt/program suites.
 
 `leaven-agentic` may keep rich domain case records. `leaven-eval` should own
 only the shared eval-suite contract, split manifest, leakage policy, helper
