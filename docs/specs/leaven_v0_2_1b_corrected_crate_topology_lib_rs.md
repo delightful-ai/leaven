@@ -94,6 +94,7 @@ leaven/
 │   ├── leaven-workspace-git/
 │   │
 │   ├── leaven-engine/
+│   ├── leaven-run/
 │   ├── leaven-derive/
 │   │
 │   ├── leaven-artifacts/
@@ -292,6 +293,23 @@ leaven-engine -> [
 
 Engine is artifact-shape-neutral. Surface-aware query helpers belong in
 `leaven-gepa`, `leaven-render`, or optimizer/stage helper crates, not in engine.
+
+### Product run builder
+
+```text
+leaven-run -> [
+  leaven-kernel,
+  leaven-core,
+  leaven-engine,
+  leaven-eval,
+  leaven-store,
+  leaven-store-inline
+]
+```
+
+`leaven-run` owns public product-builder ergonomics and lowering. It composes
+engine, eval, and stores without making `leaven-engine` depend on product
+policy or making the umbrella crate an implementation bucket.
 
 ### Derive
 
@@ -545,6 +563,7 @@ leaven -> [
   leaven-core,
   leaven-surface,
   leaven-engine,
+  leaven-run,
   leaven-eval,
   leaven-derive,
   leaven-std,
@@ -577,6 +596,8 @@ leaven-workspace -> leaven-engine
 leaven-workspace -> leaven-surface
 
 leaven-engine -> leaven-gepa
+leaven-engine -> leaven-eval
+leaven-engine -> leaven-run
 leaven-engine -> leaven-std
 leaven-engine -> leaven-population
 leaven-engine -> leaven-preference
@@ -588,6 +609,12 @@ leaven-artifacts -> leaven-engine
 
 leaven-lm -> leaven-gepa
 leaven-lm -> concrete LLM SDKs
+
+leaven-eval -> leaven-engine
+leaven-eval -> leaven-run
+leaven-eval -> leaven-gepa
+leaven-run -> concrete workspace backend crates
+leaven-run -> concrete LLM SDKs
 
 leaven-agent -> leaven-core
 leaven-agent -> leaven-engine
@@ -1323,34 +1350,34 @@ This is the corrected replacement for `ComponentEvidence`.
 
 ### Contract
 
-Shared evaluation plan/report infrastructure. Owns declarative eval protocols
-or plans, optional case catalog helpers, train/validation/test split manifests,
-split-use policy summaries, suite fingerprints, and eval reports. It is warm
-product infrastructure, not cold core.
+Shared lowered evaluation data/report infrastructure. Owns datasets,
+train/validation/test split data, split-use policy summaries, suite
+fingerprints, request templates, and evaluation reports. It is warm product
+infrastructure, not cold core and not the public optimizer front door.
 
-The detailed type-level contract lives in `docs/specs/eval_protocol_detail.md`.
+The detailed type-level contract lives in `docs/specs/eval_lowering_detail.md`.
 
-Evaluation protocols, datasets, and environments are separate:
+User inputs, lowered eval data, execution, and environments are separate:
 
 ```text
-Evaluation protocol  = what is measured, when, by whom, and how results count.
-Dataset/case catalog = optional source of examples, tasks, prompts, fixtures, ids.
-Environment          = optional execution substrate for an evaluator or agent.
+User input        = train/validation/test cases, scorer/evaluator, optimizer.
+Lowered eval data = dataset, splits, split-use plan, request templates, reports.
+Execution         = engine evaluator calls, graph mutation, cache, budget.
+Environment       = optional workspace/agent/process substrate for an evaluator.
 ```
 
-An eval protocol may run without a dataset. A dataset may be reused by multiple
-eval protocols. An environment belongs to workspace/agentic/runtime crates, not
-to `leaven-eval`.
+Evaluation may run without a dataset. A dataset may be reused by multiple
+plans. An environment belongs to workspace/agentic/runtime crates, not to
+`leaven-eval`.
 
-For maintainability, `leaven-eval` owns protocol-shaped product data, not
-execution authority. It must not define a replacement for `Evaluator`, an
-environment lifecycle trait, or an optimizer rhythm.
+For maintainability, `leaven-eval` owns lowered product data, not execution
+authority. It must not define a replacement for `Evaluator`, an environment
+lifecycle trait, public builder verbs, or an optimizer rhythm.
 
 It must not depend on `leaven-engine`. Engine-backed evaluator helpers live in
-`leaven`, `leaven-std`, optimizer crates, or a later explicit adapter crate.
-It must not know GEPA rhythm, concrete LM providers, concrete workspace
-backends, DSRs, or agentic workspace/task internals. Agentic and LM-program
-adapters lower their domain cases into this shared protocol/suite/report shape.
+`leaven-run`, optimizer crates, or a later explicit adapter crate. It must not
+know GEPA rhythm, concrete LM providers, concrete workspace backends, DSRs, or
+agentic workspace/task internals.
 
 ### `src/lib.rs`
 
@@ -1358,49 +1385,107 @@ adapters lower their domain cases into this shared protocol/suite/report shape.
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
-//! Shared evaluation-suite and split semantics.
+//! Shared lowered evaluation data and report semantics.
 
-pub mod case;
+pub mod dataset;
 pub mod error;
-pub mod policy;
-pub mod protocol;
+pub mod plan;
 pub mod report;
+pub mod request;
 pub mod split;
 pub mod suite;
+pub mod use_policy;
 
-pub use case::{
-    CaseCatalog, CaseCatalogBuilder, EvalCase, LmCase,
-};
+pub use dataset::{Case, Dataset, DatasetBuilder, LmCase};
 
 pub use error::{
-    CaseCatalogError, EvalPlanError, ReportError, SplitManifestError,
+    DatasetError, DatasetSplitsError, EvaluationPlanError, ReportError,
 };
 
-pub use policy::{
-    EvalUse, FinalTestPolicy, LeakagePolicy, SplitPermissions, SplitUsePolicy,
-};
+pub use plan::{EvaluationPlan, EvaluationPlanId, EvaluationRequestShape};
 
 pub use report::{
-    EvalRunReport, EvalUseSummary, SplitReport,
+    CandidateEvaluationSummary, EvaluationReport, SplitReport, SplitUseSummary,
 };
 
-pub use protocol::{
-    EvalPlan, EvalPlanId, EvalRequestShape,
-};
+pub use request::EvaluationRequestTemplate;
 
-pub use split::{
-    SplitManifest, SplitPolicy, SplitRole,
-};
+pub use split::{DatasetSplits, SplitPolicy, SplitRole};
 
-pub use suite::EvalSuite;
+pub use suite::EvaluationSuite;
+
+pub use use_policy::{EvaluationUse, FinalTestPolicy, SplitUse, SplitUsePolicy};
 
 pub mod prelude {
     pub use crate::{
-        CaseCatalog, CaseCatalogBuilder, CaseCatalogError, EvalCase, EvalPlan,
-        EvalPlanError, EvalPlanId, EvalRequestShape, EvalRunReport, EvalSuite,
-        EvalUse, EvalUseSummary, FinalTestPolicy, LeakagePolicy, LmCase,
-        ReportError, SplitManifest, SplitManifestError, SplitPermissions,
-        SplitPolicy, SplitReport, SplitRole, SplitUsePolicy,
+        Case, CandidateEvaluationSummary, Dataset, DatasetBuilder, DatasetError,
+        DatasetSplits, DatasetSplitsError, EvaluationPlan, EvaluationPlanError,
+        EvaluationPlanId, EvaluationReport, EvaluationRequestShape,
+        EvaluationRequestTemplate, EvaluationSuite, EvaluationUse,
+        FinalTestPolicy, LmCase, ReportError, SplitPolicy, SplitReport,
+        SplitRole, SplitUse, SplitUsePolicy, SplitUseSummary,
+    };
+}
+```
+
+---
+
+## 7.2 `leaven-run`
+
+### Contract
+
+Public product-builder crate. Owns the ordinary first-mile API:
+
+```text
+optimize(seed)
+.train(...)
+.validation(...)
+.test(...)
+.score(...)
+.evaluator(...)
+.using(optimizer)
+.budget(...)
+.run()
+```
+
+`leaven-run` lowers those inputs into `leaven-engine` and `leaven-eval`:
+
+```text
+train/validation/test -> Dataset + DatasetSplits -> engine CaseSet
+score/evaluator       -> engine Evaluator registry
+budget                -> engine BudgetLedger
+split use             -> engine TrustPolicy / ReadScope
+run output            -> RunOutput + EvaluationReport + optimizer summaries
+```
+
+It exists so `leaven-engine` does not learn product policy and `leaven` remains
+a re-export crate.
+
+It must not own optimizer strategy state, GEPA selectors, domain case semantics,
+concrete LM providers, concrete workspace backends, or environment lifecycle.
+
+### `src/lib.rs`
+
+```rust
+#![forbid(unsafe_code)]
+#![warn(missing_docs)]
+
+//! Public run builders for Leaven.
+
+pub mod builder;
+pub mod error;
+pub mod result;
+pub mod scorer;
+
+pub use builder::{optimize, OptimizeBuilder};
+pub use error::{OptimizeBuildError, OptimizeRunError};
+pub use result::{Optimized, RunOutput};
+pub use scorer::{ScoreFn, ScoreWithFeedbackFn};
+
+pub mod prelude {
+    pub use crate::{
+        optimize, Optimized, OptimizeBuildError, OptimizeBuilder,
+        OptimizeRunError, RunOutput, ScoreFn, ScoreWithFeedbackFn,
     };
 }
 ```
@@ -2540,9 +2625,9 @@ GEPA as one optimizer implementation over Leaven.
 
 //! GEPA optimizer implementation for Leaven.
 
+pub mod acceptance;
 pub mod batch;
-pub mod candidate_selector;
-pub mod gate;
+pub mod parent_selector;
 pub mod gepa;
 pub mod merge;
 pub mod mutation;
@@ -2554,14 +2639,14 @@ pub use batch::{
     BatchSampler, EpochShuffled, FixedMinibatch,
 };
 
-pub use candidate_selector::{
-    BeamCandidateSelector, CandidateSelector,
-    NicheWeighted, ParetoFrequencyWeighted, RoundRobinCandidate,
-    SelectBestCandidate, UniformFrontier,
+pub use parent_selector::{
+    BeamParentSelector, NicheWeighted, ParentSelector,
+    ParetoFrequencyWeighted, RoundRobinParent, SelectBestParent,
+    UniformFrontier,
 };
 
-pub use gate::{
-    Gate, GateDecision, ImprovementOrEqual, NoRegression, StrictImprovement,
+pub use acceptance::{
+    Acceptance, AcceptanceDecision, ImprovementOrEqual, NoRegression, StrictImprovement,
 };
 
 pub use gepa::{
@@ -2587,11 +2672,11 @@ pub use validation::{
 
 pub mod prelude {
     pub use crate::{
-        BatchSampler, CandidateSelector, EpochShuffled, FullValidation, Gate,
+        Acceptance, BatchSampler, EpochShuffled, FullValidation,
         Gepa, GepaMerge, GepaMutationRequest, GepaProposal, GepaProposer,
         ImprovementOrEqual, MinibatchThenValidation,
-        ParetoFrequencyWeighted, PartSelector, ReflectiveMutation,
-        RoundRobinCandidate, RoundRobinPart, StrictImprovement,
+        ParentSelector, ParetoFrequencyWeighted, PartSelector, ReflectiveMutation,
+        RoundRobinParent, RoundRobinPart, SelectBestParent, StrictImprovement,
         SystemAwareMerge, UniformFrontier, ValidationPolicy, InvokedAndFailingPart,
     };
 }
@@ -2604,12 +2689,12 @@ lowering. Generic GEPA proposers may emit surface edits; GEPA lowers them
 through `S::change_part` into artifact-native changes before recording
 `ProposalEffect::Change`.
 
-GEPA keeps `Population` and `CandidateSelector` separate. Population owns
-archive/frontier/admission/fitted-state; `CandidateSelector` chooses the next
-candidate(s) from `PopulationView`.
+GEPA keeps `Population` and `ParentSelector` separate. Population owns
+archive/frontier/admission/fitted-state; `ParentSelector` chooses the next
+candidate(s) to use as proposal parent(s) from the population and graph view.
 
 ```rust
-pub trait CandidateSelector<P: OptimizationProblem>: Send {
+pub trait ParentSelector<P: OptimizationProblem>: Send {
     fn select(
         &mut self,
         population: leaven_engine::PopulationView<'_, P>,
@@ -2874,10 +2959,11 @@ pub mod prelude {
 
 ```toml
 [features]
-default = ["std", "derive", "gepa"]
+default = ["std", "derive", "run", "gepa"]
 
 std = ["dep:leaven-std"]
 derive = ["dep:leaven-derive"]
+run = ["dep:leaven-run"]
 gepa = ["dep:leaven-gepa"]
 
 workspace = ["dep:leaven-workspace"]
@@ -2912,6 +2998,7 @@ pub mod prelude;
 pub use leaven_core as core;
 pub use leaven_engine as engine;
 pub use leaven_kernel as kernel;
+pub use leaven_run as run;
 pub use leaven_surface as surface;
 
 pub use leaven_core::{
@@ -2928,12 +3015,15 @@ pub use leaven_surface::{
 };
 
 pub use leaven_engine::{
-    optimize, Arity, CachePolicy, CandidateSelection, Engine, EngineBuilder,
+    Arity, CachePolicy, CandidateSelection, Engine, EngineBuilder,
     Evaluator, MaterializeContext, Materializer, Optimizer, Population,
     PreferenceRelation, ProposalContext, Proposer, ReadScope, Renderer,
     RunContext, RunEvent, RunGraphView, RunResult, SelectionContext, Stopper,
     TrustPolicy,
 };
+
+#[cfg(feature = "run")]
+pub use leaven_run::optimize;
 
 pub use leaven_kernel::{
     Amount, AmountError, Budget, BudgetSnapshot, CandidateId, ContentId, Cost,
@@ -2976,11 +3066,14 @@ pub use leaven_surface::{
 };
 
 pub use leaven_engine::{
-    optimize, Arity, CachePolicy, CandidateSelection, Engine, Evaluator,
+    Arity, CachePolicy, CandidateSelection, Engine, Evaluator,
     MaterializeContext, Materializer, Optimizer, Population, PreferenceRelation,
     Proposer, Renderer, RunContext, RunGraphView, SelectionContext, Stopper,
     TrustPolicy,
 };
+
+#[cfg(feature = "run")]
+pub use leaven_run::optimize;
 
 pub use leaven_kernel::{
     Budget, CandidateId, ContentId, Cost, CostUnit, ErrorRecord, FiniteF64,
@@ -3169,7 +3262,7 @@ Before implementation:
 □ Proposer::Request is associated
 □ no `WorkspaceRenderer` export or alias; use `Materializer`
 □ workspace file APIs use `WorkspacePath`, not host paths
-□ GEPA candidate selection is a `CandidateSelector`, not hidden inside `Population`
+□ GEPA parent selection is a `ParentSelector`, not hidden inside `Population`
 □ no renderer/materializer registry in v0.2.2; stage-owned fields are normal
 □ CI enforces dependency allowlist
 ```
