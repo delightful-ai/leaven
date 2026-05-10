@@ -561,7 +561,6 @@ leaven-core -> leaven-surface
 leaven-core -> leaven-engine
 leaven-core -> leaven-workspace
 leaven-core -> leaven-store
-leaven-core -> leaven-eval
 leaven-core -> leaven-gepa
 
 leaven-surface -> leaven-engine
@@ -578,7 +577,6 @@ leaven-workspace -> leaven-engine
 leaven-workspace -> leaven-surface
 
 leaven-engine -> leaven-gepa
-leaven-engine -> leaven-eval
 leaven-engine -> leaven-std
 leaven-engine -> leaven-population
 leaven-engine -> leaven-preference
@@ -1327,9 +1325,8 @@ This is the corrected replacement for `ComponentEvidence`.
 
 Shared evaluation plan/report infrastructure. Owns declarative eval protocols
 or plans, optional case catalog helpers, train/validation/test split manifests,
-split-use policy summaries, suite fingerprints, eval reports, and
-provider-neutral helper adapters for casewise evaluators. It is warm product
-infrastructure, not cold core.
+split-use policy summaries, suite fingerprints, and eval reports. It is warm
+product infrastructure, not cold core.
 
 The detailed type-level contract lives in `docs/specs/eval_protocol_detail.md`.
 
