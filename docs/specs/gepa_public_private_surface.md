@@ -602,12 +602,14 @@ leaven-core       -> leaven-kernel
 leaven-surface    -> leaven-core, leaven-kernel
 leaven-evidence   -> leaven-core, leaven-kernel
 leaven-engine     -> leaven-core, leaven-kernel, leaven-store
-leaven-eval       -> leaven-core, leaven-kernel, leaven-evidence
-leaven-gepa       -> leaven-core, leaven-engine, leaven-eval,
-                     leaven-evidence, leaven-population, leaven-preference,
-                     leaven-render, leaven-surface, leaven-lm
+leaven-eval       -> leaven-core, leaven-kernel
+leaven-gepa       -> leaven-core, leaven-engine,
+                     leaven-evidence, leaven-kernel, leaven-lm,
+                     leaven-population, leaven-preference,
+                     leaven-render, leaven-surface
 leaven-run        -> leaven-core, leaven-engine, leaven-eval,
-                     leaven-kernel, leaven-store, leaven-store-inline
+                     leaven-evidence, leaven-kernel, leaven-store,
+                     leaven-store-inline
 domain adapters   -> leaven-core, leaven-surface, leaven-engine as needed,
                      leaven-eval/leaven-run for convenience adapters
 leaven            -> re-exports only
@@ -653,7 +655,7 @@ Public methods:
 | `.evaluator(e)` | Installs a typed engine evaluator. Ordinary path uses it as the primary evaluator; optimizer-author paths may install named auxiliary evaluators through the engine. |
 | `.using(optimizer)` | Supplies the optimizer value. Required for `leaven-run` core builder; umbrella convenience constructors may prefill `Gepa::default()` but must make that visible in docs. |
 | `.budget(budget)` | Supplies run limits. Product builders must require an explicit budget or explicit `Budget::unlimited()`; engine builders may keep `Budget::unlimited()` as their default. |
-| `.store(store)` | Supplies durable blob/evidence/checkpoint storage. If omitted, the product builder may use inline storage only for non-resumable runs and must still stage attachments durably for the result lifetime. |
+| `.store(store)` | Supplies an `OptimizeStore`: `OptimizeStore::evidence(evidence_store)` for report/evaluation evidence, or `OptimizeStore::durable(evidence_store, run_persistence)` when checkpoint persistence is also configured. If omitted, the product builder may use inline evidence storage only for non-resumable runs. |
 | `.resume(checkpoint)` | Restores graph truth plus optimizer private state. Requires matching optimizer/evaluator/score/runner fingerprints or fails before continuing. |
 | `.on_event(callback)` | Registers public run events. Layer 1 callbacks receive summaries and ids, not mutable graph access. |
 | `.run()` | Freezes builder inputs, lowers them once, initializes the optimizer, executes until stop/error/budget, optionally runs final validation/test, and returns `Optimized`. |
@@ -678,6 +680,7 @@ pub enum OptimizeBuildError {
     MissingOptimizer,
     MissingScorerOrEvaluator,
     MissingBudget,
+    HeldOutWithoutTrain,
     ConflictingPrimaryEvaluation,
     RunnerRequired,
     DuplicateCaseId { split: SplitRole, id: CaseId },
@@ -703,7 +706,7 @@ The public builder must lower:
 .using(optimizer)   -> engine optimizer value
 .budget(budget)     -> engine budget ledger
 .on_event(callback) -> engine callback
-.store(store)       -> engine/run persistence and evidence storage
+.store(store)       -> evidence storage; durable form also wires engine/run persistence
 ```
 
 It must not require the user to construct these directly in Layer 1:

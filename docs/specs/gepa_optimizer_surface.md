@@ -542,9 +542,9 @@ Checkpoint rules:
 - graph truth is enough to reconstruct public history;
 - GEPA private state must implement `CheckpointableOptimizer` before
   long-running/resumable runs are considered product-ready;
-- checkpointed private state includes RNG, batch sampler cursor, selector
-  selection stats, merge scheduler state, and population state if not fully
-  derivable from graph events.
+- checkpointed private state includes RNG, batch sampler cursor, parent/part
+  selector state, gate/admission state, merge scheduler state, and population
+  state if those values are not fully derivable from graph events.
 
 ## 14. Concrete Requirements
 

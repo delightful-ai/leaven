@@ -29,7 +29,8 @@ pub use leaven_kernel::{
     ErrorRecord, Fingerprint, FiniteF64, FiniteF64Error, MetadataBag, ProposalId,
 };
 pub use leaven_run::{
-    OptimizationReport, OptimizeBuilder, OptimizeResult, RunOutput, Score, ScoreContext, optimize,
+    IntoOptimizeStore, OptimizationReport, OptimizeBuilder, OptimizeError, OptimizeResult,
+    OptimizeStore, RunOutput, Score, ScoreContext, optimize,
 };
 pub use leaven_surface::{
     EditSurface, Part, PartAddress, PartSelection, SurfaceError, SurfaceFingerprint,

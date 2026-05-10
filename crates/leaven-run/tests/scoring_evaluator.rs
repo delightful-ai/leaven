@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use futures::executor::block_on;
 use leaven_core::{
-    Artifact, ArtifactIdentity, AssessmentGranularity, CaseSetVersion, EvaluationPurpose,
-    EvaluationSet, PairOrder, ResolvedEvaluationRequest, ResolvedEvaluationSet,
+    Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, CaseSetVersion,
+    EvaluationPurpose, EvaluationSet, PairOrder, ResolvedEvaluationRequest, ResolvedEvaluationSet,
     ResolvedRequestKind,
 };
 use leaven_engine::{BudgetLedger, CachePolicy, Evaluator, RunContext, RunGraph};
@@ -115,6 +115,54 @@ fn scoring_evaluator_rejects_non_finite_scores() {
             .expect("evaluation should fail");
 
         assert!(error.to_string().contains("score was not finite"));
+    });
+}
+
+#[test]
+fn scoring_evaluator_reports_per_candidate_cost_for_independent_batches() {
+    block_on(async {
+        let (mut graph, mut budget, left) = graph_with_seed();
+        let right = {
+            let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
+            ctx.insert_seed(TextArtifact(50), 1).unwrap()
+        };
+        let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
+        let evaluator = ScoringEvaluator::new(
+            Arc::new(vec![2, 3]),
+            Arc::new(|artifact: &TextArtifact, case| {
+                RunOutput::new(
+                    (artifact.0 + case).to_string(),
+                    vec!["runner trace".to_owned()],
+                )
+            }),
+            Arc::new(|ctx| Score::new(ctx.output.output.parse::<f64>().unwrap(), "ok")),
+            "scoring-evaluator-test",
+        );
+
+        let metered = evaluator
+            .evaluate(
+                request(
+                    ResolvedRequestKind::Independent {
+                        candidates: vec![left, right],
+                    },
+                    vec![CaseId::new(0), CaseId::new(1)],
+                    AssessmentGranularity::PerCase,
+                ),
+                ctx.evaluation_context(StageId::from_evaluator(Evaluator::id(&evaluator))),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(metered.cost.metric_calls, 4);
+        let assessment_costs = metered
+            .value
+            .iter()
+            .map(|assessment| match assessment {
+                Assessment::Independent { cost, .. } => cost.metric_calls,
+                _ => panic!("expected independent assessment"),
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(assessment_costs, vec![2, 2]);
     });
 }
 

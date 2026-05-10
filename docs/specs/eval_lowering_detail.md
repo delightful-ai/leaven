@@ -73,7 +73,6 @@ Current inventory and move decision:
 ```text
 leaven-kernel
 leaven-core
-leaven-evidence
 ```
 
 `leaven-eval` must not depend on:

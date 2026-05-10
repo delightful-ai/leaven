@@ -6,9 +6,10 @@ use leaven_core::PartitionId;
 use leaven_engine::PopulationEvent;
 use leaven_evidence::{CasewiseEvidence, ScalarEvidence};
 use leaven_kernel::{AssessmentId, CandidateId, CaseId, PopulationId};
+use serde::{Deserialize, Serialize};
 
 /// Case partition filter applied before frontier updates.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 pub enum PartitionFilter {
     /// Accept every observation.
     #[default]
@@ -50,7 +51,7 @@ impl ParetoFrontierBuilder {
 }
 
 /// Pareto frontier over sparse casewise scalar evidence.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ParetoFrontier {
     id: PopulationId,
     partition_filter: PartitionFilter,

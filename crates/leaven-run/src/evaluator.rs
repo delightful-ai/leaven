@@ -80,6 +80,7 @@ where
         let mut assessments = Vec::new();
         let mut metric_calls = 0_u64;
         for candidate in candidates {
+            let mut candidate_metric_calls = 0_u64;
             let artifact = ctx.graph().artifact(candidate).ok_or_else(|| {
                 EvaluationError::Message(format!("candidate {candidate} is missing"))
             })?;
@@ -114,12 +115,13 @@ where
                     ScoredFeedbackEvidence::new(scalar, score.feedback, trace),
                 ));
                 metric_calls += 1;
+                candidate_metric_calls += 1;
             }
             assessments.push(Assessment::Independent {
                 candidate,
                 target: AssessmentTarget::EvaluationSet(EvaluationSetId::new()),
                 evidence: CasewiseEvidence::new(outcomes),
-                cost: Cost::metric_calls(metric_calls),
+                cost: Cost::metric_calls(candidate_metric_calls),
                 metadata: leaven_kernel::MetadataBag::new(),
             });
         }

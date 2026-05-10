@@ -4,9 +4,10 @@ use std::collections::BTreeMap;
 
 use leaven_core::Evidence;
 use leaven_kernel::CaseId;
+use serde::{Deserialize, Serialize};
 
 /// Evidence for one case in a resolved evaluation set.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CaseOutcome<E: Evidence> {
     case: CaseId,
     evidence: E,
@@ -37,7 +38,7 @@ impl<E: Evidence> CaseOutcome<E> {
 /// Missing case evidence is represented by absence. Duplicate case ids are
 /// canonicalized deterministically: the last outcome for a case wins, and the
 /// stored outcomes are ordered by [`CaseId`].
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CasewiseEvidence<E: Evidence> {
     outcomes: Vec<CaseOutcome<E>>,
 }

@@ -2528,7 +2528,6 @@ name = "leaven-eval"
 version = "0.0.0"
 dependencies = [
  "leaven-core",
- "leaven-evidence",
  "leaven-kernel",
  "serde",
  "serde_json",
@@ -2543,6 +2542,7 @@ dependencies = [
  "leaven-core",
  "leaven-kernel",
  "ordered-float",
+ "serde",
  "thiserror 2.0.18",
 ]
 
@@ -2640,6 +2640,7 @@ dependencies = [
  "leaven-kernel",
  "leaven-preference",
  "proptest",
+ "serde",
 ]
 
 [[package]]

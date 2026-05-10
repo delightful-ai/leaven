@@ -2,12 +2,13 @@
 
 use leaven_core::Evidence;
 use ordered_float::NotNan;
+use serde::{Deserialize, Serialize};
 
 /// Finite scalar score evidence for single-objective evaluation.
 ///
 /// The score is finite by construction so preference and population code never
 /// has to decide what `NaN` or infinity should mean.
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub struct ScalarEvidence {
     score: NotNan<f64>,
 }

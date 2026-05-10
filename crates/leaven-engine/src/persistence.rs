@@ -1,6 +1,6 @@
 //! Run persistence capability.
 
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::Arc};
 
 use bytes::Bytes;
 use leaven_core::OptimizationProblem;
@@ -22,6 +22,16 @@ use crate::{
 pub trait RunPersistence<P: OptimizationProblem>: Send + Sync {
     /// Persist a checkpoint at a clean run boundary.
     fn checkpoint(&self, request: RunCheckpointRequest<'_, P>) -> Result<(), RunPersistenceError>;
+}
+
+impl<P, T> RunPersistence<P> for Arc<T>
+where
+    P: OptimizationProblem,
+    T: RunPersistence<P> + ?Sized,
+{
+    fn checkpoint(&self, request: RunCheckpointRequest<'_, P>) -> Result<(), RunPersistenceError> {
+        self.as_ref().checkpoint(request)
+    }
 }
 
 /// [`RunPersistence`] implementation backed by Leaven's blob and checkpoint

@@ -16,11 +16,12 @@ use leaven_kernel::{
 };
 use leaven_population::{KeepBest, ParetoFrontier};
 use leaven_surface::{EditSurface, SurfaceError};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 use crate::{
-    CandidateSelector, CheckpointPartSelector, Gate, GateDecision, ParetoFrequencyWeighted,
-    PartSelector, RoundRobinPart, StrictImprovement, SurfaceProposer,
+    CandidateSelector, CheckpointCandidateSelector, CheckpointGate, CheckpointPartSelector, Gate,
+    GateDecision, ParetoFrequencyWeighted, PartSelector, RoundRobinPart, StrictImprovement,
+    SurfaceProposer,
 };
 
 const DEFAULT_MAX_ITERATIONS: usize = 1;
@@ -80,6 +81,18 @@ pub trait GepaPopulation {
     ) -> Vec<PopulationEvent>;
 }
 
+/// Private population state that must survive GEPA checkpoint/restore.
+pub trait CheckpointPopulation {
+    /// Serializable state shape.
+    type State: Serialize + DeserializeOwned;
+
+    /// Capture population state.
+    fn checkpoint_state(&self) -> Self::State;
+
+    /// Restore population state.
+    fn restore_state(&mut self, state: Self::State);
+}
+
 impl GepaPopulation for ParetoFrontier {
     fn id(&self) -> PopulationId {
         self.id()
@@ -102,6 +115,18 @@ impl GepaPopulation for ParetoFrontier {
             }
             None => self.observe_casewise_scalar(candidate, assessment, evidence),
         }
+    }
+}
+
+impl CheckpointPopulation for ParetoFrontier {
+    type State = Self;
+
+    fn checkpoint_state(&self) -> Self::State {
+        self.clone()
+    }
+
+    fn restore_state(&mut self, state: Self::State) {
+        *self = state;
     }
 }
 
@@ -136,6 +161,18 @@ impl GepaPopulation for KeepBest {
     }
 }
 
+impl CheckpointPopulation for KeepBest {
+    type State = Self;
+
+    fn checkpoint_state(&self) -> Self::State {
+        self.clone()
+    }
+
+    fn restore_state(&mut self, state: Self::State) {
+        *self = state;
+    }
+}
+
 /// Reusable GEPA optimizer over an explicit edit surface.
 #[derive(Clone, Debug)]
 pub struct Gepa<
@@ -161,13 +198,16 @@ pub struct Gepa<
 
 /// Serializable GEPA private state.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct GepaCheckpointState<PartSelectorState> {
+pub struct GepaCheckpointState<PopulationState, ParentSelectorState, PartSelectorState, GateState> {
     train_partition: PartitionId,
     max_iterations: usize,
     completed_iterations: usize,
     best: Option<CandidateId>,
     observed: BTreeSet<CandidateId>,
+    population: PopulationState,
+    parent_selector: ParentSelectorState,
     part_selector: PartSelectorState,
+    gate: GateState,
 }
 
 /// Private helper trait used only to give `Gepa` a default generic slot.
@@ -401,13 +441,16 @@ where
     P::Evidence: GepaScoreEvidence,
     P::ProposalAnnotations: Default,
     S: EditSurface<P::Artifact> + Send + Sync,
-    Pop: GepaPopulation + Send + Sync,
+    Pop: CheckpointPopulation + GepaPopulation + Send + Sync,
     Reflect: SurfaceProposer<P::Artifact, S> + Send + Sync,
-    ParentSel: CandidateSelector<P, Pop, Selection = Option<CandidateId>> + Send + Sync,
+    ParentSel: CandidateSelector<P, Pop, Selection = Option<CandidateId>>
+        + CheckpointCandidateSelector
+        + Send
+        + Sync,
     PartSel: PartSelector<P::Artifact, S> + CheckpointPartSelector + Send + Sync,
-    GatePol: Gate + Send + Sync,
+    GatePol: CheckpointGate + Gate + Send + Sync,
 {
-    type State = GepaCheckpointState<PartSel::State>;
+    type State = GepaCheckpointState<Pop::State, ParentSel::State, PartSel::State, GatePol::State>;
 
     fn private_state_policy(&self) -> PrivateStatePolicy {
         PrivateStatePolicy::ExplicitSnapshot {
@@ -418,31 +461,73 @@ where
 
     fn checkpoint_state(
         &self,
-        _ctx: CheckpointContext<'_, P>,
+        ctx: CheckpointContext<'_, P>,
     ) -> Result<Self::State, CheckpointError> {
+        let graph = ctx.graph();
+        if let Some(best) = self.best {
+            ensure_checkpoint_candidate(&graph, best, "best candidate")?;
+        }
+        for observed in &self.observed {
+            ensure_checkpoint_candidate(&graph, *observed, "observed candidate")?;
+        }
+        if let Some(population_best) = self.population.best() {
+            ensure_checkpoint_candidate(&graph, population_best, "population best candidate")?;
+        }
         Ok(GepaCheckpointState {
             train_partition: self.train_partition.clone(),
             max_iterations: self.max_iterations,
             completed_iterations: self.completed_iterations,
             best: self.best,
             observed: self.observed.clone(),
-            part_selector: self.part_selector.checkpoint_state(),
+            population: CheckpointPopulation::checkpoint_state(&self.population),
+            parent_selector: CheckpointCandidateSelector::checkpoint_state(&self.parent_selector),
+            part_selector: CheckpointPartSelector::checkpoint_state(&self.part_selector),
+            gate: CheckpointGate::checkpoint_state(&self.gate),
         })
     }
 
     fn restore_state(
         &mut self,
         state: Self::State,
-        _ctx: RestoreContext<'_, P>,
+        ctx: RestoreContext<'_, P>,
     ) -> Result<(), CheckpointError> {
+        let graph = ctx.graph();
+        if let Some(best) = state.best {
+            ensure_checkpoint_candidate(&graph, best, "best candidate")?;
+        }
+        for observed in &state.observed {
+            ensure_checkpoint_candidate(&graph, *observed, "observed candidate")?;
+        }
         self.train_partition = state.train_partition;
         self.max_iterations = state.max_iterations;
         self.completed_iterations = state.completed_iterations;
         self.best = state.best;
         self.observed = state.observed;
+        self.population.restore_state(state.population);
+        self.parent_selector.restore_state(state.parent_selector);
         self.part_selector.restore_state(state.part_selector);
+        self.gate.restore_state(state.gate);
+        if let Some(population_best) = self.population.best() {
+            ensure_checkpoint_candidate(&graph, population_best, "population best candidate")?;
+        }
         Ok(())
     }
+}
+
+fn ensure_checkpoint_candidate<P>(
+    graph: &RunGraphView<'_, P>,
+    candidate: CandidateId,
+    role: &str,
+) -> Result<(), CheckpointError>
+where
+    P: OptimizationProblem,
+{
+    if graph.candidate(candidate).is_none() {
+        return Err(CheckpointError::MissingGraphTruth {
+            reason: format!("{role} `{candidate}` is not in the graph"),
+        });
+    }
+    Ok(())
 }
 
 impl<S, Pop, Reflect, ParentSel, PartSel, GatePol>

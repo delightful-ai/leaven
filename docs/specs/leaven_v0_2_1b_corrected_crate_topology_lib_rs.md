@@ -353,8 +353,7 @@ leaven-evidence -> [
 
 leaven-eval -> [
   leaven-kernel,
-  leaven-core,
-  leaven-evidence
+  leaven-core
 ]
 
 leaven-preference -> [

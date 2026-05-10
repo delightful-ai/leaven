@@ -13,9 +13,10 @@ use leaven_engine::{
 };
 use leaven_evidence::{CaseOutcome, CasewiseEvidence, ScalarEvidence, ScoredFeedbackEvidence};
 use leaven_gepa::{
-    CandidateSelector, Gate, GateDecision, Gepa, ImprovementOrEqual, NoRegression,
-    ParetoFrequencyWeighted, ReflectiveMutation, SelectBestCandidate, StrictImprovement,
-    SurfaceProposer, optimizer::GepaPopulation,
+    CandidateSelector, CheckpointCandidateSelector, CheckpointGate, CheckpointPopulation, Gate,
+    GateDecision, Gepa, ImprovementOrEqual, NoRegression, ParetoFrequencyWeighted,
+    ReflectiveMutation, SelectBestCandidate, StrictImprovement, SurfaceProposer,
+    optimizer::GepaPopulation,
 };
 use leaven_kernel::{
     Budget, ContentId, Cost, EvaluatorId, Fingerprint, MetadataBag, Metered, ProposerId, RunId,
@@ -122,6 +123,10 @@ fn gepa_gate_policies_preserve_score_admission_laws() {
     assert_eq!(equal.decide(1.0, 1.0), GateDecision::Accept);
     assert_eq!(equal.decide(2.0, 1.0), GateDecision::Reject);
     assert_eq!(no_regression.decide(3.0, 3.0), GateDecision::Accept);
+    CheckpointGate::checkpoint_state(&equal);
+    CheckpointGate::restore_state(&mut equal, ());
+    CheckpointGate::checkpoint_state(&no_regression);
+    CheckpointGate::restore_state(&mut no_regression, ());
 }
 
 #[test]
@@ -212,6 +217,70 @@ fn gepa_checkpoint_state_restores_loop_and_selector_cursor() {
 }
 
 #[test]
+fn gepa_checkpoint_state_restores_population_frontier_membership() {
+    let artifact = PartMapArtifact(BTreeMap::from([
+        ("answer".to_owned(), "draft".to_owned()),
+        ("search".to_owned(), "query".to_owned()),
+    ]));
+    let mut graph = RunGraph::<SmokeProblem>::new(RunId::new());
+    let mut budget = BudgetLedger::default();
+    let mut ctx = RunContext::new(&mut graph, &mut budget);
+    let seed = ctx.insert_seed(artifact, 0).unwrap();
+    let mut gepa = Gepa::new(
+        PartMapSurface,
+        ParetoFrontier::by_case()
+            .partition_filter(std::collections::BTreeSet::from(["TRAIN".into()]))
+            .build(),
+        ReflectiveMutation::new("unused".to_owned()),
+    );
+    let evidence = CasewiseEvidence::new(vec![CaseOutcome::new(
+        leaven_kernel::CaseId::new(0),
+        ScalarEvidence::new(1.0).unwrap(),
+    )]);
+    gepa.population_mut().observe_partitioned_casewise_scalar(
+        &"TRAIN".into(),
+        seed,
+        leaven_kernel::AssessmentId::new(),
+        &evidence,
+    );
+
+    assert_eq!(gepa.select_candidate(ctx.graph()), Some(seed));
+    let state = gepa
+        .checkpoint_state(CheckpointContext::new(ctx.graph()))
+        .unwrap();
+    let mut restored = Gepa::new(
+        PartMapSurface,
+        ParetoFrontier::by_case()
+            .partition_filter(std::collections::BTreeSet::from(["TRAIN".into()]))
+            .build(),
+        ReflectiveMutation::new("unused".to_owned()),
+    );
+    restored
+        .restore_state(state, RestoreContext::new(ctx.graph()))
+        .unwrap();
+
+    assert_eq!(restored.population().best(), Some(seed));
+    assert_eq!(restored.select_candidate(ctx.graph()), Some(seed));
+}
+
+#[test]
+fn gepa_checkpoint_population_round_trips_keep_best_state() {
+    let candidate = leaven_kernel::CandidateId::new();
+    let mut population = KeepBest::new();
+    population.observe(
+        candidate,
+        leaven_kernel::AssessmentId::new(),
+        ScalarEvidence::new(1.0).unwrap(),
+    );
+
+    let state = CheckpointPopulation::checkpoint_state(&population);
+    let mut restored = KeepBest::new();
+    CheckpointPopulation::restore_state(&mut restored, state);
+
+    assert_eq!(restored.best(), Some(candidate));
+}
+
+#[test]
 fn gepa_selectors_delegate_to_population_best_candidate() {
     let mut graph = RunGraph::<SmokeProblem>::new(RunId::new());
     let mut budget = BudgetLedger::default();
@@ -238,6 +307,10 @@ fn gepa_selectors_delegate_to_population_best_candidate() {
     assert_eq!(best.select(&keep_best, ctx.graph()), Some(candidate));
     assert_eq!(best.select(&tournament, ctx.graph()), Some(candidate));
     assert_eq!(weighted.select(&empty_frontier, ctx.graph()), None);
+    CheckpointCandidateSelector::checkpoint_state(&best);
+    CheckpointCandidateSelector::restore_state(&mut best, ());
+    CheckpointCandidateSelector::checkpoint_state(&weighted);
+    CheckpointCandidateSelector::restore_state(&mut weighted, ());
 }
 
 #[test]

@@ -7,22 +7,27 @@ pub mod proposer;
 pub mod selector;
 pub mod validation;
 
-pub use gate::{Gate, GateDecision, ImprovementOrEqual, NoRegression, StrictImprovement};
+pub use gate::{
+    CheckpointGate, Gate, GateDecision, ImprovementOrEqual, NoRegression, StrictImprovement,
+};
 pub use optimizer::{
-    Gepa, GepaBuilder, GepaCheckpointState, GepaConfig, GepaScoreEvidence, MergeScheduler,
+    CheckpointPopulation, Gepa, GepaBuilder, GepaCheckpointState, GepaConfig, GepaPopulation,
+    GepaScoreEvidence, MergeScheduler,
 };
 pub use part_selector::{CheckpointPartSelector, PartSelector, RoundRobinPart, WorstEvidencePart};
 pub use proposer::{
     ReflectiveMutation, ReflectiveMutationConfig, SurfaceProposer, SystemAwareMerge,
 };
 pub use selector::{
-    CandidateSelector, HasBestCandidate, ParetoFrequencyWeighted, SelectBestCandidate,
+    CandidateSelector, CheckpointCandidateSelector, HasBestCandidate, ParetoFrequencyWeighted,
+    SelectBestCandidate,
 };
 pub use validation::{FullValidation, MinibatchThenValidation, ValidationPolicy};
 
 pub mod prelude {
     pub use crate::{
-        CandidateSelector, FullValidation, Gate, Gepa, HasBestCandidate, ImprovementOrEqual,
+        CandidateSelector, CheckpointCandidateSelector, CheckpointGate, CheckpointPopulation,
+        FullValidation, Gate, Gepa, GepaPopulation, HasBestCandidate, ImprovementOrEqual,
         MinibatchThenValidation, ParetoFrequencyWeighted, PartSelector, ReflectiveMutation,
         RoundRobinPart, SelectBestCandidate, StrictImprovement, SurfaceProposer, SystemAwareMerge,
         ValidationPolicy, WorstEvidencePart,

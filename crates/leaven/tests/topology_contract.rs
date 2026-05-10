@@ -263,10 +263,7 @@ const EXPECTED_DEPENDENCIES: &[(&str, &[&str])] = &[
         ],
     ),
     ("leaven-evidence", &["leaven-core", "leaven-kernel"]),
-    (
-        "leaven-eval",
-        &["leaven-core", "leaven-evidence", "leaven-kernel"],
-    ),
+    ("leaven-eval", &["leaven-core", "leaven-kernel"]),
     (
         "leaven-gepa",
         &[

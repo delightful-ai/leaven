@@ -15,7 +15,8 @@ pub use leaven_kernel::{
     MetadataBag,
 };
 pub use leaven_run::{
-    OptimizationReport, OptimizeResult, RunOutput, Score, ScoreContext, optimize,
+    IntoOptimizeStore, OptimizationReport, OptimizeError, OptimizeResult, OptimizeStore, RunOutput,
+    Score, ScoreContext, optimize,
 };
 pub use leaven_surface::{EditSurface, Part, PartAddress, PartSelection};
 

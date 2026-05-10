@@ -1,11 +1,12 @@
 //! Score evidence that preserves textual feedback and execution traces.
 
 use leaven_core::Evidence;
+use serde::{Deserialize, Serialize};
 
 use crate::ScalarEvidence;
 
 /// One scored evaluation outcome plus proposer-readable feedback.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ScoredFeedbackEvidence {
     score: ScalarEvidence,
     feedback: String,

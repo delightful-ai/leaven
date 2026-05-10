@@ -18,10 +18,9 @@ use leaven_eval::{
 use leaven_evidence::{CasewiseEvidence, ScoredFeedbackEvidence};
 use leaven_kernel::{Budget, CaseId, EvaluatorId};
 use leaven_store::EvidenceStore;
-use leaven_store_inline::InlineEvidenceStore;
 
 use crate::{
-    RunOutput, Score, ScoreContext,
+    IntoOptimizeStore, OptimizeError, OptimizeStore, RunOutput, Score, ScoreContext,
     evaluator::ScoringEvaluator,
     result::{OptimizationReport, OptimizeResult, average},
 };
@@ -66,13 +65,18 @@ where
         runner: Arc::new(|_artifact, _case| RunOutput::default()),
         scorer: None,
         optimizer: (),
-        budget: Budget::unlimited(),
+        budget: None,
         callbacks: Vec::new(),
+        store: None,
     }
 }
 
 /// Public optimize/train/validation/test builder.
-pub struct OptimizeBuilder<A, C, O> {
+pub struct OptimizeBuilder<A, C, O>
+where
+    A: Artifact,
+    C: Send + Sync + 'static,
+{
     seed: A,
     train: Vec<C>,
     validation: Vec<C>,
@@ -80,8 +84,9 @@ pub struct OptimizeBuilder<A, C, O> {
     runner: Runner<A, C>,
     scorer: Option<Scorer<A, C>>,
     optimizer: O,
-    budget: Budget,
+    budget: Option<Budget>,
     callbacks: Vec<Box<dyn Callback<RunProblem<A, C>>>>,
+    store: Option<OptimizeStore<RunProblem<A, C>>>,
 }
 
 impl<A> OptimizeBuilder<A, (), ()>
@@ -104,6 +109,7 @@ where
             optimizer: (),
             budget: self.budget,
             callbacks: Vec::new(),
+            store: None,
         }
     }
 }
@@ -160,13 +166,34 @@ where
             optimizer,
             budget: self.budget,
             callbacks: self.callbacks,
+            store: self.store,
         }
     }
 
     /// Sets the budget.
     #[must_use]
     pub fn budget(mut self, budget: Budget) -> Self {
-        self.budget = budget;
+        self.budget = Some(budget);
+        self
+    }
+
+    /// Registers a callback for public run events.
+    #[must_use]
+    pub fn on_event<Cb>(mut self, callback: Cb) -> Self
+    where
+        Cb: Callback<RunProblem<A, C>> + 'static,
+    {
+        self.callbacks.push(Box::new(callback));
+        self
+    }
+
+    /// Supplies evidence and optional checkpoint persistence for the run.
+    #[must_use]
+    pub fn store<S>(mut self, store: S) -> Self
+    where
+        S: IntoOptimizeStore<RunProblem<A, C>>,
+    {
+        self.store = Some(store.into_optimize_store());
         self
     }
 }
@@ -178,10 +205,12 @@ where
     O: Optimizer<RunProblem<A, C>>,
 {
     /// Runs the optimization.
-    pub async fn run(mut self) -> Result<OptimizeResult<A>, leaven_engine::OptimizerError> {
-        let scorer = self.scorer.take().ok_or_else(|| {
-            leaven_engine::OptimizerError::Message("score function is required".to_owned())
-        })?;
+    pub async fn run(mut self) -> Result<OptimizeResult<A>, OptimizeError> {
+        let scorer = self.scorer.take().ok_or(OptimizeError::MissingScore)?;
+        let budget = self.budget.take().ok_or(OptimizeError::MissingBudget)?;
+        if self.train.is_empty() && (!self.validation.is_empty() || !self.test.is_empty()) {
+            return Err(OptimizeError::HeldOutWithoutTrain);
+        }
         let all_cases = all_cases(&self.train, &self.validation, &self.test);
         let dataset = Dataset::from_ordered(all_cases.clone());
         let splits = dataset_splits(self.train.len(), self.validation.len(), self.test.len());
@@ -191,27 +220,37 @@ where
             self.validation.len(),
             self.test.len(),
         );
-        let store =
-            InlineEvidenceStore::<CasewiseEvidence<ScoredFeedbackEvidence>>::new("leaven-run");
+        let store = self
+            .store
+            .take()
+            .unwrap_or_else(|| OptimizeStore::inline("leaven-run"));
         let evaluator = ScoringEvaluator::new(
             Arc::new(case_set_cases(&self.train, &self.validation, &self.test)),
             self.runner.clone(),
             scorer,
             "leaven-run/score",
         );
-        let mut engine =
+        let mut engine_builder =
             leaven_engine::Engine::<RunProblem<A, C>>::builder()
-                .budget(self.budget)
+                .budget(budget)
                 .trust_policy(TrustPolicy::default().hide_from_proposers([
                     PartitionId::from("VALIDATION"),
                     PartitionId::from("TEST"),
                 ]))
-                .evaluator(evaluator)
-                .build();
-        let seed = engine.insert_seed(self.seed.clone(), 0).map_err(|source| {
-            leaven_engine::OptimizerError::with_source("seed insertion failed", source)
-        })?;
-        let run = engine.run(&mut self.optimizer, &case_set, &store).await?;
+                .evaluator(evaluator);
+        if let Some(persistence) = store.persistence() {
+            engine_builder = engine_builder.persistence(persistence);
+        }
+        for callback in self.callbacks {
+            engine_builder = engine_builder.callback(callback);
+        }
+        let mut engine = engine_builder.build();
+        let seed = engine
+            .insert_seed(self.seed.clone(), 0)
+            .map_err(|source| OptimizeError::SeedInsertion { source })?;
+        let run = engine
+            .run(&mut self.optimizer, &case_set, store.evidence_store())
+            .await?;
         let best = run.best.ok_or_else(|| {
             leaven_engine::OptimizerError::Message(
                 "optimizer finished without a best candidate".to_owned(),
@@ -221,7 +260,7 @@ where
         let final_evaluations = run_final_evaluations(
             &mut engine,
             &case_set,
-            &store,
+            store.evidence_store(),
             seed,
             best,
             !self.validation.is_empty(),
@@ -230,7 +269,7 @@ where
         .await?;
         let (best_artifact, report) = build_report(
             &engine,
-            &store,
+            store.evidence_store(),
             &dataset,
             &splits,
             seed,
@@ -319,7 +358,7 @@ fn dataset_splits(train: usize, validation: usize, test: usize) -> DatasetSplits
 async fn run_final_evaluations<A, C>(
     engine: &mut leaven_engine::Engine<RunProblem<A, C>>,
     case_set: &leaven_engine::CaseSet<C>,
-    store: &InlineEvidenceStore<CasewiseEvidence<ScoredFeedbackEvidence>>,
+    store: &dyn EvidenceStore<CasewiseEvidence<ScoredFeedbackEvidence>>,
     seed: leaven_kernel::CandidateId,
     best: leaven_kernel::CandidateId,
     has_validation: bool,
@@ -399,7 +438,7 @@ where
 
 fn build_report<A, C>(
     engine: &leaven_engine::Engine<RunProblem<A, C>>,
-    store: &InlineEvidenceStore<CasewiseEvidence<ScoredFeedbackEvidence>>,
+    store: &dyn EvidenceStore<CasewiseEvidence<ScoredFeedbackEvidence>>,
     dataset: &Dataset<C>,
     splits: &DatasetSplits,
     seed: leaven_kernel::CandidateId,
@@ -455,7 +494,7 @@ where
 async fn final_eval<A, C>(
     engine: &mut leaven_engine::Engine<RunProblem<A, C>>,
     case_set: &leaven_engine::CaseSet<C>,
-    store: &InlineEvidenceStore<CasewiseEvidence<ScoredFeedbackEvidence>>,
+    store: &dyn EvidenceStore<CasewiseEvidence<ScoredFeedbackEvidence>>,
     candidate: leaven_kernel::CandidateId,
     partition: PartitionId,
     purpose: EvaluationPurpose,
@@ -486,7 +525,7 @@ where
 
 fn latest_average_for_partition<A, C>(
     view: &leaven_engine::RunGraphView<'_, RunProblem<A, C>>,
-    store: &InlineEvidenceStore<CasewiseEvidence<ScoredFeedbackEvidence>>,
+    store: &dyn EvidenceStore<CasewiseEvidence<ScoredFeedbackEvidence>>,
     candidate: leaven_kernel::CandidateId,
     partition: &PartitionId,
 ) -> Result<Option<f64>, leaven_engine::OptimizerError>
@@ -509,7 +548,7 @@ where
 
 fn split_reports_for<A, C>(
     view: &leaven_engine::RunGraphView<'_, RunProblem<A, C>>,
-    store: &InlineEvidenceStore<CasewiseEvidence<ScoredFeedbackEvidence>>,
+    store: &dyn EvidenceStore<CasewiseEvidence<ScoredFeedbackEvidence>>,
     splits: &DatasetSplits,
 ) -> Result<Vec<SplitReport>, leaven_engine::OptimizerError>
 where
@@ -567,7 +606,7 @@ where
 
 fn assessment_summary<A, C>(
     view: &leaven_engine::RunGraphView<'_, RunProblem<A, C>>,
-    store: &InlineEvidenceStore<CasewiseEvidence<ScoredFeedbackEvidence>>,
+    store: &dyn EvidenceStore<CasewiseEvidence<ScoredFeedbackEvidence>>,
     assessment: leaven_kernel::AssessmentId,
 ) -> Result<CandidateEvaluationSummary, leaven_engine::OptimizerError>
 where

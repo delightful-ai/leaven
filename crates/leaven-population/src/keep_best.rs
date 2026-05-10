@@ -2,8 +2,9 @@
 
 use leaven_evidence::ScalarEvidence;
 use leaven_kernel::{AssessmentId, CandidateId, PopulationId};
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct KeepBest {
     id: PopulationId,
     best: Option<ScoredCandidate>,
@@ -89,7 +90,7 @@ impl Default for KeepBest {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 struct ScoredCandidate {
     candidate: CandidateId,
     assessment: AssessmentId,
