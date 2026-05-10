@@ -60,6 +60,7 @@ let result = leaven::optimize(seed_program)
     .train(train_cases)
     .validation(dev_cases)
     .test(test_cases)
+    .runner(program_runner)
     .score(score_fn)
     .using(Gepa::default().with_reflection_lm(reflection_lm))
     .budget(Budget::metric_calls(300))
@@ -699,7 +700,7 @@ Goal: make the short user path work without making `leaven-engine` depend on
 Scope:
 
 - scaffold `leaven-run`;
-- public builder accepts seed/train/validation/test/score/evaluator/optimizer;
+- public builder accepts seed/train/validation/test/runner/scorer/evaluator/optimizer;
 - builder lowers to engine `CaseSet`, evaluators, trust policy, budget,
   callbacks, evidence store, and optimizer;
 - `leaven` re-exports `leaven_run::optimize` as the product entrypoint while

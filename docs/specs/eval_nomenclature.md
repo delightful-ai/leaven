@@ -22,6 +22,7 @@ train
 validation
 test
 score
+runner
 evaluate
 reflect
 budget
@@ -41,6 +42,8 @@ train
 validation / dev
 test
 case / example / task
+scoring function
+runner / executor
 score / metric
 feedback / trace
 reflection
@@ -52,7 +55,7 @@ report
 The user-facing explanation should be:
 
 ```text
-Give Leaven a candidate, work to train on, a scorer, an optimizer, and a budget.
+Give Leaven a candidate, work to train on, a scoring function, an optimizer, and a budget.
 Optionally give it validation/test work. GEPA searches for a better candidate
 and reports what happened.
 ```
@@ -124,6 +127,9 @@ The lowered eval crate should prefer:
 | `LeakagePolicy` | engine `TrustPolicy` or builder lowering | Leakage is a failure mode, not a product object. |
 | `EvalRunReport` | `EvaluationReport` | Familiar and direct. |
 | `ReportAxis` | `MetricAxis` | ML-native. |
+| `ScoreWithFeedback` | `Score` | Feedback is not a side channel; it is part of the score evidence. |
+| `.score_with_feedback(...)` | `.score(...)` | Rich and scalar scoring should be the same public concept. |
+| `.reward(...)` | `.score(...)` | Evaluation APIs usually say score/scorer; reward is one possible signal source, not the public optimizer verb. |
 
 ## 5. Words To Keep Out Of Layer 1
 
@@ -141,17 +147,23 @@ graph mutation
 evidence store
 substrate
 Harbor/AISI-like
+score_with_feedback
 ```
 
 They may appear in optimizer-author, engine, or agentic security docs. They
 should not be necessary to understand how to run GEPA.
+
+`scorer` may remain a domain-local word in agentic or benchmark adapters when it
+means "the thing that judges a completed task run". When surfaced through the
+ordinary optimizer builder, that scorer adapts to `.score(...)` and returns
+`Score`.
 
 ## 6. Crate Naming Implication
 
 The naming split maps to crate ownership:
 
 ```text
-leaven-run     public builder verbs: optimize/train/validation/test/score/run
+leaven-run     public builder verbs: optimize/train/validation/test/runner/score/run
 leaven-gepa    GEPA strategy vocabulary: parent selector, part selector, etc.
 leaven-eval    lowered dataset/split/report vocabulary
 leaven-engine  execution vocabulary: requests, graph, trust, budget, callbacks

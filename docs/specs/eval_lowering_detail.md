@@ -26,7 +26,7 @@ not scatter across engine, optimizer, dataset, and agentic code.
 The product distinction:
 
 ```text
-User input        = train/validation/test cases, scorer/evaluator, optimizer.
+User input        = train/validation/test cases, runner/scoring function/evaluator, optimizer.
 Lowered eval data = dataset, splits, split-use plan, request templates, reports.
 Execution         = engine evaluator calls, graph mutation, cache, budget.
 Environment       = optional workspace/agent/process substrate for an evaluator.
@@ -230,9 +230,15 @@ pub struct LmCase<I = serde_json::Value, O = serde_json::Value> {
 }
 ```
 
-Datasets are optional. Single-task search, live human evals, scalar reward
+Datasets are optional. Single-task search, live human evals, scalar score
 functions, and online pairwise tournaments may have no stable dataset and still
 use engine evaluation.
+
+A dataset case means "unit of work", not "labeled example". `expected` is
+optional by design. Fixed references, hidden verifier targets, LLM judges,
+human judgments, environment score, and open-ended task scoring all lower
+through scorer/evaluator execution without making gold labels a dataset
+requirement.
 
 Agentic case suites do not move into `leaven-eval`. They may lower case ids and
 split roles into this crate while keeping hidden targets and workspace
@@ -309,7 +315,35 @@ pub enum ScoreDirection {
 `MetricAxis` is report metadata. It must not require vector-valued score
 evidence before the first `leaven-eval` slice can land.
 
-### 3.8 Split Use Policy
+### 3.8 Score Normalization
+
+`CandidateRunner`, `Score`, `ScoreContext`, score-on-error policy, and scoring
+closure adapters belong to `leaven-run` or a domain adapter, not to
+`leaven-eval`. The lowered eval layer only needs the parts that survive
+execution as reportable evidence:
+
+```text
+primary comparable score
+named metric axes and directions
+feedback evidence references
+attachment evidence references
+metadata projected into reports
+unscored diagnostic records
+```
+
+Score normalization must preserve information until a caller explicitly
+chooses a report projection. In particular:
+
+1. scalar scores normalize to a `Score` with one primary score;
+2. rich scores normalize to graph assessments plus evidence references;
+3. attachments are staged into the evidence/artifact store before reports cite
+   them;
+4. runtime paths are not durable report truth;
+5. metadata cannot silently become an optimizer decision axis;
+6. unscored `Score` values are valid for diagnostics and reports, but default in-loop
+   GEPA policy requires at least one comparable score axis.
+
+### 3.9 Split Use Policy
 
 ```rust
 pub struct SplitUsePolicy {
@@ -364,7 +398,7 @@ Actor/read enforcement is not modeled here. Product builders lower split-use
 intent into engine `TrustPolicy`/`ReadScope`; `leaven-eval` must not import
 those engine types.
 
-### 3.9 Evaluation Request Template
+### 3.10 Evaluation Request Template
 
 ```rust
 pub struct EvaluationRequestTemplate {
@@ -630,7 +664,8 @@ Product builders outside `leaven-engine` that accept `.train`, `.validation`,
 9. produce a deterministic fingerprint over dataset content, splits, and plan
    metadata;
 10. lower split-use intent into engine `TrustPolicy`;
-11. install evaluator(s) through engine builder, not through `EvaluationPlan`.
+11. install scorer/evaluator adapters through engine builder, not through
+    `EvaluationPlan`.
 
 The engine builder may continue to accept cold `CaseSet`, evaluators,
 optimizers, trust policy, and budget. It should not import `leaven-eval` just
@@ -679,7 +714,7 @@ Agentic adapters must:
 2. lower case ids and partition roles into `leaven-eval`;
 3. run workspaces and agents through `leaven-workspace`/`leaven-agent`;
 4. record workspace/session/transcript evidence in graph assessments;
-5. ensure hidden targets/test traces are scorer-visible only;
+5. ensure hidden targets/test traces are scorer/evaluator-visible only;
 6. use final-test reports without exposing test content to proposers.
 
 ### 7.5 DSRS/LM Program Behavior
@@ -803,7 +838,9 @@ Extend `crates/leaven/tests/topology_contract.rs` so:
 5. Scaffold `leaven-run` builder and lower train/validation/test into
    dataset/splits/case-set/trust policy.
 6. Add GEPA split-use integration over `PartitionId`s.
-7. Add scalar and feedback-aware score closure helpers in `leaven-run`.
+7. Add `CandidateRunner`, `Score`, `ScoreContext`, attachment staging, scalar
+   lifting, score-on-error policy, and rich scoring closure helpers in
+   `leaven-run`.
 8. Add LM-program evaluator helper.
 9. Add agentic adapter in `leaven-agentic`, not in `leaven-eval`.
 

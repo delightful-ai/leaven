@@ -1360,7 +1360,7 @@ The detailed type-level contract lives in `docs/specs/eval_lowering_detail.md`.
 User inputs, lowered eval data, execution, and environments are separate:
 
 ```text
-User input        = train/validation/test cases, scorer/evaluator, optimizer.
+User input        = train/validation/test cases, runner/scorer/evaluator, optimizer.
 Lowered eval data = dataset, splits, split-use plan, request templates, reports.
 Execution         = engine evaluator calls, graph mutation, cache, budget.
 Environment       = optional workspace/agent/process substrate for an evaluator.
@@ -1441,6 +1441,7 @@ optimize(seed)
 .train(...)
 .validation(...)
 .test(...)
+.runner(...)
 .score(...)
 .evaluator(...)
 .using(optimizer)
@@ -1452,7 +1453,7 @@ optimize(seed)
 
 ```text
 train/validation/test -> Dataset + DatasetSplits -> engine CaseSet
-score/evaluator       -> engine Evaluator registry
+runner/scorer/evaluator -> engine Evaluator registry
 budget                -> engine BudgetLedger
 split use             -> engine TrustPolicy / ReadScope
 run output            -> RunOutput + EvaluationReport + optimizer summaries
@@ -1475,17 +1476,18 @@ concrete LM providers, concrete workspace backends, or environment lifecycle.
 pub mod builder;
 pub mod error;
 pub mod result;
-pub mod scorer;
+pub mod score;
 
 pub use builder::{optimize, OptimizeBuilder};
 pub use error::{OptimizeBuildError, OptimizeRunError};
 pub use result::{Optimized, RunOutput};
-pub use scorer::{ScoreFn, ScoreWithFeedbackFn};
+pub use score::{CandidateRunner, Score, ScoreContext, ScoreError, Scorer};
 
 pub mod prelude {
     pub use crate::{
         optimize, Optimized, OptimizeBuildError, OptimizeBuilder,
-        OptimizeRunError, RunOutput, ScoreFn, ScoreWithFeedbackFn,
+        CandidateRunner, OptimizeRunError, Score, ScoreContext, ScoreError,
+        Scorer, RunOutput,
     };
 }
 ```
