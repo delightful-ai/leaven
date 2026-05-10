@@ -453,7 +453,7 @@ mod tests {
         assert_eq!(result.report.baseline_test_score, None);
         assert_eq!(result.report.test_score, None);
         assert_eq!(result.report().events.len(), result.report.events.len());
-        assert!(std::ptr::eq(result.best(), &result.best_artifact));
+        assert_eq!(result.best(), &result.best_artifact);
     }
 
     #[test]

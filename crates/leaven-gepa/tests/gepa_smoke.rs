@@ -266,8 +266,8 @@ fn gepa_score_evidence_projects_feedback_scores_to_scalar_casewise() {
         leaven_gepa::GepaScoreEvidence::average_score(&scored),
         Some(0.75)
     );
-    assert_eq!(scalar.outcomes()[0].evidence().score(), 1.0);
-    assert_eq!(scalar.outcomes()[1].evidence().score(), 0.5);
+    assert!((scalar.outcomes()[0].evidence().score() - 1.0).abs() < f64::EPSILON);
+    assert!((scalar.outcomes()[1].evidence().score() - 0.5).abs() < f64::EPSILON);
     assert_eq!(
         leaven_gepa::GepaScoreEvidence::average_score(&CasewiseEvidence::<ScalarEvidence>::new(
             Vec::new()
