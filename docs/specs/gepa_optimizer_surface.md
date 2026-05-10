@@ -228,7 +228,6 @@ dependency direction should be:
 leaven-eval -> leaven-kernel
 leaven-eval -> leaven-core
 leaven-eval -> leaven-evidence
-leaven-eval -> leaven-engine   # only for evaluator/helper adapters
 ```
 
 It must not depend on GEPA, concrete LM/provider crates, concrete workspace
@@ -426,7 +425,7 @@ domain crates  own domain cases/environments and lower into leaven-eval plans.
 optimizers     own search rhythm and strategy state.
 ```
 
-That means an `EvalProtocol`/`EvalPlan` is declarative data: request shape,
+That means an `EvalPlan` is declarative data: request shape,
 granularity, split-use policy, report axes, leakage summary, and optional case
 catalog identity. It is not a trait that runs evaluations and it is not an
 environment abstraction.
@@ -437,17 +436,17 @@ environment abstraction.
 `EvaluationSet` algebra and engine evaluator trait:
 
 ```rust
-pub struct EvalProtocol {
-    pub id: EvalProtocolId,
+pub struct EvalPlan {
+    pub id: EvalPlanId,
     pub request_shape: EvalRequestShape,
     pub granularity: AssessmentGranularity,
     pub split_uses: SplitUsePolicy,
-    pub report_axes: Vec<ScoreAxis>,
+    pub report_axes: Vec<ReportAxis>,
     pub metadata: MetadataBag,
 }
 
 pub struct EvalSuite<C = EvalCase> {
-    pub protocol: EvalProtocol,
+    pub plan: EvalPlan,
     pub catalog: Option<CaseCatalog<C>>,
     pub splits: Option<SplitManifest>,
     pub fingerprint: Fingerprint,
@@ -573,7 +572,7 @@ pub struct CaseOutcome<E> {
 The LM-program adapter's job is:
 
 ```text
-EvalSuite<LmCase> or EvalProtocol + candidate artifact + evaluator closure/program runner
+EvalSuite<LmCase> or EvalPlan + candidate artifact + evaluator closure/program runner
 -> Evaluator<P>
 -> per-case Assessment<P> records with structured evidence
 ```
@@ -630,12 +629,12 @@ candidate summary:
 
 ```rust
 pub struct EvalRunReport {
-    pub suite_fingerprint: Fingerprint,
-    pub split_manifest: SplitManifest,
+    pub suite_fingerprint: Option<Fingerprint>,
+    pub split_manifest: Option<SplitManifestSummary>,
     pub train: Option<SplitReport>,
     pub validation: Option<SplitReport>,
     pub test: Option<SplitReport>,
-    pub policy: SplitUseSummary,
+    pub policy: EvalUseSummary,
 }
 ```
 
@@ -1116,9 +1115,8 @@ ergonomics depend on them.
 
 Scope:
 
-- scaffold `leaven-eval` with `EvalProtocol`/`EvalPlan`, `EvalSuite`,
-  `CaseCatalog`, `SplitManifest`, `SplitRole`, `SplitPolicy`, and
-  `EvalRunReport`;
+- scaffold `leaven-eval` with `EvalPlan`, `EvalSuite`, `CaseCatalog`,
+  `SplitManifest`, `SplitRole`, `SplitPolicy`, and `EvalRunReport`;
 - map product-builder `.cases`, `.validation_cases`, and `.test_cases` into
   stable partitions;
 - add leakage-policy helpers that hide validation/test content from proposers

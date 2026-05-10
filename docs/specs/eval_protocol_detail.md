@@ -78,7 +78,6 @@ The crate exists because the following product facts otherwise scatter:
 leaven-kernel
 leaven-core
 leaven-evidence
-leaven-engine
 ```
 
 `leaven-eval` must not depend on:
@@ -101,8 +100,8 @@ concrete provider/runtime crates
 
 `leaven-engine` remains the only crate that executes evaluations through
 `Evaluator<P>` and `RunContext`. `leaven-engine` must not depend on
-`leaven-eval`; product builders that combine both live in `leaven`,
-`leaven-std`, or `leaven-eval` helper APIs.
+`leaven-eval`; product builders that combine both live in `leaven` or
+`leaven-std`.
 
 ### 2.2 Module Graph
 
@@ -111,11 +110,11 @@ Planned `crates/leaven-eval/src/lib.rs` map:
 ```text
 case.rs        EvalCase, LmCase, CaseCatalog, CaseCatalogBuilder
 error.rs       EvalPlanError, SplitManifestError, CaseCatalogError, ReportError
-policy.rs      SplitUsePolicy, SplitUse, LeakagePolicy, FinalTestPolicy
-protocol.rs    EvalProtocol, EvalPlan, EvalRequestTemplate, EvalRequestShape
+policy.rs      SplitUsePolicy, SplitPermissions, EvalUse, LeakagePolicy, FinalTestPolicy
+protocol.rs    EvalPlan, EvalRequestTemplate, EvalRequestShape
 report.rs      EvalRunReport, SplitReport, CandidateEvalSummary, EvalUseSummary
-split.rs       SplitManifest, SplitRole, SplitPolicy, SplitId constants/helpers
-traits.rs      IntoEvalSuite, CaseEvaluatorFn helper adapter traits only
+split.rs       SplitManifest, SplitRole, SplitPolicy
+traits.rs      IntoEvalSuite only
 ```
 
 `lib.rs` remains a map plus curated re-exports.
@@ -135,11 +134,11 @@ pub mod traits;
 
 pub use case::{CaseCatalog, CaseCatalogBuilder, EvalCase, LmCase};
 pub use error::{CaseCatalogError, EvalPlanError, ReportError, SplitManifestError};
-pub use policy::{FinalTestPolicy, LeakagePolicy, SplitUse, SplitUsePolicy};
-pub use protocol::{EvalPlan, EvalProtocol, EvalRequestShape, EvalRequestTemplate};
+pub use policy::{EvalUse, FinalTestPolicy, LeakagePolicy, SplitPermissions, SplitUsePolicy};
+pub use protocol::{EvalPlan, EvalRequestShape, EvalRequestTemplate};
 pub use report::{CandidateEvalSummary, EvalRunReport, EvalUseSummary, SplitReport};
-pub use split::{SplitManifest, SplitPolicy, SplitRole, StandardSplit};
-pub use traits::{CaseEvaluatorFn, IntoEvalSuite};
+pub use split::{SplitManifest, SplitPolicy, SplitRole};
+pub use traits::IntoEvalSuite;
 ```
 
 Do not expose a facade trait that hides engine execution. If users need to run
@@ -148,19 +147,20 @@ an eval, they still install an `Evaluator<P>` into the engine and call
 
 ## 3. Core Types
 
-### 3.1 Standard Splits
+### 3.1 Split Roles
 
 ```rust
-pub enum StandardSplit {
+pub enum SplitRole {
     Train,
     Validation,
     Test,
     Search,
     Probe,
     ReportOnly,
+    Custom(smol_str::SmolStr),
 }
 
-impl StandardSplit {
+impl SplitRole {
     pub const TRAIN: &'static str = "TRAIN";
     pub const VALIDATION: &'static str = "VALIDATION";
     pub const TEST: &'static str = "TEST";
@@ -168,12 +168,12 @@ impl StandardSplit {
     pub const PROBE: &'static str = "PROBE";
     pub const REPORT_ONLY: &'static str = "REPORT_ONLY";
 
-    pub fn partition_id(self) -> PartitionId;
+    pub fn standard_partition_id(&self) -> Option<PartitionId>;
 }
 ```
 
-`PartitionId` remains the `leaven-core` type. `StandardSplit` is convenience
-vocabulary, not a replacement.
+`PartitionId` remains the `leaven-core` type. `SplitRole` is the only enum
+that owns train/validation/test/search/probe/report-only semantics.
 
 ### 3.2 Split Manifest
 
@@ -184,16 +184,6 @@ pub struct SplitManifest {
     cases: BTreeMap<PartitionId, Vec<CaseId>>,
     policy: SplitPolicy,
     fingerprint: Fingerprint,
-}
-
-pub enum SplitRole {
-    Train,
-    Validation,
-    Test,
-    Search,
-    Probe,
-    ReportOnly,
-    Custom(smol_str::SmolStr),
 }
 
 pub enum SplitPolicy {
@@ -267,11 +257,10 @@ pub enum EvalRequestShape {
 This mirrors `leaven_core::EvaluationRequest` shape. It is a declarative
 template field, not an executable request.
 
-### 3.5 Eval Protocol / Plan
+### 3.5 Eval Plan
 
-The implementation may settle on `EvalPlan` as the public name and keep
-`EvalProtocol` as an alias only before release. The durable concept is a
-declarative product plan.
+The public name is `EvalPlan`. The word "protocol" in prose means the product
+contract, not a separate crate or trait.
 
 ```rust
 pub struct EvalPlan {
@@ -280,11 +269,9 @@ pub struct EvalPlan {
     pub granularity: AssessmentGranularity,
     pub split_uses: SplitUsePolicy,
     pub leakage: LeakagePolicy,
-    pub report_axes: Vec<ScoreAxis>,
+    pub report_axes: Vec<ReportAxis>,
     pub metadata: MetadataBag,
 }
-
-pub type EvalProtocol = EvalPlan;
 ```
 
 `EvalPlan` must not:
@@ -311,22 +298,47 @@ pub struct EvalSuite<C = EvalCase> {
 `EvalSuite` means "a plan plus optional data and split metadata". It does not
 mean "a runnable evaluator".
 
-### 3.7 Split Use Policy
+### 3.7 Report Axis
+
+```rust
+pub struct ReportAxis {
+    pub id: smol_str::SmolStr,
+    pub direction: Option<ScoreDirection>,
+    pub label: Option<String>,
+}
+
+pub enum ScoreDirection {
+    HigherIsBetter,
+    LowerIsBetter,
+}
+```
+
+`ReportAxis` is report metadata. It must not require `ScoreVectorEvidence` to
+be complete before the first `leaven-eval` slice can land. If a concrete
+evaluator returns `ScoreVectorEvidence`, reports may reference the axis ids;
+otherwise scalar/boolean evidence can still be summarized.
+
+### 3.8 Split Use Policy
 
 ```rust
 pub struct SplitUsePolicy {
-    uses: BTreeMap<PartitionId, SplitUse>,
-    default: SplitUse,
+    uses: BTreeMap<PartitionId, SplitPermissions>,
+    default: SplitPermissions,
     final_test: FinalTestPolicy,
 }
 
-pub struct SplitUse {
-    pub proposer_feedback: bool,
-    pub optimizer_selection: bool,
-    pub gate_admission: bool,
-    pub population_observation: bool,
-    pub report: bool,
-    pub evaluator_only: bool,
+pub struct SplitPermissions {
+    uses: BTreeSet<EvalUse>,
+}
+
+pub enum EvalUse {
+    ProposerFeedback,
+    OptimizerSelection,
+    GateAdmission,
+    PopulationObservation,
+    Report,
+    EvaluatorOnly,
+    FinalTest,
 }
 
 pub enum FinalTestPolicy {
@@ -334,6 +346,15 @@ pub enum FinalTestPolicy {
     FinalReportOnly,
     ExplicitlyAllowedInLoop { reason: String },
 }
+```
+
+Construction is fallible. `SplitPermissions` must reject contradictory sets:
+
+```text
+EvaluatorOnly + ProposerFeedback
+EvaluatorOnly + GateAdmission
+FinalTest + any in-loop use unless FinalTestPolicy explicitly allows it
+empty permissions for a split that appears in SplitManifest
 ```
 
 Default GEPA-compatible policy:
@@ -353,23 +374,22 @@ pub struct LeakagePolicy {
     hidden_from_proposers: BTreeSet<PartitionId>,
     hidden_from_optimizers: BTreeSet<PartitionId>,
     hidden_from_callbacks: BTreeSet<PartitionId>,
-    proposer_evidence_visibility: EvidenceVisibility,
-    callback_evidence_visibility: EvidenceVisibility,
+    proposer_evidence_visibility: EvalEvidenceVisibility,
+    callback_evidence_visibility: EvalEvidenceVisibility,
+}
+
+pub enum EvalEvidenceVisibility {
+    Full,
+    ScoresOnly,
+    SummariesOnly,
+    None,
 }
 ```
 
-`LeakagePolicy` lowers into `leaven_engine::TrustPolicy`. It does not replace
-engine trust enforcement.
-
-```rust
-impl LeakagePolicy {
-    pub fn to_trust_policy(&self) -> TrustPolicy;
-}
-```
-
-If `EvidenceVisibility` remains engine-owned, `leaven-eval` may expose a small
-local summary enum and map at the boundary. Do not create a duplicate trust
-system.
+`LeakagePolicy` is declarative. It does not replace engine trust enforcement.
+Product builders in `leaven`/`leaven-std` lower it into
+`leaven_engine::TrustPolicy` and `ReadScope` configuration. `leaven-eval` must
+not import those engine types.
 
 ### 3.9 Eval Request Template
 
@@ -423,49 +443,15 @@ Expected implementations:
 - `leaven_agentic::CaseSuite` in `leaven-agentic`, not in `leaven-eval`;
 - future DSRs case/program fixtures in `leaven-dsrs`, not in `leaven-eval`.
 
-### 4.2 `CaseEvaluatorFn`
+### 4.2 Deferred Engine Adapters
 
-Closure helpers are allowed, but only as adapters into `Evaluator<P>`.
+Closure evaluator helpers are useful, but they are not part of the first
+`leaven-eval` crate surface. Any helper that implements
+`leaven_engine::Evaluator<P>` belongs in a crate that already depends on
+`leaven-engine`, such as `leaven`, `leaven-std`, an optimizer crate, or a later
+explicit adapter crate.
 
-```rust
-pub trait CaseEvaluatorFn<P, C>: Send + Sync
-where
-    P: OptimizationProblem,
-{
-    type Feedback;
-    type Error;
-
-    fn evaluate_case<'a>(
-        &'a self,
-        artifact: &'a P::Artifact,
-        case: &'a C,
-    ) -> impl Future<Output = Result<CaseEvalOutcome<Self::Feedback>, Self::Error>> + Send + 'a;
-}
-```
-
-Adapter:
-
-```rust
-pub struct CaseEvaluator<P, C, F> {
-    id: EvaluatorId,
-    fingerprint: Fingerprint,
-    catalog: Arc<CaseCatalog<C>>,
-    f: F,
-    _marker: PhantomData<P>,
-}
-```
-
-`CaseEvaluator` implements `leaven_engine::Evaluator<P>` and must:
-
-- accept only independent requests initially;
-- resolve `CaseId`s against its catalog;
-- return explicit errors for missing cases;
-- produce per-case assessments when requested;
-- never cache by default unless the caller supplies a deterministic fingerprint
-  and cache policy.
-
-This trait lives in `leaven-eval` only if it stays generic and provider-free.
-Provider/agentic evaluators live elsewhere.
+The first `leaven-eval` slice must land without an engine dependency.
 
 ## 5. Errors
 
@@ -527,9 +513,6 @@ represented as `None`, not `Some(empty_catalog)`.
 ```rust
 #[derive(Debug, thiserror::Error)]
 pub enum EvalPlanError {
-    #[error("eval plan has no report axes")]
-    MissingReportAxes,
-
     #[error("eval plan references unknown split `{partition}`")]
     UnknownSplit { partition: PartitionId },
 
@@ -618,11 +601,11 @@ They must not duplicate artifacts or evidence payloads.
 pub struct SplitReport {
     pub partition: PartitionId,
     pub role: Option<SplitRole>,
-    pub use_: SplitUse,
+    pub permissions: SplitPermissions,
     pub resolved_sets: Vec<ResolvedEvaluationSetId>,
     pub requests: Vec<EvaluationRequestId>,
     pub assessments: Vec<AssessmentId>,
-    pub aggregate_score: Option<ScoreVectorEvidence>,
+    pub aggregate_score: Option<ScoreSummary>,
     pub per_case_count: usize,
 }
 ```
@@ -639,10 +622,20 @@ pub struct CandidateEvalSummary {
 
 pub struct CandidateSplitSummary {
     pub assessments: Vec<AssessmentId>,
-    pub score: Option<ScoreVectorEvidence>,
+    pub score: Option<ScoreSummary>,
     pub cases_observed: usize,
 }
 ```
+
+```rust
+pub struct ScoreSummary {
+    pub axes: BTreeMap<smol_str::SmolStr, f64>,
+    pub primary: Option<f64>,
+}
+```
+
+`ScoreSummary` is a report projection. It does not replace evidence records and
+does not require `ScoreVectorEvidence` to be the only score shape.
 
 ## 7. Required Behavior
 
@@ -654,17 +647,28 @@ Product builders outside `leaven-engine` that accept `.cases`,
 1. construct a `CaseCatalog` when concrete cases are supplied;
 2. construct a `SplitManifest` with stable `TRAIN`, `VALIDATION`, and `TEST`
    partition ids;
-3. reject duplicate case ids in a catalog;
-4. reject split references to missing cases;
-5. default to `SplitPolicy::DisjointRequired`;
-6. produce a deterministic fingerprint over catalog content, split manifest,
+3. derive exactly one engine `CaseSet` from that catalog and manifest before
+   running;
+4. treat that derived `CaseSet` as the execution source of truth for
+   `RunContext` resolution;
+5. keep `CaseCatalog` and `SplitManifest` as immutable product input/report
+   fingerprints, not as a second runtime case store;
+6. reject duplicate case ids in a catalog;
+7. reject split references to missing cases;
+8. default to `SplitPolicy::DisjointRequired`;
+9. produce a deterministic fingerprint over catalog content, split manifest,
    and plan metadata;
-7. lower leakage policy into engine `TrustPolicy`;
-8. install evaluator(s) through engine builder, not through `EvalPlan`.
+10. lower leakage policy into engine `TrustPolicy`;
+11. install evaluator(s) through engine builder, not through `EvalPlan`.
 
 The engine builder may continue to accept cold `CaseSet`, evaluators,
 optimizers, trust policy, and budget. It should not import `leaven-eval` just
 to support product ergonomics.
+
+Split-scoped product builders and optimizers must build TRAIN/VALIDATION/TEST
+requests with `EvaluationSet::Partition`, not `EvaluationSet::Cases(test_ids)`.
+Explicit case-id requests bypass current engine hidden-partition checks unless
+engine trust is strengthened after resolution.
 
 ### 7.2 Optimizer Behavior
 
@@ -767,6 +771,9 @@ DSRs and LM-program adapters must:
 - `TEST` is final-report-only by default.
 - Hidden partitions in `LeakagePolicy` must be reflected in engine
   `TrustPolicy`.
+- Split-scoped product paths must use `EvaluationSet::Partition` for
+  train/validation/test requests until engine trust can map explicit case ids
+  back to hidden partition membership after resolution.
 
 ### 8.3 Catalog Invariants
 
@@ -785,6 +792,9 @@ DSRs and LM-program adapters must:
 - Request `purpose` is always explicit.
 - Dynamic `EvaluationSet`s are resolved only by `RunContext`, never by
   `leaven-eval`.
+- `CaseCatalog`/`SplitManifest` are product input truth; the derived engine
+  `CaseSet` is runtime resolution truth. They must be generated from the same
+  input in one product-builder step.
 
 ### 8.5 Report Invariants
 
@@ -814,7 +824,7 @@ DSRs and LM-program adapters must:
 - build train/validation/test suite from three case vectors;
 - build no-dataset scalar eval plan;
 - build pairwise online eval plan with no catalog;
-- lower `LeakagePolicy` into engine `TrustPolicy`;
+- product-builder lowering maps `LeakagePolicy` into engine `TrustPolicy`;
 - produce report summary from mocked graph assessment IDs.
 
 ### 9.3 Cross-Crate Scenario Tests

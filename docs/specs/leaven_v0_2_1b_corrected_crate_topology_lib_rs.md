@@ -336,8 +336,7 @@ leaven-evidence -> [
 leaven-eval -> [
   leaven-kernel,
   leaven-core,
-  leaven-evidence,
-  leaven-engine
+  leaven-evidence
 ]
 
 leaven-preference -> [
@@ -1350,10 +1349,11 @@ For maintainability, `leaven-eval` owns protocol-shaped product data, not
 execution authority. It must not define a replacement for `Evaluator`, an
 environment lifecycle trait, or an optimizer rhythm.
 
-It may depend on `leaven-engine` for evaluator helper adapters, but it must not
-know GEPA rhythm, concrete LM providers, concrete workspace backends, DSRs, or
-agentic workspace/task internals. Agentic and LM-program adapters lower their
-domain cases into this shared protocol/suite/report shape.
+It must not depend on `leaven-engine`. Engine-backed evaluator helpers live in
+`leaven`, `leaven-std`, optimizer crates, or a later explicit adapter crate.
+It must not know GEPA rhythm, concrete LM providers, concrete workspace
+backends, DSRs, or agentic workspace/task internals. Agentic and LM-program
+adapters lower their domain cases into this shared protocol/suite/report shape.
 
 ### `src/lib.rs`
 
@@ -1363,32 +1363,47 @@ domain cases into this shared protocol/suite/report shape.
 
 //! Shared evaluation-suite and split semantics.
 
+pub mod case;
+pub mod error;
+pub mod policy;
 pub mod protocol;
 pub mod report;
 pub mod split;
 pub mod suite;
 
+pub use case::{
+    CaseCatalog, CaseCatalogBuilder, EvalCase, LmCase,
+};
+
+pub use error::{
+    CaseCatalogError, EvalPlanError, ReportError, SplitManifestError,
+};
+
+pub use policy::{
+    EvalUse, FinalTestPolicy, LeakagePolicy, SplitPermissions, SplitUsePolicy,
+};
+
 pub use report::{
-    EvalRunReport, SplitReport, SplitUseSummary,
+    EvalRunReport, EvalUseSummary, SplitReport,
 };
 
 pub use protocol::{
-    EvalProtocol, EvalProtocolId, EvalRequestShape,
+    EvalPlan, EvalPlanId, EvalRequestShape,
 };
 
 pub use split::{
     SplitManifest, SplitPolicy, SplitRole,
 };
 
-pub use suite::{
-    CaseCatalog, EvalCase, EvalSuite, LmCase,
-};
+pub use suite::EvalSuite;
 
 pub mod prelude {
     pub use crate::{
-        CaseCatalog, EvalCase, EvalProtocol, EvalProtocolId, EvalRequestShape,
-        EvalRunReport, EvalSuite, LmCase, SplitManifest, SplitPolicy,
-        SplitReport, SplitRole, SplitUseSummary,
+        CaseCatalog, CaseCatalogBuilder, CaseCatalogError, EvalCase, EvalPlan,
+        EvalPlanError, EvalPlanId, EvalRequestShape, EvalRunReport, EvalSuite,
+        EvalUse, EvalUseSummary, FinalTestPolicy, LeakagePolicy, LmCase,
+        ReportError, SplitManifest, SplitManifestError, SplitPermissions,
+        SplitPolicy, SplitReport, SplitRole, SplitUsePolicy,
     };
 }
 ```
