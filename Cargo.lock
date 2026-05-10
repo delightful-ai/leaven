@@ -2290,10 +2290,13 @@ dependencies = [
  "leaven-core",
  "leaven-derive",
  "leaven-engine",
+ "leaven-eval",
+ "leaven-evidence",
  "leaven-gepa",
  "leaven-kernel",
  "leaven-lm-anthropic",
  "leaven-lm-openai",
+ "leaven-run",
  "leaven-std",
  "leaven-store-inline",
  "leaven-store-sqlite",
@@ -2521,6 +2524,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "leaven-eval"
+version = "0.0.0"
+dependencies = [
+ "leaven-core",
+ "leaven-evidence",
+ "leaven-kernel",
+ "serde",
+ "serde_json",
+ "smol_str",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "leaven-evidence"
 version = "0.0.0"
 dependencies = [
@@ -2656,6 +2672,20 @@ dependencies = [
  "leaven-store",
  "leaven-surface",
  "leaven-workspace",
+]
+
+[[package]]
+name = "leaven-run"
+version = "0.0.0"
+dependencies = [
+ "leaven-core",
+ "leaven-engine",
+ "leaven-eval",
+ "leaven-evidence",
+ "leaven-kernel",
+ "leaven-store",
+ "leaven-store-inline",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -3372,6 +3402,18 @@ dependencies = [
  "leaven-kernel",
  "leaven-population",
  "leaven-store-inline",
+]
+
+[[package]]
+name = "p8_aime_gepa"
+version = "0.0.0"
+dependencies = [
+ "futures",
+ "leaven",
+ "leaven-evidence",
+ "leaven-kernel",
+ "leaven-population",
+ "leaven-surface",
 ]
 
 [[package]]

@@ -31,7 +31,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let evaluator = PolicyEvaluator {
             cases: cases.clone(),
         };
-        let mut engine = leaven::optimize::<OptimizerPolicyProblem>()
+        let mut engine = leaven::engine::optimize::<OptimizerPolicyProblem>()
             .budget(Budget::metric_calls(80))
             .trust_policy(
                 TrustPolicy::default()

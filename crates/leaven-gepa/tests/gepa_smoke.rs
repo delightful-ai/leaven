@@ -29,9 +29,10 @@ fn gepa_owns_surface_and_lowers_selected_part_edits() {
         ("answer".to_owned(), "draft".to_owned()),
         ("search".to_owned(), "query".to_owned()),
     ]));
-    let mut gepa = Gepa::<SmokeProblem, PartMapSurface, ParetoFrontier>::new(
+    let mut gepa = Gepa::new(
         PartMapSurface,
         ParetoFrontier::by_case().build(),
+        ReflectiveMutation::new("unused".to_owned()),
     );
     let mut proposer = ReflectiveMutation::new("improved".to_owned());
 
@@ -60,9 +61,10 @@ proptest! {
             ("answer".to_owned(), answer.clone()),
             ("search".to_owned(), search.clone()),
         ]));
-        let gepa = Gepa::<SmokeProblem, PartMapSurface, ParetoFrontier>::new(
+        let gepa = Gepa::new(
             PartMapSurface,
             ParetoFrontier::by_case().build(),
+            ReflectiveMutation::new("unused".to_owned()),
         );
         let selected = if mutate_answer { "answer" } else { "search" };
         let untouched = if mutate_answer { "search" } else { "answer" };
@@ -96,8 +98,11 @@ fn gepa_candidate_selector_is_population_backed() {
             leaven_evidence::ScalarEvidence::new(1.0).unwrap(),
         )]),
     );
-    let mut gepa =
-        Gepa::<SmokeProblem, PartMapSurface, ParetoFrontier>::new(PartMapSurface, frontier);
+    let mut gepa = Gepa::new(
+        PartMapSurface,
+        frontier,
+        ReflectiveMutation::new("unused".to_owned()),
+    );
 
     assert_eq!(gepa.select_candidate(ctx.graph()), Some(seed));
 }
@@ -138,15 +143,16 @@ fn gepa_explicit_strategies_are_owned_by_optimizer() {
         )]),
     );
     let mut gepa = Gepa::<
-        SmokeProblem,
         PartMapSurface,
         ParetoFrontier,
+        ReflectiveMutation<String>,
         SelectBestCandidate,
         leaven_gepa::RoundRobinPart,
         ImprovementOrEqual,
     >::with_strategies(
         PartMapSurface,
         frontier,
+        ReflectiveMutation::new("unused".to_owned()),
         SelectBestCandidate,
         leaven_gepa::RoundRobinPart::new(),
         ImprovementOrEqual,

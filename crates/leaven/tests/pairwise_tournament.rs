@@ -21,7 +21,7 @@ fn engine_runs_pairwise_tournament_end_to_end() {
     block_on(async {
         let store = InlineEvidenceStore::<PairwiseJudgmentEvidence>::new("inline");
         let cases = CaseSet::new(vec![()]);
-        let mut engine = leaven::optimize::<TournamentProblem>()
+        let mut engine = leaven::engine::optimize::<TournamentProblem>()
             .budget(Budget::metric_calls(10))
             .evaluator(LengthPairwiseJudge)
             .build();

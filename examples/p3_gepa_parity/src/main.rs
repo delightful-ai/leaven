@@ -30,7 +30,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 vec![CaseId::new(0), CaseId::new(1)],
             )
             .with_partition(PartitionId::from(VALIDATION), vec![CaseId::new(2)]);
-        let mut engine = leaven::optimize::<PartMapProblem>()
+        let mut engine = leaven::engine::optimize::<PartMapProblem>()
             .budget(Budget::metric_calls(20))
             .trust_policy(
                 TrustPolicy::default()
@@ -52,6 +52,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 ParetoFrontier::by_case()
                     .partition_filter(BTreeSet::from([PartitionId::from(TRAIN)]))
                     .build(),
+                ReflectiveMutation::new(PartMapEdit::Replace("improved answer".to_owned())),
             ),
             proposer: ReflectiveMutation::new(PartMapEdit::Replace("improved answer".to_owned())),
             seed,
@@ -184,7 +185,7 @@ impl EditSurface<PartMapArtifact> for PartMapSurface {
 }
 
 struct GepaParityOptimizer {
-    gepa: Gepa<PartMapProblem, PartMapSurface, ParetoFrontier>,
+    gepa: Gepa<PartMapSurface, ParetoFrontier, ReflectiveMutation<PartMapEdit>>,
     proposer: ReflectiveMutation<PartMapEdit>,
     seed: CandidateId,
     best: Option<CandidateId>,

@@ -3,15 +3,18 @@
 pub use leaven_core::{
     Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, AssessmentTarget,
     ContentAddressed, EvaluationRequest, EvaluationSet, Evidence, OptimizationProblem, PairOrder,
-    Proposal, ProposalBatch, ProposalEffect,
+    PartitionId, Proposal, ProposalBatch, ProposalEffect,
 };
 pub use leaven_engine::{
     Arity, CachePolicy, Engine, Evaluator, MaterializationReport, MaterializeContext,
     MaterializeError, Materializer, Optimizer, Population, PreferenceRelation, Proposer, Renderer,
-    RunContext, RunGraphView, Stopper, TrustPolicy, optimize,
+    RunContext, RunGraphView, Stopper, TrustPolicy,
 };
 pub use leaven_kernel::{
     Budget, CandidateId, ContentId, Cost, CostUnit, ErrorRecord, FiniteF64, MetadataBag,
+};
+pub use leaven_run::{
+    OptimizationReport, OptimizeResult, RunOutput, Score, ScoreContext, optimize,
 };
 pub use leaven_surface::{EditSurface, Part, PartAddress, PartSelection};
 

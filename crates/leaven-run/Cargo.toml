@@ -1,0 +1,21 @@
+[package]
+name = "leaven-run"
+description = "Public optimize/train/validation/test builder for Leaven."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+leaven-core = { workspace = true }
+leaven-engine = { workspace = true }
+leaven-eval = { workspace = true }
+leaven-evidence = { workspace = true }
+leaven-kernel = { workspace = true }
+leaven-store = { workspace = true }
+leaven-store-inline = { workspace = true }
+thiserror = { workspace = true }

@@ -1,82 +1,217 @@
-//! GEPA optimizer state.
+//! Reusable GEPA optimizer loop.
 
-use std::marker::PhantomData;
+use std::collections::BTreeSet;
 
-use leaven_core::OptimizationProblem;
-use leaven_engine::RunGraphView;
-use leaven_kernel::CandidateId;
+use leaven_core::{
+    AssessmentGranularity, EvaluationPurpose, EvaluationRequest, EvaluationSet, InfoRef,
+    OptimizationProblem, PartitionId, Proposal, ProposalBatch, ProposalBatchSemantics,
+};
+use leaven_engine::{Optimizer, OptimizerError, PopulationEvent, RunContext, RunGraphView};
+use leaven_evidence::{CaseOutcome, CasewiseEvidence, ScalarEvidence, ScoredFeedbackEvidence};
+use leaven_kernel::{
+    AssessmentId, CandidateId, Cost, EvaluatorId, MetadataBag, PopulationId, StageId,
+};
+use leaven_population::{KeepBest, ParetoFrontier};
 use leaven_surface::{EditSurface, SurfaceError};
 
 use crate::{
-    CandidateSelector, Gate, ParetoFrequencyWeighted, PartSelector, RoundRobinPart,
-    StrictImprovement,
+    CandidateSelector, Gate, GateDecision, ParetoFrequencyWeighted, PartSelector, RoundRobinPart,
+    StrictImprovement, SurfaceProposer,
 };
 
-/// GEPA state over an explicit edit surface.
-///
-/// Strategy slots are statically typed with defaults. Users can swap candidate
-/// selection, part selection, and gate policy without changing the engine or
-/// the artifact trait.
-#[derive(Clone, Debug)]
-pub struct Gepa<
-    P,
-    S,
-    Pop,
-    CandSel = ParetoFrequencyWeighted,
-    PartSel = RoundRobinPart,
-    GatePol = StrictImprovement,
-> where
-    P: OptimizationProblem,
-    S: EditSurface<P::Artifact>,
-{
-    surface: S,
-    population: Pop,
-    candidate_selector: CandSel,
-    part_selector: PartSel,
-    gate: GatePol,
-    _problem: PhantomData<P>,
+const DEFAULT_MAX_ITERATIONS: usize = 1;
+
+/// Evidence shape GEPA can compare as casewise scalar scores.
+pub trait GepaScoreEvidence: leaven_core::Evidence {
+    /// Project comparable per-case scalar evidence for population updates.
+    fn scalar_casewise(&self) -> CasewiseEvidence<ScalarEvidence>;
+
+    /// Average comparable score over present case outcomes.
+    fn average_score(&self) -> Option<f64> {
+        let evidence = self.scalar_casewise();
+        if evidence.outcomes().is_empty() {
+            return None;
+        }
+        let total: f64 = evidence
+            .outcomes()
+            .iter()
+            .map(|outcome| outcome.evidence().score())
+            .sum();
+        let count = u32::try_from(evidence.outcomes().len()).expect("case count fits into u32");
+        Some(total / f64::from(count))
+    }
 }
 
-impl<P, S, Pop> Gepa<P, S, Pop>
-where
-    P: OptimizationProblem,
-    S: EditSurface<P::Artifact>,
-{
-    /// Build GEPA with standard deterministic strategies.
-    #[must_use]
-    pub fn new(surface: S, population: Pop) -> Self {
-        Self {
-            surface,
-            population,
-            candidate_selector: ParetoFrequencyWeighted,
-            part_selector: RoundRobinPart::new(),
-            gate: StrictImprovement,
-            _problem: PhantomData,
+impl GepaScoreEvidence for CasewiseEvidence<ScalarEvidence> {
+    fn scalar_casewise(&self) -> CasewiseEvidence<ScalarEvidence> {
+        self.clone()
+    }
+}
+
+impl GepaScoreEvidence for CasewiseEvidence<ScoredFeedbackEvidence> {
+    fn scalar_casewise(&self) -> CasewiseEvidence<ScalarEvidence> {
+        CasewiseEvidence::new(
+            self.outcomes()
+                .iter()
+                .map(|outcome| CaseOutcome::new(outcome.case(), outcome.evidence().score()))
+                .collect(),
+        )
+    }
+}
+
+/// Population behavior the reusable GEPA loop needs.
+pub trait GepaPopulation {
+    /// Population identifier for events.
+    fn id(&self) -> PopulationId;
+    /// Current best candidate.
+    fn best(&self) -> Option<CandidateId>;
+    /// Observe casewise scalar evidence.
+    fn observe_gepa(
+        &mut self,
+        partition: Option<&PartitionId>,
+        candidate: CandidateId,
+        assessment: AssessmentId,
+        evidence: &CasewiseEvidence<ScalarEvidence>,
+    ) -> Vec<PopulationEvent>;
+}
+
+impl GepaPopulation for ParetoFrontier {
+    fn id(&self) -> PopulationId {
+        self.id()
+    }
+
+    fn best(&self) -> Option<CandidateId> {
+        self.best()
+    }
+
+    fn observe_gepa(
+        &mut self,
+        partition: Option<&PartitionId>,
+        candidate: CandidateId,
+        assessment: AssessmentId,
+        evidence: &CasewiseEvidence<ScalarEvidence>,
+    ) -> Vec<PopulationEvent> {
+        match partition {
+            Some(partition) => {
+                self.observe_partitioned_casewise_scalar(partition, candidate, assessment, evidence)
+            }
+            None => self.observe_casewise_scalar(candidate, assessment, evidence),
         }
     }
 }
 
-impl<P, S, Pop, CandSel, PartSel, GatePol> Gepa<P, S, Pop, CandSel, PartSel, GatePol>
-where
-    P: OptimizationProblem,
-    S: EditSurface<P::Artifact>,
+impl GepaPopulation for KeepBest {
+    fn id(&self) -> PopulationId {
+        self.id()
+    }
+
+    fn best(&self) -> Option<CandidateId> {
+        self.best()
+    }
+
+    fn observe_gepa(
+        &mut self,
+        _partition: Option<&PartitionId>,
+        candidate: CandidateId,
+        assessment: AssessmentId,
+        evidence: &CasewiseEvidence<ScalarEvidence>,
+    ) -> Vec<PopulationEvent> {
+        let Some(score) = average_scalar(evidence) else {
+            return vec![PopulationEvent::Ignored {
+                population: self.id(),
+                candidate,
+                reason: "casewise evidence had no comparable score".to_owned(),
+            }];
+        };
+        self.observe(
+            candidate,
+            assessment,
+            ScalarEvidence::new(score).expect("finite average"),
+        )
+    }
+}
+
+/// Reusable GEPA optimizer over an explicit edit surface.
+#[derive(Clone, Debug)]
+pub struct Gepa<
+    S,
+    Pop = ParetoFrontier,
+    Reflect = crate::ReflectiveMutation<<S as EditSurfacePlaceholder>::Edit>,
+    ParentSel = ParetoFrequencyWeighted,
+    PartSel = RoundRobinPart,
+    GatePol = StrictImprovement,
+> {
+    surface: S,
+    population: Pop,
+    reflector: Reflect,
+    parent_selector: ParentSel,
+    part_selector: PartSel,
+    gate: GatePol,
+    train_partition: PartitionId,
+    max_iterations: usize,
+    completed_iterations: usize,
+    best: Option<CandidateId>,
+    observed: BTreeSet<CandidateId>,
+}
+
+/// Private helper trait used only to give `Gepa` a default generic slot.
+pub trait EditSurfacePlaceholder {
+    /// Edit type placeholder.
+    type Edit;
+}
+
+impl<T> EditSurfacePlaceholder for T {
+    type Edit = ();
+}
+
+impl Gepa<(), ParetoFrontier, crate::ReflectiveMutation<()>> {
+    /// Starts a GEPA builder.
+    #[must_use]
+    pub fn builder() -> GepaBuilder {
+        GepaBuilder
+    }
+}
+
+impl<S, Pop, Reflect> Gepa<S, Pop, Reflect> {
+    /// Build GEPA with deterministic default strategies.
+    #[must_use]
+    pub fn new(surface: S, population: Pop, reflector: Reflect) -> Self {
+        Self::with_strategies(
+            surface,
+            population,
+            reflector,
+            ParetoFrequencyWeighted,
+            RoundRobinPart::new(),
+            StrictImprovement,
+        )
+    }
+}
+
+impl<S, Pop, Reflect, ParentSel, PartSel, GatePol>
+    Gepa<S, Pop, Reflect, ParentSel, PartSel, GatePol>
 {
     /// Build GEPA with explicit strategy values.
     #[must_use]
     pub fn with_strategies(
         surface: S,
         population: Pop,
-        candidate_selector: CandSel,
+        reflector: Reflect,
+        parent_selector: ParentSel,
         part_selector: PartSel,
         gate: GatePol,
     ) -> Self {
         Self {
             surface,
             population,
-            candidate_selector,
+            reflector,
+            parent_selector,
             part_selector,
             gate,
-            _problem: PhantomData,
+            train_partition: PartitionId::from("TRAIN"),
+            max_iterations: DEFAULT_MAX_ITERATIONS,
+            completed_iterations: 0,
+            best: None,
+            observed: BTreeSet::new(),
         }
     }
 
@@ -104,34 +239,48 @@ where
         &mut self.gate
     }
 
+    /// Set maximum reflective-mutation iterations.
+    #[must_use]
+    pub const fn max_iterations(mut self, max_iterations: usize) -> Self {
+        self.max_iterations = max_iterations;
+        self
+    }
+
     /// Select the next candidate to mutate.
-    pub fn select_candidate(&mut self, graph: RunGraphView<'_, P>) -> Option<CandidateId>
+    pub fn select_candidate<P>(&mut self, graph: RunGraphView<'_, P>) -> Option<CandidateId>
     where
-        CandSel: CandidateSelector<P, Pop, Selection = Option<CandidateId>>,
+        P: OptimizationProblem,
+        ParentSel: CandidateSelector<P, Pop, Selection = Option<CandidateId>>,
     {
-        self.candidate_selector.select(&self.population, graph)
+        self.parent_selector.select(&self.population, graph)
     }
 
     /// Select the next surface part to mutate.
-    pub fn select_part(&mut self, artifact: &P::Artifact) -> Result<S::PartId, SurfaceError>
+    pub fn select_part<A>(&mut self, artifact: &A) -> Result<S::PartId, SurfaceError>
     where
-        PartSel: PartSelector<P::Artifact, S>,
+        A: leaven_core::Artifact,
+        S: EditSurface<A>,
+        PartSel: PartSelector<A, S>,
     {
         self.part_selector.select_part(artifact, &self.surface)
     }
 
     /// Lower a surface-native edit into an artifact-native change.
-    pub fn change_part(
+    pub fn change_part<A>(
         &self,
-        artifact: &P::Artifact,
+        artifact: &A,
         part: S::PartId,
         edit: S::Edit,
-    ) -> Result<<P::Artifact as leaven_core::Artifact>::Change, SurfaceError> {
+    ) -> Result<<A as leaven_core::Artifact>::Change, SurfaceError>
+    where
+        A: leaven_core::Artifact,
+        S: EditSurface<A>,
+    {
         self.surface.change_part(artifact, part, edit)
     }
 
     /// Apply the configured gate to two scalar screening scores.
-    pub fn decide(&mut self, parent_score: f64, candidate_score: f64) -> crate::GateDecision
+    pub fn decide(&mut self, parent_score: f64, candidate_score: f64) -> GateDecision
     where
         GatePol: Gate,
     {
@@ -139,11 +288,258 @@ where
     }
 }
 
-/// Builder placeholder for future ergonomic construction.
+impl<P, S, Pop, Reflect, ParentSel, PartSel, GatePol> Optimizer<P>
+    for Gepa<S, Pop, Reflect, ParentSel, PartSel, GatePol>
+where
+    P: OptimizationProblem,
+    P::Evidence: GepaScoreEvidence,
+    P::ProposalAnnotations: Default,
+    S: EditSurface<P::Artifact> + Send,
+    Pop: GepaPopulation + Send,
+    Reflect: SurfaceProposer<P::Artifact, S> + Send,
+    ParentSel: CandidateSelector<P, Pop, Selection = Option<CandidateId>> + Send,
+    PartSel: PartSelector<P::Artifact, S> + Send,
+    GatePol: Gate + Send,
+{
+    async fn initialize(&mut self, _ctx: &mut RunContext<'_, P>) -> Result<(), OptimizerError> {
+        Ok(())
+    }
+
+    async fn step(
+        &mut self,
+        ctx: &mut RunContext<'_, P>,
+    ) -> Result<leaven_engine::StepStatus, OptimizerError> {
+        if self.completed_iterations >= self.max_iterations {
+            self.best = self.population.best();
+            return Ok(leaven_engine::StepStatus::Done);
+        }
+
+        let seed = self
+            .select_candidate(ctx.graph())
+            .or_else(|| ctx.graph().candidate_tree().roots().first().copied())
+            .ok_or_else(|| {
+                OptimizerError::Message("GEPA requires at least one seed candidate".to_owned())
+            })?;
+
+        let parent_baseline = self
+            .evaluate_casewise(ctx, seed, EvaluationPurpose::SeedBaseline)
+            .await?;
+        if !self.observed.contains(&seed) {
+            let events = self.population.observe_gepa(
+                Some(&self.train_partition),
+                seed,
+                parent_baseline.assessment,
+                &parent_baseline.scalar_evidence,
+            );
+            ctx.emit(leaven_engine::RunEvent::PopulationUpdated {
+                population_id: self.population.id(),
+                events,
+            });
+            self.observed.insert(seed);
+        }
+
+        let parent = self.select_candidate(ctx.graph()).unwrap_or(seed);
+        let artifact = ctx
+            .graph()
+            .artifact(parent)
+            .ok_or_else(|| {
+                OptimizerError::Message(format!("selected parent {parent} is missing from graph"))
+            })?
+            .clone();
+        let part = self
+            .part_selector
+            .select_part(&artifact, &self.surface)
+            .map_err(|source| OptimizerError::with_source("GEPA part selection failed", source))?;
+        let edit = self
+            .reflector
+            .propose_edit(&artifact, &self.surface, &part)
+            .map_err(|source| OptimizerError::with_source("GEPA reflection failed", source))?;
+        let change = self
+            .surface
+            .change_part(&artifact, part, edit)
+            .map_err(|source| {
+                OptimizerError::with_source("GEPA surface edit lowering failed", source)
+            })?;
+        let batch = ctx
+            .record_proposal_batch(
+                StageId::custom("gepa/reflective-mutation"),
+                ProposalBatch {
+                    proposals: vec![
+                        Proposal::mutate(parent, change)
+                            .informed_by([
+                                InfoRef::Candidate(parent),
+                                InfoRef::Assessment(parent_baseline.assessment),
+                            ])
+                            .build(),
+                    ],
+                    semantics: ProposalBatchSemantics::Alternatives,
+                    metadata: MetadataBag::new(),
+                },
+                Cost::metric_calls(1),
+            )
+            .map_err(|source| {
+                OptimizerError::with_source("GEPA proposal recording failed", source)
+            })?;
+        let applied = ctx.apply_batch(batch.batch_id).map_err(|source| {
+            OptimizerError::with_source("GEPA proposal application failed", source)
+        })?;
+        let Some(candidate) = applied.successful_candidates().next() else {
+            self.completed_iterations += 1;
+            return Ok(leaven_engine::StepStatus::Continue);
+        };
+
+        let screened = self
+            .evaluate_casewise(ctx, candidate, EvaluationPurpose::Search)
+            .await?;
+        if self
+            .gate
+            .decide(parent_baseline.average_score, screened.average_score)
+            .is_accept()
+        {
+            let events = self.population.observe_gepa(
+                Some(&self.train_partition),
+                candidate,
+                screened.assessment,
+                &screened.scalar_evidence,
+            );
+            ctx.emit(leaven_engine::RunEvent::PopulationUpdated {
+                population_id: self.population.id(),
+                events,
+            });
+            self.best = self.population.best();
+        }
+        self.completed_iterations += 1;
+
+        if self.completed_iterations >= self.max_iterations {
+            Ok(leaven_engine::StepStatus::Done)
+        } else {
+            Ok(leaven_engine::StepStatus::Continue)
+        }
+    }
+
+    fn best_candidate(&self, _graph: RunGraphView<'_, P>) -> Option<CandidateId> {
+        self.best.or_else(|| self.population.best())
+    }
+}
+
+impl<S, Pop, Reflect, ParentSel, PartSel, GatePol>
+    Gepa<S, Pop, Reflect, ParentSel, PartSel, GatePol>
+{
+    async fn evaluate_casewise<P>(
+        &self,
+        ctx: &mut RunContext<'_, P>,
+        candidate: CandidateId,
+        purpose: EvaluationPurpose,
+    ) -> Result<GepaAssessment, OptimizerError>
+    where
+        P: OptimizationProblem,
+        P::Evidence: GepaScoreEvidence,
+    {
+        let report = ctx
+            .evaluate(
+                EvaluatorId::PRIMARY,
+                EvaluationRequest::Independent {
+                    candidates: vec![candidate],
+                    set: EvaluationSet::Partition(self.train_partition.clone()),
+                    granularity: AssessmentGranularity::PerCase,
+                    purpose,
+                },
+            )
+            .await
+            .map_err(|source| OptimizerError::with_source("GEPA evaluation failed", source))?;
+        let assessment = report.assessment_ids[0];
+        let evidence = ctx
+            .assessment_evidence(assessment)
+            .map_err(|source| OptimizerError::with_source("GEPA evidence lookup failed", source))?;
+        let scalar_evidence = evidence.scalar_casewise();
+        let average_score = evidence.average_score().ok_or_else(|| {
+            OptimizerError::Message("GEPA expected comparable casewise scores".to_owned())
+        })?;
+        Ok(GepaAssessment {
+            assessment,
+            scalar_evidence,
+            average_score,
+        })
+    }
+}
+
+struct GepaAssessment {
+    assessment: AssessmentId,
+    scalar_evidence: CasewiseEvidence<ScalarEvidence>,
+    average_score: f64,
+}
+
+fn average_scalar(evidence: &CasewiseEvidence<ScalarEvidence>) -> Option<f64> {
+    if evidence.outcomes().is_empty() {
+        return None;
+    }
+    let total: f64 = evidence
+        .outcomes()
+        .iter()
+        .map(|outcome| outcome.evidence().score())
+        .sum();
+    let count = u32::try_from(evidence.outcomes().len()).expect("case count fits into u32");
+    Some(total / f64::from(count))
+}
+
+/// GEPA builder entrypoint.
 #[derive(Clone, Debug, Default)]
 pub struct GepaBuilder;
 
-/// GEPA configuration placeholder.
+impl GepaBuilder {
+    /// Supplies the required edit surface.
+    #[must_use]
+    pub fn surface<S>(self, surface: S) -> GepaBuilderWithSurface<S> {
+        GepaBuilderWithSurface { surface }
+    }
+}
+
+/// Builder after the edit surface is known.
+#[derive(Clone, Debug)]
+pub struct GepaBuilderWithSurface<S> {
+    surface: S,
+}
+
+impl<S> GepaBuilderWithSurface<S> {
+    /// Supplies the reflective proposer and builds default population policy.
+    #[must_use]
+    pub fn reflector<Reflect>(
+        self,
+        reflector: Reflect,
+    ) -> Gepa<S, ParetoFrontier, Reflect, ParetoFrequencyWeighted, RoundRobinPart, StrictImprovement>
+    {
+        Gepa::new(self.surface, ParetoFrontier::by_case().build(), reflector)
+    }
+
+    /// Supplies explicit population and reflective proposer.
+    #[must_use]
+    pub fn population<Pop>(self, population: Pop) -> GepaBuilderWithPopulation<S, Pop> {
+        GepaBuilderWithPopulation {
+            surface: self.surface,
+            population,
+        }
+    }
+}
+
+/// Builder after surface and population are known.
+#[derive(Clone, Debug)]
+pub struct GepaBuilderWithPopulation<S, Pop> {
+    surface: S,
+    population: Pop,
+}
+
+impl<S, Pop> GepaBuilderWithPopulation<S, Pop> {
+    /// Supplies the reflective proposer.
+    #[must_use]
+    pub fn reflector<Reflect>(
+        self,
+        reflector: Reflect,
+    ) -> Gepa<S, Pop, Reflect, ParetoFrequencyWeighted, RoundRobinPart, StrictImprovement> {
+        Gepa::new(self.surface, self.population, reflector)
+    }
+}
+
+/// GEPA configuration placeholder for future strategy fields.
 #[derive(Clone, Debug, Default)]
 pub struct GepaConfig;
 

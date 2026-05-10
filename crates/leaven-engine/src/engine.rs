@@ -149,6 +149,26 @@ impl<P: OptimizationProblem> Engine<P> {
         Err(error)
     }
 
+    /// Evaluate a request after or outside an optimizer step using the
+    /// engine-owned evaluator registry and stores.
+    pub async fn evaluate(
+        &mut self,
+        evaluator_id: leaven_kernel::EvaluatorId,
+        request: leaven_core::EvaluationRequest,
+        case_set: &CaseSet<P::Case>,
+        evidence_store: &dyn leaven_store::EvidenceStore<P::Evidence>,
+    ) -> Result<crate::EvaluationReport, RunContextError> {
+        let mut ctx = RunContext::new(&mut self.graph, &mut self.budget)
+            .with_case_set(case_set)
+            .with_cache(&mut self.cache)
+            .with_evidence_store(evidence_store)
+            .with_evaluators(&self.evaluators)
+            .with_trust_policy(self.trust.clone())
+            .with_callbacks(self.callbacks.as_mut_slice())
+            .with_persistence(self.persistence.as_deref());
+        ctx.evaluate(evaluator_id, request).await
+    }
+
     fn finish(
         &mut self,
         best: Option<CandidateId>,

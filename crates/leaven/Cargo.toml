@@ -13,6 +13,8 @@ workspace = true
 [dependencies]
 leaven-core = { workspace = true }
 leaven-engine = { workspace = true }
+leaven-eval = { workspace = true }
+leaven-run = { workspace = true }
 leaven-kernel = { workspace = true }
 leaven-surface = { workspace = true }
 leaven-agentic = { workspace = true, optional = true }
@@ -51,4 +53,5 @@ lm-anthropic = ["dep:leaven-lm-anthropic"]
 
 [dev-dependencies]
 futures = { workspace = true }
+leaven-evidence = { workspace = true }
 leaven-store-inline = { workspace = true }

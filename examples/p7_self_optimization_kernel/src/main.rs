@@ -51,7 +51,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let evaluator = AgentRepoEvaluator {
             cases: cases.clone(),
         };
-        let mut engine = leaven::optimize::<SelfOptimizationProblem>()
+        let mut engine = leaven::engine::optimize::<SelfOptimizationProblem>()
             .budget(Budget::metric_calls(120))
             .trust_policy(
                 TrustPolicy::default()

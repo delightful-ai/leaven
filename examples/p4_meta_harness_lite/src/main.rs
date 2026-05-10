@@ -44,7 +44,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             factory: LocalWorkspaceFactory::default(),
             cleanup_count: counters.evaluator.clone(),
         };
-        let mut engine = leaven::optimize::<MetaHarnessProblem>()
+        let mut engine = leaven::engine::optimize::<MetaHarnessProblem>()
             .budget(Budget::metric_calls(50))
             .trust_policy(TrustPolicy::default().hide_from_proposers([PartitionId::from(TEST)]))
             .evaluator(evaluator)

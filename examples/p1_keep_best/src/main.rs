@@ -17,7 +17,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     block_on(async {
         let store = InlineEvidenceStore::<ScalarEvidence>::new("inline");
         let cases = CaseSet::new(vec![()]);
-        let mut engine = leaven::optimize::<ScalarProblem>()
+        let mut engine = leaven::engine::optimize::<ScalarProblem>()
             .budget(Budget::metric_calls(10))
             .build();
         let seed = engine.insert_seed(TextArtifact("a".to_owned()), 0)?;

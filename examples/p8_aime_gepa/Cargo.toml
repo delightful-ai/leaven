@@ -1,0 +1,18 @@
+[package]
+name = "p8_aime_gepa"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+leaven = { workspace = true, features = ["std", "gepa"] }
+leaven-evidence = { workspace = true }
+leaven-kernel = { workspace = true }
+leaven-population = { workspace = true }
+leaven-surface = { workspace = true }
+futures = { workspace = true }

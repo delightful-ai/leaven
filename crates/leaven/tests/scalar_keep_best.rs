@@ -22,7 +22,7 @@ fn engine_runs_scalar_keep_best_end_to_end() {
         let callback = RecordingCallback::default();
         let callback_events = callback.events.clone();
         let callback_candidate_counts = callback.candidate_counts.clone();
-        let mut engine = leaven::optimize::<ScalarProblem>()
+        let mut engine = leaven::engine::optimize::<ScalarProblem>()
             .budget(Budget::metric_calls(10))
             .callback(callback)
             .build();

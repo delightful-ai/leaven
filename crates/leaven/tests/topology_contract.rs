@@ -21,6 +21,7 @@ const EXPECTED_WORKSPACE_MEMBERS: &[&str] = &[
     "crates/leaven-cuda",
     "crates/leaven-derive",
     "crates/leaven-engine",
+    "crates/leaven-eval",
     "crates/leaven-evidence",
     "crates/leaven-gepa",
     "crates/leaven-kernel",
@@ -34,6 +35,7 @@ const EXPECTED_WORKSPACE_MEMBERS: &[&str] = &[
     "crates/leaven-preference",
     "crates/leaven-python",
     "crates/leaven-render",
+    "crates/leaven-run",
     "crates/leaven-std",
     "crates/leaven-store",
     "crates/leaven-store-file",
@@ -58,6 +60,7 @@ const EXPECTED_WORKSPACE_MEMBERS: &[&str] = &[
     "examples/p5_evoskill_iteration",
     "examples/p6_optimizer_policy_self_opt",
     "examples/p7_self_optimization_kernel",
+    "examples/p8_aime_gepa",
     "xtask",
 ];
 
@@ -80,6 +83,7 @@ const EXPECTED_CRATES: &[&str] = &[
     "leaven-cuda",
     "leaven-derive",
     "leaven-engine",
+    "leaven-eval",
     "leaven-evidence",
     "leaven-gepa",
     "leaven-kernel",
@@ -93,6 +97,7 @@ const EXPECTED_CRATES: &[&str] = &[
     "leaven-preference",
     "leaven-python",
     "leaven-render",
+    "leaven-run",
     "leaven-std",
     "leaven-store",
     "leaven-store-file",
@@ -120,6 +125,7 @@ const EXPECTED_BINARIES: &[&str] = &[
     "examples/p5_evoskill_iteration",
     "examples/p6_optimizer_policy_self_opt",
     "examples/p7_self_optimization_kernel",
+    "examples/p8_aime_gepa",
     "xtask",
 ];
 
@@ -135,10 +141,12 @@ const EXPECTED_DEPENDENCIES: &[(&str, &[&str])] = &[
             "leaven-core",
             "leaven-derive",
             "leaven-engine",
+            "leaven-eval",
             "leaven-gepa",
             "leaven-kernel",
             "leaven-lm-anthropic",
             "leaven-lm-openai",
+            "leaven-run",
             "leaven-std",
             "leaven-store-sqlite",
             "leaven-surface",
@@ -256,6 +264,10 @@ const EXPECTED_DEPENDENCIES: &[(&str, &[&str])] = &[
     ),
     ("leaven-evidence", &["leaven-core", "leaven-kernel"]),
     (
+        "leaven-eval",
+        &["leaven-core", "leaven-evidence", "leaven-kernel"],
+    ),
+    (
         "leaven-gepa",
         &[
             "leaven-core",
@@ -319,6 +331,18 @@ const EXPECTED_DEPENDENCIES: &[(&str, &[&str])] = &[
             "leaven-store",
             "leaven-surface",
             "leaven-workspace",
+        ],
+    ),
+    (
+        "leaven-run",
+        &[
+            "leaven-core",
+            "leaven-engine",
+            "leaven-eval",
+            "leaven-evidence",
+            "leaven-kernel",
+            "leaven-store",
+            "leaven-store-inline",
         ],
     ),
     (

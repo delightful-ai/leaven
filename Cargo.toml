@@ -19,6 +19,7 @@ members = [
     "crates/leaven-core",
     "crates/leaven-engine",
     "crates/leaven-evidence",
+    "crates/leaven-eval",
     "crates/leaven-gepa",
     "crates/leaven-kernel",
     "crates/leaven-lm",
@@ -31,6 +32,7 @@ members = [
     "crates/leaven-preference",
     "crates/leaven-python",
     "crates/leaven-render",
+    "crates/leaven-run",
     "crates/leaven-std",
     "crates/leaven-store",
     "crates/leaven-store-file",
@@ -56,6 +58,7 @@ members = [
     "examples/p5_evoskill_iteration",
     "examples/p6_optimizer_policy_self_opt",
     "examples/p7_self_optimization_kernel",
+    "examples/p8_aime_gepa",
     "xtask",
 ]
 
@@ -119,6 +122,7 @@ leaven-artifact-skill = { path = "crates/leaven-artifact-skill", version = "0.0.
 leaven-artifacts = { path = "crates/leaven-artifacts", version = "0.0.0" }
 leaven-cuda = { path = "crates/leaven-cuda", version = "0.0.0" }
 leaven-evidence = { path = "crates/leaven-evidence", version = "0.0.0" }
+leaven-eval = { path = "crates/leaven-eval", version = "0.0.0" }
 leaven-gepa = { path = "crates/leaven-gepa", version = "0.0.0" }
 leaven-kernel = { path = "crates/leaven-kernel", version = "0.0.0" }
 leaven-lm = { path = "crates/leaven-lm", version = "0.0.0" }
@@ -131,6 +135,7 @@ leaven-population = { path = "crates/leaven-population", version = "0.0.0" }
 leaven-preference = { path = "crates/leaven-preference", version = "0.0.0" }
 leaven-python = { path = "crates/leaven-python", version = "0.0.0" }
 leaven-render = { path = "crates/leaven-render", version = "0.0.0" }
+leaven-run = { path = "crates/leaven-run", version = "0.0.0" }
 leaven-store = { path = "crates/leaven-store", version = "0.0.0" }
 leaven-store-file = { path = "crates/leaven-store-file", version = "0.0.0" }
 leaven-store-inline = { path = "crates/leaven-store-inline", version = "0.0.0" }

@@ -37,6 +37,7 @@ pub mod diff {
     pub struct DiffEvidence;
     pub struct RenderedDiff;
 }
+pub mod feedback;
 pub mod json {
     pub struct JsonEvidence;
 }
@@ -66,6 +67,7 @@ pub use attribution::{AttributableEvidence, Attribution, AttributionKey};
 pub use casewise::{CaseOutcome, CasewiseEvidence};
 pub use command::{AgentTrajectoryEvidence, CommandEvidence, CommandRecord, OutputRecord};
 pub use diff::{DiffEvidence, RenderedDiff};
+pub use feedback::ScoredFeedbackEvidence;
 pub use json::JsonEvidence;
 pub use listwise::{ListwiseRankingEvidence, RankingItem};
 pub use mixed::MixedEvidence;
@@ -78,6 +80,7 @@ pub mod prelude {
         AgentTrajectoryEvidence, AttributableEvidence, CaseOutcome, CasewiseEvidence,
         CommandEvidence, CommandRecord, DiffEvidence, Direction, JsonEvidence,
         ListwiseRankingEvidence, MixedEvidence, OutputRecord, PairwiseJudgmentEvidence,
-        ScalarEvidence, ScalarEvidenceError, ScoreVectorEvidence, StringEvidence,
+        ScalarEvidence, ScalarEvidenceError, ScoreVectorEvidence, ScoredFeedbackEvidence,
+        StringEvidence,
     };
 }
