@@ -1,0 +1,379 @@
+version: 1
+artifact_kind: leaven_goal_handoff
+status: set_goal
+
+goal:
+  slug: map_first_hierarchical_agents
+  original_intent:
+    user_question: >-
+      Can we make Leaven legible to future agents by building a map-first
+      hierarchical AGENTS.md system that stops crate-graph drift and routes
+      concepts to their real owning crates?
+    user_should_be_able_to:
+      - >-
+        Ask where a Leaven concept belongs and find the owning crate or
+        subtree quickly from stacked AGENTS.md context.
+      - >-
+        See adjacent crates that must not own the concept, especially across
+        cold core, engine, surfaces, stores, workspaces, LM, agentic, and
+        optimizer seams.
+      - >-
+        Distinguish current specs, stale specs, dated plans, philosophy
+        filters, tests, examples, and local bait before making a change.
+      - >-
+        Pick the narrow proof command or code/test anchor that proves the
+        relevant routing claim.
+
+spec_package:
+  package_name: map_first_agents_hierarchy
+  governing_docs:
+    - path: AGENTS.md
+      role: Repo-wide Leaven operating contract, with known inventory drift to reconcile during this goal.
+    - path: docs/AGENTSMD_INFO.md
+      role: Rubric for stackable AGENTS.md files and the map-first hierarchy standard.
+    - path: docs/specs/initial_library.md
+      role: Governing product and architecture spec.
+    - path: docs/specs/guiding_principles.md
+      role: Product requirements and design constraints.
+    - path: docs/specs/leaven_v0_2_1b_corrected_crate_topology_lib_rs.md
+      role: Crate topology intent, with known stale inventory details.
+    - path: docs/testing/README.md
+      role: Proof model, suite layout, SLA, and coverage ratchet.
+  planning_evidence:
+    - path: docs/plans/2026-05-11-map-first-agents/hierarchy-checkpoint.md
+      role: Integrated scout findings and rollout checkpoint.
+    - path: docs/plans/2026-05-11-map-first-agents/subagent-reports-verbatim.md
+      role: Raw subagent reports preserved for compaction-safe evidence.
+    - path: docs/plans/2026-05-11-map-first-agents/workspace-coverage.md
+      role: Current workspace coverage matrix and explicit deferred/quarantined decisions.
+    - path: docs/plans/2026-05-11-map-first-agents/rubric-audit.md
+      role: Qualitative audit against AGENTSMD_INFO and hierarchical-agents-md after map-first drafting.
+    - path: docs/philosophy/skills/leaven-goal-handoff/SKILL.md
+      role: Handoff process used to preserve intent and avoid proxy proofs.
+    - path: /Users/darin/.agents/skills/hierarchical-agents-md/SKILL.md
+      role: Skill workflow for auditing, drafting, and adversarially reviewing stacked AGENTS.md files.
+    - path: docs/philosophy/skills/leaven-test-design/SKILL.md
+      role: Use if adding or moving proof-model guidance.
+    - path: docs/philosophy/skills/leaven-trait-design/SKILL.md
+      role: Use if AGENTS review exposes trait-boundary drift.
+    - path: docs/philosophy/skills/leaven-type-design/SKILL.md
+      role: Use if AGENTS review exposes domain-state or ID-boundary drift.
+
+designed_surface:
+  public_surface:
+    - name: stacked_AGENTS_context
+      user_interaction: >-
+        A future agent reads AGENTS.md files from root to working directory and
+        can route concepts to the right crate or docs subtree without relying
+        on stale plans or nearby bait.
+    - name: map_first_crate_hierarchy
+      user_interaction: >-
+        The hierarchy answers concept -> owning crate/family -> wrong
+        neighboring owner -> proof anchor before adding dense invariant text.
+    - name: stale_bait_markers
+      user_interaction: >-
+        Known traps such as orphan leaven-dsrs, stale topology snippets, jj
+        setup reality, old plans, and live-provider milestone commands are
+        clearly marked or fixed.
+  private_machinery_relevant_to_handoff:
+    - Existing untracked top-level AGENTS drafts are current workspace state and must be reviewed before editing.
+    - Child AGENTS files should be added only where they add local routing, proof model, or bait warnings.
+    - Subagents may edit disjoint AGENTS scopes directly; reviewers stay read-only and adversarial.
+    - Use jj for status/diffs now that the checkout is a jj repo.
+
+intent_preservation:
+  verdict: preserved
+  reason: >-
+    The designed surface preserves the user's intent only if success is judged
+    by future-agent routing quality and stale-bait visibility, not by the
+    number of AGENTS.md files written.
+
+misleading_proxy_proofs:
+  - proxy: Many child AGENTS.md files exist.
+    why_insufficient: They may duplicate parent guidance or omit concept routes.
+    forbidden_as_completion_evidence: true
+  - proxy: The hierarchy matches the older topology spec.
+    why_insufficient: Current Cargo/tests/code already differ from stale topology inventory.
+    forbidden_as_completion_evidence: true
+  - proxy: just check passes.
+    why_insufficient: It does not prove AGENTS files route future agents correctly.
+    forbidden_as_completion_evidence: true
+  - proxy: A few high-risk crate files are excellent.
+    why_insufficient: Provider/backend/agentic seams may still be unmapped.
+    forbidden_as_completion_evidence: true
+  - proxy: AGENTS files list commands.
+    why_insufficient: Commands must say what they prove and when they apply.
+    forbidden_as_completion_evidence: true
+  - proxy: cargo test -p leaven --test topology_contract passes.
+    why_insufficient: >-
+      The topology contract does not catch every crates/* directory,
+      dev/build dependencies, feature wiring, public re-export leaks, or actual
+      API shapes.
+    forbidden_as_completion_evidence: true
+  - proxy: All referenced paths and commands exist.
+    why_insufficient: >-
+      Path and command sanity prove currentness, not decision-changing
+      AGENTS.md routing quality.
+    forbidden_as_completion_evidence: true
+
+spec_revisions_before_goal: []
+
+acceptance:
+  - id: top_level_hierarchy_is_current
+    claim: >-
+      Root, docs, specs, plans, testing, crates, examples, scripts, and xtask
+      AGENTS files provide an accurate authority and map layer.
+    status: proven
+    proof_required:
+      kind: doc_review
+      must_exercise:
+        - docs/AGENTSMD_INFO.md hierarchy rules
+        - current Cargo.toml and Justfile reality
+        - stale topology and planning-doc warnings
+        - path and command sanity checks
+    evidence:
+      - path: AGENTS.md
+        note: Root now marks orphan leaven-dsrs and current workspace inventory source.
+      - path: docs/specs/AGENTS.md
+        note: Specs AGENTS now warns topology inventory can lag Cargo/tests.
+      - path: docs/testing/AGENTS.md
+        note: Testing AGENTS now calls out P8 and live milestone-examples trap.
+      - path: docs/plans/2026-05-11-map-first-agents/rubric-audit.md
+        note: Qualitative pass confirmed strong orientation/routing and recorded remaining non-blocking maturity risks.
+    closeout_check: Top-level files must not silently promote stale specs or dated plans to current law.
+
+  - id: high_risk_crate_maps_exist
+    claim: >-
+      High-risk crate roots have local AGENTS maps that route concepts to the
+      right owner and away from wrong neighboring crates.
+    status: proven
+    proof_required:
+      kind: docs_and_adversarial_review
+      must_exercise:
+        - leaven-kernel
+        - leaven-core
+        - leaven-surface
+        - leaven-engine
+        - leaven-run
+        - leaven
+        - leaven-evidence
+        - leaven-population
+        - leaven-gepa
+        - leaven-eval
+        - leaven-artifact-skill
+        - leaven-std
+        - leaven-store
+        - leaven-workspace
+        - leaven-lm
+        - leaven-agent
+        - leaven-agentic
+    evidence:
+      - path: docs/plans/2026-05-11-map-first-agents/workspace-coverage.md
+        note: Lists all high-risk crate files created and parent/deferred neighbors.
+      - path: crates/leaven-engine/AGENTS.md
+        note: Added decision cards for graph mutation and shared execution policy.
+      - path: crates/leaven-agentic/AGENTS.md
+        note: Added decision cards for session-to-proposal parsing and cache/retry/repair behavior.
+    closeout_check: A crate file must add local routing or proof signal beyond crates/AGENTS.md.
+
+  - id: every_workspace_member_has_coverage_decision
+    claim: >-
+      Every current Cargo workspace crate is classified as local AGENTS,
+      covered by parent, explicit deferral, or quarantine/bait.
+    status: proven
+    proof_required:
+      kind: workspace_inventory_review
+      must_exercise:
+        - current Cargo.toml workspace members
+        - crates directory entries that are not workspace members
+        - local AGENTS files added by this goal
+        - parent coverage decisions
+        - explicit deferral decisions for skeleton or low-risk crates
+        - quarantine/bait decisions for orphan or stale-looking directories
+    evidence:
+      - path: docs/plans/2026-05-11-map-first-agents/workspace-coverage.md
+        note: Every cargo metadata workspace package is classified.
+      - command: cargo metadata --no-deps --format-version 1
+        note: Workspace names compared against the coverage matrix with no missing entries.
+    closeout_check: Completion cannot rely on the hand-picked high-risk crate list alone.
+
+  - id: adapter_and_provider_hazards_are_mapped
+    claim: >-
+      Provider/backend/agentic leaves with real local hazards have explicit
+      maps or documented deferral, and every adapter/provider workspace crate
+      has an explicit coverage decision.
+    status: proven
+    proof_required:
+      kind: docs_and_review
+      must_exercise:
+        - leaven-store-inline
+        - leaven-store-file
+        - leaven-store-object
+        - leaven-store-sqlite
+        - leaven-workspace-docker
+        - leaven-workspace-e2b
+        - leaven-workspace-firecracker
+        - leaven-workspace-git
+        - leaven-workspace-k8s
+        - leaven-workspace-local
+        - leaven-lm-anthropic
+        - leaven-lm-cache
+        - leaven-lm-local
+        - leaven-lm-mock
+        - leaven-lm-openai
+        - leaven-agent-claude-code
+        - leaven-agent-command
+        - leaven-agent-codex
+        - leaven-agent-codex-cli
+        - leaven-agent-codex-app-server
+        - leaven-agent-opencode
+        - leaven-agentic-skill
+    evidence:
+      - path: docs/plans/2026-05-11-map-first-agents/workspace-coverage.md
+        note: Adapter/provider crates have local, parent-covered, deferred, or quarantined decisions.
+      - path: crates/leaven-agent-codex-app-server/AGENTS.md
+        note: App-server protocol drift routes to this leaf instead of weakening topology.
+      - path: crates/AGENTS.md
+        note: Childless provider/backend leaf rules were promoted into stacked context instead of relying on sibling AGENTS files.
+      - path: crates/leaven-derive/AGENTS.md
+        note: Reserved proc-macro contract and trybuild proof loop are locally mapped.
+    closeout_check: Provider API fields, host paths, protocol types, and optimizer nouns must stay in owning leaves.
+
+  - id: examples_and_live_paths_are_honest
+    claim: >-
+      Examples AGENTS guidance separates deterministic milestone checks from
+      live/provider-cost paths and marks P5/P8 special cases.
+    status: proven
+    proof_required:
+      kind: doc_review
+      must_exercise:
+        - examples/AGENTS.md
+        - examples/p5_evoskill_iteration/AGENTS.md or explicit deferral
+        - examples/p8_aime_gepa/AGENTS.md or explicit deferral
+        - Justfile milestone commands
+    evidence:
+      - path: examples/AGENTS.md
+        note: Parent map separates deterministic milestones from live p5 and p8 variants.
+      - path: examples/p5_evoskill_iteration/AGENTS.md
+        note: P5 live Codex proof and helper-test bait are explicit.
+      - path: examples/p8_aime_gepa/AGENTS.md
+        note: P8 deterministic, cached-data, and live OpenAI proofs are distinct.
+      - command: just --dry-run milestone-examples
+        note: Confirmed milestone-examples expands through live-gated P5.
+    closeout_check: Completion cannot cite just milestone-examples as a cheap proof while it includes live Codex spend.
+
+  - id: stale_bait_is_fixed_or_marked
+    claim: >-
+      Known stale and bait paths are fixed if in AGENTS scope, or explicitly
+      marked with follow-up guidance if larger than the hierarchy goal.
+    status: proven
+    proof_required:
+      kind: doc_or_code_review
+      must_exercise:
+        - orphan crates/leaven-dsrs
+        - jj wording now that repo is jj-enabled
+        - stale topology spec inventory
+        - missing p8 testing command documentation
+        - old plans routing graph/context into leaven-core
+        - scripts/check_crate_dag.rs references
+    evidence:
+      - path: crates/leaven-dsrs/AGENTS.md
+        note: Orphan placeholder is locally quarantined.
+      - path: docs/testing/README.md
+        note: Command list now includes just milestone-p8.
+      - path: docs/specs/AGENTS.md
+        note: Stale topology inventory is marked as lagging live Cargo/tests.
+    closeout_check: No AGENTS file may require a future agent to discover these traps from scratch.
+
+  - id: adversarial_review_passes
+    claim: >-
+      Read-only reviewers find no structural issues beyond wording nits or
+      explicit accepted deferrals.
+    status: proven
+    proof_required:
+      kind: reviewer_reports
+      must_exercise:
+        - slop and duplication review
+        - stale path/command review
+        - topology and dependency review
+        - future-agent routing review
+        - blind placement samples
+        - blind refusal samples
+        - blind verification samples
+    evidence:
+      - command: RUSTUP_TOOLCHAIN=nightly just check
+        note: Passed in substrate worker lane with line 98.56% and branch 87.97%.
+      - command: cargo test -p leaven --test topology_contract
+        note: Passed in multiple worker lanes.
+      - command: cargo check -p leaven-agent-codex-app-server --features app-server
+        note: Existing failure on InitializeCapabilities::request_attestation recorded as protocol drift.
+      - reviewer: Epicurus
+        note: Initial adversarial review found three structural blockers; targeted re-review confirmed all were resolved.
+    closeout_check: Reviewer findings must be resolved, documented as deferrals, or converted into follow-up tasks before closeout.
+
+  - id: blind_routing_samples_pass
+    claim: >-
+      Stacked AGENTS context routes representative concepts correctly without
+      requiring the agent to rediscover known traps from scratch.
+    status: proven
+    proof_required:
+      kind: adversarial_blind_review
+      must_exercise:
+        - RunGraph mutation
+        - WorkspacePath
+        - provider API fields
+        - LM cache versus engine evaluation cache
+        - P5 and P8 live checks
+        - stale topology snippets
+        - orphan leaven-dsrs
+        - old graph/context plans pointing at leaven-core
+    evidence:
+      - reviewer: Epicurus
+        note: Blind routing samples for RunGraph mutation, WorkspacePath, provider API fields, LM cache versus engine evaluation cache, P5/P8 live paths, stale topology snippets, orphan leaven-dsrs, old graph/context plans, and leaven-lm-mock were checked.
+      - path: AGENTS.md
+        note: Root now instructs agents to run blind placement/refusal/imitation/verification/exception checks when consuming the hierarchy.
+    closeout_check: Review must prove both placement and refusal, not only that text exists.
+
+  - id: verification_is_honest
+    claim: >-
+      The final hierarchy is checked against the real repo and the proof
+      denominator is recorded.
+    status: proven
+    proof_required:
+      kind: repo_gate_and_doc_sanity
+      must_exercise:
+        - jj status/diff review
+        - cargo test -p leaven --test topology_contract
+        - referenced path sanity
+        - command sanity for commands named in changed AGENTS files
+        - no default live-provider spend
+    evidence:
+      - command: jj st
+        note: Reviewed current working-copy scope; unrelated .idea and Cargo.lock changes are present and were not reverted.
+      - command: RUSTUP_TOOLCHAIN=nightly just check
+        note: Passed after integrated hierarchy work before final rubric-only doc enrichments; line 98.56%, branch 87.97%.
+      - command: cargo nextest run -p leaven-engine --test graph_surface
+        note: Passed after adding the engine decision-card command reference.
+      - command: cargo nextest run -p leaven-agentic --test agentic_adapters --test agentic_workload --test repairing_proposer
+        note: Passed after adding the agentic decision-card command references.
+      - command: cargo nextest run -p leaven-derive
+        note: Passed after adding the local leaven-derive AGENTS file.
+      - command: cargo test -p leaven --test topology_contract
+        note: Passed after final hierarchy edits.
+      - command: just --dry-run milestone-examples
+        note: Confirmed live-gated p5 remains visible and is not treated as cheap deterministic proof.
+    closeout_check: just check may be run as final hygiene, but cannot replace AGENTS-specific review.
+
+explicit_non_goals:
+  - Writing AGENTS.md files for every crate just because a crate exists.
+  - Replacing specs, crate docs, or tests with AGENTS prose.
+  - Fully resolving stale topology/spec/code mismatches that are larger than the hierarchy, unless they make AGENTS guidance actively false.
+  - Claiming orphan leaven-dsrs is fixed without actually removing, integrating, or quarantining it.
+  - Making live provider spend part of the default proof path.
+  - Compressing subagent findings into lossy summaries when a verbatim evidence file is needed for compaction-safe handoff.
+
+decision:
+  status: set_goal
+  reason: >-
+    The intent, map-first surface, proxy risks, acceptance path, and proof
+    denominator are clear enough to launch a durable implementation goal.

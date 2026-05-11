@@ -7,6 +7,20 @@ Product constraints and principles live in `docs/specs/guiding_principles.md`.
 
 NEVER: add compatibility shims, parallel old/new paths, public test holes, or ornamental docs that do not change decisions. Use hard cutovers unless the user explicitly asks otherwise.
 
+## Evidence Ladder
+Use the strongest current source for the kind of decision you are making:
+
+- Product intent and public semantics: `docs/specs`, then contract tests and crate docs that deliberately encode the spec.
+- Current workspace truth: `Cargo.toml`, crate manifests, live code, and `crates/leaven/tests/topology_contract.rs`; these outrank stale inventory prose.
+- Design pressure: `docs/philosophy` and repo-local Leaven skills. They shape choices, but operational rules must land in code, tests, specs, or the nearest `AGENTS.md`.
+- Audit findings: `reviews/**`. They are evidence and prioritization input, especially for public lies and maturity gaps; promote durable lessons into owning surfaces instead of treating the audit tree as doctrine.
+- Dated execution notes: `docs/plans/**`. Use them for provenance and handoff context, not as product law.
+
+Topology proof is necessary but not sufficient. A crate can be in the right
+layer and still expose an immature public name, proxy example, placeholder
+feature, or misleading default import. When that happens, fix the public
+surface or encode the warning at the owning layer.
+
 ## Map / Routing
 - `crates/leaven-kernel`: universal IDs, content IDs, cost values, durable error records, metadata, fingerprints, and time primitives.
 - `crates/leaven-core`: cold optimizer algebra only: artifact/problem/evidence marker, proposal, evaluation, and preference vocabulary. No graph, context, stages, workspace, store, engine, runtime, or surface assumptions.
@@ -17,21 +31,41 @@ NEVER: add compatibility shims, parallel old/new paths, public test holes, or or
 - `crates/leaven-workspace-*`: concrete workspace backends.
 - `crates/leaven-engine`: run execution, `RunGraph`, `RunContext`, stage traits, budget ledger, trust/read scopes, cache, callbacks, reports, and events. Graph mutation is private to this crate and exposed through `RunContext`.
 - `crates/leaven-run`: public product-builder ergonomics and lowering: `optimize(seed)`, train/validation/test inputs, runner/scorer/evaluator helpers, default evidence-store wiring, and result facades. It composes engine/eval/store without owning optimizer strategy state, domain semantics, concrete providers, or concrete workspaces.
-- `crates/leaven-artifacts`, `crates/leaven-artifact-*`, `crates/leaven-evidence`, `crates/leaven-preference`, `crates/leaven-population`, `crates/leaven-render`: standard vocabulary and reusable implementations at their respective knowledge boundaries.
+- `crates/leaven-artifacts`, `crates/leaven-artifact-*`, `crates/leaven-evidence`, `crates/leaven-preference`, `crates/leaven-population`, `crates/leaven-render`: standard vocabulary, reusable implementations, and reserved public names at their respective knowledge boundaries. Leaf `AGENTS.md` files own current maturity; do not infer behavior from a crate name alone.
 - `crates/leaven-std`: shallow curated facade over standard pieces, not an implementation bucket.
 - `crates/leaven-lm`: provider-neutral LM request/response vocabulary and `Lm` trait only. `crates/leaven-lm-cache` owns the reusable Leaven response cache wrapper/backends. `crates/leaven-lm-*` provider crates own concrete provider lowering. These stay outside cold and engine crates.
 - `crates/leaven-agent*`, `crates/leaven-agentic`, `crates/leaven-agentic-*`: generic agentic stage adapters and shape-specific agentic adapter helpers; these stay outside cold and engine crates. `leaven-agent-codex` is a Codex provider-family facade; `leaven-agent-codex-app-server` owns Codex app-server protocol/connectors. Do not put app-server protocol types in `leaven-agent`, `leaven-agentic`, or the facade.
-- `crates/leaven-gepa`, `crates/leaven-mipro`, `crates/leaven-textgrad`, `crates/leaven-trace`: optimizer implementations. Optimizer-specific strategy state lives here, not in the engine.
-- `crates/leaven-dsrs`, `crates/leaven-cuda`, `crates/leaven-python`: domain/edge adapters.
+- `crates/leaven-gepa`, `crates/leaven-mipro`, `crates/leaven-textgrad`, `crates/leaven-trace`: optimizer homes. `leaven-gepa` has behavior-bearing scaffold plus known maturity gaps; several siblings are reserved public names. Optimizer-specific strategy state lives here, not in the engine.
+- `crates/leaven-cuda`, `crates/leaven-python`: domain/edge adapters.
+- `crates/leaven-dsrs`: orphan placeholder/bait, not a workspace member. It has no `Cargo.toml` or `src/lib.rs`; do not route new DSRS work there unless the crate is deliberately reintroduced with topology-contract, workspace, spec, and local `AGENTS.md` updates.
 - `crates/leaven-derive`: derive macros only; no runtime or adapter dependencies without an explicit derive contract.
 - `crates/leaven`: umbrella import experience and re-exports only.
 - `docs/specs`: durable product and architecture specs. Read the relevant spec before implementing spec-derived behavior.
 - `docs/testing/README.md`: test contract, suite layout, coverage ratchet, and runtime SLA.
 - `docs/philosophy`: design pressure and agent skills, not implementation status or subsystem plans.
+- `examples`: executable milestone packages. They prove specific public workflows, mechanics, or proxy demos as classified by `examples/AGENTS.md`; do not treat coverage over an example as product maturity by default.
+- `reviews`: dated audit findings and critique packages. Treat them as evidence and prioritization input, not as stronger product law than specs/code/tests. When an audit exposes a public lie, fix the owning public surface or encode the warning in the nearest `AGENTS.md`; do not bury it in plans.
 - `scripts`: repo tooling with real local side effects; scripts must be deterministic and safe to rerun.
+- `xtask`: compiled repo automation package. It is currently skeletal; `xtask/AGENTS.md` owns the proof limits for adding real automation.
+
+## How To Use This Hierarchy
+Read stacked `AGENTS.md` files from root to the working directory. Treat higher
+files as defaults and lower files as refinements or exceptions; sibling files
+are not in scope unless a stacked file explicitly routes you there.
+
+Before editing, run the quick blind checks:
+- placement: can the stacked context name the owning crate or docs subtree?
+- refusal: does it name the neighboring crate/path that must not own the work?
+- imitation: does it point at a canonical proof anchor or example worth copying?
+- verification: does it say what the local command proves, not just the command?
+- exception: does it mark stale specs, old plans, live-provider paths, or local
+  bait that would otherwise look authoritative?
 
 ## Global Invariants
 - Before planning code placement or implementation shape, apply topology discipline: identify which crate/module is allowed to know each fact, which boundary should refuse the dependency, and which public surface is the durable contract.
+- Public maturity is a separate gate from topology. Default-facing exports,
+  examples, README claims, and coverage evidence must say whether they prove
+  real product behavior, mechanics, or a proxy fixture.
 - `lib.rs` files are maps only: module declarations, curated re-exports, and optional preludes. Do not put runtime logic, domain logic, helper logic, or test-only behavior in `lib.rs`; name the owning concept and put the code in that module.
 - Types, traits, errors, and tests should preserve domain truth instead of smoothing it away.
 - Prefer ownership-native Rust APIs over clone-heavy plumbing. Pass ownership when values are consumed, borrow when the caller retains ownership, and clone only at explicit fan-out, persistence, or async/lifetime boundaries where it is clearer than contorting ownership.
@@ -95,7 +129,9 @@ The skill descriptions own trigger routing. Do not duplicate their full routing 
 
 ## Hazards / Exceptions
 - Nearby code is not automatically precedent. Prefer the contract tests, specs, and decision cards over imitation.
+- The current workspace inventory comes from `Cargo.toml` plus `crates/leaven/tests/topology_contract.rs`, not directory presence. `crates/leaven-dsrs` is the known stale directory trap.
 - Philosophy docs are decision filters. If a rule must be operational, encode it in code, tests, specs, or the nearest `AGENTS.md`.
+- Audit docs are not ornamental. When they distinguish topology proof from product maturity, preserve that distinction in examples, test docs, public facades, and local routing guidance.
 - If code and doctrine disagree, resolve the mismatch in the same change: update code toward doctrine or update doctrine because reality changed.
 - Do not create child `AGENTS.md` files unless they add a real local boundary, invariant, hazard, task pattern, routing rule, or verification delta.
 

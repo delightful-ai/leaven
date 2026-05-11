@@ -18,3 +18,22 @@ NEVER: use these essays as substitutes for crate-local ownership docs, protocol 
 - When a philosophy doc and current code disagree, fix the mismatch deliberately: either update the code toward the doctrine, or update the doctrine because reality changed. Do not leave the conflict implicit.
 - `skills/` holds repo-local skill copies of these philosophy docs so agents do not have to bounce through another file after a skill triggers. When changing a type/trait/error/test philosophy doc, update the matching skill in the same change.
 - Keep `docs/philosophy/skills` as the canonical Leaven skill tree. Expose it through root `.agents/skills` for Codex/OpenAI agents and root `.claude/skills` for Claude Code via symlinks; do not install duplicate Leaven skill copies in user-global skill directories.
+
+## Decision Cards
+- when: a review or incident suggests a new principle
+  do: encode the operational rule where it will be enforced, then update philosophy only if the underlying design pressure changed
+  preserve: philosophy as stable taste, not a bug tracker
+  avoid: adding "remember this audit" essays here
+  verify: the owning `AGENTS.md`, spec, or test contains the concrete rule
+
+- when: changing a repo-local design skill
+  do: patch the source philosophy doc and matching `docs/philosophy/skills/<skill>/SKILL.md` together when they intentionally mirror each other
+  preserve: one canonical Leaven skill tree under this subtree
+  avoid: divergent user-global copies that future agents may read instead
+  verify: skill paths named in root `AGENTS.md` and any symlinks still resolve
+
+- when: setting or reviewing a long-running goal after spec/planning work
+  do: use `goal_handoff.md` or the matching skill to check whether the goal can pass through a proxy implementation
+  preserve: the user's intended product surface, not just a nearby provable mechanism
+  avoid: launching implementation when public promise, proof path, and known audit gaps are not aligned
+  verify: the handoff names the governing specs, current audit blockers, and expected completion gate

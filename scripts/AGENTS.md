@@ -1,0 +1,40 @@
+## Boundary
+This subtree holds repository scripts with local side effects. Scripts are part of the proof path, so they must be deterministic, rerunnable, and explicit about what they invoke.
+
+Current scripts:
+- `lint-line-count.py`: enforces production Rust source size limits.
+- `test-suite-sla.py`: runs nextest plus doctests and enforces the `<30s` suite SLA.
+- `coverage-gate.py`: runs coverage over workspace tests, milestone binaries, and `xtask`, then enforces line and branch floors. It excludes live P5 from workspace coverage and runs the P5 package without `--live-codex`; it does not prove live Codex behavior.
+
+## Local Rules
+- Keep script defaults local and credential-free. Network, cloud, live model, or destructive behavior must be an explicit flag or environment opt-in.
+- Print the commands or major actions a script runs before it runs them.
+- Return non-zero on failed subprocesses and failed policy checks; do not hide failures behind warnings.
+- Generated reports and temporary run directories belong under `target/` unless the caller explicitly provides another output path.
+- If a script changes a canonical check, update `Justfile` and `docs/testing/README.md` in the same change.
+- Coverage scripts may execute milestone binaries, but they must not classify product maturity. If a script starts reporting example proof status, it must preserve the product-proof / mechanics-smoke / proxy-demo distinction from `examples/AGENTS.md`.
+- Do not add implicit credentials, provider calls, dataset downloads, or destructive filesystem cleanup to canonical scripts. Make those opt-in flags with printed side effects.
+- Keep generated coverage summaries, lcov files, run stores, and temporary example outputs under `target/` by default; scripts should not dirty the repo root.
+
+## Decision Cards
+- when: changing `coverage-gate.py`
+  do: state which packages it runs and which live paths it deliberately avoids
+  preserve: coverage as denominator/execution proof, not product-maturity proof
+  avoid: using coverage to bless P8 reflection, LM/cache roles, or live-provider paths
+  verify: run `python3 scripts/coverage-gate.py --line-floor 0 --branch-floor 0` for script behavior, then `just coverage` when feasible
+
+- when: changing `test-suite-sla.py`
+  do: keep nextest plus doctests in one timed default lane
+  preserve: the `<30s` full-suite contract in `docs/testing/README.md`
+  avoid: adding a hidden slow lane or silently dropping doctests from the measured suite
+  verify: run `python3 scripts/test-suite-sla.py --sla-seconds 30`
+
+- when: adding a new repo script
+  do: add the command to this map and wire it through `Justfile` only if it is part of the canonical operator path
+  preserve: idempotent local defaults and explicit failure exits
+  avoid: scripts that mutate source, fetch network data, or spend provider resources without an obvious flag/env gate
+  verify: run the script with the smallest meaningful arguments and check that generated files land under `target/` or the requested output path
+
+## Verification
+- Run the touched script directly with the smallest meaningful arguments.
+- For lint/test/coverage scripts, also run the corresponding `just lint`, `just test`, or `just coverage` target when feasible.

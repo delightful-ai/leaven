@@ -30,6 +30,7 @@ just milestone-p4
 just milestone-p5
 just milestone-p6
 just milestone-p7
+just milestone-p8
 just milestone-examples
 ```
 
@@ -37,6 +38,26 @@ The milestone examples are workspace packages under `examples/p*/`, not Cargo
 example targets. `cargo check --workspace --examples` is therefore not the
 proof command for them. Use the `just milestone-*` recipes, which run each
 example binary directly.
+
+Milestone execution is not automatically product proof. Classify examples as
+product-proof, mechanics-smoke, or proxy-demo before citing them as acceptance
+evidence. In particular, `just milestone-p8` currently proves public-builder
+mechanics around a fixed-edit reflector; it does not prove real GEPA
+reflection, Leaven-owned LM/cache runtime roles, or live AIME improvement.
+
+Current milestone classifications:
+
+| Recipe | Classification | What a passing run proves |
+| --- | --- | --- |
+| `just milestone-p0` | product-proof for P0 graph skeleton | Seed/create/change graph basics through `RunContext`. |
+| `just milestone-p1` | product-proof for scalar keep-best | Scalar evaluation, inline evidence storage, and keep-best selection. |
+| `just milestone-p2` | product-proof for pairwise tournament plumbing | Pairwise request/evidence flow and fitted tournament selection. |
+| `just milestone-p3` | mechanics-smoke | GEPA-shaped loop plumbing over an explicit edit surface and casewise frontier, not real evidence-aware reflection. |
+| `just milestone-p4` | product-proof for P4 workspace/trust | Materialized workspace history, create proposals, hidden test filtering, evidence refs, and cleanup. |
+| `just milestone-p5` | live product proof for the Codex/EvoSkill reproduction | Live Codex CLI execution, checkpointing, child skill bank construction, and summary output; it spends provider/runtime resources. |
+| `just milestone-p6` | product-proof for trust-policy self-optimization | Hidden validation/test partition behavior and hidden-test refusal. |
+| `just milestone-p7` | product-proof for promotion gates | Immutable public surfaces, hidden holdout refusal, final-test selection, and rollback metadata. |
+| `just milestone-p8` | mechanics-smoke/proxy-demo | Public builder mechanics, split reporting, and scripted score movement around fixed-edit reflection. |
 
 ## Runtime SLA
 
@@ -65,7 +86,14 @@ duplicate missed-line denominators; branch coverage is enforced from the
 branch-enabled JSON summary. Empty map crates and unimplemented skeleton crates
 naturally add no executable denominator; once a crate gains runtime behavior,
 that behavior is part of the canonical coverage surface and needs contract
-tests in the same change.
+tests in the same change. Coverage keeps the exercised surface honest; it does
+not promote proxy examples or placeholder public names into mature product
+contracts.
+
+Coverage's P5 run is not the same as `just milestone-p5`: the coverage script
+runs the package with a generated `--run-dir` and without the live Codex gate.
+Coverage's P8 run is the deterministic fixed-edit path. Treat both as coverage
+of executable code, not release proof for the live/provider/product claims.
 
 ## Test Shapes
 
