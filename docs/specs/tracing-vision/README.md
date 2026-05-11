@@ -81,6 +81,25 @@ Registry
 This keeps Leaven composable inside applications that already have observability
 stacks.
 
+The default dependency split should be:
+
+```text
+library/runtime crates:
+  tracing
+  metrics
+
+examples/tests/dev tools/application binaries:
+  tracing-subscriber
+  tracing-opentelemetry
+  metrics exporters/recorders
+  OpenTelemetry SDK/exporters
+```
+
+`tracing` and `metrics` are facade-style emission APIs. They fit library code
+because a missing subscriber or recorder should degrade to cheap no-op
+behavior. Subscriber, recorder, exporter, collector, sampling, and formatting
+policy belong to executables and operator examples.
+
 ### 2.2 Durable trace is not sampled
 
 Operational spans may be sampled. Durable optimizer trace records must not be
@@ -162,6 +181,11 @@ Default spans and durable events must prefer IDs, hashes, typed summaries, and
 external references. Raw payload capture, if ever supported, must be opt-in,
 targeted, clearly labeled, and easy to disable by target/level or durable sink
 policy.
+
+Runtime logging level alone must not unlock raw payload capture. Setting
+`RUST_LOG=trace` may reveal more safe operational detail; it must not dump
+prompts, transcripts, artifacts, credentials, customer data, or arbitrary
+`Debug` output.
 
 ---
 
@@ -445,6 +469,12 @@ unreplayable, with reason
 
 ## 5. Runtime `tracing` Requirements
 
+Runtime tracing is part of Leaven's public contract once stabilized, but not
+part of Leaven's runtime policy. Leaven chooses stable span names, targets,
+levels, and safe fields. The consuming application chooses whether those
+become JSON logs, local pretty logs, OpenTelemetry spans, Datadog/Honeycomb
+events, no output, or something else.
+
 ### 5.1 Stable targets
 
 Leaven should use stable target prefixes so users can filter sensibly:
@@ -467,6 +497,17 @@ leaven::trace
 
 Exact names can change before the API contract lands, but the final schema
 should treat target names and field names as semver-relevant public surface.
+
+Span and event names should be stable. Variable data belongs in fields:
+
+```text
+good:
+  span name: leaven.evaluation_request
+  fields: evaluator_id, request_id, candidate_count, cache_status
+
+bad:
+  span name: leaven.evaluation_request.gpt5.candidate_018f...
+```
 
 ### 5.2 Natural span hierarchy
 
@@ -501,7 +542,76 @@ rollout
 The hierarchy should make parallel rollout visualization useful. Orphan spans
 are a correctness bug in async instrumentation.
 
-### 5.3 Fields over log lines
+### 5.3 Required span fields
+
+The production span surface should prefer bounded, joinable fields.
+
+Recommended common fields:
+
+```text
+leaven.run_id
+leaven.iteration_id
+leaven.stage_id
+leaven.stage_kind
+leaven.actor
+leaven.status
+leaven.reason
+leaven.duration_ms
+```
+
+Candidate/proposal fields:
+
+```text
+leaven.candidate_id
+leaven.artifact_id
+leaven.proposal_id
+leaven.proposal_batch_id
+leaven.proposal_effect
+leaven.causal_input_count
+leaven.info_ref_count
+```
+
+Evaluation fields:
+
+```text
+leaven.evaluation_request_id
+leaven.evaluator_id
+leaven.evaluator_fingerprint
+leaven.evaluation_shape
+leaven.evaluation_purpose
+leaven.assessment_id
+leaven.assessment_count
+leaven.evidence_ref
+leaven.cache_status
+leaven.cache_bypass_reason
+```
+
+Provider/runtime fields:
+
+```text
+leaven.provider
+leaven.model
+leaven.prompt_hash
+leaven.response_ref
+leaven.workspace_ref
+leaven.command_kind
+leaven.exit_status
+leaven.retry_count
+```
+
+Cost fields should be numeric:
+
+```text
+leaven.cost.metric_calls
+leaven.cost.tokens.input
+leaven.cost.tokens.output
+leaven.cost.currency.estimated
+```
+
+The exact field set can stabilize in slices, but the default shape is IDs,
+bounded enums, numeric cost, refs, hashes, and safe summaries.
+
+### 5.4 Fields over log lines
 
 Events should use structured fields:
 
@@ -518,7 +628,23 @@ tracing::info!(
 Avoid embedding machine-readable data only inside message strings. Messages are
 for humans; fields are for filtering, indexing, and joining.
 
-### 5.4 Explicit instrumentation
+### 5.5 Event levels
+
+Events should report decisions and anomalies, not function-entry noise.
+
+Default level guidance:
+
+| Level | Use |
+|---|---|
+| `info` | run start/end, iteration end if sparse, final status, high-level checkpoint |
+| `debug` | proposal batch summaries, evaluation summaries, population decisions, retries |
+| `trace` | per-assessment internals, provider request lifecycle, tool-call detail, cache-key formation |
+| `warn` | budget pressure, trust violation attempts, degraded trace, retryable provider/workspace anomalies |
+| `error` | fatal run errors, callback/observer failure, invariant violation, unrecoverable backend failure |
+
+`trace` is still safe-detail tracing. It is not raw-payload capture.
+
+### 5.6 Explicit instrumentation
 
 Default `#[instrument]` behavior captures arguments via `Debug`, which is
 dangerous for optimizer workloads.
@@ -539,7 +665,7 @@ tracing::Span::current().record("score", score);
 Raw candidate payloads, prompts, transcripts, and credentials must not be
 captured by accidental `Debug`.
 
-### 5.5 Async propagation
+### 5.7 Async propagation
 
 Spans do not automatically cross all task boundaries. Any spawned future that
 belongs to a run, iteration, rollout, or provider call must be instrumented
@@ -557,7 +683,34 @@ This matters especially for:
 When visualization loses the parent-child relation, the runtime trace has lost
 the optimizer story.
 
-### 5.6 OpenTelemetry is a consumer concern
+Async code must not hold an entered span guard across `.await`. Use
+`#[tracing::instrument(skip_all, ...)]` on async functions or
+`future.instrument(span)` at spawn/await boundaries. A guard that crosses
+`.await` can attach unrelated work to the wrong span.
+
+### 5.8 Telemetry detail levels
+
+Leaven should distinguish safe operational verbosity from sensitive diagnostic
+capture.
+
+Default posture:
+
+```text
+Production:
+  stable spans, bounded fields, costs, IDs, hashes, refs, safe summaries
+
+DebugNumerics / DebugOptimizer:
+  extra safe algorithm detail, per-case summaries, rejected decisions,
+  cache-key formation reasons, retry/backoff summaries
+
+FullDiagnostics:
+  explicit opt-in raw or near-raw diagnostic capture, local/research oriented,
+  sink-policy guarded, documented as sensitive
+```
+
+`FullDiagnostics` must not be activated by logging level alone.
+
+### 5.9 OpenTelemetry is a consumer concern
 
 Leaven should be compatible with `tracing-opentelemetry`, but should not force
 OTLP, a collector, a backend, or a sampling strategy.
@@ -582,26 +735,58 @@ Traces tell the narrative. Metrics power dashboards.
 Leaven should not expect production users to derive every aggregate from trace
 queries. That is expensive and backend-specific.
 
-Useful aggregate metrics include:
+Leaven should default to the `metrics` facade when it emits metrics. Library
+crates emit metrics; applications install recorders/exporters. Metrics emission
+must be optional in effect and must not replace durable trace records.
 
-- run duration
-- iteration duration
-- proposal batch size
-- proposal success/failure count
-- candidate acceptance rate
-- evaluator latency p50/p95/p99
-- evaluator error rate
-- cache hit/miss/bypass counts
-- budget consumed by stage
-- token counts by provider/model/stage
-- cost per accepted candidate
-- cost per improvement
-- score distribution/quantiles when evidence shape supports it
-- workspace command duration/error counts
-- checkpoint duration/size/count
+Recommended default metric surface:
 
-Metrics emission should be optional and should not replace durable trace
-records.
+| Metric | Type | Bounded labels | Purpose |
+|---|---:|---|---|
+| `leaven_run_started_total` | counter | optimizer_kind | throughput |
+| `leaven_run_completed_total` | counter | optimizer_kind, status, reason | convergence/error rate |
+| `leaven_run_duration_seconds` | histogram | optimizer_kind, status | run latency |
+| `leaven_iteration_duration_seconds` | histogram | optimizer_kind, status | iteration latency |
+| `leaven_proposal_batches_total` | counter | proposer_kind, status | proposer throughput/errors |
+| `leaven_proposals_total` | counter | proposer_kind, proposal_effect, status | proposal/apply pressure |
+| `leaven_candidates_accepted_total` | counter | population_kind, reason | acceptance/admission behavior |
+| `leaven_evaluations_total` | counter | evaluator_kind, evaluation_shape, purpose, status, cache_status | evaluator pressure |
+| `leaven_evaluation_duration_seconds` | histogram | evaluator_kind, evaluation_shape, status, cache_status | evaluator latency |
+| `leaven_cache_events_total` | counter | cache_status, bypass_reason | cache effectiveness |
+| `leaven_budget_charged_total` | counter | stage_kind, cost_unit | budget consumption |
+| `leaven_lm_tokens_total` | counter | provider, model_family, direction, stage_kind | token pressure |
+| `leaven_lm_calls_total` | counter | provider, model_family, status, stage_kind | provider health |
+| `leaven_workspace_commands_total` | counter | backend_kind, command_kind, status | workspace/backend health |
+| `leaven_workspace_command_duration_seconds` | histogram | backend_kind, command_kind, status | workspace latency |
+| `leaven_checkpoints_total` | counter | backend_kind, status | checkpoint health |
+| `leaven_checkpoint_duration_seconds` | histogram | backend_kind, status | checkpoint latency |
+
+Metric labels must be bounded enums or low-cardinality controlled names. They
+must not include:
+
+- `run_id`
+- `candidate_id`
+- `proposal_id`
+- `assessment_id`
+- arbitrary user IDs
+- arbitrary problem IDs
+- raw artifact names
+- raw objective names
+- prompt hashes if each prompt creates an unbounded series
+
+High-cardinality identifiers belong in span fields and durable trace records,
+not metric labels.
+
+Metrics should measure distributions, not anecdotes. A dashboard should answer:
+
+```text
+is the optimizer healthy?
+which stage kind is failing?
+are failures budget, trust, provider, workspace, cache, or evaluator related?
+what are p95/p99 run and evaluation latencies?
+how much cost is spent per accepted candidate or improvement?
+which provider/model family is causing retries or token spikes?
+```
 
 ---
 
@@ -734,6 +919,32 @@ Redaction should be explicit and testable. Useful mechanisms may include:
 The important requirement is that safe defaults do not depend on every caller
 remembering to avoid `Debug`.
 
+Examples of values that should not appear in default runtime fields, durable
+events, or metric labels:
+
+- raw artifact payloads
+- full prompts
+- full LM responses
+- rollout transcripts
+- workspace file contents
+- raw case data
+- credentials and tokens
+- arbitrary callback `Debug` output
+- vectors/matrices/large numeric arrays in optimizer adapters
+
+Examples of safe default substitutes:
+
+- content IDs
+- evidence refs
+- prompt/config hashes
+- byte counts
+- case counts
+- dimensions/counts
+- score summaries
+- norm/aggregate summaries
+- bounded status/reason enums
+- blob refs with access controls
+
 ---
 
 ## 10. Failure Semantics
@@ -782,7 +993,50 @@ a convenience view. It cannot be the canonical format for rich trace data.
 
 ---
 
-## 12. Open Questions
+## 12. Testing Requirements
+
+Tracing is part of the public product surface. It needs compatibility tests,
+not only visual inspection.
+
+Minimum test families:
+
+1. **Durable event schema tests.**  
+   Run a toy optimizer and assert durable events preserve IDs, ordering,
+   status, cost, cache, and evidence refs.
+
+2. **Runtime span schema tests.**  
+   Use a test subscriber/layer to assert stable span names, targets, levels,
+   and critical fields for representative run/proposal/evaluation paths.
+
+3. **Failure-path tests.**  
+   Exercise budget exhaustion, trust violations, evaluator errors, provider
+   errors, workspace command errors, cache bypass, and checkpoint failure.
+   Assert status/reason/error-kind fields are precise.
+
+4. **No-sensitive-data tests.**  
+   Feed known sentinel payloads through artifacts, prompts, evidence, callback
+   errors, and workspace outputs. Assert default spans/events/metrics do not
+   expose the sentinels.
+
+5. **Metric cardinality tests/reviews.**  
+   Every metric label must be bounded. New labels require an explicit
+   cardinality review.
+
+6. **Disabled-overhead benchmarks.**  
+   Measure no subscriber/recorder, production info-level, debug, trace, and
+   diagnostics modes separately.
+
+7. **Async propagation tests.**  
+   For spawned or parallel work, assert child spans remain attached to the run
+   or stage span.
+
+8. **Docs examples.**  
+   Examples should show subscriber setup, JSON logs, OpenTelemetry export, and
+   metrics recorder/exporter setup outside library code.
+
+---
+
+## 13. Open Questions
 
 These are real design choices, not reasons to delay the vision.
 
@@ -803,8 +1057,9 @@ These are real design choices, not reasons to delay the vision.
    and full agentic workspace rollouts?
 
 5. **Metrics crate choice.**  
-   Should Leaven emit through the `metrics` ecosystem, OpenTelemetry metrics,
-   an internal observer projection, or a small adapter layer?
+   The default direction is the `metrics` facade for library emission. Do we
+   also need a small Leaven adapter layer so observer projections can feed
+   metrics without duplicating instrumentation calls?
 
 6. **Trace export format.**  
    Should canonical exports be JSONL, postcard/CBOR, Parquet, Arrow, a custom
@@ -821,7 +1076,7 @@ These are real design choices, not reasons to delay the vision.
 
 ---
 
-## 13. Implementation Direction
+## 14. Implementation Direction
 
 The likely staged implementation path is:
 
@@ -831,20 +1086,21 @@ The likely staged implementation path is:
 3. Add contract tests for event order, IDs, and no-payload defaults.
 4. Add runtime `tracing` spans in `leaven-engine` with explicit fields and
    `skip_all`.
-5. Add async span propagation where the engine or runtime crates spawn work.
-6. Turn `leaven-trace` scaffolding into graph/event projections.
-7. Add export/report tests for representative P1 and GEPA-style runs.
-8. Add provider/runtime/workspace operational spans in their owning crates.
-9. Add public observer ergonomics in `leaven-run`.
-10. Add operator examples showing subscriber setup, local fmt logging, OTLP
-    export, and sampling outside library code.
+5. Add the default `metrics` emission surface with bounded labels.
+6. Add async span propagation where the engine or runtime crates spawn work.
+7. Turn `leaven-trace` scaffolding into graph/event projections.
+8. Add export/report tests for representative P1 and GEPA-style runs.
+9. Add provider/runtime/workspace operational spans in their owning crates.
+10. Add public observer ergonomics in `leaven-run`.
+11. Add operator examples showing subscriber setup, metrics recorder setup,
+    local fmt logging, OTLP export, and sampling outside library code.
 
 This is deliberately a hard cutover path. We should not preserve a parallel
 old logging surface once typed trace and structured spans exist.
 
 ---
 
-## 14. Definition of Alignment
+## 15. Definition of Alignment
 
 Stakeholders are aligned when they agree to these statements:
 
@@ -853,6 +1109,7 @@ Stakeholders are aligned when they agree to these statements:
 - Durable trace data is complete by default and typed.
 - Operational telemetry may be sampled and exported by the consuming
   application.
+- Metrics are emitted through bounded labels and application-owned recorders.
 - Large/private payloads are referenced by default.
 - Causal lineage and informational provenance stay distinct.
 - Trust boundaries are auditable.
