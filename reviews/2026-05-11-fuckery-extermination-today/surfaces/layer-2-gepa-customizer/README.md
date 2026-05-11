@@ -44,6 +44,14 @@ GEPA-local fixed/narrow reflection call.
 
 This bypass is the main architectural drift.
 
+## Canonical Layer 2 Audit Docs
+
+- `root-cause-map.md`: Layer 2 GEPA root causes only.
+- `fix-priority-map.md`: ordered GEPA/customizer fixes and proof gates.
+- `vision-comparison.md`: original GEPA vision compared with current repo state.
+- `surface-requirements.md`: exact GEPA customizer slot, request/response,
+  error, invariant, state, and proof contract.
+
 ## Layer 2 Audit Questions For The Broader Pass
 
 - Which GEPA strategy slots are real, swappable, and tested through behavior?
@@ -56,4 +64,3 @@ This bypass is the main architectural drift.
   of reimplementing local shadows?
 - Are merge, validation cadence, and batch sampler names backed by behavior or
   just future-shaped structs?
-

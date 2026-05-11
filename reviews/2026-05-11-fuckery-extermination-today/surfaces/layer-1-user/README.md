@@ -66,3 +66,12 @@ wrapper type that becomes part of their mental model.
 - Are missing capabilities rejected before run start with useful errors rather
   than silently defaulting to no-op runner/scorer behavior?
 
+## Canonical Layer 1 Audit Docs
+
+- `root-cause-map.md`: Layer 1 root causes mapped to ideal contract, current
+  implementation, user impact, correction direction, and proof requirements.
+- `fix-priority-map.md`: ordered hard-cutover fixes and proof gates for Layer 1.
+- `vision-comparison.md`: original Layer 1 vision compared against current repo
+  reality.
+- `surface-requirements.md`: exact ordinary-user public contract Layer 1 must
+  satisfy.
