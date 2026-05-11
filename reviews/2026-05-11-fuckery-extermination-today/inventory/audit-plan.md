@@ -67,9 +67,15 @@ Planned docs:
 - `inventory/crate-inventory.md`
 - `inventory/public-api-ledger.md`
 - `inventory/stub-placeholder-ledger.md`
-- `surfaces/layer-1-user-surface.md`
-- `surfaces/layer-2-gepa-customizer-surface.md`
-- `internals/layer-3-engine-author-surface.md`
+- `surfaces/layer-1-user/public-api-ledger.md`
+- `surfaces/layer-1-user/examples-and-end-to-end-proof.md`
+- `surfaces/layer-1-user/evaluation-datasets-results.md`
+- `surfaces/layer-2-gepa-customizer/strategy-slots.md`
+- `surfaces/layer-2-gepa-customizer/reflection-and-proposal.md`
+- `surfaces/layer-2-gepa-customizer/evidence-trace-selection.md`
+- `internals/layer-3-engine-author/run-context-and-graph.md`
+- `internals/layer-3-engine-author/stage-contexts.md`
+- `internals/layer-3-engine-author/evidence-trust-budget-cache.md`
 - `cross-cutting/lm-and-cache-surface.md`
 - `cross-cutting/topology-and-crate-graph.md`
 - `cross-cutting/root-cause-map.md`
@@ -89,4 +95,3 @@ Each finding should include:
 
 No finding should be based only on vibes. If the smell is naming, cite the name
 and the implementation behind it.
-

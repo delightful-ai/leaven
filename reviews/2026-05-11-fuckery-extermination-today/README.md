@@ -25,10 +25,14 @@ The audit goal is to find every place where Leaven currently:
 
 ## Organization
 
-- `surfaces/layer-1-user-surface.md`: ordinary end-user API smells.
-- `surfaces/layer-2-gepa-customizer-surface.md`: GEPA strategy and customizer
+- `complaints/session-user-messages-for-codex.md`: the full authored user
+  message stream for this session. Read it before writing findings.
+- `auditing-conventions.md`: finding format, severity rubric, and audit
+  ground rules.
+- `surfaces/layer-1-user/`: ordinary end-user API smells.
+- `surfaces/layer-2-gepa-customizer/`: GEPA strategy and customizer
   API smells.
-- `internals/layer-3-engine-author-surface.md`: engine/core optimizer-author
+- `internals/layer-3-engine-author/`: engine/core optimizer-author
   and graph/evidence access smells.
 - `cross-cutting/lm-and-cache-surface.md`: LM/runtime/cache-specific smells.
 - `inventory/known-findings.md`: concise finding ledger seeded from current
@@ -53,4 +57,3 @@ The worst current example is GEPA reflection:
 
 That creates a false-positive implementation path: examples can show GEPA-like
 score movement while no real reflection from traces or feedback is happening.
-
