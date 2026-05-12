@@ -51,6 +51,11 @@ around engine graph mutation or a home for optimizer strategy state.
   that fact.
 - `Score` is builder evidence for the runner/scorer path, not the universal
   evidence model. Reusable evidence types belong in `leaven-evidence`.
+- `Score` is the ordinary user word; assessment/evidence/preference are the
+  durable internal truth. Do not make `.score(...)` a scalar-only dead end:
+  richer feedback, absent scores, failed evidence, trace/history, and metric
+  axes must lower into typed evidence/report records instead of becoming zero
+  or string metadata.
 - Current runner/scorer helpers are sync and scalar-leaning. Treat that as the
   present implementation state, not the final Layer 1 contract for async
   runner/scorer/evaluator roles, cache policy, or richer evidence/reporting.
@@ -63,6 +68,12 @@ around engine graph mutation or a home for optimizer strategy state.
   users to get solver/judge/reflector caching by editing this evaluator; Layer 1
   needs role-level runtime/cache policy while LM response cache capabilities
   stay in `leaven-lm-cache`.
+- Single-task/no-dataset optimization is a missing Layer 1 product mode, not a
+  reason to fake a one-row training set. If a task has no dataset, model that
+  as an explicit product mode and report shape.
+- Domain environments belong in domain adapters or workspace/runtime seams.
+  Do not add a hidden `.environment(...)` abstraction here that absorbs Python,
+  CUDA, LM, or agent execution details.
 
 ## Decision Cards
 - when: extending `optimize(seed)` user ergonomics

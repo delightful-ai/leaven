@@ -61,6 +61,11 @@ has failed to find a more specific owning crate.
 - The `gepa` default feature currently makes GEPA's fixture-shaped names easier
   to import through `leaven::prelude::*`. A topology pass can prove the edge is
   allowed; only a public-maturity pass proves it is honest for ordinary users.
+- Until a generated export-route ledger exists, every change to `src/lib.rs`,
+  `src/prelude.rs`, or `Cargo.toml` features must manually name the maturity
+  route it changes: ordinary prelude, advanced namespace, feature-gated facade,
+  test support, or explicit scaffold. Do not rely on "optional" as a scaffold
+  marker; optional provider/backend features are still public promises.
 
 ## Decision Cards
 - when: changing `src/prelude.rs` or default features
@@ -68,6 +73,12 @@ has failed to find a more specific owning crate.
   preserve: a default import experience that exposes behavior-bearing ordinary contracts, not file layout or future-work names
   avoid: adding `pub use ...::prelude::*` for a whole crate unless every exported name is mature at this layer
   verify: run `cargo nextest run -p leaven` and `cargo test -p leaven --test topology_contract`; add an import/export test when the change is about ordinary-vs-advanced visibility
+
+- when: adding or renaming a feature
+  do: prove the feature exposes a behavior-bearing adapter/facade or name it as scaffold/experimental outside defaults
+  preserve: default features as ordinary-useful and non-scaffold
+  avoid: exposing placeholder provider/backend crates, compile-error derives, or inert standard names under product-looking feature names
+  verify: run the feature-specific `cargo check -p leaven --features <feature>` plus the owning crate's focused test; add a maturity/ledger row when the feature changes public import routes
 
 - when: adding a cross-crate workflow test
   do: state whether it is product-proof, mechanics-smoke, or proxy-demo in the test/example docs or nearest `AGENTS.md`

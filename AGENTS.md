@@ -66,6 +66,12 @@ Before editing, run the quick blind checks:
 - Public maturity is a separate gate from topology. Default-facing exports,
   examples, README claims, and coverage evidence must say whether they prove
   real product behavior, mechanics, or a proxy fixture.
+- Public names must be classified by route, not just by symbol. The same type
+  can be an advanced public contract in its owning crate and still be forbidden
+  from ordinary prelude/default-feature routes. When touching facades, features,
+  preludes, examples, or coverage gates, classify each route as ordinary public
+  contract, advanced public contract, test-support public, explicit scaffold, or
+  private fixture before treating it as proof.
 - `lib.rs` files are maps only: module declarations, curated re-exports, and optional preludes. Do not put runtime logic, domain logic, helper logic, or test-only behavior in `lib.rs`; name the owning concept and put the code in that module.
 - Types, traits, errors, and tests should preserve domain truth instead of smoothing it away.
 - Prefer ownership-native Rust APIs over clone-heavy plumbing. Pass ownership when values are consumed, borrow when the caller retains ownership, and clone only at explicit fan-out, persistence, or async/lifetime boundaries where it is clearer than contorting ownership.
@@ -103,6 +109,12 @@ Before editing, run the quick blind checks:
   preserve: cold core below engine/std/workspace/derive and adapter/runtime dependencies outside cold crates
   avoid: dependency shortcuts that make future seams harder to see, logic in `lib.rs`, and public exports that exist only to make tests convenient
   verify: run `cargo test -p leaven --test topology_contract` during iteration, then `just check`
+
+- when: changing default features, preludes, facade re-exports, or example proof status
+  do: update the public-maturity classification for the affected route and add/adjust the export or proof gate in the same change
+  preserve: default-facing imports and product-proof examples as behavior-bearing ordinary contracts only
+  avoid: letting scaffold crates, compile-error derives, fixed fixtures, fake runtimes, provider shell-outs, or advanced wrappers propagate through convenient facades
+  verify: run `cargo test -p leaven --test topology_contract` plus the owning facade/example test; if no generated ledger exists yet, document the manual classification in the nearest `AGENTS.md`
 
 - when: changing scripts or repo tooling
   do: keep the operator path one-command, deterministic, and idempotent where possible
