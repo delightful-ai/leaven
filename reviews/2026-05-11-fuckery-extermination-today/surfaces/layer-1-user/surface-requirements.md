@@ -25,7 +25,6 @@ The ordinary prelude should expose the minimum user path:
   hard-cut to mean that typed candidate-run output
 - `CandidateRunner`
 - `CandidateRunCtx`
-- `CandidateRun<O>`
 - `Scorer`
 - `ScoreContext`
 - `Score`
@@ -34,8 +33,9 @@ The ordinary prelude should expose the minimum user path:
 - `MetricValue` / metric axis type
 - `Feedback`
 - `ScoreAttachment`
-- common runtime-role constructors/configs for solver, reflector, scorer/judge,
-  and agent roles
+- ordinary runtime-role config sketches such as `RuntimeRoles`, `RuntimeRole`,
+  or role-specific constructors for solver, reflector, scorer/judge, and agent
+  roles
 - `Gepa` default ordinary constructor when the `gepa` feature is enabled
 
 Do not use `RunOutput` for two concepts. The completed optimization handle is
@@ -67,8 +67,8 @@ Add a compile/import contract under `crates/leaven/tests`:
 
 - ordinary example compiles with only `use leaven::prelude::*`;
 - ordinary example contains no explicit engine imports;
-- deny-list assertion prevents ordinary prelude from exposing the forbidden
-  names above.
+- `trybuild` compile-fail fixtures, or an equivalent public-API export check,
+  prove the forbidden names above are not reachable from the ordinary prelude.
 
 ## 2. Builder Contract
 

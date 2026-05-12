@@ -55,8 +55,9 @@ runner, GEPA, budget, result/report, and should not touch `RunGraph`,
   `Population`, `Proposer`, `Evaluator`, `CachePolicy`, cache stores/keys, and
   GEPA strategy slots to explicit advanced, engine, GEPA, or cache preludes.
 - required proof/tests: a public import contract test that compiles a Layer 1
-  example using only the ordinary prelude and rejects/default-deny-lists engine
-  author names from that prelude. Keep topology tests for crate edges, but add a
+  example using only the ordinary prelude, plus `trybuild` compile-fail fixtures
+  or an equivalent export check proving engine-author names are not reachable
+  from that prelude. Keep topology tests for crate edges, but add a
   public-maturity gate because topology alignment alone does not prove product
   alignment.
 

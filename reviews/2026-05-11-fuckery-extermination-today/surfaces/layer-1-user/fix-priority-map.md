@@ -27,7 +27,9 @@ audit tree.
   proxy examples as demos until they use the real surface; split ordinary and
   advanced preludes.
 - required proof/tests:
-  - compile test: `leaven::prelude::*` ordinary example does not import
+  - compile-pass test: a Layer 1 ordinary example builds with only
+    `use leaven::prelude::*`;
+  - compile-fail or export-check test: `leaven::prelude::*` does not expose
     `RunContext`, `RunGraphView`, `TrustPolicy`, `EvaluationRequest`,
     `Population`, `Proposer`, `Evaluator`, or cache store/key types;
   - compile-fail or typed-error test: missing optimizer is either an intentional
@@ -242,7 +244,8 @@ audit tree.
 Use narrow gates during implementation, then the canonical gate before claiming
 completion:
 
-1. Public import/maturity gate for ordinary prelude and fixture quarantine.
+1. Public import/maturity gate for ordinary prelude compile-pass/compile-fail
+   coverage and fixture quarantine.
 2. `cargo nextest run -p leaven-run` for async runner/scorer, work-input, score,
    and result contracts.
 3. `cargo nextest run -p leaven-lm-cache` and provider mapping tests for runtime
