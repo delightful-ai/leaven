@@ -16,6 +16,13 @@ places. The failure is that public import paths, default features, examples, and
 topology tests make scaffolded or partial boundaries look like ready library
 capability.
 
+The refinement from the second audit pass is that "partial" has to be split
+carefully. Some crates are real but in the wrong public layer (`leaven-lm-cache`
+is the clearest example). Some crates are mixed: behavior-bearing symbols live
+beside inert public names. Some crates only have stale skeleton metadata. Some
+exports are true placeholders. The implementation gate must classify exact
+symbols and routes, not smear a crate-level label over all of them.
+
 That matters because the original design is not "many crates compile." It is:
 
 > A Rust optimizer is a configured value that drives a typed run graph by
@@ -45,10 +52,13 @@ Evidence: `docs/specs/initial_library.md:4749-4759`.
 - user impact: the graph can look complete while still allowing false public
   paths.
 - correction direction: treat crate graph as a boundary ledger and add a
-  public-maturity ledger above it.
+  public-maturity ledger above it. The ledger must track export routes as well
+  as names: root re-export, ordinary prelude, advanced namespace, feature-gated
+  module, crate-root public module, example import, or test-support path.
 - required proof/tests: topology tests must reject scaffold leakage, orphan
   directories, default-feature placeholders, and unallowlisted public unit
-  structs, not only dependency drift.
+  structs, not only dependency drift. They must also reject unknown default
+  exports until classified.
 
 ### The Umbrella Is An Import Experience
 
@@ -68,7 +78,11 @@ Evidence: `docs/specs/initial_library.md:4749-4759`.
 - user impact: a user trying to run an optimizer is taught too many internals and
   exposed to non-working derive macros.
 - correction direction: split ordinary, advanced, and scaffold/test-support
-  imports. Default `leaven::prelude` should be boring and product-facing.
+  imports. Default `leaven::prelude` should be boring and product-facing:
+  `optimize`, ordinary run/score/result types, budget/cost values, and
+  behavior-bearing LM request/response vocabulary. Engine-author contexts,
+  stage traits, derive macros, cache wrappers, and fixtures need explicit
+  advanced or test-support paths.
 - required proof/tests: default import compile test and export ledger for
   `leaven`, `leaven::prelude`, `leaven-std::prelude`, and feature-gated modules.
 
@@ -121,7 +135,9 @@ Evidence: `docs/specs/initial_library.md:4749-4759`.
   product path and know that cache/cost/continuation behavior still works.
 - correction direction: configure LM/cache by role in the run/runtime layer:
   solver/program runner, reflector/proposer, scorer/judge, and agent runtime.
-  Keep `CachedLm` as an advanced wrapper.
+  Keep `CachedLm` as an advanced wrapper. Product examples should configure cache
+  behavior by role and should not teach manual wrapper stacking as the ordinary
+  path.
 - required proof/tests: one end-to-end role-composition test over `leaven-lm`,
   cache, mock/provider mapping, and `leaven-run`; no Python provider bypass in
   product-proof examples.
@@ -165,6 +181,10 @@ Evidence: `docs/specs/initial_library.md:4749-4759`.
     (`crates/leaven-lm-cache/src/cached.rs:6-116`);
   - mixed: `leaven-std` re-exports broad standard modules
     (`crates/leaven-std/src/lib.rs:3-60`);
+  - stale metadata over real behavior: `leaven-lm-openai` still says skeleton
+    while implementing request lowering and response parsing
+    (`crates/leaven-lm-openai/Cargo.toml:3`,
+    `crates/leaven-lm-openai/src/client.rs:39-160`);
   - placeholder: one-line provider/backend structs
     (`crates/leaven-lm-anthropic/src/client.rs:1`,
     `crates/leaven-workspace-docker/src/factory.rs:1`);
@@ -177,7 +197,9 @@ Evidence: `docs/specs/initial_library.md:4749-4759`.
 - user impact: scaffolding and product contracts are visually indistinguishable
   unless a human audits line by line.
 - correction direction: create a durable public-maturity gate and then hard-cut
-  all default-facing paths to names that pass it.
+  all default-facing paths to names that pass it. Fix stale skeleton metadata
+  where real behavior exists; remove or scaffold-gate true placeholders; move
+  advanced real surfaces out of ordinary imports.
 - required proof/tests: public export ledger plus generated checks for stubs,
   skeleton descriptions, feature maturity, and example proof classification.
 
@@ -190,6 +212,7 @@ Evidence: `docs/specs/initial_library.md:4749-4759`.
 | GEPA | real optimizer slots | fixed reflection fixture and placeholders | no evidence-aware reflection | GEPA law/product scenario tests |
 | LM/cache | provider-neutral runtime roles | real crates, manual wrapper story | no role composition | solver/reflector cache role test |
 | Providers/backends | feature means usable adapter | many one-line public structs | feature names overclaim | trait-impl and mapping/law tests |
+| Metadata | docs describe current truth | skeleton labels remain on some real crates | stale docs can misclassify maturity | stale-metadata cleanup or scaffold allowlist |
 | Examples | product proof separated from demos | coverage runs proxy examples | green can mean wrong proof | example classification gate |
 
 ## Bottom Line

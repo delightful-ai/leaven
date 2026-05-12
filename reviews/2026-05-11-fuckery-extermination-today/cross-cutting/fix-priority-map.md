@@ -29,15 +29,23 @@ the name into explicit scaffold/test-support scope.
   while still failing off-the-shelf optimizer-library use.
 - correction direction:
   - add orphan `crates/*` rejection;
-  - add skeleton-description rejection outside explicit scaffold allowlists;
-  - add public unit-struct deny/allow ledger;
-  - add crate-root `pub mod` export ledger;
+  - add skeleton-description rejection outside explicit scaffold allowlists, with
+    a separate stale-metadata path for crates that already have behavior-bearing
+    contract tests;
+  - add public unit-struct deny/allow ledger keyed by exact symbol and export
+    route, not by crate-wide exemption;
+  - add crate-root `pub mod` export ledger so implementation file layout cannot
+    become semver surface by accident;
   - add default-feature maturity checks.
 - required proof/tests:
   - `cargo test -p leaven --test topology_contract` fails before the fix on at
     least one seeded maturity fixture or new allowlist test;
   - the final topology contract rejects `crates/leaven-dsrs` unless deleted or
     restored as a real workspace crate;
+  - unknown exports from `leaven`, `leaven::prelude`, `leaven-std::prelude`, and
+    feature-gated provider/backend modules fail until classified;
+  - a default feature cannot depend on an explicit-scaffold crate or expose a
+    symbol whose behavior proof is `none`;
   - `just check` remains the completion gate.
 
 ## P1: Hard-Cut Default `leaven` Imports To Behavior-Bearing Ordinary Contracts
@@ -68,8 +76,12 @@ the name into explicit scaffold/test-support scope.
   - keep `lm-cache` out of ordinary prelude unless the public story is a runtime
     role policy rather than wrapper stacking.
 - required proof/tests:
-  - default-feature compile test imports `leaven::prelude::*` and cannot import
-    compile-error derives or placeholder provider/backend types;
+  - default-feature compile test imports `leaven::prelude::*` and exercises the
+    Tier 1 shape with `optimize`, train/validation/test cases, score/run result
+    types, budget, and behavior-bearing LM request types;
+  - negative compile/export tests prove that default imports cannot reach
+    compile-error derives, production-looking fixtures, placeholder
+    provider/backend types, or raw engine-author contexts;
   - advanced-prelude test proves `RunContext`, `RunGraphView`, and stage traits
     are still reachable intentionally;
   - export ledger documents every default-facing `pub use`.
@@ -97,13 +109,15 @@ the name into explicit scaffold/test-support scope.
   cost accounting.
 - correction direction:
   - introduce or designate a run/runtime-role composition root above GEPA;
-  - configure cache policy by role;
+  - configure cache policy by role: solver/program runner, reflector/proposer,
+    scorer/judge, and agent runtime;
   - keep `CachedLm` as advanced/test implementation detail;
   - resolve the GEPA spec contradiction by forbidding `leaven-gepa ->
     leaven-lm-cache` in ordinary topology
     (`docs/specs/gepa_optimizer_surface.md:174-197`).
 - required proof/tests:
   - product-level test with independent solver and reflector role policies;
+  - the ordinary product example does not construct `CachedLm` directly;
   - cache hit returns zero metered cost while preserving stored usage;
   - provider continuation is excluded from response-cache identity;
   - `p8_aime_gepa` live path, when present, uses `OpenAiLm` through `Lm` rather
@@ -134,7 +148,9 @@ the name into explicit scaffold/test-support scope.
   - remove feature/export from `leaven` until capability exists, or implement
     the backend/provider against its owning trait;
   - reserve future shells only behind explicit `scaffold-*` features that are not
-    defaults and not used by product examples.
+    defaults and not used by product examples;
+  - do not allow a feature to claim adapter maturity unless it has constructor,
+    typed error, trait implementation, and at least one non-network behavior law.
 - required proof/tests:
   - every non-scaffold provider feature has a trait-impl compile test and a
     non-network mapping/law test;
@@ -166,6 +182,10 @@ the name into explicit scaffold/test-support scope.
 - correction direction:
   - rename/move fixed-edit proposer into test/demo scope;
   - implement a mock-LM reflective proposer over `leaven-lm`;
+  - define the reflector request as the public contract: parent candidate,
+    selected part id and current view, minibatch assessment refs, casewise
+    feedback/evidence refs, optional attribution refs, objective/background,
+    lineage summary, budget handle, and LM/agent role;
   - expose real builder slots and reject incomplete/contradictory configs before
     run start;
   - only then restore GEPA to ordinary defaults.
@@ -201,8 +221,11 @@ the name into explicit scaffold/test-support scope.
     real reflection.
 - required proof/tests:
   - coverage tooling prints or checks example classification;
+  - `mechanics-smoke` and `proxy-demo` examples may run for coverage, but cannot
+    satisfy public-maturity or release-readiness checks;
   - at least one `product-proof` example exercises `leaven-run`, GEPA,
-    `leaven-lm`, cache policy, evidence, graph, and result facade end to end.
+    `leaven-lm`, cache policy, evidence, graph, budget, events, and result facade
+    end to end.
 
 ## P6: Clean Stale Topology And Inventory Truth Without Broad Product Code Changes
 

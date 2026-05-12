@@ -39,7 +39,25 @@ and make the public repo shape overstate what Leaven can currently prove.
 - required proof/tests: extend `crates/leaven/tests/topology_contract.rs` to
   fail on unregistered `crates/*` directories, skeleton package/module docs in
   non-scaffold crates, public unit structs in ordinary features unless
-  allowlisted, and umbrella/std/prelude exports of scaffold crates.
+  allowlisted, and umbrella/std/prelude exports of scaffold crates. The gate
+  must enumerate the current export source, not only the crate name: root
+  `pub use`, prelude `pub use`, crate-root `pub mod`, feature-gated re-export,
+  and example import each need a category.
+
+The maturity layer must not be a fuzzy label. Each public or proof-bearing name
+needs a ledger row with:
+
+```text
+path + line
+owning crate
+export route: root | prelude | feature | example | test-support
+category: ordinary | advanced | test-support | explicit-scaffold | private-fixture
+behavior proof: test path, law name, example classification, or "none"
+decision: keep public | move advanced | move fixture | remove/export-gate | implement
+```
+
+Unknown rows fail the gate. `none` is allowed only for explicit scaffold or
+private fixture rows, never for default-facing rows.
 
 ## RC-X-002: Default Import Paths Promote Scaffolding Into Product API
 
@@ -113,7 +131,10 @@ and make the public repo shape overstate what Leaven can currently prove.
 - correction direction: keep `CachedLm` as an advanced implementation and
   testing/power-user wrapper. Make ordinary product paths configure solver,
   reflector, scorer/judge, and agent runtime cache policy by role in `leaven-run`
-  or a small runtime composition root above GEPA.
+  or a small runtime composition root above GEPA. The public shape should name
+  roles, not wrapper topology: `solver`, `reflector`, `scorer` or `judge`, and
+  `agent-runtime` are the configuration points that need independent cache and
+  cost policy.
 - required proof/tests: add a product-level LM runtime/cache scenario that runs
   one solver call and one reflector call through `leaven-lm`, `leaven-lm-cache`,
   and `leaven-lm-mock` or a non-network provider test; prove cache hit cost,
@@ -218,3 +239,39 @@ and make the public repo shape overstate what Leaven can currently prove.
   proof classifications, and add at least one product-proof scenario that runs
   solver and reflector roles through Leaven APIs rather than shell/process
   provider bypasses.
+
+## RC-X-007: Placeholder Vocabulary Is Too Coarse To Guide Implementation
+
+- severity: high
+- surface: public maturity, crate inventory, implementation sequencing
+- ideal contract: scaffolding is acceptable only when named and scoped as
+  scaffolding; behavior-bearing code should not be condemned by stale metadata
+  alone (`reviews/2026-05-11-fuckery-extermination-today/auditing-conventions.md:49-59`,
+  `AGENTS.md:88-99`).
+- current implementation: the live tree contains true placeholders, mixed crates,
+  stale skeleton metadata, and real advanced surfaces in the same visual shape.
+  `leaven-lm-cache` has real policy behavior and tests
+  (`crates/leaven-lm-cache/src/cached.rs:6-116`,
+  `crates/leaven-lm-cache/tests/cache_contract.rs:76-150`), while
+  `AnthropicLm`, `DockerWorkspaceFactory`, and `SqliteStore` are one-line public
+  structs (`crates/leaven-lm-anthropic/src/client.rs:1`,
+  `crates/leaven-workspace-docker/src/factory.rs:1`,
+  `crates/leaven-store-sqlite/src/store.rs:1`). Some behavior-bearing crates
+  still carry stale skeleton descriptions, such as `leaven-lm-openai`
+  (`crates/leaven-lm-openai/Cargo.toml:3`,
+  `crates/leaven-lm-openai/src/client.rs:39-160`).
+- blocker/gap: a broad "placeholder crate" label is not implementation-actionable.
+  It can either excuse a production-looking inert export because "the crate is a
+  scaffold" or wrongly demote real behavior because metadata still says
+  skeleton.
+- user impact: future implementors can fix the wrong thing: deleting useful
+  advanced capability, polishing stale docs while leaving inert exports public,
+  or allowlisting an entire crate instead of the exact public name that is safe.
+- correction direction: split audit and gate vocabulary into:
+  `true placeholder export`, `mixed crate with public stubs`,
+  `stale skeleton metadata`, `advanced real surface in ordinary path`,
+  `test-support public`, and `orphan/stale directory`.
+- required proof/tests: public-maturity checks should allowlist or fail exact
+  symbols/routes, not whole crates. A skeleton-description hit must require one
+  of two actions: clean stale metadata when behavior exists, or mark the crate as
+  explicit scaffold and remove it from default/product-proof routes.

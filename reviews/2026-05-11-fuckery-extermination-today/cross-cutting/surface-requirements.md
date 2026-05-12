@@ -9,8 +9,28 @@ compatibility plan. Leaven should hard-cut false public surfaces.
 
 ## 1. Public Maturity Categories
 
-Every public name exposed from `crates/*`, examples, or feature gates must be in
-exactly one category.
+Every exported or proof-bearing name from `crates/*`, examples, or feature gates
+must be in exactly one category for each route where it appears. The category is
+not just about the symbol; it is about the symbol plus the route. `CachedLm` can
+be an advanced public contract through `leaven-lm-cache` and still be forbidden
+from the ordinary prelude. A fixed edit proposer can be valid as test support and
+still be invalid as `ReflectiveMutation` in a product-proof example.
+
+The maturity ledger row shape is:
+
+```text
+path + line
+owning crate
+symbol or module path
+route: crate-root | ordinary-prelude | advanced-prelude | feature | example | test-support
+category
+behavior proof: test path, law name, product-proof example, or none
+decision: keep | move | rename fixture | remove/export-gate | implement
+```
+
+Unknown rows fail. `behavior proof: none` is allowed only for explicit scaffold
+features and private fixtures, and those routes must be unreachable from default
+imports and product-proof examples.
 
 ### 1.1 Ordinary Public Contract
 
@@ -78,7 +98,8 @@ exactly one category.
 
 ### 1.5 Private Fixture
 
-- ideal contract: useful local fixture that is not part of public API.
+- ideal contract: useful local fixture that is not part of public API and is not
+  imported by product-proof examples.
 - current blocker/gap: `ReflectiveMutation` is a deterministic fixed-edit
   fixture (`crates/leaven-gepa/src/proposer.rs:21-47`) but is public and
   production-looking (`crates/leaven-gepa/src/lib.rs:18-34`).
@@ -86,6 +107,25 @@ exactly one category.
   to tests/examples or an explicit fixture module.
 - required proof/tests: product examples cannot import private fixtures; GEPA
   reflection tests use the real reflector contract.
+
+### 1.6 Stale Skeleton Metadata
+
+- ideal contract: package descriptions and crate docs tell current truth. A
+  behavior-bearing crate should not still call itself a skeleton, and a skeleton
+  label alone is not enough to classify every export in the crate as inert.
+- current blocker/gap: `rg` finds skeleton metadata on both behavior-bearing
+  crates and true placeholder crates. `leaven-lm-openai` still has skeleton
+  package metadata (`crates/leaven-lm-openai/Cargo.toml:3`) while its client has
+  real OpenAI request lowering and response parsing
+  (`crates/leaven-lm-openai/src/client.rs:39-160`). By contrast,
+  `leaven-lm-anthropic` exposes only inert client/config names
+  (`crates/leaven-lm-anthropic/src/client.rs:1`,
+  `crates/leaven-lm-anthropic/src/config.rs:1`).
+- correction direction: stale metadata is its own finding class. Clean it when
+  behavior exists; scaffold-gate or remove exports when behavior does not.
+- required proof/tests: the public-maturity gate must report skeleton metadata
+  separately from public inert symbols, and must not allow crate-wide
+  placeholder exemptions.
 
 ## 2. Facade And Default Feature Requirements
 
@@ -112,6 +152,9 @@ exactly one category.
   - a negative or ledger test proving `RunContext`, `RunGraphView`, raw contexts,
     derive macros, placeholder provider/backend types, and fixtures are absent
     from ordinary prelude.
+  - an export-route ledger generated from `crates/leaven/src/lib.rs`,
+    `crates/leaven/src/prelude.rs`, `crates/leaven-std/src/lib.rs`, and
+    feature-gated provider/backend re-exports.
 
 ### 2.2 Default Features
 
@@ -131,7 +174,8 @@ exactly one category.
 - correction direction: remove each default until it passes public maturity, or
   land the missing behavior and tests first.
 - required proof/tests: feature-maturity gate checks every default feature for
-  behavior-bearing public contract tests.
+  behavior-bearing public contract tests and rejects any default dependency on an
+  explicit scaffold feature.
 
 ### 2.3 `leaven-std`
 
@@ -144,6 +188,28 @@ exactly one category.
 - correction direction: curate behavior-bearing names only. Keep future standard
   names out of `leaven-std` until they carry behavior and tests.
 - required proof/tests: `leaven-std` export ledger and public-stub denylist.
+
+### 2.4 Feature-Gated Provider And Backend Exports
+
+- ideal contract: a non-scaffold feature exposes a usable adapter against its
+  owning trait, with constructor/factory, typed errors, and at least one
+  non-network law or mapping test.
+- current implementation: `leaven` exposes provider/backend feature names
+  (`crates/leaven/Cargo.toml:49-55`) and provider re-exports
+  (`crates/leaven/src/lib.rs:68-75`), while several enabled crates expose only
+  public unit structs (`crates/leaven-lm-anthropic/src/client.rs:1`,
+  `crates/leaven-lm-local/src/client.rs:1`,
+  `crates/leaven-workspace-docker/src/factory.rs:1`,
+  `crates/leaven-workspace-e2b/src/factory.rs:1`,
+  `crates/leaven-store-object/src/store.rs:1`,
+  `crates/leaven-store-sqlite/src/store.rs:1`).
+- blocker/gap: a feature name is a public capability promise. Optional does not
+  mean scaffold.
+- correction direction: remove the feature/export until real, or rename into an
+  explicit scaffold feature that cannot be enabled by default and cannot be used
+  as product proof.
+- required proof/tests: every non-scaffold provider/backend feature has a trait
+  implementation compile test and a non-network behavior law.
 
 ## 3. Topology And Crate Graph Requirements
 
@@ -207,6 +273,11 @@ exactly one category.
   test-support, explicit scaffold, or delete/implement.
 - required proof/tests: generated public-unit-struct ledger and CI check.
 
+The public-unit-struct ledger must use exact symbol rows. Whole-crate allowlists
+are not acceptable because mixed crates are common. For example, a
+behavior-bearing population crate can keep `KeepBest` and `ParetoFrontier` while
+still failing `BeamPopulation` or `MapElites` until they carry laws and tests.
+
 ## 4. LM And Cache Composition Requirements
 
 ### 4.1 Provider-Neutral LM Contract
@@ -238,6 +309,9 @@ exactly one category.
 - correction direction: expose role policy in `leaven-run` or a runtime
   composition root. Keep `CachedLm` reachable for advanced users.
 - required proof/tests: role-level cache test plus low-level cache-key law tests.
+  The role-level test must prove at least two independently configured roles
+  such as solver and reflector; one role hitting cache must not imply another
+  role hits or shares policy.
 
 ### 4.3 Provider Exposure
 
@@ -298,6 +372,26 @@ exactly one category.
 - required proof/tests: AIME product proof with mock LM by default and optional
   OpenAI provider swap requiring minimal config, not code changes.
 
+### 5.3 Product-Proof Example Minimum Bar
+
+A `product-proof` example must satisfy all of these:
+
+1. It starts from the ordinary public entry surface, not a crate-internal helper.
+2. It runs train/search cases and reports validation/test according to
+   `leaven-run` split semantics.
+3. It routes solver/program execution and reflector/proposer execution through
+   Leaven-owned traits or role configuration.
+4. It records evidence, graph mutation, budget/cost, events, and result facade
+   truth through Leaven surfaces.
+5. It does not shell out to provider bypasses or import production-looking
+   fixtures.
+6. Optional live-provider mode is a config/env swap over the same Leaven path,
+   not a different implementation path.
+
+`mechanics-smoke` examples may use deterministic fixtures. `proxy-demo` examples
+may exercise external scripts or intentionally bypass a missing Leaven surface.
+Neither category can satisfy a public-maturity or release-readiness claim.
+
 ## 6. Minimum Cross-Cutting Exit Criteria
 
 A future implementation slice cannot claim cross-cutting maturity until all of
@@ -320,5 +414,7 @@ these are true:
 8. Product-proof examples are separated from mechanics/proxy demos and at least
    one product-proof example exercises Leaven-owned run, GEPA, LM/cache, evidence,
    graph, budget, events, and result surfaces.
-9. `just check` passes after the slice, because docs/specs and topology tests are
+9. Stale skeleton metadata is either cleaned for behavior-bearing crates or
+   moved behind explicit scaffold status for true placeholders.
+10. `just check` passes after the slice, because docs/specs and topology tests are
    part of the public contract.
