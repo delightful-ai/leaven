@@ -28,6 +28,9 @@ Evidence:
   (`examples/p8_aime_gepa/src/main.rs:81-94`);
 - placeholders are publicly re-exported from `leaven-gepa`
   (`crates/leaven-gepa/src/lib.rs:10-25`);
+- the umbrella prelude re-exports `leaven_gepa::prelude::*` behind the `gepa`
+  feature, so fixture names become ordinary `leaven::prelude` names too
+  (`crates/leaven/src/prelude.rs:33-34`);
 - render structs are exported but empty (`crates/leaven-render/src/lib.rs:10-15`,
   `crates/leaven-render/src/prompt.rs:1-3`,
   `crates/leaven-render/src/surface.rs:1-3`,
@@ -40,8 +43,8 @@ Proof gate:
   explicit fixture names;
 - no ordinary GEPA example claims real reflection unless a reflector consumes
   selected evidence/trace context;
-- public exports/preludes do not expose empty placeholder capability names as
-  standard GEPA behavior.
+- public exports/preludes, including the umbrella `leaven::prelude`, do not
+  expose empty placeholder capability names as standard GEPA behavior.
 
 Why first: as long as false public proof remains, later work can accidentally
 validate the proxy again.

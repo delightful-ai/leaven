@@ -43,7 +43,8 @@ These invariants apply to every slot.
 - Every non-derivable private decision state participates in checkpoint/restore
   (`docs/specs/gepa_optimizer_surface.md:543-550`).
 - Placeholder names are not public capability names. Scaffolding is named as
-  scaffolding or kept out of ordinary exports.
+  scaffolding or kept out of ordinary exports, including `leaven-gepa` preludes
+  and the umbrella `leaven::prelude` (`crates/leaven/src/prelude.rs:33-34`).
 - Layer 2 contracts name GEPA strategy choices. They may compose lowered engine
   capabilities, but they do not expose mutable graph internals, raw evidence
   stores, or trust/read-scope construction as the customization API.
@@ -119,10 +120,13 @@ Hard-cut names:
 - `WorstEvidencePart` cannot be exported until it receives attributed evidence;
 - empty renderer/materializer structs cannot be presented as standard reflection
   pieces.
+- ordinary preludes must not re-export fixture or placeholder names as if they
+  are standard GEPA capabilities.
 
 Evidence: nomenclature rules in `docs/specs/initial_library.md:531-572`,
 GEPA parent/part naming in `docs/specs/gepa_public_private_surface.md:246-287`,
-and current divergent exports in `crates/leaven-gepa/src/lib.rs:10-25`.
+current divergent exports in `crates/leaven-gepa/src/lib.rs:10-25`, and the
+umbrella prelude forwarding in `crates/leaven/src/prelude.rs:33-34`.
 
 ## Request/Response Details
 

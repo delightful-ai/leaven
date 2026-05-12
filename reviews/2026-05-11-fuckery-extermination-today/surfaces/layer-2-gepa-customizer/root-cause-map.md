@@ -225,7 +225,10 @@ Renderer/materializer names are publicly exported while the structs are empty
 `crates/leaven-render/src/prompt.rs:1-3`,
 `crates/leaven-render/src/surface.rs:1-3`,
 `crates/leaven-render/src/run_graph.rs:1`,
-`crates/leaven-render/src/materializer.rs:1-5`).
+`crates/leaven-render/src/materializer.rs:1-5`). The leak is not confined to
+direct `leaven-gepa` imports: the umbrella prelude re-exports
+`leaven_gepa::prelude::*` when the `gepa` feature is enabled
+(`crates/leaven/src/prelude.rs:33-34`).
 
 Blocker/gap: these names tell a future implementor the concepts already exist.
 Some are acceptable internal or future names, but not public Layer 2 evidence of
@@ -238,8 +241,9 @@ implemented or renamed; placeholders are removed from ordinary public exports or
 kept under explicit scaffold/fixture naming.
 
 Required proof/tests: add an export/stub guard that fails on approved-for-future
-placeholder structs in ordinary preludes unless they carry a real behavior test
-or live under a clearly named fixture/scaffold module.
+placeholder structs in ordinary `leaven-gepa` and umbrella `leaven::prelude`
+paths unless they carry a real behavior test or live under a clearly named
+fixture/scaffold module.
 
 ## RC-L2-007: Private State Exists For Some Slots But Not The Slot Set
 

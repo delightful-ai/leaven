@@ -18,7 +18,10 @@ casewise scalar Pareto state, and checkpoint hooks for a reduced slot set. It
 does not yet have the Layer 2 GEPA customizer surface. Reflection is a fixed
 edit fixture, feedback/trace is dropped before reflection, acceptance and
 population are scalar-only, builder slots are incomplete, and several public
-names imply behavior that does not exist.
+names imply behavior that does not exist. Some of those names also reach the
+umbrella `leaven::prelude` when the `gepa` feature is enabled, so they can look
+like standard product imports rather than local scaffolding
+(`crates/leaven/src/prelude.rs:33-34`).
 
 The correction is not to make GEPA the whole library or to put GEPA hooks into
 the engine. The correction is to make `leaven-gepa` consume the shared substrate
@@ -108,8 +111,10 @@ These are false or premature public names until behavior exists:
 `Gate` for the public admission slot, fixed-edit `ReflectiveMutation`,
 `WorstEvidencePart`, `ParetoFrequencyWeighted` while deterministic best-only,
 empty renderer/materializer structs in ordinary proof paths, and public
-`GepaConfig`/`MergeScheduler` placeholders. The hard-cut fix is to rename,
-implement, or quarantine them under explicit fixture/scaffold modules.
+`GepaConfig`/`MergeScheduler` placeholders. They must not be reachable from
+ordinary GEPA preludes, including `leaven::prelude`, unless they are real
+capabilities. The hard-cut fix is to rename, implement, or quarantine them under
+explicit fixture/scaffold modules.
 
 ## Required Interpretation
 
