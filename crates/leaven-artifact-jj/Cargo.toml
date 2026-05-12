@@ -15,4 +15,8 @@ leaven-kernel = { workspace = true }
 leaven-core = { workspace = true }
 leaven-surface = { workspace = true }
 leaven-artifacts = { workspace = true }
+serde = { workspace = true }
 thiserror = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

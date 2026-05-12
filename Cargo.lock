@@ -2445,6 +2445,8 @@ dependencies = [
  "leaven-core",
  "leaven-kernel",
  "leaven-surface",
+ "serde",
+ "serde_json",
  "thiserror 2.0.18",
 ]
 
