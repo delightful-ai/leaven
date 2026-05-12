@@ -5,6 +5,7 @@ mod case_evaluator;
 mod case_record;
 mod error;
 mod evaluator;
+mod goal_handoff;
 mod inspection;
 mod parser;
 mod preflight;
@@ -27,6 +28,11 @@ pub use case_record::{
 };
 pub use error::{AgenticAdapterError, AgenticParseError, AgenticRepairError};
 pub use evaluator::{AgenticEvaluator, AgenticEvaluatorConfig};
+pub use goal_handoff::{
+    GoalExecutionRequest, GoalExecutionSignature, GoalHandoff, GoalHandoffDecision, GoalLoop,
+    GoalSpecCheck, GoalSpecCheckRequest, GoalSpecCheckSignature, GoalSpecStatus, GoalStagePlan,
+    GoalStagePlanRequest, GoalStagePlanSignature,
+};
 pub use inspection::{
     AgenticCostInspection, AgenticInspectionWarning, AgenticRunInspection, ProposalRepairInspection,
 };
@@ -57,10 +63,13 @@ pub mod prelude {
         AgenticRunInspection, CASE_RUN_RECORD_METADATA_KEY, CaseCheckpointPolicy, CaseFiles,
         CaseInput, CaseMessage, CasePartitionId, CasePartitions, CaseSuite, CaseTarget,
         EvaluationInputBuilder, EvidenceParser, FailOnError, FailedAgentCaseRun, FiniteRatio,
-        PROPOSAL_REPAIR_ATTEMPTS_METADATA_KEY, PreflightFinding, PreflightSeverity,
-        PresenterDryRun, ProposalParser, ProposalRepairAttemptOutcome, ProposalRepairAttemptRecord,
-        ProposalRepairFeedback, ProposalRepairInspection, ProposalRepairPolicy,
-        ProposalRepairPromptBuilder, RepairingAgenticProposer, RepairingAgenticProposerConfig,
-        ScoredAgentCaseRun, ScorerDryRun, SetupScript, ToolApprovalPolicy, WorkspaceRequirement,
+        GoalExecutionRequest, GoalExecutionSignature, GoalHandoff, GoalHandoffDecision, GoalLoop,
+        GoalSpecCheck, GoalSpecCheckRequest, GoalSpecCheckSignature, GoalSpecStatus, GoalStagePlan,
+        GoalStagePlanRequest, GoalStagePlanSignature, PROPOSAL_REPAIR_ATTEMPTS_METADATA_KEY,
+        PreflightFinding, PreflightSeverity, PresenterDryRun, ProposalParser,
+        ProposalRepairAttemptOutcome, ProposalRepairAttemptRecord, ProposalRepairFeedback,
+        ProposalRepairInspection, ProposalRepairPolicy, ProposalRepairPromptBuilder,
+        RepairingAgenticProposer, RepairingAgenticProposerConfig, ScoredAgentCaseRun, ScorerDryRun,
+        SetupScript, ToolApprovalPolicy, WorkspaceRequirement,
     };
 }

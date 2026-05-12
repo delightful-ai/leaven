@@ -57,6 +57,7 @@ pub struct CodexCliConfig {
     pub codex_bin: String,
     pub model: String,
     pub reasoning_effort: CodexCliReasoningEffort,
+    pub goal_mode: CodexCliGoalMode,
     pub approval: CodexCliApproval,
     pub last_message_path: WorkspacePath,
     pub timeout: Option<Duration>,
@@ -89,6 +90,16 @@ codex exec
 The milestone live path may explicitly choose
 `--dangerously-bypass-approvals-and-sandbox` when the workspace backend is
 already the sandbox boundary.
+
+Goal-mode execution is an explicit feature opt-in:
+
+```text
+CodexCliConfig { goal_mode: CodexCliGoalMode::Enabled, .. }
+  -> codex exec --enable goals ...
+```
+
+The default remains disabled. Goal planning, spec checking, jj snapshot policy,
+and evaluation interpretation stay above this provider leaf.
 
 ## 3. Skill Layout
 

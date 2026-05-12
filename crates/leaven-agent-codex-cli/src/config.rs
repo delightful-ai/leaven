@@ -15,6 +15,7 @@ pub struct CodexCliConfig {
     pub codex_bin: String,
     pub model: String,
     pub reasoning_effort: CodexCliReasoningEffort,
+    pub goal_mode: CodexCliGoalMode,
     pub approval: CodexCliApproval,
     pub last_message_path: WorkspacePath,
     pub timeout: Option<Duration>,
@@ -30,6 +31,7 @@ impl CodexCliConfig {
             codex_bin: codex_bin.into(),
             model: "gpt-5.4-mini".to_owned(),
             reasoning_effort: CodexCliReasoningEffort::Low,
+            goal_mode: CodexCliGoalMode::Disabled,
             approval: CodexCliApproval::Sandbox(CodexCliSandbox::WorkspaceWrite),
             last_message_path: WorkspacePath::new(".leaven/codex-last-message.txt")
                 .expect("default Codex last-message path is valid"),
@@ -93,6 +95,7 @@ impl CodexCliConfig {
             CommandTemplateArg::literal("--output-last-message"),
             CommandTemplateArg::literal(self.last_message_path.as_str()),
         ];
+        self.goal_mode.push_args(&mut args);
         self.approval.push_args(&mut args);
         args.push(CommandTemplateArg::literal("-"));
         args
@@ -123,6 +126,24 @@ impl CodexCliReasoningEffort {
             Self::Medium => "medium",
             Self::High => "high",
             Self::XHigh => "xhigh",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CodexCliGoalMode {
+    Disabled,
+    Enabled,
+}
+
+impl CodexCliGoalMode {
+    fn push_args(self, args: &mut Vec<CommandTemplateArg>) {
+        match self {
+            Self::Disabled => {}
+            Self::Enabled => {
+                args.push(CommandTemplateArg::literal("--enable"));
+                args.push(CommandTemplateArg::literal("goals"));
+            }
         }
     }
 }

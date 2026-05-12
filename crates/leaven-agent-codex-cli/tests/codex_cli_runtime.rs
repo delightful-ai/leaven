@@ -3,7 +3,8 @@ use leaven_agent::{
     TranscriptEvent, TranscriptRole,
 };
 use leaven_agent_codex_cli::{
-    CodexCliApproval, CodexCliConfig, CodexCliReasoningEffort, CodexCliRuntime, CodexCliSandbox,
+    CodexCliApproval, CodexCliConfig, CodexCliGoalMode, CodexCliReasoningEffort, CodexCliRuntime,
+    CodexCliSandbox,
 };
 use leaven_agent_command::{CommandPromptMode, CommandTemplateArg};
 use leaven_kernel::{AgentSessionId, BudgetSnapshot};
@@ -53,6 +54,19 @@ fn codex_cli_config_leaves_repo_skills_native() {
 }
 
 #[test]
+fn codex_cli_goal_mode_is_explicit_feature_flag() {
+    let default_args = CodexCliConfig::new("codex").command_config().run.args;
+    assert!(!has_arg_pair(&default_args, "--enable", "goals"));
+
+    let mut config = CodexCliConfig::new("codex");
+    config.goal_mode = CodexCliGoalMode::Enabled;
+    let enabled_args = config.command_config().run.args;
+
+    assert!(has_arg_pair(&enabled_args, "--enable", "goals"));
+    assert!(enabled_args.ends_with(&[CommandTemplateArg::literal("-")]));
+}
+
+#[test]
 fn codex_cli_config_covers_wire_variants_env_and_parser_construction() {
     assert_eq!(CodexCliReasoningEffort::Minimal.as_wire(), "minimal");
     assert_eq!(CodexCliReasoningEffort::Low.as_wire(), "low");
@@ -98,6 +112,15 @@ fn codex_cli_config_covers_wire_variants_env_and_parser_construction() {
         parser.last_message_path,
         WorkspacePath::new(".leaven/codex-last-message.txt").unwrap()
     );
+}
+
+fn has_arg_pair(args: &[CommandTemplateArg], left: &str, right: &str) -> bool {
+    args.windows(2).any(|pair| {
+        pair == [
+            CommandTemplateArg::literal(left),
+            CommandTemplateArg::literal(right),
+        ]
+    })
 }
 
 #[test]
