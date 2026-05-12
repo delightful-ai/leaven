@@ -303,19 +303,22 @@ Required proof/tests:
 
 Ideal contract:
 
-The cache key must include evaluator fingerprint, resolved evaluation set,
-request shape, and artifact cache identities:
+The cache key must include evaluator fingerprint, a request fingerprint/resolved
+evaluation-set identity, request shape, and artifact cache identities:
+`docs/specs/initial_library.md:3124-3135`,
 `docs/specs/gepa_optimizer_surface.md:535-541`. Core evaluation docs say
 independent, pairwise, and listwise requests are distinct and must not be
 silently coerced: `crates/leaven-core/src/evaluation.rs:170-184`. Pair order is
-semantically meaningful when ordered: `crates/leaven-core/src/evaluation.rs:319-332`.
-Reports should point at graph truth, not duplicate or invent it:
+semantically meaningful when ordered, and unordered symmetry is an evaluator
+declaration: `crates/leaven-core/src/evaluation.rs:319-332`. Reports should
+point at graph truth, not duplicate or invent it:
 `docs/specs/initial_library.md:1984-1996`.
 
 Current implementation:
 
 `EvaluationCacheKey` includes evaluator fingerprint, policy, case-set version,
-case IDs, and candidate cache identities: `crates/leaven-engine/src/cache.rs:46-59`.
+case IDs, and request-ordered candidate cache identities:
+`crates/leaven-engine/src/cache.rs:46-59`.
 `evaluation_cache_key` builds keys from those fields only:
 `crates/leaven-engine/src/context/run_context.rs:781-794`. It reduces
 independent/listwise requests to a candidate list and pairwise requests to
@@ -326,10 +329,14 @@ without recording new assessments or graph-visible reuse lineage:
 
 Blocker/gap:
 
-The key omits request kind, granularity, purpose, pair/list semantics, and
-assessment shape. Even when the key is accidentally distinct by candidate order,
-the cache-hit report can associate request N with assessment IDs recorded for
-request M.
+The key omits request fingerprint/resolved-set identity, request kind,
+granularity, purpose, explicit pair-order/symmetry policy, listwise grouping
+semantics, and assessment shape. Candidate order can make some ordered pair
+reversals distinct, and the current registry test covers that one case:
+`crates/leaven-engine/tests/evaluator_registry.rs:97-135`. That is not the same
+as a complete cache law. Even when the key is distinct enough for a specific
+candidate order, the cache-hit report can associate request N with assessment IDs
+recorded for request M.
 
 User impact:
 
@@ -340,10 +347,14 @@ assessment records point elsewhere.
 
 Correction direction:
 
-Expand `EvaluationCacheKey` to include full resolved request semantics. On hit,
-make reuse graph-visible: either record derived/alias assessment records for the
-new request or return an explicit "request N reused request M assessments" report
-and event that downstream code cannot mistake for fresh assessment records.
+Expand `EvaluationCacheKey` to include full resolved request semantics: request
+fingerprint or resolved-set identity, request kind, granularity, purpose if
+evaluator-visible, pair order or unordered symmetry, listwise grouping semantics,
+assessment shape, evaluator fingerprint, case-set version, case identities, and
+candidate cache identities. On hit, make reuse graph-visible: either record
+derived/alias assessment records for the new request or return an explicit
+"request N reused request M assessments" report and event that downstream code
+cannot mistake for fresh assessment records.
 
 Required proof/tests:
 
@@ -351,8 +362,8 @@ Required proof/tests:
   cache entries.
 - Aggregate vs per-case vs both cannot share entries unless a named evaluator law
   proves safe projection.
-- Ordered pair `(A, B)` and `(B, A)` remain distinct; unordered symmetry is
-  explicit.
+- Ordered pair `(A, B)` and `(B, A)` remain distinct by named request semantics,
+  not only by incidental candidate vector order; unordered symmetry is explicit.
 - Cache hits preserve graph/request truth and are visible in reports/events.
 
 ## RC-L3-006: Evidence Is Recorded, But Reflection Cannot Consume It Honestly

@@ -119,17 +119,21 @@ budget, event stream, and read scope all agree on what happened.
 
 Ideal contract:
 
-Cache keys use evaluator fingerprint, resolved set, request shape, and artifact
-cache identities: `docs/specs/gepa_optimizer_surface.md:535-541`. Requests of
-different shape are not equivalent: `crates/leaven-core/src/evaluation.rs:170-184`.
-Reports point at graph truth: `docs/specs/initial_library.md:1984-1996`.
+Cache keys use evaluator fingerprint, request fingerprint/resolved-set identity,
+request shape, and artifact cache identities:
+`docs/specs/initial_library.md:3124-3135`,
+`docs/specs/gepa_optimizer_surface.md:535-541`. Requests of different shape are
+not equivalent: `crates/leaven-core/src/evaluation.rs:170-184`. Reports point at
+graph truth: `docs/specs/initial_library.md:1984-1996`.
 
 Current implementation:
 
-`EvaluationCacheKey` omits request kind, granularity, purpose, pair/list
-semantics, and assessment shape: `crates/leaven-engine/src/cache.rs:46-59`.
-`evaluation_cache_key` constructs only evaluator, policy, case-set version,
-case IDs, and candidate cache identities:
+`EvaluationCacheKey` omits request fingerprint/resolved-set identity, request
+kind, granularity, purpose, explicit pair-order/symmetry policy, listwise
+grouping semantics, and assessment shape:
+`crates/leaven-engine/src/cache.rs:46-59`. `evaluation_cache_key` constructs only
+evaluator, policy, case-set version, case IDs, and request-ordered candidate
+cache identities:
 `crates/leaven-engine/src/context/run_context.rs:781-824`. On hit, the report
 returns cached assessment IDs for a new request without graph-visible reuse
 linkage: `crates/leaven-engine/src/context/run_context.rs:537-568`.
@@ -141,9 +145,10 @@ request N appear to own assessment IDs recorded for request M.
 
 Correction direction:
 
-- Expand cache key to include resolved request kind, granularity, purpose,
-  pair/list order or symmetry, assessment shape, evaluator fingerprint, candidate
-  identities, case identities, and case-set version.
+- Expand cache key to include request fingerprint or resolved-set identity,
+  resolved request kind, granularity, purpose, pair order or unordered symmetry,
+  listwise grouping semantics, assessment shape, evaluator fingerprint,
+  candidate identities, case identities, and case-set version.
 - Add graph-visible cache-hit semantics:
   - either alias/derived assessment records for the new request;
   - or explicit reused-assessment linkage in report and event types.
@@ -154,7 +159,8 @@ Required proof/tests:
 
 - Independent/listwise/pairwise requests over the same ids do not collide.
 - Aggregate/per-case/both do not collide without an explicit projection law.
-- Ordered pair reversals do not collide; unordered symmetry is explicit.
+- Ordered pair reversals remain distinct by named request semantics, not only by
+  incidental candidate vector order; unordered symmetry is explicit.
 - Cache hit reports cannot be mistaken for fresh request-owned assessment
   records.
 

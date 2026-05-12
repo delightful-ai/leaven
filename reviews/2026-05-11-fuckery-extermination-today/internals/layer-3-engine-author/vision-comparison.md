@@ -330,9 +330,13 @@ ID-only: `crates/leaven-engine/src/reports.rs:47-54`.
 
 Gap:
 
-`EvaluationCacheKey` omits request semantics:
-`crates/leaven-engine/src/cache.rs:46-59`. Cache hits return old assessment IDs
-for new requests without graph-visible reuse lineage:
+`EvaluationCacheKey` omits request fingerprint/resolved-set identity, request
+kind, granularity, purpose, explicit pair-order/symmetry policy, listwise
+grouping semantics, and assessment shape:
+`crates/leaven-engine/src/cache.rs:46-59`. It preserves candidate identity order,
+which is enough for the current ordered-pair reversal test, but not for the full
+cache law: `crates/leaven-engine/tests/evaluator_registry.rs:97-135`. Cache hits
+return old assessment IDs for new requests without graph-visible reuse lineage:
 `crates/leaven-engine/src/context/run_context.rs:537-568`.
 
 Correction:
@@ -342,8 +346,9 @@ truth, events, and reports.
 
 Required proof:
 
-No semantically distinct request can share a cache entry accidentally, and every
-cache hit is visible as reuse rather than fresh assessment ownership.
+No semantically distinct request can share a cache entry accidentally, ordered
+and unordered pair semantics are named in the key, and every cache hit is visible
+as reuse rather than fresh assessment ownership.
 
 ### GEPA Is One Optimizer, Not The Whole Library
 

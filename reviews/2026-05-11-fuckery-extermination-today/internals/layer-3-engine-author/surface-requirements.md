@@ -500,19 +500,25 @@ Evidence:
   `crates/leaven-engine/src/context/run_context.rs:781-824`.
 - Current cache-hit report:
   `crates/leaven-engine/src/context/run_context.rs:537-568`.
+- Spec cache-key sketch includes request fingerprint/resolved-set identity and
+  preserves pairwise order unless unordered symmetry is declared:
+  `docs/specs/initial_library.md:3124-3135`.
 
 Rules:
 
-- Key fields must include evaluator fingerprint, cache policy, resolved case-set
-  version, resolved case IDs, request kind, candidate identities, granularity,
-  purpose if evaluator-visible, pair/list order semantics, and assessment shape.
+- Key fields must include evaluator fingerprint, cache policy, request
+  fingerprint or resolved-set identity, resolved case-set version, resolved case
+  IDs, request kind, candidate identities, granularity, purpose if
+  evaluator-visible, pair order or unordered symmetry, listwise grouping
+  semantics, and assessment shape.
 - Missing cache identity bypasses deterministic cache.
 - Cache hit events/reports must show reuse lineage or create graph-visible
   request-local assessment aliases.
 
 Proof/tests:
 
-- Collision tests for shape, granularity, purpose, and order.
+- Collision tests for shape, granularity, purpose, resolved-set identity, and
+  order/symmetry.
 - Missing candidate cache identity bypass.
 - Cache hit graph lineage test.
 
