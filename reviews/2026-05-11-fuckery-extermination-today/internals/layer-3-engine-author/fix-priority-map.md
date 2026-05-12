@@ -232,12 +232,20 @@ but incomplete relative to the spec:
 `crates/leaven-eval/src/dataset.rs:29-115`,
 `crates/leaven-eval/src/split.rs:59-150`,
 `crates/leaven-eval/src/use_policy.rs:85-123`.
+`leaven-run` already fills the missing lowering locally by constructing
+`Dataset`, `DatasetSplits`, engine `CaseSet`, trust policy, final evaluation
+requests, and split reports in the builder:
+`crates/leaven-run/src/builder.rs:214-240`,
+`crates/leaven-run/src/builder.rs:321-355`,
+`crates/leaven-run/src/builder.rs:580-605`.
 
 Blocker/gap:
 
 There is no implemented canonical home for evaluation plans, request templates,
-suites, and the complete report contract. That invites local lowerings in GEPA
-or product builders.
+suites, and the complete report contract. The current product builder is already
+becoming that hidden home. That invites local lowerings in GEPA or future product
+builders and makes report semantics depend on unresolved request syntax instead
+of resolved split/eval truth.
 
 Correction direction:
 
@@ -255,6 +263,8 @@ Required proof/tests:
   workspace, agentic, LM, or provider crates.
 - Product lowering smoke: eval suite can lower to engine `CaseSet`,
   `EvaluationRequest`, and trust policy without reverse dependencies.
+- Report lowering smoke: split reports are derived from resolved eval/split
+  membership, not only from `EvaluationSet::Partition` in the original request.
 
 Exit gate:
 
@@ -363,7 +373,64 @@ Exit gate:
 Layer 3 code can decide retry/skip/abort/report from typed errors and budget
 state, not debug strings.
 
-## P7: Replace Proxy Proofs With Optimizer-Author Contract Proofs
+## P7: Prove Evidence, Preference, And Population Through Graph IDs
+
+- priority: high
+- owns: standard evidence, preference relation, population observation
+
+Ideal contract:
+
+Evidence is measurement, preference interprets evidence, and population/frontier
+state is optimizer-owned strategy state:
+`docs/specs/guiding_principles.md:114-125`,
+`docs/specs/initial_library.md:70-71`. The score-normalization contract preserves
+score axes, feedback, attachments, metadata, and diagnostics until explicit
+projection: `docs/specs/eval_lowering_detail.md:315-343`.
+
+Current implementation:
+
+The engine has graph-backed `PreferenceRelation<P>` and `Population<P>` traits:
+`crates/leaven-engine/src/stage/preference.rs:8-17`,
+`crates/leaven-engine/src/stage/population.rs:8-38`. `leaven-evidence` has real
+casewise and pairwise starts:
+`crates/leaven-evidence/src/casewise.rs:36-78`,
+`crates/leaven-evidence/src/pairwise.rs:17-91`, but also root-exports empty
+placeholder vocabulary: `crates/leaven-evidence/src/lib.rs:36-77`. The current
+high-level run path fixes evidence to scalar casewise feedback:
+`crates/leaven-run/src/builder.rs:43-51`,
+`crates/leaven-run/src/evidence.rs:23-32`,
+`crates/leaven-run/src/evaluator.rs:65-128`.
+
+Blocker/gap:
+
+There is no minimum graph-backed proof that scalar and pairwise evidence drive
+preference/population decisions through assessment IDs. Concrete helper crates
+can still update local population structs directly, which is useful scaffolding
+but not the Layer 3 contract.
+
+Correction direction:
+
+- Keep public `.score(...)` as a Layer 1 facade, not internal optimizer truth.
+- Implement or remove production-looking placeholder evidence exports.
+- Add graph-backed scalar and pairwise preference/population contract tests.
+- Make population implementations that claim engine compatibility observe
+  `AssessmentId` plus `RunGraphView`, not just direct evidence payloads.
+
+Required proof/tests:
+
+- Scalar casewise evidence updates a graph-backed keep-best/preference path from
+  assessment IDs.
+- Pairwise judgment evidence updates a graph-backed tournament/preference path
+  from assessment IDs.
+- Rich score facade lowering preserves comparable axes, feedback, attachments,
+  metadata, and evidence refs before report projection.
+
+Exit gate:
+
+GEPA and non-GEPA optimizers can rely on the same standard evidence/preference
+and population substrate instead of binding to scalar helper shortcuts.
+
+## P8: Replace Proxy Proofs With Optimizer-Author Contract Proofs
 
 - priority: high
 - owns: test suite, examples, future GEPA trust gate
@@ -395,7 +462,7 @@ Correction direction:
   - pairwise tournament;
   - reflective evidence-driven proposer;
   - materializing agentic-style evaluator/proposer;
-  - final GEPA after P0-P6.
+  - final GEPA after P0-P7.
 - Tests should fail if they bypass finalizers, hidden trust, or graph-visible
   cache semantics.
 

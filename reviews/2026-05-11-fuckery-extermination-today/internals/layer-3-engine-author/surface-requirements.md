@@ -358,6 +358,11 @@ Evidence:
   `crates/leaven-core/src/evaluation.rs:226-405`.
 - Current `leaven-eval` module map is partial:
   `crates/leaven-eval/src/lib.rs:7-19`.
+- Current `leaven-run` builder-local lowering constructs datasets, splits,
+  engine case sets, trust policy, and split reports:
+  `crates/leaven-run/src/builder.rs:214-240`,
+  `crates/leaven-run/src/builder.rs:321-355`,
+  `crates/leaven-run/src/builder.rs:580-605`.
 
 Rules:
 
@@ -369,6 +374,13 @@ Rules:
 - Single-task/no-dataset evaluation must be explicit, not faked as a hidden
   singleton dataset unless the suite chooses that law.
 - Environments are evaluator/domain concerns, not dataset concerns.
+- Product builders may own ergonomic verbs, but not hidden split/report laws.
+  Builder code must lower once into `leaven-eval` values and then into engine
+  values instead of reimplementing split names, final-test rules, and report
+  inference locally.
+- Split reports must derive from resolved eval/split membership and graph IDs;
+  they must not depend only on the unresolved request being syntactically
+  `EvaluationSet::Partition`.
 
 Proof/tests:
 
@@ -376,6 +388,56 @@ Proof/tests:
 - Dataset/split/request-template/suite/report contract tests.
 - Product lowering smoke that constructs engine requests and trust policy from
   eval suite data.
+- Product report smoke for partition, explicit-case, dynamic, and final-test
+  requests proving reports cite the same resolved split/eval truth.
+
+## Public Score Facade Contract
+
+Required:
+
+- `.score(...)` and `Score` are Layer 1 conveniences, not Layer 3 optimizer
+  truth.
+- Scalar scores lower into a rich score/evidence shape without making scalar
+  averages the only report or population model.
+- Typed evaluators remain the power-user route for pairwise, listwise, batch,
+  agentic, or domain-specific evaluation.
+
+Evidence:
+
+- Score normalization must preserve comparable axes, feedback refs, attachments,
+  metadata, and diagnostics before report projection:
+  `docs/specs/eval_lowering_detail.md:315-343`.
+- Public GEPA score sketch includes primary comparable score, metrics, feedback,
+  attachments, and metadata:
+  `docs/specs/gepa_public_private_surface.md:1126-1155`.
+- Current run problem fixes evidence to casewise scored feedback:
+  `crates/leaven-run/src/builder.rs:43-51`.
+- Current `Score` is scalar value, feedback string, and structured text pairs:
+  `crates/leaven-run/src/evidence.rs:23-32`.
+- Current `ScoreContext` is public fields over artifact, case, and runner
+  output: `crates/leaven-run/src/evidence.rs:46-54`.
+- Current `ScoringEvaluator` supports only per-case independent requests and
+  lowers to scalar feedback evidence:
+  `crates/leaven-run/src/evaluator.rs:65-128`.
+
+Rules:
+
+- `Score` may expose a primary comparable value, but metric axes, directions,
+  feedback, attachments, metadata, and typed scoring errors must survive lowering
+  until a report projection explicitly selects a summary.
+- Runtime paths are not durable report truth; attachments become evidence or
+  artifact refs before reports cite them.
+- Optimizers rank/admit/update population state from declared comparable axes or
+  explicit preference relations, not from metadata or implicit averages.
+- Pairwise/listwise/batch semantics must use typed evaluators; `.score(...)`
+  must not fake them as scalar independent scores.
+
+Proof/tests:
+
+- Scalar score closure still lowers through the rich path.
+- Rich score with feedback, structured data, metadata, and staged attachment
+  refs survives into graph evidence/report output.
+- Pairwise/listwise evaluator smoke does not depend on `.score(...)`.
 
 ## Trust Contract
 
@@ -399,6 +461,8 @@ Evidence:
   `crates/leaven-engine/src/trust.rs:119-182`.
 - Current explicit case resolution:
   `crates/leaven-engine/src/case_set.rs:64-70`.
+- Current product builder hides validation/test from proposers only:
+  `crates/leaven-run/src/builder.rs:233-240`.
 
 Rules:
 
@@ -406,6 +470,8 @@ Rules:
 - `EvaluationPurpose` and `SplitUsePolicy` participate in authorization.
 - `EvidenceVisibility` must apply to evidence loading/rendering/materialization,
   not only graph record visibility.
+- Product lowering must hide validation/test from optimizer/proposer search by
+  default and allow final-test only through the explicit final-report trust mode.
 
 Proof/tests:
 
@@ -496,6 +562,9 @@ Required:
 - Standard evidence crates export only real production vocabulary.
 - Reflection/proposal can consume scoped visible evidence by one explicit
   contract.
+- Preference and population decisions that claim engine compatibility consume
+  graph assessment IDs through `RunGraphView`, not direct local evidence payloads
+  only.
 
 Evidence:
 
@@ -509,6 +578,9 @@ Evidence:
   `crates/leaven-evidence/src/casewise.rs:36-78`,
   `crates/leaven-evidence/src/pairwise.rs:17-91`,
   `crates/leaven-evidence/src/lib.rs:1-77`.
+- Engine preference/population traits are graph-backed:
+  `crates/leaven-engine/src/stage/preference.rs:8-17`,
+  `crates/leaven-engine/src/stage/population.rs:8-38`.
 
 Rules:
 
@@ -518,6 +590,10 @@ Rules:
   vocabulary.
 - `InfoRef::Assessment` records evidence read by a proposer; it does not make
   that assessment causal.
+- Standard population/preference implementations must state whether they are
+  scalar, pairwise, listwise, multi-axis, fitted, stochastic, partial, or total.
+- Direct helper methods that accept evidence payloads are scaffolding unless the
+  same behavior is proven through `AssessmentId` plus `RunGraphView`.
 
 Proof/tests:
 
@@ -525,6 +601,8 @@ Proof/tests:
 - Pairwise evidence and scalar/casewise evidence both drive separate preference
   or population tests.
 - Placeholder export ledger removed or types implemented with laws/tests.
+- At least one scalar and one pairwise population/preference path observe graph
+  assessment IDs and produce strategy events or preferences.
 
 ## Error Contract
 
@@ -572,9 +650,11 @@ Required proof gates:
    without engine dependency.
 5. Evidence/preference/population laws: scalar and pairwise paths through graph
    assessment IDs.
-6. Optimizer expressibility: scalar keep-best, pairwise tournament, evidence-led
+6. Score facade laws: scalar score remains ergonomic while rich score metadata,
+   feedback, axes, attachments, and refs survive lowering.
+7. Optimizer expressibility: scalar keep-best, pairwise tournament, evidence-led
    reflective proposer, then GEPA.
-7. Visibility tests: raw contexts are not public construction/run paths.
+8. Visibility tests: raw contexts are not public construction/run paths.
 
 Evidence:
 

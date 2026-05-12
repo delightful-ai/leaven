@@ -18,7 +18,9 @@ Optimizer authors can still choose public APIs that bypass finalization; eval
 lowering is not complete enough to stop local split/report semantics; trust is
 expression-based instead of resolved-membership based; cache hits can break graph
 truth; and evidence exists in the graph/store but is not honestly consumable by
-reflective proposers.
+reflective proposers. The high-level score facade also currently collapses too
+much public scoring into scalar casewise evidence, which can mislead future
+engine/eval work into treating one ergonomic path as the optimizer substrate.
 
 ## Original Layer 3 Vision
 
@@ -120,6 +122,11 @@ Current reality:
 `crates/leaven-eval/src/dataset.rs:29-115`,
 `crates/leaven-eval/src/split.rs:59-150`,
 `crates/leaven-eval/src/use_policy.rs:85-123`.
+`leaven-run` currently constructs datasets, splits, engine case sets, trust
+policy, and split reports locally:
+`crates/leaven-run/src/builder.rs:214-240`,
+`crates/leaven-run/src/builder.rs:321-355`,
+`crates/leaven-run/src/builder.rs:580-605`.
 
 Gap:
 
@@ -128,7 +135,9 @@ and `suite` are missing from the current module map:
 `docs/specs/eval_lowering_detail.md:101-145`,
 `crates/leaven-eval/src/lib.rs:7-19`. Without those modules, there is no
 canonical implementation home for evaluation plans, request templates, suites,
-and complete report schemas.
+and complete report schemas. Builder-local lowering is already becoming the
+hidden product law for split names, trust, final reports, and unresolved
+request-shape-based report inference.
 
 Correction:
 
@@ -139,7 +148,9 @@ hide split/report laws in local code.
 Required proof:
 
 An eval suite can lower to engine `CaseSet`, `EvaluationRequest`, and
-`TrustPolicy` values while `leaven-eval` keeps its dependency boundary clean.
+`TrustPolicy` values while `leaven-eval` keeps its dependency boundary clean,
+and split reports derive from resolved split/eval truth rather than only from
+the syntactic `EvaluationSet::Partition` form.
 
 ### Evidence Is Shape-Neutral And Separate From Preference
 
@@ -180,6 +191,50 @@ Required proof:
 
 At least one scalar casewise path and one pairwise/tournament path update
 optimizer-owned population/preference state through graph assessment IDs.
+
+### Public Score Is A Facade, Not Engine Truth
+
+Vision:
+
+Ordinary users should be able to pass a scoring function, but score
+normalization must preserve comparable axes, natural-language feedback,
+attachments, metadata, and diagnostics until explicit projection:
+`docs/specs/eval_lowering_detail.md:315-343`,
+`docs/specs/gepa_public_private_surface.md:1126-1155`. Typed evaluators remain
+the power-user path when the task is pairwise, listwise, batch-shaped, or
+domain-specific: `docs/specs/gepa_public_private_surface.md:924-933`.
+
+Current reality:
+
+`RunProblem` fixes `P::Evidence` to `CasewiseEvidence<ScoredFeedbackEvidence>`:
+`crates/leaven-run/src/builder.rs:43-51`. `Score` is only `value: f64`,
+`feedback: String`, and structured string pairs:
+`crates/leaven-run/src/evidence.rs:23-32`. `ScoreContext` is public fields over
+artifact, case, and output:
+`crates/leaven-run/src/evidence.rs:46-54`. `ScoringEvaluator` requires per-case
+independent requests and lowers every result into scalar feedback evidence:
+`crates/leaven-run/src/evaluator.rs:65-128`.
+
+Gap:
+
+The public score path is useful scaffolding, but it is currently narrower than
+the original score/reward contract and narrower than the Layer 3 evidence
+substrate. If future engine/eval work treats this as internal truth, pairwise
+tournaments, multi-axis metrics, attachment-heavy agent traces, and
+feedback-only diagnostics will be forced into scalar averages.
+
+Correction:
+
+Keep `.score(...)` as a Layer 1 convenience that lowers into richer evidence and
+report data. Layer 3 APIs must continue to center `Assessment<P>`, opaque
+`P::Evidence`, `PreferenceRelation<P>`, and `Population<P>`, not `Score`.
+
+Required proof:
+
+A scalar `.score(...)` smoke remains short, but a rich score with feedback,
+metric axes, metadata, and attachments lowers without losing durable references;
+pairwise/listwise evaluators bypass `.score(...)` and still fit naturally
+through the same engine graph/evidence/report contracts.
 
 ### Stage Neutrality Includes Agentic And Costful Stages
 
@@ -320,7 +375,7 @@ the optimizer-author substrate.
 
 Correction:
 
-Gate trusted GEPA restoration on P0-P7 in `fix-priority-map.md`.
+Gate trusted GEPA restoration on P0-P8 in `fix-priority-map.md`.
 
 Required proof:
 

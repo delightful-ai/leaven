@@ -187,12 +187,23 @@ Dataset, splits, and split-use have real starts:
 surface means evaluation plans, request templates, suites, and adapter traits are
 not yet an implementation contract.
 
+`leaven-run` is already filling part of that missing lowered layer locally:
+`.run()` constructs `Dataset`, `DatasetSplits`, engine `CaseSet`, `TrustPolicy`,
+and final report inputs in one builder path:
+`crates/leaven-run/src/builder.rs:214-240`,
+`crates/leaven-run/src/builder.rs:321-355`. Report split assignment is inferred
+from the unresolved request expression being exactly `EvaluationSet::Partition`;
+other resolved-set shapes are ignored for split reports:
+`crates/leaven-run/src/builder.rs:580-605`.
+
 Blocker/gap:
 
 The lowered eval layer is not yet complete enough to be the one place future
 implementors put train/validation/test, split-use, final-test, report, and
-request-template truth. If a GEPA or product-builder implementor proceeds now,
-they will likely encode split semantics locally.
+request-template truth. The current product builder already encodes split names,
+split construction, trust lowering, and report split inference locally. If a GEPA
+or product-builder implementor proceeds now, they will likely copy those
+builder-local conventions instead of depending on one lowered eval contract.
 
 User impact:
 
@@ -216,6 +227,8 @@ Required proof/tests:
   execution crates.
 - Builder/optimizer tests proving split-use intent lowers into engine
   `TrustPolicy` and engine `EvaluationRequest` values.
+- Report tests proving split membership comes from resolved eval/split truth, not
+  only from the syntactic unresolved `EvaluationSet::Partition` shape.
 
 ## RC-L3-004: Trust Is Checked On Expressions, Not Resolved Membership
 
@@ -242,13 +255,19 @@ accepts explicit case IDs by checking only existence:
 `crates/leaven-engine/src/case_set.rs:64-70`. Graph views hide assessments based
 on the stored unresolved expression, not resolved case membership:
 `crates/leaven-engine/src/graph/view.rs:254-295`.
+The `leaven-run` builder lowers validation/test only into proposer hiding, not
+optimizer/search-purpose authorization:
+`crates/leaven-run/src/builder.rs:233-240`.
 
 Blocker/gap:
 
 An optimizer can request hidden cases by explicit ID. The test suite currently
 documents that candidate-scoped sets do not expose hidden partitions:
 `crates/leaven-engine/tests/trust_policy.rs:113-130`. That is only true at the
-expression level and is unsafe for split-sensitive runs.
+expression level and is unsafe for split-sensitive runs. Separately, split-use
+policy is not yet an engine authorization input; `EvaluationPurpose::Search`,
+`Validation`, and `FinalTest` are recorded but not checked against
+`SplitUsePolicy`.
 
 User impact:
 
@@ -274,6 +293,8 @@ Required proof/tests:
 - Split-use tests for `ProposerFeedback`, `ParentSelection`, `PartSelection`,
   `CandidateAcceptance`, `PopulationObservation`, `Report`, `EvaluatorOnly`, and
   `FinalTest`.
+- Product-builder lowering tests proving validation/test partitions are hidden
+  from optimizer/proposer search by default, not only from proposer contexts.
 
 ## RC-L3-005: Cache Identity Is Not Request/Graph Semantics
 
@@ -456,3 +477,82 @@ Required proof/tests:
   enforcement.
 - One materializing agentic-style stage with nonzero budget and no hidden
   evidence leak.
+
+## RC-L3-008: Evidence/Preference/Population Proof Is Still Too Scalar And Local
+
+- severity: high
+- surface: standard evidence vocabulary, preference/population contracts, product scoring
+
+Ideal contract:
+
+Evidence is shape-neutral; preference is a separate relation over evidence; and
+population/frontier state is optimizer-owned strategy state:
+`docs/specs/guiding_principles.md:114-125`,
+`docs/specs/initial_library.md:70-71`. The score-normalization spec says public
+scores must preserve comparable axes, feedback references, attachments,
+metadata, and diagnostics until a report projection chooses what to show:
+`docs/specs/eval_lowering_detail.md:315-343`. The public GEPA surface sketches a
+richer `Score` with primary comparable score, metric set, feedback, attachments,
+and metadata: `docs/specs/gepa_public_private_surface.md:1126-1155`.
+
+Current implementation:
+
+The high-level run problem fixes `P::Evidence` to
+`CasewiseEvidence<ScoredFeedbackEvidence>`:
+`crates/leaven-run/src/builder.rs:43-51`. Public `Score` is a scalar `f64`, one
+feedback string, and structured string pairs:
+`crates/leaven-run/src/evidence.rs:23-32`. `ScoreContext` exposes artifact, case,
+and output as public fields, not a graph-backed trace/state view:
+`crates/leaven-run/src/evidence.rs:46-54`. `ScoringEvaluator` accepts only
+per-case independent requests, returns broad message errors for unsupported
+shape/granularity, and normalizes every case into scalar feedback evidence:
+`crates/leaven-run/src/evaluator.rs:65-128`.
+
+At the lower layers, `leaven-evidence` has real casewise and pairwise starts:
+`crates/leaven-evidence/src/casewise.rs:36-78`,
+`crates/leaven-evidence/src/pairwise.rs:17-91`, but also root-exports empty
+placeholder evidence names: `crates/leaven-evidence/src/lib.rs:36-77`.
+The engine owns graph-backed `PreferenceRelation<P>` and `Population<P>` traits:
+`crates/leaven-engine/src/stage/preference.rs:8-17`,
+`crates/leaven-engine/src/stage/population.rs:8-38`, while concrete population
+crates currently lean on local `observe_*` methods rather than proving the engine
+trait path end to end.
+
+Blocker/gap:
+
+Layer 3 currently has no minimum graph-backed proof that scalar, pairwise, and
+future multi-axis evidence can drive preference/population decisions through
+assessment IDs. The public scoring facade also makes scalar casewise evidence
+look like the internal optimizer truth. That is enough for keep-best demos, but
+not enough for pairwise tournament, GEPA population updates, TextGrad-style
+feedback aggregation, or agentic trace feedback.
+
+User impact:
+
+Optimizer authors will either bind to `leaven-run`'s scalar score shape or use
+concrete population helper APIs directly, bypassing the generic
+evidence/preference/population substrate. That repeats the proxy-proof pattern:
+a metric moves, but the library still has not proven that non-scalar optimizer
+evidence is first-class.
+
+Correction direction:
+
+Keep `Score` as a Layer 1 facade, not Layer 3 truth. Define the minimum standard
+contracts before GEPA is trusted: real scalar/casewise evidence, real pairwise
+evidence, one graph-backed scalar preference/population path, one graph-backed
+pairwise/tournament path, and no production-looking root exports for empty
+evidence placeholders. Population implementations should observe graph
+assessment IDs through `RunGraphView` when they claim to satisfy the engine
+`Population<P>` contract.
+
+Required proof/tests:
+
+- Scalar casewise evidence drives a graph-backed preference or population update
+  from assessment IDs.
+- Pairwise judgment evidence drives a tournament/preference path from graph
+  assessment IDs.
+- Public `.score(...)` lowers rich score outputs into evidence, refs,
+  comparable axes, and reports without becoming the only optimizer evidence
+  model.
+- Placeholder evidence/preference/population names are either implemented with
+  laws/tests or removed from production root exports.
