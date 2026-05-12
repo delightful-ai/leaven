@@ -44,6 +44,9 @@ These invariants apply to every slot.
   (`docs/specs/gepa_optimizer_surface.md:543-550`).
 - Placeholder names are not public capability names. Scaffolding is named as
   scaffolding or kept out of ordinary exports.
+- Layer 2 contracts name GEPA strategy choices. They may compose lowered engine
+  capabilities, but they do not expose mutable graph internals, raw evidence
+  stores, or trust/read-scope construction as the customization API.
 
 ## Slot Contract Table
 
@@ -61,6 +64,26 @@ These invariants apply to every slot.
 | Merge | `MergeScheduler` + merge proposer | frontier/lineage summaries, graph view, iteration/budget, candidate pair(s), surface/read capabilities | merge intent/skip or merge proposal(s) with pair causal provenance; `MergeError` | schedule/cursor/cooldown/RNG | `MergeScheduler` and `SystemAwareMerge` empty placeholders (`crates/leaven-gepa/src/optimizer.rs:720-722`, `crates/leaven-gepa/src/proposer.rs:54-56`) | merge records pair causal provenance and routes through proposal finalizer |
 | Stopping/config | `Stopper` / `GepaConfig` | iteration, budget snapshot, optimizer state summary, validation cadence state, callback stop flags | continue/done with reason, or `StopError` | counters/patience if not derivable | `max_iterations` exists; `GepaConfig` is placeholder (`crates/leaven-gepa/src/optimizer.rs:298-303`, `crates/leaven-gepa/src/optimizer.rs:716-718`) | report contains stop reason; restore preserves next stop decision |
 
+## Public/Lowered Boundary Table
+
+Each slot must keep three surfaces separate:
+
+| GEPA aspect | Layer 1 visible surface | Layer 2 customizer contract | Lowered/private contract |
+| --- | --- | --- | --- |
+| Candidate/program | `optimize(seed)` / `.seed(seed)` | artifact type and surface choice | candidate ids, content identity, graph insertion |
+| Train/search work | `.train(cases)` / `.cases(cases)` | `BatchSampler` and split policy | `CaseSet`, `EvaluationSet::Partition`, resolved evaluator request |
+| Feedback/traces | score/evaluator returns evidence | `FeedbackSelector` + reflection renderer | assessment ids, evidence refs, render/materialize context |
+| Reflection/proposal | `.with_reflection_lm(lm)` / default reflector | `ReflectiveMutation` or `GepaProposer` | engine `Proposer<P>`, `ProposalContext`, `RunContext::propose` or equivalent finalizer |
+| Acceptance/admission | hidden default | `Acceptance` | preference/evidence interpretation, optional validation intent |
+| Population/frontier | hidden default or `.population(...)` | `Population` / `GepaPopulation` | optimizer-owned private state plus `PopulationEvent`s |
+| Validation/test | `.validation(...)` / `.test(...)` | `ValidationPolicy` and split visibility | held-out partitions, evaluation requests, final-report-only test behavior |
+| Merge | off by default | `MergeScheduler` + merge proposer | pair causal provenance and proposal finalization |
+| Stop/report | `.budget(...)`, run limits, callbacks | `Stopper` / `GepaConfig` | budget ledger, callbacks, stop reason, run report |
+
+This table is a guardrail against the wrong fix. Adding a builder method is not
+enough unless it targets the Layer 2 contract and lowers into the private
+contract without making users manually assemble engine internals.
+
 ## Required Public Names
 
 Keep as Layer 2 names:
@@ -76,6 +99,11 @@ Keep as Layer 2 names:
 - `Population` / `ParetoFrontier`
 - `MergeScheduler`
 - `Stopper`
+
+`FeedbackSelector` is a GEPA-local subslot of the reflection/renderer path. It
+does not need to be a Layer 1 concept, but it must be real enough that
+reflection, part selection, and acceptance can receive selected evidence instead
+of re-querying hidden graph/evidence state ad hoc.
 
 Acceptable lower-level/internal names:
 
@@ -282,6 +310,36 @@ Evidence: minimum `Acceptance` input/output/must-not contract is in
 `fn decide(parent_score: f64, candidate_score: f64)`
 (`crates/leaven-gepa/src/gate.rs:23-27`).
 
+### `ValidationPolicyRequest`
+
+Must include:
+
+- admitted candidate id(s);
+- screening assessment ids and acceptance decisions;
+- configured validation split(s) and cadence state;
+- split visibility policy;
+- budget snapshot and remaining run limits;
+- previous validation summaries when the policy is adaptive.
+
+Returns:
+
+- validation evaluation intent;
+- skip decision with reason;
+- admission/defer metadata if validation is required before population update;
+- `ValidationPolicyError`.
+
+Must not:
+
+- execute evaluation itself;
+- expose validation/test feedback to reflection by default;
+- read test split under the default policy;
+- silently admit a candidate based on validation if the policy is configured as
+  search-only.
+
+Evidence: validation/test visibility is constrained by default
+(`docs/specs/gepa_optimizer_surface.md:364-384`), and the current
+`ValidationPolicy` is only a marker trait (`crates/leaven-gepa/src/validation.rs:1-16`).
+
 ### `PopulationObservationRequest`
 
 Must include:
@@ -309,6 +367,66 @@ Evidence: population is live optimizer state, not selection policy
 (`docs/specs/initial_library.md:1447-1451`). Current GEPA population observation
 is scalar-only (`crates/leaven-gepa/src/optimizer.rs:68-81`) while pairwise
 tournament population state exists (`crates/leaven-population/src/tournament.rs:78-146`).
+
+### `MergeScheduleRequest`
+
+Must include:
+
+- frontier/population summary;
+- lineage summary for candidate pair or parent set;
+- scoped graph view;
+- surface/read capabilities needed to inspect candidate parts;
+- iteration, cooldown, budget snapshot, and merge policy state.
+
+Returns:
+
+- skip decision with reason;
+- merge parent set and merge intent;
+- merge proposer request;
+- `MergeError`.
+
+Must not:
+
+- manufacture a candidate without proposal provenance;
+- bypass `RunContext::propose` or the equivalent proposal finalizer;
+- emit a two-artifact `apply_change`;
+- hide which parents contributed to the merge.
+
+Evidence: GEPA merge canonicalization records one apply target while preserving
+pair causal provenance (`docs/specs/initial_library.md:3519-3529`). Current
+merge names are placeholders (`crates/leaven-gepa/src/optimizer.rs:720-722`,
+`crates/leaven-gepa/src/proposer.rs:54-56`).
+
+### `StopRequest`
+
+Must include:
+
+- completed and maximum iterations;
+- budget snapshot and optional wall-time state;
+- validation cadence and pending-validation state;
+- population/frontier summary;
+- callback/external stop flags;
+- checkpoint/resume state needed by patience or adaptive policies.
+
+Returns:
+
+- `Continue { reason }`;
+- `Done { reason }`;
+- `StopError`.
+
+Must not:
+
+- mutate graph;
+- update population;
+- hide budget exhaustion as ordinary convergence;
+- discard a pending validation/merge obligation unless the reason says so.
+
+Evidence: GEPA defaults and builder requirements include run limits and stopping
+controls (`docs/specs/gepa_optimizer_surface.md:273-293`,
+`docs/specs/gepa_optimizer_surface.md:520-533`). Current stop behavior is
+internal `max_iterations` state plus a placeholder config
+(`crates/leaven-gepa/src/optimizer.rs:298-303`,
+`crates/leaven-gepa/src/optimizer.rs:716-718`).
 
 ## Error Contract
 

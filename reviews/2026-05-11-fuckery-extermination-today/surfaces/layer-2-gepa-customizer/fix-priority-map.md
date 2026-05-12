@@ -49,8 +49,9 @@ validate the proxy again.
 ## Priority 1: Lock The Slot Names And Builder Surface
 
 Fix: make the public Layer 2 builder enumerate the actual GEPA strategy slots:
-surface, parent selector, part selector, batch sampler, reflector/proposer,
-acceptance, validation policy, population/frontier, merge, and stopper/config.
+surface, parent selector, part selector, batch sampler, feedback
+selection/rendering, reflector/proposer, acceptance, validation policy,
+population/frontier, merge, and stopper/config.
 
 Evidence:
 
@@ -69,6 +70,8 @@ Correction:
 
 - public GEPA trait name is `ParentSelector`, not `CandidateSelector`;
 - public admission trait name is `Acceptance`, not `Gate`;
+- feedback selection/rendering is a first-class GEPA subslot between evaluation
+  and reflection, even if it is implemented as a default renderer helper;
 - `ParetoFrequencyWeighted` is kept only if it actually implements stochastic
   frequency-weighted frontier sampling;
 - `SelectBestCandidate` becomes `SelectBestParent` in GEPA-facing API if kept;
@@ -78,6 +81,8 @@ Correction:
 Proof gate:
 
 - compile/API tests demonstrate builder calls for every required slot;
+- a public/private mapping test or doc example shows the distinction between
+  Layer 1 inputs, Layer 2 slot methods, and lowered/private engine contracts;
 - negative tests prove missing surface, missing reflector/default reflection
   path, invalid split/validation, empty required train/search set, and merge
   without support fail before run start (`docs/specs/gepa_optimizer_surface.md:295-304`);
@@ -108,7 +113,7 @@ Correction:
   handles;
 - `GepaMutationRequest` -> surface edits or native proposals with provenance;
 - `AcceptanceRequest` -> accept/reject/defer with reason;
-- `ValidationRequestPolicy` -> validation intent or skip;
+- `ValidationPolicyRequest` -> validation intent or skip;
 - `PopulationObservationRequest` -> population events and updated private state;
 - `MergeScheduleRequest` -> merge intent or skip;
 - `StopRequest` -> continue/done reason.
@@ -118,6 +123,8 @@ Proof gate:
 - trait contract tests use only public request/response/error types;
 - stateful slot resume tests prove next decision equality after checkpoint and
   restore;
+- each slot contract names its allowed context/capabilities and the
+  lowered/private contract it composes with;
 - errors are structured enums/structs rather than strings at public slot
   boundaries.
 
@@ -230,6 +237,8 @@ Proof gate:
 - parent selector tests cover best-parent and real frequency-weighted sampling
   separately;
 - part selector tests cover round-robin and attributed failure selection;
+- batch sampler tests cover deterministic epoch order, empty required splits,
+  and hidden validation/test partitions;
 - acceptance tests include scalar improvement, equality/regression, incomparable
   evidence, and defer;
 - GEPA population tests cover scalar Pareto, no-population, and pairwise
@@ -261,7 +270,9 @@ Correction:
 - `MergeScheduler` schedules a merge proposer with pair causal provenance;
 - `Stopper` composes iteration, budget, callbacks, validation cadence, and
   optimizer state summary into a done/continue reason;
-- checkpoint state includes every non-derivable private decision state.
+- checkpoint state includes every non-derivable private decision state;
+- validation, merge, and stopping emit reportable reasons rather than silent
+  booleans or placeholder marker types.
 
 Proof gate:
 

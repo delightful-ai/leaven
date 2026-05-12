@@ -18,6 +18,11 @@ shape (`docs/specs/initial_library.md:406-423`). The same section defines GEPA
 as one optimizer composed from parent selector, part selector, batch sampler,
 reflector/proposer, acceptance policy, validation policy, population/frontier,
 and optional merge proposer (`docs/specs/initial_library.md:443`).
+Layer 2 must therefore stay between two other surfaces: Layer 1 product users
+see builder defaults, while Layer 3 optimizer authors see `Optimizer` and
+`RunContext`. A GEPA customizer sees GEPA strategy contracts, not engine
+trust/read scopes, evaluator request templates, or graph internals
+(`docs/specs/gepa_public_private_surface.md:172-208`).
 
 Current reality: `Gepa` is a reusable loop scaffold, but the live customizer
 surface is narrower than the contract. The struct owns `surface`, `population`,
@@ -90,13 +95,18 @@ the real contract.
 
 Correction direction: define public Layer 2 slot traits and request/response
 types before expanding the builder. Builder methods must map directly to those
-contracts, not to placeholders or scalar-only helpers.
+contracts, not to placeholders or scalar-only helpers. For every slot, document
+the GEPA-facing trait, the lowered/private engine contract it composes with, and
+the owner crate; this prevents a builder method from being mistaken for the
+actual strategy law.
 
 Required proof/tests: compile-fail or API contract tests should prove the
 builder exposes every required slot and rejects incomplete/contradictory
 configurations before a run starts, including no surface, no reflector/default
 reflection path, empty required train/search partition, invalid validation
 policy, and invalid merge configuration (`docs/specs/gepa_optimizer_surface.md:295-304`).
+The proof must also assert that configuring a slot through the builder uses the
+same request/response/error/state contract as direct strategy construction.
 
 ## RC-L2-003: Reflection Context Is Lost Before The Reflector
 
@@ -262,3 +272,47 @@ Required proof/tests: for every stateful slot, add a resume test proving that a
 checkpoint taken mid-run resumes with the same next parent, next part, next
 batch, validation cadence, merge schedule, stopper decision, and best/frontier
 state.
+
+## RC-L2-008: Control Slots Are Listed But Still Under-Specified
+
+Ideal contract: batch sampling, validation cadence, merge scheduling, and
+stopping are not convenience knobs. The GEPA step contract puts batch sampling
+before feedback evaluation, validation policy after screening/admission,
+population observation before iteration status, and final done/continue as an
+observable optimizer decision (`docs/specs/gepa_optimizer_surface.md:320-341`).
+Default split behavior also makes those slots responsible for which evidence
+may enter reflection, validation, population, and final reports
+(`docs/specs/gepa_optimizer_surface.md:364-384`).
+
+Current implementation: the live loop evaluates the selected candidate against
+`EvaluationSet::Partition(self.train_partition.clone())`, with `TRAIN` as the
+hard-coded default (`crates/leaven-gepa/src/optimizer.rs:192-193`,
+`crates/leaven-gepa/src/optimizer.rs:612-620`). `ValidationPolicy` is a marker
+trait with empty marker structs (`crates/leaven-gepa/src/validation.rs:1-16`).
+`MergeScheduler` and `GepaConfig` are public placeholders
+(`crates/leaven-gepa/src/optimizer.rs:716-722`). Stopping is only
+`max_iterations` plus internal completed-iteration state
+(`crates/leaven-gepa/src/optimizer.rs:298-303`,
+`crates/leaven-gepa/src/optimizer.rs:368-429`).
+
+Blocker/gap: these slots currently appear as names or builder requirements, but
+not as implementation contracts. Without them, GEPA cannot prove minibatch
+behavior, held-out validation/test semantics, pair-causal merge, or observable
+stop reasons. Treating them as later polish would preserve the scalar
+one-part-loop proxy.
+
+Correction direction: give each control slot a request, response/error, private
+state, event/report output, and must-not rules:
+
+- `BatchSampler` samples allowed train/search cases or returns typed no-cases;
+- `ValidationPolicy` requests validation/admission work without leaking
+  validation/test feedback to reflection by default;
+- `MergeScheduler` schedules a merge proposer with pair causal provenance;
+- `Stopper` returns done/continue with a reason from iteration, budget,
+  callbacks, validation cadence, and optimizer state.
+
+Required proof/tests: batch sampler tests reject empty required splits before
+reflection/evaluation; validation tests prove hidden-by-default and
+explicit-validation-aware policies; merge tests record `CausalInputs::Pair`;
+stopper tests report the stop reason and restore the same next stop decision
+after checkpoint.
