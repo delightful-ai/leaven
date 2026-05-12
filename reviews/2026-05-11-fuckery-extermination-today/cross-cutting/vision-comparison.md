@@ -131,6 +131,10 @@ Evidence: `docs/specs/initial_library.md:4749-4759`.
   manually stacking `CachedLm` (`docs/specs/lm_runtime_and_response_cache.md:17-28`);
   the current product builder has no runtime/cache role configuration; and the
   AIME live path shells out to Python (`examples/p8_aime_gepa/src/main.rs:293-301`).
+  The audit must also keep two cache planes separate: LM response cache
+  (`leaven-lm-cache::LmCachePolicy`) memoizes provider completions, while
+  engine evaluation cache (`leaven_engine::CachePolicy`) deduplicates evaluator
+  assessments.
 - user impact: the user cannot swap from mocked LM to OpenAI in the intended
   product path and know that cache/cost/continuation behavior still works.
 - correction direction: configure LM/cache by role in the run/runtime layer:
@@ -188,6 +192,9 @@ Evidence: `docs/specs/initial_library.md:4749-4759`.
   - placeholder: one-line provider/backend structs
     (`crates/leaven-lm-anthropic/src/client.rs:1`,
     `crates/leaven-workspace-docker/src/factory.rs:1`);
+  - workspace-visible but not umbrella-exported shells: `LocalLm` and
+    `ObjectStore` (`crates/leaven-lm-local/src/client.rs:1`,
+    `crates/leaven-store-object/src/store.rs:1`);
   - non-working default scaffold: derive macros
     (`crates/leaven-derive/src/lib.rs:9-33`,
     `crates/leaven-derive/src/unimplemented.rs:3-8`);
@@ -211,7 +218,7 @@ Evidence: `docs/specs/initial_library.md:4749-4759`.
 | Umbrella | import experience | default exposes std/derive/gepa and internals | ordinary path too broad | default import compile/export tests |
 | GEPA | real optimizer slots | fixed reflection fixture and placeholders | no evidence-aware reflection | GEPA law/product scenario tests |
 | LM/cache | provider-neutral runtime roles | real crates, manual wrapper story | no role composition | solver/reflector cache role test |
-| Providers/backends | feature means usable adapter | many one-line public structs | feature names overclaim | trait-impl and mapping/law tests |
+| Providers/backends | feature means usable adapter | feature-exposed and workspace-visible one-line public structs | feature names overclaim; workspace shells still need ledger status | trait-impl and mapping/law tests |
 | Metadata | docs describe current truth | skeleton labels remain on some real crates | stale docs can misclassify maturity | stale-metadata cleanup or scaffold allowlist |
 | Examples | product proof separated from demos | coverage runs proxy examples | green can mean wrong proof | example classification gate |
 

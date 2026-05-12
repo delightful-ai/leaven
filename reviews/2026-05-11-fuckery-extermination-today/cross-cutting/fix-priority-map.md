@@ -38,8 +38,11 @@ the name into explicit scaffold/test-support scope.
     become semver surface by accident;
   - add default-feature maturity checks.
 - required proof/tests:
-  - `cargo test -p leaven --test topology_contract` fails before the fix on at
-    least one seeded maturity fixture or new allowlist test;
+  - `cargo test -p leaven --test topology_contract` owns the gate and includes
+    negative fixtures for at least one unregistered crate dir, one skeleton
+    description in a behavior-bearing crate, one unledgered ordinary export, one
+    unledgered public unit struct, and one default feature that reaches an
+    explicit scaffold;
   - the final topology contract rejects `crates/leaven-dsrs` unless deleted or
     restored as a real workspace crate;
   - unknown exports from `leaven`, `leaven::prelude`, `leaven-std::prelude`, and
@@ -118,8 +121,10 @@ the name into explicit scaffold/test-support scope.
 - required proof/tests:
   - product-level test with independent solver and reflector role policies;
   - the ordinary product example does not construct `CachedLm` directly;
-  - cache hit returns zero metered cost while preserving stored usage;
+  - LM response-cache hit returns zero metered cost while preserving stored usage;
   - provider continuation is excluded from response-cache identity;
+  - LM response-cache policy is proved separately from
+    `leaven_engine::CachePolicy` evaluator-assessment caching;
   - `p8_aime_gepa` live path, when present, uses `OpenAiLm` through `Lm` rather
     than a Python script.
 
@@ -131,15 +136,16 @@ the name into explicit scaffold/test-support scope.
   integrations or be absent. A feature gate is not a scaffold disclaimer.
 - current implementation: the umbrella exposes optional provider/backend features
   (`crates/leaven/Cargo.toml:49-55`) and re-exports LM provider crates
-  (`crates/leaven/src/lib.rs:68-75`), while several enabled crates expose only
-  inert public structs such as `AnthropicLm`, `LocalLm`, `DockerWorkspaceFactory`,
-  `E2bWorkspaceFactory`, `ObjectStore`, and `SqliteStore`
+  (`crates/leaven/src/lib.rs:68-75`), while several umbrella feature targets
+  expose only inert public structs such as `AnthropicLm`,
+  `DockerWorkspaceFactory`, `E2bWorkspaceFactory`, and `SqliteStore`
   (`crates/leaven-lm-anthropic/src/client.rs:1`,
-  `crates/leaven-lm-local/src/client.rs:1`,
   `crates/leaven-workspace-docker/src/factory.rs:1`,
   `crates/leaven-workspace-e2b/src/factory.rs:1`,
-  `crates/leaven-store-object/src/store.rs:1`,
   `crates/leaven-store-sqlite/src/store.rs:1`).
+  `LocalLm` and `ObjectStore` are separate workspace-visible public shells, not
+  current umbrella feature exports (`crates/leaven-lm-local/src/client.rs:1`,
+  `crates/leaven-store-object/src/store.rs:1`).
 - blocker/gap: the import surface says integrations exist when no trait
   implementation, constructor, typed error, or behavior is present.
 - user impact: users spend time enabling features that cannot work, and future
@@ -156,7 +162,9 @@ the name into explicit scaffold/test-support scope.
     non-network mapping/law test;
   - every non-scaffold workspace/store backend feature has a constructor or
     factory law test;
-  - public-maturity gate rejects one-line public unit structs in feature crates.
+  - public-maturity gate rejects one-line public unit structs in feature crates
+    and also reports workspace-visible provider/backend shells that are not
+    reachable through the umbrella.
 
 ## P4: Make GEPA Default-Facing Only After Real Reflection And Slot Contracts Land
 

@@ -50,7 +50,9 @@ needs a ledger row with:
 ```text
 path + line
 owning crate
+symbol or module path
 export route: root | prelude | feature | example | test-support
+route source: Cargo feature | `pub use` | `pub mod` | example import | doctest import
 category: ordinary | advanced | test-support | explicit-scaffold | private-fixture
 behavior proof: test path, law name, example classification, or "none"
 decision: keep public | move advanced | move fixture | remove/export-gate | implement
@@ -118,8 +120,10 @@ private fixture rows, never for default-facing rows.
   flagged `CachedLm` as a smell in the public API
   (`reviews/2026-05-11-fuckery-extermination-today/complaints/session-user-messages-for-codex.md:292-299`).
 - blocker/gap: the cache crate is not fake; the problem is public composition.
-  Ordinary users need runtime/cache policy by role, not wrapper topology. GEPA
-  also has a spec contradiction: one section allows `leaven-gepa` to depend on
+  Ordinary users need LM response-cache policy by role, not wrapper topology.
+  This must stay distinct from `leaven_engine::CachePolicy`, which caches
+  evaluator assessments rather than provider completions. GEPA also has a spec
+  contradiction: one section allows `leaven-gepa` to depend on
   `leaven-lm-cache`, then immediately forbids it
   (`docs/specs/gepa_optimizer_surface.md:174-197`), while the live manifest and
   topology contract omit the cache edge
@@ -137,8 +141,9 @@ private fixture rows, never for default-facing rows.
   cost policy.
 - required proof/tests: add a product-level LM runtime/cache scenario that runs
   one solver call and one reflector call through `leaven-lm`, `leaven-lm-cache`,
-  and `leaven-lm-mock` or a non-network provider test; prove cache hit cost,
-  continuation exclusion from cache identity, and independent role policy.
+  and `leaven-lm-mock` or a non-network provider test; prove LM cache-hit cost,
+  continuation exclusion from LM response-cache identity, independent role
+  policy, and no dependency on engine evaluation-cache keys.
 
 ## RC-X-004: Provider And Backend Names Are Exposed Before Capability Laws Exist
 
@@ -152,15 +157,17 @@ private fixture rows, never for default-facing rows.
   `lm-openai`, `lm-anthropic`, `lm-cache`, `workspace-docker`, `workspace-e2b`,
   and `store-sqlite` (`crates/leaven/Cargo.toml:49-55`) and re-exports provider
   crates when features are enabled (`crates/leaven/src/lib.rs:68-75`). Some
-  exposed crates are one-line inert public structs:
-  `AnthropicLm`, `LocalLm`, `DockerWorkspaceFactory`, `E2bWorkspaceFactory`,
-  `ObjectStore`, and `SqliteStore`
+  umbrella feature targets are one-line inert public structs:
+  `AnthropicLm`, `DockerWorkspaceFactory`, `E2bWorkspaceFactory`, and
+  `SqliteStore`
   (`crates/leaven-lm-anthropic/src/client.rs:1`,
-  `crates/leaven-lm-local/src/client.rs:1`,
   `crates/leaven-workspace-docker/src/factory.rs:1`,
   `crates/leaven-workspace-e2b/src/factory.rs:1`,
-  `crates/leaven-store-object/src/store.rs:1`,
   `crates/leaven-store-sqlite/src/store.rs:1`).
+  `LocalLm` and `ObjectStore` are also one-line workspace-visible public shells,
+  but they are not currently umbrella feature exports
+  (`crates/leaven-lm-local/src/client.rs:1`,
+  `crates/leaven-store-object/src/store.rs:1`).
 - blocker/gap: optional is not the same as scaffold. A production-looking feature
   gate that exposes only an inert type is still a public lie.
 - user impact: a user can enable a provider/backend feature and get no
@@ -173,7 +180,8 @@ private fixture rows, never for default-facing rows.
 - required proof/tests: provider/backend feature tests must instantiate the
   adapter, prove the relevant trait impl, and run at least one non-network law or
   mapping test. Umbrella features must fail the maturity gate if they expose only
-  public unit structs.
+  public unit structs; workspace-visible provider/backend shells must still be
+  ledgered as explicit scaffold, test support, or implemented public contract.
 
 ## RC-X-005: GEPA Is Default-Facing Before Its Cross-Cutting Dependencies Are Honest
 

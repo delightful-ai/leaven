@@ -23,6 +23,7 @@ path + line
 owning crate
 symbol or module path
 route: crate-root | ordinary-prelude | advanced-prelude | feature | example | test-support
+route source: Cargo feature | `pub use` | `pub mod` | example import | doctest import
 category
 behavior proof: test path, law name, product-proof example, or none
 decision: keep | move | rename fixture | remove/export-gate | implement
@@ -31,6 +32,13 @@ decision: keep | move | rename fixture | remove/export-gate | implement
 Unknown rows fail. `behavior proof: none` is allowed only for explicit scaffold
 features and private fixtures, and those routes must be unreachable from default
 imports and product-proof examples.
+
+The ledger must be generated from current source, not maintained as narrative
+inventory. Minimum inputs are `cargo metadata` workspace members/features,
+`crates/leaven/src/lib.rs`, `crates/leaven/src/prelude.rs`,
+`crates/leaven-std/src/lib.rs`, crate-root `pub mod`/`pub use` items, and example
+imports. Hand-written classifications are allowed only as the reviewed decision
+table that those generated rows join against.
 
 ### 1.1 Ordinary Public Contract
 
@@ -196,20 +204,27 @@ imports and product-proof examples.
   non-network law or mapping test.
 - current implementation: `leaven` exposes provider/backend feature names
   (`crates/leaven/Cargo.toml:49-55`) and provider re-exports
-  (`crates/leaven/src/lib.rs:68-75`), while several enabled crates expose only
-  public unit structs (`crates/leaven-lm-anthropic/src/client.rs:1`,
-  `crates/leaven-lm-local/src/client.rs:1`,
+  (`crates/leaven/src/lib.rs:68-75`), while several umbrella feature targets
+  expose only public unit structs
+  (`crates/leaven-lm-anthropic/src/client.rs:1`,
   `crates/leaven-workspace-docker/src/factory.rs:1`,
   `crates/leaven-workspace-e2b/src/factory.rs:1`,
-  `crates/leaven-store-object/src/store.rs:1`,
   `crates/leaven-store-sqlite/src/store.rs:1`).
+  `LocalLm` and `ObjectStore` are one-line workspace-visible shells but are not
+  current `leaven` umbrella feature exports
+  (`crates/leaven-lm-local/src/client.rs:1`,
+  `crates/leaven-store-object/src/store.rs:1`).
 - blocker/gap: a feature name is a public capability promise. Optional does not
-  mean scaffold.
+  mean scaffold. Workspace-visible shells that are not umbrella features still
+  need ledger status so they cannot silently become future feature exports.
 - correction direction: remove the feature/export until real, or rename into an
   explicit scaffold feature that cannot be enabled by default and cannot be used
   as product proof.
 - required proof/tests: every non-scaffold provider/backend feature has a trait
-  implementation compile test and a non-network behavior law.
+  implementation compile test and a non-network behavior law. Provider/backend
+  crates that are workspace-visible but not umbrella-exported must be classified
+  as explicit scaffold, test support, private fixture, or implemented public
+  contract before they are re-exported.
 
 ## 3. Topology And Crate Graph Requirements
 
@@ -305,13 +320,18 @@ still failing `BeamPopulation` or `MapElites` until they carry laws and tests.
   hits (`crates/leaven-lm-cache/src/cached.rs:53-109`), with policy tests
   (`crates/leaven-lm-cache/tests/cache_contract.rs:76-150`).
 - blocker/gap: cache policy is not wired through product roles, and ordinary docs
-  currently show wrapper stacking.
+  currently show wrapper stacking. This is separate from
+  `leaven_engine::CachePolicy`, whose current use in `leaven-run` is evaluator
+  assessment caching and defaults to `Never`
+  (`crates/leaven-run/src/evaluator.rs:61-62`).
 - correction direction: expose role policy in `leaven-run` or a runtime
-  composition root. Keep `CachedLm` reachable for advanced users.
+  composition root. Keep `CachedLm` reachable for advanced users and keep LM
+  response-cache policy named separately from engine evaluation-cache policy.
 - required proof/tests: role-level cache test plus low-level cache-key law tests.
   The role-level test must prove at least two independently configured roles
   such as solver and reflector; one role hitting cache must not imply another
-  role hits or shares policy.
+  role hits or shares policy. It must not satisfy the proof by exercising only
+  `leaven_engine::EvaluationCache`.
 
 ### 4.3 Provider Exposure
 
