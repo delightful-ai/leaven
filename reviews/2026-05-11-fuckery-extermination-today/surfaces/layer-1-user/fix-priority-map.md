@@ -30,6 +30,9 @@ audit tree.
   - compile test: `leaven::prelude::*` ordinary example does not import
     `RunContext`, `RunGraphView`, `TrustPolicy`, `EvaluationRequest`,
     `Population`, `Proposer`, `Evaluator`, or cache store/key types;
+  - compile-fail or typed-error test: missing optimizer is either an intentional
+    typestate contract or a documented pre-run refusal, not an accidental
+    method-resolution failure;
   - example gate: no product proof may use `ReflectiveMutation::new(fixed_edit)`
     unless the type/path says fixture/demo;
   - coverage gate: product proof must distinguish demo/proxy milestone from
@@ -73,9 +76,16 @@ audit tree.
   no train/validation/test means single-task, train-only means multi-task/search,
   train+validation/test means generalization
   (`docs/specs/gepa_public_private_surface.md:722-734`).
-- current implementation: `.train(Vec<C>)` is the only case-type fixing entry
-  (`crates/leaven-run/src/builder.rs:92-114`); run concatenates vectors and builds
-  positional `Dataset::from_ordered`/`CaseId::from_index` state
+- current implementation: `.train(Vec<C>)` is the only non-unit case-type fixing
+  entry (`crates/leaven-run/src/builder.rs:92-114`); the default `C = ()` path
+  can reach `run()` but lowers no train/validation/test input to an empty dataset
+  and empty `CaseSet`, not an unscoped task
+  (`crates/leaven-run/src/builder.rs:208-222`). `leaven-eval` already has
+  explicit `Case` / `NoTarget` and duplicate-id dataset construction
+  (`crates/leaven-eval/src/dataset.rs:9-24`;
+  `crates/leaven-eval/src/dataset.rs:95-100`), but the ordinary builder does
+  not re-export or use it. `run()` concatenates vectors and builds positional
+  `Dataset::from_ordered`/`CaseId::from_index` state
   (`crates/leaven-run/src/builder.rs:214-222`;
   `crates/leaven-run/src/builder.rs:302-356`).
 - blocker/gap: product builders must reject duplicate case ids, default to
@@ -89,8 +99,9 @@ audit tree.
 - required proof/tests:
   - law tests: duplicate id rejection, missing case rejection, overlap refusal,
     stable dataset/split fingerprints;
-  - scenario tests: single-task GEPA/keep-best run; train-only run; generalization
-    run with hidden validation/test content; final-test-only default;
+  - scenario tests: single-task GEPA/keep-best run that evaluates a real
+    unscoped/singleton task rather than an empty case set; train-only run;
+    generalization run with hidden validation/test content; final-test-only default;
   - report tests: case-level output uses user-stable ids, not vector positions.
 
 ## Priority 3: Make Score/Evidence/Report Truth Rich Enough For Reflection
@@ -139,10 +150,13 @@ audit tree.
   `leaven-lm-cache` exist, but the public spec teaches `CachedLm::read_write`
   wrapper stacking (`docs/specs/lm_runtime_and_response_cache.md:15-31`), and
   `leaven-run` scoring evaluator always returns `CachePolicy::Never`
-  (`crates/leaven-run/src/evaluator.rs:61-63`).
+  (`crates/leaven-run/src/evaluator.rs:61-63`). `OpenAiLm::from_env` documents a
+  default model argument for fingerprint stability but ignores it
+  (`crates/leaven-lm-openai/src/client.rs:27-37`).
 - blocker/gap: Layer 1 has no role-based runtime API and no way to say "use this
   cached LM for solver, this cached LM/agent for reflector, and this cached judge
-  for scoring."
+  for scoring." It also lacks a public role identity contract for provider,
+  model, cache policy, and budget/cost policy.
 - user impact: live examples bypass Leaven LM/cache, or users learn cache
   internals before they can run an optimizer.
 - correction direction: expose ordinary runtime-role configuration and keep cache
@@ -152,6 +166,8 @@ audit tree.
   - `leaven-lm-cache` policy/key contract tests remain green;
   - Layer 1 mocked LM scenario shows cache hit/miss/cost summary by solver,
     reflector, and scorer roles;
+  - provider identity test proves ordinary OpenAI role construction records the
+    model/fingerprint it claims to configure;
   - OpenAI request/response mapping tests remain no-credential;
   - `p8` live-provider smoke depends on Leaven LM crates, not Python provider
     bypass.
@@ -194,7 +210,10 @@ audit tree.
   async runner/scorer, rich score/evidence, stable cases, single-task or
   train/validation/test mode as applicable, runtime/cache roles, real mock
   reflector consuming feedback, graph-backed result report, and no engine
-  internals in user code.
+  internals in user code. AIME is one proof, not the whole denominator; the
+  Layer 1 bar also needs a scalar single-task proof and, after the substrate is
+  honest, at least one non-GEPA or pairwise-shaped ordinary path so GEPA/AIME
+  cannot stand in for "optimizer library works."
 - current implementation: `p8_aime_gepa` says it exercises the high-level API and
   reports split scores/events (`examples/p8_aime_gepa/README.md:1-9`), but also
   admits deterministic mode is not evidence of live AIME improvement
@@ -208,6 +227,10 @@ audit tree.
 - required proof/tests:
   - `cargo run -p p8_aime_gepa` or successor proves mock LM/agent reflection over
     the real ordinary surface;
+  - scalar single-task proof exercises the no-dataset mode without fake
+    train/validation/test vectors;
+  - non-GEPA or pairwise-shaped ordinary proof exercises the same builder/result
+    facade once runner/scorer/case/report substrate is in place;
   - feature-gated live smoke swaps in `OpenAiLm`/runtime config in under one
     provider-construction change;
   - `just milestone-p8`, `just test`, and final `just check` remain the gates
@@ -231,4 +254,3 @@ completion:
 6. `just milestone-p8` for the canonical ordinary-user example.
 7. `just check` before any completion claim; the repo testing contract defines it
    as the full local gate (`docs/testing/README.md:7-17`).
-

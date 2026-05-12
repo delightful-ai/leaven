@@ -21,8 +21,8 @@ The ordinary prelude should expose the minimum user path:
 - `Budget`
 - `Case<I, T = NoTarget>` or equivalent stable case type
 - `NoTarget`
-- `RunOutput` only if hard-cut to typed candidate run output; otherwise replace
-  with `CandidateRun<O>`
+- `CandidateRun<O>` for one candidate execution, or `RunOutput` only if
+  hard-cut to mean that typed candidate-run output
 - `CandidateRunner`
 - `CandidateRunCtx`
 - `CandidateRun<O>`
@@ -37,6 +37,10 @@ The ordinary prelude should expose the minimum user path:
 - common runtime-role constructors/configs for solver, reflector, scorer/judge,
   and agent roles
 - `Gepa` default ordinary constructor when the `gepa` feature is enabled
+
+Do not use `RunOutput` for two concepts. The completed optimization handle is
+`OptimizeResult`, `Optimized`, or another result facade. The per-case execution
+payload is `CandidateRun<O>` or an explicitly renamed equivalent.
 
 ### Forbidden Layer 1 Prelude Names
 
@@ -99,7 +103,8 @@ only `.train`, `.validation`, `.test`, `.runner`, `.score`, `.using`, `.budget`,
 
 `OptimizeError` or its hard-cut replacement must distinguish:
 
-- missing optimizer;
+- missing optimizer, unless the builder uses an intentional typestate contract
+  and proves the missing-optimizer path with compile-fail tests;
 - missing scorer/evaluator;
 - missing budget unless explicitly unlimited;
 - validation/test without train in default GEPA mode;
@@ -117,6 +122,9 @@ only `.train`, `.validation`, `.test`, `.runner`, `.score`, `.using`, `.budget`,
 
 Current errors cover only missing budget, missing score, held-out without train,
 seed insertion, and optimizer failure (`crates/leaven-run/src/error.rs:5-25`).
+The current missing-optimizer behavior is method unavailability on
+`OptimizeBuilder<A, C, ()>`, not a documented typestate proof or a typed refusal
+(`crates/leaven-run/src/builder.rs:201-208`).
 
 ### Proof
 
@@ -125,7 +133,8 @@ explicit unlimited budget, held-out without train, no best, store/callback
 dispatch, and missing score in AIME (`crates/leaven-run/tests/optimize_builder.rs:23-158`;
 `examples/p8_aime_gepa/src/main.rs:459-475`), but they do not cover single-task,
 duplicate ids, evaluator-vs-score conflict, runtime roles, resume, runner errors,
-score errors, attachment persistence, or invalid budgets.
+score errors, attachment persistence, invalid budgets, or the chosen
+missing-optimizer contract.
 
 ## 3. Work Input Contract
 
@@ -174,10 +183,16 @@ exists for single-task/evaluator-internal work in the original spec
 
 ### Current Gap
 
-Current `leaven-run` accepts plain split vectors and generates dense positional
-case ids (`crates/leaven-run/src/builder.rs:214-222`;
-`crates/leaven-run/src/builder.rs:302-356`). That can remain only as an explicit
-dense-id convenience.
+`leaven-eval` already defines `Case`, `NoTarget`, and the explicit-id dataset
+builder (`crates/leaven-eval/src/dataset.rs:9-24`;
+`crates/leaven-eval/src/dataset.rs:95-100`), but `leaven-run` and `leaven` do
+not re-export that as the ordinary builder input. Current `leaven-run` accepts
+plain split vectors and generates dense positional case ids
+(`crates/leaven-run/src/builder.rs:214-222`;
+`crates/leaven-run/src/builder.rs:302-356`). The default no-train path lowers to
+an empty dataset/case set, not to `EvaluationSet::Unscoped` or a singleton task
+(`crates/leaven-run/src/builder.rs:208-222`). Dense vectors can remain only as
+an explicit dense-id convenience.
 
 ### Proof
 
@@ -189,6 +204,8 @@ Add law/scenario tests:
 - public builder lowers train/validation/test into `TRAIN`, `VALIDATION`, and
   `TEST`;
 - public builder supports no-dataset single-task;
+- no-train ordinary mode creates a real unscoped/singleton task evaluation path,
+  not an empty case set by accident;
 - default GEPA never feeds test into in-loop feedback;
 - reports state whether test was final-report-only.
 
@@ -373,7 +390,11 @@ API lowering (`crates/leaven-lm-openai/src/client.rs:10-37`), and `CachedLm`
 wraps an LM/cache/policy (`crates/leaven-lm-cache/src/cached.rs:6-17`). The spec
 currently teaches wrapper stacking (`docs/specs/lm_runtime_and_response_cache.md:15-31`),
 which is acceptable for advanced cache docs but not for the canonical ordinary
-example.
+example. `OpenAiLm::from_env` also accepts a `default_model` argument documented
+for fingerprint stability but ignores it; requests carry their explicit model
+instead (`crates/leaven-lm-openai/src/client.rs:27-37`;
+`crates/leaven-lm-openai/src/client.rs:44-47`). A Layer 1 runtime role must not
+inherit that ambiguity.
 
 Proof:
 
@@ -381,6 +402,8 @@ Proof:
 - Layer 1 scenario proves a cached mocked solver LM, cached mocked reflector LM,
   and cached mocked judge/scorer LM;
 - OpenAI mapping tests need no live credentials;
+- provider/runtime identity tests prove model identity and fingerprint behavior
+  for ordinary role construction;
 - live example depends on Leaven LM/provider crates rather than Python provider
   bypass.
 
@@ -451,7 +474,13 @@ Current gap: `OptimizeResult` requires a best candidate id and cloned artifacts
 floats plus event strings (`crates/leaven-run/src/result.rs:35-61`); missing
 train averages and empty averages become `0.0`
 (`crates/leaven-run/src/builder.rs:452-457`;
-`crates/leaven-run/src/result.rs:64-71`).
+`crates/leaven-run/src/result.rs:64-71`). The engine already has optional best
+and stop reasons (`crates/leaven-engine/src/engine.rs:117-184`;
+`crates/leaven-engine/src/engine.rs:306-309`;
+`crates/leaven-engine/src/events.rs:16-23`), and `OptimizeStore` can carry
+checkpoint persistence (`crates/leaven-run/src/store.rs:10-17`;
+`crates/leaven-run/src/store.rs:47-75`), but the Layer 1 result and builder do
+not expose that truth as `stop`, optional best, or `.resume(...)`.
 
 Proof:
 
@@ -464,6 +493,8 @@ Proof:
 - missing/failed evidence is absent/error, not `0.0`;
 - test results are marked final-report-only unless policy allows in-loop use;
 - events are public summaries, not strings or mutable graph access.
+- durable-store runs expose resume status and checkpoint identity, and
+  `.resume(...)` rejects mismatched fingerprints before executing.
 
 ## 9. Canonical Product Proof
 
@@ -495,4 +526,3 @@ Acceptance proof:
 - a live-provider smoke swaps only provider/runtime construction;
 - `just check` is the final completion gate (`docs/testing/README.md:7-17`);
 - no product proof may rely on provider shell-out or fixed edit reflection.
-
