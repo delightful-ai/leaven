@@ -4,6 +4,18 @@ Layer 3 users are optimizer authors. They should be able to use `RunContext`,
 `RunGraphView`, `EvaluationRequest`, evidence, budget, trust scopes, events,
 and proposal machinery directly.
 
+## Canonical Docs
+
+- `root-cause-map.md`: Layer 3 engine/eval root causes, with current code and
+  spec evidence.
+- `fix-priority-map.md`: ordered hard-cutover fixes and proof gates for
+  engine/eval/optimizer-author readiness.
+- `vision-comparison.md`: original optimizer-author/engine/eval vision versus
+  current repository reality.
+- `surface-requirements.md`: exact public/private contract for `RunContext`,
+  stage contexts, eval lowering, trust, cache, budget, evidence, errors, and
+  tests.
+
 ## Already Found Problems
 
 ### The Real Engine Proposer Surface Exists
@@ -50,4 +62,3 @@ stages for traceability and consistency.
 - Are budget charges attached to the right stage for LM/agent reflection?
 - Does checkpoint state include every private strategy decision that changes
   future behavior?
-
