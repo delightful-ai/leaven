@@ -1,0 +1,1400 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Leaven · gap audit by consumer layer · 2026-05-11</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Newsreader:opsz,wght@6..72,300;6..72,400;6..72,500;6..72,600&family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --ink:        #0c0e0a;
+    --paper:      #ece5d2;
+    --paper-2:    #d8d1bd;
+    --ash:        #98908a;
+    --rule:       #2a2c25;
+    --rule-2:     #3a3b32;
+    --leaven:     #c0c882;        /* pale sage, the culture */
+    --leaven-2:   #9aa962;
+    --proxy:      #d8612d;        /* terracotta, the fakery */
+    --proxy-2:    #b14418;
+    --warn:       #e5a247;
+    --serif:      "Instrument Serif", "Newsreader", Georgia, serif;
+    --read:       "Newsreader", "Iowan Old Style", Georgia, serif;
+    --mono:       "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  html { background: var(--ink); }
+  body {
+    margin: 0;
+    color: var(--paper);
+    background: var(--ink);
+    font-family: var(--read);
+    font-size: 16px;
+    line-height: 1.55;
+    font-weight: 300;
+    /* fine grain texture */
+    background-image:
+      radial-gradient(rgba(192,200,130,0.025) 1px, transparent 1px),
+      radial-gradient(rgba(216,97,45,0.015) 1px, transparent 1px);
+    background-size: 7px 7px, 11px 11px;
+    background-position: 0 0, 3px 5px;
+  }
+
+  a { color: var(--leaven); text-decoration: none; border-bottom: 1px dotted var(--leaven-2); }
+  a:hover { color: var(--paper); }
+
+  /* --------------------------------- frame --------------------------------- */
+
+  .frame {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 56px 64px 120px;
+    position: relative;
+  }
+  .frame::before, .frame::after {
+    content: "";
+    position: fixed;
+    top: 0; bottom: 0;
+    width: 1px;
+    background: var(--rule);
+    pointer-events: none;
+    z-index: 1;
+  }
+  .frame::before { left: 32px; }
+  .frame::after  { right: 32px; }
+
+  .crosshair {
+    position: fixed;
+    width: 12px; height: 12px;
+    border: 1px solid var(--rule-2);
+    background: var(--ink);
+    z-index: 2;
+  }
+  .crosshair.tl { top: 26px; left: 26px; }
+  .crosshair.tr { top: 26px; right: 26px; }
+  .crosshair.bl { bottom: 26px; left: 26px; }
+  .crosshair.br { bottom: 26px; right: 26px; }
+
+  /* ---------------------------- masthead ---------------------------- */
+
+  .mast {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: end;
+    gap: 24px;
+    border-top: 1px solid var(--rule-2);
+    border-bottom: 1px solid var(--rule-2);
+    padding: 28px 0 22px;
+    margin-bottom: 48px;
+  }
+
+  .mast .stamp {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ash);
+  }
+  .mast .title {
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: clamp(48px, 7vw, 92px);
+    line-height: 0.96;
+    letter-spacing: -0.01em;
+    margin: 12px 0 0;
+    color: var(--paper);
+  }
+  .mast .title em {
+    font-style: italic;
+    color: var(--leaven);
+  }
+  .mast .sub {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 22px;
+    color: var(--paper-2);
+    margin-top: 14px;
+    max-width: 70ch;
+  }
+
+  .meta {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ash);
+    text-align: right;
+    line-height: 1.7;
+    letter-spacing: 0.05em;
+  }
+  .meta b { color: var(--leaven); font-weight: 500; }
+
+  /* ---------------------------- thesis box ---------------------------- */
+
+  .thesis {
+    display: grid;
+    grid-template-columns: 1.1fr 1fr;
+    gap: 64px;
+    align-items: start;
+    padding: 24px 0 48px;
+    border-bottom: 1px solid var(--rule);
+    margin-bottom: 48px;
+  }
+  .thesis blockquote {
+    margin: 0;
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 28px;
+    line-height: 1.18;
+    color: var(--paper);
+    padding-left: 24px;
+    border-left: 2px solid var(--leaven);
+  }
+  .thesis blockquote cite {
+    display: block;
+    margin-top: 16px;
+    font-family: var(--mono);
+    font-style: normal;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    color: var(--ash);
+  }
+  .thesis p { margin: 0 0 14px; }
+  .thesis p:last-child { margin-bottom: 0; }
+  .thesis em { color: var(--leaven); font-style: italic; }
+  .thesis strong { color: var(--proxy); font-weight: 500; }
+
+  /* ---------------------------- scoreboard ---------------------------- */
+
+  .board {
+    margin: 8px 0 80px;
+  }
+  .board h2 { margin-bottom: 4px; }
+
+  .gauges {
+    margin-top: 28px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0;
+    border: 1px solid var(--rule-2);
+  }
+  .gauge {
+    padding: 22px 22px 18px;
+    border-right: 1px solid var(--rule-2);
+    position: relative;
+  }
+  .gauge:last-child { border-right: none; }
+  .gauge .layer-no {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    color: var(--ash);
+    text-transform: uppercase;
+  }
+  .gauge h3 {
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: 26px;
+    margin: 4px 0 4px;
+    line-height: 1.05;
+    color: var(--paper);
+  }
+  .gauge .role {
+    font-size: 13px;
+    color: var(--ash);
+    margin-bottom: 14px;
+    font-style: italic;
+  }
+  .gauge .pct {
+    font-family: var(--serif);
+    font-size: 64px;
+    line-height: 1;
+    letter-spacing: -0.03em;
+    color: var(--paper);
+    margin-bottom: 10px;
+  }
+  .gauge .pct sup {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ash);
+    vertical-align: super;
+    margin-left: 4px;
+    letter-spacing: 0.1em;
+  }
+  .gauge .bar {
+    height: 4px;
+    background: var(--rule);
+    position: relative;
+    overflow: hidden;
+  }
+  .gauge .bar > i {
+    display: block;
+    height: 100%;
+    background: linear-gradient(90deg, var(--leaven-2) 0%, var(--leaven) 100%);
+  }
+  .gauge .ticks {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 4px;
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--ash);
+    letter-spacing: 0.1em;
+  }
+  .gauge .verdict {
+    margin-top: 14px;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--proxy);
+  }
+  .gauge.l3 .verdict { color: var(--warn); }
+  .gauge .verdict.ok { color: var(--leaven); }
+
+  /* ---------------------------- section structure ---------------------------- */
+
+  .layer {
+    margin: 96px 0 0;
+    padding-top: 48px;
+    border-top: 1px solid var(--rule-2);
+  }
+  .layer .head {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 24px;
+    align-items: baseline;
+    margin-bottom: 8px;
+  }
+  .layer .head .marker {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--leaven);
+  }
+  .layer .head h2 {
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: clamp(36px, 4.5vw, 56px);
+    line-height: 1;
+    letter-spacing: -0.01em;
+    margin: 0;
+    color: var(--paper);
+  }
+  .layer .head h2 em { font-style: italic; color: var(--leaven); }
+  .layer .head .pct-inline {
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--ash);
+    letter-spacing: 0.08em;
+  }
+  .layer .head .pct-inline b { color: var(--paper); font-weight: 500; }
+
+  .layer .blurb {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 22px;
+    line-height: 1.3;
+    color: var(--paper-2);
+    max-width: 62ch;
+    margin: 0 0 36px;
+  }
+
+  /* ---------------------------- contract two-column ---------------------------- */
+
+  .two {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    border: 1px solid var(--rule-2);
+    margin: 28px 0 40px;
+  }
+  .two > div { padding: 22px 26px; }
+  .two .real {
+    border-right: 1px solid var(--rule-2);
+    background: rgba(192,200,130,0.04);
+  }
+  .two .proxy { background: rgba(216,97,45,0.04); }
+  .two h4 {
+    margin: 0 0 14px;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--ash);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .two .real h4::before {
+    content: "";
+    display: inline-block;
+    width: 7px; height: 7px;
+    background: var(--leaven);
+  }
+  .two .proxy h4::before {
+    content: "";
+    display: inline-block;
+    width: 7px; height: 7px;
+    background: var(--proxy);
+  }
+  .two ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    font-size: 14.5px;
+    line-height: 1.55;
+  }
+  .two li {
+    padding: 6px 0 6px 18px;
+    text-indent: -18px;
+    color: var(--paper-2);
+  }
+  .two li::before {
+    display: inline-block;
+    width: 18px;
+    text-indent: 0;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ash);
+  }
+  .two .real li::before  { content: "+"; color: var(--leaven); }
+  .two .proxy li::before { content: "−"; color: var(--proxy); }
+  .two li code, .two li .id {
+    font-family: var(--mono);
+    font-size: 12px;
+    background: rgba(0,0,0,0.25);
+    padding: 1px 5px;
+    color: var(--paper);
+    border-radius: 1px;
+  }
+
+  /* ---------------------------- findings table ---------------------------- */
+
+  .findings {
+    margin: 28px 0 12px;
+    border-top: 1px solid var(--rule-2);
+  }
+  .finding {
+    display: grid;
+    grid-template-columns: 88px 1fr 110px;
+    gap: 20px;
+    padding: 20px 0 22px;
+    border-bottom: 1px solid var(--rule);
+    align-items: start;
+  }
+  .finding .id {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    color: var(--paper);
+    padding-top: 2px;
+  }
+  .finding .id .num {
+    color: var(--leaven);
+    display: block;
+    font-size: 12px;
+    margin-bottom: 2px;
+  }
+  .finding .body h4 {
+    font-family: var(--serif);
+    font-weight: 400;
+    font-style: italic;
+    font-size: 22px;
+    line-height: 1.18;
+    margin: 0 0 4px;
+    color: var(--paper);
+  }
+  .finding .body .promise {
+    font-size: 13.5px;
+    color: var(--paper-2);
+    margin: 8px 0 0;
+  }
+  .finding .body .promise span {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ash);
+    margin-right: 6px;
+  }
+  .finding .body .actual {
+    font-size: 13.5px;
+    color: var(--paper-2);
+    margin: 4px 0 0;
+  }
+  .finding .body .actual span {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ash);
+    margin-right: 6px;
+  }
+  .finding code {
+    font-family: var(--mono);
+    font-size: 12px;
+    background: rgba(0,0,0,0.3);
+    padding: 1px 5px;
+    color: var(--paper);
+  }
+  .finding code.bad  { color: var(--proxy); }
+  .finding code.good { color: var(--leaven); }
+
+  .sev {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    padding: 4px 8px;
+    border: 1px solid currentColor;
+    text-align: center;
+    line-height: 1;
+    justify-self: end;
+    align-self: start;
+  }
+  .sev.blocker  { color: var(--proxy);  background: rgba(216,97,45,0.08); }
+  .sev.critical { color: var(--proxy);  background: rgba(216,97,45,0.18); border-color: var(--proxy-2);}
+  .sev.high     { color: var(--warn); }
+  .sev.medium   { color: var(--ash); }
+
+  /* ---------------------------- delta block (per layer) ---------------------------- */
+
+  .delta {
+    margin: 28px 0 12px;
+    padding: 22px 26px;
+    border: 1px solid var(--rule-2);
+    border-left: 3px solid var(--proxy);
+    background: rgba(0,0,0,0.18);
+  }
+  .delta h4 {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--proxy);
+    margin: 0 0 14px;
+  }
+  .delta table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .delta td {
+    padding: 6px 0;
+    border-bottom: 1px dashed var(--rule);
+  }
+  .delta td:nth-child(2) {
+    text-align: center;
+    width: 80px;
+    color: var(--ash);
+    font-size: 11px;
+    letter-spacing: 0.2em;
+  }
+  .delta td:first-child  { color: var(--proxy); }
+  .delta td:last-child   { color: var(--leaven); text-align: right; }
+
+  /* ---------------------------- sequence ---------------------------- */
+
+  .sequence {
+    margin: 96px 0 0;
+    padding-top: 48px;
+    border-top: 1px solid var(--rule-2);
+  }
+  .phase-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0;
+    border: 1px solid var(--rule-2);
+    margin-top: 28px;
+  }
+  .phase {
+    padding: 22px 24px 24px;
+    border-right: 1px solid var(--rule-2);
+    border-bottom: 1px solid var(--rule-2);
+    position: relative;
+  }
+  .phase:nth-child(3n) { border-right: none; }
+  .phase:nth-last-child(-n+3) { border-bottom: none; }
+  .phase .num {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    color: var(--leaven);
+    text-transform: uppercase;
+  }
+  .phase h4 {
+    font-family: var(--serif);
+    font-weight: 400;
+    font-style: italic;
+    font-size: 22px;
+    line-height: 1.18;
+    margin: 2px 0 12px;
+    color: var(--paper);
+  }
+  .phase p {
+    font-size: 13.5px;
+    color: var(--paper-2);
+    margin: 0;
+    line-height: 1.5;
+  }
+  .phase .exit {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px dotted var(--rule-2);
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ash);
+    letter-spacing: 0.04em;
+  }
+  .phase .exit b { color: var(--leaven); font-weight: 500; }
+
+  /* ---------------------------- ribbon (cross-cutting) ---------------------------- */
+
+  .ribbon {
+    margin: 40px 0;
+    padding: 20px 26px;
+    border: 1px solid var(--rule-2);
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    gap: 16px;
+  }
+  .ribbon .cell {
+    border-left: 1px solid var(--rule);
+    padding-left: 16px;
+  }
+  .ribbon .cell:first-child { border-left: none; padding-left: 0; }
+  .ribbon .k {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ash);
+  }
+  .ribbon .v {
+    font-family: var(--serif);
+    font-size: 38px;
+    line-height: 1;
+    color: var(--paper);
+    margin-top: 6px;
+    letter-spacing: -0.02em;
+  }
+  .ribbon .v small {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ash);
+    letter-spacing: 0.05em;
+    vertical-align: top;
+  }
+  .ribbon .n { font-size: 13px; color: var(--paper-2); margin-top: 6px; line-height: 1.4; }
+
+  /* ---------------------------- closing ---------------------------- */
+
+  .close {
+    margin: 96px 0 0;
+    padding: 48px 0 0;
+    border-top: 1px solid var(--rule-2);
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 64px;
+    align-items: start;
+  }
+  .close h2 {
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: 48px;
+    line-height: 1;
+    letter-spacing: -0.01em;
+    margin: 0;
+    color: var(--paper);
+  }
+  .close h2 em { font-style: italic; color: var(--leaven); }
+  .close p {
+    font-family: var(--read);
+    font-size: 17px;
+    color: var(--paper-2);
+    margin: 0 0 14px;
+  }
+
+  /* ---------------------------- minor ---------------------------- */
+
+  .kicker {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--ash);
+    margin-bottom: 8px;
+  }
+  h2 {
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: 38px;
+    line-height: 1;
+    letter-spacing: -0.01em;
+    margin: 0 0 16px;
+    color: var(--paper);
+  }
+  h2 em { font-style: italic; color: var(--leaven); }
+
+  .colophon {
+    margin-top: 96px;
+    padding-top: 28px;
+    border-top: 1px solid var(--rule-2);
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    color: var(--ash);
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+
+  @media (max-width: 980px) {
+    .frame { padding: 32px 28px 80px; }
+    .frame::before, .frame::after, .crosshair { display: none; }
+    .mast { grid-template-columns: 1fr; }
+    .meta { text-align: left; }
+    .thesis { grid-template-columns: 1fr; gap: 32px; }
+    .gauges { grid-template-columns: 1fr 1fr; }
+    .gauge:nth-child(2) { border-right: none; }
+    .gauge:nth-child(1), .gauge:nth-child(2) { border-bottom: 1px solid var(--rule-2); }
+    .two { grid-template-columns: 1fr; }
+    .two .real { border-right: none; border-bottom: 1px solid var(--rule-2); }
+    .phase-grid { grid-template-columns: 1fr; }
+    .phase, .phase:nth-child(3n), .phase:nth-last-child(-n+3) { border-right: none; border-bottom: 1px solid var(--rule-2); }
+    .phase:last-child { border-bottom: none; }
+    .ribbon { grid-template-columns: 1fr 1fr; }
+    .close { grid-template-columns: 1fr; gap: 24px; }
+    .finding { grid-template-columns: 64px 1fr; }
+    .finding .sev { grid-column: 2; justify-self: start; margin-top: 6px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="crosshair tl"></div>
+<div class="crosshair tr"></div>
+<div class="crosshair bl"></div>
+<div class="crosshair br"></div>
+
+<div class="frame">
+
+<header class="mast">
+  <div>
+    <div class="stamp">audit / fuckery extermination today / 2026-05-11</div>
+    <h1 class="title">where is the <em>leaven</em>,<br/>really&thinsp;?</h1>
+    <p class="sub">Gap audit by consumer layer. Vision the spec promises, contracts the repo currently presents as that vision, and the delta between them.</p>
+  </div>
+  <div class="meta">
+    rev&nbsp;·&nbsp;v0.2.7<br/>
+    branch&nbsp;·&nbsp;HEAD<br/>
+    audit&nbsp;·&nbsp;<b>4 surfaces</b><br/>
+    findings&nbsp;·&nbsp;<b>31 root&nbsp;causes</b><br/>
+    blockers&nbsp;·&nbsp;<b>14</b>
+  </div>
+</header>
+
+<section class="thesis">
+  <blockquote>
+    A Rust optimizer is a configured value that drives a typed run graph by proposing changes to artifacts, requesting assessments, interpreting evidence through preference relations, and maintaining live populations, while the engine provides budgeted, observable, capability-scoped execution.
+    <cite>— initial_library.md §29 · final design thesis</cite>
+  </blockquote>
+  <div>
+    <p class="kicker">reading of the audit tree</p>
+    <p>The crate graph is mostly in the right shape. The vocabulary exists. The cold-core thesis above is implementable on the substrate that's been built. What's missing is not a layer — it's <em>load-bearing contracts</em> behind layer names that already look done.</p>
+    <p>Each layer is failing the same way: a builder shell, a public name, or a default prelude is doing the work of a contract. <strong>Reflection is a fixed-edit fixture.</strong> Scoring is a sync closure returning <code>f64 + String</code>. Cases are vector positions. Cache is a wrapper users compose. The engine has the right finalizers — and right beside them, public bypasses.</p>
+    <p>This document reads each layer against its spec, then sums the deltas as one honest reading of distance to the vision.</p>
+  </div>
+</section>
+
+<!-- ============================== SCOREBOARD ============================== -->
+
+<section class="board">
+  <div class="kicker">scoreboard</div>
+  <h2>distance to vision · by <em>consumer layer</em></h2>
+  <p style="font-size: 15px; color: var(--paper-2); max-width: 70ch; margin: 14px 0 0;">
+    A maturity reading per layer. <em>Real</em> means there is behavior-bearing code that honors the contract. <em>Stated</em> means the name or skeleton exists but the load-bearing path is a proxy. Bars are not a metric, they're a calibrated reading of how much of each layer's intended contract is actually wired through.
+  </p>
+
+  <div class="gauges">
+
+    <div class="gauge l1">
+      <div class="layer-no">L · 01</div>
+      <h3>Ordinary user</h3>
+      <div class="role">runs <code style="font-family:var(--mono);font-size:11px;background:rgba(0,0,0,.3);padding:1px 4px;">optimize(seed).run()</code></div>
+      <div class="pct">27<sup>%</sup></div>
+      <div class="bar"><i style="width:27%"></i></div>
+      <div class="ticks"><span>0</span><span>25</span><span>50</span><span>75</span><span>100</span></div>
+      <div class="verdict">shell present · contracts proxied</div>
+    </div>
+
+    <div class="gauge l2">
+      <div class="layer-no">L · 02</div>
+      <h3>GEPA customizer</h3>
+      <div class="role">swaps strategy slots</div>
+      <div class="pct">22<sup>%</sup></div>
+      <div class="bar"><i style="width:22%"></i></div>
+      <div class="ticks"><span>0</span><span>25</span><span>50</span><span>75</span><span>100</span></div>
+      <div class="verdict">3 of 11 slots real · reflection is a fixture</div>
+    </div>
+
+    <div class="gauge l3">
+      <div class="layer-no">L · 03</div>
+      <h3>Optimizer author</h3>
+      <div class="role">implements <code style="font-family:var(--mono);font-size:11px;background:rgba(0,0,0,.3);padding:1px 4px;">Optimizer&lt;P&gt;</code></div>
+      <div class="pct">48<sup>%</sup></div>
+      <div class="bar"><i style="width:48%"></i></div>
+      <div class="ticks"><span>0</span><span>25</span><span>50</span><span>75</span><span>100</span></div>
+      <div class="verdict">finalizers exist · bypasses exist beside them</div>
+    </div>
+
+    <div class="gauge xc">
+      <div class="layer-no">L · X</div>
+      <h3>Public maturity</h3>
+      <div class="role">topology, preludes, examples</div>
+      <div class="pct">32<sup>%</sup></div>
+      <div class="bar"><i style="width:32%"></i></div>
+      <div class="ticks"><span>0</span><span>25</span><span>50</span><span>75</span><span>100</span></div>
+      <div class="verdict">graph aligned · capability overstated</div>
+    </div>
+
+  </div>
+</section>
+
+
+<!-- ============================== LAYER 1 ============================== -->
+
+<section class="layer" id="l1">
+  <div class="head">
+    <div class="marker">layer · 01</div>
+    <h2>The <em>ordinary user</em>.</h2>
+    <div class="pct-inline">maturity&nbsp;·&nbsp;<b>27 / 100</b></div>
+  </div>
+  <p class="blurb">
+    Give Leaven a candidate, training work, a scoring function, an optimizer, and a budget. Optionally validation/test. Get a result back. Don't learn engine internals.
+  </p>
+
+  <div class="two">
+    <div class="real">
+      <h4>what is real</h4>
+      <ul>
+        <li><code>optimize(seed)</code> builder shell with <code>.train</code>/<code>.validation</code>/<code>.test</code>/<code>.runner</code>/<code>.score</code>/<code>.using</code>/<code>.budget</code>/<code>.on_event</code>/<code>.store</code>/<code>.run</code></li>
+        <li>required-budget &amp; required-scorer pre-run refusals</li>
+        <li>train/validation/test lower into engine partitions with <code>TrustPolicy::hide_from_proposers</code></li>
+        <li><code>leaven-lm</code> exposes a provider-neutral async <code>Lm</code> trait</li>
+        <li><code>OptimizeStore</code> can carry checkpoint persistence (engine-side)</li>
+        <li>engine emits <code>StopReason</code> and optional best (engine-side)</li>
+      </ul>
+    </div>
+    <div class="proxy">
+      <h4>what is a proxy</h4>
+      <ul>
+        <li><span class="id">Runner</span> = <code>Fn(&amp;A, &amp;C) → RunOutput</code> — sync. cannot host LM/agent/subprocess honestly</li>
+        <li><span class="id">Score</span> = <code>f64 + String + Vec&lt;(String, String)&gt;</code> — no metrics, attachments, refs, errors</li>
+        <li><code>ScoreContext</code> is three <em>public fields</em>, not an accessor view; no trace/history/budget access</li>
+        <li>cases are positional <code>CaseId::from_index</code>; user-stable ids only exist in <code>leaven-eval</code> unused by builder</li>
+        <li>no single-task / no-dataset mode; the default <code>C = ()</code> path lowers to an empty case set, not <code>EvaluationSet::Unscoped</code></li>
+        <li><code>ScoringEvaluator</code> hard-codes <code>CachePolicy::Never</code>; no runtime-role config for solver / reflector / judge</li>
+        <li><code>OpenAiLm::from_env</code> accepts a <code>default_model</code> argument and ignores it</li>
+        <li><code>OptimizeResult</code> requires <em>best</em>, clones artifacts, drops stop reason; missing averages become <code>0.0</code></li>
+        <li><code>leaven::prelude</code> exports <code>RunContext, RunGraphView, TrustPolicy, EvaluationRequest, Population, Proposer, Evaluator, CachePolicy</code> beside ordinary names</li>
+        <li>canonical proof <code>p8_aime_gepa</code> uses fixed-edit reflector; live solver shells out to a Python script calling OpenAI directly with <code>urllib</code></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="findings">
+    <div class="finding">
+      <div class="id"><span class="num">RC-L1-001</span>boundaries</div>
+      <div class="body">
+        <h4>The prelude collapses three audiences into one import.</h4>
+        <p class="promise"><span>contract</span>Layer 1 imports teach <code>optimize</code>, cases, runner, score, optimizer, budget, result.</p>
+        <p class="actual"><span>actual</span><code class="bad">leaven::prelude::*</code> re-exports engine-author machinery; <code>leaven::prelude</code> additionally forwards <code>leaven_gepa::prelude::*</code> when the <code>gepa</code> default feature is on.</p>
+      </div>
+      <div class="sev high">high</div>
+    </div>
+
+    <div class="finding">
+      <div class="id"><span class="num">RC-L1-002</span>builder</div>
+      <div class="body">
+        <h4>The builder state machine is too narrow to host the modes the spec defines.</h4>
+        <p class="promise"><span>contract</span>single-task, train-only, generalization, plus <code>.cases</code>, <code>.task</code>, <code>.evaluator</code>, <code>.runtime</code>, <code>.resume</code>, typed pre-run refusals.</p>
+        <p class="actual"><span>actual</span>only <code class="bad">.train(Vec&lt;C&gt;)</code> fixes case type; default <code>C = ()</code> path lowers to an empty case set, not an unscoped task.</p>
+      </div>
+      <div class="sev blocker">blocker</div>
+    </div>
+
+    <div class="finding">
+      <div class="id"><span class="num">RC-L1-003</span>execution</div>
+      <div class="body">
+        <h4>Runner and scorer are sync closures.</h4>
+        <p class="promise"><span>contract</span>async <code>CandidateRunner</code> returning <code>Result&lt;CandidateRun&lt;O&gt;, _&gt;</code>; async <code>Scorer</code> returning <code>Result&lt;Metered&lt;Score&gt;, _&gt;</code>.</p>
+        <p class="actual"><span>actual</span><code class="bad">Fn(&amp;A, &amp;C) → RunOutput</code> and <code class="bad">Fn(ScoreContext) → Score</code>, called serially inside an async evaluator.</p>
+      </div>
+      <div class="sev blocker">blocker</div>
+    </div>
+
+    <div class="finding">
+      <div class="id"><span class="num">RC-L1-004</span>scoring</div>
+      <div class="body">
+        <h4>Score and feedback collapse into scalar plus strings.</h4>
+        <p class="promise"><span>contract</span><code>Score</code> with primary comparable axis, metrics, feedback, structured records, attachments, evidence refs, typed errors.</p>
+        <p class="actual"><span>actual</span><code class="bad">value: f64 + feedback: String + structured: Vec&lt;(String, String)&gt;</code>; score errors become <code>0.0</code>.</p>
+      </div>
+      <div class="sev high">high</div>
+    </div>
+
+    <div class="finding">
+      <div class="id"><span class="num">RC-L1-005</span>cases</div>
+      <div class="body">
+        <h4>Dataset semantics are positional instead of user-stable.</h4>
+        <p class="promise"><span>contract</span><code>Case&lt;I, T = NoTarget&gt;</code> with stable ids, duplicate rejection, disjoint splits, fingerprints.</p>
+        <p class="actual"><span>actual</span><code class="bad">CaseId::from_index</code> over concatenated <code>Vec&lt;C&gt;</code>; <code>leaven-eval</code> has the right primitives but the builder doesn't use them.</p>
+      </div>
+      <div class="sev high">high</div>
+    </div>
+
+    <div class="finding">
+      <div class="id"><span class="num">RC-L1-006</span>runtime</div>
+      <div class="body">
+        <h4>LM runtime &amp; cache are pieces, not an ordinary-role story.</h4>
+        <p class="promise"><span>contract</span>solver, reflector, scorer / judge, agent — each with provider + cache policy + budget + fingerprint identity.</p>
+        <p class="actual"><span>actual</span>users compose <code class="bad">CachedLm::read_write(...)</code> by hand; <code class="bad">ScoringEvaluator::cache_policy</code> returns <code>Never</code>; <code>OpenAiLm::from_env</code> ignores its model arg.</p>
+      </div>
+      <div class="sev high">high</div>
+    </div>
+
+    <div class="finding">
+      <div class="id"><span class="num">RC-L1-007</span>proof</div>
+      <div class="body">
+        <h4>The canonical example proves a proxy.</h4>
+        <p class="promise"><span>contract</span><code>p8_aime_gepa</code> exercises real reflection over Leaven LM/cache; live swap is provider construction.</p>
+        <p class="actual"><span>actual</span>reflector is <code class="bad">ReflectiveMutation::new(fixed_edit)</code>; live solver shells out to <code class="bad">scripts/openai_solver.py</code> calling OpenAI with <code>urllib</code>; the example does not depend on <code>leaven-lm-openai</code>.</p>
+      </div>
+      <div class="sev blocker">blocker</div>
+    </div>
+
+    <div class="finding">
+      <div class="id"><span class="num">RC-L1-008</span>result</div>
+      <div class="body">
+        <h4>The result facade copies a thin snapshot instead of exposing run truth.</h4>
+        <p class="promise"><span>contract</span>optional best, stop reason, budget, graph-backed report, public events, GEPA summary, final-test semantics, resume.</p>
+        <p class="actual"><span>actual</span><code class="bad">OptimizeResult</code> requires best id, clones artifacts; <code>OptimizationReport</code> is aggregate floats and event strings; empty averages → <code>0.0</code>; no <code>.resume(...)</code>.</p>
+      </div>
+      <div class="sev high">high</div>
+    </div>
+  </div>
+
+  <div class="delta">
+    <h4>the root delta · Layer 1</h4>
+    <table>
+      <tr><td>optimize builder shell</td><td>≠</td><td>ordinary optimizer product</td></tr>
+      <tr><td>empty unit case set</td><td>≠</td><td>single-task work</td></tr>
+      <tr><td>sync closure</td><td>≠</td><td>async LM / program / agent runner</td></tr>
+      <tr><td>f64 + String</td><td>≠</td><td>score / evidence / feedback contract</td></tr>
+      <tr><td>Vec position</td><td>≠</td><td>stable case identity</td></tr>
+      <tr><td>CachedLm wrapper</td><td>≠</td><td>runtime / cache role policy</td></tr>
+      <tr><td>ignored default model</td><td>≠</td><td>provider / runtime identity</td></tr>
+      <tr><td>fixed edit</td><td>≠</td><td>reflective mutation</td></tr>
+      <tr><td>aggregate floats</td><td>≠</td><td>graph-backed report</td></tr>
+      <tr><td>prelude of everything</td><td>≠</td><td>Layer 1 public surface</td></tr>
+    </table>
+  </div>
+</section>
+
+
+<!-- ============================== LAYER 2 ============================== -->
+
+<section class="layer" id="l2">
+  <div class="head">
+    <div class="marker">layer · 02</div>
+    <h2>The <em>GEPA customizer</em>.</h2>
+    <div class="pct-inline">maturity&nbsp;·&nbsp;<b>22 / 100</b></div>
+  </div>
+  <p class="blurb">
+    Touch surface, parent selection, part selection, batch sampling, reflection, acceptance, validation, population/frontier, merge, and stopping. Do not fork the engine.
+  </p>
+
+  <div class="two">
+    <div class="real">
+      <h4>what is real</h4>
+      <ul>
+        <li><code>Gepa</code> optimizer with a real candidate/evaluate/accept loop and partial checkpoint round-trip</li>
+        <li><code>EditSurface</code> in <code>leaven-surface</code> is healthy — typed part ids, addresses, views, edits, fingerprints, pure <code>change_part</code></li>
+        <li><code>TournamentPopulation</code> with pairwise Bradley-Terry state exists (in <code>leaven-population</code>)</li>
+        <li>engine has the right substrate: async <code>Proposer&lt;P&gt;</code>, typed request, <code>ProposalContext</code>, <code>RunContext::propose</code></li>
+        <li>checkpoint covers the reduced slot set (selector cursor + frontier membership)</li>
+      </ul>
+    </div>
+    <div class="proxy">
+      <h4>what is a proxy</h4>
+      <ul>
+        <li><span class="id">ReflectiveMutation</span> is a deterministic fixed-edit fixture with a production name; stores one edit, ignores <code>artifact, surface, part</code></li>
+        <li><span class="id">SurfaceProposer</span> is <em>sync</em> and receives only <code>artifact, surface, part</code>. no assessments, no evidence, no traces, no part view, no objective</li>
+        <li>builder exposes only <code>surface</code>, optional <code>population</code>, <code>reflector</code> — 3 of 11 spec'd slots</li>
+        <li>GEPA bypasses <code>RunContext::propose</code> — calls <code>record_proposal_batch</code> directly with a hard-coded <code>Cost::metric_calls(1)</code></li>
+        <li>evidence collapsed to scalar before reflection: <code>ScoredFeedbackEvidence</code> projects to <code>ScalarEvidence</code>; <code class="bad">Gate(f64, f64)</code></li>
+        <li><code>ValidationPolicy</code> is a marker trait with empty markers; <code>FullValidation</code>, <code>MinibatchThenValidation</code> have no behavior</li>
+        <li><code>MergeScheduler</code>, <code>GepaConfig</code>, <code>SystemAwareMerge</code>, <code>ReflectiveMutationConfig</code> are placeholder structs</li>
+        <li><code>ParetoFrequencyWeighted</code> selects deterministic best, not stochastic frequency-weighted Pareto sampling</li>
+        <li>public name is <code class="bad">CandidateSelector</code>; spec says GEPA-facing name is <code>ParentSelector</code></li>
+        <li>train partition hard-coded to <code>TRAIN</code>; no <code>BatchSampler</code> slot; no <code>Stopper</code> slot</li>
+        <li><code>WorstEvidencePart</code> is a placeholder with no evidence input</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="findings">
+    <div class="finding">
+      <div class="id"><span class="num">RC-L2-001</span>fixture</div>
+      <div class="body">
+        <h4>Milestone scaffolding escaped as product reflection.</h4>
+        <p class="promise"><span>contract</span>milestone-A deterministic proposer proves the loop; milestone-B replaces with real LM-driven reflection consuming feedback/trace.</p>
+        <p class="actual"><span>actual</span>fixture has the public name. AIME uses it as the reflector and the loop reports score movement that has nothing to do with reflection.</p>
+      </div>
+      <div class="sev critical">critical</div>
+    </div>
+
+    <div class="finding">
+      <div class="id"><span class="num">RC-L2-002</span>slots</div>
+      <div class="body">
+        <h4>Strategy slots are fields, not public contracts.</h4>
+        <p class="promise"><span>contract</span><code>Gepa::builder()</code> exposes surface, parent selector, part selector, batch sampler, reflector, acceptance, validation, population, merge, stopper, config.</p>
+        <p class="actual"><span>actual</span>builder exposes 3; <code>with_strategies</code> exposes 6; <code>ValidationPolicy</code>/<code>MergeScheduler</code>/<code>GepaConfig</code> are empty placeholders.</p>
+      </div>
+      <div class="sev blocker">blocker</div>
+    </div>
+
+    <div class="finding">
+      <div class="id"><span class="num">RC-L2-003</span>reflection</div>
+      <div class="body">
+        <h4>Reflection context is lost before reaching the reflector.</h4>
+        <p class="promise"><span>contract</span>parent id, selected part &amp; view, assessment ids, casewise evidence, attribution, lineage, objective/background, budget — async, provider-neutral.</p>
+        <p class="actual"><span>actual</span><code class="bad">SurfaceProposer::propose_edit(&amp;artifact, &amp;surface, &amp;part)</code> — sync; nothing else is reachable through the trait.</p>
+      </div>
+      <div class="sev blocker">blocker</div>
+    </div>
+
+    <div class="finding">
+      <div class="id"><span class="num">RC-L2-004</span>evidence</div>
+      <div class="body">
+        <h4>Evidence is collapsed to scalar before strategy interpretation.</h4>
+        <p class="promise"><span>contract</span>casewise measurement &amp; attribution stay distinct until a strategy interprets them.</p>
+        <p class="actual"><span>actual</span><code>ScoredFeedbackEvidence</code> projects to <code>CasewiseEvidence&lt;ScalarEvidence&gt;</code> before <code>Gate</code>; pairwise/listwise/multi-axis GEPA impossible without loop changes.</p>
+      </div>
+      <div class="sev blocker">blocker</div>
+    </div>
+
+    <div class="finding">
+      <div class="id"><span class="num">RC-L2-005</span>bypass</div>
+      <div class="body">
+        <h4>GEPA bypasses the engine's proposal finalization.</h4>
+        <p class="promise"><span>contract</span>optimizers route through <code>ctx.propose(&amp;proposer, request)</code> so stage events &amp; costs record uniformly.</p>
+        <p class="actual"><span>actual</span>GEPA calls a local sync proposer, lowers the edit, then calls <code class="bad">record_proposal_batch</code> directly with a hard-coded cost. Budget-exhausted proposal would not fail before graph mutation.</p>
+      </div>
+      <div class="sev blocker">blocker</div>
+    </div>
+
+    <div class="finding">
+      <div class="id"><span class="num">RC-L2-006</span>names</div>
+      <div class="body">
+        <h4>Naming divergence hides missing behavior.</h4>
+        <p class="promise"><span>contract</span><code>ParentSelector</code>, <code>Acceptance</code>, real <code>ParetoFrequencyWeighted</code>, real renderers/materializers.</p>
+        <p class="actual"><span>actual</span><code class="bad">CandidateSelector, Gate, WorstEvidencePart, ParetoFrequencyWeighted (deterministic)</code> all public; empty renderer/materializer structs forwarded through <code>leaven::prelude</code> behind the <code>gepa</code> default feature.</p>
+      </div>
+      <div class="sev high">high</div>
+    </div>
+
+    <div class="finding">
+      <div class="id"><span class="num">RC-L2-007</span>state</div>
+      <div class="body">
+        <h4>Private state exists for some slots but not the slot set.</h4>
+        <p class="promise"><span>contract</span>checkpoint covers RNG, batch sampler, parent/part selector, gate/admission, merge, population, stopper.</p>
+        <p class="actual"><span>actual</span><code>GepaCheckpointState</code> covers reduced live slots only; the rest don't exist yet, so the checkpoint will need re-design when they do.</p>
+      </div>
+      <div class="sev high">high</div>
+    </div>
+
+    <div class="finding">
+      <div class="id"><span class="num">RC-L2-008</span>control</div>
+      <div class="body">
+        <h4>Control slots are listed but still under-specified.</h4>
+        <p class="promise"><span>contract</span><code>BatchSampler</code>, <code>ValidationPolicy</code>, <code>MergeScheduler</code>, <code>Stopper</code> each with request, response, error, state, event/report, must-not rules.</p>
+        <p class="actual"><span>actual</span><code>TRAIN</code> hardcoded; <code>ValidationPolicy</code> marker-only; <code>MergeScheduler</code>/<code>GepaConfig</code> empty; <code>Stopper</code> reduced to <code>max_iterations</code>.</p>
+      </div>
+      <div class="sev blocker">blocker</div>
+    </div>
+  </div>
+
+  <div class="delta">
+    <h4>the root delta · Layer 2 — slot contract present?</h4>
+    <table>
+      <tr><td>EditSurface</td><td>HEALTHY</td><td>part view not passed to reflection</td></tr>
+      <tr><td>ParentSelector</td><td>WRONG NAME</td><td>public is CandidateSelector; default deterministic</td></tr>
+      <tr><td>PartSelector</td><td>NO EVIDENCE</td><td>only artifact + surface reach it</td></tr>
+      <tr><td>BatchSampler</td><td>ABSENT</td><td>TRAIN hard-coded in loop</td></tr>
+      <tr><td>FeedbackSelector</td><td>ABSENT</td><td>evidence projected to scalar before reflection</td></tr>
+      <tr><td>ReflectiveMutation</td><td>FIXTURE</td><td>fixed-edit stand-in for real reflection</td></tr>
+      <tr><td>Acceptance</td><td>SCALAR ONLY</td><td>Gate(f64, f64); no pairwise/listwise/defer</td></tr>
+      <tr><td>ValidationPolicy</td><td>MARKER</td><td>empty struct, no behavior</td></tr>
+      <tr><td>Population</td><td>SCALAR ONLY</td><td>tournament population unreachable through GEPA</td></tr>
+      <tr><td>MergeScheduler</td><td>PLACEHOLDER</td><td>empty struct, no behavior</td></tr>
+      <tr><td>Stopper / Config</td><td>PLACEHOLDER</td><td>max_iterations only</td></tr>
+    </table>
+  </div>
+</section>
+
+
+<!-- ============================== LAYER 3 ============================== -->
+
+<section class="layer" id="l3">
+  <div class="head">
+    <div class="marker">layer · 03</div>
+    <h2>The <em>optimizer author</em>.</h2>
+    <div class="pct-inline">maturity&nbsp;·&nbsp;<b>48 / 100</b></div>
+  </div>
+  <p class="blurb">
+    Implement a new optimizer over <code>Optimizer&lt;P&gt;</code> and <code>RunContext</code>. Pairwise tournament, MIPRO, TextGrad, AlphaEvolve must not have to contort into GEPA's loop shape.
+  </p>
+
+  <div class="two">
+    <div class="real">
+      <h4>what is real</h4>
+      <ul>
+        <li><code>RunContext::propose</code> finalizer: dispatches proposer, charges budget, records graph, emits events, checkpoints</li>
+        <li><code>RunContext::evaluate</code>/<code>evaluate_with</code> finalizers: trust check, set resolution, cache lookup, evaluator dispatch, evidence storage, assessment recording, completion event</li>
+        <li><code>ProposalContext</code>, <code>EvaluationContext</code>, <code>RenderContext</code>, <code>MaterializeContext</code> with scoped graph views + budget handles</li>
+        <li><code>EvidenceStore</code> + <code>RunContext::assessment_evidence</code> for typed payload</li>
+        <li><code>BudgetLedger</code> + <code>BudgetHandle</code> + <code>sub_stage</code> for attributed charges</li>
+        <li><code>PreferenceRelation&lt;P&gt;</code> + <code>Population&lt;P&gt;</code> traits, graph-backed</li>
+        <li>pairwise &amp; listwise assessment targets recorded in graph</li>
+        <li>casewise + pairwise evidence starts in <code>leaven-evidence</code></li>
+      </ul>
+    </div>
+    <div class="proxy">
+      <h4>what is a proxy</h4>
+      <ul>
+        <li>raw stage-context factories <code>proposal_context</code>, <code>evaluation_context</code>, <code>render_context</code>, <code>materialize_context</code> are public — optimizer authors can skip every finalizer</li>
+        <li>no <code>RunContext::render_with</code> / <code>materialize_into</code> finalizer — render &amp; materialize cost can be invisible to budget, events, checkpoints</li>
+        <li><code>TrustPolicy::check_evaluation_request</code> walks the <em>unresolved</em> <code>EvaluationSet</code> expression — <code>EvaluationSet::Cases([test_id])</code> bypasses hidden-partition policy</li>
+        <li><code>EvaluationCacheKey</code> omits request fingerprint, request kind, granularity, purpose, pair-order policy, listwise grouping, assessment shape — semantically distinct evaluations collide</li>
+        <li>cache hits return cached assessment ids for the new request id with zero recorded reuse linkage — request N can appear to own assessments from request M</li>
+        <li><code>ProposalContext</code> has no evidence reader; only <code>RunContext::assessment_evidence</code> can load payloads — proposer stages see refs but cannot load</li>
+        <li><code>leaven-eval</code> missing planned <code>plan</code>/<code>request</code>/<code>traits</code>/<code>suite</code> modules; <code>leaven-run</code> doing dataset/split/report lowering inline</li>
+        <li><code>P::Evidence</code> fixed to <code>CasewiseEvidence&lt;ScoredFeedbackEvidence&gt;</code> in <code>leaven-run</code>; placeholder evidence vocabulary in <code>leaven-evidence</code> root exports</li>
+        <li>typed errors broad — <code>ProposalError::Message</code>, <code>EvaluationError::Message</code> instead of unsupported-granularity / shape-mismatch / trust-refused / cache-key-refused / attachment-failed</li>
+        <li>no public-contract proof: scalar keep-best, pairwise tournament, reflective evidence-driven proposer, agentic materializing stage — none of these exist as Layer-3 contract tests</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="findings">
+    <div class="finding">
+      <div class="id"><span class="num">RC-L3-001</span>authority</div>
+      <div class="body">
+        <h4>Public finalization is split across two classes of API.</h4>
+        <p class="promise"><span>contract</span><code>RunContext</code> is the public mutation/finalization authority; raw stage contexts are crate-private or test-support.</p>
+        <p class="actual"><span>actual</span>raw <code>*_context()</code> factories are publicly callable; tests use them directly. Future authors can call stage traits and skip graph, budget, cache, events.</p>
+      </div>
+      <div class="sev blocker">blocker</div>
+    </div>
+
+    <div class="finding">
+      <div class="id"><span class="num">RC-L3-002</span>render</div>
+      <div class="body">
+        <h4>Rendering and materialization are split correctly but not finalized.</h4>
+        <p class="promise"><span>contract</span>render &amp; materialize work flows through <code>RunContext</code> finalizers that charge budget, emit events, propagate read scope.</p>
+        <p class="actual"><span>actual</span>only raw contexts exposed; nonzero-cost materializer can produce side effects with no ledger entry.</p>
+      </div>
+      <div class="sev high">high</div>
+    </div>
+
+    <div class="finding">
+      <div class="id"><span class="num">RC-L3-003</span>eval</div>
+      <div class="body">
+        <h4>Eval / data / environment separation exists in spec but is partial in code.</h4>
+        <p class="promise"><span>contract</span><code>leaven-eval</code> owns dataset, splits, plan, request templates, suite, report.</p>
+        <p class="actual"><span>actual</span>missing modules; <code>leaven-run</code> builder constructs <code>Dataset</code>, <code>DatasetSplits</code>, <code>CaseSet</code>, <code>TrustPolicy</code>, and report inputs in one local path. Reports infer split membership from unresolved <code>EvaluationSet::Partition</code>.</p>
+      </div>
+      <div class="sev high">high</div>
+    </div>
+
+    <div class="finding">
+      <div class="id"><span class="num">RC-L3-004</span>trust</div>
+      <div class="body">
+        <h4>Trust is checked on expressions, not resolved membership.</h4>
+        <p class="promise"><span>contract</span>hidden test/validation enforced after resolution, against actual case ids.</p>
+        <p class="actual"><span>actual</span><code class="bad">EvaluationSet::Cases([test_id])</code> sneaks past the recursive collector; <code>FinalTest</code> purpose recorded but not authorized; <code>SplitUsePolicy</code> not yet engine-readable.</p>
+      </div>
+      <div class="sev blocker">blocker</div>
+    </div>
+
+    <div class="finding">
+      <div class="id"><span class="num">RC-L3-005</span>cache</div>
+      <div class="body">
+        <h4>Cache identity is not request/graph semantics.</h4>
+        <p class="promise"><span>contract</span>key includes evaluator fingerprint + request fingerprint + kind + granularity + purpose + pair-order + listwise grouping + assessment shape + case identities.</p>
+        <p class="actual"><span>actual</span>key is <code class="bad">{evaluator, policy, case-set version, case ids, request-ordered candidates}</code>; cache hits return foreign assessment ids without graph-visible reuse linkage.</p>
+      </div>
+      <div class="sev blocker">blocker</div>
+    </div>
+
+    <div class="finding">
+      <div class="id"><span class="num">RC-L3-006</span>evidence→reflection</div>
+      <div class="body">
+        <h4>Evidence is recorded, but reflection cannot consume it honestly.</h4>
+        <p class="promise"><span>contract</span>proposer stages either receive complete owned views or can load scoped evidence from context; provenance records <code>InfoRef::Assessment</code>.</p>
+        <p class="actual"><span>actual</span><code>ProposalContext</code> exposes graph view + render + materialize but no evidence reader; GEPA avoids the issue with a narrow <code>SurfaceProposer</code> + fixed-edit fixture.</p>
+      </div>
+      <div class="sev blocker">blocker</div>
+    </div>
+
+    <div class="finding">
+      <div class="id"><span class="num">RC-L3-007</span>proof</div>
+      <div class="body">
+        <h4>Tests prove many pieces, but not the Layer 3 contract as a whole.</h4>
+        <p class="promise"><span>contract</span>scalar keep-best · pairwise tournament · evidence-driven reflective proposer · agentic materializing stage — all over public Layer 3 primitives.</p>
+        <p class="actual"><span>actual</span>focused proposer/evaluate/cache tests pass; raw context tests legitimize bypass; cache tests permit one assessment serving two requests.</p>
+      </div>
+      <div class="sev high">high</div>
+    </div>
+
+    <div class="finding">
+      <div class="id"><span class="num">RC-L3-008</span>vocabulary</div>
+      <div class="body">
+        <h4>Evidence / preference / population proof is still too scalar and local.</h4>
+        <p class="promise"><span>contract</span>graph-backed scalar &amp; pairwise paths drive preference/population from <code>AssessmentId</code> + <code>RunGraphView</code>.</p>
+        <p class="actual"><span>actual</span><code>leaven-run</code> fixes <code>P::Evidence</code> scalar; <code>leaven-evidence</code> root-exports empty placeholders; populations use direct <code>observe_*</code> instead of engine-trait paths.</p>
+      </div>
+      <div class="sev high">high</div>
+    </div>
+  </div>
+
+  <div class="delta">
+    <h4>the root delta · Layer 3 — invariant honored?</h4>
+    <table>
+      <tr><td>raw context factory bypass</td><td>OPEN</td><td>compile-fail or private-by-default</td></tr>
+      <tr><td>render/materialize off-ledger</td><td>OPEN</td><td>RunContext::render_with / materialize_into</td></tr>
+      <tr><td>expression-level trust check</td><td>OPEN</td><td>resolved-membership trust check</td></tr>
+      <tr><td>narrow cache key</td><td>OPEN</td><td>request fingerprint + kind + granularity + purpose</td></tr>
+      <tr><td>silent assessment reuse</td><td>OPEN</td><td>graph-visible reuse linkage on hit</td></tr>
+      <tr><td>no evidence reader on ProposalContext</td><td>OPEN</td><td>scoped load via AssessmentId</td></tr>
+      <tr><td>leaven-eval incomplete</td><td>OPEN</td><td>plan / request / traits / suite</td></tr>
+      <tr><td>no Layer-3 contract proof</td><td>OPEN</td><td>keep-best · pairwise · reflective · agentic</td></tr>
+    </table>
+  </div>
+</section>
+
+
+<!-- ============================== CROSS-CUTTING ============================== -->
+
+<section class="layer" id="xc">
+  <div class="head">
+    <div class="marker">layer · X</div>
+    <h2>Cross-cutting · <em>public maturity</em>.</h2>
+    <div class="pct-inline">maturity&nbsp;·&nbsp;<b>32 / 100</b></div>
+  </div>
+  <p class="blurb">
+    The crate graph is a boundary map, not a capability ledger. A name being importable is not the same as the thing behind it being safe to depend on.
+  </p>
+
+  <div class="ribbon">
+    <div class="cell">
+      <div class="k">workspace crates</div>
+      <div class="v">38</div>
+      <div class="n">named in the topology, varying maturity</div>
+    </div>
+    <div class="cell">
+      <div class="k">true placeholder shells</div>
+      <div class="v">9<small>+</small></div>
+      <div class="n">anthropic · local · docker · e2b · firecracker · k8s · sqlite · object · claude-code …</div>
+    </div>
+    <div class="cell">
+      <div class="k">orphan directory</div>
+      <div class="v">1</div>
+      <div class="n"><code>leaven-dsrs</code> — in topology spec, not in workspace</div>
+    </div>
+    <div class="cell">
+      <div class="k">default-feature leaks</div>
+      <div class="v">3</div>
+      <div class="n"><code>std</code> · <code>derive</code> (<code>compile_error!</code>) · <code>gepa</code> prelude</div>
+    </div>
+  </div>
+
+  <div class="two">
+    <div class="real">
+      <h4>what is real</h4>
+      <ul>
+        <li>cold core / surface / engine boundaries directionally correct</li>
+        <li>topology test enforces workspace membership, manifests, dep edges, Codex protocol leaf-ness</li>
+        <li><code>leaven-lm</code> has real provider-neutral messages/requests/responses + contract tests</li>
+        <li><code>leaven-lm-cache</code> has real cache policies + tests (just badly placed publicly)</li>
+        <li><code>leaven-lm-openai</code> lowers neutral requests to OpenAI Responses API JSON</li>
+        <li><code>EditSurface</code>, <code>EvidenceStore</code>, <code>BudgetLedger</code>, agentic Codex runtime topology</li>
+      </ul>
+    </div>
+    <div class="proxy">
+      <h4>what is a proxy</h4>
+      <ul>
+        <li>topology test verifies <em>skeleton presence</em>, not whether public exports carry behavior</li>
+        <li>provider/backend features (<code>lm-anthropic</code>, <code>workspace-docker</code>, <code>workspace-e2b</code>, <code>store-sqlite</code>) expose one-line public structs</li>
+        <li><code>crates/leaven-dsrs</code> has no <code>Cargo.toml</code>, no <code>src/lib.rs</code>, files only — but the topology spec names it</li>
+        <li>derive macros expand to <code>compile_error!("unimplemented")</code> and are reachable from <code>leaven::prelude</code> via default features</li>
+        <li><code>leaven-evidence</code>, <code>leaven-preference</code>, <code>leaven-render</code>, <code>leaven-std</code> mix real types with empty unit struct placeholders</li>
+        <li>multiple crates expose internal module file layout as <code>pub mod</code> alongside curated exports — file layout becomes semver surface by accident</li>
+        <li>spec contradicts itself on whether <code>leaven-gepa</code> may depend on <code>leaven-lm-cache</code>; live manifest omits the edge</li>
+        <li>coverage gate runs <code>p8_aime_gepa</code> even though its README admits the deterministic path is not evidence of live AIME improvement — proxy-demo cannot be distinguished from product-proof</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="findings">
+    <div class="finding">
+      <div class="id"><span class="num">RC-X-001</span>maturity</div>
+      <div class="body">
+        <h4>Boundary existence is being treated as capability evidence.</h4>
+        <p class="promise"><span>contract</span>topology check + public-maturity gate together: every default-facing symbol classified as ordinary / advanced / test-support / explicit-scaffold.</p>
+        <p class="actual"><span>actual</span>topology accepts shells and skeleton descriptions; orphan <code>crates/*</code> directories not rejected.</p>
+      </div>
+      <div class="sev blocker">blocker</div>
+    </div>
+
+    <div class="finding">
+      <div class="id"><span class="num">RC-X-002</span>defaults</div>
+      <div class="body">
+        <h4>Default import paths promote scaffolding into product API.</h4>
+        <p class="promise"><span>contract</span><code>leaven::prelude</code> exposes only behavior-bearing ordinary contracts; engine-author imports live behind an advanced module.</p>
+        <p class="actual"><span>actual</span>defaults enable <code>std</code>, <code>derive</code> (compile-error), <code>gepa</code>; common prelude forwards <code>leaven_gepa::prelude::*</code> and <code>leaven-std::prelude</code>.</p>
+      </div>
+      <div class="sev blocker">blocker</div>
+    </div>
+
+    <div class="finding">
+      <div class="id"><span class="num">RC-X-003</span>cache layer</div>
+      <div class="body">
+        <h4>LM cache is real, but its layer placement is publicly unsettled.</h4>
+        <p class="promise"><span>contract</span>solver / reflector / scorer / agent runtime cache policy is configured by role at the run layer; <code>CachedLm</code> is an advanced wrapper.</p>
+        <p class="actual"><span>actual</span>spec teaches manual <code class="bad">CachedLm::read_write(...)</code> stacking; <code>leaven-run</code> hard-codes <code>CachePolicy::Never</code>; the spec itself contradicts on the <code>leaven-gepa → leaven-lm-cache</code> edge.</p>
+      </div>
+      <div class="sev high">high</div>
+    </div>
+
+    <div class="finding">
+      <div class="id"><span class="num">RC-X-004</span>providers</div>
+      <div class="body">
+        <h4>Provider and backend names are exposed before capability laws exist.</h4>
+        <p class="promise"><span>contract</span>each non-scaffold provider/backend feature has constructor, trait impl, typed error, and at least one non-network mapping or law test.</p>
+        <p class="actual"><span>actual</span><code>AnthropicLm</code>, <code>DockerWorkspaceFactory</code>, <code>E2bWorkspaceFactory</code>, <code>SqliteStore</code> are one-line inert public structs reachable through umbrella features.</p>
+      </div>
+      <div class="sev high">high</div>
+    </div>
+
+    <div class="finding">
+      <div class="id"><span class="num">RC-X-005</span>gepa default</div>
+      <div class="body">
+        <h4>GEPA is default-facing before its dependencies are honest.</h4>
+        <p class="promise"><span>contract</span>GEPA goes default only after real reflection contract, real slot set, evidence flow, and finalization routing are present.</p>
+        <p class="actual"><span>actual</span><code>gepa</code> is in the umbrella default feature set; the prelude forwards GEPA names including <code>ReflectiveMutation</code> (fixed-edit) as ordinary capability.</p>
+      </div>
+      <div class="sev blocker">blocker</div>
+    </div>
+
+    <div class="finding">
+      <div class="id"><span class="num">RC-X-006</span>examples</div>
+      <div class="body">
+        <h4>Examples and coverage gates do not separate product proof from proxy demo.</h4>
+        <p class="promise"><span>contract</span>examples classified as <code>product-proof</code> / <code>mechanics-smoke</code> / <code>proxy-demo</code>; only product-proof satisfies maturity claims.</p>
+        <p class="actual"><span>actual</span>coverage gate runs <code>p8_aime_gepa</code> which itself admits the deterministic path is not live AIME evidence; live path is a Python script.</p>
+      </div>
+      <div class="sev high">high</div>
+    </div>
+
+    <div class="finding">
+      <div class="id"><span class="num">RC-X-007</span>vocabulary</div>
+      <div class="body">
+        <h4>Placeholder vocabulary is too coarse to guide implementation.</h4>
+        <p class="promise"><span>contract</span>five distinct categories — real · mixed · stale-metadata-on-real · true-placeholder · orphan — keyed by exact symbol and route, not by crate.</p>
+        <p class="actual"><span>actual</span>one broad "placeholder" bucket lets a polished docstring excuse an inert export, or demote a real surface because metadata still says skeleton.</p>
+      </div>
+      <div class="sev high">high</div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ============================== SEQUENCE ============================== -->
+
+<section class="sequence">
+  <div class="kicker">correction order</div>
+  <h2>The shortest path that doesn't re-validate the proxy.</h2>
+  <p style="font-size: 15px; color: var(--paper-2); max-width: 70ch; margin: 14px 0 0;">
+    The audit's implementation sequence is ordered to remove false public proof <em>before</em> new contracts are added — otherwise each new builder method gets validated by the same proxy example that hides the gap.
+  </p>
+
+  <div class="phase-grid">
+    <div class="phase">
+      <div class="num">phase · 0</div>
+      <h4>Quarantine false public proof.</h4>
+      <p>Rename fixed-edit fixtures out of production names. Strip <code>derive</code> and <code>gepa</code> from default features until real. Remove placeholder provider/backend exports. Mark proxy examples as demos.</p>
+      <div class="exit">exit · <b>no ordinary import or example claims a contract it can't honor.</b></div>
+    </div>
+    <div class="phase">
+      <div class="num">phase · 1</div>
+      <h4>Restore Layer 1 product builder truth.</h4>
+      <p>Async runner / scorer. Rich <code>Score</code> + accessor <code>ScoreContext</code>. Stable cases. Single-task mode. Runtime / cache by role. Ordinary prelude split from advanced. Reports preserve absence and stop reason.</p>
+      <div class="exit">exit · <b>mock-LM AIME-shaped run uses the same builder a live OpenAI run uses.</b></div>
+    </div>
+    <div class="phase">
+      <div class="num">phase · 2</div>
+      <h4>Seal engine &amp; eval invariants.</h4>
+      <p>Raw stage contexts become private. Render / materialize finalizers on <code>RunContext</code>. Trust enforced on resolved membership. Cache key carries full request semantics + graph-visible reuse. <code>leaven-eval</code> owns dataset / split / plan / suite / report.</p>
+      <div class="exit">exit · <b>pairwise tournament implements over public primitives without new traits.</b></div>
+    </div>
+    <div class="phase">
+      <div class="num">phase · 3</div>
+      <h4>Restore GEPA as one honest optimizer.</h4>
+      <p>Real <code>ReflectiveMutation</code> request: parent, part view, assessment ids, casewise evidence, attribution, lineage, budget, LM/agent role. All slots reachable through the builder. Proposal routed through engine finalization.</p>
+      <div class="exit">exit · <b>mock-LM reflective GEPA improves an artifact by reading feedback.</b></div>
+    </div>
+    <div class="phase">
+      <div class="num">phase · 4</div>
+      <h4>Topology &amp; placeholder hardening.</h4>
+      <p>Delete or hard-cut <code>leaven-dsrs</code>. Topology rejects orphan dirs &amp; unledgered exports. Provider/backend features cannot expose inert symbols. Crate roots are curated module maps, not file layouts.</p>
+      <div class="exit">exit · <b>green topology means the public surface tells the truth.</b></div>
+    </div>
+    <div class="phase">
+      <div class="num">phase · 5</div>
+      <h4>Re-run the original pressure tests.</h4>
+      <p>Scalar keep-best · pairwise tournament with fitted population · GEPA parity with real reflection · agentic Git/skill artifact with materialization, evidence store, trust boundaries, final-test policy.</p>
+      <div class="exit">exit · <b>a new paper compiles &amp; runs over public primitives without touching core.</b></div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ============================== CLOSE ============================== -->
+
+<section class="close">
+  <h2>What is true today,<br/>and what becomes <em>true</em><br/>when this is paid.</h2>
+  <div>
+    <p><strong style="color:var(--paper);">Today.</strong> The architecture is sound. The crate boundaries are mostly right. The engine has the right finalizers. <code>EditSurface</code>, <code>EvidenceStore</code>, <code>BudgetLedger</code>, <code>TournamentPopulation</code>, and the <code>Workspace</code> trait all exist as real code. <code>leaven-lm</code> + <code>leaven-lm-cache</code> + <code>leaven-lm-openai</code> can compose into a real provider-neutral runtime — they just don't, in the canonical example.</p>
+    <p><strong style="color:var(--paper);">After phase 0–2.</strong> A user can write the spec's eight-line builder and have it mean what it says. A non-GEPA optimizer like pairwise tournament fits over the public primitives. Hidden test cases stay hidden through resolved membership. Cache cannot silently swap one assessment for another.</p>
+    <p><strong style="color:var(--paper);">After phase 3–5.</strong> GEPA reads selected feedback through Leaven LM/cache, produces a typed proposal with <code>InfoRef::Assessment</code> provenance, and routes through <code>RunContext::propose</code>. AIME's live and mock paths differ only by a provider construction line. A new paper compiles against public primitives without touching <code>leaven-core</code>.</p>
+    <p style="font-family: var(--serif); font-style: italic; color: var(--paper); margin-top: 24px; font-size: 19px; line-height: 1.35;">"The engine is dumb. The optimizer is smart. The types tell the truth." Today, two of three. The audit is the receipt for the third.</p>
+  </div>
+</section>
+
+<footer class="colophon">
+  <div>reviews/2026-05-11-fuckery-extermination-today/layer-gaps.html</div>
+  <div>4 surfaces · 31 root causes · 14 blockers · 5 phases</div>
+</footer>
+
+</div>
+
+</body>
+</html>
