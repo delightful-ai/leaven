@@ -18,6 +18,12 @@ provider protocol details or optimizer-specific search rhythm.
   vocabulary.
 - `ProposalParser`, `EvidenceParser`, and `EvaluationInputBuilder` are the
   import seams from runtime/session facts into typed Leaven outputs.
+- `GoalLoop`, `GoalHandoff`, `GoalSpecCheck`, `GoalStagePlan`,
+  `GoalSpecCheckRequest`, `GoalStagePlanRequest`, `GoalExecutionRequest`, and
+  the `Goal*Signature` types are the typed pre-goal API for persistent agent
+  loops. They preserve original intent, reject proxy proofs, carry stage-plan
+  details forward, and require a proof denominator without knowing
+  provider-specific goal flags.
 - Repairing proposers own bounded re-prompt policy; repair is stage policy, not
   a provider-runtime responsibility.
 
@@ -41,6 +47,9 @@ provider protocol details or optimizer-specific search rhythm.
   policy, and workload evaluator behavior.
 - `crates/leaven-agentic/tests/repairing_proposer.rs` proves bounded repair
   loops, repair metadata, inspection, and exhausted repair behavior.
+- `crates/leaven-agentic/tests/goal_handoff.rs` proves the pre-goal checklist,
+  typed request/output helpers, next-stage planning, and execution prompt
+  contracts.
 - `docs/specs/agentic_stage_runtime.md` owns the generic runtime/stage split.
 - Run `cargo nextest run -p leaven-agentic` to prove generic agentic adapter
   behavior.
@@ -69,6 +78,12 @@ provider protocol details or optimizer-specific search rhythm.
   preserve: hidden `CaseTarget` values as scorer-visible only and `AgentCasePresentation.materialized_refs` as the explicit candidate-visible footprint
   avoid: moving agentic task/environment semantics into `leaven-eval` or leaking hidden targets through materializers
   verify: run the preflight and evaluator paths in `cargo nextest run -p leaven-agentic --test agentic_workload`
+
+- when: changing persistent-goal handoff prompts
+  do: keep the pre-goal checklist explicit in `GoalHandoff`, expose typed request/output helpers through `GoalLoop`, and prove the no-hidden-runtime path in tests
+  preserve: original intent, designed surface, misleading proxy proof rejection, acceptance path, proof denominator, stage rationale, required changes, stop condition, and honest blocked closeout
+  avoid: moving Codex CLI flags or jj command execution into this generic adapter crate, or dropping typed `GoalStagePlan` fields before execution
+  verify: run `cargo test -p leaven-agentic --test goal_handoff`
 
 ## Local Bait
 - Agent workspace mutation is not graph mutation. Only parser-produced

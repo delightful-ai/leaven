@@ -42,7 +42,7 @@ P8 owns the example artifact, edit surface, deterministic AIME-shaped cases, cac
 ## Bait
 - A passing deterministic p8 run proves public API mechanics and invariant reporting; it is not evidence of live AIME benchmark improvement.
 - A cached or live p8 run proves operator wiring over a particular local dataset/provider environment; it is not a replacement for the deterministic default acceptance path.
-- The name `ReflectiveMutation` is currently misleading in this example: it behaves like a fixed-edit fixture. Do not cite it as proof of reflection until the GEPA crate hard-cuts the public name or implements evidence-aware reflection.
+- This example wires `leaven::gepa::fixtures::FixedEditProposer` as the GEPA reflector. The `fixtures::` path is itself the label: it is Milestone A scaffolding, not reflection. Do not cite this example as proof of reflection until the GEPA crate implements evidence-aware reflection. `ReflectiveMutation` is reserved for that future contract.
 - `leaven::prelude::*` makes this example compact, but it also imports advanced
   engine/GEPA/cache names today. Do not use P8 as evidence that the ordinary
   prelude is clean; that belongs in `crates/leaven`.

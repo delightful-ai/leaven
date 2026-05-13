@@ -18,9 +18,15 @@ It composes core, surface, engine, evidence, population, render, and LM vocabula
 - Engine tests use local optimizer wrappers; do not move GEPA selector, gate, or checkpoint private state into `leaven-engine` to make those tests shorter.
 - `leaven-lm` is a neutral vocabulary dependency here, not permission to place OpenAI/Anthropic request fields or CLI/session behavior in GEPA.
 - Population defaults such as `ParetoFrontier` and `KeepBest` are consumed here; reusable population behavior still belongs in `leaven-population`.
-- The current `ReflectiveMutation` shape is fixed-edit scaffolding, not proof
-  of evidence-aware reflection. Do not add examples, exports, or prelude paths
-  that present it as production GEPA reflection.
+- The fixed-edit fixture lives at `leaven_gepa::fixtures::FixedEditProposer`
+  (or `leaven::gepa::fixtures::FixedEditProposer` when the umbrella `gepa`
+  feature is on). The `fixtures::` path is itself the label: this is Milestone
+  A scaffolding for GEPA's `Reflect` type parameter, not reflection. It is
+  intentionally absent from every prelude and from the crate root re-exports.
+  Do not add examples, exports, or prelude paths that present it as
+  production GEPA reflection. Reserve the name `ReflectiveMutation` for the
+  real async evidence-aware reflector when that contract lands; the fixture
+  itself carries a `TODO(phase-4)` deletion marker.
 - Product-facing GEPA proof requires slot contracts for parent selection, part
   selection, feedback/evidence rendering, reflection/proposal, acceptance,
   validation, population, merge, stopping, and checkpoint state. Topology and
@@ -31,8 +37,9 @@ It composes core, surface, engine, evidence, population, render, and LM vocabula
   `CandidateSelector` and `Gate` can be internal implementation words only if
   public-facing APIs do not teach them as the GEPA slots.
 - `ReflectiveMutationConfig`, `SystemAwareMerge`, `GepaConfig`, and
-  `MergeScheduler` are placeholder-shaped names. Keep them out of ordinary
-  public proof until they carry behavior, errors, state, and tests.
+  `MergeScheduler` were inert placeholder structs and have been removed. Do
+  not reintroduce them as public capability names until they carry behavior,
+  errors, state, and tests.
 
 ## Proof Anchors
 - `cargo nextest run -p leaven-gepa` proves local GEPA surface ownership, edit lowering, selectors, gates, checkpoint/restore, validation, and proposer read-scope behavior.

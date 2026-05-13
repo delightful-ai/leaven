@@ -7,7 +7,8 @@ raw stdout/stderr, and returns a provider-neutral `AgentSession`.
 
 ## Map
 - `CodexCliConfig` owns CLI binary, model, reasoning effort, approval/sandbox
-  mode, `CODEX_HOME`, timeout, and last-message path.
+  mode, explicit goal-mode feature opt-in, `CODEX_HOME`, timeout, and
+  last-message path.
 - `CodexCliRuntime` is an `AgentRuntime` implemented by delegation to
   `CommandAgentRuntime<CodexCliSessionParser>`.
 - `CodexCliSessionParser` treats `--output-last-message` as the stable final
@@ -27,8 +28,8 @@ raw stdout/stderr, and returns a provider-neutral `AgentSession`.
 ## Proof Anchors
 - `crates/leaven-agent-codex-cli/tests/codex_cli_runtime.rs` proves command
   template construction, approval/sandbox variants, native skill-discovery
-  non-copying, runtime identity/capabilities, last-message parsing, and stdout
-  fallback.
+  non-copying, explicit Codex goal-mode opt-in, runtime identity/capabilities,
+  last-message parsing, and stdout fallback.
 - `docs/specs/codex_cli_agent_runtime.md` owns this adapter's product path.
 - Run `cargo nextest run -p leaven-agent-codex-cli` to prove deterministic CLI
   adapter behavior without live Codex.
@@ -47,6 +48,12 @@ raw stdout/stderr, and returns a provider-neutral `AgentSession`.
   preserve: `WorkspaceWrite` as the ordinary sandbox default and bypass as an opt-in configuration used by known live reproductions
   avoid: hiding `--dangerously-bypass-approvals-and-sandbox` behind a convenience constructor
   verify: run `cargo nextest run -p leaven-agent-codex-cli` and inspect the expected argv in the config test
+
+- when: changing Codex goal-mode behavior
+  do: keep it as an explicit `CodexCliConfig` flag that renders Codex's feature switch
+  preserve: all goal/spec/stage/jj policy above this provider leaf
+  avoid: teaching the CLI runtime about proposals, evals, proof denominators, or jj snapshots
+  verify: keep `codex_cli_goal_mode_is_explicit_feature_flag` passing
 
 - when: changing skill behavior for Codex CLI
   do: keep native Codex skill discovery as provider behavior over the already-materialized workspace

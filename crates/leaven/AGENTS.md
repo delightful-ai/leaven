@@ -53,14 +53,18 @@ has failed to find a more specific owning crate.
 - `tests/topology_contract.rs` is stronger than stale topology prose for the
   current crate inventory, but it is still a proof anchor, not a dumping ground
   for local crate behavior tests.
-- Today `src/prelude.rs` exports engine-author names (`RunContext`,
-  `RunGraphView`, `TrustPolicy`, `EvaluationRequest`, `Proposer`, `Evaluator`),
-  GEPA's prelude, standard names, and LM-cache names behind features. Treat that
-  as an audited leak in the ordinary import story, not precedent for adding more
-  advanced surfaces to the default prelude.
-- The `gepa` default feature currently makes GEPA's fixture-shaped names easier
-  to import through `leaven::prelude::*`. A topology pass can prove the edge is
-  allowed; only a public-maturity pass proves it is honest for ordinary users.
+- `src/prelude.rs` is split: the ordinary prelude carries only behavior-bearing
+  Layer 1 names (artifact/surface, kernel budget/cost, LM vocabulary,
+  `optimize` + run/score/result, and `Gepa` when the `gepa` feature is on).
+  Engine-author and GEPA-customizer names (`RunContext`, `RunGraphView`,
+  `TrustPolicy`, `EvaluationRequest`, `Proposer`, `Evaluator`, stage traits,
+  derive macros, and `leaven_gepa::prelude::*`/`leaven_lm_cache::prelude::*`
+  re-exports) live under `prelude::advanced`. Do not promote a name back into
+  ordinary without a public-maturity pass.
+- GEPA's fixture-shaped names live under `leaven::gepa::` (e.g.
+  `leaven::gepa::FixedEditProposer`) and intentionally do not appear in any
+  prelude. A topology pass can prove the gepa edge is allowed; only a
+  public-maturity pass proves a fixture is honest for ordinary users.
 - Until a generated export-route ledger exists, every change to `src/lib.rs`,
   `src/prelude.rs`, or `Cargo.toml` features must manually name the maturity
   route it changes: ordinary prelude, advanced namespace, feature-gated facade,
