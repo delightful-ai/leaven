@@ -25,18 +25,14 @@ leaven-artifact-jj = { workspace = true, optional = true }
 leaven-artifact-skill = { workspace = true, optional = true }
 leaven-derive = { workspace = true, optional = true }
 leaven-gepa = { workspace = true, optional = true }
-leaven-lm-anthropic = { workspace = true, optional = true }
 leaven-lm-cache = { workspace = true, optional = true }
 leaven-lm-openai = { workspace = true, optional = true }
 leaven-std = { workspace = true, optional = true }
-leaven-store-sqlite = { workspace = true, optional = true }
 leaven-workspace = { workspace = true, optional = true }
-leaven-workspace-docker = { workspace = true, optional = true }
-leaven-workspace-e2b = { workspace = true, optional = true }
 leaven-workspace-local = { workspace = true, optional = true }
 
 [features]
-default = ["std", "derive", "gepa"]
+default = ["std"]
 std = ["dep:leaven-std"]
 derive = ["dep:leaven-derive"]
 gepa = ["dep:leaven-gepa"]
@@ -46,15 +42,15 @@ git = ["dep:leaven-artifact-git", "leaven-std?/git"]
 jj = ["dep:leaven-artifact-jj", "leaven-std?/jj"]
 skill = ["dep:leaven-artifact-skill", "leaven-std?/skill"]
 agentic-skill = ["agentic", "skill", "dep:leaven-agentic-skill"]
-store-sqlite = ["dep:leaven-store-sqlite"]
 workspace-local = ["workspace", "dep:leaven-workspace-local"]
-workspace-docker = ["workspace", "dep:leaven-workspace-docker"]
-workspace-e2b = ["workspace", "dep:leaven-workspace-e2b"]
 lm-openai = ["dep:leaven-lm-openai"]
-lm-anthropic = ["dep:leaven-lm-anthropic"]
 lm-cache = ["dep:leaven-lm-cache"]
 
 [dev-dependencies]
 futures = { workspace = true }
 leaven-evidence = { workspace = true }
 leaven-store-inline = { workspace = true }
+
+[[test]]
+name = "gepa_parity"
+required-features = ["gepa"]

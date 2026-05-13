@@ -51,6 +51,8 @@ pub use leaven_derive::{
 pub use leaven_std as stdlib;
 
 #[cfg(feature = "gepa")]
+pub use leaven_gepa as gepa;
+#[cfg(feature = "gepa")]
 pub use leaven_gepa::Gepa;
 
 #[cfg(feature = "workspace")]
@@ -70,6 +72,3 @@ pub use leaven_lm_cache as lm_cache;
 
 #[cfg(feature = "lm-openai")]
 pub use leaven_lm_openai as lm_openai;
-
-#[cfg(feature = "lm-anthropic")]
-pub use leaven_lm_anthropic as lm_anthropic;
