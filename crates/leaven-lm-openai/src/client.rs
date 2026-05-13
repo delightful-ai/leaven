@@ -26,13 +26,13 @@ impl OpenAiLm {
 
     /// Creates an `OpenAI` LM provider from `OPENAI_API_KEY`.
     ///
-    /// The `default_model` argument is accepted for import ergonomics and
-    /// fingerprint stability; requests still carry their explicit model.
+    /// The provider does not own a default model; every [`LmRequest`] carries
+    /// its own `model`.
     ///
     /// # Errors
     ///
     /// Returns [`LmError::InvalidRequest`] when `OPENAI_API_KEY` is missing.
-    pub fn from_env(_default_model: impl Into<String>) -> Result<Self, LmError> {
+    pub fn from_env() -> Result<Self, LmError> {
         Ok(Self::new(OpenAiConfig::from_env()?))
     }
 

@@ -5,9 +5,10 @@ use std::{
 };
 
 use futures::executor::block_on;
+use leaven::gepa::fixtures::FixedEditProposer;
 use leaven::prelude::*;
 use leaven::stdlib::populations::ParetoFrontier;
-use leaven::{SurfaceError, SurfaceFingerprint};
+use leaven::{ArtifactIdentity, PartitionId, SurfaceError, SurfaceFingerprint};
 use serde::{Deserialize, Serialize};
 
 const BASELINE: &str =
@@ -88,7 +89,7 @@ async fn run_aime(
                         )]))
                         .build(),
                 )
-                .reflector(ReflectiveMutation::new(AimePromptEdit::ReplaceSystem(
+                .reflector(FixedEditProposer::new(AimePromptEdit::ReplaceSystem(
                     OPTIMIZED.to_owned(),
                 )))
                 .max_iterations(1),
@@ -464,7 +465,7 @@ mod tests {
                 .train(train)
                 .runner(run_solver)
                 .using(Gepa::builder().surface(AimePromptSurface).reflector(
-                    ReflectiveMutation::new(AimePromptEdit::ReplaceSystem(OPTIMIZED.to_owned())),
+                    FixedEditProposer::new(AimePromptEdit::ReplaceSystem(OPTIMIZED.to_owned())),
                 ))
                 .budget(Budget::metric_calls(8))
                 .run()

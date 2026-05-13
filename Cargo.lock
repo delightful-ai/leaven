@@ -2293,17 +2293,13 @@ dependencies = [
  "leaven-gepa",
  "leaven-kernel",
  "leaven-lm",
- "leaven-lm-anthropic",
  "leaven-lm-cache",
  "leaven-lm-openai",
  "leaven-run",
  "leaven-std",
  "leaven-store-inline",
- "leaven-store-sqlite",
  "leaven-surface",
  "leaven-workspace",
- "leaven-workspace-docker",
- "leaven-workspace-e2b",
  "leaven-workspace-local",
 ]
 

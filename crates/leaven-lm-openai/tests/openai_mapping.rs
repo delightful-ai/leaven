@@ -53,7 +53,7 @@ fn openai_identity_and_fingerprint_are_stable() {
 #[test]
 fn openai_from_env_reads_api_key_in_child_process() {
     if std::env::var_os("LEAVEN_OPENAI_FROM_ENV_CHILD").is_some() {
-        let lm = OpenAiLm::from_env("gpt-4.1-mini").unwrap();
+        let lm = OpenAiLm::from_env().unwrap();
         assert_eq!(lm.id().as_str(), "openai");
         return;
     }

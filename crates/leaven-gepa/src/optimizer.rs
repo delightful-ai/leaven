@@ -178,7 +178,7 @@ impl CheckpointPopulation for KeepBest {
 pub struct Gepa<
     S,
     Pop = ParetoFrontier,
-    Reflect = crate::ReflectiveMutation<<S as EditSurfacePlaceholder>::Edit>,
+    Reflect = crate::fixtures::FixedEditProposer<<S as EditSurfacePlaceholder>::Edit>,
     ParentSel = ParetoFrequencyWeighted,
     PartSel = RoundRobinPart,
     GatePol = StrictImprovement,
@@ -220,7 +220,7 @@ impl<T> EditSurfacePlaceholder for T {
     type Edit = ();
 }
 
-impl Gepa<(), ParetoFrontier, crate::ReflectiveMutation<()>> {
+impl Gepa<(), ParetoFrontier, crate::fixtures::FixedEditProposer<()>> {
     /// Starts a GEPA builder.
     #[must_use]
     pub fn builder() -> GepaBuilder {
@@ -712,11 +712,3 @@ impl<S, Pop> GepaBuilderWithPopulation<S, Pop> {
         Gepa::new(self.surface, self.population, reflector)
     }
 }
-
-/// GEPA configuration placeholder for future strategy fields.
-#[derive(Clone, Debug, Default)]
-pub struct GepaConfig;
-
-/// Merge scheduling placeholder.
-#[derive(Clone, Debug, Default)]
-pub struct MergeScheduler;

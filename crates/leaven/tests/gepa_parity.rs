@@ -1,7 +1,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use futures::executor::block_on;
-use leaven::prelude::{Gepa, ReflectiveMutation, SurfaceProposer};
+use leaven::gepa::fixtures::FixedEditProposer;
+use leaven::prelude::Gepa;
+use leaven::prelude::advanced::SurfaceProposer;
 use leaven::stdlib::{
     evidence::{CaseOutcome, CasewiseEvidence, ScalarEvidence},
     populations::ParetoFrontier,
@@ -60,9 +62,9 @@ fn engine_runs_gepa_parity_end_to_end() {
                 ParetoFrontier::by_case()
                     .partition_filter(BTreeSet::from([PartitionId::from(TRAIN)]))
                     .build(),
-                ReflectiveMutation::new(PartMapEdit::Replace("improved answer".to_owned())),
+                FixedEditProposer::new(PartMapEdit::Replace("improved answer".to_owned())),
             ),
-            proposer: ReflectiveMutation::new(PartMapEdit::Replace("improved answer".to_owned())),
+            proposer: FixedEditProposer::new(PartMapEdit::Replace("improved answer".to_owned())),
             seed,
             best: None,
             candidate: None,
@@ -230,8 +232,8 @@ impl EditSurface<PartMapArtifact> for PartMapSurface {
 }
 
 struct GepaParityOptimizer {
-    gepa: Gepa<PartMapSurface, ParetoFrontier, ReflectiveMutation<PartMapEdit>>,
-    proposer: ReflectiveMutation<PartMapEdit>,
+    gepa: Gepa<PartMapSurface, ParetoFrontier, FixedEditProposer<PartMapEdit>>,
+    proposer: FixedEditProposer<PartMapEdit>,
     seed: CandidateId,
     best: Option<CandidateId>,
     candidate: Option<CandidateId>,
