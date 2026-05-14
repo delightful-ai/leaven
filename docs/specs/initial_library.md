@@ -254,6 +254,11 @@ This is a minor spec bump because it fixes the public meaning of
 The full companion contract is
 `docs/specs/agentic_stage_runtime.md`.
 
+The optimizer-stage workspace materialization companion is
+`docs/specs/agentic_stage_materialization.md`. It separates
+`AgentStagePlan` / `AgentBacked` / `StageAttemptReceipt` from the
+candidate-evaluation `AgentCase` / `AgentWorkload` substrate.
+
 ---
 
 ## 0.7 What Changed in v0.2.4

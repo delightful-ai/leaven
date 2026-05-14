@@ -82,6 +82,44 @@ fn case_suite_rejects_duplicate_ids_and_missing_partition_targets() {
 }
 
 #[test]
+fn workload_from_cases_and_parts_preserve_suite_validation() {
+    let first = AgentCase::text(CaseId::new(1), "first", CaseTarget::None);
+    let second = AgentCase::text(CaseId::new(2), "second", CaseTarget::None);
+
+    let workload = AgentWorkload::from_cases([first.clone(), second.clone()]).unwrap();
+    assert_eq!(workload.cases().cases().len(), 2);
+    assert_eq!(
+        workload.partitions().named()[&CasePartitionId::all()],
+        vec![first.id, second.id]
+    );
+    assert_eq!(workload.fingerprint(), workload.cases().fingerprint());
+    assert!(!workload.is_empty());
+
+    let duplicate = AgentWorkload::from_cases([first.clone(), first.clone()]).unwrap_err();
+    assert!(duplicate.to_string().contains("duplicate agent case id"));
+
+    let mut cases = BTreeMap::new();
+    cases.insert(first.id, first.clone());
+    cases.insert(second.id, second.clone());
+    let partitions = CasePartitions::with_all(vec![first.id, second.id])
+        .with_partition(CasePartitionId::from("train"), vec![second.id]);
+    let from_parts = AgentWorkload::from_parts(cases, partitions).unwrap();
+    assert_eq!(
+        from_parts.partitions().named()[&CasePartitionId::from("train")],
+        vec![second.id]
+    );
+
+    let mut cases = BTreeMap::new();
+    cases.insert(first.id, first);
+    let missing = AgentWorkload::from_parts(
+        cases,
+        CasePartitions::with_all(vec![CaseId::new(404)]),
+    )
+    .unwrap_err();
+    assert!(missing.to_string().contains("references missing case"));
+}
+
+#[test]
 fn agent_case_vocabulary_preserves_files_messages_setup_and_workspace_requirements() {
     let mut files = CaseFiles::default();
     files.insert(
@@ -114,6 +152,81 @@ fn agent_case_vocabulary_preserves_files_messages_setup_and_workspace_requiremen
 
     let empty_partition = CasePartitionId::new("").unwrap_err();
     assert!(empty_partition.to_string().contains("cannot be empty"));
+}
+
+#[test]
+fn hidden_target_is_not_presented_to_candidate() {
+    futures::executor::block_on(async {
+        let secret = ContentId::from_bytes([9; 32]);
+        let case = AgentCase::text(CaseId::new(44), "visible input", CaseTarget::Hidden(secret));
+        let presenter = TestPresenter;
+        let factory = LocalWorkspaceFactory::temp();
+        let mut workspace = factory.allocate(WorkspaceConfig::default()).await.unwrap();
+        let mut graph = RunGraph::<CaseProblem>::new(RunId::new());
+        let mut budget = BudgetLedger::default();
+        let candidate_id = {
+            let mut ctx = RunContext::<CaseProblem>::new(&mut graph, &mut budget);
+            ctx.insert_seed(CaseArtifact("candidate body".to_owned()), 0)
+                .unwrap()
+        };
+        let ctx = RunContext::<CaseProblem>::new(&mut graph, &mut budget);
+        let materialize_ctx = ctx.materialize_context();
+
+        let presentation = {
+            let mut view = workspace.view();
+            presenter
+                .present(
+                    AgentCasePresentationInput {
+                        candidate_id,
+                        candidate: &CaseArtifact("candidate body".to_owned()),
+                        case: &case,
+                        graph: materialize_ctx.graph().clone(),
+                    },
+                    &mut view,
+                    materialize_ctx,
+                )
+                .await
+                .unwrap()
+                .value
+        };
+
+        let forbidden_strings = [
+            hex::encode(secret.as_bytes()),
+            secret.to_string(),
+            format!("{:?}", secret),
+        ];
+        let instructions = serde_json::to_string(&presentation.request.instructions).unwrap();
+        for forbidden in &forbidden_strings {
+            assert!(
+                !instructions.contains(forbidden),
+                "hidden target leaked into instructions as `{forbidden}`"
+            );
+        }
+
+        {
+            let view = workspace.view();
+            for path in &presentation.materialized_refs {
+                let bytes = view.read_file(path).unwrap();
+                let rendered = String::from_utf8_lossy(&bytes);
+                for forbidden in &forbidden_strings {
+                    assert!(
+                        !rendered.contains(forbidden),
+                        "hidden target leaked into workspace file {} as `{forbidden}`",
+                        path.as_str()
+                    );
+                }
+                assert!(
+                    !bytes
+                        .windows(secret.as_bytes().len())
+                        .any(|window| window == secret.as_bytes()),
+                    "hidden target bytes leaked into workspace file {}",
+                    path.as_str()
+                );
+            }
+        }
+
+        workspace.cleanup().await.unwrap();
+    });
 }
 
 #[test]

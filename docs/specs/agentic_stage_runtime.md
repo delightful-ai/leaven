@@ -4,6 +4,7 @@
 > Date: 2026-05-07.  
 > Governing spec: `docs/specs/initial_library.md`.  
 > Topology companion: `docs/specs/leaven_v0_2_1b_corrected_crate_topology_lib_rs.md`.  
+> Stage-materialization companion: `docs/specs/agentic_stage_materialization.md`.  
 > Purpose: specify how Leaven runs agents without making the engine, artifacts,
 > or cold core know what an agent is.
 
@@ -20,6 +21,11 @@ Agent runtimes execute one session inside an already-built world.
 Parsers translate session outputs or workspace changes back into typed
 proposals or assessments.
 ```
+
+Optimizer-stage workspace setup and query-derived entries are specified in
+`docs/specs/agentic_stage_materialization.md`. This document keeps the runtime
+split: runtimes execute one session in an already-built workspace; they do not
+own optimizer-stage planning, graph reads, or receipt recording.
 
 The main design pressure is agentic optimization over evolving codebases,
 skill libraries, harnesses, `AGENTS.md` files, manifests, and traces. The

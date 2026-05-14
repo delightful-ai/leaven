@@ -17,6 +17,7 @@ It is subordinate to:
 - `docs/specs/leaven_v0_2_1b_corrected_crate_topology_lib_rs.md`
 - `docs/specs/milestone_examples_behavioral_contract.md`
 - `docs/specs/agentic_stage_runtime.md`
+- `docs/specs/agentic_stage_materialization.md`
 - `docs/specs/agentic_skill_optimization_primitives.md`
 - `docs/specs/agentic_task_execution_substrate.md`
 - `docs/specs/agentic_library_user_journey.md`
@@ -98,6 +99,12 @@ impl Optimizer<MyProblem> for MyOptimizer {
     }
 }
 ```
+
+GEPA reflection that runs an agent routes through the optimizer-stage workspace
+surface: `AgentBacked<ProposerSlot<_>, Runtime, Bootstrap, Parser>` produces a
+typed proposal batch through `RunContext::propose`. `AgentCase` remains the
+candidate-evaluation workload surface and must not become the reflection-stage
+request type.
 
 GEPA must be a reusable optimizer value. It must not require users to copy the
 P3 example's local optimizer loop.

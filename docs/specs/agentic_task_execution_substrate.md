@@ -4,6 +4,7 @@
 > Date: 2026-05-08.  
 > Governing spec: `docs/specs/initial_library.md`.  
 > Runtime companion: `docs/specs/agentic_stage_runtime.md`.  
+> Stage-materialization companion: `docs/specs/agentic_stage_materialization.md`.  
 > Skill companion: `docs/specs/agentic_skill_optimization_primitives.md`.  
 > Purpose: define the general AISI/Inspect-inspired substrate for presenting
 > tasks to agents, running agent sessions, scoring outputs, and turning those
@@ -68,6 +69,11 @@ AgentWorkload
   scorer/objective
   limits and error policy
 ```
+
+This is candidate-evaluation workload vocabulary. Optimizer-stage deliberation
+workspaces use `AgentStagePlan`, `AgentBacked`, `StageReadAuthority`, and
+`StageAttemptReceipt` from `docs/specs/agentic_stage_materialization.md`;
+`AgentCase` is not an input to those stage plans.
 
 The optimizer consumes this through normal Leaven stages:
 

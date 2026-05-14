@@ -284,6 +284,11 @@ pub enum WorkspaceRequirement {
 }
 
 /// Agent workload configuration shared by stock agentic evaluators.
+///
+/// This is candidate-evaluation workload vocabulary: cases, partitions, case
+/// inputs, hidden scorer targets, and setup requirements. Optimizer-stage
+/// agent workspaces use `AgentStagePlan` / `AgentBacked` / receipts in the
+/// stage layer instead of depending on `AgentCase`.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AgentWorkload {
     cases: CaseSuite,
@@ -296,10 +301,57 @@ impl AgentWorkload {
         Self { cases }
     }
 
+    /// Constructs a workload from cases and derives the standard `all`
+    /// partition.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AgenticAdapterError`] when case ids are duplicated.
+    pub fn from_cases(
+        cases: impl IntoIterator<Item = AgentCase>,
+    ) -> Result<Self, AgenticAdapterError> {
+        Ok(Self {
+            cases: CaseSuite::from_cases(cases)?,
+        })
+    }
+
+    /// Constructs a workload from explicit case and partition maps.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AgenticAdapterError`] when any partition references a case id
+    /// that is not present.
+    pub fn from_parts(
+        cases: BTreeMap<CaseId, AgentCase>,
+        partitions: CasePartitions,
+    ) -> Result<Self, AgenticAdapterError> {
+        Ok(Self {
+            cases: CaseSuite::new(cases, partitions)?,
+        })
+    }
+
     /// Returns the workload case suite.
     #[must_use]
     pub const fn cases(&self) -> &CaseSuite {
         &self.cases
+    }
+
+    /// Returns workload partitions.
+    #[must_use]
+    pub const fn partitions(&self) -> &CasePartitions {
+        self.cases.partitions()
+    }
+
+    /// Returns the workload fingerprint.
+    #[must_use]
+    pub const fn fingerprint(&self) -> Fingerprint {
+        self.cases.fingerprint()
+    }
+
+    /// Returns true when no cases are present.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.cases.is_empty()
     }
 }
 
