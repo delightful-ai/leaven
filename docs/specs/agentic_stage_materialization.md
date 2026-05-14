@@ -130,8 +130,9 @@ scaffolding still outside completion proof:
   runtime-integrated agent-requested shell queries remain follow-on work.
 - JJ artifact materialization is a scaffold with deterministic workspace-file
   tests. It is not live `jj` command execution or apply semantics.
-- GEPA has request/bootstrap routing into the stage vocabulary, but the full
-  optimizer switch away from fixed-edit reflection remains follow-on work.
+- GEPA has request/bootstrap routing plus a public `GepaStageProposer` bridge
+  through `AgentBacked`; the full optimizer switch away from fixed-edit
+  reflection remains follow-on work.
 - Setup/runtime/parse error paths now persist failed attempt receipts; workspace
   allocation and pre-plan serialization failures still occur before a workspace
   receipt can exist.

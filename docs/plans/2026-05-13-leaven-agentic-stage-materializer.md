@@ -32,8 +32,9 @@ tests land.
 - `AgentBacked<ProposerSlot<_>>` has a fake-runtime proof that writes
   `output/proposal.json`, parses it into `ProposalBatch`, records a stage
   attempt, and applies the batch through `RunContext::apply_batch`.
-- GEPA has stage-request/bootstrap vocabulary in `crates/leaven-gepa/src/agent_stage.rs`,
-  but the full optimizer switch is not part of this prerequisite tranche.
+- GEPA has stage-request/bootstrap vocabulary and a public
+  `GepaStageProposer` bridge in `crates/leaven-gepa/src/agent_stage.rs`, but
+  the full optimizer switch is not part of this prerequisite tranche.
 - `leaven-artifact-jj` has deterministic materializable-file scaffold tests,
   but it is not live `jj` checkout/apply behavior.
 
@@ -47,8 +48,8 @@ tests land.
 - Output receipts exist as types, and the fake-runtime path records present
   outputs plus parse status/files-read; richer runtime-integrated
   agent-requested query execution is still follow-on work.
-- GEPA still has fixed-edit reflection scaffold; the real optimizer switch to
-  agent-backed stage reflection remains a separate implementation slice.
+- GEPA still has fixed-edit reflection scaffold; the real optimizer loop switch
+  to agent-backed stage reflection remains a separate implementation slice.
 - JJ materialization reads and writes deterministic workspace files; live jj
   command execution, change ids, and apply semantics remain follow-on work.
 
@@ -4184,7 +4185,7 @@ WorstEvidencePart -> scaffold/demo unless behavior implemented
     evidence: crates/leaven-stage/tests/agent_backed.rs
 [x] setup installs an executable leaven_query help shim and parser rejects unknown commands/flags
     evidence: crates/leaven-stage/tests/setup_workspace.rs, crates/leaven-stage/tests/leaven_query.rs
-[~] GEPA stage request/bootstrap derives selected refs, but full optimizer switch remains follow-on
+[x] GEPA stage request/bootstrap derives selected refs and can run through AgentBacked with a fake runtime
     evidence: crates/leaven-gepa/src/agent_stage.rs, crates/leaven-gepa/tests/agent_stage_routing.rs
 [~] fixed-edit GEPA reflection remains explicit scaffold, not production reflection proof
     evidence: crates/leaven-gepa/AGENTS.md and crates/leaven-gepa/src/proposer.rs

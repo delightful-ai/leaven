@@ -2561,6 +2561,7 @@ name = "leaven-gepa"
 version = "0.0.0"
 dependencies = [
  "futures",
+ "leaven-agent",
  "leaven-core",
  "leaven-engine",
  "leaven-evidence",
@@ -2573,8 +2574,10 @@ dependencies = [
  "leaven-store-inline",
  "leaven-surface",
  "leaven-workspace",
+ "leaven-workspace-local",
  "proptest",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

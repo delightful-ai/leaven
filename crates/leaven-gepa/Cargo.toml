@@ -26,5 +26,8 @@ serde = { workspace = true }
 
 [dev-dependencies]
 futures = { workspace = true }
+leaven-agent = { workspace = true }
 leaven-store-inline = { workspace = true }
+leaven-workspace-local = { workspace = true }
 proptest = { workspace = true }
+serde_json = { workspace = true }

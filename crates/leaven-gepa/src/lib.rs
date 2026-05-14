@@ -8,7 +8,9 @@ pub mod proposer;
 pub mod selector;
 pub mod validation;
 
-pub use agent_stage::{GepaReflectionBootstrap, GepaReflectionRequest};
+pub use agent_stage::{
+    GepaReflectionBootstrap, GepaReflectionRequest, GepaStageProposer, gepa_stage_proposer,
+};
 pub use gate::{
     CheckpointGate, Gate, GateDecision, ImprovementOrEqual, NoRegression, StrictImprovement,
 };
@@ -30,8 +32,9 @@ pub mod prelude {
     pub use crate::{
         CandidateSelector, CheckpointCandidateSelector, CheckpointGate, CheckpointPopulation,
         FullValidation, Gate, Gepa, GepaPopulation, GepaReflectionBootstrap, GepaReflectionRequest,
-        HasBestCandidate, ImprovementOrEqual, MinibatchThenValidation, ParetoFrequencyWeighted,
-        PartSelector, ReflectiveMutation, RoundRobinPart, SelectBestCandidate, StrictImprovement,
-        SurfaceProposer, SystemAwareMerge, ValidationPolicy, WorstEvidencePart,
+        GepaStageProposer, HasBestCandidate, ImprovementOrEqual, MinibatchThenValidation,
+        ParetoFrequencyWeighted, PartSelector, ReflectiveMutation, RoundRobinPart,
+        SelectBestCandidate, StrictImprovement, SurfaceProposer, SystemAwareMerge,
+        ValidationPolicy, WorstEvidencePart, gepa_stage_proposer,
     };
 }

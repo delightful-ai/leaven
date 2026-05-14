@@ -3,11 +3,33 @@
 use leaven_core::OptimizationProblem;
 use leaven_kernel::{AssessmentId, CandidateId, StageRole};
 use leaven_stage::{
-    AgentStageBootstrap, AgentStageCallContext, AgentStagePlan, AllowedQuerySet, ProposerSlot,
-    StageBootstrapError, StageDirective, StageOutputContract, StageQuery, StageQueryKind,
-    StageQueryPolicy,
+    AgentBacked, AgentBackedPolicy, AgentStageBootstrap, AgentStageCallContext, AgentStagePlan,
+    AllowedQuerySet, ProposerSlot, StageBootstrapError, StageDirective, StageOutputContract,
+    StageQuery, StageQueryKind, StageQueryPolicy,
 };
-use leaven_workspace::WorkspacePath;
+use leaven_workspace::{WorkspaceFactory, WorkspacePath};
+
+pub type GepaStageProposer<Runtime, Parser> =
+    AgentBacked<ProposerSlot<GepaReflectionRequest>, Runtime, GepaReflectionBootstrap, Parser>;
+
+#[must_use]
+pub fn gepa_stage_proposer<Factory, Runtime, Parser>(
+    workspace_factory: Factory,
+    runtime: Runtime,
+    parser: Parser,
+    policy: AgentBackedPolicy,
+) -> GepaStageProposer<Runtime, Parser>
+where
+    Factory: WorkspaceFactory + Send + Sync + 'static,
+{
+    AgentBacked::from_factory(
+        workspace_factory,
+        runtime,
+        GepaReflectionBootstrap::default(),
+        parser,
+        policy,
+    )
+}
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct GepaReflectionRequest {
