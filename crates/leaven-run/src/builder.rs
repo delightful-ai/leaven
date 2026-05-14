@@ -653,6 +653,7 @@ fn event_name(event: &leaven_engine::RunEvent) -> String {
         leaven_engine::RunEvent::BudgetCharged { .. } => "budget_charged",
         leaven_engine::RunEvent::ProposalBatchProduced { .. } => "proposal_batch_produced",
         leaven_engine::RunEvent::ProposalRecorded { .. } => "proposal_recorded",
+        leaven_engine::RunEvent::StageAttemptRecorded { .. } => "stage_attempt_recorded",
         leaven_engine::RunEvent::ApplySucceeded { .. } => "apply_succeeded",
         leaven_engine::RunEvent::ApplyFailed { .. } => "apply_failed",
         leaven_engine::RunEvent::EvaluationRequested { .. } => "evaluation_requested",

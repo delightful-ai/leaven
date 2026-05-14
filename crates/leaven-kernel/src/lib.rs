@@ -39,6 +39,7 @@ pub mod fingerprint;
 pub mod finite;
 pub mod ids;
 pub mod metadata;
+pub mod stage;
 pub mod time;
 
 pub use cost::{
@@ -56,6 +57,9 @@ pub use ids::{
     StopperId, WorkspaceEntryId, WorkspaceId,
 };
 pub use metadata::{MetadataBag, MetadataKey, MetadataValue};
+pub use stage::{
+    StageAttemptFailure, StageAttemptOutcome, StageAttemptReceiptRef, StageRole, StageRoleError,
+};
 pub use time::{Timestamp, now};
 
 pub mod prelude {
@@ -69,5 +73,6 @@ pub mod prelude {
     pub use crate::{
         Amount, AmountError, Budget, BudgetExceeded, BudgetSnapshot, Cost, CostUnit, ErrorKind,
         ErrorRecord, Fingerprint, FiniteF64, FiniteF64Error, MetadataBag, Metered,
+        StageAttemptFailure, StageAttemptOutcome, StageAttemptReceiptRef, StageRole,
     };
 }

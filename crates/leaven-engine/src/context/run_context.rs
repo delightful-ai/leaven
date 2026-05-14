@@ -8,7 +8,8 @@ use leaven_core::{
 };
 use leaven_kernel::{
     AssessmentId, BudgetExceeded, BudgetSnapshot, CandidateId, Cost, ErrorKind, ErrorRecord,
-    EvaluationRequestId, EvaluatorId, IterationId, ProposalBatchId, ProposalId, StageId,
+    EvaluationRequestId, EvaluatorId, IterationId, ProposalBatchId, ProposalId, StageCallId,
+    StageId,
 };
 use leaven_store::{EvidenceStore, StoreError};
 use thiserror::Error;
@@ -23,6 +24,8 @@ use crate::{
     ProposalError, Proposer, ReadScope, RenderContext, RunCheckpointRequest, RunEvent, RunGraph,
     RunGraphView, RunPersistence, TrustPolicy, TrustViolation,
 };
+
+use super::proposal_context::StageAttemptEventSink;
 
 pub struct RunContext<'a, P: OptimizationProblem> {
     graph: &'a mut RunGraph<P>,
@@ -198,12 +201,16 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
     {
         let stage = StageId::from_proposer(proposer.id());
         let proposal_ctx = self.proposal_context(stage.clone());
-        let metered = proposer
-            .propose(request, proposal_ctx)
-            .await
-            .inspect_err(|err| {
-                self.emit_stage_error(Some(stage.clone()), ErrorKind::Proposal, err);
-            })?;
+        let sink = proposal_ctx.stage_attempt_sink();
+        let result = proposer.propose(request, proposal_ctx).await;
+        self.drain_stage_attempts(sink);
+        let metered = match result {
+            Ok(metered) => metered,
+            Err(err) => {
+                self.emit_stage_error(Some(stage.clone()), ErrorKind::Proposal, &err);
+                return Err(err.into());
+            }
+        };
         self.record_proposal_batch(stage, metered.value, metered.cost)
     }
 
@@ -293,6 +300,8 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
             self.graph.view(scope.clone()),
             BudgetHandle::new(self.budget, stage),
             scope,
+            StageCallId::new(),
+            StageAttemptEventSink::new(),
         )
     }
 
@@ -664,6 +673,17 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
             for callback in callbacks.iter_mut() {
                 callback.on_event_dyn(event, self.graph.view(read_scope.clone()));
             }
+        }
+    }
+
+    fn drain_stage_attempts(&mut self, sink: StageAttemptEventSink) {
+        for pending in sink.drain() {
+            self.emit(RunEvent::StageAttemptRecorded {
+                stage_call_id: pending.stage_call_id,
+                role: pending.role,
+                receipt: pending.receipt,
+                outcome: pending.outcome,
+            });
         }
     }
 

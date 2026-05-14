@@ -18,7 +18,8 @@ use leaven_engine::{
 };
 use leaven_kernel::{
     AssessmentId, Budget, ContentId, Cost, ErrorKind, EvaluatorId, Fingerprint, MetadataBag,
-    Metered, ProposerId, RunId, StageId,
+    Metered, ProposerId, RunId, StageAttemptFailure, StageAttemptOutcome, StageAttemptReceiptId,
+    StageAttemptReceiptRef, StageId, StageRole,
 };
 use leaven_store::{EvidenceStore, StoreError};
 use leaven_store_inline::InlineEvidenceStore;
@@ -45,6 +46,82 @@ fn propose_records_batch_charges_budget_and_emits_events() {
                 RunEvent::ProposalRecorded { .. },
             ]
         ));
+    });
+}
+
+#[test]
+fn stage_attempt_recorded_on_success_before_batch_events() {
+    block_on(async {
+        let (mut graph, mut budget) = graph_and_budget();
+        let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+        let receipt = StageAttemptReceiptRef {
+            id: StageAttemptReceiptId::new(),
+            fingerprint: Some(Fingerprint::from_bytes([17; 32])),
+        };
+        let proposer = StageAttemptProposer {
+            receipt: receipt.clone(),
+            outcome: StageAttemptOutcome::Completed,
+            fail: false,
+        };
+
+        let report = ctx.propose(&proposer, ()).await.unwrap();
+
+        assert_eq!(report.proposal_ids.len(), 1);
+        let events = ctx.graph().events().collect::<Vec<_>>();
+        assert!(matches!(
+            events.as_slice(),
+            [
+                RunEvent::StageAttemptRecorded {
+                    role,
+                    receipt: event_receipt,
+                    outcome: StageAttemptOutcome::Completed,
+                    ..
+                },
+                RunEvent::BudgetCharged { .. },
+                RunEvent::ProposalBatchProduced { .. },
+                RunEvent::ProposalRecorded { .. },
+            ] if role == &StageRole::reflect() && event_receipt == &receipt
+        ));
+    });
+}
+
+#[test]
+fn stage_attempt_recorded_on_proposer_error_before_error_event() {
+    block_on(async {
+        let (mut graph, mut budget) = graph_and_budget();
+        let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+        let receipt = StageAttemptReceiptRef {
+            id: StageAttemptReceiptId::new(),
+            fingerprint: None,
+        };
+        let outcome = StageAttemptOutcome::Failed(StageAttemptFailure::OutputParse);
+        let proposer = StageAttemptProposer {
+            receipt: receipt.clone(),
+            outcome: outcome.clone(),
+            fail: true,
+        };
+
+        let error = ctx.propose(&proposer, ()).await.unwrap_err();
+
+        assert!(error.to_string().contains("proposal failed"));
+        let events = ctx.graph().events().collect::<Vec<_>>();
+        assert!(matches!(
+            events.as_slice(),
+            [
+                RunEvent::StageAttemptRecorded {
+                    role,
+                    receipt: event_receipt,
+                    outcome: event_outcome,
+                    ..
+                },
+                RunEvent::Error { .. },
+            ] if role == &StageRole::reflect()
+                && event_receipt == &receipt
+                && event_outcome == &outcome
+        ));
+        assert!(!events
+            .iter()
+            .any(|event| matches!(event, RunEvent::ApplyFailed { .. })));
     });
 }
 
@@ -1036,6 +1113,43 @@ impl Proposer<TestProblem> for OneProposalProposer {
                 metadata: MetadataBag::new(),
             },
             Cost::llm_calls(3),
+        ))
+    }
+}
+
+struct StageAttemptProposer {
+    receipt: StageAttemptReceiptRef,
+    outcome: StageAttemptOutcome,
+    fail: bool,
+}
+
+impl Proposer<TestProblem> for StageAttemptProposer {
+    type Request = ();
+
+    fn id(&self) -> ProposerId {
+        ProposerId::from("stage-attempt")
+    }
+
+    async fn propose(
+        &self,
+        _request: Self::Request,
+        ctx: ProposalContext<'_, TestProblem>,
+    ) -> Result<Metered<ProposalBatch<TestProblem>>, ProposalError> {
+        ctx.record_stage_attempt(
+            StageRole::reflect(),
+            self.receipt.clone(),
+            self.outcome.clone(),
+        );
+        if self.fail {
+            return Err(ProposalError::Message("parse failed".to_owned()));
+        }
+        Ok(Metered::new(
+            ProposalBatch {
+                proposals: vec![Proposal::create(TextArtifact("stage".to_owned())).build()],
+                semantics: ProposalBatchSemantics::Alternatives,
+                metadata: MetadataBag::new(),
+            },
+            Cost::zero(),
         ))
     }
 }

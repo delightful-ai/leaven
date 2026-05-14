@@ -3,7 +3,8 @@
 use leaven_core::{CausalInputs, ProposalEffectKind};
 use leaven_kernel::{
     AssessmentId, BudgetSnapshot, CandidateId, Cost, ErrorRecord, EvaluationRequestId, EvaluatorId,
-    IterationId, PopulationId, ProposalBatchId, ProposalId, RunId, StageId,
+    IterationId, PopulationId, ProposalBatchId, ProposalId, RunId, StageAttemptOutcome,
+    StageAttemptReceiptRef, StageCallId, StageId, StageRole,
 };
 
 use crate::PopulationEvent;
@@ -65,6 +66,12 @@ pub enum RunEvent {
         effect: ProposalEffectKind,
         causal: CausalInputs,
         informed_by_count: usize,
+    },
+    StageAttemptRecorded {
+        stage_call_id: StageCallId,
+        role: StageRole,
+        receipt: StageAttemptReceiptRef,
+        outcome: StageAttemptOutcome,
     },
     ApplySucceeded {
         proposal_id: ProposalId,
