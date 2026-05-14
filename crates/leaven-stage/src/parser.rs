@@ -1,6 +1,6 @@
 use leaven_agent::AgentSession;
 use leaven_core::OptimizationProblem;
-use leaven_kernel::{Fingerprint, MetadataBag, Metered, StageRole};
+use leaven_kernel::{Fingerprint, FingerprintBuilder, MetadataBag, Metered, StageRole};
 use leaven_workspace::WorkspaceView;
 
 use crate::{
@@ -32,4 +32,29 @@ pub struct ErasedStagePlan {
     pub output: StageOutputContract,
     pub metadata: MetadataBag,
     pub fingerprint: Fingerprint,
+}
+
+impl ErasedStagePlan {
+    pub fn from_plan<Req: serde::Serialize>(
+        plan: &crate::AgentStagePlan<Req>,
+    ) -> Result<Self, serde_json::Error> {
+        let request_json = serde_json::to_value(&plan.request)?;
+        let mut fingerprint = FingerprintBuilder::new();
+        fingerprint
+            .update(b"leaven.stage.plan.v1")
+            .update(serde_json::to_vec(&plan.role)?)
+            .update(serde_json::to_vec(&request_json)?)
+            .update(serde_json::to_vec(&plan.directive)?)
+            .update(serde_json::to_vec(&plan.query)?)
+            .update(serde_json::to_vec(&plan.output)?);
+        Ok(Self {
+            role: plan.role.clone(),
+            request_json,
+            directive: plan.directive.clone(),
+            query: plan.query.clone(),
+            output: plan.output.clone(),
+            metadata: plan.metadata.clone(),
+            fingerprint: fingerprint.finish(),
+        })
+    }
 }

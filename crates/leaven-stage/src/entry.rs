@@ -36,6 +36,16 @@ impl WorkspaceEntryRole {
     pub fn query_summary() -> Self {
         Self::new_static("query_summary")
     }
+
+    #[must_use]
+    pub fn stage_plan() -> Self {
+        Self::new_static("stage_plan")
+    }
+
+    #[must_use]
+    pub fn output_skeleton() -> Self {
+        Self::new_static("output_skeleton")
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

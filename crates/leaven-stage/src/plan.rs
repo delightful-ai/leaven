@@ -80,6 +80,17 @@ impl AgentStageCallContext {
     }
 
     #[must_use]
+    pub fn from_engine<P: leaven_core::OptimizationProblem>(
+        engine: &leaven_engine::StageEngineContext<'_, P>,
+    ) -> Self {
+        Self {
+            stage_call_id: engine.stage_call_id(),
+            read_scope: engine.read_scope().clone(),
+            budget: engine.budget().clone(),
+        }
+    }
+
+    #[must_use]
     pub const fn stage_call_id(&self) -> StageCallId {
         self.stage_call_id
     }
