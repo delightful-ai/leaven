@@ -5,18 +5,21 @@ use std::time::Duration;
 use futures::future::BoxFuture;
 use leaven_agent::{AgentInstructions, AgentRunContext, AgentRunRequest, AgentRuntime};
 use leaven_core::OptimizationProblem;
-use leaven_engine::{Arity, ProposalContext, ProposalError, Proposer};
+use leaven_engine::{Arity, ProposalContext, ProposalError, Proposer, StageEngineContext};
 use leaven_kernel::{
-    AgentSessionId, FingerprintBuilder, Metered, ProposerId, StageAttemptOutcome,
-    StageAttemptReceiptRef,
+    AgentSessionId, Cost, Metered, ProposerId, StageAttemptFailure, StageAttemptOutcome,
 };
-use leaven_workspace::{FactoryError, Workspace, WorkspaceConfig, WorkspaceFactory, WorkspacePath};
+use leaven_workspace::{
+    FactoryError, Workspace, WorkspaceConfig, WorkspaceFactory, WorkspacePath, WorkspaceView,
+    fingerprint_file,
+};
 
 use crate::parser::ErasedStagePlan;
+use crate::receipt_store::InlineReceiptStore;
 use crate::{
-    AgentStageBootstrap, AgentStageCallContext, ProposerSlot, StageAttemptReceipt,
-    StageAttemptReceiptBuilder, StageOutputParser, StageReadAuthority, WorkspaceSetupError,
-    setup_stage_workspace,
+    AgentStageBootstrap, AgentStageCallContext, OutputEntryReceipt, OutputEntryStatus,
+    ParseReceipt, ParseStatus, ProposerSlot, StageAttemptReceiptBuilder, StageOutputParser,
+    StageReadAuthority, WorkspaceSetupError, setup_stage_workspace,
 };
 
 type WorkspaceAllocator =
@@ -28,6 +31,7 @@ pub struct AgentBacked<Slot, Runtime, Bootstrap, Parser> {
     pub bootstrap: Bootstrap,
     pub parser: Parser,
     pub policy: AgentBackedPolicy,
+    receipt_store: InlineReceiptStore,
     _marker: PhantomData<Slot>,
 }
 
@@ -46,6 +50,7 @@ impl<Slot, Runtime, Bootstrap, Parser> AgentBacked<Slot, Runtime, Bootstrap, Par
             bootstrap,
             parser,
             policy,
+            receipt_store: InlineReceiptStore::default(),
             _marker: PhantomData,
         }
     }
@@ -72,6 +77,11 @@ impl<Slot, Runtime, Bootstrap, Parser> AgentBacked<Slot, Runtime, Bootstrap, Par
             parser,
             policy,
         )
+    }
+
+    #[must_use]
+    pub fn receipt_store(&self) -> InlineReceiptStore {
+        self.receipt_store.clone()
     }
 }
 
@@ -124,62 +134,247 @@ where
             erased.fingerprint,
         );
 
-        let parsed = {
-            let mut slot = workspace.slot(WorkspacePath::root()).map_err(|source| {
-                ProposalError::with_source("agent stage workspace slot failed", source)
-            })?;
-            let setup = setup_stage_workspace(&mut slot, &erased)
-                .map_err(|source| map_setup_error("agent stage workspace setup failed", source))?;
-            receipt.set_setup(setup);
-            let mut read_authority =
-                StageReadAuthority::new(engine_ctx.clone(), plan.query.clone());
-            for query in read_authority.prewarm(&mut slot).map_err(|source| {
-                ProposalError::with_source("agent stage prewarm query failed", source)
-            })? {
-                receipt.push_query(query.into_record());
+        let attempt = self
+            .run_attempt(
+                AttemptEnv {
+                    ctx: &ctx,
+                    engine_ctx: &engine_ctx,
+                    call_ctx: &call_ctx,
+                    role: plan.role.clone(),
+                    plan: &erased,
+                },
+                &mut workspace,
+                &mut receipt,
+            )
+            .await;
+        let parsed = match attempt {
+            Ok(parsed) => parsed,
+            Err(source) => {
+                workspace.cleanup().await.map_err(|cleanup| {
+                    ProposalError::with_source("agent stage workspace cleanup failed", cleanup)
+                })?;
+                return Err(source);
             }
-            drop(slot);
-
-            let agent_request = agent_run_request(&erased, self.policy.runtime_timeout);
-            let budget = engine_ctx.budget().clone();
-            let session = self
-                .runtime
-                .run_session(
-                    &mut workspace.view(),
-                    agent_request,
-                    AgentRunContext::new(AgentSessionId::new(), &budget),
-                )
-                .await
-                .map_err(|source| {
-                    ProposalError::with_source("agent stage runtime failed", source)
-                })?;
-            receipt.add_cost(&session.cost);
-            let parsed = self
-                .parser
-                .parse(
-                    &mut workspace.view(),
-                    &session.value,
-                    &erased,
-                    call_ctx.clone(),
-                )
-                .await
-                .map_err(|source| {
-                    ProposalError::with_source("agent stage output parse failed", source)
-                })?;
-            receipt.add_cost(&parsed.cost);
-            parsed
         };
 
         let stage_receipt = receipt.finish(StageAttemptOutcome::Completed);
-        ctx.record_stage_attempt(
-            plan.role,
-            receipt_ref(&stage_receipt),
-            StageAttemptOutcome::Completed,
-        );
+        let receipt_ref = self
+            .receipt_store
+            .write_sync(stage_receipt)
+            .map_err(|source| {
+                ProposalError::with_source("agent stage receipt write failed", source)
+            })?;
+        ctx.record_stage_attempt(plan.role, receipt_ref, StageAttemptOutcome::Completed);
         workspace.cleanup().await.map_err(|source| {
             ProposalError::with_source("agent stage workspace cleanup failed", source)
         })?;
         Ok(parsed)
+    }
+}
+
+struct AttemptEnv<'a, 'g, P: OptimizationProblem> {
+    ctx: &'a ProposalContext<'g, P>,
+    engine_ctx: &'a StageEngineContext<'g, P>,
+    call_ctx: &'a AgentStageCallContext,
+    role: leaven_kernel::StageRole,
+    plan: &'a ErasedStagePlan,
+}
+
+impl<Req, Runtime, Bootstrap, Parser> AgentBacked<ProposerSlot<Req>, Runtime, Bootstrap, Parser>
+where
+    Req: serde::Serialize + Send + Sync + 'static,
+{
+    #[allow(clippy::future_not_send)]
+    async fn run_attempt<P>(
+        &self,
+        env: AttemptEnv<'_, '_, P>,
+        workspace: &mut Workspace,
+        receipt: &mut StageAttemptReceiptBuilder,
+    ) -> Result<Metered<leaven_core::ProposalBatch<P>>, ProposalError>
+    where
+        P: OptimizationProblem,
+        Runtime: AgentRuntime,
+        Parser: StageOutputParser<P, ProposerSlot<Req>>,
+    {
+        self.setup_and_prewarm(&env, workspace, receipt)?;
+        let session = self.run_runtime(&env, workspace, receipt).await?;
+        for output in output_receipts(&workspace.view(), env.plan) {
+            receipt.push_output(output);
+        }
+        self.parse_outputs(&env, workspace, receipt, &session).await
+    }
+
+    fn setup_and_prewarm<P>(
+        &self,
+        env: &AttemptEnv<'_, '_, P>,
+        workspace: &mut Workspace,
+        receipt: &mut StageAttemptReceiptBuilder,
+    ) -> Result<(), ProposalError>
+    where
+        P: OptimizationProblem,
+    {
+        let mut slot = workspace.slot(WorkspacePath::root()).map_err(|source| {
+            ProposalError::with_source("agent stage workspace slot failed", source)
+        })?;
+        let setup = match setup_stage_workspace(&mut slot, env.plan) {
+            Ok(setup) => setup,
+            Err(source) => {
+                drop(slot);
+                let receipt = std::mem::replace(receipt, empty_receipt());
+                self.record_failed_attempt(
+                    env.ctx,
+                    env.role.clone(),
+                    receipt,
+                    StageAttemptFailure::WorkspaceSetup,
+                )?;
+                return Err(map_setup_error(
+                    "agent stage workspace setup failed",
+                    source,
+                ));
+            }
+        };
+        receipt.set_setup(setup);
+
+        let mut read_authority =
+            StageReadAuthority::new(env.engine_ctx.clone(), env.plan.query.clone());
+        let prewarm = match read_authority.prewarm(&mut slot) {
+            Ok(prewarm) => prewarm,
+            Err(source) => {
+                drop(slot);
+                let receipt = std::mem::replace(receipt, empty_receipt());
+                self.record_failed_attempt(
+                    env.ctx,
+                    env.role.clone(),
+                    receipt,
+                    StageAttemptFailure::Query,
+                )?;
+                return Err(ProposalError::with_source(
+                    "agent stage prewarm query failed",
+                    source,
+                ));
+            }
+        };
+        for query in prewarm {
+            receipt.push_query(query.into_record());
+        }
+        Ok(())
+    }
+
+    #[allow(clippy::future_not_send)]
+    async fn run_runtime<P>(
+        &self,
+        env: &AttemptEnv<'_, '_, P>,
+        workspace: &mut Workspace,
+        receipt: &mut StageAttemptReceiptBuilder,
+    ) -> Result<Metered<leaven_agent::AgentSession>, ProposalError>
+    where
+        P: OptimizationProblem,
+        Runtime: AgentRuntime,
+    {
+        let agent_request = agent_run_request(env.plan, self.policy.runtime_timeout);
+        let budget = env.engine_ctx.budget().clone();
+        let session_result = {
+            let mut view = workspace.view();
+            self.runtime
+                .run_session(
+                    &mut view,
+                    agent_request,
+                    AgentRunContext::new(AgentSessionId::new(), &budget),
+                )
+                .await
+        };
+        match session_result {
+            Ok(session) => {
+                receipt.add_cost(&session.cost);
+                Ok(session)
+            }
+            Err(source) => {
+                let receipt = std::mem::replace(receipt, empty_receipt());
+                self.record_failed_attempt(
+                    env.ctx,
+                    env.role.clone(),
+                    receipt,
+                    StageAttemptFailure::Runtime,
+                )?;
+                Err(ProposalError::with_source(
+                    "agent stage runtime failed",
+                    source,
+                ))
+            }
+        }
+    }
+
+    #[allow(clippy::future_not_send)]
+    async fn parse_outputs<P>(
+        &self,
+        env: &AttemptEnv<'_, '_, P>,
+        workspace: &mut Workspace,
+        receipt: &mut StageAttemptReceiptBuilder,
+        session: &Metered<leaven_agent::AgentSession>,
+    ) -> Result<Metered<leaven_core::ProposalBatch<P>>, ProposalError>
+    where
+        P: OptimizationProblem,
+        Parser: StageOutputParser<P, ProposerSlot<Req>>,
+    {
+        let parsed_result = {
+            let mut view = workspace.view();
+            self.parser
+                .parse(&mut view, &session.value, env.plan, env.call_ctx.clone())
+                .await
+        };
+        match parsed_result {
+            Ok(parsed) => {
+                receipt.add_cost(&parsed.cost);
+                receipt.set_parse(ParseReceipt {
+                    status: ParseStatus::Succeeded,
+                    diagnostics: Vec::new(),
+                    files_read: output_paths(env.plan),
+                    cost: parsed.cost.clone(),
+                });
+                Ok(parsed)
+            }
+            Err(source) => {
+                receipt.set_parse(ParseReceipt {
+                    status: ParseStatus::Failed,
+                    diagnostics: Vec::new(),
+                    files_read: output_paths(env.plan),
+                    cost: Cost::zero(),
+                });
+                let receipt = std::mem::replace(receipt, empty_receipt());
+                self.record_failed_attempt(
+                    env.ctx,
+                    env.role.clone(),
+                    receipt,
+                    StageAttemptFailure::OutputParse,
+                )?;
+                Err(ProposalError::with_source(
+                    "agent stage output parse failed",
+                    source,
+                ))
+            }
+        }
+    }
+
+    fn record_failed_attempt<P>(
+        &self,
+        ctx: &ProposalContext<'_, P>,
+        role: leaven_kernel::StageRole,
+        receipt: StageAttemptReceiptBuilder,
+        failure: StageAttemptFailure,
+    ) -> Result<(), ProposalError>
+    where
+        P: OptimizationProblem,
+    {
+        let outcome = StageAttemptOutcome::Failed(failure);
+        let stage_receipt = receipt.finish(outcome.clone());
+        let receipt_ref = self
+            .receipt_store
+            .write_sync(stage_receipt)
+            .map_err(|source| {
+                ProposalError::with_source("agent stage receipt write failed", source)
+            })?;
+        ctx.record_stage_attempt(role, receipt_ref, outcome);
+        Ok(())
     }
 }
 
@@ -239,16 +434,46 @@ fn render_task(plan: &ErasedStagePlan) -> String {
     task
 }
 
-fn receipt_ref(receipt: &StageAttemptReceipt) -> StageAttemptReceiptRef {
-    let bytes = serde_json::to_vec(receipt).expect("stage attempt receipts are serializable");
-    let mut fingerprint = FingerprintBuilder::new();
-    fingerprint
-        .update(b"leaven.stage.attempt-receipt.v1")
-        .update(bytes);
-    StageAttemptReceiptRef {
-        id: receipt.receipt_id,
-        fingerprint: Some(fingerprint.finish()),
-    }
+fn output_receipts(view: &WorkspaceView<'_>, plan: &ErasedStagePlan) -> Vec<OutputEntryReceipt> {
+    plan.output
+        .all_entries()
+        .map(|entry| match fingerprint_file(view, &entry.path) {
+            Ok(file) => OutputEntryReceipt {
+                id: entry.id.clone(),
+                path: entry.path.clone(),
+                role: entry.role.clone(),
+                fingerprint: Some(file.fingerprint),
+                bytes: Some(file.bytes),
+                file: Some(file),
+                status: OutputEntryStatus::Present,
+            },
+            Err(_) => OutputEntryReceipt {
+                id: entry.id.clone(),
+                path: entry.path.clone(),
+                role: entry.role.clone(),
+                fingerprint: None,
+                bytes: None,
+                file: None,
+                status: OutputEntryStatus::Missing,
+            },
+        })
+        .collect()
+}
+
+fn output_paths(plan: &ErasedStagePlan) -> Vec<WorkspacePath> {
+    plan.output
+        .all_entries()
+        .map(|entry| entry.path.clone())
+        .collect()
+}
+
+fn empty_receipt() -> StageAttemptReceiptBuilder {
+    StageAttemptReceiptBuilder::new(
+        leaven_kernel::WorkspaceId::new(),
+        leaven_kernel::StageCallId::new(),
+        leaven_kernel::StageRole::new_static("abandoned"),
+        leaven_kernel::Fingerprint::from_bytes([0; 32]),
+    )
 }
 
 fn map_setup_error(message: &'static str, source: WorkspaceSetupError) -> ProposalError {

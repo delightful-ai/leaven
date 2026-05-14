@@ -5,11 +5,15 @@ use leaven_core::{
     ProposalBatch, ProposalBatchSemantics,
 };
 use leaven_engine::{Arity, Proposer, RunContext, RunEvent};
-use leaven_kernel::{Budget, CandidateId, ContentId, Cost, MetadataBag, Metered, StageRole};
+use leaven_kernel::{
+    Budget, CandidateId, ContentId, Cost, MetadataBag, Metered, StageAttemptFailure,
+    StageAttemptOutcome, StageAttemptReceiptRef, StageRole,
+};
 use leaven_stage::{
     AgentBacked, AgentStageBootstrap, AgentStageCallContext, AgentStagePlan, AllowedQuerySet,
-    ProposerSlot, StageDirective, StageOutputContract, StageOutputParseError, StageOutputParser,
-    StageQuery, StageQueryKind, StageQueryPolicy,
+    OutputEntryStatus, ParseStatus, ProposerSlot, StageDirective, StageOutputContract,
+    StageOutputParseError, StageOutputParser, StageQuery, StageQueryKind, StageQueryPolicy,
+    receipt_store::StageReceiptStore,
 };
 use leaven_workspace::{WorkspaceBackend, WorkspaceError, WorkspacePath, WorkspaceView};
 use leaven_workspace_local::LocalWorkspaceFactory;
@@ -48,16 +52,27 @@ fn agent_backed_fake_runtime_records_receipt_and_applies_candidate() {
         let ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
 
         assert_eq!(ctx.graph().artifact(candidate).unwrap().0, "seed-agent");
-        assert!(ctx.graph().events().any(|event| {
-            matches!(
-                event,
-                RunEvent::StageAttemptRecorded {
-                    role,
-                    outcome: leaven_kernel::StageAttemptOutcome::Completed,
-                    ..
-                } if role == &StageRole::reflect()
-            )
-        }));
+        let receipt_ref = stage_receipt_ref(&ctx, &StageAttemptOutcome::Completed);
+        let receipt = proposer
+            .receipt_store()
+            .read(receipt_ref.id)
+            .await
+            .unwrap()
+            .expect("stage receipt is persisted");
+        assert_eq!(receipt.outputs.len(), 1);
+        assert_eq!(receipt.outputs[0].status, OutputEntryStatus::Present);
+        assert_eq!(
+            receipt.outputs[0].path,
+            WorkspacePath::new("output/proposal.json").unwrap()
+        );
+        assert_eq!(
+            receipt.parse.as_ref().unwrap().status,
+            ParseStatus::Succeeded
+        );
+        assert_eq!(
+            receipt.parse.as_ref().unwrap().files_read,
+            vec![WorkspacePath::new("output/proposal.json").unwrap()]
+        );
     });
 }
 
@@ -90,7 +105,10 @@ fn agent_backed_exposes_stage_identity_and_surfaces_runtime_errors() {
                 .unwrap_err()
         };
 
-        assert!(err.to_string().contains("agent stage runtime failed"));
+        assert!(
+            err.to_string().contains("agent stage runtime failed"),
+            "{err:?} / {err}"
+        );
     });
 }
 
@@ -200,7 +218,28 @@ fn agent_backed_surfaces_serialization_allocation_and_parse_failures() {
                 .await
                 .unwrap_err()
         };
-        assert!(err.to_string().contains("agent stage output parse failed"));
+        assert!(
+            err.to_string().contains("agent stage output parse failed"),
+            "{err:?} / {err}"
+        );
+        let ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+        let receipt_ref = stage_receipt_ref(
+            &ctx,
+            &StageAttemptOutcome::Failed(StageAttemptFailure::OutputParse),
+        );
+        let receipt = parse
+            .receipt_store()
+            .read(receipt_ref.id)
+            .await
+            .unwrap()
+            .expect("parse failure receipt is persisted");
+        assert_eq!(
+            receipt.outcome,
+            StageAttemptOutcome::Failed(StageAttemptFailure::OutputParse)
+        );
+        assert_eq!(receipt.outputs.len(), 1);
+        assert_eq!(receipt.outputs[0].status, OutputEntryStatus::Present);
+        assert_eq!(receipt.parse.as_ref().unwrap().status, ParseStatus::Failed);
     });
 }
 
@@ -424,4 +463,22 @@ impl CandidateOutcome for leaven_engine::ApplyOutcome {
             Self::Failure { .. } => None,
         }
     }
+}
+
+fn stage_receipt_ref(
+    ctx: &RunContext<'_, TestProblem>,
+    expected: &StageAttemptOutcome,
+) -> StageAttemptReceiptRef {
+    ctx.graph()
+        .events()
+        .find_map(|event| match event {
+            RunEvent::StageAttemptRecorded {
+                role,
+                receipt,
+                outcome,
+                ..
+            } if role == &StageRole::reflect() && outcome == expected => Some(receipt.clone()),
+            _ => None,
+        })
+        .expect("stage attempt event recorded")
 }

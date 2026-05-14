@@ -20,7 +20,7 @@ fn inline_receipt_store_round_trips_receipts_by_id() {
 
         let reference = store.write(receipt.clone()).await.unwrap();
         assert_eq!(reference.id, id);
-        assert_eq!(reference.fingerprint, None);
+        assert!(reference.fingerprint.is_some());
         assert_eq!(store.read(id).await.unwrap().unwrap().receipt_id, id);
         assert!(
             store

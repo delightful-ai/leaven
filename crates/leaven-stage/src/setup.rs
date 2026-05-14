@@ -7,8 +7,8 @@ use leaven_workspace::{WorkspacePath, WorkspaceSlot, fingerprint_file};
 use crate::parser::ErasedStagePlan;
 use crate::receipt::WorkspaceSetupReceipt;
 use crate::{
-    EntryAccess, EntryProjection, EntrySourceRef, QueryRecord, StageAttemptReceipt,
-    WorkspaceEntryReceipt, WorkspaceEntryRole, WorkspaceSetupError,
+    EntryAccess, EntryProjection, EntrySourceRef, OutputEntryReceipt, ParseReceipt, QueryRecord,
+    StageAttemptReceipt, WorkspaceEntryReceipt, WorkspaceEntryRole, WorkspaceSetupError,
 };
 
 pub fn setup_stage_workspace(
@@ -58,6 +58,8 @@ pub struct StageAttemptReceiptBuilder {
     plan_fingerprint: Fingerprint,
     setup: WorkspaceSetupReceipt,
     queries: Vec<QueryRecord>,
+    outputs: Vec<OutputEntryReceipt>,
+    parse: Option<ParseReceipt>,
     cost: Cost,
     metadata: MetadataBag,
 }
@@ -78,6 +80,8 @@ impl StageAttemptReceiptBuilder {
             plan_fingerprint,
             setup: WorkspaceSetupReceipt::default(),
             queries: Vec::new(),
+            outputs: Vec::new(),
+            parse: None,
             cost: Cost::zero(),
             metadata: MetadataBag::new(),
         }
@@ -93,8 +97,8 @@ impl StageAttemptReceiptBuilder {
             plan_fingerprint: self.plan_fingerprint,
             setup: self.setup,
             queries: self.queries,
-            outputs: Vec::new(),
-            parse: None,
+            outputs: self.outputs,
+            parse: self.parse,
             cost: self.cost,
             outcome,
             metadata: self.metadata,
@@ -109,6 +113,15 @@ impl StageAttemptReceiptBuilder {
     pub fn push_query(&mut self, query: QueryRecord) {
         self.cost = self.cost.clone().combine(&query.cost);
         self.queries.push(query);
+    }
+
+    pub fn push_output(&mut self, output: OutputEntryReceipt) {
+        self.outputs.push(output);
+    }
+
+    pub fn set_parse(&mut self, parse: ParseReceipt) {
+        self.cost = self.cost.clone().combine(&parse.cost);
+        self.parse = Some(parse);
     }
 
     pub fn add_cost(&mut self, cost: &Cost) {

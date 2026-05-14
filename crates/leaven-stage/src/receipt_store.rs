@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
-use leaven_kernel::{StageAttemptReceiptId, StageAttemptReceiptRef};
+use leaven_kernel::{FingerprintBuilder, StageAttemptReceiptId, StageAttemptReceiptRef};
 
 use crate::StageAttemptReceipt;
 
@@ -34,18 +34,40 @@ impl StageReceiptStore for InlineReceiptStore {
         &self,
         receipt: StageAttemptReceipt,
     ) -> Result<StageAttemptReceiptRef, ReceiptStoreError> {
+        self.write_sync(receipt)
+    }
+
+    async fn read(
+        &self,
+        id: StageAttemptReceiptId,
+    ) -> Result<Option<StageAttemptReceipt>, ReceiptStoreError> {
+        self.read_sync(id)
+    }
+}
+
+impl InlineReceiptStore {
+    pub fn write_sync(
+        &self,
+        receipt: StageAttemptReceipt,
+    ) -> Result<StageAttemptReceiptRef, ReceiptStoreError> {
         let id = receipt.receipt_id;
+        let bytes = serde_json::to_vec(&receipt)
+            .map_err(|err| ReceiptStoreError::Store(err.to_string()))?;
+        let mut fingerprint = FingerprintBuilder::new();
+        fingerprint
+            .update(b"leaven.stage.attempt-receipt.v1")
+            .update(bytes);
         self.receipts
             .lock()
             .map_err(|_| ReceiptStoreError::Store("receipt store poisoned".to_owned()))?
             .insert(id, receipt);
         Ok(StageAttemptReceiptRef {
             id,
-            fingerprint: None,
+            fingerprint: Some(fingerprint.finish()),
         })
     }
 
-    async fn read(
+    pub fn read_sync(
         &self,
         id: StageAttemptReceiptId,
     ) -> Result<Option<StageAttemptReceipt>, ReceiptStoreError> {
