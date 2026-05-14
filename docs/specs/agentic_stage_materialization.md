@@ -2872,12 +2872,12 @@ GEPA reflection should use the engine proposer path when the reflector is a `Pro
 ```rust
 let request = ReflectRequest { /* selected context */ };
 let batch = ctx.propose(&self.reflector, request).await?;
-let applied = ctx.apply_batch(batch.value).await?;
+let applied = ctx.apply_batch(batch.batch_id)?;
 ```
 
 Surface-native reflection may use a GEPA-owned adapter that lowers surface edits into `ProposalBatch<P>` before returning from `Proposer::propose`.
 
-`ReflectiveMutation` should not name a fixed-edit fixture in the public ordinary surface.
+`LmBackedReflector` and agent-backed GEPA reflectors should not name a fixed-edit fixture in the public ordinary surface.
 
 ## 16. retained task/workload boundary
 

@@ -79,7 +79,10 @@ let gepa = Gepa::builder()
     .parent_selector(ParetoFrequencyWeighted::default())
     .part_selector(InvokedAndFailingPart::default())
     .batch_sampler(EpochShuffled::new(4))
-    .reflector(ReflectiveMutation::with_lm(reflection_lm))
+    .reflector(LmBackedReflector::with_default_renderer(
+        reflection_lm,
+        "gpt-4.1-mini",
+    ))
     .acceptance(StrictImprovement)
     .validation(FullValidation::every(10))
     .population(ParetoFrontier::by_case())
@@ -173,7 +176,7 @@ The GEPA-facing API name is `parent_selector`. General lower-level code may use
 | `leaven-render` | renderers/materializers over typed values | optimizer rhythm, GEPA policy |
 | `leaven-lm` | provider-neutral LM request/response vocabulary | GEPA, engine graph, response-cache stores |
 | `leaven-lm-cache` | reusable Leaven response-cache policy, keys, stores, and `CachedLm` wrapper | GEPA rhythm, engine evaluation cache, concrete providers |
-| `leaven-gepa` | GEPA optimizer, strategy slots, GEPA request/result types | concrete providers, concrete workspace backends, domain internals |
+| `leaven-gepa` | GEPA optimizer, strategy slots, GEPA request/result types, LM-backed and agent-backed reflection adapters | concrete providers, concrete workspace backends, response-cache stores, domain internals |
 | `leaven` | umbrella re-exports only | implementation logic |
 
 ### 5.2 Dependency Direction
@@ -191,7 +194,6 @@ leaven-preference
 leaven-population
 leaven-render
 leaven-lm
-leaven-lm-cache
 ```
 
 `leaven-gepa` must not depend on:
@@ -226,7 +228,7 @@ merge.rs            MergeScheduler, SystemAwareMerge, GepaMerge
 parent_selector.rs  ParentSelector, ParetoFrequencyWeighted, SelectBestParent, UniformFrontier, TopK
 part_selector.rs    PartSelector, RoundRobinPart, InvokedAndFailingPart
 proposal.rs         GepaMutationRequest, GepaProposal, SurfaceEdit
-reflection.rs       ReflectiveMutation, reflection prompt construction, ASI rendering
+reflection.rs       ReflectRequest, SelectedFeedback, LmBackedReflector, reflection prompt construction, ASI rendering
 result.rs           GepaSummary, candidate summaries, frontier summaries
 split_policy.rs     GepaSplitPolicy, train/validation/test defaults over PartitionId
 validation.rs       ValidationPolicy, FullValidation, MinibatchThenValidation
@@ -246,7 +248,7 @@ pub struct Gepa<
     ParentSel = ParetoFrequencyWeighted,
     PartSel = RoundRobinPart,
     Batch = EpochShuffled,
-    Reflect = ReflectiveMutation,
+    Reflect = LmBackedReflector,
     Accept = StrictImprovement,
     Validate = MinibatchThenValidation,
 > where
@@ -336,7 +338,7 @@ One ordinary reflective mutation iteration is:
 5. BatchSampler chooses a feedback minibatch from the train/search split.
 6. GEPA evaluates the parent on the minibatch with required granularity.
 7. GEPA extracts/captures feedback assessment IDs.
-8. ReflectiveMutation proposes one or more edits/native proposals.
+8. The configured reflector/proposer proposes one or more edits/native proposals.
 9. GEPA lowers surface edits through EditSurface::change_part.
 10. GEPA records a ProposalBatch with typed causal and informed_by provenance.
 11. GEPA applies the batch through RunContext.
@@ -454,17 +456,146 @@ There is no magical two-artifact `apply_change`.
 Python GEPA's `make_reflective_dataset` becomes a renderer/proposer concern,
 not a universal adapter contract.
 
-Standard reflective mutation:
+GEPA has two distinct LM interaction sites:
+
+```text
+candidate execution LM
+  owned by the runner/evaluator/domain adapter
+  runs a candidate artifact on cases and produces outputs, scores, traces, evidence
+
+reflection LM
+  owned by the GEPA reflection proposer
+  reads selected feedback and proposes a typed candidate change
+```
+
+These may be the same provider instance in an application, but Leaven must not
+couple them in the type system. A DSRS or AIME runner that calls an LM is still
+candidate evaluation. The GEPA reflection LM is the proposer backend that turns
+feedback into candidate edits.
+
+### 11.1 Shared Reflection Request
+
+LM-backed and agent-backed GEPA reflection use the same GEPA-owned request
+vocabulary. The shared request types live in `leaven-gepa`, not
+`leaven-stage`, because they are GEPA strategy input, not workspace substrate.
 
 ```rust
-pub struct ReflectiveMutation<Lm, R = DefaultReflectionRenderer> {
-    lm: Lm,
-    renderer: R,
-    config: ReflectiveMutationConfig,
+pub struct ReflectRequest {
+    pub parent: CandidateId,
+    pub part_label: String,
+    pub selected_feedback: SelectedFeedback,
+}
+
+pub struct SelectedFeedback {
+    pub assessment_refs: Vec<AssessmentId>,
+    pub evidence_refs: Vec<InfoRef>,
+    pub candidate_refs: Vec<CandidateId>,
+    pub records: Vec<ReflectiveFeedbackRecord>,
+}
+
+pub struct ReflectiveFeedbackRecord {
+    pub case: Option<CaseId>,
+    pub score: Option<f64>,
+    pub feedback: String,
+    pub trace: Vec<String>,
+    pub source_refs: Vec<InfoRef>,
 }
 ```
 
-The renderer consumes:
+`source_refs()` over `SelectedFeedback` is the authoritative provenance input
+for `Proposal::informed_by`. The textual records are proposer input. The refs
+are graph/evidence truth.
+
+The shared request is intentionally not `AgentCase`, not a workspace plan, and
+not a Python-style `dict[str, str]`. It is selected GEPA feedback for a parent
+candidate and selected surface part.
+
+### 11.2 Feedback Selection
+
+GEPA owns the conversion from scored casewise evidence into selected reflection
+records.
+
+```rust
+pub trait GepaReflectionEvidence: leaven_core::Evidence {
+    fn reflection_records(&self) -> Vec<ReflectiveFeedbackRecord>;
+}
+```
+
+The standard implementation for
+`CasewiseEvidence<ScoredFeedbackEvidence>` preserves:
+
+```text
+case id
+comparable scalar score
+ScoredFeedbackEvidence::feedback()
+ScoredFeedbackEvidence::trace()
+assessment/evidence source refs
+```
+
+Do not collapse feedback to `f64` before reflection. Scalar scores drive
+population and acceptance; feedback text and trace lines drive reflection.
+
+The default feedback selector uses only train/search assessments under the
+current trust policy. Validation and test evidence are excluded from
+`SelectedFeedback` unless the user selects an explicit validation-aware policy.
+
+### 11.3 LM-Backed Reflector
+
+Standard reflective mutation is an LM-backed proposer over the neutral
+`leaven-lm::Lm` capability:
+
+```rust
+pub struct LmBackedReflector<L, R, Parser> {
+    lm: L,
+    model: ModelName,
+    renderer: R,
+    parser: Parser,
+    config: LmBackedReflectorConfig,
+}
+```
+
+`leaven-gepa` constructs no concrete provider. The actual LM is injected by the
+caller as an `impl leaven_lm::Lm`:
+
+```rust
+let reflector = LmBackedReflector::new(
+    OpenAiLm::from_env("gpt-4.1-mini")?,
+    ModelName::new("gpt-4.1-mini"),
+    renderer,
+    parser,
+);
+```
+
+Tests and examples use `leaven-lm-mock`. Applications that want response
+caching wrap the provider before injection:
+
+```rust
+let lm = CachedLm::read_write(OpenAiLm::from_env("gpt-4.1-mini")?, cache);
+let reflector = LmBackedReflector::new(lm, "gpt-4.1-mini", renderer, parser);
+```
+
+`leaven-gepa` still depends only on `leaven-lm`; it does not depend on
+`leaven-lm-openai`, `leaven-lm-anthropic`, `leaven-lm-local`, or
+`leaven-lm-cache`.
+
+The call is exactly:
+
+```rust
+let request = LmRequest::new(
+    self.model.clone(),
+    Messages::new()
+        .with_system(system_prompt)
+        .with_user(user_prompt),
+)
+.with_sampling(self.config.sampling.clone())
+.with_output(self.config.output.clone());
+
+let metered = self.lm.complete(request).await?;
+let assistant_text = metered.value.assistant.content();
+let cost = metered.cost;
+```
+
+The renderer produces the `system_prompt` and `user_prompt` from:
 
 ```text
 parent candidate id
@@ -477,7 +608,59 @@ lineage summary
 objective/background prompt text
 ```
 
-It produces provider-neutral LM input through `leaven-lm`.
+The parser consumes only the assistant text and the selected surface context. It
+returns either surface-native edits or a typed `ProposalBatch<P>`. Invalid LM
+output is a proposal error, not a panic and not a hidden no-op.
+
+### 11.4 Proposer Finalization Path
+
+LM-backed reflection should use the same engine proposer finalization path as
+agent-backed reflection:
+
+```text
+GEPA builds ReflectRequest
+  -> RunContext::propose(&lm_backed_reflector, request)
+  -> LmBackedReflector renders LmRequest
+  -> impl Lm::complete returns Metered<LmResponse>
+  -> parser returns ProposalBatch<P>
+  -> RunContext records ProposalBatch with LM cost
+  -> GEPA calls RunContext::apply_batch
+```
+
+The reflector implements `Proposer<P, Request = ReflectRequest>` and returns a
+`Metered<ProposalBatch<P>>`. `RunContext::propose` is responsible for proposal
+recording, event emission, budget charging, and checkpoint interaction. The
+GEPA loop remains responsible for `apply_batch`, child screening, acceptance,
+validation, and population updates.
+
+`GepaReflector` may remain the optimizer-facing convenience trait, but when the
+concrete reflector is a `Proposer<P>` it should call `RunContext::propose`
+rather than manually calling `record_proposal_batch`.
+
+### 11.5 Agent-Backed Reflector
+
+Agent-backed reflection is optional. It is selected when the user supplies an
+`AgentBacked<ProposerSlot<ReflectRequest>, Runtime, Bootstrap, Parser>` or a
+GEPA-owned wrapper around that type.
+
+Agent-backed reflection consumes the same `ReflectRequest`, but `AgentBacked`
+turns it into:
+
+```text
+AgentStagePlan<ReflectRequest>
+bounded workspace setup
+prewarmed StageQueryPolicy entries
+AgentRuntime session
+StageOutputParser output
+mandatory StageAttemptReceipt
+Metered<ProposalBatch<P>>
+```
+
+This path is governed by `agentic_stage_materialization.md`. It must not be the
+only production reflection path. LM-backed reflection is the default no-workspace
+GEPA reflection path.
+
+### 11.6 ASI / Feedback Sources
 
 ASI/feedback sources:
 
@@ -567,7 +750,7 @@ The first product-grade GEPA implementation must:
 5. select parents through a swappable `ParentSelector`;
 6. select parts through a swappable `PartSelector`;
 7. sample minibatches through a swappable `BatchSampler`;
-8. propose surface edits through `ReflectiveMutation`;
+8. propose surface edits through `LmBackedReflector` or another supplied reflector;
 9. lower surface edits into typed artifact changes;
 10. record proposal batches with typed causal and informational provenance;
 11. apply proposals through `RunContext`;
@@ -708,13 +891,13 @@ Scope:
 - builder supports surface/population/parent/part/batch/acceptance/validation;
 - P3 example becomes thin setup code using `Gepa` directly.
 
-### Milestone B: Mock-LM Reflective Mutation
+### Milestone B: Mock-LM-Backed Reflector
 
 Goal: prove reflection loop without provider network calls.
 
 Scope:
 
-- `ReflectiveMutation` uses `leaven-lm` trait vocabulary;
+- `LmBackedReflector` uses `leaven-lm` trait vocabulary;
 - `leaven-lm-mock` drives deterministic proposal text;
 - standard reflection renderer consumes casewise evidence and part view;
 - typed parse/validation errors become proposer feedback.
