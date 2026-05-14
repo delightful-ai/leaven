@@ -111,11 +111,9 @@ fn workload_from_cases_and_parts_preserve_suite_validation() {
 
     let mut cases = BTreeMap::new();
     cases.insert(first.id, first);
-    let missing = AgentWorkload::from_parts(
-        cases,
-        CasePartitions::with_all(vec![CaseId::new(404)]),
-    )
-    .unwrap_err();
+    let missing =
+        AgentWorkload::from_parts(cases, CasePartitions::with_all(vec![CaseId::new(404)]))
+            .unwrap_err();
     assert!(missing.to_string().contains("references missing case"));
 }
 

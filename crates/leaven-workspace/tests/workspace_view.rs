@@ -179,13 +179,13 @@ fn workspace_factory_context_downcasts_and_rejects_wrong_type() {
     builder.insert(Arc::new("repo-handle".to_owned())).unwrap();
     assert!(builder.insert(Arc::new("duplicate".to_owned())).is_err());
     let context = builder.build();
-    let mut workspace = Workspace::new_with_context(
-        root.clone(),
-        Box::new(TestBackend::mounted(&root)),
-        context,
-    );
+    let mut workspace =
+        Workspace::new_with_context(root.clone(), Box::new(TestBackend::mounted(&root)), context);
 
-    assert_eq!(&*workspace.factory_context::<String>().unwrap(), "repo-handle");
+    assert_eq!(
+        &*workspace.factory_context::<String>().unwrap(),
+        "repo-handle"
+    );
     assert!(workspace.factory_context::<u64>().is_err());
     assert_eq!(
         &*workspace.view().factory_context::<String>().unwrap(),
@@ -233,9 +233,7 @@ fn workspace_slot_scopes_files_context_and_command_cwd() {
     );
     assert_eq!(*slot.factory_context::<u64>().unwrap(), 7);
 
-    let mut nested = slot
-        .subslot(WorkspacePath::new("nested").unwrap())
-        .unwrap();
+    let mut nested = slot.subslot(WorkspacePath::new("nested").unwrap()).unwrap();
     nested
         .write_file(&WorkspacePath::new("child.txt").unwrap(), b"child")
         .unwrap();
@@ -284,7 +282,10 @@ fn tree_fingerprint_is_path_order_independent() {
     let first_fingerprint = fingerprint_tree(&first.view(), &WorkspacePath::root()).unwrap();
     let second_fingerprint = fingerprint_tree(&second.view(), &WorkspacePath::root()).unwrap();
 
-    assert_eq!(first_fingerprint.fingerprint, second_fingerprint.fingerprint);
+    assert_eq!(
+        first_fingerprint.fingerprint,
+        second_fingerprint.fingerprint
+    );
     assert_eq!(
         first_fingerprint
             .files

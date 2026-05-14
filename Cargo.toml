@@ -34,6 +34,7 @@ members = [
     "crates/leaven-python",
     "crates/leaven-render",
     "crates/leaven-run",
+    "crates/leaven-stage",
     "crates/leaven-std",
     "crates/leaven-store",
     "crates/leaven-store-file",
@@ -138,6 +139,7 @@ leaven-preference = { path = "crates/leaven-preference", version = "0.0.0" }
 leaven-python = { path = "crates/leaven-python", version = "0.0.0" }
 leaven-render = { path = "crates/leaven-render", version = "0.0.0" }
 leaven-run = { path = "crates/leaven-run", version = "0.0.0" }
+leaven-stage = { path = "crates/leaven-stage", version = "0.0.0" }
 leaven-store = { path = "crates/leaven-store", version = "0.0.0" }
 leaven-store-file = { path = "crates/leaven-store-file", version = "0.0.0" }
 leaven-store-inline = { path = "crates/leaven-store-inline", version = "0.0.0" }

@@ -37,6 +37,7 @@ const EXPECTED_WORKSPACE_MEMBERS: &[&str] = &[
     "crates/leaven-python",
     "crates/leaven-render",
     "crates/leaven-run",
+    "crates/leaven-stage",
     "crates/leaven-std",
     "crates/leaven-store",
     "crates/leaven-store-file",
@@ -100,6 +101,7 @@ const EXPECTED_CRATES: &[&str] = &[
     "leaven-python",
     "leaven-render",
     "leaven-run",
+    "leaven-stage",
     "leaven-std",
     "leaven-store",
     "leaven-store-file",
@@ -345,6 +347,17 @@ const EXPECTED_DEPENDENCIES: &[(&str, &[&str])] = &[
             "leaven-kernel",
             "leaven-store",
             "leaven-store-inline",
+        ],
+    ),
+    (
+        "leaven-stage",
+        &[
+            "leaven-agent",
+            "leaven-core",
+            "leaven-engine",
+            "leaven-kernel",
+            "leaven-store",
+            "leaven-workspace",
         ],
     ),
     (

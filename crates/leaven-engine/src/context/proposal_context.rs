@@ -114,12 +114,7 @@ impl StageAttemptEventSink {
     }
 
     pub(crate) fn drain(&self) -> Vec<PendingStageAttemptEvent> {
-        std::mem::take(
-            &mut *self
-                .inner
-                .lock()
-                .expect("stage attempt sink poisoned"),
-        )
+        std::mem::take(&mut *self.inner.lock().expect("stage attempt sink poisoned"))
     }
 }
 

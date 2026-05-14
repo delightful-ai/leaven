@@ -12,9 +12,7 @@ impl StageRole {
     pub fn new(value: impl Into<String>) -> Result<Self, StageRoleError> {
         let value = value.into();
         if value.is_empty() || value.contains('/') || value.chars().any(char::is_whitespace) {
-            return Err(StageRoleError {
-                value,
-            });
+            return Err(StageRoleError { value });
         }
         Ok(Self(value))
     }

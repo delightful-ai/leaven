@@ -10,9 +10,9 @@ use parking_lot::Mutex;
 use leaven_kernel::WorkspaceId;
 
 use crate::{
-    Command, CommandOutput, WithWorkspaceError, WorkspaceConfig, WorkspaceError,
-    WorkspaceFactory, WorkspaceFactoryContext, WorkspaceFactoryContextError, WorkspacePath,
-    WorkspaceSlot, WorkspaceView,
+    Command, CommandOutput, WithWorkspaceError, WorkspaceConfig, WorkspaceError, WorkspaceFactory,
+    WorkspaceFactoryContext, WorkspaceFactoryContextError, WorkspacePath, WorkspaceSlot,
+    WorkspaceView,
 };
 
 pub struct Workspace {

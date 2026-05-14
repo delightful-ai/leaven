@@ -1,5 +1,6 @@
 //! Backend-neutral workspace paths.
 
+use std::fmt;
 use std::path::{Component, Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -79,6 +80,11 @@ impl WorkspacePath {
         &self.inner
     }
 
+    #[must_use]
+    pub fn starts_with_component(&self, component: &str) -> bool {
+        self.inner.split('/').next() == Some(component)
+    }
+
     /// Convert this workspace path into a relative host path.
     ///
     /// This is only for backends that expose a host filesystem layout. Pure
@@ -90,5 +96,11 @@ impl WorkspacePath {
             path.push(part);
         }
         path
+    }
+}
+
+impl fmt::Display for WorkspacePath {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
     }
 }

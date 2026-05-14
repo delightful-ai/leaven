@@ -39,11 +39,7 @@ impl<'a> WorkspaceSlot<'a> {
         Ok(Self { root, view })
     }
 
-    pub fn write_file(
-        &mut self,
-        path: &WorkspacePath,
-        bytes: &[u8],
-    ) -> Result<(), WorkspaceError> {
+    pub fn write_file(&mut self, path: &WorkspacePath, bytes: &[u8]) -> Result<(), WorkspaceError> {
         self.view.write_file(path, bytes)
     }
 

@@ -119,9 +119,11 @@ fn stage_attempt_recorded_on_proposer_error_before_error_event() {
                 && event_receipt == &receipt
                 && event_outcome == &outcome
         ));
-        assert!(!events
-            .iter()
-            .any(|event| matches!(event, RunEvent::ApplyFailed { .. })));
+        assert!(
+            !events
+                .iter()
+                .any(|event| matches!(event, RunEvent::ApplyFailed { .. }))
+        );
     });
 }
 

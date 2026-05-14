@@ -38,7 +38,7 @@ pub mod prelude {
         FactoryError, WithWorkspaceError, Workspace, WorkspaceBackend, WorkspaceConfig,
         WorkspaceError, WorkspaceFactory, WorkspaceFactoryContext, WorkspaceFactoryContextBuilder,
         WorkspaceFactoryContextError, WorkspaceFileFingerprint, WorkspacePath, WorkspacePathError,
-        WorkspaceSlot, WorkspaceTreeFingerprint, WorkspaceView, fingerprint_file,
-        fingerprint_tree, with_workspace,
+        WorkspaceSlot, WorkspaceTreeFingerprint, WorkspaceView, fingerprint_file, fingerprint_tree,
+        with_workspace,
     };
 }
