@@ -31,6 +31,11 @@ impl WorkspaceEntryRole {
     pub fn brief() -> Self {
         Self::new_static("brief")
     }
+
+    #[must_use]
+    pub fn query_summary() -> Self {
+        Self::new_static("query_summary")
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
