@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use futures::executor::block_on;
 use leaven_agent::{AgentSession, FakeAgentAction, FakeAgentRuntime};
 use leaven_core::{
@@ -7,13 +9,13 @@ use leaven_core::{
 use leaven_engine::{Arity, Proposer, RunContext, RunEvent};
 use leaven_kernel::{
     Budget, CandidateId, ContentId, Cost, MetadataBag, Metered, StageAttemptFailure,
-    StageAttemptOutcome, StageAttemptReceiptRef, StageRole,
+    StageAttemptOutcome, StageAttemptReceiptRef, StageRole, WorkspaceId,
 };
 use leaven_stage::{
     AgentBacked, AgentStageBootstrap, AgentStageCallContext, AgentStagePlan, AllowedQuerySet,
-    OutputEntryStatus, ParseStatus, ProposerSlot, StageDirective, StageOutputContract,
-    StageOutputParseError, StageOutputParser, StageQuery, StageQueryKind, StageQueryPolicy,
-    receipt_store::StageReceiptStore,
+    OutputEntryStatus, ParseStatus, ProposerSlot, SlotMarker, StageAttemptReceiptBuilder,
+    StageDirective, StageOutputContract, StageOutputParseError, StageOutputParser, StageQuery,
+    StageQueryKind, StageQueryPolicy, receipt_store::StageReceiptStore,
 };
 use leaven_workspace::{WorkspaceBackend, WorkspaceError, WorkspacePath, WorkspaceView};
 use leaven_workspace_local::LocalWorkspaceFactory;
@@ -109,6 +111,22 @@ fn agent_backed_exposes_stage_identity_and_surfaces_runtime_errors() {
             err.to_string().contains("agent stage runtime failed"),
             "{err:?} / {err}"
         );
+        let ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+        let receipt_ref = stage_receipt_ref(
+            &ctx,
+            &StageAttemptOutcome::Failed(StageAttemptFailure::Runtime),
+        );
+        let receipt = proposer
+            .receipt_store()
+            .read(receipt_ref.id)
+            .await
+            .unwrap()
+            .expect("runtime failure receipt is persisted");
+        assert_eq!(
+            receipt.outcome,
+            StageAttemptOutcome::Failed(StageAttemptFailure::Runtime)
+        );
+        assert!(receipt.parse.is_none());
     });
 }
 
@@ -184,24 +202,6 @@ fn agent_backed_surfaces_serialization_allocation_and_parse_failures() {
                 .contains("agent stage workspace allocation failed")
         );
 
-        let setup = AgentBacked::<ProposerSlot<ReflectRequest>, _, _, _>::from_factory(
-            SetupFailingFactory,
-            FakeAgentRuntime::new(Vec::new()),
-            ReflectBootstrap,
-            JsonProposalParser,
-            Default::default(),
-        );
-        let err = {
-            let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
-            ctx.propose(&setup, ReflectRequest { parent })
-                .await
-                .unwrap_err()
-        };
-        assert!(
-            err.to_string()
-                .contains("agent stage workspace setup failed")
-        );
-
         let parse = AgentBacked::<ProposerSlot<ReflectRequest>, _, _, _>::from_factory(
             LocalWorkspaceFactory::temp(),
             FakeAgentRuntime::new(vec![FakeAgentAction::WriteFile {
@@ -240,6 +240,184 @@ fn agent_backed_surfaces_serialization_allocation_and_parse_failures() {
         assert_eq!(receipt.outputs.len(), 1);
         assert_eq!(receipt.outputs[0].status, OutputEntryStatus::Present);
         assert_eq!(receipt.parse.as_ref().unwrap().status, ParseStatus::Failed);
+    });
+}
+
+#[test]
+fn agent_backed_records_workspace_setup_failure_receipt() {
+    block_on(async {
+        let (mut graph, mut budget) = graph_and_budget();
+        let parent = {
+            let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+            ctx.insert_seed(TextArtifact("seed".to_owned()), 0).unwrap()
+        };
+        let setup = AgentBacked::<ProposerSlot<ReflectRequest>, _, _, _>::from_factory(
+            SetupFailingFactory,
+            FakeAgentRuntime::new(Vec::new()),
+            ReflectBootstrap,
+            JsonProposalParser,
+            Default::default(),
+        );
+        let err = {
+            let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+            ctx.propose(&setup, ReflectRequest { parent })
+                .await
+                .unwrap_err()
+        };
+
+        assert!(
+            err.to_string()
+                .contains("agent stage workspace setup failed")
+        );
+        let ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+        let receipt_ref = stage_receipt_ref(
+            &ctx,
+            &StageAttemptOutcome::Failed(StageAttemptFailure::WorkspaceSetup),
+        );
+        let receipt = setup
+            .receipt_store()
+            .read(receipt_ref.id)
+            .await
+            .unwrap()
+            .expect("setup failure receipt is persisted");
+        assert_eq!(
+            receipt.outcome,
+            StageAttemptOutcome::Failed(StageAttemptFailure::WorkspaceSetup)
+        );
+    });
+}
+
+#[test]
+fn agent_backed_records_prewarm_query_failure_receipt() {
+    block_on(async {
+        let (mut graph, mut budget) = graph_and_budget();
+        let parent = {
+            let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+            ctx.insert_seed(TextArtifact("seed".to_owned()), 0).unwrap()
+        };
+        let proposer = AgentBacked::<ProposerSlot<ReflectRequest>, _, _, _>::from_factory(
+            QueryWriteFailingFactory,
+            FakeAgentRuntime::new(Vec::new()),
+            ReflectBootstrap,
+            JsonProposalParser,
+            Default::default(),
+        );
+        let err = {
+            let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+            ctx.propose(&proposer, ReflectRequest { parent })
+                .await
+                .unwrap_err()
+        };
+
+        assert!(
+            err.to_string().contains("agent stage prewarm query failed"),
+            "{err:?} / {err}"
+        );
+        let ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+        let receipt_ref = stage_receipt_ref(
+            &ctx,
+            &StageAttemptOutcome::Failed(StageAttemptFailure::Query),
+        );
+        let receipt = proposer
+            .receipt_store()
+            .read(receipt_ref.id)
+            .await
+            .unwrap()
+            .expect("query failure receipt is persisted");
+        assert_eq!(
+            receipt.outcome,
+            StageAttemptOutcome::Failed(StageAttemptFailure::Query)
+        );
+        assert_eq!(receipt.setup.plan_entries.len(), 4);
+        assert!(receipt.queries.is_empty());
+    });
+}
+
+#[test]
+fn agent_backed_surfaces_cleanup_failure_after_success_and_parse_error() {
+    block_on(async {
+        let (mut graph, mut budget) = graph_and_budget();
+        let parent = {
+            let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+            ctx.insert_seed(TextArtifact("seed".to_owned()), 0).unwrap()
+        };
+        let success = AgentBacked::<ProposerSlot<ReflectRequest>, _, _, _>::from_factory(
+            CleanupFailingFactory,
+            FakeAgentRuntime::new(vec![FakeAgentAction::WriteFile {
+                path: WorkspacePath::new("output/proposal.json").unwrap(),
+                bytes: br#"{"suffix":"-agent"}"#.to_vec(),
+            }]),
+            ReflectBootstrap,
+            JsonProposalParser,
+            Default::default(),
+        );
+        let err = {
+            let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+            ctx.propose(&success, ReflectRequest { parent })
+                .await
+                .unwrap_err()
+        };
+        assert!(
+            err.to_string()
+                .contains("agent stage workspace cleanup failed"),
+            "{err:?} / {err}"
+        );
+
+        let parse = AgentBacked::<ProposerSlot<ReflectRequest>, _, _, _>::from_factory(
+            CleanupFailingFactory,
+            FakeAgentRuntime::new(vec![FakeAgentAction::WriteFile {
+                path: WorkspacePath::new("output/proposal.json").unwrap(),
+                bytes: br#"{"suffix": 1}"#.to_vec(),
+            }]),
+            ReflectBootstrap,
+            JsonProposalParser,
+            Default::default(),
+        );
+        let err = {
+            let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+            ctx.propose(&parse, ReflectRequest { parent })
+                .await
+                .unwrap_err()
+        };
+        assert!(
+            err.to_string()
+                .contains("agent stage workspace cleanup failed"),
+            "{err:?} / {err}"
+        );
+    });
+}
+
+#[test]
+fn proposer_slot_role_and_inline_receipt_store_are_public_stage_contracts() {
+    block_on(async {
+        assert_eq!(
+            <ProposerSlot<ReflectRequest> as SlotMarker<TestProblem>>::role(),
+            StageRole::reflect()
+        );
+        let store = leaven_stage::receipt_store::InlineReceiptStore::default();
+        let receipt = StageAttemptReceiptBuilder::new(
+            WorkspaceId::new(),
+            leaven_kernel::StageCallId::new(),
+            StageRole::reflect(),
+            leaven_kernel::Fingerprint::from_bytes([9; 32]),
+        )
+        .finish(StageAttemptOutcome::Completed);
+        let receipt_id = receipt.receipt_id;
+        let receipt_ref = store.write(receipt).await.unwrap();
+
+        assert_eq!(receipt_ref.id, receipt_id);
+        assert!(receipt_ref.fingerprint.is_some());
+        assert_eq!(
+            store.read(receipt_id).await.unwrap().unwrap().outcome,
+            StageAttemptOutcome::Completed
+        );
+        assert!(
+            store
+                .read(leaven_kernel::StageAttemptReceiptId::new())
+                .await
+                .unwrap()
+                .is_none()
+        );
     });
 }
 
@@ -369,6 +547,88 @@ struct UnsupportedBackend;
 impl WorkspaceBackend for UnsupportedBackend {
     fn cleanup(self: Box<Self>) -> futures::future::BoxFuture<'static, Result<(), WorkspaceError>> {
         Box::pin(async { Ok(()) })
+    }
+}
+
+struct QueryWriteFailingFactory;
+
+impl leaven_workspace::WorkspaceFactory for QueryWriteFailingFactory {
+    async fn allocate(
+        &self,
+        _config: leaven_workspace::WorkspaceConfig,
+    ) -> Result<leaven_workspace::Workspace, leaven_workspace::FactoryError> {
+        Ok(leaven_workspace::Workspace::new(
+            std::env::temp_dir().join("leaven-stage-query-write-failing-workspace"),
+            Box::new(ControllableBackend {
+                fail_query_writes: true,
+                fail_cleanup: false,
+                ..Default::default()
+            }),
+        ))
+    }
+}
+
+#[derive(Default)]
+struct ControllableBackend {
+    fail_query_writes: bool,
+    fail_cleanup: bool,
+    files: BTreeMap<WorkspacePath, Vec<u8>>,
+    executable: BTreeMap<WorkspacePath, bool>,
+}
+
+impl WorkspaceBackend for ControllableBackend {
+    fn write_file(&mut self, path: &WorkspacePath, bytes: &[u8]) -> Result<(), WorkspaceError> {
+        if self.fail_query_writes && path.starts_with_component("queries") {
+            return Err(WorkspaceError::Io(format!(
+                "query writes disabled for {}",
+                path.as_str()
+            )));
+        }
+        self.files.insert(path.clone(), bytes.to_vec());
+        Ok(())
+    }
+
+    fn read_file(&mut self, path: &WorkspacePath) -> Result<Vec<u8>, WorkspaceError> {
+        self.files
+            .get(path)
+            .cloned()
+            .ok_or_else(|| WorkspaceError::Io(format!("missing file {}", path.as_str())))
+    }
+
+    fn set_executable(
+        &mut self,
+        path: &WorkspacePath,
+        executable: bool,
+    ) -> Result<(), WorkspaceError> {
+        self.executable.insert(path.clone(), executable);
+        Ok(())
+    }
+
+    fn cleanup(self: Box<Self>) -> futures::future::BoxFuture<'static, Result<(), WorkspaceError>> {
+        Box::pin(async move {
+            if self.fail_cleanup {
+                Err(WorkspaceError::Cleanup("cleanup disabled".to_owned()))
+            } else {
+                Ok(())
+            }
+        })
+    }
+}
+
+struct CleanupFailingFactory;
+
+impl leaven_workspace::WorkspaceFactory for CleanupFailingFactory {
+    async fn allocate(
+        &self,
+        _config: leaven_workspace::WorkspaceConfig,
+    ) -> Result<leaven_workspace::Workspace, leaven_workspace::FactoryError> {
+        Ok(leaven_workspace::Workspace::new(
+            std::env::temp_dir().join("leaven-stage-cleanup-failing-workspace"),
+            Box::new(ControllableBackend {
+                fail_cleanup: true,
+                ..Default::default()
+            }),
+        ))
     }
 }
 

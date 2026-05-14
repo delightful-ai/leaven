@@ -12,7 +12,7 @@ use leaven_core::{
 };
 use leaven_engine::{CaseSet, EvaluationContext, EvaluationError, OptimizerError, RunContext};
 use leaven_evidence::{CaseOutcome, CasewiseEvidence, ScalarEvidence};
-use leaven_gepa::{GateDecision, Gepa, ReflectiveMutation, SurfaceProposer};
+use leaven_gepa::{FixedSurfaceEdit, GateDecision, Gepa, SurfaceProposer};
 use leaven_kernel::{CaseId, EvaluatorId, Fingerprint, MetadataBag, Metered, StageId};
 use leaven_population::ParetoFrontier;
 use leaven_store_inline::InlineEvidenceStore;
@@ -52,9 +52,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 ParetoFrontier::by_case()
                     .partition_filter(BTreeSet::from([PartitionId::from(TRAIN)]))
                     .build(),
-                ReflectiveMutation::new(PartMapEdit::Replace("improved answer".to_owned())),
+                FixedSurfaceEdit::new(PartMapEdit::Replace("improved answer".to_owned())),
             ),
-            proposer: ReflectiveMutation::new(PartMapEdit::Replace("improved answer".to_owned())),
+            proposer: FixedSurfaceEdit::new(PartMapEdit::Replace("improved answer".to_owned())),
             seed,
             best: None,
             done: false,
@@ -185,8 +185,8 @@ impl EditSurface<PartMapArtifact> for PartMapSurface {
 }
 
 struct GepaParityOptimizer {
-    gepa: Gepa<PartMapSurface, ParetoFrontier, ReflectiveMutation<PartMapEdit>>,
-    proposer: ReflectiveMutation<PartMapEdit>,
+    gepa: Gepa<PartMapSurface, ParetoFrontier, FixedSurfaceEdit<PartMapEdit>>,
+    proposer: FixedSurfaceEdit<PartMapEdit>,
     seed: CandidateId,
     best: Option<CandidateId>,
     done: bool,

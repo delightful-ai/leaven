@@ -88,7 +88,7 @@ async fn run_aime(
                         )]))
                         .build(),
                 )
-                .reflector(ReflectiveMutation::new(AimePromptEdit::ReplaceSystem(
+                .reflector(FixedSurfaceEdit::new(AimePromptEdit::ReplaceSystem(
                     OPTIMIZED.to_owned(),
                 )))
                 .max_iterations(1),
@@ -459,18 +459,19 @@ mod tests {
     #[test]
     fn run_builder_requires_score_function() {
         let (train, _, _) = deterministic_cases();
-        let error = block_on(async {
-            leaven::optimize(AimePrompt::new(BASELINE))
-                .train(train)
-                .runner(run_solver)
-                .using(Gepa::builder().surface(AimePromptSurface).reflector(
-                    ReflectiveMutation::new(AimePromptEdit::ReplaceSystem(OPTIMIZED.to_owned())),
-                ))
-                .budget(Budget::metric_calls(8))
-                .run()
-                .await
-        })
-        .unwrap_err();
+        let error =
+            block_on(async {
+                leaven::optimize(AimePrompt::new(BASELINE))
+                    .train(train)
+                    .runner(run_solver)
+                    .using(Gepa::builder().surface(AimePromptSurface).reflector(
+                        FixedSurfaceEdit::new(AimePromptEdit::ReplaceSystem(OPTIMIZED.to_owned())),
+                    ))
+                    .budget(Budget::metric_calls(8))
+                    .run()
+                    .await
+            })
+            .unwrap_err();
 
         assert!(error.to_string().contains("score function is required"));
     }

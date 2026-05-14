@@ -66,6 +66,67 @@ fn leaven_query_rejects_unknown_flags_and_bad_ids() {
     assert!(parse_leaven_query_args(&["candidate".to_owned(), "not-a-uuid".to_owned()]).is_err());
     assert!(parse_leaven_query_args(&["candidate".to_owned(), "--artifact".to_owned()]).is_err());
     assert!(parse_leaven_query_args(&["candidate".to_owned(), "../secret".to_owned()]).is_err());
+    assert!(parse_leaven_query_args(&["list".to_owned()]).is_err());
+    assert!(parse_leaven_query_args(&["list".to_owned(), "assessments".to_owned()]).is_err());
+    assert!(
+        parse_leaven_query_args(&[
+            "list".to_owned(),
+            "candidates".to_owned(),
+            "extra".to_owned()
+        ])
+        .is_err()
+    );
+    assert!(parse_leaven_query_args(&["candidate".to_owned()]).is_err());
+    assert!(
+        parse_leaven_query_args(&[
+            "candidate".to_owned(),
+            CandidateId::new().to_string(),
+            "extra".to_owned()
+        ])
+        .is_err()
+    );
+    assert!(parse_leaven_query_args(&["assessment".to_owned()]).is_err());
+    assert!(
+        parse_leaven_query_args(&[
+            "assessment".to_owned(),
+            leaven_kernel::AssessmentId::new().to_string(),
+            "extra".to_owned(),
+        ])
+        .is_err()
+    );
+    assert!(parse_leaven_query_args(&["evidence".to_owned(), "unexpected".to_owned()]).is_err());
+    assert!(parse_leaven_query_args(&["lineage".to_owned()]).is_err());
+    assert!(
+        parse_leaven_query_args(&["lineage".to_owned(), CandidateId::new().to_string()]).is_err()
+    );
+    assert!(
+        parse_leaven_query_args(&[
+            "lineage".to_owned(),
+            CandidateId::new().to_string(),
+            "NaN".to_owned(),
+        ])
+        .is_err()
+    );
+    assert!(
+        parse_leaven_query_args(&[
+            "lineage".to_owned(),
+            CandidateId::new().to_string(),
+            "1".to_owned(),
+            "extra".to_owned(),
+        ])
+        .is_err()
+    );
+    assert!(parse_leaven_query_args(&["diff".to_owned()]).is_err());
+    assert!(parse_leaven_query_args(&["diff".to_owned(), CandidateId::new().to_string()]).is_err());
+    assert!(
+        parse_leaven_query_args(&[
+            "diff".to_owned(),
+            CandidateId::new().to_string(),
+            CandidateId::new().to_string(),
+            "extra".to_owned(),
+        ])
+        .is_err()
+    );
 }
 
 #[test]
