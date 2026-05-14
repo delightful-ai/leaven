@@ -232,7 +232,9 @@ const EXPECTED_DEPENDENCIES: &[(&str, &[&str])] = &[
             "leaven-artifacts",
             "leaven-core",
             "leaven-kernel",
+            "leaven-stage",
             "leaven-surface",
+            "leaven-workspace",
         ],
     ),
     (

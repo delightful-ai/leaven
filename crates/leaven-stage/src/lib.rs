@@ -21,7 +21,9 @@ pub mod slots;
 pub mod tool;
 
 pub use agent_backed::{AgentBacked, AgentBackedPolicy, ParseFailurePolicy, ReceiptSinkPolicy};
-pub use artifact::{MaterializableArtifact, MaterializationReport, ReconstructibleArtifact};
+pub use artifact::{
+    ArtifactReadbackError, MaterializableArtifact, MaterializationReport, ReconstructibleArtifact,
+};
 pub use bootstrap::AgentStageBootstrap;
 pub use error::{
     Diagnostic, DiagnosticSeverity, StageBootstrapError, StageOutputContractError,

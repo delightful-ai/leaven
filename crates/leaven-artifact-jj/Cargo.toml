@@ -15,4 +15,11 @@ leaven-kernel = { workspace = true }
 leaven-core = { workspace = true }
 leaven-surface = { workspace = true }
 leaven-artifacts = { workspace = true }
+leaven-stage = { workspace = true }
+leaven-workspace = { workspace = true }
+serde = { workspace = true }
 thiserror = { workspace = true }
+
+[dev-dependencies]
+futures = { workspace = true }
+leaven-workspace-local = { workspace = true }
