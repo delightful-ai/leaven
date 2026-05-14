@@ -62,8 +62,8 @@ pub enum StageAttemptFailure {
     OutputParse,
     Cleanup,
     StageAndCleanup {
-        stage: Box<StageAttemptFailure>,
-        cleanup: Box<StageAttemptFailure>,
+        stage: Box<Self>,
+        cleanup: Box<Self>,
     },
     Budget,
     Other(String),

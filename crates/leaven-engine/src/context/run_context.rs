@@ -203,7 +203,7 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
         let proposal_ctx = self.proposal_context(stage.clone());
         let sink = proposal_ctx.stage_attempt_sink();
         let result = proposer.propose(request, proposal_ctx).await;
-        self.drain_stage_attempts(sink);
+        self.drain_stage_attempts(&sink);
         let metered = match result {
             Ok(metered) => metered,
             Err(err) => {
@@ -676,7 +676,7 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
         }
     }
 
-    fn drain_stage_attempts(&mut self, sink: StageAttemptEventSink) {
+    fn drain_stage_attempts(&mut self, sink: &StageAttemptEventSink) {
         for pending in sink.drain() {
             self.emit(RunEvent::StageAttemptRecorded {
                 stage_call_id: pending.stage_call_id,

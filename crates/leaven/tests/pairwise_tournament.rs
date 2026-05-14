@@ -262,6 +262,7 @@ impl EventKind {
             RunEvent::ApplyFailed { .. }
             | RunEvent::Error { .. }
             | RunEvent::IterationEnded { .. }
+            | RunEvent::StageAttemptRecorded { .. }
             | RunEvent::OptimizationStopping { .. } => None,
         }
     }

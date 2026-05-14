@@ -33,7 +33,7 @@ impl<'a> WorkspaceSlot<'a> {
         &mut self.view
     }
 
-    pub fn subslot(&self, path: WorkspacePath) -> Result<WorkspaceSlot<'a>, WorkspaceError> {
+    pub fn subslot(&self, path: WorkspacePath) -> Result<Self, WorkspaceError> {
         let root = self.root.join(path.as_str())?;
         let view = self.view.subdir(path)?;
         Ok(Self { root, view })

@@ -153,7 +153,7 @@ where
                 .map_err(|source| {
                     ProposalError::with_source("agent stage runtime failed", source)
                 })?;
-            receipt.add_cost(session.cost.clone());
+            receipt.add_cost(&session.cost);
             let parsed = self
                 .parser
                 .parse(
@@ -166,7 +166,7 @@ where
                 .map_err(|source| {
                     ProposalError::with_source("agent stage output parse failed", source)
                 })?;
-            receipt.add_cost(parsed.cost.clone());
+            receipt.add_cost(&parsed.cost);
             parsed
         };
 

@@ -603,6 +603,7 @@ dependencies = [
  "codex-utils-absolute-path",
  "codex-utils-image",
  "codex-utils-string",
+ "codex-utils-template",
  "encoding_rs",
  "globset",
  "icu_decimal",
@@ -700,6 +701,10 @@ dependencies = [
  "serde",
  "serde_json",
 ]
+
+[[package]]
+name = "codex-utils-template"
+version = "0.0.0"
 
 [[package]]
 name = "color_quant"
@@ -2441,10 +2446,15 @@ dependencies = [
 name = "leaven-artifact-jj"
 version = "0.0.0"
 dependencies = [
+ "futures",
  "leaven-artifacts",
  "leaven-core",
  "leaven-kernel",
+ "leaven-stage",
  "leaven-surface",
+ "leaven-workspace",
+ "leaven-workspace-local",
+ "serde",
  "thiserror 2.0.18",
 ]
 
@@ -2559,8 +2569,10 @@ dependencies = [
  "leaven-population",
  "leaven-preference",
  "leaven-render",
+ "leaven-stage",
  "leaven-store-inline",
  "leaven-surface",
+ "leaven-workspace",
  "proptest",
  "serde",
 ]
@@ -2709,6 +2721,25 @@ dependencies = [
  "leaven-store",
  "leaven-store-inline",
  "thiserror 2.0.18",
+]
+
+[[package]]
+name = "leaven-stage"
+version = "0.0.0"
+dependencies = [
+ "futures",
+ "leaven-agent",
+ "leaven-core",
+ "leaven-engine",
+ "leaven-kernel",
+ "leaven-store",
+ "leaven-store-inline",
+ "leaven-workspace",
+ "leaven-workspace-local",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "uuid",
 ]
 
 [[package]]

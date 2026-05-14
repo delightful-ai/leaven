@@ -111,8 +111,8 @@ impl StageAttemptReceiptBuilder {
         self.queries.push(query);
     }
 
-    pub fn add_cost(&mut self, cost: Cost) {
-        self.cost = self.cost.clone().combine(&cost);
+    pub fn add_cost(&mut self, cost: &Cost) {
+        self.cost = self.cost.clone().combine(cost);
     }
 }
 

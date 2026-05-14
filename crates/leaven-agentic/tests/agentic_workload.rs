@@ -191,7 +191,7 @@ fn hidden_target_is_not_presented_to_candidate() {
         let forbidden_strings = [
             hex::encode(secret.as_bytes()),
             secret.to_string(),
-            format!("{:?}", secret),
+            format!("{secret:?}"),
         ];
         let instructions = serde_json::to_string(&presentation.request.instructions).unwrap();
         for forbidden in &forbidden_strings {
@@ -358,6 +358,21 @@ fn preflight_flags_empty_case_suite_and_artifact_validation_errors() {
     }));
     assert!(report.findings().iter().any(|finding| {
         finding.severity == PreflightSeverity::Error && finding.check == "partitions"
+    }));
+}
+
+#[test]
+fn preflight_flags_cases_without_partitions() {
+    let case = AgentCase::text(CaseId::new(77), "input", CaseTarget::None);
+    let mut cases = BTreeMap::new();
+    cases.insert(case.id, case);
+    let suite = CaseSuite::new(cases, CasePartitions::default()).unwrap();
+
+    let report = AgentRunPreflight::new().case_suite(&suite).check();
+
+    assert!(report.findings().iter().any(|finding| {
+        finding.severity == PreflightSeverity::Error
+            && finding.message == "case suite has no partitions"
     }));
 }
 

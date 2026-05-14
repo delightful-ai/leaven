@@ -489,6 +489,7 @@ impl EventKind {
             | RunEvent::BudgetCharged { .. }
             | RunEvent::Error { .. }
             | RunEvent::IterationEnded { .. }
+            | RunEvent::StageAttemptRecorded { .. }
             | RunEvent::OptimizationStopping { .. } => None,
         }
     }

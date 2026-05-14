@@ -323,6 +323,7 @@ impl EventKind {
             RunEvent::IterationEnded { .. } => Self::IterationEnded,
             RunEvent::OptimizationEnded { .. } => Self::OptimizationEnded,
             RunEvent::OptimizationStopping { .. }
+            | RunEvent::StageAttemptRecorded { .. }
             | RunEvent::ApplyFailed { .. }
             | RunEvent::Error { .. } => return None,
         })

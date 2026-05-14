@@ -10,7 +10,7 @@ use leaven_kernel::RunId;
 use leaven_workspace::{
     CapturedOutput, Command, CommandOutput, ExitStatus, FactoryError, WithWorkspaceError,
     Workspace, WorkspaceBackend, WorkspaceConfig, WorkspaceError, WorkspaceFactory,
-    WorkspaceFactoryContext, WorkspacePath, fingerprint_tree, with_workspace,
+    WorkspaceFactoryContext, WorkspacePath, WorkspaceSlot, fingerprint_tree, with_workspace,
 };
 
 #[test]
@@ -84,6 +84,33 @@ fn workspace_view_writes_reads_and_scopes_subdirectories() {
     drop(deeper);
     drop(nested);
     drop(view);
+    futures::executor::block_on(workspace.cleanup()).unwrap();
+    remove_dir(&root);
+}
+
+#[test]
+fn workspace_slot_exposes_root_view_and_listing_helpers() {
+    let root = temp_root("slot-helpers");
+    let mut workspace = Workspace::new(root.clone(), Box::new(TestBackend::mounted(&root)));
+    let mut slot = WorkspaceSlot::new(
+        WorkspacePath::new("stage").unwrap(),
+        workspace
+            .view()
+            .subdir(WorkspacePath::new("stage").unwrap())
+            .unwrap(),
+    );
+
+    assert_eq!(slot.root().as_str(), "stage");
+    assert_eq!(slot.view().root().as_str(), "stage");
+    assert_eq!(slot.view_mut().root().as_str(), "stage");
+    slot.write_file(&WorkspacePath::new("query/help.json").unwrap(), b"{}")
+        .unwrap();
+    assert_eq!(
+        slot.list_files(&WorkspacePath::root()).unwrap(),
+        vec![WorkspacePath::new("query/help.json").unwrap()]
+    );
+
+    drop(slot);
     futures::executor::block_on(workspace.cleanup()).unwrap();
     remove_dir(&root);
 }
