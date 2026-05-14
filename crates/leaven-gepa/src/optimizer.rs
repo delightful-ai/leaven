@@ -3,25 +3,23 @@
 use std::collections::BTreeSet;
 
 use leaven_core::{
-    AssessmentGranularity, EvaluationPurpose, EvaluationRequest, EvaluationSet, InfoRef,
-    OptimizationProblem, PartitionId, Proposal, ProposalBatch, ProposalBatchSemantics,
+    AssessmentGranularity, EvaluationPurpose, EvaluationRequest, EvaluationSet,
+    OptimizationProblem, PartitionId,
 };
 use leaven_engine::{
     CheckpointContext, CheckpointError, CheckpointableOptimizer, Optimizer, OptimizerError,
     PopulationEvent, PrivateStatePolicy, RestoreContext, RunContext, RunGraphView, StateFormat,
 };
 use leaven_evidence::{CaseOutcome, CasewiseEvidence, ScalarEvidence, ScoredFeedbackEvidence};
-use leaven_kernel::{
-    AssessmentId, CandidateId, Cost, EvaluatorId, Fingerprint, MetadataBag, PopulationId, StageId,
-};
+use leaven_kernel::{AssessmentId, CandidateId, EvaluatorId, Fingerprint, PopulationId};
 use leaven_population::{KeepBest, ParetoFrontier};
 use leaven_surface::{EditSurface, SurfaceError};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 use crate::{
     CandidateSelector, CheckpointCandidateSelector, CheckpointGate, CheckpointPartSelector, Gate,
-    GateDecision, ParetoFrequencyWeighted, PartSelector, RoundRobinPart, StrictImprovement,
-    SurfaceProposer,
+    GateDecision, GepaReflector, ParetoFrequencyWeighted, PartSelector, RoundRobinPart,
+    StrictImprovement,
 };
 
 const DEFAULT_MAX_ITERATIONS: usize = 1;
@@ -352,7 +350,7 @@ where
     P::ProposalAnnotations: Default,
     S: EditSurface<P::Artifact> + Send + Sync,
     Pop: GepaPopulation + Send + Sync,
-    Reflect: SurfaceProposer<P::Artifact, S> + Send + Sync,
+    Reflect: GepaReflector<P, S> + Send + Sync,
     ParentSel: CandidateSelector<P, Pop, Selection = Option<CandidateId>> + Send + Sync,
     PartSel: PartSelector<P::Artifact, S> + Send + Sync,
     GatePol: Gate + Send + Sync,
@@ -394,7 +392,9 @@ where
         }
 
         let parent = self.select_candidate(ctx.graph()).unwrap_or(seed);
-        let Some(candidate) = self.propose_candidate(ctx, parent, parent_baseline.assessment)?
+        let Some(candidate) = self
+            .propose_candidate(ctx, parent, parent_baseline.assessment)
+            .await?
         else {
             self.completed_iterations += 1;
             return Ok(leaven_engine::StepStatus::Continue);
@@ -442,7 +442,7 @@ where
     P::ProposalAnnotations: Default,
     S: EditSurface<P::Artifact> + Send + Sync,
     Pop: CheckpointPopulation + GepaPopulation + Send + Sync,
-    Reflect: SurfaceProposer<P::Artifact, S> + Send + Sync,
+    Reflect: GepaReflector<P, S> + Send + Sync,
     ParentSel: CandidateSelector<P, Pop, Selection = Option<CandidateId>>
         + CheckpointCandidateSelector
         + Send
@@ -533,7 +533,7 @@ where
 impl<S, Pop, Reflect, ParentSel, PartSel, GatePol>
     Gepa<S, Pop, Reflect, ParentSel, PartSel, GatePol>
 {
-    fn propose_candidate<P>(
+    async fn propose_candidate<P>(
         &mut self,
         ctx: &mut RunContext<'_, P>,
         parent: CandidateId,
@@ -543,7 +543,7 @@ impl<S, Pop, Reflect, ParentSel, PartSel, GatePol>
         P: OptimizationProblem,
         P::ProposalAnnotations: Default,
         S: EditSurface<P::Artifact>,
-        Reflect: SurfaceProposer<P::Artifact, S>,
+        Reflect: GepaReflector<P, S>,
         PartSel: PartSelector<P::Artifact, S>,
     {
         let artifact = ctx
@@ -557,40 +557,9 @@ impl<S, Pop, Reflect, ParentSel, PartSel, GatePol>
             .part_selector
             .select_part(&artifact, &self.surface)
             .map_err(|source| OptimizerError::with_source("GEPA part selection failed", source))?;
-        let edit = self
-            .reflector
-            .propose_edit(&artifact, &self.surface, &part)
-            .map_err(|source| OptimizerError::with_source("GEPA reflection failed", source))?;
-        let change = self
-            .surface
-            .change_part(&artifact, part, edit)
-            .map_err(|source| {
-                OptimizerError::with_source("GEPA surface edit lowering failed", source)
-            })?;
-        let batch = ctx
-            .record_proposal_batch(
-                StageId::custom("gepa/fixed-surface-edit"),
-                ProposalBatch {
-                    proposals: vec![
-                        Proposal::mutate(parent, change)
-                            .informed_by([
-                                InfoRef::Candidate(parent),
-                                InfoRef::Assessment(parent_assessment),
-                            ])
-                            .build(),
-                    ],
-                    semantics: ProposalBatchSemantics::Alternatives,
-                    metadata: MetadataBag::new(),
-                },
-                Cost::metric_calls(1),
-            )
-            .map_err(|source| {
-                OptimizerError::with_source("GEPA proposal recording failed", source)
-            })?;
-        let applied = ctx.apply_batch(batch.batch_id).map_err(|source| {
-            OptimizerError::with_source("GEPA proposal application failed", source)
-        })?;
-        Ok(applied.successful_candidates().next())
+        self.reflector
+            .reflect_candidate(ctx, &self.surface, parent, parent_assessment, part)
+            .await
     }
 
     async fn evaluate_casewise<P>(

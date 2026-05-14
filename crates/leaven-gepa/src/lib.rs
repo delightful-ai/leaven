@@ -9,7 +9,8 @@ pub mod selector;
 pub mod validation;
 
 pub use agent_stage::{
-    GepaReflectionBootstrap, GepaReflectionRequest, GepaStageProposer, gepa_stage_proposer,
+    GepaReflectionBootstrap, GepaStageProposer, ReflectRequest, SelectedFeedback,
+    gepa_stage_proposer,
 };
 pub use gate::{
     CheckpointGate, Gate, GateDecision, ImprovementOrEqual, NoRegression, StrictImprovement,
@@ -18,7 +19,7 @@ pub use optimizer::{
     CheckpointPopulation, Gepa, GepaBuilder, GepaCheckpointState, GepaPopulation, GepaScoreEvidence,
 };
 pub use part_selector::{CheckpointPartSelector, PartSelector, RoundRobinPart, WorstEvidencePart};
-pub use proposer::{FixedSurfaceEdit, SurfaceProposer};
+pub use proposer::{FixedSurfaceEdit, GepaReflector, SurfaceProposer};
 pub use selector::{
     CandidateSelector, CheckpointCandidateSelector, HasBestCandidate, ParetoFrequencyWeighted,
     SelectBestCandidate,
@@ -29,9 +30,9 @@ pub mod prelude {
     pub use crate::{
         CandidateSelector, CheckpointCandidateSelector, CheckpointGate, CheckpointPopulation,
         FixedSurfaceEdit, FullValidation, Gate, Gepa, GepaPopulation, GepaReflectionBootstrap,
-        GepaReflectionRequest, GepaStageProposer, HasBestCandidate, ImprovementOrEqual,
-        MinibatchThenValidation, ParetoFrequencyWeighted, PartSelector, RoundRobinPart,
-        SelectBestCandidate, StrictImprovement, SurfaceProposer, ValidationPolicy,
-        WorstEvidencePart, gepa_stage_proposer,
+        GepaReflector, GepaStageProposer, HasBestCandidate, ImprovementOrEqual,
+        MinibatchThenValidation, ParetoFrequencyWeighted, PartSelector, ReflectRequest,
+        RoundRobinPart, SelectBestCandidate, SelectedFeedback, StrictImprovement, SurfaceProposer,
+        ValidationPolicy, WorstEvidencePart, gepa_stage_proposer,
     };
 }

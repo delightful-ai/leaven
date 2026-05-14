@@ -28,12 +28,65 @@ pub fn setup_stage_workspace(
         EntryProjection::Generated,
     )?);
 
+    let role_path = WorkspacePath::new("focus/stage_role.txt")?;
+    workspace.write_file(&role_path, plan.role.as_str().as_bytes())?;
+    receipt.plan_entries.push(entry_receipt(
+        workspace,
+        role_path,
+        WorkspaceEntryRole::stage_plan(),
+        EntrySourceRef::Generated,
+        EntryProjection::Generated,
+    )?);
+
+    let request_path = WorkspacePath::new("focus/request.json")?;
+    let request_json = serde_json::to_vec_pretty(&plan.request_json)?;
+    workspace.write_file(&request_path, &request_json)?;
+    receipt.plan_entries.push(entry_receipt(
+        workspace,
+        request_path,
+        WorkspaceEntryRole::stage_plan(),
+        EntrySourceRef::Generated,
+        EntryProjection::Generated,
+    )?);
+
+    let instructions_path = WorkspacePath::new("focus/instructions.md")?;
+    workspace.write_file(&instructions_path, plan.directive.instructions.as_bytes())?;
+    receipt.plan_entries.push(entry_receipt(
+        workspace,
+        instructions_path,
+        WorkspaceEntryRole::brief(),
+        EntrySourceRef::Generated,
+        EntryProjection::Generated,
+    )?);
+
     let plan_path = WorkspacePath::new(".leaven/stage-plan.json")?;
     let plan_json = serde_json::to_vec_pretty(plan)?;
     workspace.write_file(&plan_path, &plan_json)?;
     receipt.plan_entries.push(entry_receipt(
         workspace,
         plan_path,
+        WorkspaceEntryRole::stage_plan(),
+        EntrySourceRef::Generated,
+        EntryProjection::Generated,
+    )?);
+
+    let output_schema_path = WorkspacePath::new(".leaven/output_schema.json")?;
+    let output_schema = serde_json::to_vec_pretty(&plan.output)?;
+    workspace.write_file(&output_schema_path, &output_schema)?;
+    receipt.plan_entries.push(entry_receipt(
+        workspace,
+        output_schema_path,
+        WorkspaceEntryRole::stage_plan(),
+        EntrySourceRef::Generated,
+        EntryProjection::Generated,
+    )?);
+
+    let query_policy_path = WorkspacePath::new(".leaven/query_policy.json")?;
+    let query_policy = serde_json::to_vec_pretty(&plan.query)?;
+    workspace.write_file(&query_policy_path, &query_policy)?;
+    receipt.plan_entries.push(entry_receipt(
+        workspace,
+        query_policy_path,
         WorkspaceEntryRole::stage_plan(),
         EntrySourceRef::Generated,
         EntryProjection::Generated,

@@ -34,7 +34,7 @@ fn setup_stage_workspace_writes_brief_plan_and_output_skeleton() {
             let mut slot = workspace.slot(WorkspacePath::root()).unwrap();
             let receipt = setup_stage_workspace(&mut slot, &erased).unwrap();
 
-            assert_eq!(receipt.plan_entries.len(), 4);
+            assert_eq!(receipt.plan_entries.len(), 9);
             assert!(
                 String::from_utf8(
                     slot.read_file(&WorkspacePath::new("BRIEF.md").unwrap())
@@ -45,6 +45,30 @@ fn setup_stage_workspace_writes_brief_plan_and_output_skeleton() {
             );
             assert!(
                 slot.read_file(&WorkspacePath::new(".leaven/stage-plan.json").unwrap())
+                    .is_ok()
+            );
+            assert_eq!(
+                String::from_utf8(
+                    slot.read_file(&WorkspacePath::new("focus/stage_role.txt").unwrap())
+                        .unwrap()
+                )
+                .unwrap(),
+                "reflect"
+            );
+            assert!(
+                String::from_utf8(
+                    slot.read_file(&WorkspacePath::new("focus/request.json").unwrap())
+                        .unwrap()
+                )
+                .unwrap()
+                .contains("abc")
+            );
+            assert!(
+                slot.read_file(&WorkspacePath::new(".leaven/output_schema.json").unwrap())
+                    .is_ok()
+            );
+            assert!(
+                slot.read_file(&WorkspacePath::new(".leaven/query_policy.json").unwrap())
                     .is_ok()
             );
             assert_eq!(

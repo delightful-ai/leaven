@@ -10,9 +10,10 @@ It composes core, surface, engine, evidence, population, render, and LM vocabula
 - Surface ownership is explicit: GEPA selects a part from an `EditSurface` and lowers edits through that surface into artifact-native changes. Artifact-specific surfaces belong in `leaven-surface` or `leaven-artifact-*`.
 - The current live loop is: select parent from population, evaluate train
   partition casewise, project evidence to scalar scores, select a surface part,
-  call local `SurfaceProposer::propose_edit`, lower through `EditSurface`,
-  record/apply a proposal batch through `RunContext`, then update population.
-  That is a real fixed-edit scaffold, not the final GEPA reflection contract.
+  call a `GepaReflector`, apply the returned proposal batch through
+  `RunContext`, then update population. `FixedSurfaceEdit` is still a
+  scaffold reflector; agent-backed reflection must route through
+  `RunContext::propose` before `apply_batch`.
 
 ## Local Bait
 - Engine tests use local optimizer wrappers; do not move GEPA selector, gate, or checkpoint private state into `leaven-engine` to make those tests shorter.
@@ -41,6 +42,11 @@ It composes core, surface, engine, evidence, population, render, and LM vocabula
   for the current scaffold: surface lowering, fixed-edit proposer behavior,
   train-filtered population, checkpoint state, and hidden validation visibility
   tests.
+- `cargo nextest run -p leaven-gepa --test agent_stage_routing` proves the
+  agent-backed GEPA reflection slot: selected feedback refs enter
+  `ReflectRequest`, the fake runtime writes `output/proposal.json`, the parser
+  returns a proposal batch, `RunContext::propose` records the batch, and
+  `apply_batch` creates the candidate.
 - `cargo nextest run -p leaven --test gepa_parity` proves the public P3 workflow:
   explicit edit-surface GEPA, train-filtered Pareto updates, and best-candidate
   result. `FixedSurfaceEdit` in that proof is not product proof of GEPA
@@ -49,10 +55,10 @@ It composes core, surface, engine, evidence, population, render, and LM vocabula
 
 ## Decision Cards
 - when: replacing fixed-edit reflection
-  do: introduce an async GEPA mutation/proposer request carrying selected parent, selected part/view, assessment/evidence refs, rendered feedback/trace, objective/background, proposal count, budget/runtime handles, and output mode
+  do: route through `GepaReflector` with `ReflectRequest`/`SelectedFeedback`; agent-backed reflectors must use `RunContext::propose` before `apply_batch`
   preserve: causal parent provenance plus `informed_by` assessment/evidence refs, hidden validation/test defaults, typed proposal errors, and engine finalization semantics
   avoid: widening `SurfaceProposer<A, S>` in place as if artifact/surface/part is enough context, or letting GEPA read provider-specific LM fields
-  verify: run `cargo nextest run -p leaven-gepa --test gepa_smoke`, then `cargo nextest run -p leaven --test gepa_parity` after parity uses the real reflector
+  verify: run `cargo nextest run -p leaven-gepa --test agent_stage_routing`, then `cargo nextest run -p leaven-gepa --test gepa_smoke`
 
 - when: adding or renaming GEPA strategy slots
   do: give each slot a request type, output type, structured error, private/checkpoint state story, budget/cost behavior, event/report behavior where relevant, and explicit hidden-split rules

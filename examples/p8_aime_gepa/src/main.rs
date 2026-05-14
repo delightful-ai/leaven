@@ -7,7 +7,11 @@ use std::{
 use futures::executor::block_on;
 use leaven::prelude::*;
 use leaven::stdlib::populations::ParetoFrontier;
-use leaven::{SurfaceError, SurfaceFingerprint};
+use leaven::{ProposalBatchSemantics, SurfaceError, SurfaceFingerprint, kernel::Metered};
+use leaven_agent::{AgentSession, FakeAgentAction, FakeAgentRuntime};
+use leaven_stage::{AgentStageCallContext, ProposerSlot, StageOutputParseError, StageOutputParser};
+use leaven_workspace::{WorkspacePath, WorkspaceView};
+use leaven_workspace_local::LocalWorkspaceFactory;
 use serde::{Deserialize, Serialize};
 
 const BASELINE: &str =
@@ -88,15 +92,75 @@ async fn run_aime(
                         )]))
                         .build(),
                 )
-                .reflector(FixedSurfaceEdit::new(AimePromptEdit::ReplaceSystem(
-                    OPTIMIZED.to_owned(),
-                )))
+                .reflector(aime_stage_reflector())
                 .max_iterations(1),
         )
         .budget(Budget::metric_calls(512))
         .run()
         .await
         .expect("deterministic AIME GEPA run succeeds")
+}
+
+fn aime_stage_reflector() -> leaven_gepa::GepaStageProposer<FakeAgentRuntime, AimeProposalParser> {
+    leaven_gepa::gepa_stage_proposer(
+        LocalWorkspaceFactory::temp(),
+        FakeAgentRuntime::new(vec![
+            FakeAgentAction::ReadFile {
+                path: WorkspacePath::new("focus/request.json").unwrap(),
+            },
+            FakeAgentAction::WriteFile {
+                path: WorkspacePath::new("output/proposal.json").unwrap(),
+                bytes: serde_json::to_vec(&AimeProposalOutput {
+                    system: OPTIMIZED.to_owned(),
+                })
+                .unwrap(),
+            },
+        ]),
+        AimeProposalParser,
+        Default::default(),
+    )
+}
+
+struct AimeProposalParser;
+
+impl<P> StageOutputParser<P, ProposerSlot<leaven_gepa::ReflectRequest>> for AimeProposalParser
+where
+    P: OptimizationProblem<Artifact = AimePrompt, ProposalAnnotations = ()>,
+{
+    async fn parse(
+        &self,
+        workspace: &mut WorkspaceView<'_>,
+        _session: &AgentSession,
+        plan: &leaven_stage::parser::ErasedStagePlan,
+        _ctx: AgentStageCallContext,
+    ) -> Result<Metered<ProposalBatch<P>>, StageOutputParseError> {
+        let bytes = workspace.read_file(&WorkspacePath::new("output/proposal.json").unwrap())?;
+        let parsed: AimeProposalOutput = serde_json::from_slice(&bytes)?;
+        let request: leaven_gepa::ReflectRequest =
+            serde_json::from_value(plan.request_json.clone())?;
+        Ok(Metered::new(
+            ProposalBatch {
+                proposals: vec![
+                    Proposal::mutate(
+                        request.parent,
+                        AimePromptChange {
+                            system: parsed.system,
+                        },
+                    )
+                    .informed_by(request.selected_feedback.source_refs())
+                    .build(),
+                ],
+                semantics: ProposalBatchSemantics::Alternatives,
+                metadata: MetadataBag::new(),
+            },
+            Cost::zero(),
+        ))
+    }
+}
+
+#[derive(Deserialize, Serialize)]
+struct AimeProposalOutput {
+    system: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -110,11 +174,6 @@ impl AimePrompt {
             system: system.into(),
         }
     }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-enum AimePromptEdit {
-    ReplaceSystem(String),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -155,7 +214,7 @@ impl EditSurface<AimePrompt> for AimePromptSurface {
     type PartId = &'static str;
     type Address = PartAddress;
     type View<'a> = &'a str;
-    type Edit = AimePromptEdit;
+    type Edit = AimePromptChange;
 
     fn fingerprint(&self) -> SurfaceFingerprint {
         SurfaceFingerprint(Fingerprint::from_bytes([8; 32]))
@@ -181,8 +240,7 @@ impl EditSurface<AimePrompt> for AimePromptSurface {
         if id != "system" {
             return Err(SurfaceError::UnknownPart);
         }
-        let AimePromptEdit::ReplaceSystem(system) = edit;
-        Ok(AimePromptChange { system })
+        Ok(edit)
     }
 }
 
@@ -459,19 +517,20 @@ mod tests {
     #[test]
     fn run_builder_requires_score_function() {
         let (train, _, _) = deterministic_cases();
-        let error =
-            block_on(async {
-                leaven::optimize(AimePrompt::new(BASELINE))
-                    .train(train)
-                    .runner(run_solver)
-                    .using(Gepa::builder().surface(AimePromptSurface).reflector(
-                        FixedSurfaceEdit::new(AimePromptEdit::ReplaceSystem(OPTIMIZED.to_owned())),
-                    ))
-                    .budget(Budget::metric_calls(8))
-                    .run()
-                    .await
-            })
-            .unwrap_err();
+        let error = block_on(async {
+            leaven::optimize(AimePrompt::new(BASELINE))
+                .train(train)
+                .runner(run_solver)
+                .using(
+                    Gepa::builder()
+                        .surface(AimePromptSurface)
+                        .reflector(aime_stage_reflector()),
+                )
+                .budget(Budget::metric_calls(8))
+                .run()
+                .await
+        })
+        .unwrap_err();
 
         assert!(error.to_string().contains("score function is required"));
     }

@@ -328,7 +328,7 @@ fn agent_backed_records_prewarm_query_failure_receipt() {
             receipt.outcome,
             StageAttemptOutcome::Failed(StageAttemptFailure::Query)
         );
-        assert_eq!(receipt.setup.plan_entries.len(), 4);
+        assert_eq!(receipt.setup.plan_entries.len(), 9);
         assert!(receipt.queries.is_empty());
     });
 }
