@@ -3695,7 +3695,8 @@ The parser must consult `plan.output`; no hardcoded output path.
 ## Done when, no workarounds
 
 ```text
-- FixedSurfaceEdit is canonical; ReflectiveMutation is deprecated alias.
+- FixedSurfaceEdit is canonical; ReflectiveMutation is removed instead of
+  retained as a compatibility alias.
 - ReflectRequest<PartId>, SelectedFeedback, FeedbackSelector exist and serde roundtrip.
 - ParentAssessmentFeedback derives refs by reading graph, not echoing request.
 - Hidden existing assessment yields AssessmentNotVisible, distinct from missing.
@@ -3740,8 +3741,9 @@ where
     }
 }
 
-#[deprecated(note = "use FixedSurfaceEdit; ReflectiveMutation was a fixed fixture, not reflection")]
-pub type ReflectiveMutation<E> = FixedSurfaceEdit<E>;
+No `ReflectiveMutation` alias is retained. The root contract requires hard
+cutovers, and keeping the old name would continue teaching a fixed fixture as
+reflection.
 ```
 
 ## 14.2 GEPA reflection types
@@ -4124,8 +4126,8 @@ Add docs:
 Rename/quarantine:
 
 ```text
-ReflectiveMutation -> FixedSurfaceEdit, deprecated alias retained temporarily
-SystemAwareMerge -> scaffold/demo unless behavior implemented
+ReflectiveMutation -> FixedSurfaceEdit, no alias retained
+SystemAwareMerge -> removed until behavior exists
 WorstEvidencePart -> scaffold/demo unless behavior implemented
 ```
 

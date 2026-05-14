@@ -13,9 +13,9 @@ use leaven_engine::{
 };
 use leaven_evidence::{CaseOutcome, CasewiseEvidence, ScalarEvidence, ScoredFeedbackEvidence};
 use leaven_gepa::{
-    CandidateSelector, CheckpointCandidateSelector, CheckpointGate, CheckpointPopulation, Gate,
-    GateDecision, Gepa, ImprovementOrEqual, NoRegression, ParetoFrequencyWeighted,
-    ReflectiveMutation, SelectBestCandidate, StrictImprovement, SurfaceProposer,
+    CandidateSelector, CheckpointCandidateSelector, CheckpointGate, CheckpointPopulation,
+    FixedSurfaceEdit, Gate, GateDecision, Gepa, ImprovementOrEqual, NoRegression,
+    ParetoFrequencyWeighted, SelectBestCandidate, StrictImprovement, SurfaceProposer,
     optimizer::GepaPopulation,
 };
 use leaven_kernel::{
@@ -35,9 +35,9 @@ fn gepa_owns_surface_and_lowers_selected_part_edits() {
     let mut gepa = Gepa::new(
         PartMapSurface,
         ParetoFrontier::by_case().build(),
-        ReflectiveMutation::new("unused".to_owned()),
+        FixedSurfaceEdit::new("unused".to_owned()),
     );
-    let mut proposer = ReflectiveMutation::new("improved".to_owned());
+    let mut proposer = FixedSurfaceEdit::new("improved".to_owned());
 
     let part = gepa.select_part(&artifact).unwrap();
     let edit = proposer
@@ -67,7 +67,7 @@ proptest! {
         let gepa = Gepa::new(
             PartMapSurface,
             ParetoFrontier::by_case().build(),
-            ReflectiveMutation::new("unused".to_owned()),
+            FixedSurfaceEdit::new("unused".to_owned()),
         );
         let selected = if mutate_answer { "answer" } else { "search" };
         let untouched = if mutate_answer { "search" } else { "answer" };
@@ -104,7 +104,7 @@ fn gepa_candidate_selector_is_population_backed() {
     let mut gepa = Gepa::new(
         PartMapSurface,
         frontier,
-        ReflectiveMutation::new("unused".to_owned()),
+        FixedSurfaceEdit::new("unused".to_owned()),
     );
 
     assert_eq!(gepa.select_candidate(ctx.graph()), Some(seed));
@@ -152,14 +152,14 @@ fn gepa_explicit_strategies_are_owned_by_optimizer() {
     let mut gepa = Gepa::<
         PartMapSurface,
         ParetoFrontier,
-        ReflectiveMutation<String>,
+        FixedSurfaceEdit<String>,
         SelectBestCandidate,
         leaven_gepa::RoundRobinPart,
         ImprovementOrEqual,
     >::with_strategies(
         PartMapSurface,
         frontier,
-        ReflectiveMutation::new("unused".to_owned()),
+        FixedSurfaceEdit::new("unused".to_owned()),
         SelectBestCandidate,
         leaven_gepa::RoundRobinPart::new(),
         ImprovementOrEqual,
@@ -189,14 +189,14 @@ fn gepa_checkpoint_state_restores_loop_and_selector_cursor() {
     let mut gepa = Gepa::new(
         PartMapSurface,
         ParetoFrontier::by_case().build(),
-        ReflectiveMutation::new("unused".to_owned()),
+        FixedSurfaceEdit::new("unused".to_owned()),
     );
 
     assert_eq!(gepa.select_part(&artifact).unwrap(), "answer");
     let state = gepa
         .checkpoint_state(CheckpointContext::new(ctx.graph()))
         .unwrap();
-    let policy = <Gepa<PartMapSurface, ParetoFrontier, ReflectiveMutation<String>> as CheckpointableOptimizer<
+    let policy = <Gepa<PartMapSurface, ParetoFrontier, FixedSurfaceEdit<String>> as CheckpointableOptimizer<
         SmokeProblem,
     >>::private_state_policy(&gepa);
     assert!(matches!(
@@ -207,7 +207,7 @@ fn gepa_checkpoint_state_restores_loop_and_selector_cursor() {
     let mut restored = Gepa::new(
         PartMapSurface,
         ParetoFrontier::by_case().build(),
-        ReflectiveMutation::new("unused".to_owned()),
+        FixedSurfaceEdit::new("unused".to_owned()),
     );
     restored
         .restore_state(state, RestoreContext::new(ctx.graph()))
@@ -231,7 +231,7 @@ fn gepa_checkpoint_state_restores_population_frontier_membership() {
         ParetoFrontier::by_case()
             .partition_filter(std::collections::BTreeSet::from(["TRAIN".into()]))
             .build(),
-        ReflectiveMutation::new("unused".to_owned()),
+        FixedSurfaceEdit::new("unused".to_owned()),
     );
     let evidence = CasewiseEvidence::new(vec![CaseOutcome::new(
         leaven_kernel::CaseId::new(0),
@@ -253,7 +253,7 @@ fn gepa_checkpoint_state_restores_population_frontier_membership() {
         ParetoFrontier::by_case()
             .partition_filter(std::collections::BTreeSet::from(["TRAIN".into()]))
             .build(),
-        ReflectiveMutation::new("unused".to_owned()),
+        FixedSurfaceEdit::new("unused".to_owned()),
     );
     restored
         .restore_state(state, RestoreContext::new(ctx.graph()))
@@ -397,7 +397,7 @@ fn keep_best_gepa_population_ignores_empty_casewise_and_averages_scores() {
 fn gepa_builder_default_reflector_path_uses_pareto_frontier_defaults() {
     let gepa = Gepa::builder()
         .surface(PartMapSurface)
-        .reflector(ReflectiveMutation::new("improved".to_owned()))
+        .reflector(FixedSurfaceEdit::new("improved".to_owned()))
         .max_iterations(2);
 
     assert_eq!(gepa.population().best(), None);
@@ -414,7 +414,7 @@ fn gepa_run_reports_missing_seed_before_evaluation() {
         let mut gepa = Gepa::new(
             PartMapSurface,
             ParetoFrontier::by_case().build(),
-            ReflectiveMutation::new("unused".to_owned()),
+            FixedSurfaceEdit::new("unused".to_owned()),
         );
 
         let error = engine.run(&mut gepa, &case_set, &store).await.unwrap_err();
@@ -440,7 +440,7 @@ fn gepa_run_reports_empty_casewise_scores() {
         let mut gepa = Gepa::new(
             PartMapSurface,
             ParetoFrontier::by_case().build(),
-            ReflectiveMutation::new("unused".to_owned()),
+            FixedSurfaceEdit::new("unused".to_owned()),
         );
 
         let error = engine.run(&mut gepa, &case_set, &store).await.unwrap_err();
@@ -466,7 +466,7 @@ fn gepa_zero_iterations_finishes_without_best_candidate() {
         let mut gepa = Gepa::new(
             PartMapSurface,
             ParetoFrontier::by_case().build(),
-            ReflectiveMutation::new("unused".to_owned()),
+            FixedSurfaceEdit::new("unused".to_owned()),
         )
         .max_iterations(0);
 

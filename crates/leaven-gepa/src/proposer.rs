@@ -18,13 +18,13 @@ where
     ) -> Result<S::Edit, SurfaceError>;
 }
 
-/// Deterministic reflective mutation fixture.
+/// Deterministic fixed surface edit fixture.
 #[derive(Clone, Debug)]
-pub struct ReflectiveMutation<E> {
+pub struct FixedSurfaceEdit<E> {
     edit: E,
 }
 
-impl<E> ReflectiveMutation<E> {
+impl<E> FixedSurfaceEdit<E> {
     /// Build a proposer that always returns the supplied edit.
     #[must_use]
     pub const fn new(edit: E) -> Self {
@@ -32,7 +32,7 @@ impl<E> ReflectiveMutation<E> {
     }
 }
 
-impl<A, S> SurfaceProposer<A, S> for ReflectiveMutation<S::Edit>
+impl<A, S> SurfaceProposer<A, S> for FixedSurfaceEdit<S::Edit>
 where
     A: Artifact,
     S: EditSurface<A>,
@@ -46,11 +46,3 @@ where
         Ok(self.edit.clone())
     }
 }
-
-/// Configuration placeholder for reflective mutation.
-#[derive(Clone, Debug, Default)]
-pub struct ReflectiveMutationConfig;
-
-/// System-aware merge proposer placeholder.
-#[derive(Clone, Debug, Default)]
-pub struct SystemAwareMerge;

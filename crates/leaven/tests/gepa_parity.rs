@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use futures::executor::block_on;
-use leaven::prelude::{Gepa, ReflectiveMutation, SurfaceProposer};
+use leaven::prelude::{FixedSurfaceEdit, Gepa, SurfaceProposer};
 use leaven::stdlib::{
     evidence::{CaseOutcome, CasewiseEvidence, ScalarEvidence},
     populations::ParetoFrontier,
@@ -60,9 +60,9 @@ fn engine_runs_gepa_parity_end_to_end() {
                 ParetoFrontier::by_case()
                     .partition_filter(BTreeSet::from([PartitionId::from(TRAIN)]))
                     .build(),
-                ReflectiveMutation::new(PartMapEdit::Replace("improved answer".to_owned())),
+                FixedSurfaceEdit::new(PartMapEdit::Replace("improved answer".to_owned())),
             ),
-            proposer: ReflectiveMutation::new(PartMapEdit::Replace("improved answer".to_owned())),
+            proposer: FixedSurfaceEdit::new(PartMapEdit::Replace("improved answer".to_owned())),
             seed,
             best: None,
             candidate: None,
@@ -230,8 +230,8 @@ impl EditSurface<PartMapArtifact> for PartMapSurface {
 }
 
 struct GepaParityOptimizer {
-    gepa: Gepa<PartMapSurface, ParetoFrontier, ReflectiveMutation<PartMapEdit>>,
-    proposer: ReflectiveMutation<PartMapEdit>,
+    gepa: Gepa<PartMapSurface, ParetoFrontier, FixedSurfaceEdit<PartMapEdit>>,
+    proposer: FixedSurfaceEdit<PartMapEdit>,
     seed: CandidateId,
     best: Option<CandidateId>,
     candidate: Option<CandidateId>,
@@ -294,7 +294,7 @@ impl Optimizer<PartMapProblem> for GepaParityOptimizer {
             .map_err(|err| OptimizerError::Message(err.to_string()))?;
         let proposal = ctx
             .record_proposal_batch(
-                StageId::custom("p3/reflective-mutation"),
+                StageId::custom("p3/fixed-surface-edit"),
                 ProposalBatch {
                     proposals: vec![
                         Proposal::mutate(parent, change)

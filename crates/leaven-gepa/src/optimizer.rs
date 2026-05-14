@@ -178,7 +178,7 @@ impl CheckpointPopulation for KeepBest {
 pub struct Gepa<
     S,
     Pop = ParetoFrontier,
-    Reflect = crate::ReflectiveMutation<<S as EditSurfacePlaceholder>::Edit>,
+    Reflect = crate::FixedSurfaceEdit<<S as EditSurfacePlaceholder>::Edit>,
     ParentSel = ParetoFrequencyWeighted,
     PartSel = RoundRobinPart,
     GatePol = StrictImprovement,
@@ -220,7 +220,7 @@ impl<T> EditSurfacePlaceholder for T {
     type Edit = ();
 }
 
-impl Gepa<(), ParetoFrontier, crate::ReflectiveMutation<()>> {
+impl Gepa<(), ParetoFrontier, crate::FixedSurfaceEdit<()>> {
     /// Starts a GEPA builder.
     #[must_use]
     pub fn builder() -> GepaBuilder {
@@ -295,7 +295,7 @@ impl<S, Pop, Reflect, ParentSel, PartSel, GatePol>
         &mut self.gate
     }
 
-    /// Set maximum reflective-mutation iterations.
+    /// Set maximum fixed-surface-edit iterations.
     #[must_use]
     pub const fn max_iterations(mut self, max_iterations: usize) -> Self {
         self.max_iterations = max_iterations;
@@ -569,7 +569,7 @@ impl<S, Pop, Reflect, ParentSel, PartSel, GatePol>
             })?;
         let batch = ctx
             .record_proposal_batch(
-                StageId::custom("gepa/reflective-mutation"),
+                StageId::custom("gepa/fixed-surface-edit"),
                 ProposalBatch {
                     proposals: vec![
                         Proposal::mutate(parent, change)
@@ -712,11 +712,3 @@ impl<S, Pop> GepaBuilderWithPopulation<S, Pop> {
         Gepa::new(self.surface, self.population, reflector)
     }
 }
-
-/// GEPA configuration placeholder for future strategy fields.
-#[derive(Clone, Debug, Default)]
-pub struct GepaConfig;
-
-/// Merge scheduling placeholder.
-#[derive(Clone, Debug, Default)]
-pub struct MergeScheduler;
