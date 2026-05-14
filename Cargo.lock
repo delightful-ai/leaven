@@ -3473,11 +3473,8 @@ version = "0.0.0"
 dependencies = [
  "futures",
  "leaven",
- "leaven-agent",
  "leaven-gepa",
- "leaven-stage",
- "leaven-workspace",
- "leaven-workspace-local",
+ "leaven-lm",
  "serde",
  "serde_json",
 ]

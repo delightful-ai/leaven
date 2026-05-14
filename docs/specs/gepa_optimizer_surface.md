@@ -480,8 +480,9 @@ vocabulary. The shared request types live in `leaven-gepa`, not
 `leaven-stage`, because they are GEPA strategy input, not workspace substrate.
 
 ```rust
-pub struct ReflectRequest {
+pub struct ReflectRequest<Part = String> {
     pub parent: CandidateId,
+    pub part: Part,
     pub part_label: String,
     pub selected_feedback: SelectedFeedback,
 }
@@ -509,6 +510,10 @@ are graph/evidence truth.
 The shared request is intentionally not `AgentCase`, not a workspace plan, and
 not a Python-style `dict[str, str]`. It is selected GEPA feedback for a parent
 candidate and selected surface part.
+
+The default `String` part type keeps agent-stage JSON requests small. Typed
+LM-backed reflectors use their surface's native `S::PartId` so parsing and
+lowering cannot drift from `EditSurface::change_part`.
 
 ### 11.2 Feedback Selection
 
@@ -566,8 +571,8 @@ let reflector = LmBackedReflector::new(
 );
 ```
 
-Tests and examples use `leaven-lm-mock`. Applications that want response
-caching wrap the provider before injection:
+Tests and examples use deterministic `Lm` fixtures. Applications that want
+response caching wrap the provider before injection:
 
 ```rust
 let lm = CachedLm::read_write(OpenAiLm::from_env("gpt-4.1-mini")?, cache);
@@ -619,7 +624,7 @@ agent-backed reflection:
 
 ```text
 GEPA builds ReflectRequest
-  -> RunContext::propose(&lm_backed_reflector, request)
+  -> RunContext::propose(&lm_backed_proposer_adapter, request)
   -> LmBackedReflector renders LmRequest
   -> impl Lm::complete returns Metered<LmResponse>
   -> parser returns ProposalBatch<P>
@@ -627,15 +632,17 @@ GEPA builds ReflectRequest
   -> GEPA calls RunContext::apply_batch
 ```
 
-The reflector implements `Proposer<P, Request = ReflectRequest>` and returns a
-`Metered<ProposalBatch<P>>`. `RunContext::propose` is responsible for proposal
-recording, event emission, budget charging, and checkpoint interaction. The
-GEPA loop remains responsible for `apply_batch`, child screening, acceptance,
-validation, and population updates.
+The LM-backed proposer adapter implements
+`Proposer<P, Request = ReflectRequest<S::PartId>>` and returns a
+`Metered<ProposalBatch<P>>`. It is GEPA-owned because it needs the selected
+`EditSurface` to lower parsed output into artifact changes. `RunContext::propose`
+is responsible for proposal recording, event emission, budget charging, and
+checkpoint interaction. The GEPA loop remains responsible for `apply_batch`,
+child screening, acceptance, validation, and population updates.
 
 `GepaReflector` may remain the optimizer-facing convenience trait, but when the
-concrete reflector is a `Proposer<P>` it should call `RunContext::propose`
-rather than manually calling `record_proposal_batch`.
+concrete reflector is backed by a proposer adapter it should call
+`RunContext::propose` rather than manually calling `record_proposal_batch`.
 
 ### 11.5 Agent-Backed Reflector
 
@@ -819,8 +826,8 @@ Each test must name a claim and live at the lowest clean layer.
   `PartMapArtifact`;
 - acceptance policies implement strict/equal/no-regression laws;
 - batch sampler is deterministic under a seed;
-- reflective proposer turns casewise feedback into a surface edit using
-  `leaven-lm-mock`;
+- reflective proposer turns casewise feedback into a surface edit using a
+  deterministic `Lm` fixture;
 - invalid proposer output becomes typed proposal error, not panic;
 - merge canonicalizes to one target while preserving pair causal lineage;
 - split policy refuses test split as feedback/admission by default;
@@ -898,7 +905,7 @@ Goal: prove reflection loop without provider network calls.
 Scope:
 
 - `LmBackedReflector` uses `leaven-lm` trait vocabulary;
-- `leaven-lm-mock` drives deterministic proposal text;
+- a deterministic `Lm` fixture drives proposal text;
 - standard reflection renderer consumes casewise evidence and part view;
 - typed parse/validation errors become proposer feedback.
 

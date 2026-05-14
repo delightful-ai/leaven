@@ -1,13 +1,15 @@
 //! GEPA reflection routing through optimizer-stage agent workspaces.
 
-use leaven_core::{InfoRef, OptimizationProblem};
-use leaven_kernel::{AssessmentId, CandidateId, StageRole};
+use leaven_core::OptimizationProblem;
+use leaven_kernel::StageRole;
 use leaven_stage::{
     AgentBacked, AgentBackedPolicy, AgentStageBootstrap, AgentStageCallContext, AgentStagePlan,
     AllowedQuerySet, ProposerSlot, StageBootstrapError, StageDirective, StageOutputContract,
     StageQuery, StageQueryKind, StageQueryPolicy,
 };
 use leaven_workspace::{WorkspaceFactory, WorkspacePath};
+
+use crate::reflection::ReflectRequest;
 
 pub type GepaStageProposer<Runtime, Parser> =
     AgentBacked<ProposerSlot<ReflectRequest>, Runtime, GepaReflectionBootstrap, Parser>;
@@ -29,67 +31,6 @@ where
         parser,
         policy,
     )
-}
-
-#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
-pub struct SelectedFeedback {
-    pub assessment_refs: Vec<AssessmentId>,
-    pub evidence_refs: Vec<InfoRef>,
-    pub candidate_refs: Vec<CandidateId>,
-}
-
-impl SelectedFeedback {
-    #[must_use]
-    pub fn with_assessments(mut self, feedback: impl IntoIterator<Item = AssessmentId>) -> Self {
-        self.assessment_refs.extend(feedback);
-        self
-    }
-
-    #[must_use]
-    pub fn source_refs(&self) -> Vec<InfoRef> {
-        self.candidate_refs
-            .iter()
-            .copied()
-            .map(InfoRef::Candidate)
-            .chain(
-                self.assessment_refs
-                    .iter()
-                    .copied()
-                    .map(InfoRef::Assessment),
-            )
-            .chain(self.evidence_refs.iter().cloned())
-            .collect()
-    }
-}
-
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-pub struct ReflectRequest {
-    pub parent: CandidateId,
-    pub part_label: String,
-    pub selected_feedback: SelectedFeedback,
-}
-
-impl ReflectRequest {
-    #[must_use]
-    pub fn new(parent: CandidateId, part_label: impl Into<String>) -> Self {
-        Self {
-            parent,
-            part_label: part_label.into(),
-            selected_feedback: SelectedFeedback::default(),
-        }
-    }
-
-    #[must_use]
-    pub fn with_feedback(mut self, feedback: impl IntoIterator<Item = AssessmentId>) -> Self {
-        self.selected_feedback = self.selected_feedback.with_assessments(feedback);
-        self
-    }
-
-    #[must_use]
-    pub fn with_selected_feedback(mut self, selected_feedback: SelectedFeedback) -> Self {
-        self.selected_feedback = selected_feedback;
-        self
-    }
 }
 
 #[derive(Clone, Debug)]

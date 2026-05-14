@@ -3108,9 +3108,9 @@ StageEngineContext, ScopedRunGraphView, and StageAttemptRecorded in leaven-engin
 leaven-stage USER/ADAPTER/RECEIPT types, including AgentStagePlan, AgentBacked, StageReadAuthority, StageQueryPolicy, StageAttemptReceipt, setup_stage_workspace, output contracts, parser contracts, and receipt storage.
 Prewarm and agent-requested query policy share one StageReadAuthority and receipt record shape.
 AgentBacked<ProposerSlot<Req>, Runtime, Bootstrap, Parser> implements Proposer<P> and records mandatory receipts on success and post-allocation failures.
-GEPA owns ReflectRequest, SelectedFeedback, GepaReflector, and the agent-backed stage proposer bridge.
-GEPA agent-backed reflection routes through RunContext::propose and then RunContext::apply_batch.
-The public AIME GEPA example exercises the agent-backed reflection path; FixedSurfaceEdit remains scaffold/proxy evidence only.
+GEPA owns ReflectRequest, SelectedFeedback, LmBackedReflector, GepaReflector, and the agent-backed stage proposer bridge.
+GEPA LM-backed and agent-backed reflection route through RunContext::propose and then RunContext::apply_batch.
+The public AIME GEPA example exercises the LM-backed reflection path; FixedSurfaceEdit remains scaffold/proxy evidence only.
 JJ artifact materialization laws have a scaffold proof, but not full live jj apply semantics.
 ```
 
@@ -3297,6 +3297,7 @@ SurfaceProposer<A, S>::propose_edit(&artifact, &surface, &part)
 FixedSurfaceEdit<E> fixed-edit scaffold
 ReflectRequest
 SelectedFeedback
+LmBackedReflector
 GepaReflector
 GepaStageProposer
 Gepa::propose_candidate(...)
@@ -3304,13 +3305,14 @@ Gepa::propose_candidate(...)
 
 `Gepa::propose_candidate` selects a parent and part, then calls
 `GepaReflector`. `FixedSurfaceEdit` still records/applies a fixed edit as
-scaffold. Agent-backed `GepaReflector` implementations build a `ReflectRequest`
-with `SelectedFeedback`, call `RunContext::propose`, then call
+scaffold. LM-backed and agent-backed `GepaReflector` implementations build a
+`ReflectRequest` with `SelectedFeedback`, call `RunContext::propose`, then call
 `RunContext::apply_batch`.
 
 Current proof anchors:
 
 ```text
+cargo nextest run -p leaven-gepa --test lm_reflection
 cargo nextest run -p leaven-gepa --test agent_stage_routing
 cargo test -p p8_aime_gepa
 ```

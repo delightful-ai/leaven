@@ -6,7 +6,11 @@ This example exercises the high-level Leaven API:
 cargo run -p p8_aime_gepa
 ```
 
-The default path is deterministic and uses a scripted solver, so CI can prove GEPA mechanics without live model spend. It reports baseline train score, optimized train score, validation score, held-out test score, split reports, budget usage, emitted events, and the selected prompt.
+The default path is deterministic and uses a scripted solver plus a local
+provider-neutral `Lm` fixture for reflection, so CI can prove the LM-backed GEPA
+builder path without live model spend. It reports baseline train score,
+optimized train score, validation score, held-out test score, split reports,
+budget usage, emitted events, and the selected prompt.
 
 To materialize the upstream AIME HuggingFace cache:
 
@@ -30,4 +34,7 @@ export LEAVEN_AIME_CACHE=target/leaven-aime-cache/aime.json
 cargo run -p p8_aime_gepa
 ```
 
-The OpenAI path is an opt-in runner/provider swap over the same `leaven::optimize(...).train(...).validation(...).test(...).runner(...).score(...).using(...).run()` surface. The deterministic path proves public API mechanics and invariants; it is not evidence of live AIME improvement.
+The OpenAI path is an opt-in solver swap over the same
+`leaven::optimize(...).train(...).validation(...).test(...).runner(...).score(...).using(...).run()`
+surface. The deterministic path proves public API mechanics and LM-backed
+reflection invariants; it is not evidence of live AIME improvement.

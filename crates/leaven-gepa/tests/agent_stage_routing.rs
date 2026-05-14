@@ -126,6 +126,7 @@ fn gepa_stage_proposer_routes_fake_runtime_through_run_context() {
                     assessment_refs: vec![AssessmentId::new()],
                     evidence_refs: Vec::new(),
                     candidate_refs: vec![parent],
+                    records: Vec::new(),
                 }),
             )
             .await

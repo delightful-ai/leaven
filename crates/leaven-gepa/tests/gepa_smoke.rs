@@ -264,6 +264,47 @@ fn gepa_checkpoint_state_restores_population_frontier_membership() {
 }
 
 #[test]
+fn gepa_checkpoint_restore_rejects_missing_best_and_observed_candidates() {
+    let artifact = PartMapArtifact(BTreeMap::from([("answer".to_owned(), "draft".to_owned())]));
+    let mut graph = RunGraph::<SmokeProblem>::new(RunId::new());
+    let mut budget = BudgetLedger::default();
+    let mut ctx = RunContext::new(&mut graph, &mut budget);
+    let seed = ctx.insert_seed(artifact, 0).unwrap();
+    let gepa = Gepa::new(
+        PartMapSurface,
+        ParetoFrontier::by_case().build(),
+        FixedSurfaceEdit::new("unused".to_owned()),
+    );
+    let state = gepa
+        .checkpoint_state(CheckpointContext::new(ctx.graph()))
+        .unwrap();
+    let mut missing_best = serde_json::to_value(&state).unwrap();
+    missing_best["best"] = serde_json::to_value(leaven_kernel::CandidateId::new()).unwrap();
+    let missing_best_state = serde_json::from_value(missing_best).unwrap();
+    let mut restored = Gepa::new(
+        PartMapSurface,
+        ParetoFrontier::by_case().build(),
+        FixedSurfaceEdit::new("unused".to_owned()),
+    );
+
+    let error = restored
+        .restore_state(missing_best_state, RestoreContext::new(ctx.graph()))
+        .unwrap_err();
+
+    assert!(error.to_string().contains("best candidate"));
+
+    let mut missing_observed = serde_json::to_value(&state).unwrap();
+    missing_observed["best"] = serde_json::to_value(seed).unwrap();
+    missing_observed["observed"] = serde_json::json!([leaven_kernel::CandidateId::new()]);
+    let observed_state = serde_json::from_value(missing_observed).unwrap();
+    let error = restored
+        .restore_state(observed_state, RestoreContext::new(ctx.graph()))
+        .unwrap_err();
+
+    assert!(error.to_string().contains("observed candidate"));
+}
+
+#[test]
 fn gepa_checkpoint_population_round_trips_keep_best_state() {
     let candidate = leaven_kernel::CandidateId::new();
     let mut population = KeepBest::new();

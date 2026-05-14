@@ -6,17 +6,22 @@ use std::{
 
 use futures::executor::block_on;
 use leaven::prelude::*;
-use leaven::stdlib::populations::ParetoFrontier;
-use leaven::{ProposalBatchSemantics, SurfaceError, SurfaceFingerprint, kernel::Metered};
-use leaven_agent::{AgentSession, FakeAgentAction, FakeAgentRuntime};
-use leaven_stage::{AgentStageCallContext, ProposerSlot, StageOutputParseError, StageOutputParser};
-use leaven_workspace::{WorkspacePath, WorkspaceView};
-use leaven_workspace_local::LocalWorkspaceFactory;
+use leaven::{
+    ProposalBatchSemantics, SurfaceError, SurfaceFingerprint, engine::ProposalError,
+    kernel::Metered, stdlib::populations::ParetoFrontier,
+};
+use leaven_gepa::{
+    DefaultReflectionRenderer, LmBackedReflector, ReflectRequest, ReflectionOutputParser,
+};
+use leaven_lm::{Lm, LmError, LmId, LmRequest, LmResponse, Message, TokenUsage};
 use serde::{Deserialize, Serialize};
 
 const BASELINE: &str =
     "Solve the math problem carefully. Provide the final answer as a single number.";
 const OPTIMIZED: &str = "Solve with modular arithmetic when useful. Verify arithmetic before the final answer. Provide only the final integer.";
+
+type AimeLmReflector =
+    LmBackedReflector<DeterministicReflectionLm, DefaultReflectionRenderer, AimeProposalParser>;
 
 fn main() {
     block_on(async {
@@ -55,6 +60,7 @@ fn main() {
             "budget_metric_calls={}",
             result.report.budget.spent.metric_calls
         );
+        println!("budget_llm_calls={}", result.report.budget.spent.llm_calls);
         println!("best_system_prompt={}", result.best().system);
         println!("events={}", result.report.events.join(","));
     });
@@ -92,7 +98,7 @@ async fn run_aime(
                         )]))
                         .build(),
                 )
-                .reflector(aime_stage_reflector())
+                .reflector(aime_lm_reflector())
                 .max_iterations(1),
         )
         .budget(Budget::metric_calls(512))
@@ -101,66 +107,102 @@ async fn run_aime(
         .expect("deterministic AIME GEPA run succeeds")
 }
 
-fn aime_stage_reflector() -> leaven_gepa::GepaStageProposer<FakeAgentRuntime, AimeProposalParser> {
-    leaven_gepa::gepa_stage_proposer(
-        LocalWorkspaceFactory::temp(),
-        FakeAgentRuntime::new(vec![
-            FakeAgentAction::ReadFile {
-                path: WorkspacePath::new("focus/request.json").unwrap(),
-            },
-            FakeAgentAction::WriteFile {
-                path: WorkspacePath::new("output/proposal.json").unwrap(),
-                bytes: serde_json::to_vec(&AimeProposalOutput {
-                    system: OPTIMIZED.to_owned(),
-                })
-                .unwrap(),
-            },
-        ]),
+fn aime_lm_reflector() -> AimeLmReflector {
+    LmBackedReflector::new(
+        DeterministicReflectionLm,
+        "deterministic-aime-reflector",
+        DefaultReflectionRenderer,
         AimeProposalParser,
-        Default::default(),
     )
 }
 
 struct AimeProposalParser;
 
-impl<P> StageOutputParser<P, ProposerSlot<leaven_gepa::ReflectRequest>> for AimeProposalParser
+impl<P> ReflectionOutputParser<P, AimePromptSurface> for AimeProposalParser
 where
     P: OptimizationProblem<Artifact = AimePrompt, ProposalAnnotations = ()>,
 {
-    async fn parse(
+    fn parse(
         &self,
-        workspace: &mut WorkspaceView<'_>,
-        _session: &AgentSession,
-        plan: &leaven_stage::parser::ErasedStagePlan,
-        _ctx: AgentStageCallContext,
-    ) -> Result<Metered<ProposalBatch<P>>, StageOutputParseError> {
-        let bytes = workspace.read_file(&WorkspacePath::new("output/proposal.json").unwrap())?;
-        let parsed: AimeProposalOutput = serde_json::from_slice(&bytes)?;
-        let request: leaven_gepa::ReflectRequest =
-            serde_json::from_value(plan.request_json.clone())?;
-        Ok(Metered::new(
-            ProposalBatch {
-                proposals: vec![
-                    Proposal::mutate(
-                        request.parent,
-                        AimePromptChange {
-                            system: parsed.system,
-                        },
-                    )
+        assistant_text: &str,
+        request: &ReflectRequest<<AimePromptSurface as EditSurface<AimePrompt>>::PartId>,
+        artifact: &AimePrompt,
+        surface: &AimePromptSurface,
+    ) -> Result<ProposalBatch<P>, ProposalError> {
+        let parsed: AimeProposalOutput =
+            serde_json::from_str(assistant_text).map_err(|source| {
+                ProposalError::with_source("AIME reflection JSON parse failed", source)
+            })?;
+        let change = surface
+            .change_part(
+                artifact,
+                request.part,
+                AimePromptChange {
+                    system: parsed.system,
+                },
+            )
+            .map_err(|source| {
+                ProposalError::with_source("AIME prompt edit lowering failed", source)
+            })?;
+        Ok(ProposalBatch {
+            proposals: vec![
+                Proposal::mutate(request.parent, change)
                     .informed_by(request.selected_feedback.source_refs())
                     .build(),
-                ],
-                semantics: ProposalBatchSemantics::Alternatives,
-                metadata: MetadataBag::new(),
-            },
-            Cost::zero(),
-        ))
+            ],
+            semantics: ProposalBatchSemantics::Alternatives,
+            metadata: MetadataBag::new(),
+        })
     }
 }
 
 #[derive(Deserialize, Serialize)]
 struct AimeProposalOutput {
     system: String,
+}
+
+#[derive(Clone, Debug)]
+struct DeterministicReflectionLm;
+
+impl Lm for DeterministicReflectionLm {
+    fn id(&self) -> LmId {
+        LmId::from("deterministic-aime-reflection")
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        Fingerprint::from_bytes([10; 32])
+    }
+
+    async fn complete(&self, request: LmRequest) -> Result<Metered<LmResponse>, LmError> {
+        let prompt = request
+            .messages
+            .iter()
+            .map(Message::content)
+            .collect::<Vec<_>>()
+            .join("\n");
+        let system = if prompt.contains("incorrect") && prompt.contains("mod") {
+            OPTIMIZED
+        } else {
+            BASELINE
+        };
+        let content = serde_json::to_string(&AimeProposalOutput {
+            system: system.to_owned(),
+        })
+        .map_err(|source| {
+            LmError::invalid_response("deterministic-aime-reflection", source.to_string())
+        })?;
+        let usage = TokenUsage {
+            input_tokens: 37,
+            cached_input_tokens: 0,
+            output_tokens: 11,
+            reasoning_tokens: 0,
+        };
+        let response =
+            LmResponse::new(Message::assistant(content), usage.clone()).map_err(|source| {
+                LmError::invalid_response("deterministic-aime-reflection", source.to_string())
+            })?;
+        Ok(Metered::new(response, usage.to_cost()))
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -465,6 +507,9 @@ mod tests {
         assert_optional_score(result.report.test_score, 1.0);
         assert_eq!(result.report.evaluation.splits_reported.len(), 3);
         assert!(result.report.budget.spent.metric_calls > 0);
+        assert_eq!(result.report.budget.spent.llm_calls, 1);
+        assert_eq!(result.report.budget.spent.prompt_tokens, 37);
+        assert_eq!(result.report.budget.spent.completion_tokens, 11);
         assert!(
             result
                 .report
@@ -524,7 +569,7 @@ mod tests {
                 .using(
                     Gepa::builder()
                         .surface(AimePromptSurface)
-                        .reflector(aime_stage_reflector()),
+                        .reflector(aime_lm_reflector()),
                 )
                 .budget(Budget::metric_calls(8))
                 .run()

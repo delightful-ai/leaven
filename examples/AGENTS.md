@@ -12,7 +12,7 @@ Each `pN_*` directory is a workspace package with a runnable binary. Keep reusab
 - `p5_evoskill_iteration`: local `AGENTS.md`; `just milestone-p5` is a live Codex/EvoSkill proof and is not cheap or deterministic.
 - `p6_optimizer_policy_self_opt`: product-proof for trust-policy self-optimization; `just milestone-p6` proves optimizer-policy self-optimization over hidden validation/test partitions and hidden-test refusal.
 - `p7_self_optimization_kernel`: product-proof for the promotion-gate milestone; `just milestone-p7` proves immutable public surfaces, hidden holdout refusal, promotion gates, final-test selection, and rollback metadata.
-- `p8_aime_gepa`: local `AGENTS.md`; `just milestone-p8` is a mechanics-smoke/proxy-demo around a fixed edit and public builder shell, not product proof of real GEPA reflection, LM runtime roles, or live AIME improvement.
+- `p8_aime_gepa`: local `AGENTS.md`; `just milestone-p8` is a product-proof for the public builder path through LM-backed GEPA reflection over provider-neutral `leaven-lm`, with deterministic local model output. It is not proof of a live provider, LM cache behavior, or live AIME improvement.
 
 ## Proof Classification
 - `product-proof`: an example that exercises the real public contract at the intended user layer, with no proxy substitution for the behavior being claimed.
