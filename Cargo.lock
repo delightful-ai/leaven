@@ -3475,6 +3475,7 @@ dependencies = [
  "leaven",
  "leaven-gepa",
  "leaven-lm",
+ "leaven-lm-openai",
  "serde",
  "serde_json",
 ]

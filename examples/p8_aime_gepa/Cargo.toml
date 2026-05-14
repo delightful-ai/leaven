@@ -13,6 +13,7 @@ workspace = true
 leaven = { workspace = true, features = ["std", "gepa"] }
 leaven-gepa = { workspace = true }
 leaven-lm = { workspace = true }
+leaven-lm-openai = { workspace = true }
 futures = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

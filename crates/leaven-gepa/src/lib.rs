@@ -19,9 +19,9 @@ pub use optimizer::{
 pub use part_selector::{CheckpointPartSelector, PartSelector, RoundRobinPart, WorstEvidencePart};
 pub use proposer::{FixedSurfaceEdit, GepaReflector, LmBackedReflector, SurfaceProposer};
 pub use reflection::{
-    DefaultReflectionRenderer, GepaReflectionEvidence, LmBackedReflectorConfig,
-    PlainTextEditParser, ReflectRequest, ReflectionOutputParser, ReflectionRenderInput,
-    ReflectionRenderer, ReflectiveFeedbackRecord, SelectedFeedback,
+    DEFAULT_REFLECTION_PROMPT_TEMPLATE, DefaultReflectionRenderer, GepaReflectionEvidence,
+    LmBackedReflectorConfig, PlainTextEditParser, ReflectRequest, ReflectionOutputParser,
+    ReflectionRenderInput, ReflectionRenderer, ReflectiveFeedbackRecord, SelectedFeedback,
 };
 pub use selector::{
     CandidateSelector, CheckpointCandidateSelector, HasBestCandidate, ParetoFrequencyWeighted,
@@ -32,11 +32,12 @@ pub use validation::{FullValidation, MinibatchThenValidation, ValidationPolicy};
 pub mod prelude {
     pub use crate::{
         CandidateSelector, CheckpointCandidateSelector, CheckpointGate, CheckpointPopulation,
-        DefaultReflectionRenderer, FixedSurfaceEdit, FullValidation, Gate, Gepa, GepaPopulation,
-        GepaReflectionBootstrap, GepaReflectionEvidence, GepaReflector, GepaStageProposer,
-        HasBestCandidate, ImprovementOrEqual, LmBackedReflector, LmBackedReflectorConfig,
-        MinibatchThenValidation, ParetoFrequencyWeighted, PartSelector, PlainTextEditParser,
-        ReflectRequest, ReflectionOutputParser, ReflectionRenderInput, ReflectionRenderer,
+        DEFAULT_REFLECTION_PROMPT_TEMPLATE, DefaultReflectionRenderer, FixedSurfaceEdit,
+        FullValidation, Gate, Gepa, GepaPopulation, GepaReflectionBootstrap,
+        GepaReflectionEvidence, GepaReflector, GepaStageProposer, HasBestCandidate,
+        ImprovementOrEqual, LmBackedReflector, LmBackedReflectorConfig, MinibatchThenValidation,
+        ParetoFrequencyWeighted, PartSelector, PlainTextEditParser, ReflectRequest,
+        ReflectionOutputParser, ReflectionRenderInput, ReflectionRenderer,
         ReflectiveFeedbackRecord, RoundRobinPart, SelectBestCandidate, SelectedFeedback,
         StrictImprovement, SurfaceProposer, ValidationPolicy, WorstEvidencePart,
         gepa_stage_proposer,

@@ -588,9 +588,7 @@ The call is exactly:
 ```rust
 let request = LmRequest::new(
     self.model.clone(),
-    Messages::new()
-        .with_system(system_prompt)
-        .with_user(user_prompt),
+    Messages::from_user(rendered_reflection_prompt),
 )
 .with_sampling(self.config.sampling.clone())
 .with_output(self.config.output.clone());
@@ -616,6 +614,14 @@ objective/background prompt text
 The parser consumes only the assistant text and the selected surface context. It
 returns either surface-native edits or a typed `ProposalBatch<P>`. Invalid LM
 output is a proposal error, not a panic and not a hidden no-op.
+
+The default renderer/parser pair follows upstream GEPA's ordinary instruction
+proposal surface: the renderer places the selected part text in `<curr_param>`,
+renders selected feedback into `<side_info>`, and asks for replacement
+instructions inside triple-backtick fences. `PlainTextEditParser` extracts the
+first fenced replacement when present and otherwise falls back to stripped raw
+assistant text. JSON is a custom renderer/parser choice, not the default
+reflection contract.
 
 ### 11.4 Proposer Finalization Path
 

@@ -7,13 +7,15 @@ use std::{
 use futures::executor::block_on;
 use leaven::prelude::*;
 use leaven::{
-    ProposalBatchSemantics, SurfaceError, SurfaceFingerprint, engine::ProposalError,
-    kernel::Metered, stdlib::populations::ParetoFrontier,
+    SurfaceError, SurfaceFingerprint, kernel::Metered, stdlib::populations::ParetoFrontier,
 };
 use leaven_gepa::{
-    DefaultReflectionRenderer, LmBackedReflector, ReflectRequest, ReflectionOutputParser,
+    DefaultReflectionRenderer, LmBackedReflector, LmBackedReflectorConfig, PlainTextEditParser,
 };
-use leaven_lm::{Lm, LmError, LmId, LmRequest, LmResponse, Message, TokenUsage};
+use leaven_lm::{
+    Lm, LmError, LmId, LmRequest, LmResponse, Message, ReasoningEffort, SamplingOptions, TokenUsage,
+};
+use leaven_lm_openai::OpenAiLm;
 use serde::{Deserialize, Serialize};
 
 const BASELINE: &str =
@@ -21,7 +23,7 @@ const BASELINE: &str =
 const OPTIMIZED: &str = "Solve with modular arithmetic when useful. Verify arithmetic before the final answer. Provide only the final integer.";
 
 type AimeLmReflector =
-    LmBackedReflector<DeterministicReflectionLm, DefaultReflectionRenderer, AimeProposalParser>;
+    LmBackedReflector<AimeReflectionLm, DefaultReflectionRenderer, PlainTextEditParser>;
 
 fn main() {
     block_on(async {
@@ -108,57 +110,68 @@ async fn run_aime(
 }
 
 fn aime_lm_reflector() -> AimeLmReflector {
-    LmBackedReflector::new(
-        DeterministicReflectionLm,
-        "deterministic-aime-reflector",
-        DefaultReflectionRenderer,
-        AimeProposalParser,
+    let live_reflection = std::env::var_os("LEAVEN_AIME_LIVE_OPENAI_REFLECTION").is_some();
+    let model = if live_reflection {
+        aime_reflection_model_name()
+    } else {
+        "deterministic-aime-reflector".to_owned()
+    };
+    let lm = if live_reflection {
+        AimeReflectionLm::OpenAi(
+            OpenAiLm::from_env(&model).expect("OPENAI_API_KEY is required for live reflection"),
+        )
+    } else {
+        AimeReflectionLm::Deterministic(DeterministicReflectionLm)
+    };
+    LmBackedReflector::new(lm, model, DefaultReflectionRenderer, PlainTextEditParser).with_config(
+        LmBackedReflectorConfig {
+            sampling: SamplingOptions::default().with_reasoning_effort(ReasoningEffort::Medium),
+            output: leaven_lm::OutputMode::Text,
+            prompt_template: None,
+        },
     )
 }
 
-struct AimeProposalParser;
+fn aime_reflection_model_name() -> String {
+    std::env::var("LEAVEN_AIME_REFLECTION_MODEL").unwrap_or_else(|_| "gpt-5.4-mini".to_owned())
+}
 
-impl<P> ReflectionOutputParser<P, AimePromptSurface> for AimeProposalParser
-where
-    P: OptimizationProblem<Artifact = AimePrompt, ProposalAnnotations = ()>,
-{
-    fn parse(
-        &self,
-        assistant_text: &str,
-        request: &ReflectRequest<<AimePromptSurface as EditSurface<AimePrompt>>::PartId>,
-        artifact: &AimePrompt,
-        surface: &AimePromptSurface,
-    ) -> Result<ProposalBatch<P>, ProposalError> {
-        let parsed: AimeProposalOutput =
-            serde_json::from_str(assistant_text).map_err(|source| {
-                ProposalError::with_source("AIME reflection JSON parse failed", source)
-            })?;
-        let change = surface
-            .change_part(
-                artifact,
-                request.part,
-                AimePromptChange {
-                    system: parsed.system,
-                },
-            )
-            .map_err(|source| {
-                ProposalError::with_source("AIME prompt edit lowering failed", source)
-            })?;
-        Ok(ProposalBatch {
-            proposals: vec![
-                Proposal::mutate(request.parent, change)
-                    .informed_by(request.selected_feedback.source_refs())
-                    .build(),
-            ],
-            semantics: ProposalBatchSemantics::Alternatives,
-            metadata: MetadataBag::new(),
-        })
+#[derive(Clone)]
+enum AimeReflectionLm {
+    Deterministic(DeterministicReflectionLm),
+    OpenAi(OpenAiLm),
+}
+
+impl std::fmt::Debug for AimeReflectionLm {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Deterministic(inner) => f.debug_tuple("Deterministic").field(inner).finish(),
+            Self::OpenAi(_) => f.write_str("OpenAi"),
+        }
     }
 }
 
-#[derive(Deserialize, Serialize)]
-struct AimeProposalOutput {
-    system: String,
+impl Lm for AimeReflectionLm {
+    fn id(&self) -> LmId {
+        match self {
+            Self::Deterministic(inner) => inner.id(),
+            Self::OpenAi(inner) => inner.id(),
+        }
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        match self {
+            Self::Deterministic(inner) => inner.fingerprint(),
+            Self::OpenAi(inner) => inner.fingerprint(),
+        }
+    }
+
+    async fn complete(&self, request: LmRequest) -> Result<Metered<LmResponse>, LmError> {
+        match self {
+            Self::Deterministic(inner) => inner.complete(request).await,
+            Self::OpenAi(inner) => inner.complete(request).await,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -185,12 +198,7 @@ impl Lm for DeterministicReflectionLm {
         } else {
             BASELINE
         };
-        let content = serde_json::to_string(&AimeProposalOutput {
-            system: system.to_owned(),
-        })
-        .map_err(|source| {
-            LmError::invalid_response("deterministic-aime-reflection", source.to_string())
-        })?;
+        let content = format!("```\n{system}\n```");
         let usage = TokenUsage {
             input_tokens: 37,
             cached_input_tokens: 0,
@@ -256,7 +264,7 @@ impl EditSurface<AimePrompt> for AimePromptSurface {
     type PartId = &'static str;
     type Address = PartAddress;
     type View<'a> = &'a str;
-    type Edit = AimePromptChange;
+    type Edit = String;
 
     fn fingerprint(&self) -> SurfaceFingerprint {
         SurfaceFingerprint(Fingerprint::from_bytes([8; 32]))
@@ -282,7 +290,7 @@ impl EditSurface<AimePrompt> for AimePromptSurface {
         if id != "system" {
             return Err(SurfaceError::UnknownPart);
         }
-        Ok(edit)
+        Ok(AimePromptChange { system: edit })
     }
 }
 

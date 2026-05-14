@@ -9,10 +9,12 @@ P8 owns the example artifact, edit surface, deterministic AIME-shaped cases, cac
 - `AimePromptSurface` is the local artifact/surface handhold: one `"system"`
   part and artifact-native `AimePromptChange`.
   Reusable surface rules belong in `leaven-surface` or GEPA docs, not here.
-- `aime_lm_reflector` is the deterministic LM-backed reflector. It injects a
-  local `DeterministicReflectionLm` into the production `LmBackedReflector` /
-  `ReflectRequest` / `ReflectionOutputParser` path and applies the resulting
-  proposal through GEPA and `RunContext`.
+- `aime_lm_reflector` is the LM-backed reflector. By default it injects a local
+  `DeterministicReflectionLm`; with `LEAVEN_AIME_LIVE_OPENAI_REFLECTION=1` it
+  injects `leaven_lm_openai::OpenAiLm` with `gpt-5.4-mini` and medium
+  reasoning unless `LEAVEN_AIME_REFLECTION_MODEL` overrides the model. Both
+  routes use `DefaultReflectionRenderer` / `PlainTextEditParser` and apply the
+  resulting proposal through GEPA and `RunContext`.
 - `score_answer` proves current score/report plumbing by producing scalar
   scores, feedback text, and trace lines. It does not prove rich scoring,
   evaluator errors, attachments, or evidence refs.
@@ -24,6 +26,7 @@ P8 owns the example artifact, edit surface, deterministic AIME-shaped cases, cac
 - Clean deterministic proof: `just milestone-p8` with `LEAVEN_AIME_CACHE` and `LEAVEN_AIME_LIVE_OPENAI` unset proves public builder mechanics, split reporting, and the production LM-backed GEPA reflection route through provider-neutral `leaven-lm`. It does not prove live provider quality.
 - Local cached-data proof: materialize `target/leaven-aime-cache/aime.json` with `uv run --with datasets python examples/p8_aime_gepa/scripts/materialize_hf_aime.py --out target/leaven-aime-cache/aime.json`, then run `LEAVEN_AIME_CACHE=target/leaven-aime-cache/aime.json cargo run -p p8_aime_gepa`; this proves the same harness can consume the upstream-shaped AIME cache, not that the default deterministic fixture changed.
 - Live solver proof: `OPENAI_API_KEY=... LEAVEN_AIME_LIVE_OPENAI=1 LEAVEN_AIME_CACHE=target/leaven-aime-cache/aime.json cargo run -p p8_aime_gepa` swaps only the runner to the OpenAI Responses script. It spends provider resources, still uses deterministic reflection, and is not part of the cheap milestone lane.
+- Live reflection proof: `OPENAI_API_KEY=... LEAVEN_AIME_LIVE_OPENAI_REFLECTION=1 LEAVEN_AIME_REFLECTION_MODEL=gpt-5.4-mini LEAVEN_AIME_CACHE=target/leaven-aime-cache/aime.json cargo run -p p8_aime_gepa` swaps reflection to `leaven-lm-openai` through the same `LmBackedReflector` and default GEPA prompt renderer. It spends provider resources and is not part of the cheap milestone lane.
 - Unit tests in `src/main.rs` prove deterministic improvement, train-only
   absent validation/test scores, missing score refusal, and cache role
   preservation. The test named
@@ -31,19 +34,21 @@ P8 owns the example artifact, edit surface, deterministic AIME-shaped cases, cac
   public builder path now uses the LM-backed reflection route.
 
 ## Local Rules
-- If your shell may already export live/cache variables, unset them before claiming deterministic p8 behavior: `env -u LEAVEN_AIME_CACHE -u LEAVEN_AIME_LIVE_OPENAI just milestone-p8`.
+- If your shell may already export live/cache variables, unset them before claiming deterministic p8 behavior: `env -u LEAVEN_AIME_CACHE -u LEAVEN_AIME_LIVE_OPENAI -u LEAVEN_AIME_LIVE_OPENAI_REFLECTION just milestone-p8`.
 - Preserve the train/validation/test roles in both deterministic cases and cache JSON. The example is specifically proving the public API facade reports split scores and held-out test scores.
-- Keep the OpenAI integration in `scripts/openai_solver.py` as an opt-in example runner. Do not move OpenAI Responses payload details into the public GEPA example surface or provider-neutral crates.
-- Live-provider product proof still requires a concrete provider `Lm`. The
-  deterministic path is production Leaven plumbing with fake model output, not
-  evidence of model quality.
+- Keep the OpenAI solver integration in `scripts/openai_solver.py` as an opt-in
+  example runner. Reflection uses the concrete `leaven-lm-openai` provider; do
+  not move OpenAI Responses payload details into the public GEPA example
+  surface or provider-neutral crates.
+- The deterministic path is production Leaven plumbing with fake model output,
+  not evidence of model quality.
 - Generated HuggingFace cache files belong under `target/leaven-aime-cache/`; do not commit materialized upstream data.
 - If you change the deterministic cases, preserve why baseline fails and the
   deterministic reflection improves it. Otherwise the example stops proving builder/report
   mechanics and becomes a noisy fixture tweak.
-- If you change the live provider path, the honest target is to remove the
-  Python process boundary in favor of Leaven LM/runtime role construction. Do
-  not add more provider-specific behavior to `run_solver`.
+- If you change the live solver path, the honest target is to remove the Python
+  process boundary in favor of Leaven LM/runtime role construction. Do not add
+  more provider-specific behavior to `run_solver`.
 
 ## Bait
 - A passing deterministic p8 run proves public API mechanics, invariant
@@ -51,8 +56,9 @@ P8 owns the example artifact, edit surface, deterministic AIME-shaped cases, cac
   live AIME benchmark improvement.
 - A cached or live p8 run proves operator wiring over a particular local dataset/provider environment; it is not a replacement for the deterministic default acceptance path.
 - `DeterministicReflectionLm` is still a deterministic LM fixture. Do not cite
-  P8 as proof of provider-native transport, cache behavior, or live model
-  reflection quality.
+  the default P8 path as proof of provider-native transport, cache behavior, or
+  live model reflection quality. It should mimic upstream GEPA reflection output
+  by returning fenced replacement instruction text, not a local JSON schema.
 - `leaven::prelude::*` makes this example compact, but it also imports advanced
   engine/GEPA/cache names today. Do not use P8 as evidence that the ordinary
   prelude is clean; that belongs in `crates/leaven`.

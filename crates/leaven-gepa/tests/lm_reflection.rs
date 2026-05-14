@@ -9,15 +9,16 @@ use leaven_core::{
 use leaven_engine::{CachePolicy, CaseSet, Engine, EvaluationContext, EvaluationError, Evaluator};
 use leaven_evidence::{CaseOutcome, CasewiseEvidence, ScalarEvidence, ScoredFeedbackEvidence};
 use leaven_gepa::{
-    DefaultReflectionRenderer, Gepa, GepaReflectionEvidence, LmBackedReflector,
-    LmBackedReflectorConfig, PlainTextEditParser, ReflectRequest, ReflectionOutputParser,
-    ReflectionRenderInput, ReflectionRenderer, ReflectiveFeedbackRecord, SelectedFeedback,
+    DEFAULT_REFLECTION_PROMPT_TEMPLATE, DefaultReflectionRenderer, Gepa, GepaReflectionEvidence,
+    LmBackedReflector, LmBackedReflectorConfig, PlainTextEditParser, ReflectRequest,
+    ReflectionOutputParser, ReflectionRenderInput, ReflectionRenderer, ReflectiveFeedbackRecord,
+    SelectedFeedback,
 };
 use leaven_kernel::{
     AssessmentId, Budget, CandidateId, CaseId, ContentId, Cost, EvaluatorId, Fingerprint,
     MetadataBag, Metered, ProposerId, StageId,
 };
-use leaven_lm::{Lm, LmError, LmId, LmRequest, LmResponse, Message, TokenUsage};
+use leaven_lm::{Lm, LmError, LmId, LmRequest, LmResponse, Message, Role, TokenUsage};
 use leaven_population::ParetoFrontier;
 use leaven_store_inline::InlineEvidenceStore;
 use leaven_surface::{EditSurface, Part, PartAddress, SurfaceError, SurfaceFingerprint};
@@ -73,7 +74,9 @@ fn lm_backed_reflector_renders_feedback_records_and_applies_candidate() {
             .map(Message::content)
             .collect::<Vec<_>>()
             .join("\n");
-        assert!(rendered.contains("Selected part: \"text\""));
+        assert!(rendered.contains("I provided an assistant with the following instructions"));
+        assert!(rendered.contains("```"));
+        assert!(rendered.contains("seed"));
         assert!(rendered.contains("candidate missed the target suffix"));
         assert!(rendered.contains("runner trace: saw seed"));
 
@@ -234,6 +237,169 @@ fn default_renderer_and_plain_text_parser_cover_empty_feedback_and_bad_part() {
             .to_string()
             .contains("GEPA surface edit lowering failed")
     );
+}
+
+#[test]
+fn default_renderer_uses_gepa_prompt_template_and_config_override() {
+    let parent = CandidateId::new();
+    let artifact = TestArtifact("old instruction".to_owned());
+    let surface = WholeTextSurface;
+    let request = ReflectRequest::for_part(parent, "text", "text").with_selected_feedback(
+        SelectedFeedback::default().with_records([ReflectiveFeedbackRecord {
+            case: Some(CaseId::new(1)),
+            score: Some(0.0),
+            feedback: "needs a modular arithmetic strategy".to_owned(),
+            trace: vec!["solver_answer: 42".to_owned()],
+            source_refs: Vec::new(),
+        }]),
+    );
+
+    let default_rendered = DefaultReflectionRenderer
+        .render(ReflectionRenderInput::<TestProblem, WholeTextSurface> {
+            request: &request,
+            artifact: &artifact,
+            surface: &surface,
+            model: "mock-renderer".into(),
+            config: &LmBackedReflectorConfig::default(),
+        })
+        .unwrap();
+    let default_text = default_rendered
+        .messages
+        .iter()
+        .map(Message::content)
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert_eq!(default_rendered.messages.len(), 1);
+    assert_eq!(
+        default_rendered.messages.as_slice()[0].role(),
+        Role::User,
+        "GEPA default reflection should be the upstream prompt as a user turn, not a synthetic system prompt",
+    );
+    assert!(default_text.contains(DEFAULT_REFLECTION_PROMPT_TEMPLATE.lines().next().unwrap()));
+    assert!(default_text.contains("old instruction"));
+    assert!(default_text.contains("needs a modular arithmetic strategy"));
+    assert!(default_text.contains("solver_answer: 42"));
+
+    let config = LmBackedReflectorConfig::default()
+        .with_prompt_template("CURRENT=<curr_param>\nFEEDBACK=<side_info>");
+    let custom_rendered = DefaultReflectionRenderer
+        .render(ReflectionRenderInput::<TestProblem, WholeTextSurface> {
+            request: &request,
+            artifact: &artifact,
+            surface: &surface,
+            model: "mock-renderer".into(),
+            config: &config,
+        })
+        .unwrap();
+    let custom_text = custom_rendered
+        .messages
+        .iter()
+        .map(Message::content)
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(custom_text.contains("CURRENT=old instruction"));
+    assert!(custom_text.contains("FEEDBACK=# Example 1"));
+}
+
+#[test]
+fn default_renderer_reports_bad_surface_and_bad_template() {
+    let parent = CandidateId::new();
+    let artifact = TestArtifact("old instruction".to_owned());
+    let request = ReflectRequest::for_part(parent, "text", "text");
+
+    let error = DefaultReflectionRenderer
+        .render(
+            ReflectionRenderInput::<TestProblem, FailingProjectionSurface> {
+                request: &request,
+                artifact: &artifact,
+                surface: &FailingProjectionSurface,
+                model: "mock-renderer".into(),
+                config: &LmBackedReflectorConfig::default(),
+            },
+        )
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("GEPA reflection surface projection failed")
+    );
+
+    let missing_part = ReflectRequest::for_part(parent, "missing", "missing");
+    let error = DefaultReflectionRenderer
+        .render(ReflectionRenderInput::<TestProblem, WholeTextSurface> {
+            request: &missing_part,
+            artifact: &artifact,
+            surface: &WholeTextSurface,
+            model: "mock-renderer".into(),
+            config: &LmBackedReflectorConfig::default(),
+        })
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("selected GEPA reflection part \"missing\" is missing from surface")
+    );
+
+    let bad_template = LmBackedReflectorConfig::default().with_prompt_template("missing both");
+    let error = DefaultReflectionRenderer
+        .render(ReflectionRenderInput::<TestProblem, WholeTextSurface> {
+            request: &request,
+            artifact: &artifact,
+            surface: &WholeTextSurface,
+            model: "mock-renderer".into(),
+            config: &bad_template,
+        })
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("GEPA reflection prompt template is missing placeholder(s)")
+    );
+}
+
+#[test]
+fn plain_text_parser_extracts_gepa_fenced_replacement() {
+    let parent = CandidateId::new();
+    let artifact = TestArtifact("seed".to_owned());
+    let surface = WholeTextSurface;
+    let request = ReflectRequest::for_part(parent, "text", "text");
+    let batch: ProposalBatch<TestProblem> = PlainTextEditParser
+        .parse(
+            "Checklist:\n- use modular arithmetic\n```\nnew instruction\n```",
+            &request,
+            &artifact,
+            &surface,
+        )
+        .unwrap();
+
+    let leaven_core::ProposalEffect::Change { change, .. } = &batch.proposals[0].effect else {
+        panic!("plain text parser should produce a mutation proposal");
+    };
+    assert_eq!(change, "new instruction");
+}
+
+#[test]
+fn plain_text_parser_handles_unclosed_and_inline_fences() {
+    let parent = CandidateId::new();
+    let artifact = TestArtifact("seed".to_owned());
+    let surface = WholeTextSurface;
+    let request = ReflectRequest::for_part(parent, "text", "text");
+
+    let unclosed: ProposalBatch<TestProblem> = PlainTextEditParser
+        .parse("```text\nnew instruction", &request, &artifact, &surface)
+        .unwrap();
+    let leaven_core::ProposalEffect::Change { change, .. } = &unclosed.proposals[0].effect else {
+        panic!("plain text parser should produce a mutation proposal");
+    };
+    assert_eq!(change, "new instruction");
+
+    let inline: ProposalBatch<TestProblem> = PlainTextEditParser
+        .parse("```new instruction", &request, &artifact, &surface)
+        .unwrap();
+    let leaven_core::ProposalEffect::Change { change, .. } = &inline.proposals[0].effect else {
+        panic!("plain text parser should produce a mutation proposal");
+    };
+    assert_eq!(change, "new instruction");
 }
 
 #[test]
@@ -515,6 +681,36 @@ impl EditSurface<TestArtifact> for RejectingSurface {
             address: PartAddress("text".to_owned()),
             view: artifact.0.as_str(),
         }])
+    }
+
+    fn change_part(
+        &self,
+        _artifact: &TestArtifact,
+        _id: Self::PartId,
+        _edit: Self::Edit,
+    ) -> Result<<TestArtifact as Artifact>::Change, SurfaceError> {
+        Err(SurfaceError::UnknownPart)
+    }
+}
+
+#[derive(Clone, Debug)]
+struct FailingProjectionSurface;
+
+impl EditSurface<TestArtifact> for FailingProjectionSurface {
+    type PartId = &'static str;
+    type Address = PartAddress;
+    type View<'a> = &'a str;
+    type Edit = String;
+
+    fn fingerprint(&self) -> SurfaceFingerprint {
+        SurfaceFingerprint(Fingerprint::from_bytes([6; 32]))
+    }
+
+    fn parts<'a>(
+        &self,
+        _artifact: &'a TestArtifact,
+    ) -> Result<Vec<Part<Self::PartId, Self::Address, Self::View<'a>>>, SurfaceError> {
+        Err(SurfaceError::UnknownPart)
     }
 
     fn change_part(
