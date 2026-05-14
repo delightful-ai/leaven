@@ -46,6 +46,11 @@ impl WorkspaceEntryRole {
     pub fn output_skeleton() -> Self {
         Self::new_static("output_skeleton")
     }
+
+    #[must_use]
+    pub fn tool() -> Self {
+        Self::new_static("tool")
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

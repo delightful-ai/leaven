@@ -125,12 +125,13 @@ scaffolding still outside completion proof:
 - `RunContext::propose` can carry a receipt-backed `StageAttemptRecorded` event,
   and the fake-runtime proof applies agent-written proposal bytes through
   `RunContext::apply_batch`.
-- `leaven_query` parsing and read-authority query execution are scaffolded and
-  tested, but workspace installation of an executable query shim is still
-  follow-on implementation work.
+- `leaven_query` parsing, help text, read-authority query execution, and
+  workspace installation of an executable help shim are scaffolded and tested;
+  runtime-integrated agent-requested shell queries remain follow-on work.
 - JJ artifact materialization is a scaffold with deterministic workspace-file
   tests. It is not live `jj` command execution or apply semantics.
 - GEPA has request/bootstrap routing into the stage vocabulary, but the full
   optimizer switch away from fixed-edit reflection remains follow-on work.
-- Early setup/runtime/parse error paths still need durable receipt persistence
-  before they can be used as audit-complete failure evidence.
+- Setup/runtime/parse error paths now persist failed attempt receipts; workspace
+  allocation and pre-plan serialization failures still occur before a workspace
+  receipt can exist.

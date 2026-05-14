@@ -1,5 +1,8 @@
 use leaven_kernel::CandidateId;
-use leaven_stage::{StageQuery, tool::parse_leaven_query_args};
+use leaven_stage::{
+    StageQuery, StageQueryKind,
+    tool::{leaven_query_help, parse_leaven_query_args},
+};
 
 #[test]
 fn leaven_query_parses_candidate_and_lineage() {
@@ -46,10 +49,33 @@ fn leaven_query_parses_assessment_diff_and_default_help() {
         .unwrap(),
         StageQuery::Diff { left, right }
     );
+    assert_eq!(
+        leaven_stage::tool::parse_leaven_query_args(&["list".to_owned(), "candidates".to_owned()])
+            .unwrap(),
+        StageQuery::ListCandidates
+    );
+    assert_eq!(
+        leaven_stage::tool::parse_leaven_query_args(&["evidence".to_owned()]).unwrap(),
+        StageQuery::Evidence
+    );
 }
 
 #[test]
-fn leaven_query_rejects_unknown_and_bad_ids() {
+fn leaven_query_rejects_unknown_flags_and_bad_ids() {
     assert!(parse_leaven_query_args(&["search".to_owned()]).is_err());
     assert!(parse_leaven_query_args(&["candidate".to_owned(), "not-a-uuid".to_owned()]).is_err());
+    assert!(parse_leaven_query_args(&["candidate".to_owned(), "--artifact".to_owned()]).is_err());
+    assert!(parse_leaven_query_args(&["candidate".to_owned(), "../secret".to_owned()]).is_err());
+}
+
+#[test]
+fn leaven_query_help_lists_all_v0_4_variants() {
+    let help = leaven_query_help();
+    for kind in StageQueryKind::all_v0_4() {
+        assert!(
+            help.contains(kind.label()),
+            "help omitted {}:\n{help}",
+            kind.label()
+        );
+    }
 }

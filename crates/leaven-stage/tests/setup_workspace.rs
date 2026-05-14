@@ -34,7 +34,7 @@ fn setup_stage_workspace_writes_brief_plan_and_output_skeleton() {
             let mut slot = workspace.slot(WorkspacePath::root()).unwrap();
             let receipt = setup_stage_workspace(&mut slot, &erased).unwrap();
 
-            assert_eq!(receipt.plan_entries.len(), 3);
+            assert_eq!(receipt.plan_entries.len(), 4);
             assert!(
                 String::from_utf8(
                     slot.read_file(&WorkspacePath::new("BRIEF.md").unwrap())
@@ -52,6 +52,10 @@ fn setup_stage_workspace_writes_brief_plan_and_output_skeleton() {
                     .unwrap(),
                 b""
             );
+            let tool_path = WorkspacePath::new("tools/leaven_query").unwrap();
+            let tool = String::from_utf8(slot.read_file(&tool_path).unwrap()).unwrap();
+            assert!(tool.contains("leaven_query candidate <candidate_id>"));
+            assert!(slot.view().is_executable(&tool_path).unwrap());
         }
         workspace.cleanup().await.unwrap();
     });

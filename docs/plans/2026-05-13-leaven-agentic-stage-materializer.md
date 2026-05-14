@@ -39,13 +39,14 @@ tests land.
 
 ### Remaining scaffold, not a blocker for starting the next goal
 
-- Early `AgentBacked` serialization/allocation/setup/runtime/parse failures are
-  surfaced, but receipts are not durably persisted for every early failure path.
-- `setup_stage_workspace` writes `BRIEF.md`, `.leaven/stage-plan.json`, and the
-  output skeleton; it does not yet install an executable `tools/leaven_query`
-  shim.
-- Output receipts exist as types, but richer output-read status and parse-file
-  receipt population are still follow-on work.
+- Early `AgentBacked` setup/runtime/parse failures are surfaced and persisted as
+  failed attempt receipts; serialization/allocation failures still happen before
+  a workspace receipt can exist.
+- `setup_stage_workspace` writes `BRIEF.md`, `.leaven/stage-plan.json`, the
+  output skeleton, and an executable `tools/leaven_query` help shim.
+- Output receipts exist as types, and the fake-runtime path records present
+  outputs plus parse status/files-read; richer runtime-integrated
+  agent-requested query execution is still follow-on work.
 - GEPA still has fixed-edit reflection scaffold; the real optimizer switch to
   agent-backed stage reflection remains a separate implementation slice.
 - JJ materialization reads and writes deterministic workspace files; live jj
@@ -4179,8 +4180,10 @@ WorstEvidencePart -> scaffold/demo unless behavior implemented
     evidence: crates/leaven-stage/tests/agent_backed.rs::agent_backed_fake_runtime_records_receipt_and_applies_candidate
 [x] fake runtime bytes become applied candidate bytes
     evidence: crates/leaven-stage/tests/agent_backed.rs::agent_backed_fake_runtime_records_receipt_and_applies_candidate
-[~] malformed output surfaces parse failure and leaves the graph usable, but early failure receipts are still scaffold
-    evidence: crates/leaven-stage/tests/agent_backed.rs; follow-on: durable receipt persistence for all early errors
+[x] malformed output surfaces parse failure, leaves the graph usable, and records a failed attempt receipt
+    evidence: crates/leaven-stage/tests/agent_backed.rs
+[x] setup installs an executable leaven_query help shim and parser rejects unknown commands/flags
+    evidence: crates/leaven-stage/tests/setup_workspace.rs, crates/leaven-stage/tests/leaven_query.rs
 [~] GEPA stage request/bootstrap derives selected refs, but full optimizer switch remains follow-on
     evidence: crates/leaven-gepa/src/agent_stage.rs, crates/leaven-gepa/tests/agent_stage_routing.rs
 [~] fixed-edit GEPA reflection remains explicit scaffold, not production reflection proof

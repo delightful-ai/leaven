@@ -6,6 +6,7 @@ use leaven_workspace::{WorkspacePath, WorkspaceSlot, fingerprint_file};
 
 use crate::parser::ErasedStagePlan;
 use crate::receipt::WorkspaceSetupReceipt;
+use crate::tool::leaven_query_help;
 use crate::{
     EntryAccess, EntryProjection, EntrySourceRef, OutputEntryReceipt, ParseReceipt, QueryRecord,
     StageAttemptReceipt, WorkspaceEntryReceipt, WorkspaceEntryRole, WorkspaceSetupError,
@@ -44,6 +45,17 @@ pub fn setup_stage_workspace(
         workspace,
         keep_path,
         WorkspaceEntryRole::output_skeleton(),
+        EntrySourceRef::Generated,
+        EntryProjection::Generated,
+    )?);
+
+    let tool_path = WorkspacePath::new("tools/leaven_query")?;
+    workspace.write_file(&tool_path, leaven_query_tool_script().as_bytes())?;
+    workspace.view_mut().set_executable(&tool_path, true)?;
+    receipt.plan_entries.push(entry_receipt(
+        workspace,
+        tool_path,
+        WorkspaceEntryRole::tool(),
         EntrySourceRef::Generated,
         EntryProjection::Generated,
     )?);
@@ -151,6 +163,10 @@ fn render_brief(plan: &ErasedStagePlan) -> String {
         }
     }
     brief
+}
+
+fn leaven_query_tool_script() -> String {
+    format!("#!/bin/sh\ncat <<'EOF'\n{}EOF\n", leaven_query_help())
 }
 
 fn entry_receipt(

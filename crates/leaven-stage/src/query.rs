@@ -86,6 +86,34 @@ pub enum StageQueryKind {
     Diff,
 }
 
+impl StageQueryKind {
+    #[must_use]
+    pub const fn all_v0_4() -> &'static [Self] {
+        &[
+            Self::Help,
+            Self::ListCandidates,
+            Self::Candidate,
+            Self::Assessment,
+            Self::Evidence,
+            Self::Lineage,
+            Self::Diff,
+        ]
+    }
+
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Help => "help",
+            Self::ListCandidates => "list candidates",
+            Self::Candidate => "candidate",
+            Self::Assessment => "assessment",
+            Self::Evidence => "evidence",
+            Self::Lineage => "lineage",
+            Self::Diff => "diff",
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum StageQuery {
     Help,

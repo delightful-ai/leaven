@@ -6,7 +6,7 @@ use leaven_workspace::{WorkspaceError, WorkspacePath, WorkspaceSlot, fingerprint
 use crate::receipt::QueryTiming;
 use crate::{
     EntryAccess, EntryProjection, EntrySourceRef, QueryRecord, QueryRecordEffect, StageQuery,
-    StageQueryError, StageQueryPolicy, WorkspaceEntryReceipt, WorkspaceEntryRole,
+    StageQueryError, StageQueryKind, StageQueryPolicy, WorkspaceEntryReceipt, WorkspaceEntryRole,
 };
 
 pub struct StageReadAuthority<'a, P: OptimizationProblem> {
@@ -155,7 +155,10 @@ impl<'a, P: OptimizationProblem> StageReadAuthority<'a, P> {
         let json = match query {
             StageQuery::Help => serde_json::json!({
                 "kind": "help",
-                "queries": ["help", "list-candidates", "candidate", "assessment", "lineage", "diff"]
+                "queries": StageQueryKind::all_v0_4()
+                    .iter()
+                    .map(|kind| kind.label())
+                    .collect::<Vec<_>>()
             }),
             StageQuery::ListCandidates => serde_json::json!({
                 "kind": "list_candidates",
