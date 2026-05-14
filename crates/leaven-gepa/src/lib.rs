@@ -1,5 +1,6 @@
 //! GEPA optimizer primitives.
 
+pub mod agent_stage;
 pub mod gate;
 pub mod optimizer;
 pub mod part_selector;
@@ -7,6 +8,7 @@ pub mod proposer;
 pub mod selector;
 pub mod validation;
 
+pub use agent_stage::{GepaReflectionBootstrap, GepaReflectionRequest};
 pub use gate::{
     CheckpointGate, Gate, GateDecision, ImprovementOrEqual, NoRegression, StrictImprovement,
 };
@@ -27,9 +29,9 @@ pub use validation::{FullValidation, MinibatchThenValidation, ValidationPolicy};
 pub mod prelude {
     pub use crate::{
         CandidateSelector, CheckpointCandidateSelector, CheckpointGate, CheckpointPopulation,
-        FullValidation, Gate, Gepa, GepaPopulation, HasBestCandidate, ImprovementOrEqual,
-        MinibatchThenValidation, ParetoFrequencyWeighted, PartSelector, ReflectiveMutation,
-        RoundRobinPart, SelectBestCandidate, StrictImprovement, SurfaceProposer, SystemAwareMerge,
-        ValidationPolicy, WorstEvidencePart,
+        FullValidation, Gate, Gepa, GepaPopulation, GepaReflectionBootstrap, GepaReflectionRequest,
+        HasBestCandidate, ImprovementOrEqual, MinibatchThenValidation, ParetoFrequencyWeighted,
+        PartSelector, ReflectiveMutation, RoundRobinPart, SelectBestCandidate, StrictImprovement,
+        SurfaceProposer, SystemAwareMerge, ValidationPolicy, WorstEvidencePart,
     };
 }

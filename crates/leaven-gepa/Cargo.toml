@@ -20,6 +20,8 @@ leaven-preference = { workspace = true }
 leaven-population = { workspace = true }
 leaven-render = { workspace = true }
 leaven-lm = { workspace = true }
+leaven-stage = { workspace = true }
+leaven-workspace = { workspace = true }
 serde = { workspace = true }
 
 [dev-dependencies]
