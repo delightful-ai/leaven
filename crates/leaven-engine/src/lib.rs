@@ -23,7 +23,7 @@ pub use cache::{
 pub use case_set::{CaseSet, CaseSetBuilder, EvaluationResolveError, UnsupportedEvaluationSet};
 pub use context::{
     EvaluationContext, MaterializeContext, ProposalContext, RenderContext, RunContext,
-    RunContextError,
+    RunContextError, StageEngineContext,
 };
 pub use engine::{Engine, EngineBuilder, RunResult, optimize};
 pub use events::{
@@ -33,7 +33,7 @@ pub use graph::storage::ApplyProposalError;
 pub use graph::{
     AssessmentQuery, AssessmentView, CandidateOrigin, CandidateTree, CandidateView,
     EvaluationRequestView, FailureRef, Lineage, ProposalBatchView, ProposalView, RunGraph,
-    RunGraphRestoreError, RunGraphSnapshot, RunGraphView,
+    RunGraphRestoreError, RunGraphSnapshot, RunGraphView, ScopedRunGraphView,
 };
 pub use persistence::{
     CacheIndexSnapshot, GraphSnapshotRef, OptimizerStateWrite, RestoredRunState, RunCheckpoint,
@@ -68,7 +68,7 @@ pub mod prelude {
         OptimizerStateSnapshot, Population, PreferenceRelation, PrivateStatePolicy,
         ProposalContext, Proposer, ReadScope, RenderContext, Renderer, RestoreContext,
         RestoredRunState, RunCheckpoint, RunContext, RunEvent, RunGraphRestoreError,
-        RunGraphSnapshot, RunGraphView, RunResult, StateFormat, StepStatus, Stopper,
-        StoreRunPersistence, TrustPolicy, optimize,
+        RunGraphSnapshot, RunGraphView, RunResult, ScopedRunGraphView, StageEngineContext,
+        StateFormat, StepStatus, Stopper, StoreRunPersistence, TrustPolicy, optimize,
     };
 }

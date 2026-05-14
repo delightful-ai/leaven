@@ -7,7 +7,10 @@ use leaven_kernel::{
     BudgetSnapshot, StageAttemptOutcome, StageAttemptReceiptRef, StageCallId, StageId, StageRole,
 };
 
-use crate::{BudgetHandle, MaterializeContext, ReadScope, RenderContext, RunGraphView};
+use crate::{
+    BudgetHandle, MaterializeContext, ReadScope, RenderContext, RunGraphView, ScopedRunGraphView,
+    StageEngineContext,
+};
 
 pub struct ProposalContext<'a, P: OptimizationProblem> {
     graph: RunGraphView<'a, P>,
@@ -74,6 +77,16 @@ impl<'a, P: OptimizationProblem> ProposalContext<'a, P> {
 
     pub(crate) fn stage_attempt_sink(&self) -> StageAttemptEventSink {
         self.stage_attempt_sink.clone()
+    }
+
+    #[must_use]
+    pub fn stage_engine_context(&self) -> StageEngineContext<'a, P> {
+        StageEngineContext::new(
+            ScopedRunGraphView::new(self.graph.clone(), self.read_scope.clone()),
+            self.read_scope.clone(),
+            self.budget.snapshot(),
+            self.stage_call_id,
+        )
     }
 
     #[must_use]

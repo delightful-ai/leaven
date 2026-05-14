@@ -866,6 +866,68 @@ fn read_scope_hides_assessments_from_forbidden_partitions() {
 }
 
 #[test]
+fn stage_engine_context_uses_scoped_graph_without_exposing_raw_view() {
+    block_on(async {
+        let (mut graph, mut budget) = graph_and_budget();
+        let mut cache = leaven_engine::EvaluationCache::default();
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let test_partition = PartitionId::from("TEST");
+        let case_set = CaseSet::new(vec!["case"]).with_partition(
+            test_partition.clone(),
+            vec![leaven_kernel::CaseId::from_index(0)],
+        );
+        let candidate = {
+            let mut seed_ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+            seed_ctx
+                .insert_seed(TextArtifact("abc".to_owned()), 0)
+                .unwrap()
+        };
+        let evaluator = CountingEvaluator::new(CachePolicy::Never);
+        let report = {
+            let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
+                .with_case_set(&case_set)
+                .with_cache(&mut cache)
+                .with_evidence_store(&store);
+            ctx.evaluate_with(
+                &evaluator,
+                EvaluationRequest::Independent {
+                    candidates: vec![candidate],
+                    set: EvaluationSet::Partition(test_partition.clone()),
+                    granularity: AssessmentGranularity::Aggregate,
+                    purpose: EvaluationPurpose::FinalTest,
+                },
+            )
+            .await
+            .unwrap()
+        };
+
+        let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
+            .with_trust_policy(TrustPolicy::default().hide_from_proposers([test_partition]));
+        let proposal_ctx = ctx.proposal_context(StageId::from_proposer(ProposerId::from("stage")));
+        let stage_ctx = proposal_ctx.stage_engine_context();
+
+        assert_eq!(stage_ctx.stage_call_id(), proposal_ctx.stage_call_id());
+        assert_eq!(
+            stage_ctx.graph().candidate(candidate).unwrap().id(),
+            candidate
+        );
+        assert_eq!(stage_ctx.graph().artifact(candidate).unwrap().0, "abc");
+        assert!(
+            stage_ctx
+                .graph()
+                .assessment(report.assessment_ids[0])
+                .is_none()
+        );
+        assert!(
+            stage_ctx
+                .graph()
+                .assessments_for_candidate(candidate)
+                .is_empty()
+        );
+    });
+}
+
+#[test]
 fn hidden_partition_evaluation_request_records_trust_violation_without_mutation() {
     block_on(async {
         let (mut graph, mut budget) = graph_and_budget();
