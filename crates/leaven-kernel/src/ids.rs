@@ -182,6 +182,31 @@ uuid_id!(
 );
 
 uuid_id!(
+    /// Identifier for one allocated workspace instance.
+    WorkspaceId
+);
+
+uuid_id!(
+    /// Identifier for one optimizer stage call.
+    StageCallId
+);
+
+uuid_id!(
+    /// Identifier for a durable receipt produced by one stage attempt.
+    StageAttemptReceiptId
+);
+
+uuid_id!(
+    /// Identifier for one query handled by a stage read authority.
+    StageQueryId
+);
+
+uuid_id!(
+    /// Identifier for one workspace entry written by setup or query.
+    WorkspaceEntryId
+);
+
+uuid_id!(
     /// Identifier for one persisted run checkpoint.
     CheckpointId
 );

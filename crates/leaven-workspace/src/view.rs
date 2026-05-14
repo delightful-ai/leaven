@@ -6,12 +6,16 @@ use std::sync::Arc;
 
 use parking_lot::Mutex;
 
-use crate::{Command, CommandOutput, WorkspaceBackend, WorkspaceError, WorkspacePath};
+use crate::{
+    Command, CommandOutput, WorkspaceBackend, WorkspaceError, WorkspaceFactoryContext,
+    WorkspaceFactoryContextError, WorkspacePath,
+};
 
 pub struct WorkspaceView<'a> {
     backend: Arc<Mutex<Box<dyn WorkspaceBackend>>>,
     local_mount: Option<PathBuf>,
     prefix: WorkspacePath,
+    factory_context: WorkspaceFactoryContext,
     marker: PhantomData<&'a mut ()>,
 }
 
@@ -21,12 +25,14 @@ impl<'a> WorkspaceView<'a> {
         backend: Arc<Mutex<Box<dyn WorkspaceBackend>>>,
         local_mount: Option<PathBuf>,
         prefix: WorkspacePath,
+        factory_context: WorkspaceFactoryContext,
         marker: PhantomData<&'a mut ()>,
     ) -> Self {
         Self {
             backend,
             local_mount,
             prefix,
+            factory_context,
             marker,
         }
     }
@@ -50,8 +56,16 @@ impl<'a> WorkspaceView<'a> {
             } else {
                 self.prefix.join(path.as_str())?
             },
+            factory_context: self.factory_context.clone(),
             marker: PhantomData,
         })
+    }
+
+    pub fn factory_context<T>(&self) -> Result<Arc<T>, WorkspaceFactoryContextError>
+    where
+        T: std::any::Any + Send + Sync + 'static,
+    {
+        self.factory_context.get::<T>()
     }
 
     pub fn write_file(&mut self, path: &WorkspacePath, bytes: &[u8]) -> Result<(), WorkspaceError> {

@@ -52,7 +52,8 @@ pub use ids::{
     AgentRuntimeId, AgentSessionId, ApplyAttemptId, AssessmentId, BlobRef, CandidateId, CaseId,
     CheckpointId, ContentId, EvaluationRequestId, EvaluationSetId, EvaluatorId, EvidenceRef,
     IterationId, PopulationId, ProposalBatchId, ProposalId, ProposerId, RenderId, RendererId,
-    ResolvedEvaluationSetId, RunId, StageId, StopperId,
+    ResolvedEvaluationSetId, RunId, StageAttemptReceiptId, StageCallId, StageId, StageQueryId,
+    StopperId, WorkspaceEntryId, WorkspaceId,
 };
 pub use metadata::{MetadataBag, MetadataKey, MetadataValue};
 pub use time::{Timestamp, now};

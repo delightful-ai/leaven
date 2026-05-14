@@ -7,24 +7,45 @@ use std::sync::Arc;
 use futures::future::BoxFuture;
 use parking_lot::Mutex;
 
+use leaven_kernel::WorkspaceId;
+
 use crate::{
-    Command, CommandOutput, WithWorkspaceError, WorkspaceConfig, WorkspaceError, WorkspaceFactory,
-    WorkspacePath, WorkspaceView,
+    Command, CommandOutput, WithWorkspaceError, WorkspaceConfig, WorkspaceError,
+    WorkspaceFactory, WorkspaceFactoryContext, WorkspaceFactoryContextError, WorkspacePath,
+    WorkspaceSlot, WorkspaceView,
 };
 
 pub struct Workspace {
+    id: WorkspaceId,
     backend: Arc<Mutex<Box<dyn WorkspaceBackend>>>,
     local_mount: Option<PathBuf>,
+    factory_context: WorkspaceFactoryContext,
 }
 
 impl Workspace {
     #[must_use]
-    pub fn new(_root: PathBuf, backend: Box<dyn WorkspaceBackend>) -> Self {
+    pub fn new(root: PathBuf, backend: Box<dyn WorkspaceBackend>) -> Self {
+        Self::new_with_context(root, backend, WorkspaceFactoryContext::empty())
+    }
+
+    #[must_use]
+    pub fn new_with_context(
+        _root: PathBuf,
+        backend: Box<dyn WorkspaceBackend>,
+        factory_context: WorkspaceFactoryContext,
+    ) -> Self {
         let local_mount = backend.local_mount().map(Path::to_path_buf);
         Self {
+            id: WorkspaceId::new(),
             backend: Arc::new(Mutex::new(backend)),
             local_mount,
+            factory_context,
         }
+    }
+
+    #[must_use]
+    pub const fn id(&self) -> WorkspaceId {
+        self.id
     }
 
     #[must_use]
@@ -43,8 +64,21 @@ impl Workspace {
             self.backend.clone(),
             self.local_mount.clone(),
             WorkspacePath::root(),
+            self.factory_context.clone(),
             PhantomData,
         )
+    }
+
+    pub fn slot(&mut self, root: WorkspacePath) -> Result<WorkspaceSlot<'_>, WorkspaceError> {
+        let view = self.view().subdir(root.clone())?;
+        Ok(WorkspaceSlot::new(root, view))
+    }
+
+    pub fn factory_context<T>(&self) -> Result<Arc<T>, WorkspaceFactoryContextError>
+    where
+        T: std::any::Any + Send + Sync + 'static,
+    {
+        self.factory_context.get::<T>()
     }
 
     pub async fn cleanup(self) -> Result<(), WorkspaceError> {

@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::{
     Arc, Mutex,
@@ -8,8 +9,8 @@ use futures::future::{BoxFuture, FutureExt};
 use leaven_kernel::RunId;
 use leaven_workspace::{
     CapturedOutput, Command, CommandOutput, ExitStatus, FactoryError, WithWorkspaceError,
-    Workspace, WorkspaceBackend, WorkspaceConfig, WorkspaceError, WorkspaceFactory, WorkspacePath,
-    with_workspace,
+    Workspace, WorkspaceBackend, WorkspaceConfig, WorkspaceError, WorkspaceFactory,
+    WorkspaceFactoryContext, WorkspacePath, fingerprint_tree, with_workspace,
 };
 
 #[test]
@@ -157,6 +158,8 @@ fn workspace_lifecycle_exposes_root_mount_view_and_cleanup_backend() {
     let mut workspace = Workspace::new(root.clone(), Box::new(TestBackend::mounted(&root)));
 
     assert_eq!(workspace.root().as_str(), "");
+    let workspace_id = workspace.id();
+    assert_eq!(workspace.id(), workspace_id);
     assert_eq!(workspace.local_mount(), Some(root.as_path()));
     workspace
         .view()
@@ -167,6 +170,134 @@ fn workspace_lifecycle_exposes_root_mount_view_and_cleanup_backend() {
     futures::executor::block_on(workspace.cleanup()).unwrap();
 
     assert!(!root.exists());
+}
+
+#[test]
+fn workspace_factory_context_downcasts_and_rejects_wrong_type() {
+    let root = temp_root("workspace-context");
+    let mut builder = WorkspaceFactoryContext::builder();
+    builder.insert(Arc::new("repo-handle".to_owned())).unwrap();
+    assert!(builder.insert(Arc::new("duplicate".to_owned())).is_err());
+    let context = builder.build();
+    let mut workspace = Workspace::new_with_context(
+        root.clone(),
+        Box::new(TestBackend::mounted(&root)),
+        context,
+    );
+
+    assert_eq!(&*workspace.factory_context::<String>().unwrap(), "repo-handle");
+    assert!(workspace.factory_context::<u64>().is_err());
+    assert_eq!(
+        &*workspace.view().factory_context::<String>().unwrap(),
+        "repo-handle"
+    );
+    assert_eq!(
+        &*workspace
+            .view()
+            .subdir(WorkspacePath::new("nested").unwrap())
+            .unwrap()
+            .factory_context::<String>()
+            .unwrap(),
+        "repo-handle"
+    );
+
+    futures::executor::block_on(workspace.cleanup()).unwrap();
+    remove_dir(&root);
+}
+
+#[test]
+fn workspace_slot_scopes_files_context_and_command_cwd() {
+    let root = temp_root("workspace-slot");
+    let commands = Arc::new(Mutex::new(Vec::new()));
+    let mut builder = WorkspaceFactoryContext::builder();
+    builder.insert(Arc::new(7_u64)).unwrap();
+    let mut workspace = Workspace::new_with_context(
+        root.clone(),
+        Box::new(TestBackend::mounted_with_commands(&root, commands.clone())),
+        builder.build(),
+    );
+    let mut slot = workspace
+        .slot(WorkspacePath::new("slots/primary").unwrap())
+        .unwrap();
+
+    slot.write_file(&WorkspacePath::new("artifact.txt").unwrap(), b"slot")
+        .unwrap();
+    assert_eq!(
+        std::fs::read(root.join("slots/primary/artifact.txt")).unwrap(),
+        b"slot"
+    );
+    assert_eq!(
+        slot.read_file(&WorkspacePath::new("artifact.txt").unwrap())
+            .unwrap(),
+        b"slot"
+    );
+    assert_eq!(*slot.factory_context::<u64>().unwrap(), 7);
+
+    let mut nested = slot
+        .subslot(WorkspacePath::new("nested").unwrap())
+        .unwrap();
+    nested
+        .write_file(&WorkspacePath::new("child.txt").unwrap(), b"child")
+        .unwrap();
+    assert_eq!(
+        std::fs::read(root.join("slots/primary/nested/child.txt")).unwrap(),
+        b"child"
+    );
+
+    slot.run_command(Command::new("pwd")).unwrap();
+    nested
+        .run_command({
+            let mut command = Command::new("echo");
+            command.cwd = Some(WorkspacePath::new("work").unwrap());
+            command
+        })
+        .unwrap();
+    let recorded = commands.lock().unwrap();
+    assert_eq!(recorded[0].cwd.as_ref().unwrap().as_str(), "slots/primary");
+    assert_eq!(
+        recorded[1].cwd.as_ref().unwrap().as_str(),
+        "slots/primary/nested/work"
+    );
+    drop(recorded);
+    drop(nested);
+    drop(slot);
+
+    futures::executor::block_on(workspace.cleanup()).unwrap();
+    remove_dir(&root);
+}
+
+#[test]
+fn tree_fingerprint_is_path_order_independent() {
+    let first_root = temp_root("fingerprint-first");
+    let second_root = temp_root("fingerprint-second");
+    let mut first = Workspace::new(first_root.clone(), Box::new(UnsortedBackend::new(false)));
+    let mut second = Workspace::new(second_root.clone(), Box::new(UnsortedBackend::new(true)));
+
+    for workspace in [&mut first, &mut second] {
+        let mut view = workspace.view();
+        view.write_file(&WorkspacePath::new("b.txt").unwrap(), b"b")
+            .unwrap();
+        view.write_file(&WorkspacePath::new("a.txt").unwrap(), b"a")
+            .unwrap();
+    }
+
+    let first_fingerprint = fingerprint_tree(&first.view(), &WorkspacePath::root()).unwrap();
+    let second_fingerprint = fingerprint_tree(&second.view(), &WorkspacePath::root()).unwrap();
+
+    assert_eq!(first_fingerprint.fingerprint, second_fingerprint.fingerprint);
+    assert_eq!(
+        first_fingerprint
+            .files
+            .iter()
+            .map(|file| file.path.as_str())
+            .collect::<Vec<_>>(),
+        vec!["a.txt", "b.txt"]
+    );
+
+    futures::executor::block_on(first.cleanup()).unwrap();
+    futures::executor::block_on(second.cleanup()).unwrap();
+    remove_dir(&first_root);
+    remove_dir(&second_root);
 }
 
 #[test]
@@ -492,6 +623,46 @@ impl WorkspaceBackend for OutsidePrefixBackend {
             WorkspacePath::new("candidate").unwrap(),
             WorkspacePath::new("other/file.txt").unwrap(),
         ])
+    }
+
+    fn cleanup(self: Box<Self>) -> BoxFuture<'static, Result<(), WorkspaceError>> {
+        async { Ok(()) }.boxed()
+    }
+}
+
+struct UnsortedBackend {
+    files: BTreeMap<WorkspacePath, Vec<u8>>,
+    reverse: bool,
+}
+
+impl UnsortedBackend {
+    fn new(reverse: bool) -> Self {
+        Self {
+            files: BTreeMap::new(),
+            reverse,
+        }
+    }
+}
+
+impl WorkspaceBackend for UnsortedBackend {
+    fn write_file(&mut self, path: &WorkspacePath, bytes: &[u8]) -> Result<(), WorkspaceError> {
+        self.files.insert(path.clone(), bytes.to_vec());
+        Ok(())
+    }
+
+    fn read_file(&mut self, path: &WorkspacePath) -> Result<Vec<u8>, WorkspaceError> {
+        self.files
+            .get(path)
+            .cloned()
+            .ok_or_else(|| WorkspaceError::Io(format!("missing {}", path.as_str())))
+    }
+
+    fn list_files(&mut self, _path: &WorkspacePath) -> Result<Vec<WorkspacePath>, WorkspaceError> {
+        let mut files = self.files.keys().cloned().collect::<Vec<_>>();
+        if self.reverse {
+            files.reverse();
+        }
+        Ok(files)
     }
 
     fn cleanup(self: Box<Self>) -> BoxFuture<'static, Result<(), WorkspaceError>> {
