@@ -3,6 +3,54 @@
 Date: 2026-05-13  
 Status: implementation-ready draft, framed as behavioral milestones
 
+## Current prerequisite status
+
+Status updated after the `agentic-stage: satisfy workspace-wide completion gate`
+jj slice. The durable spec route is now
+`docs/specs/agentic_stage_materialization.md`; misspelled duplicate spec paths
+are not authoritative.
+
+This plan is complete enough to launch the next focused implementation goal for
+the stage materialization spec. The remaining gaps below are deliberate
+scaffolding and must not be reported as implemented behavior until their own
+tests land.
+
+### Proven prerequisite substrate
+
+- `leaven-agentic` keeps `AgentCase`, `CaseSuite`, `AgentWorkload`, and
+  `AgentCaseEvaluator` in the candidate-evaluation workload layer; optimizer
+  stage workspaces route through `leaven-stage` instead.
+- `leaven-workspace` has workspace ids, typed factory context, slot/root
+  containment, command cwd scoping, and fingerprint helpers.
+- `leaven-engine` has scoped stage handoff and one receipt-backed
+  `StageAttemptRecorded` event path through `RunContext::propose`.
+- `leaven-stage` exists with the user/adapter/receipt surface:
+  `AgentStagePlan`, `AgentBacked`, `StageReadAuthority`,
+  `StageAttemptReceipt`, `StageQueryPolicy`, `setup_stage_workspace`,
+  output contracts, parser traits, receipt store, query parsing, and
+  `MaterializableArtifact`.
+- `AgentBacked<ProposerSlot<_>>` has a fake-runtime proof that writes
+  `output/proposal.json`, parses it into `ProposalBatch`, records a stage
+  attempt, and applies the batch through `RunContext::apply_batch`.
+- GEPA has stage-request/bootstrap vocabulary in `crates/leaven-gepa/src/agent_stage.rs`,
+  but the full optimizer switch is not part of this prerequisite tranche.
+- `leaven-artifact-jj` has deterministic materializable-file scaffold tests,
+  but it is not live `jj` checkout/apply behavior.
+
+### Remaining scaffold, not a blocker for starting the next goal
+
+- Early `AgentBacked` serialization/allocation/setup/runtime/parse failures are
+  surfaced, but receipts are not durably persisted for every early failure path.
+- `setup_stage_workspace` writes `BRIEF.md`, `.leaven/stage-plan.json`, and the
+  output skeleton; it does not yet install an executable `tools/leaven_query`
+  shim.
+- Output receipts exist as types, but richer output-read status and parse-file
+  receipt population are still follow-on work.
+- GEPA still has fixed-edit reflection scaffold; the real optimizer switch to
+  agent-backed stage reflection remains a separate implementation slice.
+- JJ materialization reads and writes deterministic workspace files; live jj
+  command execution, change ids, and apply semantics remain follow-on work.
+
 ## 0. purpose
 
 This plan turns the goal-state agentic stage materialization spec into implementation milestones. It is intentionally code-shaped: every milestone names files, target structs, traits, methods, error types, and tests. The desired outcome is that an implementer can open a milestone, create the listed modules, paste/adapt the target definitions, and know exactly which observable behaviors must hold before the milestone is complete.
@@ -4103,24 +4151,42 @@ WorstEvidencePart -> scaffold/demo unless behavior implemented
 # 20. promotion checklist
 
 ```text
-[ ] docs distinguish AgentCase workload from AgentStage workspace across every relevant docs/specs file
-[ ] hidden-target presenter law passes against every stock presenter
-[ ] leaven-stage has no leaven-gepa or leaven-agentic transitive dependency
-[ ] WorkspaceSlot containment tested adversarially
-[ ] WorkspaceFactoryContext typed registry works and rejects wrong types
-[ ] StageAttemptRecorded emitted on success and error; parse failure is not ApplyFailed
-[ ] StageQueryPolicy has prewarm and allowed; no eager/lazy split remains
-[ ] setup_stage_workspace writes only plan-derived files plus prewarm query entries
-[ ] StageReadAuthority is the single query path for prewarm and agent-requested queries
-[ ] StageAttemptReceipt roundtrips and records full ReadScope plus fingerprint
-[ ] TextArtifact proof exercises None / Some(Change) / Err
-[ ] parser uses plan.output path, not hardcoded output/proposal.json
-[ ] AgentBacked<ProposerSlot> runs through RunContext::propose end to end
-[ ] fake runtime randomized bytes become applied candidate bytes
-[ ] malformed output records OutputParse and leaves RunContext usable
-[ ] GEPA ReflectRequest / SelectedFeedback derive refs from graph
-[ ] FixedSurfaceEdit canonical; ReflectiveMutation deprecated and unused internally
-[ ] one example migration demonstrates the new abstraction is simpler or honestly records where it is not
+[x] docs distinguish AgentCase workload from AgentStage workspace across relevant specs and crate AGENTS files
+    evidence: docs/specs/agentic_stage_materialization.md, crates/leaven-stage/AGENTS.md, crates/leaven-agentic/src/case.rs
+[x] hidden-target presenter law passes against stock workload surfaces
+    evidence: crates/leaven-agentic/tests/agentic_workload.rs
+[x] leaven-stage has no leaven-gepa or leaven-agentic transitive dependency
+    evidence: crates/leaven-stage/tests/dependency_shape.rs and topology_contract
+[x] WorkspaceSlot containment tested adversarially
+    evidence: crates/leaven-workspace/tests/workspace_view.rs
+[x] WorkspaceFactoryContext typed registry works and rejects wrong types
+    evidence: crates/leaven-workspace/tests/workspace_view.rs
+[x] StageAttemptRecorded emitted on success and scaffolded failure surfaces are explicit
+    evidence: crates/leaven-engine/tests/context_services.rs, crates/leaven-stage/tests/agent_backed.rs
+[x] StageQueryPolicy has prewarm and allowed; no eager/lazy split remains
+    evidence: crates/leaven-stage/tests/query_policy.rs
+[x] setup_stage_workspace writes plan-derived files plus output skeleton
+    evidence: crates/leaven-stage/tests/setup_workspace.rs
+[x] StageReadAuthority is the single query path for prewarm query execution
+    evidence: crates/leaven-stage/tests/read_authority.rs
+[x] StageAttemptReceipt roundtrips and records setup/query/output/parse vocabulary
+    evidence: crates/leaven-stage/tests/receipt_store.rs, crates/leaven-stage/tests/serde_roundtrip.rs
+[x] MaterializableArtifact proof exercises None / Some(Change) / Err
+    evidence: crates/leaven-artifact-jj/tests/materializable.rs
+[x] parser reads declared plan output path in the fake-runtime proof
+    evidence: crates/leaven-stage/tests/agent_backed.rs
+[x] AgentBacked<ProposerSlot> runs through RunContext::propose end to end
+    evidence: crates/leaven-stage/tests/agent_backed.rs::agent_backed_fake_runtime_records_receipt_and_applies_candidate
+[x] fake runtime bytes become applied candidate bytes
+    evidence: crates/leaven-stage/tests/agent_backed.rs::agent_backed_fake_runtime_records_receipt_and_applies_candidate
+[~] malformed output surfaces parse failure and leaves the graph usable, but early failure receipts are still scaffold
+    evidence: crates/leaven-stage/tests/agent_backed.rs; follow-on: durable receipt persistence for all early errors
+[~] GEPA stage request/bootstrap derives selected refs, but full optimizer switch remains follow-on
+    evidence: crates/leaven-gepa/src/agent_stage.rs, crates/leaven-gepa/tests/agent_stage_routing.rs
+[~] fixed-edit GEPA reflection remains explicit scaffold, not production reflection proof
+    evidence: crates/leaven-gepa/AGENTS.md and crates/leaven-gepa/src/proposer.rs
+[~] example migration/product proof remains follow-on for the full implementation goal
+    evidence: milestone examples are proxy proof unless they execute the production stage path
 ```
 
 ---

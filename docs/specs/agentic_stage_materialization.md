@@ -10,6 +10,21 @@ This spec reconciles the stage-materialization plan with the current product
 vocabulary. It is the durable target for optimizer-stage agent workspaces; the
 dated plan under `docs/plans/` is execution order and provenance.
 
+## Authority
+
+This file is the only authoritative agentic-stage materialization spec path.
+Use this spelling:
+
+```text
+docs/specs/agentic_stage_materialization.md
+```
+
+Do not create or route work through misspelled duplicate paths. The older
+goal-state draft was folded into this implementation spec and the dated plan at
+`docs/plans/2026-05-13-leaven-agentic-stage-materializer.md`; any remaining
+full-detail snippets in that plan are provenance and implementation guidance,
+not a second spec.
+
 ## Boundary
 
 There are three separate surfaces:
@@ -94,3 +109,28 @@ Promotion requires behavior tests for:
 
 Fixed-edit GEPA fixtures, compile-only crates, and examples that do not execute
 the production stage path are proxy proof only.
+
+## Prerequisite Readiness
+
+As of the `agentic-stage: satisfy workspace-wide completion gate` jj slice, the
+stage substrate is ready for a focused implementation goal, with explicit
+scaffolding still outside completion proof:
+
+- The stage/workload/workspace boundary is encoded in crate `AGENTS.md` files
+  and in the `leaven-stage`, `leaven-agentic`, and `leaven-workspace` APIs.
+- `leaven-stage` exists and owns `AgentStagePlan`, `AgentBacked`,
+  `StageReadAuthority`, `StageAttemptReceipt`, `StageQueryPolicy`,
+  `setup_stage_workspace`, output contracts, parsers, receipt stores, and the
+  `ProposerSlot` adapter.
+- `RunContext::propose` can carry a receipt-backed `StageAttemptRecorded` event,
+  and the fake-runtime proof applies agent-written proposal bytes through
+  `RunContext::apply_batch`.
+- `leaven_query` parsing and read-authority query execution are scaffolded and
+  tested, but workspace installation of an executable query shim is still
+  follow-on implementation work.
+- JJ artifact materialization is a scaffold with deterministic workspace-file
+  tests. It is not live `jj` command execution or apply semantics.
+- GEPA has request/bootstrap routing into the stage vocabulary, but the full
+  optimizer switch away from fixed-edit reflection remains follow-on work.
+- Early setup/runtime/parse error paths still need durable receipt persistence
+  before they can be used as audit-complete failure evidence.
