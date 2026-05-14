@@ -11,7 +11,8 @@ use leaven_engine::{
 };
 use leaven_evidence::{CaseOutcome, CasewiseEvidence, ScalarEvidence};
 use leaven_gepa::{
-    Gepa, GepaReflectionBootstrap, ReflectRequest, SelectedFeedback, gepa_stage_proposer,
+    FixedSurfaceEdit, Gepa, GepaReflectionBootstrap, GepaReflector, ReflectRequest,
+    SelectedFeedback, gepa_stage_proposer,
 };
 use leaven_kernel::{
     AssessmentId, Budget, BudgetSnapshot, CandidateId, ContentId, Cost, EvaluatorId, Fingerprint,
@@ -245,6 +246,107 @@ fn gepa_optimizer_uses_agent_backed_reflection_path() {
                 .iter()
                 .any(|source| matches!(source, leaven_core::InfoRef::Assessment(_)))
         );
+    });
+}
+
+#[test]
+fn fixed_surface_reflector_records_and_applies_through_run_context() {
+    block_on(async {
+        let (mut graph, mut budget) = graph_and_budget();
+        let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+        let parent = ctx.insert_seed(TestArtifact("seed".to_owned()), 0).unwrap();
+        let parent_assessment = AssessmentId::new();
+        let mut reflector = FixedSurfaceEdit::new("fixed".to_owned());
+
+        let candidate = reflector
+            .reflect_candidate(
+                &mut ctx,
+                &WholeTextSurface,
+                parent,
+                parent_assessment,
+                "text",
+            )
+            .await
+            .unwrap()
+            .expect("fixed reflection applies a candidate");
+
+        assert_eq!(ctx.graph().artifact(candidate).unwrap().0, "seedfixed");
+        let proposal = ctx
+            .graph()
+            .proposal_that_created(candidate)
+            .expect("fixed reflection proposal created candidate");
+        assert!(
+            proposal
+                .provenance()
+                .informed_by
+                .contains(&leaven_core::InfoRef::Candidate(parent))
+        );
+        assert!(
+            proposal
+                .provenance()
+                .informed_by
+                .contains(&leaven_core::InfoRef::Assessment(parent_assessment))
+        );
+    });
+}
+
+#[test]
+fn fixed_surface_reflector_reports_graph_surface_and_budget_failures() {
+    block_on(async {
+        let (mut graph, mut budget) = graph_and_budget();
+        let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+        let mut reflector = FixedSurfaceEdit::new("fixed".to_owned());
+        let missing_parent = CandidateId::new();
+
+        let error = reflector
+            .reflect_candidate(
+                &mut ctx,
+                &WholeTextSurface,
+                missing_parent,
+                AssessmentId::new(),
+                "text",
+            )
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains(&format!(
+            "selected parent {missing_parent} is missing from graph"
+        )));
+
+        let parent = ctx.insert_seed(TestArtifact("seed".to_owned()), 0).unwrap();
+        let error = reflector
+            .reflect_candidate(
+                &mut ctx,
+                &WholeTextSurface,
+                parent,
+                AssessmentId::new(),
+                "missing",
+            )
+            .await
+            .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("GEPA surface edit lowering failed")
+        );
+
+        let mut capped_graph =
+            leaven_engine::RunGraph::<TestProblem>::new(leaven_kernel::RunId::new());
+        let mut capped_budget = leaven_engine::BudgetLedger::new(Budget::metric_calls(0));
+        let mut capped_ctx = RunContext::<TestProblem>::new(&mut capped_graph, &mut capped_budget);
+        let capped_parent = capped_ctx
+            .insert_seed(TestArtifact("seed".to_owned()), 0)
+            .unwrap();
+        let error = reflector
+            .reflect_candidate(
+                &mut capped_ctx,
+                &WholeTextSurface,
+                capped_parent,
+                AssessmentId::new(),
+                "text",
+            )
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("GEPA proposal recording failed"));
     });
 }
 
