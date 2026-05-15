@@ -2676,7 +2676,7 @@ GEPA as one optimizer implementation over Leaven.
 
 pub mod acceptance;
 pub mod batch;
-pub mod parent_selector;
+pub mod candidate_selector;
 pub mod gepa;
 pub mod merge;
 pub mod mutation;
@@ -2688,9 +2688,9 @@ pub use batch::{
     BatchSampler, EpochShuffled, FixedMinibatch,
 };
 
-pub use parent_selector::{
-    BeamParentSelector, NicheWeighted, ParentSelector,
-    ParetoFrequencyWeighted, RoundRobinParent, SelectBestParent,
+pub use candidate_selector::{
+    BeamCandidateSelector, NicheWeighted, CandidateSelector,
+    ParetoFrequencyWeighted, RoundRobinCandidate, SelectBestCandidate,
     UniformFrontier,
 };
 
@@ -2724,8 +2724,8 @@ pub mod prelude {
         Acceptance, BatchSampler, EpochShuffled, FullValidation,
         Gepa, GepaMerge, GepaMutationRequest, GepaProposal, GepaProposer,
         ImprovementOrEqual, MinibatchThenValidation,
-        ParentSelector, ParetoFrequencyWeighted, PartSelector, ReflectiveMutation,
-        RoundRobinParent, RoundRobinPart, SelectBestParent, StrictImprovement,
+        CandidateSelector, ParetoFrequencyWeighted, PartSelector, ReflectiveMutation,
+        RoundRobinCandidate, RoundRobinPart, SelectBestCandidate, StrictImprovement,
         SystemAwareMerge, UniformFrontier, ValidationPolicy, InvokedAndFailingPart,
     };
 }
@@ -2738,12 +2738,12 @@ lowering. Generic GEPA proposers may emit surface edits; GEPA lowers them
 through `S::change_part` into artifact-native changes before recording
 `ProposalEffect::Change`.
 
-GEPA keeps `Population` and `ParentSelector` separate. Population owns
-archive/frontier/admission/fitted-state; `ParentSelector` chooses the next
+GEPA keeps `Population` and `CandidateSelector` separate. Population owns
+archive/frontier/admission/fitted-state; `CandidateSelector` chooses the next
 candidate(s) to use as proposal parent(s) from the population and graph view.
 
 ```rust
-pub trait ParentSelector<P: OptimizationProblem>: Send {
+pub trait CandidateSelector<P: OptimizationProblem>: Send {
     fn select(
         &mut self,
         population: leaven_engine::PopulationView<'_, P>,
@@ -3312,7 +3312,7 @@ Before implementation:
 □ Proposer::Request is associated
 □ no `WorkspaceRenderer` export or alias; use `Materializer`
 □ workspace file APIs use `WorkspacePath`, not host paths
-□ GEPA parent selection is a `ParentSelector`, not hidden inside `Population`
+□ GEPA parent selection is a `CandidateSelector`, not hidden inside `Population`
 □ no renderer/materializer registry in v0.2.2; stage-owned fields are normal
 □ CI enforces dependency allowlist
 ```

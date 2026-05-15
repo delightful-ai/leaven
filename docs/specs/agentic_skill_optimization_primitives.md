@@ -1127,8 +1127,8 @@ pub trait AdmissionPolicy<P> {
 Standard selectors:
 
 ```text
-RoundRobinParent
-BestParent
+RoundRobinCandidate
+BestCandidate
 RandomParent
 WeightedParent
 ParetoFrequencyWeighted
@@ -1163,7 +1163,7 @@ leaven-population
   population/frontier state
   population views
   admission policies
-  candidate/parent selectors that depend only on population evidence
+  candidate selectors that depend only on population evidence
 
 leaven-gepa
   GEPA step rhythm
@@ -1174,7 +1174,7 @@ leaven-agentic-skill or paper crates
   skill-utility selectors that depend on skill telemetry or registry state
 ```
 
-This split keeps `ParetoFrequencyWeighted`, `BestParent`, `RoundRobinParent`,
+This split keeps `ParetoFrequencyWeighted`, `BestCandidate`, `RoundRobinCandidate`,
 and `TopKByPreference` reusable for EvoSkill, GEPA, beam baselines, and
 non-GEPA skill optimizers.
 
@@ -1658,7 +1658,7 @@ Implementation status:
 - Runtime/stage boundary is mostly specced.
 - Skill artifact/surface/materializer is not implemented.
 - Git snapshot proposal parsing is not implemented.
-- Top-k frontier/parent selectors are not fully implemented.
+- Top-k frontier/candidate selectors are not fully implemented.
 - OfficeQA reproduction crate is not implemented.
 
 ### 14.2 Trace2Skill
@@ -1806,7 +1806,7 @@ Known implementation blockers for paper reproduction:
 - real `leaven-artifact-git`
 - workspace proposal parser / snapshot parser
 - cache identity code cutover
-- top-k frontier and standalone parent selectors
+- top-k frontier and standalone candidate selectors
 - skill evidence types
 - durable checkpoint/restore with explicit private optimizer/population state
 - bounded proposer-owned validation/reproposal loop for agentic proposers
@@ -1833,7 +1833,7 @@ Known implementation blockers for paper reproduction:
 7. Implement local skill materializer and workspace proposal-parser smoke tests.
 8. Implement fake-runtime agentic proposer/evaluator tests over real
    `SkillBank`.
-9. Implement `TopKFrontier`, `KeepIfAboveWeakest`, and parent selectors outside
+9. Implement `TopKFrontier`, `KeepIfAboveWeakest`, and candidate selectors outside
    `leaven-gepa`.
 10. Implement `AgentSkillEvidence` and attribution traits.
 11. Prove GEPA consumes the generic agent evaluator/proposer plus `SkillBank`

@@ -61,7 +61,7 @@ the simplicity target is **legibility to competent language models**, not human 
 
 **explicit trait/protocol surfaces over duck typing.** a model can hold a small number of named traits with precise contracts in context and reason about which one to implement to achieve a goal. it cannot reliably guess which methods need to exist on an object based on context.
 **conceptual names that map 1:1 to literature concepts.** if the literature calls something a "pareto frontier," the type should be named something like ParetoFrontier, not Archive. when a paper says "we use bradley-terry to convert preferences to scores," there should be a BradleyTerryRanker or equivalent. naming is the index into the library's capabilities.
-**predictable factoring.** when a model thinks "to change GEPA parent selection, i implement the ParentSelector trait," it should be right. the override surface is enumerable and matches user intuition.
+**predictable factoring.** when a model thinks "to change GEPA parent selection, i implement the CandidateSelector trait," it should be right. the override surface is enumerable and matches user intuition.
 **small composable pieces over large generic ones.** seven well-factored protocols beat three god-protocols that conditionally do different things. context-fit matters.
 **docstrings as contracts.** every trait method documents what it must do, what invariants it must maintain, what it can assume from callers. these are read at code-generation time.
 **examples as pattern-matching fodder.** for each major optimizer in the literature, there should be a worked example showing the trait impls and configuration. a model writing a new optimizer pattern-matches against the closest worked example.
@@ -336,7 +336,7 @@ every place the framework hands off to user code that may have side effects (fil
 
 ### 6.9 names should explain themselves
 
-when a model encounters a type or trait name in this library, the name should immediately suggest what role it plays. ParentSelector is good for GEPA parent choice; ChoicePolicy is bad (could be many things). PreferenceRelation is good; Comparator is bad (collision with std). Evidence is good; Feedback is mediocre (overloaded). this isn't pedantry — it's the index into the library.
+when a model encounters a type or trait name in this library, the name should immediately suggest what role it plays. CandidateSelector is good for GEPA candidate choice; ChoicePolicy is bad (could be many things). PreferenceRelation is good; Comparator is bad (collision with std). Evidence is good; Feedback is mediocre (overloaded). this isn't pedantry — it's the index into the library.
 
 ### 6.10 the loop is observable end-to-end
 
@@ -444,7 +444,7 @@ content-addressed identity makes idempotent eval caching trivial when the evalua
 
 ### 9.9 the right defaults for the standard library
 
-we will ship some number of standard strategy impls (parent selectors, frontiers, eval policies, acceptance criteria, stoppers, proposers). the right *list* is open. too few and users have to write everything; too many and the surface bloats. likely: ship the impls necessary to reproduce the literature in §3.7 and stop there until concrete demand emerges.
+we will ship some number of standard strategy impls (candidate selectors, frontiers, eval policies, acceptance criteria, stoppers, proposers). the right *list* is open. too few and users have to write everything; too many and the surface bloats. likely: ship the impls necessary to reproduce the literature in §3.7 and stop there until concrete demand emerges.
 
 ---
 

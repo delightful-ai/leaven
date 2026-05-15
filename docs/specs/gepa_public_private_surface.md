@@ -77,7 +77,7 @@ EvaluationRequest
 ResolvedEvaluationRequest
 SplitUse
 Population
-ParentSelector
+CandidateSelector
 PartSelector
 EvidenceStore
 ```
@@ -177,7 +177,7 @@ They should touch recognizable algorithm knobs:
 
 ```text
 surface
-parent selector
+candidate selector
 part selector
 batch sampler
 reflector / proposer
@@ -193,7 +193,7 @@ Example:
 ```rust
 let gepa = Gepa::builder()
     .surface(SkillDirByFrontmatterId)
-    .parent_selector(ParetoFrequencyWeighted::default())
+    .candidate_selector(ParetoFrequencyWeighted::default())
     .part_selector(InvokedAndFailingPart::default())
     .batch_sampler(EpochShuffled::new(4))
     .reflector(LmBackedReflector::with_default_renderer(lm, "gpt-4.1-mini"))
@@ -278,11 +278,11 @@ They are orthogonal because good search policies can disagree:
 Public names should therefore be:
 
 ```text
-parent_selector
+candidate_selector
 part_selector
 ```
 
-`candidate_selector` is acceptable internally, but "parent selector" is clearer
+`candidate_selector` is acceptable internally, but "candidate selector" is clearer
 for GEPA users because it names the role of the selected candidate in the next
 proposal.
 
@@ -292,7 +292,7 @@ proposal.
 | --- | --- | --- | --- | --- |
 | Candidate/program | `optimize(seed)` / `.seed(seed)` | artifact type | `Artifact`, `CandidateId`, graph insertion | `leaven-core`, `leaven-engine`, domain crates |
 | Editable view | default/derived surface | `.surface(surface)` | `EditSurface`, part ids, surface fingerprint | `leaven-surface`, artifact/domain crates |
-| Parent choice | hidden default | `.parent_selector(...)` | selector reads population + graph view | `leaven-gepa` |
+| Candidate choice | hidden default | `.candidate_selector(...)` | selector reads population + graph view | `leaven-gepa` |
 | Part choice | hidden default | `.part_selector(...)` | selector reads selected artifact through surface | `leaven-gepa`, `leaven-surface` |
 | Training work | `.train(cases)` / `.cases(cases)` | sampler/filter policy | `CaseSet`, `EvaluationSet::Partition(TRAIN)` | `leaven-run`, `leaven-eval`, `leaven-engine` |
 | Validation work | `.validation(cases)` | validation cadence/policy | held-out partition + run policy | `leaven-run`, `leaven-eval`, `leaven-gepa` |
@@ -378,7 +378,7 @@ the `leaven-engine` crate directly.
 ```text
 Gepa
 GepaBuilder
-parent selector traits and defaults
+candidate selector traits and defaults
 part selector traits and defaults
 batch samplers
 reflective mutation / proposer adapters
@@ -494,7 +494,7 @@ ReadScope
 Actor
 SplitUse
 Population
-ParentSelector
+CandidateSelector
 PartSelector
 EvidenceStore
 ```
@@ -506,7 +506,7 @@ Those can still be public Rust APIs. They are not the default story.
 GEPA customizer traits must be small and swappable:
 
 ```text
-ParentSelector
+CandidateSelector
 PartSelector
 BatchSampler
 Reflector / Proposer
@@ -522,7 +522,7 @@ Minimum strategy contracts:
 
 | Slot | Input | Output | Must Not |
 | --- | --- | --- | --- |
-| `ParentSelector` | population state + scoped graph view + optional search state | parent candidate id(s) or typed "no parent" decision | mutate graph, run evaluators, inspect forbidden splits |
+| `CandidateSelector` | population state + scoped graph view + optional search state | candidate id(s) or typed "no parent" decision | mutate graph, run evaluators, inspect forbidden splits |
 | `PartSelector` | selected artifact + surface + optional attributed evidence | surface part id(s) or typed surface/selection error | lower edits, mutate artifact, call LMs |
 | `BatchSampler` | split/case view + sampling cursor + budget hint | nonempty case batch or typed "no cases" decision | bypass split policy, duplicate cases unless policy allows |
 | `Reflector` / `Proposer` | parent, selected part, rendered score feedback, objective/background | surface edit(s) or native proposal(s) with causal inputs | apply proposals directly, write graph, hide parse errors as empty output |
@@ -880,7 +880,7 @@ When revising the companion specs:
 
 1. Teach Layer 1 before internal types.
 2. Put actor/trust/visibility language only in lowered/engine sections.
-3. Use `parent_selector` in GEPA-facing docs and reserve
+3. Use `candidate_selector` in GEPA-facing docs and reserve
    `candidate_selector` for lower-level/general optimizer internals.
 4. Describe train/validation/test by user intent first, then by partition and
    policy lowering.

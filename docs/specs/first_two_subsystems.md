@@ -105,7 +105,7 @@ optimize-gepa
     Gepa
     ReflectiveMutation
     SystemAwareMerge
-    ParentSelector
+    CandidateSelector
     PartSelector
     BatchSampler
     Acceptance

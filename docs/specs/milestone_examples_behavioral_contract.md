@@ -793,7 +793,7 @@ Requirements:
 crates/leaven-gepa/src/
   lib.rs
   optimizer.rs
-  parent_selector.rs
+  candidate_selector.rs
   part_selector.rs
   proposer.rs
   acceptance.rs
@@ -813,7 +813,7 @@ where
     // parent-selector/proposer/acceptance policy fields
 }
 
-pub trait ParentSelector<P: OptimizationProblem, Pop> {
+pub trait CandidateSelector<P: OptimizationProblem, Pop> {
     type Selection;
     fn select(&mut self, population: &Pop, graph: RunGraphView<'_, P>) -> Self::Selection;
 }
@@ -825,7 +825,7 @@ pub trait PartSelector<A: Artifact, S: EditSurface<A>> {
 
 Requirements:
 
-- `Population` and `ParentSelector` are separate.
+- `Population` and `CandidateSelector` are separate.
 - GEPA owns the chosen `EditSurface`.
 - GEPA proposers may emit surface-native edits.
 - GEPA lowers surface edits through `S::change_part(...)` before recording

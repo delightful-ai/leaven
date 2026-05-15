@@ -26,7 +26,7 @@ It composes core, surface, engine, evidence, population, render, and LM vocabula
   selection, feedback/evidence rendering, reflection/proposal, acceptance,
   validation, population, merge, stopping, and checkpoint state. Topology and
   scalar-score improvement are not sufficient.
-- Public GEPA nomenclature matters. `ParentSelector`, `PartSelector`,
+- Public GEPA nomenclature matters. `CandidateSelector`, `PartSelector`,
   `BatchSampler`, `Acceptance`, `ValidationPolicy`,
   `Population`/`ParetoFrontier`, and `Merge` are the teachable slot names.
   `CandidateSelector` and `Gate` can be internal implementation words only if

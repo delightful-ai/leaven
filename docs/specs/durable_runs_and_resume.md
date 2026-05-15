@@ -228,7 +228,7 @@ decisions, including:
 - completed iteration or proposal counters;
 - current best and observed candidates;
 - population/frontier state;
-- parent selector state;
+- candidate selector state;
 - part selector state;
 - acceptance/gate state;
 - batch sampler cursor and RNG state when introduced;

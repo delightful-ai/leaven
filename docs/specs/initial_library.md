@@ -212,8 +212,8 @@ extension seams before implementation.
     renderers, materializers, agent runtimes, and callbacks can read or do.
 
 52. **GEPA parent selection is explicitly swappable.**
-    `Population` is archive/admission/update state. `ParentSelector` is the
-    policy that chooses which parent candidate to mutate next from a typed `PopulationView`. This is
+    `Population` is archive/admission/update state. `CandidateSelector` is the
+    policy that chooses which candidate to mutate next from a typed `PopulationView`. This is
     required by GEPA variants, MAP-Elites/quality-diversity, skill-library
     evolution, and tournament optimizers.
 
@@ -445,7 +445,7 @@ trust/capability boundaries for agentic stages
 a first-class Optimizer trait for algorithm authors
 ```
 
-GEPA is one optimizer value, not the engine. It is composed from smaller GEPA-specific strategies: parent selector, part selector, batch sampler, reflector/proposer, acceptance policy, validation policy, population/frontier, and optional merge proposer.
+GEPA is one optimizer value, not the engine. It is composed from smaller GEPA-specific strategies: candidate selector, part selector, batch sampler, reflector/proposer, acceptance policy, validation policy, population/frontier, and optional merge proposer.
 
 ---
 
@@ -478,7 +478,7 @@ They want to replace one part of GEPA:
 
 ```rust
 let gepa = Gepa::default()
-    .parent_selector(ParetoFrequencyWeighted)
+    .candidate_selector(ParetoFrequencyWeighted)
     .surface(PartMapSurface::default())
     .part_selector(InvokedAndFailingPart::default())
     .batch_sampler(EpochShuffled::new(4))
@@ -538,7 +538,7 @@ The core should be small, but not artificially tiny. A few sharp concepts are be
 A competent model should be able to read a paper and map its concepts to library concepts:
 
 ```text
-parent selection -> ParentSelector
+parent selection -> CandidateSelector
 Pareto frontier -> ParetoFrontier
 niche -> NicheDescriptor / MapElites
 pairwise judge -> EvaluationRequest::Pairwise
@@ -570,7 +570,7 @@ Naming is not polish; it is infrastructure.
 | Non-dominated live set | `Frontier`, `ParetoFrontier` | generic `ArchivePolicy` | If it is a Pareto frontier, say so. |
 | Frontier partition | `Niche` | `Cell`, `Slice::Niche` | Niche is the MAP-Elites / quality-diversity term. |
 | Where to evaluate | `EvaluationSet` | `Slice`, `Cohort` | EvaluationSet is direct. Cohort is removed. |
-| Chooses parent candidates to evolve | `ParentSelector` | `CandidateSelector` in GEPA-facing APIs | GEPA mutates parents; general optimizers may still use candidate selection internally. |
+| Chooses candidates to evolve | `CandidateSelector` | `ParentSelector` | Matches upstream GEPA (`CandidateSelector` / `select_candidate_idx`). "Parent" framing presumes the next stage produces a child, which is a property of what the proposer does, not of selection itself. |
 | Acceptance/admission decision | `Acceptance` | `Gate`, core `Decision` | Acceptance is optimizer-local and says whether the child is good enough to keep or validate. |
 | Full algorithm value | `Optimizer` | `SearchStrategy` | Optimizer is the domain word. |
 | Opaque-to-visible bridge | `Renderer` / `Materializer` | `make_reflective_dataset`, global `RenderedView` | Rendering/materialization is consumer-specific, not GEPA-specific. |
@@ -2437,7 +2437,7 @@ Preference may be partial. `Incomparable` is a valid result.
 A population is live optimizer state. A frontier is a kind of population.
 Population owns archive membership, admission/update laws, fitted model state,
 and strategy events. It does not own the policy for "what should we try next."
-That policy is `ParentSelector` for GEPA-shaped optimizers and analogous
+That policy is `CandidateSelector` for GEPA-shaped optimizers and analogous
 selector traits for other optimizer families.
 
 ```rust
@@ -3327,7 +3327,7 @@ where
     surface: Arc<S>,
     population: Pop,
     proposer: Box<dyn GepaProposer<P, S>>,
-    parent_selector: Box<dyn ParentSelector<P>>,
+    candidate_selector: Box<dyn CandidateSelector<P>>,
     part_selector: Box<dyn PartSelector<P, S>>,
     batch_sampler: Box<dyn BatchSampler<P>>,
     acceptance: Box<dyn Acceptance<P>>,
@@ -3346,7 +3346,7 @@ marker traits for slots that are already object-safe.
 GEPA components:
 
 ```text
-ParentSelector selects parent candidate(s) from a PopulationView.
+CandidateSelector selects candidate(s) from a PopulationView.
 PartSelector selects surface part(s) to mutate.
 BatchSampler selects train/minibatch cases.
 Proposer emits surface edits or artifact-native proposals.
@@ -3360,7 +3360,7 @@ Population and candidate selection stay separate:
 
 ```text
 Population        = what exists, how observations update it, what gets admitted/replaced
-ParentSelector = what parent to mutate next from the current population/archive view
+CandidateSelector = what parent to mutate next from the current population/archive view
 Acceptance     = whether a freshly proposed child deserves follow-up validation
 ```
 
@@ -3370,7 +3370,7 @@ archive sampling, island migration, and skill-library hard-case loops all need
 different selection policies over similar archive state.
 
 ```rust
-pub trait ParentSelector<P: OptimizationProblem>: Send {
+pub trait CandidateSelector<P: OptimizationProblem>: Send {
     fn select(
         &mut self,
         population: PopulationView<'_, P>,
@@ -3429,7 +3429,7 @@ where
 }
 ```
 
-`ParentSelector::select` is synchronous and side-effect-light. It receives
+`CandidateSelector::select` is synchronous and side-effect-light. It receives
 borrowed graph/population views and must not await. If a "selector" needs LLM
 calls, subprocesses, or remote state, model it as an optimizer step or proposer
 substage and feed the result into a normal selector/admission policy.
@@ -3438,11 +3438,11 @@ Standard GEPA selectors:
 
 ```text
 ParetoFrequencyWeighted   paper-style instance-pareto frequency sampling
-SelectBestParent          greedy ablation / TextGrad-like baseline
-BeamParentSelector        top-k beam-style parent choice
+SelectBestCandidate          greedy ablation / TextGrad-like baseline
+BeamCandidateSelector        top-k beam-style candidate choice
 UniformFrontier           exploration over current frontier members
 NicheWeighted             MAP-Elites/quality-diversity archive sampling
-RoundRobinParent          deterministic reproduction/debug selector
+RoundRobinCandidate       deterministic reproduction/debug selector
 ```
 
 Mapping to GEPA paper:
@@ -3451,7 +3451,7 @@ Mapping to GEPA paper:
 |---|---|
 | candidate pool `P` | `Population` |
 | Pareto front by instance | `ParetoFrontier::by_case()` |
-| SELECTCANDIDATE | `ParentSelector` |
+| SELECTCANDIDATE | `CandidateSelector` |
 | SELECTMODULE | `PartSelector<P, S>` over `EditSurface<P::Artifact>` |
 | minibatch from `D_feedback` | `BatchSampler` + `EvaluationSet::Partition(TRAIN)` |
 | per-instance score table | `CasewiseEvidence` + `AssessmentGranularity::PerCase` |
@@ -3465,7 +3465,7 @@ Canonical GEPA step skeleton:
 
 ```text
 1. view = population.view(ctx.graph())
-2. parent = parent_selector.select(view, ctx.graph(), selection_ctx)?
+2. parent = candidate_selector.select(view, ctx.graph(), selection_ctx)?
 3. part = part_selector.select(parent, ctx.graph(), surface)?
 4. batch = batch_sampler.sample(...)
 5. run parent on minibatch and gather casewise/attribution evidence
@@ -3637,7 +3637,7 @@ let result = optimize(seed_agent)
         Gepa::default()
             .surface(RepoPathSurface::default())
             .proposer(AgenticProposer::new(runtime))
-            .parent_selector(ParetoFrequencyWeighted)
+            .candidate_selector(ParetoFrequencyWeighted)
             .part_selector(InvokedAndFailingPart::default())
             .population(ParetoFrontier::by_case_and_axis())
             .batch_sampler(EpochShuffled::new(4))
@@ -4948,8 +4948,8 @@ This pass records the decisions needed before implementing agentic stages and
   renderer, materializer, agent runtime, and callback capabilities are spelled
   out directly.
 - **GEPA parent selection split from population.** Populations expose
-  archive/frontier/model state through `PopulationView`; `ParentSelector`
-  chooses which parent candidate to mutate next and is explicitly swappable.
+  archive/frontier/model state through `PopulationView`; `CandidateSelector`
+  chooses which candidate to mutate next and is explicitly swappable.
 - **Future skill-library direction captured.** The spec names likely extension
   points for skill routing, hard-case selection, target selection, and admission
   without pulling them into core.

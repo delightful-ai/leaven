@@ -66,7 +66,7 @@ Use these for Layer 2:
 
 ```text
 surface
-parent selector
+candidate selector
 part selector
 batch sampler
 reflector / proposer
@@ -80,13 +80,13 @@ stopper
 The parent/part distinction is:
 
 ```text
-parent selector = which candidate to mutate next
+candidate selector = which candidate to mutate next
 part selector   = where inside that candidate to edit
 ```
 
-Prefer `parent_selector` in GEPA-facing APIs. Use `candidate_selector` only for
-general optimizer internals where the selected candidate is not necessarily a
-proposal parent.
+Use `CandidateSelector` / `candidate_selector` for the GEPA strategy trait that
+picks the next candidate to mutate. The name matches upstream GEPA literature
+(`select_candidate_idx`) and does not presume the next stage produces a child.
 
 ## 4. Lowered/Internal Words
 
@@ -164,7 +164,7 @@ The naming split maps to crate ownership:
 
 ```text
 leaven-run     public builder verbs: optimize/train/validation/test/runner/score/run
-leaven-gepa    GEPA strategy vocabulary: parent selector, part selector, etc.
+leaven-gepa    GEPA strategy vocabulary: candidate selector, part selector, etc.
 leaven-eval    lowered dataset/split/report vocabulary
 leaven-engine  execution vocabulary: requests, graph, trust, budget, callbacks
 domain crates  artifact/evaluator/surface adapters

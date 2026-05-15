@@ -76,7 +76,7 @@ The GEPA customizer path:
 ```rust
 let gepa = Gepa::builder()
     .surface(SkillDirByFrontmatterId)
-    .parent_selector(ParetoFrequencyWeighted::default())
+    .candidate_selector(ParetoFrequencyWeighted::default())
     .part_selector(InvokedAndFailingPart::default())
     .batch_sampler(EpochShuffled::new(4))
     .reflector(LmBackedReflector::with_default_renderer(
@@ -157,7 +157,7 @@ For a prompt artifact with `{ system, rubric, examples }`, parent selection
 chooses the candidate version and part selection chooses one of `system`,
 `rubric`, or `examples` inside that version.
 
-The GEPA-facing API name is `parent_selector`. General lower-level code may use
+The GEPA-facing API name is `candidate_selector`. General lower-level code may use
 `candidate_selector` when no proposal parent relationship is implied.
 
 ## 5. Crate Placement
@@ -225,7 +225,7 @@ batch.rs            BatchSampler, EpochShuffled, FixedMinibatch
 error.rs            GepaError, GepaBuilderError, GepaPolicyError
 gepa.rs             Gepa, Optimizer<P> impl, private step state
 merge.rs            MergeScheduler, SystemAwareMerge, GepaMerge
-parent_selector.rs  ParentSelector, ParetoFrequencyWeighted, SelectBestParent, UniformFrontier, TopK
+candidate_selector.rs  CandidateSelector, ParetoFrequencyWeighted, SelectBestCandidate, UniformFrontier, TopK
 part_selector.rs    PartSelector, RoundRobinPart, InvokedAndFailingPart
 proposal.rs         GepaMutationRequest, GepaProposal, SurfaceEdit
 reflection.rs       ReflectRequest, SelectedFeedback, LmBackedReflector, reflection prompt construction, ASI rendering
@@ -245,7 +245,7 @@ pub struct Gepa<
     P,
     S,
     Pop = ParetoFrontier,
-    ParentSel = ParetoFrequencyWeighted,
+    CandidateSel = ParetoFrequencyWeighted,
     PartSel = RoundRobinPart,
     Batch = EpochShuffled,
     Reflect = LmBackedReflector,
@@ -257,7 +257,7 @@ pub struct Gepa<
 {
     surface: S,
     population: Pop,
-    parent_selector: ParentSel,
+    candidate_selector: CandidateSel,
     part_selector: PartSel,
     batch_sampler: Batch,
     reflector: Reflect,
@@ -284,7 +284,7 @@ typing, attribution typing, cache safety, and surface-edit lowering.
 ```text
 surface(S)
 population(Pop)
-parent_selector(...)
+candidate_selector(...)
 part_selector(...)
 batch_sampler(...)
 reflector(...)
@@ -333,7 +333,7 @@ One ordinary reflective mutation iteration is:
 ```text
 1. Ensure seeds are inserted and population has observed seed baseline.
 2. Build a population view from the current graph.
-3. ParentSelector chooses parent candidate(s).
+3. CandidateSelector chooses candidate(s).
 4. PartSelector chooses one or more surface parts on the parent artifact.
 5. BatchSampler chooses a feedback minibatch from the train/search split.
 6. GEPA evaluates the parent on the minibatch with required granularity.
@@ -601,7 +601,7 @@ let cost = metered.cost;
 The renderer produces the `system_prompt` and `user_prompt` from:
 
 ```text
-parent candidate id
+candidate id
 selected surface part
 surface part view
 screening/minibatch assessment IDs
@@ -760,7 +760,7 @@ The first product-grade GEPA implementation must:
 2. support seed insertion and seed baseline evaluation;
 3. support single-task, train-only, and train+validation runs;
 4. support explicit test splits as final-report-only by default;
-5. select parents through a swappable `ParentSelector`;
+5. select parents through a swappable `CandidateSelector`;
 6. select parts through a swappable `PartSelector`;
 7. sample minibatches through a swappable `BatchSampler`;
 8. propose surface edits through `LmBackedReflector` or another supplied reflector;
@@ -781,7 +781,7 @@ Defaults:
 
 ```text
 population:        ParetoFrontier::by_case()
-parent selector:   ParetoFrequencyWeighted
+candidate selector:   ParetoFrequencyWeighted
 part selector:     RoundRobinPart
 batch sampler:     EpochShuffled { minibatch_size: 3 }
 acceptance:        StrictImprovement
