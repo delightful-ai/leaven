@@ -12,6 +12,7 @@ mod events;
 mod graph;
 mod persistence;
 mod reports;
+mod sqlite_cache;
 mod stage;
 mod trust;
 
@@ -43,6 +44,7 @@ pub use persistence::{
 pub use reports::{
     ApplyOneReport, ApplyOutcome, ApplyReport, EvaluationReport, ProposalBatchReport,
 };
+pub use sqlite_cache::{EvaluationCacheStoreError, SqliteEvaluationCache};
 pub use stage::{
     Arity, Callback, DynCallback, DynEvaluator, DynPreferenceRelation, DynProposer, DynStopper,
     EvaluationError, Evaluator, MaterializationReport, MaterializeError, Materializer, Optimizer,
@@ -63,13 +65,14 @@ pub mod prelude {
     pub use crate::{
         Arity, BudgetHandle, BudgetLedger, CacheBypassReason, CachePolicy, CacheStatus, Callback,
         CheckpointContext, CheckpointError, CheckpointableOptimizer, Engine, EngineBuilder,
-        EvaluationCacheSnapshot, EvaluationContext, Evaluator, GraphSnapshotRef,
-        MaterializationReport, MaterializeContext, MaterializeError, Materializer, Optimizer,
-        OptimizerStateReader, OptimizerStateSnapshot, Population, PreferenceRelation,
-        PrivateStatePolicy, ProposalContext, Proposer, ReadScope, RenderContext, Renderer,
-        RestoreContext, RestoredRunState, RunCheckpoint, RunContext, RunEvent,
-        RunGraphRestoreError, RunGraphSnapshot, RunGraphView, RunResult, ScopedRunGraphView,
-        StageEngineContext, StateFormat, StepStatus, Stopper, StoreRunPersistence, TrustPolicy,
-        optimize, restore_checkpointable_optimizer_state,
+        EvaluationCacheSnapshot, EvaluationCacheStoreError, EvaluationContext, Evaluator,
+        GraphSnapshotRef, MaterializationReport, MaterializeContext, MaterializeError,
+        Materializer, Optimizer, OptimizerStateReader, OptimizerStateSnapshot, Population,
+        PreferenceRelation, PrivateStatePolicy, ProposalContext, Proposer, ReadScope,
+        RenderContext, Renderer, RestoreContext, RestoredRunState, RunCheckpoint, RunContext,
+        RunEvent, RunGraphRestoreError, RunGraphSnapshot, RunGraphView, RunResult,
+        ScopedRunGraphView, SqliteEvaluationCache, StageEngineContext, StateFormat, StepStatus,
+        Stopper, StoreRunPersistence, TrustPolicy, optimize,
+        restore_checkpointable_optimizer_state,
     };
 }

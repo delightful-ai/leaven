@@ -22,8 +22,10 @@ use leaven_eval::Case;
 use leaven_evidence::{CaseAssessmentEvidence, CasewiseEvidence};
 use leaven_kernel::{Budget, CandidateId, CaseId, ContentId, EvaluatorId, Fingerprint, RunId};
 use leaven_run::{
-    OptimizationStopReason, OptimizeBuilder, OptimizeError, OptimizeStore, RunCase,
-    RunEventSummary, RunOutput, RunProblem, RunStorage, Score, ScoreContext, ScoreError, optimize,
+    EvaluationCacheBackend, EvaluationCacheBypassReason, OptimizationStopReason, OptimizeBuilder,
+    OptimizeError, OptimizeStore, ResumeCompatibilityError, RunCase, RunEventSummary,
+    RunNotResumableReason, RunOutput, RunProblem, RunResumability, RunStorage, Score, ScoreContext,
+    ScoreError, optimize,
 };
 use leaven_store::{EvidenceStore, StoreError};
 use leaven_store_inline::InlineEvidenceStore;
@@ -107,6 +109,20 @@ fn run_builder_ephemeral_is_the_explicit_throwaway_path() {
             run_id: result.run_id
         }
     );
+    assert_eq!(
+        result.summary().cache.evaluation.backend,
+        EvaluationCacheBackend::InMemory
+    );
+    assert!(!result.summary().cache.evaluation.durable);
+    assert!(
+        result
+            .summary()
+            .cache
+            .evaluation
+            .bypasses
+            .iter()
+            .any(|summary| summary.reason == EvaluationCacheBypassReason::DisabledByPolicy)
+    );
 }
 
 #[test]
@@ -130,7 +146,7 @@ fn run_builder_run_dir_writes_discoverable_durable_artifacts() {
             run_id,
             run_dir: Some(stored_dir),
             latest_checkpoint: Some(_),
-            resumable: true,
+            resumability: RunResumability::Resumable,
         } => {
             assert_eq!(run_id, result.run_id);
             assert_eq!(stored_dir, run_dir);
@@ -139,7 +155,113 @@ fn run_builder_run_dir_writes_discoverable_durable_artifacts() {
     }
     assert!(run_dir.join("blobs").is_dir());
     assert!(run_dir.join("checkpoints").join("LATEST").is_file());
+    assert!(run_dir.join("compatibility.json").is_file());
     assert!(run_dir.join("evidence").is_dir());
+    let summary_json = run_dir.join("reports").join("summary.json");
+    assert!(summary_json.is_file());
+    assert!(run_dir.join("run.sqlite").is_file());
+    assert_eq!(
+        result.summary().reports.summary_json.as_deref(),
+        Some(summary_json.as_path())
+    );
+    let summary_payload: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&summary_json).unwrap()).unwrap();
+    assert_eq!(
+        summary_payload["storage"]["Stored"]["run_dir"].as_str(),
+        Some(run_dir.to_string_lossy().as_ref())
+    );
+    assert_eq!(
+        summary_payload["reports"]["summary_json"].as_str(),
+        Some(summary_json.to_string_lossy().as_ref())
+    );
+    assert_eq!(
+        summary_payload["cache"]["evaluation"]["backend"],
+        "SqliteRunStore"
+    );
+    let compatibility = result
+        .summary()
+        .compatibility
+        .as_ref()
+        .expect("durable run reports compatibility summary");
+    assert_eq!(compatibility.schema, "leaven-run.compatibility.v1");
+    assert_eq!(compatibility.run_kind, "leaven-run.optimize");
+    assert_eq!(compatibility.lm_role_count, 0);
+    assert_eq!(
+        result.summary().cache.evaluation.backend,
+        EvaluationCacheBackend::SqliteRunStore
+    );
+    assert!(result.summary().cache.evaluation.durable);
+    assert_eq!(result.summary().cache.evaluation.hits, 0);
+    assert_eq!(result.summary().cache.evaluation.misses, 0);
+    assert_eq!(result.summary().cache.evaluation.write_errors, 0);
+    assert!(result.summary().cache.evaluation.hit_cost_zero);
+    assert!(
+        result
+            .summary()
+            .cache
+            .evaluation
+            .bypasses
+            .iter()
+            .any(|summary| summary.reason == EvaluationCacheBypassReason::DisabledByPolicy)
+    );
+    assert!(result.summary().storage.is_resumable());
+    cleanup_path(&run_dir);
+}
+
+#[test]
+fn run_builder_run_dir_reports_blocked_summary_directory() {
+    let run_dir = temp_run_dir("blocked-summary-dir");
+    std::fs::create_dir_all(&run_dir).unwrap();
+    std::fs::write(run_dir.join("reports"), b"not a directory").unwrap();
+
+    let error = block_on(
+        optimize(TextArtifact(40))
+            .train_inputs(vec![TextCase(2)])
+            .runner(|artifact, case| async move { text_runner(&artifact, &case) })
+            .score(text_score)
+            .using(SeedBest::default())
+            .budget(Budget::unlimited())
+            .run_dir(&run_dir)
+            .test_runtime_fingerprints()
+            .run(),
+    )
+    .unwrap_err();
+
+    assert!(matches!(
+        error,
+        OptimizeError::ReportStore {
+            operation: "create report directory",
+            ..
+        }
+    ));
+    cleanup_path(&run_dir);
+}
+
+#[test]
+fn run_builder_run_dir_reports_blocked_summary_file() {
+    let run_dir = temp_run_dir("blocked-summary-file");
+    std::fs::create_dir_all(run_dir.join("reports").join("summary.json")).unwrap();
+
+    let error = block_on(
+        optimize(TextArtifact(40))
+            .train_inputs(vec![TextCase(2)])
+            .runner(|artifact, case| async move { text_runner(&artifact, &case) })
+            .score(text_score)
+            .using(SeedBest::default())
+            .budget(Budget::unlimited())
+            .run_dir(&run_dir)
+            .test_runtime_fingerprints()
+            .run(),
+    )
+    .unwrap_err();
+
+    assert!(matches!(
+        error,
+        OptimizeError::ReportStore {
+            operation: "write summary json",
+            ..
+        }
+    ));
     cleanup_path(&run_dir);
 }
 
@@ -186,6 +308,230 @@ fn run_builder_run_dir_resume_preserves_existing_budget_and_graph_state() {
 }
 
 #[test]
+fn run_builder_refuses_runner_fingerprint_mismatch_before_runner_call() {
+    let run_dir = temp_run_dir("resume-runner-mismatch");
+    block_on(
+        optimize(TextArtifact(40))
+            .train_inputs(vec![TextCase(2)])
+            .runner(|artifact, case| async move { text_runner(&artifact, &case) })
+            .score(text_score)
+            .using(ResumeOnce::new(Arc::new(AtomicUsize::new(0))))
+            .budget(Budget::metric_calls(1))
+            .run_dir(&run_dir)
+            .test_runtime_fingerprints()
+            .run(),
+    )
+    .unwrap();
+
+    let runner_calls = Arc::new(AtomicUsize::new(0));
+    let error = block_on(
+        optimize(TextArtifact(40))
+            .train_inputs(vec![TextCase(2)])
+            .runner({
+                let runner_calls = Arc::clone(&runner_calls);
+                move |artifact, case| {
+                    let runner_calls = Arc::clone(&runner_calls);
+                    async move {
+                        runner_calls.fetch_add(1, Ordering::SeqCst);
+                        text_runner(&artifact, &case)
+                    }
+                }
+            })
+            .score(text_score)
+            .using(ResumeOnce::new(Arc::new(AtomicUsize::new(0))))
+            .budget(Budget::metric_calls(1))
+            .run_dir(&run_dir)
+            .runner_fingerprint(ALT_RUNNER_FINGERPRINT)
+            .scorer_fingerprint(TEST_SCORER_FINGERPRINT)
+            .run(),
+    )
+    .unwrap_err();
+
+    assert!(matches!(
+        error,
+        OptimizeError::ResumeCompatibility(source)
+            if matches!(
+                source.as_ref(),
+                ResumeCompatibilityError::RunnerFingerprintMismatch { .. }
+            )
+    ));
+    assert_eq!(runner_calls.load(Ordering::SeqCst), 0);
+    cleanup_path(&run_dir);
+}
+
+#[test]
+fn run_builder_refuses_scorer_fingerprint_mismatch_before_scorer_call() {
+    let run_dir = temp_run_dir("resume-scorer-mismatch");
+    block_on(
+        optimize(TextArtifact(40))
+            .train_inputs(vec![TextCase(2)])
+            .runner(|artifact, case| async move { text_runner(&artifact, &case) })
+            .score(text_score)
+            .using(ResumeOnce::new(Arc::new(AtomicUsize::new(0))))
+            .budget(Budget::metric_calls(1))
+            .run_dir(&run_dir)
+            .test_runtime_fingerprints()
+            .run(),
+    )
+    .unwrap();
+
+    let scorer_calls = Arc::new(AtomicUsize::new(0));
+    let error = block_on(
+        optimize(TextArtifact(40))
+            .train_inputs(vec![TextCase(2)])
+            .runner(|artifact, case| async move { text_runner(&artifact, &case) })
+            .score({
+                let scorer_calls = Arc::clone(&scorer_calls);
+                move |ctx| {
+                    let scorer_calls = Arc::clone(&scorer_calls);
+                    async move {
+                        scorer_calls.fetch_add(1, Ordering::SeqCst);
+                        text_score(ctx).await
+                    }
+                }
+            })
+            .using(ResumeOnce::new(Arc::new(AtomicUsize::new(0))))
+            .budget(Budget::metric_calls(1))
+            .run_dir(&run_dir)
+            .runner_fingerprint(TEST_RUNNER_FINGERPRINT)
+            .scorer_fingerprint(ALT_SCORER_FINGERPRINT)
+            .run(),
+    )
+    .unwrap_err();
+
+    assert!(matches!(
+        error,
+        OptimizeError::ResumeCompatibility(source)
+            if matches!(
+                source.as_ref(),
+                ResumeCompatibilityError::ScorerFingerprintMismatch { .. }
+            )
+    ));
+    assert_eq!(scorer_calls.load(Ordering::SeqCst), 0);
+    cleanup_path(&run_dir);
+}
+
+#[test]
+fn run_builder_refuses_case_content_or_split_identity_mismatch() {
+    let run_dir = temp_run_dir("resume-case-mismatch");
+    block_on(
+        optimize(TextArtifact(40))
+            .train(vec![Case::targeted(
+                CaseId::new(77),
+                TextCase(2),
+                TextTarget(42),
+            )])
+            .runner(|artifact, case| async move { text_runner(&artifact, &case) })
+            .score(
+                |ctx: ScoreContext<TextArtifact, TextCase, TextTarget>| async move {
+                    Ok(Score::new(
+                        f64::from(u8::from(
+                            ctx.output.output == ctx.case.target().unwrap().0.to_string(),
+                        )),
+                        "ok",
+                    ))
+                },
+            )
+            .using(TargetSeedBest::default())
+            .budget(Budget::metric_calls(1))
+            .run_dir(&run_dir)
+            .test_runtime_fingerprints()
+            .run(),
+    )
+    .unwrap();
+
+    let error = block_on(
+        optimize(TextArtifact(40))
+            .train(vec![Case::targeted(
+                CaseId::new(77),
+                TextCase(2),
+                TextTarget(43),
+            )])
+            .validation(vec![Case::targeted(
+                CaseId::new(78),
+                TextCase(3),
+                TextTarget(43),
+            )])
+            .runner(|artifact, case| async move { text_runner(&artifact, &case) })
+            .score(
+                |ctx: ScoreContext<TextArtifact, TextCase, TextTarget>| async move {
+                    Ok(Score::new(
+                        f64::from(u8::from(
+                            ctx.output.output == ctx.case.target().unwrap().0.to_string(),
+                        )),
+                        "ok",
+                    ))
+                },
+            )
+            .using(TargetSeedBest::default())
+            .budget(Budget::metric_calls(1))
+            .run_dir(&run_dir)
+            .test_runtime_fingerprints()
+            .run(),
+    )
+    .unwrap_err();
+
+    assert!(matches!(
+        error,
+        OptimizeError::ResumeCompatibility(source)
+            if matches!(
+                source.as_ref(),
+                ResumeCompatibilityError::DatasetFingerprintMismatch { .. }
+            )
+    ));
+    cleanup_path(&run_dir);
+}
+
+#[test]
+fn run_builder_missing_runtime_fingerprint_refuses_durable_but_not_ephemeral() {
+    let run_dir = temp_run_dir("missing-runtime-fingerprint");
+    let runner_calls = Arc::new(AtomicUsize::new(0));
+    let error = block_on(
+        optimize(TextArtifact(40))
+            .train_inputs(vec![TextCase(2)])
+            .runner({
+                let runner_calls = Arc::clone(&runner_calls);
+                move |artifact, case| {
+                    let runner_calls = Arc::clone(&runner_calls);
+                    async move {
+                        runner_calls.fetch_add(1, Ordering::SeqCst);
+                        text_runner(&artifact, &case)
+                    }
+                }
+            })
+            .score(text_score)
+            .using(SeedBest::default())
+            .budget(Budget::metric_calls(1))
+            .run_dir(&run_dir)
+            .run(),
+    )
+    .unwrap_err();
+
+    assert!(matches!(
+        error,
+        OptimizeError::RuntimeFingerprintMissing { runtime: "runner" }
+    ));
+    assert_eq!(runner_calls.load(Ordering::SeqCst), 0);
+
+    let result = block_on(
+        optimize(TextArtifact(40))
+            .train_inputs(vec![TextCase(2)])
+            .runner(|artifact, case| async move { text_runner(&artifact, &case) })
+            .score(text_score)
+            .using(SeedBest::default())
+            .budget(Budget::metric_calls(1))
+            .ephemeral()
+            .run(),
+    )
+    .unwrap();
+    assert!(matches!(
+        result.summary().storage,
+        RunStorage::Ephemeral { .. }
+    ));
+    cleanup_path(&run_dir);
+}
+
+#[test]
 fn public_stop_reason_preserves_all_engine_stop_variants() {
     let cases = [
         (
@@ -216,6 +562,76 @@ fn public_stop_reason_preserves_all_engine_stop_variants() {
 
     for (engine_reason, public_reason) in cases {
         assert_eq!(OptimizationStopReason::from(engine_reason), public_reason);
+    }
+}
+
+#[test]
+fn public_storage_and_cache_names_cover_all_status_variants() {
+    let run_id = RunId::new();
+    let missing_checkpoint = RunStorage::Stored {
+        run_id,
+        run_dir: Some(PathBuf::from("/tmp/leaven-missing-checkpoint")),
+        latest_checkpoint: None,
+        resumability: RunResumability::NotResumable {
+            reason: RunNotResumableReason::MissingLatestCheckpoint,
+        },
+    };
+    let explicit_store = RunStorage::Stored {
+        run_id,
+        run_dir: None,
+        latest_checkpoint: None,
+        resumability: RunResumability::NotResumable {
+            reason: RunNotResumableReason::ExplicitStoreWithoutLocalRunDir,
+        },
+    };
+    let resumable = RunStorage::Stored {
+        run_id,
+        run_dir: Some(PathBuf::from("/tmp/leaven-resumable")),
+        latest_checkpoint: Some(leaven_kernel::CheckpointId::new()),
+        resumability: RunResumability::Resumable,
+    };
+
+    assert!(!RunStorage::Ephemeral { run_id }.is_resumable());
+    assert!(!missing_checkpoint.is_resumable());
+    assert!(!explicit_store.is_resumable());
+    assert!(resumable.is_resumable());
+    assert_eq!(
+        RunNotResumableReason::MissingLatestCheckpoint.as_str(),
+        "missing_latest_checkpoint"
+    );
+    assert_eq!(
+        RunNotResumableReason::ExplicitStoreWithoutLocalRunDir.as_str(),
+        "explicit_store_without_local_run_dir"
+    );
+
+    let backends = [
+        (EvaluationCacheBackend::SqliteRunStore, "sqlite-run-store"),
+        (
+            EvaluationCacheBackend::CheckpointedRunStore,
+            "checkpointed-run-store",
+        ),
+        (EvaluationCacheBackend::InMemory, "in-memory"),
+    ];
+    for (backend, expected) in backends {
+        assert_eq!(backend.as_str(), expected);
+    }
+
+    let bypasses = [
+        (
+            EvaluationCacheBypassReason::DisabledByPolicy,
+            "disabled_by_policy",
+        ),
+        (
+            EvaluationCacheBypassReason::CacheUnavailable,
+            "cache_unavailable",
+        ),
+        (
+            EvaluationCacheBypassReason::MissingCandidateIdentity,
+            "missing_candidate_identity",
+        ),
+    ];
+    for (reason, expected) in bypasses {
+        assert_eq!(reason.as_str(), expected);
     }
 }
 
@@ -505,7 +921,7 @@ fn run_builder_preserves_case_envelope_ids_and_targets_score_only() {
                         let target = ctx.case.target().expect("target is scorer-visible");
                         *scorer_seen_target.lock().unwrap() = Some(target.0);
                         Ok(Score::new(
-                            (ctx.output.output == target.0.to_string()) as u8 as f64,
+                            f64::from(u8::from(ctx.output.output == target.0.to_string())),
                             "target checked",
                         ))
                     }
@@ -594,7 +1010,9 @@ fn run_builder_dispatches_callbacks_and_supplied_store_capabilities() {
             run_id: result.run_id,
             run_dir: None,
             latest_checkpoint: None,
-            resumable: false,
+            resumability: RunResumability::NotResumable {
+                reason: RunNotResumableReason::ExplicitStoreWithoutLocalRunDir,
+            },
         }
     );
     let events = events.lock().unwrap();
@@ -608,7 +1026,7 @@ fn assert_resumable_storage(storage: RunStorage, run_id: RunId) {
             run_id: stored_run,
             run_dir: Some(run_dir),
             latest_checkpoint: Some(_),
-            resumable: true,
+            resumability: RunResumability::Resumable,
         } => {
             assert_eq!(stored_run, run_id);
             assert!(run_dir.ends_with(run_id.to_string()));

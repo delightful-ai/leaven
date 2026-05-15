@@ -42,9 +42,9 @@ example binary directly.
 Milestone execution is not automatically product proof. Classify examples as
 product-proof, mechanics-smoke, or proxy-demo before citing them as acceptance
 evidence. In particular, `just milestone-p8` now proves the public builder path
-through LM-backed GEPA reflection over provider-neutral `leaven-lm`; it does
-not prove concrete provider transport, LM cache behavior, or live AIME
-improvement.
+through target-safe AIME case lowering, source-id reporting, and LM-backed GEPA
+reflection over provider-neutral `leaven-lm`; it does not prove concrete
+provider transport, durable SQLite cache behavior, or live AIME improvement.
 
 Current milestone classifications:
 
@@ -58,7 +58,7 @@ Current milestone classifications:
 | `just milestone-p5` | live product proof for the Codex/EvoSkill reproduction | Live Codex CLI execution, checkpointing, child skill bank construction, and summary output; it spends provider/runtime resources. |
 | `just milestone-p6` | product-proof for trust-policy self-optimization | Hidden validation/test partition behavior and hidden-test refusal. |
 | `just milestone-p7` | product-proof for promotion gates | Immutable public surfaces, hidden holdout refusal, final-test selection, and rollback metadata. |
-| `just milestone-p8` | product-proof for LM-backed GEPA builder path | Public builder mechanics, split reporting, evidence-aware LM-backed reflection over `leaven-lm`, proposal recording, and candidate application. |
+| `just milestone-p8` | product-proof for LM-backed GEPA builder path | Public builder mechanics, target-safe AIME case lowering, source-id reporting, evidence-aware LM-backed reflection over `leaven-lm`, proposal recording, and candidate application. |
 
 ## Runtime SLA
 
@@ -94,7 +94,8 @@ contracts.
 Coverage's P5 run is not the same as `just milestone-p5`: the coverage script
 runs the package with a generated `--run-dir` and without the live Codex gate.
 Coverage's P8 run is the deterministic LM-backed path. Treat both as coverage
-of executable code, not release proof for live-provider or cache claims.
+of executable code, not release proof for live-provider, durable cache, or live
+AIME improvement claims.
 
 ## Test Shapes
 

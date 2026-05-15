@@ -2,6 +2,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     num::NonZeroUsize,
     path::Path,
+    sync::{Arc, Mutex},
     time::Duration,
 };
 
@@ -10,13 +11,13 @@ use leaven::engine::RunContext;
 use leaven::eval::{Case, SplitRole};
 use leaven::extend::PartitionId;
 use leaven::gepa::{Gepa, ReflectionError, ReflectiveDatasetBuilder, ReflectiveExample};
-use leaven::kernel::{AssessmentId, CandidateId, CaseId, FingerprintBuilder, MetadataValue};
+use leaven::kernel::{AssessmentId, CandidateId, CaseId, Cost, FingerprintBuilder, MetadataValue};
 use leaven::plumbing::{ContentId, Fingerprint, FiniteF64, MetadataBag};
 use leaven::prelude::{
     Artifact, ArtifactIdentity, Budget, EditSurface, Optimized, Part, PartAddress, RunOutput,
     Score, ScoreContext, ScoreError, SurfaceError, SurfaceFingerprint,
 };
-use leaven::run::{RunCase, RunProblem};
+use leaven::run::{RunCase, RunProblem, RunResumability, RunStorage};
 use leaven::{kernel::Metered, stdlib::populations::ParetoFrontier};
 use leaven_gepa::LmBackedReflectorConfig;
 use leaven_lm::{
@@ -37,6 +38,7 @@ const GEPA_AIME_MAX_OUTPUT_TOKENS: u32 = 32_000;
 const GEPA_AIME_INTERNAL_ITERATION_CEILING: usize = 500;
 const GEPA_AIME_SOLVER_MODEL: &str = "gpt-4.1-mini";
 const GEPA_AIME_REFLECTION_MODEL: &str = "gpt-5.4-mini";
+const DETERMINISTIC_SOLVER_MODEL: &str = "deterministic-aime-solver";
 const LEAVEN_AIME_SOLVER_CACHE_POLICY: &str = "LEAVEN_AIME_SOLVER_CACHE_POLICY";
 const LEAVEN_AIME_REFLECTION_CACHE_POLICY: &str = "LEAVEN_AIME_REFLECTION_CACHE_POLICY";
 const LEAVEN_AIME_LM_CACHE_BACKEND: &str = "LEAVEN_AIME_LM_CACHE_BACKEND";
@@ -55,8 +57,74 @@ async fn main() {
 
 fn report_lines(config: &AimeRunConfig, run: &AimeRunResult) -> Vec<String> {
     let result = &run.optimized;
-    let mut lines = vec![
+    let mut lines = report_run_header_lines(config, result);
+    lines.extend(report_score_lines(result));
+    lines.extend(report_runtime_lines(config));
+    lines.extend(report_budget_and_cache_lines(config, result));
+    lines.extend(report_best_and_event_lines(result));
+    for role in run.role_reports.iter() {
+        lines.extend(report_lm_role_lines(role));
+    }
+    lines.extend(report_case_lines(run));
+    lines
+}
+
+fn report_run_header_lines(config: &AimeRunConfig, result: &Optimized<AimePrompt>) -> Vec<String> {
+    vec![
         format!("run_profile={}", config.profile.label()),
+        format!("proof_classification={}", config.proof_classification()),
+        format!("data_source={}", config.data_source.label()),
+        format!("run_id={}", result.run_id),
+        format!(
+            "run_storage={}",
+            report_run_storage(&result.summary.storage)
+        ),
+        format!("run_resumable={}", result.summary.storage.is_resumable()),
+        format!(
+            "run_resumability={}",
+            report_resumability(&result.summary.storage)
+        ),
+        format!("run_dir={}", report_run_dir(&result.summary.storage)),
+        format!(
+            "latest_checkpoint={}",
+            report_latest_checkpoint(&result.summary.storage)
+        ),
+        format!(
+            "summary_json={}",
+            result
+                .summary
+                .reports
+                .summary_json
+                .as_ref()
+                .map(|path| path.display().to_string())
+                .unwrap_or_else(|| "none".to_owned())
+        ),
+        format!("compatibility={}", report_compatibility(result)),
+    ]
+}
+
+fn report_compatibility(result: &Optimized<AimePrompt>) -> String {
+    result
+        .summary
+        .compatibility
+        .as_ref()
+        .map(|summary| {
+            format!(
+                "schema={} run_kind={} dataset={} splits={} cache={} budget={} lm_roles={}",
+                summary.schema,
+                summary.run_kind,
+                summary.dataset,
+                summary.splits,
+                summary.cache,
+                summary.budget,
+                summary.lm_role_count
+            )
+        })
+        .unwrap_or_else(|| "none".to_owned())
+}
+
+fn report_score_lines(result: &Optimized<AimePrompt>) -> Vec<String> {
+    vec![
         format!(
             "baseline_train_score={}",
             report_score(result.summary.baseline_train_score)
@@ -82,6 +150,11 @@ fn report_lines(config: &AimeRunConfig, run: &AimeRunResult) -> Vec<String> {
             "report_splits={}",
             result.summary.evaluation.splits_reported.len()
         ),
+    ]
+}
+
+fn report_runtime_lines(config: &AimeRunConfig) -> Vec<String> {
+    vec![
         format!("solver_model={}", config.solver.model),
         format!("reflection_model={}", config.reflection.model),
         format!(
@@ -106,7 +179,28 @@ fn report_lines(config: &AimeRunConfig, run: &AimeRunResult) -> Vec<String> {
         ),
         "reflection_output=text".to_owned(),
         "reflection_parser=plain-text-fenced".to_owned(),
+    ]
+}
+
+fn report_budget_and_cache_lines(
+    config: &AimeRunConfig,
+    result: &Optimized<AimePrompt>,
+) -> Vec<String> {
+    vec![
         format!("stop_reason={}", report_stop_reason(result.stop)),
+        format!(
+            "search_metric_call_cap={}",
+            report_optional_u64(config.budget.metric_calls)
+        ),
+        format!(
+            "search_metric_calls_spent={}",
+            result.summary.optimization_cost.metric_calls
+        ),
+        "final_report_metric_call_cap=unlimited".to_owned(),
+        format!(
+            "final_report_metric_calls_spent={}",
+            result.summary.final_report_cost.metric_calls
+        ),
         format!(
             "optimization_metric_calls={}",
             result.summary.optimization_cost.metric_calls
@@ -117,6 +211,25 @@ fn report_lines(config: &AimeRunConfig, run: &AimeRunResult) -> Vec<String> {
         ),
         format!("budget_metric_calls={}", result.budget.spent.metric_calls),
         format!("budget_llm_calls={}", result.budget.spent.llm_calls),
+        format!(
+            "eval_cache=backend={} durable={} hits={} misses={} bypasses={} write_errors={} hit_cost_zero={}",
+            result.summary.cache.evaluation.backend.as_str(),
+            result.summary.cache.evaluation.durable,
+            result.summary.cache.evaluation.hits,
+            result.summary.cache.evaluation.misses,
+            evaluation_cache_bypass_count(&result.summary.cache.evaluation),
+            result.summary.cache.evaluation.write_errors,
+            result.summary.cache.evaluation.hit_cost_zero
+        ),
+        format!(
+            "eval_cache_bypass_reasons={}",
+            report_evaluation_cache_bypasses(&result.summary.cache.evaluation)
+        ),
+    ]
+}
+
+fn report_best_and_event_lines(result: &Optimized<AimePrompt>) -> Vec<String> {
+    vec![
         format!(
             "best_system_prompt={}",
             result.best().expect("AIME run has best prompt").system
@@ -130,8 +243,12 @@ fn report_lines(config: &AimeRunConfig, run: &AimeRunResult) -> Vec<String> {
                 .collect::<Vec<_>>()
                 .join(",")
         ),
-    ];
-    for split in &result.summary.evaluation.splits_reported {
+    ]
+}
+
+fn report_case_lines(run: &AimeRunResult) -> Vec<String> {
+    let mut lines = Vec::new();
+    for split in &run.optimized.summary.evaluation.splits_reported {
         for candidate in &split.candidates {
             for case in &candidate.cases {
                 let source_id = run
@@ -156,6 +273,136 @@ fn report_lines(config: &AimeRunConfig, run: &AimeRunResult) -> Vec<String> {
 
 fn report_score(score: Option<f64>) -> String {
     score.map_or_else(|| "absent".to_owned(), |value| format!("{value:.3}"))
+}
+
+fn report_run_storage(storage: &RunStorage) -> &'static str {
+    match storage {
+        RunStorage::Ephemeral { .. } => "ephemeral",
+        RunStorage::Stored { .. } => "stored",
+    }
+}
+
+fn report_resumability(storage: &RunStorage) -> String {
+    match storage {
+        RunStorage::Ephemeral { .. } => "ephemeral".to_owned(),
+        RunStorage::Stored { resumability, .. } => match resumability {
+            RunResumability::Resumable => "resumable".to_owned(),
+            RunResumability::NotResumable { reason } => reason.as_str().to_owned(),
+        },
+    }
+}
+
+fn report_run_dir(storage: &RunStorage) -> String {
+    match storage {
+        RunStorage::Stored {
+            run_dir: Some(run_dir),
+            ..
+        } => run_dir.display().to_string(),
+        RunStorage::Stored { .. } | RunStorage::Ephemeral { .. } => "none".to_owned(),
+    }
+}
+
+fn report_latest_checkpoint(storage: &RunStorage) -> String {
+    match storage {
+        RunStorage::Stored {
+            latest_checkpoint: Some(checkpoint),
+            ..
+        } => checkpoint.to_string(),
+        RunStorage::Stored { .. } | RunStorage::Ephemeral { .. } => "none".to_owned(),
+    }
+}
+
+fn report_optional_u64(value: Option<u64>) -> String {
+    value.map_or_else(|| "unlimited".to_owned(), |value| value.to_string())
+}
+
+fn evaluation_cache_bypass_count(summary: &leaven::run::EvaluationCacheSummary) -> u64 {
+    summary.bypasses.iter().map(|bypass| bypass.count).sum()
+}
+
+fn report_evaluation_cache_bypasses(summary: &leaven::run::EvaluationCacheSummary) -> String {
+    if summary.bypasses.is_empty() {
+        return "none".to_owned();
+    }
+    summary
+        .bypasses
+        .iter()
+        .map(|bypass| format!("{}:{}", bypass.reason.as_str(), bypass.count))
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+fn report_lm_role_lines(role: &AimeLmRoleReport) -> Vec<String> {
+    vec![
+        format!(
+            "lm_role={} provider={} live={} model={} runtime_fingerprint={}",
+            role.role.label(),
+            role.provider.label(),
+            role.live,
+            role.model,
+            report_fingerprint(role.runtime_fingerprint)
+        ),
+        format!(
+            "lm_role_runtime={} cache_policy={} cache_backend={} cache_durable={} max_concurrent_requests={} output={} parser={}",
+            role.role.label(),
+            report_lm_cache_policy(role.cache_policy),
+            report_lm_cache_backend(role.cache_backend),
+            role.cache_durable,
+            role.max_concurrent_requests,
+            role.output,
+            role.parser
+        ),
+        format!(
+            "lm_role_cost={} calls={} prompt_tokens={} cached_input_tokens={} completion_tokens={} reasoning_tokens={} cost_llm_calls={} cost_prompt_tokens={} cost_completion_tokens={}",
+            role.role.label(),
+            role.metrics.calls,
+            role.metrics.usage.input_tokens,
+            role.metrics.usage.cached_input_tokens,
+            role.metrics.usage.output_tokens,
+            role.metrics.usage.reasoning_tokens,
+            role.metrics.cost.llm_calls,
+            role.metrics.cost.prompt_tokens,
+            role.metrics.cost.completion_tokens
+        ),
+        format!(
+            "lm_role_cache={} hits={} misses={} bypasses={} bypass_policy_never={} bypass_refresh={} write_errors={} hit_cost_zero={}",
+            role.role.label(),
+            role.metrics.cache.hits,
+            role.metrics.cache.misses,
+            role.metrics.cache.bypasses(),
+            role.metrics.cache.bypass_policy_never,
+            role.metrics.cache.bypass_refresh,
+            role.metrics.cache.write_errors,
+            role.metrics.cache.hit_cost_zero
+        ),
+        format!(
+            "lm_role_failures={} count={} missing_credentials={} authentication={} rate_limit={} retry_exhausted={} malformed_provider_response={} answer_parse={} scorer_parse={} budget_refusal={} cache={} transport={} provider={} unknown={}",
+            role.role.label(),
+            role.metrics.failures.total(),
+            role.metrics.failures.missing_credentials,
+            role.metrics.failures.authentication,
+            role.metrics.failures.rate_limit,
+            role.metrics.failures.retry_exhausted,
+            role.metrics.failures.malformed_provider_response,
+            role.metrics.failures.answer_parse,
+            role.metrics.failures.scorer_parse,
+            role.metrics.failures.budget_refusal,
+            role.metrics.failures.cache,
+            role.metrics.failures.transport,
+            role.metrics.failures.provider,
+            role.metrics.failures.unknown
+        ),
+    ]
+}
+
+fn report_fingerprint(fingerprint: Fingerprint) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut out = String::with_capacity(16);
+    for byte in &fingerprint.0[..8] {
+        out.push(char::from(HEX[usize::from(byte >> 4)]));
+        out.push(char::from(HEX[usize::from(byte & 0x0f)]));
+    }
+    out
 }
 
 fn report_lm_cache_policy(policy: LmCachePolicy) -> &'static str {
@@ -197,7 +444,9 @@ async fn run_configured_aime(config: AimeRunConfig) -> AimeRunResult {
 }
 
 async fn run_aime(config: AimeRunConfig, dataset: AimeDataset) -> AimeRunResult {
-    let solver = aime_solver_lm(&config.solver);
+    let solver_telemetry = AimeLmTelemetry::new(config.solver.cache_policy);
+    let reflection_telemetry = AimeLmTelemetry::new(config.reflection.cache_policy);
+    let solver = aime_solver_lm(&config.solver, solver_telemetry.clone());
     let runner_fingerprint = aime_runner_fingerprint(&config.solver);
     let scorer_fingerprint = aime_scorer_fingerprint();
     let solver_config = config.solver.clone();
@@ -218,7 +467,7 @@ async fn run_aime(config: AimeRunConfig, dataset: AimeDataset) -> AimeRunResult 
         .evaluation_parallelism(config.evaluation_parallelism)
         .using(
             Gepa::reflect_with_lm(
-                aime_reflection_lm(&config.reflection),
+                aime_reflection_lm(&config.reflection, reflection_telemetry.clone()),
                 config.reflection.model.clone(),
             )
             .with_reflector_config(aime_reflector_config(&config.reflection))
@@ -233,19 +482,26 @@ async fn run_aime(config: AimeRunConfig, dataset: AimeDataset) -> AimeRunResult 
             .reflective_dataset(reflective_dataset)
             .max_iterations(config.max_iterations),
         )
-        .budget(config.budget)
+        .budget(config.budget.clone())
         .run()
         .await
         .expect("AIME GEPA run succeeds");
+    let role_reports = AimeRoleReports::from_config(
+        &config,
+        solver_telemetry.snapshot(),
+        reflection_telemetry.snapshot(),
+    );
     AimeRunResult {
         optimized,
         report_metadata,
+        role_reports,
     }
 }
 
 #[derive(Clone, Debug)]
 struct AimeRunConfig {
     profile: AimeRunProfile,
+    data_source: AimeDataSource,
     seed_prompt: &'static str,
     budget: Budget,
     evaluation_parallelism: NonZeroUsize,
@@ -256,18 +512,25 @@ struct AimeRunConfig {
 
 impl AimeRunConfig {
     fn configured() -> Self {
+        let data_source = AimeDataSource::configured();
         if std::env::var_os("LEAVEN_AIME_LIVE_OPENAI").is_some() {
-            Self::gepa_aime()
+            Self::gepa_aime_with_data_source(data_source)
         } else {
-            Self::deterministic_smoke()
+            Self::deterministic_smoke_with_data_source(data_source)
         }
     }
 
+    #[cfg(test)]
     fn gepa_aime() -> Self {
+        Self::gepa_aime_with_data_source(AimeDataSource::configured())
+    }
+
+    fn gepa_aime_with_data_source(data_source: AimeDataSource) -> Self {
         let cache_policies = AimeLmCachePolicies::from_env();
         let runtime = AimeOpenAiRuntimeConfig::from_env();
         Self {
             profile: AimeRunProfile::GepaAime,
+            data_source,
             seed_prompt: BASELINE,
             budget: Budget::metric_calls(GEPA_AIME_METRIC_CALLS),
             evaluation_parallelism: NonZeroUsize::new(GEPA_AIME_MAX_WORKERS)
@@ -290,16 +553,22 @@ impl AimeRunConfig {
         }
     }
 
+    #[cfg(test)]
     fn deterministic_smoke() -> Self {
+        Self::deterministic_smoke_with_data_source(AimeDataSource::DeterministicFixture)
+    }
+
+    fn deterministic_smoke_with_data_source(data_source: AimeDataSource) -> Self {
         Self {
             profile: AimeRunProfile::DeterministicSmoke,
+            data_source,
             seed_prompt: BASELINE,
             budget: Budget::metric_calls(DETERMINISTIC_SMOKE_METRIC_CALLS),
             evaluation_parallelism: NonZeroUsize::new(1).expect("smoke worker count is non-zero"),
             max_iterations: DETERMINISTIC_SMOKE_ITERATIONS,
             solver: AimeSolverConfig {
                 live: false,
-                model: openai_model_name(),
+                model: DETERMINISTIC_SOLVER_MODEL.to_owned(),
                 sampling: SamplingOptions::default(),
                 cache_policy: LmCachePolicy::Never,
                 runtime: AimeOpenAiRuntimeConfig::default_for_p8(),
@@ -311,6 +580,18 @@ impl AimeRunConfig {
                 cache_policy: LmCachePolicy::Never,
                 runtime: AimeOpenAiRuntimeConfig::default_for_p8(),
             },
+        }
+    }
+
+    fn proof_classification(&self) -> &'static str {
+        match (self.solver.live, self.reflection.live, self.data_source) {
+            (false, false, AimeDataSource::DeterministicFixture) => {
+                "deterministic_mechanics_product_surface_proof"
+            }
+            (false, false, AimeDataSource::HuggingFaceCache) => "local_cached_data_proof",
+            (true, false, _) => "live_solver_proof",
+            (false, true, _) => "live_reflection_proof",
+            (true, true, _) => "full_live_aime_reproduction_attempt",
         }
     }
 }
@@ -326,6 +607,29 @@ impl AimeRunProfile {
         match self {
             Self::DeterministicSmoke => "deterministic-smoke",
             Self::GepaAime => "gepa-aime",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AimeDataSource {
+    DeterministicFixture,
+    HuggingFaceCache,
+}
+
+impl AimeDataSource {
+    fn configured() -> Self {
+        if std::env::var_os("LEAVEN_AIME_CACHE").is_some() {
+            Self::HuggingFaceCache
+        } else {
+            Self::DeterministicFixture
+        }
+    }
+
+    const fn label(self) -> &'static str {
+        match self {
+            Self::DeterministicFixture => "deterministic-fixture",
+            Self::HuggingFaceCache => "huggingface-cache",
         }
     }
 }
@@ -346,6 +650,441 @@ struct AimeReflectionConfig {
     sampling: SamplingOptions,
     cache_policy: LmCachePolicy,
     runtime: AimeOpenAiRuntimeConfig,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AimeLmRole {
+    Solver,
+    Reflection,
+}
+
+impl AimeLmRole {
+    const fn label(self) -> &'static str {
+        match self {
+            Self::Solver => "solver",
+            Self::Reflection => "reflection",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AimeLmProvider {
+    Deterministic,
+    OpenAi,
+}
+
+impl AimeLmProvider {
+    const fn label(self) -> &'static str {
+        match self {
+            Self::Deterministic => "deterministic-fixture",
+            Self::OpenAi => "openai",
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+struct AimeRoleReports {
+    solver: AimeLmRoleReport,
+    reflection: AimeLmRoleReport,
+}
+
+impl AimeRoleReports {
+    fn from_config(
+        config: &AimeRunConfig,
+        solver_metrics: AimeLmRoleMetrics,
+        reflection_metrics: AimeLmRoleMetrics,
+    ) -> Self {
+        Self {
+            solver: AimeLmRoleReport {
+                role: AimeLmRole::Solver,
+                provider: if config.solver.live {
+                    AimeLmProvider::OpenAi
+                } else {
+                    AimeLmProvider::Deterministic
+                },
+                live: config.solver.live,
+                model: config.solver.model.clone(),
+                runtime_fingerprint: aime_runner_fingerprint(&config.solver),
+                cache_policy: config.solver.cache_policy,
+                cache_backend: config.solver.runtime.cache_backend,
+                cache_durable: config.solver.runtime.cache_backend.is_durable(),
+                max_concurrent_requests: config.solver.runtime.max_concurrent_requests,
+                output: "answer-text",
+                parser: "trimmed-answer",
+                metrics: solver_metrics,
+            },
+            reflection: AimeLmRoleReport {
+                role: AimeLmRole::Reflection,
+                provider: if config.reflection.live {
+                    AimeLmProvider::OpenAi
+                } else {
+                    AimeLmProvider::Deterministic
+                },
+                live: config.reflection.live,
+                model: config.reflection.model.clone(),
+                runtime_fingerprint: aime_reflection_role_fingerprint(&config.reflection),
+                cache_policy: config.reflection.cache_policy,
+                cache_backend: config.reflection.runtime.cache_backend,
+                cache_durable: config.reflection.runtime.cache_backend.is_durable(),
+                max_concurrent_requests: config.reflection.runtime.max_concurrent_requests,
+                output: "text",
+                parser: "plain-text-fenced",
+                metrics: reflection_metrics,
+            },
+        }
+    }
+
+    fn iter(&self) -> impl Iterator<Item = &AimeLmRoleReport> {
+        [&self.solver, &self.reflection].into_iter()
+    }
+}
+
+#[derive(Clone, Debug)]
+struct AimeLmRoleReport {
+    role: AimeLmRole,
+    provider: AimeLmProvider,
+    live: bool,
+    model: String,
+    runtime_fingerprint: Fingerprint,
+    cache_policy: LmCachePolicy,
+    cache_backend: AimeLmCacheBackend,
+    cache_durable: bool,
+    max_concurrent_requests: NonZeroUsize,
+    output: &'static str,
+    parser: &'static str,
+    metrics: AimeLmRoleMetrics,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+struct AimeLmRoleMetrics {
+    calls: u64,
+    usage: TokenUsage,
+    cost: Cost,
+    cache: AimeLmCacheMetrics,
+    failures: AimeProviderFailureCounts,
+}
+
+impl AimeLmRoleMetrics {
+    fn record_success(&mut self, policy: LmCachePolicy, response: &LmResponse, cost: &Cost) {
+        self.calls += 1;
+        self.usage.input_tokens += response.usage.input_tokens;
+        self.usage.cached_input_tokens += response.usage.cached_input_tokens;
+        self.usage.output_tokens += response.usage.output_tokens;
+        self.usage.reasoning_tokens += response.usage.reasoning_tokens;
+        self.cost = self.cost.clone().combine(cost);
+        self.cache.record_success(policy, &response.usage, cost);
+    }
+
+    fn record_failure(&mut self, error: &LmError) {
+        let kind = AimeProviderFailureKind::from_lm_error(error);
+        self.failures.increment(kind);
+        if kind == AimeProviderFailureKind::Cache {
+            self.cache.write_errors += 1;
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct AimeLmCacheMetrics {
+    hits: u64,
+    misses: u64,
+    bypass_policy_never: u64,
+    bypass_refresh: u64,
+    write_errors: u64,
+    hit_cost_zero: bool,
+}
+
+impl Default for AimeLmCacheMetrics {
+    fn default() -> Self {
+        Self {
+            hits: 0,
+            misses: 0,
+            bypass_policy_never: 0,
+            bypass_refresh: 0,
+            write_errors: 0,
+            hit_cost_zero: true,
+        }
+    }
+}
+
+impl AimeLmCacheMetrics {
+    fn record_success(&mut self, policy: LmCachePolicy, usage: &TokenUsage, cost: &Cost) {
+        match policy {
+            LmCachePolicy::Never => {
+                self.bypass_policy_never += 1;
+            }
+            LmCachePolicy::Refresh => {
+                self.bypass_refresh += 1;
+            }
+            LmCachePolicy::ReadWrite | LmCachePolicy::ReadOnly => {
+                if cost.is_zero() && !usage.to_cost().is_zero() {
+                    self.hits += 1;
+                    self.hit_cost_zero &= cost.is_zero();
+                } else {
+                    self.misses += 1;
+                }
+            }
+        }
+    }
+
+    const fn bypasses(&self) -> u64 {
+        self.bypass_policy_never + self.bypass_refresh
+    }
+}
+
+#[derive(Clone, Debug)]
+struct AimeLmTelemetry {
+    policy: LmCachePolicy,
+    metrics: Arc<Mutex<AimeLmRoleMetrics>>,
+}
+
+impl AimeLmTelemetry {
+    fn new(policy: LmCachePolicy) -> Self {
+        Self {
+            policy,
+            metrics: Arc::new(Mutex::new(AimeLmRoleMetrics::default())),
+        }
+    }
+
+    fn record(&self, result: &Result<Metered<LmResponse>, LmError>) {
+        let mut metrics = self.metrics.lock().expect("AIME telemetry lock is valid");
+        match result {
+            Ok(metered) => {
+                metrics.record_success(self.policy, &metered.value, &metered.cost);
+            }
+            Err(error) => {
+                metrics.record_failure(error);
+            }
+        }
+    }
+
+    fn snapshot(&self) -> AimeLmRoleMetrics {
+        self.metrics
+            .lock()
+            .expect("AIME telemetry lock is valid")
+            .clone()
+    }
+}
+
+#[derive(Clone)]
+struct AimeInstrumentedLm<L> {
+    inner: L,
+    telemetry: AimeLmTelemetry,
+}
+
+impl<L> AimeInstrumentedLm<L> {
+    fn new(inner: L, telemetry: AimeLmTelemetry) -> Self {
+        Self { inner, telemetry }
+    }
+}
+
+impl<L: std::fmt::Debug> std::fmt::Debug for AimeInstrumentedLm<L> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AimeInstrumentedLm")
+            .field("inner", &self.inner)
+            .finish_non_exhaustive()
+    }
+}
+
+impl<L: Lm> Lm for AimeInstrumentedLm<L> {
+    fn id(&self) -> LmId {
+        self.inner.id()
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        self.inner.fingerprint()
+    }
+
+    async fn complete(&self, request: LmRequest) -> Result<Metered<LmResponse>, LmError> {
+        let result = self.inner.complete(request).await;
+        self.telemetry.record(&result);
+        result
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AimeProviderFailureKind {
+    MissingCredentials,
+    Authentication,
+    RateLimit,
+    RetryExhausted,
+    MalformedProviderResponse,
+    AnswerParse,
+    ScorerParse,
+    BudgetRefusal,
+    Cache,
+    Transport,
+    Provider,
+    Unknown,
+}
+
+impl AimeProviderFailureKind {
+    fn from_lm_error(error: &LmError) -> Self {
+        match error {
+            LmError::InvalidRequest { reason } if reason.contains("OPENAI_API_KEY") => {
+                Self::MissingCredentials
+            }
+            LmError::InvalidRequest { reason } if reason.contains("retry") => Self::RetryExhausted,
+            LmError::InvalidRequest { reason } if reason.contains("answer parse") => {
+                Self::AnswerParse
+            }
+            LmError::InvalidRequest { reason } if reason.contains("scorer parse") => {
+                Self::ScorerParse
+            }
+            LmError::InvalidRequest { reason } if reason.contains("budget") => Self::BudgetRefusal,
+            LmError::InvalidRequest { .. } => Self::Unknown,
+            LmError::InvalidResponse { .. } => Self::MalformedProviderResponse,
+            LmError::Provider {
+                status: Some(401 | 403),
+                ..
+            } => Self::Authentication,
+            LmError::Provider {
+                status: Some(429), ..
+            } => Self::RateLimit,
+            LmError::Provider { .. } => Self::Provider,
+            LmError::Transport { .. } => Self::Transport,
+            LmError::Cache { .. } => Self::Cache,
+        }
+    }
+
+    #[cfg(test)]
+    const fn label(self) -> &'static str {
+        match self {
+            Self::MissingCredentials => "missing_credentials",
+            Self::Authentication => "authentication",
+            Self::RateLimit => "rate_limit",
+            Self::RetryExhausted => "retry_exhausted",
+            Self::MalformedProviderResponse => "malformed_provider_response",
+            Self::AnswerParse => "answer_parse",
+            Self::ScorerParse => "scorer_parse",
+            Self::BudgetRefusal => "budget_refusal",
+            Self::Cache => "cache",
+            Self::Transport => "transport",
+            Self::Provider => "provider",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+struct AimeProviderFailureCounts {
+    missing_credentials: u64,
+    authentication: u64,
+    rate_limit: u64,
+    retry_exhausted: u64,
+    malformed_provider_response: u64,
+    answer_parse: u64,
+    scorer_parse: u64,
+    budget_refusal: u64,
+    cache: u64,
+    transport: u64,
+    provider: u64,
+    unknown: u64,
+}
+
+impl AimeProviderFailureCounts {
+    fn increment(&mut self, kind: AimeProviderFailureKind) {
+        match kind {
+            AimeProviderFailureKind::MissingCredentials => self.missing_credentials += 1,
+            AimeProviderFailureKind::Authentication => self.authentication += 1,
+            AimeProviderFailureKind::RateLimit => self.rate_limit += 1,
+            AimeProviderFailureKind::RetryExhausted => self.retry_exhausted += 1,
+            AimeProviderFailureKind::MalformedProviderResponse => {
+                self.malformed_provider_response += 1;
+            }
+            AimeProviderFailureKind::AnswerParse => self.answer_parse += 1,
+            AimeProviderFailureKind::ScorerParse => self.scorer_parse += 1,
+            AimeProviderFailureKind::BudgetRefusal => self.budget_refusal += 1,
+            AimeProviderFailureKind::Cache => self.cache += 1,
+            AimeProviderFailureKind::Transport => self.transport += 1,
+            AimeProviderFailureKind::Provider => self.provider += 1,
+            AimeProviderFailureKind::Unknown => self.unknown += 1,
+        }
+    }
+
+    const fn total(&self) -> u64 {
+        self.missing_credentials
+            + self.authentication
+            + self.rate_limit
+            + self.retry_exhausted
+            + self.malformed_provider_response
+            + self.answer_parse
+            + self.scorer_parse
+            + self.budget_refusal
+            + self.cache
+            + self.transport
+            + self.provider
+            + self.unknown
+    }
+}
+
+#[cfg(test)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct AimeProviderFailureSummary {
+    kind: AimeProviderFailureKind,
+    provider: String,
+    status: Option<u16>,
+    message: &'static str,
+}
+
+#[cfg(test)]
+impl AimeProviderFailureSummary {
+    fn from_lm_error(error: &LmError) -> Self {
+        let kind = AimeProviderFailureKind::from_lm_error(error);
+        let (provider, status) = match error {
+            LmError::InvalidRequest { .. } | LmError::Cache { .. } => ("unknown".to_owned(), None),
+            LmError::InvalidResponse { provider, .. }
+            | LmError::Provider { provider, .. }
+            | LmError::Transport { provider, .. } => {
+                let status = if let LmError::Provider { status, .. } = error {
+                    *status
+                } else {
+                    None
+                };
+                (provider.clone(), status)
+            }
+        };
+        Self {
+            kind,
+            provider,
+            status,
+            message: redacted_failure_message(kind),
+        }
+    }
+
+    fn report_line(&self, role: AimeLmRole) -> String {
+        format!(
+            "provider_failure role={} kind={} provider={} status={} message={}",
+            role.label(),
+            self.kind.label(),
+            self.provider,
+            self.status
+                .map_or_else(|| "none".to_owned(), |status| status.to_string()),
+            self.message
+        )
+    }
+}
+
+#[cfg(test)]
+const fn redacted_failure_message(kind: AimeProviderFailureKind) -> &'static str {
+    match kind {
+        AimeProviderFailureKind::MissingCredentials => "missing required credential",
+        AimeProviderFailureKind::Authentication => "provider authentication failed",
+        AimeProviderFailureKind::RateLimit => "provider rate limited the request",
+        AimeProviderFailureKind::RetryExhausted => "retry policy exhausted",
+        AimeProviderFailureKind::MalformedProviderResponse => {
+            "provider response could not be lowered"
+        }
+        AimeProviderFailureKind::AnswerParse => "solver answer could not be parsed",
+        AimeProviderFailureKind::ScorerParse => "scorer response could not be parsed",
+        AimeProviderFailureKind::BudgetRefusal => {
+            "budget refused the request before provider execution"
+        }
+        AimeProviderFailureKind::Cache => "lm response cache failed",
+        AimeProviderFailureKind::Transport => "provider transport failed",
+        AimeProviderFailureKind::Provider => "provider returned a failure response",
+        AimeProviderFailureKind::Unknown => "provider failure was not classified",
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -459,15 +1198,20 @@ fn gepa_aime_sampling() -> SamplingOptions {
     }
 }
 
-fn aime_reflection_lm(config: &AimeReflectionConfig) -> AimeReflectionLm {
+fn aime_reflection_lm(
+    config: &AimeReflectionConfig,
+    telemetry: AimeLmTelemetry,
+) -> AimeReflectionLm {
     if config.live {
-        AimeReflectionLm::OpenAi(cached_openai_lm(
-            config.cache_policy,
-            config.runtime,
-            "live reflection",
+        AimeReflectionLm::OpenAi(AimeInstrumentedLm::new(
+            cached_openai_lm(config.cache_policy, config.runtime, "live reflection"),
+            telemetry,
         ))
     } else {
-        AimeReflectionLm::Deterministic(DeterministicReflectionLm)
+        AimeReflectionLm::Deterministic(AimeInstrumentedLm::new(
+            DeterministicReflectionLm,
+            telemetry,
+        ))
     }
 }
 
@@ -486,8 +1230,8 @@ fn aime_reflection_model_name() -> String {
 
 #[derive(Clone)]
 enum AimeReflectionLm {
-    Deterministic(DeterministicReflectionLm),
-    OpenAi(AimeOpenAiLm),
+    Deterministic(AimeInstrumentedLm<DeterministicReflectionLm>),
+    OpenAi(AimeInstrumentedLm<AimeOpenAiLm>),
 }
 
 impl std::fmt::Debug for AimeReflectionLm {
@@ -648,6 +1392,7 @@ type AimeRunCase = Case<AimeInput, AimeTarget>;
 struct AimeRunResult {
     optimized: Optimized<AimePrompt>,
     report_metadata: BTreeMap<CaseId, AimeReportMetadata>,
+    role_reports: AimeRoleReports,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -762,9 +1507,9 @@ struct AimeDataset {
 impl AimeDataset {
     fn from_cache(cache: AimeDatasetCache) -> Result<Self, AimeDatasetError> {
         let mut lowerer = AimeDatasetLowerer::default();
-        let train = lowerer.lower_split(SplitRole::Train, cache.train)?;
-        let validation = lowerer.lower_split(SplitRole::Validation, cache.validation)?;
-        let test = lowerer.lower_split(SplitRole::Test, cache.test)?;
+        let train = lowerer.lower_split(&SplitRole::Train, cache.train)?;
+        let validation = lowerer.lower_split(&SplitRole::Validation, cache.validation)?;
+        let test = lowerer.lower_split(&SplitRole::Test, cache.test)?;
         Ok(Self {
             train,
             validation,
@@ -796,7 +1541,7 @@ struct AimeDatasetLowerer {
 impl AimeDatasetLowerer {
     fn lower_split(
         &mut self,
-        split: SplitRole,
+        split: &SplitRole,
         records: Vec<AimeImportRecord>,
     ) -> Result<Vec<AimeRunCase>, AimeDatasetError> {
         records
@@ -1076,12 +1821,14 @@ impl Lm for AimeOpenAiLm {
     }
 }
 
-fn aime_solver_lm(config: &AimeSolverConfig) -> Option<AimeOpenAiLm> {
+fn aime_solver_lm(
+    config: &AimeSolverConfig,
+    telemetry: AimeLmTelemetry,
+) -> Option<AimeInstrumentedLm<AimeOpenAiLm>> {
     if config.live {
-        Some(cached_openai_lm(
-            config.cache_policy,
-            config.runtime,
-            "live solver",
+        Some(AimeInstrumentedLm::new(
+            cached_openai_lm(config.cache_policy, config.runtime, "live solver"),
+            telemetry,
         ))
     } else {
         None
@@ -1110,7 +1857,7 @@ fn cached_openai_lm(
 async fn run_solver(
     prompt: AimePrompt,
     case: RunCase<AimeInput>,
-    solver: Option<AimeOpenAiLm>,
+    solver: Option<AimeInstrumentedLm<AimeOpenAiLm>>,
     solver_config: AimeSolverConfig,
 ) -> RunOutput {
     if let Some(solver) = solver {
@@ -1129,7 +1876,7 @@ async fn run_solver(
 }
 
 async fn run_openai_solver(
-    solver: AimeOpenAiLm,
+    solver: AimeInstrumentedLm<AimeOpenAiLm>,
     prompt: &AimePrompt,
     case: &RunCase<AimeInput>,
     solver_config: &AimeSolverConfig,
@@ -1168,6 +1915,22 @@ fn aime_runner_fingerprint(config: &AimeSolverConfig) -> Fingerprint {
     builder.update(report_lm_cache_policy(config.cache_policy).as_bytes());
     builder.update(report_lm_cache_backend(config.runtime.cache_backend).as_bytes());
     builder.update(config.runtime.max_concurrent_requests.get().to_le_bytes());
+    builder.finish()
+}
+
+fn aime_reflection_role_fingerprint(config: &AimeReflectionConfig) -> Fingerprint {
+    let mut builder = FingerprintBuilder::new();
+    builder.update(b"p8-aime-reflection-role.v1");
+    builder.update([u8::from(config.live)]);
+    builder.update(config.model.as_bytes());
+    builder.update(
+        serde_json::to_vec(&config.sampling).expect("AIME reflection sampling config serializes"),
+    );
+    builder.update(report_lm_cache_policy(config.cache_policy).as_bytes());
+    builder.update(report_lm_cache_backend(config.runtime.cache_backend).as_bytes());
+    builder.update(config.runtime.max_concurrent_requests.get().to_le_bytes());
+    builder.update(b"output:text");
+    builder.update(b"parser:plain-text-fenced");
     builder.finish()
 }
 
@@ -1219,8 +1982,8 @@ fn deterministic_fixture_answer(input: &AimeInput) -> i64 {
     match input.problem.as_str() {
         "Find the remainder when 2^10 is divided by 7." => 2,
         "What is 19 + 23?" => 42,
-        "Find the remainder when 5^4 is divided by 13." => 1,
-        "Find the remainder when 3^6 is divided by 7." => 1,
+        "Find the remainder when 5^4 is divided by 13."
+        | "Find the remainder when 3^6 is divided by 7." => 1,
         "Find the remainder when 4^5 is divided by 9." => 7,
         "What is 31 - 8?" => 23,
         _ => 0,
@@ -1339,6 +2102,18 @@ mod tests {
         assert_eq!(result.budget.spent.llm_calls, 1);
         assert_eq!(result.budget.spent.prompt_tokens, 37);
         assert_eq!(result.budget.spent.completion_tokens, 11);
+        assert_eq!(run.role_reports.solver.metrics.calls, 0);
+        assert_eq!(run.role_reports.reflection.metrics.calls, 1);
+        assert_eq!(run.role_reports.reflection.metrics.cost.llm_calls, 1);
+        assert_eq!(run.role_reports.reflection.metrics.usage.input_tokens, 37);
+        assert_eq!(
+            run.role_reports
+                .reflection
+                .metrics
+                .cache
+                .bypass_policy_never,
+            1
+        );
         assert!(
             result
                 .summary
@@ -1421,7 +2196,10 @@ mod tests {
                 })
                 .using(
                     Gepa::reflect_with_lm(
-                        aime_reflection_lm(&config.reflection),
+                        aime_reflection_lm(
+                            &config.reflection,
+                            AimeLmTelemetry::new(config.reflection.cache_policy),
+                        ),
                         config.reflection.model.clone(),
                     )
                     .with_reflector_config(aime_reflector_config(&config.reflection))
@@ -1474,6 +2252,52 @@ mod tests {
         let validation_id = case_id_from_source_id("deterministic:default:validation:0");
         let test_id = case_id_from_source_id("deterministic:default:test:0");
 
+        assert!(lines.iter().any(
+            |line| line == "proof_classification=deterministic_mechanics_product_surface_proof"
+        ));
+        assert!(lines.iter().any(|line| line == "run_storage=stored"));
+        assert!(lines.iter().any(|line| line == "run_resumable=true"));
+        assert!(
+            lines
+                .iter()
+                .any(|line| line == "run_resumability=resumable")
+        );
+        assert!(
+            lines
+                .iter()
+                .any(|line| line.starts_with("run_dir=.leaven/runs/"))
+        );
+        assert!(
+            lines
+                .iter()
+                .any(|line| line.starts_with("summary_json=.leaven/runs/")
+                    && line.ends_with("/reports/summary.json"))
+        );
+        assert!(lines.iter().any(|line| {
+            line.starts_with("compatibility=schema=leaven-run.compatibility.v1")
+                && line.contains(" run_kind=leaven-run.optimize ")
+                && line.contains(" cache=cache:auto/")
+        }));
+        assert!(
+            lines
+                .iter()
+                .any(|line| line == "search_metric_call_cap=512")
+        );
+        assert!(
+            lines
+                .iter()
+                .any(|line| line == "search_metric_calls_spent=6")
+        );
+        assert!(
+            lines
+                .iter()
+                .any(|line| line == "final_report_metric_call_cap=unlimited")
+        );
+        assert!(
+            lines
+                .iter()
+                .any(|line| line == "final_report_metric_calls_spent=12")
+        );
         assert!(
             lines
                 .iter()
@@ -1489,6 +2313,12 @@ mod tests {
                 .iter()
                 .any(|line| line == "test_score_use=final_report_only")
         );
+        assert!(lines.iter().any(|line| {
+            line == "lm_role_cost=reflection calls=1 prompt_tokens=37 cached_input_tokens=0 completion_tokens=11 reasoning_tokens=0 cost_llm_calls=1 cost_prompt_tokens=37 cost_completion_tokens=11"
+        }));
+        assert!(lines.iter().any(|line| {
+            line == "lm_role_cache=reflection hits=0 misses=0 bypasses=1 bypass_policy_never=1 bypass_refresh=0 write_errors=0 hit_cost_zero=true"
+        }));
         assert!(lines.iter().any(|line| {
             line.contains(&format!("report_case={validation_id}"))
                 && line.contains("source_id=deterministic:default:validation:0")
@@ -1581,7 +2411,12 @@ mod tests {
         config.reflection.model = "reflection-model".to_owned();
         config.reflection.cache_policy = LmCachePolicy::Refresh;
         config.reflection.runtime = config.solver.runtime;
-        let result = block_on(run_deterministic_aime());
+        let mut result = block_on(run_deterministic_aime());
+        result.role_reports = AimeRoleReports::from_config(
+            &config,
+            AimeLmRoleMetrics::default(),
+            AimeLmRoleMetrics::default(),
+        );
 
         let lines = report_lines(&config, &result);
 
@@ -1618,6 +2453,68 @@ mod tests {
                 .iter()
                 .any(|line| line == "reflection_parser=plain-text-fenced")
         );
+        assert!(lines.iter().any(|line| {
+            line.starts_with(
+                "lm_role=solver provider=openai live=true model=solver-model runtime_fingerprint=",
+            )
+        }));
+        assert!(lines.iter().any(|line| {
+            line == "lm_role_runtime=solver cache_policy=read-write cache_backend=in-memory cache_durable=false max_concurrent_requests=7 output=answer-text parser=trimmed-answer"
+        }));
+        assert!(lines.iter().any(|line| {
+            line.starts_with(
+                "lm_role=reflection provider=openai live=true model=reflection-model runtime_fingerprint=",
+            )
+        }));
+        assert!(lines.iter().any(|line| {
+            line == "lm_role_runtime=reflection cache_policy=refresh cache_backend=in-memory cache_durable=false max_concurrent_requests=7 output=text parser=plain-text-fenced"
+        }));
+    }
+
+    #[test]
+    fn deterministic_lm_cache_hit_reports_zero_new_cost() {
+        let telemetry = AimeLmTelemetry::new(LmCachePolicy::ReadWrite);
+        let cached = CachedLm::new(
+            DeterministicReflectionLm,
+            InMemoryLmCache::default(),
+            LmCachePolicy::ReadWrite,
+        );
+        let lm = AimeInstrumentedLm::new(cached, telemetry.clone());
+        let request = LmRequest::new(
+            "deterministic-aime-reflector",
+            Messages::from_user("incorrect modular feedback"),
+        );
+
+        let first = block_on(lm.complete(request.clone())).expect("first LM call succeeds");
+        let second = block_on(lm.complete(request)).expect("cached LM call succeeds");
+
+        assert_eq!(first.cost.llm_calls, 1);
+        assert_eq!(second.cost, Cost::zero());
+        assert_eq!(second.value.usage.input_tokens, 37);
+        let metrics = telemetry.snapshot();
+        assert_eq!(metrics.calls, 2);
+        assert_eq!(metrics.cost.llm_calls, 1);
+        assert_eq!(metrics.cache.misses, 1);
+        assert_eq!(metrics.cache.hits, 1);
+        assert!(metrics.cache.hit_cost_zero);
+    }
+
+    #[test]
+    fn typed_live_provider_failure_summary_redacts_missing_credentials() {
+        let secret = "sk-test-secret";
+        let error = LmError::invalid_request(format!("OPENAI_API_KEY is not set; saw {secret}"));
+        let summary = AimeProviderFailureSummary::from_lm_error(&error);
+        let line = summary.report_line(AimeLmRole::Solver);
+        let telemetry = AimeLmTelemetry::new(LmCachePolicy::Never);
+        let failure: Result<Metered<LmResponse>, LmError> = Err(error);
+
+        telemetry.record(&failure);
+
+        assert_eq!(summary.kind, AimeProviderFailureKind::MissingCredentials);
+        assert_eq!(summary.message, "missing required credential");
+        assert!(line.contains("kind=missing_credentials"));
+        assert!(!line.contains(secret));
+        assert_eq!(telemetry.snapshot().failures.missing_credentials, 1);
     }
 
     #[test]

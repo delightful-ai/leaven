@@ -197,6 +197,25 @@ async fn sqlite_cache_opens_and_creates_parent_directories() {
 }
 
 #[tokio::test]
+async fn sqlite_cache_reports_parent_directory_creation_failure() {
+    let dir = tempfile::tempdir().unwrap();
+    let blocked_parent = dir.path().join("not-a-directory");
+    std::fs::write(&blocked_parent, b"file blocks child dirs").unwrap();
+    let path = blocked_parent.join("lm-cache.sqlite");
+
+    let Err(error) = SqliteLmCache::open(&path) else {
+        panic!("parent creation through a file should fail");
+    };
+    assert!(matches!(
+        error,
+        LmCacheError::Backend {
+            operation: "open",
+            ..
+        }
+    ));
+}
+
+#[tokio::test]
 async fn sqlite_cache_round_trips_entries_across_reopen() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("lm-cache.sqlite");
@@ -211,6 +230,111 @@ async fn sqlite_cache_round_trips_entries_across_reopen() {
     let reopened = SqliteLmCache::open(&path).unwrap();
 
     assert_eq!(reopened.get(key).await.unwrap(), Some(entry));
+}
+
+#[tokio::test]
+async fn sqlite_cache_rejects_newer_schema_version() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("lm-cache.sqlite");
+    let connection = rusqlite::Connection::open(&path).unwrap();
+    connection.pragma_update(None, "user_version", 99).unwrap();
+    drop(connection);
+
+    let Err(error) = SqliteLmCache::open(&path) else {
+        panic!("newer schema version should be rejected");
+    };
+    assert!(matches!(
+        error,
+        LmCacheError::Backend {
+            operation: "open",
+            ..
+        }
+    ));
+    assert!(error.to_string().contains("schema version 99"));
+}
+
+#[tokio::test]
+async fn sqlite_cache_rejects_write_key_mismatch_before_storage() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("lm-cache.sqlite");
+    let cache = SqliteLmCache::open(&path).unwrap();
+    let key = cache_key();
+    let other_key = LmCacheKey {
+        fingerprint: Fingerprint::from_bytes([10; 32]),
+    };
+
+    let error = cache
+        .put(other_key, cache_entry(key, "mismatched"))
+        .await
+        .unwrap_err();
+
+    assert!(matches!(error, LmCacheError::Codec { .. }));
+    assert_eq!(cache.get(key).await.unwrap(), None);
+}
+
+#[tokio::test]
+async fn sqlite_cache_rejects_stored_key_mismatch_and_missing_schema() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("lm-cache.sqlite");
+    let key = cache_key();
+    let cache = SqliteLmCache::open(&path).unwrap();
+    cache
+        .put(key, cache_entry(key, "corrupt key"))
+        .await
+        .unwrap();
+    drop(cache);
+
+    let connection = rusqlite::Connection::open(&path).unwrap();
+    let mut entry: LmCacheEntry = serde_json::from_str(
+        &connection
+            .query_row("SELECT entry_json FROM lm_cache_entries", [], |row| {
+                row.get::<_, String>(0)
+            })
+            .unwrap(),
+    )
+    .unwrap();
+    entry.key = LmCacheKey {
+        fingerprint: Fingerprint::from_bytes([11; 32]),
+    };
+    connection
+        .execute(
+            "UPDATE lm_cache_entries SET entry_json = ?1",
+            [serde_json::to_string(&entry).unwrap()],
+        )
+        .unwrap();
+    drop(connection);
+
+    let cache = SqliteLmCache::open(&path).unwrap();
+    let mismatch = cache.get(key).await.unwrap_err();
+    assert!(matches!(mismatch, LmCacheError::Codec { .. }));
+    drop(cache);
+
+    let connection = rusqlite::Connection::open(&path).unwrap();
+    connection
+        .execute("DROP TABLE lm_cache_entries", [])
+        .unwrap();
+    drop(connection);
+    let cache = SqliteLmCache::open(&path).unwrap();
+
+    let read_error = cache.get(key).await.unwrap_err();
+    assert!(matches!(
+        read_error,
+        LmCacheError::Backend {
+            operation: "get",
+            ..
+        }
+    ));
+    let write_error = cache
+        .put(key, cache_entry(key, "write refused"))
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        write_error,
+        LmCacheError::Backend {
+            operation: "put",
+            ..
+        }
+    ));
 }
 
 #[tokio::test]

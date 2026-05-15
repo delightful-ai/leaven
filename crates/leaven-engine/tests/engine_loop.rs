@@ -18,6 +18,7 @@ use leaven_engine::{
     PrivateStatePolicy, RestoreContext, RunCheckpoint, RunCheckpointRequest, RunContext, RunEvent,
     RunGraph, RunGraphSnapshot, RunGraphView, RunPersistence, RunPersistenceError, StateFormat,
     StepStatus, StopReason, Stopper, StoreRunPersistence, TrustPolicy, optimize,
+    restore_checkpointable_optimizer_state,
 };
 use leaven_kernel::{
     AssessmentId, BlobRef, Budget, CandidateId, CaseId, ContentId, Cost, ErrorKind, Fingerprint,
@@ -1067,6 +1068,183 @@ fn checkpointable_optimizer_write_surfaces_serialization_failures() {
 }
 
 #[test]
+fn checkpointable_optimizer_restore_default_refuses_unhandled_private_state() {
+    let engine = Engine::<TestProblem>::builder().build();
+    let mut optimizer = PlainStatelessOptimizer;
+    let mut checkpoint = checkpoint_referencing_graph(BlobRef {
+        store: "recording".to_owned(),
+        key: "graph".to_owned(),
+    });
+    checkpoint.optimizer_state = Some(OptimizerStateSnapshot {
+        optimizer: Fingerprint::from_bytes([90; 32]),
+        schema: Fingerprint::from_bytes([91; 32]),
+        format: StateFormat::Json,
+        bytes: BlobRef {
+            store: "recording".to_owned(),
+            key: "optimizer-state".to_owned(),
+        },
+    });
+
+    let err = optimizer
+        .restore_checkpoint_state(
+            &checkpoint,
+            &JsonStateReader::missing(),
+            RestoreContext::new(engine.view()),
+        )
+        .unwrap_err();
+
+    assert!(err.to_string().contains("private state"));
+}
+
+#[test]
+fn checkpointable_optimizer_restore_helper_validates_policy_and_reader_state() {
+    let engine = Engine::<TestProblem>::builder().build();
+    let checkpoint_without_state = checkpoint_referencing_graph(BlobRef {
+        store: "recording".to_owned(),
+        key: "graph".to_owned(),
+    });
+
+    let mut non_json = NonJsonStateOptimizer;
+    let err = restore_checkpointable_optimizer_state(
+        &mut non_json,
+        &checkpoint_without_state,
+        &JsonStateReader::missing(),
+        RestoreContext::new(engine.view()),
+    )
+    .unwrap_err();
+    assert!(format!("{err:?}").contains("Postcard"));
+
+    let mut explicit = StatefulOptimizer {
+        selected: None,
+        cursor: 0,
+    };
+    let err = restore_checkpointable_optimizer_state(
+        &mut explicit,
+        &checkpoint_without_state,
+        &JsonStateReader::missing(),
+        RestoreContext::new(engine.view()),
+    )
+    .unwrap_err();
+    assert!(format!("{err:?}").contains("does not contain optimizer private state"));
+
+    let mut explicit = StatefulOptimizer {
+        selected: None,
+        cursor: 0,
+    };
+    let err = restore_checkpointable_optimizer_state(
+        &mut explicit,
+        &checkpoint_without_state,
+        &JsonStateReader::failing(),
+        RestoreContext::new(engine.view()),
+    )
+    .unwrap_err();
+    assert!(format!("{err:?}").contains("reader refused"));
+}
+
+#[test]
+fn checkpointable_optimizer_restore_helper_rejects_graph_derived_private_state() {
+    let engine = Engine::<TestProblem>::builder().build();
+    let mut checkpoint = checkpoint_referencing_graph(BlobRef {
+        store: "recording".to_owned(),
+        key: "graph".to_owned(),
+    });
+    checkpoint.optimizer_state = Some(OptimizerStateSnapshot {
+        optimizer: Fingerprint::from_bytes([90; 32]),
+        schema: Fingerprint::from_bytes([91; 32]),
+        format: StateFormat::Json,
+        bytes: BlobRef {
+            store: "recording".to_owned(),
+            key: "optimizer-state".to_owned(),
+        },
+    });
+    let mut optimizer = DerivedStateOptimizer;
+
+    let err = restore_checkpointable_optimizer_state(
+        &mut optimizer,
+        &checkpoint,
+        &JsonStateReader::missing(),
+        RestoreContext::new(engine.view()),
+    )
+    .unwrap_err();
+
+    assert!(format!("{err:?}").contains("graph-derived optimizer"));
+}
+
+#[test]
+fn checkpointable_optimizer_restore_helper_surfaces_restore_state_errors() {
+    let engine = Engine::<TestProblem>::builder().build();
+    let mut checkpoint = checkpoint_referencing_graph(BlobRef {
+        store: "recording".to_owned(),
+        key: "graph".to_owned(),
+    });
+    checkpoint.optimizer_state = Some(OptimizerStateSnapshot {
+        optimizer: STATEFUL_OPTIMIZER_FINGERPRINT,
+        schema: STATEFUL_OPTIMIZER_STATE_SCHEMA,
+        format: StateFormat::Json,
+        bytes: BlobRef {
+            store: "recording".to_owned(),
+            key: "optimizer-state".to_owned(),
+        },
+    });
+    let mut optimizer = StatefulOptimizer {
+        selected: None,
+        cursor: 0,
+    };
+
+    let err = restore_checkpointable_optimizer_state(
+        &mut optimizer,
+        &checkpoint,
+        &JsonStateReader::state(StatefulOptimizerState {
+            selected: Some(CandidateId::new()),
+            cursor: 99,
+        }),
+        RestoreContext::new(engine.view()),
+    )
+    .unwrap_err();
+
+    assert!(format!("{err:?}").contains("selected candidate"));
+}
+
+#[test]
+fn checkpointable_optimizer_restore_helper_restores_explicit_json_state() {
+    let mut engine = Engine::<TestProblem>::builder().build();
+    let seed = engine
+        .insert_seed(TextArtifact("seed".to_owned()), 0)
+        .unwrap();
+    let mut checkpoint = checkpoint_referencing_graph(BlobRef {
+        store: "recording".to_owned(),
+        key: "graph".to_owned(),
+    });
+    checkpoint.optimizer_state = Some(OptimizerStateSnapshot {
+        optimizer: STATEFUL_OPTIMIZER_FINGERPRINT,
+        schema: STATEFUL_OPTIMIZER_STATE_SCHEMA,
+        format: StateFormat::Json,
+        bytes: BlobRef {
+            store: "recording".to_owned(),
+            key: "optimizer-state".to_owned(),
+        },
+    });
+    let mut optimizer = StatefulOptimizer {
+        selected: None,
+        cursor: 0,
+    };
+
+    restore_checkpointable_optimizer_state(
+        &mut optimizer,
+        &checkpoint,
+        &JsonStateReader::state(StatefulOptimizerState {
+            selected: Some(seed),
+            cursor: 99,
+        }),
+        RestoreContext::new(engine.view()),
+    )
+    .unwrap();
+
+    assert_eq!(optimizer.selected, Some(seed));
+    assert_eq!(optimizer.cursor, 99);
+}
+
+#[test]
 fn engine_surfaces_iteration_checkpoint_failures_as_run_errors() {
     block_on(async {
         let calls = Arc::new(AtomicUsize::new(0));
@@ -1563,6 +1741,68 @@ impl Stopper<TestProblem> for StopImmediately {
 struct StatefulOptimizer {
     selected: Option<CandidateId>,
     cursor: u64,
+}
+
+struct PlainStatelessOptimizer;
+
+impl Optimizer<TestProblem> for PlainStatelessOptimizer {
+    async fn step(
+        &mut self,
+        _ctx: &mut RunContext<'_, TestProblem>,
+    ) -> Result<StepStatus, OptimizerError> {
+        Ok(StepStatus::Done)
+    }
+
+    fn best_candidate(&self, _graph: RunGraphView<'_, TestProblem>) -> Option<CandidateId> {
+        None
+    }
+}
+
+struct JsonStateReader {
+    state: Result<Option<serde_json::Value>, &'static str>,
+}
+
+impl JsonStateReader {
+    fn missing() -> Self {
+        Self { state: Ok(None) }
+    }
+
+    fn state<T: serde::Serialize>(state: T) -> Self {
+        Self {
+            state: Ok(Some(serde_json::to_value(state).unwrap())),
+        }
+    }
+
+    fn failing() -> Self {
+        Self {
+            state: Err("reader refused"),
+        }
+    }
+}
+
+impl leaven_engine::OptimizerStateReader for JsonStateReader {
+    fn load_optimizer_state<T>(
+        &self,
+        _checkpoint: &RunCheckpoint,
+        _optimizer: Fingerprint,
+        _schema: Fingerprint,
+    ) -> Result<Option<T>, RunPersistenceError>
+    where
+        T: serde::de::DeserializeOwned,
+    {
+        match &self.state {
+            Ok(Some(state)) => serde_json::from_value(state.clone())
+                .map(Some)
+                .map_err(|source| RunPersistenceError::Serialization {
+                    state: "optimizer state",
+                    reason: source.to_string(),
+                }),
+            Ok(None) => Ok(None),
+            Err(reason) => Err(RunPersistenceError::Unavailable {
+                reason: (*reason).to_owned(),
+            }),
+        }
+    }
 }
 
 const STATEFUL_OPTIMIZER_FINGERPRINT: Fingerprint = Fingerprint::from_bytes([5; 32]);

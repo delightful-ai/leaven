@@ -297,7 +297,7 @@ pub(crate) trait ReflectionProjection: Evidence {
 }
 
 fn build_gepa_reflective_examples<P>(
-    ctx: &mut RunContext<'_, P>,
+    ctx: &RunContext<'_, P>,
     parent_assessment: AssessmentId,
     project_case_input: impl Fn(&P::Case) -> String,
 ) -> Result<Vec<ReflectiveExample>, ReflectionError>

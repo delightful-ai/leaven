@@ -30,9 +30,12 @@ It optimizes exactly the `AimePrompt.system` field through the local
 `AimePromptSurface`; problems, answers, solutions, and case source IDs are task
 inputs, not optimized artifact fields. It reports baseline train score,
 optimized train score, validation score, held-out test score, the held-out test
-score use (`final_report_only`), split reports, optimization metric-call cost,
-final-report metric-call cost, total budget usage, emitted events, case
-IDs/source IDs for reported cases, and the selected prompt.
+score use (`final_report_only`), proof classification, split reports, search
+metric-call cap/spent, final-report metric-call cost, total budget usage,
+evaluation-cache counts, solver/reflection runtime fingerprints, LM
+calls/tokens/cost by role, LM cache hit/miss/bypass counts by role, typed
+provider-failure counters, emitted events, case IDs/source IDs for reported
+cases, and the selected prompt.
 GEPA search minibatches remain optimization evidence only; the public
 baseline/optimized train scores come from explicit full-train final report
 evaluations so report aggregates are not confused with sampled feedback.
@@ -75,14 +78,16 @@ The OpenAI path is an opt-in native async solver swap over the same
 surface. Both live solver and live reflection use `leaven-lm-openai` wrapped by
 the P8-local OpenAI LM role, with response caching configured internally;
 solver LM spend is attached to `RunOutput` and charged through evaluation
-accounting. Cache use is opt-in per role:
+accounting. The role-specific cache env vars are legacy/advanced P8 scaffold
+for experiments, not final product defaults:
 `LEAVEN_AIME_SOLVER_CACHE_POLICY` and `LEAVEN_AIME_REFLECTION_CACHE_POLICY`
 accept `never`, `read-write`, `read-only`, or `refresh`, and default to `never`.
 `LEAVEN_AIME_LM_CACHE_BACKEND` currently accepts only `in-memory`; the example
 prints `lm_cache_durable=false` so operators do not mistake this for a durable
-cross-process cache. Durable LM cache storage belongs with the durable run/resume
-branch, not this example. `LEAVEN_OPENAI_MAX_CONCURRENT_REQUESTS` bounds
-in-process OpenAI request concurrency for both live roles and defaults to `32`.
+cross-process cache. One durable run cache/resume default is specified in
+`docs/specs/default_cache_storage.md` and is not owned by this example.
+`LEAVEN_OPENAI_MAX_CONCURRENT_REQUESTS` bounds in-process OpenAI request
+concurrency for both live roles and defaults to `32`.
 The score function is the normal async/fallible Leaven scorer surface. This
 example uses a fixed-reference checker that mirrors the GEPA/DSPy AIME feedback
 shape: exact-match scalar score, correctness text, full reference solution, and

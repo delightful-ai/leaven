@@ -21,6 +21,12 @@ The top of the stack is:
 - `gepa_reflection_evidence_visibility.md`: optimizer-visible reflection data,
   scorer-feedback boundary, target-safe case input projection, hidden split
   defaults, and durable reflection evidence requirements.
+- `p8_run_report_operator_ux.md`: P8 result/report surface, run-dir and
+  resumability facts, cache/cost/source summaries, proof classification, and
+  durable report files.
+- `p8_live_provider_budget_reliability.md`: live-provider role identity, budget
+  split, retry/idempotency semantics, cache hit cost rules, and P8 live-mode
+  cost reporting.
 - `gepa_aime_paper_parity.md`: implementation spec for the GEPA/AIME paper-parity path, including budget stopping, GEPA loop continuation, reflection, LM/provider/cache use, AIME runner/scorer/reporting, and the proof denominator for P8.
 - `milestone_examples_behavioral_contract.md`: executable behavior contract for milestone examples.
 - `docs/testing/README.md`: proof model and coverage/SLA contract.

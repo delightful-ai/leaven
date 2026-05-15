@@ -32,7 +32,7 @@ use leaven_engine::{
 };
 use leaven_kernel::{
     AgentSessionId, BlobRef, CaseId, CheckpointId, ContentId, Cost, EvaluatorId, Fingerprint,
-    MetadataKey, MetadataValue, Metered, RunId,
+    MetadataKey, MetadataValue, Metered, RunId, StageId,
 };
 use leaven_store::{BlobStore, BlobWrite, CheckpointBytes, CheckpointStore, StoreError};
 use leaven_store_inline::{InlineEvidenceStore, InlineStore};
@@ -1393,6 +1393,61 @@ fn agent_case_evaluator_rejects_unsupported_request_shapes_and_missing_inputs() 
                 .to_string()
                 .contains("agent case evaluator failed")
         );
+    });
+}
+
+#[test]
+fn agent_case_evaluator_rejects_resolved_cases_missing_from_suite() {
+    futures::executor::block_on(async {
+        let suite = CaseSuite::from_cases([AgentCase::text(
+            CaseId::new(0),
+            "question",
+            CaseTarget::Text("expected".to_owned()),
+        )])
+        .unwrap();
+        let evaluator = AgentCaseEvaluator::new(
+            AgentCaseEvaluatorConfig::new(
+                EvaluatorId::from("agent-case/direct-missing-case"),
+                Fingerprint::from_bytes([4; 32]),
+            ),
+            suite,
+            LocalWorkspaceFactory::temp(),
+            FakeAgentRuntime::new(vec![FakeAgentAction::WriteFile {
+                path: WorkspacePath::new("output/result.txt").unwrap(),
+                bytes: b"observed".to_vec(),
+            }]),
+            TestPresenter,
+            TestScorer,
+        );
+        let mut graph = RunGraph::<CaseProblem>::new(RunId::new());
+        let mut budget = BudgetLedger::default();
+        let engine_cases = CaseSet::new(vec!["case-0", "case-1"]);
+        let candidate = {
+            let mut ctx = RunContext::<CaseProblem>::new(&mut graph, &mut budget);
+            ctx.insert_seed(CaseArtifact("seed".to_owned()), 0).unwrap()
+        };
+        let mut ctx =
+            RunContext::<CaseProblem>::new(&mut graph, &mut budget).with_case_set(&engine_cases);
+        let resolved = engine_cases.resolve(&EvaluationSet::All).unwrap();
+
+        let result = evaluator
+            .evaluate(
+                ResolvedEvaluationRequest {
+                    kind: leaven_core::ResolvedRequestKind::Independent {
+                        candidates: vec![candidate],
+                    },
+                    set: resolved,
+                    granularity: AssessmentGranularity::PerCase,
+                    purpose: EvaluationPurpose::Search,
+                },
+                ctx.evaluation_context(StageId::custom("agent-case-test")),
+            )
+            .await;
+        let Err(error) = result else {
+            panic!("case suite mismatch should fail evaluation");
+        };
+
+        assert!(format!("{error:?}").contains("case suite does not contain resolved case"));
     });
 }
 

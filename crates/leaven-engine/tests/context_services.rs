@@ -14,7 +14,7 @@ use leaven_core::{
 use leaven_engine::{
     BudgetLedger, CacheBypassReason, CachePolicy, CacheStatus, Callback, CaseSet,
     EvaluationCacheKey, EvaluationContext, EvaluationError, Evaluator, ProposalContext,
-    ProposalError, Proposer, RunContext, RunEvent, RunGraphView, TrustPolicy,
+    ProposalError, Proposer, RunContext, RunEvent, RunGraphView, StoreRunPersistence, TrustPolicy,
 };
 use leaven_kernel::{
     AssessmentId, Budget, CaseId, ContentId, Cost, ErrorKind, EvaluatorId, Fingerprint,
@@ -22,7 +22,7 @@ use leaven_kernel::{
     StageAttemptReceiptId, StageAttemptReceiptRef, StageId, StageRole,
 };
 use leaven_store::{EvidenceStore, StoreError};
-use leaven_store_inline::InlineEvidenceStore;
+use leaven_store_inline::{InlineEvidenceStore, InlineStore};
 
 use support::{TestEvidence, TestProblem, TextArtifact, graph_and_budget};
 
@@ -617,6 +617,58 @@ fn deterministic_evaluation_cache_skips_second_evaluator_call() {
 
         assert_eq!(first.cache, CacheStatus::Miss);
         assert_eq!(second.cache, CacheStatus::Hit);
+        assert_eq!(first.assessment_ids, second.assessment_ids);
+        assert_eq!(evaluator.calls(), 1);
+    });
+}
+
+#[test]
+fn deterministic_evaluation_cache_restores_from_checkpoint_without_recalling_evaluator() {
+    block_on(async {
+        let (mut graph, mut budget) = graph_and_budget();
+        let mut cache = leaven_engine::EvaluationCache::default();
+        let case_set = CaseSet::new(vec!["case"]);
+        let evidence_store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let persistence = StoreRunPersistence::new(InlineStore::new("run"));
+        let candidate = {
+            let mut seed_ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+            seed_ctx
+                .insert_seed(TextArtifact("abcd".to_owned()), 0)
+                .unwrap()
+        };
+        let evaluator = CountingEvaluator::new(CachePolicy::Deterministic);
+
+        let first = {
+            let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
+                .with_case_set(&case_set)
+                .with_cache(&mut cache)
+                .with_evidence_store(&evidence_store)
+                .with_persistence(Some(&persistence));
+            ctx.evaluate_with(&evaluator, independent_request(candidate))
+                .await
+                .unwrap()
+        };
+        assert_eq!(first.cache, CacheStatus::Miss);
+        assert_eq!(evaluator.calls(), 1);
+
+        let restored = persistence
+            .latest_checkpoint::<TestProblem>()
+            .unwrap()
+            .expect("checkpoint includes cache after deterministic miss");
+        let mut restored_graph = restored.graph;
+        let mut restored_budget = restored.budget;
+        let mut restored_cache = restored.cache.expect("checkpoint restored cache index");
+        let second = {
+            let mut ctx = RunContext::<TestProblem>::new(&mut restored_graph, &mut restored_budget)
+                .with_case_set(&case_set)
+                .with_cache(&mut restored_cache);
+            ctx.evaluate_with(&evaluator, independent_request(candidate))
+                .await
+                .unwrap()
+        };
+
+        assert_eq!(second.cache, CacheStatus::Hit);
+        assert_eq!(second.cost, Cost::zero());
         assert_eq!(first.assessment_ids, second.assessment_ids);
         assert_eq!(evaluator.calls(), 1);
     });

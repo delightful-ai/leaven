@@ -10,33 +10,32 @@ use std::{
 };
 
 use futures::{FutureExt, future::BoxFuture};
-use leaven_core::{
-    Artifact, AssessmentGranularity, EvaluationPurpose, EvaluationRequest, EvaluationSet,
-    OptimizationProblem, PartitionId,
-};
+use leaven_core::{Artifact, EvaluationPurpose, OptimizationProblem, PartitionId};
 use leaven_engine::{Callback, Optimizer, OptimizerError, TrustPolicy};
-use leaven_eval::{
-    CandidateEvaluationSummary, Case, Dataset, DatasetSplits, EvaluationReport, NoTarget,
-    ReportScore, SplitPolicy, SplitReport, SplitRole,
-};
-use leaven_evidence::{CaseAssessmentEvidence, CasewiseEvidence, OutputRecord};
-use leaven_kernel::{
-    Budget, BudgetSnapshot, CandidateId, CaseId, Cost, EvaluatorId, Fingerprint, RunId,
-};
-use leaven_store::{CheckpointStore, EvidenceStore};
+use leaven_eval::{Case, Dataset, DatasetSplits, NoTarget, SplitPolicy, SplitRole};
+use leaven_evidence::{CaseAssessmentEvidence, CasewiseEvidence};
+use leaven_kernel::{Budget, CaseId, Cost, Fingerprint, RunId};
+use leaven_store::EvidenceStore;
 use serde::{Serialize, de::DeserializeOwned};
 
 use crate::{
-    IntoOptimizeStore, OptimizeError, OptimizeStore, RunCase, RunOutput, Score, ScoreContext,
-    ScoreError,
+    IntoOptimizeStore, OptimizeError, RunCase, RunOutput, Score, ScoreContext, ScoreError,
     compatibility::{
         DatasetCompatibility, RunCompatibilityManifest, RuntimeFingerprint, RuntimeKind,
         ScoringEvaluatorIdentity, case_content_fingerprint, case_set_version,
         compare_stored_manifest, store_fresh_manifest,
     },
     evaluator::{ScoringEvaluator, default_parallelism},
-    result::{BestCandidate, Optimized, RunEventSummary, RunStorage, StandardRunSummary, average},
-    store::LocalOptimizeStore,
+    result::Optimized,
+    run_report::{
+        FinalEvaluationInputs, FinalEvaluations, FinalPartitionEvaluation, FinalPartitionResults,
+        ReportInputs, build_summary, final_eval, report_paths_for, run_storage,
+        write_summary_report,
+    },
+    run_store::{
+        PreparedStore, StoreConfig, StoreSource, StoreStart, has_persistence, latest_checkpoint,
+        prepare_store,
+    },
 };
 
 type Runner<A, I> = Arc<dyn Fn(A, RunCase<I>) -> BoxFuture<'static, RunOutput> + Send + Sync>;
@@ -44,98 +43,10 @@ type Scorer<A, I, T> = Arc<
     dyn Fn(ScoreContext<A, I, T>) -> BoxFuture<'static, Result<Score, ScoreError>> + Send + Sync,
 >;
 
-struct FinalEvaluations {
-    baseline_train: Option<CandidateEvaluationSummary>,
-    train: Option<CandidateEvaluationSummary>,
-    baseline_validation: Option<CandidateEvaluationSummary>,
-    validation: Option<CandidateEvaluationSummary>,
-    baseline_test: Option<CandidateEvaluationSummary>,
-    test: Option<CandidateEvaluationSummary>,
-    cost: Cost,
-}
-
-struct FinalEvaluationInputs {
-    seed: CandidateId,
-    best: Option<CandidateId>,
-    has_train: bool,
-    has_validation: bool,
-    has_test: bool,
-}
-
-struct FinalPartitionEvaluation {
-    partition: PartitionId,
-    purpose: EvaluationPurpose,
-}
-
-struct FinalPartitionResults {
-    baseline: CandidateEvaluationSummary,
-    optimized: Option<CandidateEvaluationSummary>,
-    cost: Cost,
-}
-
-struct ReportInputs<'a, I, T> {
-    dataset: &'a Dataset<Case<I, T>>,
-    splits: &'a DatasetSplits,
-    best: Option<CandidateId>,
-    final_evaluations: &'a FinalEvaluations,
-    optimization_budget: BudgetSnapshot,
-    storage: RunStorage,
-}
-
-type SummaryBuild<A> = (
-    Option<BestCandidate<A>>,
-    StandardRunSummary,
-    Vec<RunEventSummary>,
-);
-
-enum StoreSource {
-    DefaultDurable,
-    RunDir(PathBuf),
-    Ephemeral,
-}
-
-enum StoreConfig<P>
-where
-    P: OptimizationProblem,
-{
-    Source(StoreSource),
-    Explicit(OptimizeStore<P>),
-}
-
-impl<P> StoreConfig<P>
-where
-    P: OptimizationProblem,
-{
-    fn into_source(self) -> StoreSource {
-        match self {
-            Self::Source(source) => source,
-            Self::Explicit(_) => StoreSource::DefaultDurable,
-        }
-    }
-}
-
-struct PreparedStore<P>
-where
-    P: OptimizationProblem,
-{
-    store: OptimizeStore<P>,
-    run_dir: Option<PathBuf>,
-    local_persistence: Option<leaven_engine::StoreRunPersistence<leaven_store_file::FileStore>>,
-    start: StoreStart<P>,
-    resumable: bool,
-}
-
-enum StoreStart<P>
-where
-    P: OptimizationProblem,
-{
-    Fresh {
-        run_id: RunId,
-    },
-    Resume {
-        checkpoint: leaven_engine::RunCheckpoint,
-        restored: leaven_engine::RestoredRunState<P>,
-    },
+struct CasePlan<I, T> {
+    dataset: Dataset<Case<I, T>>,
+    splits: DatasetSplits,
+    case_set: leaven_engine::CaseSet<Case<I, T>>,
 }
 
 /// Problem type used by the public run builder.
@@ -241,8 +152,8 @@ where
 impl<A, I, T, O> OptimizeBuilder<A, I, T, O>
 where
     A: Artifact,
-    I: Clone + Serialize + Send + Sync + 'static,
-    T: Clone + Serialize + Send + Sync + 'static,
+    I: Clone + Send + Sync + 'static,
+    T: Clone + Send + Sync + 'static,
 {
     /// Supplies validation/dev case envelopes.
     #[must_use]
@@ -388,8 +299,8 @@ impl<A, I, T, O> OptimizeBuilder<A, I, T, O>
 where
     A: Artifact + Serialize + DeserializeOwned,
     <A as Artifact>::Change: Serialize + DeserializeOwned,
-    I: Clone + Send + Sync + 'static,
-    T: Clone + Send + Sync + 'static,
+    I: Clone + Serialize + Send + Sync + 'static,
+    T: Clone + Serialize + Send + Sync + 'static,
     O: Optimizer<RunProblem<A, I, T>>,
 {
     /// Runs the optimization.
@@ -400,18 +311,9 @@ where
         if self.train.is_empty() && (!self.validation.is_empty() || !self.test.is_empty()) {
             return Err(OptimizeError::HeldOutWithoutTrain);
         }
-        let case_content =
-            case_content_fingerprint(&self.train, &self.validation, &self.test)
-                .map_err(|source| OptimizeError::CaseFingerprint { source })?;
-        let all_cases = all_cases(&self.train, &self.validation, &self.test);
-        let dataset = Dataset::from_cases(all_cases.clone())?;
-        let splits = dataset_splits(&self.train, &self.validation, &self.test, case_content);
-        let case_set = case_set(
-            all_cases,
-            self.train.len(),
-            self.validation.len(),
-            self.test.len(),
-        );
+        let case_content = case_content_fingerprint(&self.train, &self.validation, &self.test)
+            .map_err(|source| OptimizeError::CaseFingerprint { source })?;
+        let case_plan = build_case_plan(&self.train, &self.validation, &self.test, case_content)?;
         let store_config =
             std::mem::replace(&mut self.store, StoreConfig::Source(StoreSource::Ephemeral));
         let mut prepared_store = prepare_store::<RunProblem<A, I, T>>(store_config, RunId::new())?;
@@ -430,66 +332,39 @@ where
             runner: runner_fingerprint,
             scorer: scorer_fingerprint,
             dataset: case_content,
-            splits: splits.fingerprint(),
+            splits: case_plan.splits.fingerprint(),
         };
         let evaluator_fingerprint = RuntimeFingerprint::new(evaluator_identity.fingerprint());
         let compatibility = RunCompatibilityManifest::new(
-            DatasetCompatibility::new(case_content, &splits),
+            DatasetCompatibility::new(case_content, &case_plan.splits),
             runner_fingerprint,
             scorer_fingerprint,
             evaluator_fingerprint,
         );
+        let compatibility_summary = prepared_store
+            .run_dir
+            .as_ref()
+            .map(|_| compatibility.summary());
         let evaluator = ScoringEvaluator::new(
             Arc::new(case_set_cases(&self.train, &self.validation, &self.test)),
             self.runner.clone(),
             scorer,
-            evaluator_identity,
+            &evaluator_identity,
         )
         .with_parallelism(self.evaluation_parallelism);
-        let mut engine_builder =
-            leaven_engine::Engine::<RunProblem<A, I, T>>::builder()
-                .budget(budget)
-                .trust_policy(TrustPolicy::default().hide_from_proposers([
-                    PartitionId::from("VALIDATION"),
-                    PartitionId::from("TEST"),
-                ]))
-                .evaluator(evaluator);
-        if let Some(limit) = metric_call_limit {
-            engine_builder = engine_builder.metric_call_budget_stopper(limit);
-        }
-        let start = std::mem::replace(
-            &mut prepared_store.start,
-            StoreStart::Fresh {
-                run_id: RunId::new(),
-            },
-        );
-        let (is_resume, checkpoint) = match start {
-            StoreStart::Fresh { run_id } => {
-                store_fresh_manifest(prepared_store.run_dir.as_deref(), &compatibility).map_err(
-                    |source| OptimizeError::CompatibilityStore {
-                        operation: "write compatibility manifest",
-                        source,
-                    },
-                )?;
-                engine_builder = engine_builder.run_id(run_id);
-                (false, None)
-            }
-            StoreStart::Resume {
-                checkpoint,
-                restored,
-            } => {
-                if let Some(run_dir) = prepared_store.run_dir.as_deref() {
-                    compare_stored_manifest(run_dir, &compatibility)?;
-                }
-                engine_builder = engine_builder.restored_run(restored);
-                (true, Some(checkpoint))
-            }
-        };
-        if let Some(persistence) = prepared_store.store.persistence() {
-            engine_builder = engine_builder.persistence(persistence);
-        }
         let callbacks = std::mem::take(&mut self.callbacks);
-        let engine = build_engine(engine_builder, callbacks);
+        let EngineStart {
+            engine,
+            resumed,
+            checkpoint,
+        } = start_engine(EngineStartInputs {
+            budget,
+            metric_call_limit,
+            evaluator,
+            prepared_store: &mut prepared_store,
+            compatibility: &compatibility,
+            callbacks,
+        })?;
         if let Some(checkpoint) = checkpoint {
             let reader = prepared_store.local_persistence.as_ref().ok_or_else(|| {
                 OptimizeError::Optimizer(OptimizerError::Message(
@@ -504,35 +379,184 @@ where
             return run_with_engine(
                 self,
                 engine,
-                &case_set,
-                &dataset,
-                &splits,
-                prepared_store,
-                true,
+                EngineRunInputs {
+                    case_set: &case_plan.case_set,
+                    dataset: &case_plan.dataset,
+                    splits: &case_plan.splits,
+                    prepared_store,
+                    resumed: true,
+                    compatibility_summary,
+                },
             )
             .await;
         }
         run_with_engine(
             self,
             engine,
-            &case_set,
-            &dataset,
-            &splits,
-            prepared_store,
-            is_resume,
+            EngineRunInputs {
+                case_set: &case_plan.case_set,
+                dataset: &case_plan.dataset,
+                splits: &case_plan.splits,
+                prepared_store,
+                resumed,
+                compatibility_summary,
+            },
         )
         .await
     }
 }
 
+struct EngineStartInputs<'a, A, I, T>
+where
+    A: Artifact,
+    I: Send + Sync + 'static,
+    T: Send + Sync + 'static,
+{
+    budget: Budget,
+    metric_call_limit: Option<u64>,
+    evaluator: ScoringEvaluator<A, I, T>,
+    prepared_store: &'a mut PreparedStore<RunProblem<A, I, T>>,
+    compatibility: &'a RunCompatibilityManifest,
+    callbacks: Vec<Box<dyn Callback<RunProblem<A, I, T>>>>,
+}
+
+struct EngineStart<A, I, T>
+where
+    A: Artifact,
+    I: Send + Sync + 'static,
+    T: Send + Sync + 'static,
+{
+    engine: leaven_engine::Engine<RunProblem<A, I, T>>,
+    resumed: bool,
+    checkpoint: Option<Box<leaven_engine::RunCheckpoint>>,
+}
+
+struct ConfiguredEngineStart<A, I, T>
+where
+    A: Artifact,
+    I: Send + Sync + 'static,
+    T: Send + Sync + 'static,
+{
+    builder: leaven_engine::EngineBuilder<RunProblem<A, I, T>>,
+    resumed: bool,
+    checkpoint: Option<Box<leaven_engine::RunCheckpoint>>,
+}
+
+fn start_engine<A, I, T>(
+    inputs: EngineStartInputs<'_, A, I, T>,
+) -> Result<EngineStart<A, I, T>, OptimizeError>
+where
+    A: Artifact,
+    I: Clone + Send + Sync + 'static,
+    T: Clone + Send + Sync + 'static,
+{
+    let EngineStartInputs {
+        budget,
+        metric_call_limit,
+        evaluator,
+        prepared_store,
+        compatibility,
+        callbacks,
+    } = inputs;
+    let mut engine_builder = leaven_engine::Engine::<RunProblem<A, I, T>>::builder()
+        .budget(budget)
+        .trust_policy(
+            TrustPolicy::default()
+                .hide_from_proposers([PartitionId::from("VALIDATION"), PartitionId::from("TEST")]),
+        )
+        .evaluator(evaluator);
+    if let Some(evaluation_cache) = prepared_store.evaluation_cache.as_ref() {
+        let cache =
+            evaluation_cache
+                .load_cache()
+                .map_err(|source| OptimizeError::EvaluationCache {
+                    operation: "load sqlite evaluation cache",
+                    source,
+                })?;
+        engine_builder = engine_builder.evaluation_cache(cache);
+    }
+    if let Some(limit) = metric_call_limit {
+        engine_builder = engine_builder.metric_call_budget_stopper(limit);
+    }
+    let ConfiguredEngineStart {
+        builder: mut engine_builder,
+        resumed,
+        checkpoint,
+    } = configure_engine_start(engine_builder, prepared_store, compatibility)?;
+    if let Some(persistence) = prepared_store.store.persistence() {
+        engine_builder = engine_builder.persistence(persistence);
+    }
+    Ok(EngineStart {
+        engine: build_engine(engine_builder, callbacks),
+        resumed,
+        checkpoint,
+    })
+}
+
+fn configure_engine_start<A, I, T>(
+    engine_builder: leaven_engine::EngineBuilder<RunProblem<A, I, T>>,
+    prepared_store: &mut PreparedStore<RunProblem<A, I, T>>,
+    compatibility: &RunCompatibilityManifest,
+) -> Result<ConfiguredEngineStart<A, I, T>, OptimizeError>
+where
+    A: Artifact,
+    I: Clone + Send + Sync + 'static,
+    T: Clone + Send + Sync + 'static,
+{
+    let start = std::mem::replace(
+        &mut prepared_store.start,
+        StoreStart::Fresh {
+            run_id: RunId::new(),
+        },
+    );
+    match start {
+        StoreStart::Fresh { run_id } => {
+            store_fresh_manifest(prepared_store.run_dir.as_deref(), compatibility).map_err(
+                |source| OptimizeError::CompatibilityStore {
+                    operation: "write compatibility manifest",
+                    source,
+                },
+            )?;
+            Ok(ConfiguredEngineStart {
+                builder: engine_builder.run_id(run_id),
+                resumed: false,
+                checkpoint: None,
+            })
+        }
+        StoreStart::Resume {
+            checkpoint,
+            restored,
+        } => {
+            if let Some(run_dir) = prepared_store.run_dir.as_deref() {
+                compare_stored_manifest(run_dir, compatibility)?;
+            }
+            Ok(ConfiguredEngineStart {
+                builder: engine_builder.restored_run(*restored),
+                resumed: true,
+                checkpoint: Some(checkpoint),
+            })
+        }
+    }
+}
+
+struct EngineRunInputs<'a, A, I, T>
+where
+    A: Artifact,
+    I: Send + Sync + 'static,
+    T: Send + Sync + 'static,
+{
+    case_set: &'a leaven_engine::CaseSet<Case<I, T>>,
+    dataset: &'a Dataset<Case<I, T>>,
+    splits: &'a DatasetSplits,
+    prepared_store: PreparedStore<RunProblem<A, I, T>>,
+    resumed: bool,
+    compatibility_summary: Option<crate::result::RunCompatibilitySummary>,
+}
+
 async fn run_with_engine<A, I, T, O>(
     mut builder: OptimizeBuilder<A, I, T, O>,
     mut engine: leaven_engine::Engine<RunProblem<A, I, T>>,
-    case_set: &leaven_engine::CaseSet<Case<I, T>>,
-    dataset: &Dataset<Case<I, T>>,
-    splits: &DatasetSplits,
-    prepared_store: PreparedStore<RunProblem<A, I, T>>,
-    resumed: bool,
+    inputs: EngineRunInputs<'_, A, I, T>,
 ) -> Result<Optimized<A>, OptimizeError>
 where
     A: Artifact + Serialize + DeserializeOwned,
@@ -541,6 +565,14 @@ where
     T: Clone + Send + Sync + 'static,
     O: Optimizer<RunProblem<A, I, T>>,
 {
+    let EngineRunInputs {
+        case_set,
+        dataset,
+        splits,
+        prepared_store,
+        resumed,
+        compatibility_summary,
+    } = inputs;
     let seed = if resumed {
         engine
             .view()
@@ -574,10 +606,8 @@ where
     let optimization_budget = engine.budget().snapshot();
     let stop_reason = stop_reason_from_events(&engine.view())?;
     let best = run.best;
-    let has_train = !builder.train.is_empty();
-    let has_validation = !builder.validation.is_empty();
-    let has_test = !builder.test.is_empty();
-    if has_train || has_validation || has_test {
+    let final_inputs = final_evaluation_inputs(seed, best, &builder);
+    if final_inputs.has_any_split() {
         engine.set_budget_limit(Budget::unlimited());
     }
 
@@ -585,20 +615,23 @@ where
         &mut engine,
         case_set,
         prepared_store.store.evidence_store(),
-        FinalEvaluationInputs {
-            seed,
-            best,
-            has_train,
-            has_validation,
-            has_test,
-        },
+        final_inputs,
     )
     .await?;
     if has_persistence(&prepared_store) {
         engine.checkpoint_optimizer_state(&builder.optimizer)?;
     }
+    if let Some(evaluation_cache) = prepared_store.evaluation_cache.as_ref() {
+        evaluation_cache
+            .replace_from_snapshot(&engine.evaluation_cache_snapshot())
+            .map_err(|source| OptimizeError::EvaluationCache {
+                operation: "flush sqlite evaluation cache",
+                source,
+            })?;
+    }
     let latest_checkpoint = latest_checkpoint(&prepared_store)?;
     let storage = run_storage(run.run_id, &prepared_store, latest_checkpoint);
+    let reports = report_paths_for(&storage);
     let seed_artifact = engine
         .view()
         .artifact(seed)
@@ -614,8 +647,11 @@ where
             final_evaluations: &final_evaluations,
             optimization_budget,
             storage,
+            reports,
+            compatibility: compatibility_summary,
         },
     )?;
+    write_summary_report(&summary)?;
     let budget = summary.budget.clone();
     Ok(Optimized {
         run_id: run.run_id,
@@ -626,6 +662,25 @@ where
         summary,
         events,
     })
+}
+
+fn final_evaluation_inputs<A, I, T, O>(
+    seed: leaven_kernel::CandidateId,
+    best: Option<leaven_kernel::CandidateId>,
+    builder: &OptimizeBuilder<A, I, T, O>,
+) -> FinalEvaluationInputs
+where
+    A: Artifact,
+    I: Clone + Send + Sync + 'static,
+    T: Clone + Send + Sync + 'static,
+{
+    FinalEvaluationInputs {
+        seed,
+        best,
+        has_train: !builder.train.is_empty(),
+        has_validation: !builder.validation.is_empty(),
+        has_test: !builder.test.is_empty(),
+    }
 }
 
 fn build_engine<A, I, T>(
@@ -643,118 +698,17 @@ where
     engine_builder.build()
 }
 
-fn prepare_store<P>(
-    config: StoreConfig<P>,
-    run_id: RunId,
-) -> Result<PreparedStore<P>, OptimizeError>
-where
-    P: OptimizationProblem,
-    P::Artifact: Serialize + DeserializeOwned,
-    <P::Artifact as Artifact>::Change: Serialize + DeserializeOwned,
-    P::Evidence: Clone + Serialize + DeserializeOwned,
-    P::ProposalAnnotations: Serialize + DeserializeOwned,
-{
-    match config {
-        StoreConfig::Source(StoreSource::DefaultDurable) => {
-            prepare_local_store(default_run_dir(run_id), run_id)
-        }
-        StoreConfig::Source(StoreSource::RunDir(run_dir)) => prepare_local_store(run_dir, run_id),
-        StoreConfig::Source(StoreSource::Ephemeral) => Ok(PreparedStore {
-            store: OptimizeStore::inline("leaven-run"),
-            run_dir: None,
-            local_persistence: None,
-            start: StoreStart::Fresh { run_id },
-            resumable: false,
-        }),
-        StoreConfig::Explicit(store) => Ok(PreparedStore {
-            store,
-            run_dir: None,
-            local_persistence: None,
-            start: StoreStart::Fresh { run_id },
-            resumable: false,
-        }),
-    }
-}
-
-fn prepare_local_store<P>(
-    run_dir: PathBuf,
-    run_id: RunId,
-) -> Result<PreparedStore<P>, OptimizeError>
-where
-    P: OptimizationProblem,
-    P::Artifact: Serialize + DeserializeOwned,
-    <P::Artifact as Artifact>::Change: Serialize + DeserializeOwned,
-    P::Evidence: Clone + Serialize + DeserializeOwned,
-    P::ProposalAnnotations: Serialize + DeserializeOwned,
-{
-    let local = LocalOptimizeStore::<P>::open(&run_dir).map_err(|source| OptimizeError::Store {
-        operation: "open local run store",
-        source,
-    })?;
-    let restored = local
-        .persistence
-        .latest_checkpoint::<P>()
-        .map_err(|source| OptimizeError::Resume {
-            operation: "read latest checkpoint",
-            source,
-        })?;
-    let start = match restored {
-        Some(restored) => StoreStart::Resume {
-            checkpoint: restored.checkpoint.clone(),
-            restored,
-        },
-        None => StoreStart::Fresh { run_id },
-    };
-    Ok(PreparedStore {
-        store: local.store,
-        run_dir: Some(local.run_dir),
-        local_persistence: Some(local.persistence),
-        start,
-        resumable: true,
-    })
-}
-
-fn default_run_dir(run_id: RunId) -> PathBuf {
-    PathBuf::from(".leaven")
-        .join("runs")
-        .join(run_id.to_string())
-}
-
-fn has_persistence<P>(store: &PreparedStore<P>) -> bool
-where
-    P: OptimizationProblem,
-{
-    store.store.persistence().is_some()
-}
-
-fn latest_checkpoint<P>(
-    store: &PreparedStore<P>,
-) -> Result<Option<leaven_kernel::CheckpointId>, OptimizeError>
-where
-    P: OptimizationProblem,
-{
-    let Some(persistence) = &store.local_persistence else {
-        return Ok(None);
-    };
-    persistence
-        .store()
-        .latest()
-        .map_err(|source| OptimizeError::Store {
-            operation: "read latest checkpoint pointer",
-            source,
-        })
-}
-
 fn durable_runtime_fingerprint(
     run_dir: Option<&std::path::Path>,
     fingerprint: Option<RuntimeFingerprint>,
     runtime: RuntimeKind,
 ) -> Result<RuntimeFingerprint, OptimizeError> {
     match (run_dir, fingerprint) {
-        (Some(_), Some(fingerprint)) => Ok(fingerprint),
         (Some(_), None) => Err(runtime.missing_error()),
-        (None, Some(fingerprint)) => Ok(fingerprint),
-        (None, None) => Ok(RuntimeFingerprint::new(ephemeral_runtime_fingerprint(runtime))),
+        (Some(_) | None, Some(fingerprint)) => Ok(fingerprint),
+        (None, None) => Ok(RuntimeFingerprint::new(ephemeral_runtime_fingerprint(
+            runtime,
+        ))),
     }
 }
 
@@ -771,6 +725,27 @@ fn cases_from_inputs<I>(start: usize, inputs: Vec<I>) -> Vec<Case<I, NoTarget>> 
         .enumerate()
         .map(|(offset, input)| Case::input(CaseId::from_index(start + offset), input))
         .collect()
+}
+
+fn build_case_plan<I, T>(
+    train: &[Case<I, T>],
+    validation: &[Case<I, T>],
+    test: &[Case<I, T>],
+    case_content: Fingerprint,
+) -> Result<CasePlan<I, T>, OptimizeError>
+where
+    I: Clone,
+    T: Clone,
+{
+    let all_cases = all_cases(train, validation, test);
+    let dataset = Dataset::from_cases(all_cases.clone())?;
+    let splits = dataset_splits(train, validation, test, case_content);
+    let case_set = case_set(all_cases, train.len(), validation.len(), test.len());
+    Ok(CasePlan {
+        dataset,
+        splits,
+        case_set,
+    })
 }
 
 fn all_cases<I: Clone, T: Clone>(
@@ -970,218 +945,6 @@ where
     })
 }
 
-fn build_summary<A, I, T>(
-    engine: &leaven_engine::Engine<RunProblem<A, I, T>>,
-    store: &dyn EvidenceStore<CasewiseEvidence<CaseAssessmentEvidence>>,
-    inputs: ReportInputs<'_, I, T>,
-) -> Result<SummaryBuild<A>, leaven_engine::OptimizerError>
-where
-    A: Artifact,
-    I: Clone + Send + Sync + 'static,
-    T: Clone + Send + Sync + 'static,
-{
-    let view = engine.view();
-    let best = inputs.best.map(|id| BestCandidate {
-        id,
-        artifact: view.artifact(id).expect("best exists").clone(),
-    });
-    let budget = engine.budget().snapshot();
-    let cost = budget.spent.clone();
-    let summary = StandardRunSummary {
-        storage: inputs.storage,
-        optimization_budget: inputs.optimization_budget.clone(),
-        budget,
-        optimization_cost: inputs.optimization_budget.spent,
-        final_report_cost: inputs.final_evaluations.cost.clone(),
-        cost: cost.clone(),
-        baseline_train_score: inputs
-            .final_evaluations
-            .baseline_train
-            .as_ref()
-            .and_then(|summary| summary.average_score),
-        optimized_train_score: inputs
-            .final_evaluations
-            .train
-            .as_ref()
-            .and_then(|summary| summary.average_score),
-        baseline_validation_score: inputs
-            .final_evaluations
-            .baseline_validation
-            .as_ref()
-            .and_then(|summary| summary.average_score),
-        validation_score: inputs
-            .final_evaluations
-            .validation
-            .as_ref()
-            .and_then(|summary| summary.average_score),
-        baseline_test_score: inputs
-            .final_evaluations
-            .baseline_test
-            .as_ref()
-            .and_then(|summary| summary.average_score),
-        test_score: inputs
-            .final_evaluations
-            .test
-            .as_ref()
-            .and_then(|summary| summary.average_score),
-        evaluation: EvaluationReport {
-            dataset: inputs.dataset.fingerprint(),
-            splits: inputs.splits.fingerprint(),
-            cost,
-            splits_reported: split_reports_for(&view, store, inputs.splits)?,
-        },
-    };
-    let events = view.events().map(event_summary).collect();
-    Ok((best, summary, events))
-}
-
-async fn final_eval<A, I, T>(
-    engine: &mut leaven_engine::Engine<RunProblem<A, I, T>>,
-    case_set: &leaven_engine::CaseSet<Case<I, T>>,
-    store: &dyn EvidenceStore<CasewiseEvidence<CaseAssessmentEvidence>>,
-    candidate: leaven_kernel::CandidateId,
-    partition: PartitionId,
-    purpose: EvaluationPurpose,
-) -> Result<(CandidateEvaluationSummary, Cost), leaven_engine::OptimizerError>
-where
-    A: Artifact,
-    I: Clone + Send + Sync + 'static,
-    T: Clone + Send + Sync + 'static,
-{
-    let report = engine
-        .evaluate(
-            EvaluatorId::PRIMARY,
-            EvaluationRequest::Independent {
-                candidates: vec![candidate],
-                set: EvaluationSet::Partition(partition),
-                granularity: AssessmentGranularity::PerCase,
-                purpose,
-            },
-            case_set,
-            store,
-        )
-        .await
-        .map_err(|source| {
-            leaven_engine::OptimizerError::with_source("final evaluation failed", source)
-        })?;
-    let view = engine.view();
-    Ok((
-        assessment_summary(&view, store, report.assessment_ids[0])?,
-        report.cost,
-    ))
-}
-
-fn split_reports_for<A, I, T>(
-    view: &leaven_engine::RunGraphView<'_, RunProblem<A, I, T>>,
-    store: &dyn EvidenceStore<CasewiseEvidence<CaseAssessmentEvidence>>,
-    splits: &DatasetSplits,
-) -> Result<Vec<SplitReport>, leaven_engine::OptimizerError>
-where
-    A: Artifact,
-    I: Clone + Send + Sync + 'static,
-    T: Clone + Send + Sync + 'static,
-{
-    let mut reports = BTreeMap::<PartitionId, SplitReport>::new();
-    for assessment in view.all_assessments() {
-        let Some((partition, role)) = assessment_split(view, assessment.id()) else {
-            continue;
-        };
-        if splits.role(&partition).is_none() {
-            continue;
-        }
-        let summary = assessment_summary(view, store, assessment.id())?;
-        reports
-            .entry(partition.clone())
-            .or_insert_with(|| SplitReport {
-                role,
-                partition,
-                candidates: Vec::new(),
-            })
-            .candidates
-            .push(summary);
-    }
-    Ok(reports.into_values().collect())
-}
-
-fn assessment_split<A, I, T>(
-    view: &leaven_engine::RunGraphView<'_, RunProblem<A, I, T>>,
-    assessment: leaven_kernel::AssessmentId,
-) -> Option<(PartitionId, SplitRole)>
-where
-    A: Artifact,
-    I: Clone + Send + Sync + 'static,
-    T: Clone + Send + Sync + 'static,
-{
-    let request_id = view.assessment(assessment)?.request_id();
-    let evaluation_request = view.evaluation_request(request_id)?;
-    let request = evaluation_request.request();
-    let partition = match request {
-        EvaluationRequest::Independent {
-            set: EvaluationSet::Partition(partition),
-            ..
-        } => partition.clone(),
-        _ => return None,
-    };
-    let role = match partition.0.as_str() {
-        "TRAIN" => SplitRole::Train,
-        "VALIDATION" => SplitRole::Validation,
-        "TEST" => SplitRole::Test,
-        other => SplitRole::Custom(other.to_owned().into()),
-    };
-    Some((partition, role))
-}
-
-fn assessment_summary<A, I, T>(
-    view: &leaven_engine::RunGraphView<'_, RunProblem<A, I, T>>,
-    store: &dyn EvidenceStore<CasewiseEvidence<CaseAssessmentEvidence>>,
-    assessment: leaven_kernel::AssessmentId,
-) -> Result<CandidateEvaluationSummary, leaven_engine::OptimizerError>
-where
-    A: Artifact,
-    I: Clone + Send + Sync + 'static,
-    T: Clone + Send + Sync + 'static,
-{
-    let assessment_view = view.assessment(assessment).ok_or_else(|| {
-        leaven_engine::OptimizerError::Message("assessment missing from graph".to_owned())
-    })?;
-    let candidate = assessment_view.independent_candidate().ok_or_else(|| {
-        leaven_engine::OptimizerError::Message("report expected independent assessment".to_owned())
-    })?;
-    let evidence = store
-        .get(assessment_view.evidence_ref())
-        .map_err(|source| {
-            leaven_engine::OptimizerError::with_source("report evidence lookup failed", source)
-        })?;
-    let cases = report_scores(&evidence);
-    Ok(CandidateEvaluationSummary {
-        candidate,
-        request: assessment_view.request_id(),
-        assessment,
-        average_score: average(&cases),
-        cases,
-    })
-}
-
-fn report_scores(evidence: &CasewiseEvidence<CaseAssessmentEvidence>) -> Vec<ReportScore> {
-    evidence
-        .outcomes()
-        .iter()
-        .map(|outcome| ReportScore {
-            case_id: outcome.case(),
-            score: outcome.evidence().score().score(),
-            feedback: outcome.evidence().feedback().to_owned(),
-            output: output_record_text(outcome.evidence().output()),
-        })
-        .collect()
-}
-
-fn output_record_text(output: &OutputRecord) -> String {
-    match output {
-        OutputRecord::Inline { text, .. } => text.clone(),
-        OutputRecord::BlobRef(reference) => format!("blob:{}:{}", reference.store, reference.key),
-    }
-}
-
 fn stop_reason_from_events<A, I, T>(
     view: &leaven_engine::RunGraphView<'_, RunProblem<A, I, T>>,
 ) -> Result<leaven_engine::StopReason, leaven_engine::OptimizerError>
@@ -1201,50 +964,4 @@ where
             "optimizer finished without a stop reason".to_owned(),
         )
     })
-}
-
-fn run_storage<P>(
-    run_id: leaven_kernel::RunId,
-    store: &PreparedStore<P>,
-    latest_checkpoint: Option<leaven_kernel::CheckpointId>,
-) -> RunStorage
-where
-    P: OptimizationProblem,
-{
-    if store.store.persistence().is_some() {
-        RunStorage::Stored {
-            run_id,
-            run_dir: store.run_dir.clone(),
-            latest_checkpoint,
-            resumable: store.resumable && latest_checkpoint.is_some(),
-        }
-    } else {
-        RunStorage::Ephemeral { run_id }
-    }
-}
-
-fn event_summary(event: &leaven_engine::RunEvent) -> RunEventSummary {
-    match event {
-        leaven_engine::RunEvent::OptimizationStarted { .. } => RunEventSummary::OptimizationStarted,
-        leaven_engine::RunEvent::IterationStarted { .. } => RunEventSummary::IterationStarted,
-        leaven_engine::RunEvent::BudgetCharged { .. } => RunEventSummary::BudgetCharged,
-        leaven_engine::RunEvent::ProposalBatchProduced { .. } => {
-            RunEventSummary::ProposalBatchProduced
-        }
-        leaven_engine::RunEvent::ProposalRecorded { .. } => RunEventSummary::ProposalRecorded,
-        leaven_engine::RunEvent::StageAttemptRecorded { .. } => {
-            RunEventSummary::StageAttemptRecorded
-        }
-        leaven_engine::RunEvent::ApplySucceeded { .. } => RunEventSummary::ApplySucceeded,
-        leaven_engine::RunEvent::ApplyFailed { .. } => RunEventSummary::ApplyFailed,
-        leaven_engine::RunEvent::EvaluationRequested { .. } => RunEventSummary::EvaluationRequested,
-        leaven_engine::RunEvent::EvaluationCompleted { .. } => RunEventSummary::EvaluationCompleted,
-        leaven_engine::RunEvent::PopulationUpdated { .. } => RunEventSummary::PopulationUpdated,
-        leaven_engine::RunEvent::IterationEnded { .. } => RunEventSummary::IterationEnded,
-        leaven_engine::RunEvent::OptimizationStopping { .. } => {
-            RunEventSummary::OptimizationStopping
-        }
-        leaven_engine::RunEvent::OptimizationEnded { .. } => RunEventSummary::OptimizationEnded,
-        leaven_engine::RunEvent::Error { .. } => RunEventSummary::Error,
-    }
 }

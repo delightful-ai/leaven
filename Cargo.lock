@@ -2548,9 +2548,12 @@ dependencies = [
  "leaven-store-inline",
  "leaven-surface",
  "leaven-workspace",
+ "parking_lot",
  "proptest",
+ "rusqlite",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror 2.0.18",
 ]
 
@@ -2749,6 +2752,7 @@ dependencies = [
  "leaven-store-file",
  "leaven-store-inline",
  "serde",
+ "serde_json",
  "thiserror 2.0.18",
 ]
 

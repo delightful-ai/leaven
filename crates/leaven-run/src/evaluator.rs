@@ -12,12 +12,10 @@ use leaven_eval::{Case, NoTarget};
 use leaven_evidence::{
     CaseAssessmentEvidence, CaseOutcome, CasewiseEvidence, OutputRecord, ScalarEvidence,
 };
-use leaven_kernel::{
-    BudgetSnapshot, Cost, EvaluationSetId, EvaluatorId, Fingerprint, Metered,
-};
+use leaven_kernel::{BudgetSnapshot, Cost, EvaluationSetId, EvaluatorId, Fingerprint, Metered};
 
-use crate::{RunCase, RunOutput, RunProblem, Score, ScoreContext, ScoreError};
 use crate::compatibility::ScoringEvaluatorIdentity;
+use crate::{RunCase, RunOutput, RunProblem, Score, ScoreContext, ScoreError};
 
 type Runner<A, I> = Arc<dyn Fn(A, RunCase<I>) -> BoxFuture<'static, RunOutput> + Send + Sync>;
 type Scorer<A, I, T> = Arc<
@@ -41,7 +39,7 @@ impl<A, I, T> ScoringEvaluator<A, I, T> {
         cases: Arc<Vec<Case<I, T>>>,
         runner: Runner<A, I>,
         scorer: Scorer<A, I, T>,
-        identity: ScoringEvaluatorIdentity,
+        identity: &ScoringEvaluatorIdentity,
     ) -> Self {
         Self {
             cases,

@@ -1,16 +1,19 @@
 //! Public product builder for ordinary Leaven optimization runs.
 
 mod builder;
-mod compatibility;
+pub(crate) mod compatibility;
 mod error;
 mod evaluator;
 mod evidence;
 mod result;
+pub(crate) mod run_report;
+pub(crate) mod run_store;
 mod store;
 
 pub use builder::{OptimizeBuilder, RunProblem, optimize};
 pub use compatibility::{
-    RunCompatibilityManifest, RuntimeFingerprint, RuntimeKind, ScoringEvaluatorIdentity,
+    ResumeCompatibilityError, RunCompatibilityManifest, RuntimeFingerprint, RuntimeKind,
+    ScoringEvaluatorIdentity,
 };
 pub use error::OptimizeError;
 pub use evaluator::ScoringEvaluator;
@@ -18,8 +21,10 @@ pub use evidence::{
     RunCase, RunOutput, Score, ScoreCase, ScoreContext, ScoreError, ScoreMetadataView,
 };
 pub use result::{
-    BestCandidate, OptimizationStopReason, Optimized, RunEventSummary, RunStorage,
-    StandardRunSummary,
+    BestCandidate, EvaluationCacheBackend, EvaluationCacheBypassReason,
+    EvaluationCacheBypassSummary, EvaluationCacheSummary, OptimizationStopReason, Optimized,
+    RunCacheSummary, RunCompatibilitySummary, RunEventSummary, RunNotResumableReason,
+    RunReportPaths, RunResumability, RunStorage, StandardRunSummary,
 };
 pub use store::{IntoOptimizeStore, OptimizeStore};
 
@@ -27,9 +32,11 @@ pub mod prelude {
     //! Common public-run imports.
 
     pub use crate::{
-        BestCandidate, IntoOptimizeStore, OptimizationStopReason, OptimizeBuilder, OptimizeError,
-        OptimizeStore, Optimized, RunCase, RunEventSummary, RunOutput, RunProblem, RunStorage,
-        Score, ScoreCase, ScoreContext, ScoreError, ScoreMetadataView, StandardRunSummary,
-        optimize,
+        BestCandidate, EvaluationCacheBackend, EvaluationCacheBypassReason,
+        EvaluationCacheBypassSummary, EvaluationCacheSummary, IntoOptimizeStore,
+        OptimizationStopReason, OptimizeBuilder, OptimizeError, OptimizeStore, Optimized,
+        RunCacheSummary, RunCase, RunCompatibilitySummary, RunEventSummary, RunNotResumableReason,
+        RunOutput, RunProblem, RunReportPaths, RunResumability, RunStorage, Score, ScoreCase,
+        ScoreContext, ScoreError, ScoreMetadataView, StandardRunSummary, optimize,
     };
 }

@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use leaven_eval::EvaluationReport;
 use leaven_kernel::{BudgetSnapshot, CandidateId, CheckpointId, Cost, RunId};
+use serde::Serialize;
 
 /// Result returned by the product builder.
 #[derive(Clone, Debug)]
@@ -66,7 +67,7 @@ pub struct BestCandidate<A> {
 }
 
 /// Reason the optimizer portion of a product run stopped.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize)]
 pub enum OptimizationStopReason {
     /// Optimizer reported that it had finished.
     OptimizerDone,
@@ -96,7 +97,7 @@ impl From<leaven_engine::StopReason> for OptimizationStopReason {
 }
 
 /// Public storage status for a product run.
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize)]
 pub enum RunStorage {
     /// No stored-run resume promise exists for this run.
     Ephemeral {
@@ -112,16 +113,102 @@ pub enum RunStorage {
         run_dir: Option<PathBuf>,
         /// Latest checkpoint known at result construction time.
         latest_checkpoint: Option<CheckpointId>,
-        /// Whether the public product surface can resume this run.
-        resumable: bool,
+        /// Whether the public product surface can resume this run, or why not.
+        resumability: RunResumability,
     },
 }
 
+impl RunStorage {
+    /// Whether the public product surface can resume this run.
+    #[must_use]
+    pub const fn is_resumable(&self) -> bool {
+        matches!(
+            self,
+            Self::Stored {
+                resumability: RunResumability::Resumable,
+                ..
+            }
+        )
+    }
+}
+
+/// Public stored-run resumability status.
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize)]
+pub enum RunResumability {
+    /// Stored run has the artifacts needed for product-level resume.
+    Resumable,
+    /// Stored run cannot be resumed through the product surface.
+    NotResumable {
+        /// Typed reason the run cannot be resumed.
+        reason: RunNotResumableReason,
+    },
+}
+
+/// Typed reason a stored run is not resumable.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize)]
+pub enum RunNotResumableReason {
+    /// The caller supplied a store capability without a Leaven-managed local run directory.
+    ExplicitStoreWithoutLocalRunDir,
+    /// No latest checkpoint was discoverable when the result was built.
+    MissingLatestCheckpoint,
+}
+
+impl RunNotResumableReason {
+    /// Stable reason name.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::ExplicitStoreWithoutLocalRunDir => "explicit_store_without_local_run_dir",
+            Self::MissingLatestCheckpoint => "missing_latest_checkpoint",
+        }
+    }
+}
+
+/// Product report paths emitted for a run.
+#[derive(Clone, Debug, Default, Eq, PartialEq, Hash, Serialize)]
+pub struct RunReportPaths {
+    /// Durable summary JSON written beside the run, when one exists.
+    pub summary_json: Option<PathBuf>,
+}
+
+/// Public redacted summary of the compatibility manifest used for resume.
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize)]
+pub struct RunCompatibilitySummary {
+    /// Manifest schema.
+    pub schema: String,
+    /// Product run kind.
+    pub run_kind: String,
+    /// Dataset content fingerprint as lowercase hex.
+    pub dataset: String,
+    /// Split membership fingerprint as lowercase hex.
+    pub splits: String,
+    /// Derived case-set version.
+    pub case_set_version: String,
+    /// Runner behavior fingerprint as lowercase hex.
+    pub runner: String,
+    /// Scorer behavior fingerprint as lowercase hex.
+    pub scorer: String,
+    /// Composed evaluator/cache-key fingerprint as lowercase hex.
+    pub evaluator: String,
+    /// Optimizer compatibility declaration.
+    pub optimizer: String,
+    /// Cache compatibility declaration.
+    pub cache: String,
+    /// Budget compatibility declaration.
+    pub budget: String,
+    /// Number of role-specific LM fingerprints declared.
+    pub lm_role_count: usize,
+}
+
 /// Public summary for an ordinary optimization run.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub struct StandardRunSummary {
     /// Public storage/resume status for this run.
     pub storage: RunStorage,
+    /// Report artifacts emitted for this run.
+    pub reports: RunReportPaths,
+    /// Redacted resume compatibility identity for durable runs.
+    pub compatibility: Option<RunCompatibilitySummary>,
     /// Budget snapshot after optimizer work, before final report evaluations.
     pub optimization_budget: BudgetSnapshot,
     /// Budget snapshot after optimizer and final report evaluations.
@@ -132,6 +219,8 @@ pub struct StandardRunSummary {
     pub final_report_cost: Cost,
     /// Total visible evaluation/proposal cost after final reporting.
     pub cost: Cost,
+    /// Cache behavior observed during the run.
+    pub cache: RunCacheSummary,
     /// Baseline train score when train evidence exists.
     pub baseline_train_score: Option<f64>,
     /// Optimized train score when train evidence exists.
@@ -148,8 +237,89 @@ pub struct StandardRunSummary {
     pub evaluation: EvaluationReport,
 }
 
+/// Public cache summary for an ordinary optimization run.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct RunCacheSummary {
+    /// Engine-owned evaluation cache summary.
+    pub evaluation: EvaluationCacheSummary,
+}
+
+/// Engine evaluation-cache summary.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct EvaluationCacheSummary {
+    /// Whether evaluation cache state is durable with the run.
+    pub durable: bool,
+    /// Human-readable backend class.
+    pub backend: EvaluationCacheBackend,
+    /// Number of evaluation cache hits.
+    pub hits: u64,
+    /// Number of cacheable evaluation misses.
+    pub misses: u64,
+    /// Bypasses grouped by reason.
+    pub bypasses: Vec<EvaluationCacheBypassSummary>,
+    /// Number of cache write errors observed by the product summary.
+    pub write_errors: u64,
+    /// Whether every observed cache hit charged zero run cost.
+    pub hit_cost_zero: bool,
+}
+
+/// Evaluation cache backend reported by the product run summary.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize)]
+pub enum EvaluationCacheBackend {
+    /// Durable `SQLite` cache table in the local run store.
+    SqliteRunStore,
+    /// Durable checkpointed run-store cache index.
+    CheckpointedRunStore,
+    /// Non-durable in-memory cache state.
+    InMemory,
+}
+
+impl EvaluationCacheBackend {
+    /// Stable backend name.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::SqliteRunStore => "sqlite-run-store",
+            Self::CheckpointedRunStore => "checkpointed-run-store",
+            Self::InMemory => "in-memory",
+        }
+    }
+}
+
+/// Evaluation cache bypass count.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct EvaluationCacheBypassSummary {
+    /// Bypass reason.
+    pub reason: EvaluationCacheBypassReason,
+    /// Number of observations.
+    pub count: u64,
+}
+
+/// Public summary of why engine evaluation caching was bypassed.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize)]
+pub enum EvaluationCacheBypassReason {
+    /// Evaluator declared `CachePolicy::Never`.
+    DisabledByPolicy,
+    /// Engine run context had no attached cache.
+    CacheUnavailable,
+    /// At least one candidate lacked a cache-safe identity.
+    MissingCandidateIdentity,
+}
+
+impl EvaluationCacheBypassReason {
+    /// Stable reason name.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::DisabledByPolicy => "disabled_by_policy",
+            Self::CacheUnavailable => "cache_unavailable",
+            Self::MissingCandidateIdentity => "missing_candidate_identity",
+        }
+    }
+}
+
 /// Public event summary emitted during an optimization run.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize)]
 pub enum RunEventSummary {
     /// Optimization started.
     OptimizationStarted,

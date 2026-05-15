@@ -171,7 +171,7 @@ fn scoring_evaluator_reports_per_candidate_cost_for_independent_batches() {
                 }
                 .boxed()
             }),
-            identity("scoring-evaluator-test"),
+            &identity("scoring-evaluator-test"),
         );
         assert!(evaluator.parallelism().get() > 0);
 
@@ -274,7 +274,7 @@ fn scoring_evaluator_hides_target_from_runner_and_passes_target_to_scorer() {
                             let target = ctx.case.target().expect("target is scorer-visible");
                             *scorer_seen_target.lock().unwrap() = Some(target.answer);
                             Ok(Score::new(
-                                (ctx.output.output == target.answer.to_string()) as u8 as f64,
+                                f64::from(u8::from(ctx.output.output == target.answer.to_string())),
                                 "target checked",
                             ))
                         }
@@ -282,7 +282,7 @@ fn scoring_evaluator_hides_target_from_runner_and_passes_target_to_scorer() {
                     },
                 )
             },
-            identity("scoring-evaluator-target-visibility-test"),
+            &identity("scoring-evaluator-target-visibility-test"),
         );
 
         let metered = evaluator
@@ -354,7 +354,7 @@ fn scoring_evaluator_surfaces_async_scorer_failures_with_metered_cost() {
                 }
                 .boxed()
             }),
-            identity("scoring-evaluator-failure-test"),
+            &identity("scoring-evaluator-failure-test"),
         );
 
         let error = evaluator
@@ -400,7 +400,7 @@ fn scoring_evaluator_passes_budget_snapshot_to_scorer() {
                 }
                 .boxed()
             }),
-            identity("scoring-evaluator-budget-test"),
+            &identity("scoring-evaluator-budget-test"),
         );
 
         evaluator
@@ -459,7 +459,7 @@ fn scoring_evaluator_runs_case_jobs_with_bounded_parallelism_and_stable_order() 
                 async move { Ok(Score::new(ctx.output.output.parse::<f64>().unwrap(), "ok")) }
                     .boxed()
             }),
-            identity("scoring-evaluator-parallel-test"),
+            &identity("scoring-evaluator-parallel-test"),
         )
         .with_parallelism(NonZeroUsize::new(2).unwrap());
 
@@ -502,14 +502,14 @@ fn scoring_evaluator(
     let scorer = Arc::new(scorer);
     ScoringEvaluator::new(
         Arc::new(vec![input_case(0, 2)]),
-        Arc::new(|artifact, case| {
+        Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
             async move { RunOutput::new((artifact.0 + *case.input()).to_string()) }.boxed()
         }),
         Arc::new(move |ctx| {
             let score = scorer(ctx);
             async move { Ok(score) }.boxed()
         }),
-        identity("scoring-evaluator-test"),
+        &identity("scoring-evaluator-test"),
     )
 }
 
@@ -619,4 +619,54 @@ fn scoring_evaluator_identity_and_cache_policy_are_stable() {
     );
     assert_eq!(evaluator.cache_policy(&request), CachePolicy::Never);
     assert_eq!(evaluator.fingerprint(), evaluator.fingerprint());
+}
+
+#[test]
+fn scoring_evaluator_fingerprint_includes_runtime_and_case_identity() {
+    let base = ScoringEvaluator::new(
+        Arc::new(vec![input_case(0, 2)]),
+        Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
+            async move { RunOutput::new((artifact.0 + *case.input()).to_string()) }.boxed()
+        }),
+        Arc::new(|ctx: ScoreContext<TextArtifact, i32>| {
+            async move { Ok(Score::new(ctx.output.output.parse().unwrap(), "ok")) }.boxed()
+        }),
+        &identity("fingerprint-test"),
+    );
+    let changed_runner = ScoringEvaluator::new(
+        Arc::new(vec![input_case(0, 2)]),
+        Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
+            async move { RunOutput::new((artifact.0 + *case.input()).to_string()) }.boxed()
+        }),
+        Arc::new(|ctx: ScoreContext<TextArtifact, i32>| {
+            async move { Ok(Score::new(ctx.output.output.parse().unwrap(), "ok")) }.boxed()
+        }),
+        &ScoringEvaluatorIdentity {
+            runner: RuntimeFingerprint::new(Fingerprint::from_bytes([77; 32])),
+            ..identity("fingerprint-test")
+        },
+    );
+    let changed_cases = ScoringEvaluator::new(
+        Arc::new(vec![input_case(0, 2), input_case(1, 3)]),
+        Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
+            async move { RunOutput::new((artifact.0 + *case.input()).to_string()) }.boxed()
+        }),
+        Arc::new(|ctx: ScoreContext<TextArtifact, i32>| {
+            async move { Ok(Score::new(ctx.output.output.parse().unwrap(), "ok")) }.boxed()
+        }),
+        &ScoringEvaluatorIdentity {
+            dataset: Fingerprint::from_bytes([78; 32]),
+            splits: Fingerprint::from_bytes([79; 32]),
+            ..identity("fingerprint-test")
+        },
+    );
+
+    assert_ne!(
+        Evaluator::<RunProblem<TextArtifact, i32>>::fingerprint(&base),
+        Evaluator::<RunProblem<TextArtifact, i32>>::fingerprint(&changed_runner)
+    );
+    assert_ne!(
+        Evaluator::<RunProblem<TextArtifact, i32>>::fingerprint(&base),
+        Evaluator::<RunProblem<TextArtifact, i32>>::fingerprint(&changed_cases)
+    );
 }

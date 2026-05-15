@@ -11,8 +11,10 @@ use leaven_core::{
 };
 use leaven_engine::{
     BudgetLedger, CachePolicy, CaseSet, CheckpointContext, CheckpointableOptimizer, Engine,
-    EvaluationContext, EvaluationError, Evaluator, PrivateStatePolicy, ProposalContext,
-    ProposalError, Proposer, RestoreContext, RunContext, RunGraph, TrustPolicy,
+    EvaluationContext, EvaluationError, Evaluator, GraphSnapshotRef, Optimizer,
+    OptimizerStateReader, PrivateStatePolicy, ProposalContext, ProposalError, Proposer,
+    RestoreContext, RunCheckpoint, RunContext, RunGraph, RunPersistenceError, StateFormat,
+    TrustPolicy,
 };
 use leaven_evidence::{
     CaseAssessmentEvidence, CaseOutcome, CasewiseEvidence, OutputRecord, ScalarEvidence,
@@ -30,7 +32,8 @@ use leaven_gepa::{
     },
 };
 use leaven_kernel::{
-    Budget, ContentId, Cost, EvaluatorId, Fingerprint, MetadataBag, Metered, ProposerId, RunId,
+    BlobRef, Budget, BudgetSnapshot, ContentId, Cost, EvaluatorId, Fingerprint, MetadataBag,
+    Metered, ProposerId, RunId,
 };
 use leaven_population::{KeepBest, ParetoFrontier, TournamentPopulation};
 use leaven_store_inline::InlineEvidenceStore;
@@ -295,6 +298,39 @@ fn gepa_checkpoint_state_restores_loop_and_selector_cursor() {
 }
 
 #[test]
+fn gepa_restore_checkpoint_state_uses_engine_resume_contract() {
+    let artifact = PartMapArtifact(BTreeMap::from([("answer".to_owned(), "draft".to_owned())]));
+    let mut graph = RunGraph::<SmokeProblem>::new(RunId::new());
+    let mut budget = BudgetLedger::default();
+    let mut ctx = RunContext::new(&mut graph, &mut budget);
+    ctx.insert_seed(artifact, 0).unwrap();
+    let mut gepa = smoke_gepa(FixedSurfaceEdit::new("unused".to_owned()));
+    let checkpoint = RunCheckpoint::new(
+        RunId::new(),
+        leaven_kernel::now(),
+        GraphSnapshotRef {
+            schema: Fingerprint::from_bytes([1; 32]),
+            format: StateFormat::Json,
+            bytes: BlobRef {
+                store: "test".to_owned(),
+                key: "graph".to_owned(),
+            },
+        },
+        BudgetSnapshot::default(),
+    );
+
+    let error = Optimizer::<SmokeProblem>::restore_checkpoint_state(
+        &mut gepa,
+        &checkpoint,
+        &MissingOptimizerStateReader,
+        RestoreContext::new(ctx.graph()),
+    )
+    .unwrap_err();
+
+    assert!(format!("{error:?}").contains("does not contain optimizer private state"));
+}
+
+#[test]
 fn gepa_checkpoint_state_restores_population_frontier_membership() {
     let artifact = PartMapArtifact(BTreeMap::from([
         ("answer".to_owned(), "draft".to_owned()),
@@ -337,6 +373,22 @@ fn gepa_checkpoint_state_restores_population_frontier_membership() {
 
     assert_eq!(restored.population().best(), Some(seed));
     assert_eq!(restored.select_candidate(ctx.graph()), Some(seed));
+}
+
+struct MissingOptimizerStateReader;
+
+impl OptimizerStateReader for MissingOptimizerStateReader {
+    fn load_optimizer_state<T>(
+        &self,
+        _checkpoint: &RunCheckpoint,
+        _optimizer: Fingerprint,
+        _schema: Fingerprint,
+    ) -> Result<Option<T>, RunPersistenceError>
+    where
+        T: serde::de::DeserializeOwned,
+    {
+        Ok(None)
+    }
 }
 
 #[test]

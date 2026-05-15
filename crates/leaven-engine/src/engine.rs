@@ -48,6 +48,12 @@ impl<P: OptimizationProblem> Engine<P> {
         &self.budget
     }
 
+    /// Captures the current evaluation-cache index.
+    #[must_use]
+    pub fn evaluation_cache_snapshot(&self) -> crate::EvaluationCacheSnapshot {
+        self.cache.snapshot()
+    }
+
     /// Replaces the budget limit while preserving already-spent ledger state.
     pub fn set_budget_limit(&mut self, budget: Budget) {
         self.budget.set_limit(budget);
@@ -344,6 +350,7 @@ const MAX_ITERATIONS: usize = 1024;
 pub struct EngineBuilder<P: OptimizationProblem> {
     run_id: RunId,
     budget: Budget,
+    cache: Option<EvaluationCache>,
     restored: Option<RestoredEngineState<P>>,
     evaluators: BTreeMap<EvaluatorId, Arc<dyn DynEvaluator<P>>>,
     callbacks: Vec<Box<dyn DynCallback<P>>>,
@@ -358,6 +365,7 @@ impl<P: OptimizationProblem> Default for EngineBuilder<P> {
         Self {
             run_id: RunId::new(),
             budget: Budget::unlimited(),
+            cache: None,
             restored: None,
             evaluators: BTreeMap::new(),
             callbacks: Vec::new(),
@@ -379,6 +387,12 @@ impl<P: OptimizationProblem> EngineBuilder<P> {
     #[must_use]
     pub fn budget(mut self, budget: Budget) -> Self {
         self.budget = budget;
+        self
+    }
+
+    #[must_use]
+    pub fn evaluation_cache(mut self, cache: EvaluationCache) -> Self {
+        self.cache = Some(cache);
         self
     }
 
@@ -446,13 +460,19 @@ impl<P: OptimizationProblem> EngineBuilder<P> {
 
     #[must_use]
     pub fn build(self) -> Engine<P> {
+        let fallback_cache = self.cache.unwrap_or_default();
         let (graph, budget, cache) = if let Some(restored) = self.restored {
-            (restored.graph, restored.budget, restored.cache)
+            let cache = if restored.cache.is_empty() {
+                fallback_cache
+            } else {
+                restored.cache
+            };
+            (restored.graph, restored.budget, cache)
         } else {
             (
                 RunGraph::new(self.run_id),
                 BudgetLedger::new(self.budget),
-                EvaluationCache::default(),
+                fallback_cache,
             )
         };
         Engine {

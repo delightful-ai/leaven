@@ -97,6 +97,12 @@ must not reach into graph storage to make progress.
   new optimizer product paths.
 - Persistence here is the run checkpoint envelope and codec boundary. Concrete
   byte stores and backend details belong in `leaven-store-*`.
+- `SqliteEvaluationCache` is a focused exception for leaven-env.10: it persists
+  the engine-owned `EvaluationCacheKey -> AssessmentId` index while
+  `leaven-store-sqlite` is still generic scaffold with no engine cache
+  capability. Do not expand it into LM response cache, optimizer state, evidence
+  storage, or run graph schema; move the backend out when a real cache-capability
+  crate exists.
 - `Population` and `PreferenceRelation` traits live here because the engine
   calls them. Reusable implementations and fitted model state do not.
 - `CachePolicy::Never` is the safe default for stochastic evaluators. Switching

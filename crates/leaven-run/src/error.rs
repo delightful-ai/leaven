@@ -1,6 +1,8 @@
 //! Public run-builder refusal modes.
 
-use leaven_engine::{OptimizerError, RunContextError, RunPersistenceError};
+use leaven_engine::{
+    EvaluationCacheStoreError, OptimizerError, RunContextError, RunPersistenceError,
+};
 use leaven_eval::DatasetError;
 use leaven_store::StoreError;
 
@@ -52,7 +54,7 @@ pub enum OptimizeError {
     },
     /// Durable resume compatibility rejected the live run inputs.
     #[error(transparent)]
-    ResumeCompatibility(#[from] ResumeCompatibilityError),
+    ResumeCompatibility(Box<ResumeCompatibilityError>),
     /// Case content could not be fingerprinted for durable compatibility.
     #[error("case content fingerprinting failed")]
     CaseFingerprint {
@@ -66,6 +68,20 @@ pub enum OptimizeError {
         operation: &'static str,
         #[source]
         source: std::io::Error,
+    },
+    /// Durable report storage failed.
+    #[error("run report failed during {operation}")]
+    ReportStore {
+        operation: &'static str,
+        #[source]
+        source: std::io::Error,
+    },
+    /// Durable evaluation-cache storage failed.
+    #[error("evaluation cache failed during {operation}")]
+    EvaluationCache {
+        operation: &'static str,
+        #[source]
+        source: EvaluationCacheStoreError,
     },
     /// A restored graph did not contain the seed candidate needed for reports.
     #[error("restored run graph does not contain a seed candidate")]
@@ -86,5 +102,11 @@ impl RuntimeKind {
 impl From<DatasetError> for OptimizeError {
     fn from(source: DatasetError) -> Self {
         Self::Dataset { source }
+    }
+}
+
+impl From<ResumeCompatibilityError> for OptimizeError {
+    fn from(source: ResumeCompatibilityError) -> Self {
+        Self::ResumeCompatibility(Box::new(source))
     }
 }

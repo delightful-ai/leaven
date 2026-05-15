@@ -6,7 +6,7 @@ use leaven_kernel::{AssessmentId, CandidateId, CaseId, Cost, EvaluationRequestId
 use crate::{EvaluationUse, SplitRole};
 
 /// One reportable case score.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct ReportScore {
     /// Case this score describes.
     pub case_id: CaseId,
@@ -19,7 +19,7 @@ pub struct ReportScore {
 }
 
 /// Candidate summary for one split.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct CandidateEvaluationSummary {
     /// Candidate evaluated.
     pub candidate: CandidateId,
@@ -34,7 +34,7 @@ pub struct CandidateEvaluationSummary {
 }
 
 /// Summary for a single split.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct SplitReport {
     /// Split role.
     pub role: SplitRole,
@@ -45,7 +45,7 @@ pub struct SplitReport {
 }
 
 /// Split-use report row.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct SplitUseSummary {
     /// Partition id.
     pub partition: PartitionId,
@@ -56,7 +56,7 @@ pub struct SplitUseSummary {
 }
 
 /// Evaluation report facade.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct EvaluationReport {
     /// Dataset fingerprint.
     pub dataset: Fingerprint,

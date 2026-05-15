@@ -7,7 +7,7 @@ use leaven_core::PartitionId;
 use crate::SplitUsePolicyError;
 
 /// One way a split may influence a run.
-#[derive(Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd, serde::Serialize)]
 pub enum EvaluationUse {
     /// May be rendered to proposers as feedback.
     ProposerFeedback,

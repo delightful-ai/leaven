@@ -85,6 +85,13 @@ around engine graph mutation or a home for optimizer strategy state.
   partition resolution is still internally positional; do not cite engine
   resolved-set case IDs as caller-stable product IDs until the engine owns
   explicit-id case sets.
+- Durable local runs write a product-layer compatibility manifest before work
+  and compare it before resume. Arbitrary closure runners/scorers are not
+  introspectable; `.runner_fingerprint(...)` and `.scorer_fingerprint(...)`
+  are the current explicit declarations for durable mode. Ephemeral runs may
+  omit them. Cache, budget, LM-role, and optimizer compatibility still contain
+  narrow placeholders except where engine optimizer checkpoint validation
+  already owns the concrete refusal.
 - `ScoringEvaluator::cache_policy` returns `CachePolicy::Never`. Do not teach
   users to get solver/judge/reflector caching by editing this evaluator; Layer 1
   needs role-level runtime/cache policy while LM response cache capabilities

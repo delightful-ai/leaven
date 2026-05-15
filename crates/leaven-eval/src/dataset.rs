@@ -7,7 +7,7 @@ use leaven_kernel::{CaseId, Fingerprint, FingerprintBuilder, MetadataBag};
 use crate::DatasetError;
 
 /// Marker target for unlabeled cases.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum NoTarget {}
 
 /// One unit of evaluation work.

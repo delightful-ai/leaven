@@ -14,6 +14,8 @@ on:
 - `docs/specs/case_visibility_and_target_isolation.md`
 - `docs/specs/aime_case_report_adapter.md`
 - `docs/specs/gepa_reflection_evidence_visibility.md`
+- `docs/specs/p8_run_report_operator_ux.md`
+- `docs/specs/p8_live_provider_budget_reliability.md`
 
 The immediate paper target is the GEPA CAIS AIME Math artifact under
 `~/vendor/github.com/gepa-ai/gepa-cais26-artifact/acm_cais_artifact_evaluation/domains/aime_math`.

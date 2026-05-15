@@ -2,15 +2,16 @@
 
 use std::{
     collections::BTreeMap,
-    fs,
-    io,
+    fs, io,
     path::{Path, PathBuf},
 };
 
-use leaven_core::{CaseSetVersion, PartitionId};
-use leaven_eval::{Case, DatasetSplits, SplitRole};
+use leaven_core::CaseSetVersion;
+use leaven_eval::{Case, DatasetSplits};
 use leaven_kernel::{Fingerprint, FingerprintBuilder};
 use serde::{Deserialize, Serialize};
+
+use crate::result::RunCompatibilitySummary;
 
 const MANIFEST_FILE: &str = "compatibility.json";
 const MANIFEST_SCHEMA: &str = "leaven-run.compatibility.v1";
@@ -135,6 +136,23 @@ impl RunCompatibilityManifest {
             budget: BUDGET_PLACEHOLDER.to_owned(),
         }
     }
+
+    pub(crate) fn summary(&self) -> RunCompatibilitySummary {
+        RunCompatibilitySummary {
+            schema: self.schema.clone(),
+            run_kind: self.run_kind.clone(),
+            dataset: fingerprint_hex(self.dataset.content),
+            splits: fingerprint_hex(self.dataset.splits),
+            case_set_version: self.dataset.case_set_version.clone(),
+            runner: fingerprint_hex(self.runner.fingerprint()),
+            scorer: fingerprint_hex(self.scorer.fingerprint()),
+            evaluator: fingerprint_hex(self.evaluator.fingerprint()),
+            optimizer: self.optimizer.clone(),
+            cache: self.cache.clone(),
+            budget: self.budget.clone(),
+            lm_role_count: self.lm_roles.len(),
+        }
+    }
 }
 
 /// Durable dataset compatibility identity.
@@ -155,15 +173,6 @@ impl DatasetCompatibility {
             splits: splits.fingerprint(),
             case_set_version: splits.version().0.clone(),
         }
-    }
-
-    pub(crate) fn fingerprint(&self) -> Fingerprint {
-        let mut fingerprint = FingerprintBuilder::new();
-        fingerprint.update(b"leaven-run.dataset-compatibility.v1");
-        fingerprint.update(self.content.0);
-        fingerprint.update(self.splits.0);
-        fingerprint.update(self.case_set_version.as_bytes());
-        fingerprint.finish()
     }
 }
 
@@ -192,9 +201,9 @@ pub enum ResumeCompatibilityError {
     #[error("stored dataset compatibility does not match live cases or splits")]
     DatasetFingerprintMismatch {
         /// Stored dataset compatibility.
-        stored: DatasetCompatibility,
+        stored: Box<DatasetCompatibility>,
         /// Live dataset compatibility.
-        live: DatasetCompatibility,
+        live: Box<DatasetCompatibility>,
     },
     /// Runner behavior changed.
     #[error("stored runner fingerprint does not match live runner fingerprint")]
@@ -229,7 +238,7 @@ pub enum ResumeCompatibilityError {
 }
 
 /// Stable content fingerprint for case ids, split roles, inputs, targets, and scorer metadata.
-pub(crate) fn case_content_fingerprint<I, T>(
+pub fn case_content_fingerprint<I, T>(
     train: &[Case<I, T>],
     validation: &[Case<I, T>],
     test: &[Case<I, T>],
@@ -266,31 +275,11 @@ where
     Ok(())
 }
 
-pub(crate) fn case_set_version(content: Fingerprint) -> CaseSetVersion {
+pub fn case_set_version(content: Fingerprint) -> CaseSetVersion {
     CaseSetVersion(format!("leaven-run-cases-v1:{}", fingerprint_hex(content)))
 }
 
-pub(crate) fn split_fingerprint(
-    version: &CaseSetVersion,
-    roles: &BTreeMap<PartitionId, SplitRole>,
-    cases: &BTreeMap<PartitionId, Vec<leaven_kernel::CaseId>>,
-) -> Fingerprint {
-    let mut fingerprint = FingerprintBuilder::new();
-    fingerprint.update(version.0.as_bytes());
-    for (partition, role) in roles {
-        fingerprint.update(partition.0.as_bytes());
-        fingerprint.update(format!("{role:?}").as_bytes());
-    }
-    for (partition, ids) in cases {
-        fingerprint.update(partition.0.as_bytes());
-        for id in ids {
-            fingerprint.update(id.0.to_le_bytes());
-        }
-    }
-    fingerprint.finish()
-}
-
-pub(crate) fn store_fresh_manifest(
+pub fn store_fresh_manifest(
     run_dir: Option<&Path>,
     manifest: &RunCompatibilityManifest,
 ) -> Result<(), io::Error> {
@@ -304,7 +293,7 @@ pub(crate) fn store_fresh_manifest(
     fs::write(path, bytes)
 }
 
-pub(crate) fn compare_stored_manifest(
+pub fn compare_stored_manifest(
     run_dir: &Path,
     live: &RunCompatibilityManifest,
 ) -> Result<(), ResumeCompatibilityError> {
@@ -313,11 +302,8 @@ pub(crate) fn compare_stored_manifest(
         path: path.clone(),
         source,
     })?;
-    let stored: RunCompatibilityManifest =
-        serde_json::from_slice(&bytes).map_err(|source| ResumeCompatibilityError::Decode {
-            path,
-            source,
-        })?;
+    let stored: RunCompatibilityManifest = serde_json::from_slice(&bytes)
+        .map_err(|source| ResumeCompatibilityError::Decode { path, source })?;
     compare_manifests(&stored, live)
 }
 
@@ -327,8 +313,8 @@ fn compare_manifests(
 ) -> Result<(), ResumeCompatibilityError> {
     if stored.dataset != live.dataset {
         return Err(ResumeCompatibilityError::DatasetFingerprintMismatch {
-            stored: stored.dataset.clone(),
-            live: live.dataset.clone(),
+            stored: Box::new(stored.dataset.clone()),
+            live: Box::new(live.dataset.clone()),
         });
     }
     if stored.runner != live.runner {
