@@ -8,7 +8,8 @@ use leaven_core::{
 };
 use leaven_engine::{
     CheckpointContext, CheckpointError, CheckpointableOptimizer, Optimizer, OptimizerError,
-    PopulationEvent, PrivateStatePolicy, RestoreContext, RunContext, RunGraphView, StateFormat,
+    OptimizerStateWrite, PopulationEvent, PrivateStatePolicy, RestoreContext, RunContext,
+    RunGraphView, StateFormat,
 };
 use leaven_evidence::{CaseOutcome, CasewiseEvidence, ScalarEvidence, ScoredFeedbackEvidence};
 use leaven_kernel::{AssessmentId, CandidateId, EvaluatorId, Fingerprint, PopulationId};
@@ -23,6 +24,7 @@ use crate::{
 };
 
 const DEFAULT_MAX_ITERATIONS: usize = 1;
+const GEPA_OPTIMIZER_FINGERPRINT: Fingerprint = Fingerprint::from_bytes([8; 32]);
 const GEPA_CHECKPOINT_SCHEMA: Fingerprint = Fingerprint::from_bytes([7; 32]);
 
 /// Evidence shape GEPA can compare as casewise scalar scores.
@@ -349,11 +351,14 @@ where
     P::Evidence: GepaScoreEvidence,
     P::ProposalAnnotations: Default,
     S: EditSurface<P::Artifact> + Send + Sync,
-    Pop: GepaPopulation + Send + Sync,
+    Pop: CheckpointPopulation + GepaPopulation + Send + Sync,
     Reflect: GepaReflector<P, S> + Send + Sync,
-    ParentSel: CandidateSelector<P, Pop, Selection = Option<CandidateId>> + Send + Sync,
-    PartSel: PartSelector<P::Artifact, S> + Send + Sync,
-    GatePol: Gate + Send + Sync,
+    ParentSel: CandidateSelector<P, Pop, Selection = Option<CandidateId>>
+        + CheckpointCandidateSelector
+        + Send
+        + Sync,
+    PartSel: PartSelector<P::Artifact, S> + CheckpointPartSelector + Send + Sync,
+    GatePol: CheckpointGate + Gate + Send + Sync,
 {
     async fn initialize(&mut self, _ctx: &mut RunContext<'_, P>) -> Result<(), OptimizerError> {
         Ok(())
@@ -432,6 +437,13 @@ where
     fn best_candidate(&self, _graph: RunGraphView<'_, P>) -> Option<CandidateId> {
         self.best.or_else(|| self.population.best())
     }
+
+    fn checkpoint_state_write(
+        &self,
+        ctx: CheckpointContext<'_, P>,
+    ) -> Result<Option<OptimizerStateWrite>, OptimizerError> {
+        <Self as CheckpointableOptimizer<P>>::checkpoint_state_write(self, ctx)
+    }
 }
 
 impl<P, S, Pop, Reflect, ParentSel, PartSel, GatePol> CheckpointableOptimizer<P>
@@ -451,6 +463,10 @@ where
     GatePol: CheckpointGate + Gate + Send + Sync,
 {
     type State = GepaCheckpointState<Pop::State, ParentSel::State, PartSel::State, GatePol::State>;
+
+    fn optimizer_fingerprint(&self) -> Fingerprint {
+        GEPA_OPTIMIZER_FINGERPRINT
+    }
 
     fn private_state_policy(&self) -> PrivateStatePolicy {
         PrivateStatePolicy::ExplicitSnapshot {

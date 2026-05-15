@@ -9,10 +9,10 @@ use leaven_kernel::{
 use leaven_store::EvidenceStore;
 
 use crate::{
-    BudgetLedger, Callback, CaseSet, DynCallback, DynEvaluator, ErrorPolicy, EvaluationCache,
-    Evaluator, Optimizer, OptimizerError, ReadScope, RunCheckpointRequest, RunContext,
-    RunContextError, RunEvent, RunGraph, RunGraphView, RunPersistence, StepStatus, StopReason,
-    TrustPolicy,
+    BudgetLedger, Callback, CaseSet, CheckpointContext, DynCallback, DynEvaluator, ErrorPolicy,
+    EvaluationCache, Evaluator, Optimizer, OptimizerError, OptimizerStateWrite, ReadScope,
+    RunCheckpointRequest, RunContext, RunContextError, RunEvent, RunGraph, RunGraphView,
+    RunPersistence, StepStatus, StopReason, TrustPolicy,
 };
 
 pub struct Engine<P: OptimizationProblem> {
@@ -53,7 +53,8 @@ impl<P: OptimizationProblem> Engine<P> {
     ) -> Result<CandidateId, RunContextError> {
         let candidate =
             RunContext::new(&mut self.graph, &mut self.budget).insert_seed(artifact, seed_index)?;
-        self.checkpoint().map_err(RunContextError::Persistence)?;
+        self.checkpoint(None)
+            .map_err(RunContextError::Persistence)?;
         Ok(candidate)
     }
 
@@ -83,12 +84,12 @@ impl<P: OptimizationProblem> Engine<P> {
                 return Err(error);
             }
         }
-        self.checkpoint().map_err(|error| {
-            let error =
-                OptimizerError::with_source("run checkpoint failed after initialize", error);
+        if let Err(error) =
+            self.checkpoint_optimizer(optimizer, "run checkpoint failed after initialize")
+        {
             self.record_optimizer_error(&error);
-            error
-        })?;
+            return Err(error);
+        }
 
         for _ in 0..MAX_ITERATIONS {
             let iteration = IterationId::new();
@@ -106,20 +107,27 @@ impl<P: OptimizationProblem> Engine<P> {
                 optimizer.step(&mut ctx).await
             };
             self.emit(RunEvent::IterationEnded { iteration });
-            self.checkpoint().map_err(|error| {
-                let error =
-                    OptimizerError::with_source("run checkpoint failed after iteration", error);
+            if let Err(error) =
+                self.checkpoint_optimizer(optimizer, "run checkpoint failed after iteration")
+            {
                 self.record_optimizer_error(&error);
-                error
-            })?;
+                return Err(error);
+            }
             match status {
                 Ok(StepStatus::Continue) => {}
                 Ok(StepStatus::Done) => {
                     self.emit(RunEvent::OptimizationStopping {
                         reason: StopReason::OptimizerDone,
                     });
+                    let optimizer_state = match self.optimizer_state_write(optimizer) {
+                        Ok(state) => state,
+                        Err(error) => {
+                            self.record_optimizer_error(&error);
+                            return Err(error);
+                        }
+                    };
                     return self
-                        .finish(optimizer.best_candidate(self.view()))
+                        .finish(optimizer.best_candidate(self.view()), optimizer_state)
                         .map_err(|error| {
                             let error = OptimizerError::with_source(
                                 "run checkpoint failed after finish",
@@ -172,6 +180,7 @@ impl<P: OptimizationProblem> Engine<P> {
     fn finish(
         &mut self,
         best: Option<CandidateId>,
+        optimizer_state: Option<OptimizerStateWrite>,
     ) -> Result<RunResult, crate::RunPersistenceError> {
         let run_id = self.graph.run_id;
         let budget = self.budget.snapshot();
@@ -180,19 +189,46 @@ impl<P: OptimizationProblem> Engine<P> {
             best,
             budget,
         });
-        self.checkpoint()?;
+        self.checkpoint(optimizer_state)?;
         Ok(RunResult { run_id, best })
     }
 
-    fn checkpoint(&self) -> Result<(), crate::RunPersistenceError> {
+    fn checkpoint(
+        &self,
+        optimizer_state: Option<OptimizerStateWrite>,
+    ) -> Result<(), crate::RunPersistenceError> {
         if let Some(persistence) = &self.persistence {
-            persistence.checkpoint(RunCheckpointRequest::new(
-                &self.graph,
-                &self.budget,
-                Some(&self.cache),
-            ))?;
+            let mut request =
+                RunCheckpointRequest::new(&self.graph, &self.budget, Some(&self.cache));
+            if let Some(state) = optimizer_state {
+                request = request.with_optimizer_state(state);
+            }
+            persistence.checkpoint(request)?;
         }
         Ok(())
+    }
+
+    fn checkpoint_optimizer<O>(
+        &self,
+        optimizer: &O,
+        failure_message: &'static str,
+    ) -> Result<(), OptimizerError>
+    where
+        O: Optimizer<P>,
+    {
+        let optimizer_state = self.optimizer_state_write(optimizer)?;
+        self.checkpoint(optimizer_state)
+            .map_err(|error| OptimizerError::with_source(failure_message, error))
+    }
+
+    fn optimizer_state_write<O>(
+        &self,
+        optimizer: &O,
+    ) -> Result<Option<OptimizerStateWrite>, OptimizerError>
+    where
+        O: Optimizer<P>,
+    {
+        optimizer.checkpoint_state_write(CheckpointContext::new(self.view()))
     }
 
     fn record_optimizer_error(&mut self, error: &OptimizerError) {
@@ -204,7 +240,7 @@ impl<P: OptimizationProblem> Engine<P> {
         self.emit(RunEvent::OptimizationStopping {
             reason: StopReason::Error,
         });
-        let _ = self.finish(None);
+        let _ = self.finish(None, None);
     }
 
     fn emit(&mut self, event: RunEvent) {

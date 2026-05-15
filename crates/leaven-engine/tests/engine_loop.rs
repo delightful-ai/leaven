@@ -126,6 +126,82 @@ fn engine_checkpoints_clean_run_boundaries() {
 }
 
 #[test]
+fn engine_checkpoints_explicit_optimizer_state_at_clean_run_boundaries() {
+    block_on(async {
+        let optimizer_state_presence = Arc::new(Mutex::new(Vec::new()));
+        let persistence = OptimizerStatePresencePersistence {
+            optimizer_state_presence: Arc::clone(&optimizer_state_presence),
+        };
+        let mut engine = Engine::<TestProblem>::builder()
+            .persistence(persistence)
+            .build();
+        let seed = engine
+            .insert_seed(TextArtifact("seed".to_owned()), 0)
+            .unwrap();
+        let cases = CaseSet::new(vec!["case"]);
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let mut optimizer = StatefulOptimizer {
+            selected: Some(seed),
+            cursor: 7,
+        };
+
+        engine.run(&mut optimizer, &cases, &store).await.unwrap();
+
+        let calls = optimizer_state_presence.lock().unwrap().clone();
+        assert_eq!(calls, vec![false, true, true, true]);
+    });
+}
+
+#[test]
+fn engine_restores_explicit_optimizer_state_from_stored_run_checkpoint() {
+    block_on(async {
+        let store = RecordingStore::new("recording");
+        let persistence = StoreRunPersistence::new(store);
+        let mut engine = Engine::<TestProblem>::builder()
+            .persistence(persistence.clone())
+            .build();
+        let seed = engine
+            .insert_seed(TextArtifact("seed".to_owned()), 0)
+            .unwrap();
+        let cases = CaseSet::new(vec!["case"]);
+        let evidence = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let mut optimizer = StatefulOptimizer {
+            selected: Some(seed),
+            cursor: 7,
+        };
+
+        engine.run(&mut optimizer, &cases, &evidence).await.unwrap();
+
+        let restored = persistence
+            .latest_checkpoint::<TestProblem>()
+            .unwrap()
+            .unwrap();
+        let state: StatefulOptimizerState = persistence
+            .load_optimizer_state(
+                &restored.checkpoint,
+                STATEFUL_OPTIMIZER_FINGERPRINT,
+                STATEFUL_OPTIMIZER_STATE_SCHEMA,
+            )
+            .unwrap()
+            .expect("ordinary run checkpoint should include optimizer state");
+        let mut restored_graph = restored.graph;
+        let mut restored_budget = restored.budget;
+        let restored_ctx =
+            RunContext::<TestProblem>::new(&mut restored_graph, &mut restored_budget);
+        let mut resumed = StatefulOptimizer {
+            selected: None,
+            cursor: 0,
+        };
+        resumed
+            .restore_state(state, RestoreContext::new(restored_ctx.graph()))
+            .unwrap();
+
+        assert_eq!(resumed.selected, Some(seed));
+        assert_eq!(resumed.cursor, 7);
+    });
+}
+
+#[test]
 fn store_run_persistence_writes_graph_cache_and_checkpoint_envelope() {
     let store = RecordingStore::new("recording");
     let persistence = StoreRunPersistence::new(store.clone());
@@ -790,6 +866,10 @@ struct CountingPersistence {
     cache_absent: Option<Arc<AtomicUsize>>,
 }
 
+struct OptimizerStatePresencePersistence {
+    optimizer_state_presence: Arc<Mutex<Vec<bool>>>,
+}
+
 #[derive(Clone)]
 struct RecordingStore {
     name: String,
@@ -880,6 +960,19 @@ impl RunPersistence<TestProblem> for CountingPersistence {
             cache_absent.fetch_add(1, Ordering::SeqCst);
         }
         self.checkpoints.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }
+}
+
+impl RunPersistence<TestProblem> for OptimizerStatePresencePersistence {
+    fn checkpoint(
+        &self,
+        request: RunCheckpointRequest<'_, TestProblem>,
+    ) -> Result<(), RunPersistenceError> {
+        self.optimizer_state_presence
+            .lock()
+            .unwrap()
+            .push(request.optimizer_state.is_some());
         Ok(())
     }
 }
@@ -997,6 +1090,9 @@ struct StatefulOptimizer {
     cursor: u64,
 }
 
+const STATEFUL_OPTIMIZER_FINGERPRINT: Fingerprint = Fingerprint::from_bytes([5; 32]);
+const STATEFUL_OPTIMIZER_STATE_SCHEMA: Fingerprint = Fingerprint::from_bytes([6; 32]);
+
 #[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 struct StatefulOptimizerState {
     selected: Option<CandidateId>,
@@ -1014,14 +1110,25 @@ impl Optimizer<TestProblem> for StatefulOptimizer {
     fn best_candidate(&self, _graph: RunGraphView<'_, TestProblem>) -> Option<CandidateId> {
         self.selected
     }
+
+    fn checkpoint_state_write(
+        &self,
+        ctx: CheckpointContext<'_, TestProblem>,
+    ) -> Result<Option<OptimizerStateWrite>, OptimizerError> {
+        <Self as CheckpointableOptimizer<TestProblem>>::checkpoint_state_write(self, ctx)
+    }
 }
 
 impl CheckpointableOptimizer<TestProblem> for StatefulOptimizer {
     type State = StatefulOptimizerState;
 
+    fn optimizer_fingerprint(&self) -> Fingerprint {
+        STATEFUL_OPTIMIZER_FINGERPRINT
+    }
+
     fn private_state_policy(&self) -> PrivateStatePolicy {
         PrivateStatePolicy::ExplicitSnapshot {
-            schema: Fingerprint::from_bytes([5; 32]),
+            schema: STATEFUL_OPTIMIZER_STATE_SCHEMA,
             format: StateFormat::Json,
         }
     }

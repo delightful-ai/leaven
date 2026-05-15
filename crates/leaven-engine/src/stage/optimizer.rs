@@ -4,7 +4,7 @@ use leaven_core::OptimizationProblem;
 use leaven_kernel::{BlobRef, CandidateId, Fingerprint};
 use serde::{Serialize, de::DeserializeOwned};
 
-use crate::RunGraphView;
+use crate::{OptimizerStateWrite, RunGraphView};
 
 #[allow(async_fn_in_trait)]
 pub trait Optimizer<P: OptimizationProblem>: Send {
@@ -21,6 +21,20 @@ pub trait Optimizer<P: OptimizationProblem>: Send {
     ) -> Result<StepStatus, OptimizerError>;
 
     fn best_candidate(&self, graph: RunGraphView<'_, P>) -> Option<CandidateId>;
+
+    /// Captures serialized optimizer continuation state for a clean run
+    /// checkpoint.
+    ///
+    /// Optimizers with no future-affecting private state return `None`.
+    /// Optimizers with explicit private state should delegate to their
+    /// checkpoint contract so ordinary durable runs preserve the next-decision
+    /// state without callers remembering a second checkpoint path.
+    fn checkpoint_state_write(
+        &self,
+        _ctx: CheckpointContext<'_, P>,
+    ) -> Result<Option<OptimizerStateWrite>, OptimizerError> {
+        Ok(None)
+    }
 }
 
 /// Optimizer capability for durable private-state checkpointing.
@@ -33,6 +47,9 @@ where
     P: OptimizationProblem,
 {
     type State: Serialize + DeserializeOwned;
+
+    /// Stable optimizer identity used to validate restored continuation state.
+    fn optimizer_fingerprint(&self) -> Fingerprint;
 
     /// Describes whether private state is derived from graph truth or must be
     /// snapshotted explicitly.
@@ -50,6 +67,39 @@ where
         state: Self::State,
         ctx: RestoreContext<'_, P>,
     ) -> Result<(), CheckpointError>;
+
+    /// Serializes checkpoint state for a run persistence adapter.
+    fn checkpoint_state_write(
+        &self,
+        ctx: CheckpointContext<'_, P>,
+    ) -> Result<Option<OptimizerStateWrite>, OptimizerError> {
+        match self.private_state_policy() {
+            PrivateStatePolicy::DerivedFromGraph => Ok(None),
+            PrivateStatePolicy::ExplicitSnapshot { schema, format } => {
+                if format != StateFormat::Json {
+                    return Err(OptimizerError::with_source(
+                        "optimizer private state checkpoint failed",
+                        CheckpointError::IncompatibleState {
+                            reason: format!(
+                                "run persistence currently writes JSON optimizer state, got {format:?}"
+                            ),
+                        },
+                    ));
+                }
+                let state = self.checkpoint_state(ctx).map_err(|source| {
+                    OptimizerError::with_source("optimizer private state checkpoint failed", source)
+                })?;
+                OptimizerStateWrite::json(self.optimizer_fingerprint(), schema, &state)
+                    .map(Some)
+                    .map_err(|source| {
+                        OptimizerError::with_source(
+                            "optimizer private state serialization failed",
+                            source,
+                        )
+                    })
+            }
+        }
+    }
 }
 
 /// Format metadata for serialized private state.
