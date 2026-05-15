@@ -88,7 +88,7 @@ async fn run_aime(
             let solver = solver.clone();
             async move { run_solver(prompt, case, solver).await }
         })
-        .score(|ctx| score_answer(&ctx))
+        .score(score_answer)
         .using(
             Gepa::builder()
                 .surface(AimePromptSurface)
@@ -449,9 +449,9 @@ fn openai_model_name() -> String {
     std::env::var("LEAVEN_OPENAI_MODEL").unwrap_or_else(|_| "gpt-4.1-mini".to_owned())
 }
 
-fn score_answer(ctx: &ScoreContext<'_, AimePrompt, AimeCase>) -> Score {
+async fn score_answer(ctx: ScoreContext<AimePrompt, AimeCase>) -> Result<Score, ScoreError> {
     let parsed = ctx.output.output.parse::<i64>();
-    match parsed {
+    let score = match parsed {
         Ok(answer) if answer == ctx.case.answer => Score::new(
             1.0,
             format!(
@@ -473,7 +473,8 @@ fn score_answer(ctx: &ScoreContext<'_, AimePrompt, AimeCase>) -> Score {
                 ctx.case.answer, ctx.case.solution
             ),
         ),
-    }
+    };
+    Ok(score)
 }
 
 fn content_id(bytes: &[u8]) -> ContentId {

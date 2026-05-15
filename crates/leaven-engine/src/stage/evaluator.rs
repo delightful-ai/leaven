@@ -4,7 +4,7 @@ use std::future::Future;
 
 use futures::future::BoxFuture;
 use leaven_core::{Assessment, OptimizationProblem, ResolvedEvaluationRequest};
-use leaven_kernel::{EvaluatorId, Fingerprint, Metered};
+use leaven_kernel::{Cost, EvaluatorId, Fingerprint, Metered};
 
 use crate::CachePolicy;
 
@@ -84,6 +84,7 @@ pub enum EvaluationError {
     #[error("evaluation failed: {message}")]
     WithSource {
         message: String,
+        cost: Cost,
         #[source]
         source: Box<dyn std::error::Error + Send + Sync + 'static>,
     },
@@ -96,9 +97,29 @@ impl EvaluationError {
         message: impl Into<String>,
         source: impl std::error::Error + Send + Sync + 'static,
     ) -> Self {
+        Self::with_cost_source(message, Cost::zero(), source)
+    }
+
+    /// Build an evaluator error with metered cost incurred before failure.
+    #[must_use]
+    pub fn with_cost_source(
+        message: impl Into<String>,
+        cost: Cost,
+        source: impl std::error::Error + Send + Sync + 'static,
+    ) -> Self {
         Self::WithSource {
             message: message.into(),
+            cost,
             source: Box::new(source),
+        }
+    }
+
+    /// Cost incurred before the evaluator refused the request.
+    #[must_use]
+    pub fn cost(&self) -> Cost {
+        match self {
+            Self::Message(_) => Cost::zero(),
+            Self::WithSource { cost, .. } => cost.clone(),
         }
     }
 }

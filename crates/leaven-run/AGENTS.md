@@ -59,9 +59,16 @@ around engine graph mutation or a home for optimizer strategy state.
 - Runner helpers are async and bounded-concurrent. `RunOutput` carries runner
   cost so solver/program LM calls, subprocesses, and agent runtimes can be
   charged through evaluation reports instead of disappearing into trace text.
-  Scoring is still scalar-leaning and synchronous; treat that as present
-  implementation state, not the final Layer 1 contract for rich scoring,
-  scorer failures, attachments, cache policy, or role-level runtime controls.
+  Scoring is also async and fallible: `.score(...)` receives owned
+  `ScoreContext` values, returns `Result<Score, ScoreError>`, and may attach
+  scorer cost and feedback attachments. Treat scalar comparison as the current
+  selection contract, not as permission to drop judge transcripts, runtime
+  failures, or metered provider work.
+- The current `ScoreContext` exposes a budget snapshot because the engine
+  already has that fact at evaluation time. It still does not expose the full
+  spec target: optional cases, score-on-error, generic output views, accessor
+  methods, or score history. Do not describe this slice as complete GEPA-style
+  scorer context until those gaps are closed.
 - The current builder fixes case identity by vector position via
   `CaseId::from_index` and uses literal `TRAIN`/`VALIDATION`/`TEST` partitions.
   That is acceptable for today's proof path, but stable user-provided case IDs,
@@ -88,7 +95,7 @@ around engine graph mutation or a home for optimizer strategy state.
 - when: adding scorer async/failure support, rich scoring, stable cases, or single-task mode
   do: hard-cut the builder/evaluator/report path together instead of adding parallel simple-vs-rich product APIs
   preserve: one ordinary lowering route into `ScoringEvaluator` or its replacement, with typed errors and metered cost rather than score-zero fallbacks
-  avoid: treating `RunOutput { output, trace }` plus scalar `Score` as the final evidence model
+  avoid: treating `RunOutput { output, trace, cost }` plus scalar-only `Score` as the final evidence model
   verify: run `cargo nextest run -p leaven-run --test scoring_evaluator --test optimize_builder`, then the affected product example
 
 - when: moving evaluation planning out of this crate

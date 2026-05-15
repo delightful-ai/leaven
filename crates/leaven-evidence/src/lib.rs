@@ -67,7 +67,7 @@ pub use attribution::{AttributableEvidence, Attribution, AttributionKey};
 pub use casewise::{CaseOutcome, CasewiseEvidence};
 pub use command::{AgentTrajectoryEvidence, CommandEvidence, CommandRecord, OutputRecord};
 pub use diff::{DiffEvidence, RenderedDiff};
-pub use feedback::ScoredFeedbackEvidence;
+pub use feedback::{FeedbackAttachment, ScoredFeedbackEvidence};
 pub use json::JsonEvidence;
 pub use listwise::{ListwiseRankingEvidence, RankingItem};
 pub use mixed::MixedEvidence;
@@ -78,7 +78,7 @@ pub use string::StringEvidence;
 pub mod prelude {
     pub use crate::{
         AgentTrajectoryEvidence, AttributableEvidence, CaseOutcome, CasewiseEvidence,
-        CommandEvidence, CommandRecord, DiffEvidence, Direction, JsonEvidence,
+        CommandEvidence, CommandRecord, DiffEvidence, Direction, FeedbackAttachment, JsonEvidence,
         ListwiseRankingEvidence, MixedEvidence, OutputRecord, PairwiseJudgmentEvidence,
         ScalarEvidence, ScalarEvidenceError, ScoreVectorEvidence, ScoredFeedbackEvidence,
         StringEvidence,

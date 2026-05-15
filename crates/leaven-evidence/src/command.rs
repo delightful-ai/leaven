@@ -4,9 +4,10 @@ use std::time::Duration;
 
 use leaven_core::Evidence;
 use leaven_kernel::BlobRef;
+use serde::{Deserialize, Serialize};
 
 /// Command output carried inline or by external blob reference.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum OutputRecord {
     /// Bounded inline output text.
     Inline {

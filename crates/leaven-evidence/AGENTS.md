@@ -12,18 +12,18 @@ Evidence here is data a stage or evaluator can produce and another component can
 
 ## Current Public-Maturity Split
 - Behavior-bearing today: scalar scores, pairwise judgments, casewise sparse
-  containers, command/agent trajectory records, and attribution traits have
-  local tests.
-- Concrete but under-tested today: `ScoredFeedbackEvidence` has real fields and
-  constructors but no focused test yet. Treat it as useful vocabulary, not as a
-  completed reflective-feedback contract.
+  containers, command/agent trajectory records, attribution traits, and
+  `ScoredFeedbackEvidence` have local tests. `ScoredFeedbackEvidence`
+  preserves scalar score, natural-language feedback, trace lines, and named
+  attachments; it is reusable evidence vocabulary, not the reflective mutation
+  algorithm.
 - Public placeholders today: `diff`, `json`, `listwise`, `mixed`,
   `score_vector`, and `string` are root-re-exported names without behavior laws.
   Do not cite them as standard evidence until they carry fields, constructors,
   and tests.
 - `ScoredFeedbackEvidence` is currently the closest reusable GEPA-style feedback
-  shape: scalar score, natural-language feedback, and trace lines. It is still
-  evidence data, not the reflective mutation algorithm.
+  shape: scalar score, natural-language feedback, trace lines, and attachments.
+  It is still evidence data, not the reflective mutation algorithm.
 
 ## Local Helper Stack
 - Use `ScalarEvidence::new` for any score crossing crate boundaries; downstream

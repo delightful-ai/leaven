@@ -15,9 +15,9 @@ P8 owns the example artifact, edit surface, deterministic AIME-shaped cases, cac
   reasoning unless `LEAVEN_AIME_REFLECTION_MODEL` overrides the model. Both
   routes use `DefaultReflectionRenderer` / `PlainTextEditParser` and apply the
   resulting proposal through GEPA and `RunContext`.
-- `score_answer` proves current score/report plumbing by producing scalar
-  scores, feedback text, and trace lines. It does not prove rich scoring,
-  evaluator errors, attachments, or evidence refs.
+- `score_answer` proves the async/fallible score surface on a fixed-reference
+  local checker by producing scalar scores, feedback text, and trace lines. It
+  does not prove live model-judge quality or domain-specific score semantics.
 - `run_openai_solver` is a native async runner over `leaven_lm_openai::OpenAiLm`.
   It returns `RunOutput` with the LM cost attached so solver spend is charged
   through normal evaluation accounting.

@@ -10,7 +10,8 @@ mod store;
 pub use builder::{OptimizeBuilder, RunProblem, optimize};
 pub use error::OptimizeError;
 pub use evaluator::ScoringEvaluator;
-pub use evidence::{RunOutput, Score, ScoreContext};
+pub use evidence::{RunOutput, Score, ScoreContext, ScoreError};
+pub use leaven_evidence::FeedbackAttachment;
 pub use result::{OptimizationReport, OptimizeResult};
 pub use store::{IntoOptimizeStore, OptimizeStore};
 
@@ -18,7 +19,8 @@ pub mod prelude {
     //! Common public-run imports.
 
     pub use crate::{
-        IntoOptimizeStore, OptimizationReport, OptimizeBuilder, OptimizeError, OptimizeResult,
-        OptimizeStore, RunOutput, RunProblem, Score, ScoreContext, optimize,
+        FeedbackAttachment, IntoOptimizeStore, OptimizationReport, OptimizeBuilder, OptimizeError,
+        OptimizeResult, OptimizeStore, RunOutput, RunProblem, Score, ScoreContext, ScoreError,
+        optimize,
     };
 }

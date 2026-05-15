@@ -432,13 +432,14 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
 
         let stage = StageId::from_evaluator(evaluator_id.clone());
         let eval_ctx = self.evaluation_context(stage.clone());
-        let metered = evaluator
-            .evaluate(resolved_request.clone(), eval_ctx)
-            .await
-            .inspect_err(|err| {
-                self.emit_stage_error(Some(stage.clone()), ErrorKind::Evaluation, err);
-            })
-            .map_err(RunContextError::Evaluation)?;
+        let metered = match evaluator.evaluate(resolved_request.clone(), eval_ctx).await {
+            Ok(metered) => metered,
+            Err(error) => {
+                self.charge_failed_evaluation_cost(&stage, &error)?;
+                self.emit_stage_error(Some(stage.clone()), ErrorKind::Evaluation, &error);
+                return Err(RunContextError::Evaluation(error));
+            }
+        };
         self.complete_evaluation(
             &evaluator_id,
             request_id,
@@ -493,13 +494,17 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
 
         let stage = StageId::from_evaluator(evaluator_id.clone());
         let eval_ctx = self.evaluation_context(stage.clone());
-        let metered = evaluator
+        let metered = match evaluator
             .evaluate_boxed(resolved_request.clone(), eval_ctx)
             .await
-            .inspect_err(|err| {
-                self.emit_stage_error(Some(stage.clone()), ErrorKind::Evaluation, err);
-            })
-            .map_err(RunContextError::Evaluation)?;
+        {
+            Ok(metered) => metered,
+            Err(error) => {
+                self.charge_failed_evaluation_cost(&stage, &error)?;
+                self.emit_stage_error(Some(stage.clone()), ErrorKind::Evaluation, &error);
+                return Err(RunContextError::Evaluation(error));
+            }
+        };
         self.complete_evaluation(
             &evaluator_id,
             request_id,
@@ -507,6 +512,19 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
             cache_key,
             metered,
         )
+    }
+
+    fn charge_failed_evaluation_cost(
+        &mut self,
+        stage: &StageId,
+        error: &EvaluationError,
+    ) -> Result<(), RunContextError> {
+        let cost = error.cost();
+        if cost.is_zero() {
+            return Ok(());
+        }
+        self.charge(stage.clone(), cost)?;
+        Ok(())
     }
 
     fn complete_evaluation(

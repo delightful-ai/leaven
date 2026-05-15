@@ -18,7 +18,7 @@ use leaven_engine::{
 use leaven_evidence::{CasewiseEvidence, ScoredFeedbackEvidence};
 use leaven_kernel::{Budget, CandidateId, ContentId, EvaluatorId};
 use leaven_run::{
-    OptimizeError, OptimizeStore, RunOutput, RunProblem, Score, ScoreContext, optimize,
+    OptimizeError, OptimizeStore, RunOutput, RunProblem, Score, ScoreContext, ScoreError, optimize,
 };
 use leaven_store::{EvidenceStore, StoreError};
 use leaven_store_inline::InlineEvidenceStore;
@@ -370,10 +370,10 @@ fn text_runner(artifact: &TextArtifact, case: &TextCase) -> RunOutput {
 }
 
 #[allow(clippy::needless_pass_by_value)]
-fn text_score(ctx: ScoreContext<'_, TextArtifact, TextCase>) -> Score {
+async fn text_score(ctx: ScoreContext<TextArtifact, TextCase>) -> Result<Score, ScoreError> {
     let ScoreContext { case, output, .. } = ctx;
     let value = output.output.parse::<f64>().unwrap();
-    Score::new(value, format!("case {}", case.0))
+    Ok(Score::new(value, format!("case {}", case.0)))
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

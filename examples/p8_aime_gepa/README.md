@@ -50,6 +50,9 @@ The OpenAI path is an opt-in native async solver swap over the same
 `leaven::optimize(...).train(...).validation(...).test(...).runner(...).score(...).using(...).run()`
 surface. Both live solver and live reflection use `leaven-lm-openai`; solver
 LM spend is attached to `RunOutput` and charged through evaluation accounting.
+The score function is the normal async/fallible Leaven scorer surface; this
+example uses a fixed-reference checker, while model judges can return
+`ScoreError`, scorer cost, and feedback attachments through the same path.
 The live reflection path uses `LmBackedReflector`, with `gpt-5.4-mini` and
 medium reasoning as the default reflection model controls. The deterministic
 path proves public API mechanics and LM-backed reflection invariants; it is not

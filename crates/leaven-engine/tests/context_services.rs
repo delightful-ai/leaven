@@ -436,6 +436,42 @@ fn evaluation_error_records_request_and_stage_error_without_assessment_mutation(
 }
 
 #[test]
+fn metered_evaluation_errors_charge_budget_before_error_return() {
+    block_on(async {
+        let (mut graph, mut budget) = graph_and_budget();
+        let mut cache = leaven_engine::EvaluationCache::default();
+        let case_set = CaseSet::new(vec!["case"]);
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let candidate = {
+            let mut seed_ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+            seed_ctx
+                .insert_seed(TextArtifact("abc".to_owned()), 0)
+                .unwrap()
+        };
+        let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
+            .with_case_set(&case_set)
+            .with_cache(&mut cache)
+            .with_evidence_store(&store);
+
+        let err = ctx
+            .evaluate_with(&CostedFailingEvaluator, independent_request(candidate))
+            .await
+            .unwrap_err();
+
+        assert!(matches!(err, leaven_engine::RunContextError::Evaluation(_)));
+        assert_eq!(ctx.budget().spent.llm_calls, 2);
+        assert_eq!(ctx.graph().assessment_count(), 0);
+        assert!(ctx.graph().events().any(|event| matches!(
+            event,
+            RunEvent::BudgetCharged {
+                stage: StageId::Evaluator(_),
+                ..
+            }
+        )));
+    });
+}
+
+#[test]
 fn evidence_store_error_records_stage_error_after_request_without_assessment_mutation() {
     block_on(async {
         let (mut graph, mut budget) = graph_and_budget();
@@ -1332,6 +1368,30 @@ impl Evaluator<TestProblem> for FailingEvaluator {
         Err(EvaluationError::with_source(
             "evaluation failed",
             StaticTestError("metric backend offline"),
+        ))
+    }
+}
+
+struct CostedFailingEvaluator;
+
+impl Evaluator<TestProblem> for CostedFailingEvaluator {
+    fn id(&self) -> EvaluatorId {
+        EvaluatorId::from("costed-fail")
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        Fingerprint::from_bytes([11; 32])
+    }
+
+    async fn evaluate(
+        &self,
+        _request: ResolvedEvaluationRequest,
+        _ctx: EvaluationContext<'_, TestProblem>,
+    ) -> Result<Metered<Vec<Assessment<TestProblem>>>, EvaluationError> {
+        Err(EvaluationError::with_cost_source(
+            "evaluation failed after judge call",
+            Cost::llm_calls(2),
+            StaticTestError("judge backend offline"),
         ))
     }
 }

@@ -15,9 +15,12 @@ use leaven_core::{
 };
 use leaven_engine::{BudgetLedger, CachePolicy, Evaluator, RunContext, RunGraph};
 use leaven_kernel::{
-    CandidateId, CaseId, ContentId, Cost, EvaluatorId, ResolvedEvaluationSetId, RunId, StageId, now,
+    Budget, CandidateId, CaseId, ContentId, Cost, EvaluatorId, ResolvedEvaluationSetId, RunId,
+    StageId, now,
 };
-use leaven_run::{RunOutput, RunProblem, Score, ScoreContext, ScoringEvaluator};
+use leaven_run::{
+    FeedbackAttachment, RunOutput, RunProblem, Score, ScoreContext, ScoreError, ScoringEvaluator,
+};
 
 #[test]
 fn scoring_evaluator_rejects_unsupported_request_shapes_and_bad_inputs() {
@@ -146,7 +149,17 @@ fn scoring_evaluator_reports_per_candidate_cost_for_independent_batches() {
                 }
                 .boxed()
             }),
-            Arc::new(|ctx| Score::new(ctx.output.output.parse::<f64>().unwrap(), "ok")),
+            Arc::new(|ctx: ScoreContext<TextArtifact, i32>| {
+                async move {
+                    Ok(Score::new(ctx.output.output.parse::<f64>().unwrap(), "ok")
+                        .with_cost(Cost::llm_calls(1))
+                        .with_attachment(FeedbackAttachment::text(
+                            "judge-transcript",
+                            "judge says ok",
+                        )))
+                }
+                .boxed()
+            }),
             "scoring-evaluator-test",
         );
         assert!(evaluator.parallelism().get() > 0);
@@ -166,7 +179,7 @@ fn scoring_evaluator_reports_per_candidate_cost_for_independent_batches() {
             .unwrap();
 
         assert_eq!(metered.cost.metric_calls, 4);
-        assert_eq!(metered.cost.llm_calls, 10);
+        assert_eq!(metered.cost.llm_calls, 14);
         let assessment_costs = metered
             .value
             .iter()
@@ -175,7 +188,110 @@ fn scoring_evaluator_reports_per_candidate_cost_for_independent_batches() {
                 _ => panic!("expected independent assessment"),
             })
             .collect::<Vec<_>>();
-        assert_eq!(assessment_costs, vec![(2, 5), (2, 5)]);
+        assert_eq!(assessment_costs, vec![(2, 7), (2, 7)]);
+        let [Assessment::Independent { evidence, .. }, ..] = metered.value.as_slice() else {
+            panic!("expected independent assessments");
+        };
+        assert_eq!(
+            evidence.outcomes()[0].evidence().attachments()[0].name(),
+            "judge-transcript"
+        );
+    });
+}
+
+#[test]
+fn scoring_evaluator_surfaces_async_scorer_failures_with_metered_cost() {
+    block_on(async {
+        let (mut graph, mut budget, candidate) = graph_with_seed();
+        let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
+        let evaluator = ScoringEvaluator::new(
+            Arc::new(vec![2]),
+            Arc::new(|artifact: TextArtifact, case| {
+                async move {
+                    RunOutput::new(
+                        (artifact.0 + case).to_string(),
+                        vec!["runner trace".to_owned()],
+                    )
+                    .with_cost(Cost::llm_calls(2))
+                }
+                .boxed()
+            }),
+            Arc::new(|_ctx: ScoreContext<TextArtifact, i32>| {
+                async move {
+                    Err(ScoreError::new("judge unavailable")
+                        .with_trace("judge call reached provider")
+                        .with_cost(Cost::llm_calls(3)))
+                }
+                .boxed()
+            }),
+            "scoring-evaluator-failure-test",
+        );
+
+        let error = evaluator
+            .evaluate(
+                request(
+                    ResolvedRequestKind::Independent {
+                        candidates: vec![candidate],
+                    },
+                    vec![CaseId::new(0)],
+                    AssessmentGranularity::PerCase,
+                ),
+                ctx.evaluation_context(StageId::from_evaluator(Evaluator::id(&evaluator))),
+            )
+            .await
+            .err()
+            .expect("evaluation should fail");
+
+        assert!(error.to_string().contains("scoring function failed"));
+        assert_eq!(error.cost().metric_calls, 1);
+        assert_eq!(error.cost().llm_calls, 5);
+    });
+}
+
+#[test]
+fn scoring_evaluator_passes_budget_snapshot_to_scorer() {
+    block_on(async {
+        let (mut graph, _budget, candidate) = graph_with_seed();
+        let mut budget = BudgetLedger::new(Budget::metric_calls(16));
+        budget
+            .charge(StageId::custom("setup"), Cost::metric_calls(3))
+            .unwrap();
+        let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
+        let evaluator = ScoringEvaluator::new(
+            Arc::new(vec![2]),
+            Arc::new(|artifact: TextArtifact, case| {
+                async move {
+                    RunOutput::new(
+                        (artifact.0 + case).to_string(),
+                        vec!["runner trace".to_owned()],
+                    )
+                }
+                .boxed()
+            }),
+            Arc::new(|ctx: ScoreContext<TextArtifact, i32>| {
+                async move {
+                    assert_eq!(ctx.budget.spent.metric_calls, 3);
+                    assert_eq!(ctx.budget.limit.metric_calls, Some(16));
+                    Ok(Score::new(ctx.output.output.parse::<f64>().unwrap(), "ok"))
+                }
+                .boxed()
+            }),
+            "scoring-evaluator-budget-test",
+        );
+
+        evaluator
+            .evaluate(
+                request(
+                    ResolvedRequestKind::Independent {
+                        candidates: vec![candidate],
+                    },
+                    vec![CaseId::new(0)],
+                    AssessmentGranularity::PerCase,
+                ),
+                ctx.evaluation_context(StageId::from_evaluator(Evaluator::id(&evaluator))),
+            )
+            .await
+            .unwrap();
     });
 }
 
@@ -212,7 +328,10 @@ fn scoring_evaluator_runs_case_jobs_with_bounded_parallelism_and_stable_order() 
                     .boxed()
                 })
             },
-            Arc::new(|ctx| Score::new(ctx.output.output.parse::<f64>().unwrap(), "ok")),
+            Arc::new(|ctx: ScoreContext<TextArtifact, i32>| {
+                async move { Ok(Score::new(ctx.output.output.parse::<f64>().unwrap(), "ok")) }
+                    .boxed()
+            }),
             "scoring-evaluator-parallel-test",
         )
         .with_parallelism(NonZeroUsize::new(2).unwrap());
@@ -251,8 +370,9 @@ fn scoring_evaluator_runs_case_jobs_with_bounded_parallelism_and_stable_order() 
 }
 
 fn scoring_evaluator(
-    scorer: impl for<'a> Fn(ScoreContext<'a, TextArtifact, i32>) -> Score + Send + Sync + 'static,
+    scorer: impl Fn(ScoreContext<TextArtifact, i32>) -> Score + Send + Sync + 'static,
 ) -> ScoringEvaluator<TextArtifact, i32> {
+    let scorer = Arc::new(scorer);
     ScoringEvaluator::new(
         Arc::new(vec![2]),
         Arc::new(|artifact, case| {
@@ -264,7 +384,10 @@ fn scoring_evaluator(
             }
             .boxed()
         }),
-        Arc::new(scorer),
+        Arc::new(move |ctx| {
+            let score = scorer(ctx);
+            async move { Ok(score) }.boxed()
+        }),
         "scoring-evaluator-test",
     )
 }

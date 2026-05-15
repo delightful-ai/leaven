@@ -9,12 +9,15 @@ use leaven_core::{
 };
 use leaven_engine::{CachePolicy, EvaluationContext, EvaluationError, Evaluator};
 use leaven_evidence::{CaseOutcome, CasewiseEvidence, ScalarEvidence, ScoredFeedbackEvidence};
-use leaven_kernel::{Cost, EvaluationSetId, EvaluatorId, Fingerprint, FingerprintBuilder, Metered};
+use leaven_kernel::{
+    BudgetSnapshot, Cost, EvaluationSetId, EvaluatorId, Fingerprint, FingerprintBuilder, Metered,
+};
 
-use crate::{RunOutput, RunProblem, Score, ScoreContext};
+use crate::{RunOutput, RunProblem, Score, ScoreContext, ScoreError};
 
 type Runner<A, C> = Arc<dyn Fn(A, C) -> BoxFuture<'static, RunOutput> + Send + Sync>;
-type Scorer<A, C> = Arc<dyn for<'a> Fn(ScoreContext<'a, A, C>) -> Score + Send + Sync>;
+type Scorer<A, C> =
+    Arc<dyn Fn(ScoreContext<A, C>) -> BoxFuture<'static, Result<Score, ScoreError>> + Send + Sync>;
 
 /// Evaluator that runs a candidate on cases and normalizes scores into
 /// casewise feedback evidence.
@@ -95,6 +98,7 @@ where
         };
         let case_count = request.set.case_ids.len();
         let mut jobs = Vec::with_capacity(candidates.len().saturating_mul(case_count));
+        let budget = ctx.budget();
         for (candidate_index, candidate) in candidates.iter().copied().enumerate() {
             let artifact = ctx.graph().artifact(candidate).ok_or_else(|| {
                 EvaluationError::Message(format!("candidate {candidate} is missing"))
@@ -114,6 +118,7 @@ where
                     case_id,
                     artifact: artifact.clone(),
                     case: case.clone(),
+                    budget: budget.clone(),
                 });
             }
         }
@@ -167,6 +172,7 @@ struct EvaluationJob<A, C> {
     case_id: leaven_kernel::CaseId,
     artifact: A,
     case: C,
+    budget: BudgetSnapshot,
 }
 
 struct EvaluationOutcome {
@@ -214,14 +220,25 @@ where
     C: Clone + Send + Sync + 'static,
 {
     let output = runner(job.artifact.clone(), job.case.clone()).await;
-    let cost = Cost::metric_calls(1).combine(&output.cost);
     let score = scorer(ScoreContext {
-        artifact: &job.artifact,
-        case: &job.case,
-        output: &output,
-    });
-    let scalar = ScalarEvidence::new(score.value)
-        .map_err(|source| EvaluationError::with_source("score was not finite", source))?;
+        artifact: job.artifact.clone(),
+        case: job.case.clone(),
+        output: output.clone(),
+        budget: job.budget.clone(),
+    })
+    .await
+    .map_err(|source| {
+        let cost = Cost::metric_calls(1)
+            .combine(&output.cost)
+            .combine(source.cost());
+        EvaluationError::with_cost_source("scoring function failed", cost, source)
+    })?;
+    let cost = Cost::metric_calls(1)
+        .combine(&output.cost)
+        .combine(&score.cost);
+    let scalar = ScalarEvidence::new(score.value).map_err(|source| {
+        EvaluationError::with_cost_source("score was not finite", cost.clone(), source)
+    })?;
     let mut trace = output.trace;
     trace.extend(
         score
@@ -233,7 +250,8 @@ where
         candidate_index: job.candidate_index,
         case_index: job.case_index,
         case_id: job.case_id,
-        evidence: ScoredFeedbackEvidence::new(scalar, score.feedback, trace),
+        evidence: ScoredFeedbackEvidence::new(scalar, score.feedback, trace)
+            .with_attachments(score.attachments),
         cost,
     })
 }

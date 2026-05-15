@@ -966,6 +966,10 @@ impl<'a, I, T> CaseView<'a, I, T> {
 }
 ```
 
+The scorer contract is async and fallible so model judges can await provider
+calls without lifetime gymnastics. Do not simplify that by replacing the typed
+view with a scalar-only, sync-only, or infallible scorer path.
+
 `candidate` is always present. `case` is `None` for single-task search or any
 online evaluation that has no stable dataset case. `target` is optional because a
 case is a unit of work, not necessarily a labeled example.
@@ -980,6 +984,17 @@ not branch on whether tracing was enabled.
 `history` is read-only and bounded by the configured score-history policy. It
 may include previous scores for this candidate, this case, and historical best
 evaluations. It must not expose mutable graph state.
+
+`budget` is the point-in-time budget snapshot visible to the scoring function.
+Scorers may use it to choose a cheap judge, skip optional checks, or include
+remaining-budget facts in feedback, but all actual charging still goes through
+engine budget accounting.
+
+Runner output/trace/cost becomes part of `ScoreContext`. Scorer output must
+lower score, feedback, structured fields, attachments, and cost into typed
+evidence. Scorer failures are `ScoreError`s; they are not zero scores. If a
+failure incurred provider/runtime cost, that cost must still be charged by the
+engine before the evaluation error returns.
 
 `ScoreContext` must not expose `RunGraph`, `Actor`, `ReadScope`, `TrustPolicy`, or
 evaluation request templates in Layer 1.
@@ -1063,6 +1078,15 @@ Metered<Score>        rich score plus scoring-stage cost
 FiniteF64 / f64        primary higher-is-better score after finite validation
 bool                   1.0 for true, 0.0 for false
 ```
+
+Implementation status: the current `leaven-run` scorer slice has only the
+owned builder lowering needed by the P8 AIME example:
+`ScoreContext<A, C> { artifact, case, output, budget }`, async/fallible scorer
+closures, scorer attachments, and scorer cost. That is a useful cutover from the
+old sync/scalar path, but it is not the full Layer 1 scoring contract above. Do
+not treat the current owned struct as permission to drop `case = None`,
+`run_error`, `trace` accessors, `history()`, `Metered<Score>`, or generic runner
+output from the public design.
 
 Do not support `Option<Score>` as a public return. Use `Score::unscored(...)`
 for diagnostics without a comparable value, so absence is explicit.

@@ -23,13 +23,14 @@ use leaven_kernel::{Budget, CaseId, EvaluatorId};
 use leaven_store::EvidenceStore;
 
 use crate::{
-    IntoOptimizeStore, OptimizeError, OptimizeStore, RunOutput, Score, ScoreContext,
+    IntoOptimizeStore, OptimizeError, OptimizeStore, RunOutput, Score, ScoreContext, ScoreError,
     evaluator::{ScoringEvaluator, default_parallelism},
     result::{OptimizationReport, OptimizeResult, average},
 };
 
 type Runner<A, C> = Arc<dyn Fn(A, C) -> BoxFuture<'static, RunOutput> + Send + Sync>;
-type Scorer<A, C> = Arc<dyn for<'a> Fn(ScoreContext<'a, A, C>) -> Score + Send + Sync>;
+type Scorer<A, C> =
+    Arc<dyn Fn(ScoreContext<A, C>) -> BoxFuture<'static, Result<Score, ScoreError>> + Send + Sync>;
 
 struct FinalEvaluations {
     baseline_validation: Option<CandidateEvaluationSummary>,
@@ -150,13 +151,14 @@ where
         self
     }
 
-    /// Supplies the scoring function.
+    /// Supplies the async scoring function.
     #[must_use]
-    pub fn score<F>(mut self, scorer: F) -> Self
+    pub fn score<F, Fut>(mut self, scorer: F) -> Self
     where
-        F: for<'a> Fn(ScoreContext<'a, A, C>) -> Score + Send + Sync + 'static,
+        F: Fn(ScoreContext<A, C>) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<Score, ScoreError>> + Send + 'static,
     {
-        self.scorer = Some(Arc::new(scorer));
+        self.scorer = Some(Arc::new(move |ctx| scorer(ctx).boxed()));
         self
     }
 
