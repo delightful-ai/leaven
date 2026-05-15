@@ -1,12 +1,15 @@
 use futures::executor::block_on;
+use leaven::extend::{
+    CachePolicy, EvaluationRequest, Evaluator, InfoRef, Optimizer, ProposalBatchSemantics, RunEvent,
+};
+use leaven::plumbing::ContentId;
+use leaven::prelude::{
+    Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, AssessmentTarget, Budget,
+    CandidateId, Cost, PairOrder, Proposal, ProposalBatch,
+};
 use leaven::stdlib::{
     evidence::{PairwiseJudgment, PairwiseJudgmentEvidence},
     populations::{BradleyTerryFit, TournamentPopulation},
-};
-use leaven::{
-    Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, AssessmentTarget, Budget,
-    CachePolicy, CandidateId, ContentId, Cost, EvaluationRequest, Evaluator, InfoRef, Optimizer,
-    PairOrder, Proposal, ProposalBatch, ProposalBatchSemantics, RunEvent,
 };
 use leaven_core::{EvaluationPurpose, ResolvedEvaluationRequest, ResolvedRequestKind};
 use leaven_engine::{CaseSet, EvaluationContext, EvaluationError, OptimizerError, RunContext};
@@ -93,7 +96,7 @@ impl Artifact for TextArtifact {
 
 struct TournamentProblem;
 
-impl leaven::OptimizationProblem for TournamentProblem {
+impl leaven::prelude::OptimizationProblem for TournamentProblem {
     type Artifact = TextArtifact;
     type Case = ();
     type Evidence = PairwiseJudgmentEvidence;
@@ -113,9 +116,9 @@ impl Optimizer<TournamentProblem> for PairwiseTournamentOptimizer {
     async fn step(
         &mut self,
         ctx: &mut RunContext<'_, TournamentProblem>,
-    ) -> Result<leaven::StepStatus, OptimizerError> {
+    ) -> Result<leaven::extend::StepStatus, OptimizerError> {
         if self.done {
-            return Ok(leaven::StepStatus::Done);
+            return Ok(leaven::extend::StepStatus::Done);
         }
         let create = ctx
             .record_proposal_batch(
@@ -146,7 +149,7 @@ impl Optimizer<TournamentProblem> for PairwiseTournamentOptimizer {
                 EvaluationRequest::Pairwise {
                     left: self.seed,
                     right: contender,
-                    set: leaven::EvaluationSet::All,
+                    set: leaven::extend::EvaluationSet::All,
                     granularity: AssessmentGranularity::Aggregate,
                     purpose: EvaluationPurpose::Selection,
                     order: PairOrder::Ordered,
@@ -170,12 +173,12 @@ impl Optimizer<TournamentProblem> for PairwiseTournamentOptimizer {
         self.assessment = Some(assessment);
         self.judgment = Some(evidence.judgment());
         self.done = true;
-        Ok(leaven::StepStatus::Done)
+        Ok(leaven::extend::StepStatus::Done)
     }
 
     fn best_candidate(
         &self,
-        _graph: leaven::RunGraphView<'_, TournamentProblem>,
+        _graph: leaven::extend::RunGraphView<'_, TournamentProblem>,
     ) -> Option<CandidateId> {
         self.population.best()
     }

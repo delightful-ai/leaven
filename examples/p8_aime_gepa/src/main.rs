@@ -1,9 +1,13 @@
 use std::{collections::BTreeMap, num::NonZeroUsize, path::Path, time::Duration};
 
-use leaven::prelude::*;
-use leaven::{
-    SurfaceError, SurfaceFingerprint, kernel::Metered, stdlib::populations::ParetoFrontier,
+use leaven::extend::{PartitionId, RunOutput, ScoreContext};
+use leaven::gepa::Gepa;
+use leaven::plumbing::{ContentId, Fingerprint, FiniteF64, SurfaceError, SurfaceFingerprint};
+use leaven::prelude::{
+    Artifact, ArtifactIdentity, Budget, EditSurface, OptimizeResult, Part, PartAddress, Score,
+    ScoreError,
 };
+use leaven::{kernel::Metered, stdlib::populations::ParetoFrontier};
 use leaven_gepa::{
     DefaultReflectionRenderer, LmBackedReflector, LmBackedReflectorConfig, PlainTextEditParser,
 };
@@ -183,7 +187,7 @@ async fn run_aime(
 ) -> OptimizeResult<AimePrompt> {
     let solver = aime_solver_lm(&config.solver);
     let solver_config = config.solver.clone();
-    leaven::optimize(AimePrompt::new(config.seed_prompt))
+    leaven::prelude::optimize(AimePrompt::new(config.seed_prompt))
         .train(train)
         .validation(validation)
         .test(test)
@@ -941,7 +945,7 @@ mod tests {
         let solver_config = config.solver.clone();
         let (train, _, _) = deterministic_cases();
         let error = block_on(async {
-            leaven::optimize(AimePrompt::new(config.seed_prompt))
+            leaven::prelude::optimize(AimePrompt::new(config.seed_prompt))
                 .train(train)
                 .runner(move |prompt, case| {
                     let solver_config = solver_config.clone();

@@ -77,6 +77,8 @@ P8 owns the example artifact, edit surface, deterministic AIME-shaped cases, cac
   the default P8 path as proof of provider-native transport, cache behavior, or
   live model reflection quality. It should mimic upstream GEPA reflection output
   by returning fenced replacement instruction text, not a local JSON schema.
-- `leaven::prelude::*` makes this example compact, but it also imports advanced
-  engine/GEPA/cache names today. Do not use P8 as evidence that the ordinary
-  prelude is clean; that belongs in `crates/leaven`.
+- P8 imports through the audience-routed umbrella surface: ordinary types from
+  `leaven::prelude`, component-author types from `leaven::extend`, identity
+  internals from `leaven::plumbing`, and `Gepa` from the `leaven::gepa` alias.
+  It no longer uses `leaven::prelude::*`. Keep imports on those explicit routes;
+  the route classification itself is proven in `crates/leaven`.

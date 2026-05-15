@@ -1,11 +1,15 @@
 use std::collections::BTreeSet;
 
 use futures::executor::block_on;
-use leaven::{
-    Arity, Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, AssessmentTarget, Budget,
-    CachePolicy, CausalInputs, ContentId, Cost, EvaluationRequest, Evaluator, InfoRef,
-    OptimizationProblem, Optimizer, Proposal, ProposalBatch, ProposalBatchSemantics,
-    ProposalContext, ProposalEffect, Proposer, RunEvent, RunGraphView, StepStatus, TrustPolicy,
+use leaven::extend::{
+    Arity, CachePolicy, CausalInputs, EvaluationRequest, Evaluator, InfoRef, Optimizer,
+    ProposalBatchSemantics, ProposalContext, ProposalEffect, Proposer, RunEvent, RunGraphView,
+    StepStatus, TrustPolicy,
+};
+use leaven::plumbing::ContentId;
+use leaven::prelude::{
+    Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, AssessmentTarget, Budget, Cost,
+    OptimizationProblem, Proposal, ProposalBatch,
 };
 use leaven_core::{
     EvaluationPurpose, EvaluationSet, ExternalRef, PartitionId, ResolvedEvaluationRequest,
@@ -197,7 +201,7 @@ struct PolicyEvaluationEvidence {
     outcomes: Vec<PolicyCaseOutcome>,
 }
 
-impl leaven::Evidence for PolicyEvaluationEvidence {}
+impl leaven::prelude::Evidence for PolicyEvaluationEvidence {}
 
 #[derive(Clone, Debug, PartialEq)]
 struct PolicyCaseOutcome {
@@ -223,7 +227,7 @@ struct PolicySelfOptimizer {
 impl Optimizer<OptimizerPolicyProblem> for PolicySelfOptimizer {
     async fn step(
         &mut self,
-        ctx: &mut leaven::RunContext<'_, OptimizerPolicyProblem>,
+        ctx: &mut leaven::extend::RunContext<'_, OptimizerPolicyProblem>,
     ) -> Result<StepStatus, OptimizerError> {
         if self.done {
             return Ok(StepStatus::Done);
@@ -319,7 +323,7 @@ impl Optimizer<OptimizerPolicyProblem> for PolicySelfOptimizer {
 impl PolicySelfOptimizer {
     fn observe_validation(
         &mut self,
-        ctx: &mut leaven::RunContext<'_, OptimizerPolicyProblem>,
+        ctx: &mut leaven::extend::RunContext<'_, OptimizerPolicyProblem>,
         candidate: CandidateId,
         assessment: AssessmentId,
     ) -> Result<(), OptimizerError> {
@@ -336,7 +340,7 @@ impl PolicySelfOptimizer {
 }
 
 async fn evaluate_one(
-    ctx: &mut leaven::RunContext<'_, OptimizerPolicyProblem>,
+    ctx: &mut leaven::extend::RunContext<'_, OptimizerPolicyProblem>,
     candidate: CandidateId,
     partition: &'static str,
     purpose: EvaluationPurpose,
@@ -356,7 +360,7 @@ async fn evaluate_one(
 }
 
 fn emit_population_events(
-    ctx: &mut leaven::RunContext<'_, OptimizerPolicyProblem>,
+    ctx: &mut leaven::extend::RunContext<'_, OptimizerPolicyProblem>,
     events: Vec<leaven_engine::PopulationEvent>,
 ) {
     if !events.is_empty() {

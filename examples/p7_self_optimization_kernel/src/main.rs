@@ -1,11 +1,15 @@
 use std::collections::BTreeSet;
 
 use futures::executor::block_on;
-use leaven::{
-    Arity, Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, AssessmentTarget, Budget,
-    CachePolicy, CausalInputs, ContentId, Cost, EvaluationRequest, Evaluator, InfoRef,
-    OptimizationProblem, Optimizer, Proposal, ProposalBatch, ProposalBatchSemantics,
-    ProposalContext, ProposalEffect, Proposer, RunEvent, RunGraphView, StepStatus, TrustPolicy,
+use leaven::extend::{
+    Arity, CachePolicy, CausalInputs, EvaluationRequest, Evaluator, InfoRef, Optimizer,
+    ProposalBatchSemantics, ProposalContext, ProposalEffect, Proposer, RunEvent, RunGraphView,
+    StepStatus, TrustPolicy,
+};
+use leaven::plumbing::ContentId;
+use leaven::prelude::{
+    Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, AssessmentTarget, Budget, Cost,
+    OptimizationProblem, Proposal, ProposalBatch,
 };
 use leaven_core::{
     EvaluationPurpose, EvaluationSet, ExternalRef, PartitionId, ResolvedEvaluationRequest,
@@ -400,7 +404,7 @@ struct AgentRepoEvidence {
     hard_gate_failures: BTreeSet<HardGateFailure>,
 }
 
-impl leaven::Evidence for AgentRepoEvidence {}
+impl leaven::prelude::Evidence for AgentRepoEvidence {}
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 enum HardGateFailure {
@@ -435,7 +439,7 @@ struct ArchiveSelfOptimizer {
 impl Optimizer<SelfOptimizationProblem> for ArchiveSelfOptimizer {
     async fn step(
         &mut self,
-        ctx: &mut leaven::RunContext<'_, SelfOptimizationProblem>,
+        ctx: &mut leaven::extend::RunContext<'_, SelfOptimizationProblem>,
     ) -> Result<StepStatus, OptimizerError> {
         if self.generation >= self.max_generations {
             return Ok(StepStatus::Done);
@@ -539,7 +543,7 @@ impl Optimizer<SelfOptimizationProblem> for ArchiveSelfOptimizer {
 impl ArchiveSelfOptimizer {
     fn observe(
         &mut self,
-        ctx: &mut leaven::RunContext<'_, SelfOptimizationProblem>,
+        ctx: &mut leaven::extend::RunContext<'_, SelfOptimizationProblem>,
         candidate: CandidateId,
         assessment: AssessmentId,
     ) -> Result<(), OptimizerError> {
@@ -595,7 +599,7 @@ impl EvolutionArchive {
 
     fn record_assessment(
         &mut self,
-        ctx: &leaven::RunContext<'_, SelfOptimizationProblem>,
+        ctx: &leaven::extend::RunContext<'_, SelfOptimizationProblem>,
         candidate: CandidateId,
         assessment: AssessmentId,
     ) -> Result<(), OptimizerError> {
@@ -833,7 +837,7 @@ fn allowed_surface_for(mutation: &RepoMutation) -> BTreeSet<MutableSurface> {
 }
 
 async fn evaluate_one(
-    ctx: &mut leaven::RunContext<'_, SelfOptimizationProblem>,
+    ctx: &mut leaven::extend::RunContext<'_, SelfOptimizationProblem>,
     candidate: CandidateId,
     partition: &'static str,
     purpose: EvaluationPurpose,

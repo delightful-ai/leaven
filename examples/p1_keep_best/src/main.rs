@@ -1,10 +1,14 @@
 use futures::executor::block_on;
-use leaven::stdlib::{evidence::ScalarEvidence, populations::KeepBest};
-use leaven::{
-    Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, AssessmentTarget, Budget,
-    CachePolicy, CandidateId, ContentId, Cost, EvaluationRequest, Evaluator, Optimizer, Proposal,
-    ProposalBatch, ProposalBatchSemantics, ProposalContext, Proposer, RunEvent,
+use leaven::extend::{
+    CachePolicy, EvaluationRequest, Evaluator, Optimizer, ProposalBatchSemantics, ProposalContext,
+    Proposer, RunEvent,
 };
+use leaven::plumbing::ContentId;
+use leaven::prelude::{
+    Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, AssessmentTarget, Budget,
+    CandidateId, Cost, Proposal, ProposalBatch,
+};
+use leaven::stdlib::{evidence::ScalarEvidence, populations::KeepBest};
 use leaven_core::{EvaluationPurpose, ResolvedEvaluationRequest, ResolvedRequestKind};
 use leaven_engine::{
     CaseSet, EvaluationContext, EvaluationError, OptimizerError, ProposalError, RunContext,
@@ -85,7 +89,7 @@ impl Artifact for TextArtifact {
 
 struct ScalarProblem;
 
-impl leaven::OptimizationProblem for ScalarProblem {
+impl leaven::prelude::OptimizationProblem for ScalarProblem {
     type Artifact = TextArtifact;
     type Case = ();
     type Evidence = ScalarEvidence;
@@ -199,7 +203,7 @@ impl Optimizer<ScalarProblem> for ScalarKeepBestOptimizer {
                 &self.evaluator,
                 EvaluationRequest::Independent {
                     candidates,
-                    set: leaven::EvaluationSet::All,
+                    set: leaven::extend::EvaluationSet::All,
                     granularity: AssessmentGranularity::Aggregate,
                     purpose: EvaluationPurpose::Search,
                 },

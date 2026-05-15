@@ -1,49 +1,62 @@
-//! Common imports for most Leaven users.
+//! Imports for ordinary Leaven users.
+//!
+//! This is the entry route for users who define an [`OptimizationProblem`],
+//! call [`optimize`], write a scorer, and implement [`Artifact`] or
+//! [`EditSurface`]. It carries only ordinary product vocabulary.
+//!
+//! Users implementing a *piece of the machine* (a custom optimizer, proposer,
+//! selector, gate, evaluator, store, or LM provider) want [`crate::extend`]
+//! instead. Engine and cold-algebra internals are not re-exported here.
+//!
+//! Standard implementations live behind namespaced facades, not this prelude:
+//! `leaven::stdlib` for standard artifacts/evidence/populations and
+//! `leaven::gepa` for the GEPA optimizer. The `public_surface_contract` test
+//! enforces that this route stays ordinary-only.
 
-pub use leaven_core::{
-    Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, AssessmentTarget,
-    ContentAddressed, EvaluationRequest, EvaluationSet, Evidence, OptimizationProblem, PairOrder,
-    PartitionId, Proposal, ProposalBatch, ProposalEffect,
-};
-pub use leaven_engine::{
-    Arity, CachePolicy, Engine, Evaluator, MaterializationReport, MaterializeContext,
-    MaterializeError, Materializer, Optimizer, Population, PreferenceRelation, Proposer, Renderer,
-    RunContext, RunGraphView, Stopper, TrustPolicy,
-};
-pub use leaven_kernel::{
-    Budget, CandidateId, ContentId, Cost, CostUnit, ErrorRecord, Fingerprint, FiniteF64,
-    MetadataBag,
-};
-pub use leaven_lm::{
-    Lm, LmContinuation, LmError, LmId, LmRequest, LmResponse, Message, Messages, ModelName,
-    OutputMode, ProviderHints, ProviderName, ReasoningEffort, Role, SamplingOptions, TokenUsage,
-};
-pub use leaven_run::{
-    IntoOptimizeStore, OptimizationReport, OptimizeError, OptimizeResult, OptimizeStore, RunOutput,
-    Score, ScoreContext, ScoreError, optimize,
-};
-pub use leaven_surface::{EditSurface, Part, PartAddress, PartSelection};
+// --- Defining a problem and its artifacts. ---
+
+pub use leaven_core::Artifact;
+pub use leaven_core::ArtifactIdentity;
+pub use leaven_core::OptimizationProblem;
+pub use leaven_core::Proposal;
+pub use leaven_core::ProposalBatch;
+
+// --- Reading results: assessments, evidence, preferences. ---
+
+pub use leaven_core::Assessment;
+pub use leaven_core::AssessmentGranularity;
+pub use leaven_core::AssessmentTarget;
+pub use leaven_core::Evidence;
+pub use leaven_core::PairOrder;
+pub use leaven_core::Preference;
+
+// --- Edit surfaces over artifacts. ---
+
+pub use leaven_surface::EditSurface;
+pub use leaven_surface::Part;
+pub use leaven_surface::PartAddress;
+pub use leaven_surface::PartSelection;
+
+// --- Budget and identity an ordinary user touches. ---
+
+pub use leaven_kernel::Budget;
+pub use leaven_kernel::CandidateId;
+pub use leaven_kernel::Cost;
+pub use leaven_kernel::CostUnit;
+
+// --- The optimize workflow. ---
+
+pub use leaven_run::OptimizationReport;
+pub use leaven_run::OptimizeBuilder;
+pub use leaven_run::OptimizeResult;
+pub use leaven_run::Score;
+pub use leaven_run::ScoreError;
+pub use leaven_run::optimize;
+
+// --- Artifact derive macros, when the `derive` feature is on. ---
 
 #[cfg(feature = "derive")]
 pub use leaven_derive::{
     Artifact as DeriveArtifact, ContentAddressed as DeriveContentAddressed,
     EditSurface as DeriveEditSurface,
 };
-
-#[cfg(feature = "gepa")]
-pub use leaven_gepa::prelude::*;
-
-#[cfg(feature = "std")]
-pub use leaven_std::prelude::*;
-
-#[cfg(feature = "agentic")]
-pub use leaven_agentic::prelude::*;
-
-#[cfg(all(feature = "skill", not(feature = "std")))]
-pub use leaven_artifact_skill::*;
-
-#[cfg(feature = "agentic-skill")]
-pub use leaven_agentic_skill::*;
-
-#[cfg(feature = "lm-cache")]
-pub use leaven_lm_cache::prelude::*;

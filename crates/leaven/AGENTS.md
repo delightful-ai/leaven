@@ -5,9 +5,41 @@ feature gates, preludes, and cross-crate topology/end-to-end contract tests.
 It is not an implementation crate. Any behavior added here is suspect until it
 has failed to find a more specific owning crate.
 
+## Public Route Model
+The umbrella routes every individually re-exported symbol through exactly one
+audience-named module. Routes are chosen by **who has a named job**, not by
+sophistication tier.
+
+- `prelude` (`leaven::prelude`): ordinary users who define an
+  `OptimizationProblem`, call `optimize`, write a scorer, and implement
+  `Artifact`/`EditSurface`. ~25 ordinary product types. Nothing else.
+- `extend` (`leaven::extend`): users implementing a *piece of the machine* --
+  a custom optimizer, proposer, selector, gate, evaluator, materializer,
+  store, or LM/agent provider. Engine stage traits, contexts, trust/scope,
+  cold algebra. It is not a dumping bag: every symbol carries a `///` doc line
+  naming the concrete consumer.
+- `plumbing` (`#[doc(hidden)] leaven::plumbing`): public *only* so a sibling
+  crate or a contract test can reach it, never for an external caller. No
+  stability promise.
+
+`lib.rs` is maps-only: route modules, crate aliases (`pub use leaven_x as x`),
+and feature-gated module re-exports. It must carry **no loose
+`pub use ...::SomeType;`** at the crate root -- the route module is the
+classification. Standard implementations stay behind crate aliases
+(`leaven::stdlib`, `leaven::gepa`), never the prelude; do not re-add
+`pub use leaven_*::prelude::*` transitive wildcards.
+
+`tests/public_surface_contract.rs` is the enforcement mechanism. It holds a
+checked `SURFACE` registry of `(symbol, Route, reason)` and text-parses the
+route modules. It fails when a re-exported symbol is unclassified, when a
+route module re-exports a symbol with the wrong route, when an `Extend` or
+`Plumbing` entry has an empty `reason`, or when `lib.rs` re-exports an
+individual symbol. If you cannot name a consumer for an `extend`/`plumbing`
+symbol, make it `pub(crate)` instead of routing it.
+
 ## Route Here
-- Public import shape belongs here: top-level crate aliases, curated re-exports,
-  feature-gated facades, and `prelude` membership.
+- Public import shape belongs here: crate aliases, the three route modules,
+  and feature-gated module facades.
 - Cross-crate contract tests belong here when they prove workspace topology,
   dependency edges, feature/import shape, or public workflows that intentionally
   span multiple crates.
@@ -28,8 +60,12 @@ has failed to find a more specific owning crate.
   vocabulary crate, not in the umbrella.
 
 ## Proof Anchors
-- `src/lib.rs` and `src/prelude.rs` are the implementation surface: they should
-  remain maps of aliases, re-exports, and feature-gated facades.
+- `src/lib.rs`, `src/prelude.rs`, `src/extend.rs`, and `src/plumbing.rs` are
+  the implementation surface: `lib.rs` is a map of aliases and route modules;
+  the three route modules are curated re-export lists.
+- `tests/public_surface_contract.rs` proves every routed symbol is classified
+  with a route and a consumer reason, and that `lib.rs` routes no loose
+  individual symbol.
 - `tests/topology_contract.rs` proves workspace member inventory, crate
   dependency edges, cold-core leak checks, and Codex app-server protocol
   quarantine.
@@ -38,6 +74,8 @@ has failed to find a more specific owning crate.
   import surface.
 - `cargo test -p leaven --test topology_contract` proves manifest/topology and
   quarantine changes.
+- `cargo test -p leaven --test public_surface_contract` proves the route
+  classification after any `lib.rs`/route-module change.
 - `cargo nextest run -p leaven` proves the umbrella import and cross-crate
   workflow contracts.
 
@@ -53,30 +91,31 @@ has failed to find a more specific owning crate.
 - `tests/topology_contract.rs` is stronger than stale topology prose for the
   current crate inventory, but it is still a proof anchor, not a dumping ground
   for local crate behavior tests.
-- `src/prelude.rs` is split: the ordinary prelude carries only behavior-bearing
-  Layer 1 names (artifact/surface, kernel budget/cost, LM vocabulary,
-  `optimize` + run/score/result, and `Gepa` when the `gepa` feature is on).
-  Engine-author and GEPA-customizer names (`RunContext`, `RunGraphView`,
-  `TrustPolicy`, `EvaluationRequest`, `Proposer`, `Evaluator`, stage traits,
-  derive macros, and `leaven_gepa::prelude::*`/`leaven_lm_cache::prelude::*`
-  re-exports) live under `prelude::advanced`. Do not promote a name back into
-  ordinary without a public-maturity pass.
+- The umbrella surface is routed by audience (`prelude`/`extend`/`plumbing`),
+  not by a sophistication split. There is no `prelude::advanced` module:
+  engine-author and component-author names (`RunContext`, `RunGraphView`,
+  `TrustPolicy`, `EvaluationRequest`, `Proposer`, `Evaluator`, stage traits)
+  live in `leaven::extend`; identity/finite-number/error internals live in
+  `leaven::plumbing`. Moving a symbol between routes is a public-surface
+  change: update `SURFACE` in `public_surface_contract.rs` in the same edit.
 - GEPA's fixture-shaped names live under `leaven::gepa::` (e.g.
-  `leaven::gepa::FixedEditProposer`) and intentionally do not appear in any
-  prelude. A topology pass can prove the gepa edge is allowed; only a
+  `leaven::gepa::FixedSurfaceEdit`) and intentionally do not appear in any
+  route module. A topology pass can prove the gepa edge is allowed; only a
   public-maturity pass proves a fixture is honest for ordinary users.
-- Until a generated export-route ledger exists, every change to `src/lib.rs`,
-  `src/prelude.rs`, or `Cargo.toml` features must manually name the maturity
-  route it changes: ordinary prelude, advanced namespace, feature-gated facade,
-  test support, or explicit scaffold. Do not rely on "optional" as a scaffold
-  marker; optional provider/backend features are still public promises.
+- Every change to `src/lib.rs` or a route module must keep the
+  `public_surface_contract.rs` `SURFACE` registry in sync: a new re-export
+  needs a route and (for `extend`/`plumbing`) a consumer reason, and a removed
+  re-export needs its registry entry deleted. `Cargo.toml` feature changes
+  still name the maturity route they touch (feature-gated facade, test
+  support, or explicit scaffold); optional provider/backend features are
+  public promises, not scaffold markers.
 
 ## Decision Cards
-- when: changing `src/prelude.rs` or default features
-  do: classify each exported name as ordinary user, GEPA customizer, engine author, LM/runtime, cache-store, or explicit scaffold before adding it
-  preserve: a default import experience that exposes behavior-bearing ordinary contracts, not file layout or future-work names
-  avoid: adding `pub use ...::prelude::*` for a whole crate unless every exported name is mature at this layer
-  verify: run `cargo nextest run -p leaven` and `cargo test -p leaven --test topology_contract`; add an import/export test when the change is about ordinary-vs-advanced visibility
+- when: adding, removing, or re-routing a re-exported umbrella symbol
+  do: route it through exactly one of `prelude`/`extend`/`plumbing`, then add or update its `SURFACE` row in `public_surface_contract.rs` with route and (for extend/plumbing) a consumer reason
+  preserve: `prelude` as ordinary-only, `extend` symbols each justified by a named consumer, `lib.rs` as maps-only with no loose individual `pub use`
+  avoid: re-adding `pub use ...::prelude::*` transitive wildcards, or routing an `extend`/`plumbing` symbol you cannot name a consumer for (make it `pub(crate)` instead)
+  verify: run `cargo test -p leaven --test public_surface_contract` and `cargo nextest run -p leaven`
 
 - when: adding or renaming a feature
   do: prove the feature exposes a behavior-bearing adapter/facade or name it as scaffold/experimental outside defaults

@@ -1,10 +1,14 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use futures::executor::block_on;
-use leaven::{
+use leaven::extend::{
+    CachePolicy, EvaluationRequest, Evaluator, Optimizer, ProposalBatchSemantics, RunEvent,
+    TrustPolicy,
+};
+use leaven::plumbing::ContentId;
+use leaven::prelude::{
     Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, AssessmentTarget, Budget,
-    CachePolicy, CandidateId, ContentId, Cost, EvaluationRequest, Evaluator, Optimizer, Proposal,
-    ProposalBatch, ProposalBatchSemantics, RunEvent, TrustPolicy,
+    CandidateId, Cost, Proposal, ProposalBatch,
 };
 use leaven_core::{
     EvaluationPurpose, EvaluationSet, OptimizationProblem, PartitionId, ResolvedEvaluationRequest,
@@ -196,9 +200,9 @@ impl Optimizer<PartMapProblem> for GepaParityOptimizer {
     async fn step(
         &mut self,
         ctx: &mut RunContext<'_, PartMapProblem>,
-    ) -> Result<leaven::StepStatus, OptimizerError> {
+    ) -> Result<leaven::extend::StepStatus, OptimizerError> {
         if self.done {
-            return Ok(leaven::StepStatus::Done);
+            return Ok(leaven::extend::StepStatus::Done);
         }
 
         let baseline = self
@@ -248,7 +252,7 @@ impl Optimizer<PartMapProblem> for GepaParityOptimizer {
                 ProposalBatch {
                     proposals: vec![
                         Proposal::mutate(parent, change)
-                            .informed_by([leaven::InfoRef::Candidate(parent)])
+                            .informed_by([leaven::extend::InfoRef::Candidate(parent)])
                             .build(),
                     ],
                     semantics: ProposalBatchSemantics::Alternatives,
@@ -290,12 +294,12 @@ impl Optimizer<PartMapProblem> for GepaParityOptimizer {
         });
         self.best = self.gepa.population().best();
         self.done = true;
-        Ok(leaven::StepStatus::Done)
+        Ok(leaven::extend::StepStatus::Done)
     }
 
     fn best_candidate(
         &self,
-        _graph: leaven::RunGraphView<'_, PartMapProblem>,
+        _graph: leaven::extend::RunGraphView<'_, PartMapProblem>,
     ) -> Option<CandidateId> {
         self.best
     }

@@ -2,8 +2,34 @@
 //!
 //! This is the umbrella crate. It is an import experience, not an
 //! implementation crate.
+//!
+//! # Public routes
+//!
+//! Individual symbols are routed by audience, not by sophistication tier:
+//!
+//! - [`prelude`] — ordinary users: define an [`OptimizationProblem`], call
+//!   [`optimize`], write a scorer, implement [`Artifact`] or [`EditSurface`].
+//! - [`extend`] — users implementing a *piece of the machine*: a custom
+//!   optimizer, proposer, selector, gate, evaluator, store, or LM provider.
+//! - [`plumbing`] — `#[doc(hidden)]`; public only so a sibling crate or a
+//!   contract test can reach it, never for an external caller.
+//!
+//! Standard implementations and the GEPA optimizer live behind the namespaced
+//! crate aliases below (`leaven::stdlib`, `leaven::gepa`, `leaven::engine`,
+//! ...), not in the prelude.
+//!
+//! [`OptimizationProblem`]: prelude::OptimizationProblem
+//! [`optimize`]: prelude::optimize
+//! [`Artifact`]: prelude::Artifact
+//! [`EditSurface`]: prelude::EditSurface
 
+pub mod extend;
 pub mod prelude;
+
+#[doc(hidden)]
+pub mod plumbing;
+
+// --- Crate aliases: namespaced access to the underlying workspace crates. ---
 
 pub use leaven_core as core;
 pub use leaven_engine as engine;
@@ -13,45 +39,11 @@ pub use leaven_lm as lm;
 pub use leaven_run as run;
 pub use leaven_surface as surface;
 
-pub use leaven_core::{
-    Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, AssessmentTarget, CacheIdentity,
-    CausalInputs, ContentAddressed, EvaluationRequest, EvaluationSet, Evidence, InfoRef,
-    OptimizationProblem, PairOrder, PartitionId, Preference, Proposal, ProposalBatch,
-    ProposalBatchSemantics, ProposalEffect, ProposalProvenance,
-};
-pub use leaven_engine::{
-    Arity, CachePolicy, Engine, EngineBuilder, Evaluator, MaterializationReport,
-    MaterializeContext, MaterializeError, Materializer, Optimizer, Population, PreferenceRelation,
-    ProposalContext, Proposer, ReadScope, RenderContext, Renderer, RunContext, RunEvent,
-    RunGraphView, RunResult, StepStatus, Stopper, TrustPolicy,
-};
-pub use leaven_kernel::{
-    Amount, AmountError, Budget, BudgetSnapshot, CandidateId, ContentId, Cost, CostUnit,
-    ErrorRecord, Fingerprint, FiniteF64, FiniteF64Error, MetadataBag, ProposalId,
-};
-pub use leaven_lm::{
-    Lm, LmContinuation, LmError, LmId, LmRequest, LmResponse, Message, Messages, ModelName,
-    OutputMode, ProviderHints, ProviderName, ReasoningEffort, Role, SamplingOptions, TokenUsage,
-};
-pub use leaven_run::{
-    IntoOptimizeStore, OptimizationReport, OptimizeBuilder, OptimizeError, OptimizeResult,
-    OptimizeStore, RunOutput, Score, ScoreContext, ScoreError, optimize,
-};
-pub use leaven_surface::{
-    EditSurface, Part, PartAddress, PartSelection, SurfaceError, SurfaceFingerprint,
-};
-
-#[cfg(feature = "derive")]
-pub use leaven_derive::{
-    Artifact as DeriveArtifact, ContentAddressed as DeriveContentAddressed,
-    EditSurface as DeriveEditSurface,
-};
-
 #[cfg(feature = "std")]
 pub use leaven_std as stdlib;
 
 #[cfg(feature = "gepa")]
-pub use leaven_gepa::Gepa;
+pub use leaven_gepa as gepa;
 
 #[cfg(feature = "workspace")]
 pub use leaven_workspace as workspace;

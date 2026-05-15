@@ -14,6 +14,9 @@ SKIP_DIRS = {
     ".git",
     ".jj",
     "target",
+    # External dependency clones (e.g. the vendored Codex tree) live behind a
+    # symlinked `vendor/` directory and are not Leaven production source.
+    "vendor",
 }
 
 

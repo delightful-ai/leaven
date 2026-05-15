@@ -1,8 +1,10 @@
 use leaven::engine::{BudgetLedger, RunContext, RunGraph};
+use leaven::extend::ProposalBatchSemantics;
 use leaven::kernel::{RunId, StageId};
-use leaven::{
-    Artifact, ArtifactIdentity, Budget, ContentId, Cost, Evidence, MetadataBag,
-    OptimizationProblem, Proposal, ProposalBatch, ProposalBatchSemantics,
+use leaven::plumbing::{ContentId, MetadataBag};
+use leaven::prelude::{
+    Artifact, ArtifactIdentity, Budget, Cost, Evidence, OptimizationProblem, Proposal,
+    ProposalBatch,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

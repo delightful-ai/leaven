@@ -1,15 +1,19 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use futures::executor::block_on;
-use leaven::prelude::{FixedSurfaceEdit, Gepa, SurfaceProposer};
+use leaven::extend::{
+    CachePolicy, EvaluationRequest, Evaluator, InfoRef, Optimizer, ProposalBatchSemantics,
+    ProposalEffect, RunEvent, TrustPolicy,
+};
+use leaven::gepa::{FixedSurfaceEdit, Gepa, SurfaceProposer};
+use leaven::plumbing::ContentId;
+use leaven::prelude::{
+    Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, AssessmentTarget, Budget,
+    CandidateId, Cost, Proposal, ProposalBatch,
+};
 use leaven::stdlib::{
     evidence::{CaseOutcome, CasewiseEvidence, ScalarEvidence},
     populations::ParetoFrontier,
-};
-use leaven::{
-    Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, AssessmentTarget, Budget,
-    CachePolicy, CandidateId, ContentId, Cost, EvaluationRequest, Evaluator, InfoRef, Optimizer,
-    Proposal, ProposalBatch, ProposalBatchSemantics, ProposalEffect, RunEvent, TrustPolicy,
 };
 use leaven_core::{
     EvaluationPurpose, EvaluationSet, OptimizationProblem, PartitionId, ResolvedEvaluationRequest,
@@ -245,9 +249,9 @@ impl Optimizer<PartMapProblem> for GepaParityOptimizer {
     async fn step(
         &mut self,
         ctx: &mut RunContext<'_, PartMapProblem>,
-    ) -> Result<leaven::StepStatus, OptimizerError> {
+    ) -> Result<leaven::extend::StepStatus, OptimizerError> {
         if self.done {
-            return Ok(leaven::StepStatus::Done);
+            return Ok(leaven::extend::StepStatus::Done);
         }
 
         let baseline = self
@@ -343,12 +347,12 @@ impl Optimizer<PartMapProblem> for GepaParityOptimizer {
         self.best = self.gepa.population().best();
         self.candidate = Some(candidate);
         self.done = true;
-        Ok(leaven::StepStatus::Done)
+        Ok(leaven::extend::StepStatus::Done)
     }
 
     fn best_candidate(
         &self,
-        _graph: leaven::RunGraphView<'_, PartMapProblem>,
+        _graph: leaven::extend::RunGraphView<'_, PartMapProblem>,
     ) -> Option<CandidateId> {
         self.best
     }

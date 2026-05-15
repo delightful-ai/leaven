@@ -5,12 +5,16 @@ use std::sync::{
 use std::time::Duration;
 
 use futures::executor::block_on;
-use leaven::{
-    Arity, Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, AssessmentTarget, Budget,
-    CachePolicy, CausalInputs, ContentId, Cost, EvaluationRequest, EvaluationSet, Evaluator,
-    InfoRef, MaterializationReport, MaterializeContext, MaterializeError, Materializer,
-    MetadataBag, OptimizationProblem, Optimizer, Proposal, ProposalBatch, ProposalBatchSemantics,
-    ProposalContext, ProposalEffect, Proposer, RunEvent, RunGraphView, StepStatus, TrustPolicy,
+use leaven::extend::{
+    Arity, CachePolicy, CausalInputs, EvaluationRequest, EvaluationSet, Evaluator, InfoRef,
+    MaterializationReport, MaterializeContext, MaterializeError, Materializer, Optimizer,
+    ProposalBatchSemantics, ProposalContext, ProposalEffect, Proposer, RunEvent, RunGraphView,
+    StepStatus, TrustPolicy,
+};
+use leaven::plumbing::{ContentId, MetadataBag};
+use leaven::prelude::{
+    Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, AssessmentTarget, Budget, Cost,
+    OptimizationProblem, Proposal, ProposalBatch,
 };
 use leaven_core::{
     EvaluationPurpose, ExternalRef, PartitionId, ResolvedEvaluationRequest, ResolvedRequestKind,
@@ -164,7 +168,7 @@ enum HarnessEvidence {
     },
 }
 
-impl leaven::Evidence for HarnessEvidence {}
+impl leaven::prelude::Evidence for HarnessEvidence {}
 
 impl HarnessEvidence {
     const fn score(&self) -> ScalarEvidence {
@@ -199,7 +203,7 @@ struct MetaHarnessOptimizer {
 impl Optimizer<MetaHarnessProblem> for MetaHarnessOptimizer {
     async fn step(
         &mut self,
-        ctx: &mut leaven::RunContext<'_, MetaHarnessProblem>,
+        ctx: &mut leaven::extend::RunContext<'_, MetaHarnessProblem>,
     ) -> Result<StepStatus, OptimizerError> {
         if self.done {
             return Ok(StepStatus::Done);
@@ -295,7 +299,7 @@ impl Optimizer<MetaHarnessProblem> for MetaHarnessOptimizer {
 }
 
 async fn evaluate_one(
-    ctx: &mut leaven::RunContext<'_, MetaHarnessProblem>,
+    ctx: &mut leaven::extend::RunContext<'_, MetaHarnessProblem>,
     candidate: CandidateId,
     partition: &'static str,
     purpose: EvaluationPurpose,
@@ -315,7 +319,7 @@ async fn evaluate_one(
 }
 
 fn emit_population_events(
-    ctx: &mut leaven::RunContext<'_, MetaHarnessProblem>,
+    ctx: &mut leaven::extend::RunContext<'_, MetaHarnessProblem>,
     events: Vec<leaven_engine::PopulationEvent>,
 ) {
     if !events.is_empty() {
