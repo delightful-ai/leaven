@@ -1,5 +1,7 @@
 //! Public runner and scoring evidence shapes.
 
+use leaven_kernel::Cost;
+
 /// Output produced by running one artifact on one case.
 #[derive(Clone, Debug, Default)]
 pub struct RunOutput {
@@ -7,6 +9,8 @@ pub struct RunOutput {
     pub output: String,
     /// Trace lines captured while running the artifact.
     pub trace: Vec<String>,
+    /// Metered cost incurred while producing the output.
+    pub cost: Cost,
 }
 
 impl RunOutput {
@@ -16,7 +20,15 @@ impl RunOutput {
         Self {
             output: output.into(),
             trace,
+            cost: Cost::zero(),
         }
+    }
+
+    /// Attaches metered runner cost to the output.
+    #[must_use]
+    pub fn with_cost(mut self, cost: Cost) -> Self {
+        self.cost = cost;
+        self
     }
 }
 

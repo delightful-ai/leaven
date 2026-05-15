@@ -46,10 +46,11 @@ export LEAVEN_AIME_CACHE=target/leaven-aime-cache/aime.json
 cargo run -p p8_aime_gepa
 ```
 
-The OpenAI path is an opt-in solver swap over the same
+The OpenAI path is an opt-in native async solver swap over the same
 `leaven::optimize(...).train(...).validation(...).test(...).runner(...).score(...).using(...).run()`
-surface. The live reflection path uses `leaven-lm-openai` through the same
-`LmBackedReflector`, with `gpt-5.4-mini` and medium reasoning as the default
-reflection model controls. The deterministic path proves public API mechanics
-and LM-backed reflection invariants; it is not evidence of live AIME
-improvement.
+surface. Both live solver and live reflection use `leaven-lm-openai`; solver
+LM spend is attached to `RunOutput` and charged through evaluation accounting.
+The live reflection path uses `LmBackedReflector`, with `gpt-5.4-mini` and
+medium reasoning as the default reflection model controls. The deterministic
+path proves public API mechanics and LM-backed reflection invariants; it is not
+evidence of live AIME improvement.

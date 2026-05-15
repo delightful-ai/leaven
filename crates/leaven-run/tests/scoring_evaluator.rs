@@ -1,6 +1,13 @@
-use std::sync::Arc;
+use std::{
+    num::NonZeroUsize,
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
+    time::Duration,
+};
 
-use futures::executor::block_on;
+use futures::{FutureExt, channel::oneshot, executor::block_on};
 use leaven_core::{
     Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, CaseSetVersion,
     EvaluationPurpose, EvaluationSet, PairOrder, ResolvedEvaluationRequest, ResolvedEvaluationSet,
@@ -8,7 +15,7 @@ use leaven_core::{
 };
 use leaven_engine::{BudgetLedger, CachePolicy, Evaluator, RunContext, RunGraph};
 use leaven_kernel::{
-    CandidateId, CaseId, ContentId, EvaluatorId, ResolvedEvaluationSetId, RunId, StageId, now,
+    CandidateId, CaseId, ContentId, Cost, EvaluatorId, ResolvedEvaluationSetId, RunId, StageId, now,
 };
 use leaven_run::{RunOutput, RunProblem, Score, ScoreContext, ScoringEvaluator};
 
@@ -129,15 +136,20 @@ fn scoring_evaluator_reports_per_candidate_cost_for_independent_batches() {
         let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
         let evaluator = ScoringEvaluator::new(
             Arc::new(vec![2, 3]),
-            Arc::new(|artifact: &TextArtifact, case| {
-                RunOutput::new(
-                    (artifact.0 + case).to_string(),
-                    vec!["runner trace".to_owned()],
-                )
+            Arc::new(|artifact: TextArtifact, case| {
+                async move {
+                    RunOutput::new(
+                        (artifact.0 + case).to_string(),
+                        vec!["runner trace".to_owned()],
+                    )
+                    .with_cost(Cost::llm_calls(u64::try_from(case).unwrap()))
+                }
+                .boxed()
             }),
             Arc::new(|ctx| Score::new(ctx.output.output.parse::<f64>().unwrap(), "ok")),
             "scoring-evaluator-test",
         );
+        assert!(evaluator.parallelism().get() > 0);
 
         let metered = evaluator
             .evaluate(
@@ -154,15 +166,87 @@ fn scoring_evaluator_reports_per_candidate_cost_for_independent_batches() {
             .unwrap();
 
         assert_eq!(metered.cost.metric_calls, 4);
+        assert_eq!(metered.cost.llm_calls, 10);
         let assessment_costs = metered
             .value
             .iter()
             .map(|assessment| match assessment {
-                Assessment::Independent { cost, .. } => cost.metric_calls,
+                Assessment::Independent { cost, .. } => (cost.metric_calls, cost.llm_calls),
                 _ => panic!("expected independent assessment"),
             })
             .collect::<Vec<_>>();
-        assert_eq!(assessment_costs, vec![2, 2]);
+        assert_eq!(assessment_costs, vec![(2, 5), (2, 5)]);
+    });
+}
+
+#[test]
+fn scoring_evaluator_runs_case_jobs_with_bounded_parallelism_and_stable_order() {
+    block_on(async {
+        let (mut graph, mut budget, candidate) = graph_with_seed();
+        let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
+        let active = Arc::new(AtomicUsize::new(0));
+        let max_active = Arc::new(AtomicUsize::new(0));
+        let evaluator = ScoringEvaluator::new(
+            Arc::new(vec![1, 2, 3, 4]),
+            {
+                let active = Arc::clone(&active);
+                let max_active = Arc::clone(&max_active);
+                Arc::new(move |artifact: TextArtifact, case| {
+                    let active = Arc::clone(&active);
+                    let max_active = Arc::clone(&max_active);
+                    async move {
+                        let now = active.fetch_add(1, Ordering::SeqCst) + 1;
+                        max_active.fetch_max(now, Ordering::SeqCst);
+                        let (tx, rx) = oneshot::channel();
+                        std::thread::spawn(move || {
+                            std::thread::sleep(Duration::from_millis(20));
+                            let _ = tx.send(RunOutput::new(
+                                (artifact.0 + case).to_string(),
+                                vec![format!("case {case}")],
+                            ));
+                        });
+                        let output = rx.await.expect("worker sends output");
+                        active.fetch_sub(1, Ordering::SeqCst);
+                        output
+                    }
+                    .boxed()
+                })
+            },
+            Arc::new(|ctx| Score::new(ctx.output.output.parse::<f64>().unwrap(), "ok")),
+            "scoring-evaluator-parallel-test",
+        )
+        .with_parallelism(NonZeroUsize::new(2).unwrap());
+
+        let metered = evaluator
+            .evaluate(
+                request(
+                    ResolvedRequestKind::Independent {
+                        candidates: vec![candidate],
+                    },
+                    vec![
+                        CaseId::new(0),
+                        CaseId::new(1),
+                        CaseId::new(2),
+                        CaseId::new(3),
+                    ],
+                    AssessmentGranularity::PerCase,
+                ),
+                ctx.evaluation_context(StageId::from_evaluator(Evaluator::id(&evaluator))),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(metered.cost.metric_calls, 4);
+        assert_eq!(max_active.load(Ordering::SeqCst), 2);
+        let [Assessment::Independent { evidence, .. }] = metered.value.as_slice() else {
+            panic!("expected one independent assessment");
+        };
+        let scores = evidence
+            .outcomes()
+            .iter()
+            .map(|outcome| outcome.evidence().score().score())
+            .collect::<Vec<_>>();
+        assert_eq!(scores, vec![41.0, 42.0, 43.0, 44.0]);
     });
 }
 
@@ -172,10 +256,13 @@ fn scoring_evaluator(
     ScoringEvaluator::new(
         Arc::new(vec![2]),
         Arc::new(|artifact, case| {
-            RunOutput::new(
-                (artifact.0 + case).to_string(),
-                vec!["runner trace".to_owned()],
-            )
+            async move {
+                RunOutput::new(
+                    (artifact.0 + case).to_string(),
+                    vec!["runner trace".to_owned()],
+                )
+            }
+            .boxed()
         }),
         Arc::new(scorer),
         "scoring-evaluator-test",

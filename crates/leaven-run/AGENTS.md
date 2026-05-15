@@ -56,9 +56,12 @@ around engine graph mutation or a home for optimizer strategy state.
   richer feedback, absent scores, failed evidence, trace/history, and metric
   axes must lower into typed evidence/report records instead of becoming zero
   or string metadata.
-- Current runner/scorer helpers are sync and scalar-leaning. Treat that as the
-  present implementation state, not the final Layer 1 contract for async
-  runner/scorer/evaluator roles, cache policy, or richer evidence/reporting.
+- Runner helpers are async and bounded-concurrent. `RunOutput` carries runner
+  cost so solver/program LM calls, subprocesses, and agent runtimes can be
+  charged through evaluation reports instead of disappearing into trace text.
+  Scoring is still scalar-leaning and synchronous; treat that as present
+  implementation state, not the final Layer 1 contract for rich scoring,
+  scorer failures, attachments, cache policy, or role-level runtime controls.
 - The current builder fixes case identity by vector position via
   `CaseId::from_index` and uses literal `TRAIN`/`VALIDATION`/`TEST` partitions.
   That is acceptable for today's proof path, but stable user-provided case IDs,
@@ -82,8 +85,8 @@ around engine graph mutation or a home for optimizer strategy state.
   avoid: putting GEPA strategy knobs, engine graph shortcuts, provider clients, or dataset execution machinery into the builder just because P8 needs them
   verify: run `cargo nextest run -p leaven-run --test optimize_builder`
 
-- when: adding async runner/scorer, rich scoring, stable cases, or single-task mode
-  do: hard-cut the builder/evaluator/report path together instead of adding parallel sync-vs-async product APIs
+- when: adding scorer async/failure support, rich scoring, stable cases, or single-task mode
+  do: hard-cut the builder/evaluator/report path together instead of adding parallel simple-vs-rich product APIs
   preserve: one ordinary lowering route into `ScoringEvaluator` or its replacement, with typed errors and metered cost rather than score-zero fallbacks
   avoid: treating `RunOutput { output, trace }` plus scalar `Score` as the final evidence model
   verify: run `cargo nextest run -p leaven-run --test scoring_evaluator --test optimize_builder`, then the affected product example

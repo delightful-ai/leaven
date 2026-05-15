@@ -2,10 +2,13 @@
 
 use std::{
     collections::{BTreeMap, BTreeSet},
+    future::Future,
     marker::PhantomData,
+    num::NonZeroUsize,
     sync::Arc,
 };
 
+use futures::{FutureExt, future::BoxFuture};
 use leaven_core::{
     Artifact, AssessmentGranularity, EvaluationPurpose, EvaluationRequest, EvaluationSet,
     OptimizationProblem, PartitionId,
@@ -21,11 +24,11 @@ use leaven_store::EvidenceStore;
 
 use crate::{
     IntoOptimizeStore, OptimizeError, OptimizeStore, RunOutput, Score, ScoreContext,
-    evaluator::ScoringEvaluator,
+    evaluator::{ScoringEvaluator, default_parallelism},
     result::{OptimizationReport, OptimizeResult, average},
 };
 
-type Runner<A, C> = Arc<dyn Fn(&A, &C) -> RunOutput + Send + Sync>;
+type Runner<A, C> = Arc<dyn Fn(A, C) -> BoxFuture<'static, RunOutput> + Send + Sync>;
 type Scorer<A, C> = Arc<dyn for<'a> Fn(ScoreContext<'a, A, C>) -> Score + Send + Sync>;
 
 struct FinalEvaluations {
@@ -62,10 +65,11 @@ where
         train: Vec::new(),
         validation: Vec::new(),
         test: Vec::new(),
-        runner: Arc::new(|_artifact, _case| RunOutput::default()),
+        runner: Arc::new(|_artifact, _case| async { RunOutput::default() }.boxed()),
         scorer: None,
         optimizer: (),
         budget: None,
+        evaluation_parallelism: default_parallelism(),
         callbacks: Vec::new(),
         store: None,
     }
@@ -85,6 +89,7 @@ where
     scorer: Option<Scorer<A, C>>,
     optimizer: O,
     budget: Option<Budget>,
+    evaluation_parallelism: NonZeroUsize,
     callbacks: Vec<Box<dyn Callback<RunProblem<A, C>>>>,
     store: Option<OptimizeStore<RunProblem<A, C>>>,
 }
@@ -104,10 +109,11 @@ where
             train,
             validation: Vec::new(),
             test: Vec::new(),
-            runner: Arc::new(|_artifact, _case| RunOutput::default()),
+            runner: Arc::new(|_artifact, _case| async { RunOutput::default() }.boxed()),
             scorer: None,
             optimizer: (),
             budget: self.budget,
+            evaluation_parallelism: self.evaluation_parallelism,
             callbacks: Vec::new(),
             store: None,
         }
@@ -135,11 +141,12 @@ where
 
     /// Supplies the runner/executor.
     #[must_use]
-    pub fn runner<F>(mut self, runner: F) -> Self
+    pub fn runner<F, Fut>(mut self, runner: F) -> Self
     where
-        F: Fn(&A, &C) -> RunOutput + Send + Sync + 'static,
+        F: Fn(A, C) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = RunOutput> + Send + 'static,
     {
-        self.runner = Arc::new(runner);
+        self.runner = Arc::new(move |artifact, case| runner(artifact, case).boxed());
         self
     }
 
@@ -165,6 +172,7 @@ where
             scorer: self.scorer,
             optimizer,
             budget: self.budget,
+            evaluation_parallelism: self.evaluation_parallelism,
             callbacks: self.callbacks,
             store: self.store,
         }
@@ -174,6 +182,13 @@ where
     #[must_use]
     pub fn budget(mut self, budget: Budget) -> Self {
         self.budget = Some(budget);
+        self
+    }
+
+    /// Sets the maximum number of runner/scorer jobs evaluated at once.
+    #[must_use]
+    pub const fn evaluation_parallelism(mut self, parallelism: NonZeroUsize) -> Self {
+        self.evaluation_parallelism = parallelism;
         self
     }
 
@@ -229,7 +244,8 @@ where
             self.runner.clone(),
             scorer,
             "leaven-run/score",
-        );
+        )
+        .with_parallelism(self.evaluation_parallelism);
         let mut engine_builder =
             leaven_engine::Engine::<RunProblem<A, C>>::builder()
                 .budget(budget)

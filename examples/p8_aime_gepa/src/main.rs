@@ -1,8 +1,4 @@
-use std::{
-    collections::BTreeMap,
-    path::Path,
-    process::{Command, Stdio},
-};
+use std::{collections::BTreeMap, path::Path};
 
 use leaven::prelude::*;
 use leaven::{
@@ -12,7 +8,8 @@ use leaven_gepa::{
     DefaultReflectionRenderer, LmBackedReflector, LmBackedReflectorConfig, PlainTextEditParser,
 };
 use leaven_lm::{
-    Lm, LmError, LmId, LmRequest, LmResponse, Message, ReasoningEffort, SamplingOptions, TokenUsage,
+    Lm, LmError, LmId, LmRequest, LmResponse, Message, Messages, ReasoningEffort, SamplingOptions,
+    TokenUsage,
 };
 use leaven_lm_openai::OpenAiLm;
 use serde::{Deserialize, Serialize};
@@ -82,11 +79,15 @@ async fn run_aime(
     validation: Vec<AimeCase>,
     test: Vec<AimeCase>,
 ) -> OptimizeResult<AimePrompt> {
+    let solver = aime_solver_lm();
     leaven::optimize(AimePrompt::new(BASELINE))
         .train(train)
         .validation(validation)
         .test(test)
-        .runner(run_solver)
+        .runner(move |prompt, case| {
+            let solver = solver.clone();
+            async move { run_solver(prompt, case, solver).await }
+        })
         .score(|ctx| score_answer(&ctx))
         .using(
             Gepa::builder()
@@ -374,9 +375,20 @@ fn deterministic_cases() -> (Vec<AimeCase>, Vec<AimeCase>, Vec<AimeCase>) {
     (train, validation, test)
 }
 
-fn run_solver(prompt: &AimePrompt, case: &AimeCase) -> RunOutput {
+fn aime_solver_lm() -> Option<OpenAiLm> {
     if std::env::var_os("LEAVEN_AIME_LIVE_OPENAI").is_some() {
-        return run_openai_solver(prompt, case);
+        Some(
+            OpenAiLm::from_env(openai_model_name())
+                .expect("OPENAI_API_KEY is required for live solver"),
+        )
+    } else {
+        None
+    }
+}
+
+async fn run_solver(prompt: AimePrompt, case: AimeCase, solver: Option<OpenAiLm>) -> RunOutput {
+    if let Some(solver) = solver {
+        return run_openai_solver(solver, &prompt, &case).await;
     }
     let has_modular = prompt.system.contains("modular arithmetic");
     let verifies = prompt.system.contains("Verify arithmetic");
@@ -396,18 +408,19 @@ fn run_solver(prompt: &AimePrompt, case: &AimeCase) -> RunOutput {
     )
 }
 
-fn run_openai_solver(prompt: &AimePrompt, case: &AimeCase) -> RunOutput {
-    let python = std::env::var("LEAVEN_OPENAI_PYTHON").unwrap_or_else(|_| "python3".to_owned());
-    let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/openai_solver.py");
-    let output = Command::new(&python)
-        .arg(script)
-        .env("LEAVEN_AIME_SYSTEM_PROMPT", &prompt.system)
-        .env("LEAVEN_AIME_PROBLEM", &case.problem)
-        .stdin(Stdio::null())
-        .output();
-    match output {
-        Ok(output) if output.status.success() => {
-            let answer = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+async fn run_openai_solver(solver: OpenAiLm, prompt: &AimePrompt, case: &AimeCase) -> RunOutput {
+    let request = LmRequest::new(
+        openai_model_name(),
+        Messages::new()
+            .with_system(prompt.system.clone())
+            .with_user(format!(
+                "Problem:\n{}\n\nReturn only the final integer answer.",
+                case.problem
+            )),
+    );
+    match solver.complete(request).await {
+        Ok(metered) => {
+            let answer = metered.value.assistant.content().trim().to_owned();
             RunOutput::new(
                 answer.clone(),
                 vec![
@@ -418,24 +431,15 @@ fn run_openai_solver(prompt: &AimePrompt, case: &AimeCase) -> RunOutput {
                     format!("solver_answer: {answer}"),
                 ],
             )
+            .with_cost(metered.cost)
         }
-        Ok(output) => RunOutput::new(
-            String::new(),
-            vec![
-                "provider: openai-responses".to_owned(),
-                format!("model: {}", openai_model_name()),
-                format!("problem: {}", case.problem),
-                format!("openai_status: {}", output.status),
-                format!("openai_stderr: {}", String::from_utf8_lossy(&output.stderr)),
-            ],
-        ),
         Err(source) => RunOutput::new(
             String::new(),
             vec![
                 "provider: openai-responses".to_owned(),
                 format!("model: {}", openai_model_name()),
                 format!("problem: {}", case.problem),
-                format!("openai_spawn_error: {source}"),
+                format!("openai_error: {source}"),
             ],
         ),
     }
@@ -572,7 +576,7 @@ mod tests {
         let error = block_on(async {
             leaven::optimize(AimePrompt::new(BASELINE))
                 .train(train)
-                .runner(run_solver)
+                .runner(|prompt, case| async move { run_solver(prompt, case, None).await })
                 .using(
                     Gepa::builder()
                         .surface(AimePromptSurface)

@@ -1,6 +1,9 @@
-use std::sync::{
-    Arc, Mutex,
-    atomic::{AtomicUsize, Ordering},
+use std::{
+    num::NonZeroUsize,
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
+    },
 };
 
 use futures::executor::block_on;
@@ -25,7 +28,7 @@ fn run_builder_requires_explicit_budget() {
     let error = block_on(
         optimize(TextArtifact(40))
             .train(vec![TextCase(2)])
-            .runner(text_runner)
+            .runner(|artifact, case| async move { text_runner(&artifact, &case) })
             .score(text_score)
             .using(SeedBest::default())
             .run(),
@@ -40,10 +43,11 @@ fn run_builder_accepts_explicit_unlimited_budget() {
     let result = block_on(
         optimize(TextArtifact(40))
             .train(vec![TextCase(2)])
-            .runner(text_runner)
+            .runner(|artifact, case| async move { text_runner(&artifact, &case) })
             .score(text_score)
             .using(SeedBest::default())
             .budget(Budget::unlimited())
+            .evaluation_parallelism(NonZeroUsize::new(1).unwrap())
             .run(),
     )
     .unwrap();
@@ -61,7 +65,7 @@ fn run_builder_accepts_cloned_evidence_only_store() {
     let result = block_on(
         optimize(TextArtifact(40))
             .train(vec![TextCase(2)])
-            .runner(text_runner)
+            .runner(|artifact, case| async move { text_runner(&artifact, &case) })
             .score(text_score)
             .using(EvaluateSeed::default())
             .budget(Budget::metric_calls(16))
@@ -72,7 +76,7 @@ fn run_builder_accepts_cloned_evidence_only_store() {
     let cloned_result = block_on(
         optimize(TextArtifact(41))
             .train(vec![TextCase(2)])
-            .runner(text_runner)
+            .runner(|artifact, case| async move { text_runner(&artifact, &case) })
             .score(text_score)
             .using(EvaluateSeed::default())
             .budget(Budget::metric_calls(16))
@@ -93,7 +97,7 @@ fn run_builder_rejects_held_out_cases_without_train_cases() {
         optimize(TextArtifact(40))
             .train(Vec::<TextCase>::new())
             .validation(vec![TextCase(2)])
-            .runner(text_runner)
+            .runner(|artifact, case| async move { text_runner(&artifact, &case) })
             .score(text_score)
             .using(SeedBest::default())
             .budget(Budget::metric_calls(8))
@@ -105,11 +109,30 @@ fn run_builder_rejects_held_out_cases_without_train_cases() {
 }
 
 #[test]
+fn run_builder_accepts_empty_train_when_no_held_out_sets_exist() {
+    let result = block_on(
+        optimize(TextArtifact(40))
+            .train(Vec::<TextCase>::new())
+            .runner(|artifact, case| async move { text_runner(&artifact, &case) })
+            .score(text_score)
+            .using(EvaluateSeed::default())
+            .budget(Budget::metric_calls(8))
+            .run(),
+    )
+    .unwrap();
+
+    assert_eq!(result.best(), &TextArtifact(40));
+    assert!(result.report().baseline_train_score.abs() < f64::EPSILON);
+    assert!(result.report().optimized_train_score.abs() < f64::EPSILON);
+    assert_eq!(result.report().cost.metric_calls, 0);
+}
+
+#[test]
 fn run_builder_rejects_optimizer_that_reports_no_best_candidate() {
     let error = block_on(
         optimize(TextArtifact(40))
             .train(vec![TextCase(2)])
-            .runner(text_runner)
+            .runner(|artifact, case| async move { text_runner(&artifact, &case) })
             .score(text_score)
             .using(NoBest)
             .budget(Budget::metric_calls(8))
@@ -133,7 +156,7 @@ fn run_builder_dispatches_callbacks_and_supplied_store_capabilities() {
     let result = block_on(
         optimize(TextArtifact(40))
             .train(vec![TextCase(2), TextCase(3)])
-            .runner(text_runner)
+            .runner(|artifact, case| async move { text_runner(&artifact, &case) })
             .score(text_score)
             .using(EvaluateSeed::default())
             .budget(Budget::metric_calls(32))
