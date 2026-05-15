@@ -27,8 +27,7 @@ pub struct OptimizeResult<A> {
 
 `OptimizationReport` is a flat struct: `stop_reason`, `storage`, two
 `BudgetSnapshot`s, three `Cost`s, six `Option<f64>` split scores,
-`evaluation: EvaluationReport`, `events: Vec<String>`, and (to be deleted in
-slice 6) duplicate `dataset`/`splits` fingerprints.
+`evaluation: EvaluationReport`, and `events: Vec<String>`.
 
 ### What the spec wants
 
@@ -86,37 +85,53 @@ absence for missing scores.
 
 ### Decision
 
-Do **A-lite as a hard cutover**, not a compatibility shim and not a one-field
-patch.
+Do **a narrow A-lite hard cutover**, not a compatibility shim and not a
+one-field patch.
 
 The next result slice should rename the ordinary completed-run facade to
-`Optimized<A, S = StandardRunSummary>` and delete `OptimizeResult` rather than
-leaving both names alive. The product-builder result is generic over the owned
-artifact type, not over `P: OptimizationProblem`; `RunProblem<A, C>` is internal
-lowering glue and should not leak into the user's result type.
+`Optimized<A>` and delete `OptimizeResult` rather than leaving both names alive.
+Do not introduce a public `S = StandardRunSummary` generic in this cut. The
+planning spec sketches that escape hatch, but high-taste optimizer libraries
+usually keep the ordinary result concrete until there are multiple real result
+families. The product-builder result is generic over the owned artifact type,
+not over `P: OptimizationProblem`; `RunProblem<A, C>` is internal lowering glue
+and should not leak into the user's result type.
 
 The minimum shape for this slice:
 
 ```rust
-pub struct Optimized<A, S = StandardRunSummary> {
+pub struct Optimized<A> {
     pub run_id: RunId,
-    pub best: Option<CandidateId>,
-    pub best_artifact: Option<A>,
+    pub best: Option<BestCandidate<A>>,
     pub seed_artifact: A,
     pub stop: OptimizationStopReason,
     pub budget: BudgetSnapshot,
-    pub summary: S,
+    pub summary: StandardRunSummary,
     pub events: Vec<RunEventSummary>,
+}
+
+pub struct BestCandidate<A> {
+    pub id: CandidateId,
+    pub artifact: A,
 }
 ```
 
+`BestCandidate<A>` is deliberately a bundled optional value. The public result
+needs both the durable graph identity (`CandidateId`) and the ergonomic owned
+artifact (`A`), but two parallel `Option` fields would encode their invariant by
+convention. One `Option<BestCandidate<A>>` makes the invariant structural.
+
 `StandardRunSummary` should absorb today's flattened `OptimizationReport`
 payload: storage/resumability, optimizer/final-report cost, split score
-summaries, and the graph-backed `EvaluationReport`. Keep it in `leaven-run`.
+summaries, and the graph-backed `EvaluationReport`. This is a concrete ordinary
+summary, not a generic public axis. Rename `OptimizationReport` to
+`StandardRunSummary` in the same hard cutover; do not leave both names alive.
+
 `GepaSummary` stays in `leaven-gepa`; `leaven-run` must not depend on GEPA
-strategy state. The `S` generic carries its weight because it is the only clean
-way for optimizer-specific summaries to exist later without making the ordinary
-run crate know optimizer internals.
+strategy state. Add a GEPA-specific result summary only when a real GEPA facade
+needs to expose iterations/frontier/lineage without leaking graph internals. At
+that point, choose the explicit GEPA result/report surface from the concrete
+need instead of preemptively making the ordinary result generic.
 
 `RunEventSummary` should be a curated public enum in `leaven-run`, not
 `Vec<String>` and not `leaven_engine::RunEvent` re-exported through the ordinary
@@ -126,11 +141,11 @@ and the fields ordinary users can rely on.
 
 The no-best path must be real. Today `OptimizeBuilder::run()` maps
 `run.best == None` into `OptimizeError::Optimizer`, then never builds a result.
-The hard cutover should return `Optimized { best: None, best_artifact: None,
-... }` when the optimizer has no admissible candidate, skip best-only final
-evaluations, still report baseline/seed final evaluations where configured,
-and make `best()` return `Option<&A>`. That is the correctness bug, not merely
-the field type.
+The hard cutover should return `Optimized { best: None, summary, ... }` when
+the optimizer has no admissible candidate, skip best-only final evaluations,
+still report baseline/seed final evaluations where configured, and make
+`best()` return `Option<&A>`. That is the correctness bug, not merely the field
+type.
 
 Do **not** add `type OptimizeResult<A> = Optimized<A>` or duplicate accessors
 for old call sites. This repo is hard cutover.

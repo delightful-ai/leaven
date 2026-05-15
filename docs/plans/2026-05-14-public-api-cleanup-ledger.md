@@ -38,12 +38,13 @@ the drift-stopper — slop now costs a build failure, not a code review.
 
 See `docs/plans/2026-05-15-result-facade-and-gepa-ergonomics-decisions.md`:
 
-1. **Result facade.** Do an A-lite hard cutover: rename `OptimizeResult<A>` to
-   `Optimized<A, S = StandardRunSummary>`, make `best` and `best_artifact`
-   optional, move the current flattened report payload into `StandardRunSummary`,
-   and replace `events: Vec<String>` with a curated `RunEventSummary`. Do not add
-   an `OptimizeResult` alias. The no-best path must return a result with baseline
-   report data, not an optimizer error.
+1. **Result facade.** Do a narrow A-lite hard cutover: rename
+   `OptimizeResult<A>` to `Optimized<A>`, replace parallel best fields with
+   `best: Option<BestCandidate<A>>`, rename `OptimizationReport` to concrete
+   `StandardRunSummary`, and replace `events: Vec<String>` with a curated
+   `RunEventSummary`. Do not add an `OptimizeResult` alias or a premature
+   `Optimized<A, S>` generic. The no-best path must return a result with
+   baseline report data, not an optimizer error.
 2. **GEPA ergonomic constructors.** Build only `Gepa::reflect_with_lm(lm,
    model)` now as a thin defaulted entry point over
    `LmBackedReflector::with_default_renderer`. Do not build
@@ -58,9 +59,9 @@ See `docs/plans/2026-05-15-result-facade-and-gepa-ergonomics-decisions.md`:
 - Run the AIME (p8) example end to end; the GEPA reflection path is now honest
   (LM and agent backends provably see identical reflective data — regression
   test `lm_and_agent_reflectors_receive_byte_identical_examples`).
-- Agentic reflection is now unblocked: the agent-backed reflector consumes the
-  same `ReflectRequest` as the LM path and materializes its `examples` into the
-  workspace.
+- Agentic reflection is substrate-unblocked, but its public constructor is
+  deliberately deferred until the factory/parser/policy shape earns an ergonomic
+  surface.
 
 ## Recovery notes
 

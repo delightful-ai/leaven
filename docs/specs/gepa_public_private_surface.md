@@ -1210,25 +1210,38 @@ The invariants:
 `Optimized` / `RunOutput` is the ordinary user's completed-run handle. It is not
 a duplicate run graph and it must not copy evidence payloads into a second truth.
 
-Minimum public shape:
+Minimum ordinary public shape:
 
 ```rust
-pub struct Optimized<P: OptimizationProblem, S = StandardRunSummary> {
+pub struct Optimized<A> {
     pub run_id: RunId,
-    pub best: Option<CandidateId>,
-    pub stop: StopReason,
+    pub best: Option<BestCandidate<A>>,
+    pub seed_artifact: A,
+    pub stop: OptimizationStopReason,
     pub budget: BudgetSnapshot,
-    pub summary: S,
+    pub summary: StandardRunSummary,
+    pub events: Vec<RunEventSummary>,
+}
+
+pub struct BestCandidate<A> {
+    pub id: CandidateId,
+    pub artifact: A,
 }
 ```
+
+`StandardRunSummary` is the concrete ordinary run summary. It carries
+storage/resumability, optimizer cost, final-report cost, train/validation/test
+score summaries, and the graph-backed `EvaluationReport`. It is not a generic
+parameter on `Optimized` yet. Add a GEPA-specific result/report surface only
+when the GEPA summary is behavior-bearing enough to justify a public route.
 
 Required methods:
 
 ```text
 best_id() -> Option<CandidateId>
-best() -> Option<&P::Artifact> when the result owns an in-memory graph snapshot
+best() -> Option<&A> when the result owns an in-memory artifact
 report() -> &EvaluationReport
-gepa() -> Option<&GepaSummary> when the optimizer supplied a GEPA summary
+summary() -> &StandardRunSummary
 events() -> public event summaries, not mutable graph access
 graph() / into_graph() only on an explicitly advanced result type or feature
 ```
@@ -1250,6 +1263,8 @@ Result invariants:
    budget was exhausted, a callback stopped it, or an error aborted it.
 6. Public result accessors must not require users to learn `RunGraph` for the
    ordinary best/report path.
+7. `BestCandidate<A>` bundles the durable candidate id with the owned artifact;
+   do not model those as two parallel optional fields.
 
 ## 12. Open Design Pressure
 

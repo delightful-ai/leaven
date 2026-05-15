@@ -313,7 +313,7 @@ result/resume ergonomics.
 
 ## 10. Result Contract
 
-`OptimizeResult` / `Optimized` must report:
+`Optimized` must report:
 
 - `run_id`;
 - best candidate/artifact when present;
@@ -411,4 +411,3 @@ Current implementation has useful pieces:
 The correction is not to add a second public run path. The correction is to
 make ordinary `.run()` durable, make `ephemeral` explicit, and enforce the
 optimizer continuation contract at the run boundary.
-
