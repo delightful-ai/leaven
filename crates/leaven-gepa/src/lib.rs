@@ -17,7 +17,7 @@ pub use optimizer::{
     CheckpointPopulation, Gepa, GepaBuilder, GepaCandidateHistoryEntry, GepaCheckpointState,
     GepaPopulation, GepaScoreEvidence,
 };
-pub use part_selector::{CheckpointPartSelector, PartSelector, RoundRobinPart, WorstEvidencePart};
+pub use part_selector::{CheckpointPartSelector, PartSelector, RoundRobinPart};
 pub use proposer::{FixedSurfaceEdit, GepaReflector, LmBackedReflector, SurfaceProposer};
 pub use reflection::{
     DEFAULT_REFLECTION_PROMPT_TEMPLATE, DefaultReflectionRenderer, GepaReflectiveDataset,
@@ -42,6 +42,6 @@ pub mod prelude {
         ReflectRequest, ReflectionError, ReflectionOutputParser, ReflectionRenderInput,
         ReflectionRenderer, ReflectiveDatasetBuilder, ReflectiveExample, RoundRobinPart,
         SelectBestCandidate, StrictImprovement, SurfaceProposer, ValidationPolicy,
-        WorstEvidencePart, gepa_stage_proposer,
+        gepa_stage_proposer,
     };
 }

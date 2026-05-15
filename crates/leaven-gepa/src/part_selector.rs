@@ -68,7 +68,3 @@ impl CheckpointPartSelector for RoundRobinPart {
         self.next = state;
     }
 }
-
-/// Placeholder name for trace-aware selection over worst evidence.
-#[derive(Clone, Debug, Default)]
-pub struct WorstEvidencePart;

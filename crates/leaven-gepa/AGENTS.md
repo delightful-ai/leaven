@@ -40,8 +40,10 @@ It composes core, surface, engine, evidence, population, render, and LM vocabula
   public-facing APIs do not teach them as the GEPA slots.
 - `ReflectiveMutation`, `ReflectiveMutationConfig`, `SystemAwareMerge`,
   `GepaConfig`, `MergeScheduler`, `SelectedFeedback`, `ReflectiveFeedbackRecord`,
-  and `GepaReflectionEvidence` were inert, misleading, or superseded public
-  names and have been removed. `SelectedFeedback` collapsed into
+  `GepaReflectionEvidence`, and `WorstEvidencePart` were inert, misleading, or
+  superseded public names and have been removed. `WorstEvidencePart` was a
+  `PartSelector` placeholder struct with no trait impl; reintroduce trace-aware
+  part selection only as a behavior-bearing, tested selector. `SelectedFeedback` collapsed into
   `ReflectRequest` (`examples` plus `source_refs`); the per-case record is
   `ReflectiveExample`; the evidence-type-keyed `GepaReflectionEvidence`
   projection became the swappable `ReflectiveDatasetBuilder` seam with the
