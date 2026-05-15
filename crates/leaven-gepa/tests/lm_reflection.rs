@@ -88,13 +88,13 @@ fn lm_backed_reflector_renders_feedback_records_and_applies_candidate() {
         assert!(
             proposal
                 .provenance()
-                .informed_by
+                .informed_by_refs()
                 .contains(&leaven_core::InfoRef::Candidate(seed))
         );
         assert!(
             proposal
                 .provenance()
-                .informed_by
+                .informed_by_refs()
                 .iter()
                 .any(|source| matches!(source, leaven_core::InfoRef::Assessment(_)))
         );
@@ -250,7 +250,7 @@ fn default_renderer_and_plain_text_parser_cover_empty_feedback_and_bad_part() {
         .unwrap();
     assert_eq!(batch.semantics, ProposalBatchSemantics::Alternatives);
     assert_eq!(batch.proposals.len(), 1);
-    assert!(!batch.proposals[0].provenance.informed_by.is_empty());
+    assert!(!batch.proposals[0].provenance.informed_by_refs().is_empty());
 
     let bad_request = ReflectRequest::for_part(parent, "missing", "missing");
     let result: Result<ProposalBatch<TestProblem>, _> =

@@ -188,8 +188,8 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
                 proposal_id: *proposal_id,
                 batch_id,
                 effect: RunGraph::<P>::proposal_effect_kind(&proposal.effect),
-                causal: proposal.provenance.causal.clone(),
-                informed_by_count: proposal.provenance.informed_by.len(),
+                causal: proposal.provenance.causal().clone(),
+                informed_by_count: proposal.provenance.informed_by_refs().len(),
             });
         }
         self.checkpoint()?;

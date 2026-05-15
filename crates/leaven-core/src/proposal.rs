@@ -298,9 +298,9 @@ impl<P: OptimizationProblem> Clone for ProposalEffect<P> {
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct ProposalProvenance {
     /// Candidates whose content contributed to the proposal.
-    pub causal: CausalInputs,
+    causal: CausalInputs,
     /// References the proposer read while deciding.
-    pub informed_by: Vec<InfoRef>,
+    informed_by: Vec<InfoRef>,
 }
 
 impl ProposalProvenance {
@@ -319,6 +319,20 @@ impl ProposalProvenance {
     pub fn informed_by(mut self, refs: impl IntoIterator<Item = InfoRef>) -> Self {
         self.informed_by.extend(refs);
         self
+    }
+
+    /// The content lineage: candidates whose state contributed to the
+    /// proposal's identity.
+    #[must_use]
+    pub fn causal(&self) -> &CausalInputs {
+        &self.causal
+    }
+
+    /// The bibliographic lineage: references the proposer read while
+    /// deciding but whose content did not participate in the result.
+    #[must_use]
+    pub fn informed_by_refs(&self) -> &[InfoRef] {
+        &self.informed_by
     }
 }
 

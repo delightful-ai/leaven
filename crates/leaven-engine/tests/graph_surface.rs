@@ -390,7 +390,7 @@ fn graph_views_expose_record_details_without_storage_maps() {
             artifact: TextArtifact(text)
         } if text == "detailed"
     ));
-    assert_eq!(proposal.provenance().causal, CausalInputs::None);
+    assert_eq!(proposal.provenance().causal(), &CausalInputs::None);
     assert_eq!(proposal.annotations(), &());
     assert!(matches!(
         proposal.metadata().get(&MetadataKey::from("proposal")),

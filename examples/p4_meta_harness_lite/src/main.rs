@@ -266,7 +266,7 @@ impl Optimizer<MetaHarnessProblem> for MetaHarnessOptimizer {
             .proposal_that_created(created)
             .expect("created candidate has proposal");
         assert!(matches!(proposal.effect(), ProposalEffect::Create { .. }));
-        assert!(matches!(&proposal.provenance().causal, CausalInputs::None));
+        assert!(matches!(proposal.provenance().causal(), CausalInputs::None));
 
         let created_assessment = evaluate_one(ctx, created, SEARCH, EvaluationPurpose::Search)
             .await

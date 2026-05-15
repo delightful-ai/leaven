@@ -271,7 +271,7 @@ impl Optimizer<OptimizerPolicyProblem> for PolicySelfOptimizer {
             ProposalEffect::Change { target, .. } if *target == self.seed
         ));
         assert!(matches!(
-            &proposal.provenance().causal,
+            proposal.provenance().causal(),
             CausalInputs::Single(parent) if *parent == self.seed
         ));
         assert!(

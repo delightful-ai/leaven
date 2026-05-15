@@ -25,6 +25,11 @@ optimizer strategy state.
 - Use `ProposalProvenance::informed_by` / `InfoRef` for bibliographic reads and
   `CausalInputs` only for content lineage. Reflection reading an assessment is
   usually informational; creating a child from candidate content is causal.
+- `ProposalProvenance.causal` / `.informed_by` are private fields. Construct
+  provenance through `ProposalProvenance::new` and the `ProposalBuilder` /
+  `ProposalProvenance::informed_by` paths; read it through the `causal()` and
+  `informed_by_refs()` accessors. Lineage is load-bearing, so a caller must
+  not be able to forge it by setting fields directly.
 - Use `EvaluationRequest` for unresolved user intent and
   `ResolvedEvaluationRequest` only after a run context has frozen the set
   against a `CaseSetVersion`.

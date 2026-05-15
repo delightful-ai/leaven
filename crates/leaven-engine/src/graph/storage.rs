@@ -432,7 +432,7 @@ impl<P: OptimizationProblem> RunGraph<P> {
         provenance: &ProposalProvenance,
     ) -> Result<(), ApplyProposalError> {
         match effect {
-            ProposalEffect::Create { .. } => match &provenance.causal {
+            ProposalEffect::Create { .. } => match provenance.causal() {
                 CausalInputs::None => Ok(()),
                 CausalInputs::NAry(parents) => self.validate_existing_candidates(parents),
                 CausalInputs::Single(_) | CausalInputs::Pair(_, _) => {
@@ -440,10 +440,10 @@ impl<P: OptimizationProblem> RunGraph<P> {
                 }
             },
             ProposalEffect::Change { target, .. } => {
-                if !provenance.causal.contains_candidate(*target) {
+                if !provenance.causal().contains_candidate(*target) {
                     return Err(ApplyProposalError::InvalidProvenance);
                 }
-                let parents: Vec<_> = provenance.causal.iter().collect();
+                let parents: Vec<_> = provenance.causal().iter().collect();
                 self.validate_existing_candidates(&parents)
             }
         }
@@ -463,7 +463,7 @@ impl<P: OptimizationProblem> RunGraph<P> {
         candidate_id: CandidateId,
         provenance: &ProposalProvenance,
     ) {
-        let parents: Vec<_> = provenance.causal.iter().collect();
+        let parents: Vec<_> = provenance.causal().iter().collect();
         self.indices
             .causal_parents
             .insert(candidate_id, parents.clone());
@@ -476,8 +476,8 @@ impl<P: OptimizationProblem> RunGraph<P> {
         }
         self.indices
             .informed_by
-            .insert(candidate_id, provenance.informed_by.clone());
-        for info in &provenance.informed_by {
+            .insert(candidate_id, provenance.informed_by_refs().to_vec());
+        for info in provenance.informed_by_refs() {
             if let InfoRef::Candidate(source) = info {
                 self.indices
                     .informed

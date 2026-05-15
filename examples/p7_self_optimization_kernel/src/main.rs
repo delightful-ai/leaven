@@ -483,7 +483,7 @@ impl Optimizer<SelfOptimizationProblem> for ArchiveSelfOptimizer {
             ProposalEffect::Change { target, .. } if *target == parent
         ));
         assert!(matches!(
-            &proposal.provenance().causal,
+            proposal.provenance().causal(),
             CausalInputs::Single(causal_parent) if *causal_parent == parent
         ));
         assert!(

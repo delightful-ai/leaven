@@ -217,7 +217,7 @@ fn gepa_stage_proposer_routes_fake_runtime_through_run_context() {
         assert!(
             proposal
                 .provenance()
-                .informed_by
+                .informed_by_refs()
                 .contains(&leaven_core::InfoRef::Candidate(parent))
         );
     });
@@ -282,13 +282,13 @@ fn gepa_optimizer_uses_agent_backed_reflection_path() {
         assert!(
             proposal
                 .provenance()
-                .informed_by
+                .informed_by_refs()
                 .contains(&leaven_core::InfoRef::Candidate(seed))
         );
         assert!(
             proposal
                 .provenance()
-                .informed_by
+                .informed_by_refs()
                 .iter()
                 .any(|source| matches!(source, leaven_core::InfoRef::Assessment(_)))
         );
@@ -325,13 +325,13 @@ fn fixed_surface_reflector_records_and_applies_through_run_context() {
         assert!(
             proposal
                 .provenance()
-                .informed_by
+                .informed_by_refs()
                 .contains(&leaven_core::InfoRef::Candidate(parent))
         );
         assert!(
             proposal
                 .provenance()
-                .informed_by
+                .informed_by_refs()
                 .contains(&leaven_core::InfoRef::Assessment(parent_assessment))
         );
     });

@@ -31,21 +31,24 @@ fn proposal_builders_preserve_causal_and_informational_lineage() {
             .build();
 
     assert!(matches!(created.effect, ProposalEffect::Create { .. }));
-    assert_eq!(created.provenance.causal, CausalInputs::None);
+    assert_eq!(created.provenance.causal(), &CausalInputs::None);
     assert_eq!(
-        created.provenance.informed_by,
-        vec![InfoRef::Candidate(parent), external]
+        created.provenance.informed_by_refs(),
+        [InfoRef::Candidate(parent), external]
     );
     assert_eq!(created.annotations.label, "create");
     assert!(matches!(
         created.metadata.get(&"worker".into()),
         Some(MetadataValue::String(worker)) if worker == "local"
     ));
-    assert_eq!(mutated.provenance.causal, CausalInputs::Single(parent));
-    assert_eq!(merged.provenance.causal, CausalInputs::Pair(parent, right));
+    assert_eq!(mutated.provenance.causal(), &CausalInputs::Single(parent));
     assert_eq!(
-        aggregated.provenance.causal,
-        CausalInputs::NAry(vec![parent, right])
+        merged.provenance.causal(),
+        &CausalInputs::Pair(parent, right)
+    );
+    assert_eq!(
+        aggregated.provenance.causal(),
+        &CausalInputs::NAry(vec![parent, right])
     );
 }
 
@@ -103,8 +106,8 @@ fn provenance_builder_accumulates_bibliographic_refs() {
         .informed_by([InfoRef::Proposal(proposal)]);
 
     assert_eq!(
-        provenance.informed_by,
-        vec![InfoRef::Candidate(candidate), InfoRef::Proposal(proposal)]
+        provenance.informed_by_refs(),
+        [InfoRef::Candidate(candidate), InfoRef::Proposal(proposal)]
     );
 }
 
