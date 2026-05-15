@@ -1,7 +1,7 @@
 # Public API Cleanup — Orchestration Ledger
 
 - **Started:** 2026-05-14 — **completed (this run):** 2026-05-15 (overnight)
-- **Status:** cleanup slices complete and verified; two design decisions parked
+- **Status:** cleanup slices complete and verified; follow-up API slices decided
 - **Final verification:** `just check` exit 0 (line 98.54%, branch 88.27%,
   floors intact); `just milestone-p8` exit 0 (baseline 0.0 → optimized /
   validation / held-out-test 1.0). Both run against the final commit.
@@ -34,25 +34,27 @@ every umbrella-re-exported symbol is classified `prelude` / `extend` /
 A new unclassified or unjustified `pub` re-export fails `just check`. That is
 the drift-stopper — slop now costs a build failure, not a code review.
 
-## Parked for you — genuine design decisions, deliberately not autopiloted
+## Follow-up slices decided
 
 See `docs/plans/2026-05-15-result-facade-and-gepa-ergonomics-decisions.md`:
 
-1. **Result facade.** The planning spec `gepa_public_private_surface.md` §11
-   specifies `Optimized<P, S>` with `best: Option<CandidateId>`; the code has
-   `OptimizeResult`. The `best` non-optionality is a real correctness gap; the
-   `Optimized`/`summary: S` reshape is a public-API design call on a core type
-   from a *planning*-status spec — your decision, not an overnight rewrite.
-   `OptimizationReport.events: Vec<String>` typing rides with this.
-2. **GEPA ergonomic constructors.** `Gepa::reflect_with_lm` /
-   `reflect_with_agent` (design doc D6) were not built — the load-bearing
-   reflection correctness landed, the fluent ergonomic builder is a public-API
-   shape worth your eye. Recommendation in the doc: two thin constructors, not
-   the full fluent type-state chain.
+1. **Result facade.** Do an A-lite hard cutover: rename `OptimizeResult<A>` to
+   `Optimized<A, S = StandardRunSummary>`, make `best` and `best_artifact`
+   optional, move the current flattened report payload into `StandardRunSummary`,
+   and replace `events: Vec<String>` with a curated `RunEventSummary`. Do not add
+   an `OptimizeResult` alias. The no-best path must return a result with baseline
+   report data, not an optimizer error.
+2. **GEPA ergonomic constructors.** Build only `Gepa::reflect_with_lm(lm,
+   model)` now as a thin defaulted entry point over
+   `LmBackedReflector::with_default_renderer`. Do not build
+   `reflect_with_agent(workspace, runtime)` yet; the honest agent constructor
+   needs workspace factory, parser, and policy shape.
 
 ## Suggested next session
 
-- Decide the two items above.
+- Implement the result facade hard cutover.
+- Then implement the LM-only GEPA ergonomic constructor and update one public
+  GEPA example to use it.
 - Run the AIME (p8) example end to end; the GEPA reflection path is now honest
   (LM and agent backends provably see identical reflective data — regression
   test `lm_and_agent_reflectors_receive_byte_identical_examples`).

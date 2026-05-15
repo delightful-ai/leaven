@@ -1,12 +1,10 @@
-# Decisions for the morning — result facade & GEPA ergonomics
+# Decisions - result facade & GEPA ergonomics
 
 - **Date:** 2026-05-15
-- **Status:** decision request — needs Darin's call, deliberately not done autonomously
-- **Why deferred:** both are public-API *design* choices on core types, driven
-  by a spec marked `planning` (not an implemented contract). The whole
-  cleanup conversation established that rushing public-API shape produces the
-  next bad abstraction. These are flagged, not slop-skipped: the analysis below
-  is complete enough to decide from.
+- **Status:** decided next slices; implementation not started in this note
+- **Why this exists:** the overnight cleanup intentionally stopped before two
+  public API shape choices. This note turns those parked questions into a
+  concrete next cut without treating the planning spec as auto-implementation.
 
 ---
 
@@ -86,20 +84,63 @@ absence for missing scores.
   durable truth and rewrite `gepa_public_private_surface.md` §11. Cheapest;
   abandons the `Optimized`/`summary: S` design.
 
-### Recommendation
+### Decision
 
-**B now, A as a deliberate follow-up.** `best: Option<CandidateId>` is a
-correctness fix and should land regardless — the current type can represent
-"a best candidate" for a run that has none. `events` typing should ride with
-the facade decision (don't type it twice). The full `Optimized<P, S>` reshape
-(A) is worth doing but is a real design session — the `summary: S` generic and
-`GepaSummary` shape deserve the same scrutiny the reflection types got. Don't
-let a planning sketch become code by autopilot.
+Do **A-lite as a hard cutover**, not a compatibility shim and not a one-field
+patch.
 
-**One thing to settle first:** is the `summary: S` generic actually carrying
-its weight, or is a plain non-generic `Optimized` with an optional
-`gepa: Option<GepaSummary>` field simpler and honest? That is the core taste
-call and belongs to you.
+The next result slice should rename the ordinary completed-run facade to
+`Optimized<A, S = StandardRunSummary>` and delete `OptimizeResult` rather than
+leaving both names alive. The product-builder result is generic over the owned
+artifact type, not over `P: OptimizationProblem`; `RunProblem<A, C>` is internal
+lowering glue and should not leak into the user's result type.
+
+The minimum shape for this slice:
+
+```rust
+pub struct Optimized<A, S = StandardRunSummary> {
+    pub run_id: RunId,
+    pub best: Option<CandidateId>,
+    pub best_artifact: Option<A>,
+    pub seed_artifact: A,
+    pub stop: OptimizationStopReason,
+    pub budget: BudgetSnapshot,
+    pub summary: S,
+    pub events: Vec<RunEventSummary>,
+}
+```
+
+`StandardRunSummary` should absorb today's flattened `OptimizationReport`
+payload: storage/resumability, optimizer/final-report cost, split score
+summaries, and the graph-backed `EvaluationReport`. Keep it in `leaven-run`.
+`GepaSummary` stays in `leaven-gepa`; `leaven-run` must not depend on GEPA
+strategy state. The `S` generic carries its weight because it is the only clean
+way for optimizer-specific summaries to exist later without making the ordinary
+run crate know optimizer internals.
+
+`RunEventSummary` should be a curated public enum in `leaven-run`, not
+`Vec<String>` and not `leaven_engine::RunEvent` re-exported through the ordinary
+route. The engine event enum is still an `extend`/harness contract; the ordinary
+facade needs stable public summary vocabulary. Start with the same event kinds
+and the fields ordinary users can rely on.
+
+The no-best path must be real. Today `OptimizeBuilder::run()` maps
+`run.best == None` into `OptimizeError::Optimizer`, then never builds a result.
+The hard cutover should return `Optimized { best: None, best_artifact: None,
+... }` when the optimizer has no admissible candidate, skip best-only final
+evaluations, still report baseline/seed final evaluations where configured,
+and make `best()` return `Option<&A>`. That is the correctness bug, not merely
+the field type.
+
+Do **not** add `type OptimizeResult<A> = Optimized<A>` or duplicate accessors
+for old call sites. This repo is hard cutover.
+
+### Result slice verification
+
+- `cargo nextest run -p leaven-run --test optimize_builder`
+- `cargo test -p leaven --test public_surface_contract`
+- `just milestone-p8` after adapting the P8 example to `Optimized`
+- `just check` before closeout
 
 ---
 
@@ -143,14 +184,44 @@ The minimal user program in the design doc §4 was
 verbose `Gepa::builder()...reflector(LmBackedReflector::with_default_renderer(...))`.
 Not fuckery — no lie, no proxy — but the headline *ergonomic* win is unbuilt.
 
-### Recommendation
+### Decision
 
-Build the two constructors `Gepa::reflect_with_lm(lm, model)` and
-`Gepa::reflect_with_agent(workspace, runtime)` as thin convenience entry points
-that return a `Gepa` builder pre-wired with the default reflector — **without**
-the full fluent `.prompt_template/.render/.materialize` type-state chain.
-`prompt_template` is already reachable via `LmBackedReflectorConfig`; the
-selection seam via `.reflective_dataset(...)`. The constructors are the cheap,
-high-value, low-risk 80%; the fluent sub-knob chain is the speculative 20% and
-can wait for real demand. This is a small slice once you bless the two
-constructor signatures.
+Build **only the LM constructor now**:
+
+```rust
+Gepa::reflect_with_lm(lm, model)
+    .surface(surface)
+    .population(population) // optional, same builder ladder as today
+```
+
+This is a thin entry point over
+`LmBackedReflector::with_default_renderer(lm, model)` and the existing
+`GepaBuilder` ladder. It buys the headline ergonomic path without adding a
+second reflection API.
+
+Do **not** build `reflect_with_agent(workspace, runtime)` in this slice. The
+current agent-backed helper needs a workspace factory, parser, and
+`AgentBackedPolicy`; pretending the constructor is just `(workspace, runtime)`
+would hide real policy and output-contract choices. The honest agent ergonomic
+slice is a separate design:
+
+```rust
+Gepa::reflect_with_agent(factory, runtime, parser, policy)
+```
+
+or a named config object if that signature proves too noisy. That belongs after
+the result facade cut because agent reflection summary/reporting is one of the
+places result shape will matter.
+
+Do **not** build the full fluent `.prompt_template/.render/.materialize`
+type-state chain yet. `LmBackedReflectorConfig`, `.reflective_dataset(...)`,
+and explicit reflector construction already cover advanced users. The missing
+ordinary-user affordance is one defaulted LM entry point, not another builder
+language.
+
+### GEPA ergonomics slice verification
+
+- `cargo nextest run -p leaven-gepa --test lm_reflection --test gepa_smoke`
+- update one public GEPA example to use `Gepa::reflect_with_lm`
+- `cargo test -p leaven --test public_surface_contract` if any facade route
+  changes
