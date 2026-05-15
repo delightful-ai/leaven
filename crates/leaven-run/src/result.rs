@@ -1,7 +1,7 @@
 //! Public optimization result facade.
 
 use leaven_eval::EvaluationReport;
-use leaven_kernel::{BudgetSnapshot, CandidateId, Cost, Fingerprint, RunId};
+use leaven_kernel::{BudgetSnapshot, CandidateId, Cost, RunId};
 
 /// Result returned by the product builder.
 #[derive(Clone, Debug)]
@@ -82,10 +82,6 @@ pub enum RunStorage {
 /// Public report for an optimization run.
 #[derive(Clone, Debug)]
 pub struct OptimizationReport {
-    /// Dataset fingerprint.
-    pub dataset: Fingerprint,
-    /// Split fingerprint.
-    pub splits: Fingerprint,
     /// Reason the optimizer stopped before final report evaluations ran.
     pub stop_reason: OptimizationStopReason,
     /// Public storage/resume status for this run.

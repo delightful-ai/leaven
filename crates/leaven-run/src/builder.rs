@@ -549,8 +549,6 @@ where
     let budget = engine.budget().snapshot();
     let cost = budget.spent.clone();
     let report = OptimizationReport {
-        dataset: inputs.dataset.fingerprint(),
-        splits: inputs.splits.fingerprint(),
         stop_reason: inputs.stop_reason.into(),
         storage: inputs.storage,
         optimization_budget: inputs.optimization_budget.clone(),
