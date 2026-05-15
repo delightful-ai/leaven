@@ -625,6 +625,15 @@ struct AimeCase {
     needs_modular: bool,
 }
 
+// GEPA's default reflective-dataset builder reads each evaluated case input via
+// `Display`; for an AIME case the input the artifact ran on is the problem
+// statement.
+impl std::fmt::Display for AimeCase {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.problem)
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct AimeDatasetCache {
     train: Vec<AimeCase>,
