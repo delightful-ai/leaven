@@ -1,8 +1,11 @@
 mod support;
 
-use std::sync::{
-    Arc, Mutex,
-    atomic::{AtomicUsize, Ordering},
+use std::{
+    collections::BTreeMap,
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
+    },
 };
 
 use bytes::Bytes;
@@ -597,6 +600,113 @@ fn store_run_persistence_reports_missing_optimizer_state_payload() {
 }
 
 #[test]
+fn store_run_persistence_reports_store_read_refusals() {
+    let latest_failure = StoreRunPersistence::new(FaultyStore::new("recording").fail_latest());
+    let latest = latest_checkpoint_err(&latest_failure);
+    assert!(matches!(
+        latest,
+        RunPersistenceError::Store {
+            operation: "read latest checkpoint pointer",
+            ..
+        }
+    ));
+
+    let get_failure = StoreRunPersistence::new(FaultyStore::new("recording").fail_checkpoint_get());
+    let Err(missing_envelope) =
+        get_failure.load_checkpoint::<TestProblem>(leaven_kernel::CheckpointId::new())
+    else {
+        panic!("checkpoint load unexpectedly succeeded");
+    };
+    assert!(matches!(
+        missing_envelope,
+        RunPersistenceError::Store {
+            operation: "read checkpoint envelope",
+            ..
+        }
+    ));
+}
+
+#[test]
+fn store_run_persistence_reports_store_write_refusals() {
+    let (graph, budget) = graph_and_budget();
+
+    let graph_blob_failure =
+        StoreRunPersistence::new(FaultyStore::new("recording").fail_blob_put_on(1));
+    let graph_err = graph_blob_failure
+        .checkpoint(RunCheckpointRequest::new(&graph, &budget, None))
+        .unwrap_err();
+    assert!(matches!(
+        graph_err,
+        RunPersistenceError::Store {
+            operation: "write checkpoint blob",
+            ..
+        }
+    ));
+
+    let optimizer_blob_failure =
+        StoreRunPersistence::new(FaultyStore::new("recording").fail_blob_put_on(2));
+    let optimizer_err = optimizer_blob_failure
+        .checkpoint(
+            RunCheckpointRequest::new(&graph, &budget, None).with_optimizer_state(
+                OptimizerStateWrite::json(
+                    Fingerprint::from_bytes([5; 32]),
+                    Fingerprint::from_bytes([6; 32]),
+                    &StatefulOptimizerState {
+                        selected: None,
+                        cursor: 42,
+                    },
+                )
+                .unwrap(),
+            ),
+        )
+        .unwrap_err();
+    assert!(matches!(
+        optimizer_err,
+        RunPersistenceError::Store {
+            operation: "write optimizer state blob",
+            ..
+        }
+    ));
+
+    let mut cache = EvaluationCache::default();
+    cache.insert(
+        EvaluationCacheKey {
+            evaluator: Fingerprint::from_bytes([3; 32]),
+            policy: CachePolicy::Deterministic,
+            case_set_version: CaseSetVersion("v1".to_owned()),
+            case_ids: vec![CaseId::new(0)],
+            candidates: vec![CacheIdentity::Content(ContentId::from_bytes([4; 32]))],
+        },
+        vec![AssessmentId::new()],
+    );
+    let cache_blob_failure =
+        StoreRunPersistence::new(FaultyStore::new("recording").fail_blob_put_on(2));
+    let cache_err = cache_blob_failure
+        .checkpoint(RunCheckpointRequest::new(&graph, &budget, Some(&cache)))
+        .unwrap_err();
+    assert!(matches!(
+        cache_err,
+        RunPersistenceError::Store {
+            operation: "write checkpoint blob",
+            ..
+        }
+    ));
+
+    let envelope_failure =
+        StoreRunPersistence::new(FaultyStore::new("recording").fail_checkpoint_put());
+    let envelope_err = envelope_failure
+        .checkpoint(RunCheckpointRequest::new(&graph, &budget, None))
+        .unwrap_err();
+    assert!(matches!(
+        envelope_err,
+        RunPersistenceError::Store {
+            operation: "write checkpoint envelope",
+            ..
+        }
+    ));
+}
+
+#[test]
 fn engine_surfaces_checkpoint_failures_as_run_errors() {
     block_on(async {
         let mut engine = Engine::<TestProblem>::builder()
@@ -757,6 +867,120 @@ fn checkpointable_optimizer_restore_rejects_missing_graph_truth() {
         .unwrap_err();
 
     assert!(matches!(err, CheckpointError::MissingGraphTruth { .. }));
+}
+
+#[test]
+fn checkpointable_optimizer_write_omits_graph_derived_state() {
+    let engine = Engine::<TestProblem>::builder().build();
+    let optimizer = DerivedStateOptimizer;
+
+    let state =
+        <DerivedStateOptimizer as CheckpointableOptimizer<TestProblem>>::checkpoint_state_write(
+            &optimizer,
+            CheckpointContext::new(engine.view()),
+        )
+        .unwrap();
+
+    assert!(state.is_none());
+}
+
+#[test]
+fn checkpointable_optimizer_write_rejects_non_json_state_format() {
+    let engine = Engine::<TestProblem>::builder().build();
+    let optimizer = NonJsonStateOptimizer;
+
+    let err =
+        <NonJsonStateOptimizer as CheckpointableOptimizer<TestProblem>>::checkpoint_state_write(
+            &optimizer,
+            CheckpointContext::new(engine.view()),
+        )
+        .unwrap_err();
+
+    assert!(err.to_string().contains("private state checkpoint failed"));
+    assert!(format!("{err:?}").contains("Postcard"));
+}
+
+#[test]
+fn checkpointable_optimizer_write_surfaces_checkpoint_state_failures() {
+    let engine = Engine::<TestProblem>::builder().build();
+    let optimizer = FailingCheckpointStateOptimizer;
+
+    let err =
+        <FailingCheckpointStateOptimizer as CheckpointableOptimizer<TestProblem>>::checkpoint_state_write(
+            &optimizer,
+            CheckpointContext::new(engine.view()),
+        )
+        .unwrap_err();
+
+    assert!(err.to_string().contains("private state checkpoint failed"));
+    assert!(format!("{err:?}").contains("state unavailable"));
+}
+
+#[test]
+fn checkpointable_optimizer_write_surfaces_serialization_failures() {
+    let engine = Engine::<TestProblem>::builder().build();
+    let optimizer = UnserializableStateOptimizer;
+
+    let err =
+        <UnserializableStateOptimizer as CheckpointableOptimizer<TestProblem>>::checkpoint_state_write(
+            &optimizer,
+            CheckpointContext::new(engine.view()),
+        )
+        .unwrap_err();
+
+    assert!(
+        err.to_string()
+            .contains("private state serialization failed")
+    );
+}
+
+#[test]
+fn engine_surfaces_iteration_checkpoint_failures_as_run_errors() {
+    block_on(async {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let mut engine = Engine::<TestProblem>::builder()
+            .persistence(FailOnCheckpoint {
+                calls: calls.clone(),
+                fail_on: 2,
+            })
+            .build();
+        let cases = CaseSet::new(vec!["case"]);
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let mut optimizer = ContinueThenDone { steps: 0 };
+
+        let err = engine
+            .run(&mut optimizer, &cases, &store)
+            .await
+            .unwrap_err();
+
+        assert!(
+            err.to_string()
+                .contains("run checkpoint failed after iteration")
+        );
+        assert_eq!(calls.load(Ordering::SeqCst), 3);
+    });
+}
+
+#[test]
+fn engine_surfaces_final_optimizer_state_failures_as_run_errors() {
+    block_on(async {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let mut engine = Engine::<TestProblem>::builder().build();
+        let cases = CaseSet::new(vec!["case"]);
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let mut optimizer = FailingCheckpointWriteOptimizer {
+            calls: calls.clone(),
+            fail_on: 3,
+        };
+
+        let err = engine
+            .run(&mut optimizer, &cases, &store)
+            .await
+            .unwrap_err();
+
+        assert!(err.to_string().contains("checkpoint write failed"));
+        assert_eq!(calls.load(Ordering::SeqCst), 3);
+    });
 }
 
 #[test]
@@ -991,6 +1215,95 @@ impl RunPersistence<TestProblem> for FailingPersistence {
     }
 }
 
+#[derive(Clone)]
+struct FaultyStore {
+    inner: RecordingStore,
+    blob_puts: Arc<AtomicUsize>,
+    fail_blob_put_on: Option<usize>,
+    fail_checkpoint_put: bool,
+    fail_checkpoint_get: bool,
+    fail_latest: bool,
+}
+
+impl FaultyStore {
+    fn new(name: impl Into<String>) -> Self {
+        Self {
+            inner: RecordingStore::new(name),
+            blob_puts: Arc::new(AtomicUsize::new(0)),
+            fail_blob_put_on: None,
+            fail_checkpoint_put: false,
+            fail_checkpoint_get: false,
+            fail_latest: false,
+        }
+    }
+
+    fn fail_blob_put_on(mut self, call: usize) -> Self {
+        self.fail_blob_put_on = Some(call);
+        self
+    }
+
+    fn fail_checkpoint_put(mut self) -> Self {
+        self.fail_checkpoint_put = true;
+        self
+    }
+
+    fn fail_checkpoint_get(mut self) -> Self {
+        self.fail_checkpoint_get = true;
+        self
+    }
+
+    fn fail_latest(mut self) -> Self {
+        self.fail_latest = true;
+        self
+    }
+
+    fn store_error(&self, operation: &'static str) -> StoreError {
+        StoreError::OperationFailed {
+            store: self.inner.name.clone(),
+            operation,
+            reason: "injected store refusal".to_owned(),
+            retryable: Some(false),
+        }
+    }
+}
+
+impl BlobStore for FaultyStore {
+    fn put(&self, write: BlobWrite) -> Result<BlobRef, StoreError> {
+        let call = self.blob_puts.fetch_add(1, Ordering::SeqCst) + 1;
+        if self.fail_blob_put_on == Some(call) {
+            return Err(self.store_error("put_blob"));
+        }
+        BlobStore::put(&self.inner, write)
+    }
+
+    fn get(&self, reference: &BlobRef) -> Result<Bytes, StoreError> {
+        BlobStore::get(&self.inner, reference)
+    }
+}
+
+impl CheckpointStore for FaultyStore {
+    fn put(&self, checkpoint: CheckpointBytes) -> Result<leaven_kernel::CheckpointId, StoreError> {
+        if self.fail_checkpoint_put {
+            return Err(self.store_error("put_checkpoint"));
+        }
+        CheckpointStore::put(&self.inner, checkpoint)
+    }
+
+    fn get(&self, id: leaven_kernel::CheckpointId) -> Result<CheckpointBytes, StoreError> {
+        if self.fail_checkpoint_get {
+            return Err(self.store_error("get_checkpoint"));
+        }
+        CheckpointStore::get(&self.inner, id)
+    }
+
+    fn latest(&self) -> Result<Option<leaven_kernel::CheckpointId>, StoreError> {
+        if self.fail_latest {
+            return Err(self.store_error("latest_checkpoint"));
+        }
+        CheckpointStore::latest(&self.inner)
+    }
+}
+
 struct FailOnCheckpoint {
     calls: Arc<AtomicUsize>,
     fail_on: usize,
@@ -1165,6 +1478,216 @@ impl CheckpointableOptimizer<TestProblem> for StatefulOptimizer {
         self.selected = state.selected;
         self.cursor = state.cursor;
         Ok(())
+    }
+}
+
+struct DerivedStateOptimizer;
+
+impl Optimizer<TestProblem> for DerivedStateOptimizer {
+    async fn step(
+        &mut self,
+        _ctx: &mut RunContext<'_, TestProblem>,
+    ) -> Result<StepStatus, OptimizerError> {
+        Ok(StepStatus::Done)
+    }
+
+    fn best_candidate(&self, _graph: RunGraphView<'_, TestProblem>) -> Option<CandidateId> {
+        None
+    }
+}
+
+impl CheckpointableOptimizer<TestProblem> for DerivedStateOptimizer {
+    type State = ();
+
+    fn optimizer_fingerprint(&self) -> Fingerprint {
+        Fingerprint::from_bytes([9; 32])
+    }
+
+    fn private_state_policy(&self) -> PrivateStatePolicy {
+        PrivateStatePolicy::DerivedFromGraph
+    }
+
+    fn checkpoint_state(
+        &self,
+        _ctx: CheckpointContext<'_, TestProblem>,
+    ) -> Result<Self::State, CheckpointError> {
+        Ok(())
+    }
+
+    fn restore_state(
+        &mut self,
+        _state: Self::State,
+        _ctx: RestoreContext<'_, TestProblem>,
+    ) -> Result<(), CheckpointError> {
+        Ok(())
+    }
+}
+
+struct NonJsonStateOptimizer;
+
+impl Optimizer<TestProblem> for NonJsonStateOptimizer {
+    async fn step(
+        &mut self,
+        _ctx: &mut RunContext<'_, TestProblem>,
+    ) -> Result<StepStatus, OptimizerError> {
+        Ok(StepStatus::Done)
+    }
+
+    fn best_candidate(&self, _graph: RunGraphView<'_, TestProblem>) -> Option<CandidateId> {
+        None
+    }
+}
+
+impl CheckpointableOptimizer<TestProblem> for NonJsonStateOptimizer {
+    type State = ();
+
+    fn optimizer_fingerprint(&self) -> Fingerprint {
+        Fingerprint::from_bytes([10; 32])
+    }
+
+    fn private_state_policy(&self) -> PrivateStatePolicy {
+        PrivateStatePolicy::ExplicitSnapshot {
+            schema: Fingerprint::from_bytes([11; 32]),
+            format: StateFormat::Postcard,
+        }
+    }
+
+    fn checkpoint_state(
+        &self,
+        _ctx: CheckpointContext<'_, TestProblem>,
+    ) -> Result<Self::State, CheckpointError> {
+        Ok(())
+    }
+
+    fn restore_state(
+        &mut self,
+        _state: Self::State,
+        _ctx: RestoreContext<'_, TestProblem>,
+    ) -> Result<(), CheckpointError> {
+        Ok(())
+    }
+}
+
+struct FailingCheckpointStateOptimizer;
+
+impl Optimizer<TestProblem> for FailingCheckpointStateOptimizer {
+    async fn step(
+        &mut self,
+        _ctx: &mut RunContext<'_, TestProblem>,
+    ) -> Result<StepStatus, OptimizerError> {
+        Ok(StepStatus::Done)
+    }
+
+    fn best_candidate(&self, _graph: RunGraphView<'_, TestProblem>) -> Option<CandidateId> {
+        None
+    }
+}
+
+impl CheckpointableOptimizer<TestProblem> for FailingCheckpointStateOptimizer {
+    type State = ();
+
+    fn optimizer_fingerprint(&self) -> Fingerprint {
+        Fingerprint::from_bytes([12; 32])
+    }
+
+    fn private_state_policy(&self) -> PrivateStatePolicy {
+        PrivateStatePolicy::ExplicitSnapshot {
+            schema: Fingerprint::from_bytes([13; 32]),
+            format: StateFormat::Json,
+        }
+    }
+
+    fn checkpoint_state(
+        &self,
+        _ctx: CheckpointContext<'_, TestProblem>,
+    ) -> Result<Self::State, CheckpointError> {
+        Err(CheckpointError::StateUnavailable {
+            reason: "state unavailable".to_owned(),
+        })
+    }
+
+    fn restore_state(
+        &mut self,
+        _state: Self::State,
+        _ctx: RestoreContext<'_, TestProblem>,
+    ) -> Result<(), CheckpointError> {
+        Ok(())
+    }
+}
+
+struct UnserializableStateOptimizer;
+
+impl Optimizer<TestProblem> for UnserializableStateOptimizer {
+    async fn step(
+        &mut self,
+        _ctx: &mut RunContext<'_, TestProblem>,
+    ) -> Result<StepStatus, OptimizerError> {
+        Ok(StepStatus::Done)
+    }
+
+    fn best_candidate(&self, _graph: RunGraphView<'_, TestProblem>) -> Option<CandidateId> {
+        None
+    }
+}
+
+impl CheckpointableOptimizer<TestProblem> for UnserializableStateOptimizer {
+    type State = BTreeMap<(u8, u8), u8>;
+
+    fn optimizer_fingerprint(&self) -> Fingerprint {
+        Fingerprint::from_bytes([14; 32])
+    }
+
+    fn private_state_policy(&self) -> PrivateStatePolicy {
+        PrivateStatePolicy::ExplicitSnapshot {
+            schema: Fingerprint::from_bytes([15; 32]),
+            format: StateFormat::Json,
+        }
+    }
+
+    fn checkpoint_state(
+        &self,
+        _ctx: CheckpointContext<'_, TestProblem>,
+    ) -> Result<Self::State, CheckpointError> {
+        Ok(BTreeMap::from([((1, 2), 3)]))
+    }
+
+    fn restore_state(
+        &mut self,
+        _state: Self::State,
+        _ctx: RestoreContext<'_, TestProblem>,
+    ) -> Result<(), CheckpointError> {
+        Ok(())
+    }
+}
+
+struct FailingCheckpointWriteOptimizer {
+    calls: Arc<AtomicUsize>,
+    fail_on: usize,
+}
+
+impl Optimizer<TestProblem> for FailingCheckpointWriteOptimizer {
+    async fn step(
+        &mut self,
+        _ctx: &mut RunContext<'_, TestProblem>,
+    ) -> Result<StepStatus, OptimizerError> {
+        Ok(StepStatus::Done)
+    }
+
+    fn best_candidate(&self, _graph: RunGraphView<'_, TestProblem>) -> Option<CandidateId> {
+        None
+    }
+
+    fn checkpoint_state_write(
+        &self,
+        _ctx: CheckpointContext<'_, TestProblem>,
+    ) -> Result<Option<OptimizerStateWrite>, OptimizerError> {
+        let call = self.calls.fetch_add(1, Ordering::SeqCst) + 1;
+        if call == self.fail_on {
+            return Err(OptimizerError::Message(
+                "checkpoint write failed".to_owned(),
+            ));
+        }
+        Ok(None)
     }
 }
 
