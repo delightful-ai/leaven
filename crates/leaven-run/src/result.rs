@@ -5,31 +5,62 @@ use leaven_kernel::{BudgetSnapshot, CandidateId, Cost, RunId};
 
 /// Result returned by the product builder.
 #[derive(Clone, Debug)]
-pub struct OptimizeResult<A> {
+pub struct Optimized<A> {
     /// Run id.
     pub run_id: RunId,
-    /// Best candidate id.
-    pub best: CandidateId,
-    /// Best artifact cloned from graph truth.
-    pub best_artifact: A,
+    /// Best candidate and artifact when the optimizer selected one.
+    pub best: Option<BestCandidate<A>>,
     /// Seed artifact.
     pub seed_artifact: A,
-    /// Public report.
-    pub report: OptimizationReport,
+    /// Reason the optimizer portion of the run stopped.
+    pub stop: OptimizationStopReason,
+    /// Budget snapshot after optimizer work and final report evaluations.
+    pub budget: BudgetSnapshot,
+    /// Ordinary run summary.
+    pub summary: StandardRunSummary,
+    /// Public event summaries emitted during the run.
+    pub events: Vec<RunEventSummary>,
 }
 
-impl<A> OptimizeResult<A> {
-    /// Best artifact.
+impl<A> Optimized<A> {
+    /// Best candidate id.
     #[must_use]
-    pub const fn best(&self) -> &A {
-        &self.best_artifact
+    pub const fn best_id(&self) -> Option<CandidateId> {
+        match &self.best {
+            Some(best) => Some(best.id),
+            None => None,
+        }
     }
 
-    /// Report facade.
+    /// Best artifact.
     #[must_use]
-    pub const fn report(&self) -> &OptimizationReport {
-        &self.report
+    pub const fn best(&self) -> Option<&A> {
+        match &self.best {
+            Some(best) => Some(&best.artifact),
+            None => None,
+        }
     }
+
+    /// Ordinary run summary.
+    #[must_use]
+    pub const fn summary(&self) -> &StandardRunSummary {
+        &self.summary
+    }
+
+    /// Split-aware evaluation report.
+    #[must_use]
+    pub const fn report(&self) -> &EvaluationReport {
+        &self.summary.evaluation
+    }
+}
+
+/// Best candidate returned by an optimization run.
+#[derive(Clone, Debug)]
+pub struct BestCandidate<A> {
+    /// Graph-local candidate id.
+    pub id: CandidateId,
+    /// Candidate artifact cloned from graph truth.
+    pub artifact: A,
 }
 
 /// Reason the optimizer portion of a product run stopped.
@@ -79,11 +110,9 @@ pub enum RunStorage {
     },
 }
 
-/// Public report for an optimization run.
+/// Public summary for an ordinary optimization run.
 #[derive(Clone, Debug)]
-pub struct OptimizationReport {
-    /// Reason the optimizer stopped before final report evaluations ran.
-    pub stop_reason: OptimizationStopReason,
+pub struct StandardRunSummary {
     /// Public storage/resume status for this run.
     pub storage: RunStorage,
     /// Budget snapshot after optimizer work, before final report evaluations.
@@ -110,8 +139,65 @@ pub struct OptimizationReport {
     pub test_score: Option<f64>,
     /// Split-aware report.
     pub evaluation: EvaluationReport,
-    /// Event names emitted during the run.
-    pub events: Vec<String>,
+}
+
+/// Public event summary emitted during an optimization run.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+pub enum RunEventSummary {
+    /// Optimization started.
+    OptimizationStarted,
+    /// Iteration started.
+    IterationStarted,
+    /// Budget was charged.
+    BudgetCharged,
+    /// A proposer produced a proposal batch.
+    ProposalBatchProduced,
+    /// A proposal was recorded.
+    ProposalRecorded,
+    /// A stage attempt was recorded.
+    StageAttemptRecorded,
+    /// A proposal applied successfully.
+    ApplySucceeded,
+    /// A proposal failed to apply.
+    ApplyFailed,
+    /// Evaluation was requested.
+    EvaluationRequested,
+    /// Evaluation completed.
+    EvaluationCompleted,
+    /// Population state was updated.
+    PopulationUpdated,
+    /// Iteration ended.
+    IterationEnded,
+    /// Optimization is stopping.
+    OptimizationStopping,
+    /// Optimization ended.
+    OptimizationEnded,
+    /// Error event.
+    Error,
+}
+
+impl RunEventSummary {
+    /// Stable snake-case event name.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::OptimizationStarted => "optimization_started",
+            Self::IterationStarted => "iteration_started",
+            Self::BudgetCharged => "budget_charged",
+            Self::ProposalBatchProduced => "proposal_batch_produced",
+            Self::ProposalRecorded => "proposal_recorded",
+            Self::StageAttemptRecorded => "stage_attempt_recorded",
+            Self::ApplySucceeded => "apply_succeeded",
+            Self::ApplyFailed => "apply_failed",
+            Self::EvaluationRequested => "evaluation_requested",
+            Self::EvaluationCompleted => "evaluation_completed",
+            Self::PopulationUpdated => "population_updated",
+            Self::IterationEnded => "iteration_ended",
+            Self::OptimizationStopping => "optimization_stopping",
+            Self::OptimizationEnded => "optimization_ended",
+            Self::Error => "error",
+        }
+    }
 }
 
 pub fn average(cases: &[leaven_eval::ReportScore]) -> Option<f64> {

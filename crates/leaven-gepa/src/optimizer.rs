@@ -283,14 +283,6 @@ impl<T> EditSurfacePlaceholder for T {
     type Edit = ();
 }
 
-impl Gepa<(), ParetoFrontier, crate::FixedSurfaceEdit<()>> {
-    /// Starts a GEPA builder.
-    #[must_use]
-    pub fn builder() -> GepaBuilder {
-        GepaBuilder
-    }
-}
-
 impl<S, Pop, Reflect> Gepa<S, Pop, Reflect> {
     /// Build GEPA with deterministic default strategies.
     #[must_use]
@@ -964,61 +956,4 @@ fn average_scalar(evidence: &CasewiseEvidence<ScalarEvidence>) -> Option<f64> {
         .sum();
     let count = u32::try_from(evidence.outcomes().len()).expect("case count fits into u32");
     Some(total / f64::from(count))
-}
-
-/// GEPA builder entrypoint.
-#[derive(Clone, Debug, Default)]
-pub struct GepaBuilder;
-
-impl GepaBuilder {
-    /// Supplies the required edit surface.
-    #[must_use]
-    pub fn surface<S>(self, surface: S) -> GepaBuilderWithSurface<S> {
-        GepaBuilderWithSurface { surface }
-    }
-}
-
-/// Builder after the edit surface is known.
-#[derive(Clone, Debug)]
-pub struct GepaBuilderWithSurface<S> {
-    surface: S,
-}
-
-impl<S> GepaBuilderWithSurface<S> {
-    /// Supplies the reflective proposer and builds default population policy.
-    #[must_use]
-    pub fn reflector<Reflect>(
-        self,
-        reflector: Reflect,
-    ) -> Gepa<S, ParetoFrontier, Reflect, ParetoFrequencyWeighted, RoundRobinPart, StrictImprovement>
-    {
-        Gepa::new(self.surface, ParetoFrontier::by_case().build(), reflector)
-    }
-
-    /// Supplies explicit population and reflective proposer.
-    #[must_use]
-    pub fn population<Pop>(self, population: Pop) -> GepaBuilderWithPopulation<S, Pop> {
-        GepaBuilderWithPopulation {
-            surface: self.surface,
-            population,
-        }
-    }
-}
-
-/// Builder after surface and population are known.
-#[derive(Clone, Debug)]
-pub struct GepaBuilderWithPopulation<S, Pop> {
-    surface: S,
-    population: Pop,
-}
-
-impl<S, Pop> GepaBuilderWithPopulation<S, Pop> {
-    /// Supplies the reflective proposer.
-    #[must_use]
-    pub fn reflector<Reflect>(
-        self,
-        reflector: Reflect,
-    ) -> Gepa<S, Pop, Reflect, ParetoFrequencyWeighted, RoundRobinPart, StrictImprovement> {
-        Gepa::new(self.surface, self.population, reflector)
-    }
 }

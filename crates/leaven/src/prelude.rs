@@ -46,14 +46,16 @@ pub use leaven_kernel::CostUnit;
 
 // --- The optimize workflow. ---
 
-pub use leaven_run::OptimizationReport;
+pub use leaven_run::BestCandidate;
 pub use leaven_run::OptimizeBuilder;
 pub use leaven_run::OptimizeError;
-pub use leaven_run::OptimizeResult;
+pub use leaven_run::Optimized;
+pub use leaven_run::RunEventSummary;
 pub use leaven_run::RunOutput;
 pub use leaven_run::Score;
 pub use leaven_run::ScoreContext;
 pub use leaven_run::ScoreError;
+pub use leaven_run::StandardRunSummary;
 pub use leaven_run::optimize;
 
 // --- Artifact derive macros, when the `derive` feature is on. ---

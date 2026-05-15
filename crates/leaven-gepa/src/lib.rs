@@ -1,6 +1,7 @@
 //! GEPA optimizer primitives.
 
 pub mod agent_stage;
+pub mod builder;
 pub mod gate;
 pub mod optimizer;
 pub mod part_selector;
@@ -10,12 +11,16 @@ pub mod selector;
 pub mod validation;
 
 pub use agent_stage::{GepaReflectionBootstrap, GepaStageProposer, gepa_stage_proposer};
+pub use builder::{
+    GepaBuilder, GepaBuilderWithPopulation, GepaBuilderWithSurface, GepaReflectWithLmBuilder,
+    GepaReflectWithLmBuilderWithSurface,
+};
 pub use gate::{
     CheckpointGate, Gate, GateDecision, ImprovementOrEqual, NoRegression, StrictImprovement,
 };
 pub use optimizer::{
-    CheckpointPopulation, Gepa, GepaBuilder, GepaCandidateHistoryEntry, GepaCheckpointState,
-    GepaPopulation, GepaScoreEvidence,
+    CheckpointPopulation, Gepa, GepaCandidateHistoryEntry, GepaCheckpointState, GepaPopulation,
+    GepaScoreEvidence,
 };
 pub use part_selector::{CheckpointPartSelector, PartSelector, RoundRobinPart};
 pub use proposer::{FixedSurfaceEdit, GepaReflector, LmBackedReflector, SurfaceProposer};
@@ -36,12 +41,12 @@ pub mod prelude {
         CandidateSelector, CheckpointCandidateSelector, CheckpointGate, CheckpointPopulation,
         DEFAULT_REFLECTION_PROMPT_TEMPLATE, DefaultReflectionRenderer, FixedSurfaceEdit,
         FullValidation, Gate, Gepa, GepaCandidateHistoryEntry, GepaPopulation,
-        GepaReflectionBootstrap, GepaReflectiveDataset, GepaReflector, GepaStageProposer,
-        HasBestCandidate, ImprovementOrEqual, LmBackedReflector, LmBackedReflectorConfig,
-        MinibatchThenValidation, ParetoFrequencyWeighted, PartSelector, PlainTextEditParser,
-        ReflectRequest, ReflectionError, ReflectionOutputParser, ReflectionRenderInput,
-        ReflectionRenderer, ReflectiveDatasetBuilder, ReflectiveExample, RoundRobinPart,
-        SelectBestCandidate, StrictImprovement, SurfaceProposer, ValidationPolicy,
-        gepa_stage_proposer,
+        GepaReflectWithLmBuilder, GepaReflectWithLmBuilderWithSurface, GepaReflectionBootstrap,
+        GepaReflectiveDataset, GepaReflector, GepaStageProposer, HasBestCandidate,
+        ImprovementOrEqual, LmBackedReflector, LmBackedReflectorConfig, MinibatchThenValidation,
+        ParetoFrequencyWeighted, PartSelector, PlainTextEditParser, ReflectRequest,
+        ReflectionError, ReflectionOutputParser, ReflectionRenderInput, ReflectionRenderer,
+        ReflectiveDatasetBuilder, ReflectiveExample, RoundRobinPart, SelectBestCandidate,
+        StrictImprovement, SurfaceProposer, ValidationPolicy, gepa_stage_proposer,
     };
 }

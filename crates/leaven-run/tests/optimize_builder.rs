@@ -18,8 +18,8 @@ use leaven_engine::{
 use leaven_evidence::{CaseAssessmentEvidence, CasewiseEvidence};
 use leaven_kernel::{Budget, CandidateId, CaseId, ContentId, EvaluatorId};
 use leaven_run::{
-    OptimizationStopReason, OptimizeError, OptimizeStore, RunOutput, RunProblem, RunStorage, Score,
-    ScoreContext, ScoreError, optimize,
+    OptimizationStopReason, OptimizeError, OptimizeStore, RunEventSummary, RunOutput, RunProblem,
+    RunStorage, Score, ScoreContext, ScoreError, optimize,
 };
 use leaven_store::{EvidenceStore, StoreError};
 use leaven_store_inline::InlineEvidenceStore;
@@ -53,13 +53,10 @@ fn run_builder_accepts_explicit_unlimited_budget() {
     )
     .unwrap();
 
-    assert_eq!(result.best(), &TextArtifact(40));
+    assert_eq!(result.best(), Some(&TextArtifact(40)));
+    assert_eq!(result.stop, OptimizationStopReason::OptimizerDone);
     assert_eq!(
-        result.report().stop_reason,
-        OptimizationStopReason::OptimizerDone
-    );
-    assert_eq!(
-        result.report().storage,
+        result.summary().storage,
         RunStorage::Ephemeral {
             run_id: result.run_id
         }
@@ -101,6 +98,40 @@ fn public_stop_reason_preserves_all_engine_stop_variants() {
 }
 
 #[test]
+fn run_event_summary_names_cover_public_variants() {
+    let cases = [
+        (RunEventSummary::OptimizationStarted, "optimization_started"),
+        (RunEventSummary::IterationStarted, "iteration_started"),
+        (RunEventSummary::BudgetCharged, "budget_charged"),
+        (
+            RunEventSummary::ProposalBatchProduced,
+            "proposal_batch_produced",
+        ),
+        (RunEventSummary::ProposalRecorded, "proposal_recorded"),
+        (
+            RunEventSummary::StageAttemptRecorded,
+            "stage_attempt_recorded",
+        ),
+        (RunEventSummary::ApplySucceeded, "apply_succeeded"),
+        (RunEventSummary::ApplyFailed, "apply_failed"),
+        (RunEventSummary::EvaluationRequested, "evaluation_requested"),
+        (RunEventSummary::EvaluationCompleted, "evaluation_completed"),
+        (RunEventSummary::PopulationUpdated, "population_updated"),
+        (RunEventSummary::IterationEnded, "iteration_ended"),
+        (
+            RunEventSummary::OptimizationStopping,
+            "optimization_stopping",
+        ),
+        (RunEventSummary::OptimizationEnded, "optimization_ended"),
+        (RunEventSummary::Error, "error"),
+    ];
+
+    for (event, name) in cases {
+        assert_eq!(event.as_str(), name);
+    }
+}
+
+#[test]
 fn run_builder_reports_final_train_scores_when_optimizer_does_not_evaluate_train() {
     let result = block_on(
         optimize(TextArtifact(40))
@@ -114,8 +145,9 @@ fn run_builder_reports_final_train_scores_when_optimizer_does_not_evaluate_train
     )
     .unwrap();
 
-    assert_eq!(result.report().baseline_train_score, Some(42.0));
-    assert_eq!(result.report().optimized_train_score, Some(42.0));
+    assert_eq!(result.summary().baseline_train_score, Some(42.0));
+    assert_eq!(result.summary().optimized_train_score, Some(42.0));
+    assert_eq!(result.report().splits_reported.len(), 1);
 }
 
 #[test]
@@ -148,8 +180,8 @@ fn run_builder_accepts_cloned_evidence_only_store() {
     )
     .unwrap();
 
-    assert_eq!(result.best(), &TextArtifact(40));
-    assert_eq!(cloned_result.best(), &TextArtifact(41));
+    assert_eq!(result.best(), Some(&TextArtifact(40)));
+    assert_eq!(cloned_result.best(), Some(&TextArtifact(41)));
     assert!(evidence_store.puts() > 0);
     assert!(evidence_store.gets() > 0);
 }
@@ -184,11 +216,11 @@ fn run_builder_accepts_empty_train_when_no_held_out_sets_exist() {
     )
     .unwrap();
 
-    assert_eq!(result.best(), &TextArtifact(40));
-    assert_eq!(result.report().baseline_train_score, None);
-    assert_eq!(result.report().optimized_train_score, None);
-    assert_eq!(result.report().optimization_cost.metric_calls, 0);
-    assert_eq!(result.report().final_report_cost.metric_calls, 0);
+    assert_eq!(result.best(), Some(&TextArtifact(40)));
+    assert_eq!(result.summary().baseline_train_score, None);
+    assert_eq!(result.summary().optimized_train_score, None);
+    assert_eq!(result.summary().optimization_cost.metric_calls, 0);
+    assert_eq!(result.summary().final_report_cost.metric_calls, 0);
 }
 
 #[test]
@@ -207,17 +239,17 @@ fn run_builder_separates_optimization_cost_from_final_report_cost() {
     )
     .unwrap();
 
-    assert_eq!(result.report().optimization_budget.spent.metric_calls, 1);
-    assert_eq!(result.report().optimization_cost.metric_calls, 1);
-    assert_eq!(result.report().baseline_train_score, Some(42.0));
-    assert_eq!(result.report().optimized_train_score, Some(42.0));
-    assert_eq!(result.report().final_report_cost.metric_calls, 6);
-    assert_eq!(result.report().budget.spent.metric_calls, 7);
-    assert_eq!(result.report().cost.metric_calls, 7);
-    assert_eq!(result.report().baseline_validation_score, Some(43.0));
-    assert_eq!(result.report().validation_score, Some(43.0));
-    assert_eq!(result.report().baseline_test_score, Some(44.0));
-    assert_eq!(result.report().test_score, Some(44.0));
+    assert_eq!(result.summary().optimization_budget.spent.metric_calls, 1);
+    assert_eq!(result.summary().optimization_cost.metric_calls, 1);
+    assert_eq!(result.summary().baseline_train_score, Some(42.0));
+    assert_eq!(result.summary().optimized_train_score, Some(42.0));
+    assert_eq!(result.summary().final_report_cost.metric_calls, 6);
+    assert_eq!(result.budget.spent.metric_calls, 7);
+    assert_eq!(result.summary().cost.metric_calls, 7);
+    assert_eq!(result.summary().baseline_validation_score, Some(43.0));
+    assert_eq!(result.summary().validation_score, Some(43.0));
+    assert_eq!(result.summary().baseline_test_score, Some(44.0));
+    assert_eq!(result.summary().test_score, Some(44.0));
 }
 
 #[test]
@@ -234,13 +266,10 @@ fn run_builder_reports_budget_stop_reason_from_metric_call_budget() {
     )
     .unwrap();
 
-    assert_eq!(result.best(), &TextArtifact(40));
-    assert_eq!(
-        result.report().stop_reason,
-        OptimizationStopReason::BudgetReached
-    );
-    assert_eq!(result.report().optimization_cost.metric_calls, 1);
-    assert_eq!(result.report().final_report_cost.metric_calls, 2);
+    assert_eq!(result.best(), Some(&TextArtifact(40)));
+    assert_eq!(result.stop, OptimizationStopReason::BudgetReached);
+    assert_eq!(result.summary().optimization_cost.metric_calls, 1);
+    assert_eq!(result.summary().final_report_cost.metric_calls, 2);
 }
 
 #[test]
@@ -259,18 +288,15 @@ fn run_builder_runs_final_reports_after_metric_budget_stop() {
     )
     .unwrap();
 
-    assert_eq!(result.best(), &TextArtifact(40));
-    assert_eq!(
-        result.report().stop_reason,
-        OptimizationStopReason::BudgetReached
-    );
-    assert_eq!(result.report().optimization_cost.metric_calls, 1);
-    assert_eq!(result.report().final_report_cost.metric_calls, 6);
-    assert_eq!(result.report().cost.metric_calls, 7);
-    assert_eq!(result.report().baseline_validation_score, Some(43.0));
-    assert_eq!(result.report().validation_score, Some(43.0));
-    assert_eq!(result.report().baseline_test_score, Some(44.0));
-    assert_eq!(result.report().test_score, Some(44.0));
+    assert_eq!(result.best(), Some(&TextArtifact(40)));
+    assert_eq!(result.stop, OptimizationStopReason::BudgetReached);
+    assert_eq!(result.summary().optimization_cost.metric_calls, 1);
+    assert_eq!(result.summary().final_report_cost.metric_calls, 6);
+    assert_eq!(result.summary().cost.metric_calls, 7);
+    assert_eq!(result.summary().baseline_validation_score, Some(43.0));
+    assert_eq!(result.summary().validation_score, Some(43.0));
+    assert_eq!(result.summary().baseline_test_score, Some(44.0));
+    assert_eq!(result.summary().test_score, Some(44.0));
 }
 
 #[test]
@@ -288,7 +314,7 @@ fn run_builder_reports_case_ids_output_and_feedback_for_case_level_rows() {
     .unwrap();
 
     let train = result
-        .report()
+        .summary()
         .evaluation
         .splits_reported
         .iter()
@@ -297,7 +323,7 @@ fn run_builder_reports_case_ids_output_and_feedback_for_case_level_rows() {
     let candidate = train
         .candidates
         .iter()
-        .find(|candidate| candidate.candidate == result.best)
+        .find(|candidate| candidate.candidate == result.best_id().expect("best exists"))
         .expect("best candidate train summary exists");
 
     assert_eq!(candidate.average_score, Some(42.5));
@@ -311,8 +337,8 @@ fn run_builder_reports_case_ids_output_and_feedback_for_case_level_rows() {
 }
 
 #[test]
-fn run_builder_rejects_optimizer_that_reports_no_best_candidate() {
-    let error = block_on(
+fn run_builder_reports_no_best_candidate_without_error() {
+    let result = block_on(
         optimize(TextArtifact(40))
             .train(vec![TextCase(2)])
             .runner(|artifact, case| async move { text_runner(&artifact, &case) })
@@ -321,13 +347,14 @@ fn run_builder_rejects_optimizer_that_reports_no_best_candidate() {
             .budget(Budget::metric_calls(8))
             .run(),
     )
-    .unwrap_err();
+    .unwrap();
 
-    assert!(matches!(error, OptimizeError::Optimizer(_)));
-    assert_eq!(
-        error.to_string(),
-        "optimizer failed: optimizer finished without a best candidate"
-    );
+    assert_eq!(result.best_id(), None);
+    assert_eq!(result.best(), None);
+    assert_eq!(result.summary().baseline_train_score, Some(42.0));
+    assert_eq!(result.summary().optimized_train_score, None);
+    assert_eq!(result.summary().final_report_cost.metric_calls, 1);
+    assert!(result.events.contains(&RunEventSummary::OptimizationEnded));
 }
 
 #[test]
@@ -354,12 +381,12 @@ fn run_builder_dispatches_callbacks_and_supplied_store_capabilities() {
     )
     .unwrap();
 
-    assert_eq!(result.best(), &TextArtifact(40));
+    assert_eq!(result.best(), Some(&TextArtifact(40)));
     assert!(evidence_store.puts() > 0);
     assert!(evidence_store.gets() > 0);
     assert!(persistence.checkpoints() > 0);
     assert_eq!(
-        result.report().storage,
+        result.summary().storage,
         RunStorage::Stored {
             run_id: result.run_id,
             resumable: false,

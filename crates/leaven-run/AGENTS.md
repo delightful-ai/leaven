@@ -9,7 +9,7 @@ around engine graph mutation or a home for optimizer strategy state.
 ## Route Here
 - Builder ergonomics belong here: required budget policy, train vs held-out
   validation/test rules, callbacks, store selection, runner/scorer wiring, and
-  `OptimizeResult` facades.
+  `Optimized` facades.
 - `RunProblem`, `RunOutput`, `Score`, `ScoreContext`, `ScoringEvaluator`,
   `OptimizeStore`, and `IntoOptimizeStore` belong here when they serve the
   high-level optimize workflow.
@@ -19,7 +19,7 @@ around engine graph mutation or a home for optimizer strategy state.
   `Dataset`/`DatasetSplits`, engine `CaseSet` partitions named `TRAIN`,
   `VALIDATION`, and `TEST`, a `ScoringEvaluator`, an `Engine` with
   validation/test hidden from proposers, final baseline/best evaluations, and a
-  flattened `OptimizationReport`.
+  concrete `StandardRunSummary`.
 
 ## Route Away
 - Graph records, checkpoint envelopes, budget ledgers, trust, cache,

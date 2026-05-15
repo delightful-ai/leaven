@@ -25,7 +25,7 @@ use leaven_store::EvidenceStore;
 use crate::{
     IntoOptimizeStore, OptimizeError, OptimizeStore, RunOutput, Score, ScoreContext, ScoreError,
     evaluator::{ScoringEvaluator, default_parallelism},
-    result::{OptimizationReport, OptimizeResult, RunStorage, average},
+    result::{BestCandidate, Optimized, RunEventSummary, RunStorage, StandardRunSummary, average},
 };
 
 type Runner<A, C> = Arc<dyn Fn(A, C) -> BoxFuture<'static, RunOutput> + Send + Sync>;
@@ -44,7 +44,7 @@ struct FinalEvaluations {
 
 struct FinalEvaluationInputs {
     seed: CandidateId,
-    best: CandidateId,
+    best: Option<CandidateId>,
     has_train: bool,
     has_validation: bool,
     has_test: bool,
@@ -57,19 +57,24 @@ struct FinalPartitionEvaluation {
 
 struct FinalPartitionResults {
     baseline: CandidateEvaluationSummary,
-    optimized: CandidateEvaluationSummary,
+    optimized: Option<CandidateEvaluationSummary>,
     cost: Cost,
 }
 
 struct ReportInputs<'a, C> {
     dataset: &'a Dataset<C>,
     splits: &'a DatasetSplits,
-    best: CandidateId,
+    best: Option<CandidateId>,
     final_evaluations: &'a FinalEvaluations,
     optimization_budget: BudgetSnapshot,
-    stop_reason: leaven_engine::StopReason,
     storage: RunStorage,
 }
+
+type SummaryBuild<A> = (
+    Option<BestCandidate<A>>,
+    StandardRunSummary,
+    Vec<RunEventSummary>,
+);
 
 /// Problem type used by the public run builder.
 pub struct RunProblem<A, C> {
@@ -254,7 +259,7 @@ where
     O: Optimizer<RunProblem<A, C>>,
 {
     /// Runs the optimization.
-    pub async fn run(mut self) -> Result<OptimizeResult<A>, OptimizeError> {
+    pub async fn run(mut self) -> Result<Optimized<A>, OptimizeError> {
         let scorer = self.scorer.take().ok_or(OptimizeError::MissingScore)?;
         let budget = self.budget.take().ok_or(OptimizeError::MissingBudget)?;
         let metric_call_limit = budget.metric_calls;
@@ -309,11 +314,7 @@ where
         let optimization_budget = engine.budget().snapshot();
         let stop_reason = stop_reason_from_events(&engine.view())?;
         let storage = run_storage(run.run_id, has_persistence);
-        let best = run.best.ok_or_else(|| {
-            leaven_engine::OptimizerError::Message(
-                "optimizer finished without a best candidate".to_owned(),
-            )
-        })?;
+        let best = run.best;
         let has_train = !self.train.is_empty();
         let has_validation = !self.validation.is_empty();
         let has_test = !self.test.is_empty();
@@ -334,7 +335,7 @@ where
             },
         )
         .await?;
-        let (best_artifact, report) = build_report(
+        let (best, summary, events) = build_summary(
             &engine,
             store.evidence_store(),
             ReportInputs {
@@ -343,16 +344,18 @@ where
                 best,
                 final_evaluations: &final_evaluations,
                 optimization_budget,
-                stop_reason,
                 storage,
             },
         )?;
-        Ok(OptimizeResult {
+        let budget = summary.budget.clone();
+        Ok(Optimized {
             run_id: run.run_id,
-            best,
-            best_artifact,
             seed_artifact: self.seed,
-            report,
+            stop: stop_reason.into(),
+            budget,
+            best,
+            summary,
+            events,
         })
     }
 }
@@ -490,11 +493,11 @@ where
     };
     Ok(FinalEvaluations {
         baseline_train: train.as_ref().map(|(baseline, _)| baseline.clone()),
-        train: train.map(|(_, optimized)| optimized),
+        train: train.and_then(|(_, optimized)| optimized),
         baseline_validation: validation.as_ref().map(|(baseline, _)| baseline.clone()),
-        validation: validation.map(|(_, optimized)| optimized),
+        validation: validation.and_then(|(_, optimized)| optimized),
         baseline_test: test.as_ref().map(|(baseline, _)| baseline.clone()),
-        test: test.map(|(_, optimized)| optimized),
+        test: test.and_then(|(_, optimized)| optimized),
         cost,
     })
 }
@@ -519,15 +522,20 @@ where
         evaluation.purpose.clone(),
     )
     .await?;
-    let (optimized, optimized_cost) = final_eval(
-        engine,
-        case_set,
-        store,
-        inputs.best,
-        evaluation.partition,
-        evaluation.purpose,
-    )
-    .await?;
+    let (optimized, optimized_cost) = if let Some(best) = inputs.best {
+        let (optimized, optimized_cost) = final_eval(
+            engine,
+            case_set,
+            store,
+            best,
+            evaluation.partition,
+            evaluation.purpose,
+        )
+        .await?;
+        (Some(optimized), optimized_cost)
+    } else {
+        (None, Cost::zero())
+    };
     Ok(FinalPartitionResults {
         baseline,
         optimized,
@@ -535,21 +543,23 @@ where
     })
 }
 
-fn build_report<A, C>(
+fn build_summary<A, C>(
     engine: &leaven_engine::Engine<RunProblem<A, C>>,
     store: &dyn EvidenceStore<CasewiseEvidence<CaseAssessmentEvidence>>,
     inputs: ReportInputs<'_, C>,
-) -> Result<(A, OptimizationReport), leaven_engine::OptimizerError>
+) -> Result<SummaryBuild<A>, leaven_engine::OptimizerError>
 where
     A: Artifact,
     C: Clone + Send + Sync + 'static,
 {
     let view = engine.view();
-    let best_artifact = view.artifact(inputs.best).expect("best exists").clone();
+    let best = inputs.best.map(|id| BestCandidate {
+        id,
+        artifact: view.artifact(id).expect("best exists").clone(),
+    });
     let budget = engine.budget().snapshot();
     let cost = budget.spent.clone();
-    let report = OptimizationReport {
-        stop_reason: inputs.stop_reason.into(),
+    let summary = StandardRunSummary {
         storage: inputs.storage,
         optimization_budget: inputs.optimization_budget.clone(),
         budget,
@@ -592,9 +602,9 @@ where
             cost,
             splits_reported: split_reports_for(&view, store, inputs.splits)?,
         },
-        events: view.events().map(event_name).collect(),
     };
-    Ok((best_artifact, report))
+    let events = view.events().map(event_summary).collect();
+    Ok((best, summary, events))
 }
 
 async fn final_eval<A, C>(
@@ -771,23 +781,28 @@ fn run_storage(run_id: leaven_kernel::RunId, has_persistence: bool) -> RunStorag
     }
 }
 
-fn event_name(event: &leaven_engine::RunEvent) -> String {
+fn event_summary(event: &leaven_engine::RunEvent) -> RunEventSummary {
     match event {
-        leaven_engine::RunEvent::OptimizationStarted { .. } => "optimization_started",
-        leaven_engine::RunEvent::IterationStarted { .. } => "iteration_started",
-        leaven_engine::RunEvent::BudgetCharged { .. } => "budget_charged",
-        leaven_engine::RunEvent::ProposalBatchProduced { .. } => "proposal_batch_produced",
-        leaven_engine::RunEvent::ProposalRecorded { .. } => "proposal_recorded",
-        leaven_engine::RunEvent::StageAttemptRecorded { .. } => "stage_attempt_recorded",
-        leaven_engine::RunEvent::ApplySucceeded { .. } => "apply_succeeded",
-        leaven_engine::RunEvent::ApplyFailed { .. } => "apply_failed",
-        leaven_engine::RunEvent::EvaluationRequested { .. } => "evaluation_requested",
-        leaven_engine::RunEvent::EvaluationCompleted { .. } => "evaluation_completed",
-        leaven_engine::RunEvent::PopulationUpdated { .. } => "population_updated",
-        leaven_engine::RunEvent::IterationEnded { .. } => "iteration_ended",
-        leaven_engine::RunEvent::OptimizationStopping { .. } => "optimization_stopping",
-        leaven_engine::RunEvent::OptimizationEnded { .. } => "optimization_ended",
-        leaven_engine::RunEvent::Error { .. } => "error",
+        leaven_engine::RunEvent::OptimizationStarted { .. } => RunEventSummary::OptimizationStarted,
+        leaven_engine::RunEvent::IterationStarted { .. } => RunEventSummary::IterationStarted,
+        leaven_engine::RunEvent::BudgetCharged { .. } => RunEventSummary::BudgetCharged,
+        leaven_engine::RunEvent::ProposalBatchProduced { .. } => {
+            RunEventSummary::ProposalBatchProduced
+        }
+        leaven_engine::RunEvent::ProposalRecorded { .. } => RunEventSummary::ProposalRecorded,
+        leaven_engine::RunEvent::StageAttemptRecorded { .. } => {
+            RunEventSummary::StageAttemptRecorded
+        }
+        leaven_engine::RunEvent::ApplySucceeded { .. } => RunEventSummary::ApplySucceeded,
+        leaven_engine::RunEvent::ApplyFailed { .. } => RunEventSummary::ApplyFailed,
+        leaven_engine::RunEvent::EvaluationRequested { .. } => RunEventSummary::EvaluationRequested,
+        leaven_engine::RunEvent::EvaluationCompleted { .. } => RunEventSummary::EvaluationCompleted,
+        leaven_engine::RunEvent::PopulationUpdated { .. } => RunEventSummary::PopulationUpdated,
+        leaven_engine::RunEvent::IterationEnded { .. } => RunEventSummary::IterationEnded,
+        leaven_engine::RunEvent::OptimizationStopping { .. } => {
+            RunEventSummary::OptimizationStopping
+        }
+        leaven_engine::RunEvent::OptimizationEnded { .. } => RunEventSummary::OptimizationEnded,
+        leaven_engine::RunEvent::Error { .. } => RunEventSummary::Error,
     }
-    .to_owned()
 }

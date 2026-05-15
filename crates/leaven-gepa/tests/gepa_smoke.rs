@@ -62,6 +62,26 @@ fn gepa_owns_surface_and_lowers_selected_part_edits() {
     assert_eq!(changed.0.get("search").unwrap(), "query");
 }
 
+#[test]
+fn public_builder_supports_explicit_population_before_reflector() {
+    let mut gepa = Gepa::builder()
+        .surface(PartMapSurface)
+        .population(ParetoFrontier::by_case().build())
+        .reflector(FixedSurfaceEdit::new("builder-edit".to_owned()));
+    let artifact = PartMapArtifact(BTreeMap::from([("answer".to_owned(), "draft".to_owned())]));
+
+    let part = gepa.select_part(&artifact).unwrap();
+    let changed = artifact
+        .apply_change(
+            &gepa
+                .change_part(&artifact, part, "builder-edit".to_owned())
+                .unwrap(),
+        )
+        .unwrap();
+
+    assert_eq!(changed.0.get("answer").unwrap(), "builder-edit");
+}
+
 proptest! {
     #[test]
     fn surface_lowering_then_apply_changes_only_selected_part(

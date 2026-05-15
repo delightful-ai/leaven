@@ -4,13 +4,11 @@ use leaven::extend::PartitionId;
 use leaven::gepa::Gepa;
 use leaven::plumbing::{ContentId, Fingerprint, FiniteF64};
 use leaven::prelude::{
-    Artifact, ArtifactIdentity, Budget, EditSurface, OptimizeResult, Part, PartAddress, RunOutput,
+    Artifact, ArtifactIdentity, Budget, EditSurface, Optimized, Part, PartAddress, RunOutput,
     Score, ScoreContext, ScoreError, SurfaceError, SurfaceFingerprint,
 };
 use leaven::{kernel::Metered, stdlib::populations::ParetoFrontier};
-use leaven_gepa::{
-    DefaultReflectionRenderer, LmBackedReflector, LmBackedReflectorConfig, PlainTextEditParser,
-};
+use leaven_gepa::LmBackedReflectorConfig;
 use leaven_lm::{
     Lm, LmError, LmId, LmRequest, LmResponse, Message, Messages, ReasoningEffort, SamplingOptions,
     TokenUsage,
@@ -36,9 +34,6 @@ const LEAVEN_OPENAI_MAX_CONCURRENT_REQUESTS: &str = "LEAVEN_OPENAI_MAX_CONCURREN
 const DETERMINISTIC_SMOKE_METRIC_CALLS: u64 = 512;
 const DETERMINISTIC_SMOKE_ITERATIONS: usize = 1;
 
-type AimeLmReflector =
-    LmBackedReflector<AimeReflectionLm, DefaultReflectionRenderer, PlainTextEditParser>;
-
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
     let config = AimeRunConfig::configured();
@@ -48,33 +43,33 @@ async fn main() {
     }
 }
 
-fn report_lines(config: &AimeRunConfig, result: &OptimizeResult<AimePrompt>) -> Vec<String> {
+fn report_lines(config: &AimeRunConfig, result: &Optimized<AimePrompt>) -> Vec<String> {
     let mut lines = vec![
         format!("run_profile={}", config.profile.label()),
         format!(
             "baseline_train_score={}",
-            report_score(result.report.baseline_train_score)
+            report_score(result.summary.baseline_train_score)
         ),
         format!(
             "optimized_train_score={}",
-            report_score(result.report.optimized_train_score)
+            report_score(result.summary.optimized_train_score)
         ),
         format!(
             "validation_score={}",
-            report_score(result.report.validation_score)
+            report_score(result.summary.validation_score)
         ),
         format!(
             "baseline_heldout_test_score={}",
-            report_score(result.report.baseline_test_score)
+            report_score(result.summary.baseline_test_score)
         ),
         format!(
             "heldout_test_score={}",
-            report_score(result.report.test_score)
+            report_score(result.summary.test_score)
         ),
         "test_score_use=final_report_only".to_owned(),
         format!(
             "report_splits={}",
-            result.report.evaluation.splits_reported.len()
+            result.summary.evaluation.splits_reported.len()
         ),
         format!("solver_model={}", config.solver.model),
         format!("reflection_model={}", config.reflection.model),
@@ -100,27 +95,32 @@ fn report_lines(config: &AimeRunConfig, result: &OptimizeResult<AimePrompt>) -> 
         ),
         "reflection_output=text".to_owned(),
         "reflection_parser=plain-text-fenced".to_owned(),
-        format!(
-            "stop_reason={}",
-            report_stop_reason(result.report.stop_reason)
-        ),
+        format!("stop_reason={}", report_stop_reason(result.stop)),
         format!(
             "optimization_metric_calls={}",
-            result.report.optimization_cost.metric_calls
+            result.summary.optimization_cost.metric_calls
         ),
         format!(
             "final_report_metric_calls={}",
-            result.report.final_report_cost.metric_calls
+            result.summary.final_report_cost.metric_calls
+        ),
+        format!("budget_metric_calls={}", result.budget.spent.metric_calls),
+        format!("budget_llm_calls={}", result.budget.spent.llm_calls),
+        format!(
+            "best_system_prompt={}",
+            result.best().expect("AIME run has best prompt").system
         ),
         format!(
-            "budget_metric_calls={}",
-            result.report.budget.spent.metric_calls
+            "events={}",
+            result
+                .events
+                .iter()
+                .map(|event| event.as_str())
+                .collect::<Vec<_>>()
+                .join(",")
         ),
-        format!("budget_llm_calls={}", result.report.budget.spent.llm_calls),
-        format!("best_system_prompt={}", result.best().system),
-        format!("events={}", result.report.events.join(",")),
     ];
-    for split in &result.report.evaluation.splits_reported {
+    for split in &result.summary.evaluation.splits_reported {
         for candidate in &split.candidates {
             for case in &candidate.cases {
                 lines.push(format!(
@@ -168,13 +168,13 @@ fn report_stop_reason(reason: leaven::run::OptimizationStopReason) -> &'static s
 }
 
 #[cfg(test)]
-async fn run_deterministic_aime() -> OptimizeResult<AimePrompt> {
+async fn run_deterministic_aime() -> Optimized<AimePrompt> {
     let config = AimeRunConfig::deterministic_smoke();
     let (train, validation, test) = deterministic_cases();
     run_aime(config, train, validation, test).await
 }
 
-async fn run_configured_aime(config: AimeRunConfig) -> OptimizeResult<AimePrompt> {
+async fn run_configured_aime(config: AimeRunConfig) -> Optimized<AimePrompt> {
     let (train, validation, test) = configured_cases();
     run_aime(config, train, validation, test).await
 }
@@ -184,7 +184,7 @@ async fn run_aime(
     train: Vec<AimeCase>,
     validation: Vec<AimeCase>,
     test: Vec<AimeCase>,
-) -> OptimizeResult<AimePrompt> {
+) -> Optimized<AimePrompt> {
     let solver = aime_solver_lm(&config.solver);
     let solver_config = config.solver.clone();
     leaven::prelude::optimize(AimePrompt::new(config.seed_prompt))
@@ -199,17 +199,20 @@ async fn run_aime(
         .score(score_answer)
         .evaluation_parallelism(config.evaluation_parallelism)
         .using(
-            Gepa::builder()
-                .surface(AimePromptSurface)
-                .population(
-                    ParetoFrontier::by_case()
-                        .partition_filter(std::collections::BTreeSet::from([PartitionId::from(
-                            "TRAIN",
-                        )]))
-                        .build(),
-                )
-                .reflector(aime_lm_reflector(&config.reflection))
-                .max_iterations(config.max_iterations),
+            Gepa::reflect_with_lm(
+                aime_reflection_lm(&config.reflection),
+                config.reflection.model.clone(),
+            )
+            .with_reflector_config(aime_reflector_config(&config.reflection))
+            .surface(AimePromptSurface)
+            .population(
+                ParetoFrontier::by_case()
+                    .partition_filter(std::collections::BTreeSet::from([PartitionId::from(
+                        "TRAIN",
+                    )]))
+                    .build(),
+            )
+            .max_iterations(config.max_iterations),
         )
         .budget(config.budget)
         .run()
@@ -433,9 +436,8 @@ fn gepa_aime_sampling() -> SamplingOptions {
     }
 }
 
-fn aime_lm_reflector(config: &AimeReflectionConfig) -> AimeLmReflector {
-    let model = config.model.clone();
-    let lm = if config.live {
+fn aime_reflection_lm(config: &AimeReflectionConfig) -> AimeReflectionLm {
+    if config.live {
         AimeReflectionLm::OpenAi(cached_openai_lm(
             config.cache_policy,
             config.runtime,
@@ -443,14 +445,15 @@ fn aime_lm_reflector(config: &AimeReflectionConfig) -> AimeLmReflector {
         ))
     } else {
         AimeReflectionLm::Deterministic(DeterministicReflectionLm)
-    };
-    LmBackedReflector::new(lm, model, DefaultReflectionRenderer, PlainTextEditParser).with_config(
-        LmBackedReflectorConfig {
-            sampling: config.sampling.clone(),
-            output: leaven_lm::OutputMode::Text,
-            prompt_template: None,
-        },
-    )
+    }
+}
+
+fn aime_reflector_config(config: &AimeReflectionConfig) -> LmBackedReflectorConfig {
+    LmBackedReflectorConfig {
+        sampling: config.sampling.clone(),
+        output: leaven_lm::OutputMode::Text,
+        prompt_template: None,
+    }
 }
 
 fn aime_reflection_model_name() -> String {
@@ -871,6 +874,7 @@ mod tests {
     use super::*;
     use futures::executor::block_on;
     use leaven::kernel::CaseId;
+    use leaven::prelude::RunEventSummary;
 
     fn assert_score(actual: f64, expected: f64) {
         assert!(
@@ -887,20 +891,20 @@ mod tests {
     fn deterministic_aime_acceptance_shows_public_gepa_improvement() {
         let result = block_on(run_deterministic_aime());
 
-        assert_optional_score(result.report.baseline_train_score, 0.0);
-        assert_optional_score(result.report.optimized_train_score, 1.0);
-        assert_optional_score(result.report.baseline_validation_score, 0.0);
-        assert_optional_score(result.report.validation_score, 1.0);
-        assert_optional_score(result.report.baseline_test_score, 0.0);
-        assert_optional_score(result.report.test_score, 1.0);
-        assert_eq!(result.report.evaluation.splits_reported.len(), 3);
-        assert!(result.report.budget.spent.metric_calls > 0);
-        assert_eq!(result.report.budget.spent.llm_calls, 1);
-        assert_eq!(result.report.budget.spent.prompt_tokens, 37);
-        assert_eq!(result.report.budget.spent.completion_tokens, 11);
+        assert_optional_score(result.summary.baseline_train_score, 0.0);
+        assert_optional_score(result.summary.optimized_train_score, 1.0);
+        assert_optional_score(result.summary.baseline_validation_score, 0.0);
+        assert_optional_score(result.summary.validation_score, 1.0);
+        assert_optional_score(result.summary.baseline_test_score, 0.0);
+        assert_optional_score(result.summary.test_score, 1.0);
+        assert_eq!(result.summary.evaluation.splits_reported.len(), 3);
+        assert!(result.budget.spent.metric_calls > 0);
+        assert_eq!(result.budget.spent.llm_calls, 1);
+        assert_eq!(result.budget.spent.prompt_tokens, 37);
+        assert_eq!(result.budget.spent.completion_tokens, 11);
         assert!(
             result
-                .report
+                .summary
                 .evaluation
                 .splits_reported
                 .iter()
@@ -908,28 +912,20 @@ mod tests {
                 .flat_map(|candidate| &candidate.cases)
                 .any(|case| !case.feedback.is_empty() && !case.output.is_empty())
         );
-        assert!(result.best().system.contains("modular arithmetic"));
         assert!(
             result
-                .report
-                .events
-                .iter()
-                .any(|event| event == "proposal_recorded")
+                .best()
+                .expect("AIME run has best prompt")
+                .system
+                .contains("modular arithmetic")
         );
+        assert!(result.events.contains(&RunEventSummary::ProposalRecorded));
         assert!(
             result
-                .report
                 .events
-                .iter()
-                .any(|event| event == "evaluation_completed")
+                .contains(&RunEventSummary::EvaluationCompleted)
         );
-        assert!(
-            result
-                .report
-                .events
-                .iter()
-                .any(|event| event == "optimization_ended")
-        );
+        assert!(result.events.contains(&RunEventSummary::OptimizationEnded));
     }
 
     #[test]
@@ -938,14 +934,23 @@ mod tests {
         let (train, _, _) = deterministic_cases();
         let result = block_on(run_aime(config, train, Vec::new(), Vec::new()));
 
-        assert_optional_score(result.report.baseline_train_score, 0.0);
-        assert_optional_score(result.report.optimized_train_score, 1.0);
-        assert_eq!(result.report.baseline_validation_score, None);
-        assert_eq!(result.report.validation_score, None);
-        assert_eq!(result.report.baseline_test_score, None);
-        assert_eq!(result.report.test_score, None);
-        assert_eq!(result.report().events.len(), result.report.events.len());
-        assert_eq!(result.best(), &result.best_artifact);
+        assert_optional_score(result.summary.baseline_train_score, 0.0);
+        assert_optional_score(result.summary.optimized_train_score, 1.0);
+        assert_eq!(result.summary.baseline_validation_score, None);
+        assert_eq!(result.summary.validation_score, None);
+        assert_eq!(result.summary.baseline_test_score, None);
+        assert_eq!(result.summary.test_score, None);
+        assert!(!result.events.is_empty());
+        assert_eq!(
+            result.best(),
+            Some(
+                &result
+                    .best
+                    .as_ref()
+                    .expect("train-only run has best")
+                    .artifact
+            )
+        );
     }
 
     #[test]
@@ -961,9 +966,13 @@ mod tests {
                     async move { run_solver(prompt, case, None, solver_config).await }
                 })
                 .using(
-                    Gepa::builder()
-                        .surface(AimePromptSurface)
-                        .reflector(aime_lm_reflector(&config.reflection)),
+                    Gepa::reflect_with_lm(
+                        aime_reflection_lm(&config.reflection),
+                        config.reflection.model.clone(),
+                    )
+                    .with_reflector_config(aime_reflector_config(&config.reflection))
+                    .surface(AimePromptSurface)
+                    .build(),
                 )
                 .budget(Budget::metric_calls(8))
                 .run()
@@ -1044,19 +1053,17 @@ mod tests {
         let result = block_on(run_aime(config.clone(), train, validation, test));
 
         assert_eq!(
-            result.report.stop_reason,
+            result.stop,
             leaven::run::OptimizationStopReason::BudgetReached
         );
-        assert_eq!(result.report.optimization_cost.metric_calls, 6);
+        assert_eq!(result.summary.optimization_cost.metric_calls, 6);
         assert!(
             result
-                .report
                 .events
-                .iter()
-                .any(|event| event == "optimization_stopping")
+                .contains(&RunEventSummary::OptimizationStopping)
         );
         assert!(
-            !result.report.events.iter().any(|event| event == "error"),
+            !result.events.contains(&RunEventSummary::Error),
             "metric-call stop should be a clean public stop, not an optimizer error"
         );
         let lines = report_lines(&config, &result);
@@ -1154,7 +1161,7 @@ mod tests {
         let result = block_on(run_deterministic_aime());
 
         let cases = result
-            .report
+            .summary
             .evaluation
             .splits_reported
             .iter()
