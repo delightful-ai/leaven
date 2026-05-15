@@ -1,18 +1,15 @@
 //! GEPA reflection proposers.
 
-use leaven_core::{
-    Artifact, InfoRef, OptimizationProblem, Proposal, ProposalBatch, ProposalBatchSemantics,
-};
+use leaven_core::{Artifact, OptimizationProblem, ProposalBatch};
 use leaven_engine::{OptimizerError, ProposalContext, ProposalError, Proposer, RunContext};
-use leaven_kernel::{AssessmentId, CandidateId, Cost, MetadataBag, Metered, ProposerId, StageId};
+use leaven_kernel::{CandidateId, Cost, MetadataBag, Metered, ProposerId, StageId};
 use leaven_lm::{Lm, ModelName};
 use leaven_stage::{AgentBacked, ProposerSlot};
 use leaven_surface::{EditSurface, SurfaceError};
 
 use crate::reflection::{
-    DefaultReflectionRenderer, GepaReflectionEvidence, LmBackedReflectorConfig,
-    PlainTextEditParser, ReflectRequest, ReflectionOutputParser, ReflectionRenderInput,
-    ReflectionRenderer, SelectedFeedback,
+    DefaultReflectionRenderer, LmBackedReflectorConfig, PlainTextEditParser, ReflectRequest,
+    ReflectionOutputParser, ReflectionRenderInput, ReflectionRenderer,
 };
 
 /// Produces a surface-native edit for one selected part.
@@ -59,22 +56,26 @@ where
     }
 }
 
-/// Reflects on selected GEPA feedback and finalizes the resulting candidate
-/// through the engine.
+/// Reflects on a pre-built [`ReflectRequest`] and finalizes the resulting
+/// candidate through the engine.
+///
+/// The optimizer loop builds the request once via a
+/// [`ReflectiveDatasetBuilder`](crate::ReflectiveDatasetBuilder) and passes the
+/// same value to whichever reflector is configured. A reflector never builds
+/// its own request, so the LM and agent backends provably see identical
+/// reflective examples for identical inputs.
 #[allow(async_fn_in_trait)]
 pub trait GepaReflector<P, S>: Send + Sync
 where
     P: OptimizationProblem,
     S: EditSurface<P::Artifact>,
 {
-    /// Produce and apply the next GEPA proposal for `parent`.
+    /// Produce and apply the next GEPA proposal for the request's parent.
     async fn reflect_candidate(
         &mut self,
         ctx: &mut RunContext<'_, P>,
-        _surface: &S,
-        parent: CandidateId,
-        parent_assessment: AssessmentId,
-        part: S::PartId,
+        surface: &S,
+        request: ReflectRequest<S::PartId>,
     ) -> Result<Option<CandidateId>, OptimizerError>;
 }
 
@@ -88,10 +89,9 @@ where
         &mut self,
         ctx: &mut RunContext<'_, P>,
         surface: &S,
-        parent: CandidateId,
-        parent_assessment: AssessmentId,
-        part: S::PartId,
+        request: ReflectRequest<S::PartId>,
     ) -> Result<Option<CandidateId>, OptimizerError> {
+        let parent = request.parent;
         let artifact = ctx
             .graph()
             .artifact(parent)
@@ -100,10 +100,10 @@ where
             })?
             .clone();
         let edit = self
-            .propose_edit(&artifact, surface, &part)
+            .propose_edit(&artifact, surface, &request.part)
             .map_err(|source| OptimizerError::with_source("GEPA reflection failed", source))?;
         let change = surface
-            .change_part(&artifact, part, edit)
+            .change_part(&artifact, request.part.clone(), edit)
             .map_err(|source| {
                 OptimizerError::with_source("GEPA surface edit lowering failed", source)
             })?;
@@ -112,14 +112,11 @@ where
                 StageId::custom("gepa/fixed-surface-edit"),
                 ProposalBatch {
                     proposals: vec![
-                        Proposal::mutate(parent, change)
-                            .informed_by([
-                                InfoRef::Candidate(parent),
-                                InfoRef::Assessment(parent_assessment),
-                            ])
+                        leaven_core::Proposal::mutate(parent, change)
+                            .informed_by(request.informed_by())
                             .build(),
                     ],
-                    semantics: ProposalBatchSemantics::Alternatives,
+                    semantics: leaven_core::ProposalBatchSemantics::Alternatives,
                     metadata: MetadataBag::new(),
                 },
                 Cost::metric_calls(1),
@@ -147,18 +144,15 @@ where
         &mut self,
         ctx: &mut RunContext<'_, P>,
         _surface: &S,
-        parent: CandidateId,
-        parent_assessment: AssessmentId,
-        part: S::PartId,
+        request: ReflectRequest<S::PartId>,
     ) -> Result<Option<CandidateId>, OptimizerError> {
-        let selected_feedback = SelectedFeedback {
-            assessment_refs: vec![parent_assessment],
-            evidence_refs: Vec::new(),
-            candidate_refs: vec![parent],
-            records: Vec::new(),
+        let request = ReflectRequest {
+            parent: request.parent,
+            part: format!("{:?}", request.part),
+            part_label: request.part_label,
+            examples: request.examples,
+            source_refs: request.source_refs,
         };
-        let request = ReflectRequest::new(parent, format!("{part:?}"))
-            .with_selected_feedback(selected_feedback);
         let batch = ctx
             .propose(self, request)
             .await
@@ -221,7 +215,6 @@ impl<L> LmBackedReflector<L, DefaultReflectionRenderer, PlainTextEditParser> {
 impl<P, S, L, Renderer, Parser> GepaReflector<P, S> for LmBackedReflector<L, Renderer, Parser>
 where
     P: OptimizationProblem,
-    P::Evidence: GepaReflectionEvidence,
     S: EditSurface<P::Artifact> + Send + Sync,
     S::PartId: std::fmt::Debug + Send + Sync,
     L: Lm,
@@ -232,26 +225,8 @@ where
         &mut self,
         ctx: &mut RunContext<'_, P>,
         surface: &S,
-        parent: CandidateId,
-        parent_assessment: AssessmentId,
-        part: S::PartId,
+        request: ReflectRequest<S::PartId>,
     ) -> Result<Option<CandidateId>, OptimizerError> {
-        let evidence = ctx
-            .assessment_evidence(parent_assessment)
-            .map_err(|source| OptimizerError::with_source("GEPA evidence lookup failed", source))?;
-        let records = evidence
-            .reflection_records()
-            .into_iter()
-            .map(|record| record.with_source_refs([InfoRef::Assessment(parent_assessment)]));
-        let selected_feedback = SelectedFeedback {
-            assessment_refs: vec![parent_assessment],
-            evidence_refs: Vec::new(),
-            candidate_refs: vec![parent],
-            records: records.collect(),
-        };
-        let part_label = format!("{part:?}");
-        let request = ReflectRequest::for_part(parent, part, part_label);
-        let request = request.with_selected_feedback(selected_feedback);
         let call = LmBackedProposalCall {
             reflector: self,
             surface,

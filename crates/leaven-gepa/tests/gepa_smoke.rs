@@ -20,7 +20,8 @@ use leaven_evidence::{
 use leaven_gepa::{
     CandidateSelector, CheckpointCandidateSelector, CheckpointGate, CheckpointPopulation,
     FixedSurfaceEdit, FullValidation, Gate, GateDecision, Gepa, GepaReflector, ImprovementOrEqual,
-    NoRegression, ParetoFrequencyWeighted, SelectBestCandidate, StrictImprovement, SurfaceProposer,
+    NoRegression, ParetoFrequencyWeighted, ReflectRequest, ReflectiveDatasetBuilder,
+    ReflectiveExample, SelectBestCandidate, StrictImprovement, SurfaceProposer,
     optimizer::GepaPopulation,
     validation::{
         BatchSampler, CheckpointBatchSampler, CheckpointValidationPolicy, EpochShuffled,
@@ -231,15 +232,9 @@ fn gepa_explicit_strategies_are_owned_by_optimizer() {
 
 #[test]
 fn gepa_checkpoint_schema_changed_when_batch_sampler_state_was_added() {
-    let gepa = Gepa::new(
-        PartMapSurface,
-        ParetoFrontier::by_case().build(),
-        FixedSurfaceEdit::new("unused".to_owned()),
-    );
+    let gepa = smoke_gepa(FixedSurfaceEdit::new("unused".to_owned()));
 
-    let policy = <Gepa<PartMapSurface, ParetoFrontier, FixedSurfaceEdit<String>> as CheckpointableOptimizer<
-        SmokeProblem,
-    >>::private_state_policy(&gepa);
+    let policy = <SmokeGepa as CheckpointableOptimizer<SmokeProblem>>::private_state_policy(&gepa);
 
     assert!(matches!(
         policy,
@@ -258,29 +253,20 @@ fn gepa_checkpoint_state_restores_loop_and_selector_cursor() {
     let mut budget = BudgetLedger::default();
     let mut ctx = RunContext::new(&mut graph, &mut budget);
     ctx.insert_seed(artifact.clone(), 0).unwrap();
-    let mut gepa = Gepa::new(
-        PartMapSurface,
-        ParetoFrontier::by_case().build(),
-        FixedSurfaceEdit::new("unused".to_owned()),
-    );
+    let mut gepa = smoke_gepa(FixedSurfaceEdit::new("unused".to_owned()));
 
     assert_eq!(gepa.select_part(&artifact).unwrap(), "answer");
     let state = gepa
         .checkpoint_state(CheckpointContext::new(ctx.graph()))
         .unwrap();
-    let policy = <Gepa<PartMapSurface, ParetoFrontier, FixedSurfaceEdit<String>> as CheckpointableOptimizer<
-        SmokeProblem,
-    >>::private_state_policy(&gepa);
+    let policy =
+        <SmokeGepa as CheckpointableOptimizer<SmokeProblem>>::private_state_policy(&gepa);
     assert!(matches!(
         policy,
         PrivateStatePolicy::ExplicitSnapshot { .. }
     ));
 
-    let mut restored = Gepa::new(
-        PartMapSurface,
-        ParetoFrontier::by_case().build(),
-        FixedSurfaceEdit::new("unused".to_owned()),
-    );
+    let mut restored = smoke_gepa(FixedSurfaceEdit::new("unused".to_owned()));
     restored
         .restore_state(state, RestoreContext::new(ctx.graph()))
         .unwrap();
@@ -298,8 +284,7 @@ fn gepa_checkpoint_state_restores_population_frontier_membership() {
     let mut budget = BudgetLedger::default();
     let mut ctx = RunContext::new(&mut graph, &mut budget);
     let seed = ctx.insert_seed(artifact, 0).unwrap();
-    let mut gepa = Gepa::new(
-        PartMapSurface,
+    let mut gepa = smoke_gepa_with_population(
         ParetoFrontier::by_case()
             .partition_filter(std::collections::BTreeSet::from(["TRAIN".into()]))
             .build(),
@@ -320,8 +305,7 @@ fn gepa_checkpoint_state_restores_population_frontier_membership() {
     let state = gepa
         .checkpoint_state(CheckpointContext::new(ctx.graph()))
         .unwrap();
-    let mut restored = Gepa::new(
-        PartMapSurface,
+    let mut restored = smoke_gepa_with_population(
         ParetoFrontier::by_case()
             .partition_filter(std::collections::BTreeSet::from(["TRAIN".into()]))
             .build(),
@@ -342,22 +326,14 @@ fn gepa_checkpoint_restore_rejects_missing_best_and_observed_candidates() {
     let mut budget = BudgetLedger::default();
     let mut ctx = RunContext::new(&mut graph, &mut budget);
     let seed = ctx.insert_seed(artifact, 0).unwrap();
-    let gepa = Gepa::new(
-        PartMapSurface,
-        ParetoFrontier::by_case().build(),
-        FixedSurfaceEdit::new("unused".to_owned()),
-    );
+    let gepa = smoke_gepa(FixedSurfaceEdit::new("unused".to_owned()));
     let state = gepa
         .checkpoint_state(CheckpointContext::new(ctx.graph()))
         .unwrap();
     let mut missing_best = serde_json::to_value(&state).unwrap();
     missing_best["best"] = serde_json::to_value(leaven_kernel::CandidateId::new()).unwrap();
     let missing_best_state = serde_json::from_value(missing_best).unwrap();
-    let mut restored = Gepa::new(
-        PartMapSurface,
-        ParetoFrontier::by_case().build(),
-        FixedSurfaceEdit::new("unused".to_owned()),
-    );
+    let mut restored = smoke_gepa(FixedSurfaceEdit::new("unused".to_owned()));
 
     let error = restored
         .restore_state(missing_best_state, RestoreContext::new(ctx.graph()))
@@ -562,6 +538,7 @@ fn gepa_default_sampler_uses_train_minibatches_without_validation_or_test_cases(
             ParetoFrontier::by_case().build(),
             FixedSurfaceEdit::new("improved".to_owned()),
         )
+        .reflective_dataset(NoReflectiveExamples)
         .max_iterations(1);
 
         engine.run(&mut gepa, &case_set, &store).await.unwrap();
@@ -598,6 +575,7 @@ fn gepa_candidate_history_tracks_seed_and_accepted_children_by_assessment() {
             ParetoFrontier::by_case().build(),
             FixedSurfaceEdit::new("improved".to_owned()),
         )
+        .reflective_dataset(NoReflectiveExamples)
         .max_iterations(1);
 
         engine.run(&mut gepa, &case_set, &store).await.unwrap();
@@ -644,6 +622,7 @@ fn gepa_batch_sampler_builder_uses_custom_minibatches() {
             ParetoFrontier::by_case().build(),
             FixedSurfaceEdit::new("improved".to_owned()),
         )
+        .reflective_dataset(NoReflectiveExamples)
         .batch_sampler(EpochShuffled::new(2).with_seed(7))
         .max_iterations(1);
 
@@ -674,6 +653,7 @@ fn gepa_proposal_count_applies_multiple_reflections_in_one_iteration() {
             ParetoFrontier::by_case().build(),
             SequentialSurfaceEdits::new(["improved-a", "improved-b"]),
         )
+        .reflective_dataset(NoReflectiveExamples)
         .proposal_count(2)
         .max_iterations(1);
 
@@ -730,6 +710,7 @@ fn full_validation_policy_evaluates_accepted_candidates_and_selects_validation_b
             ParetoFrontier::by_case().build(),
             FixedSurfaceEdit::new("improved".to_owned()),
         )
+        .reflective_dataset(NoReflectiveExamples)
         .validation_policy(FullValidation)
         .max_iterations(1);
 
@@ -776,6 +757,7 @@ fn gepa_checkpoint_restore_rejects_missing_validation_best_candidate() {
             ParetoFrontier::by_case().build(),
             FixedSurfaceEdit::new("improved".to_owned()),
         )
+        .reflective_dataset(NoReflectiveExamples)
         .validation_policy(FullValidation)
         .max_iterations(1);
         engine.run(&mut gepa, &case_set, &store).await.unwrap();
@@ -792,6 +774,7 @@ fn gepa_checkpoint_restore_rejects_missing_validation_best_candidate() {
             ParetoFrontier::by_case().build(),
             FixedSurfaceEdit::new("unused".to_owned()),
         )
+        .reflective_dataset(NoReflectiveExamples)
         .validation_policy(FullValidation);
 
         let error = restored
@@ -807,11 +790,7 @@ fn gepa_checkpoint_state_includes_validation_policy_state() {
     let mut graph = RunGraph::<SmokeProblem>::new(RunId::new());
     let mut budget = BudgetLedger::default();
     let ctx = RunContext::new(&mut graph, &mut budget);
-    let gepa = Gepa::new(
-        PartMapSurface,
-        ParetoFrontier::by_case().build(),
-        FixedSurfaceEdit::new("unused".to_owned()),
-    );
+    let gepa = smoke_gepa(FixedSurfaceEdit::new("unused".to_owned()));
 
     let state = gepa
         .checkpoint_state(CheckpointContext::new(ctx.graph()))
@@ -826,11 +805,7 @@ fn gepa_default_max_iterations_is_not_one_iteration_smoke_config() {
     let mut graph = RunGraph::<SmokeProblem>::new(RunId::new());
     let mut budget = BudgetLedger::default();
     let ctx = RunContext::new(&mut graph, &mut budget);
-    let gepa = Gepa::new(
-        PartMapSurface,
-        ParetoFrontier::by_case().build(),
-        FixedSurfaceEdit::new("unused".to_owned()),
-    );
+    let gepa = smoke_gepa(FixedSurfaceEdit::new("unused".to_owned()));
 
     let state = gepa
         .checkpoint_state(CheckpointContext::new(ctx.graph()))
@@ -858,11 +833,7 @@ fn gepa_run_reports_missing_seed_before_evaluation() {
         let mut engine = Engine::<SmokeProblem>::builder()
             .evaluator(VisibilityEvaluator)
             .build();
-        let mut gepa = Gepa::new(
-            PartMapSurface,
-            ParetoFrontier::by_case().build(),
-            FixedSurfaceEdit::new("unused".to_owned()),
-        );
+        let mut gepa = smoke_gepa(FixedSurfaceEdit::new("unused".to_owned()));
 
         let error = engine.run(&mut gepa, &case_set, &store).await.unwrap_err();
 
@@ -884,11 +855,7 @@ fn gepa_run_reports_empty_casewise_scores() {
                 0,
             )
             .unwrap();
-        let mut gepa = Gepa::new(
-            PartMapSurface,
-            ParetoFrontier::by_case().build(),
-            FixedSurfaceEdit::new("unused".to_owned()),
-        );
+        let mut gepa = smoke_gepa(FixedSurfaceEdit::new("unused".to_owned()));
 
         let error = engine.run(&mut gepa, &case_set, &store).await.unwrap_err();
 
@@ -910,12 +877,7 @@ fn gepa_zero_iterations_finishes_without_best_candidate() {
                 0,
             )
             .unwrap();
-        let mut gepa = Gepa::new(
-            PartMapSurface,
-            ParetoFrontier::by_case().build(),
-            FixedSurfaceEdit::new("unused".to_owned()),
-        )
-        .max_iterations(0);
+        let mut gepa = smoke_gepa(FixedSurfaceEdit::new("unused".to_owned())).max_iterations(0);
 
         let run = engine.run(&mut gepa, &case_set, &store).await.unwrap();
 
@@ -1050,6 +1012,53 @@ impl leaven_gepa::GepaScoreEvidence for SmokeEvidence {
     fn scalar_casewise(&self) -> CasewiseEvidence<ScalarEvidence> {
         CasewiseEvidence::new(Vec::new())
     }
+}
+
+/// Test reflective-dataset builder: `SmokeEvidence` is a minimal evidence type
+/// with no per-case projection, so smoke tests project no examples.
+#[derive(Clone, Copy, Debug, Default)]
+struct NoReflectiveExamples;
+
+impl<P, S> ReflectiveDatasetBuilder<P, S> for NoReflectiveExamples
+where
+    P: OptimizationProblem,
+    S: EditSurface<P::Artifact>,
+{
+    async fn build(
+        &self,
+        _ctx: &mut RunContext<'_, P>,
+        _parent: leaven_kernel::CandidateId,
+        _parent_assessment: leaven_kernel::AssessmentId,
+        _part: &S::PartId,
+    ) -> Result<Vec<ReflectiveExample>, leaven_gepa::ReflectionError> {
+        Ok(Vec::new())
+    }
+}
+
+/// `SmokeProblem` GEPA value: default strategies plus the no-example dataset
+/// builder, because `SmokeEvidence` has no GEPA-parity projection.
+type SmokeGepa = Gepa<
+    PartMapSurface,
+    ParetoFrontier,
+    FixedSurfaceEdit<String>,
+    ParetoFrequencyWeighted,
+    leaven_gepa::RoundRobinPart,
+    StrictImprovement,
+    EpochShuffled,
+    MinibatchThenValidation,
+    NoReflectiveExamples,
+>;
+
+fn smoke_gepa(reflector: FixedSurfaceEdit<String>) -> SmokeGepa {
+    Gepa::new(PartMapSurface, ParetoFrontier::by_case().build(), reflector)
+        .reflective_dataset(NoReflectiveExamples)
+}
+
+fn smoke_gepa_with_population(
+    population: ParetoFrontier,
+    reflector: FixedSurfaceEdit<String>,
+) -> SmokeGepa {
+    Gepa::new(PartMapSurface, population, reflector).reflective_dataset(NoReflectiveExamples)
 }
 
 struct RecordingCaseSetEvaluator {
@@ -1339,13 +1348,11 @@ impl GepaReflector<SamplingProblem, PartMapSurface> for SequentialSurfaceEdits {
         &mut self,
         ctx: &mut RunContext<'_, SamplingProblem>,
         surface: &PartMapSurface,
-        parent: leaven_kernel::CandidateId,
-        parent_assessment: leaven_kernel::AssessmentId,
-        part: String,
+        request: ReflectRequest<String>,
     ) -> Result<Option<leaven_kernel::CandidateId>, leaven_engine::OptimizerError> {
         let edit = self.edits.pop_front().expect("enough scripted edits");
         FixedSurfaceEdit::new(edit)
-            .reflect_candidate(ctx, surface, parent, parent_assessment, part)
+            .reflect_candidate(ctx, surface, request)
             .await
     }
 }

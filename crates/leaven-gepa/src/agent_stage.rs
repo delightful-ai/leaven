@@ -61,20 +61,25 @@ where
         _ctx: AgentStageCallContext,
     ) -> Result<AgentStagePlan<ReflectRequest>, StageBootstrapError> {
         let mut prewarm = vec![StageQuery::Candidate { id: request.parent }];
-        prewarm.extend(
-            request
-                .selected_feedback
-                .assessment_refs
-                .iter()
-                .copied()
-                .map(|id| StageQuery::Assessment { id }),
-        );
+        for source in request.informed_by() {
+            match source {
+                leaven_core::InfoRef::Candidate(id) => {
+                    if id != request.parent {
+                        prewarm.push(StageQuery::Candidate { id });
+                    }
+                }
+                leaven_core::InfoRef::Assessment(id) => {
+                    prewarm.push(StageQuery::Assessment { id });
+                }
+                leaven_core::InfoRef::Proposal(_) | leaven_core::InfoRef::External(_) => {}
+            }
+        }
         Ok(AgentStagePlan::new(
             StageRole::reflect(),
             request,
             StageDirective::new(
                 "GEPA reflection",
-                "Use the parent candidate and selected feedback to write a proposal JSON file.",
+                "Use the parent candidate and the reflective examples in the request to write a proposal JSON file.",
             ),
             StageOutputContract::proposal_json(self.output_path.clone()),
         )

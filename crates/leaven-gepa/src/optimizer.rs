@@ -19,8 +19,8 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 use crate::{
     CandidateSelector, CheckpointCandidateSelector, CheckpointGate, CheckpointPartSelector, Gate,
-    GateDecision, GepaReflector, ParetoFrequencyWeighted, PartSelector, RoundRobinPart,
-    StrictImprovement,
+    GateDecision, GepaReflectiveDataset, GepaReflector, ParetoFrequencyWeighted, PartSelector,
+    ReflectRequest, ReflectiveDatasetBuilder, RoundRobinPart, StrictImprovement,
     validation::{
         BatchSampler, CheckpointBatchSampler, CheckpointValidationPolicy, EpochShuffled,
         MinibatchThenValidation, ValidationPolicy,
@@ -223,6 +223,7 @@ pub struct Gepa<
     GatePol = StrictImprovement,
     Batch = EpochShuffled,
     Validate = MinibatchThenValidation,
+    Dataset = GepaReflectiveDataset,
 > {
     surface: S,
     population: Pop,
@@ -232,6 +233,7 @@ pub struct Gepa<
     gate: GatePol,
     batch_sampler: Batch,
     validation_policy: Validate,
+    dataset: Dataset,
     train_partition: PartitionId,
     max_iterations: usize,
     proposal_count: usize,
@@ -301,8 +303,8 @@ impl<S, Pop, Reflect> Gepa<S, Pop, Reflect> {
     }
 }
 
-impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate>
-    Gepa<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate>
+impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
+    Gepa<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
 {
     /// Build GEPA with explicit strategy values.
     #[must_use]
@@ -317,6 +319,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate>
     where
         Batch: Default,
         Validate: Default,
+        Dataset: Default,
     {
         Self {
             surface,
@@ -327,6 +330,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate>
             gate,
             batch_sampler: Batch::default(),
             validation_policy: Validate::default(),
+            dataset: Dataset::default(),
             train_partition: PartitionId::from("TRAIN"),
             max_iterations: DEFAULT_MAX_ITERATIONS,
             proposal_count: 1,
@@ -367,7 +371,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate>
     pub fn batch_sampler<NextBatch>(
         self,
         batch_sampler: NextBatch,
-    ) -> Gepa<S, Pop, Reflect, CandidateSel, PartSel, GatePol, NextBatch, Validate> {
+    ) -> Gepa<S, Pop, Reflect, CandidateSel, PartSel, GatePol, NextBatch, Validate, Dataset> {
         Gepa {
             surface: self.surface,
             population: self.population,
@@ -377,6 +381,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate>
             gate: self.gate,
             batch_sampler,
             validation_policy: self.validation_policy,
+            dataset: self.dataset,
             train_partition: self.train_partition,
             max_iterations: self.max_iterations,
             proposal_count: self.proposal_count,
@@ -393,7 +398,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate>
     pub fn validation_policy<NextValidate>(
         self,
         validation_policy: NextValidate,
-    ) -> Gepa<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, NextValidate> {
+    ) -> Gepa<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, NextValidate, Dataset> {
         Gepa {
             surface: self.surface,
             population: self.population,
@@ -403,6 +408,38 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate>
             gate: self.gate,
             batch_sampler: self.batch_sampler,
             validation_policy,
+            dataset: self.dataset,
+            train_partition: self.train_partition,
+            max_iterations: self.max_iterations,
+            proposal_count: self.proposal_count,
+            completed_iterations: self.completed_iterations,
+            best: self.best,
+            validation_best: self.validation_best,
+            observed: self.observed,
+            candidate_history: self.candidate_history,
+        }
+    }
+
+    /// Swap the reflective-dataset builder used before each reflection step.
+    ///
+    /// The builder is the "what data does reflection see" seam. The default is
+    /// [`GepaReflectiveDataset`], a GEPA-parity per-case projection. A plain
+    /// closure can be passed here via the closure blanket impl.
+    #[must_use]
+    pub fn reflective_dataset<NextDataset>(
+        self,
+        dataset: NextDataset,
+    ) -> Gepa<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, NextDataset> {
+        Gepa {
+            surface: self.surface,
+            population: self.population,
+            reflector: self.reflector,
+            candidate_selector: self.candidate_selector,
+            part_selector: self.part_selector,
+            gate: self.gate,
+            batch_sampler: self.batch_sampler,
+            validation_policy: self.validation_policy,
+            dataset,
             train_partition: self.train_partition,
             max_iterations: self.max_iterations,
             proposal_count: self.proposal_count,
@@ -476,13 +513,14 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate>
     }
 }
 
-impl<P, S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate> Optimizer<P>
-    for Gepa<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate>
+impl<P, S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset> Optimizer<P>
+    for Gepa<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
 where
     P: OptimizationProblem,
     P::Evidence: GepaScoreEvidence,
     P::ProposalAnnotations: Default,
     S: EditSurface<P::Artifact> + Send + Sync,
+    S::PartId: std::fmt::Debug,
     Pop: CheckpointPopulation + GepaPopulation + Send + Sync,
     Reflect: GepaReflector<P, S> + Send + Sync,
     CandidateSel: CandidateSelector<P, Pop, Selection = Option<CandidateId>>
@@ -493,6 +531,7 @@ where
     GatePol: CheckpointGate + Gate + Send + Sync,
     Batch: BatchSampler + CheckpointBatchSampler + Send + Sync,
     Validate: ValidationPolicy + CheckpointValidationPolicy + Send + Sync,
+    Dataset: ReflectiveDatasetBuilder<P, S>,
 {
     async fn initialize(&mut self, _ctx: &mut RunContext<'_, P>) -> Result<(), OptimizerError> {
         Ok(())
@@ -614,13 +653,15 @@ where
     }
 }
 
-impl<P, S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate> CheckpointableOptimizer<P>
-    for Gepa<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate>
+impl<P, S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
+    CheckpointableOptimizer<P>
+    for Gepa<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
 where
     P: OptimizationProblem,
     P::Evidence: GepaScoreEvidence,
     P::ProposalAnnotations: Default,
     S: EditSurface<P::Artifact> + Send + Sync,
+    S::PartId: std::fmt::Debug,
     Pop: CheckpointPopulation + GepaPopulation + Send + Sync,
     Reflect: GepaReflector<P, S> + Send + Sync,
     CandidateSel: CandidateSelector<P, Pop, Selection = Option<CandidateId>>
@@ -631,6 +672,7 @@ where
     GatePol: CheckpointGate + Gate + Send + Sync,
     Batch: BatchSampler + CheckpointBatchSampler + Send + Sync,
     Validate: ValidationPolicy + CheckpointValidationPolicy + Send + Sync,
+    Dataset: ReflectiveDatasetBuilder<P, S>,
 {
     type State = GepaCheckpointState<
         Pop::State,
@@ -753,8 +795,8 @@ where
     Ok(())
 }
 
-impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate>
-    Gepa<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate>
+impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
+    Gepa<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
 {
     async fn propose_candidate<P>(
         &mut self,
@@ -766,8 +808,10 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate>
         P: OptimizationProblem,
         P::ProposalAnnotations: Default,
         S: EditSurface<P::Artifact>,
+        S::PartId: std::fmt::Debug,
         Reflect: GepaReflector<P, S>,
         PartSel: PartSelector<P::Artifact, S>,
+        Dataset: ReflectiveDatasetBuilder<P, S>,
     {
         let artifact = ctx
             .graph()
@@ -782,8 +826,26 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate>
             .part_selector
             .select_part(&artifact, &self.surface)
             .map_err(|source| OptimizerError::with_source("GEPA part selection failed", source))?;
+        let part_label = format!("{part:?}");
+        let examples = self
+            .dataset
+            .build(ctx, parent, parent_assessment, &part)
+            .await
+            .map_err(|source| {
+                OptimizerError::with_source("GEPA reflective-dataset build failed", source)
+            })?;
+        let request = ReflectRequest {
+            parent,
+            part,
+            part_label,
+            examples,
+            source_refs: vec![
+                leaven_core::InfoRef::Candidate(parent),
+                leaven_core::InfoRef::Assessment(parent_assessment),
+            ],
+        };
         self.reflector
-            .reflect_candidate(ctx, &self.surface, parent, parent_assessment, part)
+            .reflect_candidate(ctx, &self.surface, request)
             .await
     }
 

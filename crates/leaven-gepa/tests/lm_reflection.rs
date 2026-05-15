@@ -11,10 +11,9 @@ use leaven_evidence::{
     CaseAssessmentEvidence, CaseOutcome, CasewiseEvidence, OutputRecord, ScalarEvidence,
 };
 use leaven_gepa::{
-    DEFAULT_REFLECTION_PROMPT_TEMPLATE, DefaultReflectionRenderer, Gepa, GepaReflectionEvidence,
-    LmBackedReflector, LmBackedReflectorConfig, PlainTextEditParser, ReflectRequest,
-    ReflectionOutputParser, ReflectionRenderInput, ReflectionRenderer, ReflectiveFeedbackRecord,
-    SelectedFeedback,
+    DEFAULT_REFLECTION_PROMPT_TEMPLATE, DefaultReflectionRenderer, Gepa, LmBackedReflector,
+    LmBackedReflectorConfig, PlainTextEditParser, ReflectRequest, ReflectionOutputParser,
+    ReflectionRenderInput, ReflectionRenderer, ReflectiveExample,
 };
 use leaven_kernel::{
     AssessmentId, Budget, CandidateId, CaseId, ContentId, Cost, EvaluatorId, Fingerprint,
@@ -28,7 +27,7 @@ use leaven_surface::{EditSurface, Part, PartAddress, SurfaceError, SurfaceFinger
 #[test]
 fn lm_backed_reflector_renders_feedback_records_and_applies_candidate() {
     block_on(async {
-        let case_set = CaseSet::new(vec![()]).with_partition(
+        let case_set = CaseSet::new(vec!["the case input"]).with_partition(
             leaven_core::PartitionId::from("TRAIN"),
             vec![leaven_kernel::CaseId::new(0)],
         );
@@ -117,7 +116,7 @@ fn lm_backed_reflector_renders_feedback_records_and_applies_candidate() {
 #[test]
 fn multi_iteration_reflection_uses_selected_parent_assessment_feedback() {
     block_on(async {
-        let case_set = CaseSet::new(vec![()]).with_partition(
+        let case_set = CaseSet::new(vec!["the case input"]).with_partition(
             leaven_core::PartitionId::from("TRAIN"),
             vec![leaven_kernel::CaseId::new(0)],
         );
@@ -161,53 +160,29 @@ fn multi_iteration_reflection_uses_selected_parent_assessment_feedback() {
 }
 
 #[test]
-fn reflection_feedback_records_preserve_all_source_refs() {
+fn reflect_request_informed_by_unions_request_and_example_source_refs() {
     let candidate = CandidateId::new();
     let assessment = AssessmentId::new();
-    let external = InfoRef::External(ExternalRef {
-        kind: "fixture".to_owned(),
-        id: "feedback-row".to_owned(),
-    });
-    let record_source = InfoRef::External(ExternalRef {
+    let example_source = InfoRef::External(ExternalRef {
         kind: "fixture".to_owned(),
         id: "trace-row".to_owned(),
     });
 
-    let selected = SelectedFeedback {
-        candidate_refs: vec![candidate],
-        evidence_refs: vec![external.clone()],
-        ..SelectedFeedback::default()
-    }
-    .with_assessments([assessment])
-    .with_records([ReflectiveFeedbackRecord {
-        case: Some(CaseId::new(7)),
-        score: Some(0.25),
-        output: Some("31".to_owned()),
-        feedback: "needs modular arithmetic".to_owned(),
-        source_refs: vec![record_source.clone()],
-    }]);
+    let request = ReflectRequest::for_part(candidate, "text", "text")
+        .with_source_refs([InfoRef::Candidate(candidate), InfoRef::Assessment(assessment)])
+        .with_examples([ReflectiveExample {
+            case: Some(CaseId::new(7)),
+            input: "find the remainder".to_owned(),
+            output: Some("31".to_owned()),
+            score: Some(0.25),
+            feedback: "needs modular arithmetic".to_owned(),
+            source_refs: vec![example_source.clone()],
+        }]);
 
-    let refs = selected.source_refs();
+    let refs = request.informed_by();
     assert!(refs.contains(&InfoRef::Candidate(candidate)));
     assert!(refs.contains(&InfoRef::Assessment(assessment)));
-    assert!(refs.contains(&external));
-    assert!(refs.contains(&record_source));
-}
-
-#[test]
-fn scalar_casewise_evidence_projects_reflection_records() {
-    let evidence = CasewiseEvidence::new(vec![CaseOutcome::new(
-        CaseId::new(3),
-        ScalarEvidence::new(0.75).unwrap(),
-    )]);
-
-    let records = evidence.reflection_records();
-
-    assert_eq!(records.len(), 1);
-    assert_eq!(records[0].case, Some(CaseId::new(3)));
-    assert_eq!(records[0].score, Some(0.75));
-    assert!(records[0].output.is_none());
-    assert!(records[0].feedback.is_empty());
+    assert!(refs.contains(&example_source));
 }
 
 #[test]
@@ -233,18 +208,17 @@ fn default_renderer_and_plain_text_parser_cover_empty_feedback_and_bad_part() {
         .map(Message::content)
         .collect::<Vec<_>>()
         .join("\n");
-    assert!(rendered_text.contains("(no textual feedback records were selected)"));
+    assert!(rendered_text.contains("(no reflective examples were selected)"));
 
-    let no_output_request = ReflectRequest::for_part(parent, "text", "text")
-        .with_selected_feedback(SelectedFeedback::default().with_records([
-            ReflectiveFeedbackRecord {
-                case: Some(CaseId::new(9)),
-                score: Some(1.0),
-                output: None,
-                feedback: "already correct".to_owned(),
-                source_refs: Vec::new(),
-            },
-        ]));
+    let no_output_request =
+        ReflectRequest::for_part(parent, "text", "text").with_examples([ReflectiveExample {
+            case: Some(CaseId::new(9)),
+            input: "the input".to_owned(),
+            score: Some(1.0),
+            output: None,
+            feedback: "already correct".to_owned(),
+            source_refs: Vec::new(),
+        }]);
     let no_output_rendered = DefaultReflectionRenderer
         .render(ReflectionRenderInput::<TestProblem, WholeTextSurface> {
             request: &no_output_request,
@@ -261,14 +235,13 @@ fn default_renderer_and_plain_text_parser_cover_empty_feedback_and_bad_part() {
         .collect::<Vec<_>>()
         .join("\n");
     assert!(no_output_text.contains("already correct"));
+    assert!(no_output_text.contains("## Input\nthe input"));
     assert!(!no_output_text.contains("## Trace"));
 
-    let selected = SelectedFeedback {
-        candidate_refs: vec![parent],
-        assessment_refs: vec![AssessmentId::new()],
-        ..SelectedFeedback::default()
-    };
-    let request = request.with_selected_feedback(selected);
+    let request = request.with_source_refs([
+        InfoRef::Candidate(parent),
+        InfoRef::Assessment(AssessmentId::new()),
+    ]);
     let batch: ProposalBatch<TestProblem> = PlainTextEditParser
         .parse("-direct", &request, &artifact, &surface)
         .unwrap();
@@ -294,15 +267,15 @@ fn default_renderer_uses_gepa_prompt_template_and_config_override() {
     let parent = CandidateId::new();
     let artifact = TestArtifact("old instruction".to_owned());
     let surface = WholeTextSurface;
-    let request = ReflectRequest::for_part(parent, "text", "text").with_selected_feedback(
-        SelectedFeedback::default().with_records([ReflectiveFeedbackRecord {
+    let request =
+        ReflectRequest::for_part(parent, "text", "text").with_examples([ReflectiveExample {
             case: Some(CaseId::new(1)),
+            input: "an example input".to_owned(),
             score: Some(0.0),
             output: Some("42".to_owned()),
             feedback: "needs a modular arithmetic strategy".to_owned(),
             source_refs: Vec::new(),
-        }]),
-    );
+        }]);
 
     let default_rendered = DefaultReflectionRenderer
         .render(ReflectionRenderInput::<TestProblem, WholeTextSurface> {
@@ -461,7 +434,7 @@ fn default_lm_backed_reflector_constructor_is_typed() {
 #[test]
 fn lm_backed_reflector_surfaces_lm_failures_without_candidate() {
     block_on(async {
-        let case_set = CaseSet::new(vec![()]).with_partition(
+        let case_set = CaseSet::new(vec!["the case input"]).with_partition(
             leaven_core::PartitionId::from("TRAIN"),
             vec![leaven_kernel::CaseId::new(0)],
         );
@@ -495,7 +468,7 @@ fn lm_backed_reflector_surfaces_lm_failures_without_candidate() {
 #[test]
 fn lm_backed_reflector_surfaces_parser_failures_without_candidate() {
     block_on(async {
-        let case_set = CaseSet::new(vec![()]).with_partition(
+        let case_set = CaseSet::new(vec!["the case input"]).with_partition(
             leaven_core::PartitionId::from("TRAIN"),
             vec![leaven_kernel::CaseId::new(0)],
         );
@@ -550,7 +523,7 @@ struct TestProblem;
 
 impl OptimizationProblem for TestProblem {
     type Artifact = TestArtifact;
-    type Case = ();
+    type Case = &'static str;
     type Evidence = CasewiseEvidence<CaseAssessmentEvidence>;
     type ProposalAnnotations = ();
 }

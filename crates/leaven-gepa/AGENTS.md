@@ -10,10 +10,17 @@ It composes core, surface, engine, evidence, population, render, and LM vocabula
 - Surface ownership is explicit: GEPA selects a part from an `EditSurface` and lowers edits through that surface into artifact-native changes. Artifact-specific surfaces belong in `leaven-surface` or `leaven-artifact-*`.
 - The current live loop is: select parent from population, evaluate train
   partition casewise, project evidence to scalar scores, select a surface part,
-  call a `GepaReflector`, apply the returned proposal batch through
+  build the reflective dataset once via the configured
+  `ReflectiveDatasetBuilder`, assemble one `ReflectRequest`, call a
+  `GepaReflector` with that request, apply the returned proposal batch through
   `RunContext`, then update population. `FixedSurfaceEdit` is still a
   scaffold reflector; agent-backed reflection must route through
   `RunContext::propose` before `apply_batch`.
+- Reflection is build-once-pass-down: `reflect_candidate` receives a fully
+  built `ReflectRequest` and never projects its own data. The LM-backed and
+  agent-backed reflectors therefore see byte-identical `examples`; the
+  `agent_stage_routing` regression test pins this. Do not reintroduce a
+  reflector that derives feedback inside itself.
 
 ## Local Bait
 - Engine tests use local optimizer wrappers; do not move GEPA selector, gate, or checkpoint private state into `leaven-engine` to make those tests shorter.
@@ -32,9 +39,13 @@ It composes core, surface, engine, evidence, population, render, and LM vocabula
   `CandidateSelector` and `Gate` can be internal implementation words only if
   public-facing APIs do not teach them as the GEPA slots.
 - `ReflectiveMutation`, `ReflectiveMutationConfig`, `SystemAwareMerge`,
-  `GepaConfig`, and `MergeScheduler` were inert or misleading public names and
-  have been removed. Do not reintroduce them until they carry behavior, errors,
-  state, and tests.
+  `GepaConfig`, `MergeScheduler`, `SelectedFeedback`, `ReflectiveFeedbackRecord`,
+  and `GepaReflectionEvidence` were inert, misleading, or superseded public
+  names and have been removed. `SelectedFeedback` collapsed into
+  `ReflectRequest` (`examples` plus `source_refs`); the per-case record is
+  `ReflectiveExample`; the evidence-type-keyed `GepaReflectionEvidence`
+  projection became the swappable `ReflectiveDatasetBuilder` seam with the
+  `GepaReflectiveDataset` default. Do not reintroduce the removed names.
 
 ## Proof Anchors
 - `cargo nextest run -p leaven-gepa` proves local GEPA surface ownership, edit lowering, selectors, gates, checkpoint/restore, validation, and proposer read-scope behavior.
@@ -43,10 +54,12 @@ It composes core, surface, engine, evidence, population, render, and LM vocabula
   train-filtered population, checkpoint state, and hidden validation visibility
   tests.
 - `cargo nextest run -p leaven-gepa --test agent_stage_routing` proves the
-  agent-backed GEPA reflection slot: selected feedback refs enter
-  `ReflectRequest`, the fake runtime writes `output/proposal.json`, the parser
-  returns a proposal batch, `RunContext::propose` records the batch, and
-  `apply_batch` creates the candidate.
+  agent-backed GEPA reflection slot: provenance refs enter `ReflectRequest`,
+  the fake runtime writes `output/proposal.json`, the parser returns a proposal
+  batch, `RunContext::propose` records the batch, and `apply_batch` creates the
+  candidate. It also holds the divergence regression test
+  (`lm_and_agent_reflectors_receive_byte_identical_examples`) proving the LM
+  and agent reflectors receive byte-identical reflective examples.
 - `cargo nextest run -p leaven --test gepa_parity` proves the public P3 workflow:
   explicit edit-surface GEPA, train-filtered Pareto updates, and best-candidate
   result. `FixedSurfaceEdit` in that proof is not product proof of GEPA
@@ -55,10 +68,16 @@ It composes core, surface, engine, evidence, population, render, and LM vocabula
 
 ## Decision Cards
 - when: replacing fixed-edit reflection
-  do: route through `GepaReflector` with `ReflectRequest`/`SelectedFeedback`; agent-backed reflectors must use `RunContext::propose` before `apply_batch`
-  preserve: causal parent provenance plus `informed_by` assessment/evidence refs, hidden validation/test defaults, typed proposal errors, and engine finalization semantics
-  avoid: widening `SurfaceProposer<A, S>` in place as if artifact/surface/part is enough context, or letting GEPA read provider-specific LM fields
+  do: route through `GepaReflector::reflect_candidate(ctx, surface, request)` with a pre-built `ReflectRequest`; the optimizer builds the reflective dataset once via `ReflectiveDatasetBuilder`; agent-backed reflectors must use `RunContext::propose` before `apply_batch`
+  preserve: build-once-pass-down (a reflector never projects its own data), causal parent provenance plus `informed_by` refs from `ReflectRequest::informed_by`, hidden validation/test defaults, typed proposal/reflection errors, and engine finalization semantics
+  avoid: widening `SurfaceProposer<A, S>` in place as if artifact/surface/part is enough context, letting a reflector derive feedback internally, or letting GEPA read provider-specific LM fields
   verify: run `cargo nextest run -p leaven-gepa --test agent_stage_routing`, then `cargo nextest run -p leaven-gepa --test gepa_smoke`
+
+- when: changing what data reflection sees
+  do: implement or swap a `ReflectiveDatasetBuilder` (named type or closure); `GepaReflectiveDataset` is the GEPA-parity default and requires `P::Case: Display` plus a projectable evidence shape
+  preserve: the builder as the single selection seam, separate from backend presentation (LM renderer vs agent workspace materialization)
+  avoid: keying projection on the evidence type, or merging selection and presentation into one seam
+  verify: run `cargo nextest run -p leaven-gepa --test agent_stage_routing --test lm_reflection`
 
 - when: adding or renaming GEPA strategy slots
   do: give each slot a request type, output type, structured error, private/checkpoint state story, budget/cost behavior, event/report behavior where relevant, and explicit hidden-split rules

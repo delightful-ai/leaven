@@ -11,8 +11,9 @@ use leaven_engine::{
 };
 use leaven_evidence::{CaseOutcome, CasewiseEvidence, ScalarEvidence};
 use leaven_gepa::{
-    FixedSurfaceEdit, Gepa, GepaReflectionBootstrap, GepaReflector, ReflectRequest,
-    SelectedFeedback, gepa_stage_proposer,
+    FixedSurfaceEdit, Gepa, GepaReflectionBootstrap, GepaReflector, LmBackedReflector,
+    PlainTextEditParser, ReflectRequest, ReflectionError, ReflectionRenderInput,
+    ReflectionRenderer, ReflectiveDatasetBuilder, ReflectiveExample, gepa_stage_proposer,
 };
 use leaven_kernel::{
     AssessmentId, Budget, BudgetSnapshot, CandidateId, ContentId, Cost, EvaluatorId, Fingerprint,
@@ -33,7 +34,8 @@ fn gepa_reflection_bootstrap_prewarms_parent_and_feedback_queries() {
     block_on(async {
         let parent = CandidateId::new();
         let feedback = AssessmentId::new();
-        let request = ReflectRequest::new(parent, "answer").with_feedback([feedback]);
+        let request = ReflectRequest::new(parent, "answer")
+            .with_source_refs([leaven_core::InfoRef::Assessment(feedback)]);
         let ctx = AgentStageCallContext::new(
             StageCallId::new(),
             leaven_engine::ReadScope::default(),
@@ -100,6 +102,34 @@ impl OptimizationProblem for TestProblem {
     type ProposalAnnotations = ();
 }
 
+/// Reflective-dataset builder fixture: `TestEvidence` has no GEPA-parity
+/// projection, so the agent routing test scripts one fixed example.
+#[derive(Clone, Copy, Debug)]
+struct ScriptedDataset;
+
+fn scripted_examples() -> Vec<ReflectiveExample> {
+    vec![ReflectiveExample {
+        case: Some(leaven_kernel::CaseId::new(0)),
+        input: "scripted reflection input".to_owned(),
+        output: Some("scripted output".to_owned()),
+        score: Some(0.5),
+        feedback: "scripted feedback".to_owned(),
+        source_refs: Vec::new(),
+    }]
+}
+
+impl ReflectiveDatasetBuilder<TestProblem, WholeTextSurface> for ScriptedDataset {
+    async fn build(
+        &self,
+        _ctx: &mut RunContext<'_, TestProblem>,
+        _parent: CandidateId,
+        _parent_assessment: AssessmentId,
+        _part: &&'static str,
+    ) -> Result<Vec<ReflectiveExample>, ReflectionError> {
+        Ok(scripted_examples())
+    }
+}
+
 #[test]
 fn gepa_stage_proposer_routes_fake_runtime_through_run_context() {
     block_on(async {
@@ -122,12 +152,10 @@ fn gepa_stage_proposer_routes_fake_runtime_through_run_context() {
             let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
             ctx.propose(
                 &proposer,
-                ReflectRequest::new(parent, "root").with_selected_feedback(SelectedFeedback {
-                    assessment_refs: vec![AssessmentId::new()],
-                    evidence_refs: Vec::new(),
-                    candidate_refs: vec![parent],
-                    records: Vec::new(),
-                }),
+                ReflectRequest::new(parent, "root").with_source_refs([
+                    leaven_core::InfoRef::Candidate(parent),
+                    leaven_core::InfoRef::Assessment(AssessmentId::new()),
+                ]),
             )
             .await
             .unwrap()
@@ -202,11 +230,8 @@ fn gepa_optimizer_uses_agent_backed_reflection_path() {
             JsonProposalParser,
             Default::default(),
         );
-        let mut gepa = Gepa::new(
-            WholeTextSurface,
-            ParetoFrontier::by_case().build(),
-            proposer,
-        );
+        let mut gepa = Gepa::new(WholeTextSurface, ParetoFrontier::by_case().build(), proposer)
+            .reflective_dataset(ScriptedDataset);
 
         engine.run(&mut gepa, &case_set, &store).await.unwrap();
         let view = engine.view();
@@ -263,9 +288,10 @@ fn fixed_surface_reflector_records_and_applies_through_run_context() {
             .reflect_candidate(
                 &mut ctx,
                 &WholeTextSurface,
-                parent,
-                parent_assessment,
-                "text",
+                ReflectRequest::for_part(parent, "text", "text").with_source_refs([
+                    leaven_core::InfoRef::Candidate(parent),
+                    leaven_core::InfoRef::Assessment(parent_assessment),
+                ]),
             )
             .await
             .unwrap()
@@ -303,9 +329,7 @@ fn fixed_surface_reflector_reports_graph_surface_and_budget_failures() {
             .reflect_candidate(
                 &mut ctx,
                 &WholeTextSurface,
-                missing_parent,
-                AssessmentId::new(),
-                "text",
+                ReflectRequest::for_part(missing_parent, "text", "text"),
             )
             .await
             .unwrap_err();
@@ -318,9 +342,7 @@ fn fixed_surface_reflector_reports_graph_surface_and_budget_failures() {
             .reflect_candidate(
                 &mut ctx,
                 &WholeTextSurface,
-                parent,
-                AssessmentId::new(),
-                "missing",
+                ReflectRequest::for_part(parent, "missing", "missing"),
             )
             .await
             .unwrap_err();
@@ -341,14 +363,194 @@ fn fixed_surface_reflector_reports_graph_surface_and_budget_failures() {
             .reflect_candidate(
                 &mut capped_ctx,
                 &WholeTextSurface,
-                capped_parent,
-                AssessmentId::new(),
-                "text",
+                ReflectRequest::for_part(capped_parent, "text", "text"),
             )
             .await
             .unwrap_err();
         assert!(error.to_string().contains("GEPA proposal recording failed"));
     });
+}
+
+/// Regression test for the GEPA reflection divergence bug.
+///
+/// Before the build-once-pass-down cutover, the LM-backed reflector projected
+/// real per-case feedback while the agent-backed reflector hard-coded an empty
+/// record list. This test proves that for one `(parent, part, examples)`
+/// input, the LM reflector and the agent reflector receive byte-identical
+/// `ReflectRequest.examples`.
+#[test]
+fn lm_and_agent_reflectors_receive_byte_identical_examples() {
+    use std::sync::{Arc, Mutex};
+
+    block_on(async {
+        let examples = vec![
+            ReflectiveExample {
+                case: Some(leaven_kernel::CaseId::new(0)),
+                input: "find the remainder when 2^10 is divided by 7".to_owned(),
+                output: Some("3".to_owned()),
+                score: Some(0.0),
+                feedback: "incorrect; expected 2".to_owned(),
+                source_refs: Vec::new(),
+            },
+            ReflectiveExample {
+                case: Some(leaven_kernel::CaseId::new(1)),
+                input: "what is 19 + 23".to_owned(),
+                output: Some("42".to_owned()),
+                score: Some(1.0),
+                feedback: "correct".to_owned(),
+                source_refs: Vec::new(),
+            },
+        ];
+        let canonical = serde_json::to_vec(&examples).unwrap();
+
+        // LM-backed reflection path: capture the examples the renderer sees.
+        let lm_seen: Arc<Mutex<Option<Vec<u8>>>> = Arc::new(Mutex::new(None));
+        let (mut graph, mut budget) = graph_and_budget();
+        let lm_parent = {
+            let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+            ctx.insert_seed(TestArtifact("seed".to_owned()), 0).unwrap()
+        };
+        let mut lm_reflector = LmBackedReflector::new(
+            FencedLm,
+            "mock-reflector",
+            RecordingExamplesRenderer {
+                seen: lm_seen.clone(),
+            },
+            PlainTextEditParser,
+        );
+        let lm_request = ReflectRequest::for_part(lm_parent, "text", "text")
+            .with_examples(examples.clone())
+            .with_source_refs([leaven_core::InfoRef::Candidate(lm_parent)]);
+        {
+            let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+            lm_reflector
+                .reflect_candidate(&mut ctx, &WholeTextSurface, lm_request)
+                .await
+                .unwrap();
+        }
+
+        // Agent-backed reflection path: capture the examples the parser sees.
+        let agent_seen: Arc<Mutex<Option<Vec<u8>>>> = Arc::new(Mutex::new(None));
+        let (mut agent_graph, mut agent_budget) = graph_and_budget();
+        let agent_parent = {
+            let mut ctx = RunContext::<TestProblem>::new(&mut agent_graph, &mut agent_budget);
+            ctx.insert_seed(TestArtifact("seed".to_owned()), 0).unwrap()
+        };
+        let mut agent_reflector = gepa_stage_proposer(
+            LocalWorkspaceFactory::temp(),
+            FakeAgentRuntime::new(vec![FakeAgentAction::WriteFile {
+                path: WorkspacePath::new("output/proposal.json").unwrap(),
+                bytes: br#"{"suffix":"-agent"}"#.to_vec(),
+            }]),
+            RecordingExamplesParser {
+                seen: agent_seen.clone(),
+            },
+            Default::default(),
+        );
+        let agent_request = ReflectRequest::for_part(agent_parent, "text", "text")
+            .with_examples(examples.clone())
+            .with_source_refs([leaven_core::InfoRef::Candidate(agent_parent)]);
+        {
+            let mut ctx = RunContext::<TestProblem>::new(&mut agent_graph, &mut agent_budget);
+            agent_reflector
+                .reflect_candidate(&mut ctx, &WholeTextSurface, agent_request)
+                .await
+                .unwrap();
+        }
+
+        let lm_bytes = lm_seen.lock().unwrap().clone().expect("LM renderer ran");
+        let agent_bytes = agent_seen.lock().unwrap().clone().expect("agent parser ran");
+        assert_eq!(
+            lm_bytes, agent_bytes,
+            "LM and agent reflectors must receive byte-identical reflective examples",
+        );
+        assert_eq!(
+            lm_bytes, canonical,
+            "the examples both backends receive must be exactly the optimizer-built examples",
+        );
+    });
+}
+
+#[derive(Clone)]
+struct RecordingExamplesRenderer {
+    seen: std::sync::Arc<std::sync::Mutex<Option<Vec<u8>>>>,
+}
+
+impl ReflectionRenderer<TestProblem, WholeTextSurface> for RecordingExamplesRenderer {
+    fn render(
+        &self,
+        input: ReflectionRenderInput<'_, TestProblem, WholeTextSurface>,
+    ) -> Result<leaven_lm::LmRequest, leaven_engine::ProposalError> {
+        *self.seen.lock().unwrap() =
+            Some(serde_json::to_vec(&input.request.examples).expect("examples serialize"));
+        Ok(leaven_lm::LmRequest::new(
+            input.model,
+            leaven_lm::Messages::from_user("reflect"),
+        ))
+    }
+}
+
+struct RecordingExamplesParser {
+    seen: std::sync::Arc<std::sync::Mutex<Option<Vec<u8>>>>,
+}
+
+impl StageOutputParser<TestProblem, ProposerSlot<ReflectRequest>> for RecordingExamplesParser {
+    async fn parse(
+        &self,
+        workspace: &mut WorkspaceView<'_>,
+        _session: &AgentSession,
+        plan: &leaven_stage::parser::ErasedStagePlan,
+        _ctx: AgentStageCallContext,
+    ) -> Result<Metered<ProposalBatch<TestProblem>>, StageOutputParseError> {
+        let request: ReflectRequest = serde_json::from_value(plan.request_json.clone())?;
+        *self.seen.lock().unwrap() =
+            Some(serde_json::to_vec(&request.examples).expect("examples serialize"));
+        let bytes = workspace.read_file(&WorkspacePath::new("output/proposal.json").unwrap())?;
+        let parsed: ParsedProposal = serde_json::from_slice(&bytes)?;
+        Ok(Metered::new(
+            ProposalBatch {
+                proposals: vec![
+                    Proposal::mutate(request.parent, parsed.suffix)
+                        .informed_by(request.informed_by())
+                        .build(),
+                ],
+                semantics: ProposalBatchSemantics::Alternatives,
+                metadata: MetadataBag::new(),
+            },
+            Cost::zero(),
+        ))
+    }
+}
+
+#[derive(Clone)]
+struct FencedLm;
+
+impl leaven_lm::Lm for FencedLm {
+    fn id(&self) -> leaven_lm::LmId {
+        leaven_lm::LmId::from("fenced")
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        Fingerprint::from_bytes([12; 32])
+    }
+
+    async fn complete(
+        &self,
+        _request: leaven_lm::LmRequest,
+    ) -> Result<Metered<leaven_lm::LmResponse>, leaven_lm::LmError> {
+        let usage = leaven_lm::TokenUsage {
+            input_tokens: 1,
+            cached_input_tokens: 0,
+            output_tokens: 1,
+            reasoning_tokens: 0,
+        };
+        let response = leaven_lm::LmResponse::new(
+            leaven_lm::Message::assistant("```\n-reflected\n```"),
+            usage.clone(),
+        )
+        .map_err(|error| leaven_lm::LmError::invalid_response("fenced", error.to_string()))?;
+        Ok(Metered::new(response, usage.to_cost()))
+    }
 }
 
 struct JsonProposalParser;
@@ -364,7 +566,7 @@ impl StageOutputParser<TestProblem, ProposerSlot<ReflectRequest>> for JsonPropos
         let bytes = workspace.read_file(&WorkspacePath::new("output/proposal.json").unwrap())?;
         let parsed: ParsedProposal = serde_json::from_slice(&bytes)?;
         let request: ReflectRequest = serde_json::from_value(plan.request_json.clone())?;
-        let informed_by = request.selected_feedback.source_refs();
+        let informed_by = request.informed_by();
         Ok(Metered::new(
             ProposalBatch {
                 proposals: vec![
