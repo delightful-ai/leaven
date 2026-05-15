@@ -14,8 +14,8 @@ pub struct ReportScore {
     pub score: f64,
     /// Human-readable feedback.
     pub feedback: String,
-    /// Trace lines used to produce the score.
-    pub trace: Vec<String>,
+    /// Generated output that was scored.
+    pub output: String,
 }
 
 /// Candidate summary for one split.

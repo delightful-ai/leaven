@@ -14,7 +14,9 @@ use leaven_engine::{
     EvaluationContext, EvaluationError, Evaluator, PrivateStatePolicy, ProposalContext,
     ProposalError, Proposer, RestoreContext, RunContext, RunGraph, TrustPolicy,
 };
-use leaven_evidence::{CaseOutcome, CasewiseEvidence, ScalarEvidence, ScoredFeedbackEvidence};
+use leaven_evidence::{
+    CaseAssessmentEvidence, CaseOutcome, CasewiseEvidence, OutputRecord, ScalarEvidence,
+};
 use leaven_gepa::{
     CandidateSelector, CheckpointCandidateSelector, CheckpointGate, CheckpointPopulation,
     FixedSurfaceEdit, FullValidation, Gate, GateDecision, Gepa, GepaReflector, ImprovementOrEqual,
@@ -446,18 +448,18 @@ fn gepa_score_evidence_projects_feedback_scores_to_scalar_casewise() {
     let scored = CasewiseEvidence::new(vec![
         CaseOutcome::new(
             leaven_kernel::CaseId::new(0),
-            ScoredFeedbackEvidence::new(
+            CaseAssessmentEvidence::new(
                 ScalarEvidence::new(1.0).unwrap(),
+                OutputRecord::inline("correct output"),
                 "correct".to_owned(),
-                vec!["trace".to_owned()],
             ),
         ),
         CaseOutcome::new(
             leaven_kernel::CaseId::new(1),
-            ScoredFeedbackEvidence::new(
+            CaseAssessmentEvidence::new(
                 ScalarEvidence::new(0.5).unwrap(),
+                OutputRecord::inline("partial output"),
                 "partial".to_owned(),
-                vec!["trace".to_owned()],
             ),
         ),
     ]);

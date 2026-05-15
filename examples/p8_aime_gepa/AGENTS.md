@@ -18,12 +18,11 @@ P8 owns the example artifact, edit surface, deterministic AIME-shaped cases, cac
   reasoning unless `LEAVEN_AIME_REFLECTION_MODEL` overrides the model. Both
   routes use `DefaultReflectionRenderer` / `PlainTextEditParser` and apply the
   resulting proposal through GEPA and `RunContext`.
-- `run_solver` preserves each `AimeCase.source_id` in `RunOutput` trace. P8
-  consumes structured `ReportScore.case_id` from the public split report and
-  carries the upstream source id alongside it in trace; new report schema still
-  belongs in `leaven-eval` / `leaven-run`, not this example.
+- `run_solver` returns only the generated answer as `RunOutput` plus metered
+  cost. `AimeCase.source_id`, problem text, and prompt text stay in the case or
+  artifact instead of being smuggled through trace/report strings.
 - `score_answer` proves the async/fallible score surface on a fixed-reference
-  local checker by producing scalar scores, feedback text, and trace lines. It
+  local checker by producing scalar scores and feedback text. It
   does not prove live model-judge quality or domain-specific score semantics.
 - `run_openai_solver` is a native async runner over the P8-local OpenAI solver
   role. It returns `RunOutput` with the LM cost attached so solver spend is

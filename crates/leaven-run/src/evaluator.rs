@@ -8,7 +8,9 @@ use leaven_core::{
     ResolvedRequestKind,
 };
 use leaven_engine::{CachePolicy, EvaluationContext, EvaluationError, Evaluator};
-use leaven_evidence::{CaseOutcome, CasewiseEvidence, ScalarEvidence, ScoredFeedbackEvidence};
+use leaven_evidence::{
+    CaseAssessmentEvidence, CaseOutcome, CasewiseEvidence, OutputRecord, ScalarEvidence,
+};
 use leaven_kernel::{
     BudgetSnapshot, Cost, EvaluationSetId, EvaluatorId, Fingerprint, FingerprintBuilder, Metered,
 };
@@ -179,7 +181,7 @@ struct EvaluationOutcome {
     candidate_index: usize,
     case_index: usize,
     case_id: leaven_kernel::CaseId,
-    evidence: ScoredFeedbackEvidence,
+    evidence: CaseAssessmentEvidence,
     cost: Cost,
 }
 
@@ -239,19 +241,12 @@ where
     let scalar = ScalarEvidence::new(score.value).map_err(|source| {
         EvaluationError::with_cost_source("score was not finite", cost.clone(), source)
     })?;
-    let mut trace = output.trace;
-    trace.extend(
-        score
-            .structured
-            .into_iter()
-            .map(|(key, value)| format!("{key}: {value}")),
-    );
+    let generated_output = OutputRecord::inline(output.output);
     Ok(EvaluationOutcome {
         candidate_index: job.candidate_index,
         case_index: job.case_index,
         case_id: job.case_id,
-        evidence: ScoredFeedbackEvidence::new(scalar, score.feedback, trace)
-            .with_attachments(score.attachments),
+        evidence: CaseAssessmentEvidence::new(scalar, generated_output, score.feedback),
         cost,
     })
 }

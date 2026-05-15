@@ -11,7 +11,7 @@ use leaven_engine::{
     OptimizerStateWrite, PopulationEvent, PrivateStatePolicy, RestoreContext, RunContext,
     RunGraphView, StateFormat,
 };
-use leaven_evidence::{CaseOutcome, CasewiseEvidence, ScalarEvidence, ScoredFeedbackEvidence};
+use leaven_evidence::{CaseAssessmentEvidence, CaseOutcome, CasewiseEvidence, ScalarEvidence};
 use leaven_kernel::{AssessmentId, CandidateId, EvaluatorId, Fingerprint, PopulationId};
 use leaven_population::{KeepBest, ParetoFrontier};
 use leaven_surface::{EditSurface, SurfaceError};
@@ -58,7 +58,7 @@ impl GepaScoreEvidence for CasewiseEvidence<ScalarEvidence> {
     }
 }
 
-impl GepaScoreEvidence for CasewiseEvidence<ScoredFeedbackEvidence> {
+impl GepaScoreEvidence for CasewiseEvidence<CaseAssessmentEvidence> {
     fn scalar_casewise(&self) -> CasewiseEvidence<ScalarEvidence> {
         CasewiseEvidence::new(
             self.outcomes()

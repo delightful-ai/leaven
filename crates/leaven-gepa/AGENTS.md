@@ -69,5 +69,5 @@ It composes core, surface, engine, evidence, population, render, and LM vocabula
 - when: changing population, acceptance, or selection logic
   do: keep scalar strict-improvement as one default adapter, not the trait signature
   preserve: casewise evidence shape until a strategy explicitly interprets it, and keep population as optimizer-private live state
-  avoid: treating `ScoredFeedbackEvidence.feedback()` or trace lines as discardable before reflection and part selection have had a chance to consume them
+  avoid: treating `CaseAssessmentEvidence.output()` or `CaseAssessmentEvidence.feedback()` as discardable before reflection and part selection have had a chance to consume them
   verify: run `cargo nextest run -p leaven-gepa --test gepa_smoke`

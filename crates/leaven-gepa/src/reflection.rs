@@ -4,7 +4,7 @@ use std::fmt::Write as _;
 
 use leaven_core::{InfoRef, OptimizationProblem, Proposal, ProposalBatch, ProposalBatchSemantics};
 use leaven_engine::ProposalError;
-use leaven_evidence::{CasewiseEvidence, ScalarEvidence, ScoredFeedbackEvidence};
+use leaven_evidence::{CaseAssessmentEvidence, CasewiseEvidence, OutputRecord, ScalarEvidence};
 use leaven_kernel::{AssessmentId, CandidateId, CaseId, MetadataBag};
 use leaven_lm::{LmRequest, Messages};
 use leaven_surface::EditSurface;
@@ -37,8 +37,8 @@ Provide the new instructions within ``` blocks.";
 pub struct ReflectiveFeedbackRecord {
     pub case: Option<CaseId>,
     pub score: Option<f64>,
+    pub output: Option<String>,
     pub feedback: String,
-    pub trace: Vec<String>,
     pub source_refs: Vec<InfoRef>,
 }
 
@@ -160,26 +160,33 @@ impl GepaReflectionEvidence for CasewiseEvidence<ScalarEvidence> {
             .map(|outcome| ReflectiveFeedbackRecord {
                 case: Some(outcome.case()),
                 score: Some(outcome.evidence().score()),
+                output: None,
                 feedback: String::new(),
-                trace: Vec::new(),
                 source_refs: Vec::new(),
             })
             .collect()
     }
 }
 
-impl GepaReflectionEvidence for CasewiseEvidence<ScoredFeedbackEvidence> {
+impl GepaReflectionEvidence for CasewiseEvidence<CaseAssessmentEvidence> {
     fn reflection_records(&self) -> Vec<ReflectiveFeedbackRecord> {
         self.outcomes()
             .iter()
             .map(|outcome| ReflectiveFeedbackRecord {
                 case: Some(outcome.case()),
                 score: Some(outcome.evidence().score().score()),
+                output: Some(output_record_text(outcome.evidence().output())),
                 feedback: outcome.evidence().feedback().to_owned(),
-                trace: outcome.evidence().trace().to_vec(),
                 source_refs: Vec::new(),
             })
             .collect()
+    }
+}
+
+fn output_record_text(output: &OutputRecord) -> String {
+    match output {
+        OutputRecord::Inline { text, .. } => text.clone(),
+        OutputRecord::BlobRef(reference) => format!("blob:{}:{}", reference.store, reference.key),
     }
 }
 
@@ -339,14 +346,11 @@ fn render_feedback_records(records: &[ReflectiveFeedbackRecord]) -> String {
         if let Some(score) = record.score {
             let _ = writeln!(feedback, "## Score\n{score}");
         }
+        if let Some(output) = &record.output {
+            let _ = writeln!(feedback, "## Output\n{}", output.trim());
+        }
         if !record.feedback.is_empty() {
             let _ = writeln!(feedback, "## Feedback\n{}", record.feedback.trim());
-        }
-        if !record.trace.is_empty() {
-            feedback.push_str("## Trace\n");
-            for (trace_index, line) in record.trace.iter().enumerate() {
-                let _ = writeln!(feedback, "### Item {}\n{}", trace_index + 1, line.trim());
-            }
         }
         feedback.push('\n');
     }

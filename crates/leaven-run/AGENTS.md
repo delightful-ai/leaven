@@ -53,17 +53,18 @@ around engine graph mutation or a home for optimizer strategy state.
   evidence model. Reusable evidence types belong in `leaven-evidence`.
 - `Score` is the ordinary user word; assessment/evidence/preference are the
   durable internal truth. Do not make `.score(...)` a scalar-only dead end:
-  richer feedback, absent scores, failed evidence, trace/history, and metric
-  axes must lower into typed evidence/report records instead of becoming zero
-  or string metadata.
+  generated output, feedback, absent scores, failed evidence, and metric axes
+  must lower into typed evidence/report records instead of becoming zero or
+  string metadata.
 - Runner helpers are async and bounded-concurrent. `RunOutput` carries runner
-  cost so solver/program LM calls, subprocesses, and agent runtimes can be
-  charged through evaluation reports instead of disappearing into trace text.
+  output and cost so solver/program LM calls, subprocesses, and agent runtimes
+  can be charged through evaluation reports while generated outputs remain
+  first-class evidence.
   Scoring is also async and fallible: `.score(...)` receives owned
   `ScoreContext` values, returns `Result<Score, ScoreError>`, and may attach
-  scorer cost and feedback attachments. Treat scalar comparison as the current
-  selection contract, not as permission to drop judge transcripts, runtime
-  failures, or metered provider work.
+  scorer cost. Treat scalar comparison as the current selection contract, not as
+  permission to drop generated outputs, runtime failures, or metered provider
+  work.
 - The current `ScoreContext` exposes a budget snapshot because the engine
   already has that fact at evaluation time. It still does not expose the full
   spec target: optional cases, score-on-error, generic output views, accessor
@@ -95,7 +96,7 @@ around engine graph mutation or a home for optimizer strategy state.
 - when: adding scorer async/failure support, rich scoring, stable cases, or single-task mode
   do: hard-cut the builder/evaluator/report path together instead of adding parallel simple-vs-rich product APIs
   preserve: one ordinary lowering route into `ScoringEvaluator` or its replacement, with typed errors and metered cost rather than score-zero fallbacks
-  avoid: treating `RunOutput { output, trace, cost }` plus scalar-only `Score` as the final evidence model
+  avoid: treating scalar-only `Score` as the final evidence model or smuggling generated output through trace/report strings
   verify: run `cargo nextest run -p leaven-run --test scoring_evaluator --test optimize_builder`, then the affected product example
 
 - when: moving evaluation planning out of this crate

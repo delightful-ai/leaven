@@ -18,7 +18,7 @@ use leaven_eval::{
     CandidateEvaluationSummary, Dataset, DatasetSplits, EvaluationReport, ReportScore, SplitPolicy,
     SplitReport, SplitRole,
 };
-use leaven_evidence::{CasewiseEvidence, ScoredFeedbackEvidence};
+use leaven_evidence::{CaseAssessmentEvidence, CasewiseEvidence, OutputRecord};
 use leaven_kernel::{Budget, BudgetSnapshot, CandidateId, CaseId, Cost, EvaluatorId};
 use leaven_store::EvidenceStore;
 
@@ -83,7 +83,7 @@ where
 {
     type Artifact = A;
     type Case = C;
-    type Evidence = CasewiseEvidence<ScoredFeedbackEvidence>;
+    type Evidence = CasewiseEvidence<CaseAssessmentEvidence>;
     type ProposalAnnotations = ();
 }
 
@@ -429,7 +429,7 @@ fn dataset_splits(train: usize, validation: usize, test: usize) -> DatasetSplits
 async fn run_final_evaluations<A, C>(
     engine: &mut leaven_engine::Engine<RunProblem<A, C>>,
     case_set: &leaven_engine::CaseSet<C>,
-    store: &dyn EvidenceStore<CasewiseEvidence<ScoredFeedbackEvidence>>,
+    store: &dyn EvidenceStore<CasewiseEvidence<CaseAssessmentEvidence>>,
     inputs: FinalEvaluationInputs,
 ) -> Result<FinalEvaluations, leaven_engine::OptimizerError>
 where
@@ -502,7 +502,7 @@ where
 async fn final_eval_partition<A, C>(
     engine: &mut leaven_engine::Engine<RunProblem<A, C>>,
     case_set: &leaven_engine::CaseSet<C>,
-    store: &dyn EvidenceStore<CasewiseEvidence<ScoredFeedbackEvidence>>,
+    store: &dyn EvidenceStore<CasewiseEvidence<CaseAssessmentEvidence>>,
     inputs: &FinalEvaluationInputs,
     evaluation: FinalPartitionEvaluation,
 ) -> Result<FinalPartitionResults, leaven_engine::OptimizerError>
@@ -537,7 +537,7 @@ where
 
 fn build_report<A, C>(
     engine: &leaven_engine::Engine<RunProblem<A, C>>,
-    store: &dyn EvidenceStore<CasewiseEvidence<ScoredFeedbackEvidence>>,
+    store: &dyn EvidenceStore<CasewiseEvidence<CaseAssessmentEvidence>>,
     inputs: ReportInputs<'_, C>,
 ) -> Result<(A, OptimizationReport), leaven_engine::OptimizerError>
 where
@@ -602,7 +602,7 @@ where
 async fn final_eval<A, C>(
     engine: &mut leaven_engine::Engine<RunProblem<A, C>>,
     case_set: &leaven_engine::CaseSet<C>,
-    store: &dyn EvidenceStore<CasewiseEvidence<ScoredFeedbackEvidence>>,
+    store: &dyn EvidenceStore<CasewiseEvidence<CaseAssessmentEvidence>>,
     candidate: leaven_kernel::CandidateId,
     partition: PartitionId,
     purpose: EvaluationPurpose,
@@ -636,7 +636,7 @@ where
 
 fn split_reports_for<A, C>(
     view: &leaven_engine::RunGraphView<'_, RunProblem<A, C>>,
-    store: &dyn EvidenceStore<CasewiseEvidence<ScoredFeedbackEvidence>>,
+    store: &dyn EvidenceStore<CasewiseEvidence<CaseAssessmentEvidence>>,
     splits: &DatasetSplits,
 ) -> Result<Vec<SplitReport>, leaven_engine::OptimizerError>
 where
@@ -694,7 +694,7 @@ where
 
 fn assessment_summary<A, C>(
     view: &leaven_engine::RunGraphView<'_, RunProblem<A, C>>,
-    store: &dyn EvidenceStore<CasewiseEvidence<ScoredFeedbackEvidence>>,
+    store: &dyn EvidenceStore<CasewiseEvidence<CaseAssessmentEvidence>>,
     assessment: leaven_kernel::AssessmentId,
 ) -> Result<CandidateEvaluationSummary, leaven_engine::OptimizerError>
 where
@@ -722,7 +722,7 @@ where
     })
 }
 
-fn report_scores(evidence: &CasewiseEvidence<ScoredFeedbackEvidence>) -> Vec<ReportScore> {
+fn report_scores(evidence: &CasewiseEvidence<CaseAssessmentEvidence>) -> Vec<ReportScore> {
     evidence
         .outcomes()
         .iter()
@@ -730,9 +730,16 @@ fn report_scores(evidence: &CasewiseEvidence<ScoredFeedbackEvidence>) -> Vec<Rep
             case_id: outcome.case(),
             score: outcome.evidence().score().score(),
             feedback: outcome.evidence().feedback().to_owned(),
-            trace: outcome.evidence().trace().to_vec(),
+            output: output_record_text(outcome.evidence().output()),
         })
         .collect()
+}
+
+fn output_record_text(output: &OutputRecord) -> String {
+    match output {
+        OutputRecord::Inline { text, .. } => text.clone(),
+        OutputRecord::BlobRef(reference) => format!("blob:{}:{}", reference.store, reference.key),
+    }
 }
 
 fn stop_reason_from_events<A, C>(

@@ -1,6 +1,5 @@
 //! Public runner and scoring evidence shapes.
 
-use leaven_evidence::FeedbackAttachment;
 use leaven_kernel::{BudgetSnapshot, Cost};
 
 /// Output produced by running one artifact on one case.
@@ -8,19 +7,16 @@ use leaven_kernel::{BudgetSnapshot, Cost};
 pub struct RunOutput {
     /// User-facing answer/output.
     pub output: String,
-    /// Trace lines captured while running the artifact.
-    pub trace: Vec<String>,
     /// Metered cost incurred while producing the output.
     pub cost: Cost,
 }
 
 impl RunOutput {
-    /// Builds an output with trace lines.
+    /// Builds a generated output.
     #[must_use]
-    pub fn new(output: impl Into<String>, trace: Vec<String>) -> Self {
+    pub fn new(output: impl Into<String>) -> Self {
         Self {
             output: output.into(),
-            trace,
             cost: Cost::zero(),
         }
     }
@@ -40,10 +36,6 @@ pub struct Score {
     pub value: f64,
     /// Natural-language feedback for reports and reflection.
     pub feedback: String,
-    /// Structured feedback projected into stable report text.
-    pub structured: Vec<(String, String)>,
-    /// Named payloads that preserve richer judge/program evidence.
-    pub attachments: Vec<FeedbackAttachment>,
     /// Metered cost incurred while producing the score.
     pub cost: Cost,
 }
@@ -55,24 +47,8 @@ impl Score {
         Self {
             value,
             feedback: feedback.into(),
-            structured: Vec::new(),
-            attachments: Vec::new(),
             cost: Cost::zero(),
         }
-    }
-
-    /// Adds one structured feedback field.
-    #[must_use]
-    pub fn with_structured(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
-        self.structured.push((key.into(), value.into()));
-        self
-    }
-
-    /// Adds one attachment.
-    #[must_use]
-    pub fn with_attachment(mut self, attachment: FeedbackAttachment) -> Self {
-        self.attachments.push(attachment);
-        self
     }
 
     /// Attaches metered scorer cost.

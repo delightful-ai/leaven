@@ -15,7 +15,7 @@ use leaven_engine::{
     Callback, Optimizer, OptimizerError, RunCheckpointRequest, RunContext, RunEvent, RunGraphView,
     RunPersistence, RunPersistenceError, StepStatus,
 };
-use leaven_evidence::{CasewiseEvidence, ScoredFeedbackEvidence};
+use leaven_evidence::{CaseAssessmentEvidence, CasewiseEvidence};
 use leaven_kernel::{Budget, CandidateId, CaseId, ContentId, EvaluatorId};
 use leaven_run::{
     OptimizationStopReason, OptimizeError, OptimizeStore, RunOutput, RunProblem, RunStorage, Score,
@@ -274,7 +274,7 @@ fn run_builder_runs_final_reports_after_metric_budget_stop() {
 }
 
 #[test]
-fn run_builder_reports_case_ids_feedback_and_trace_for_case_level_rows() {
+fn run_builder_reports_case_ids_output_and_feedback_for_case_level_rows() {
     let result = block_on(
         optimize(TextArtifact(40))
             .train(vec![TextCase(2), TextCase(3)])
@@ -303,11 +303,11 @@ fn run_builder_reports_case_ids_feedback_and_trace_for_case_level_rows() {
     assert_eq!(candidate.average_score, Some(42.5));
     assert_eq!(candidate.cases.len(), 2);
     assert_eq!(candidate.cases[0].case_id, CaseId::from_index(0));
+    assert_eq!(candidate.cases[0].output, "42");
     assert_eq!(candidate.cases[0].feedback, "case 2");
-    assert_eq!(candidate.cases[0].trace, vec!["runner trace".to_owned()]);
     assert_eq!(candidate.cases[1].case_id, CaseId::from_index(1));
+    assert_eq!(candidate.cases[1].output, "43");
     assert_eq!(candidate.cases[1].feedback, "case 3");
-    assert_eq!(candidate.cases[1].trace, vec!["runner trace".to_owned()]);
 }
 
 #[test]
@@ -519,7 +519,7 @@ struct CountingEvidenceStore {
 }
 
 struct CountingEvidenceInner {
-    store: InlineEvidenceStore<CasewiseEvidence<ScoredFeedbackEvidence>>,
+    store: InlineEvidenceStore<CasewiseEvidence<CaseAssessmentEvidence>>,
     puts: AtomicUsize,
     gets: AtomicUsize,
 }
@@ -544,10 +544,10 @@ impl CountingEvidenceStore {
     }
 }
 
-impl EvidenceStore<CasewiseEvidence<ScoredFeedbackEvidence>> for CountingEvidenceStore {
+impl EvidenceStore<CasewiseEvidence<CaseAssessmentEvidence>> for CountingEvidenceStore {
     fn put(
         &self,
-        evidence: CasewiseEvidence<ScoredFeedbackEvidence>,
+        evidence: CasewiseEvidence<CaseAssessmentEvidence>,
     ) -> Result<leaven_kernel::EvidenceRef, StoreError> {
         self.inner.puts.fetch_add(1, Ordering::SeqCst);
         self.inner.store.put(evidence)
@@ -556,7 +556,7 @@ impl EvidenceStore<CasewiseEvidence<ScoredFeedbackEvidence>> for CountingEvidenc
     fn get(
         &self,
         reference: &leaven_kernel::EvidenceRef,
-    ) -> Result<CasewiseEvidence<ScoredFeedbackEvidence>, StoreError> {
+    ) -> Result<CasewiseEvidence<CaseAssessmentEvidence>, StoreError> {
         self.inner.gets.fetch_add(1, Ordering::SeqCst);
         self.inner.store.get(reference)
     }
@@ -603,10 +603,7 @@ impl Callback<RunProblem<TextArtifact, TextCase>> for RecordingCallback {
 }
 
 fn text_runner(artifact: &TextArtifact, case: &TextCase) -> RunOutput {
-    RunOutput::new(
-        (artifact.0 + case.0).to_string(),
-        vec!["runner trace".to_owned()],
-    )
+    RunOutput::new((artifact.0 + case.0).to_string())
 }
 
 #[allow(clippy::needless_pass_by_value)]

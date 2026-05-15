@@ -120,25 +120,17 @@ fn report_lines(config: &AimeRunConfig, result: &OptimizeResult<AimePrompt>) -> 
         for candidate in &split.candidates {
             for case in &candidate.cases {
                 lines.push(format!(
-                    "report_case={} split={:?} source_id={} score={:.3} feedback_chars={} trace_lines={}",
+                    "report_case={} split={:?} score={:.3} output_chars={} feedback_chars={}",
                     case.case_id,
                     split.role,
-                    report_source_id(&case.trace),
                     case.score,
-                    case.feedback.len(),
-                    case.trace.len()
+                    case.output.len(),
+                    case.feedback.len()
                 ));
             }
         }
     }
     lines
-}
-
-fn report_source_id(trace: &[String]) -> &str {
-    trace
-        .iter()
-        .find_map(|line| line.strip_prefix("source_id: "))
-        .unwrap_or("absent")
 }
 
 fn report_score(score: Option<f64>) -> String {
@@ -782,15 +774,7 @@ async fn run_solver(
     } else {
         case.answer + 1
     };
-    RunOutput::new(
-        answer.to_string(),
-        vec![
-            format!("source_id: {}", case.source_id),
-            format!("problem: {}", case.problem),
-            format!("system_prompt: {}", prompt.system),
-            format!("solver_answer: {answer}"),
-        ],
-    )
+    RunOutput::new(answer.to_string())
 }
 
 async fn run_openai_solver(
@@ -812,29 +796,9 @@ async fn run_openai_solver(
     match solver.complete(request).await {
         Ok(metered) => {
             let answer = metered.value.assistant.content().trim().to_owned();
-            RunOutput::new(
-                answer.clone(),
-                vec![
-                    "provider: openai-responses".to_owned(),
-                    format!("model: {}", solver_config.model),
-                    format!("source_id: {}", case.source_id),
-                    format!("problem: {}", case.problem),
-                    format!("system_prompt: {}", prompt.system),
-                    format!("solver_answer: {answer}"),
-                ],
-            )
-            .with_cost(metered.cost)
+            RunOutput::new(answer).with_cost(metered.cost)
         }
-        Err(source) => RunOutput::new(
-            String::new(),
-            vec![
-                "provider: openai-responses".to_owned(),
-                format!("model: {}", solver_config.model),
-                format!("source_id: {}", case.source_id),
-                format!("problem: {}", case.problem),
-                format!("openai_error: {source}"),
-            ],
-        ),
+        Err(_) => RunOutput::new(String::new()),
     }
 }
 
@@ -929,7 +893,7 @@ mod tests {
                 .iter()
                 .flat_map(|split| &split.candidates)
                 .flat_map(|candidate| &candidate.cases)
-                .any(|case| !case.feedback.is_empty() && !case.trace.is_empty())
+                .any(|case| !case.feedback.is_empty() && !case.output.is_empty())
         );
         assert!(result.best().system.contains("modular arithmetic"));
         assert!(
@@ -1048,12 +1012,12 @@ mod tests {
         );
         assert!(lines.iter().any(|line| {
             line.contains("report_case=case:3")
-                && line.contains("source_id=deterministic:validation:0")
+                && line.contains("output_chars=")
                 && line.contains("feedback_chars=")
         }));
         assert!(lines.iter().any(|line| {
             line.contains("report_case=case:4")
-                && line.contains("source_id=deterministic:test:0")
+                && line.contains("output_chars=")
                 && line.contains("feedback_chars=")
         }));
     }
@@ -1173,7 +1137,7 @@ mod tests {
     }
 
     #[test]
-    fn public_report_preserves_case_ids_and_aime_source_ids() {
+    fn public_report_preserves_case_ids_and_generated_outputs() {
         let result = block_on(run_deterministic_aime());
 
         let cases = result
@@ -1186,24 +1150,16 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert!(
-            cases.iter().any(|case| {
-                case.case_id == CaseId::from_index(3)
-                    && case
-                        .trace
-                        .iter()
-                        .any(|line| line == "source_id: deterministic:validation:0")
-            }),
-            "expected deterministic validation case id and source id in public report"
+            cases
+                .iter()
+                .any(|case| { case.case_id == CaseId::from_index(3) && !case.output.is_empty() }),
+            "expected deterministic validation case id and generated output in public report"
         );
         assert!(
-            cases.iter().any(|case| {
-                case.case_id == CaseId::from_index(4)
-                    && case
-                        .trace
-                        .iter()
-                        .any(|line| line == "source_id: deterministic:test:0")
-            }),
-            "expected deterministic test case id and source id in public report"
+            cases
+                .iter()
+                .any(|case| { case.case_id == CaseId::from_index(4) && !case.output.is_empty() }),
+            "expected deterministic test case id and generated output in public report"
         );
     }
 

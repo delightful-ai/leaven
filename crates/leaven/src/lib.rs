@@ -34,8 +34,8 @@ pub use leaven_lm::{
     OutputMode, ProviderHints, ProviderName, ReasoningEffort, Role, SamplingOptions, TokenUsage,
 };
 pub use leaven_run::{
-    FeedbackAttachment, IntoOptimizeStore, OptimizationReport, OptimizeBuilder, OptimizeError,
-    OptimizeResult, OptimizeStore, RunOutput, Score, ScoreContext, ScoreError, optimize,
+    IntoOptimizeStore, OptimizationReport, OptimizeBuilder, OptimizeError, OptimizeResult,
+    OptimizeStore, RunOutput, Score, ScoreContext, ScoreError, optimize,
 };
 pub use leaven_surface::{
     EditSurface, Part, PartAddress, PartSelection, SurfaceError, SurfaceFingerprint,

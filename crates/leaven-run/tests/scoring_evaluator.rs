@@ -18,9 +18,7 @@ use leaven_kernel::{
     Budget, CandidateId, CaseId, ContentId, Cost, EvaluatorId, ResolvedEvaluationSetId, RunId,
     StageId, now,
 };
-use leaven_run::{
-    FeedbackAttachment, RunOutput, RunProblem, Score, ScoreContext, ScoreError, ScoringEvaluator,
-};
+use leaven_run::{RunOutput, RunProblem, Score, ScoreContext, ScoreError, ScoringEvaluator};
 
 #[test]
 fn scoring_evaluator_rejects_unsupported_request_shapes_and_bad_inputs() {
@@ -141,23 +139,15 @@ fn scoring_evaluator_reports_per_candidate_cost_for_independent_batches() {
             Arc::new(vec![2, 3]),
             Arc::new(|artifact: TextArtifact, case| {
                 async move {
-                    RunOutput::new(
-                        (artifact.0 + case).to_string(),
-                        vec!["runner trace".to_owned()],
-                    )
-                    .with_cost(Cost::llm_calls(u64::try_from(case).unwrap()))
+                    RunOutput::new((artifact.0 + case).to_string())
+                        .with_cost(Cost::llm_calls(u64::try_from(case).unwrap()))
                 }
                 .boxed()
             }),
             Arc::new(|ctx: ScoreContext<TextArtifact, i32>| {
                 async move {
                     Ok(Score::new(ctx.output.output.parse::<f64>().unwrap(), "ok")
-                        .with_structured("verdict", "accepted")
-                        .with_cost(Cost::llm_calls(1))
-                        .with_attachment(FeedbackAttachment::text(
-                            "judge-transcript",
-                            "judge says ok",
-                        )))
+                        .with_cost(Cost::llm_calls(1)))
                 }
                 .boxed()
             }),
@@ -194,16 +184,10 @@ fn scoring_evaluator_reports_per_candidate_cost_for_independent_batches() {
             panic!("expected independent assessments");
         };
         assert_eq!(
-            evidence.outcomes()[0].evidence().attachments()[0].name(),
-            "judge-transcript"
+            evidence.outcomes()[0].evidence().output(),
+            &leaven_evidence::OutputRecord::inline("42")
         );
-        assert!(
-            evidence.outcomes()[0]
-                .evidence()
-                .trace()
-                .iter()
-                .any(|line| line == "verdict: accepted")
-        );
+        assert_eq!(evidence.outcomes()[0].evidence().feedback(), "ok");
     });
 }
 
@@ -233,11 +217,7 @@ fn scoring_evaluator_surfaces_async_scorer_failures_with_metered_cost() {
             Arc::new(vec![2]),
             Arc::new(|artifact: TextArtifact, case| {
                 async move {
-                    RunOutput::new(
-                        (artifact.0 + case).to_string(),
-                        vec!["runner trace".to_owned()],
-                    )
-                    .with_cost(Cost::llm_calls(2))
+                    RunOutput::new((artifact.0 + case).to_string()).with_cost(Cost::llm_calls(2))
                 }
                 .boxed()
             }),
@@ -285,13 +265,7 @@ fn scoring_evaluator_passes_budget_snapshot_to_scorer() {
         let evaluator = ScoringEvaluator::new(
             Arc::new(vec![2]),
             Arc::new(|artifact: TextArtifact, case| {
-                async move {
-                    RunOutput::new(
-                        (artifact.0 + case).to_string(),
-                        vec!["runner trace".to_owned()],
-                    )
-                }
-                .boxed()
+                async move { RunOutput::new((artifact.0 + case).to_string()) }.boxed()
             }),
             Arc::new(|ctx: ScoreContext<TextArtifact, i32>| {
                 async move {
@@ -341,10 +315,7 @@ fn scoring_evaluator_runs_case_jobs_with_bounded_parallelism_and_stable_order() 
                         let (tx, rx) = oneshot::channel();
                         std::thread::spawn(move || {
                             std::thread::sleep(Duration::from_millis(20));
-                            let _ = tx.send(RunOutput::new(
-                                (artifact.0 + case).to_string(),
-                                vec![format!("case {case}")],
-                            ));
+                            let _ = tx.send(RunOutput::new((artifact.0 + case).to_string()));
                         });
                         let output = rx.await.expect("worker sends output");
                         active.fetch_sub(1, Ordering::SeqCst);
@@ -401,13 +372,7 @@ fn scoring_evaluator(
     ScoringEvaluator::new(
         Arc::new(vec![2]),
         Arc::new(|artifact, case| {
-            async move {
-                RunOutput::new(
-                    (artifact.0 + case).to_string(),
-                    vec!["runner trace".to_owned()],
-                )
-            }
-            .boxed()
+            async move { RunOutput::new((artifact.0 + case).to_string()) }.boxed()
         }),
         Arc::new(move |ctx| {
             let score = scorer(ctx);

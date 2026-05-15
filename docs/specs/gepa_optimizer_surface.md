@@ -496,8 +496,8 @@ pub struct SelectedFeedback {
 pub struct ReflectiveFeedbackRecord {
     pub case: Option<CaseId>,
     pub score: Option<f64>,
+    pub output: Option<String>,
     pub feedback: String,
-    pub trace: Vec<String>,
     pub source_refs: Vec<InfoRef>,
 }
 ```
@@ -526,18 +526,18 @@ pub trait GepaReflectionEvidence: leaven_core::Evidence {
 ```
 
 The standard implementation for
-`CasewiseEvidence<ScoredFeedbackEvidence>` preserves:
+`CasewiseEvidence<CaseAssessmentEvidence>` preserves:
 
 ```text
 case id
 comparable scalar score
-ScoredFeedbackEvidence::feedback()
-ScoredFeedbackEvidence::trace()
+CaseAssessmentEvidence::output()
+CaseAssessmentEvidence::feedback()
 assessment/evidence source refs
 ```
 
 Do not collapse feedback to `f64` before reflection. Scalar scores drive
-population and acceptance; feedback text and trace lines drive reflection.
+population and acceptance; generated output and feedback text drive reflection.
 
 The default feedback selector uses only train/search assessments under the
 current trust policy. Validation and test evidence are excluded from

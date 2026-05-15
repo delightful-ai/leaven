@@ -7,7 +7,9 @@ use leaven_core::{
     ResolvedRequestKind,
 };
 use leaven_engine::{CachePolicy, CaseSet, Engine, EvaluationContext, EvaluationError, Evaluator};
-use leaven_evidence::{CaseOutcome, CasewiseEvidence, ScalarEvidence, ScoredFeedbackEvidence};
+use leaven_evidence::{
+    CaseAssessmentEvidence, CaseOutcome, CasewiseEvidence, OutputRecord, ScalarEvidence,
+};
 use leaven_gepa::{
     DEFAULT_REFLECTION_PROMPT_TEMPLATE, DefaultReflectionRenderer, Gepa, GepaReflectionEvidence,
     LmBackedReflector, LmBackedReflectorConfig, PlainTextEditParser, ReflectRequest,
@@ -30,7 +32,7 @@ fn lm_backed_reflector_renders_feedback_records_and_applies_candidate() {
             leaven_core::PartitionId::from("TRAIN"),
             vec![leaven_kernel::CaseId::new(0)],
         );
-        let store = InlineEvidenceStore::<CasewiseEvidence<ScoredFeedbackEvidence>>::new("inline");
+        let store = InlineEvidenceStore::<CasewiseEvidence<CaseAssessmentEvidence>>::new("inline");
         let mut engine = Engine::<TestProblem>::builder()
             .budget(Budget::unlimited())
             .evaluator(FeedbackEvaluator)
@@ -79,7 +81,7 @@ fn lm_backed_reflector_renders_feedback_records_and_applies_candidate() {
         assert!(rendered.contains("```"));
         assert!(rendered.contains("seed"));
         assert!(rendered.contains("candidate missed the target suffix"));
-        assert!(rendered.contains("runner trace: saw seed"));
+        assert!(rendered.contains("candidate output"));
 
         let proposal = view
             .proposal_that_created(candidate)
@@ -119,7 +121,7 @@ fn multi_iteration_reflection_uses_selected_parent_assessment_feedback() {
             leaven_core::PartitionId::from("TRAIN"),
             vec![leaven_kernel::CaseId::new(0)],
         );
-        let store = InlineEvidenceStore::<CasewiseEvidence<ScoredFeedbackEvidence>>::new("inline");
+        let store = InlineEvidenceStore::<CasewiseEvidence<CaseAssessmentEvidence>>::new("inline");
         let mut engine = Engine::<TestProblem>::builder()
             .budget(Budget::unlimited())
             .evaluator(ArtifactFeedbackEvaluator)
@@ -180,8 +182,8 @@ fn reflection_feedback_records_preserve_all_source_refs() {
     .with_records([ReflectiveFeedbackRecord {
         case: Some(CaseId::new(7)),
         score: Some(0.25),
+        output: Some("31".to_owned()),
         feedback: "needs modular arithmetic".to_owned(),
-        trace: vec!["missed 32nds conversion".to_owned()],
         source_refs: vec![record_source.clone()],
     }]);
 
@@ -204,8 +206,8 @@ fn scalar_casewise_evidence_projects_reflection_records() {
     assert_eq!(records.len(), 1);
     assert_eq!(records[0].case, Some(CaseId::new(3)));
     assert_eq!(records[0].score, Some(0.75));
+    assert!(records[0].output.is_none());
     assert!(records[0].feedback.is_empty());
-    assert!(records[0].trace.is_empty());
 }
 
 #[test]
@@ -233,32 +235,33 @@ fn default_renderer_and_plain_text_parser_cover_empty_feedback_and_bad_part() {
         .join("\n");
     assert!(rendered_text.contains("(no textual feedback records were selected)"));
 
-    let no_trace_request = ReflectRequest::for_part(parent, "text", "text").with_selected_feedback(
-        SelectedFeedback::default().with_records([ReflectiveFeedbackRecord {
-            case: Some(CaseId::new(9)),
-            score: Some(1.0),
-            feedback: "already correct".to_owned(),
-            trace: Vec::new(),
-            source_refs: Vec::new(),
-        }]),
-    );
-    let no_trace_rendered = DefaultReflectionRenderer
+    let no_output_request = ReflectRequest::for_part(parent, "text", "text")
+        .with_selected_feedback(SelectedFeedback::default().with_records([
+            ReflectiveFeedbackRecord {
+                case: Some(CaseId::new(9)),
+                score: Some(1.0),
+                output: None,
+                feedback: "already correct".to_owned(),
+                source_refs: Vec::new(),
+            },
+        ]));
+    let no_output_rendered = DefaultReflectionRenderer
         .render(ReflectionRenderInput::<TestProblem, WholeTextSurface> {
-            request: &no_trace_request,
+            request: &no_output_request,
             artifact: &artifact,
             surface: &surface,
             model: "mock-renderer".into(),
             config: &config,
         })
         .unwrap();
-    let no_trace_text = no_trace_rendered
+    let no_output_text = no_output_rendered
         .messages
         .iter()
         .map(Message::content)
         .collect::<Vec<_>>()
         .join("\n");
-    assert!(no_trace_text.contains("already correct"));
-    assert!(!no_trace_text.contains("trace:"));
+    assert!(no_output_text.contains("already correct"));
+    assert!(!no_output_text.contains("## Trace"));
 
     let selected = SelectedFeedback {
         candidate_refs: vec![parent],
@@ -295,8 +298,8 @@ fn default_renderer_uses_gepa_prompt_template_and_config_override() {
         SelectedFeedback::default().with_records([ReflectiveFeedbackRecord {
             case: Some(CaseId::new(1)),
             score: Some(0.0),
+            output: Some("42".to_owned()),
             feedback: "needs a modular arithmetic strategy".to_owned(),
-            trace: vec!["solver_answer: 42".to_owned()],
             source_refs: Vec::new(),
         }]),
     );
@@ -325,7 +328,7 @@ fn default_renderer_uses_gepa_prompt_template_and_config_override() {
     assert!(default_text.contains(DEFAULT_REFLECTION_PROMPT_TEMPLATE.lines().next().unwrap()));
     assert!(default_text.contains("old instruction"));
     assert!(default_text.contains("needs a modular arithmetic strategy"));
-    assert!(default_text.contains("solver_answer: 42"));
+    assert!(default_text.contains("## Output\n42"));
 
     let config = LmBackedReflectorConfig::default()
         .with_prompt_template("CURRENT=<curr_param>\nFEEDBACK=<side_info>");
@@ -462,7 +465,7 @@ fn lm_backed_reflector_surfaces_lm_failures_without_candidate() {
             leaven_core::PartitionId::from("TRAIN"),
             vec![leaven_kernel::CaseId::new(0)],
         );
-        let store = InlineEvidenceStore::<CasewiseEvidence<ScoredFeedbackEvidence>>::new("inline");
+        let store = InlineEvidenceStore::<CasewiseEvidence<CaseAssessmentEvidence>>::new("inline");
         let mut engine = Engine::<TestProblem>::builder()
             .budget(Budget::unlimited())
             .evaluator(FeedbackEvaluator)
@@ -496,7 +499,7 @@ fn lm_backed_reflector_surfaces_parser_failures_without_candidate() {
             leaven_core::PartitionId::from("TRAIN"),
             vec![leaven_kernel::CaseId::new(0)],
         );
-        let store = InlineEvidenceStore::<CasewiseEvidence<ScoredFeedbackEvidence>>::new("inline");
+        let store = InlineEvidenceStore::<CasewiseEvidence<CaseAssessmentEvidence>>::new("inline");
         let mut engine = Engine::<TestProblem>::builder()
             .budget(Budget::unlimited())
             .evaluator(FeedbackEvaluator)
@@ -548,7 +551,7 @@ struct TestProblem;
 impl OptimizationProblem for TestProblem {
     type Artifact = TestArtifact;
     type Case = ();
-    type Evidence = CasewiseEvidence<ScoredFeedbackEvidence>;
+    type Evidence = CasewiseEvidence<CaseAssessmentEvidence>;
     type ProposalAnnotations = ();
 }
 
@@ -656,10 +659,10 @@ impl Evaluator<TestProblem> for ArtifactFeedbackEvaluator {
                         ),
                         evidence: CasewiseEvidence::new(vec![CaseOutcome::new(
                             leaven_kernel::CaseId::new(0),
-                            ScoredFeedbackEvidence::new(
+                            CaseAssessmentEvidence::new(
                                 ScalarEvidence::new(improvement_score).unwrap(),
+                                OutputRecord::inline(format!("output for {}", artifact.0)),
                                 format!("feedback for {}", artifact.0),
-                                vec![format!("trace for {}", artifact.0)],
                             ),
                         )]),
                         cost: Cost::metric_calls(1),
@@ -705,15 +708,15 @@ impl Evaluator<TestProblem> for FeedbackEvaluator {
                     target: AssessmentTarget::EvaluationSet(leaven_kernel::EvaluationSetId::new()),
                     evidence: CasewiseEvidence::new(vec![CaseOutcome::new(
                         leaven_kernel::CaseId::new(0),
-                        ScoredFeedbackEvidence::new(
+                        CaseAssessmentEvidence::new(
                             ScalarEvidence::new(if candidate_suffix(candidate) {
                                 1.0
                             } else {
                                 0.0
                             })
                             .unwrap(),
+                            OutputRecord::inline("candidate output"),
                             "candidate missed the target suffix",
-                            vec!["runner trace: saw seed".to_owned()],
                         ),
                     )]),
                     cost: Cost::metric_calls(1),
