@@ -33,9 +33,15 @@ use leaven_workspace_local::LocalWorkspaceFactory;
 fn gepa_reflection_bootstrap_prewarms_parent_and_feedback_queries() {
     block_on(async {
         let parent = CandidateId::new();
+        let sibling = CandidateId::new();
         let feedback = AssessmentId::new();
-        let request = ReflectRequest::new(parent, "answer")
-            .with_source_refs([leaven_core::InfoRef::Assessment(feedback)]);
+        // The parent ref is deduplicated; a sibling candidate ref and an
+        // assessment ref each become their own prewarm query.
+        let request = ReflectRequest::new(parent, "answer").with_source_refs([
+            leaven_core::InfoRef::Candidate(parent),
+            leaven_core::InfoRef::Candidate(sibling),
+            leaven_core::InfoRef::Assessment(feedback),
+        ]);
         let ctx = AgentStageCallContext::new(
             StageCallId::new(),
             leaven_engine::ReadScope::default(),
@@ -52,9 +58,19 @@ fn gepa_reflection_bootstrap_prewarms_parent_and_feedback_queries() {
         assert_eq!(plan.role, StageRole::reflect());
         assert!(plan.query.allowed.contains(StageQueryKind::Candidate));
         assert_eq!(plan.query.prewarm[0], StageQuery::Candidate { id: parent });
+        assert_eq!(plan.query.prewarm[1], StageQuery::Candidate { id: sibling });
         assert_eq!(
-            plan.query.prewarm[1],
+            plan.query.prewarm[2],
             StageQuery::Assessment { id: feedback }
+        );
+        assert_eq!(
+            plan.query
+                .prewarm
+                .iter()
+                .filter(|query| matches!(query, StageQuery::Candidate { id } if *id == parent))
+                .count(),
+            1,
+            "the parent candidate is prewarmed once even when also a source ref",
         );
     });
 }
@@ -230,8 +246,12 @@ fn gepa_optimizer_uses_agent_backed_reflection_path() {
             JsonProposalParser,
             Default::default(),
         );
-        let mut gepa = Gepa::new(WholeTextSurface, ParetoFrontier::by_case().build(), proposer)
-            .reflective_dataset(ScriptedDataset);
+        let mut gepa = Gepa::new(
+            WholeTextSurface,
+            ParetoFrontier::by_case().build(),
+            proposer,
+        )
+        .reflective_dataset(ScriptedDataset);
 
         engine.run(&mut gepa, &case_set, &store).await.unwrap();
         let view = engine.view();
@@ -459,7 +479,11 @@ fn lm_and_agent_reflectors_receive_byte_identical_examples() {
         }
 
         let lm_bytes = lm_seen.lock().unwrap().clone().expect("LM renderer ran");
-        let agent_bytes = agent_seen.lock().unwrap().clone().expect("agent parser ran");
+        let agent_bytes = agent_seen
+            .lock()
+            .unwrap()
+            .clone()
+            .expect("agent parser ran");
         assert_eq!(
             lm_bytes, agent_bytes,
             "LM and agent reflectors must receive byte-identical reflective examples",

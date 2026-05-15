@@ -865,6 +865,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
         PartSel: Sync,
         GatePol: Sync,
         Batch: Sync,
+        Dataset: Sync,
     {
         let Some(set) = self.validation_policy.validation_set(candidate) else {
             return Ok(());
@@ -903,6 +904,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
         GatePol: Sync,
         Batch: Sync,
         Validate: Sync,
+        Dataset: Sync,
     {
         let report = ctx
             .evaluate(

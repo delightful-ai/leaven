@@ -169,7 +169,10 @@ fn reflect_request_informed_by_unions_request_and_example_source_refs() {
     });
 
     let request = ReflectRequest::for_part(candidate, "text", "text")
-        .with_source_refs([InfoRef::Candidate(candidate), InfoRef::Assessment(assessment)])
+        .with_source_refs([
+            InfoRef::Candidate(candidate),
+            InfoRef::Assessment(assessment),
+        ])
         .with_examples([ReflectiveExample {
             case: Some(CaseId::new(7)),
             input: "find the remainder".to_owned(),

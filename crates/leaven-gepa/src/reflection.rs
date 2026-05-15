@@ -3,7 +3,9 @@
 use std::fmt::{Display, Write as _};
 use std::future::Future;
 
-use leaven_core::{Evidence, InfoRef, OptimizationProblem, Proposal, ProposalBatch, ProposalBatchSemantics};
+use leaven_core::{
+    Evidence, InfoRef, OptimizationProblem, Proposal, ProposalBatch, ProposalBatchSemantics,
+};
 use leaven_engine::{ProposalError, RunContext, RunContextError};
 use leaven_evidence::{CaseAssessmentEvidence, CasewiseEvidence, OutputRecord, ScalarEvidence};
 use leaven_kernel::{AssessmentId, CandidateId, CaseId, MetadataBag};
@@ -53,15 +55,6 @@ pub struct ReflectiveExample {
     pub feedback: String,
     /// Provenance refs for this example.
     pub source_refs: Vec<InfoRef>,
-}
-
-impl ReflectiveExample {
-    /// Attach additional source refs to this example.
-    #[must_use]
-    pub fn with_source_refs(mut self, refs: impl IntoIterator<Item = InfoRef>) -> Self {
-        self.source_refs.extend(refs);
-        self
-    }
 }
 
 /// Shared GEPA reflection request.
@@ -215,12 +208,11 @@ where
         let evidence = ctx.assessment_evidence(parent_assessment)?;
         let mut examples = evidence.reflection_examples();
         for example in &mut examples {
-            example.source_refs.push(InfoRef::Assessment(parent_assessment));
+            example
+                .source_refs
+                .push(InfoRef::Assessment(parent_assessment));
             if let Some(case) = example.case {
-                example.input = ctx
-                    .case(case)
-                    .map(|case| case.to_string())
-                    .unwrap_or_default();
+                example.input = ctx.case(case).map(ToString::to_string).unwrap_or_default();
             }
         }
         Ok(examples)

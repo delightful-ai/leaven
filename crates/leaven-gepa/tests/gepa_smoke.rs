@@ -259,8 +259,7 @@ fn gepa_checkpoint_state_restores_loop_and_selector_cursor() {
     let state = gepa
         .checkpoint_state(CheckpointContext::new(ctx.graph()))
         .unwrap();
-    let policy =
-        <SmokeGepa as CheckpointableOptimizer<SmokeProblem>>::private_state_policy(&gepa);
+    let policy = <SmokeGepa as CheckpointableOptimizer<SmokeProblem>>::private_state_policy(&gepa);
     assert!(matches!(
         policy,
         PrivateStatePolicy::ExplicitSnapshot { .. }
@@ -589,6 +588,164 @@ fn gepa_candidate_history_tracks_seed_and_accepted_children_by_assessment() {
         assert!((history[1].score() - 1.0).abs() < f64::EPSILON);
         assert!(engine.view().assessment(history[0].assessment()).is_some());
         assert!(engine.view().assessment(history[1].assessment()).is_some());
+    });
+}
+
+#[test]
+fn gepa_reflective_dataset_default_projects_scalar_examples_with_case_input() {
+    block_on(async {
+        let case_set = CaseSet::new(vec!["input alpha"]).with_partition(
+            leaven_core::PartitionId::from("TRAIN"),
+            vec![leaven_kernel::CaseId::new(0)],
+        );
+        let store = InlineEvidenceStore::<CasewiseEvidence<ScalarEvidence>>::new("inline");
+        let mut graph = RunGraph::<DisplayScalarProblem>::new(RunId::new());
+        let mut budget = BudgetLedger::new(Budget::unlimited());
+        let candidate = {
+            let mut ctx = RunContext::<DisplayScalarProblem>::new(&mut graph, &mut budget);
+            ctx.insert_seed(
+                PartMapArtifact(BTreeMap::from([("answer".to_owned(), "draft".to_owned())])),
+                0,
+            )
+            .unwrap()
+        };
+        let assessment = {
+            let mut ctx = RunContext::<DisplayScalarProblem>::new(&mut graph, &mut budget)
+                .with_case_set(&case_set)
+                .with_evidence_store(&store);
+            ctx.evaluate_with(&ScalarCaseEvaluator, independent_train_request(candidate))
+                .await
+                .unwrap()
+                .assessment_ids[0]
+        };
+
+        let mut ctx = RunContext::<DisplayScalarProblem>::new(&mut graph, &mut budget)
+            .with_case_set(&case_set)
+            .with_evidence_store(&store);
+        let examples = ReflectiveDatasetBuilder::<DisplayScalarProblem, PartMapSurface>::build(
+            &leaven_gepa::GepaReflectiveDataset,
+            &mut ctx,
+            candidate,
+            assessment,
+            &"answer".to_owned(),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(examples.len(), 1);
+        assert_eq!(examples[0].input, "input alpha");
+        assert_eq!(examples[0].score, Some(0.5));
+        assert!(examples[0].output.is_none());
+        assert!(examples[0].feedback.is_empty());
+        assert!(
+            examples[0]
+                .source_refs
+                .contains(&leaven_core::InfoRef::Assessment(assessment))
+        );
+    });
+}
+
+#[test]
+fn gepa_reflective_dataset_default_reports_missing_assessment_evidence() {
+    block_on(async {
+        let store = InlineEvidenceStore::<CasewiseEvidence<ScalarEvidence>>::new("inline");
+        let mut graph = RunGraph::<DisplayScalarProblem>::new(RunId::new());
+        let mut budget = BudgetLedger::new(Budget::unlimited());
+        let candidate = {
+            let mut ctx = RunContext::<DisplayScalarProblem>::new(&mut graph, &mut budget);
+            ctx.insert_seed(PartMapArtifact(BTreeMap::new()), 0)
+                .unwrap()
+        };
+        let mut ctx = RunContext::<DisplayScalarProblem>::new(&mut graph, &mut budget)
+            .with_evidence_store(&store);
+
+        let error = ReflectiveDatasetBuilder::<DisplayScalarProblem, PartMapSurface>::build(
+            &leaven_gepa::GepaReflectiveDataset,
+            &mut ctx,
+            candidate,
+            leaven_kernel::AssessmentId::new(),
+            &"answer".to_owned(),
+        )
+        .await
+        .unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("GEPA reflective-dataset projection failed")
+        );
+    });
+}
+
+#[test]
+fn gepa_run_surfaces_reflective_dataset_build_failure() {
+    block_on(async {
+        let case_set = CaseSet::new(vec!["input alpha"]).with_partition(
+            leaven_core::PartitionId::from("TRAIN"),
+            vec![leaven_kernel::CaseId::new(0)],
+        );
+        let store = InlineEvidenceStore::<CasewiseEvidence<ScalarEvidence>>::new("inline");
+        let mut engine = Engine::<DisplayScalarProblem>::builder()
+            .evaluator(ScalarCaseEvaluator)
+            .build();
+        engine
+            .insert_seed(
+                PartMapArtifact(BTreeMap::from([("answer".to_owned(), "draft".to_owned())])),
+                0,
+            )
+            .unwrap();
+        let failing_dataset = |_ctx: &mut RunContext<'_, DisplayScalarProblem>,
+                               _parent: leaven_kernel::CandidateId,
+                               _assessment: leaven_kernel::AssessmentId,
+                               _part: &String| async move {
+            Result::<Vec<ReflectiveExample>, leaven_gepa::ReflectionError>::Err(
+                leaven_gepa::ReflectionError::builder("scripted dataset failure"),
+            )
+        };
+        let mut gepa = Gepa::new(
+            PartMapSurface,
+            ParetoFrontier::by_case().build(),
+            FixedSurfaceEdit::new("improved".to_owned()),
+        )
+        .reflective_dataset(failing_dataset)
+        .max_iterations(1);
+
+        let error = engine.run(&mut gepa, &case_set, &store).await.unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("GEPA reflective-dataset build failed")
+        );
+    });
+}
+
+#[test]
+fn gepa_reflective_dataset_closure_builder_can_refuse() {
+    block_on(async {
+        let builder = |_ctx: &mut RunContext<'_, DisplayScalarProblem>,
+                       _parent: leaven_kernel::CandidateId,
+                       _assessment: leaven_kernel::AssessmentId,
+                       _part: &String| async move {
+            Result::<Vec<ReflectiveExample>, leaven_gepa::ReflectionError>::Err(
+                leaven_gepa::ReflectionError::builder("custom dataset declined"),
+            )
+        };
+        let mut graph = RunGraph::<DisplayScalarProblem>::new(RunId::new());
+        let mut budget = BudgetLedger::new(Budget::unlimited());
+        let mut ctx = RunContext::<DisplayScalarProblem>::new(&mut graph, &mut budget);
+
+        let error = ReflectiveDatasetBuilder::<DisplayScalarProblem, PartMapSurface>::build(
+            &builder,
+            &mut ctx,
+            leaven_kernel::CandidateId::new(),
+            leaven_kernel::AssessmentId::new(),
+            &"answer".to_owned(),
+        )
+        .await
+        .unwrap_err();
+
+        assert!(error.to_string().contains("custom dataset declined"));
     });
 }
 
@@ -1001,6 +1158,75 @@ impl OptimizationProblem for SamplingProblem {
     type Case = ();
     type Evidence = CasewiseEvidence<ScalarEvidence>;
     type ProposalAnnotations = ();
+}
+
+/// Problem with a `Display` case, so the default `GepaReflectiveDataset`
+/// builder can read each evaluated case input.
+struct DisplayScalarProblem;
+
+impl OptimizationProblem for DisplayScalarProblem {
+    type Artifact = PartMapArtifact;
+    type Case = &'static str;
+    type Evidence = CasewiseEvidence<ScalarEvidence>;
+    type ProposalAnnotations = ();
+}
+
+fn independent_train_request(candidate: leaven_kernel::CandidateId) -> EvaluationRequest {
+    EvaluationRequest::Independent {
+        candidates: vec![candidate],
+        set: EvaluationSet::Partition(leaven_core::PartitionId::from("TRAIN")),
+        granularity: AssessmentGranularity::PerCase,
+        purpose: EvaluationPurpose::SeedBaseline,
+    }
+}
+
+struct ScalarCaseEvaluator;
+
+impl Evaluator<DisplayScalarProblem> for ScalarCaseEvaluator {
+    fn id(&self) -> EvaluatorId {
+        EvaluatorId::PRIMARY
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        Fingerprint::from_bytes([11; 32])
+    }
+
+    fn cache_policy(&self, _request: &ResolvedEvaluationRequest) -> CachePolicy {
+        CachePolicy::Never
+    }
+
+    async fn evaluate(
+        &self,
+        request: ResolvedEvaluationRequest,
+        _ctx: EvaluationContext<'_, DisplayScalarProblem>,
+    ) -> Result<Metered<Vec<Assessment<DisplayScalarProblem>>>, EvaluationError> {
+        let ResolvedRequestKind::Independent { candidates } = request.kind else {
+            return Err(EvaluationError::Message(
+                "expected independent request".to_owned(),
+            ));
+        };
+        Ok(Metered::new(
+            candidates
+                .into_iter()
+                .map(|candidate| Assessment::Independent {
+                    candidate,
+                    target: AssessmentTarget::EvaluationSet(leaven_kernel::EvaluationSetId::new()),
+                    evidence: CasewiseEvidence::new(
+                        request
+                            .set
+                            .case_ids
+                            .iter()
+                            .copied()
+                            .map(|case| CaseOutcome::new(case, ScalarEvidence::new(0.5).unwrap()))
+                            .collect(),
+                    ),
+                    cost: Cost::metric_calls(1),
+                    metadata: MetadataBag::new(),
+                })
+                .collect(),
+            Cost::metric_calls(1),
+        ))
+    }
 }
 
 #[derive(Clone, Debug)]
