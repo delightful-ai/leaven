@@ -22,8 +22,8 @@ It composes core, surface, engine, evidence, population, render, and LM vocabula
 - The fixed-edit fixture is `FixedSurfaceEdit`. The name is deliberately plain:
   it is scaffolding for GEPA's `Reflect` type parameter, not reflection. Do not
   re-export or document it as production GEPA reflection.
-- Product-facing GEPA proof requires slot contracts for parent selection, part
-  selection, feedback/evidence rendering, reflection/proposal, acceptance,
+- Product-facing GEPA proof requires slot contracts for candidate selection,
+  part selection, feedback/evidence rendering, reflection/proposal, acceptance,
   validation, population, merge, stopping, and checkpoint state. Topology and
   scalar-score improvement are not sufficient.
 - Public GEPA nomenclature matters. `CandidateSelector`, `PartSelector`,

@@ -90,7 +90,7 @@ GEPA, LLM SDKs, agents, or workspace backends.
   - emits run and iteration events
   - returns `RunResult`
 - `StopReason`
-  - at least `OptimizerDone`, `BudgetExceeded`, and `Error`
+  - at least `OptimizerDone`, `BudgetReached`, `BudgetExceeded`, and `Error`
 
 ### Store
 

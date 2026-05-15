@@ -39,6 +39,10 @@ impl BudgetLedger {
         }
     }
 
+    pub fn set_limit(&mut self, limit: Budget) {
+        self.limit = limit;
+    }
+
     pub fn charge(&mut self, stage: StageId, cost: Cost) -> Result<BudgetSnapshot, BudgetExceeded> {
         let projected = self.spent.clone().combine(&cost);
         if let Some(limit) = self.limit.metric_calls {

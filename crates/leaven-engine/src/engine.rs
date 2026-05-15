@@ -4,15 +4,16 @@ use std::{collections::BTreeMap, sync::Arc};
 
 use leaven_core::OptimizationProblem;
 use leaven_kernel::{
-    Budget, CandidateId, ErrorKind, ErrorRecord, EvaluatorId, IterationId, RunId, StageId,
+    Budget, BudgetExceeded, CandidateId, ErrorKind, ErrorRecord, EvaluatorId, IterationId, RunId,
+    StageId,
 };
 use leaven_store::EvidenceStore;
 
 use crate::{
-    BudgetLedger, Callback, CaseSet, CheckpointContext, DynCallback, DynEvaluator, ErrorPolicy,
-    EvaluationCache, Evaluator, Optimizer, OptimizerError, OptimizerStateWrite, ReadScope,
-    RunCheckpointRequest, RunContext, RunContextError, RunEvent, RunGraph, RunGraphView,
-    RunPersistence, StepStatus, StopReason, TrustPolicy,
+    BudgetLedger, Callback, CaseSet, CheckpointContext, DynCallback, DynEvaluator, DynStopper,
+    ErrorPolicy, EvaluationCache, Evaluator, Optimizer, OptimizerError, OptimizerStateWrite,
+    ReadScope, RunCheckpointRequest, RunContext, RunContextError, RunEvent, RunGraph, RunGraphView,
+    RunPersistence, StepStatus, StopReason, Stopper, TrustPolicy,
 };
 
 pub struct Engine<P: OptimizationProblem> {
@@ -21,6 +22,7 @@ pub struct Engine<P: OptimizationProblem> {
     cache: EvaluationCache,
     evaluators: BTreeMap<EvaluatorId, Arc<dyn DynEvaluator<P>>>,
     callbacks: Vec<Box<dyn DynCallback<P>>>,
+    stoppers: Vec<EngineStopper<P>>,
     persistence: Option<Arc<dyn RunPersistence<P>>>,
     trust: TrustPolicy,
 }
@@ -44,6 +46,11 @@ impl<P: OptimizationProblem> Engine<P> {
     #[must_use]
     pub fn budget(&self) -> &BudgetLedger {
         &self.budget
+    }
+
+    /// Replaces the budget limit while preserving already-spent ledger state.
+    pub fn set_budget_limit(&mut self, budget: Budget) {
+        self.budget.set_limit(budget);
     }
 
     pub fn insert_seed(
@@ -92,6 +99,10 @@ impl<P: OptimizationProblem> Engine<P> {
         }
 
         for _ in 0..MAX_ITERATIONS {
+            if let Some(reason) = self.stop_reason() {
+                return self.finish_clean_stop(optimizer, reason);
+            }
+
             let iteration = IterationId::new();
             self.emit(RunEvent::IterationStarted { iteration });
             let status = {
@@ -116,33 +127,7 @@ impl<P: OptimizationProblem> Engine<P> {
             match status {
                 Ok(StepStatus::Continue) => {}
                 Ok(StepStatus::Done) => {
-                    self.emit(RunEvent::OptimizationStopping {
-                        reason: StopReason::OptimizerDone,
-                    });
-                    let optimizer_state = match self.optimizer_state_write(optimizer) {
-                        Ok(state) => state,
-                        Err(error) => {
-                            self.record_optimizer_error(&error);
-                            return Err(error);
-                        }
-                    };
-                    return self
-                        .finish(optimizer.best_candidate(self.view()), optimizer_state)
-                        .map_err(|error| {
-                            let error = OptimizerError::with_source(
-                                "run checkpoint failed after finish",
-                                error,
-                            );
-                            self.emit(RunEvent::Error {
-                                stage: Some(StageId::custom("optimizer")),
-                                error: ErrorRecord::from_error(ErrorKind::Optimizer, &error),
-                                policy: ErrorPolicy::StoppedRun,
-                            });
-                            self.emit(RunEvent::OptimizationStopping {
-                                reason: StopReason::Error,
-                            });
-                            error
-                        });
+                    return self.finish_clean_stop(optimizer, StopReason::OptimizerDone);
                 }
                 Err(error) => {
                     self.record_optimizer_error(&error);
@@ -177,6 +162,38 @@ impl<P: OptimizationProblem> Engine<P> {
         ctx.evaluate(evaluator_id, request).await
     }
 
+    fn finish_clean_stop<O>(
+        &mut self,
+        optimizer: &O,
+        reason: StopReason,
+    ) -> Result<RunResult, OptimizerError>
+    where
+        O: Optimizer<P>,
+    {
+        let optimizer_state = match self.optimizer_state_write(optimizer) {
+            Ok(state) => state,
+            Err(error) => {
+                self.record_optimizer_error(&error);
+                return Err(error);
+            }
+        };
+        self.emit(RunEvent::OptimizationStopping { reason });
+        self.finish(optimizer.best_candidate(self.view()), optimizer_state)
+            .map_err(|error| {
+                let error =
+                    OptimizerError::with_source("run checkpoint failed after finish", error);
+                self.emit(RunEvent::Error {
+                    stage: Some(StageId::custom("optimizer")),
+                    error: ErrorRecord::from_error(ErrorKind::Optimizer, &error),
+                    policy: ErrorPolicy::StoppedRun,
+                });
+                self.emit(RunEvent::OptimizationStopping {
+                    reason: StopReason::Error,
+                });
+                error
+            })
+    }
+
     fn finish(
         &mut self,
         best: Option<CandidateId>,
@@ -191,6 +208,18 @@ impl<P: OptimizationProblem> Engine<P> {
         });
         self.checkpoint(optimizer_state)?;
         Ok(RunResult { run_id, best })
+    }
+
+    fn stop_reason(&self) -> Option<StopReason> {
+        let budget = self.budget.snapshot();
+        self.stoppers.iter().find_map(|stopper| match stopper {
+            EngineStopper::External(stopper) => stopper
+                .should_stop_dyn(self.graph.view(self.trust.callback_read_scope()))
+                .then_some(StopReason::StopperTriggered),
+            EngineStopper::MetricCalls(limit) => {
+                (budget.spent.metric_calls >= *limit).then_some(StopReason::BudgetReached)
+            }
+        })
     }
 
     fn checkpoint(
@@ -232,6 +261,19 @@ impl<P: OptimizationProblem> Engine<P> {
     }
 
     fn record_optimizer_error(&mut self, error: &OptimizerError) {
+        if let Some(budget_error) = budget_exceeded_source(error) {
+            self.emit(RunEvent::Error {
+                stage: Some(budget_error.stage.clone()),
+                error: ErrorRecord::from_error(ErrorKind::Budget, budget_error),
+                policy: ErrorPolicy::StoppedRun,
+            });
+            self.emit(RunEvent::OptimizationStopping {
+                reason: StopReason::BudgetExceeded,
+            });
+            let _ = self.finish(None, None);
+            return;
+        }
+
         self.emit(RunEvent::Error {
             stage: Some(StageId::custom("optimizer")),
             error: ErrorRecord::from_error(ErrorKind::Optimizer, error),
@@ -263,6 +305,7 @@ pub struct EngineBuilder<P: OptimizationProblem> {
     budget: Budget,
     evaluators: BTreeMap<EvaluatorId, Arc<dyn DynEvaluator<P>>>,
     callbacks: Vec<Box<dyn DynCallback<P>>>,
+    stoppers: Vec<EngineStopper<P>>,
     persistence: Option<Arc<dyn RunPersistence<P>>>,
     trust: TrustPolicy,
     _problem: std::marker::PhantomData<P>,
@@ -275,6 +318,7 @@ impl<P: OptimizationProblem> Default for EngineBuilder<P> {
             budget: Budget::unlimited(),
             evaluators: BTreeMap::new(),
             callbacks: Vec::new(),
+            stoppers: Vec::new(),
             persistence: None,
             trust: TrustPolicy::default(),
             _problem: std::marker::PhantomData,
@@ -295,6 +339,23 @@ impl<P: OptimizationProblem> EngineBuilder<P> {
         C: Callback<P> + 'static,
     {
         self.callbacks.push(Box::new(callback));
+        self
+    }
+
+    #[must_use]
+    pub fn stopper<S>(mut self, stopper: S) -> Self
+    where
+        S: Stopper<P> + 'static,
+    {
+        self.stoppers
+            .push(EngineStopper::External(Box::new(stopper)));
+        self
+    }
+
+    #[must_use]
+    pub fn metric_call_budget_stopper(mut self, max_metric_calls: u64) -> Self {
+        self.stoppers
+            .push(EngineStopper::MetricCalls(max_metric_calls));
         self
     }
 
@@ -332,10 +393,28 @@ impl<P: OptimizationProblem> EngineBuilder<P> {
             cache: EvaluationCache::default(),
             evaluators: self.evaluators,
             callbacks: self.callbacks,
+            stoppers: self.stoppers,
             persistence: self.persistence,
             trust: self.trust,
         }
     }
+}
+
+enum EngineStopper<P: OptimizationProblem> {
+    External(Box<dyn DynStopper<P>>),
+    MetricCalls(u64),
+}
+
+fn budget_exceeded_source<'a>(
+    error: &'a (dyn std::error::Error + 'static),
+) -> Option<&'a BudgetExceeded> {
+    if let Some(budget_error) = error.downcast_ref::<BudgetExceeded>() {
+        return Some(budget_error);
+    }
+    if let Some(RunContextError::Budget(budget_error)) = error.downcast_ref::<RunContextError>() {
+        return Some(budget_error);
+    }
+    error.source().and_then(budget_exceeded_source)
 }
 
 #[derive(Clone, Debug)]

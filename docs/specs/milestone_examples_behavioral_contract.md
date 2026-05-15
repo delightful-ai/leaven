@@ -194,7 +194,7 @@ OptimizationStarted
 IterationStarted
 ...
 IterationEnded
-OptimizationStopping(reason = OptimizerDone | BudgetExceeded | Error | ...)
+OptimizationStopping(reason = OptimizerDone | BudgetReached | BudgetExceeded | Error | ...)
 OptimizationEnded
 ```
 

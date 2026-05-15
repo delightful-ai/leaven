@@ -17,6 +17,7 @@ pub struct CausalInputsSummary {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum StopReason {
     OptimizerDone,
+    BudgetReached,
     BudgetExceeded,
     StopperTriggered,
     External,

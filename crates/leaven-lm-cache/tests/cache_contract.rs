@@ -93,6 +93,21 @@ async fn read_write_policy_serves_second_call_from_cache() {
 }
 
 #[tokio::test]
+async fn cloned_cached_lm_handles_share_cache_and_preserve_cached_usage() {
+    let inner = CountingLm::new();
+    let lm = CachedLm::read_write(inner.clone(), InMemoryLmCache::default());
+    let clone = lm.clone();
+
+    let first = lm.complete(request()).await.unwrap();
+    let second = clone.complete(request()).await.unwrap();
+
+    assert_eq!(second.value.assistant.content(), "call 1");
+    assert_eq!(second.value.usage, first.value.usage);
+    assert_eq!(second.cost, Cost::zero());
+    assert_eq!(inner.calls(), 1);
+}
+
+#[tokio::test]
 async fn never_policy_bypasses_cache_and_accessors_expose_parts() {
     let inner = CountingLm::new();
     let cache = InMemoryLmCache::default();

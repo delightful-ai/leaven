@@ -1,4 +1,7 @@
-use std::collections::BTreeMap;
+use std::{
+    collections::BTreeMap,
+    sync::{Arc, Mutex},
+};
 
 use futures::executor::block_on;
 use leaven_core::{
@@ -14,9 +17,13 @@ use leaven_engine::{
 use leaven_evidence::{CaseOutcome, CasewiseEvidence, ScalarEvidence, ScoredFeedbackEvidence};
 use leaven_gepa::{
     CandidateSelector, CheckpointCandidateSelector, CheckpointGate, CheckpointPopulation,
-    FixedSurfaceEdit, Gate, GateDecision, Gepa, ImprovementOrEqual, NoRegression,
-    ParetoFrequencyWeighted, SelectBestCandidate, StrictImprovement, SurfaceProposer,
+    FixedSurfaceEdit, FullValidation, Gate, GateDecision, Gepa, GepaReflector, ImprovementOrEqual,
+    NoRegression, ParetoFrequencyWeighted, SelectBestCandidate, StrictImprovement, SurfaceProposer,
     optimizer::GepaPopulation,
+    validation::{
+        BatchSampler, CheckpointBatchSampler, CheckpointValidationPolicy, EpochShuffled,
+        MinibatchThenValidation, ValidationPolicy,
+    },
 };
 use leaven_kernel::{
     Budget, ContentId, Cost, EvaluatorId, Fingerprint, MetadataBag, Metered, ProposerId, RunId,
@@ -82,6 +89,50 @@ proptest! {
         prop_assert_eq!(changed.0.get(selected), Some(&edit));
         prop_assert_eq!(changed.0.get(untouched), untouched_before.as_ref());
     }
+}
+
+#[test]
+fn epoch_shuffled_samples_train_with_seed_and_restores_cursor() {
+    let train = leaven_core::PartitionId::from("TRAIN");
+    let mut sampler = EpochShuffled::new(2).with_seed(41);
+
+    assert!(matches!(
+        sampler.sample_train(&train),
+        EvaluationSet::Sample { of, n: 2, seed: 41 }
+            if matches!(*of, EvaluationSet::Partition(ref partition) if partition == &train)
+    ));
+    assert!(matches!(
+        sampler.sample_train(&train),
+        EvaluationSet::Sample { of, n: 2, seed: 42 }
+            if matches!(*of, EvaluationSet::Partition(ref partition) if partition == &train)
+    ));
+
+    let state = CheckpointBatchSampler::checkpoint_state(&sampler);
+    let mut restored = EpochShuffled::default();
+    CheckpointBatchSampler::restore_state(&mut restored, state);
+
+    assert!(matches!(
+        restored.sample_train(&train),
+        EvaluationSet::Sample { of, n: 2, seed: 43 }
+            if matches!(*of, EvaluationSet::Partition(ref partition) if partition == &train)
+    ));
+}
+
+#[test]
+fn validation_policies_expose_held_out_and_default_skip_behaviors() {
+    let accepted = leaven_kernel::CandidateId::new();
+    let mut full = FullValidation;
+    let mut default = MinibatchThenValidation;
+
+    assert!(matches!(
+        full.validation_set(accepted),
+        Some(EvaluationSet::Partition(partition)) if partition == leaven_core::PartitionId::from("VALIDATION")
+    ));
+    assert!(default.validation_set(accepted).is_none());
+    CheckpointValidationPolicy::checkpoint_state(&full);
+    CheckpointValidationPolicy::restore_state(&mut full, ());
+    CheckpointValidationPolicy::checkpoint_state(&default);
+    CheckpointValidationPolicy::restore_state(&mut default, ());
 }
 
 #[test]
@@ -173,6 +224,25 @@ fn gepa_explicit_strategies_are_owned_by_optimizer() {
         gepa.select_part(&PartMapArtifact(BTreeMap::new())),
         Err(SurfaceError::Message(message))
             if message == "round-robin selector found no surface parts"
+    ));
+}
+
+#[test]
+fn gepa_checkpoint_schema_changed_when_batch_sampler_state_was_added() {
+    let gepa = Gepa::new(
+        PartMapSurface,
+        ParetoFrontier::by_case().build(),
+        FixedSurfaceEdit::new("unused".to_owned()),
+    );
+
+    let policy = <Gepa<PartMapSurface, ParetoFrontier, FixedSurfaceEdit<String>> as CheckpointableOptimizer<
+        SmokeProblem,
+    >>::private_state_policy(&gepa);
+
+    assert!(matches!(
+        policy,
+        PrivateStatePolicy::ExplicitSnapshot { schema, .. }
+            if schema != Fingerprint::from_bytes([7; 32])
     ));
 }
 
@@ -322,6 +392,23 @@ fn gepa_checkpoint_population_round_trips_keep_best_state() {
 }
 
 #[test]
+fn gepa_candidate_selector_slot_uses_upstream_language() {
+    let mut graph = RunGraph::<SmokeProblem>::new(RunId::new());
+    let mut budget = BudgetLedger::default();
+    let ctx = RunContext::new(&mut graph, &mut budget);
+    let candidate = leaven_kernel::CandidateId::new();
+    let mut keep_best = KeepBest::new();
+    keep_best.observe(
+        candidate,
+        leaven_kernel::AssessmentId::new(),
+        leaven_evidence::ScalarEvidence::new(1.0).unwrap(),
+    );
+    let mut weighted = ParetoFrequencyWeighted;
+
+    assert_eq!(weighted.select(&keep_best, ctx.graph()), Some(candidate));
+}
+
+#[test]
 fn gepa_selectors_delegate_to_population_best_candidate() {
     let mut graph = RunGraph::<SmokeProblem>::new(RunId::new());
     let mut budget = BudgetLedger::default();
@@ -432,6 +519,323 @@ fn keep_best_gepa_population_ignores_empty_casewise_and_averages_scores() {
     let frontier_events =
         GepaPopulation::observe_gepa(&mut frontier, None, candidate, assessment, &scored);
     assert!(!frontier_events.is_empty());
+}
+
+#[test]
+fn gepa_default_sampler_uses_train_minibatches_without_validation_or_test_cases() {
+    block_on(async {
+        let seen_sets = Arc::new(Mutex::new(Vec::new()));
+        let case_set = CaseSet::new(vec![(), (), (), (), (), ()])
+            .with_partition(
+                leaven_core::PartitionId::from("TRAIN"),
+                vec![
+                    leaven_kernel::CaseId::new(0),
+                    leaven_kernel::CaseId::new(1),
+                    leaven_kernel::CaseId::new(2),
+                    leaven_kernel::CaseId::new(3),
+                ],
+            )
+            .with_partition(
+                leaven_core::PartitionId::from("VALIDATION"),
+                vec![leaven_kernel::CaseId::new(4)],
+            )
+            .with_partition(
+                leaven_core::PartitionId::from("TEST"),
+                vec![leaven_kernel::CaseId::new(5)],
+            );
+        let store = InlineEvidenceStore::<CasewiseEvidence<ScalarEvidence>>::new("inline");
+        let mut engine = Engine::<SamplingProblem>::builder()
+            .evaluator(RecordingCaseSetEvaluator {
+                seen_sets: seen_sets.clone(),
+            })
+            .build();
+        engine
+            .insert_seed(
+                PartMapArtifact(BTreeMap::from([("answer".to_owned(), "draft".to_owned())])),
+                0,
+            )
+            .unwrap();
+        let mut gepa = Gepa::new(
+            PartMapSurface,
+            ParetoFrontier::by_case().build(),
+            FixedSurfaceEdit::new("improved".to_owned()),
+        )
+        .max_iterations(1);
+
+        engine.run(&mut gepa, &case_set, &store).await.unwrap();
+
+        let seen_sets = seen_sets.lock().expect("seen sets lock").clone();
+        assert_eq!(seen_sets.len(), 2);
+        for case_ids in seen_sets {
+            assert_eq!(case_ids.len(), 3);
+            assert!(
+                case_ids
+                    .iter()
+                    .all(|case| *case < leaven_kernel::CaseId::new(4))
+            );
+        }
+    });
+}
+
+#[test]
+fn gepa_candidate_history_tracks_seed_and_accepted_children_by_assessment() {
+    block_on(async {
+        let case_set = train_case_set();
+        let store = InlineEvidenceStore::<CasewiseEvidence<ScalarEvidence>>::new("inline");
+        let mut engine = Engine::<SamplingProblem>::builder()
+            .evaluator(PrefixImprovementEvaluator)
+            .build();
+        let seed = engine
+            .insert_seed(
+                PartMapArtifact(BTreeMap::from([("answer".to_owned(), "draft".to_owned())])),
+                0,
+            )
+            .unwrap();
+        let mut gepa = Gepa::new(
+            PartMapSurface,
+            ParetoFrontier::by_case().build(),
+            FixedSurfaceEdit::new("improved".to_owned()),
+        )
+        .max_iterations(1);
+
+        engine.run(&mut gepa, &case_set, &store).await.unwrap();
+
+        let child = engine.view().candidate_tree().children(seed)[0];
+        let history = gepa.candidate_history();
+        assert_eq!(history.len(), 2);
+        assert_eq!(history[0].candidate(), seed);
+        assert!((history[0].score() - 0.0).abs() < f64::EPSILON);
+        assert_eq!(history[1].candidate(), child);
+        assert!((history[1].score() - 1.0).abs() < f64::EPSILON);
+        assert!(engine.view().assessment(history[0].assessment()).is_some());
+        assert!(engine.view().assessment(history[1].assessment()).is_some());
+    });
+}
+
+#[test]
+fn gepa_batch_sampler_builder_uses_custom_minibatches() {
+    block_on(async {
+        let seen_sets = Arc::new(Mutex::new(Vec::new()));
+        let case_set = CaseSet::new(vec![(), (), (), ()]).with_partition(
+            leaven_core::PartitionId::from("TRAIN"),
+            vec![
+                leaven_kernel::CaseId::new(0),
+                leaven_kernel::CaseId::new(1),
+                leaven_kernel::CaseId::new(2),
+                leaven_kernel::CaseId::new(3),
+            ],
+        );
+        let store = InlineEvidenceStore::<CasewiseEvidence<ScalarEvidence>>::new("inline");
+        let mut engine = Engine::<SamplingProblem>::builder()
+            .evaluator(RecordingCaseSetEvaluator {
+                seen_sets: seen_sets.clone(),
+            })
+            .build();
+        engine
+            .insert_seed(
+                PartMapArtifact(BTreeMap::from([("answer".to_owned(), "draft".to_owned())])),
+                0,
+            )
+            .unwrap();
+        let mut gepa = Gepa::new(
+            PartMapSurface,
+            ParetoFrontier::by_case().build(),
+            FixedSurfaceEdit::new("improved".to_owned()),
+        )
+        .batch_sampler(EpochShuffled::new(2).with_seed(7))
+        .max_iterations(1);
+
+        engine.run(&mut gepa, &case_set, &store).await.unwrap();
+
+        let seen_sets = seen_sets.lock().expect("seen sets lock").clone();
+        assert_eq!(seen_sets.len(), 2);
+        assert!(seen_sets.iter().all(|case_ids| case_ids.len() == 2));
+    });
+}
+
+#[test]
+fn gepa_proposal_count_applies_multiple_reflections_in_one_iteration() {
+    block_on(async {
+        let case_set = train_case_set();
+        let store = InlineEvidenceStore::<CasewiseEvidence<ScalarEvidence>>::new("inline");
+        let mut engine = Engine::<SamplingProblem>::builder()
+            .evaluator(PrefixImprovementEvaluator)
+            .build();
+        let seed = engine
+            .insert_seed(
+                PartMapArtifact(BTreeMap::from([("answer".to_owned(), "draft".to_owned())])),
+                0,
+            )
+            .unwrap();
+        let mut gepa = Gepa::new(
+            PartMapSurface,
+            ParetoFrontier::by_case().build(),
+            SequentialSurfaceEdits::new(["improved-a", "improved-b"]),
+        )
+        .proposal_count(2)
+        .max_iterations(1);
+
+        engine.run(&mut gepa, &case_set, &store).await.unwrap();
+
+        let view = engine.view();
+        let children = view.candidate_tree().children(seed);
+        let child_artifacts = children
+            .iter()
+            .map(|child| {
+                view.artifact(*child)
+                    .unwrap()
+                    .0
+                    .get("answer")
+                    .unwrap()
+                    .clone()
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(children.len(), 2);
+        assert!(child_artifacts.contains(&"improved-a".to_owned()));
+        assert!(child_artifacts.contains(&"improved-b".to_owned()));
+        assert_eq!(view.proposal_batch_count(), 2);
+        assert_eq!(view.assessment_count(), 3);
+    });
+}
+
+#[test]
+fn full_validation_policy_evaluates_accepted_candidates_and_selects_validation_best() {
+    block_on(async {
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let case_set = CaseSet::new(vec![(), ()])
+            .with_partition(
+                leaven_core::PartitionId::from("TRAIN"),
+                vec![leaven_kernel::CaseId::new(0)],
+            )
+            .with_partition(
+                leaven_core::PartitionId::from("VALIDATION"),
+                vec![leaven_kernel::CaseId::new(1)],
+            );
+        let store = InlineEvidenceStore::<CasewiseEvidence<ScalarEvidence>>::new("inline");
+        let mut engine = Engine::<SamplingProblem>::builder()
+            .evaluator(ValidationSelectionEvaluator {
+                seen_sets: seen.clone(),
+            })
+            .build();
+        let seed = engine
+            .insert_seed(
+                PartMapArtifact(BTreeMap::from([("answer".to_owned(), "draft".to_owned())])),
+                0,
+            )
+            .unwrap();
+        let mut gepa = Gepa::new(
+            PartMapSurface,
+            ParetoFrontier::by_case().build(),
+            FixedSurfaceEdit::new("improved".to_owned()),
+        )
+        .validation_policy(FullValidation)
+        .max_iterations(1);
+
+        let run = engine.run(&mut gepa, &case_set, &store).await.unwrap();
+        let child = engine.view().candidate_tree().children(seed)[0];
+
+        let seen = seen.lock().expect("seen lock").clone();
+        assert_eq!(seen.len(), 4);
+        assert_eq!(seen[0], vec![leaven_kernel::CaseId::new(0)]);
+        assert_eq!(seen[1], vec![leaven_kernel::CaseId::new(1)]);
+        assert_eq!(seen[2], vec![leaven_kernel::CaseId::new(0)]);
+        assert_eq!(seen[3], vec![leaven_kernel::CaseId::new(1)]);
+        assert_eq!(gepa.population().best(), Some(child));
+        assert_eq!(run.best, Some(seed));
+    });
+}
+
+#[test]
+fn gepa_checkpoint_restore_rejects_missing_validation_best_candidate() {
+    block_on(async {
+        let case_set = CaseSet::new(vec![(), ()])
+            .with_partition(
+                leaven_core::PartitionId::from("TRAIN"),
+                vec![leaven_kernel::CaseId::new(0)],
+            )
+            .with_partition(
+                leaven_core::PartitionId::from("VALIDATION"),
+                vec![leaven_kernel::CaseId::new(1)],
+            );
+        let store = InlineEvidenceStore::<CasewiseEvidence<ScalarEvidence>>::new("inline");
+        let mut engine = Engine::<SamplingProblem>::builder()
+            .evaluator(ValidationSelectionEvaluator {
+                seen_sets: Arc::new(Mutex::new(Vec::new())),
+            })
+            .build();
+        engine
+            .insert_seed(
+                PartMapArtifact(BTreeMap::from([("answer".to_owned(), "draft".to_owned())])),
+                0,
+            )
+            .unwrap();
+        let mut gepa = Gepa::new(
+            PartMapSurface,
+            ParetoFrontier::by_case().build(),
+            FixedSurfaceEdit::new("improved".to_owned()),
+        )
+        .validation_policy(FullValidation)
+        .max_iterations(1);
+        engine.run(&mut gepa, &case_set, &store).await.unwrap();
+
+        let state = gepa
+            .checkpoint_state(CheckpointContext::new(engine.view()))
+            .unwrap();
+        let mut missing_validation_best = serde_json::to_value(&state).unwrap();
+        missing_validation_best["validation_best"]["candidate"] =
+            serde_json::to_value(leaven_kernel::CandidateId::new()).unwrap();
+        let missing_state = serde_json::from_value(missing_validation_best).unwrap();
+        let mut restored = Gepa::new(
+            PartMapSurface,
+            ParetoFrontier::by_case().build(),
+            FixedSurfaceEdit::new("unused".to_owned()),
+        )
+        .validation_policy(FullValidation);
+
+        let error = restored
+            .restore_state(missing_state, RestoreContext::new(engine.view()))
+            .unwrap_err();
+
+        assert!(error.to_string().contains("validation best candidate"));
+    });
+}
+
+#[test]
+fn gepa_checkpoint_state_includes_validation_policy_state() {
+    let mut graph = RunGraph::<SmokeProblem>::new(RunId::new());
+    let mut budget = BudgetLedger::default();
+    let ctx = RunContext::new(&mut graph, &mut budget);
+    let gepa = Gepa::new(
+        PartMapSurface,
+        ParetoFrontier::by_case().build(),
+        FixedSurfaceEdit::new("unused".to_owned()),
+    );
+
+    let state = gepa
+        .checkpoint_state(CheckpointContext::new(ctx.graph()))
+        .unwrap();
+    let serialized = serde_json::to_value(state).unwrap();
+
+    assert!(serialized.get("validation_policy").is_some());
+}
+
+#[test]
+fn gepa_default_max_iterations_is_not_one_iteration_smoke_config() {
+    let mut graph = RunGraph::<SmokeProblem>::new(RunId::new());
+    let mut budget = BudgetLedger::default();
+    let ctx = RunContext::new(&mut graph, &mut budget);
+    let gepa = Gepa::new(
+        PartMapSurface,
+        ParetoFrontier::by_case().build(),
+        FixedSurfaceEdit::new("unused".to_owned()),
+    );
+
+    let state = gepa
+        .checkpoint_state(CheckpointContext::new(ctx.graph()))
+        .unwrap();
+    let serialized = serde_json::to_value(state).unwrap();
+
+    assert_ne!(serialized["max_iterations"].as_u64(), Some(1));
 }
 
 #[test]
@@ -626,6 +1030,15 @@ impl OptimizationProblem for SmokeProblem {
     type ProposalAnnotations = ();
 }
 
+struct SamplingProblem;
+
+impl OptimizationProblem for SamplingProblem {
+    type Artifact = PartMapArtifact;
+    type Case = ();
+    type Evidence = CasewiseEvidence<ScalarEvidence>;
+    type ProposalAnnotations = ();
+}
+
 #[derive(Clone, Debug)]
 struct SmokeEvidence;
 
@@ -634,6 +1047,202 @@ impl Evidence for SmokeEvidence {}
 impl leaven_gepa::GepaScoreEvidence for SmokeEvidence {
     fn scalar_casewise(&self) -> CasewiseEvidence<ScalarEvidence> {
         CasewiseEvidence::new(Vec::new())
+    }
+}
+
+struct RecordingCaseSetEvaluator {
+    seen_sets: Arc<Mutex<Vec<Vec<leaven_kernel::CaseId>>>>,
+}
+
+impl Evaluator<SamplingProblem> for RecordingCaseSetEvaluator {
+    fn id(&self) -> EvaluatorId {
+        EvaluatorId::PRIMARY
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        Fingerprint::from_bytes([8; 32])
+    }
+
+    fn cache_policy(&self, _request: &ResolvedEvaluationRequest) -> CachePolicy {
+        CachePolicy::Never
+    }
+
+    async fn evaluate(
+        &self,
+        request: ResolvedEvaluationRequest,
+        ctx: EvaluationContext<'_, SamplingProblem>,
+    ) -> Result<Metered<Vec<Assessment<SamplingProblem>>>, EvaluationError> {
+        self.seen_sets
+            .lock()
+            .expect("seen sets lock")
+            .push(request.set.case_ids.clone());
+        let ResolvedRequestKind::Independent { candidates } = request.kind else {
+            return Err(EvaluationError::Message(
+                "expected independent request".to_owned(),
+            ));
+        };
+        Ok(Metered::new(
+            candidates
+                .into_iter()
+                .map(|candidate| {
+                    let artifact = ctx.graph().artifact(candidate).expect("candidate artifact");
+                    let score = if artifact.0.get("answer").map(String::as_str) == Some("improved")
+                    {
+                        1.0
+                    } else {
+                        0.0
+                    };
+                    Assessment::Independent {
+                        candidate,
+                        target: AssessmentTarget::EvaluationSet(
+                            leaven_kernel::EvaluationSetId::new(),
+                        ),
+                        evidence: CasewiseEvidence::new(
+                            request
+                                .set
+                                .case_ids
+                                .iter()
+                                .copied()
+                                .map(|case| {
+                                    CaseOutcome::new(case, ScalarEvidence::new(score).unwrap())
+                                })
+                                .collect(),
+                        ),
+                        cost: Cost::metric_calls(1),
+                        metadata: MetadataBag::new(),
+                    }
+                })
+                .collect(),
+            Cost::metric_calls(1),
+        ))
+    }
+}
+
+struct ValidationSelectionEvaluator {
+    seen_sets: Arc<Mutex<Vec<Vec<leaven_kernel::CaseId>>>>,
+}
+
+impl Evaluator<SamplingProblem> for ValidationSelectionEvaluator {
+    fn id(&self) -> EvaluatorId {
+        EvaluatorId::PRIMARY
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        Fingerprint::from_bytes([9; 32])
+    }
+
+    fn cache_policy(&self, _request: &ResolvedEvaluationRequest) -> CachePolicy {
+        CachePolicy::Never
+    }
+
+    async fn evaluate(
+        &self,
+        request: ResolvedEvaluationRequest,
+        ctx: EvaluationContext<'_, SamplingProblem>,
+    ) -> Result<Metered<Vec<Assessment<SamplingProblem>>>, EvaluationError> {
+        self.seen_sets
+            .lock()
+            .expect("seen sets lock")
+            .push(request.set.case_ids.clone());
+        let ResolvedRequestKind::Independent { candidates } = request.kind else {
+            return Err(EvaluationError::Message(
+                "expected independent request".to_owned(),
+            ));
+        };
+        Ok(Metered::new(
+            candidates
+                .into_iter()
+                .map(|candidate| {
+                    let artifact = ctx.graph().artifact(candidate).expect("candidate artifact");
+                    let improved = artifact.0.get("answer").map(String::as_str) == Some("improved");
+                    Assessment::Independent {
+                        candidate,
+                        target: AssessmentTarget::EvaluationSet(
+                            leaven_kernel::EvaluationSetId::new(),
+                        ),
+                        evidence: CasewiseEvidence::new(
+                            request
+                                .set
+                                .case_ids
+                                .iter()
+                                .copied()
+                                .map(|case| {
+                                    let score = if case == leaven_kernel::CaseId::new(1) {
+                                        if improved { 0.0 } else { 1.0 }
+                                    } else if improved {
+                                        1.0
+                                    } else {
+                                        0.0
+                                    };
+                                    CaseOutcome::new(case, ScalarEvidence::new(score).unwrap())
+                                })
+                                .collect(),
+                        ),
+                        cost: Cost::metric_calls(1),
+                        metadata: MetadataBag::new(),
+                    }
+                })
+                .collect(),
+            Cost::metric_calls(1),
+        ))
+    }
+}
+
+struct PrefixImprovementEvaluator;
+
+impl Evaluator<SamplingProblem> for PrefixImprovementEvaluator {
+    fn id(&self) -> EvaluatorId {
+        EvaluatorId::PRIMARY
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        Fingerprint::from_bytes([10; 32])
+    }
+
+    fn cache_policy(&self, _request: &ResolvedEvaluationRequest) -> CachePolicy {
+        CachePolicy::Never
+    }
+
+    async fn evaluate(
+        &self,
+        request: ResolvedEvaluationRequest,
+        ctx: EvaluationContext<'_, SamplingProblem>,
+    ) -> Result<Metered<Vec<Assessment<SamplingProblem>>>, EvaluationError> {
+        let ResolvedRequestKind::Independent { candidates } = request.kind else {
+            return Err(EvaluationError::Message(
+                "expected independent request".to_owned(),
+            ));
+        };
+        Ok(Metered::new(
+            candidates
+                .into_iter()
+                .map(|candidate| {
+                    let artifact = ctx.graph().artifact(candidate).expect("candidate artifact");
+                    let score = if artifact
+                        .0
+                        .get("answer")
+                        .is_some_and(|value| value.starts_with("improved"))
+                    {
+                        1.0
+                    } else {
+                        0.0
+                    };
+                    Assessment::Independent {
+                        candidate,
+                        target: AssessmentTarget::EvaluationSet(
+                            leaven_kernel::EvaluationSetId::new(),
+                        ),
+                        evidence: CasewiseEvidence::new(vec![CaseOutcome::new(
+                            leaven_kernel::CaseId::new(0),
+                            ScalarEvidence::new(score).unwrap(),
+                        )]),
+                        cost: Cost::metric_calls(1),
+                        metadata: MetadataBag::new(),
+                    }
+                })
+                .collect(),
+            Cost::metric_calls(1),
+        ))
     }
 }
 
@@ -707,6 +1316,35 @@ impl Proposer<SmokeProblem> for HiddenPartitionInspectingProposer {
             },
             Cost::zero(),
         ))
+    }
+}
+
+#[derive(Clone, Debug)]
+struct SequentialSurfaceEdits {
+    edits: std::collections::VecDeque<String>,
+}
+
+impl SequentialSurfaceEdits {
+    fn new<const N: usize>(edits: [&str; N]) -> Self {
+        Self {
+            edits: edits.into_iter().map(str::to_owned).collect(),
+        }
+    }
+}
+
+impl GepaReflector<SamplingProblem, PartMapSurface> for SequentialSurfaceEdits {
+    async fn reflect_candidate(
+        &mut self,
+        ctx: &mut RunContext<'_, SamplingProblem>,
+        surface: &PartMapSurface,
+        parent: leaven_kernel::CandidateId,
+        parent_assessment: leaven_kernel::AssessmentId,
+        part: String,
+    ) -> Result<Option<leaven_kernel::CandidateId>, leaven_engine::OptimizerError> {
+        let edit = self.edits.pop_front().expect("enough scripted edits");
+        FixedSurfaceEdit::new(edit)
+            .reflect_candidate(ctx, surface, parent, parent_assessment, part)
+            .await
     }
 }
 

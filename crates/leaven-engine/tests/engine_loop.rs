@@ -17,11 +17,11 @@ use leaven_engine::{
     GraphSnapshotRef, Optimizer, OptimizerError, OptimizerStateSnapshot, OptimizerStateWrite,
     PrivateStatePolicy, RestoreContext, RunCheckpoint, RunCheckpointRequest, RunContext, RunEvent,
     RunGraph, RunGraphSnapshot, RunGraphView, RunPersistence, RunPersistenceError, StateFormat,
-    StepStatus, StoreRunPersistence, TrustPolicy, optimize,
+    StepStatus, StopReason, Stopper, StoreRunPersistence, TrustPolicy, optimize,
 };
 use leaven_kernel::{
-    AssessmentId, BlobRef, Budget, CandidateId, CaseId, ContentId, ErrorKind, Fingerprint, RunId,
-    now,
+    AssessmentId, BlobRef, Budget, CandidateId, CaseId, ContentId, Cost, ErrorKind, Fingerprint,
+    RunId, StageId, now,
 };
 use leaven_store::{BlobStore, BlobWrite, CheckpointBytes, CheckpointStore, StoreError};
 use leaven_store_inline::InlineEvidenceStore;
@@ -81,6 +81,138 @@ fn optimize_builder_wires_budget_and_callbacks() {
 
         assert!(seen.load(Ordering::SeqCst) > 0);
         assert_eq!(engine.budget().snapshot().limit.metric_calls, Some(7));
+    });
+}
+
+#[test]
+fn engine_builder_stopper_stops_cleanly_before_first_step_with_current_best() {
+    block_on(async {
+        let mut engine = Engine::<TestProblem>::builder()
+            .stopper(StopImmediately)
+            .build();
+        let seed = engine
+            .insert_seed(TextArtifact("seed".to_owned()), 0)
+            .unwrap();
+        let cases = CaseSet::new(vec!["case"]);
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let mut optimizer = StatefulOptimizer {
+            selected: Some(seed),
+            cursor: 0,
+        };
+
+        let result = engine.run(&mut optimizer, &cases, &store).await.unwrap();
+
+        assert_eq!(result.best, Some(seed));
+        assert!(engine.view().events().any(|event| matches!(
+            event,
+            RunEvent::OptimizationStopping {
+                reason: StopReason::StopperTriggered,
+            }
+        )));
+        assert!(
+            !engine
+                .view()
+                .events()
+                .any(|event| matches!(event, RunEvent::IterationStarted { .. }))
+        );
+        assert!(
+            !engine
+                .view()
+                .events()
+                .any(|event| matches!(event, RunEvent::Error { .. }))
+        );
+    });
+}
+
+#[test]
+fn metric_call_budget_stopper_stops_before_next_step_without_budget_error() {
+    block_on(async {
+        let mut engine = Engine::<TestProblem>::builder()
+            .budget(Budget::metric_calls(1))
+            .metric_call_budget_stopper(1)
+            .build();
+        let seed = engine
+            .insert_seed(TextArtifact("seed".to_owned()), 0)
+            .unwrap();
+        let cases = CaseSet::new(vec!["case"]);
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let mut optimizer = ChargeMetricThenContinue {
+            best: Some(seed),
+            steps: 0,
+        };
+
+        let result = engine.run(&mut optimizer, &cases, &store).await.unwrap();
+
+        assert_eq!(optimizer.steps, 1);
+        assert_eq!(result.best, Some(seed));
+        assert_eq!(engine.budget().snapshot().spent.metric_calls, 1);
+        assert_eq!(
+            engine
+                .view()
+                .events()
+                .filter(|event| matches!(event, RunEvent::IterationStarted { .. }))
+                .count(),
+            1
+        );
+        assert!(engine.view().events().any(|event| matches!(
+            event,
+            RunEvent::OptimizationStopping {
+                reason: StopReason::BudgetReached,
+            }
+        )));
+        assert!(
+            !engine
+                .view()
+                .events()
+                .any(|event| matches!(event, RunEvent::Error { .. }))
+        );
+    });
+}
+
+#[test]
+fn metric_budget_hard_guard_stops_as_budget_not_optimizer_error() {
+    block_on(async {
+        let mut engine = Engine::<TestProblem>::builder()
+            .budget(Budget::metric_calls(0))
+            .build();
+        let seed = engine
+            .insert_seed(TextArtifact("seed".to_owned()), 0)
+            .unwrap();
+        let cases = CaseSet::new(vec!["case"]);
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let mut optimizer = ChargeMetricThenContinue {
+            best: Some(seed),
+            steps: 0,
+        };
+
+        let err = engine
+            .run(&mut optimizer, &cases, &store)
+            .await
+            .unwrap_err();
+
+        assert!(err.to_string().contains("metric charge failed"));
+        assert_eq!(optimizer.steps, 0);
+        assert_eq!(engine.budget().snapshot().spent.metric_calls, 0);
+        assert!(engine.view().events().any(|event| matches!(
+            event,
+            RunEvent::OptimizationStopping {
+                reason: StopReason::BudgetExceeded,
+            }
+        )));
+        assert!(!engine.view().events().any(|event| matches!(
+            event,
+            RunEvent::OptimizationStopping {
+                reason: StopReason::Error,
+            }
+        )));
+        assert!(engine.view().events().any(|event| matches!(
+            event,
+            RunEvent::Error { error, .. } if error.kind == ErrorKind::Budget
+        )));
+        assert!(!engine.view().events().any(|event| matches!(
+            event,
+            RunEvent::Error { error, .. } if error.kind == ErrorKind::Optimizer
+        )));
     });
 }
 
@@ -1080,6 +1212,13 @@ struct ContinueThenDone {
     steps: usize,
 }
 
+struct ChargeMetricThenContinue {
+    best: Option<CandidateId>,
+    steps: usize,
+}
+
+struct StopImmediately;
+
 struct CountingCallback {
     seen: Arc<AtomicUsize>,
 }
@@ -1395,6 +1534,29 @@ impl Optimizer<TestProblem> for ContinueThenDone {
         _graph: leaven_engine::RunGraphView<'_, TestProblem>,
     ) -> Option<leaven_kernel::CandidateId> {
         None
+    }
+}
+
+impl Optimizer<TestProblem> for ChargeMetricThenContinue {
+    async fn step(
+        &mut self,
+        ctx: &mut RunContext<'_, TestProblem>,
+    ) -> Result<StepStatus, OptimizerError> {
+        assert!(ctx.iteration().is_some());
+        ctx.charge(StageId::custom("metric"), Cost::metric_calls(1))
+            .map_err(|error| OptimizerError::with_source("metric charge failed", error))?;
+        self.steps += 1;
+        Ok(StepStatus::Continue)
+    }
+
+    fn best_candidate(&self, _graph: RunGraphView<'_, TestProblem>) -> Option<CandidateId> {
+        self.best
+    }
+}
+
+impl Stopper<TestProblem> for StopImmediately {
+    fn should_stop(&self, _graph: RunGraphView<'_, TestProblem>) -> bool {
+        true
     }
 }
 

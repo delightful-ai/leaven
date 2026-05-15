@@ -19,13 +19,13 @@ use leaven_eval::{
     SplitReport, SplitRole,
 };
 use leaven_evidence::{CasewiseEvidence, ScoredFeedbackEvidence};
-use leaven_kernel::{Budget, CaseId, EvaluatorId};
+use leaven_kernel::{Budget, BudgetSnapshot, CandidateId, CaseId, Cost, EvaluatorId};
 use leaven_store::EvidenceStore;
 
 use crate::{
     IntoOptimizeStore, OptimizeError, OptimizeStore, RunOutput, Score, ScoreContext, ScoreError,
     evaluator::{ScoringEvaluator, default_parallelism},
-    result::{OptimizationReport, OptimizeResult, average},
+    result::{OptimizationReport, OptimizeResult, RunStorage, average},
 };
 
 type Runner<A, C> = Arc<dyn Fn(A, C) -> BoxFuture<'static, RunOutput> + Send + Sync>;
@@ -33,10 +33,42 @@ type Scorer<A, C> =
     Arc<dyn Fn(ScoreContext<A, C>) -> BoxFuture<'static, Result<Score, ScoreError>> + Send + Sync>;
 
 struct FinalEvaluations {
+    baseline_train: Option<CandidateEvaluationSummary>,
+    train: Option<CandidateEvaluationSummary>,
     baseline_validation: Option<CandidateEvaluationSummary>,
     validation: Option<CandidateEvaluationSummary>,
     baseline_test: Option<CandidateEvaluationSummary>,
     test: Option<CandidateEvaluationSummary>,
+    cost: Cost,
+}
+
+struct FinalEvaluationInputs {
+    seed: CandidateId,
+    best: CandidateId,
+    has_train: bool,
+    has_validation: bool,
+    has_test: bool,
+}
+
+struct FinalPartitionEvaluation {
+    partition: PartitionId,
+    purpose: EvaluationPurpose,
+}
+
+struct FinalPartitionResults {
+    baseline: CandidateEvaluationSummary,
+    optimized: CandidateEvaluationSummary,
+    cost: Cost,
+}
+
+struct ReportInputs<'a, C> {
+    dataset: &'a Dataset<C>,
+    splits: &'a DatasetSplits,
+    best: CandidateId,
+    final_evaluations: &'a FinalEvaluations,
+    optimization_budget: BudgetSnapshot,
+    stop_reason: leaven_engine::StopReason,
+    storage: RunStorage,
 }
 
 /// Problem type used by the public run builder.
@@ -225,6 +257,7 @@ where
     pub async fn run(mut self) -> Result<OptimizeResult<A>, OptimizeError> {
         let scorer = self.scorer.take().ok_or(OptimizeError::MissingScore)?;
         let budget = self.budget.take().ok_or(OptimizeError::MissingBudget)?;
+        let metric_call_limit = budget.metric_calls;
         if self.train.is_empty() && (!self.validation.is_empty() || !self.test.is_empty()) {
             return Err(OptimizeError::HeldOutWithoutTrain);
         }
@@ -241,6 +274,7 @@ where
             .store
             .take()
             .unwrap_or_else(|| OptimizeStore::inline("leaven-run"));
+        let has_persistence = store.persistence().is_some();
         let evaluator = ScoringEvaluator::new(
             Arc::new(case_set_cases(&self.train, &self.validation, &self.test)),
             self.runner.clone(),
@@ -256,6 +290,9 @@ where
                     PartitionId::from("TEST"),
                 ]))
                 .evaluator(evaluator);
+        if let Some(limit) = metric_call_limit {
+            engine_builder = engine_builder.metric_call_budget_stopper(limit);
+        }
         if let Some(persistence) = store.persistence() {
             engine_builder = engine_builder.persistence(persistence);
         }
@@ -269,30 +306,46 @@ where
         let run = engine
             .run(&mut self.optimizer, &case_set, store.evidence_store())
             .await?;
+        let optimization_budget = engine.budget().snapshot();
+        let stop_reason = stop_reason_from_events(&engine.view())?;
+        let storage = run_storage(run.run_id, has_persistence);
         let best = run.best.ok_or_else(|| {
             leaven_engine::OptimizerError::Message(
                 "optimizer finished without a best candidate".to_owned(),
             )
         })?;
+        let has_train = !self.train.is_empty();
+        let has_validation = !self.validation.is_empty();
+        let has_test = !self.test.is_empty();
+        if has_train || has_validation || has_test {
+            engine.set_budget_limit(Budget::unlimited());
+        }
 
         let final_evaluations = run_final_evaluations(
             &mut engine,
             &case_set,
             store.evidence_store(),
-            seed,
-            best,
-            !self.validation.is_empty(),
-            !self.test.is_empty(),
+            FinalEvaluationInputs {
+                seed,
+                best,
+                has_train,
+                has_validation,
+                has_test,
+            },
         )
         .await?;
         let (best_artifact, report) = build_report(
             &engine,
             store.evidence_store(),
-            &dataset,
-            &splits,
-            seed,
-            best,
-            &final_evaluations,
+            ReportInputs {
+                dataset: &dataset,
+                splits: &splits,
+                best,
+                final_evaluations: &final_evaluations,
+                optimization_budget,
+                stop_reason,
+                storage,
+            },
         )?;
         Ok(OptimizeResult {
             run_id: run.run_id,
@@ -377,132 +430,169 @@ async fn run_final_evaluations<A, C>(
     engine: &mut leaven_engine::Engine<RunProblem<A, C>>,
     case_set: &leaven_engine::CaseSet<C>,
     store: &dyn EvidenceStore<CasewiseEvidence<ScoredFeedbackEvidence>>,
-    seed: leaven_kernel::CandidateId,
-    best: leaven_kernel::CandidateId,
-    has_validation: bool,
-    has_test: bool,
+    inputs: FinalEvaluationInputs,
 ) -> Result<FinalEvaluations, leaven_engine::OptimizerError>
 where
     A: Artifact,
     C: Clone + Send + Sync + 'static,
 {
-    let baseline_validation = if has_validation {
-        Some(
-            final_eval(
-                engine,
-                case_set,
-                store,
-                seed,
-                PartitionId::from("VALIDATION"),
-                EvaluationPurpose::Validation,
-            )
-            .await?,
+    let mut cost = Cost::zero();
+    let train = if inputs.has_train {
+        let results = final_eval_partition(
+            engine,
+            case_set,
+            store,
+            &inputs,
+            FinalPartitionEvaluation {
+                partition: PartitionId::from("TRAIN"),
+                purpose: EvaluationPurpose::Custom("final-train-report".into()),
+            },
         )
+        .await?;
+        cost = cost.combine(&results.cost);
+        Some((results.baseline, results.optimized))
     } else {
         None
     };
-    let validation = if has_validation {
-        Some(
-            final_eval(
-                engine,
-                case_set,
-                store,
-                best,
-                PartitionId::from("VALIDATION"),
-                EvaluationPurpose::Validation,
-            )
-            .await?,
+    let validation = if inputs.has_validation {
+        let results = final_eval_partition(
+            engine,
+            case_set,
+            store,
+            &inputs,
+            FinalPartitionEvaluation {
+                partition: PartitionId::from("VALIDATION"),
+                purpose: EvaluationPurpose::Validation,
+            },
         )
+        .await?;
+        cost = cost.combine(&results.cost);
+        Some((results.baseline, results.optimized))
     } else {
         None
     };
-    let baseline_test = if has_test {
-        Some(
-            final_eval(
-                engine,
-                case_set,
-                store,
-                seed,
-                PartitionId::from("TEST"),
-                EvaluationPurpose::FinalTest,
-            )
-            .await?,
+    let test = if inputs.has_test {
+        let results = final_eval_partition(
+            engine,
+            case_set,
+            store,
+            &inputs,
+            FinalPartitionEvaluation {
+                partition: PartitionId::from("TEST"),
+                purpose: EvaluationPurpose::FinalTest,
+            },
         )
-    } else {
-        None
-    };
-    let test = if has_test {
-        Some(
-            final_eval(
-                engine,
-                case_set,
-                store,
-                best,
-                PartitionId::from("TEST"),
-                EvaluationPurpose::FinalTest,
-            )
-            .await?,
-        )
+        .await?;
+        cost = cost.combine(&results.cost);
+        Some((results.baseline, results.optimized))
     } else {
         None
     };
     Ok(FinalEvaluations {
-        baseline_validation,
-        validation,
-        baseline_test,
-        test,
+        baseline_train: train.as_ref().map(|(baseline, _)| baseline.clone()),
+        train: train.map(|(_, optimized)| optimized),
+        baseline_validation: validation.as_ref().map(|(baseline, _)| baseline.clone()),
+        validation: validation.map(|(_, optimized)| optimized),
+        baseline_test: test.as_ref().map(|(baseline, _)| baseline.clone()),
+        test: test.map(|(_, optimized)| optimized),
+        cost,
+    })
+}
+
+async fn final_eval_partition<A, C>(
+    engine: &mut leaven_engine::Engine<RunProblem<A, C>>,
+    case_set: &leaven_engine::CaseSet<C>,
+    store: &dyn EvidenceStore<CasewiseEvidence<ScoredFeedbackEvidence>>,
+    inputs: &FinalEvaluationInputs,
+    evaluation: FinalPartitionEvaluation,
+) -> Result<FinalPartitionResults, leaven_engine::OptimizerError>
+where
+    A: Artifact,
+    C: Clone + Send + Sync + 'static,
+{
+    let (baseline, baseline_cost) = final_eval(
+        engine,
+        case_set,
+        store,
+        inputs.seed,
+        evaluation.partition.clone(),
+        evaluation.purpose.clone(),
+    )
+    .await?;
+    let (optimized, optimized_cost) = final_eval(
+        engine,
+        case_set,
+        store,
+        inputs.best,
+        evaluation.partition,
+        evaluation.purpose,
+    )
+    .await?;
+    Ok(FinalPartitionResults {
+        baseline,
+        optimized,
+        cost: baseline_cost.combine(&optimized_cost),
     })
 }
 
 fn build_report<A, C>(
     engine: &leaven_engine::Engine<RunProblem<A, C>>,
     store: &dyn EvidenceStore<CasewiseEvidence<ScoredFeedbackEvidence>>,
-    dataset: &Dataset<C>,
-    splits: &DatasetSplits,
-    seed: leaven_kernel::CandidateId,
-    best: leaven_kernel::CandidateId,
-    final_evaluations: &FinalEvaluations,
+    inputs: ReportInputs<'_, C>,
 ) -> Result<(A, OptimizationReport), leaven_engine::OptimizerError>
 where
     A: Artifact,
     C: Clone + Send + Sync + 'static,
 {
     let view = engine.view();
-    let train_partition = PartitionId::from("TRAIN");
-    let baseline_train =
-        latest_average_for_partition(&view, store, seed, &train_partition)?.unwrap_or(0.0);
-    let optimized_train =
-        latest_average_for_partition(&view, store, best, &train_partition)?.unwrap_or(0.0);
-    let best_artifact = view.artifact(best).expect("best exists").clone();
-    let cost = engine.budget().snapshot().spent;
+    let best_artifact = view.artifact(inputs.best).expect("best exists").clone();
+    let budget = engine.budget().snapshot();
+    let cost = budget.spent.clone();
     let report = OptimizationReport {
-        dataset: dataset.fingerprint(),
-        splits: splits.fingerprint(),
-        budget: engine.budget().snapshot(),
+        dataset: inputs.dataset.fingerprint(),
+        splits: inputs.splits.fingerprint(),
+        stop_reason: inputs.stop_reason.into(),
+        storage: inputs.storage,
+        optimization_budget: inputs.optimization_budget.clone(),
+        budget,
+        optimization_cost: inputs.optimization_budget.spent,
+        final_report_cost: inputs.final_evaluations.cost.clone(),
         cost: cost.clone(),
-        baseline_train_score: baseline_train,
-        optimized_train_score: optimized_train,
-        baseline_validation_score: final_evaluations
+        baseline_train_score: inputs
+            .final_evaluations
+            .baseline_train
+            .as_ref()
+            .and_then(|summary| summary.average_score),
+        optimized_train_score: inputs
+            .final_evaluations
+            .train
+            .as_ref()
+            .and_then(|summary| summary.average_score),
+        baseline_validation_score: inputs
+            .final_evaluations
             .baseline_validation
             .as_ref()
-            .map(|summary| summary.average_score),
-        validation_score: final_evaluations
+            .and_then(|summary| summary.average_score),
+        validation_score: inputs
+            .final_evaluations
             .validation
             .as_ref()
-            .map(|summary| summary.average_score),
-        baseline_test_score: final_evaluations
+            .and_then(|summary| summary.average_score),
+        baseline_test_score: inputs
+            .final_evaluations
             .baseline_test
             .as_ref()
-            .map(|summary| summary.average_score),
-        test_score: final_evaluations
+            .and_then(|summary| summary.average_score),
+        test_score: inputs
+            .final_evaluations
             .test
             .as_ref()
-            .map(|summary| summary.average_score),
+            .and_then(|summary| summary.average_score),
         evaluation: EvaluationReport {
-            dataset: dataset.fingerprint(),
-            splits: splits.fingerprint(),
+            dataset: inputs.dataset.fingerprint(),
+            splits: inputs.splits.fingerprint(),
             cost,
-            splits_reported: split_reports_for(&view, store, splits)?,
+            splits_reported: split_reports_for(&view, store, inputs.splits)?,
         },
         events: view.events().map(event_name).collect(),
     };
@@ -516,7 +606,7 @@ async fn final_eval<A, C>(
     candidate: leaven_kernel::CandidateId,
     partition: PartitionId,
     purpose: EvaluationPurpose,
-) -> Result<CandidateEvaluationSummary, leaven_engine::OptimizerError>
+) -> Result<(CandidateEvaluationSummary, Cost), leaven_engine::OptimizerError>
 where
     A: Artifact,
     C: Clone + Send + Sync + 'static,
@@ -538,30 +628,10 @@ where
             leaven_engine::OptimizerError::with_source("final evaluation failed", source)
         })?;
     let view = engine.view();
-    assessment_summary(&view, store, report.assessment_ids[0])
-}
-
-fn latest_average_for_partition<A, C>(
-    view: &leaven_engine::RunGraphView<'_, RunProblem<A, C>>,
-    store: &dyn EvidenceStore<CasewiseEvidence<ScoredFeedbackEvidence>>,
-    candidate: leaven_kernel::CandidateId,
-    partition: &PartitionId,
-) -> Result<Option<f64>, leaven_engine::OptimizerError>
-where
-    A: Artifact,
-    C: Clone + Send + Sync + 'static,
-{
-    let mut latest = None;
-    for assessment in view.assessments(candidate).iter() {
-        let Some((assessment_partition, _role)) = assessment_split(view, assessment.id()) else {
-            continue;
-        };
-        if &assessment_partition != partition {
-            continue;
-        }
-        latest = Some(assessment_summary(view, store, assessment.id())?.average_score);
-    }
-    Ok(latest)
+    Ok((
+        assessment_summary(&view, store, report.assessment_ids[0])?,
+        report.cost,
+    ))
 }
 
 fn split_reports_for<A, C>(
@@ -657,11 +727,43 @@ fn report_scores(evidence: &CasewiseEvidence<ScoredFeedbackEvidence>) -> Vec<Rep
         .outcomes()
         .iter()
         .map(|outcome| ReportScore {
+            case_id: outcome.case(),
             score: outcome.evidence().score().score(),
             feedback: outcome.evidence().feedback().to_owned(),
             trace: outcome.evidence().trace().to_vec(),
         })
         .collect()
+}
+
+fn stop_reason_from_events<A, C>(
+    view: &leaven_engine::RunGraphView<'_, RunProblem<A, C>>,
+) -> Result<leaven_engine::StopReason, leaven_engine::OptimizerError>
+where
+    A: Artifact,
+    C: Clone + Send + Sync + 'static,
+{
+    let mut stop_reason = None;
+    for event in view.events() {
+        if let leaven_engine::RunEvent::OptimizationStopping { reason } = event {
+            stop_reason = Some(reason);
+        }
+    }
+    stop_reason.copied().ok_or_else(|| {
+        leaven_engine::OptimizerError::Message(
+            "optimizer finished without a stop reason".to_owned(),
+        )
+    })
+}
+
+fn run_storage(run_id: leaven_kernel::RunId, has_persistence: bool) -> RunStorage {
+    if has_persistence {
+        RunStorage::Stored {
+            run_id,
+            resumable: false,
+        }
+    } else {
+        RunStorage::Ephemeral { run_id }
+    }
 }
 
 fn event_name(event: &leaven_engine::RunEvent) -> String {

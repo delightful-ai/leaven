@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{num::NonZeroUsize, time::Duration};
 
 use leaven_lm::LmError;
 
@@ -9,6 +9,7 @@ pub struct OpenAiConfig {
     base_url: String,
     request_timeout: Duration,
     retry_policy: OpenAiRetryPolicy,
+    throttle_policy: OpenAiThrottlePolicy,
 }
 
 impl OpenAiConfig {
@@ -19,6 +20,7 @@ impl OpenAiConfig {
             base_url: "https://api.openai.com/v1/responses".to_owned(),
             request_timeout: Duration::from_secs(120),
             retry_policy: OpenAiRetryPolicy::default(),
+            throttle_policy: OpenAiThrottlePolicy::default(),
         }
     }
 
@@ -54,6 +56,13 @@ impl OpenAiConfig {
         self
     }
 
+    /// Overrides proactive concurrency throttling for provider calls.
+    #[must_use]
+    pub const fn with_throttle_policy(mut self, throttle_policy: OpenAiThrottlePolicy) -> Self {
+        self.throttle_policy = throttle_policy;
+        self
+    }
+
     pub(crate) fn api_key(&self) -> &str {
         &self.api_key
     }
@@ -68,6 +77,45 @@ impl OpenAiConfig {
 
     pub(crate) const fn retry_policy(&self) -> &OpenAiRetryPolicy {
         &self.retry_policy
+    }
+
+    pub(crate) const fn throttle_policy(&self) -> &OpenAiThrottlePolicy {
+        &self.throttle_policy
+    }
+}
+
+/// Proactive concurrency throttle for `OpenAI` Responses API requests.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct OpenAiThrottlePolicy {
+    max_concurrent_requests: NonZeroUsize,
+    acquire_timeout: Duration,
+}
+
+impl OpenAiThrottlePolicy {
+    /// Creates an explicit provider-call concurrency policy.
+    #[must_use]
+    pub const fn new(max_concurrent_requests: NonZeroUsize, acquire_timeout: Duration) -> Self {
+        Self {
+            max_concurrent_requests,
+            acquire_timeout,
+        }
+    }
+
+    pub(crate) const fn max_concurrent_requests(&self) -> NonZeroUsize {
+        self.max_concurrent_requests
+    }
+
+    pub(crate) const fn acquire_timeout(&self) -> Duration {
+        self.acquire_timeout
+    }
+}
+
+impl Default for OpenAiThrottlePolicy {
+    fn default() -> Self {
+        Self::new(
+            NonZeroUsize::new(32).expect("default OpenAI concurrency is non-zero"),
+            Duration::ZERO,
+        )
     }
 }
 

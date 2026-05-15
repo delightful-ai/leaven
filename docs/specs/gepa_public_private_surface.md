@@ -243,13 +243,13 @@ TrustPolicy / ReadScope when building secure agentic flows
 The design goal is not to hide power-user machinery. It is to keep it out of
 the first mile.
 
-## 3. Parent Selection Versus Part Selection
+## 3. Candidate Selection Versus Part Selection
 
 GEPA has two different selection questions.
 
 ```text
-Parent selection: Which candidate should GEPA mutate next?
-Part selection:   Where inside that candidate should GEPA edit?
+Candidate selection: Which candidate should GEPA mutate next?
+Part selection:      Where inside that candidate should GEPA edit?
 ```
 
 Example:
@@ -260,7 +260,7 @@ Candidate B: prompt { system, rubric, examples }
 Candidate C: prompt { system, rubric, examples }
 ```
 
-Parent selection chooses `A`, `B`, or `C`.
+Candidate selection chooses `A`, `B`, or `C`.
 
 Part selection then chooses `system`, `rubric`, or `examples` inside the chosen
 candidate.
@@ -738,7 +738,7 @@ three original modes.
 Default GEPA behavior:
 
 ```text
-train/search evidence can drive proposer feedback, parent selection,
+train/search evidence can drive proposer feedback, candidate selection,
 part selection, acceptance/admission, and population updates.
 
 validation evidence can drive reports and explicit validation cadence.
