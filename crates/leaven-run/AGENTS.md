@@ -10,9 +10,13 @@ around engine graph mutation or a home for optimizer strategy state.
 - Builder ergonomics belong here: required budget policy, train vs held-out
   validation/test rules, callbacks, store selection, runner/scorer wiring, and
   `Optimized` facades.
-- `RunProblem`, `RunOutput`, `Score`, `ScoreContext`, `ScoringEvaluator`,
-  `OptimizeStore`, and `IntoOptimizeStore` belong here when they serve the
-  high-level optimize workflow.
+- Ordinary durability belongs here: omitted `.store(...)` opens a managed local
+  `.leaven/runs/<run-id>/` directory, `.run_dir(path)` is the user-facing
+  durable override/resume handle, and `.ephemeral()` is the explicit
+  throwaway path.
+- `RunProblem`, `RunCase`, `RunOutput`, `Score`, `ScoreCase`, `ScoreContext`,
+  `ScoringEvaluator`, `OptimizeStore`, and `IntoOptimizeStore` belong here when
+  they serve the high-level optimize workflow.
 - Default evidence-only and durable store composition belongs here when it is
   product wiring over store capabilities, not a new backend.
 - The current lowering stack is local product glue: builder input vectors become
@@ -33,8 +37,8 @@ around engine graph mutation or a home for optimizer strategy state.
 
 ## Proof Anchors
 - `tests/optimize_builder.rs` proves required budget policy, held-out case
-  rejection, callbacks, supplied store capabilities, no-best error mapping, and
-  default optimize flow.
+  rejection, callbacks, supplied store capabilities, no-best error mapping,
+  default durable local storage, explicit ephemeral mode, and `run_dir` resume.
 - `tests/scoring_evaluator.rs` proves runner/scorer evaluation shape,
   per-case granularity requirements, independent-request requirements,
   missing input errors, finite score refusal, and cost reporting.
@@ -65,16 +69,22 @@ around engine graph mutation or a home for optimizer strategy state.
   scorer cost. Treat scalar comparison as the current selection contract, not as
   permission to drop generated outputs, runtime failures, or metered provider
   work.
-- The current `ScoreContext` exposes a budget snapshot because the engine
-  already has that fact at evaluation time. It still does not expose the full
-  spec target: optional cases, score-on-error, generic output views, accessor
-  methods, or score history. Do not describe this slice as complete GEPA-style
-  scorer context until those gaps are closed.
-- The current builder fixes case identity by vector position via
-  `CaseId::from_index` and uses literal `TRAIN`/`VALIDATION`/`TEST` partitions.
-  That is acceptable for today's proof path, but stable user-provided case IDs,
-  duplicate-id rejection, and split-use lowering belong in the next product
-  surface rather than more ad hoc positional logic here.
+- Ordinary runners receive `RunCase<I>`, not the durable `Case<I, T>` envelope.
+  That is the structural target/metadata isolation boundary: do not add target,
+  metadata, or raw case envelope access to the ordinary runner signature.
+- `ScoreContext` exposes a budget snapshot and `ScoreCase<I, T>` with case id,
+  input, optional target, and an empty scorer metadata projection. It still does
+  not expose the full spec target: score-on-error, generic output views, score
+  history, or selected scorer metadata projection. Do not describe this slice as
+  complete GEPA-style scorer context until those gaps are closed.
+- The builder's canonical `.train` / `.validation` / `.test` path now accepts
+  `leaven_eval::Case<I, T>` envelopes and preserves caller-provided case IDs in
+  datasets, scoring evidence, and reports. `.train_inputs`,
+  `.validation_inputs`, and `.test_inputs` are input-only toy conveniences that
+  lower to `Case<I, NoTarget>` with dense generated IDs. Engine `CaseSet`
+  partition resolution is still internally positional; do not cite engine
+  resolved-set case IDs as caller-stable product IDs until the engine owns
+  explicit-id case sets.
 - `ScoringEvaluator::cache_policy` returns `CachePolicy::Never`. Do not teach
   users to get solver/judge/reflector caching by editing this evaluator; Layer 1
   needs role-level runtime/cache policy while LM response cache capabilities
@@ -89,7 +99,7 @@ around engine graph mutation or a home for optimizer strategy state.
 ## Decision Cards
 - when: extending `optimize(seed)` user ergonomics
   do: keep the public path in this crate and lower into engine/eval/store seams deliberately
-  preserve: required budget, hidden validation/test defaults, callback/store wiring, and result facades that do not expose raw `RunGraph`
+  preserve: required budget, durable-by-default local run storage, explicit ephemeral opt-out, hidden validation/test defaults, callback/store wiring, and result facades that do not expose raw `RunGraph`
   avoid: putting GEPA strategy knobs, engine graph shortcuts, provider clients, or dataset execution machinery into the builder just because P8 needs them
   verify: run `cargo nextest run -p leaven-run --test optimize_builder`
 

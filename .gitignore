@@ -3,3 +3,4 @@
 .env
 tmp/
 .orientation/
+.beads/issues.jsonl

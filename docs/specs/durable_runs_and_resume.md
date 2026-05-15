@@ -68,6 +68,33 @@ If no store is configured, `.run()` uses Leaven's default local `RunStore`,
 rooted at `.leaven/runs/` relative to the process working directory unless an
 explicit store root is configured.
 
+The current ordinary builder layout is:
+
+```text
+.leaven/runs/<run-id>/
+  run.sqlite
+  lm-cache.sqlite
+  blobs/
+  checkpoints/
+    LATEST
+    <checkpoint-id>.checkpoint
+  evidence/
+    <evidence-key>.json
+  reports/
+    summary.json
+```
+
+The current implementation may still materialize only the file/blob/checkpoint
+portion of this layout. The product target is defined in
+`docs/specs/default_cache_storage.md`: durable run dirs provision SQLite-backed
+evaluation and LM response caches by default while JSON checkpoint blobs remain
+acceptable for optimizer continuation and human-readable sidecars.
+
+`.run_dir(path)` uses `path` as the per-run directory with the same layout. If
+`path/checkpoints/LATEST` exists, the builder treats the directory as a resume
+handle and restores the latest checkpoint before continuing. If it does not
+exist, the builder starts a new durable run in that directory.
+
 Explicit non-durable run:
 
 ```rust
@@ -91,6 +118,10 @@ An equivalent explicit store form is allowed:
 but `ephemeral()` should be the common spelling for tests, examples, and
 throwaway local experiments.
 
+The currently implemented low-level opt-out remains
+`OptimizeStore::inline(...)` through `.store(...)`; it is explicit advanced
+plumbing and must not be the omitted-store default.
+
 ## 4. Resume Surface
 
 Resume is ordinary, but runtime code is not magically serialized.
@@ -98,6 +129,10 @@ Resume is ordinary, but runtime code is not magically serialized.
 Stored run state contains durable data and fingerprints. The caller must supply
 compatible live capabilities such as runner, scorer, evaluator, provider, and
 optimizer constructors.
+
+`resume_compatibility_fingerprints.md` owns the detailed compatibility manifest:
+case content/splits, runner, scorer, evaluator, optimizer, LM roles, cache, and
+budget domains are compared before resume performs costful work.
 
 Shape:
 

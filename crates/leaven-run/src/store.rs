@@ -1,11 +1,15 @@
 //! Store wiring for product-level optimization runs.
 
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use leaven_core::Artifact;
 use leaven_core::OptimizationProblem;
-use leaven_engine::RunPersistence;
-use leaven_store::EvidenceStore;
+use leaven_engine::{RunPersistence, StoreRunPersistence};
+use leaven_store::{EvidenceStore, StoreError};
+use leaven_store_file::{FileEvidenceStore, FileStore};
 use leaven_store_inline::InlineEvidenceStore;
+use serde::{Serialize, de::DeserializeOwned};
 
 /// Evidence and optional checkpoint persistence used by a product run.
 pub struct OptimizeStore<P>
@@ -72,6 +76,38 @@ where
 
     pub(crate) fn persistence(&self) -> Option<Arc<dyn RunPersistence<P>>> {
         self.persistence.as_ref().map(Arc::clone)
+    }
+}
+
+pub(crate) struct LocalOptimizeStore<P>
+where
+    P: OptimizationProblem,
+{
+    pub(crate) store: OptimizeStore<P>,
+    pub(crate) persistence: StoreRunPersistence<FileStore>,
+    pub(crate) run_dir: PathBuf,
+}
+
+impl<P> LocalOptimizeStore<P>
+where
+    P: OptimizationProblem,
+    P::Artifact: Serialize + DeserializeOwned,
+    <P::Artifact as Artifact>::Change: Serialize + DeserializeOwned,
+    P::Evidence: Clone + Serialize + DeserializeOwned,
+    P::ProposalAnnotations: Serialize + DeserializeOwned,
+{
+    pub(crate) fn open(run_dir: impl AsRef<Path>) -> Result<Self, StoreError> {
+        let run_dir = run_dir.as_ref().to_path_buf();
+        let file_store = FileStore::open(&run_dir)?;
+        let evidence =
+            FileEvidenceStore::<P::Evidence>::open("leaven-run", run_dir.join("evidence"))?;
+        let persistence = StoreRunPersistence::new(file_store);
+        let store = OptimizeStore::durable(evidence, persistence.clone());
+        Ok(Self {
+            store,
+            persistence,
+            run_dir,
+        })
     }
 }
 

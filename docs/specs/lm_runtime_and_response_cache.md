@@ -30,12 +30,17 @@ let response = lm.complete(
 This must support GEPA reflection and future LM-program runners without pulling
 OpenAI, Anthropic, local runtimes, or cache backends into optimizer crates.
 
+For durable product runs, `InMemoryLmCache` is not the intended default backend.
+`docs/specs/default_cache_storage.md` defines the default run-dir behavior:
+Leaven provisions a SQLite-backed LM response cache automatically, and
+`InMemoryLmCache` remains the cheap test/ephemeral backend.
+
 ## 2. Crate Graph
 
 | Crate | Owns | Must not know |
 | --- | --- | --- |
 | `leaven-lm` | provider-neutral messages, requests, responses, usage, sampling, output mode, continuation, provider hints, `Lm` trait, `LmError` | response-cache stores, cache policies, HTTP clients, provider SDKs, GEPA, engine graph |
-| `leaven-lm-cache` | Leaven response-cache policy, cache keys, cache entries, cache-store trait, in-memory cache backend, `CachedLm<M, C>` wrapper | concrete providers, engine evaluation cache, GEPA rhythm, provider SDKs |
+| `leaven-lm-cache` | Leaven response-cache policy, cache keys, cache entries, cache-store trait, in-memory cache backend, SQLite durable backend or backend trait integration, `CachedLm<M, C>` wrapper | concrete providers, engine evaluation cache, GEPA rhythm, provider SDKs |
 | `leaven-lm-openai` | OpenAI Responses API lowering for the neutral `Lm` trait | GEPA, engine graph, cache backends |
 | `leaven-lm-mock` | deterministic scripted/test LM implementation | concrete providers, cache backends |
 | `leaven-gepa` | GEPA reflection components that consume `impl Lm` | concrete providers and cache stores |
@@ -186,6 +191,11 @@ pub struct CachedLm<M, C> {
     policy: LmCachePolicy,
 }
 ```
+
+Durable local runs should use a SQLite-backed implementation of
+`LmCacheStore`. In-memory storage remains valid for unit tests and explicit
+ephemeral runs, but ordinary `.run()`/`.run_dir(...)` must not require examples
+to manually wire `InMemoryLmCache` or any other cache backend.
 
 Policy behavior:
 

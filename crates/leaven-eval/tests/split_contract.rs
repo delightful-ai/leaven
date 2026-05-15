@@ -2,10 +2,10 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use leaven_core::{CaseSetVersion, PartitionId};
 use leaven_eval::{
-    Dataset, DatasetError, DatasetSplits, DatasetSplitsError, EvaluationUse, FinalTestPolicy,
+    Case, Dataset, DatasetError, DatasetSplits, DatasetSplitsError, EvaluationUse, FinalTestPolicy,
     SplitPolicy, SplitRole, SplitUse, SplitUsePolicy, SplitUsePolicyError,
 };
-use leaven_kernel::CaseId;
+use leaven_kernel::{CaseId, MetadataBag, MetadataKey, MetadataValue};
 
 #[test]
 fn dataset_fingerprint_tracks_ordered_case_membership() {
@@ -31,6 +31,38 @@ fn dataset_builder_refuses_duplicate_explicit_case_ids() {
     };
 
     assert_eq!(error, DatasetError::DuplicateCase(CaseId::from_index(7)));
+}
+
+#[test]
+fn dataset_from_case_envelopes_preserves_ids_and_metadata() {
+    let mut metadata = MetadataBag::new();
+    metadata.insert("source_id", MetadataValue::String("aime/2024/1".to_owned()));
+    let dataset = Dataset::from_cases(vec![
+        Case::targeted(CaseId::new(42), "problem", "answer").with_metadata(metadata),
+    ])
+    .unwrap();
+
+    let case = dataset
+        .cases()
+        .get(&CaseId::new(42))
+        .expect("case id is preserved");
+    assert_eq!(case.input, "problem");
+    assert_eq!(case.target, Some("answer"));
+    let source_id = case
+        .metadata
+        .get(&MetadataKey::from("source_id"))
+        .expect("metadata is preserved");
+    let MetadataValue::String(source_id) = source_id else {
+        panic!("source id should be stored as string metadata");
+    };
+    assert_eq!(source_id, "aime/2024/1");
+
+    let duplicate = Dataset::from_cases(vec![
+        Case::input(CaseId::new(42), "first"),
+        Case::input(CaseId::new(42), "second"),
+    ])
+    .unwrap_err();
+    assert_eq!(duplicate, DatasetError::DuplicateCase(CaseId::new(42)));
 }
 
 #[test]

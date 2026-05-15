@@ -2746,7 +2746,9 @@ dependencies = [
  "leaven-evidence",
  "leaven-kernel",
  "leaven-store",
+ "leaven-store-file",
  "leaven-store-inline",
+ "serde",
  "thiserror 2.0.18",
 ]
 

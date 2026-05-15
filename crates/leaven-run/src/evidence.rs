@@ -1,6 +1,7 @@
 //! Public runner and scoring evidence shapes.
 
-use leaven_kernel::{BudgetSnapshot, Cost};
+use leaven_eval::Case;
+use leaven_kernel::{BudgetSnapshot, CaseId, Cost};
 
 /// Output produced by running one artifact on one case.
 #[derive(Clone, Debug, Default)]
@@ -129,12 +130,109 @@ impl ScoreError {
     }
 }
 
+/// Target-free case view passed to ordinary runner closures.
+#[derive(Clone, Debug)]
+pub struct RunCase<I> {
+    id: CaseId,
+    input: I,
+}
+
+impl<I> RunCase<I> {
+    pub(crate) fn from_case<T>(case: &Case<I, T>) -> Self
+    where
+        I: Clone,
+    {
+        Self {
+            id: case.id,
+            input: case.input.clone(),
+        }
+    }
+
+    /// Stable case id visible to the runner.
+    #[must_use]
+    pub const fn id(&self) -> CaseId {
+        self.id
+    }
+
+    /// Target-free input visible to the runner.
+    #[must_use]
+    pub const fn input(&self) -> &I {
+        &self.input
+    }
+
+    /// Consumes the view and returns the target-free input.
+    #[must_use]
+    pub fn into_input(self) -> I {
+        self.input
+    }
+}
+
+/// Empty scorer metadata projection for the ordinary product path.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct ScoreMetadataView;
+
+impl ScoreMetadataView {
+    /// Returns true because the current ordinary scorer projection is empty.
+    #[must_use]
+    pub const fn is_empty(self) -> bool {
+        true
+    }
+}
+
+/// Target-aware case view passed to scoring closures.
+#[derive(Clone, Debug)]
+pub struct ScoreCase<I, T = leaven_eval::NoTarget> {
+    id: CaseId,
+    input: I,
+    target: Option<T>,
+    metadata: ScoreMetadataView,
+}
+
+impl<I, T> ScoreCase<I, T> {
+    pub(crate) fn from_case(case: &Case<I, T>) -> Self
+    where
+        I: Clone,
+        T: Clone,
+    {
+        Self {
+            id: case.id,
+            input: case.input.clone(),
+            target: case.target.clone(),
+            metadata: ScoreMetadataView,
+        }
+    }
+
+    /// Stable case id visible to the scorer.
+    #[must_use]
+    pub const fn id(&self) -> CaseId {
+        self.id
+    }
+
+    /// Case input visible to the scorer.
+    #[must_use]
+    pub const fn input(&self) -> &I {
+        &self.input
+    }
+
+    /// Optional reference target visible to the scorer.
+    #[must_use]
+    pub fn target(&self) -> Option<&T> {
+        self.target.as_ref()
+    }
+
+    /// Explicit scorer metadata projection.
+    #[must_use]
+    pub const fn metadata(&self) -> ScoreMetadataView {
+        self.metadata
+    }
+}
+
 /// Context passed to scoring closures.
-pub struct ScoreContext<A, C> {
+pub struct ScoreContext<A, I, T = leaven_eval::NoTarget> {
     /// Artifact/candidate that was run.
     pub artifact: A,
-    /// Evaluation case.
-    pub case: C,
+    /// Evaluation case with target-aware scorer visibility.
+    pub case: ScoreCase<I, T>,
     /// Runner output.
     pub output: RunOutput,
     /// Point-in-time budget snapshot visible to the scorer.

@@ -14,11 +14,30 @@ use leaven_core::{
     ResolvedRequestKind,
 };
 use leaven_engine::{BudgetLedger, CachePolicy, Evaluator, RunContext, RunGraph};
+use leaven_eval::Case;
 use leaven_kernel::{
-    Budget, CandidateId, CaseId, ContentId, Cost, EvaluatorId, ResolvedEvaluationSetId, RunId,
-    StageId, now,
+    Budget, CandidateId, CaseId, ContentId, Cost, EvaluatorId, Fingerprint,
+    ResolvedEvaluationSetId, RunId, StageId, now,
 };
-use leaven_run::{RunOutput, RunProblem, Score, ScoreContext, ScoreError, ScoringEvaluator};
+use leaven_run::{
+    RunCase, RunOutput, RunProblem, RuntimeFingerprint, Score, ScoreContext, ScoreError,
+    ScoringEvaluator, ScoringEvaluatorIdentity,
+};
+
+const TEST_RUNNER_FINGERPRINT: Fingerprint = Fingerprint::from_bytes([7; 32]);
+const TEST_SCORER_FINGERPRINT: Fingerprint = Fingerprint::from_bytes([8; 32]);
+const TEST_DATASET_FINGERPRINT: Fingerprint = Fingerprint::from_bytes([9; 32]);
+const TEST_SPLIT_FINGERPRINT: Fingerprint = Fingerprint::from_bytes([10; 32]);
+
+fn identity(label: &str) -> ScoringEvaluatorIdentity {
+    ScoringEvaluatorIdentity {
+        label: label.to_owned(),
+        runner: RuntimeFingerprint::new(TEST_RUNNER_FINGERPRINT),
+        scorer: RuntimeFingerprint::new(TEST_SCORER_FINGERPRINT),
+        dataset: TEST_DATASET_FINGERPRINT,
+        splits: TEST_SPLIT_FINGERPRINT,
+    }
+}
 
 #[test]
 fn scoring_evaluator_rejects_unsupported_request_shapes_and_bad_inputs() {
@@ -28,7 +47,7 @@ fn scoring_evaluator_rejects_unsupported_request_shapes_and_bad_inputs() {
         let evaluator = scoring_evaluator(|ctx| {
             Score::new(
                 ctx.output.output.parse::<f64>().unwrap(),
-                format!("case {}", ctx.case),
+                format!("case {}", ctx.case.input()),
             )
         });
 
@@ -136,11 +155,12 @@ fn scoring_evaluator_reports_per_candidate_cost_for_independent_batches() {
         };
         let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
         let evaluator = ScoringEvaluator::new(
-            Arc::new(vec![2, 3]),
+            Arc::new(vec![input_case(0, 2), input_case(1, 3)]),
             Arc::new(|artifact: TextArtifact, case| {
                 async move {
-                    RunOutput::new((artifact.0 + case).to_string())
-                        .with_cost(Cost::llm_calls(u64::try_from(case).unwrap()))
+                    let input = *case.input();
+                    RunOutput::new((artifact.0 + input).to_string())
+                        .with_cost(Cost::llm_calls(u64::try_from(input).unwrap()))
                 }
                 .boxed()
             }),
@@ -151,7 +171,7 @@ fn scoring_evaluator_reports_per_candidate_cost_for_independent_batches() {
                 }
                 .boxed()
             }),
-            "scoring-evaluator-test",
+            identity("scoring-evaluator-test"),
         );
         assert!(evaluator.parallelism().get() > 0);
 
@@ -192,6 +212,110 @@ fn scoring_evaluator_reports_per_candidate_cost_for_independent_batches() {
 }
 
 #[test]
+fn scoring_evaluator_hides_target_from_runner_and_passes_target_to_scorer() {
+    #[derive(Clone, Debug, Eq, PartialEq)]
+    struct PromptInput {
+        addend: i32,
+    }
+
+    #[derive(Clone, Debug, Eq, PartialEq)]
+    struct AnswerTarget {
+        answer: i32,
+    }
+
+    fn ordinary_runner_signature_has_no_target_type_parameter<F, Fut>(_runner: F)
+    where
+        F: Fn(TextArtifact, RunCase<PromptInput>) -> Fut,
+    {
+    }
+
+    ordinary_runner_signature_has_no_target_type_parameter(|_artifact, case| async move {
+        let _runner_visible = (case.id(), case.input().addend);
+        RunOutput::default()
+    });
+
+    block_on(async {
+        let (mut graph, mut budget, candidate) = graph_with_seed_for::<PromptInput, AnswerTarget>();
+        let mut ctx = RunContext::<RunProblem<TextArtifact, PromptInput, AnswerTarget>>::new(
+            &mut graph,
+            &mut budget,
+        );
+        let runner_seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let scorer_seen_target = Arc::new(std::sync::Mutex::new(None));
+        let evaluator = ScoringEvaluator::new(
+            Arc::new(vec![Case::targeted(
+                CaseId::new(700),
+                PromptInput { addend: 2 },
+                AnswerTarget { answer: 42 },
+            )]),
+            {
+                let runner_seen = Arc::clone(&runner_seen);
+                Arc::new(move |artifact: TextArtifact, case: RunCase<PromptInput>| {
+                    let runner_seen = Arc::clone(&runner_seen);
+                    async move {
+                        runner_seen
+                            .lock()
+                            .unwrap()
+                            .push((case.id(), case.input().addend));
+                        RunOutput::new((artifact.0 + case.input().addend).to_string())
+                    }
+                    .boxed()
+                })
+            },
+            {
+                let scorer_seen_target = Arc::clone(&scorer_seen_target);
+                Arc::new(
+                    move |ctx: ScoreContext<TextArtifact, PromptInput, AnswerTarget>| {
+                        let scorer_seen_target = Arc::clone(&scorer_seen_target);
+                        async move {
+                            assert_eq!(ctx.case.id(), CaseId::new(700));
+                            assert_eq!(ctx.case.input().addend, 2);
+                            assert!(ctx.case.metadata().is_empty());
+                            let target = ctx.case.target().expect("target is scorer-visible");
+                            *scorer_seen_target.lock().unwrap() = Some(target.answer);
+                            Ok(Score::new(
+                                (ctx.output.output == target.answer.to_string()) as u8 as f64,
+                                "target checked",
+                            ))
+                        }
+                        .boxed()
+                    },
+                )
+            },
+            identity("scoring-evaluator-target-visibility-test"),
+        );
+
+        let metered = evaluator
+            .evaluate(
+                request(
+                    ResolvedRequestKind::Independent {
+                        candidates: vec![candidate],
+                    },
+                    vec![CaseId::new(0)],
+                    AssessmentGranularity::PerCase,
+                ),
+                ctx.evaluation_context(StageId::from_evaluator(Evaluator::id(&evaluator))),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            runner_seen.lock().unwrap().as_slice(),
+            &[(CaseId::new(700), 2)]
+        );
+        assert_eq!(*scorer_seen_target.lock().unwrap(), Some(42));
+        let [Assessment::Independent { evidence, .. }] = metered.value.as_slice() else {
+            panic!("expected one independent assessment");
+        };
+        assert_eq!(evidence.outcomes()[0].case(), CaseId::new(700));
+        assert_eq!(
+            evidence.outcomes()[0].evidence().feedback(),
+            "target checked"
+        );
+    });
+}
+
+#[test]
 fn score_error_preserves_source_trace_message_and_cost() {
     let error = ScoreError::with_source("judge failed", JudgeSourceError)
         .with_trace("provider returned malformed rubric")
@@ -214,10 +338,11 @@ fn scoring_evaluator_surfaces_async_scorer_failures_with_metered_cost() {
         let (mut graph, mut budget, candidate) = graph_with_seed();
         let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
         let evaluator = ScoringEvaluator::new(
-            Arc::new(vec![2]),
+            Arc::new(vec![input_case(0, 2)]),
             Arc::new(|artifact: TextArtifact, case| {
                 async move {
-                    RunOutput::new((artifact.0 + case).to_string()).with_cost(Cost::llm_calls(2))
+                    RunOutput::new((artifact.0 + *case.input()).to_string())
+                        .with_cost(Cost::llm_calls(2))
                 }
                 .boxed()
             }),
@@ -229,7 +354,7 @@ fn scoring_evaluator_surfaces_async_scorer_failures_with_metered_cost() {
                 }
                 .boxed()
             }),
-            "scoring-evaluator-failure-test",
+            identity("scoring-evaluator-failure-test"),
         );
 
         let error = evaluator
@@ -263,9 +388,9 @@ fn scoring_evaluator_passes_budget_snapshot_to_scorer() {
             .unwrap();
         let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
         let evaluator = ScoringEvaluator::new(
-            Arc::new(vec![2]),
+            Arc::new(vec![input_case(0, 2)]),
             Arc::new(|artifact: TextArtifact, case| {
-                async move { RunOutput::new((artifact.0 + case).to_string()) }.boxed()
+                async move { RunOutput::new((artifact.0 + *case.input()).to_string()) }.boxed()
             }),
             Arc::new(|ctx: ScoreContext<TextArtifact, i32>| {
                 async move {
@@ -275,7 +400,7 @@ fn scoring_evaluator_passes_budget_snapshot_to_scorer() {
                 }
                 .boxed()
             }),
-            "scoring-evaluator-budget-test",
+            identity("scoring-evaluator-budget-test"),
         );
 
         evaluator
@@ -302,7 +427,12 @@ fn scoring_evaluator_runs_case_jobs_with_bounded_parallelism_and_stable_order() 
         let active = Arc::new(AtomicUsize::new(0));
         let max_active = Arc::new(AtomicUsize::new(0));
         let evaluator = ScoringEvaluator::new(
-            Arc::new(vec![1, 2, 3, 4]),
+            Arc::new(vec![
+                input_case(0, 1),
+                input_case(1, 2),
+                input_case(2, 3),
+                input_case(3, 4),
+            ]),
             {
                 let active = Arc::clone(&active);
                 let max_active = Arc::clone(&max_active);
@@ -315,7 +445,8 @@ fn scoring_evaluator_runs_case_jobs_with_bounded_parallelism_and_stable_order() 
                         let (tx, rx) = oneshot::channel();
                         std::thread::spawn(move || {
                             std::thread::sleep(Duration::from_millis(20));
-                            let _ = tx.send(RunOutput::new((artifact.0 + case).to_string()));
+                            let _ =
+                                tx.send(RunOutput::new((artifact.0 + *case.input()).to_string()));
                         });
                         let output = rx.await.expect("worker sends output");
                         active.fetch_sub(1, Ordering::SeqCst);
@@ -328,7 +459,7 @@ fn scoring_evaluator_runs_case_jobs_with_bounded_parallelism_and_stable_order() 
                 async move { Ok(Score::new(ctx.output.output.parse::<f64>().unwrap(), "ok")) }
                     .boxed()
             }),
-            "scoring-evaluator-parallel-test",
+            identity("scoring-evaluator-parallel-test"),
         )
         .with_parallelism(NonZeroUsize::new(2).unwrap());
 
@@ -370,16 +501,20 @@ fn scoring_evaluator(
 ) -> ScoringEvaluator<TextArtifact, i32> {
     let scorer = Arc::new(scorer);
     ScoringEvaluator::new(
-        Arc::new(vec![2]),
+        Arc::new(vec![input_case(0, 2)]),
         Arc::new(|artifact, case| {
-            async move { RunOutput::new((artifact.0 + case).to_string()) }.boxed()
+            async move { RunOutput::new((artifact.0 + *case.input()).to_string()) }.boxed()
         }),
         Arc::new(move |ctx| {
             let score = scorer(ctx);
             async move { Ok(score) }.boxed()
         }),
-        "scoring-evaluator-test",
+        identity("scoring-evaluator-test"),
     )
+}
+
+fn input_case(index: usize, input: i32) -> Case<i32> {
+    Case::input(CaseId::from_index(index), input)
 }
 
 fn request(
@@ -406,10 +541,22 @@ fn graph_with_seed() -> (
     BudgetLedger,
     CandidateId,
 ) {
-    let mut graph = RunGraph::<RunProblem<TextArtifact, i32>>::new(RunId::new());
+    graph_with_seed_for::<i32, leaven_eval::NoTarget>()
+}
+
+fn graph_with_seed_for<I, T>() -> (
+    RunGraph<RunProblem<TextArtifact, I, T>>,
+    BudgetLedger,
+    CandidateId,
+)
+where
+    I: Send + Sync + 'static,
+    T: Send + Sync + 'static,
+{
+    let mut graph = RunGraph::<RunProblem<TextArtifact, I, T>>::new(RunId::new());
     let mut budget = BudgetLedger::default();
     let candidate = {
-        let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
+        let mut ctx = RunContext::<RunProblem<TextArtifact, I, T>>::new(&mut graph, &mut budget);
         ctx.insert_seed(TextArtifact(40), 0).unwrap()
     };
     (graph, budget, candidate)

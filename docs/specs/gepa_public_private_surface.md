@@ -10,6 +10,7 @@ specs:
 - `docs/specs/gepa_optimizer_surface.md`
 - `docs/specs/eval_lowering_detail.md`
 - `docs/specs/eval_nomenclature.md`
+- `docs/specs/case_visibility_and_target_isolation.md`
 
 It is subordinate to:
 
@@ -307,7 +308,7 @@ proposal.
 | Merge | off by default | `.merge(...)` | proposal effect with multi-parent provenance | `leaven-gepa`, `leaven-core` |
 | Budget | `.budget(...)` | stopper/budget policy | `BudgetLedger`, stage charges | `leaven-kernel`, `leaven-engine` |
 | Events | `.on_event(...)` | callbacks | `RunEvent`, scoped graph views | `leaven-run`, `leaven-engine` |
-| Persistence | `.store(...)` / `.resume(...)` | checkpoint policy | run graph + optimizer state snapshots | `leaven-run`, `leaven-engine`, `leaven-store` |
+| Persistence | `.run_dir(...)` / `.store(...)` / `.resume(...)` | checkpoint policy | run graph + optimizer state snapshots | `leaven-run`, `leaven-engine`, `leaven-store`, `leaven-store-file` |
 | Report | `result.report()` | report options | graph-backed report construction over eval/gepa schemas | `leaven-run`, `leaven-eval`, `leaven-gepa` |
 
 ## 5. What We Need To Add
@@ -347,6 +348,7 @@ leaven-core
 leaven-engine
 leaven-eval
 leaven-store
+leaven-store-file
 leaven-store-inline
 ```
 
@@ -609,7 +611,7 @@ leaven-gepa       -> leaven-core, leaven-engine,
                      leaven-render, leaven-surface
 leaven-run        -> leaven-core, leaven-engine, leaven-eval,
                      leaven-evidence, leaven-kernel, leaven-store,
-                     leaven-store-inline
+                     leaven-store-file, leaven-store-inline
 domain adapters   -> leaven-core, leaven-surface, leaven-engine as needed,
                      leaven-eval/leaven-run for convenience adapters
 leaven            -> re-exports only
@@ -655,8 +657,10 @@ Public methods:
 | `.evaluator(e)` | Installs a typed engine evaluator. Ordinary path uses it as the primary evaluator; optimizer-author paths may install named auxiliary evaluators through the engine. |
 | `.using(optimizer)` | Supplies the optimizer value. Required for `leaven-run` core builder; umbrella convenience constructors may prefill `Gepa::default()` but must make that visible in docs. |
 | `.budget(budget)` | Supplies run limits. Product builders must require an explicit budget or explicit `Budget::unlimited()`; engine builders may keep `Budget::unlimited()` as their default. |
-| `.store(store)` | Supplies an `OptimizeStore`: `OptimizeStore::evidence(evidence_store)` for report/evaluation evidence, or `OptimizeStore::durable(evidence_store, run_persistence)` when checkpoint persistence is also configured. If omitted, the product builder may use inline evidence storage only for non-resumable runs. |
-| `.resume(checkpoint)` | Restores graph truth plus optimizer private state. Requires matching optimizer/evaluator/score/runner fingerprints or fails before continuing. |
+| `.run_dir(path)` | Uses a durable local run directory as both store override and resume handle. If the directory already has a latest checkpoint, the builder restores graph truth, budget, cache index, and optimizer continuation before continuing. |
+| `.ephemeral()` | Explicit throwaway mode. It uses inline evidence and no checkpoint persistence; this is the only ordinary spelling for non-resumable runs. |
+| `.store(store)` | Supplies a low-level `OptimizeStore`: `OptimizeStore::evidence(evidence_store)` for evidence-only plumbing, or `OptimizeStore::durable(evidence_store, run_persistence)` when checkpoint persistence is also configured. This is an advanced override; omitted `.store(...)` uses the Leaven-managed durable local run directory, not inline storage. |
+| `.resume(checkpoint)` | Reserved public shape for direct checkpoint/run-id resume. The implemented ordinary handle is currently `.run_dir(existing_dir)`, which restores the latest checkpoint in that directory. |
 | `.on_event(callback)` | Registers public run events. Layer 1 callbacks receive summaries and ids, not mutable graph access. |
 | `.run()` | Freezes builder inputs, lowers them once, initializes the optimizer, executes until stop/error/budget, optionally runs final validation/test, and returns `Optimized`. |
 
@@ -794,11 +798,13 @@ must still lower to case ids plus split roles before reaching the engine.
 
 Case rules:
 
-1. `input` is the thing the runner/scorer needs to do the work.
-2. `target` is optional and scorer-visible by default; it is not proposer-visible
-   unless split policy explicitly allows that.
-3. `metadata` is report/debug context. It does not affect scoring or split
-   policy unless user code reads it.
+1. `input` is the thing the runner may use to execute the candidate.
+2. `target` is optional and scorer-visible by default. It is not
+   runner-visible, and it is not proposer-visible unless split policy explicitly
+   allows target-derived feedback.
+3. `metadata` is report/debug/provenance/stratification context. It is not
+   runner-visible. It affects scoring only when a builder/domain adapter
+   explicitly projects selected metadata into the scorer view.
 4. Case order is preserved for deterministic samplers, but samplers may choose a
    different evaluation order.
 5. Case ids are unique across all default splits. If overlap is desired, the user
@@ -1003,19 +1009,24 @@ When `.runner(...)` is installed, it adapts to this candidate-execution
 contract:
 
 ```rust
-pub trait CandidateRunner<P: OptimizationProblem, I, T = NoTarget, O = ()>:
+pub trait CandidateRunner<P: OptimizationProblem, I, O = ()>:
     Send + Sync + 'static
 {
     fn run(
         &self,
-        ctx: CandidateRunCtx<'_, P, I, T>,
+        ctx: CandidateRunCtx<'_, P, I>,
     ) -> impl Future<Output = Result<CandidateRun<O>, CandidateRunError<O>>> + Send;
 }
 
-pub struct CandidateRunCtx<'a, P: OptimizationProblem, I, T = NoTarget> {
+pub struct CandidateRunCtx<'a, P: OptimizationProblem, I> {
     pub candidate: CandidateView<'a, P::Artifact>,
-    pub case: Option<CaseView<'a, I, T>>,
+    pub case: Option<RunCaseView<'a, I>>,
     pub budget: BudgetSnapshot,
+}
+
+pub struct RunCaseView<'a, I> {
+    pub id: CaseId,
+    pub input: &'a I,
 }
 
 pub struct CandidateRun<O = ()> {
@@ -1040,6 +1051,9 @@ Runner rules:
 6. Generic runners capture their own environment handles. Workspace, sandbox,
    process, and agent runners live in adapter crates such as `leaven-agentic` or
    domain crates; `leaven-run` must not grow a hidden environment abstraction.
+7. Runner case views are target-free and metadata-free. Hidden answers,
+   reference solutions, source ids, and stratification tags must not be reachable
+   through the ordinary runner type signature.
 
 Every public scoring function is adapted to this canonical contract:
 

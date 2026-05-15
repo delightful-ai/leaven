@@ -46,12 +46,12 @@ pub use reports::{
 pub use stage::{
     Arity, Callback, DynCallback, DynEvaluator, DynPreferenceRelation, DynProposer, DynStopper,
     EvaluationError, Evaluator, MaterializationReport, MaterializeError, Materializer, Optimizer,
-    OptimizerError, Population, PopulationEvent, PopulationView, PreferenceRelation, ProposalError,
-    Proposer, RenderError, Renderer, StepStatus, Stopper,
+    OptimizerError, OptimizerStateReader, Population, PopulationEvent, PopulationView,
+    PreferenceRelation, ProposalError, Proposer, RenderError, Renderer, StepStatus, Stopper,
 };
 pub use stage::{
     CheckpointContext, CheckpointError, CheckpointableOptimizer, OptimizerStateSnapshot,
-    PrivateStatePolicy, RestoreContext, StateFormat,
+    PrivateStatePolicy, RestoreContext, StateFormat, restore_checkpointable_optimizer_state,
 };
 pub use trust::{
     Actor, EvalHandle, EvidenceVisibility, ProbeRecorder, ReadScope, TrustPolicy, TrustViolation,
@@ -65,10 +65,11 @@ pub mod prelude {
         CheckpointContext, CheckpointError, CheckpointableOptimizer, Engine, EngineBuilder,
         EvaluationCacheSnapshot, EvaluationContext, Evaluator, GraphSnapshotRef,
         MaterializationReport, MaterializeContext, MaterializeError, Materializer, Optimizer,
-        OptimizerStateSnapshot, Population, PreferenceRelation, PrivateStatePolicy,
-        ProposalContext, Proposer, ReadScope, RenderContext, Renderer, RestoreContext,
-        RestoredRunState, RunCheckpoint, RunContext, RunEvent, RunGraphRestoreError,
-        RunGraphSnapshot, RunGraphView, RunResult, ScopedRunGraphView, StageEngineContext,
-        StateFormat, StepStatus, Stopper, StoreRunPersistence, TrustPolicy, optimize,
+        OptimizerStateReader, OptimizerStateSnapshot, Population, PreferenceRelation,
+        PrivateStatePolicy, ProposalContext, Proposer, ReadScope, RenderContext, Renderer,
+        RestoreContext, RestoredRunState, RunCheckpoint, RunContext, RunEvent,
+        RunGraphRestoreError, RunGraphSnapshot, RunGraphView, RunResult, ScopedRunGraphView,
+        StageEngineContext, StateFormat, StepStatus, Stopper, StoreRunPersistence, TrustPolicy,
+        optimize, restore_checkpointable_optimizer_state,
     };
 }

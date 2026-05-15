@@ -8,8 +8,8 @@ use leaven_core::{
 };
 use leaven_engine::{
     CheckpointContext, CheckpointError, CheckpointableOptimizer, Optimizer, OptimizerError,
-    OptimizerStateWrite, PopulationEvent, PrivateStatePolicy, RestoreContext, RunContext,
-    RunGraphView, StateFormat,
+    OptimizerStateReader, OptimizerStateWrite, PopulationEvent, PrivateStatePolicy, RestoreContext,
+    RunContext, RunGraphView, StateFormat, restore_checkpointable_optimizer_state,
 };
 use leaven_evidence::{CaseAssessmentEvidence, CaseOutcome, CasewiseEvidence, ScalarEvidence};
 use leaven_kernel::{AssessmentId, CandidateId, EvaluatorId, Fingerprint, PopulationId};
@@ -645,6 +645,18 @@ where
         ctx: CheckpointContext<'_, P>,
     ) -> Result<Option<OptimizerStateWrite>, OptimizerError> {
         <Self as CheckpointableOptimizer<P>>::checkpoint_state_write(self, ctx)
+    }
+
+    fn restore_checkpoint_state<R>(
+        &mut self,
+        checkpoint: &leaven_engine::RunCheckpoint,
+        reader: &R,
+        ctx: RestoreContext<'_, P>,
+    ) -> Result<(), OptimizerError>
+    where
+        R: OptimizerStateReader,
+    {
+        restore_checkpointable_optimizer_state(self, checkpoint, reader, ctx)
     }
 }
 

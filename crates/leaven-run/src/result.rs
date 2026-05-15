@@ -1,7 +1,9 @@
 //! Public optimization result facade.
 
+use std::path::PathBuf;
+
 use leaven_eval::EvaluationReport;
-use leaven_kernel::{BudgetSnapshot, CandidateId, Cost, RunId};
+use leaven_kernel::{BudgetSnapshot, CandidateId, CheckpointId, Cost, RunId};
 
 /// Result returned by the product builder.
 #[derive(Clone, Debug)]
@@ -94,17 +96,22 @@ impl From<leaven_engine::StopReason> for OptimizationStopReason {
 }
 
 /// Public storage status for a product run.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum RunStorage {
     /// No stored-run resume promise exists for this run.
     Ephemeral {
         /// Run id for correlating events and reports.
         run_id: RunId,
     },
-    /// Checkpoint persistence was configured, but resume is not promised yet.
+    /// Checkpoint persistence was configured for this run.
     Stored {
         /// Run id handed to the configured persistence capability.
         run_id: RunId,
+        /// Local run directory when the product builder owns a resumable file
+        /// store for this run.
+        run_dir: Option<PathBuf>,
+        /// Latest checkpoint known at result construction time.
+        latest_checkpoint: Option<CheckpointId>,
         /// Whether the public product surface can resume this run.
         resumable: bool,
     },

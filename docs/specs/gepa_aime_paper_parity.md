@@ -11,6 +11,9 @@ on:
 - `docs/specs/durable_runs_and_resume.md`
 - `docs/specs/lm_runtime_and_response_cache.md`
 - `docs/specs/eval_lowering_detail.md`
+- `docs/specs/case_visibility_and_target_isolation.md`
+- `docs/specs/aime_case_report_adapter.md`
+- `docs/specs/gepa_reflection_evidence_visibility.md`
 
 The immediate paper target is the GEPA CAIS AIME Math artifact under
 `~/vendor/github.com/gepa-ai/gepa-cais26-artifact/acm_cais_artifact_evaluation/domains/aime_math`.
@@ -618,6 +621,11 @@ Snapshot tests must compare rendered prompt text against a checked-in fixture
 derived from upstream GEPA's AIME reflection prompt shape.
 
 ## 6. AIME Task Requirements
+
+`aime_case_report_adapter.md` owns the detailed lowering from upstream/import
+records into `Case<AimeInput, AimeTarget>` envelopes, stable source-derived
+`CaseId`s, and report source projection. This section remains the paper-parity
+summary.
 
 ### 6.1 Dataset Materialization
 

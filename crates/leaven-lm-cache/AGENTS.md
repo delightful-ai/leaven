@@ -1,6 +1,7 @@
 ## Boundary
 This crate owns Leaven's provider-neutral LM response cache: cache policy,
-cache key, cache entry, cache-store trait, in-memory backend, and `CachedLm`.
+cache key, cache entry, cache-store trait, in-memory backend, durable SQLite
+backend, and `CachedLm`.
 
 It wraps `impl Lm`; it is not a provider crate and it is not the engine
 evaluation cache.
@@ -15,6 +16,9 @@ evaluation cache.
   cache hit returns zero metered cost while preserving stored usage.
 - `LmCacheStore` is the cache backend capability; concrete persistent stores can
   grow from this trait without changing provider crates.
+- Durable product runs should use the SQLite backend described in
+  `docs/specs/default_cache_storage.md`; `InMemoryLmCache` remains the cheap
+  test/ephemeral backend.
 - `CachedLm::id()` and `CachedLm::fingerprint()` delegate to the inner provider.
   Cache policy and backend are wrapper/runtime composition, not provider
   identity. Role-level resume identity belongs above this crate.
@@ -38,7 +42,8 @@ evaluation cache.
   zero-cost cache hits, backend error lifting, and that continuation response
   IDs are ignored by cache keys.
 - `docs/specs/lm_runtime_and_response_cache.md` is the local spec for key
-  ingredients and response-cache boundaries.
+  ingredients and response-cache boundaries. `docs/specs/default_cache_storage.md`
+  owns the durable product default and SQLite storage expectations.
 - Run `cargo nextest run -p leaven-lm-cache` to prove response-cache behavior.
 - If `LmRequest`, `ProviderHints`, `SamplingOptions`, or `OutputMode` changes,
   pair this with `cargo nextest run -p leaven-lm`; those types define the key

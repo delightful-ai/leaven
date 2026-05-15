@@ -11,8 +11,8 @@ use leaven_store::{BlobStore, BlobWrite, CheckpointBytes, CheckpointStore, Store
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 use crate::{
-    BudgetLedger, EvaluationCache, EvaluationCacheSnapshot, OptimizerStateSnapshot, RunGraph,
-    RunGraphRestoreError, RunGraphSnapshot, StateFormat,
+    BudgetLedger, EvaluationCache, EvaluationCacheSnapshot, OptimizerStateReader,
+    OptimizerStateSnapshot, RunGraph, RunGraphRestoreError, RunGraphSnapshot, StateFormat,
 };
 
 /// Capability for durable run checkpoints.
@@ -194,6 +194,23 @@ where
                 state: "optimizer state",
                 reason: err.to_string(),
             })
+    }
+}
+
+impl<S> OptimizerStateReader for StoreRunPersistence<S>
+where
+    S: BlobStore + CheckpointStore,
+{
+    fn load_optimizer_state<T>(
+        &self,
+        checkpoint: &RunCheckpoint,
+        optimizer: Fingerprint,
+        schema: Fingerprint,
+    ) -> Result<Option<T>, RunPersistenceError>
+    where
+        T: DeserializeOwned,
+    {
+        Self::load_optimizer_state(self, checkpoint, optimizer, schema)
     }
 }
 

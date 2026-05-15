@@ -12,8 +12,8 @@ use leaven_store::EvidenceStore;
 use crate::{
     BudgetLedger, Callback, CaseSet, CheckpointContext, DynCallback, DynEvaluator, DynStopper,
     ErrorPolicy, EvaluationCache, Evaluator, Optimizer, OptimizerError, OptimizerStateWrite,
-    ReadScope, RunCheckpointRequest, RunContext, RunContextError, RunEvent, RunGraph, RunGraphView,
-    RunPersistence, StepStatus, StopReason, Stopper, TrustPolicy,
+    ReadScope, RestoredRunState, RunCheckpointRequest, RunContext, RunContextError, RunEvent,
+    RunGraph, RunGraphView, RunPersistence, StepStatus, StopReason, Stopper, TrustPolicy,
 };
 
 pub struct Engine<P: OptimizationProblem> {
@@ -98,6 +98,39 @@ impl<P: OptimizationProblem> Engine<P> {
             return Err(error);
         }
 
+        self.run_iterations(optimizer, case_set, evidence_store)
+            .await
+    }
+
+    /// Resumes a restored run from a clean checkpoint boundary.
+    ///
+    /// The optimizer must already have restored its continuation state. Resume
+    /// does not call [`Optimizer::initialize`], because initialization belongs
+    /// to fresh runs before the first checkpoint exists.
+    pub async fn resume<O>(
+        &mut self,
+        optimizer: &mut O,
+        case_set: &CaseSet<P::Case>,
+        evidence_store: &dyn EvidenceStore<P::Evidence>,
+    ) -> Result<RunResult, OptimizerError>
+    where
+        O: Optimizer<P>,
+    {
+        let run_id = self.graph.run_id;
+        self.emit(RunEvent::OptimizationStarted { run_id });
+        self.run_iterations(optimizer, case_set, evidence_store)
+            .await
+    }
+
+    async fn run_iterations<O>(
+        &mut self,
+        optimizer: &mut O,
+        case_set: &CaseSet<P::Case>,
+        evidence_store: &dyn EvidenceStore<P::Evidence>,
+    ) -> Result<RunResult, OptimizerError>
+    where
+        O: Optimizer<P>,
+    {
         for _ in 0..MAX_ITERATIONS {
             if let Some(reason) = self.stop_reason() {
                 return self.finish_clean_stop(optimizer, reason);
@@ -160,6 +193,14 @@ impl<P: OptimizationProblem> Engine<P> {
             .with_callbacks(self.callbacks.as_mut_slice())
             .with_persistence(self.persistence.as_deref());
         ctx.evaluate(evaluator_id, request).await
+    }
+
+    /// Persists a clean checkpoint that includes optimizer continuation state.
+    pub fn checkpoint_optimizer_state<O>(&self, optimizer: &O) -> Result<(), OptimizerError>
+    where
+        O: Optimizer<P>,
+    {
+        self.checkpoint_optimizer(optimizer, "run checkpoint failed")
     }
 
     fn finish_clean_stop<O>(
@@ -303,6 +344,7 @@ const MAX_ITERATIONS: usize = 1024;
 pub struct EngineBuilder<P: OptimizationProblem> {
     run_id: RunId,
     budget: Budget,
+    restored: Option<RestoredEngineState<P>>,
     evaluators: BTreeMap<EvaluatorId, Arc<dyn DynEvaluator<P>>>,
     callbacks: Vec<Box<dyn DynCallback<P>>>,
     stoppers: Vec<EngineStopper<P>>,
@@ -316,6 +358,7 @@ impl<P: OptimizationProblem> Default for EngineBuilder<P> {
         Self {
             run_id: RunId::new(),
             budget: Budget::unlimited(),
+            restored: None,
             evaluators: BTreeMap::new(),
             callbacks: Vec::new(),
             stoppers: Vec::new(),
@@ -327,6 +370,12 @@ impl<P: OptimizationProblem> Default for EngineBuilder<P> {
 }
 
 impl<P: OptimizationProblem> EngineBuilder<P> {
+    #[must_use]
+    pub fn run_id(mut self, run_id: RunId) -> Self {
+        self.run_id = run_id;
+        self
+    }
+
     #[must_use]
     pub fn budget(mut self, budget: Budget) -> Self {
         self.budget = budget;
@@ -378,6 +427,16 @@ impl<P: OptimizationProblem> EngineBuilder<P> {
         self
     }
 
+    #[must_use]
+    pub fn restored_run(mut self, state: RestoredRunState<P>) -> Self {
+        self.restored = Some(RestoredEngineState {
+            graph: state.graph,
+            budget: state.budget,
+            cache: state.cache.unwrap_or_default(),
+        });
+        self
+    }
+
     /// Set the trust policy used for optimizer contexts and callback views.
     #[must_use]
     pub fn trust_policy(mut self, trust: TrustPolicy) -> Self {
@@ -387,10 +446,19 @@ impl<P: OptimizationProblem> EngineBuilder<P> {
 
     #[must_use]
     pub fn build(self) -> Engine<P> {
+        let (graph, budget, cache) = if let Some(restored) = self.restored {
+            (restored.graph, restored.budget, restored.cache)
+        } else {
+            (
+                RunGraph::new(self.run_id),
+                BudgetLedger::new(self.budget),
+                EvaluationCache::default(),
+            )
+        };
         Engine {
-            graph: RunGraph::new(self.run_id),
-            budget: BudgetLedger::new(self.budget),
-            cache: EvaluationCache::default(),
+            graph,
+            budget,
+            cache,
             evaluators: self.evaluators,
             callbacks: self.callbacks,
             stoppers: self.stoppers,
@@ -398,6 +466,12 @@ impl<P: OptimizationProblem> EngineBuilder<P> {
             trust: self.trust,
         }
     }
+}
+
+struct RestoredEngineState<P: OptimizationProblem> {
+    graph: RunGraph<P>,
+    budget: BudgetLedger,
+    cache: EvaluationCache,
 }
 
 enum EngineStopper<P: OptimizationProblem> {

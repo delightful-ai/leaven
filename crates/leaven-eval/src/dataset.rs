@@ -23,6 +23,40 @@ pub struct Case<I = serde_json::Value, T = NoTarget> {
     pub metadata: MetadataBag,
 }
 
+impl<I, T> Case<I, T> {
+    /// Builds a case envelope with an optional scorer-visible target.
+    #[must_use]
+    pub fn new(id: CaseId, input: I, target: Option<T>) -> Self {
+        Self {
+            id,
+            input,
+            target,
+            metadata: MetadataBag::new(),
+        }
+    }
+
+    /// Builds a case envelope with a required scorer-visible target.
+    #[must_use]
+    pub fn targeted(id: CaseId, input: I, target: T) -> Self {
+        Self::new(id, input, Some(target))
+    }
+
+    /// Replaces the operational metadata bag.
+    #[must_use]
+    pub fn with_metadata(mut self, metadata: MetadataBag) -> Self {
+        self.metadata = metadata;
+        self
+    }
+}
+
+impl<I> Case<I, NoTarget> {
+    /// Builds an input-only case envelope.
+    #[must_use]
+    pub fn input(id: CaseId, input: I) -> Self {
+        Self::new(id, input, None)
+    }
+}
+
 /// Conventional language-model case alias.
 pub type LmCase<I = serde_json::Value, T = serde_json::Value> = Case<I, T>;
 
@@ -62,6 +96,17 @@ impl<C> Dataset<C> {
     #[must_use]
     pub const fn metadata(&self) -> &MetadataBag {
         &self.metadata
+    }
+}
+
+impl<I, T> Dataset<Case<I, T>> {
+    /// Builds a dataset from case envelopes while preserving their stable IDs.
+    pub fn from_cases(cases: Vec<Case<I, T>>) -> Result<Self, DatasetError> {
+        let mut builder = Self::builder();
+        for case in cases {
+            builder = builder.case(case.id, case)?;
+        }
+        Ok(builder.build())
     }
 }
 

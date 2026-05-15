@@ -8,46 +8,46 @@ use leaven_core::{
     ResolvedRequestKind,
 };
 use leaven_engine::{CachePolicy, EvaluationContext, EvaluationError, Evaluator};
+use leaven_eval::{Case, NoTarget};
 use leaven_evidence::{
     CaseAssessmentEvidence, CaseOutcome, CasewiseEvidence, OutputRecord, ScalarEvidence,
 };
 use leaven_kernel::{
-    BudgetSnapshot, Cost, EvaluationSetId, EvaluatorId, Fingerprint, FingerprintBuilder, Metered,
+    BudgetSnapshot, Cost, EvaluationSetId, EvaluatorId, Fingerprint, Metered,
 };
 
-use crate::{RunOutput, RunProblem, Score, ScoreContext, ScoreError};
+use crate::{RunCase, RunOutput, RunProblem, Score, ScoreContext, ScoreError};
+use crate::compatibility::ScoringEvaluatorIdentity;
 
-type Runner<A, C> = Arc<dyn Fn(A, C) -> BoxFuture<'static, RunOutput> + Send + Sync>;
-type Scorer<A, C> =
-    Arc<dyn Fn(ScoreContext<A, C>) -> BoxFuture<'static, Result<Score, ScoreError>> + Send + Sync>;
+type Runner<A, I> = Arc<dyn Fn(A, RunCase<I>) -> BoxFuture<'static, RunOutput> + Send + Sync>;
+type Scorer<A, I, T> = Arc<
+    dyn Fn(ScoreContext<A, I, T>) -> BoxFuture<'static, Result<Score, ScoreError>> + Send + Sync,
+>;
 
 /// Evaluator that runs a candidate on cases and normalizes scores into
 /// casewise feedback evidence.
-pub struct ScoringEvaluator<A, C> {
-    cases: Arc<Vec<C>>,
-    runner: Runner<A, C>,
-    scorer: Scorer<A, C>,
+pub struct ScoringEvaluator<A, I, T = NoTarget> {
+    cases: Arc<Vec<Case<I, T>>>,
+    runner: Runner<A, I>,
+    scorer: Scorer<A, I, T>,
     fingerprint: Fingerprint,
     parallelism: NonZeroUsize,
 }
 
-impl<A, C> ScoringEvaluator<A, C> {
+impl<A, I, T> ScoringEvaluator<A, I, T> {
     /// Builds a scoring evaluator.
     #[must_use]
     pub fn new(
-        cases: Arc<Vec<C>>,
-        runner: Runner<A, C>,
-        scorer: Scorer<A, C>,
-        label: &str,
+        cases: Arc<Vec<Case<I, T>>>,
+        runner: Runner<A, I>,
+        scorer: Scorer<A, I, T>,
+        identity: ScoringEvaluatorIdentity,
     ) -> Self {
-        let mut fingerprint = FingerprintBuilder::new();
-        fingerprint.update(label.as_bytes());
-        fingerprint.update(cases.len().to_le_bytes());
         Self {
             cases,
             runner,
             scorer,
-            fingerprint: fingerprint.finish(),
+            fingerprint: identity.fingerprint(),
             parallelism: default_parallelism(),
         }
     }
@@ -66,10 +66,11 @@ impl<A, C> ScoringEvaluator<A, C> {
     }
 }
 
-impl<A, C> Evaluator<RunProblem<A, C>> for ScoringEvaluator<A, C>
+impl<A, I, T> Evaluator<RunProblem<A, I, T>> for ScoringEvaluator<A, I, T>
 where
     A: leaven_core::Artifact,
-    C: Clone + Send + Sync + 'static,
+    I: Clone + Send + Sync + 'static,
+    T: Clone + Send + Sync + 'static,
 {
     fn id(&self) -> EvaluatorId {
         EvaluatorId::PRIMARY
@@ -86,8 +87,8 @@ where
     async fn evaluate(
         &self,
         request: ResolvedEvaluationRequest,
-        ctx: EvaluationContext<'_, RunProblem<A, C>>,
-    ) -> Result<Metered<Vec<Assessment<RunProblem<A, C>>>>, EvaluationError> {
+        ctx: EvaluationContext<'_, RunProblem<A, I, T>>,
+    ) -> Result<Metered<Vec<Assessment<RunProblem<A, I, T>>>>, EvaluationError> {
         if request.granularity != AssessmentGranularity::PerCase {
             return Err(EvaluationError::Message(
                 "leaven-run scoring evaluator requires per-case granularity".to_owned(),
@@ -117,7 +118,6 @@ where
                 jobs.push(EvaluationJob {
                     candidate_index,
                     case_index,
-                    case_id,
                     artifact: artifact.clone(),
                     case: case.clone(),
                     budget: budget.clone(),
@@ -134,13 +134,13 @@ where
             let EvaluationOutcome {
                 candidate_index,
                 case_index,
-                case_id,
+                visible_case_id,
                 evidence,
                 cost,
             } = outcome;
             total_cost = total_cost.combine(&cost);
             by_candidate[candidate_index][case_index] =
-                Some((CaseOutcome::new(case_id, evidence), cost));
+                Some((CaseOutcome::new(visible_case_id, evidence), cost));
         }
 
         let mut assessments = Vec::with_capacity(candidates.len());
@@ -168,32 +168,32 @@ where
     }
 }
 
-struct EvaluationJob<A, C> {
+struct EvaluationJob<A, I, T> {
     candidate_index: usize,
     case_index: usize,
-    case_id: leaven_kernel::CaseId,
     artifact: A,
-    case: C,
+    case: Case<I, T>,
     budget: BudgetSnapshot,
 }
 
 struct EvaluationOutcome {
     candidate_index: usize,
     case_index: usize,
-    case_id: leaven_kernel::CaseId,
+    visible_case_id: leaven_kernel::CaseId,
     evidence: CaseAssessmentEvidence,
     cost: Cost,
 }
 
-fn evaluate_jobs<A, C>(
-    jobs: Vec<EvaluationJob<A, C>>,
-    runner: &Runner<A, C>,
-    scorer: &Scorer<A, C>,
+fn evaluate_jobs<A, I, T>(
+    jobs: Vec<EvaluationJob<A, I, T>>,
+    runner: &Runner<A, I>,
+    scorer: &Scorer<A, I, T>,
     parallelism: NonZeroUsize,
 ) -> impl Future<Output = Result<Vec<EvaluationOutcome>, EvaluationError>> + Send + 'static
 where
     A: leaven_core::Artifact,
-    C: Clone + Send + Sync + 'static,
+    I: Clone + Send + Sync + 'static,
+    T: Clone + Send + Sync + 'static,
 {
     let parallelism = parallelism.get().min(jobs.len().max(1));
     let runner = Arc::clone(runner);
@@ -212,19 +212,23 @@ where
     .boxed()
 }
 
-async fn evaluate_job<A, C>(
-    job: EvaluationJob<A, C>,
-    runner: &Runner<A, C>,
-    scorer: &Scorer<A, C>,
+async fn evaluate_job<A, I, T>(
+    job: EvaluationJob<A, I, T>,
+    runner: &Runner<A, I>,
+    scorer: &Scorer<A, I, T>,
 ) -> Result<EvaluationOutcome, EvaluationError>
 where
     A: leaven_core::Artifact,
-    C: Clone + Send + Sync + 'static,
+    I: Clone + Send + Sync + 'static,
+    T: Clone + Send + Sync + 'static,
 {
-    let output = runner(job.artifact.clone(), job.case.clone()).await;
+    let run_case = RunCase::from_case(&job.case);
+    let score_case = crate::ScoreCase::from_case(&job.case);
+    let visible_case_id = job.case.id;
+    let output = runner(job.artifact.clone(), run_case).await;
     let score = scorer(ScoreContext {
         artifact: job.artifact.clone(),
-        case: job.case.clone(),
+        case: score_case,
         output: output.clone(),
         budget: job.budget.clone(),
     })
@@ -245,7 +249,7 @@ where
     Ok(EvaluationOutcome {
         candidate_index: job.candidate_index,
         case_index: job.case_index,
-        case_id: job.case_id,
+        visible_case_id,
         evidence: CaseAssessmentEvidence::new(scalar, generated_output, score.feedback),
         cost,
     })

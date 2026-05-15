@@ -4,7 +4,7 @@ use leaven_core::OptimizationProblem;
 use leaven_kernel::{BlobRef, CandidateId, Fingerprint};
 use serde::{Serialize, de::DeserializeOwned};
 
-use crate::{OptimizerStateWrite, RunGraphView};
+use crate::{OptimizerStateWrite, RunCheckpoint, RunGraphView, RunPersistenceError};
 
 #[allow(async_fn_in_trait)]
 pub trait Optimizer<P: OptimizationProblem>: Send {
@@ -34,6 +34,105 @@ pub trait Optimizer<P: OptimizationProblem>: Send {
         _ctx: CheckpointContext<'_, P>,
     ) -> Result<Option<OptimizerStateWrite>, OptimizerError> {
         Ok(None)
+    }
+
+    /// Restores optimizer continuation state from a durable run checkpoint.
+    ///
+    /// Stateless or graph-derived optimizers can use the default when the
+    /// checkpoint has no private optimizer payload. If a checkpoint contains
+    /// private state, the optimizer must override this and restore or reject it
+    /// before the engine continues.
+    fn restore_checkpoint_state<R>(
+        &mut self,
+        checkpoint: &RunCheckpoint,
+        _reader: &R,
+        _ctx: RestoreContext<'_, P>,
+    ) -> Result<(), OptimizerError>
+    where
+        R: OptimizerStateReader,
+    {
+        if checkpoint.optimizer_state.is_some() {
+            return Err(OptimizerError::Message(
+                "stored run includes optimizer private state, but this optimizer does not implement resume restore".to_owned(),
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// Capability for reading typed optimizer continuation payloads referenced by
+/// a run checkpoint.
+pub trait OptimizerStateReader {
+    /// Load and validate a JSON optimizer state payload.
+    fn load_optimizer_state<T>(
+        &self,
+        checkpoint: &RunCheckpoint,
+        optimizer: Fingerprint,
+        schema: Fingerprint,
+    ) -> Result<Option<T>, RunPersistenceError>
+    where
+        T: DeserializeOwned;
+}
+
+/// Restores a [`CheckpointableOptimizer`] from a stored run checkpoint.
+pub fn restore_checkpointable_optimizer_state<P, O, R>(
+    optimizer: &mut O,
+    checkpoint: &RunCheckpoint,
+    reader: &R,
+    ctx: RestoreContext<'_, P>,
+) -> Result<(), OptimizerError>
+where
+    P: OptimizationProblem,
+    O: CheckpointableOptimizer<P>,
+    R: OptimizerStateReader,
+{
+    match optimizer.private_state_policy() {
+        PrivateStatePolicy::DerivedFromGraph => {
+            if checkpoint.optimizer_state.is_some() {
+                return Err(OptimizerError::with_source(
+                    "optimizer private state restore failed",
+                    CheckpointError::IncompatibleState {
+                        reason:
+                            "checkpoint contains private optimizer state for a graph-derived optimizer"
+                                .to_owned(),
+                    },
+                ));
+            }
+            Ok(())
+        }
+        PrivateStatePolicy::ExplicitSnapshot { schema, format } => {
+            if format != StateFormat::Json {
+                return Err(OptimizerError::with_source(
+                    "optimizer private state restore failed",
+                    CheckpointError::IncompatibleState {
+                        reason: format!(
+                            "run persistence currently restores JSON optimizer state, got {format:?}"
+                        ),
+                    },
+                ));
+            }
+            let state = reader
+                .load_optimizer_state::<O::State>(
+                    checkpoint,
+                    optimizer.optimizer_fingerprint(),
+                    schema,
+                )
+                .map_err(|source| {
+                    OptimizerError::with_source("optimizer private state restore failed", source)
+                })?
+                .ok_or_else(|| {
+                    OptimizerError::with_source(
+                        "optimizer private state restore failed",
+                        CheckpointError::StateUnavailable {
+                            reason: "checkpoint does not contain optimizer private state"
+                                .to_owned(),
+                        },
+                    )
+                })?;
+            optimizer.restore_state(state, ctx).map_err(|source| {
+                OptimizerError::with_source("optimizer private state restore failed", source)
+            })
+        }
     }
 }
 

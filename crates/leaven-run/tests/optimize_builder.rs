@@ -1,5 +1,6 @@
 use std::{
     num::NonZeroUsize,
+    path::{Path, PathBuf},
     sync::{
         Arc, Mutex,
         atomic::{AtomicUsize, Ordering},
@@ -12,26 +13,51 @@ use leaven_core::{
     EvaluationSet,
 };
 use leaven_engine::{
-    Callback, Optimizer, OptimizerError, RunCheckpointRequest, RunContext, RunEvent, RunGraphView,
-    RunPersistence, RunPersistenceError, StepStatus,
+    Callback, CheckpointContext, CheckpointError, CheckpointableOptimizer, Optimizer,
+    OptimizerError, OptimizerStateWrite, PrivateStatePolicy, RestoreContext, RunCheckpointRequest,
+    RunContext, RunEvent, RunGraphView, RunPersistence, RunPersistenceError, StateFormat,
+    StepStatus,
 };
+use leaven_eval::Case;
 use leaven_evidence::{CaseAssessmentEvidence, CasewiseEvidence};
-use leaven_kernel::{Budget, CandidateId, CaseId, ContentId, EvaluatorId};
+use leaven_kernel::{Budget, CandidateId, CaseId, ContentId, EvaluatorId, Fingerprint, RunId};
 use leaven_run::{
-    OptimizationStopReason, OptimizeError, OptimizeStore, RunEventSummary, RunOutput, RunProblem,
-    RunStorage, Score, ScoreContext, ScoreError, optimize,
+    OptimizationStopReason, OptimizeBuilder, OptimizeError, OptimizeStore, RunCase,
+    RunEventSummary, RunOutput, RunProblem, RunStorage, Score, ScoreContext, ScoreError, optimize,
 };
 use leaven_store::{EvidenceStore, StoreError};
 use leaven_store_inline::InlineEvidenceStore;
+
+const TEST_RUNNER_FINGERPRINT: Fingerprint = Fingerprint::from_bytes([7; 32]);
+const TEST_SCORER_FINGERPRINT: Fingerprint = Fingerprint::from_bytes([8; 32]);
+const ALT_RUNNER_FINGERPRINT: Fingerprint = Fingerprint::from_bytes([9; 32]);
+const ALT_SCORER_FINGERPRINT: Fingerprint = Fingerprint::from_bytes([10; 32]);
+
+trait TestRuntimeFingerprints {
+    fn test_runtime_fingerprints(self) -> Self;
+}
+
+impl<A, I, T, O> TestRuntimeFingerprints for OptimizeBuilder<A, I, T, O>
+where
+    A: Artifact,
+    I: Clone + Send + Sync + 'static,
+    T: Clone + Send + Sync + 'static,
+{
+    fn test_runtime_fingerprints(self) -> Self {
+        self.runner_fingerprint(TEST_RUNNER_FINGERPRINT)
+            .scorer_fingerprint(TEST_SCORER_FINGERPRINT)
+    }
+}
 
 #[test]
 fn run_builder_requires_explicit_budget() {
     let error = block_on(
         optimize(TextArtifact(40))
-            .train(vec![TextCase(2)])
+            .train_inputs(vec![TextCase(2)])
             .runner(|artifact, case| async move { text_runner(&artifact, &case) })
             .score(text_score)
             .using(SeedBest::default())
+            .test_runtime_fingerprints()
             .run(),
     )
     .unwrap_err();
@@ -43,24 +69,120 @@ fn run_builder_requires_explicit_budget() {
 fn run_builder_accepts_explicit_unlimited_budget() {
     let result = block_on(
         optimize(TextArtifact(40))
-            .train(vec![TextCase(2)])
+            .train_inputs(vec![TextCase(2)])
             .runner(|artifact, case| async move { text_runner(&artifact, &case) })
             .score(text_score)
             .using(SeedBest::default())
             .budget(Budget::unlimited())
             .evaluation_parallelism(NonZeroUsize::new(1).unwrap())
+            .test_runtime_fingerprints()
             .run(),
     )
     .unwrap();
 
     assert_eq!(result.best(), Some(&TextArtifact(40)));
     assert_eq!(result.stop, OptimizationStopReason::OptimizerDone);
+    assert_resumable_storage(result.summary().storage.clone(), result.run_id);
+    cleanup_result_storage(&result.summary().storage);
+}
+
+#[test]
+fn run_builder_ephemeral_is_the_explicit_throwaway_path() {
+    let result = block_on(
+        optimize(TextArtifact(40))
+            .train_inputs(vec![TextCase(2)])
+            .runner(|artifact, case| async move { text_runner(&artifact, &case) })
+            .score(text_score)
+            .using(SeedBest::default())
+            .budget(Budget::unlimited())
+            .ephemeral()
+            .test_runtime_fingerprints()
+            .run(),
+    )
+    .unwrap();
+
     assert_eq!(
         result.summary().storage,
         RunStorage::Ephemeral {
             run_id: result.run_id
         }
     );
+}
+
+#[test]
+fn run_builder_run_dir_writes_discoverable_durable_artifacts() {
+    let run_dir = temp_run_dir("explicit-run-dir");
+    let result = block_on(
+        optimize(TextArtifact(40))
+            .train_inputs(vec![TextCase(2)])
+            .runner(|artifact, case| async move { text_runner(&artifact, &case) })
+            .score(text_score)
+            .using(SeedBest::default())
+            .budget(Budget::unlimited())
+            .run_dir(&run_dir)
+            .test_runtime_fingerprints()
+            .run(),
+    )
+    .unwrap();
+
+    match result.summary().storage.clone() {
+        RunStorage::Stored {
+            run_id,
+            run_dir: Some(stored_dir),
+            latest_checkpoint: Some(_),
+            resumable: true,
+        } => {
+            assert_eq!(run_id, result.run_id);
+            assert_eq!(stored_dir, run_dir);
+        }
+        other => panic!("expected resumable run-dir storage, got {other:?}"),
+    }
+    assert!(run_dir.join("blobs").is_dir());
+    assert!(run_dir.join("checkpoints").join("LATEST").is_file());
+    assert!(run_dir.join("evidence").is_dir());
+    cleanup_path(&run_dir);
+}
+
+#[test]
+fn run_builder_run_dir_resume_preserves_existing_budget_and_graph_state() {
+    let run_dir = temp_run_dir("resume-existing-run");
+    let first_steps = Arc::new(AtomicUsize::new(0));
+    let first = block_on(
+        optimize(TextArtifact(40))
+            .train_inputs(vec![TextCase(2)])
+            .runner(|artifact, case| async move { text_runner(&artifact, &case) })
+            .score(text_score)
+            .using(ResumeOnce::new(Arc::clone(&first_steps)))
+            .budget(Budget::metric_calls(1))
+            .run_dir(&run_dir)
+            .test_runtime_fingerprints()
+            .run(),
+    )
+    .unwrap();
+    assert_eq!(first_steps.load(Ordering::SeqCst), 1);
+
+    let restored_steps = Arc::new(AtomicUsize::new(0));
+    let restored = block_on(
+        optimize(TextArtifact(999))
+            .train_inputs(vec![TextCase(2)])
+            .runner(|artifact, case| async move { text_runner(&artifact, &case) })
+            .score(text_score)
+            .using(ResumeOnce::new(Arc::clone(&restored_steps)))
+            .budget(Budget::metric_calls(1))
+            .run_dir(&run_dir)
+            .test_runtime_fingerprints()
+            .run(),
+    )
+    .unwrap();
+
+    assert_eq!(restored.run_id, first.run_id);
+    assert_eq!(restored_steps.load(Ordering::SeqCst), 0);
+    assert_eq!(
+        restored.summary().optimization_budget.spent.metric_calls,
+        first.summary().budget.spent.metric_calls
+    );
+    assert!(restored.events.len() > first.events.len());
+    cleanup_path(&run_dir);
 }
 
 #[test]
@@ -135,12 +257,13 @@ fn run_event_summary_names_cover_public_variants() {
 fn run_builder_reports_final_train_scores_when_optimizer_does_not_evaluate_train() {
     let result = block_on(
         optimize(TextArtifact(40))
-            .train(vec![TextCase(2)])
+            .train_inputs(vec![TextCase(2)])
             .runner(|artifact, case| async move { text_runner(&artifact, &case) })
             .score(text_score)
             .using(SeedBest::default())
             .budget(Budget::unlimited())
             .evaluation_parallelism(NonZeroUsize::new(1).unwrap())
+            .test_runtime_fingerprints()
             .run(),
     )
     .unwrap();
@@ -159,23 +282,25 @@ fn run_builder_accepts_cloned_evidence_only_store() {
 
     let result = block_on(
         optimize(TextArtifact(40))
-            .train(vec![TextCase(2)])
+            .train_inputs(vec![TextCase(2)])
             .runner(|artifact, case| async move { text_runner(&artifact, &case) })
             .score(text_score)
             .using(EvaluateSeed::default())
             .budget(Budget::metric_calls(16))
             .store(store)
+            .test_runtime_fingerprints()
             .run(),
     )
     .unwrap();
     let cloned_result = block_on(
         optimize(TextArtifact(41))
-            .train(vec![TextCase(2)])
+            .train_inputs(vec![TextCase(2)])
             .runner(|artifact, case| async move { text_runner(&artifact, &case) })
             .score(text_score)
             .using(EvaluateSeed::default())
             .budget(Budget::metric_calls(16))
             .store(cloned_store)
+            .test_runtime_fingerprints()
             .run(),
     )
     .unwrap();
@@ -184,18 +309,20 @@ fn run_builder_accepts_cloned_evidence_only_store() {
     assert_eq!(cloned_result.best(), Some(&TextArtifact(41)));
     assert!(evidence_store.puts() > 0);
     assert!(evidence_store.gets() > 0);
+    cleanup_result_storage(&result.summary().storage);
 }
 
 #[test]
 fn run_builder_rejects_held_out_cases_without_train_cases() {
     let error = block_on(
         optimize(TextArtifact(40))
-            .train(Vec::<TextCase>::new())
-            .validation(vec![TextCase(2)])
+            .train_inputs(Vec::<TextCase>::new())
+            .validation_inputs(vec![TextCase(2)])
             .runner(|artifact, case| async move { text_runner(&artifact, &case) })
             .score(text_score)
             .using(SeedBest::default())
             .budget(Budget::metric_calls(8))
+            .test_runtime_fingerprints()
             .run(),
     )
     .unwrap_err();
@@ -207,11 +334,12 @@ fn run_builder_rejects_held_out_cases_without_train_cases() {
 fn run_builder_accepts_empty_train_when_no_held_out_sets_exist() {
     let result = block_on(
         optimize(TextArtifact(40))
-            .train(Vec::<TextCase>::new())
+            .train_inputs(Vec::<TextCase>::new())
             .runner(|artifact, case| async move { text_runner(&artifact, &case) })
             .score(text_score)
             .using(EvaluateSeed::default())
             .budget(Budget::metric_calls(8))
+            .test_runtime_fingerprints()
             .run(),
     )
     .unwrap();
@@ -221,20 +349,22 @@ fn run_builder_accepts_empty_train_when_no_held_out_sets_exist() {
     assert_eq!(result.summary().optimized_train_score, None);
     assert_eq!(result.summary().optimization_cost.metric_calls, 0);
     assert_eq!(result.summary().final_report_cost.metric_calls, 0);
+    cleanup_result_storage(&result.summary().storage);
 }
 
 #[test]
 fn run_builder_separates_optimization_cost_from_final_report_cost() {
     let result = block_on(
         optimize(TextArtifact(40))
-            .train(vec![TextCase(2)])
-            .validation(vec![TextCase(3)])
-            .test(vec![TextCase(4)])
+            .train_inputs(vec![TextCase(2)])
+            .validation_inputs(vec![TextCase(3)])
+            .test_inputs(vec![TextCase(4)])
             .runner(|artifact, case| async move { text_runner(&artifact, &case) })
             .score(text_score)
             .using(EvaluateSeed::default())
             .budget(Budget::metric_calls(16))
             .evaluation_parallelism(NonZeroUsize::new(1).unwrap())
+            .test_runtime_fingerprints()
             .run(),
     )
     .unwrap();
@@ -250,18 +380,20 @@ fn run_builder_separates_optimization_cost_from_final_report_cost() {
     assert_eq!(result.summary().validation_score, Some(43.0));
     assert_eq!(result.summary().baseline_test_score, Some(44.0));
     assert_eq!(result.summary().test_score, Some(44.0));
+    cleanup_result_storage(&result.summary().storage);
 }
 
 #[test]
 fn run_builder_reports_budget_stop_reason_from_metric_call_budget() {
     let result = block_on(
         optimize(TextArtifact(40))
-            .train(vec![TextCase(2)])
+            .train_inputs(vec![TextCase(2)])
             .runner(|artifact, case| async move { text_runner(&artifact, &case) })
             .score(text_score)
             .using(ContinueAfterSeedEvaluation::default())
             .budget(Budget::metric_calls(1))
             .evaluation_parallelism(NonZeroUsize::new(1).unwrap())
+            .test_runtime_fingerprints()
             .run(),
     )
     .unwrap();
@@ -270,20 +402,22 @@ fn run_builder_reports_budget_stop_reason_from_metric_call_budget() {
     assert_eq!(result.stop, OptimizationStopReason::BudgetReached);
     assert_eq!(result.summary().optimization_cost.metric_calls, 1);
     assert_eq!(result.summary().final_report_cost.metric_calls, 2);
+    cleanup_result_storage(&result.summary().storage);
 }
 
 #[test]
 fn run_builder_runs_final_reports_after_metric_budget_stop() {
     let result = block_on(
         optimize(TextArtifact(40))
-            .train(vec![TextCase(2)])
-            .validation(vec![TextCase(3)])
-            .test(vec![TextCase(4)])
+            .train_inputs(vec![TextCase(2)])
+            .validation_inputs(vec![TextCase(3)])
+            .test_inputs(vec![TextCase(4)])
             .runner(|artifact, case| async move { text_runner(&artifact, &case) })
             .score(text_score)
             .using(ContinueAfterSeedEvaluation::default())
             .budget(Budget::metric_calls(1))
             .evaluation_parallelism(NonZeroUsize::new(1).unwrap())
+            .test_runtime_fingerprints()
             .run(),
     )
     .unwrap();
@@ -297,18 +431,20 @@ fn run_builder_runs_final_reports_after_metric_budget_stop() {
     assert_eq!(result.summary().validation_score, Some(43.0));
     assert_eq!(result.summary().baseline_test_score, Some(44.0));
     assert_eq!(result.summary().test_score, Some(44.0));
+    cleanup_result_storage(&result.summary().storage);
 }
 
 #[test]
 fn run_builder_reports_case_ids_output_and_feedback_for_case_level_rows() {
     let result = block_on(
         optimize(TextArtifact(40))
-            .train(vec![TextCase(2), TextCase(3)])
+            .train_inputs(vec![TextCase(2), TextCase(3)])
             .runner(|artifact, case| async move { text_runner(&artifact, &case) })
             .score(text_score)
             .using(EvaluateSeed::default())
             .budget(Budget::metric_calls(16))
             .evaluation_parallelism(NonZeroUsize::new(1).unwrap())
+            .test_runtime_fingerprints()
             .run(),
     )
     .unwrap();
@@ -334,17 +470,82 @@ fn run_builder_reports_case_ids_output_and_feedback_for_case_level_rows() {
     assert_eq!(candidate.cases[1].case_id, CaseId::from_index(1));
     assert_eq!(candidate.cases[1].output, "43");
     assert_eq!(candidate.cases[1].feedback, "case 3");
+    cleanup_result_storage(&result.summary().storage);
+}
+
+#[test]
+fn run_builder_preserves_case_envelope_ids_and_targets_score_only() {
+    let runner_seen = Arc::new(Mutex::new(Vec::new()));
+    let scorer_seen_target = Arc::new(Mutex::new(None));
+    let result = block_on(
+        optimize(TextArtifact(40))
+            .train(vec![Case::targeted(
+                CaseId::new(77),
+                TextCase(2),
+                TextTarget(42),
+            )])
+            .runner({
+                let runner_seen = Arc::clone(&runner_seen);
+                move |artifact, case: RunCase<TextCase>| {
+                    let runner_seen = Arc::clone(&runner_seen);
+                    async move {
+                        runner_seen
+                            .lock()
+                            .unwrap()
+                            .push((case.id(), case.input().0));
+                        text_runner(&artifact, &case)
+                    }
+                }
+            })
+            .score({
+                let scorer_seen_target = Arc::clone(&scorer_seen_target);
+                move |ctx: ScoreContext<TextArtifact, TextCase, TextTarget>| {
+                    let scorer_seen_target = Arc::clone(&scorer_seen_target);
+                    async move {
+                        let target = ctx.case.target().expect("target is scorer-visible");
+                        *scorer_seen_target.lock().unwrap() = Some(target.0);
+                        Ok(Score::new(
+                            (ctx.output.output == target.0.to_string()) as u8 as f64,
+                            "target checked",
+                        ))
+                    }
+                }
+            })
+            .using(TargetSeedBest::default())
+            .budget(Budget::metric_calls(8))
+            .ephemeral()
+            .test_runtime_fingerprints()
+            .run(),
+    )
+    .unwrap();
+
+    assert_eq!(
+        runner_seen.lock().unwrap().as_slice(),
+        &[(CaseId::new(77), 2), (CaseId::new(77), 2)]
+    );
+    assert_eq!(*scorer_seen_target.lock().unwrap(), Some(42));
+    let train = result
+        .summary()
+        .evaluation
+        .splits_reported
+        .iter()
+        .find(|split| split.partition.0 == "TRAIN")
+        .expect("train split is reported");
+    let candidate = &train.candidates[0];
+    assert_eq!(candidate.cases[0].case_id, CaseId::new(77));
+    assert_eq!(candidate.cases[0].feedback, "target checked");
 }
 
 #[test]
 fn run_builder_reports_no_best_candidate_without_error() {
     let result = block_on(
         optimize(TextArtifact(40))
-            .train(vec![TextCase(2)])
+            .train_inputs(vec![TextCase(2)])
             .runner(|artifact, case| async move { text_runner(&artifact, &case) })
             .score(text_score)
             .using(NoBest)
             .budget(Budget::metric_calls(8))
+            .test_runtime_fingerprints()
             .run(),
     )
     .unwrap();
@@ -355,6 +556,7 @@ fn run_builder_reports_no_best_candidate_without_error() {
     assert_eq!(result.summary().optimized_train_score, None);
     assert_eq!(result.summary().final_report_cost.metric_calls, 1);
     assert!(result.events.contains(&RunEventSummary::OptimizationEnded));
+    cleanup_result_storage(&result.summary().storage);
 }
 
 #[test]
@@ -365,7 +567,7 @@ fn run_builder_dispatches_callbacks_and_supplied_store_capabilities() {
 
     let result = block_on(
         optimize(TextArtifact(40))
-            .train(vec![TextCase(2), TextCase(3)])
+            .train_inputs(vec![TextCase(2), TextCase(3)])
             .runner(|artifact, case| async move { text_runner(&artifact, &case) })
             .score(text_score)
             .using(EvaluateSeed::default())
@@ -377,6 +579,7 @@ fn run_builder_dispatches_callbacks_and_supplied_store_capabilities() {
             .on_event(RecordingCallback {
                 events: Arc::clone(&events),
             })
+            .test_runtime_fingerprints()
             .run(),
     )
     .unwrap();
@@ -389,12 +592,50 @@ fn run_builder_dispatches_callbacks_and_supplied_store_capabilities() {
         result.summary().storage,
         RunStorage::Stored {
             run_id: result.run_id,
+            run_dir: None,
+            latest_checkpoint: None,
             resumable: false,
         }
     );
     let events = events.lock().unwrap();
     assert!(events.contains(&"optimization_started"));
     assert!(events.contains(&"optimization_ended"));
+}
+
+fn assert_resumable_storage(storage: RunStorage, run_id: RunId) {
+    match storage {
+        RunStorage::Stored {
+            run_id: stored_run,
+            run_dir: Some(run_dir),
+            latest_checkpoint: Some(_),
+            resumable: true,
+        } => {
+            assert_eq!(stored_run, run_id);
+            assert!(run_dir.ends_with(run_id.to_string()));
+            assert!(run_dir.join("checkpoints").join("LATEST").is_file());
+        }
+        other => panic!("expected default durable storage, got {other:?}"),
+    }
+}
+
+fn cleanup_result_storage(storage: &RunStorage) {
+    if let RunStorage::Stored {
+        run_dir: Some(run_dir),
+        ..
+    } = storage
+    {
+        cleanup_path(run_dir);
+    }
+}
+
+fn temp_run_dir(label: &str) -> PathBuf {
+    let root = std::env::temp_dir().join(format!("leaven-run-{label}-{}", RunId::new()));
+    cleanup_path(&root);
+    root
+}
+
+fn cleanup_path(path: &Path) {
+    let _ = std::fs::remove_dir_all(path);
 }
 
 #[derive(Default)]
@@ -421,6 +662,36 @@ impl Optimizer<RunProblem<TextArtifact, TextCase>> for SeedBest {
     fn best_candidate(
         &self,
         graph: RunGraphView<'_, RunProblem<TextArtifact, TextCase>>,
+    ) -> Option<CandidateId> {
+        self.best
+            .or_else(|| graph.candidate_tree().roots().first().copied())
+    }
+}
+
+#[derive(Default)]
+struct TargetSeedBest {
+    best: Option<CandidateId>,
+}
+
+impl Optimizer<RunProblem<TextArtifact, TextCase, TextTarget>> for TargetSeedBest {
+    async fn initialize(
+        &mut self,
+        ctx: &mut RunContext<'_, RunProblem<TextArtifact, TextCase, TextTarget>>,
+    ) -> Result<(), OptimizerError> {
+        self.best = ctx.graph().candidate_tree().roots().first().copied();
+        Ok(())
+    }
+
+    async fn step(
+        &mut self,
+        _ctx: &mut RunContext<'_, RunProblem<TextArtifact, TextCase, TextTarget>>,
+    ) -> Result<StepStatus, OptimizerError> {
+        Ok(StepStatus::Done)
+    }
+
+    fn best_candidate(
+        &self,
+        graph: RunGraphView<'_, RunProblem<TextArtifact, TextCase, TextTarget>>,
     ) -> Option<CandidateId> {
         self.best
             .or_else(|| graph.candidate_tree().roots().first().copied())
@@ -540,6 +811,146 @@ impl Optimizer<RunProblem<TextArtifact, TextCase>> for EvaluateSeed {
     }
 }
 
+struct ResumeOnce {
+    best: Option<CandidateId>,
+    evaluated: bool,
+    step_calls: Arc<AtomicUsize>,
+}
+
+const RESUME_ONCE_FINGERPRINT: Fingerprint = Fingerprint::from_bytes([41; 32]);
+const RESUME_ONCE_STATE_SCHEMA: Fingerprint = Fingerprint::from_bytes([42; 32]);
+
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+struct ResumeOnceState {
+    best: Option<CandidateId>,
+    evaluated: bool,
+}
+
+impl ResumeOnce {
+    fn new(step_calls: Arc<AtomicUsize>) -> Self {
+        Self {
+            best: None,
+            evaluated: false,
+            step_calls,
+        }
+    }
+}
+
+impl Optimizer<RunProblem<TextArtifact, TextCase>> for ResumeOnce {
+    async fn initialize(
+        &mut self,
+        ctx: &mut RunContext<'_, RunProblem<TextArtifact, TextCase>>,
+    ) -> Result<(), OptimizerError> {
+        self.best = ctx.graph().candidate_tree().roots().first().copied();
+        Ok(())
+    }
+
+    async fn step(
+        &mut self,
+        ctx: &mut RunContext<'_, RunProblem<TextArtifact, TextCase>>,
+    ) -> Result<StepStatus, OptimizerError> {
+        self.step_calls.fetch_add(1, Ordering::SeqCst);
+        if self.evaluated {
+            return Ok(StepStatus::Continue);
+        }
+        self.evaluated = true;
+        let seed = self
+            .best
+            .or_else(|| ctx.graph().candidate_tree().roots().first().copied())
+            .ok_or_else(|| OptimizerError::Message("missing seed".to_owned()))?;
+        ctx.evaluate(
+            EvaluatorId::PRIMARY,
+            EvaluationRequest::Independent {
+                candidates: vec![seed],
+                set: EvaluationSet::Partition("TRAIN".into()),
+                granularity: AssessmentGranularity::PerCase,
+                purpose: EvaluationPurpose::Search,
+            },
+        )
+        .await
+        .map_err(|source| OptimizerError::with_source("seed evaluation failed", source))?;
+        Ok(StepStatus::Continue)
+    }
+
+    fn best_candidate(
+        &self,
+        graph: RunGraphView<'_, RunProblem<TextArtifact, TextCase>>,
+    ) -> Option<CandidateId> {
+        self.best
+            .or_else(|| graph.candidate_tree().roots().first().copied())
+    }
+
+    fn checkpoint_state_write(
+        &self,
+        ctx: CheckpointContext<'_, RunProblem<TextArtifact, TextCase>>,
+    ) -> Result<Option<OptimizerStateWrite>, OptimizerError> {
+        <Self as CheckpointableOptimizer<RunProblem<TextArtifact, TextCase>>>::checkpoint_state_write(
+            self, ctx,
+        )
+    }
+
+    fn restore_checkpoint_state<R>(
+        &mut self,
+        checkpoint: &leaven_engine::RunCheckpoint,
+        reader: &R,
+        ctx: RestoreContext<'_, RunProblem<TextArtifact, TextCase>>,
+    ) -> Result<(), OptimizerError>
+    where
+        R: leaven_engine::OptimizerStateReader,
+    {
+        leaven_engine::restore_checkpointable_optimizer_state(self, checkpoint, reader, ctx)
+    }
+}
+
+impl CheckpointableOptimizer<RunProblem<TextArtifact, TextCase>> for ResumeOnce {
+    type State = ResumeOnceState;
+
+    fn optimizer_fingerprint(&self) -> Fingerprint {
+        RESUME_ONCE_FINGERPRINT
+    }
+
+    fn private_state_policy(&self) -> PrivateStatePolicy {
+        PrivateStatePolicy::ExplicitSnapshot {
+            schema: RESUME_ONCE_STATE_SCHEMA,
+            format: StateFormat::Json,
+        }
+    }
+
+    fn checkpoint_state(
+        &self,
+        ctx: CheckpointContext<'_, RunProblem<TextArtifact, TextCase>>,
+    ) -> Result<Self::State, CheckpointError> {
+        if let Some(best) = self.best
+            && ctx.graph().candidate(best).is_none()
+        {
+            return Err(CheckpointError::MissingGraphTruth {
+                reason: format!("best candidate `{best}` is not in the graph"),
+            });
+        }
+        Ok(ResumeOnceState {
+            best: self.best,
+            evaluated: self.evaluated,
+        })
+    }
+
+    fn restore_state(
+        &mut self,
+        state: Self::State,
+        ctx: RestoreContext<'_, RunProblem<TextArtifact, TextCase>>,
+    ) -> Result<(), CheckpointError> {
+        if let Some(best) = state.best
+            && ctx.graph().candidate(best).is_none()
+        {
+            return Err(CheckpointError::MissingGraphTruth {
+                reason: format!("best candidate `{best}` is not in the graph"),
+            });
+        }
+        self.best = state.best;
+        self.evaluated = state.evaluated;
+        Ok(())
+    }
+}
+
 #[derive(Clone)]
 struct CountingEvidenceStore {
     inner: Arc<CountingEvidenceInner>,
@@ -629,22 +1040,25 @@ impl Callback<RunProblem<TextArtifact, TextCase>> for RecordingCallback {
     }
 }
 
-fn text_runner(artifact: &TextArtifact, case: &TextCase) -> RunOutput {
-    RunOutput::new((artifact.0 + case.0).to_string())
+fn text_runner(artifact: &TextArtifact, case: &RunCase<TextCase>) -> RunOutput {
+    RunOutput::new((artifact.0 + case.input().0).to_string())
 }
 
 #[allow(clippy::needless_pass_by_value)]
 async fn text_score(ctx: ScoreContext<TextArtifact, TextCase>) -> Result<Score, ScoreError> {
     let ScoreContext { case, output, .. } = ctx;
     let value = output.output.parse::<f64>().unwrap();
-    Ok(Score::new(value, format!("case {}", case.0)))
+    Ok(Score::new(value, format!("case {}", case.input().0)))
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 struct TextArtifact(i32);
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 struct TextCase(i32);
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+struct TextTarget(i32);
 
 #[derive(Debug)]
 struct TextArtifactError;

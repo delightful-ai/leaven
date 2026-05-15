@@ -305,6 +305,7 @@ leaven-run -> [
   leaven-engine,
   leaven-eval,
   leaven-store,
+  leaven-store-file,
   leaven-store-inline
 ]
 ```

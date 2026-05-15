@@ -6,6 +6,21 @@ The top of the stack is:
 - `guiding_principles.md`: requirements and product constraints, not implementation layout.
 - `leaven_v0_2_1b_corrected_crate_topology_lib_rs.md`: topology intent and `lib.rs` map contract. Its crate inventory can lag the live workspace; verify live membership against root `Cargo.toml` and `crates/leaven/tests/topology_contract.rs`.
 - `durable_runs_and_resume.md`: default-durable run/resume semantics, `RunStore` vocabulary, optimizer continuation policy, and the explicit `ephemeral` escape hatch.
+- `resume_compatibility_fingerprints.md`: durable resume compatibility domains,
+  manifest comparison, runtime fingerprint obligations, cache/budget
+  compatibility, and P8 resume refusal requirements.
+- `default_cache_storage.md`: one-knob durable cache defaults, SQLite-backed
+  evaluation and LM response caches, automatic safe caching policy, report
+  requirements, and explicit override modes.
+- `case_visibility_and_target_isolation.md`: case id/input/target/metadata
+  visibility rules, target-free runner views, scorer target access, metadata
+  projection, and proof requirements for preventing hidden-answer leaks.
+- `aime_case_report_adapter.md`: P8 AIME import-record lowering into target-safe
+  Leaven cases, source-derived case identity, report source projection, and
+  AIME-specific cache/resume identity obligations.
+- `gepa_reflection_evidence_visibility.md`: optimizer-visible reflection data,
+  scorer-feedback boundary, target-safe case input projection, hidden split
+  defaults, and durable reflection evidence requirements.
 - `gepa_aime_paper_parity.md`: implementation spec for the GEPA/AIME paper-parity path, including budget stopping, GEPA loop continuation, reflection, LM/provider/cache use, AIME runner/scorer/reporting, and the proof denominator for P8.
 - `milestone_examples_behavioral_contract.md`: executable behavior contract for milestone examples.
 - `docs/testing/README.md`: proof model and coverage/SLA contract.

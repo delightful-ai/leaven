@@ -350,6 +350,7 @@ const EXPECTED_DEPENDENCIES: &[(&str, &[&str])] = &[
             "leaven-evidence",
             "leaven-kernel",
             "leaven-store",
+            "leaven-store-file",
             "leaven-store-inline",
         ],
     ),
