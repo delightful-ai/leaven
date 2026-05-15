@@ -1,12 +1,22 @@
-use std::{collections::BTreeMap, num::NonZeroUsize, path::Path, time::Duration};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    num::NonZeroUsize,
+    path::Path,
+    time::Duration,
+};
 
+use leaven::core::InfoRef;
+use leaven::engine::RunContext;
+use leaven::eval::{Case, SplitRole};
 use leaven::extend::PartitionId;
-use leaven::gepa::Gepa;
-use leaven::plumbing::{ContentId, Fingerprint, FiniteF64};
+use leaven::gepa::{Gepa, ReflectionError, ReflectiveDatasetBuilder, ReflectiveExample};
+use leaven::kernel::{AssessmentId, CandidateId, CaseId, FingerprintBuilder, MetadataValue};
+use leaven::plumbing::{ContentId, Fingerprint, FiniteF64, MetadataBag};
 use leaven::prelude::{
     Artifact, ArtifactIdentity, Budget, EditSurface, Optimized, Part, PartAddress, RunOutput,
     Score, ScoreContext, ScoreError, SurfaceError, SurfaceFingerprint,
 };
+use leaven::run::{RunCase, RunProblem};
 use leaven::{kernel::Metered, stdlib::populations::ParetoFrontier};
 use leaven_gepa::LmBackedReflectorConfig;
 use leaven_lm::{
@@ -43,7 +53,8 @@ async fn main() {
     }
 }
 
-fn report_lines(config: &AimeRunConfig, result: &Optimized<AimePrompt>) -> Vec<String> {
+fn report_lines(config: &AimeRunConfig, run: &AimeRunResult) -> Vec<String> {
+    let result = &run.optimized;
     let mut lines = vec![
         format!("run_profile={}", config.profile.label()),
         format!(
@@ -123,9 +134,15 @@ fn report_lines(config: &AimeRunConfig, result: &Optimized<AimePrompt>) -> Vec<S
     for split in &result.summary.evaluation.splits_reported {
         for candidate in &split.candidates {
             for case in &candidate.cases {
+                let source_id = run
+                    .report_metadata
+                    .get(&case.case_id)
+                    .map(AimeReportMetadata::source_id)
+                    .unwrap_or_else(|| "missing-source-id".to_owned());
                 lines.push(format!(
-                    "report_case={} split={:?} score={:.3} output_chars={} feedback_chars={}",
+                    "report_case={} source_id={} split={:?} score={:.3} output_chars={} feedback_chars={}",
                     case.case_id,
+                    source_id,
                     split.role,
                     case.score,
                     case.output.len(),
@@ -168,35 +185,36 @@ fn report_stop_reason(reason: leaven::run::OptimizationStopReason) -> &'static s
 }
 
 #[cfg(test)]
-async fn run_deterministic_aime() -> Optimized<AimePrompt> {
+async fn run_deterministic_aime() -> AimeRunResult {
     let config = AimeRunConfig::deterministic_smoke();
-    let (train, validation, test) = deterministic_cases();
-    run_aime(config, train, validation, test).await
+    let dataset = deterministic_dataset();
+    run_aime(config, dataset).await
 }
 
-async fn run_configured_aime(config: AimeRunConfig) -> Optimized<AimePrompt> {
-    let (train, validation, test) = configured_cases();
-    run_aime(config, train, validation, test).await
+async fn run_configured_aime(config: AimeRunConfig) -> AimeRunResult {
+    let dataset = configured_dataset();
+    run_aime(config, dataset).await
 }
 
-async fn run_aime(
-    config: AimeRunConfig,
-    train: Vec<AimeCase>,
-    validation: Vec<AimeCase>,
-    test: Vec<AimeCase>,
-) -> Optimized<AimePrompt> {
+async fn run_aime(config: AimeRunConfig, dataset: AimeDataset) -> AimeRunResult {
     let solver = aime_solver_lm(&config.solver);
+    let runner_fingerprint = aime_runner_fingerprint(&config.solver);
+    let scorer_fingerprint = aime_scorer_fingerprint();
     let solver_config = config.solver.clone();
-    leaven::prelude::optimize(AimePrompt::new(config.seed_prompt))
-        .train(train)
-        .validation(validation)
-        .test(test)
+    let report_metadata = dataset.report_metadata.clone();
+    let reflective_dataset = dataset.reflective_dataset();
+    let optimized = leaven::prelude::optimize(AimePrompt::new(config.seed_prompt))
+        .train(dataset.train)
+        .validation(dataset.validation)
+        .test(dataset.test)
         .runner(move |prompt, case| {
             let solver = solver.clone();
             let solver_config = solver_config.clone();
             async move { run_solver(prompt, case, solver, solver_config).await }
         })
         .score(score_answer)
+        .runner_fingerprint(runner_fingerprint)
+        .scorer_fingerprint(scorer_fingerprint)
         .evaluation_parallelism(config.evaluation_parallelism)
         .using(
             Gepa::reflect_with_lm(
@@ -212,12 +230,17 @@ async fn run_aime(
                     )]))
                     .build(),
             )
+            .reflective_dataset(reflective_dataset)
             .max_iterations(config.max_iterations),
         )
         .budget(config.budget)
         .run()
         .await
-        .expect("AIME GEPA run succeeds")
+        .expect("AIME GEPA run succeeds");
+    AimeRunResult {
+        optimized,
+        report_metadata,
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -538,7 +561,7 @@ impl Lm for DeterministicReflectionLm {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 struct AimePrompt {
     system: String,
 }
@@ -551,7 +574,7 @@ impl AimePrompt {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 struct AimePromptChange {
     system: String,
 }
@@ -619,8 +642,16 @@ impl EditSurface<AimePrompt> for AimePromptSurface {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-struct AimeCase {
+type AimeRunCase = Case<AimeInput, AimeTarget>;
+
+#[derive(Clone, Debug)]
+struct AimeRunResult {
+    optimized: Optimized<AimePrompt>,
+    report_metadata: BTreeMap<CaseId, AimeReportMetadata>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+struct AimeImportRecord {
     source_id: String,
     problem: String,
     answer: i64,
@@ -628,30 +659,247 @@ struct AimeCase {
     needs_modular: bool,
 }
 
-// GEPA's default reflective-dataset builder reads each evaluated case input via
-// `Display`; for an AIME case the input the artifact ran on is the problem
-// statement.
-impl std::fmt::Display for AimeCase {
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+struct AimeInput {
+    problem: String,
+}
+
+impl std::fmt::Display for AimeInput {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.problem)
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-struct AimeDatasetCache {
-    train: Vec<AimeCase>,
-    validation: Vec<AimeCase>,
-    test: Vec<AimeCase>,
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+struct AimeTarget {
+    answer: AimeAnswer,
+    solution: String,
 }
 
-fn configured_cases() -> (Vec<AimeCase>, Vec<AimeCase>, Vec<AimeCase>) {
-    match std::env::var("LEAVEN_AIME_CACHE") {
-        Ok(path) => cases_from_cache(Path::new(&path)),
-        Err(_) => deterministic_cases(),
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+struct AimeAnswer {
+    integer: i64,
+    raw: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+struct AimeSource {
+    dataset: String,
+    config: String,
+    split: String,
+    row_id: String,
+    revision: Option<String>,
+}
+
+impl AimeSource {
+    fn parse(source_id: &str) -> Result<Self, AimeDatasetError> {
+        let (body, revision) = source_id
+            .rsplit_once('@')
+            .map_or((source_id, None), |(body, revision)| {
+                (body, Some(revision.to_owned()))
+            });
+        let parts = body.split(':').collect::<Vec<_>>();
+        if parts.len() != 4 || parts.iter().any(|part| part.is_empty()) {
+            return Err(AimeDatasetError::InvalidSourceId {
+                source_id: source_id.to_owned(),
+            });
+        }
+        Ok(Self {
+            dataset: parts[0].to_owned(),
+            config: parts[1].to_owned(),
+            split: parts[2].to_owned(),
+            row_id: parts[3].to_owned(),
+            revision,
+        })
+    }
+
+    fn canonical_id(&self) -> String {
+        let mut source_id = format!(
+            "{}:{}:{}:{}",
+            self.dataset, self.config, self.split, self.row_id
+        );
+        if let Some(revision) = &self.revision {
+            source_id.push('@');
+            source_id.push_str(revision);
+        }
+        source_id
     }
 }
 
-fn cases_from_cache(path: &Path) -> (Vec<AimeCase>, Vec<AimeCase>, Vec<AimeCase>) {
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+struct AimeTags {
+    needs_modular: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct AimeReportMetadata {
+    source: AimeSource,
+    split: SplitRole,
+    tags: AimeTags,
+}
+
+impl AimeReportMetadata {
+    fn source_id(&self) -> String {
+        self.source.canonical_id()
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct AimeDatasetCache {
+    train: Vec<AimeImportRecord>,
+    validation: Vec<AimeImportRecord>,
+    test: Vec<AimeImportRecord>,
+}
+
+#[derive(Clone, Debug)]
+struct AimeDataset {
+    train: Vec<AimeRunCase>,
+    validation: Vec<AimeRunCase>,
+    test: Vec<AimeRunCase>,
+    report_metadata: BTreeMap<CaseId, AimeReportMetadata>,
+}
+
+impl AimeDataset {
+    fn from_cache(cache: AimeDatasetCache) -> Result<Self, AimeDatasetError> {
+        let mut lowerer = AimeDatasetLowerer::default();
+        let train = lowerer.lower_split(SplitRole::Train, cache.train)?;
+        let validation = lowerer.lower_split(SplitRole::Validation, cache.validation)?;
+        let test = lowerer.lower_split(SplitRole::Test, cache.test)?;
+        Ok(Self {
+            train,
+            validation,
+            test,
+            report_metadata: lowerer.report_metadata,
+        })
+    }
+
+    fn reflective_dataset(&self) -> AimeReflectiveDataset {
+        AimeReflectiveDataset {
+            inputs_by_case: self
+                .train
+                .iter()
+                .chain(&self.validation)
+                .chain(&self.test)
+                .map(|case| (case.id, case.input.problem.clone()))
+                .collect(),
+        }
+    }
+}
+
+#[derive(Default)]
+struct AimeDatasetLowerer {
+    seen_sources: BTreeSet<String>,
+    seen_case_ids: BTreeMap<CaseId, String>,
+    report_metadata: BTreeMap<CaseId, AimeReportMetadata>,
+}
+
+impl AimeDatasetLowerer {
+    fn lower_split(
+        &mut self,
+        split: SplitRole,
+        records: Vec<AimeImportRecord>,
+    ) -> Result<Vec<AimeRunCase>, AimeDatasetError> {
+        records
+            .into_iter()
+            .map(|record| self.lower_record(split.clone(), record))
+            .collect()
+    }
+
+    fn lower_record(
+        &mut self,
+        split: SplitRole,
+        record: AimeImportRecord,
+    ) -> Result<AimeRunCase, AimeDatasetError> {
+        let source = AimeSource::parse(&record.source_id)?;
+        let source_id = source.canonical_id();
+        if !self.seen_sources.insert(source_id.clone()) {
+            return Err(AimeDatasetError::DuplicateSourceId { source_id });
+        }
+        let case_id = case_id_from_source_id(&source_id);
+        if let Some(existing_source_id) = self.seen_case_ids.insert(case_id, source_id.clone()) {
+            return Err(AimeDatasetError::CaseIdCollision {
+                case_id,
+                existing_source_id,
+                incoming_source_id: source_id,
+            });
+        }
+
+        let tags = AimeTags {
+            needs_modular: record.needs_modular,
+        };
+        let metadata = AimeReportMetadata {
+            source,
+            split,
+            tags,
+        };
+        self.report_metadata.insert(case_id, metadata.clone());
+
+        Ok(Case::targeted(
+            case_id,
+            AimeInput {
+                problem: record.problem,
+            },
+            AimeTarget {
+                answer: AimeAnswer {
+                    integer: record.answer,
+                    raw: record.answer.to_string(),
+                },
+                solution: record.solution,
+            },
+        )
+        .with_metadata(aime_metadata(&metadata)))
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum AimeDatasetError {
+    InvalidSourceId {
+        source_id: String,
+    },
+    DuplicateSourceId {
+        source_id: String,
+    },
+    CaseIdCollision {
+        case_id: CaseId,
+        existing_source_id: String,
+        incoming_source_id: String,
+    },
+}
+
+impl std::fmt::Display for AimeDatasetError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::InvalidSourceId { source_id } => {
+                write!(
+                    f,
+                    "invalid AIME source_id {source_id:?}; expected dataset:config:split:row_id[@revision]"
+                )
+            }
+            Self::DuplicateSourceId { source_id } => {
+                write!(f, "duplicate AIME source_id {source_id:?}")
+            }
+            Self::CaseIdCollision {
+                case_id,
+                existing_source_id,
+                incoming_source_id,
+            } => write!(
+                f,
+                "AIME source ids {existing_source_id:?} and {incoming_source_id:?} collide at {case_id}"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for AimeDatasetError {}
+
+fn configured_dataset() -> AimeDataset {
+    match std::env::var("LEAVEN_AIME_CACHE") {
+        Ok(path) => dataset_from_cache(Path::new(&path)),
+        Err(_) => deterministic_dataset(),
+    }
+}
+
+fn dataset_from_cache(path: &Path) -> AimeDataset {
     let bytes = std::fs::read(path).unwrap_or_else(|source| {
         panic!(
             "failed to read LEAVEN_AIME_CACHE={}: {source}",
@@ -664,57 +912,143 @@ fn cases_from_cache(path: &Path) -> (Vec<AimeCase>, Vec<AimeCase>, Vec<AimeCase>
             path.display()
         )
     });
-    (cache.train, cache.validation, cache.test)
+    AimeDataset::from_cache(cache).unwrap_or_else(|source| {
+        panic!(
+            "failed to lower LEAVEN_AIME_CACHE={}: {source}",
+            path.display()
+        )
+    })
 }
 
-fn deterministic_cases() -> (Vec<AimeCase>, Vec<AimeCase>, Vec<AimeCase>) {
+fn deterministic_dataset() -> AimeDataset {
     let train = vec![
-        AimeCase {
-            source_id: "deterministic:train:0".to_owned(),
+        AimeImportRecord {
+            source_id: "deterministic:default:train:0".to_owned(),
             problem: "Find the remainder when 2^10 is divided by 7.".to_owned(),
             answer: 2,
             solution: "2^3 = 8 == 1 mod 7, so 2^10 == 2 mod 7.".to_owned(),
             needs_modular: true,
         },
-        AimeCase {
-            source_id: "deterministic:train:1".to_owned(),
+        AimeImportRecord {
+            source_id: "deterministic:default:train:1".to_owned(),
             problem: "What is 19 + 23?".to_owned(),
             answer: 42,
             solution: "19 + 23 = 42.".to_owned(),
             needs_modular: false,
         },
-        AimeCase {
-            source_id: "deterministic:train:2".to_owned(),
+        AimeImportRecord {
+            source_id: "deterministic:default:train:2".to_owned(),
             problem: "Find the remainder when 5^4 is divided by 13.".to_owned(),
             answer: 1,
             solution: "5^2 = 25 == -1 mod 13, so 5^4 == 1.".to_owned(),
             needs_modular: true,
         },
     ];
-    let validation = vec![AimeCase {
-        source_id: "deterministic:validation:0".to_owned(),
+    let validation = vec![AimeImportRecord {
+        source_id: "deterministic:default:validation:0".to_owned(),
         problem: "Find the remainder when 3^6 is divided by 7.".to_owned(),
         answer: 1,
         solution: "3^6 = 729 == 1 mod 7.".to_owned(),
         needs_modular: true,
     }];
     let test = vec![
-        AimeCase {
-            source_id: "deterministic:test:0".to_owned(),
+        AimeImportRecord {
+            source_id: "deterministic:default:test:0".to_owned(),
             problem: "Find the remainder when 4^5 is divided by 9.".to_owned(),
             answer: 7,
             solution: "4^3 == 1 mod 9, so 4^5 == 4^2 == 7.".to_owned(),
             needs_modular: true,
         },
-        AimeCase {
-            source_id: "deterministic:test:1".to_owned(),
+        AimeImportRecord {
+            source_id: "deterministic:default:test:1".to_owned(),
             problem: "What is 31 - 8?".to_owned(),
             answer: 23,
             solution: "31 - 8 = 23.".to_owned(),
             needs_modular: false,
         },
     ];
-    (train, validation, test)
+    AimeDataset::from_cache(AimeDatasetCache {
+        train,
+        validation,
+        test,
+    })
+    .expect("deterministic AIME fixture lowers")
+}
+
+fn aime_metadata(metadata: &AimeReportMetadata) -> MetadataBag {
+    let mut bag = MetadataBag::new();
+    bag.insert("source_id", MetadataValue::String(metadata.source_id()));
+    bag.insert(
+        "source",
+        MetadataValue::Json(
+            serde_json::to_value(&metadata.source).expect("AIME source metadata serializes"),
+        ),
+    );
+    bag.insert(
+        "split_role",
+        MetadataValue::String(split_role_label(&metadata.split).to_owned()),
+    );
+    bag.insert(
+        "needs_modular",
+        MetadataValue::Bool(metadata.tags.needs_modular),
+    );
+    bag
+}
+
+fn split_role_label(role: &SplitRole) -> &str {
+    match role {
+        SplitRole::Train => "train",
+        SplitRole::Validation => "validation",
+        SplitRole::Test => "test",
+        SplitRole::Search => "search",
+        SplitRole::Probe => "probe",
+        SplitRole::ReportOnly => "report-only",
+        SplitRole::Custom(_) => "custom",
+    }
+}
+
+fn case_id_from_source_id(source_id: &str) -> CaseId {
+    let mut builder = FingerprintBuilder::new();
+    builder.update(b"leaven:aime-case:v1");
+    builder.update(source_id.as_bytes());
+    let fingerprint = builder.finish();
+    let mut bytes = [0; 8];
+    bytes.copy_from_slice(&fingerprint.0[..8]);
+    CaseId::new(u64::from_le_bytes(bytes))
+}
+
+#[derive(Clone, Debug)]
+struct AimeReflectiveDataset {
+    inputs_by_case: BTreeMap<CaseId, String>,
+}
+
+impl ReflectiveDatasetBuilder<RunProblem<AimePrompt, AimeInput, AimeTarget>, AimePromptSurface>
+    for AimeReflectiveDataset
+{
+    async fn build(
+        &self,
+        ctx: &mut RunContext<'_, RunProblem<AimePrompt, AimeInput, AimeTarget>>,
+        _parent: CandidateId,
+        parent_assessment: AssessmentId,
+        _part: &&'static str,
+    ) -> Result<Vec<ReflectiveExample>, ReflectionError> {
+        let evidence = ctx.assessment_evidence(parent_assessment)?;
+        Ok(evidence
+            .outcomes()
+            .iter()
+            .map(|outcome| {
+                let case = outcome.case();
+                ReflectiveExample {
+                    case: Some(case),
+                    input: self.inputs_by_case.get(&case).cloned().unwrap_or_default(),
+                    output: Some(format!("{:?}", outcome.evidence().output())),
+                    score: Some(outcome.evidence().score().score()),
+                    feedback: outcome.evidence().feedback().to_owned(),
+                    source_refs: vec![InfoRef::Assessment(parent_assessment)],
+                }
+            })
+            .collect())
+    }
 }
 
 #[derive(Clone)]
@@ -775,7 +1109,7 @@ fn cached_openai_lm(
 
 async fn run_solver(
     prompt: AimePrompt,
-    case: AimeCase,
+    case: RunCase<AimeInput>,
     solver: Option<AimeOpenAiLm>,
     solver_config: AimeSolverConfig,
 ) -> RunOutput {
@@ -784,11 +1118,12 @@ async fn run_solver(
     }
     let has_modular = prompt.system.contains("modular arithmetic");
     let verifies = prompt.system.contains("Verify arithmetic");
-    let correct = (!case.needs_modular || has_modular) && verifies;
+    let correct = (!input_needs_modular(case.input()) || has_modular) && verifies;
+    let target_answer = deterministic_fixture_answer(case.input());
     let answer = if correct {
-        case.answer
+        target_answer
     } else {
-        case.answer + 1
+        target_answer + 1
     };
     RunOutput::new(answer.to_string())
 }
@@ -796,7 +1131,7 @@ async fn run_solver(
 async fn run_openai_solver(
     solver: AimeOpenAiLm,
     prompt: &AimePrompt,
-    case: &AimeCase,
+    case: &RunCase<AimeInput>,
     solver_config: &AimeSolverConfig,
 ) -> RunOutput {
     let request = LmRequest::new(
@@ -805,7 +1140,7 @@ async fn run_openai_solver(
             .with_system(prompt.system.clone())
             .with_user(format!(
                 "Problem:\n{}\n\nReturn only the final numerical answer.",
-                case.problem
+                case.input().problem
             )),
     )
     .with_sampling(solver_config.sampling.clone());
@@ -822,36 +1157,80 @@ fn openai_model_name() -> String {
     std::env::var("LEAVEN_OPENAI_MODEL").unwrap_or_else(|_| GEPA_AIME_SOLVER_MODEL.to_owned())
 }
 
-async fn score_answer(ctx: ScoreContext<AimePrompt, AimeCase>) -> Result<Score, ScoreError> {
+fn aime_runner_fingerprint(config: &AimeSolverConfig) -> Fingerprint {
+    let mut builder = FingerprintBuilder::new();
+    builder.update(b"p8-aime-runner.v1");
+    builder.update([u8::from(config.live)]);
+    builder.update(config.model.as_bytes());
+    builder.update(
+        serde_json::to_vec(&config.sampling).expect("AIME solver sampling config serializes"),
+    );
+    builder.update(report_lm_cache_policy(config.cache_policy).as_bytes());
+    builder.update(report_lm_cache_backend(config.runtime.cache_backend).as_bytes());
+    builder.update(config.runtime.max_concurrent_requests.get().to_le_bytes());
+    builder.finish()
+}
+
+fn aime_scorer_fingerprint() -> Fingerprint {
+    let mut builder = FingerprintBuilder::new();
+    builder.update(b"p8-aime-scorer.exact-integer.v1");
+    builder.update(b"target-answer-integer");
+    builder.update(b"solution-feedback-visible-to-scorer");
+    builder.finish()
+}
+
+async fn score_answer(
+    ctx: ScoreContext<AimePrompt, AimeInput, AimeTarget>,
+) -> Result<Score, ScoreError> {
+    let target = ctx
+        .case
+        .target()
+        .ok_or_else(|| ScoreError::new("AIME scorer requires a target answer"))?;
     let parsed = ctx.output.output.parse::<i64>();
     let score = match parsed {
-        Ok(answer) if answer == ctx.case.answer => {
-            Score::new(1.0, format!("correct.{}", solution_feedback(&ctx.case)))
+        Ok(answer) if answer == target.answer.integer => {
+            Score::new(1.0, format!("correct.{}", solution_feedback(target)))
         }
         Ok(answer) => Score::new(
             0.0,
             format!(
                 "incorrect; got {answer}, expected {}.{}",
-                ctx.case.answer,
-                solution_feedback(&ctx.case)
+                target.answer.integer,
+                solution_feedback(target)
             ),
         ),
         Err(_) => Score::new(
             0.0,
             format!(
                 "final answer must parse as an integer; expected {}.{}",
-                ctx.case.answer,
-                solution_feedback(&ctx.case)
+                target.answer.integer,
+                solution_feedback(target)
             ),
         ),
     };
     Ok(score)
 }
 
-fn solution_feedback(case: &AimeCase) -> String {
+fn input_needs_modular(input: &AimeInput) -> bool {
+    input.problem.contains("remainder")
+}
+
+fn deterministic_fixture_answer(input: &AimeInput) -> i64 {
+    match input.problem.as_str() {
+        "Find the remainder when 2^10 is divided by 7." => 2,
+        "What is 19 + 23?" => 42,
+        "Find the remainder when 5^4 is divided by 13." => 1,
+        "Find the remainder when 3^6 is divided by 7." => 1,
+        "Find the remainder when 4^5 is divided by 9." => 7,
+        "What is 31 - 8?" => 23,
+        _ => 0,
+    }
+}
+
+fn solution_feedback(target: &AimeTarget) -> String {
     format!(
         " Here's the full step-by-step solution:\n{}\n\nThink about what takeaways you can learn from this solution to improve your future answers and approach to similar problems.",
-        case.solution
+        target.solution
     )
 }
 
@@ -888,8 +1267,66 @@ mod tests {
     }
 
     #[test]
+    fn deterministic_fixture_lowers_to_target_safe_cases() {
+        let dataset = deterministic_dataset();
+        let first = &dataset.train[0];
+        let first_target = first.target.as_ref().expect("AIME train case has target");
+        let first_source = "deterministic:default:train:0";
+        let first_id = case_id_from_source_id(first_source);
+
+        assert_eq!(first.id, first_id);
+        assert_eq!(
+            first.input.problem,
+            "Find the remainder when 2^10 is divided by 7."
+        );
+        assert_eq!(first_target.answer.integer, 2);
+        assert_eq!(dataset.report_metadata[&first_id].source_id(), first_source);
+        assert_eq!(dataset.report_metadata[&first_id].split, SplitRole::Train);
+        assert!(dataset.report_metadata[&first_id].tags.needs_modular);
+        assert_ne!(first.id, CaseId::from_index(0));
+    }
+
+    #[test]
+    fn runner_case_type_does_not_name_target_or_metadata() {
+        let runner_case_type = std::any::type_name::<RunCase<AimeInput>>();
+
+        assert!(runner_case_type.contains("AimeInput"));
+        assert!(!runner_case_type.contains("AimeTarget"));
+        assert!(!runner_case_type.contains("AimeReportMetadata"));
+    }
+
+    #[test]
+    fn duplicate_source_ids_refuse_before_running() {
+        let duplicate = AimeDatasetCache {
+            train: vec![AimeImportRecord {
+                source_id: "deterministic:default:train:0".to_owned(),
+                problem: "first".to_owned(),
+                answer: 1,
+                solution: "first solution".to_owned(),
+                needs_modular: false,
+            }],
+            validation: vec![AimeImportRecord {
+                source_id: "deterministic:default:train:0".to_owned(),
+                problem: "second".to_owned(),
+                answer: 2,
+                solution: "second solution".to_owned(),
+                needs_modular: true,
+            }],
+            test: Vec::new(),
+        };
+
+        assert_eq!(
+            AimeDataset::from_cache(duplicate).unwrap_err(),
+            AimeDatasetError::DuplicateSourceId {
+                source_id: "deterministic:default:train:0".to_owned()
+            }
+        );
+    }
+
+    #[test]
     fn deterministic_aime_acceptance_shows_public_gepa_improvement() {
-        let result = block_on(run_deterministic_aime());
+        let run = block_on(run_deterministic_aime());
+        let result = &run.optimized;
 
         assert_optional_score(result.summary.baseline_train_score, 0.0);
         assert_optional_score(result.summary.optimized_train_score, 1.0);
@@ -914,6 +1351,19 @@ mod tests {
         );
         assert!(
             result
+                .summary
+                .evaluation
+                .splits_reported
+                .iter()
+                .flat_map(|split| &split.candidates)
+                .flat_map(|candidate| &candidate.cases)
+                .any(|case| case
+                    .feedback
+                    .contains("Here's the full step-by-step solution")),
+            "scorer feedback should prove target/reference solution visibility"
+        );
+        assert!(
+            result
                 .best()
                 .expect("AIME run has best prompt")
                 .system
@@ -931,8 +1381,11 @@ mod tests {
     #[test]
     fn train_only_run_reports_absent_validation_and_test_scores() {
         let config = AimeRunConfig::deterministic_smoke();
-        let (train, _, _) = deterministic_cases();
-        let result = block_on(run_aime(config, train, Vec::new(), Vec::new()));
+        let mut dataset = deterministic_dataset();
+        dataset.validation.clear();
+        dataset.test.clear();
+        let run = block_on(run_aime(config, dataset));
+        let result = &run.optimized;
 
         assert_optional_score(result.summary.baseline_train_score, 0.0);
         assert_optional_score(result.summary.optimized_train_score, 1.0);
@@ -957,10 +1410,11 @@ mod tests {
     fn run_builder_requires_score_function() {
         let config = AimeRunConfig::deterministic_smoke();
         let solver_config = config.solver.clone();
-        let (train, _, _) = deterministic_cases();
+        let dataset = deterministic_dataset();
+        let reflective_dataset = dataset.reflective_dataset();
         let error = block_on(async {
             leaven::prelude::optimize(AimePrompt::new(config.seed_prompt))
-                .train(train)
+                .train(dataset.train)
                 .runner(move |prompt, case| {
                     let solver_config = solver_config.clone();
                     async move { run_solver(prompt, case, None, solver_config).await }
@@ -972,7 +1426,8 @@ mod tests {
                     )
                     .with_reflector_config(aime_reflector_config(&config.reflection))
                     .surface(AimePromptSurface)
-                    .build(),
+                    .build()
+                    .reflective_dataset(reflective_dataset),
                 )
                 .budget(Budget::metric_calls(8))
                 .run()
@@ -1016,6 +1471,8 @@ mod tests {
         let config = AimeRunConfig::deterministic_smoke();
         let result = block_on(run_deterministic_aime());
         let lines = report_lines(&config, &result);
+        let validation_id = case_id_from_source_id("deterministic:default:validation:0");
+        let test_id = case_id_from_source_id("deterministic:default:test:0");
 
         assert!(
             lines
@@ -1033,15 +1490,22 @@ mod tests {
                 .any(|line| line == "test_score_use=final_report_only")
         );
         assert!(lines.iter().any(|line| {
-            line.contains("report_case=case:3")
+            line.contains(&format!("report_case={validation_id}"))
+                && line.contains("source_id=deterministic:default:validation:0")
                 && line.contains("output_chars=")
                 && line.contains("feedback_chars=")
         }));
         assert!(lines.iter().any(|line| {
-            line.contains("report_case=case:4")
+            line.contains(&format!("report_case={test_id}"))
+                && line.contains("source_id=deterministic:default:test:0")
                 && line.contains("output_chars=")
                 && line.contains("feedback_chars=")
         }));
+        assert!(
+            !lines
+                .iter()
+                .any(|line| line.contains("step-by-step solution"))
+        );
     }
 
     #[test]
@@ -1049,8 +1513,8 @@ mod tests {
         let mut config = AimeRunConfig::deterministic_smoke();
         config.budget = Budget::metric_calls(6);
         config.max_iterations = 2;
-        let (train, validation, test) = deterministic_cases();
-        let result = block_on(run_aime(config.clone(), train, validation, test));
+        let run = block_on(run_aime(config.clone(), deterministic_dataset()));
+        let result = &run.optimized;
 
         assert_eq!(
             result.stop,
@@ -1066,7 +1530,7 @@ mod tests {
             !result.events.contains(&RunEventSummary::Error),
             "metric-call stop should be a clean public stop, not an optimizer error"
         );
-        let lines = report_lines(&config, &result);
+        let lines = report_lines(&config, &run);
         assert!(
             lines
                 .iter()
@@ -1080,7 +1544,7 @@ mod tests {
     }
 
     #[test]
-    fn cache_policy_parser_keeps_solver_and_reflection_roles_independent() {
+    fn legacy_cache_policy_parser_keeps_solver_and_reflection_role_knobs_scaffolded() {
         let policies = AimeLmCachePolicies::from_values(Some("read-write"), Some("refresh"));
 
         assert_eq!(policies.solver, LmCachePolicy::ReadWrite);
@@ -1158,7 +1622,10 @@ mod tests {
 
     #[test]
     fn public_report_preserves_case_ids_and_generated_outputs() {
-        let result = block_on(run_deterministic_aime());
+        let run = block_on(run_deterministic_aime());
+        let result = &run.optimized;
+        let validation_id = case_id_from_source_id("deterministic:default:validation:0");
+        let test_id = case_id_from_source_id("deterministic:default:test:0");
 
         let cases = result
             .summary
@@ -1172,13 +1639,13 @@ mod tests {
         assert!(
             cases
                 .iter()
-                .any(|case| { case.case_id == CaseId::from_index(3) && !case.output.is_empty() }),
+                .any(|case| { case.case_id == validation_id && !case.output.is_empty() }),
             "expected deterministic validation case id and generated output in public report"
         );
         assert!(
             cases
                 .iter()
-                .any(|case| { case.case_id == CaseId::from_index(4) && !case.output.is_empty() }),
+                .any(|case| { case.case_id == test_id && !case.output.is_empty() }),
             "expected deterministic test case id and generated output in public report"
         );
     }
@@ -1188,21 +1655,21 @@ mod tests {
         let path =
             std::env::temp_dir().join(format!("leaven-aime-cache-{}.json", std::process::id()));
         let cache = AimeDatasetCache {
-            train: vec![AimeCase {
+            train: vec![AimeImportRecord {
                 source_id: "AI-MO/aimo-validation-aime:default:train:17".to_owned(),
                 problem: "train".to_owned(),
                 answer: 1,
                 solution: "train solution".to_owned(),
                 needs_modular: true,
             }],
-            validation: vec![AimeCase {
+            validation: vec![AimeImportRecord {
                 source_id: "AI-MO/aimo-validation-aime:default:train:42".to_owned(),
                 problem: "validation".to_owned(),
                 answer: 2,
                 solution: "validation solution".to_owned(),
                 needs_modular: true,
             }],
-            test: vec![AimeCase {
+            test: vec![AimeImportRecord {
                 source_id: "MathArena/aime_2025:default:train:3".to_owned(),
                 problem: "test".to_owned(),
                 answer: 3,
@@ -1212,20 +1679,30 @@ mod tests {
         };
         std::fs::write(&path, serde_json::to_vec(&cache).unwrap()).unwrap();
 
-        let (train, validation, test) = cases_from_cache(&path);
+        let dataset = dataset_from_cache(&path);
+        let train_id = case_id_from_source_id("AI-MO/aimo-validation-aime:default:train:17");
+        let validation_id = case_id_from_source_id("AI-MO/aimo-validation-aime:default:train:42");
+        let test_id = case_id_from_source_id("MathArena/aime_2025:default:train:3");
 
+        assert_eq!(dataset.train[0].id, train_id);
+        assert_eq!(dataset.train[0].input.problem, "train");
         assert_eq!(
-            train[0].source_id,
+            dataset.report_metadata[&train_id].source_id(),
             "AI-MO/aimo-validation-aime:default:train:17"
         );
-        assert_eq!(train[0].problem, "train");
+        assert_eq!(dataset.report_metadata[&train_id].split, SplitRole::Train);
+        assert_eq!(dataset.validation[0].id, validation_id);
         assert_eq!(
-            validation[0].source_id,
+            dataset.report_metadata[&validation_id].source_id(),
             "AI-MO/aimo-validation-aime:default:train:42"
         );
-        assert_eq!(validation[0].problem, "validation");
-        assert_eq!(test[0].source_id, "MathArena/aime_2025:default:train:3");
-        assert_eq!(test[0].problem, "test");
+        assert_eq!(
+            dataset.report_metadata[&validation_id].split,
+            SplitRole::Validation
+        );
+        assert_eq!(dataset.test[0].id, test_id);
+        assert_eq!(dataset.test[0].input.problem, "test");
+        assert_eq!(dataset.report_metadata[&test_id].split, SplitRole::Test);
         std::fs::remove_file(path).unwrap();
     }
 }
