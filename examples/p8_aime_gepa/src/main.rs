@@ -4,7 +4,6 @@ use std::{
     process::{Command, Stdio},
 };
 
-use futures::executor::block_on;
 use leaven::prelude::*;
 use leaven::{
     SurfaceError, SurfaceFingerprint, kernel::Metered, stdlib::populations::ParetoFrontier,
@@ -25,47 +24,46 @@ const OPTIMIZED: &str = "Solve with modular arithmetic when useful. Verify arith
 type AimeLmReflector =
     LmBackedReflector<AimeReflectionLm, DefaultReflectionRenderer, PlainTextEditParser>;
 
-fn main() {
-    block_on(async {
-        let result = run_configured_aime().await;
-        println!(
-            "baseline_train_score={:.3}",
-            result.report.baseline_train_score
-        );
-        println!(
-            "optimized_train_score={:.3}",
-            result.report.optimized_train_score
-        );
-        println!(
-            "validation_score={:.3}",
-            result
-                .report
-                .validation_score
-                .expect("validation is configured")
-        );
-        println!(
-            "baseline_heldout_test_score={:.3}",
-            result
-                .report
-                .baseline_test_score
-                .expect("test is configured")
-        );
-        println!(
-            "heldout_test_score={:.3}",
-            result.report.test_score.expect("test is configured")
-        );
-        println!(
-            "report_splits={}",
-            result.report.evaluation.splits_reported.len()
-        );
-        println!(
-            "budget_metric_calls={}",
-            result.report.budget.spent.metric_calls
-        );
-        println!("budget_llm_calls={}", result.report.budget.spent.llm_calls);
-        println!("best_system_prompt={}", result.best().system);
-        println!("events={}", result.report.events.join(","));
-    });
+#[tokio::main(flavor = "current_thread")]
+async fn main() {
+    let result = run_configured_aime().await;
+    println!(
+        "baseline_train_score={:.3}",
+        result.report.baseline_train_score
+    );
+    println!(
+        "optimized_train_score={:.3}",
+        result.report.optimized_train_score
+    );
+    println!(
+        "validation_score={:.3}",
+        result
+            .report
+            .validation_score
+            .expect("validation is configured")
+    );
+    println!(
+        "baseline_heldout_test_score={:.3}",
+        result
+            .report
+            .baseline_test_score
+            .expect("test is configured")
+    );
+    println!(
+        "heldout_test_score={:.3}",
+        result.report.test_score.expect("test is configured")
+    );
+    println!(
+        "report_splits={}",
+        result.report.evaluation.splits_reported.len()
+    );
+    println!(
+        "budget_metric_calls={}",
+        result.report.budget.spent.metric_calls
+    );
+    println!("budget_llm_calls={}", result.report.budget.spent.llm_calls);
+    println!("best_system_prompt={}", result.best().system);
+    println!("events={}", result.report.events.join(","));
 }
 
 #[cfg(test)]
@@ -491,6 +489,7 @@ fn content_id(bytes: &[u8]) -> ContentId {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures::executor::block_on;
 
     fn assert_score(actual: f64, expected: f64) {
         assert!(

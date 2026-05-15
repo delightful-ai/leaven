@@ -3478,6 +3478,7 @@ dependencies = [
  "leaven-lm-openai",
  "serde",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]
