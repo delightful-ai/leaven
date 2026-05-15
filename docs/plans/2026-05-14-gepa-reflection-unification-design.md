@@ -235,32 +235,36 @@ where
 Net: one rename, one new field, one deletion. The advanced user who writes a
 custom dataset builder constructs exactly one type — `ReflectiveExample`.
 
-### D3 — The case input becomes first-class evaluation evidence
+### D3 — The default builder reads the case input from `RunContext`
 
-Slice #1 of this workstream already made the generated *output* first-class
-evidence: `CaseAssessmentEvidence` (in `crates/leaven-evidence`) carries
-`output: OutputRecord`. The input is just as much a fact of an evaluation as the
-output, and its absence is the direct cause of defect #2.
+GEPA reflection needs to show the model the input it ran on. That data is
+already reachable: `RunContext` holds `case_set: Option<&CaseSet<P::Case>>`
+(`crates/leaven-engine/src/context/run_context.rs:36`), and `CaseSet<C>` stores
+`cases: IndexMap<CaseId, C>` (`crates/leaven-engine/src/case_set.rs:13`).
+Neither currently exposes a public lookup accessor.
 
-**Decision:** add an `input: String` field to `CaseAssessmentEvidence`, captured
-by the evaluator at evaluation time, exactly parallel to `output`. The
-default reflective-dataset builder then reads `evidence.input()` for each case.
+**Decision:** add two small public accessors and have the reflective-dataset
+builder fetch the case directly. Do **not** add an `input` field to
+`CaseAssessmentEvidence` and do **not** change the evaluator. Case-input
+rendering is domain work; it belongs in the swappable builder (D4), not baked
+into the durable evidence record or forced on every evaluation.
 
-The evaluator (`crates/leaven-run/src/evaluator.rs`) has the case value at
-evaluation time. It renders the case to a `String` for the evidence record. The
-implementing agent must choose the rendering mechanism:
+- `CaseSet::get(&self, CaseId) -> Option<&C>` — a plain `IndexMap` lookup.
+- `RunContext::case(&self, CaseId) -> Option<&P::Case>` — reads the installed
+  case set; returns `None` when no case set is installed.
 
-- **Preferred:** require `P::Case: Display` (or the nearest existing
-  case-render capability) and render via that. Simple, no new public seam.
-- **Fallback if `Display` is too restrictive:** a case-render closure supplied
-  on the `optimize(...)` builder.
+Both are read-only and follow the engine's `RunContext`-is-the-only-path rule
+(they observe, they do not mutate the graph).
 
-This is the one decision in this document that touches a public bound. Use the
-preferred path unless an existing constraint makes it impossible; if you must
-use the fallback, keep it a single optional builder method, not a new trait.
+The default reflective-dataset builder (D4) fetches `ctx.case(case_id)` for each
+evaluated case and renders it to a `String` via `Display`. The bound
+`P::Case: Display` is therefore required only on the **default builder's**
+`impl` — not on `OptimizationProblem`, not on the evaluator, not on every run.
+A custom builder for a non-`Display` case type renders however it wants.
 
-`ReflectiveExample.input` is a plain `String`. Projecting a domain case into a
-reviewable view is domain work; it is done once, in the evaluator, and stored.
+`ReflectiveExample.input` is a plain `String`. When no case set is installed or
+a case id is unknown, the default builder uses an empty string and reflection
+still proceeds.
 
 ### D4 — The selection seam: a swappable reflective-dataset builder
 
@@ -423,13 +427,11 @@ is the durable proof that D1 holds.
 This is a hard cutover (no compatibility shims, no parallel old/new paths — per
 repo `AGENTS.md`).
 
-`crates/leaven-evidence`:
-- `CaseAssessmentEvidence` — add `input: String` field, constructor parameter,
-  and `input()` accessor, parallel to `output`.
-
-`crates/leaven-run`:
-- `evaluator.rs` — capture the rendered case input and pass it to
-  `CaseAssessmentEvidence::new(...)` (see D3).
+`crates/leaven-engine`:
+- `case_set.rs` — add `CaseSet::get(&self, CaseId) -> Option<&C>`.
+- `context/run_context.rs` — add
+  `RunContext::case(&self, CaseId) -> Option<&P::Case>`, reading the installed
+  case set (see D3). Read-only; obeys the `RunContext` mutation rule.
 
 `crates/leaven-gepa`:
 - `reflection.rs` — rename `ReflectiveFeedbackRecord` → `ReflectiveExample`,
@@ -478,8 +480,15 @@ surface as `OptimizerError` / `ProposalError` as today.
   `ReflectionError`, `Gepa::reflect_with_lm`, etc.) belong in the **`extend`**
   route — register them there only if/when that route work has landed; otherwise
   leave a note for that workstream. Ordinary users never see them.
-- This change is confined to `leaven-gepa`, `leaven-evidence`, `leaven-run`,
-  the `p8` example, and tests. Do not modify the engine, stores, or workspaces.
+- This change is confined to `leaven-gepa`, two read-only accessors in
+  `leaven-engine` (see D3/§7), the `p8` example, and tests. Do not modify
+  stores, workspaces, `leaven-evidence`, or the `leaven-run` evaluator.
+- GEPA's public types are reached through the `leaven::gepa` crate alias, not
+  the umbrella `prelude`/`extend`/`plumbing` route modules. Do **not** add any
+  new reflection type to those route modules or to
+  `crates/leaven/tests/public_surface_contract.rs`. Keep `leaven-gepa`'s own
+  `lib.rs`/prelude honest per its `AGENTS.md`, but the umbrella contract test
+  is out of scope.
 - Do not add a compatibility shim or a parallel old/new reflection path.
 
 ---
@@ -507,8 +516,7 @@ Iterate with:
 - `cargo nextest run -p leaven-gepa --test gepa_smoke`
 - `cargo nextest run -p leaven-gepa --test agent_stage_routing`
 - `cargo nextest run -p leaven-gepa --test lm_reflection`
-- `cargo nextest run -p leaven-evidence -p leaven-run` — the evidence/evaluator
-  changes.
+- `cargo nextest run -p leaven-engine` — the `CaseSet`/`RunContext` accessors.
 - `cargo test -p leaven --test topology_contract` — if dependencies change.
 
 Completion gate (must pass before claiming done):
@@ -527,8 +535,9 @@ Do not claim completion without showing the actual command output.
    reflector builds its own request.
 2. The LM reflector and the agent reflector provably receive identical
    `examples` for identical inputs (§6 test passes).
-3. `ReflectiveExample` carries `input`; `CaseAssessmentEvidence` carries `input`;
-   the evaluator captures it.
+3. `ReflectiveExample` carries `input`; the default builder reads it via the
+   new `RunContext::case` accessor; `CaseAssessmentEvidence` and the evaluator
+   are unchanged.
 4. The reflective-dataset builder is a swappable seam with a GEPA-parity
    default and a closure blanket impl.
 5. The agent reflector materializes the examples into the workspace.
