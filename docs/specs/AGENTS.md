@@ -5,6 +5,7 @@ The top of the stack is:
 - `initial_library.md`: governing product and architecture spec for the current Leaven library shape.
 - `guiding_principles.md`: requirements and product constraints, not implementation layout.
 - `leaven_v0_2_1b_corrected_crate_topology_lib_rs.md`: topology intent and `lib.rs` map contract. Its crate inventory can lag the live workspace; verify live membership against root `Cargo.toml` and `crates/leaven/tests/topology_contract.rs`.
+- `durable_runs_and_resume.md`: default-durable run/resume semantics, `RunStore` vocabulary, optimizer continuation policy, and the explicit `ephemeral` escape hatch.
 - `milestone_examples_behavioral_contract.md`: executable behavior contract for milestone examples.
 - `docs/testing/README.md`: proof model and coverage/SLA contract.
 

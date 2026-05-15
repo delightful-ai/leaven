@@ -5,7 +5,10 @@ P8 owns the example artifact, edit surface, deterministic AIME-shaped cases, cac
 
 ## Code Landmarks
 - `src/main.rs::run_aime` is the public builder shell to preserve when proving
-  ordinary-user ergonomics. Its use of `Gepa::builder().surface(...).population(...).reflector(...).max_iterations(1)` is a GEPA wiring demo, not a final API map.
+  ordinary-user ergonomics. The deterministic smoke profile deliberately caps
+  GEPA at one iteration; the live GEPA AIME profile raises that Leaven-local
+  ceiling because the reference is controlled by `max_metric_calls`, not
+  `max_iterations`.
 - `AimePromptSurface` is the local artifact/surface handhold: one `"system"`
   part and artifact-native `AimePromptChange`.
   Reusable surface rules belong in `leaven-surface` or GEPA docs, not here.
@@ -24,8 +27,8 @@ P8 owns the example artifact, edit surface, deterministic AIME-shaped cases, cac
 
 ## Proof Paths
 - Clean deterministic proof: `just milestone-p8` with `LEAVEN_AIME_CACHE` and `LEAVEN_AIME_LIVE_OPENAI` unset proves public builder mechanics, split reporting, and the production LM-backed GEPA reflection route through provider-neutral `leaven-lm`. It does not prove live provider quality.
-- Local cached-data proof: materialize `target/leaven-aime-cache/aime.json` with `uv run --with datasets python examples/p8_aime_gepa/scripts/materialize_hf_aime.py --out target/leaven-aime-cache/aime.json`, then run `LEAVEN_AIME_CACHE=target/leaven-aime-cache/aime.json cargo run -p p8_aime_gepa`; this proves the same harness can consume the upstream-shaped AIME cache, not that the default deterministic fixture changed.
-- Live solver proof: `OPENAI_API_KEY=... LEAVEN_AIME_LIVE_OPENAI=1 LEAVEN_AIME_CACHE=target/leaven-aime-cache/aime.json cargo run -p p8_aime_gepa` swaps only the runner to native `leaven-lm-openai`. It spends provider resources, records solver LM cost in evaluation budget, still uses deterministic reflection, and is not part of the cheap milestone lane.
+- Local cached-data proof: materialize `target/leaven-aime-cache/aime.json` with `uv run --with datasets python examples/p8_aime_gepa/scripts/materialize_hf_aime.py --out target/leaven-aime-cache/aime.json`, then run `LEAVEN_AIME_CACHE=target/leaven-aime-cache/aime.json cargo run -p p8_aime_gepa`; this proves the same harness can consume the upstream-shaped AIME cache under the deterministic provider fixture, not live GEPA AIME quality.
+- Live solver proof: `OPENAI_API_KEY=... LEAVEN_AIME_LIVE_OPENAI=1 LEAVEN_AIME_CACHE=target/leaven-aime-cache/aime.json cargo run -p p8_aime_gepa` swaps the runner to native `leaven-lm-openai` and uses the GEPA AIME profile knobs available in Leaven. It spends provider resources, records solver LM cost in evaluation budget, still uses deterministic reflection, and is not part of the cheap milestone lane.
 - Live reflection proof: `OPENAI_API_KEY=... LEAVEN_AIME_LIVE_OPENAI_REFLECTION=1 LEAVEN_AIME_REFLECTION_MODEL=gpt-5.4-mini LEAVEN_AIME_CACHE=target/leaven-aime-cache/aime.json cargo run -p p8_aime_gepa` swaps reflection to `leaven-lm-openai` through the same `LmBackedReflector` and default GEPA prompt renderer. It spends provider resources and is not part of the cheap milestone lane.
 - Unit tests in `src/main.rs` prove deterministic improvement, train-only
   absent validation/test scores, missing score refusal, and cache role

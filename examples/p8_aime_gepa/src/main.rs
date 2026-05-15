@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, path::Path};
+use std::{collections::BTreeMap, num::NonZeroUsize, path::Path};
 
 use leaven::prelude::*;
 use leaven::{
@@ -14,16 +14,27 @@ use leaven_lm::{
 use leaven_lm_openai::OpenAiLm;
 use serde::{Deserialize, Serialize};
 
-const BASELINE: &str =
-    "Solve the math problem carefully. Provide the final answer as a single number.";
+const BASELINE: &str = "Solve the math problem carefully. Break down the steps and provide the final answer as a single number.";
 const OPTIMIZED: &str = "Solve with modular arithmetic when useful. Verify arithmetic before the final answer. Provide only the final integer.";
+const GEPA_AIME_METRIC_CALLS: u64 = 500;
+const GEPA_AIME_MAX_WORKERS: usize = 32;
+const GEPA_AIME_MAX_OUTPUT_TOKENS: u32 = 32_000;
+// GEPA AIME is controlled by max_metric_calls, not max_iterations. This is a
+// Leaven-local safety ceiling until the GEPA loop has a native budget stopper.
+const GEPA_AIME_INTERNAL_ITERATION_CEILING: usize = 500;
+const GEPA_AIME_SOLVER_MODEL: &str = "gpt-4.1-mini";
+const GEPA_AIME_REFLECTION_MODEL: &str = "gpt-5.4-mini";
+const DETERMINISTIC_SMOKE_METRIC_CALLS: u64 = 512;
+const DETERMINISTIC_SMOKE_ITERATIONS: usize = 1;
 
 type AimeLmReflector =
     LmBackedReflector<AimeReflectionLm, DefaultReflectionRenderer, PlainTextEditParser>;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
-    let result = run_configured_aime().await;
+    let config = AimeRunConfig::configured();
+    let result = run_configured_aime(config.clone()).await;
+    println!("run_profile={}", config.profile.label());
     println!(
         "baseline_train_score={:.3}",
         result.report.baseline_train_score
@@ -65,30 +76,35 @@ async fn main() {
 
 #[cfg(test)]
 async fn run_deterministic_aime() -> OptimizeResult<AimePrompt> {
+    let config = AimeRunConfig::deterministic_smoke();
     let (train, validation, test) = deterministic_cases();
-    run_aime(train, validation, test).await
+    run_aime(config, train, validation, test).await
 }
 
-async fn run_configured_aime() -> OptimizeResult<AimePrompt> {
+async fn run_configured_aime(config: AimeRunConfig) -> OptimizeResult<AimePrompt> {
     let (train, validation, test) = configured_cases();
-    run_aime(train, validation, test).await
+    run_aime(config, train, validation, test).await
 }
 
 async fn run_aime(
+    config: AimeRunConfig,
     train: Vec<AimeCase>,
     validation: Vec<AimeCase>,
     test: Vec<AimeCase>,
 ) -> OptimizeResult<AimePrompt> {
-    let solver = aime_solver_lm();
-    leaven::optimize(AimePrompt::new(BASELINE))
+    let solver = aime_solver_lm(&config.solver);
+    let solver_config = config.solver.clone();
+    leaven::optimize(AimePrompt::new(config.seed_prompt))
         .train(train)
         .validation(validation)
         .test(test)
         .runner(move |prompt, case| {
             let solver = solver.clone();
-            async move { run_solver(prompt, case, solver).await }
+            let solver_config = solver_config.clone();
+            async move { run_solver(prompt, case, solver, solver_config).await }
         })
         .score(score_answer)
+        .evaluation_parallelism(config.evaluation_parallelism)
         .using(
             Gepa::builder()
                 .surface(AimePromptSurface)
@@ -99,23 +115,117 @@ async fn run_aime(
                         )]))
                         .build(),
                 )
-                .reflector(aime_lm_reflector())
-                .max_iterations(1),
+                .reflector(aime_lm_reflector(&config.reflection))
+                .max_iterations(config.max_iterations),
         )
-        .budget(Budget::metric_calls(512))
+        .budget(config.budget)
         .run()
         .await
-        .expect("deterministic AIME GEPA run succeeds")
+        .expect("AIME GEPA run succeeds")
 }
 
-fn aime_lm_reflector() -> AimeLmReflector {
-    let live_reflection = std::env::var_os("LEAVEN_AIME_LIVE_OPENAI_REFLECTION").is_some();
-    let model = if live_reflection {
-        aime_reflection_model_name()
-    } else {
-        "deterministic-aime-reflector".to_owned()
-    };
-    let lm = if live_reflection {
+#[derive(Clone, Debug)]
+struct AimeRunConfig {
+    profile: AimeRunProfile,
+    seed_prompt: &'static str,
+    budget: Budget,
+    evaluation_parallelism: NonZeroUsize,
+    max_iterations: usize,
+    solver: AimeSolverConfig,
+    reflection: AimeReflectionConfig,
+}
+
+impl AimeRunConfig {
+    fn configured() -> Self {
+        if std::env::var_os("LEAVEN_AIME_LIVE_OPENAI").is_some() {
+            Self::gepa_aime()
+        } else {
+            Self::deterministic_smoke()
+        }
+    }
+
+    fn gepa_aime() -> Self {
+        Self {
+            profile: AimeRunProfile::GepaAime,
+            seed_prompt: BASELINE,
+            budget: Budget::metric_calls(GEPA_AIME_METRIC_CALLS),
+            evaluation_parallelism: NonZeroUsize::new(GEPA_AIME_MAX_WORKERS)
+                .expect("GEPA AIME worker count is non-zero"),
+            max_iterations: GEPA_AIME_INTERNAL_ITERATION_CEILING,
+            solver: AimeSolverConfig {
+                live: true,
+                model: openai_model_name(),
+                sampling: gepa_aime_sampling(),
+            },
+            reflection: AimeReflectionConfig {
+                live: std::env::var_os("LEAVEN_AIME_LIVE_OPENAI_REFLECTION").is_some(),
+                model: aime_reflection_model_name(),
+                sampling: SamplingOptions::default().with_reasoning_effort(ReasoningEffort::Medium),
+            },
+        }
+    }
+
+    fn deterministic_smoke() -> Self {
+        Self {
+            profile: AimeRunProfile::DeterministicSmoke,
+            seed_prompt: BASELINE,
+            budget: Budget::metric_calls(DETERMINISTIC_SMOKE_METRIC_CALLS),
+            evaluation_parallelism: NonZeroUsize::new(1).expect("smoke worker count is non-zero"),
+            max_iterations: DETERMINISTIC_SMOKE_ITERATIONS,
+            solver: AimeSolverConfig {
+                live: false,
+                model: openai_model_name(),
+                sampling: SamplingOptions::default(),
+            },
+            reflection: AimeReflectionConfig {
+                live: false,
+                model: "deterministic-aime-reflector".to_owned(),
+                sampling: SamplingOptions::default().with_reasoning_effort(ReasoningEffort::Medium),
+            },
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AimeRunProfile {
+    DeterministicSmoke,
+    GepaAime,
+}
+
+impl AimeRunProfile {
+    const fn label(self) -> &'static str {
+        match self {
+            Self::DeterministicSmoke => "deterministic-smoke",
+            Self::GepaAime => "gepa-aime",
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+struct AimeSolverConfig {
+    live: bool,
+    model: String,
+    sampling: SamplingOptions,
+}
+
+#[derive(Clone, Debug)]
+struct AimeReflectionConfig {
+    live: bool,
+    model: String,
+    sampling: SamplingOptions,
+}
+
+fn gepa_aime_sampling() -> SamplingOptions {
+    SamplingOptions {
+        temperature: Some(FiniteF64::new(1.0).expect("temperature is finite")),
+        max_output_tokens: Some(GEPA_AIME_MAX_OUTPUT_TOKENS),
+        ..SamplingOptions::default()
+    }
+}
+
+fn aime_lm_reflector(config: &AimeReflectionConfig) -> AimeLmReflector {
+    let model = config.model.clone();
+    let lm = if config.live {
         AimeReflectionLm::OpenAi(
             OpenAiLm::from_env(&model).expect("OPENAI_API_KEY is required for live reflection"),
         )
@@ -124,7 +234,7 @@ fn aime_lm_reflector() -> AimeLmReflector {
     };
     LmBackedReflector::new(lm, model, DefaultReflectionRenderer, PlainTextEditParser).with_config(
         LmBackedReflectorConfig {
-            sampling: SamplingOptions::default().with_reasoning_effort(ReasoningEffort::Medium),
+            sampling: config.sampling.clone(),
             output: leaven_lm::OutputMode::Text,
             prompt_template: None,
         },
@@ -132,7 +242,8 @@ fn aime_lm_reflector() -> AimeLmReflector {
 }
 
 fn aime_reflection_model_name() -> String {
-    std::env::var("LEAVEN_AIME_REFLECTION_MODEL").unwrap_or_else(|_| "gpt-5.4-mini".to_owned())
+    std::env::var("LEAVEN_AIME_REFLECTION_MODEL")
+        .unwrap_or_else(|_| GEPA_AIME_REFLECTION_MODEL.to_owned())
 }
 
 #[derive(Clone)]
@@ -375,20 +486,22 @@ fn deterministic_cases() -> (Vec<AimeCase>, Vec<AimeCase>, Vec<AimeCase>) {
     (train, validation, test)
 }
 
-fn aime_solver_lm() -> Option<OpenAiLm> {
-    if std::env::var_os("LEAVEN_AIME_LIVE_OPENAI").is_some() {
-        Some(
-            OpenAiLm::from_env(openai_model_name())
-                .expect("OPENAI_API_KEY is required for live solver"),
-        )
+fn aime_solver_lm(config: &AimeSolverConfig) -> Option<OpenAiLm> {
+    if config.live {
+        Some(OpenAiLm::from_env(&config.model).expect("OPENAI_API_KEY is required for live solver"))
     } else {
         None
     }
 }
 
-async fn run_solver(prompt: AimePrompt, case: AimeCase, solver: Option<OpenAiLm>) -> RunOutput {
+async fn run_solver(
+    prompt: AimePrompt,
+    case: AimeCase,
+    solver: Option<OpenAiLm>,
+    solver_config: AimeSolverConfig,
+) -> RunOutput {
     if let Some(solver) = solver {
-        return run_openai_solver(solver, &prompt, &case).await;
+        return run_openai_solver(solver, &prompt, &case, &solver_config).await;
     }
     let has_modular = prompt.system.contains("modular arithmetic");
     let verifies = prompt.system.contains("Verify arithmetic");
@@ -408,16 +521,22 @@ async fn run_solver(prompt: AimePrompt, case: AimeCase, solver: Option<OpenAiLm>
     )
 }
 
-async fn run_openai_solver(solver: OpenAiLm, prompt: &AimePrompt, case: &AimeCase) -> RunOutput {
+async fn run_openai_solver(
+    solver: OpenAiLm,
+    prompt: &AimePrompt,
+    case: &AimeCase,
+    solver_config: &AimeSolverConfig,
+) -> RunOutput {
     let request = LmRequest::new(
-        openai_model_name(),
+        solver_config.model.clone(),
         Messages::new()
             .with_system(prompt.system.clone())
             .with_user(format!(
-                "Problem:\n{}\n\nReturn only the final integer answer.",
+                "Problem:\n{}\n\nReturn only the final numerical answer.",
                 case.problem
             )),
-    );
+    )
+    .with_sampling(solver_config.sampling.clone());
     match solver.complete(request).await {
         Ok(metered) => {
             let answer = metered.value.assistant.content().trim().to_owned();
@@ -425,7 +544,7 @@ async fn run_openai_solver(solver: OpenAiLm, prompt: &AimePrompt, case: &AimeCas
                 answer.clone(),
                 vec![
                     "provider: openai-responses".to_owned(),
-                    format!("model: {}", openai_model_name()),
+                    format!("model: {}", solver_config.model),
                     format!("problem: {}", case.problem),
                     format!("system_prompt: {}", prompt.system),
                     format!("solver_answer: {answer}"),
@@ -437,7 +556,7 @@ async fn run_openai_solver(solver: OpenAiLm, prompt: &AimePrompt, case: &AimeCas
             String::new(),
             vec![
                 "provider: openai-responses".to_owned(),
-                format!("model: {}", openai_model_name()),
+                format!("model: {}", solver_config.model),
                 format!("problem: {}", case.problem),
                 format!("openai_error: {source}"),
             ],
@@ -446,35 +565,40 @@ async fn run_openai_solver(solver: OpenAiLm, prompt: &AimePrompt, case: &AimeCas
 }
 
 fn openai_model_name() -> String {
-    std::env::var("LEAVEN_OPENAI_MODEL").unwrap_or_else(|_| "gpt-4.1-mini".to_owned())
+    std::env::var("LEAVEN_OPENAI_MODEL").unwrap_or_else(|_| GEPA_AIME_SOLVER_MODEL.to_owned())
 }
 
 async fn score_answer(ctx: ScoreContext<AimePrompt, AimeCase>) -> Result<Score, ScoreError> {
     let parsed = ctx.output.output.parse::<i64>();
     let score = match parsed {
-        Ok(answer) if answer == ctx.case.answer => Score::new(
-            1.0,
-            format!(
-                "correct; expected {}. {}",
-                ctx.case.answer, ctx.case.solution
-            ),
-        ),
+        Ok(answer) if answer == ctx.case.answer => {
+            Score::new(1.0, format!("correct.{}", solution_feedback(&ctx.case)))
+        }
         Ok(answer) => Score::new(
             0.0,
             format!(
-                "incorrect; got {answer}, expected {}. {}",
-                ctx.case.answer, ctx.case.solution
+                "incorrect; got {answer}, expected {}.{}",
+                ctx.case.answer,
+                solution_feedback(&ctx.case)
             ),
         ),
         Err(_) => Score::new(
             0.0,
             format!(
-                "final answer must parse as an integer; expected {}. {}",
-                ctx.case.answer, ctx.case.solution
+                "final answer must parse as an integer; expected {}.{}",
+                ctx.case.answer,
+                solution_feedback(&ctx.case)
             ),
         ),
     };
     Ok(score)
+}
+
+fn solution_feedback(case: &AimeCase) -> String {
+    format!(
+        " Here's the full step-by-step solution:\n{}\n\nThink about what takeaways you can learn from this solution to improve your future answers and approach to similar problems.",
+        case.solution
+    )
 }
 
 fn content_id(bytes: &[u8]) -> ContentId {
@@ -558,8 +682,9 @@ mod tests {
 
     #[test]
     fn train_only_run_reports_absent_validation_and_test_scores() {
+        let config = AimeRunConfig::deterministic_smoke();
         let (train, _, _) = deterministic_cases();
-        let result = block_on(run_aime(train, Vec::new(), Vec::new()));
+        let result = block_on(run_aime(config, train, Vec::new(), Vec::new()));
 
         assert_score(result.report.baseline_train_score, 0.0);
         assert_score(result.report.optimized_train_score, 1.0);
@@ -573,15 +698,20 @@ mod tests {
 
     #[test]
     fn run_builder_requires_score_function() {
+        let config = AimeRunConfig::deterministic_smoke();
+        let solver_config = config.solver.clone();
         let (train, _, _) = deterministic_cases();
         let error = block_on(async {
-            leaven::optimize(AimePrompt::new(BASELINE))
+            leaven::optimize(AimePrompt::new(config.seed_prompt))
                 .train(train)
-                .runner(|prompt, case| async move { run_solver(prompt, case, None).await })
+                .runner(move |prompt, case| {
+                    let solver_config = solver_config.clone();
+                    async move { run_solver(prompt, case, None, solver_config).await }
+                })
                 .using(
                     Gepa::builder()
                         .surface(AimePromptSurface)
-                        .reflector(aime_lm_reflector()),
+                        .reflector(aime_lm_reflector(&config.reflection)),
                 )
                 .budget(Budget::metric_calls(8))
                 .run()
@@ -590,6 +720,32 @@ mod tests {
         .unwrap_err();
 
         assert!(error.to_string().contains("score function is required"));
+    }
+
+    #[test]
+    fn configured_gepa_aime_profile_matches_reference_knobs() {
+        let config = AimeRunConfig::gepa_aime();
+
+        assert_eq!(config.profile, AimeRunProfile::GepaAime);
+        assert_eq!(config.seed_prompt, BASELINE);
+        assert_eq!(config.budget.metric_calls, Some(GEPA_AIME_METRIC_CALLS));
+        assert_eq!(config.evaluation_parallelism.get(), GEPA_AIME_MAX_WORKERS);
+        assert_eq!(config.max_iterations, GEPA_AIME_INTERNAL_ITERATION_CEILING);
+        assert!(config.solver.live);
+        assert_eq!(config.solver.model, openai_model_name());
+        assert_eq!(
+            config.solver.sampling.temperature.map(FiniteF64::as_f64),
+            Some(1.0)
+        );
+        assert_eq!(
+            config.solver.sampling.max_output_tokens,
+            Some(GEPA_AIME_MAX_OUTPUT_TOKENS)
+        );
+        assert_eq!(config.reflection.model, aime_reflection_model_name());
+        assert_eq!(
+            config.reflection.sampling.reasoning_effort,
+            Some(ReasoningEffort::Medium)
+        );
     }
 
     #[test]
