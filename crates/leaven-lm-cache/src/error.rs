@@ -24,4 +24,12 @@ impl LmCacheError {
             message: message.into(),
         }
     }
+
+    /// Builds a backend error.
+    pub fn backend(operation: &'static str, message: impl Into<String>) -> Self {
+        Self::Backend {
+            operation,
+            message: message.into(),
+        }
+    }
 }

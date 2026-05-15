@@ -8,6 +8,7 @@ use leaven_lm::{
 };
 use leaven_lm_cache::{
     CachedLm, InMemoryLmCache, LmCacheEntry, LmCacheError, LmCacheKey, LmCachePolicy, LmCacheStore,
+    SqliteLmCache,
 };
 
 #[derive(Clone)]
@@ -71,6 +72,23 @@ impl Lm for CountingLm {
 
 fn request() -> LmRequest {
     LmRequest::new(ModelName::new("mock-model"), Messages::from_user("hello"))
+}
+
+fn cache_key() -> LmCacheKey {
+    LmCacheKey::for_request(Fingerprint::from_bytes([9; 32]), &request())
+}
+
+fn cache_entry(key: LmCacheKey, content: &str) -> LmCacheEntry {
+    let usage = TokenUsage {
+        input_tokens: 5,
+        cached_input_tokens: 1,
+        output_tokens: 3,
+        reasoning_tokens: 2,
+    };
+    let response = LmResponse::new(Message::assistant(content), usage)
+        .unwrap()
+        .with_provider_response_id("resp_original");
+    LmCacheEntry::new(key, response)
 }
 
 #[tokio::test]
@@ -164,6 +182,87 @@ async fn read_only_policy_reads_but_does_not_write() {
     assert_eq!(first.value.assistant.content(), "call 1");
     assert_eq!(second.value.assistant.content(), "call 2");
     assert_eq!(inner.calls(), 2);
+}
+
+#[tokio::test]
+async fn sqlite_cache_opens_and_creates_parent_directories() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("nested/cache/lm-cache.sqlite");
+
+    let cache = SqliteLmCache::open(&path).unwrap();
+
+    assert_eq!(cache.path(), path.as_path());
+    assert!(path.exists());
+    assert_eq!(cache.get(cache_key()).await.unwrap(), None);
+}
+
+#[tokio::test]
+async fn sqlite_cache_round_trips_entries_across_reopen() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("lm-cache.sqlite");
+    let key = cache_key();
+    let entry = cache_entry(key, "persisted");
+
+    SqliteLmCache::open(&path)
+        .unwrap()
+        .put(key, entry.clone())
+        .await
+        .unwrap();
+    let reopened = SqliteLmCache::open(&path).unwrap();
+
+    assert_eq!(reopened.get(key).await.unwrap(), Some(entry));
+}
+
+#[tokio::test]
+async fn sqlite_cache_read_miss_returns_none() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("lm-cache.sqlite");
+    let cache = SqliteLmCache::open(path).unwrap();
+
+    assert_eq!(cache.get(cache_key()).await.unwrap(), None);
+}
+
+#[tokio::test]
+async fn sqlite_cache_refresh_overwrites_cached_entry_through_cached_lm() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("lm-cache.sqlite");
+    let inner = CountingLm::new();
+    let cache = SqliteLmCache::open(path).unwrap();
+    let read_write = CachedLm::new(inner.clone(), cache.clone(), LmCachePolicy::ReadWrite);
+    let refresh = CachedLm::new(inner.clone(), cache.clone(), LmCachePolicy::Refresh);
+
+    let cached = read_write.complete(request()).await.unwrap();
+    let refreshed = refresh.complete(request()).await.unwrap();
+    let after_refresh = read_write.complete(request()).await.unwrap();
+
+    assert_eq!(cached.value.assistant.content(), "call 1");
+    assert_eq!(refreshed.value.assistant.content(), "call 2");
+    assert_eq!(after_refresh.value.assistant.content(), "call 2");
+    assert_eq!(after_refresh.cost, Cost::zero());
+    assert_eq!(inner.calls(), 2);
+}
+
+#[tokio::test]
+async fn sqlite_cache_reports_malformed_entry_json_as_codec_error() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("lm-cache.sqlite");
+    let key = cache_key();
+    let cache = SqliteLmCache::open(&path).unwrap();
+    cache
+        .put(key, cache_entry(key, "corrupt me"))
+        .await
+        .unwrap();
+    drop(cache);
+
+    let connection = rusqlite::Connection::open(&path).unwrap();
+    connection
+        .execute("UPDATE lm_cache_entries SET entry_json = '{not json'", [])
+        .unwrap();
+    drop(connection);
+
+    let cache = SqliteLmCache::open(&path).unwrap();
+    let error = cache.get(key).await.unwrap_err();
+    assert!(matches!(error, LmCacheError::Codec { .. }));
 }
 
 #[tokio::test]
