@@ -1,12 +1,12 @@
 use futures::executor::block_on;
 use leaven::extend::{
-    CachePolicy, EvaluationRequest, Evaluator, Optimizer, ProposalBatchSemantics, ProposalContext,
-    Proposer, RunEvent,
+    CachePolicy, EvaluationRequest, Evaluator, Optimizer, Proposal, ProposalBatch,
+    ProposalBatchSemantics, ProposalContext, Proposer, RunEvent,
 };
 use leaven::plumbing::ContentId;
 use leaven::prelude::{
     Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, AssessmentTarget, Budget,
-    CandidateId, Cost, Proposal, ProposalBatch,
+    CandidateId, Cost,
 };
 use leaven::stdlib::{evidence::ScalarEvidence, populations::KeepBest};
 use leaven_core::{EvaluationPurpose, ResolvedEvaluationRequest, ResolvedRequestKind};

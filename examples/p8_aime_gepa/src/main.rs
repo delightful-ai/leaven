@@ -1,11 +1,11 @@
 use std::{collections::BTreeMap, num::NonZeroUsize, path::Path, time::Duration};
 
-use leaven::extend::{PartitionId, RunOutput, ScoreContext};
+use leaven::extend::PartitionId;
 use leaven::gepa::Gepa;
-use leaven::plumbing::{ContentId, Fingerprint, FiniteF64, SurfaceError, SurfaceFingerprint};
+use leaven::plumbing::{ContentId, Fingerprint, FiniteF64};
 use leaven::prelude::{
-    Artifact, ArtifactIdentity, Budget, EditSurface, OptimizeResult, Part, PartAddress, Score,
-    ScoreError,
+    Artifact, ArtifactIdentity, Budget, EditSurface, OptimizeResult, Part, PartAddress, RunOutput,
+    Score, ScoreContext, ScoreError, SurfaceError, SurfaceFingerprint,
 };
 use leaven::{kernel::Metered, stdlib::populations::ParetoFrontier};
 use leaven_gepa::{

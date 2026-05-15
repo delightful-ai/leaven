@@ -1,11 +1,12 @@
 use futures::executor::block_on;
 use leaven::extend::{
-    CachePolicy, EvaluationRequest, Evaluator, Optimizer, ProposalBatchSemantics, RunEvent,
+    CachePolicy, EvaluationRequest, Evaluator, Optimizer, Proposal, ProposalBatch,
+    ProposalBatchSemantics, RunEvent,
 };
 use leaven::plumbing::ContentId;
 use leaven::prelude::{
     Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, AssessmentTarget, Budget,
-    CandidateId, Cost, PairOrder, Proposal, ProposalBatch,
+    CandidateId, Cost, PairOrder,
 };
 use leaven::stdlib::{
     evidence::{PairwiseJudgment, PairwiseJudgmentEvidence},

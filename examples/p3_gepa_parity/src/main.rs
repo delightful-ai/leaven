@@ -2,13 +2,13 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use futures::executor::block_on;
 use leaven::extend::{
-    CachePolicy, EvaluationRequest, Evaluator, Optimizer, ProposalBatchSemantics, RunEvent,
-    TrustPolicy,
+    CachePolicy, EvaluationRequest, Evaluator, Optimizer, Proposal, ProposalBatch,
+    ProposalBatchSemantics, RunEvent, TrustPolicy,
 };
 use leaven::plumbing::ContentId;
 use leaven::prelude::{
     Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, AssessmentTarget, Budget,
-    CandidateId, Cost, Proposal, ProposalBatch,
+    CandidateId, Cost,
 };
 use leaven_core::{
     EvaluationPurpose, EvaluationSet, OptimizationProblem, PartitionId, ResolvedEvaluationRequest,

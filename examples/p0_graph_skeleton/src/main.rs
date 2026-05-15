@@ -1,11 +1,8 @@
 use leaven::engine::{BudgetLedger, RunContext, RunGraph};
-use leaven::extend::ProposalBatchSemantics;
+use leaven::extend::{Proposal, ProposalBatch, ProposalBatchSemantics};
 use leaven::kernel::{RunId, StageId};
 use leaven::plumbing::{ContentId, MetadataBag};
-use leaven::prelude::{
-    Artifact, ArtifactIdentity, Budget, Cost, Evidence, OptimizationProblem, Proposal,
-    ProposalBatch,
-};
+use leaven::prelude::{Artifact, ArtifactIdentity, Budget, Cost, Evidence, OptimizationProblem};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut graph = RunGraph::<TextProblem>::new(RunId::new());

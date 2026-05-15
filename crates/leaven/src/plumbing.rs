@@ -19,8 +19,6 @@ pub use leaven_core::ContentAddressed;
 pub use leaven_kernel::ContentId;
 /// Surface and engine fingerprint plumbing compares `Fingerprint` values.
 pub use leaven_kernel::Fingerprint;
-/// Surface diff plumbing compares `SurfaceFingerprint` values.
-pub use leaven_surface::SurfaceFingerprint;
 
 // --- Finite-number and budget internals. ---
 
@@ -43,5 +41,3 @@ pub use leaven_kernel::ErrorRecord;
 pub use leaven_kernel::MetadataBag;
 /// Engine graph plumbing identifies proposal nodes with `ProposalId`.
 pub use leaven_kernel::ProposalId;
-/// Surface implementation plumbing surfaces `SurfaceError` on invalid edits.
-pub use leaven_surface::SurfaceError;

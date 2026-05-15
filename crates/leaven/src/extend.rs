@@ -97,14 +97,8 @@ pub use leaven_core::ProposalProvenance;
 
 /// Store wiring authors implement `IntoOptimizeStore` to supply a store.
 pub use leaven_run::IntoOptimizeStore;
-/// Callers handling `optimize` failures match the `OptimizeError` variants.
-pub use leaven_run::OptimizeError;
 /// Custom store authors implement `OptimizeStore` for evidence persistence.
 pub use leaven_run::OptimizeStore;
-/// Scorer authors read `RunOutput` to see runner output, trace, and cost.
-pub use leaven_run::RunOutput;
-/// Scorer authors receive `ScoreContext` with budget snapshot at score time.
-pub use leaven_run::ScoreContext;
 
 // --- LM provider vocabulary: implemented and consumed by LM/agent providers. ---
 

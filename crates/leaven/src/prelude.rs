@@ -18,8 +18,6 @@
 pub use leaven_core::Artifact;
 pub use leaven_core::ArtifactIdentity;
 pub use leaven_core::OptimizationProblem;
-pub use leaven_core::Proposal;
-pub use leaven_core::ProposalBatch;
 
 // --- Reading results: assessments, evidence, preferences. ---
 
@@ -36,6 +34,8 @@ pub use leaven_surface::EditSurface;
 pub use leaven_surface::Part;
 pub use leaven_surface::PartAddress;
 pub use leaven_surface::PartSelection;
+pub use leaven_surface::SurfaceError;
+pub use leaven_surface::SurfaceFingerprint;
 
 // --- Budget and identity an ordinary user touches. ---
 
@@ -48,8 +48,11 @@ pub use leaven_kernel::CostUnit;
 
 pub use leaven_run::OptimizationReport;
 pub use leaven_run::OptimizeBuilder;
+pub use leaven_run::OptimizeError;
 pub use leaven_run::OptimizeResult;
+pub use leaven_run::RunOutput;
 pub use leaven_run::Score;
+pub use leaven_run::ScoreContext;
 pub use leaven_run::ScoreError;
 pub use leaven_run::optimize;
 

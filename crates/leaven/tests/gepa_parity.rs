@@ -2,14 +2,14 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use futures::executor::block_on;
 use leaven::extend::{
-    CachePolicy, EvaluationRequest, Evaluator, InfoRef, Optimizer, ProposalBatchSemantics,
-    ProposalEffect, RunEvent, TrustPolicy,
+    CachePolicy, EvaluationRequest, Evaluator, InfoRef, Optimizer, Proposal, ProposalBatch,
+    ProposalBatchSemantics, ProposalEffect, RunEvent, TrustPolicy,
 };
 use leaven::gepa::{FixedSurfaceEdit, Gepa, SurfaceProposer};
 use leaven::plumbing::ContentId;
 use leaven::prelude::{
     Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, AssessmentTarget, Budget,
-    CandidateId, Cost, Proposal, ProposalBatch,
+    CandidateId, Cost,
 };
 use leaven::stdlib::{
     evidence::{CaseOutcome, CasewiseEvidence, ScalarEvidence},

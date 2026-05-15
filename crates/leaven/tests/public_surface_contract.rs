@@ -44,8 +44,6 @@ const SURFACE: &[(&str, Route, &str)] = &[
     ("Artifact", Route::Prelude, ""),
     ("ArtifactIdentity", Route::Prelude, ""),
     ("OptimizationProblem", Route::Prelude, ""),
-    ("Proposal", Route::Prelude, ""),
-    ("ProposalBatch", Route::Prelude, ""),
     ("Assessment", Route::Prelude, ""),
     ("AssessmentGranularity", Route::Prelude, ""),
     ("AssessmentTarget", Route::Prelude, ""),
@@ -56,14 +54,19 @@ const SURFACE: &[(&str, Route, &str)] = &[
     ("Part", Route::Prelude, ""),
     ("PartAddress", Route::Prelude, ""),
     ("PartSelection", Route::Prelude, ""),
+    ("SurfaceError", Route::Prelude, ""),
+    ("SurfaceFingerprint", Route::Prelude, ""),
     ("Budget", Route::Prelude, ""),
     ("CandidateId", Route::Prelude, ""),
     ("Cost", Route::Prelude, ""),
     ("CostUnit", Route::Prelude, ""),
     ("OptimizationReport", Route::Prelude, ""),
     ("OptimizeBuilder", Route::Prelude, ""),
+    ("OptimizeError", Route::Prelude, ""),
     ("OptimizeResult", Route::Prelude, ""),
+    ("RunOutput", Route::Prelude, ""),
     ("Score", Route::Prelude, ""),
+    ("ScoreContext", Route::Prelude, ""),
     ("ScoreError", Route::Prelude, ""),
     ("optimize", Route::Prelude, ""),
     ("DeriveArtifact", Route::Prelude, ""),
@@ -201,6 +204,16 @@ const SURFACE: &[(&str, Route, &str)] = &[
         "proposer authors record causal inputs",
     ),
     (
+        "Proposal",
+        Route::Extend,
+        "proposer authors build candidate actions",
+    ),
+    (
+        "ProposalBatch",
+        Route::Extend,
+        "Proposer::propose returns a sibling batch",
+    ),
+    (
         "ProposalProvenance",
         Route::Extend,
         "proposer authors record how a proposal was made",
@@ -240,21 +253,6 @@ const SURFACE: &[(&str, Route, &str)] = &[
         "IntoOptimizeStore",
         Route::Extend,
         "store wiring authors implement it",
-    ),
-    (
-        "OptimizeError",
-        Route::Extend,
-        "callers match optimize failures",
-    ),
-    (
-        "RunOutput",
-        Route::Extend,
-        "scorer authors read runner output",
-    ),
-    (
-        "ScoreContext",
-        Route::Extend,
-        "scorer authors receive it at score time",
     ),
     // --- extend: LM provider vocabulary. ---
     (
@@ -351,11 +349,6 @@ const SURFACE: &[(&str, Route, &str)] = &[
         "surface and engine fingerprint plumbing",
     ),
     (
-        "SurfaceFingerprint",
-        Route::Plumbing,
-        "surface diff plumbing",
-    ),
-    (
         "Amount",
         Route::Plumbing,
         "cost and score arithmetic internals",
@@ -394,11 +387,6 @@ const SURFACE: &[(&str, Route, &str)] = &[
         "ProposalId",
         Route::Plumbing,
         "engine graph proposal-node plumbing",
-    ),
-    (
-        "SurfaceError",
-        Route::Plumbing,
-        "surface implementation error plumbing",
     ),
 ];
 

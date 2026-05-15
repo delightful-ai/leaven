@@ -1548,15 +1548,16 @@ fn annotate_builder_proposals(
             proposer_evidence: Some(input.proposer_evidence.clone()),
         };
         let _proposal_payload_present = item.annotations.proposal.is_some();
-        item.provenance
-            .informed_by
-            .push(InfoRef::External(ExternalRef {
+        item.provenance = item
+            .provenance
+            .clone()
+            .informed_by([InfoRef::External(ExternalRef {
                 kind: "evidence".to_owned(),
                 id: format!(
                     "{}:{}",
                     input.proposer_evidence.store, input.proposer_evidence.key
                 ),
-            }));
+            })]);
     }
 }
 
@@ -1682,20 +1683,22 @@ fn record_skill_change(
         .artifact(parent)
         .ok_or_else(|| msg("parent artifact missing"))?
         .apply_skill_change(&change)?;
-    let mut item = leaven_core::Proposal::<EvoSkillProblem>::mutate(parent, change.clone())
+    let informed_by: Vec<InfoRef> = proposer_evidence
+        .iter()
+        .map(|reference| {
+            InfoRef::External(ExternalRef {
+                kind: "evidence".to_owned(),
+                id: format!("{}:{}", reference.store, reference.key),
+            })
+        })
+        .collect();
+    let item = leaven_core::Proposal::<EvoSkillProblem>::mutate(parent, change.clone())
         .annotations(EvoSkillProposalAnnotations {
             proposal,
             proposer_evidence,
         })
+        .informed_by(informed_by)
         .build();
-    if let Some(reference) = &item.annotations.proposer_evidence {
-        item.provenance
-            .informed_by
-            .push(InfoRef::External(ExternalRef {
-                kind: "evidence".to_owned(),
-                id: format!("{}:{}", reference.store, reference.key),
-            }));
-    }
     let batch = leaven_core::ProposalBatch {
         proposals: vec![item],
         semantics: ProposalBatchSemantics::Alternatives,
