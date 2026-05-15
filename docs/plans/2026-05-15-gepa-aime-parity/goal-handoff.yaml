@@ -1,0 +1,153 @@
+# Leaven GEPA/AIME parity goal handoff.
+# This is the compact intent-preservation artifact for a future /goal. Detailed
+# requirements live in docs/specs/gepa_aime_paper_parity.md.
+
+status: ready_for_goal_draft
+date: 2026-05-15
+
+original_intent: >
+  After durable checkpoint/resume work, make the remaining GEPA/AIME path real:
+  a user should be able to run GEPA over AIME through Leaven's high-level
+  optimizer surface, with real LM/cache/eval behavior and honest paper-parity
+  accounting rather than proxy examples.
+
+designed_surface:
+  ordinary_user_path:
+    - leaven::optimize(seed_prompt)
+    - trainset(...)
+    - valset(...)
+    - testset(...)
+    - using(Gepa::for_surface(...).with_defaults(...))
+    - budget(Budget::metric_calls(500))
+    - run().await
+  visible_outputs:
+    - best candidate prompt/artifact
+    - train/validation/test scores
+    - case-level score state and feedback
+    - budget stop reason and spend report
+    - resume/checkpoint evidence
+  private_machinery:
+    - engine RunGraph mutation only through RunContext
+    - GEPA continuation state owned by leaven-gepa
+    - LM provider/cache owned by leaven-lm and leaven-lm-cache families
+    - AIME adapter materialized in the P8 example layer unless promoted later
+
+governing_docs:
+  product:
+    - docs/specs/initial_library.md
+    - docs/specs/guiding_principles.md
+  implementation:
+    - docs/specs/gepa_aime_paper_parity.md
+    - docs/specs/durable_runs_and_resume.md
+    - docs/specs/gepa_public_private_surface.md
+    - docs/specs/gepa_optimizer_surface.md
+    - docs/specs/lm_runtime_and_response_cache.md
+    - docs/specs/eval_lowering_detail.md
+    - docs/testing/README.md
+  handoff_context:
+    - docs/plans/2026-05-15-gepa-aime-parity/requirements-summary.md
+
+intent_preservation: >
+  Preserved if the implementation proves the ordinary user path above with
+  durable/resumable GEPA search, Leaven-native LM/provider/cache calls, GEPA
+  reflection defaults, metric-call budget stopping, and AIME task reporting.
+  Not preserved by internal-only engine behavior, deterministic fixtures, or
+  examples that bypass Leaven's public optimizer and LM surfaces.
+
+misleading_proxy_proofs:
+  - deterministic P8 smoke that does not use live or provider-mock Leaven LM calls
+  - one-iteration GEPA scaffold treated as the default optimizer loop
+  - durable run records without GEPA continuation resume
+  - OpenAI calls from an example script that bypass leaven-lm and leaven-lm-cache
+  - Python subprocess or DSPy shell-out used as the solver/reflector implementation
+  - final aggregate numbers without per-case score, feedback, trace, and split evidence
+  - BudgetExceeded or an evaluator failure treated as normal search completion
+  - JSON-only reflection prompts or parsers used as the default GEPA path
+  - validation or test labels, answers, or feedback leaking into default reflection
+
+acceptance_path:
+  - id: engine_budget_stop_semantics
+    status: pending
+    requirement: >
+      Engine distinguishes normal BudgetReached stopping from BudgetExceeded
+      invariant failures, stops before overspending when possible, and reports
+      search versus final-report spend.
+    evidence: []
+  - id: gepa_loop_parity
+    status: pending
+    requirement: >
+      GEPA runs the spec loop order with parent selection, train batching, part
+      selection, evidence rendering, reflection proposal, proposal application,
+      child evaluation, acceptance, validation policy, population update, and
+      checkpointing.
+    evidence: []
+  - id: gepa_continuation_resume
+    status: pending
+    requirement: >
+      GEPA continuation state persists all selector/sampler/acceptance/validation
+      state needed to resume without replaying committed evaluations or losing
+      best-candidate/frontier state.
+    evidence: []
+  - id: reflection_parity
+    status: pending
+    requirement: >
+      Default reflection uses a GEPA-style rendered natural-language prompt with
+      full allowed trace/evidence materials, fenced replacement parsing, swappable
+      LM/agent implementation, and no JSON-only default.
+    evidence: []
+  - id: live_provider_cache_path
+    status: pending
+    requirement: >
+      Solver and reflector calls flow through leaven-lm, concrete OpenAI provider
+      wiring, retries/backoff, cost metadata, and reusable response cache.
+    evidence: []
+  - id: aime_task_parity
+    status: pending
+    requirement: >
+      P8 materializes AIME train/validation/test splits from the documented
+      sources, uses the GEPA seed solver prompt as the mutable artifact, scores
+      exact final numeric answers, and returns natural-language feedback.
+    evidence: []
+  - id: result_report_truth
+    status: pending
+    requirement: >
+      Reports classify missing, cached, failed, and scored cases separately and
+      publish train/validation/test aggregate plus case-level evidence.
+    evidence: []
+  - id: repo_standards_hold
+    status: pending
+    requirement: >
+      Crate placement follows topology, public APIs hide lowered machinery from
+      ordinary users, docs and tests preserve maturity labels, and the final gate
+      is just check unless a pre-existing unrelated blocker is documented.
+    evidence: []
+
+proof_denominator:
+  required_tests:
+    - engine budget/stopping tests from docs/specs/gepa_aime_paper_parity.md section 9.1
+    - GEPA loop/continuation/cache tests from section 9.2
+    - reflection renderer/parser/LM tests from section 9.3
+    - AIME materializer/scorer/P8 tests from section 9.4
+  required_commands:
+    - just milestone-p8
+    - just check
+  live_or_mock_requirement: >
+    If OpenAI credentials are available, run a bounded P8 live slice through the
+    Leaven LM path. If credentials are unavailable, prove the same surfaces with
+    provider mocks and mark the live-provider proof blocked rather than proven.
+
+explicit_non_goals:
+  - exact Python/DSPy API compatibility
+  - claiming GEPA CAIS artifact numbers before a live full run proves them
+  - making GEPA depend on OpenAI as a strategy requirement
+  - exposing RunGraph, RunContext, engine stoppers, or GEPA continuation internals
+    in the ordinary user API
+  - promoting P8 AIME adapter types into a stable reusable dataset crate before
+    there is a broader dataset product decision
+  - treating a deterministic smoke as a benchmark or paper reproduction
+
+decision: >
+  Ready to draft a /goal against this handoff and
+  docs/specs/gepa_aime_paper_parity.md. Before activating, confirm that this
+  handoff captures the intended denominator: real high-level Leaven GEPA/AIME,
+  not internal substrate or proxy demo proof.
