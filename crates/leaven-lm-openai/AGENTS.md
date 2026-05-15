@@ -7,16 +7,20 @@ responses and failures back into `LmResponse`/`LmError`, and computes an OpenAI
 runtime fingerprint that excludes secrets.
 
 ## Map
-- `OpenAiConfig` owns endpoint and API-key sourcing. It does not currently own
-  a model default; `LmRequest.model` is what lowers to the wire `model`.
+- `OpenAiConfig` owns endpoint, API-key sourcing, request timeout, and retry
+  policy. It does not currently own a model default; `LmRequest.model` is what
+  lowers to the wire `model`.
 - `OpenAiLm::to_wire_request` is the local seam for request lowering tests.
 - OpenAI `previous_response_id` is used only when `LmContinuation` says the
   covered canonical messages line up safely.
 - OpenAI prompt caching is provider-side prefix reuse. It may lower from
   `ProviderHints`, but it is not Leaven response caching.
 - `OpenAiLm::fingerprint()` includes the adapter version marker and base URL,
-  and excludes API keys. It also currently excludes request model because model
-  lives on `LmRequest`.
+  request timeout, and retry policy, and excludes API keys. It also currently
+  excludes request model because model lives on `LmRequest`.
+- Retry policy is local provider transport policy: bounded retries apply to
+  transport errors and retryable OpenAI HTTP statuses, and numeric
+  `Retry-After` seconds are honored up to the configured maximum backoff.
 
 ## Route Away
 - Provider-neutral request, response, sampling, continuation, usage, and error
@@ -31,7 +35,8 @@ runtime fingerprint that excludes secrets.
 ## Proof Anchors
 - `crates/leaven-lm-openai/tests/openai_mapping.rs` proves request lowering,
   continuation handling, prompt cache hint lowering, fingerprint behavior,
-  env-var loading, transport errors, and response parsing against local fixtures.
+  env-var loading, timeout/retry policy identity, transport errors, retryable
+  statuses, and response parsing against local fixtures.
 - `docs/specs/lm_runtime_and_response_cache.md` section "OpenAI Provider
   Contract" owns the adapter contract.
 - Run `cargo nextest run -p leaven-lm-openai` to prove OpenAI mapping behavior
@@ -78,6 +83,17 @@ runtime fingerprint that excludes secrets.
     provider continuations are ignored, and provider hints lower only through
     neutral `ProviderHints`
   avoid: introducing live OpenAI calls into the default test path
+  verify: run `cargo nextest run -p leaven-lm-openai`
+
+- when: changing OpenAI timeout or retry behavior
+  do: keep the policy in `OpenAiConfig`, include behavior-affecting fields in
+    `OpenAiLm::fingerprint()`, and prove retry/non-retry behavior with local
+    one-shot HTTP fixtures
+  preserve: raw providers do not read/write Leaven response caches, and
+    provider errors remain structured `LmError` values after retries are
+    exhausted
+  avoid: leaking OpenAI retry policy into `leaven-lm`, GEPA, engine, or example
+    code
   verify: run `cargo nextest run -p leaven-lm-openai`
 
 - when: changing response parsing

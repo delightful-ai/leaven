@@ -1,14 +1,23 @@
+use std::fmt::Write as _;
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::process::Command;
+use std::sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering},
+};
 use std::thread;
+use std::time::Duration;
 
 use leaven_kernel::{Cost, FiniteF64};
 use leaven_lm::{
     JsonSchemaOutput, Lm, LmContinuation, LmError, LmRequest, Messages, ModelName, OutputMode,
     ProviderHints, ProviderName, ReasoningEffort, Role, SamplingOptions,
 };
-use leaven_lm_openai::{OpenAiConfig, OpenAiLm};
+use leaven_lm_openai::{OpenAiConfig, OpenAiLm, OpenAiRetryPolicy};
+
+type FixtureHeaders = &'static [(&'static str, &'static str)];
+type FixtureResponse = (&'static str, FixtureHeaders, &'static str);
 
 #[test]
 fn openai_request_uses_previous_response_id_for_uncovered_suffix() {
@@ -46,6 +55,22 @@ fn openai_identity_and_fingerprint_are_stable() {
     assert_ne!(
         lm.fingerprint(),
         OpenAiLm::new(OpenAiConfig::new("test-key").with_base_url("http://localhost/custom"))
+            .fingerprint()
+    );
+    assert_ne!(
+        lm.fingerprint(),
+        OpenAiLm::new(
+            OpenAiConfig::new("test-key").with_retry_policy(OpenAiRetryPolicy::new(
+                1,
+                Duration::ZERO,
+                Duration::ZERO
+            ))
+        )
+        .fingerprint()
+    );
+    assert_ne!(
+        lm.fingerprint(),
+        OpenAiLm::new(OpenAiConfig::new("test-key").with_request_timeout(Duration::from_secs(5)))
             .fingerprint()
     );
 }
@@ -194,7 +219,25 @@ async fn openai_complete_refuses_invalid_continuation_before_transport() {
 #[tokio::test]
 async fn openai_complete_maps_transport_failure() {
     let lm = OpenAiLm::new(
-        OpenAiConfig::new("test-key").with_base_url("http://127.0.0.1:9/v1/responses"),
+        OpenAiConfig::new("test-key")
+            .with_base_url("http://127.0.0.1:9/v1/responses")
+            .with_retry_policy(OpenAiRetryPolicy::none()),
+    );
+
+    let error = lm
+        .complete(LmRequest::new("gpt-4.1-mini", Messages::from_user("hi")))
+        .await
+        .unwrap_err();
+
+    assert!(matches!(error, LmError::Transport { .. }));
+}
+
+#[tokio::test]
+async fn openai_complete_retries_transport_failures_until_exhausted() {
+    let lm = OpenAiLm::new(
+        OpenAiConfig::new("test-key")
+            .with_base_url("http://127.0.0.1:9/v1/responses")
+            .with_retry_policy(OpenAiRetryPolicy::new(1, Duration::ZERO, Duration::ZERO)),
     );
 
     let error = lm
@@ -341,10 +384,95 @@ async fn openai_complete_posts_response_and_meters_usage() {
 }
 
 #[tokio::test]
+async fn openai_complete_retries_retryable_statuses_then_succeeds() {
+    let success_body = r#"{
+        "id": "resp_after_retry",
+        "output": [{
+            "type": "message",
+            "role": "assistant",
+            "content": [{"type": "output_text", "text": "after retry"}]
+        }],
+        "usage": {"input_tokens": 4, "output_tokens": 5}
+    }"#;
+    let (url, attempts) = serve_sequence([
+        (
+            "429 Too Many Requests",
+            [("retry-after", "999")].as_slice(),
+            "slow down",
+        ),
+        ("200 OK", [].as_slice(), success_body),
+    ]);
+    let lm = OpenAiLm::new(
+        OpenAiConfig::new("test-key")
+            .with_base_url(url)
+            .with_retry_policy(OpenAiRetryPolicy::new(1, Duration::ZERO, Duration::ZERO)),
+    );
+
+    let metered = lm
+        .complete(LmRequest::new("gpt-4.1-mini", Messages::from_user("hi")))
+        .await
+        .unwrap();
+
+    assert_eq!(metered.value.assistant.content(), "after retry");
+    assert_eq!(attempts.load(Ordering::SeqCst), 2);
+}
+
+#[tokio::test]
+async fn openai_complete_uses_backoff_when_retry_after_is_absent() {
+    let success_body = r#"{
+        "id": "resp_after_backoff",
+        "output": [{
+            "type": "message",
+            "role": "assistant",
+            "content": [{"type": "output_text", "text": "after backoff"}]
+        }]
+    }"#;
+    let (url, attempts) = serve_sequence([
+        ("503 Service Unavailable", [].as_slice(), "busy"),
+        ("200 OK", [].as_slice(), success_body),
+    ]);
+    let lm = OpenAiLm::new(
+        OpenAiConfig::new("test-key")
+            .with_base_url(url)
+            .with_retry_policy(OpenAiRetryPolicy::new(1, Duration::ZERO, Duration::ZERO)),
+    );
+
+    let metered = lm
+        .complete(LmRequest::new("gpt-4.1-mini", Messages::from_user("hi")))
+        .await
+        .unwrap();
+
+    assert_eq!(metered.value.assistant.content(), "after backoff");
+    assert_eq!(attempts.load(Ordering::SeqCst), 2);
+}
+
+#[tokio::test]
+async fn openai_complete_does_not_retry_non_retryable_statuses() {
+    let (url, attempts) = serve_sequence([("400 Bad Request", [].as_slice(), "bad request")]);
+    let lm = OpenAiLm::new(
+        OpenAiConfig::new("test-key")
+            .with_base_url(url)
+            .with_retry_policy(OpenAiRetryPolicy::new(3, Duration::ZERO, Duration::ZERO)),
+    );
+
+    let error = lm
+        .complete(LmRequest::new("gpt-4.1-mini", Messages::from_user("hi")))
+        .await
+        .unwrap_err();
+
+    assert_eq!(
+        error.to_string(),
+        "openai lm provider failed with status 400: bad request"
+    );
+    assert_eq!(attempts.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
 async fn openai_complete_maps_status_failure_to_provider_error() {
     let lm = OpenAiLm::new(
         OpenAiConfig::new("test-key")
-            .with_base_url(serve_once("429 Too Many Requests", "slow down")),
+            .with_base_url(serve_once("429 Too Many Requests", "slow down"))
+            .with_retry_policy(OpenAiRetryPolicy::none()),
     );
 
     let error = lm
@@ -371,17 +499,30 @@ async fn openai_complete_maps_invalid_json_to_invalid_response() {
 }
 
 fn serve_once(status: &'static str, body: &'static str) -> String {
+    serve_sequence([(status, [].as_slice(), body)]).0
+}
+
+fn serve_sequence<const N: usize>(responses: [FixtureResponse; N]) -> (String, Arc<AtomicUsize>) {
     let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
     let url = format!("http://{}/v1/responses", listener.local_addr().unwrap());
+    let attempts = Arc::new(AtomicUsize::new(0));
+    let thread_attempts = attempts.clone();
     thread::spawn(move || {
-        let (mut stream, _) = listener.accept().unwrap();
-        let mut request = [0_u8; 4096];
-        let _ = stream.read(&mut request).unwrap();
-        let response = format!(
-            "HTTP/1.1 {status}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
-            body.len()
-        );
-        stream.write_all(response.as_bytes()).unwrap();
+        for (status, headers, body) in responses {
+            let (mut stream, _) = listener.accept().unwrap();
+            thread_attempts.fetch_add(1, Ordering::SeqCst);
+            let mut request = [0_u8; 4096];
+            let _ = stream.read(&mut request).unwrap();
+            let mut headers_text = String::new();
+            for (name, value) in headers {
+                let _ = write!(headers_text, "{name}: {value}\r\n");
+            }
+            let response = format!(
+                "HTTP/1.1 {status}\r\ncontent-type: application/json\r\n{headers_text}content-length: {}\r\nconnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            stream.write_all(response.as_bytes()).unwrap();
+        }
     });
-    url
+    (url, attempts)
 }

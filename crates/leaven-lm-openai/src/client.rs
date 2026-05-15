@@ -1,8 +1,11 @@
+use std::time::Duration;
+
 use leaven_kernel::{Fingerprint, FingerprintBuilder, Metered};
 use leaven_lm::{
     Lm, LmContinuation, LmError, LmId, LmRequest, LmResponse, Message, OutputMode, ProviderName,
     ReasoningEffort, Role, SamplingOptions, TokenUsage,
 };
+use reqwest::{StatusCode, header::RETRY_AFTER};
 use serde_json::{Map, Value, json};
 
 use crate::OpenAiConfig;
@@ -18,10 +21,11 @@ impl OpenAiLm {
     /// Creates an `OpenAI` LM provider from config.
     #[must_use]
     pub fn new(config: OpenAiConfig) -> Self {
-        Self {
-            config,
-            client: reqwest::Client::new(),
-        }
+        let client = reqwest::Client::builder()
+            .timeout(config.request_timeout())
+            .build()
+            .expect("OpenAI reqwest client config is valid");
+        Self { config, client }
     }
 
     /// Creates an `OpenAI` LM provider from `OPENAI_API_KEY`.
@@ -130,19 +134,28 @@ impl Lm for OpenAiLm {
         let mut builder = FingerprintBuilder::new();
         builder.update(b"leaven-lm-openai-responses-v1");
         builder.update(self.config.base_url().as_bytes());
+        builder.update(self.config.request_timeout().as_millis().to_string());
+        builder.update(self.config.retry_policy().max_retries().to_string());
+        builder.update(
+            self.config
+                .retry_policy()
+                .initial_backoff()
+                .as_millis()
+                .to_string(),
+        );
+        builder.update(
+            self.config
+                .retry_policy()
+                .max_backoff()
+                .as_millis()
+                .to_string(),
+        );
         builder.finish()
     }
 
     async fn complete(&self, request: LmRequest) -> Result<Metered<LmResponse>, LmError> {
         let body = self.to_wire_request(&request)?;
-        let response = self
-            .client
-            .post(self.config.base_url())
-            .bearer_auth(self.config.api_key())
-            .json(&body)
-            .send()
-            .await
-            .map_err(|error| LmError::transport("openai", error))?;
+        let response = self.send_with_retries(&body).await?;
         let status = response.status();
         let text = response
             .text()
@@ -156,6 +169,43 @@ impl Lm for OpenAiLm {
         let parsed = Self::parse_response(&raw, request.messages.len())?;
         let cost = parsed.usage.to_cost();
         Ok(Metered::new(parsed, cost))
+    }
+}
+
+impl OpenAiLm {
+    async fn send_with_retries(&self, body: &Value) -> Result<reqwest::Response, LmError> {
+        let policy = self.config.retry_policy();
+        let mut attempt = 0;
+        loop {
+            let result = self
+                .client
+                .post(self.config.base_url())
+                .bearer_auth(self.config.api_key())
+                .json(body)
+                .send()
+                .await;
+
+            match result {
+                Ok(response) => {
+                    let status = response.status();
+                    if !is_retryable_status(status) || attempt >= policy.max_retries() {
+                        return Ok(response);
+                    }
+                    let delay = retry_after_delay(response.headers())
+                        .map(|delay| delay.min(policy.max_backoff()))
+                        .unwrap_or_else(|| retry_delay(policy, attempt));
+                    tokio::time::sleep(delay).await;
+                }
+                Err(error) => {
+                    if attempt >= policy.max_retries() {
+                        return Err(LmError::transport("openai", error));
+                    }
+                    tokio::time::sleep(retry_delay(policy, attempt)).await;
+                }
+            }
+
+            attempt += 1;
+        }
     }
 }
 
@@ -298,4 +348,25 @@ fn token_usage(value: Option<&Value>) -> TokenUsage {
 
 fn field(value: &Value, name: &str) -> u64 {
     value.get(name).and_then(Value::as_u64).unwrap_or(0)
+}
+
+fn is_retryable_status(status: StatusCode) -> bool {
+    matches!(
+        status.as_u16(),
+        408 | 409 | 425 | 429 | 500 | 502 | 503 | 504
+    )
+}
+
+fn retry_after_delay(headers: &reqwest::header::HeaderMap) -> Option<Duration> {
+    let value = headers.get(RETRY_AFTER)?.to_str().ok()?;
+    let seconds = value.trim().parse::<u64>().ok()?;
+    Some(Duration::from_secs(seconds))
+}
+
+fn retry_delay(policy: &crate::OpenAiRetryPolicy, attempt: u32) -> Duration {
+    let multiplier = 1_u32.checked_shl(attempt.min(31)).unwrap_or(u32::MAX);
+    policy
+        .initial_backoff()
+        .saturating_mul(multiplier)
+        .min(policy.max_backoff())
 }

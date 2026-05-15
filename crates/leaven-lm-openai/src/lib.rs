@@ -4,4 +4,4 @@ mod client;
 mod config;
 
 pub use client::OpenAiLm;
-pub use config::OpenAiConfig;
+pub use config::{OpenAiConfig, OpenAiRetryPolicy};

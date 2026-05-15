@@ -85,6 +85,9 @@ Trait laws:
 4. `Metered<LmResponse>::cost` is the cost paid during this call. A cache hit
    returns zero cost even though `LmResponse::usage` still preserves the usage
    reported by the original provider call.
+5. Provider crates own concrete network policy. Behavior-affecting timeout and
+   retry policy must be reflected in the provider fingerprint; neutral
+   `leaven-lm` request types do not learn provider-specific retry knobs.
 
 ## 4. Request And Response Types
 
@@ -229,6 +232,9 @@ Required implementation behavior:
    `reasoning_tokens`.
 8. HTTP failures, non-success status codes, malformed responses, and completed
    responses without assistant text return structured `LmError` variants.
+9. The provider uses bounded retries for transport failures and retryable HTTP
+   statuses, honors numeric `Retry-After` seconds up to the configured maximum
+   backoff, and applies a finite request timeout by default.
 
 OpenAI prompt caching is not the Leaven response cache. OpenAI prompt caching is
 provider-side prefix reuse and still computes a fresh response. Leaven response
