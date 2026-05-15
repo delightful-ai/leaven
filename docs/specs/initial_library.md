@@ -122,7 +122,7 @@ v0.2 retained shapes from v0.1 that became lies once the new capabilities (fresh
     The earlier draft kept cache identity on `Artifact`. v0.2.1c splits graph identity from cache identity because external graph identities can be mutable while some external content references are cache-safe.
 
 31. **`Arity` is a request hint, not a law.**  
-    Describes what the optimizer should provide as input when the optimizer drives parent selection. Proposers may emit fewer or more proposals than `Arity` suggests, and may set causal inputs differently per-proposal.
+    Describes what the optimizer should provide as input when the optimizer drives candidate selection. Proposers may emit fewer or more proposals than `Arity` suggests, and may set causal inputs differently per-proposal.
 
 32. **Constructor sugar for `Proposal`.**  
     `Proposal::mutate(target, change)`, `Proposal::merge(a, b, change)`, `Proposal::create(artifact)` builders cover the common cases in one call. Users rarely construct the full struct directly.
@@ -211,7 +211,7 @@ extension seams before implementation.
     The spec now states exactly what optimizers, proposers, evaluators,
     renderers, materializers, agent runtimes, and callbacks can read or do.
 
-52. **GEPA parent selection is explicitly swappable.**
+52. **GEPA candidate selection is explicitly swappable.**
     `Population` is archive/admission/update state. `CandidateSelector` is the
     policy that chooses which candidate to mutate next from a typed `PopulationView`. This is
     required by GEPA variants, MAP-Elites/quality-diversity, skill-library
@@ -538,7 +538,7 @@ The core should be small, but not artificially tiny. A few sharp concepts are be
 A competent model should be able to read a paper and map its concepts to library concepts:
 
 ```text
-parent selection -> CandidateSelector
+candidate selection -> CandidateSelector
 Pareto frontier -> ParetoFrontier
 niche -> NicheDescriptor / MapElites
 pairwise judge -> EvaluationRequest::Pairwise
@@ -570,7 +570,7 @@ Naming is not polish; it is infrastructure.
 | Non-dominated live set | `Frontier`, `ParetoFrontier` | generic `ArchivePolicy` | If it is a Pareto frontier, say so. |
 | Frontier partition | `Niche` | `Cell`, `Slice::Niche` | Niche is the MAP-Elites / quality-diversity term. |
 | Where to evaluate | `EvaluationSet` | `Slice`, `Cohort` | EvaluationSet is direct. Cohort is removed. |
-| Chooses candidates to evolve | `CandidateSelector` | `ParentSelector` | Matches upstream GEPA (`CandidateSelector` / `select_candidate_idx`). "Parent" framing presumes the next stage produces a child, which is a property of what the proposer does, not of selection itself. |
+| Chooses candidates to evolve | `CandidateSelector` | old parent-framed naming | Matches upstream GEPA (`CandidateSelector` / `select_candidate_idx`). Framing the selected candidate only as a parent presumes the next stage produces a child, which is a property of what the proposer does, not of selection itself. |
 | Acceptance/admission decision | `Acceptance` | `Gate`, core `Decision` | Acceptance is optimizer-local and says whether the child is good enough to keep or validate. |
 | Full algorithm value | `Optimizer` | `SearchStrategy` | Optimizer is the domain word. |
 | Opaque-to-visible bridge | `Renderer` / `Materializer` | `make_reflective_dataset`, global `RenderedView` | Rendering/materialization is consumer-specific, not GEPA-specific. |
@@ -2203,7 +2203,7 @@ pub trait Proposer<P: OptimizationProblem>: Send + Sync {
 }
 
 /// A hint for what causal-input shape this proposer expects when the optimizer
-/// is responsible for parent selection. NOT a hard law — proposers may emit
+/// is responsible for candidate selection. NOT a hard law — proposers may emit
 /// proposals with different causal shapes than their declared arity (e.g.
 /// fail and emit zero proposals; emit alternatives with different parents).
 pub enum Arity {
@@ -4947,7 +4947,7 @@ This pass records the decisions needed before implementing agentic stages and
 - **Actor trust table added.** Optimizer, selector, proposer, evaluator,
   renderer, materializer, agent runtime, and callback capabilities are spelled
   out directly.
-- **GEPA parent selection split from population.** Populations expose
+- **GEPA candidate selection split from population.** Populations expose
   archive/frontier/model state through `PopulationView`; `CandidateSelector`
   chooses which candidate to mutate next and is explicitly swappable.
 - **Future skill-library direction captured.** The spec names likely extension
@@ -5021,7 +5021,7 @@ External review of v0.2 (sharp, terse, mostly fair) flagged that v0.2 retained s
 #### Proposer shape
 
 - **`Proposer::Request` is an associated type** (§12). GEPA reflective mutation, merge, Meta-Harness, ComBE, MIPRO acquisition, and human edits don't share a request shape; an associated type is the rust-native answer and matches the static-first proposer story already chosen in v0.1. `DynProposer` wraps the request as `Box<dyn Any>` for runtime-loaded plugins.
-- **`Arity` reframed as a request hint** (§12). Describes what shape the optimizer should provide as input *when the optimizer drives parent selection*. Proposers may emit proposals with different causal shapes than declared arity.
+- **`Arity` reframed as a request hint** (§12). Describes what shape the optimizer should provide as input *when the optimizer drives candidate selection*. Proposers may emit proposals with different causal shapes than declared arity.
 
 #### Context shape
 

@@ -144,21 +144,20 @@ S::Edit                     surface-native replacement/edit
 P::Artifact::Change         artifact-native change after lowering
 ```
 
-## 4. Parent Selection And Part Selection
+## 4. Candidate Selection And Part Selection
 
 GEPA has two separate selection questions:
 
 ```text
-parent selection = which candidate/program version to mutate next
-part selection   = where inside that candidate's surface to edit
+candidate selection = which candidate/program version to mutate next
+part selection      = where inside that candidate's surface to edit
 ```
 
-For a prompt artifact with `{ system, rubric, examples }`, parent selection
+For a prompt artifact with `{ system, rubric, examples }`, candidate selection
 chooses the candidate version and part selection chooses one of `system`,
 `rubric`, or `examples` inside that version.
 
-The GEPA-facing API name is `candidate_selector`. General lower-level code may use
-`candidate_selector` when no proposal parent relationship is implied.
+The GEPA-facing API name is `candidate_selector`.
 
 ## 5. Crate Placement
 
@@ -372,7 +371,7 @@ It does not make users construct that layer directly.
 
 Default GEPA split behavior:
 
-| Split role | Reflection feedback | Parent selection | Part selection | Acceptance/admission | Population | Final report |
+| Split role | Reflection feedback | Candidate selection | Part selection | Acceptance/admission | Population | Final report |
 | --- | --- | --- | --- | --- | --- | --- |
 | Train/Search | yes | yes | yes | yes | yes | yes |
 | Validation | no by default | optional explicit policy | optional explicit policy | optional explicit policy | no by default | yes |
@@ -564,7 +563,7 @@ caller as an `impl leaven_lm::Lm`:
 
 ```rust
 let reflector = LmBackedReflector::new(
-    OpenAiLm::from_env("gpt-4.1-mini")?,
+    OpenAiLm::from_env()?,
     ModelName::new("gpt-4.1-mini"),
     renderer,
     parser,
@@ -575,7 +574,7 @@ Tests and examples use deterministic `Lm` fixtures. Applications that want
 response caching wrap the provider before injection:
 
 ```rust
-let lm = CachedLm::read_write(OpenAiLm::from_env("gpt-4.1-mini")?, cache);
+let lm = CachedLm::read_write(OpenAiLm::from_env()?, cache);
 let reflector = LmBackedReflector::new(lm, "gpt-4.1-mini", renderer, parser);
 ```
 

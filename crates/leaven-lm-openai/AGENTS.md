@@ -21,6 +21,11 @@ runtime fingerprint that excludes secrets.
 - Retry policy is local provider transport policy: bounded retries apply to
   transport errors and retryable OpenAI HTTP statuses, and numeric
   `Retry-After` seconds are honored up to the configured maximum backoff.
+- Throttle policy is local provider concurrency policy: `OpenAiThrottlePolicy`
+  bounds simultaneous provider calls with a semaphore and an optional acquire
+  timeout. It is not a token bucket and does not estimate provider request or
+  token quotas; retry/`Retry-After` still handles backpressure after a request
+  reaches OpenAI.
 
 ## Route Away
 - Provider-neutral request, response, sampling, continuation, usage, and error
@@ -39,8 +44,9 @@ runtime fingerprint that excludes secrets.
   statuses, and response parsing against local fixtures.
 - `docs/specs/lm_runtime_and_response_cache.md` section "OpenAI Provider
   Contract" owns the adapter contract.
-- Run `cargo nextest run -p leaven-lm-openai` to prove OpenAI mapping behavior
-  without live provider calls.
+- Run `cargo nextest run -p leaven-lm-openai` to prove OpenAI mapping behavior,
+  retry behavior, and provider-side concurrency throttling without live provider
+  calls.
 - The env test uses `OPENAI_API_KEY=test-key` in a child process; it proves
   environment loading only, not live credential validity or provider reachability.
 - Mapping tests use `to_wire_request`, `parse_response`, and a local one-shot
@@ -49,9 +55,9 @@ runtime fingerprint that excludes secrets.
 ## Local Bait
 - Do not copy the OpenAI `previous_response_id` model into neutral cache keys.
   It is transport continuation, not canonical conversation identity.
-- Audit the constructor semantics before citing model-default behavior. A
-  model-looking `from_env` argument that is ignored is a public lie; either the
-  provider stores a real default or requests own the model explicitly.
+- Requests own the model explicitly through `LmRequest.model`; `OpenAiLm::from_env()`
+  only reads credentials and must not grow a model-looking argument unless the
+  provider also stores and fingerprints a real default model.
 - Do not add live OpenAI tests as the default proof for mapping changes; keep
   deterministic local wire/fixture tests as the cheap contract.
 - Do not infer that OpenAI prompt caching equals Leaven response caching.
@@ -67,12 +73,12 @@ runtime fingerprint that excludes secrets.
   broken.
 
 ## Decision Cards
-- when: fixing `from_env` or model-default semantics
-  do: either remove the model-looking argument or store a real default with
-    explicit fallback rules
+- when: changing `from_env` or model-default semantics
+  do: keep `from_env()` credential-only, or store a real default with explicit
+    fallback rules
   preserve: cache/replay identity changes when default model can affect output
-  avoid: keeping `_default_model` as import ergonomics while documenting it as
-    behavior
+  avoid: adding a model-looking argument for import ergonomics while requests
+    still own the model
   verify: run `cargo nextest run -p leaven-lm-openai`; add assertions that
     distinguish request model, default model, and fingerprint behavior
 
@@ -85,15 +91,15 @@ runtime fingerprint that excludes secrets.
   avoid: introducing live OpenAI calls into the default test path
   verify: run `cargo nextest run -p leaven-lm-openai`
 
-- when: changing OpenAI timeout or retry behavior
+- when: changing OpenAI timeout, retry, or throttle behavior
   do: keep the policy in `OpenAiConfig`, include behavior-affecting fields in
-    `OpenAiLm::fingerprint()`, and prove retry/non-retry behavior with local
-    one-shot HTTP fixtures
-  preserve: raw providers do not read/write Leaven response caches, and
-    provider errors remain structured `LmError` values after retries are
-    exhausted
-  avoid: leaking OpenAI retry policy into `leaven-lm`, GEPA, engine, or example
-    code
+    `OpenAiLm::fingerprint()`, and prove retry/non-retry/throttle behavior with
+    local one-shot HTTP fixtures
+  preserve: raw providers do not read/write Leaven response caches, provider
+    errors remain structured `LmError` values after retries are exhausted, and
+    proactive throttling limits in-flight provider calls before transport
+  avoid: leaking OpenAI retry or throttle policy into `leaven-lm`, GEPA, engine,
+    or cache crates
   verify: run `cargo nextest run -p leaven-lm-openai`
 
 - when: changing response parsing

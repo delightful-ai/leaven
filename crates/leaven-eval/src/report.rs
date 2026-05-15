@@ -1,14 +1,16 @@
 //! Lowered evaluation reports.
 
 use leaven_core::PartitionId;
-use leaven_kernel::{AssessmentId, CandidateId, Cost, EvaluationRequestId, Fingerprint};
+use leaven_kernel::{AssessmentId, CandidateId, CaseId, Cost, EvaluationRequestId, Fingerprint};
 
 use crate::{EvaluationUse, SplitRole};
 
-/// One reportable score.
+/// One reportable case score.
 #[derive(Clone, Debug)]
 pub struct ReportScore {
-    /// Numeric score.
+    /// Case this score describes.
+    pub case_id: CaseId,
+    /// Numeric score for the case.
     pub score: f64,
     /// Human-readable feedback.
     pub feedback: String,
@@ -25,8 +27,8 @@ pub struct CandidateEvaluationSummary {
     pub request: EvaluationRequestId,
     /// Assessment id.
     pub assessment: AssessmentId,
-    /// Average score across cases.
-    pub average_score: f64,
+    /// Average score across present case scores.
+    pub average_score: Option<f64>,
     /// Per-case score and feedback evidence.
     pub cases: Vec<ReportScore>,
 }

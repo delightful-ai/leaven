@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use leaven_kernel::{Fingerprint, FingerprintBuilder, Metered};
 use leaven_lm::{
@@ -7,6 +7,7 @@ use leaven_lm::{
 };
 use reqwest::{StatusCode, header::RETRY_AFTER};
 use serde_json::{Map, Value, json};
+use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
 use crate::OpenAiConfig;
 
@@ -15,6 +16,7 @@ use crate::OpenAiConfig;
 pub struct OpenAiLm {
     config: OpenAiConfig,
     client: reqwest::Client,
+    throttle: Arc<Semaphore>,
 }
 
 impl OpenAiLm {
@@ -25,18 +27,25 @@ impl OpenAiLm {
             .timeout(config.request_timeout())
             .build()
             .expect("OpenAI reqwest client config is valid");
-        Self { config, client }
+        let throttle = Arc::new(Semaphore::new(
+            config.throttle_policy().max_concurrent_requests().get(),
+        ));
+        Self {
+            config,
+            client,
+            throttle,
+        }
     }
 
     /// Creates an `OpenAI` LM provider from `OPENAI_API_KEY`.
     ///
-    /// The `default_model` argument is accepted for import ergonomics and
-    /// fingerprint stability; requests still carry their explicit model.
+    /// Requests carry their explicit model; this provider has no implicit
+    /// model default.
     ///
     /// # Errors
     ///
     /// Returns [`LmError::InvalidRequest`] when `OPENAI_API_KEY` is missing.
-    pub fn from_env(_default_model: impl Into<String>) -> Result<Self, LmError> {
+    pub fn from_env() -> Result<Self, LmError> {
         Ok(Self::new(OpenAiConfig::from_env()?))
     }
 
@@ -150,6 +159,20 @@ impl Lm for OpenAiLm {
                 .as_millis()
                 .to_string(),
         );
+        builder.update(
+            self.config
+                .throttle_policy()
+                .max_concurrent_requests()
+                .get()
+                .to_string(),
+        );
+        builder.update(
+            self.config
+                .throttle_policy()
+                .acquire_timeout()
+                .as_millis()
+                .to_string(),
+        );
         builder.finish()
     }
 
@@ -177,6 +200,7 @@ impl OpenAiLm {
         let policy = self.config.retry_policy();
         let mut attempt = 0;
         loop {
+            let permit = self.acquire_throttle_permit().await?;
             let result = self
                 .client
                 .post(self.config.base_url())
@@ -184,6 +208,7 @@ impl OpenAiLm {
                 .json(body)
                 .send()
                 .await;
+            drop(permit);
 
             match result {
                 Ok(response) => {
@@ -206,6 +231,24 @@ impl OpenAiLm {
 
             attempt += 1;
         }
+    }
+
+    async fn acquire_throttle_permit(&self) -> Result<OwnedSemaphorePermit, LmError> {
+        let acquire = self.throttle.clone().acquire_owned();
+        let timeout = self.config.throttle_policy().acquire_timeout();
+        if timeout.is_zero() {
+            return acquire.await.map_err(|_| {
+                LmError::invalid_request("OpenAI throttle closed before request could start")
+            });
+        }
+        tokio::time::timeout(timeout, acquire)
+            .await
+            .map_err(|_| {
+                LmError::invalid_request("OpenAI throttle timed out before request could start")
+            })?
+            .map_err(|_| {
+                LmError::invalid_request("OpenAI throttle closed before request could start")
+            })
     }
 }
 

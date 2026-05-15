@@ -4,6 +4,7 @@ use leaven_lm::{Lm, LmError, LmId, LmRequest, LmResponse};
 use crate::{LmCacheEntry, LmCacheKey, LmCachePolicy, LmCacheStore};
 
 /// LM wrapper that memoizes provider-neutral responses through a cache store.
+#[derive(Clone)]
 pub struct CachedLm<M, C> {
     inner: M,
     cache: C,

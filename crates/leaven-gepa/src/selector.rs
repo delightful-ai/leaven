@@ -36,7 +36,7 @@ pub trait CandidateSelector<P: OptimizationProblem, Pop> {
     /// Selection result shape.
     type Selection;
 
-    /// Select from population state and a read-only graph view.
+    /// Select a candidate from population state and a read-only graph view.
     fn select(&mut self, population: &Pop, graph: RunGraphView<'_, P>) -> Self::Selection;
 }
 
