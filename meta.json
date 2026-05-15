@@ -2,11 +2,11 @@
   "format_version": 1,
   "root_slug": "leaven",
   "last_write_stamp": [
-    1778880981245,
+    1778881001220,
     0
   ],
-  "state_sha256": "7750ce971190b6629347acf6c638de898e0828af80ef2868688757ad880aaf33",
+  "state_sha256": "3f9662559a983990d18dbb8c067b5d15af0c0be1adaa65bbda16f87ef40f9486",
   "tombstones_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-  "deps_sha256": "fb281f6417cb72d23048d999f8ca399427eb3ef908e4c8ad4c45159b37ed80ec",
+  "deps_sha256": "9aa192f2a1e6ed4bb3dafe86a42530cc04e21ed247dd1eccc793151c244e5f8a",
   "notes_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 }
