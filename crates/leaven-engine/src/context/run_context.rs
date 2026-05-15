@@ -125,6 +125,15 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
         self.budget.snapshot()
     }
 
+    /// Looks up one resolved case from the installed case set.
+    ///
+    /// Returns `None` when no case set is installed or the case is unknown.
+    /// This is a read-only observation; it does not mutate the run graph.
+    #[must_use]
+    pub fn case(&self, case: leaven_kernel::CaseId) -> Option<&P::Case> {
+        self.case_set.and_then(|case_set| case_set.get(case))
+    }
+
     /// Persist a clean checkpoint with explicit optimizer/private state.
     ///
     /// Graph truth, budget, and cache state still come from the live context.

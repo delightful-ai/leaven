@@ -36,6 +36,14 @@ impl<C> CaseSet<C> {
         self
     }
 
+    /// Looks up one case by its identifier.
+    ///
+    /// Returns `None` when the case set does not contain `case`.
+    #[must_use]
+    pub fn get(&self, case: CaseId) -> Option<&C> {
+        self.cases.get(&case)
+    }
+
     /// Resolves an evaluation-set expression against this case set.
     pub fn resolve(
         &self,

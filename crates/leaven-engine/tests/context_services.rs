@@ -17,14 +17,29 @@ use leaven_engine::{
     ProposalError, Proposer, RunContext, RunEvent, RunGraphView, TrustPolicy,
 };
 use leaven_kernel::{
-    AssessmentId, Budget, ContentId, Cost, ErrorKind, EvaluatorId, Fingerprint, MetadataBag,
-    Metered, ProposerId, RunId, StageAttemptFailure, StageAttemptOutcome, StageAttemptReceiptId,
-    StageAttemptReceiptRef, StageId, StageRole,
+    AssessmentId, Budget, CaseId, ContentId, Cost, ErrorKind, EvaluatorId, Fingerprint,
+    MetadataBag, Metered, ProposerId, RunId, StageAttemptFailure, StageAttemptOutcome,
+    StageAttemptReceiptId, StageAttemptReceiptRef, StageId, StageRole,
 };
 use leaven_store::{EvidenceStore, StoreError};
 use leaven_store_inline::InlineEvidenceStore;
 
 use support::{TestEvidence, TestProblem, TextArtifact, graph_and_budget};
+
+#[test]
+fn case_reads_installed_case_set_and_is_none_without_one() {
+    let (mut graph, mut budget) = graph_and_budget();
+    let case_set = CaseSet::new(vec!["alpha", "beta"]);
+
+    let bare = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+    assert_eq!(bare.case(CaseId::from_index(0)), None);
+    drop(bare);
+
+    let ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget).with_case_set(&case_set);
+    assert_eq!(ctx.case(CaseId::from_index(0)), Some(&"alpha"));
+    assert_eq!(ctx.case(CaseId::from_index(1)), Some(&"beta"));
+    assert_eq!(ctx.case(CaseId::new(42)), None);
+}
 
 #[test]
 fn propose_records_batch_charges_budget_and_emits_events() {

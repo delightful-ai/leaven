@@ -32,6 +32,15 @@ fn partitions_and_explicit_cases_resolve_or_refuse_unknown_ids() {
 }
 
 #[test]
+fn get_returns_present_cases_and_none_for_unknown_ids() {
+    let cases = CaseSet::new(vec!["a", "b", "c"]);
+
+    assert_eq!(cases.get(CaseId::from_index(0)), Some(&"a"));
+    assert_eq!(cases.get(CaseId::from_index(2)), Some(&"c"));
+    assert_eq!(cases.get(CaseId::new(99)), None);
+}
+
+#[test]
 fn set_combinators_resolve_stably() {
     let left = EvaluationSet::Cases(vec![CaseId::new(0), CaseId::new(1)]);
     let right = EvaluationSet::Cases(vec![CaseId::new(1), CaseId::new(2)]);
