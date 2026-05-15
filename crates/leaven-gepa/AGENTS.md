@@ -76,9 +76,9 @@ It composes core, surface, engine, evidence, population, render, and LM vocabula
   verify: run `cargo nextest run -p leaven-gepa --test agent_stage_routing`, then `cargo nextest run -p leaven-gepa --test gepa_smoke`
 
 - when: changing what data reflection sees
-  do: implement or swap a `ReflectiveDatasetBuilder` (named type or closure); `GepaReflectiveDataset` is the GEPA-parity default and requires `P::Case: Display` plus a projectable evidence shape
+  do: implement or swap a `ReflectiveDatasetBuilder` (named type or closure); `GepaReflectiveDataset` is the GEPA-parity default and requires `P::Case: ReflectiveCaseInput` plus a projectable evidence shape, or `GepaReflectiveDataset::with_case_input(...)` for an explicit target-safe projection
   preserve: the builder as the single selection seam, separate from backend presentation (LM renderer vs agent workspace materialization)
-  avoid: keying projection on the evidence type, or merging selection and presentation into one seam
+  avoid: keying projection on the evidence type, merging selection and presentation into one seam, or relying on `Display` for a whole target-bearing case envelope
   verify: run `cargo nextest run -p leaven-gepa --test agent_stage_routing --test lm_reflection`
 
 - when: adding or renaming GEPA strategy slots

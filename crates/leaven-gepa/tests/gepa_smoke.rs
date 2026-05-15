@@ -20,8 +20,9 @@ use leaven_evidence::{
 use leaven_gepa::{
     CandidateSelector, CheckpointCandidateSelector, CheckpointGate, CheckpointPopulation,
     FixedSurfaceEdit, FullValidation, Gate, GateDecision, Gepa, GepaReflector, ImprovementOrEqual,
-    NoRegression, ParetoFrequencyWeighted, ReflectRequest, ReflectiveDatasetBuilder,
-    ReflectiveExample, SelectBestCandidate, StrictImprovement, SurfaceProposer,
+    NoRegression, ParetoFrequencyWeighted, ReflectRequest, ReflectiveCaseInput,
+    ReflectiveDatasetBuilder, ReflectiveExample, SelectBestCandidate, StrictImprovement,
+    SurfaceProposer,
     optimizer::GepaPopulation,
     validation::{
         BatchSampler, CheckpointBatchSampler, CheckpointValidationPolicy, EpochShuffled,
@@ -666,6 +667,84 @@ fn gepa_reflective_dataset_default_projects_scalar_examples_with_case_input() {
 }
 
 #[test]
+fn gepa_reflective_dataset_uses_target_safe_case_projection() {
+    block_on(async {
+        let case_set = CaseSet::new(vec![HiddenTargetCase {
+            safe_input: "visible problem statement",
+            hidden_target: "SECRET_TARGET_42",
+            hidden_metadata: "SECRET_SOURCE_ROW",
+        }])
+        .with_partition(
+            leaven_core::PartitionId::from("TRAIN"),
+            vec![leaven_kernel::CaseId::new(0)],
+        );
+        let store = InlineEvidenceStore::<CasewiseEvidence<CaseAssessmentEvidence>>::new("inline");
+        let mut graph = RunGraph::<HiddenTargetProblem>::new(RunId::new());
+        let mut budget = BudgetLedger::new(Budget::unlimited());
+        let candidate = {
+            let mut ctx = RunContext::<HiddenTargetProblem>::new(&mut graph, &mut budget);
+            ctx.insert_seed(
+                PartMapArtifact(BTreeMap::from([("answer".to_owned(), "draft".to_owned())])),
+                0,
+            )
+            .unwrap()
+        };
+        let assessment = {
+            let mut ctx = RunContext::<HiddenTargetProblem>::new(&mut graph, &mut budget)
+                .with_case_set(&case_set)
+                .with_evidence_store(&store);
+            ctx.evaluate_with(&HiddenTargetEvaluator, independent_train_request(candidate))
+                .await
+                .unwrap()
+                .assessment_ids[0]
+        };
+
+        let mut ctx = RunContext::<HiddenTargetProblem>::new(&mut graph, &mut budget)
+            .with_case_set(&case_set)
+            .with_evidence_store(&store);
+        let examples = ReflectiveDatasetBuilder::<HiddenTargetProblem, PartMapSurface>::build(
+            &leaven_gepa::GepaReflectiveDataset,
+            &mut ctx,
+            candidate,
+            assessment,
+            &"answer".to_owned(),
+        )
+        .await
+        .unwrap();
+        let projected_examples =
+            ReflectiveDatasetBuilder::<HiddenTargetProblem, PartMapSurface>::build(
+                &leaven_gepa::GepaReflectiveDataset::with_case_input(|case: &HiddenTargetCase| {
+                    case.safe_input.to_owned()
+                }),
+                &mut ctx,
+                candidate,
+                assessment,
+                &"answer".to_owned(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(projected_examples, examples);
+        assert_eq!(examples.len(), 1);
+        assert_eq!(examples[0].case, Some(leaven_kernel::CaseId::new(0)));
+        assert_eq!(examples[0].input, "visible problem statement");
+        assert_eq!(examples[0].output.as_deref(), Some("candidate output"));
+        assert_eq!(examples[0].score, Some(0.25));
+        assert_eq!(examples[0].feedback, "visible scorer feedback");
+        assert!(
+            examples[0]
+                .source_refs
+                .contains(&leaven_core::InfoRef::Assessment(assessment))
+        );
+
+        let serialized = serde_json::to_string(&examples).unwrap();
+        assert!(!serialized.contains("SECRET_TARGET_42"));
+        assert!(!serialized.contains("SECRET_SOURCE_ROW"));
+        assert!(!serialized.contains("display leak"));
+    });
+}
+
+#[test]
 fn gepa_reflective_dataset_default_reports_missing_assessment_evidence() {
     block_on(async {
         let store = InlineEvidenceStore::<CasewiseEvidence<ScalarEvidence>>::new("inline");
@@ -1191,12 +1270,105 @@ impl OptimizationProblem for DisplayScalarProblem {
     type ProposalAnnotations = ();
 }
 
+/// Problem with a mixed input/target/metadata case envelope. Its `Display`
+/// implementation intentionally leaks hidden fields; the GEPA default builder
+/// must use `ReflectiveCaseInput` instead.
+struct HiddenTargetProblem;
+
+impl OptimizationProblem for HiddenTargetProblem {
+    type Artifact = PartMapArtifact;
+    type Case = HiddenTargetCase;
+    type Evidence = CasewiseEvidence<CaseAssessmentEvidence>;
+    type ProposalAnnotations = ();
+}
+
+#[derive(Clone, Debug)]
+struct HiddenTargetCase {
+    safe_input: &'static str,
+    hidden_target: &'static str,
+    hidden_metadata: &'static str,
+}
+
+impl std::fmt::Display for HiddenTargetCase {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "display leak target={} metadata={}",
+            self.hidden_target, self.hidden_metadata
+        )
+    }
+}
+
+impl ReflectiveCaseInput for HiddenTargetCase {
+    fn reflective_input(&self) -> String {
+        self.safe_input.to_owned()
+    }
+}
+
 fn independent_train_request(candidate: leaven_kernel::CandidateId) -> EvaluationRequest {
     EvaluationRequest::Independent {
         candidates: vec![candidate],
         set: EvaluationSet::Partition(leaven_core::PartitionId::from("TRAIN")),
         granularity: AssessmentGranularity::PerCase,
         purpose: EvaluationPurpose::SeedBaseline,
+    }
+}
+
+struct HiddenTargetEvaluator;
+
+impl Evaluator<HiddenTargetProblem> for HiddenTargetEvaluator {
+    fn id(&self) -> EvaluatorId {
+        EvaluatorId::PRIMARY
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        Fingerprint::from_bytes([12; 32])
+    }
+
+    fn cache_policy(&self, _request: &ResolvedEvaluationRequest) -> CachePolicy {
+        CachePolicy::Never
+    }
+
+    async fn evaluate(
+        &self,
+        request: ResolvedEvaluationRequest,
+        _ctx: EvaluationContext<'_, HiddenTargetProblem>,
+    ) -> Result<Metered<Vec<Assessment<HiddenTargetProblem>>>, EvaluationError> {
+        let ResolvedRequestKind::Independent { candidates } = request.kind else {
+            return Err(EvaluationError::Message(
+                "expected independent request".to_owned(),
+            ));
+        };
+        Ok(Metered::new(
+            candidates
+                .into_iter()
+                .map(|candidate| Assessment::Independent {
+                    candidate,
+                    target: AssessmentTarget::EvaluationSet(leaven_kernel::EvaluationSetId::new()),
+                    evidence: CasewiseEvidence::new(
+                        request
+                            .set
+                            .case_ids
+                            .iter()
+                            .copied()
+                            .map(|case| {
+                                CaseOutcome::new(
+                                    case,
+                                    CaseAssessmentEvidence::new(
+                                        ScalarEvidence::new(0.25).unwrap(),
+                                        OutputRecord::inline("candidate output"),
+                                        "visible scorer feedback",
+                                    ),
+                                )
+                            })
+                            .collect(),
+                    ),
+                    cost: Cost::metric_calls(1),
+                    metadata: MetadataBag::new(),
+                })
+                .collect(),
+            Cost::metric_calls(1),
+        ))
     }
 }
 

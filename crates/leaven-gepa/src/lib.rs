@@ -25,10 +25,10 @@ pub use optimizer::{
 pub use part_selector::{CheckpointPartSelector, PartSelector, RoundRobinPart};
 pub use proposer::{FixedSurfaceEdit, GepaReflector, LmBackedReflector, SurfaceProposer};
 pub use reflection::{
-    DEFAULT_REFLECTION_PROMPT_TEMPLATE, DefaultReflectionRenderer, GepaReflectiveDataset,
-    LmBackedReflectorConfig, PlainTextEditParser, ReflectRequest, ReflectionError,
-    ReflectionOutputParser, ReflectionRenderInput, ReflectionRenderer, ReflectiveDatasetBuilder,
-    ReflectiveExample,
+    CaseInputProjectedDataset, DEFAULT_REFLECTION_PROMPT_TEMPLATE, DefaultReflectionRenderer,
+    GepaReflectiveDataset, LmBackedReflectorConfig, PlainTextEditParser, ReflectRequest,
+    ReflectionError, ReflectionOutputParser, ReflectionRenderInput, ReflectionRenderer,
+    ReflectiveCaseInput, ReflectiveDatasetBuilder, ReflectiveExample,
 };
 pub use selector::{
     CandidateSelector, CheckpointCandidateSelector, HasBestCandidate, ParetoFrequencyWeighted,
@@ -38,15 +38,16 @@ pub use validation::{FullValidation, MinibatchThenValidation, ValidationPolicy};
 
 pub mod prelude {
     pub use crate::{
-        CandidateSelector, CheckpointCandidateSelector, CheckpointGate, CheckpointPopulation,
-        DEFAULT_REFLECTION_PROMPT_TEMPLATE, DefaultReflectionRenderer, FixedSurfaceEdit,
-        FullValidation, Gate, Gepa, GepaCandidateHistoryEntry, GepaPopulation,
+        CandidateSelector, CaseInputProjectedDataset, CheckpointCandidateSelector, CheckpointGate,
+        CheckpointPopulation, DEFAULT_REFLECTION_PROMPT_TEMPLATE, DefaultReflectionRenderer,
+        FixedSurfaceEdit, FullValidation, Gate, Gepa, GepaCandidateHistoryEntry, GepaPopulation,
         GepaReflectWithLmBuilder, GepaReflectWithLmBuilderWithSurface, GepaReflectionBootstrap,
         GepaReflectiveDataset, GepaReflector, GepaStageProposer, HasBestCandidate,
         ImprovementOrEqual, LmBackedReflector, LmBackedReflectorConfig, MinibatchThenValidation,
         ParetoFrequencyWeighted, PartSelector, PlainTextEditParser, ReflectRequest,
         ReflectionError, ReflectionOutputParser, ReflectionRenderInput, ReflectionRenderer,
-        ReflectiveDatasetBuilder, ReflectiveExample, RoundRobinPart, SelectBestCandidate,
-        StrictImprovement, SurfaceProposer, ValidationPolicy, gepa_stage_proposer,
+        ReflectiveCaseInput, ReflectiveDatasetBuilder, ReflectiveExample, RoundRobinPart,
+        SelectBestCandidate, StrictImprovement, SurfaceProposer, ValidationPolicy,
+        gepa_stage_proposer,
     };
 }

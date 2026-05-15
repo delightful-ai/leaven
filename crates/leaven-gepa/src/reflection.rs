@@ -1,6 +1,6 @@
 //! Shared GEPA reflection request and reflective-dataset vocabulary.
 
-use std::fmt::{Display, Write as _};
+use std::fmt::Write as _;
 use std::future::Future;
 
 use leaven_core::{
@@ -182,19 +182,74 @@ where
     }
 }
 
+/// Target-safe case input projection for GEPA's default reflective dataset.
+///
+/// This trait is deliberately narrower than [`std::fmt::Display`]. Implement it
+/// only for the runner-visible case input that reflection is allowed to see. If
+/// a case envelope also stores targets or metadata, use
+/// [`GepaReflectiveDataset::with_case_input`] or implement this trait by
+/// projecting only the allowed input field.
+pub trait ReflectiveCaseInput {
+    /// Render the runner-visible case input for reflection.
+    fn reflective_input(&self) -> String;
+}
+
+impl ReflectiveCaseInput for () {
+    fn reflective_input(&self) -> String {
+        String::new()
+    }
+}
+
+impl ReflectiveCaseInput for str {
+    fn reflective_input(&self) -> String {
+        self.to_owned()
+    }
+}
+
+impl ReflectiveCaseInput for &str {
+    fn reflective_input(&self) -> String {
+        (*self).to_owned()
+    }
+}
+
+impl ReflectiveCaseInput for String {
+    fn reflective_input(&self) -> String {
+        self.clone()
+    }
+}
+
 /// GEPA-parity reflective-dataset builder.
 ///
 /// Projects one [`ReflectiveExample`] per evaluated case from the parent's
 /// assessment evidence: case input (read from the installed case set via
 /// [`RunContext::case`]), generated output, score, and feedback. Assessment
 /// provenance is attached to every example.
+///
+/// The default builder requires [`ReflectiveCaseInput`] rather than
+/// [`std::fmt::Display`] so target-bearing case envelopes do not accidentally
+/// teach reflection hidden answers or metadata.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct GepaReflectiveDataset;
+
+impl GepaReflectiveDataset {
+    /// Use an explicit target-safe projection while preserving GEPA's default
+    /// evidence-to-example projection.
+    #[must_use]
+    pub fn with_case_input<F>(project_case_input: F) -> CaseInputProjectedDataset<F> {
+        CaseInputProjectedDataset { project_case_input }
+    }
+}
+
+/// GEPA-parity reflective dataset with caller-supplied case input projection.
+#[derive(Clone, Copy, Debug)]
+pub struct CaseInputProjectedDataset<F> {
+    project_case_input: F,
+}
 
 impl<P, S> ReflectiveDatasetBuilder<P, S> for GepaReflectiveDataset
 where
     P: OptimizationProblem,
-    P::Case: Display,
+    P::Case: ReflectiveCaseInput,
     P::Evidence: ReflectionProjection,
     S: EditSurface<P::Artifact>,
 {
@@ -205,17 +260,29 @@ where
         parent_assessment: AssessmentId,
         _part: &S::PartId,
     ) -> Result<Vec<ReflectiveExample>, ReflectionError> {
-        let evidence = ctx.assessment_evidence(parent_assessment)?;
-        let mut examples = evidence.reflection_examples();
-        for example in &mut examples {
-            example
-                .source_refs
-                .push(InfoRef::Assessment(parent_assessment));
-            if let Some(case) = example.case {
-                example.input = ctx.case(case).map(ToString::to_string).unwrap_or_default();
-            }
-        }
-        Ok(examples)
+        build_gepa_reflective_examples(
+            ctx,
+            parent_assessment,
+            ReflectiveCaseInput::reflective_input,
+        )
+    }
+}
+
+impl<P, S, F> ReflectiveDatasetBuilder<P, S> for CaseInputProjectedDataset<F>
+where
+    P: OptimizationProblem,
+    P::Evidence: ReflectionProjection,
+    S: EditSurface<P::Artifact>,
+    F: Fn(&P::Case) -> String + Send + Sync,
+{
+    async fn build(
+        &self,
+        ctx: &mut RunContext<'_, P>,
+        _parent: CandidateId,
+        parent_assessment: AssessmentId,
+        _part: &S::PartId,
+    ) -> Result<Vec<ReflectiveExample>, ReflectionError> {
+        build_gepa_reflective_examples(ctx, parent_assessment, &self.project_case_input)
     }
 }
 
@@ -227,6 +294,28 @@ where
 pub(crate) trait ReflectionProjection: Evidence {
     /// Project per-case examples, leaving `input` empty.
     fn reflection_examples(&self) -> Vec<ReflectiveExample>;
+}
+
+fn build_gepa_reflective_examples<P>(
+    ctx: &mut RunContext<'_, P>,
+    parent_assessment: AssessmentId,
+    project_case_input: impl Fn(&P::Case) -> String,
+) -> Result<Vec<ReflectiveExample>, ReflectionError>
+where
+    P: OptimizationProblem,
+    P::Evidence: ReflectionProjection,
+{
+    let evidence = ctx.assessment_evidence(parent_assessment)?;
+    let mut examples = evidence.reflection_examples();
+    for example in &mut examples {
+        example
+            .source_refs
+            .push(InfoRef::Assessment(parent_assessment));
+        if let Some(case) = example.case.and_then(|case_id| ctx.case(case_id)) {
+            example.input = project_case_input(case);
+        }
+    }
+    Ok(examples)
 }
 
 impl ReflectionProjection for CasewiseEvidence<ScalarEvidence> {
