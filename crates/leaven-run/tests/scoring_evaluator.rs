@@ -152,6 +152,7 @@ fn scoring_evaluator_reports_per_candidate_cost_for_independent_batches() {
             Arc::new(|ctx: ScoreContext<TextArtifact, i32>| {
                 async move {
                     Ok(Score::new(ctx.output.output.parse::<f64>().unwrap(), "ok")
+                        .with_structured("verdict", "accepted")
                         .with_cost(Cost::llm_calls(1))
                         .with_attachment(FeedbackAttachment::text(
                             "judge-transcript",
@@ -196,7 +197,31 @@ fn scoring_evaluator_reports_per_candidate_cost_for_independent_batches() {
             evidence.outcomes()[0].evidence().attachments()[0].name(),
             "judge-transcript"
         );
+        assert!(
+            evidence.outcomes()[0]
+                .evidence()
+                .trace()
+                .iter()
+                .any(|line| line == "verdict: accepted")
+        );
     });
+}
+
+#[test]
+fn score_error_preserves_source_trace_message_and_cost() {
+    let error = ScoreError::with_source("judge failed", JudgeSourceError)
+        .with_trace("provider returned malformed rubric")
+        .with_cost(Cost::llm_calls(7));
+
+    assert_eq!(error.message(), "judge failed");
+    assert_eq!(
+        error.trace(),
+        &["provider returned malformed rubric".to_owned()]
+    );
+    assert_eq!(error.cost().llm_calls, 7);
+    assert_eq!(error.to_string(), "score failed: judge failed");
+    let source = std::error::Error::source(&error).expect("source is preserved");
+    assert_eq!(source.to_string(), "judge source");
 }
 
 #[test]
@@ -430,6 +455,17 @@ struct TextArtifact(i32);
 
 #[derive(Debug)]
 struct TextArtifactError;
+
+#[derive(Debug)]
+struct JudgeSourceError;
+
+impl std::fmt::Display for JudgeSourceError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("judge source")
+    }
+}
+
+impl std::error::Error for JudgeSourceError {}
 
 impl std::fmt::Display for TextArtifactError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

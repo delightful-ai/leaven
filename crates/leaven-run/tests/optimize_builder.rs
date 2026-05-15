@@ -16,9 +16,10 @@ use leaven_engine::{
     RunPersistence, RunPersistenceError, StepStatus,
 };
 use leaven_evidence::{CasewiseEvidence, ScoredFeedbackEvidence};
-use leaven_kernel::{Budget, CandidateId, ContentId, EvaluatorId};
+use leaven_kernel::{Budget, CandidateId, CaseId, ContentId, EvaluatorId};
 use leaven_run::{
-    OptimizeError, OptimizeStore, RunOutput, RunProblem, Score, ScoreContext, ScoreError, optimize,
+    OptimizationStopReason, OptimizeError, OptimizeStore, RunOutput, RunProblem, RunStorage, Score,
+    ScoreContext, ScoreError, optimize,
 };
 use leaven_store::{EvidenceStore, StoreError};
 use leaven_store_inline::InlineEvidenceStore;
@@ -53,6 +54,64 @@ fn run_builder_accepts_explicit_unlimited_budget() {
     .unwrap();
 
     assert_eq!(result.best(), &TextArtifact(40));
+    assert_eq!(
+        result.report().stop_reason,
+        OptimizationStopReason::OptimizerDone
+    );
+    assert_eq!(
+        result.report().storage,
+        RunStorage::Ephemeral {
+            run_id: result.run_id
+        }
+    );
+}
+
+#[test]
+fn public_stop_reason_preserves_all_engine_stop_variants() {
+    let cases = [
+        (
+            leaven_engine::StopReason::OptimizerDone,
+            OptimizationStopReason::OptimizerDone,
+        ),
+        (
+            leaven_engine::StopReason::BudgetExceeded,
+            OptimizationStopReason::BudgetExceeded,
+        ),
+        (
+            leaven_engine::StopReason::StopperTriggered,
+            OptimizationStopReason::StopperTriggered,
+        ),
+        (
+            leaven_engine::StopReason::External,
+            OptimizationStopReason::External,
+        ),
+        (
+            leaven_engine::StopReason::Error,
+            OptimizationStopReason::Error,
+        ),
+    ];
+
+    for (engine_reason, public_reason) in cases {
+        assert_eq!(OptimizationStopReason::from(engine_reason), public_reason);
+    }
+}
+
+#[test]
+fn run_builder_reports_absent_train_scores_when_optimizer_does_not_evaluate_train() {
+    let result = block_on(
+        optimize(TextArtifact(40))
+            .train(vec![TextCase(2)])
+            .runner(|artifact, case| async move { text_runner(&artifact, &case) })
+            .score(text_score)
+            .using(SeedBest::default())
+            .budget(Budget::unlimited())
+            .evaluation_parallelism(NonZeroUsize::new(1).unwrap())
+            .run(),
+    )
+    .unwrap();
+
+    assert_eq!(result.report().baseline_train_score, None);
+    assert_eq!(result.report().optimized_train_score, None);
 }
 
 #[test]
@@ -122,9 +181,127 @@ fn run_builder_accepts_empty_train_when_no_held_out_sets_exist() {
     .unwrap();
 
     assert_eq!(result.best(), &TextArtifact(40));
-    assert!(result.report().baseline_train_score.abs() < f64::EPSILON);
-    assert!(result.report().optimized_train_score.abs() < f64::EPSILON);
-    assert_eq!(result.report().cost.metric_calls, 0);
+    assert_eq!(result.report().baseline_train_score, None);
+    assert_eq!(result.report().optimized_train_score, None);
+    assert_eq!(result.report().optimization_cost.metric_calls, 0);
+    assert_eq!(result.report().final_report_cost.metric_calls, 0);
+}
+
+#[test]
+fn run_builder_separates_optimization_cost_from_final_report_cost() {
+    let result = block_on(
+        optimize(TextArtifact(40))
+            .train(vec![TextCase(2)])
+            .validation(vec![TextCase(3)])
+            .test(vec![TextCase(4)])
+            .runner(|artifact, case| async move { text_runner(&artifact, &case) })
+            .score(text_score)
+            .using(EvaluateSeed::default())
+            .budget(Budget::metric_calls(16))
+            .evaluation_parallelism(NonZeroUsize::new(1).unwrap())
+            .run(),
+    )
+    .unwrap();
+
+    assert_eq!(result.report().optimization_budget.spent.metric_calls, 1);
+    assert_eq!(result.report().optimization_cost.metric_calls, 1);
+    assert_eq!(result.report().final_report_cost.metric_calls, 4);
+    assert_eq!(result.report().budget.spent.metric_calls, 5);
+    assert_eq!(result.report().cost.metric_calls, 5);
+    assert_eq!(result.report().baseline_validation_score, Some(43.0));
+    assert_eq!(result.report().validation_score, Some(43.0));
+    assert_eq!(result.report().baseline_test_score, Some(44.0));
+    assert_eq!(result.report().test_score, Some(44.0));
+}
+
+#[test]
+fn run_builder_reports_budget_stop_reason_from_metric_call_budget() {
+    let result = block_on(
+        optimize(TextArtifact(40))
+            .train(vec![TextCase(2)])
+            .runner(|artifact, case| async move { text_runner(&artifact, &case) })
+            .score(text_score)
+            .using(ContinueAfterSeedEvaluation::default())
+            .budget(Budget::metric_calls(1))
+            .evaluation_parallelism(NonZeroUsize::new(1).unwrap())
+            .run(),
+    )
+    .unwrap();
+
+    assert_eq!(result.best(), &TextArtifact(40));
+    assert_eq!(
+        result.report().stop_reason,
+        OptimizationStopReason::BudgetExceeded
+    );
+    assert_eq!(result.report().optimization_cost.metric_calls, 1);
+    assert_eq!(result.report().final_report_cost.metric_calls, 0);
+}
+
+#[test]
+fn run_builder_runs_final_reports_after_metric_budget_stop() {
+    let result = block_on(
+        optimize(TextArtifact(40))
+            .train(vec![TextCase(2)])
+            .validation(vec![TextCase(3)])
+            .test(vec![TextCase(4)])
+            .runner(|artifact, case| async move { text_runner(&artifact, &case) })
+            .score(text_score)
+            .using(ContinueAfterSeedEvaluation::default())
+            .budget(Budget::metric_calls(1))
+            .evaluation_parallelism(NonZeroUsize::new(1).unwrap())
+            .run(),
+    )
+    .unwrap();
+
+    assert_eq!(result.best(), &TextArtifact(40));
+    assert_eq!(
+        result.report().stop_reason,
+        OptimizationStopReason::BudgetExceeded
+    );
+    assert_eq!(result.report().optimization_cost.metric_calls, 1);
+    assert_eq!(result.report().final_report_cost.metric_calls, 4);
+    assert_eq!(result.report().cost.metric_calls, 5);
+    assert_eq!(result.report().baseline_validation_score, Some(43.0));
+    assert_eq!(result.report().validation_score, Some(43.0));
+    assert_eq!(result.report().baseline_test_score, Some(44.0));
+    assert_eq!(result.report().test_score, Some(44.0));
+}
+
+#[test]
+fn run_builder_reports_case_ids_feedback_and_trace_for_case_level_rows() {
+    let result = block_on(
+        optimize(TextArtifact(40))
+            .train(vec![TextCase(2), TextCase(3)])
+            .runner(|artifact, case| async move { text_runner(&artifact, &case) })
+            .score(text_score)
+            .using(EvaluateSeed::default())
+            .budget(Budget::metric_calls(16))
+            .evaluation_parallelism(NonZeroUsize::new(1).unwrap())
+            .run(),
+    )
+    .unwrap();
+
+    let train = result
+        .report()
+        .evaluation
+        .splits_reported
+        .iter()
+        .find(|split| split.partition.0 == "TRAIN")
+        .expect("train split is reported");
+    let candidate = train
+        .candidates
+        .iter()
+        .find(|candidate| candidate.candidate == result.best)
+        .expect("best candidate train summary exists");
+
+    assert_eq!(candidate.average_score, Some(42.5));
+    assert_eq!(candidate.cases.len(), 2);
+    assert_eq!(candidate.cases[0].case_id, CaseId::from_index(0));
+    assert_eq!(candidate.cases[0].feedback, "case 2");
+    assert_eq!(candidate.cases[0].trace, vec!["runner trace".to_owned()]);
+    assert_eq!(candidate.cases[1].case_id, CaseId::from_index(1));
+    assert_eq!(candidate.cases[1].feedback, "case 3");
+    assert_eq!(candidate.cases[1].trace, vec!["runner trace".to_owned()]);
 }
 
 #[test]
@@ -175,6 +352,13 @@ fn run_builder_dispatches_callbacks_and_supplied_store_capabilities() {
     assert!(evidence_store.puts() > 0);
     assert!(evidence_store.gets() > 0);
     assert!(persistence.checkpoints() > 0);
+    assert_eq!(
+        result.report().storage,
+        RunStorage::Stored {
+            run_id: result.run_id,
+            resumable: false,
+        }
+    );
     let events = events.lock().unwrap();
     assert!(events.contains(&"optimization_started"));
     assert!(events.contains(&"optimization_ended"));
@@ -225,6 +409,56 @@ impl Optimizer<RunProblem<TextArtifact, TextCase>> for NoBest {
         _graph: RunGraphView<'_, RunProblem<TextArtifact, TextCase>>,
     ) -> Option<CandidateId> {
         None
+    }
+}
+
+#[derive(Default)]
+struct ContinueAfterSeedEvaluation {
+    best: Option<CandidateId>,
+    evaluated: bool,
+}
+
+impl Optimizer<RunProblem<TextArtifact, TextCase>> for ContinueAfterSeedEvaluation {
+    async fn initialize(
+        &mut self,
+        ctx: &mut RunContext<'_, RunProblem<TextArtifact, TextCase>>,
+    ) -> Result<(), OptimizerError> {
+        self.best = ctx.graph().candidate_tree().roots().first().copied();
+        Ok(())
+    }
+
+    async fn step(
+        &mut self,
+        ctx: &mut RunContext<'_, RunProblem<TextArtifact, TextCase>>,
+    ) -> Result<StepStatus, OptimizerError> {
+        if self.evaluated {
+            return Ok(StepStatus::Continue);
+        }
+        self.evaluated = true;
+        let seed = self
+            .best
+            .or_else(|| ctx.graph().candidate_tree().roots().first().copied())
+            .ok_or_else(|| OptimizerError::Message("missing seed".to_owned()))?;
+        ctx.evaluate(
+            EvaluatorId::PRIMARY,
+            EvaluationRequest::Independent {
+                candidates: vec![seed],
+                set: EvaluationSet::Partition("TRAIN".into()),
+                granularity: AssessmentGranularity::PerCase,
+                purpose: EvaluationPurpose::Search,
+            },
+        )
+        .await
+        .map_err(|source| OptimizerError::with_source("seed evaluation failed", source))?;
+        Ok(StepStatus::Continue)
+    }
+
+    fn best_candidate(
+        &self,
+        graph: RunGraphView<'_, RunProblem<TextArtifact, TextCase>>,
+    ) -> Option<CandidateId> {
+        self.best
+            .or_else(|| graph.candidate_tree().roots().first().copied())
     }
 }
 

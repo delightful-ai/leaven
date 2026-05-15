@@ -603,7 +603,6 @@ dependencies = [
  "codex-utils-absolute-path",
  "codex-utils-image",
  "codex-utils-string",
- "codex-utils-template",
  "encoding_rs",
  "globset",
  "icu_decimal",
@@ -701,10 +700,6 @@ dependencies = [
  "serde",
  "serde_json",
 ]
-
-[[package]]
-name = "codex-utils-template"
-version = "0.0.0"
 
 [[package]]
 name = "color_quant"
@@ -3475,6 +3470,7 @@ dependencies = [
  "leaven",
  "leaven-gepa",
  "leaven-lm",
+ "leaven-lm-cache",
  "leaven-lm-openai",
  "serde",
  "serde_json",

@@ -15,9 +15,19 @@ from pathlib import Path
 
 from datasets import load_dataset
 
+AIMO_DATASET = "AI-MO/aimo-validation-aime"
+AIME_2025_DATASET = "MathArena/aime_2025"
+HF_CONFIG = "default"
+HF_SPLIT = "train"
 
-def aime_case(item: dict, *, needs_modular: bool) -> dict:
+
+def hf_source_id(dataset: str, config: str, split: str, index: int) -> str:
+    return f"{dataset}:{config}:{split}:{index}"
+
+
+def aime_case(item: dict, *, source_id: str, needs_modular: bool) -> dict:
     return {
+        "source_id": source_id,
         "problem": item["problem"],
         "answer": int(item["answer"]),
         "solution": item.get("solution", ""),
@@ -35,14 +45,22 @@ def main() -> None:
     args = parser.parse_args()
 
     train_val = [
-        aime_case(item, needs_modular=True)
-        for item in load_dataset("AI-MO/aimo-validation-aime", "default", split="train")
+        aime_case(
+            item,
+            source_id=hf_source_id(AIMO_DATASET, HF_CONFIG, HF_SPLIT, index),
+            needs_modular=True,
+        )
+        for index, item in enumerate(load_dataset(AIMO_DATASET, HF_CONFIG, split=HF_SPLIT))
     ]
     random.Random(0).shuffle(train_val)
 
     test = [
-        aime_case(item, needs_modular=True)
-        for item in load_dataset("MathArena/aime_2025", "default", split="train")
+        aime_case(
+            item,
+            source_id=hf_source_id(AIME_2025_DATASET, HF_CONFIG, HF_SPLIT, index),
+            needs_modular=True,
+        )
+        for index, item in enumerate(load_dataset(AIME_2025_DATASET, HF_CONFIG, split=HF_SPLIT))
     ]
 
     train_size = len(train_val) // 2

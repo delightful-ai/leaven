@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, num::NonZeroUsize, path::Path};
+use std::{collections::BTreeMap, num::NonZeroUsize, path::Path, time::Duration};
 
 use leaven::prelude::*;
 use leaven::{
@@ -11,7 +11,8 @@ use leaven_lm::{
     Lm, LmError, LmId, LmRequest, LmResponse, Message, Messages, ReasoningEffort, SamplingOptions,
     TokenUsage,
 };
-use leaven_lm_openai::OpenAiLm;
+use leaven_lm_cache::{CachedLm, InMemoryLmCache, LmCachePolicy};
+use leaven_lm_openai::{OpenAiConfig, OpenAiLm, OpenAiThrottlePolicy};
 use serde::{Deserialize, Serialize};
 
 const BASELINE: &str = "Solve the math problem carefully. Break down the steps and provide the final answer as a single number.";
@@ -20,13 +21,18 @@ const GEPA_AIME_METRIC_CALLS: u64 = 500;
 const GEPA_AIME_MAX_WORKERS: usize = 32;
 const GEPA_AIME_MAX_OUTPUT_TOKENS: u32 = 32_000;
 // GEPA AIME is controlled by max_metric_calls, not max_iterations. This is a
-// Leaven-local safety ceiling until the GEPA loop has a native budget stopper.
+// Leaven-local safety ceiling; the public metric-call budget is the stop control.
 const GEPA_AIME_INTERNAL_ITERATION_CEILING: usize = 500;
 const GEPA_AIME_SOLVER_MODEL: &str = "gpt-4.1-mini";
 const GEPA_AIME_REFLECTION_MODEL: &str = "gpt-5.4-mini";
+const LEAVEN_AIME_SOLVER_CACHE_POLICY: &str = "LEAVEN_AIME_SOLVER_CACHE_POLICY";
+const LEAVEN_AIME_REFLECTION_CACHE_POLICY: &str = "LEAVEN_AIME_REFLECTION_CACHE_POLICY";
+const LEAVEN_AIME_LM_CACHE_BACKEND: &str = "LEAVEN_AIME_LM_CACHE_BACKEND";
+const LEAVEN_OPENAI_MAX_CONCURRENT_REQUESTS: &str = "LEAVEN_OPENAI_MAX_CONCURRENT_REQUESTS";
 const DETERMINISTIC_SMOKE_METRIC_CALLS: u64 = 512;
 const DETERMINISTIC_SMOKE_ITERATIONS: usize = 1;
 
+type CachedOpenAiLm = CachedLm<OpenAiLm, InMemoryLmCache>;
 type AimeLmReflector =
     LmBackedReflector<AimeReflectionLm, DefaultReflectionRenderer, PlainTextEditParser>;
 
@@ -34,44 +40,135 @@ type AimeLmReflector =
 async fn main() {
     let config = AimeRunConfig::configured();
     let result = run_configured_aime(config.clone()).await;
-    println!("run_profile={}", config.profile.label());
-    println!(
-        "baseline_train_score={:.3}",
-        result.report.baseline_train_score
-    );
-    println!(
-        "optimized_train_score={:.3}",
-        result.report.optimized_train_score
-    );
-    println!(
-        "validation_score={:.3}",
-        result
-            .report
-            .validation_score
-            .expect("validation is configured")
-    );
-    println!(
-        "baseline_heldout_test_score={:.3}",
-        result
-            .report
-            .baseline_test_score
-            .expect("test is configured")
-    );
-    println!(
-        "heldout_test_score={:.3}",
-        result.report.test_score.expect("test is configured")
-    );
-    println!(
-        "report_splits={}",
-        result.report.evaluation.splits_reported.len()
-    );
-    println!(
-        "budget_metric_calls={}",
-        result.report.budget.spent.metric_calls
-    );
-    println!("budget_llm_calls={}", result.report.budget.spent.llm_calls);
-    println!("best_system_prompt={}", result.best().system);
-    println!("events={}", result.report.events.join(","));
+    for line in report_lines(&config, &result) {
+        println!("{line}");
+    }
+}
+
+fn report_lines(config: &AimeRunConfig, result: &OptimizeResult<AimePrompt>) -> Vec<String> {
+    let mut lines = vec![
+        format!("run_profile={}", config.profile.label()),
+        format!(
+            "baseline_train_score={}",
+            report_score(result.report.baseline_train_score)
+        ),
+        format!(
+            "optimized_train_score={}",
+            report_score(result.report.optimized_train_score)
+        ),
+        format!(
+            "validation_score={}",
+            report_score(result.report.validation_score)
+        ),
+        format!(
+            "baseline_heldout_test_score={}",
+            report_score(result.report.baseline_test_score)
+        ),
+        format!(
+            "heldout_test_score={}",
+            report_score(result.report.test_score)
+        ),
+        "test_score_use=final_report_only".to_owned(),
+        format!(
+            "report_splits={}",
+            result.report.evaluation.splits_reported.len()
+        ),
+        format!("solver_model={}", config.solver.model),
+        format!("reflection_model={}", config.reflection.model),
+        format!(
+            "solver_cache_policy={}",
+            report_lm_cache_policy(config.solver.cache_policy)
+        ),
+        format!(
+            "reflection_cache_policy={}",
+            report_lm_cache_policy(config.reflection.cache_policy)
+        ),
+        format!(
+            "lm_cache_backend={}",
+            report_lm_cache_backend(config.solver.runtime.cache_backend)
+        ),
+        format!(
+            "lm_cache_durable={}",
+            config.solver.runtime.cache_backend.is_durable()
+        ),
+        format!(
+            "openai_max_concurrent_requests={}",
+            config.solver.runtime.max_concurrent_requests
+        ),
+        "reflection_output=text".to_owned(),
+        "reflection_parser=plain-text-fenced".to_owned(),
+        format!(
+            "stop_reason={}",
+            report_stop_reason(result.report.stop_reason)
+        ),
+        format!(
+            "optimization_metric_calls={}",
+            result.report.optimization_cost.metric_calls
+        ),
+        format!(
+            "final_report_metric_calls={}",
+            result.report.final_report_cost.metric_calls
+        ),
+        format!(
+            "budget_metric_calls={}",
+            result.report.budget.spent.metric_calls
+        ),
+        format!("budget_llm_calls={}", result.report.budget.spent.llm_calls),
+        format!("best_system_prompt={}", result.best().system),
+        format!("events={}", result.report.events.join(",")),
+    ];
+    for split in &result.report.evaluation.splits_reported {
+        for candidate in &split.candidates {
+            for case in &candidate.cases {
+                lines.push(format!(
+                    "report_case={} split={:?} source_id={} score={:.3} feedback_chars={} trace_lines={}",
+                    case.case_id,
+                    split.role,
+                    report_source_id(&case.trace),
+                    case.score,
+                    case.feedback.len(),
+                    case.trace.len()
+                ));
+            }
+        }
+    }
+    lines
+}
+
+fn report_source_id(trace: &[String]) -> &str {
+    trace
+        .iter()
+        .find_map(|line| line.strip_prefix("source_id: "))
+        .unwrap_or("absent")
+}
+
+fn report_score(score: Option<f64>) -> String {
+    score.map_or_else(|| "absent".to_owned(), |value| format!("{value:.3}"))
+}
+
+fn report_lm_cache_policy(policy: LmCachePolicy) -> &'static str {
+    match policy {
+        LmCachePolicy::Never => "never",
+        LmCachePolicy::ReadWrite => "read-write",
+        LmCachePolicy::ReadOnly => "read-only",
+        LmCachePolicy::Refresh => "refresh",
+    }
+}
+
+fn report_lm_cache_backend(backend: AimeLmCacheBackend) -> &'static str {
+    match backend {
+        AimeLmCacheBackend::InMemory => "in-memory",
+    }
+}
+
+fn report_stop_reason(reason: leaven::run::OptimizationStopReason) -> &'static str {
+    match reason {
+        leaven::run::OptimizationStopReason::OptimizerDone => "optimizer_done",
+        leaven::run::OptimizationStopReason::BudgetExceeded => "budget_exceeded",
+        leaven::run::OptimizationStopReason::StopperTriggered => "stopper_triggered",
+        leaven::run::OptimizationStopReason::External => "external",
+        leaven::run::OptimizationStopReason::Error => "error",
+    }
 }
 
 #[cfg(test)]
@@ -145,6 +242,8 @@ impl AimeRunConfig {
     }
 
     fn gepa_aime() -> Self {
+        let cache_policies = AimeLmCachePolicies::from_env();
+        let runtime = AimeOpenAiRuntimeConfig::from_env();
         Self {
             profile: AimeRunProfile::GepaAime,
             seed_prompt: BASELINE,
@@ -156,11 +255,15 @@ impl AimeRunConfig {
                 live: true,
                 model: openai_model_name(),
                 sampling: gepa_aime_sampling(),
+                cache_policy: cache_policies.solver,
+                runtime,
             },
             reflection: AimeReflectionConfig {
                 live: std::env::var_os("LEAVEN_AIME_LIVE_OPENAI_REFLECTION").is_some(),
                 model: aime_reflection_model_name(),
                 sampling: SamplingOptions::default().with_reasoning_effort(ReasoningEffort::Medium),
+                cache_policy: cache_policies.reflection,
+                runtime,
             },
         }
     }
@@ -176,11 +279,15 @@ impl AimeRunConfig {
                 live: false,
                 model: openai_model_name(),
                 sampling: SamplingOptions::default(),
+                cache_policy: LmCachePolicy::Never,
+                runtime: AimeOpenAiRuntimeConfig::default_for_p8(),
             },
             reflection: AimeReflectionConfig {
                 live: false,
                 model: "deterministic-aime-reflector".to_owned(),
                 sampling: SamplingOptions::default().with_reasoning_effort(ReasoningEffort::Medium),
+                cache_policy: LmCachePolicy::Never,
+                runtime: AimeOpenAiRuntimeConfig::default_for_p8(),
             },
         }
     }
@@ -206,6 +313,8 @@ struct AimeSolverConfig {
     live: bool,
     model: String,
     sampling: SamplingOptions,
+    cache_policy: LmCachePolicy,
+    runtime: AimeOpenAiRuntimeConfig,
 }
 
 #[derive(Clone, Debug)]
@@ -213,6 +322,111 @@ struct AimeReflectionConfig {
     live: bool,
     model: String,
     sampling: SamplingOptions,
+    cache_policy: LmCachePolicy,
+    runtime: AimeOpenAiRuntimeConfig,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct AimeLmCachePolicies {
+    solver: LmCachePolicy,
+    reflection: LmCachePolicy,
+}
+
+impl AimeLmCachePolicies {
+    fn from_env() -> Self {
+        let solver = std::env::var(LEAVEN_AIME_SOLVER_CACHE_POLICY).ok();
+        let reflection = std::env::var(LEAVEN_AIME_REFLECTION_CACHE_POLICY).ok();
+        Self::from_values(solver.as_deref(), reflection.as_deref())
+    }
+
+    fn from_values(solver: Option<&str>, reflection: Option<&str>) -> Self {
+        Self {
+            solver: parse_lm_cache_policy(LEAVEN_AIME_SOLVER_CACHE_POLICY, solver),
+            reflection: parse_lm_cache_policy(LEAVEN_AIME_REFLECTION_CACHE_POLICY, reflection),
+        }
+    }
+}
+
+fn parse_lm_cache_policy(env_name: &str, value: Option<&str>) -> LmCachePolicy {
+    let Some(raw) = value.map(str::trim).filter(|value| !value.is_empty()) else {
+        return LmCachePolicy::Never;
+    };
+    match raw.to_ascii_lowercase().as_str() {
+        "never" | "none" | "off" => LmCachePolicy::Never,
+        "read-write" | "read_write" | "readwrite" => LmCachePolicy::ReadWrite,
+        "read-only" | "read_only" | "readonly" => LmCachePolicy::ReadOnly,
+        "refresh" => LmCachePolicy::Refresh,
+        _ => panic!(
+            "unsupported {env_name}={raw:?}; expected never, read-write, read-only, or refresh"
+        ),
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct AimeOpenAiRuntimeConfig {
+    max_concurrent_requests: NonZeroUsize,
+    cache_backend: AimeLmCacheBackend,
+}
+
+impl AimeOpenAiRuntimeConfig {
+    fn from_env() -> Self {
+        let max_concurrent = std::env::var(LEAVEN_OPENAI_MAX_CONCURRENT_REQUESTS).ok();
+        let cache_backend = std::env::var(LEAVEN_AIME_LM_CACHE_BACKEND).ok();
+        Self::from_values(max_concurrent.as_deref(), cache_backend.as_deref())
+    }
+
+    fn from_values(max_concurrent: Option<&str>, cache_backend: Option<&str>) -> Self {
+        Self {
+            max_concurrent_requests: parse_max_concurrent_requests(max_concurrent),
+            cache_backend: parse_lm_cache_backend(cache_backend),
+        }
+    }
+
+    fn default_for_p8() -> Self {
+        Self {
+            max_concurrent_requests: NonZeroUsize::new(GEPA_AIME_MAX_WORKERS)
+                .expect("GEPA AIME worker count is non-zero"),
+            cache_backend: AimeLmCacheBackend::InMemory,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AimeLmCacheBackend {
+    InMemory,
+}
+
+impl AimeLmCacheBackend {
+    const fn is_durable(self) -> bool {
+        match self {
+            Self::InMemory => false,
+        }
+    }
+}
+
+fn parse_max_concurrent_requests(value: Option<&str>) -> NonZeroUsize {
+    let Some(raw) = value.map(str::trim).filter(|value| !value.is_empty()) else {
+        return NonZeroUsize::new(GEPA_AIME_MAX_WORKERS)
+            .expect("GEPA AIME worker count is non-zero");
+    };
+    let parsed = raw.parse::<usize>().unwrap_or_else(|source| {
+        panic!("unsupported {LEAVEN_OPENAI_MAX_CONCURRENT_REQUESTS}={raw:?}: {source}")
+    });
+    NonZeroUsize::new(parsed).unwrap_or_else(|| {
+        panic!("unsupported {LEAVEN_OPENAI_MAX_CONCURRENT_REQUESTS}=0; expected a positive integer")
+    })
+}
+
+fn parse_lm_cache_backend(value: Option<&str>) -> AimeLmCacheBackend {
+    let Some(raw) = value.map(str::trim).filter(|value| !value.is_empty()) else {
+        return AimeLmCacheBackend::InMemory;
+    };
+    match raw.to_ascii_lowercase().as_str() {
+        "in-memory" | "in_memory" | "memory" => AimeLmCacheBackend::InMemory,
+        _ => panic!(
+            "unsupported {LEAVEN_AIME_LM_CACHE_BACKEND}={raw:?}; only in-memory is implemented in this branch"
+        ),
+    }
 }
 
 fn gepa_aime_sampling() -> SamplingOptions {
@@ -226,9 +440,11 @@ fn gepa_aime_sampling() -> SamplingOptions {
 fn aime_lm_reflector(config: &AimeReflectionConfig) -> AimeLmReflector {
     let model = config.model.clone();
     let lm = if config.live {
-        AimeReflectionLm::OpenAi(
-            OpenAiLm::from_env(&model).expect("OPENAI_API_KEY is required for live reflection"),
-        )
+        AimeReflectionLm::OpenAi(cached_openai_lm(
+            config.cache_policy,
+            config.runtime,
+            "live reflection",
+        ))
     } else {
         AimeReflectionLm::Deterministic(DeterministicReflectionLm)
     };
@@ -249,7 +465,7 @@ fn aime_reflection_model_name() -> String {
 #[derive(Clone)]
 enum AimeReflectionLm {
     Deterministic(DeterministicReflectionLm),
-    OpenAi(OpenAiLm),
+    OpenAi(CachedOpenAiLm),
 }
 
 impl std::fmt::Debug for AimeReflectionLm {
@@ -406,6 +622,7 @@ impl EditSurface<AimePrompt> for AimePromptSurface {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct AimeCase {
+    source_id: String,
     problem: String,
     answer: i64,
     solution: String,
@@ -445,18 +662,21 @@ fn cases_from_cache(path: &Path) -> (Vec<AimeCase>, Vec<AimeCase>, Vec<AimeCase>
 fn deterministic_cases() -> (Vec<AimeCase>, Vec<AimeCase>, Vec<AimeCase>) {
     let train = vec![
         AimeCase {
+            source_id: "deterministic:train:0".to_owned(),
             problem: "Find the remainder when 2^10 is divided by 7.".to_owned(),
             answer: 2,
             solution: "2^3 = 8 == 1 mod 7, so 2^10 == 2 mod 7.".to_owned(),
             needs_modular: true,
         },
         AimeCase {
+            source_id: "deterministic:train:1".to_owned(),
             problem: "What is 19 + 23?".to_owned(),
             answer: 42,
             solution: "19 + 23 = 42.".to_owned(),
             needs_modular: false,
         },
         AimeCase {
+            source_id: "deterministic:train:2".to_owned(),
             problem: "Find the remainder when 5^4 is divided by 13.".to_owned(),
             answer: 1,
             solution: "5^2 = 25 == -1 mod 13, so 5^4 == 1.".to_owned(),
@@ -464,6 +684,7 @@ fn deterministic_cases() -> (Vec<AimeCase>, Vec<AimeCase>, Vec<AimeCase>) {
         },
     ];
     let validation = vec![AimeCase {
+        source_id: "deterministic:validation:0".to_owned(),
         problem: "Find the remainder when 3^6 is divided by 7.".to_owned(),
         answer: 1,
         solution: "3^6 = 729 == 1 mod 7.".to_owned(),
@@ -471,12 +692,14 @@ fn deterministic_cases() -> (Vec<AimeCase>, Vec<AimeCase>, Vec<AimeCase>) {
     }];
     let test = vec![
         AimeCase {
+            source_id: "deterministic:test:0".to_owned(),
             problem: "Find the remainder when 4^5 is divided by 9.".to_owned(),
             answer: 7,
             solution: "4^3 == 1 mod 9, so 4^5 == 4^2 == 7.".to_owned(),
             needs_modular: true,
         },
         AimeCase {
+            source_id: "deterministic:test:1".to_owned(),
             problem: "What is 31 - 8?".to_owned(),
             answer: 23,
             solution: "31 - 8 = 23.".to_owned(),
@@ -486,18 +709,41 @@ fn deterministic_cases() -> (Vec<AimeCase>, Vec<AimeCase>, Vec<AimeCase>) {
     (train, validation, test)
 }
 
-fn aime_solver_lm(config: &AimeSolverConfig) -> Option<OpenAiLm> {
+fn aime_solver_lm(config: &AimeSolverConfig) -> Option<CachedOpenAiLm> {
     if config.live {
-        Some(OpenAiLm::from_env(&config.model).expect("OPENAI_API_KEY is required for live solver"))
+        Some(cached_openai_lm(
+            config.cache_policy,
+            config.runtime,
+            "live solver",
+        ))
     } else {
         None
+    }
+}
+
+fn cached_openai_lm(
+    cache_policy: LmCachePolicy,
+    runtime: AimeOpenAiRuntimeConfig,
+    role: &str,
+) -> CachedOpenAiLm {
+    let config = OpenAiConfig::from_env()
+        .unwrap_or_else(|source| panic!("OPENAI_API_KEY is required for {role}: {source}"))
+        .with_throttle_policy(OpenAiThrottlePolicy::new(
+            runtime.max_concurrent_requests,
+            Duration::ZERO,
+        ));
+    let inner = OpenAiLm::new(config);
+    match runtime.cache_backend {
+        AimeLmCacheBackend::InMemory => {
+            CachedLm::new(inner, InMemoryLmCache::default(), cache_policy)
+        }
     }
 }
 
 async fn run_solver(
     prompt: AimePrompt,
     case: AimeCase,
-    solver: Option<OpenAiLm>,
+    solver: Option<CachedOpenAiLm>,
     solver_config: AimeSolverConfig,
 ) -> RunOutput {
     if let Some(solver) = solver {
@@ -514,6 +760,7 @@ async fn run_solver(
     RunOutput::new(
         answer.to_string(),
         vec![
+            format!("source_id: {}", case.source_id),
             format!("problem: {}", case.problem),
             format!("system_prompt: {}", prompt.system),
             format!("solver_answer: {answer}"),
@@ -522,7 +769,7 @@ async fn run_solver(
 }
 
 async fn run_openai_solver(
-    solver: OpenAiLm,
+    solver: CachedOpenAiLm,
     prompt: &AimePrompt,
     case: &AimeCase,
     solver_config: &AimeSolverConfig,
@@ -545,6 +792,7 @@ async fn run_openai_solver(
                 vec![
                     "provider: openai-responses".to_owned(),
                     format!("model: {}", solver_config.model),
+                    format!("source_id: {}", case.source_id),
                     format!("problem: {}", case.problem),
                     format!("system_prompt: {}", prompt.system),
                     format!("solver_answer: {answer}"),
@@ -557,6 +805,7 @@ async fn run_openai_solver(
             vec![
                 "provider: openai-responses".to_owned(),
                 format!("model: {}", solver_config.model),
+                format!("source_id: {}", case.source_id),
                 format!("problem: {}", case.problem),
                 format!("openai_error: {source}"),
             ],
@@ -619,6 +868,7 @@ fn content_id(bytes: &[u8]) -> ContentId {
 mod tests {
     use super::*;
     use futures::executor::block_on;
+    use leaven::kernel::CaseId;
 
     fn assert_score(actual: f64, expected: f64) {
         assert!(
@@ -635,13 +885,13 @@ mod tests {
     fn deterministic_aime_acceptance_shows_public_gepa_improvement() {
         let result = block_on(run_deterministic_aime());
 
-        assert_score(result.report.baseline_train_score, 0.0);
-        assert_score(result.report.optimized_train_score, 1.0);
+        assert_eq!(result.report.baseline_train_score, None);
+        assert_eq!(result.report.optimized_train_score, None);
         assert_optional_score(result.report.baseline_validation_score, 0.0);
         assert_optional_score(result.report.validation_score, 1.0);
         assert_optional_score(result.report.baseline_test_score, 0.0);
         assert_optional_score(result.report.test_score, 1.0);
-        assert_eq!(result.report.evaluation.splits_reported.len(), 3);
+        assert_eq!(result.report.evaluation.splits_reported.len(), 2);
         assert!(result.report.budget.spent.metric_calls > 0);
         assert_eq!(result.report.budget.spent.llm_calls, 1);
         assert_eq!(result.report.budget.spent.prompt_tokens, 37);
@@ -686,8 +936,8 @@ mod tests {
         let (train, _, _) = deterministic_cases();
         let result = block_on(run_aime(config, train, Vec::new(), Vec::new()));
 
-        assert_score(result.report.baseline_train_score, 0.0);
-        assert_score(result.report.optimized_train_score, 1.0);
+        assert_eq!(result.report.baseline_train_score, None);
+        assert_eq!(result.report.optimized_train_score, None);
         assert_eq!(result.report.baseline_validation_score, None);
         assert_eq!(result.report.validation_score, None);
         assert_eq!(result.report.baseline_test_score, None);
@@ -733,6 +983,7 @@ mod tests {
         assert_eq!(config.max_iterations, GEPA_AIME_INTERNAL_ITERATION_CEILING);
         assert!(config.solver.live);
         assert_eq!(config.solver.model, openai_model_name());
+        assert_eq!(config.solver.cache_policy, LmCachePolicy::Never);
         assert_eq!(
             config.solver.sampling.temperature.map(FiniteF64::as_f64),
             Some(1.0)
@@ -742,9 +993,192 @@ mod tests {
             Some(GEPA_AIME_MAX_OUTPUT_TOKENS)
         );
         assert_eq!(config.reflection.model, aime_reflection_model_name());
+        assert_eq!(config.reflection.cache_policy, LmCachePolicy::Never);
         assert_eq!(
             config.reflection.sampling.reasoning_effort,
             Some(ReasoningEffort::Medium)
+        );
+    }
+
+    #[test]
+    fn report_lines_include_split_budget_and_case_identity() {
+        let config = AimeRunConfig::deterministic_smoke();
+        let result = block_on(run_deterministic_aime());
+        let lines = report_lines(&config, &result);
+
+        assert!(
+            lines
+                .iter()
+                .any(|line| line == "optimization_metric_calls=6")
+        );
+        assert!(
+            lines
+                .iter()
+                .any(|line| line == "final_report_metric_calls=6")
+        );
+        assert!(
+            lines
+                .iter()
+                .any(|line| line == "test_score_use=final_report_only")
+        );
+        assert!(lines.iter().any(|line| {
+            line.contains("report_case=case:3")
+                && line.contains("source_id=deterministic:validation:0")
+                && line.contains("feedback_chars=")
+        }));
+        assert!(lines.iter().any(|line| {
+            line.contains("report_case=case:4")
+                && line.contains("source_id=deterministic:test:0")
+                && line.contains("feedback_chars=")
+        }));
+    }
+
+    #[test]
+    fn deterministic_metric_call_budget_stops_gepa_cleanly_before_second_step() {
+        let mut config = AimeRunConfig::deterministic_smoke();
+        config.budget = Budget::metric_calls(6);
+        config.max_iterations = 2;
+        let (train, validation, test) = deterministic_cases();
+        let result = block_on(run_aime(config.clone(), train, validation, test));
+
+        assert_eq!(
+            result.report.stop_reason,
+            leaven::run::OptimizationStopReason::BudgetExceeded
+        );
+        assert_eq!(result.report.optimization_cost.metric_calls, 6);
+        assert!(
+            result
+                .report
+                .events
+                .iter()
+                .any(|event| event == "optimization_stopping")
+        );
+        assert!(
+            !result.report.events.iter().any(|event| event == "error"),
+            "metric-call stop should be a clean public stop, not an optimizer error"
+        );
+        let lines = report_lines(&config, &result);
+        assert!(
+            lines
+                .iter()
+                .any(|line| line == "stop_reason=budget_exceeded")
+        );
+        assert!(
+            lines
+                .iter()
+                .any(|line| line == "optimization_metric_calls=6")
+        );
+    }
+
+    #[test]
+    fn cache_policy_parser_keeps_solver_and_reflection_roles_independent() {
+        let policies = AimeLmCachePolicies::from_values(Some("read-write"), Some("refresh"));
+
+        assert_eq!(policies.solver, LmCachePolicy::ReadWrite);
+        assert_eq!(policies.reflection, LmCachePolicy::Refresh);
+        assert_eq!(
+            AimeLmCachePolicies::from_values(None, None).solver,
+            LmCachePolicy::Never
+        );
+    }
+
+    #[test]
+    fn live_openai_runtime_config_names_in_memory_cache_and_provider_throttle() {
+        let runtime = AimeOpenAiRuntimeConfig::from_values(Some("8"), Some("in-memory"));
+
+        assert_eq!(runtime.max_concurrent_requests.get(), 8);
+        assert_eq!(runtime.cache_backend, AimeLmCacheBackend::InMemory);
+        assert_eq!(
+            AimeOpenAiRuntimeConfig::from_values(None, None)
+                .max_concurrent_requests
+                .get(),
+            GEPA_AIME_MAX_WORKERS
+        );
+    }
+
+    #[test]
+    fn report_lines_disclose_live_lm_role_cache_and_runtime_truth() {
+        let mut config = AimeRunConfig::deterministic_smoke();
+        config.profile = AimeRunProfile::GepaAime;
+        config.solver.live = true;
+        config.solver.model = "solver-model".to_owned();
+        config.solver.cache_policy = LmCachePolicy::ReadWrite;
+        config.solver.runtime = AimeOpenAiRuntimeConfig::from_values(Some("7"), Some("in-memory"));
+        config.reflection.live = true;
+        config.reflection.model = "reflection-model".to_owned();
+        config.reflection.cache_policy = LmCachePolicy::Refresh;
+        config.reflection.runtime = config.solver.runtime;
+        let result = block_on(run_deterministic_aime());
+
+        let lines = report_lines(&config, &result);
+
+        assert!(lines.iter().any(|line| line == "solver_model=solver-model"));
+        assert!(
+            lines
+                .iter()
+                .any(|line| line == "reflection_model=reflection-model")
+        );
+        assert!(
+            lines
+                .iter()
+                .any(|line| line == "solver_cache_policy=read-write")
+        );
+        assert!(
+            lines
+                .iter()
+                .any(|line| line == "reflection_cache_policy=refresh")
+        );
+        assert!(
+            lines
+                .iter()
+                .any(|line| line == "lm_cache_backend=in-memory")
+        );
+        assert!(lines.iter().any(|line| line == "lm_cache_durable=false"));
+        assert!(
+            lines
+                .iter()
+                .any(|line| line == "openai_max_concurrent_requests=7")
+        );
+        assert!(lines.iter().any(|line| line == "reflection_output=text"));
+        assert!(
+            lines
+                .iter()
+                .any(|line| line == "reflection_parser=plain-text-fenced")
+        );
+    }
+
+    #[test]
+    fn public_report_preserves_case_ids_and_aime_source_ids() {
+        let result = block_on(run_deterministic_aime());
+
+        let cases = result
+            .report
+            .evaluation
+            .splits_reported
+            .iter()
+            .flat_map(|split| &split.candidates)
+            .flat_map(|candidate| &candidate.cases)
+            .collect::<Vec<_>>();
+
+        assert!(
+            cases.iter().any(|case| {
+                case.case_id == CaseId::from_index(3)
+                    && case
+                        .trace
+                        .iter()
+                        .any(|line| line == "source_id: deterministic:validation:0")
+            }),
+            "expected deterministic validation case id and source id in public report"
+        );
+        assert!(
+            cases.iter().any(|case| {
+                case.case_id == CaseId::from_index(4)
+                    && case
+                        .trace
+                        .iter()
+                        .any(|line| line == "source_id: deterministic:test:0")
+            }),
+            "expected deterministic test case id and source id in public report"
         );
     }
 
@@ -754,18 +1188,21 @@ mod tests {
             std::env::temp_dir().join(format!("leaven-aime-cache-{}.json", std::process::id()));
         let cache = AimeDatasetCache {
             train: vec![AimeCase {
+                source_id: "AI-MO/aimo-validation-aime:default:train:17".to_owned(),
                 problem: "train".to_owned(),
                 answer: 1,
                 solution: "train solution".to_owned(),
                 needs_modular: true,
             }],
             validation: vec![AimeCase {
+                source_id: "AI-MO/aimo-validation-aime:default:train:42".to_owned(),
                 problem: "validation".to_owned(),
                 answer: 2,
                 solution: "validation solution".to_owned(),
                 needs_modular: true,
             }],
             test: vec![AimeCase {
+                source_id: "MathArena/aime_2025:default:train:3".to_owned(),
                 problem: "test".to_owned(),
                 answer: 3,
                 solution: "test solution".to_owned(),
@@ -776,8 +1213,17 @@ mod tests {
 
         let (train, validation, test) = cases_from_cache(&path);
 
+        assert_eq!(
+            train[0].source_id,
+            "AI-MO/aimo-validation-aime:default:train:17"
+        );
         assert_eq!(train[0].problem, "train");
+        assert_eq!(
+            validation[0].source_id,
+            "AI-MO/aimo-validation-aime:default:train:42"
+        );
         assert_eq!(validation[0].problem, "validation");
+        assert_eq!(test[0].source_id, "MathArena/aime_2025:default:train:3");
         assert_eq!(test[0].problem, "test");
         std::fs::remove_file(path).unwrap();
     }

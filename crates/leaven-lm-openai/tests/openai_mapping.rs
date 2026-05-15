@@ -1,6 +1,7 @@
 use std::fmt::Write as _;
 use std::io::{Read, Write};
 use std::net::TcpListener;
+use std::num::NonZeroUsize;
 use std::process::Command;
 use std::sync::{
     Arc,
@@ -14,7 +15,7 @@ use leaven_lm::{
     JsonSchemaOutput, Lm, LmContinuation, LmError, LmRequest, Messages, ModelName, OutputMode,
     ProviderHints, ProviderName, ReasoningEffort, Role, SamplingOptions,
 };
-use leaven_lm_openai::{OpenAiConfig, OpenAiLm, OpenAiRetryPolicy};
+use leaven_lm_openai::{OpenAiConfig, OpenAiLm, OpenAiRetryPolicy, OpenAiThrottlePolicy};
 
 type FixtureHeaders = &'static [(&'static str, &'static str)];
 type FixtureResponse = (&'static str, FixtureHeaders, &'static str);
@@ -78,7 +79,7 @@ fn openai_identity_and_fingerprint_are_stable() {
 #[test]
 fn openai_from_env_reads_api_key_in_child_process() {
     if std::env::var_os("LEAVEN_OPENAI_FROM_ENV_CHILD").is_some() {
-        let lm = OpenAiLm::from_env("gpt-4.1-mini").unwrap();
+        let lm = OpenAiLm::from_env().unwrap();
         assert_eq!(lm.id().as_str(), "openai");
         return;
     }
@@ -487,6 +488,36 @@ async fn openai_complete_maps_status_failure_to_provider_error() {
 }
 
 #[tokio::test]
+async fn openai_complete_respects_configured_concurrency_limit() {
+    let body = r#"{
+        "id": "resp_throttled",
+        "output": [{
+            "type": "message",
+            "role": "assistant",
+            "content": [{"type": "output_text", "text": "ok"}]
+        }]
+    }"#;
+    let (url, max_active) = serve_concurrent(2, body);
+    let lm = OpenAiLm::new(
+        OpenAiConfig::new("test-key")
+            .with_base_url(url)
+            .with_retry_policy(OpenAiRetryPolicy::none())
+            .with_throttle_policy(OpenAiThrottlePolicy::new(
+                NonZeroUsize::new(1).unwrap(),
+                Duration::ZERO,
+            )),
+    );
+    let first = lm.complete(LmRequest::new("gpt-4.1-mini", Messages::from_user("one")));
+    let second = lm.complete(LmRequest::new("gpt-4.1-mini", Messages::from_user("two")));
+
+    let (first, second) = tokio::join!(first, second);
+
+    first.unwrap();
+    second.unwrap();
+    assert_eq!(max_active.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
 async fn openai_complete_maps_invalid_json_to_invalid_response() {
     let lm = OpenAiLm::new(OpenAiConfig::new("test-key").with_base_url(serve_once("200 OK", "{")));
 
@@ -500,6 +531,40 @@ async fn openai_complete_maps_invalid_json_to_invalid_response() {
 
 fn serve_once(status: &'static str, body: &'static str) -> String {
     serve_sequence([(status, [].as_slice(), body)]).0
+}
+
+fn serve_concurrent(requests: usize, body: &'static str) -> (String, Arc<AtomicUsize>) {
+    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let url = format!("http://{}/v1/responses", listener.local_addr().unwrap());
+    let active = Arc::new(AtomicUsize::new(0));
+    let max_active = Arc::new(AtomicUsize::new(0));
+    let thread_active = active;
+    let thread_max_active = max_active.clone();
+    thread::spawn(move || {
+        let mut handles = Vec::new();
+        for _ in 0..requests {
+            let (mut stream, _) = listener.accept().unwrap();
+            let active = thread_active.clone();
+            let max_active = thread_max_active.clone();
+            handles.push(thread::spawn(move || {
+                let current = active.fetch_add(1, Ordering::SeqCst) + 1;
+                max_active.fetch_max(current, Ordering::SeqCst);
+                let mut request = [0_u8; 4096];
+                let _ = stream.read(&mut request).unwrap();
+                thread::sleep(Duration::from_millis(50));
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                stream.write_all(response.as_bytes()).unwrap();
+                active.fetch_sub(1, Ordering::SeqCst);
+            }));
+        }
+        for handle in handles {
+            handle.join().unwrap();
+        }
+    });
+    (url, max_active)
 }
 
 fn serve_sequence<const N: usize>(responses: [FixtureResponse; N]) -> (String, Arc<AtomicUsize>) {

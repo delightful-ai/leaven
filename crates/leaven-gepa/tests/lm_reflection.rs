@@ -52,7 +52,8 @@ fn lm_backed_reflector_renders_feedback_records_and_applies_candidate() {
             WholeTextSurface,
             ParetoFrontier::by_case().build(),
             reflector,
-        );
+        )
+        .max_iterations(1);
 
         engine.run(&mut gepa, &case_set, &store).await.unwrap();
 
@@ -108,6 +109,52 @@ fn lm_backed_reflector_renders_feedback_records_and_applies_candidate() {
             .get(&proposer_stage)
             .expect("LM-backed reflector charged as proposer stage");
         assert_eq!(proposer_cost.llm_calls, 1);
+    });
+}
+
+#[test]
+fn multi_iteration_reflection_uses_selected_parent_assessment_feedback() {
+    block_on(async {
+        let case_set = CaseSet::new(vec![()]).with_partition(
+            leaven_core::PartitionId::from("TRAIN"),
+            vec![leaven_kernel::CaseId::new(0)],
+        );
+        let store = InlineEvidenceStore::<CasewiseEvidence<ScoredFeedbackEvidence>>::new("inline");
+        let mut engine = Engine::<TestProblem>::builder()
+            .budget(Budget::unlimited())
+            .evaluator(ArtifactFeedbackEvaluator)
+            .build();
+        engine
+            .insert_seed(TestArtifact("seed".to_owned()), 0)
+            .unwrap();
+        let lm = RecordingLm::new("-lm", 1, 1);
+        let requests = lm.requests();
+        let reflector = LmBackedReflector::new(
+            lm,
+            "mock-reflector",
+            DefaultReflectionRenderer,
+            PlainTextEditParser,
+        );
+        let mut gepa = Gepa::new(
+            WholeTextSurface,
+            ParetoFrontier::by_case().build(),
+            reflector,
+        )
+        .max_iterations(2);
+
+        engine.run(&mut gepa, &case_set, &store).await.unwrap();
+
+        let captured = requests.lock().expect("requests lock").clone();
+        assert_eq!(captured.len(), 2);
+        let second_rendered = captured[1]
+            .messages
+            .iter()
+            .map(Message::content)
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(second_rendered.contains("seed-lm"));
+        assert!(second_rendered.contains("## Feedback\nfeedback for seed-lm\n"));
+        assert!(!second_rendered.contains("## Feedback\nfeedback for seed\n"));
     });
 }
 
@@ -565,6 +612,63 @@ impl Lm for FailingLm {
 
     async fn complete(&self, _request: LmRequest) -> Result<Metered<LmResponse>, LmError> {
         Err(LmError::provider("failing", None, "boom"))
+    }
+}
+
+struct ArtifactFeedbackEvaluator;
+
+impl Evaluator<TestProblem> for ArtifactFeedbackEvaluator {
+    fn id(&self) -> EvaluatorId {
+        EvaluatorId::PRIMARY
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        Fingerprint::from_bytes([7; 32])
+    }
+
+    fn cache_policy(&self, _request: &ResolvedEvaluationRequest) -> CachePolicy {
+        CachePolicy::Never
+    }
+
+    async fn evaluate(
+        &self,
+        request: ResolvedEvaluationRequest,
+        ctx: EvaluationContext<'_, TestProblem>,
+    ) -> Result<Metered<Vec<Assessment<TestProblem>>>, EvaluationError> {
+        let ResolvedRequestKind::Independent { candidates } = request.kind else {
+            return Err(EvaluationError::Message(
+                "expected independent request".to_owned(),
+            ));
+        };
+        Ok(Metered::new(
+            candidates
+                .into_iter()
+                .map(|candidate| {
+                    let artifact = ctx.graph().artifact(candidate).expect("candidate artifact");
+                    let improvement_count = artifact.0.matches("-lm").count();
+                    let improvement_score = f64::from(
+                        u32::try_from(improvement_count).expect("test improvement count fits u32"),
+                    );
+                    Assessment::Independent {
+                        candidate,
+                        target: AssessmentTarget::EvaluationSet(
+                            leaven_kernel::EvaluationSetId::new(),
+                        ),
+                        evidence: CasewiseEvidence::new(vec![CaseOutcome::new(
+                            leaven_kernel::CaseId::new(0),
+                            ScoredFeedbackEvidence::new(
+                                ScalarEvidence::new(improvement_score).unwrap(),
+                                format!("feedback for {}", artifact.0),
+                                vec![format!("trace for {}", artifact.0)],
+                            ),
+                        )]),
+                        cost: Cost::metric_calls(1),
+                        metadata: MetadataBag::new(),
+                    }
+                })
+                .collect(),
+            Cost::metric_calls(1),
+        ))
     }
 }
 

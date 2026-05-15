@@ -18,7 +18,7 @@ Leaven needs an LM boundary that optimizer code can use without knowing concrete
 providers:
 
 ```rust
-let lm = OpenAiLm::from_env("gpt-4.1-mini")?;
+let lm = OpenAiLm::from_env()?;
 let lm = CachedLm::read_write(lm, InMemoryLmCache::default());
 
 let response = lm.complete(
@@ -85,9 +85,10 @@ Trait laws:
 4. `Metered<LmResponse>::cost` is the cost paid during this call. A cache hit
    returns zero cost even though `LmResponse::usage` still preserves the usage
    reported by the original provider call.
-5. Provider crates own concrete network policy. Behavior-affecting timeout and
-   retry policy must be reflected in the provider fingerprint; neutral
-   `leaven-lm` request types do not learn provider-specific retry knobs.
+5. Provider crates own concrete network policy. Behavior-affecting timeout,
+   retry, and proactive throttle policy must be reflected in the provider
+   fingerprint; neutral `leaven-lm` request types do not learn
+   provider-specific transport knobs.
 
 ## 4. Request And Response Types
 
@@ -217,7 +218,7 @@ track prompt cache hits via `usage.input_tokens_details.cached_tokens`.
 
 Required implementation behavior:
 
-1. `OpenAiLm::from_env(model)` reads `OPENAI_API_KEY`.
+1. `OpenAiLm::from_env()` reads `OPENAI_API_KEY`; request models live on `LmRequest.model`, not on the provider constructor.
 2. The default endpoint is `https://api.openai.com/v1/responses`.
 3. `messages` lower to Responses `input` items. A system message lowers to the
    request `instructions` string; user and assistant messages lower to input
@@ -235,6 +236,10 @@ Required implementation behavior:
 9. The provider uses bounded retries for transport failures and retryable HTTP
    statuses, honors numeric `Retry-After` seconds up to the configured maximum
    backoff, and applies a finite request timeout by default.
+10. The provider applies a configured proactive in-process concurrency throttle
+    before issuing Responses API calls. This throttle limits simultaneous
+    provider calls; it is not a durable distributed quota manager or token-rate
+    estimator.
 
 OpenAI prompt caching is not the Leaven response cache. OpenAI prompt caching is
 provider-side prefix reuse and still computes a fresh response. Leaven response

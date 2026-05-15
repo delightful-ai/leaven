@@ -20,10 +20,14 @@ use crate::{
     CandidateSelector, CheckpointCandidateSelector, CheckpointGate, CheckpointPartSelector, Gate,
     GateDecision, GepaReflector, ParetoFrequencyWeighted, PartSelector, RoundRobinPart,
     StrictImprovement,
+    validation::{
+        BatchSampler, CheckpointBatchSampler, CheckpointValidationPolicy, EpochShuffled,
+        MinibatchThenValidation, ValidationPolicy,
+    },
 };
 
-const DEFAULT_MAX_ITERATIONS: usize = 1;
-const GEPA_CHECKPOINT_SCHEMA: Fingerprint = Fingerprint::from_bytes([7; 32]);
+const DEFAULT_MAX_ITERATIONS: usize = 500;
+const GEPA_CHECKPOINT_SCHEMA: Fingerprint = Fingerprint::from_bytes([9; 32]);
 
 /// Evidence shape GEPA can compare as casewise scalar scores.
 pub trait GepaScoreEvidence: leaven_core::Evidence {
@@ -171,41 +175,95 @@ impl CheckpointPopulation for KeepBest {
     }
 }
 
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+struct GepaValidationBest {
+    candidate: CandidateId,
+    assessment: AssessmentId,
+    score: f64,
+}
+
+/// One candidate observation tracked by GEPA's private history.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+pub struct GepaCandidateHistoryEntry {
+    candidate: CandidateId,
+    assessment: AssessmentId,
+    score: f64,
+}
+
+impl GepaCandidateHistoryEntry {
+    /// Candidate observed by GEPA.
+    #[must_use]
+    pub const fn candidate(&self) -> CandidateId {
+        self.candidate
+    }
+
+    /// Assessment that justified the observation.
+    #[must_use]
+    pub const fn assessment(&self) -> AssessmentId {
+        self.assessment
+    }
+
+    /// Comparable average score GEPA used for screening.
+    #[must_use]
+    pub const fn score(&self) -> f64 {
+        self.score
+    }
+}
+
 /// Reusable GEPA optimizer over an explicit edit surface.
 #[derive(Clone, Debug)]
 pub struct Gepa<
     S,
     Pop = ParetoFrontier,
     Reflect = crate::FixedSurfaceEdit<<S as EditSurfacePlaceholder>::Edit>,
-    ParentSel = ParetoFrequencyWeighted,
+    CandidateSel = ParetoFrequencyWeighted,
     PartSel = RoundRobinPart,
     GatePol = StrictImprovement,
+    Batch = EpochShuffled,
+    Validate = MinibatchThenValidation,
 > {
     surface: S,
     population: Pop,
     reflector: Reflect,
-    parent_selector: ParentSel,
+    candidate_selector: CandidateSel,
     part_selector: PartSel,
     gate: GatePol,
+    batch_sampler: Batch,
+    validation_policy: Validate,
     train_partition: PartitionId,
     max_iterations: usize,
+    proposal_count: usize,
     completed_iterations: usize,
     best: Option<CandidateId>,
+    validation_best: Option<GepaValidationBest>,
     observed: BTreeSet<CandidateId>,
+    candidate_history: Vec<GepaCandidateHistoryEntry>,
 }
 
 /// Serializable GEPA private state.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct GepaCheckpointState<PopulationState, ParentSelectorState, PartSelectorState, GateState> {
+pub struct GepaCheckpointState<
+    PopulationState,
+    CandidateSelectorState,
+    PartSelectorState,
+    GateState,
+    BatchSamplerState,
+    ValidationPolicyState,
+> {
     train_partition: PartitionId,
     max_iterations: usize,
+    proposal_count: usize,
     completed_iterations: usize,
     best: Option<CandidateId>,
+    validation_best: Option<GepaValidationBest>,
     observed: BTreeSet<CandidateId>,
+    candidate_history: Vec<GepaCandidateHistoryEntry>,
     population: PopulationState,
-    parent_selector: ParentSelectorState,
+    candidate_selector: CandidateSelectorState,
     part_selector: PartSelectorState,
     gate: GateState,
+    batch_sampler: BatchSamplerState,
+    validation_policy: ValidationPolicyState,
 }
 
 /// Private helper trait used only to give `Gepa` a default generic slot.
@@ -241,8 +299,8 @@ impl<S, Pop, Reflect> Gepa<S, Pop, Reflect> {
     }
 }
 
-impl<S, Pop, Reflect, ParentSel, PartSel, GatePol>
-    Gepa<S, Pop, Reflect, ParentSel, PartSel, GatePol>
+impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate>
+    Gepa<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate>
 {
     /// Build GEPA with explicit strategy values.
     #[must_use]
@@ -250,22 +308,31 @@ impl<S, Pop, Reflect, ParentSel, PartSel, GatePol>
         surface: S,
         population: Pop,
         reflector: Reflect,
-        parent_selector: ParentSel,
+        candidate_selector: CandidateSel,
         part_selector: PartSel,
         gate: GatePol,
-    ) -> Self {
+    ) -> Self
+    where
+        Batch: Default,
+        Validate: Default,
+    {
         Self {
             surface,
             population,
             reflector,
-            parent_selector,
+            candidate_selector,
             part_selector,
             gate,
+            batch_sampler: Batch::default(),
+            validation_policy: Validate::default(),
             train_partition: PartitionId::from("TRAIN"),
             max_iterations: DEFAULT_MAX_ITERATIONS,
+            proposal_count: 1,
             completed_iterations: 0,
             best: None,
+            validation_best: None,
             observed: BTreeSet::new(),
+            candidate_history: Vec::new(),
         }
     }
 
@@ -293,6 +360,58 @@ impl<S, Pop, Reflect, ParentSel, PartSel, GatePol>
         &mut self.gate
     }
 
+    /// Set the train minibatch sampler used for parent and child screening.
+    #[must_use]
+    pub fn batch_sampler<NextBatch>(
+        self,
+        batch_sampler: NextBatch,
+    ) -> Gepa<S, Pop, Reflect, CandidateSel, PartSel, GatePol, NextBatch, Validate> {
+        Gepa {
+            surface: self.surface,
+            population: self.population,
+            reflector: self.reflector,
+            candidate_selector: self.candidate_selector,
+            part_selector: self.part_selector,
+            gate: self.gate,
+            batch_sampler,
+            validation_policy: self.validation_policy,
+            train_partition: self.train_partition,
+            max_iterations: self.max_iterations,
+            proposal_count: self.proposal_count,
+            completed_iterations: self.completed_iterations,
+            best: self.best,
+            validation_best: self.validation_best,
+            observed: self.observed,
+            candidate_history: self.candidate_history,
+        }
+    }
+
+    /// Set the validation policy used after accepted candidates.
+    #[must_use]
+    pub fn validation_policy<NextValidate>(
+        self,
+        validation_policy: NextValidate,
+    ) -> Gepa<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, NextValidate> {
+        Gepa {
+            surface: self.surface,
+            population: self.population,
+            reflector: self.reflector,
+            candidate_selector: self.candidate_selector,
+            part_selector: self.part_selector,
+            gate: self.gate,
+            batch_sampler: self.batch_sampler,
+            validation_policy,
+            train_partition: self.train_partition,
+            max_iterations: self.max_iterations,
+            proposal_count: self.proposal_count,
+            completed_iterations: self.completed_iterations,
+            best: self.best,
+            validation_best: self.validation_best,
+            observed: self.observed,
+            candidate_history: self.candidate_history,
+        }
+    }
+
     /// Set maximum fixed-surface-edit iterations.
     #[must_use]
     pub const fn max_iterations(mut self, max_iterations: usize) -> Self {
@@ -300,13 +419,26 @@ impl<S, Pop, Reflect, ParentSel, PartSel, GatePol>
         self
     }
 
+    /// Set how many proposal attempts to run for the selected candidate in each iteration.
+    #[must_use]
+    pub const fn proposal_count(mut self, proposal_count: usize) -> Self {
+        self.proposal_count = proposal_count;
+        self
+    }
+
+    /// Candidate observations tracked by GEPA's private state.
+    #[must_use]
+    pub fn candidate_history(&self) -> &[GepaCandidateHistoryEntry] {
+        &self.candidate_history
+    }
+
     /// Select the next candidate to mutate.
     pub fn select_candidate<P>(&mut self, graph: RunGraphView<'_, P>) -> Option<CandidateId>
     where
         P: OptimizationProblem,
-        ParentSel: CandidateSelector<P, Pop, Selection = Option<CandidateId>>,
+        CandidateSel: CandidateSelector<P, Pop, Selection = Option<CandidateId>>,
     {
-        self.parent_selector.select(&self.population, graph)
+        self.candidate_selector.select(&self.population, graph)
     }
 
     /// Select the next surface part to mutate.
@@ -342,8 +474,8 @@ impl<S, Pop, Reflect, ParentSel, PartSel, GatePol>
     }
 }
 
-impl<P, S, Pop, Reflect, ParentSel, PartSel, GatePol> Optimizer<P>
-    for Gepa<S, Pop, Reflect, ParentSel, PartSel, GatePol>
+impl<P, S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate> Optimizer<P>
+    for Gepa<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate>
 where
     P: OptimizationProblem,
     P::Evidence: GepaScoreEvidence,
@@ -351,9 +483,11 @@ where
     S: EditSurface<P::Artifact> + Send + Sync,
     Pop: GepaPopulation + Send + Sync,
     Reflect: GepaReflector<P, S> + Send + Sync,
-    ParentSel: CandidateSelector<P, Pop, Selection = Option<CandidateId>> + Send + Sync,
+    CandidateSel: CandidateSelector<P, Pop, Selection = Option<CandidateId>> + Send + Sync,
     PartSel: PartSelector<P::Artifact, S> + Send + Sync,
     GatePol: Gate + Send + Sync,
+    Batch: BatchSampler + Send + Sync,
+    Validate: ValidationPolicy + Send + Sync,
 {
     async fn initialize(&mut self, _ctx: &mut RunContext<'_, P>) -> Result<(), OptimizerError> {
         Ok(())
@@ -375,10 +509,18 @@ where
                 OptimizerError::Message("GEPA requires at least one seed candidate".to_owned())
             })?;
 
+        let evaluation_set = self.batch_sampler.sample_train(&self.train_partition);
         let parent_baseline = self
-            .evaluate_casewise(ctx, seed, EvaluationPurpose::SeedBaseline)
+            .evaluate_casewise(
+                ctx,
+                seed,
+                evaluation_set.clone(),
+                EvaluationPurpose::SeedBaseline,
+            )
             .await?;
         if self.observed.insert(seed) {
+            self.candidate_history
+                .push(parent_baseline.history_entry(seed));
             let events = self.population.observe_gepa(
                 Some(&self.train_partition),
                 seed,
@@ -390,35 +532,58 @@ where
                 events,
             });
         }
+        if self.validation_best.is_none() {
+            self.validate_candidate(ctx, seed).await?;
+        }
 
         let parent = self.select_candidate(ctx.graph()).unwrap_or(seed);
-        let Some(candidate) = self
-            .propose_candidate(ctx, parent, parent_baseline.assessment)
+        let parent_screening = if parent == seed {
+            parent_baseline
+        } else {
+            self.evaluate_casewise(
+                ctx,
+                parent,
+                evaluation_set.clone(),
+                EvaluationPurpose::SeedBaseline,
+            )
             .await?
-        else {
-            self.completed_iterations += 1;
-            return Ok(leaven_engine::StepStatus::Continue);
         };
+        for _ in 0..self.proposal_count {
+            let Some(candidate) = self
+                .propose_candidate(ctx, parent, parent_screening.assessment)
+                .await?
+            else {
+                continue;
+            };
 
-        let screened = self
-            .evaluate_casewise(ctx, candidate, EvaluationPurpose::Search)
-            .await?;
-        if self
-            .gate
-            .decide(parent_baseline.average_score, screened.average_score)
-            .is_accept()
-        {
-            let events = self.population.observe_gepa(
-                Some(&self.train_partition),
-                candidate,
-                screened.assessment,
-                &screened.scalar_evidence,
-            );
-            ctx.emit(leaven_engine::RunEvent::PopulationUpdated {
-                population_id: self.population.id(),
-                events,
-            });
-            self.best = self.population.best();
+            let screened = self
+                .evaluate_casewise(
+                    ctx,
+                    candidate,
+                    evaluation_set.clone(),
+                    EvaluationPurpose::Search,
+                )
+                .await?;
+            if self
+                .gate
+                .decide(parent_screening.average_score, screened.average_score)
+                .is_accept()
+            {
+                self.candidate_history
+                    .push(screened.history_entry(candidate));
+                let events = self.population.observe_gepa(
+                    Some(&self.train_partition),
+                    candidate,
+                    screened.assessment,
+                    &screened.scalar_evidence,
+                );
+                ctx.emit(leaven_engine::RunEvent::PopulationUpdated {
+                    population_id: self.population.id(),
+                    events,
+                });
+                self.best = self.population.best();
+                self.validate_candidate(ctx, candidate).await?;
+            }
         }
         self.completed_iterations += 1;
 
@@ -430,12 +595,15 @@ where
     }
 
     fn best_candidate(&self, _graph: RunGraphView<'_, P>) -> Option<CandidateId> {
-        self.best.or_else(|| self.population.best())
+        self.validation_best
+            .map(|best| best.candidate)
+            .or(self.best)
+            .or_else(|| self.population.best())
     }
 }
 
-impl<P, S, Pop, Reflect, ParentSel, PartSel, GatePol> CheckpointableOptimizer<P>
-    for Gepa<S, Pop, Reflect, ParentSel, PartSel, GatePol>
+impl<P, S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate> CheckpointableOptimizer<P>
+    for Gepa<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate>
 where
     P: OptimizationProblem,
     P::Evidence: GepaScoreEvidence,
@@ -443,14 +611,23 @@ where
     S: EditSurface<P::Artifact> + Send + Sync,
     Pop: CheckpointPopulation + GepaPopulation + Send + Sync,
     Reflect: GepaReflector<P, S> + Send + Sync,
-    ParentSel: CandidateSelector<P, Pop, Selection = Option<CandidateId>>
+    CandidateSel: CandidateSelector<P, Pop, Selection = Option<CandidateId>>
         + CheckpointCandidateSelector
         + Send
         + Sync,
     PartSel: PartSelector<P::Artifact, S> + CheckpointPartSelector + Send + Sync,
     GatePol: CheckpointGate + Gate + Send + Sync,
+    Batch: BatchSampler + CheckpointBatchSampler + Send + Sync,
+    Validate: ValidationPolicy + CheckpointValidationPolicy + Send + Sync,
 {
-    type State = GepaCheckpointState<Pop::State, ParentSel::State, PartSel::State, GatePol::State>;
+    type State = GepaCheckpointState<
+        Pop::State,
+        CandidateSel::State,
+        PartSel::State,
+        GatePol::State,
+        Batch::State,
+        Validate::State,
+    >;
 
     fn private_state_policy(&self) -> PrivateStatePolicy {
         PrivateStatePolicy::ExplicitSnapshot {
@@ -467,6 +644,13 @@ where
         if let Some(best) = self.best {
             ensure_checkpoint_candidate(&graph, best, "best candidate")?;
         }
+        if let Some(validation_best) = self.validation_best {
+            ensure_checkpoint_candidate(
+                &graph,
+                validation_best.candidate,
+                "validation best candidate",
+            )?;
+        }
         for observed in &self.observed {
             ensure_checkpoint_candidate(&graph, *observed, "observed candidate")?;
         }
@@ -476,13 +660,22 @@ where
         Ok(GepaCheckpointState {
             train_partition: self.train_partition.clone(),
             max_iterations: self.max_iterations,
+            proposal_count: self.proposal_count,
             completed_iterations: self.completed_iterations,
             best: self.best,
+            validation_best: self.validation_best,
             observed: self.observed.clone(),
+            candidate_history: self.candidate_history.clone(),
             population: CheckpointPopulation::checkpoint_state(&self.population),
-            parent_selector: CheckpointCandidateSelector::checkpoint_state(&self.parent_selector),
+            candidate_selector: CheckpointCandidateSelector::checkpoint_state(
+                &self.candidate_selector,
+            ),
             part_selector: CheckpointPartSelector::checkpoint_state(&self.part_selector),
             gate: CheckpointGate::checkpoint_state(&self.gate),
+            batch_sampler: CheckpointBatchSampler::checkpoint_state(&self.batch_sampler),
+            validation_policy: CheckpointValidationPolicy::checkpoint_state(
+                &self.validation_policy,
+            ),
         })
     }
 
@@ -495,18 +688,32 @@ where
         if let Some(best) = state.best {
             ensure_checkpoint_candidate(&graph, best, "best candidate")?;
         }
+        if let Some(validation_best) = state.validation_best {
+            ensure_checkpoint_candidate(
+                &graph,
+                validation_best.candidate,
+                "validation best candidate",
+            )?;
+        }
         for observed in &state.observed {
             ensure_checkpoint_candidate(&graph, *observed, "observed candidate")?;
         }
         self.train_partition = state.train_partition;
         self.max_iterations = state.max_iterations;
+        self.proposal_count = state.proposal_count;
         self.completed_iterations = state.completed_iterations;
         self.best = state.best;
         self.observed = state.observed;
+        self.candidate_history = state.candidate_history;
         self.population.restore_state(state.population);
-        self.parent_selector.restore_state(state.parent_selector);
+        self.candidate_selector
+            .restore_state(state.candidate_selector);
         self.part_selector.restore_state(state.part_selector);
         self.gate.restore_state(state.gate);
+        self.batch_sampler.restore_state(state.batch_sampler);
+        self.validation_policy
+            .restore_state(state.validation_policy);
+        self.validation_best = state.validation_best;
         if let Some(population_best) = self.population.best() {
             ensure_checkpoint_candidate(&graph, population_best, "population best candidate")?;
         }
@@ -530,8 +737,8 @@ where
     Ok(())
 }
 
-impl<S, Pop, Reflect, ParentSel, PartSel, GatePol>
-    Gepa<S, Pop, Reflect, ParentSel, PartSel, GatePol>
+impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate>
+    Gepa<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate>
 {
     async fn propose_candidate<P>(
         &mut self,
@@ -550,7 +757,9 @@ impl<S, Pop, Reflect, ParentSel, PartSel, GatePol>
             .graph()
             .artifact(parent)
             .ok_or_else(|| {
-                OptimizerError::Message(format!("selected parent {parent} is missing from graph"))
+                OptimizerError::Message(format!(
+                    "selected candidate {parent} is missing from graph"
+                ))
             })?
             .clone();
         let part = self
@@ -562,10 +771,47 @@ impl<S, Pop, Reflect, ParentSel, PartSel, GatePol>
             .await
     }
 
+    async fn validate_candidate<P>(
+        &mut self,
+        ctx: &mut RunContext<'_, P>,
+        candidate: CandidateId,
+    ) -> Result<(), OptimizerError>
+    where
+        P: OptimizationProblem,
+        P::Evidence: GepaScoreEvidence,
+        Validate: ValidationPolicy + Sync,
+        S: Sync,
+        Pop: Sync,
+        Reflect: Sync,
+        CandidateSel: Sync,
+        PartSel: Sync,
+        GatePol: Sync,
+        Batch: Sync,
+    {
+        let Some(set) = self.validation_policy.validation_set(candidate) else {
+            return Ok(());
+        };
+        let assessment = self
+            .evaluate_casewise(ctx, candidate, set, EvaluationPurpose::Validation)
+            .await?;
+        if self
+            .validation_best
+            .is_none_or(|best| assessment.average_score > best.score)
+        {
+            self.validation_best = Some(GepaValidationBest {
+                candidate,
+                assessment: assessment.assessment,
+                score: assessment.average_score,
+            });
+        }
+        Ok(())
+    }
+
     async fn evaluate_casewise<P>(
         &self,
         ctx: &mut RunContext<'_, P>,
         candidate: CandidateId,
+        set: EvaluationSet,
         purpose: EvaluationPurpose,
     ) -> Result<GepaAssessment, OptimizerError>
     where
@@ -574,16 +820,18 @@ impl<S, Pop, Reflect, ParentSel, PartSel, GatePol>
         S: Sync,
         Pop: Sync,
         Reflect: Sync,
-        ParentSel: Sync,
+        CandidateSel: Sync,
         PartSel: Sync,
         GatePol: Sync,
+        Batch: Sync,
+        Validate: Sync,
     {
         let report = ctx
             .evaluate(
                 EvaluatorId::PRIMARY,
                 EvaluationRequest::Independent {
                     candidates: vec![candidate],
-                    set: EvaluationSet::Partition(self.train_partition.clone()),
+                    set,
                     granularity: AssessmentGranularity::PerCase,
                     purpose,
                 },
@@ -610,6 +858,16 @@ struct GepaAssessment {
     assessment: AssessmentId,
     scalar_evidence: CasewiseEvidence<ScalarEvidence>,
     average_score: f64,
+}
+
+impl GepaAssessment {
+    fn history_entry(&self, candidate: CandidateId) -> GepaCandidateHistoryEntry {
+        GepaCandidateHistoryEntry {
+            candidate,
+            assessment: self.assessment,
+            score: self.average_score,
+        }
+    }
 }
 
 fn average_scalar(evidence: &CasewiseEvidence<ScalarEvidence>) -> Option<f64> {
