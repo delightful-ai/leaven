@@ -1215,6 +1215,19 @@ pub enum AssessmentGranularity {
 
 If an evaluator cannot provide the requested granularity, it returns an explicit `EvaluationError::UnsupportedGranularity`.
 
+`PerCase` is a graph-row contract, not an evidence-shape hint. For an
+independent request it returns one case-targeted assessment per
+`(candidate, case)` in the resolved set:
+
+```text
+AssessmentTarget::Case { set: resolved_set_id, case }
+```
+
+It must not return one `AssessmentTarget::EvaluationSet` row whose evidence is a
+casewise map. Consumers that need a casewise table, including GEPA and reports,
+derive that view from the returned assessment rows. The detailed row law lives in
+`docs/specs/per_case_assessment_rows.md`.
+
 ### 5.11 `EvaluationRequest`
 
 Evaluation can be independent, pairwise, or listwise.
@@ -1385,6 +1398,10 @@ single evidence type may implement both, but the traits say different things.
 For `AttributableEvidence<S::PartId>`, consumers must check that
 `attribution_domain() == AttributionDomain::Surface(surface.fingerprint().0)`
 before using the part IDs.
+
+`CasewiseEvidence` is an aggregation view. It is allowed as a strategy/report
+projection and may be a domain evidence type for an explicitly aggregate row, but
+`AssessmentGranularity::PerCase` persists case-targeted assessment rows first.
 
 ### 5.15 `PreferenceRelation`
 
@@ -3456,7 +3473,7 @@ Mapping to GEPA paper:
 | SELECTCANDIDATE | `CandidateSelector` |
 | SELECTMODULE | `PartSelector<P, S>` over `EditSurface<P::Artifact>` |
 | minibatch from `D_feedback` | `BatchSampler` + `EvaluationSet::Partition(TRAIN)` |
-| per-instance score table | `CasewiseEvidence` + `AssessmentGranularity::PerCase` |
+| per-instance score table | GEPA-normalized `CasewiseEvidence` derived from `AssessmentGranularity::PerCase` assessment rows |
 | reflective prompt update | `Proposer` |
 | score improves on minibatch | `Acceptance` |
 | evaluate on `D_pareto` | `ValidationPolicy` |
@@ -3470,7 +3487,7 @@ Canonical GEPA step skeleton:
 2. parent = candidate_selector.select(view, ctx.graph(), selection_ctx)?
 3. part = part_selector.select(parent, ctx.graph(), surface)?
 4. batch = batch_sampler.sample(...)
-5. run parent on minibatch and gather casewise/attribution evidence
+5. run parent on minibatch and gather case-targeted assessment rows
 6. proposer proposes one or more surface edits for selected part
 7. GEPA lowers surface edits through S into artifact-native changes
 8. apply proposals through RunContext
@@ -4011,8 +4028,6 @@ impl Evaluator<GskillProblem> for GskillEvaluator<MiniSweAgentRuntime> {
             // Own the artifact before awaiting. Do not hold graph-backed views
             // across workspace rendering or agent runtime calls.
             let artifact = ctx.graph().artifact(cand).unwrap().clone();
-            let mut per_case = BTreeMap::new();
-
             for case_id in set.resolve(&self.cases)? {
                 let case = self.cases.get(case_id).clone();
                 let artifact_for_case = artifact.clone();
@@ -4048,16 +4063,17 @@ impl Evaluator<GskillProblem> for GskillEvaluator<MiniSweAgentRuntime> {
                 ).await?;
 
                 total_cost.checked_add_assign(&cost)?;
-                per_case.insert(case_id, case_result);
+                out.push(Assessment::Independent {
+                    candidate: cand,
+                    target: AssessmentTarget::Case {
+                        set: set.id(),
+                        case: case_id,
+                    },
+                    evidence: ResolveCaseEvidence { result: case_result },
+                    cost,
+                    metadata: MetadataBag::new(),
+                });
             }
-
-            out.push(Assessment::Independent {
-                candidate: cand,
-                target: AssessmentTarget::EvaluationSet(set.id()),
-                evidence: ResolveEvidence { per_case },
-                cost: total_cost.clone(),
-                metadata: MetadataBag::new(),
-            });
         }
 
         Ok(Metered::new(out, total_cost))

@@ -21,6 +21,9 @@ The top of the stack is:
 - `gepa_reflection_evidence_visibility.md`: optimizer-visible reflection data,
   scorer-feedback boundary, target-safe case input projection, hidden split
   defaults, and durable reflection evidence requirements.
+- `per_case_assessment_rows.md`: case-targeted assessment row law for
+  `AssessmentGranularity::PerCase`, GEPA normalization, report grouping, and
+  cache/row restoration requirements.
 - `p8_run_report_operator_ux.md`: P8 result/report surface, run-dir and
   resumability facts, cache/cost/source summaries, proof classification, and
   durable report files.

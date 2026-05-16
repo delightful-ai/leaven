@@ -352,8 +352,8 @@ One ordinary reflective mutation iteration is:
 Required invariants:
 
 - graph mutations go only through `RunContext`;
-- per-case evidence reaches `ParetoFrontier` before any casewise frontier
-  update;
+- per-case assessment rows are normalized into casewise evidence before any
+  `ParetoFrontier` update;
 - validation/test case content is hidden from reflective proposers by default
   through `leaven-run` lowering into engine trust/read policy;
 - proposer feedback uses `InfoRef::Assessment`, `InfoRef::Candidate`, or
@@ -362,7 +362,9 @@ Required invariants:
 - every reflection/proposal records what it read through `informed_by`;
 - acceptance rejection does not erase graph truth about the proposal, apply
   attempt, or screening assessment;
-- population events are optimizer opinions, not graph truth.
+- population events are optimizer opinions, not graph truth;
+- GEPA treats `EvaluationCompleted.assessment_ids` as the full per-case row set
+  and never treats `assessment_ids[0]` as a bundled minibatch assessment.
 
 ## 9. Evaluation And Data Semantics
 
@@ -516,17 +518,18 @@ lowering cannot drift from `EditSurface::change_part`.
 
 ### 11.2 Feedback Selection
 
-GEPA owns the conversion from scored casewise evidence into selected reflection
-records.
+GEPA owns the conversion from scored per-case assessment rows into selected
+reflection records. `CasewiseEvidence` is the normalized GEPA view over those
+rows, not the required evaluator output shape for `AssessmentGranularity::PerCase`.
 
 ```rust
-pub trait GepaReflectionEvidence: leaven_core::Evidence {
-    fn reflection_records(&self) -> Vec<ReflectiveFeedbackRecord>;
+pub trait GepaCaseEvidence: leaven_core::Evidence {
+    fn scalar_score(&self) -> Option<ScalarEvidence>;
+    fn reflection_record(&self) -> Option<ReflectiveFeedbackRecord>;
 }
 ```
 
-The standard implementation for
-`CasewiseEvidence<CaseAssessmentEvidence>` preserves:
+The standard implementation for `CaseAssessmentEvidence` preserves:
 
 ```text
 case id
@@ -538,6 +541,11 @@ assessment/evidence source refs
 
 Do not collapse feedback to `f64` before reflection. Scalar scores drive
 population and acceptance; generated output and feedback text drive reflection.
+
+Every selected record carries the row's `InfoRef::Assessment`. The reflection
+request also carries `InfoRef::Candidate(parent)` and the complete selected row
+set so proposal lineage can be audited without relying on a synthetic aggregate
+assessment.
 
 The default feedback selector uses only train/search assessments under the
 current trust policy. Validation and test evidence are excluded from
@@ -603,8 +611,8 @@ The renderer produces the `system_prompt` and `user_prompt` from:
 candidate id
 selected surface part
 surface part view
-screening/minibatch assessment IDs
-casewise evidence
+screening/minibatch assessment row IDs
+GEPA-normalized casewise evidence
 optional attribution evidence for the selected part
 lineage summary
 objective/background prompt text
@@ -805,7 +813,8 @@ GEPA must return typed errors for:
 - proposer output references unknown part;
 - proposer output is invalid for the surface;
 - evaluator does not support requested granularity;
-- expected casewise evidence missing;
+- expected case-targeted assessment rows missing;
+- a per-case GEPA evaluation returns an aggregate/set-targeted assessment;
 - acceptance policy cannot compare requested evidence shape;
 - split data references unknown cases;
 - required train/search split is empty;

@@ -724,9 +724,13 @@ DSRS and LM-program adapters must:
 
 1. keep program/module artifact semantics in the domain crate;
 2. use `Dataset<LmCase<...>>` or a domain dataset adapter for typed cases;
-3. implement evaluator adapters that return per-case assessments when GEPA or a
-   frontier optimizer needs them;
+3. implement evaluator adapters that return case-targeted per-case assessment
+   rows when GEPA or a frontier optimizer needs them;
 4. not require GEPA or `leaven-eval` to know DSRS program internals.
+
+Per-case means row shape, not a bundled casewise evidence map. The detailed law
+for `AssessmentGranularity::PerCase`, report grouping, cache restoration, and
+GEPA normalization is `docs/specs/per_case_assessment_rows.md`.
 
 ## 8. Invariants
 
@@ -817,7 +821,8 @@ Under `crates/leaven/tests` or `crates/leaven-run/tests`:
 - GEPA default policy never evaluates test in-loop;
 - validation-aware policy records validation use explicitly;
 - agentic suite adapter preserves hidden target semantics and dataset splits;
-- LM-program closure evaluator returns per-case assessments for train cases.
+- LM-program closure evaluator returns case-targeted per-case assessment rows
+  for train cases.
 
 ### 9.4 Topology Contract Tests
 
