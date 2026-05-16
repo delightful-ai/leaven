@@ -1134,6 +1134,18 @@ fn gepa_builder_default_reflector_path_uses_pareto_frontier_defaults() {
 }
 
 #[test]
+fn gepa_default_validation_policy_is_full_validation() {
+    let gepa = Gepa::new(
+        PartMapSurface,
+        ParetoFrontier::by_case().build(),
+        FixedSurfaceEdit::new("improved".to_owned()),
+    )
+    .reflective_dataset(NoReflectiveExamples);
+
+    assert!(std::any::type_name_of_val(&gepa).contains("FullValidation"));
+}
+
+#[test]
 fn gepa_run_reports_missing_seed_before_evaluation() {
     block_on(async {
         let case_set = train_case_set();
@@ -1508,6 +1520,7 @@ type SmokeGepa = Gepa<
 
 fn smoke_gepa(reflector: FixedSurfaceEdit<String>) -> SmokeGepa {
     Gepa::new(PartMapSurface, ParetoFrontier::by_case().build(), reflector)
+        .validation_policy(MinibatchThenValidation)
         .reflective_dataset(NoReflectiveExamples)
 }
 
@@ -1515,7 +1528,9 @@ fn smoke_gepa_with_population(
     population: ParetoFrontier,
     reflector: FixedSurfaceEdit<String>,
 ) -> SmokeGepa {
-    Gepa::new(PartMapSurface, population, reflector).reflective_dataset(NoReflectiveExamples)
+    Gepa::new(PartMapSurface, population, reflector)
+        .validation_policy(MinibatchThenValidation)
+        .reflective_dataset(NoReflectiveExamples)
 }
 
 struct RecordingCaseSetEvaluator {

@@ -23,7 +23,7 @@ use crate::{
     ReflectRequest, ReflectiveDatasetBuilder, RoundRobinPart, StrictImprovement,
     validation::{
         BatchSampler, CheckpointBatchSampler, CheckpointValidationPolicy, EpochShuffled,
-        MinibatchThenValidation, ValidationPolicy,
+        FullValidation, ValidationPolicy,
     },
 };
 
@@ -216,7 +216,7 @@ pub struct Gepa<
     PartSel = RoundRobinPart,
     GatePol = StrictImprovement,
     Batch = EpochShuffled,
-    Validate = MinibatchThenValidation,
+    Validate = FullValidation,
     Dataset = GepaReflectiveDataset,
 > {
     surface: S,
