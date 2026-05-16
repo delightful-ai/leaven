@@ -1382,15 +1382,15 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
                     candidates: vec![candidate],
                     set,
                     granularity: AssessmentGranularity::PerCase,
-                    purpose,
+                    purpose: purpose.clone(),
                 },
             )
             .await
             .map_err(|source| OptimizerError::with_source("GEPA evaluation failed", source))?;
         if report.assessment_ids.is_empty() {
-            return Err(OptimizerError::Message(
-                "GEPA expected at least one case assessment row".to_owned(),
-            ));
+            return Err(OptimizerError::Message(format!(
+                "GEPA {purpose:?} expected at least one case assessment row"
+            )));
         }
         let mut outcomes = Vec::with_capacity(report.assessment_ids.len());
         for assessment in &report.assessment_ids {

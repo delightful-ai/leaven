@@ -11,8 +11,8 @@ use leaven::engine::{
     CacheBypassReason, CacheStatus, Callback, RunContext, RunEvent, RunGraphView,
 };
 use leaven::eval::{Case, SplitRole};
-use leaven::extend::PartitionId;
 use leaven::gepa::{Gepa, ReflectionError, ReflectiveDatasetBuilder, ReflectiveExample};
+use leaven::kernel::Metered;
 use leaven::kernel::{
     AssessmentId, CandidateId, CaseId, Cost, FingerprintBuilder, MetadataValue, RunId,
 };
@@ -22,7 +22,6 @@ use leaven::prelude::{
     Score, ScoreContext, ScoreError, SurfaceError, SurfaceFingerprint,
 };
 use leaven::run::{CachePolicy, RunCase, RunProblem, RunResumability, RunStorage};
-use leaven::{kernel::Metered, stdlib::populations::ParetoFrontier};
 use leaven_gepa::LmBackedReflectorConfig;
 use leaven_lm::{
     Lm, LmError, LmId, LmRequest, LmResponse, Message, Messages, ReasoningEffort, SamplingOptions,
@@ -538,13 +537,7 @@ async fn try_run_aime(
             )
             .with_reflector_config(aime_reflector_config(&config.reflection))
             .surface(AimePromptSurface)
-            .population(
-                ParetoFrontier::by_case()
-                    .partition_filter(std::collections::BTreeSet::from([PartitionId::from(
-                        "TRAIN",
-                    )]))
-                    .build(),
-            )
+            .build()
             .reflective_dataset(reflective_dataset)
             .max_iterations(config.max_iterations),
         )
@@ -2586,31 +2579,14 @@ mod tests {
     }
 
     #[test]
-    fn train_only_run_reports_absent_validation_and_test_scores() {
+    fn reference_gepa_requires_validation_instead_of_silent_train_only_fallback() {
         let config = AimeRunConfig::deterministic_smoke();
         let mut dataset = deterministic_dataset();
         dataset.validation.clear();
         dataset.test.clear();
-        let run = block_on(run_aime(config, dataset));
-        let result = &run.optimized;
+        let error = block_on(try_run_aime(config, dataset)).unwrap_err();
 
-        assert_optional_score(result.summary.baseline_train_score, 0.0);
-        assert_optional_score(result.summary.optimized_train_score, 1.0);
-        assert_eq!(result.summary.baseline_validation_score, None);
-        assert_eq!(result.summary.validation_score, None);
-        assert_eq!(result.summary.baseline_test_score, None);
-        assert_eq!(result.summary.test_score, None);
-        assert!(!result.events.is_empty());
-        assert_eq!(
-            result.best(),
-            Some(
-                &result
-                    .best
-                    .as_ref()
-                    .expect("train-only run has best")
-                    .artifact
-            )
-        );
+        assert!(error.to_string().contains("Validation"));
     }
 
     #[test]
@@ -2782,7 +2758,7 @@ Provide the new instructions within ``` blocks.";
         assert!(
             lines
                 .iter()
-                .any(|line| line == "search_metric_calls_spent=6")
+                .any(|line| line == "search_metric_calls_spent=8")
         );
         assert!(
             lines
@@ -2797,7 +2773,7 @@ Provide the new instructions within ``` blocks.";
         assert!(
             lines
                 .iter()
-                .any(|line| line == "optimization_metric_calls=6")
+                .any(|line| line == "optimization_metric_calls=8")
         );
         assert!(
             lines
@@ -2837,7 +2813,7 @@ Provide the new instructions within ``` blocks.";
     #[test]
     fn deterministic_metric_call_budget_stops_gepa_cleanly_before_second_step() {
         let mut config = AimeRunConfig::deterministic_smoke();
-        config.budget = Budget::metric_calls(6);
+        config.budget = Budget::metric_calls(8);
         config.max_iterations = 2;
         let run = block_on(run_aime(config.clone(), deterministic_dataset()));
         let result = &run.optimized;
@@ -2846,7 +2822,7 @@ Provide the new instructions within ``` blocks.";
             result.stop,
             leaven::run::OptimizationStopReason::BudgetReached
         );
-        assert_eq!(result.summary.optimization_cost.metric_calls, 6);
+        assert_eq!(result.summary.optimization_cost.metric_calls, 8);
         assert!(
             result
                 .events
@@ -2865,7 +2841,7 @@ Provide the new instructions within ``` blocks.";
         assert!(
             lines
                 .iter()
-                .any(|line| line == "optimization_metric_calls=6")
+                .any(|line| line == "optimization_metric_calls=8")
         );
     }
 
