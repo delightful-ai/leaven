@@ -321,7 +321,7 @@ P8 adapter tests:
 Focused commands:
 
 - `cargo nextest run -p p8_aime_gepa`
-- `env -u LEAVEN_AIME_CACHE -u LEAVEN_AIME_LIVE_OPENAI -u LEAVEN_AIME_LIVE_OPENAI_REFLECTION just milestone-p8`
+- `env -u LEAVEN_AIME_CACHE -u LEAVEN_AIME_LIVE_OPENAI -u LEAVEN_AIME_DETERMINISTIC_REFLECTION just milestone-p8`
 - `cargo test -p leaven --test topology_contract`
 
 Completion gate remains `just check` before claiming P8 product readiness.

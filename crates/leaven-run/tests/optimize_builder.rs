@@ -235,7 +235,7 @@ fn run_builder_run_dir_writes_discoverable_durable_artifacts() {
             .evaluation
             .bypasses
             .iter()
-            .any(|summary| summary.reason == EvaluationCacheBypassReason::DisabledByPolicy)
+            .all(|summary| summary.reason != EvaluationCacheBypassReason::DisabledByPolicy)
     );
     assert!(result.summary().storage.is_resumable());
     cleanup_path(&run_dir);

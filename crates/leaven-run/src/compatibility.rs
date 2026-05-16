@@ -7,6 +7,7 @@ use std::{
 };
 
 use leaven_core::CaseSetVersion;
+use leaven_engine::CachePolicy;
 use leaven_eval::{Case, DatasetSplits};
 use leaven_kernel::{Fingerprint, FingerprintBuilder};
 use serde::{Deserialize, Serialize};
@@ -70,6 +71,8 @@ pub struct ScoringEvaluatorIdentity {
     pub dataset: Fingerprint,
     /// Split role/membership identity.
     pub splits: Fingerprint,
+    /// Evaluation cache semantics declared by this evaluator.
+    pub cache_policy: CachePolicy,
 }
 
 impl ScoringEvaluatorIdentity {
@@ -83,7 +86,11 @@ impl ScoringEvaluatorIdentity {
         fingerprint.update(self.splits.0);
         fingerprint.update(b"granularity:per-case");
         fingerprint.update(b"aggregation:casewise-average-report");
-        fingerprint.update(b"cache:never");
+        fingerprint.update(
+            serde_json::to_vec(&self.cache_policy)
+                .expect("cache policy serializes")
+                .as_slice(),
+        );
         fingerprint.finish()
     }
 }

@@ -29,6 +29,7 @@ pub struct ScoringEvaluator<A, I, T = NoTarget> {
     runner: Runner<A, I>,
     scorer: Scorer<A, I, T>,
     fingerprint: Fingerprint,
+    cache_policy: CachePolicy,
     parallelism: NonZeroUsize,
 }
 
@@ -46,6 +47,7 @@ impl<A, I, T> ScoringEvaluator<A, I, T> {
             runner,
             scorer,
             fingerprint: identity.fingerprint(),
+            cache_policy: identity.cache_policy.clone(),
             parallelism: default_parallelism(),
         }
     }
@@ -54,6 +56,13 @@ impl<A, I, T> ScoringEvaluator<A, I, T> {
     #[must_use]
     pub const fn with_parallelism(mut self, parallelism: NonZeroUsize) -> Self {
         self.parallelism = parallelism;
+        self
+    }
+
+    /// Overrides the evaluation cache policy declared to the engine.
+    #[must_use]
+    pub fn with_cache_policy(mut self, cache_policy: CachePolicy) -> Self {
+        self.cache_policy = cache_policy;
         self
     }
 
@@ -79,7 +88,7 @@ where
     }
 
     fn cache_policy(&self, _request: &ResolvedEvaluationRequest) -> CachePolicy {
-        CachePolicy::Never
+        self.cache_policy.clone()
     }
 
     async fn evaluate(

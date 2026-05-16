@@ -117,13 +117,18 @@ the LM response cache and it is not optimizer private state.
 Default product behavior:
 
 1. Durable runs provision evaluation-cache storage automatically.
-2. Default evaluation cache policy remains semantically no-cache unless the
-   evaluator/scorer declares a cache-safe policy.
-3. When an evaluator declares deterministic caching and required identities are
+2. The product-builder default is automatic: ordinary durable
+   `optimize(...).run()` / `.run_dir(...)` uses deterministic candidate/case
+   caching once runner, scorer, case, split, and candidate identities are
+   available.
+3. Explicit `CachePolicy::Never` remains the throwaway/debug policy for
+   ephemeral runs, smoke fixtures, or evaluators that intentionally refuse
+   replay.
+4. When an evaluator declares deterministic caching and required identities are
    present, the engine uses the cache without an extra user knob.
-4. When the cache cannot be used, the report records an explicit bypass reason.
-5. Cache hits do not charge new metric calls or provider/runtime cost.
-6. Cache writes are part of clean durable evaluation completion. Resume must not
+5. When the cache cannot be used, the report records an explicit bypass reason.
+6. Cache hits do not charge new metric calls or provider/runtime cost.
+7. Cache writes are part of clean durable evaluation completion. Resume must not
    pretend an assessment completed unless its graph/evidence/cache records are
    consistent.
 

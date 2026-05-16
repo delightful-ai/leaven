@@ -92,10 +92,12 @@ around engine graph mutation or a home for optimizer strategy state.
   omit them. Cache, budget, LM-role, and optimizer compatibility still contain
   narrow placeholders except where engine optimizer checkpoint validation
   already owns the concrete refusal.
-- `ScoringEvaluator::cache_policy` returns `CachePolicy::Never`. Do not teach
-  users to get solver/judge/reflector caching by editing this evaluator; Layer 1
-  needs role-level runtime/cache policy while LM response cache capabilities
-  stay in `leaven-lm-cache`.
+- `OptimizeBuilder` defaults evaluation caching to automatic deterministic
+  candidate/case caching for ordinary durable runs. Explicit
+  `.evaluation_cache_policy(CachePolicy::Never)` is the throwaway/debug path.
+  Do not teach users to get solver/judge/reflector response caching by editing
+  `ScoringEvaluator`; role-level LM response cache capabilities stay in
+  `leaven-lm-cache`.
 - Single-task/no-dataset optimization is a missing Layer 1 product mode, not a
   reason to fake a one-row training set. If a task has no dataset, model that
   as an explicit product mode and report shape.

@@ -12,12 +12,14 @@ P8 owns the example artifact, edit surface, deterministic AIME-shaped import rec
 - `AimePromptSurface` is the local artifact/surface handhold: one `"system"`
   part and artifact-native `AimePromptChange`.
   Reusable surface rules belong in `leaven-surface` or GEPA docs, not here.
-- `aime_lm_reflector` is the LM-backed reflector. By default it injects a local
-  `DeterministicReflectionLm`; with `LEAVEN_AIME_LIVE_OPENAI_REFLECTION=1` it
-  injects the P8-local OpenAI reflection role with `gpt-5.4-mini` and medium
-  reasoning unless `LEAVEN_AIME_REFLECTION_MODEL` overrides the model. Both
-  routes use `DefaultReflectionRenderer` / `PlainTextEditParser` and apply the
-  resulting proposal through GEPA and `RunContext`.
+- `aime_lm_reflector` is the LM-backed reflector. The deterministic smoke path
+  injects a local `DeterministicReflectionLm`. The live GEPA AIME profile
+  injects the P8-local OpenAI reflection role by default with `gpt-5.1` and
+  medium reasoning unless `LEAVEN_AIME_REFLECTION_MODEL` overrides the model.
+  `LEAVEN_AIME_DETERMINISTIC_REFLECTION=1` is the explicit debug/scaffold path
+  for live solver plus deterministic reflection. Both routes use
+  `DefaultReflectionRenderer` / `PlainTextEditParser` and apply the resulting
+  proposal through GEPA and `RunContext`.
 - `run_solver` receives `RunCase<AimeInput>` and returns only the generated
   answer as `RunOutput` plus metered cost. The ordinary runner path sees the
   problem input and case id, not AIME targets, source metadata, split role, or
@@ -60,8 +62,7 @@ P8 owns the example artifact, edit surface, deterministic AIME-shaped import rec
 ## Proof Paths
 - Clean deterministic proof: `just milestone-p8` with `LEAVEN_AIME_CACHE` and `LEAVEN_AIME_LIVE_OPENAI` unset proves public builder mechanics, split reporting, and the production LM-backed GEPA reflection route through provider-neutral `leaven-lm`. It does not prove live provider quality.
 - Local cached-data proof: materialize `target/leaven-aime-cache/aime.json` with `uv run --with datasets python examples/p8_aime_gepa/scripts/materialize_hf_aime.py --out target/leaven-aime-cache/aime.json`, then run `LEAVEN_AIME_CACHE=target/leaven-aime-cache/aime.json cargo run -p p8_aime_gepa`; this proves the same harness can consume the upstream-shaped AIME cache under the deterministic provider fixture, not live GEPA AIME quality.
-- Live solver proof: `OPENAI_API_KEY=... LEAVEN_AIME_LIVE_OPENAI=1 LEAVEN_AIME_CACHE=target/leaven-aime-cache/aime.json cargo run -p p8_aime_gepa` swaps the runner to native `leaven-lm-openai` and uses the GEPA AIME profile knobs available in Leaven. It spends provider resources, records solver LM cost in evaluation budget, still uses deterministic reflection, and is not part of the cheap milestone lane.
-- Live reflection proof: `OPENAI_API_KEY=... LEAVEN_AIME_LIVE_OPENAI=1 LEAVEN_AIME_LIVE_OPENAI_REFLECTION=1 LEAVEN_AIME_REFLECTION_MODEL=gpt-5.4-mini LEAVEN_AIME_CACHE=target/leaven-aime-cache/aime.json cargo run -p p8_aime_gepa` swaps reflection to `leaven-lm-openai` through the same `LmBackedReflector` and default GEPA prompt renderer. It spends provider resources and is not part of the cheap milestone lane.
+- Full live GEPA AIME proof: `OPENAI_API_KEY=... LEAVEN_AIME_LIVE_OPENAI=1 LEAVEN_AIME_CACHE=target/leaven-aime-cache/aime.json cargo run -p p8_aime_gepa` swaps both solver and reflection to native `leaven-lm-openai`, uses durable SQLite LM response caching, enables deterministic evaluator caching on the durable run store, and uses `gpt-5.1` reflection by default. It spends provider resources, records solver LM cost in evaluation budget, and is not part of the cheap milestone lane.
 - Unit tests in `src/main.rs` prove deterministic improvement, target-safe AIME
   lowering, runner target-invisibility by type route, scorer target visibility,
   source-id report projection without target disclosure, duplicate source-id
@@ -73,7 +74,7 @@ P8 owns the example artifact, edit surface, deterministic AIME-shaped import rec
   public builder path now uses the LM-backed reflection route.
 
 ## Local Rules
-- If your shell may already export live/cache variables, unset them before claiming deterministic p8 behavior: `env -u LEAVEN_AIME_CACHE -u LEAVEN_AIME_LIVE_OPENAI -u LEAVEN_AIME_LIVE_OPENAI_REFLECTION just milestone-p8`.
+- If your shell may already export live/cache variables, unset them before claiming deterministic p8 behavior: `env -u LEAVEN_AIME_CACHE -u LEAVEN_AIME_LIVE_OPENAI -u LEAVEN_AIME_DETERMINISTIC_REFLECTION just milestone-p8`.
 - Preserve the train/validation/test roles in both deterministic cases and cache JSON. Cache JSON must also preserve a stable `source_id` for every import record using `dataset:config:split:row` for HuggingFace materialization. P8 lowers those records into `Case<AimeInput, AimeTarget>` before they reach the runner. The example is specifically proving the public API facade reports split scores, held-out test scores, and report-visible source IDs without making targets runner-visible.
 - Keep the OpenAI solver integration on the same async `.runner(...)` surface
   and concrete `leaven-lm-openai` provider wrapped by `leaven-lm-cache` as

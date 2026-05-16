@@ -19,7 +19,7 @@ profile:
 - metric-call budget: `500`
 - evaluation parallelism: `32`
 - reflection: Leaven GEPA default upstream-style reflection prompt,
-  fenced replacement parser, and `gpt-5.4-mini` with medium reasoning by default
+  fenced replacement parser, and `gpt-5.1` with medium reasoning by default
 
 The GEPA AIME reference does not set a max-iterations hyperparameter. This
 example currently has to set a Leaven-local internal iteration ceiling because
@@ -52,33 +52,25 @@ LEAVEN_AIME_CACHE=target/leaven-aime-cache/aime.json \
 
 The cache uses `AI-MO/aimo-validation-aime` for train/validation and `MathArena/aime_2025` for final held-out test, matching the upstream GEPA example. Each cached case carries a stable `source_id` in the form `dataset:config:split:row`, and the top-level `train`/`validation`/`test` keys remain the split-role boundary. P8 consumes structured Leaven `CaseId` report rows and carries each case's upstream `source_id` into the public evaluation report trace.
 
-To run the GEPA AIME profile with OpenAI as the solver, while keeping reflection
-on the deterministic fixture:
+To run the GEPA AIME profile with OpenAI as the solver and reflector:
 
 ```bash
 export OPENAI_API_KEY=...
 export LEAVEN_AIME_LIVE_OPENAI=1
-export LEAVEN_AIME_CACHE=target/leaven-aime-cache/aime.json
-cargo run -p p8_aime_gepa
-```
-
-To run OpenAI for reflection too, still using `gpt-5.4-mini` instead of the
-paper artifact's `gpt-5.1` reflector:
-
-```bash
-export OPENAI_API_KEY=...
-export LEAVEN_AIME_LIVE_OPENAI=1
-export LEAVEN_AIME_LIVE_OPENAI_REFLECTION=1
 export LEAVEN_AIME_CACHE=target/leaven-aime-cache/aime.json
 cargo run -p p8_aime_gepa
 ```
 
 The OpenAI path is an opt-in native async solver swap over the same
 `leaven::optimize(...).train(...).validation(...).test(...).runner(...).score(...).using(...).run()`
-surface. Both live solver and live reflection use `leaven-lm-openai` wrapped by
+surface. `LEAVEN_AIME_LIVE_OPENAI=1` enables both live solver and live
+reflection by default, matching the GEPA AIME reproduction path. Both live
+solver and live reflection use `leaven-lm-openai` wrapped by
 the P8-local OpenAI LM role, with response caching configured internally;
 solver LM spend is attached to `RunOutput` and charged through evaluation
-accounting. Live roles use the run's LM response cache by default. The
+accounting. Live roles use the run's LM response cache by default, and the
+live GEPA profile declares deterministic evaluator caching over the durable
+run store to match GEPA's `cache_evaluation=True` behavior. The
 role-specific cache env vars are advanced P8 scaffold for experiments, not
 required product setup:
 `LEAVEN_AIME_SOLVER_CACHE_POLICY` and `LEAVEN_AIME_REFLECTION_CACHE_POLICY`
@@ -89,13 +81,17 @@ values default to read/write cache use.
 is the throwaway/debug backend and prints `lm_cache_durable=false`.
 `LEAVEN_OPENAI_MAX_CONCURRENT_REQUESTS` bounds in-process OpenAI request
 concurrency for both live roles and defaults to `32`.
+`LEAVEN_AIME_RUN_DIR` is the explicit resume handle and uses the same durable
+run-directory layout as `.run_dir(path)`. Omit it to get a managed
+`.leaven/runs/<run-id>/` directory. `LEAVEN_AIME_DETERMINISTIC_REFLECTION=1`
+is the debug/scaffold path for live solver with deterministic local reflection.
 The score function is the normal async/fallible Leaven scorer surface. This
 example uses a fixed-reference checker that mirrors the GEPA/DSPy AIME feedback
 shape: exact-match scalar score, correctness text, full reference solution, and
 takeaway prompt for reflection. Model judges can return `ScoreError`, scorer
 cost, and feedback attachments through the same path.
 The live reflection path uses `LmBackedReflector`, text output, and the
-plain-text fenced parser, with `gpt-5.4-mini` and medium reasoning as the default
+plain-text fenced parser, with `gpt-5.1` and medium reasoning as the default
 reflection model controls. `LEAVEN_OPENAI_MODEL` and
 `LEAVEN_AIME_REFLECTION_MODEL` keep solver and reflection models independently
 swappable. The deterministic path proves public API mechanics and LM-backed
@@ -106,6 +102,5 @@ AIME Math test accuracy improving from 46.67% to 60.00%, with validation
 reaching 57.78%. The DSPy tutorial reports an
 `auto="light"` run from 46.6% to 56.6% and repeats AIME 2025 five times for a
 more stable test estimate. Leaven's current P8 profile matches the public
-dataset roles and the available optimizer/provider knobs, with one intentional
-reflection-model difference (`gpt-5.4-mini` instead of `gpt-5.1`). The main
+dataset roles and the available optimizer/provider knobs. The main
 remaining exact-parity gap is that this Rust example uses a Rust-native solver contract: the optimized system prompt is passed directly to `leaven-lm`, and the user turn asks for an answer-only response. That is intentionally not DSPy's full `ChainOfThought` prompt lowering, signature formatting, or rationale-field extraction. Leaven's public report now separates optimization cost from final validation/test report cost; the remaining local control difference is the Leaven-local iteration ceiling described above.

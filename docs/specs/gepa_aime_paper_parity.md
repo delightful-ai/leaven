@@ -42,10 +42,9 @@ let result = leaven::optimize(AimePrompt::new(GEPA_AIME_SEED_PROMPT))
 The run must be durable by default, resumable from clean boundaries, stopped by
 metric-call budget, and backed by Leaven LM/provider/cache infrastructure.
 
-This spec does not require matching GEPA's reflection model exactly. Leaven may
-use `gpt-5.4-mini` as the default reflection model for this reproduction path.
-All other material deltas from the GEPA artifact must be documented in the P8
-report and example README.
+This spec requires the default live P8 reflection model to match the GEPA
+optimize-anything AIME example's `gpt-5.1` reflection setting. Material deltas
+from the GEPA artifact must be documented in the P8 report and example README.
 
 ## 1.1 User-Facing API Contract
 
@@ -63,7 +62,7 @@ let result = leaven::optimize(AimePrompt::seed())
     .using(
         Gepa::builder()
             .surface(AimePromptSurface)
-            .reflection_lm(OpenAiLm::from_env("gpt-5.4-mini")?)
+            .reflection_lm(OpenAiLm::from_env("gpt-5.1")?)
             .aime_defaults()
             .build()?,
     )
@@ -120,7 +119,7 @@ GEPA AIME reference settings:
 | Evaluation cache | enabled |
 | Track best outputs | enabled or explained by richer durable trace |
 | Reflection prompt parser | fenced text replacement, not JSON |
-| Reflection model | Leaven default `gpt-5.4-mini`, overridable |
+| Reflection model | Leaven default `gpt-5.1`, overridable |
 
 The GEPA CAIS artifact reports AIME Math test accuracy from `46.67%` to
 `60.00%`, with validation reaching `57.78%`. Leaven must treat those numbers as
@@ -601,7 +600,7 @@ Required behavior:
 
 - async call path;
 - model configurable separately from solver model;
-- default model for this path is `gpt-5.4-mini`;
+- default model for this path is `gpt-5.1`;
 - sampling/output config recorded in request metadata;
 - LM cost charged to the run budget ledger under the reflection stage;
 - response cache available through `leaven-lm-cache`;
@@ -752,7 +751,7 @@ Live AIME run defaults:
 - solver: `gpt-4.1-mini`;
 - solver temperature: `1.0`;
 - solver max output tokens: `32000`;
-- reflector: `gpt-5.4-mini`;
+- reflector: `gpt-5.1`;
 - parallelism: `32`;
 - search budget: `500` metric calls;
 - run mode: durable;
@@ -919,7 +918,7 @@ Minimum test cases:
 
 - materialized AIME cache preserves source ids and train/validation/test roles;
 - deterministic smoke is labeled non-benchmark proof;
-- live P8 uses `gpt-4.1-mini` solver defaults and `gpt-5.4-mini` reflector;
+- live P8 uses `gpt-4.1-mini` solver defaults and `gpt-5.1` reflector;
 - live P8 stops by metric-call budget and returns a stored/resumable run;
 - resumed P8 does not repeat committed evaluations;
 - final report includes baseline/optimized train, validation, and held-out test

@@ -20,6 +20,7 @@ pub use evaluator::ScoringEvaluator;
 pub use evidence::{
     RunCase, RunOutput, Score, ScoreCase, ScoreContext, ScoreError, ScoreMetadataView,
 };
+pub use leaven_engine::CachePolicy;
 pub use result::{
     BestCandidate, EvaluationCacheBackend, EvaluationCacheBypassReason,
     EvaluationCacheBypassSummary, EvaluationCacheSummary, OptimizationStopReason, Optimized,
@@ -33,7 +34,7 @@ pub mod prelude {
     //! Common public-run imports.
 
     pub use crate::{
-        BestCandidate, EvaluationCacheBackend, EvaluationCacheBypassReason,
+        BestCandidate, CachePolicy, EvaluationCacheBackend, EvaluationCacheBypassReason,
         EvaluationCacheBypassSummary, EvaluationCacheSummary, IntoOptimizeStore,
         OptimizationStopReason, OptimizeBuilder, OptimizeError, OptimizeStore, Optimized,
         RunCacheSummary, RunCase, RunCompatibilitySummary, RunEventSummary, RunNotResumableReason,

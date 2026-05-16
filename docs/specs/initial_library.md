@@ -44,7 +44,9 @@ It tightens several places where the first v0.1 draft was still ambiguous or und
    The spec includes a concrete `RunEvent` shape.
 
 9. **Caching policy is explicit.**  
-   Engine-owned cache; evaluator-declared cache policy; default no-cache.
+   Engine-owned cache; evaluator-declared cache policy; product builders may
+   choose an automatic durable default once replay-safe identities are present;
+   the cold engine trait default remains no-cache.
 
 10. **Async/dyn policy is explicit.**  
     Optimizers are static-first. Stages intended for registries use object-safe `Dyn*` wrappers returning boxed futures.

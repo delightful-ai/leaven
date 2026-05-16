@@ -11,7 +11,7 @@ use std::{
 
 use futures::{FutureExt, future::BoxFuture};
 use leaven_core::{Artifact, EvaluationPurpose, OptimizationProblem, PartitionId};
-use leaven_engine::{Callback, Optimizer, OptimizerError, TrustPolicy};
+use leaven_engine::{CachePolicy, Callback, Optimizer, OptimizerError, TrustPolicy};
 use leaven_eval::{Case, Dataset, DatasetSplits, NoTarget, SplitPolicy, SplitRole};
 use leaven_evidence::{CaseAssessmentEvidence, CasewiseEvidence};
 use leaven_kernel::{Budget, CaseId, Cost, Fingerprint, RunId};
@@ -83,6 +83,7 @@ where
         scorer_fingerprint: None,
         optimizer: (),
         budget: None,
+        evaluation_cache_policy: None,
         evaluation_parallelism: default_parallelism(),
         callbacks: Vec::new(),
         store: StoreConfig::Source(StoreSource::DefaultDurable),
@@ -107,6 +108,7 @@ where
     scorer_fingerprint: Option<RuntimeFingerprint>,
     optimizer: O,
     budget: Option<Budget>,
+    evaluation_cache_policy: Option<CachePolicy>,
     evaluation_parallelism: NonZeroUsize,
     callbacks: Vec<Box<dyn Callback<RunProblem<A, I, T>>>>,
     store: StoreConfig<RunProblem<A, I, T>>,
@@ -135,6 +137,7 @@ where
             scorer_fingerprint: self.scorer_fingerprint,
             optimizer: (),
             budget: self.budget,
+            evaluation_cache_policy: self.evaluation_cache_policy,
             evaluation_parallelism: self.evaluation_parallelism,
             callbacks: Vec::new(),
             store: StoreConfig::Source(self.store.into_source()),
@@ -222,6 +225,7 @@ where
             scorer_fingerprint: self.scorer_fingerprint,
             optimizer,
             budget: self.budget,
+            evaluation_cache_policy: self.evaluation_cache_policy,
             evaluation_parallelism: self.evaluation_parallelism,
             callbacks: self.callbacks,
             store: self.store,
@@ -233,6 +237,17 @@ where
     #[must_use]
     pub fn budget(mut self, budget: Budget) -> Self {
         self.budget = Some(budget);
+        self
+    }
+
+    /// Declares when the engine may reuse scored candidate/case evaluations.
+    ///
+    /// The default is automatic: ordinary durable runs use deterministic
+    /// candidate/case evaluation caching, while explicit `Never` remains the
+    /// throwaway/debug path.
+    #[must_use]
+    pub fn evaluation_cache_policy(mut self, policy: CachePolicy) -> Self {
+        self.evaluation_cache_policy = Some(policy);
         self
     }
 
@@ -331,23 +346,22 @@ where
         let store_config =
             std::mem::replace(&mut self.store, StoreConfig::Source(StoreSource::Ephemeral));
         let mut prepared_store = prepare_store::<RunProblem<A, I, T>>(store_config, self.run_id)?;
-        let runner_fingerprint = durable_runtime_fingerprint(
+        let (runner_fingerprint, scorer_fingerprint) = durable_runtime_fingerprints(
             prepared_store.run_dir.as_deref(),
             self.runner_fingerprint,
-            RuntimeKind::Runner,
-        )?;
-        let scorer_fingerprint = durable_runtime_fingerprint(
-            prepared_store.run_dir.as_deref(),
             self.scorer_fingerprint,
-            RuntimeKind::Scorer,
         )?;
-        let evaluator_identity = ScoringEvaluatorIdentity {
-            label: "leaven-run/score".to_owned(),
-            runner: runner_fingerprint,
-            scorer: scorer_fingerprint,
-            dataset: case_content,
-            splits: case_plan.splits.fingerprint(),
-        };
+        let evaluation_cache_policy = self
+            .evaluation_cache_policy
+            .clone()
+            .unwrap_or_else(|| default_evaluation_cache_policy(&prepared_store));
+        let evaluator_identity = scoring_evaluator_identity(
+            runner_fingerprint,
+            scorer_fingerprint,
+            case_content,
+            case_plan.splits.fingerprint(),
+            evaluation_cache_policy.clone(),
+        );
         let evaluator_fingerprint = RuntimeFingerprint::new(evaluator_identity.fingerprint());
         let compatibility = RunCompatibilityManifest::new(
             DatasetCompatibility::new(case_content, &case_plan.splits),
@@ -365,7 +379,8 @@ where
             scorer,
             &evaluator_identity,
         )
-        .with_parallelism(self.evaluation_parallelism);
+        .with_parallelism(self.evaluation_parallelism)
+        .with_cache_policy(evaluation_cache_policy);
         let callbacks = std::mem::take(&mut self.callbacks);
         let EngineStart {
             engine,
@@ -417,6 +432,45 @@ where
             },
         )
         .await
+    }
+}
+
+fn durable_runtime_fingerprints(
+    run_dir: Option<&std::path::Path>,
+    runner: Option<RuntimeFingerprint>,
+    scorer: Option<RuntimeFingerprint>,
+) -> Result<(RuntimeFingerprint, RuntimeFingerprint), OptimizeError> {
+    Ok((
+        durable_runtime_fingerprint(run_dir, runner, RuntimeKind::Runner)?,
+        durable_runtime_fingerprint(run_dir, scorer, RuntimeKind::Scorer)?,
+    ))
+}
+
+fn default_evaluation_cache_policy<P>(prepared_store: &PreparedStore<P>) -> CachePolicy
+where
+    P: OptimizationProblem,
+{
+    if prepared_store.evaluation_cache.is_some() {
+        CachePolicy::Deterministic
+    } else {
+        CachePolicy::Never
+    }
+}
+
+fn scoring_evaluator_identity(
+    runner: RuntimeFingerprint,
+    scorer: RuntimeFingerprint,
+    dataset: Fingerprint,
+    splits: Fingerprint,
+    cache_policy: CachePolicy,
+) -> ScoringEvaluatorIdentity {
+    ScoringEvaluatorIdentity {
+        label: "leaven-run/score".to_owned(),
+        runner,
+        scorer,
+        dataset,
+        splits,
+        cache_policy,
     }
 }
 

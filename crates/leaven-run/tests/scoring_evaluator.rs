@@ -36,6 +36,7 @@ fn identity(label: &str) -> ScoringEvaluatorIdentity {
         scorer: RuntimeFingerprint::new(TEST_SCORER_FINGERPRINT),
         dataset: TEST_DATASET_FINGERPRINT,
         splits: TEST_SPLIT_FINGERPRINT,
+        cache_policy: CachePolicy::Never,
     }
 }
 
@@ -619,6 +620,10 @@ fn scoring_evaluator_identity_and_cache_policy_are_stable() {
     );
     assert_eq!(evaluator.cache_policy(&request), CachePolicy::Never);
     assert_eq!(evaluator.fingerprint(), evaluator.fingerprint());
+
+    let cached = scoring_evaluator(|ctx| Score::new(ctx.output.output.parse().unwrap(), "ok"))
+        .with_cache_policy(CachePolicy::Deterministic);
+    assert_eq!(cached.cache_policy(&request), CachePolicy::Deterministic);
 }
 
 #[test]
@@ -660,6 +665,19 @@ fn scoring_evaluator_fingerprint_includes_runtime_and_case_identity() {
             ..identity("fingerprint-test")
         },
     );
+    let changed_cache_policy = ScoringEvaluator::new(
+        Arc::new(vec![input_case(0, 2)]),
+        Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
+            async move { RunOutput::new((artifact.0 + *case.input()).to_string()) }.boxed()
+        }),
+        Arc::new(|ctx: ScoreContext<TextArtifact, i32>| {
+            async move { Ok(Score::new(ctx.output.output.parse().unwrap(), "ok")) }.boxed()
+        }),
+        &ScoringEvaluatorIdentity {
+            cache_policy: CachePolicy::Deterministic,
+            ..identity("fingerprint-test")
+        },
+    );
 
     assert_ne!(
         Evaluator::<RunProblem<TextArtifact, i32>>::fingerprint(&base),
@@ -668,5 +686,9 @@ fn scoring_evaluator_fingerprint_includes_runtime_and_case_identity() {
     assert_ne!(
         Evaluator::<RunProblem<TextArtifact, i32>>::fingerprint(&base),
         Evaluator::<RunProblem<TextArtifact, i32>>::fingerprint(&changed_cases)
+    );
+    assert_ne!(
+        Evaluator::<RunProblem<TextArtifact, i32>>::fingerprint(&base),
+        Evaluator::<RunProblem<TextArtifact, i32>>::fingerprint(&changed_cache_policy)
     );
 }
