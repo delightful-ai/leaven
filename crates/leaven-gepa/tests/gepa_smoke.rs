@@ -1147,6 +1147,57 @@ fn accepted_child_enters_reference_state_only_after_full_validation() {
 }
 
 #[test]
+fn default_parent_selection_uses_validation_frontier_frequency() {
+    block_on(async {
+        let case_set = CaseSet::new(vec![(), (), (), ()])
+            .with_partition(
+                leaven_core::PartitionId::from("TRAIN"),
+                vec![leaven_kernel::CaseId::new(0)],
+            )
+            .with_partition(
+                leaven_core::PartitionId::from("VALIDATION"),
+                vec![
+                    leaven_kernel::CaseId::new(1),
+                    leaven_kernel::CaseId::new(2),
+                    leaven_kernel::CaseId::new(3),
+                ],
+            );
+        let store = InlineEvidenceStore::<ScalarEvidence>::new("inline");
+        let mut engine = Engine::<SamplingProblem>::builder()
+            .evaluator(ValidationFrontierFrequencyEvaluator)
+            .build();
+        engine
+            .insert_seed(
+                PartMapArtifact(BTreeMap::from([("answer".to_owned(), "draft".to_owned())])),
+                0,
+            )
+            .unwrap();
+        let mut gepa = Gepa::new(
+            PartMapSurface,
+            ParetoFrontier::by_case().build(),
+            SequentialSurfaceEdits::new(["improved", "improved-again"]),
+        )
+        .reflective_dataset(OneReflectiveExample)
+        .validation_policy(FullValidation)
+        .max_iterations(2);
+
+        engine.run(&mut gepa, &case_set, &store).await.unwrap();
+
+        let selected = gepa
+            .events()
+            .iter()
+            .filter_map(|event| match event {
+                leaven_gepa::GepaEventSummary::ParentSelected { candidate_index } => {
+                    Some(candidate_index.get())
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(selected, vec![0, 1]);
+    });
+}
+
+#[test]
 fn no_reflective_examples_skip_before_reflector_provider_work() {
     block_on(async {
         let case_set = CaseSet::new(vec![(), ()])
@@ -1815,6 +1866,67 @@ impl Evaluator<SamplingProblem> for ValidationSelectionEvaluator {
                     if improved { 0.0 } else { 1.0 }
                 } else if improved {
                     1.0
+                } else {
+                    0.0
+                };
+                assessments.push(Assessment::Independent {
+                    candidate,
+                    target: AssessmentTarget::Case { set, case },
+                    evidence: ScalarEvidence::new(score).unwrap(),
+                    cost: Cost::metric_calls(1),
+                    metadata: MetadataBag::new(),
+                });
+            }
+        }
+        Ok(Metered::new(
+            assessments,
+            Cost::metric_calls(request.set.case_ids.len() as u64),
+        ))
+    }
+}
+
+struct ValidationFrontierFrequencyEvaluator;
+
+impl Evaluator<SamplingProblem> for ValidationFrontierFrequencyEvaluator {
+    fn id(&self) -> EvaluatorId {
+        EvaluatorId::PRIMARY
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        Fingerprint::from_bytes([11; 32])
+    }
+
+    fn cache_policy(&self, _request: &ResolvedEvaluationRequest) -> CachePolicy {
+        CachePolicy::Never
+    }
+
+    async fn evaluate(
+        &self,
+        request: ResolvedEvaluationRequest,
+        ctx: EvaluationContext<'_, SamplingProblem>,
+    ) -> Result<Metered<Vec<Assessment<SamplingProblem>>>, EvaluationError> {
+        let set = leaven_kernel::EvaluationSetId::from_uuid(request.set.id.as_uuid());
+        let ResolvedRequestKind::Independent { candidates } = request.kind else {
+            return Err(EvaluationError::Message(
+                "expected independent request".to_owned(),
+            ));
+        };
+        let mut assessments = Vec::new();
+        for candidate in candidates {
+            let artifact = ctx.graph().artifact(candidate).expect("candidate artifact");
+            let improved = artifact
+                .0
+                .get("answer")
+                .is_some_and(|value| value.starts_with("improved"));
+            for case in request.set.case_ids.iter().copied() {
+                let score = if case == leaven_kernel::CaseId::new(0) {
+                    if improved { 1.0 } else { 0.0 }
+                } else if case == leaven_kernel::CaseId::new(1) {
+                    if improved { 0.0 } else { 1.0 }
+                } else if case == leaven_kernel::CaseId::new(2)
+                    || case == leaven_kernel::CaseId::new(3)
+                {
+                    if improved { 0.4 } else { 0.0 }
                 } else {
                     0.0
                 };

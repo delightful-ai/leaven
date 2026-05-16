@@ -299,6 +299,34 @@ impl GepaReferenceState {
             .map(|(_, candidate)| candidate)
     }
 
+    fn select_by_validation_frontier_frequency(&self) -> Option<(GepaCandidateIndex, CandidateId)> {
+        let mut frequencies = BTreeMap::<GepaCandidateIndex, usize>::new();
+        for candidates in self.validation_frontier_candidates.values() {
+            for candidate in candidates {
+                *frequencies.entry(*candidate).or_default() += 1;
+            }
+        }
+        let (index, _) = frequencies.into_iter().max_by(|left, right| {
+            let left_score = self
+                .record(left.0)
+                .and_then(GepaCandidateRecord::validation_score)
+                .unwrap_or(f64::NEG_INFINITY);
+            let right_score = self
+                .record(right.0)
+                .and_then(GepaCandidateRecord::validation_score)
+                .unwrap_or(f64::NEG_INFINITY);
+            left.1
+                .cmp(&right.1)
+                .then_with(|| left_score.total_cmp(&right_score))
+                .then_with(|| right.0.cmp(&left.0))
+        })?;
+        Some((index, self.record(index)?.candidate()))
+    }
+
+    fn record(&self, index: GepaCandidateIndex) -> Option<&GepaCandidateRecord> {
+        self.records.get(usize::try_from(index.get()).ok()?)
+    }
+
     fn add_validated_candidate(
         &mut self,
         candidate: CandidateId,
@@ -855,14 +883,18 @@ where
         });
         let evaluation_set = self.batch_sampler.sample_train(&self.train_partition);
         self.events.push(GepaEventSummary::TrainMinibatchSampled);
-        let parent = self
+        let (parent_index, parent) = self
             .reference_state
-            .best_candidate()
-            .or_else(|| self.select_candidate(ctx.graph()))
-            .unwrap_or(seed);
-        let parent_index = self.reference_state.index_of(parent).ok_or_else(|| {
-            OptimizerError::Message("GEPA selected a parent outside reference state".to_owned())
-        })?;
+            .select_by_validation_frontier_frequency()
+            .or_else(|| {
+                let parent = self.select_candidate(ctx.graph()).unwrap_or(seed);
+                self.reference_state
+                    .index_of(parent)
+                    .map(|index| (index, parent))
+            })
+            .ok_or_else(|| {
+                OptimizerError::Message("GEPA selected a parent outside reference state".to_owned())
+            })?;
         self.events.push(GepaEventSummary::ParentSelected {
             candidate_index: parent_index,
         });
