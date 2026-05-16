@@ -346,12 +346,8 @@ pub fn write_summary_report(summary: &StandardRunSummary) -> Result<(), Optimize
         operation: "create report directory",
         source,
     })?;
-    let bytes = serde_json::to_vec_pretty(summary).map_err(|source| {
-        OptimizeError::Optimizer(leaven_engine::OptimizerError::with_source(
-            "serialize summary report failed",
-            source,
-        ))
-    })?;
+    let bytes =
+        serde_json::to_vec_pretty(summary).expect("standard run summary is JSON-serializable");
     fs::write(path, bytes).map_err(|source| OptimizeError::ReportStore {
         operation: "write summary json",
         source,
@@ -473,7 +469,7 @@ mod tests {
     fn cache_summary_groups_hits_misses_and_bypasses_by_storage_status() {
         let request_id = EvaluationRequestId::new();
         let evaluator = EvaluatorId::PRIMARY;
-        let events = vec![
+        let events = [
             leaven_engine::RunEvent::OptimizationStarted {
                 run_id: leaven_kernel::RunId::new(),
             },
@@ -521,7 +517,7 @@ mod tests {
             ),
             completed(
                 EvaluationRequestId::new(),
-                evaluator.clone(),
+                evaluator,
                 leaven_engine::CacheStatus::Bypassed(
                     leaven_engine::CacheBypassReason::MissingCandidateIdentity {
                         candidate: CandidateId::new(),
@@ -575,132 +571,130 @@ mod tests {
     }
 
     #[test]
-    fn event_summary_maps_every_engine_event_variant() {
+    fn event_summary_maps_lifecycle_and_budget_events() {
+        assert_event_summary(
+            leaven_engine::RunEvent::OptimizationStarted {
+                run_id: leaven_kernel::RunId::new(),
+            },
+            RunEventSummary::OptimizationStarted,
+        );
+        assert_event_summary(
+            leaven_engine::RunEvent::IterationStarted {
+                iteration: IterationId::new(),
+            },
+            RunEventSummary::IterationStarted,
+        );
+        assert_event_summary(
+            leaven_engine::RunEvent::BudgetCharged {
+                stage: StageId::custom("test"),
+                cost: Cost::metric_calls(1),
+                remaining: BudgetSnapshot::default(),
+            },
+            RunEventSummary::BudgetCharged,
+        );
+        assert_event_summary(
+            leaven_engine::RunEvent::IterationEnded {
+                iteration: IterationId::new(),
+            },
+            RunEventSummary::IterationEnded,
+        );
+        assert_event_summary(
+            leaven_engine::RunEvent::OptimizationStopping {
+                reason: leaven_engine::StopReason::OptimizerDone,
+            },
+            RunEventSummary::OptimizationStopping,
+        );
+        assert_event_summary(
+            leaven_engine::RunEvent::OptimizationEnded {
+                run_id: leaven_kernel::RunId::new(),
+                best: None,
+                budget: BudgetSnapshot::default(),
+            },
+            RunEventSummary::OptimizationEnded,
+        );
+    }
+
+    #[test]
+    fn event_summary_maps_graph_stage_eval_population_and_error_events() {
         let error = ErrorRecord::new(ErrorKind::Internal, "bad input");
         let receipt = StageAttemptReceiptRef {
             id: StageAttemptReceiptId::new(),
             fingerprint: None,
         };
-        let events = vec![
-            (
-                leaven_engine::RunEvent::OptimizationStarted {
-                    run_id: leaven_kernel::RunId::new(),
-                },
-                RunEventSummary::OptimizationStarted,
+        assert_event_summary(
+            leaven_engine::RunEvent::ProposalBatchProduced {
+                iteration: Some(IterationId::new()),
+                batch_id: ProposalBatchId::new(),
+                proposer: StageId::custom("proposer"),
+                proposal_count: 1,
+            },
+            RunEventSummary::ProposalBatchProduced,
+        );
+        assert_event_summary(
+            leaven_engine::RunEvent::ProposalRecorded {
+                proposal_id: ProposalId::new(),
+                batch_id: ProposalBatchId::new(),
+                effect: ProposalEffectKind::Create,
+                causal: CausalInputs::None,
+                informed_by_count: 0,
+            },
+            RunEventSummary::ProposalRecorded,
+        );
+        assert_event_summary(
+            leaven_engine::RunEvent::StageAttemptRecorded {
+                stage_call_id: StageCallId::new(),
+                role: StageRole::reflect(),
+                receipt,
+                outcome: StageAttemptOutcome::Failed(StageAttemptFailure::OutputParse),
+            },
+            RunEventSummary::StageAttemptRecorded,
+        );
+        assert_event_summary(
+            leaven_engine::RunEvent::ApplySucceeded {
+                proposal_id: ProposalId::new(),
+                candidate_id: CandidateId::new(),
+            },
+            RunEventSummary::ApplySucceeded,
+        );
+        assert_event_summary(
+            leaven_engine::RunEvent::ApplyFailed {
+                proposal_id: ProposalId::new(),
+                error: error.clone(),
+            },
+            RunEventSummary::ApplyFailed,
+        );
+        assert_event_summary(
+            leaven_engine::RunEvent::EvaluationRequested {
+                request_id: EvaluationRequestId::new(),
+                evaluator: EvaluatorId::PRIMARY,
+                request: leaven_engine::EvaluationRequestSummary { candidate_count: 1 },
+            },
+            RunEventSummary::EvaluationRequested,
+        );
+        assert_event_summary(
+            completed(
+                EvaluationRequestId::new(),
+                EvaluatorId::PRIMARY,
+                leaven_engine::CacheStatus::Miss,
+                Cost::zero(),
             ),
-            (
-                leaven_engine::RunEvent::IterationStarted {
-                    iteration: IterationId::new(),
-                },
-                RunEventSummary::IterationStarted,
-            ),
-            (
-                leaven_engine::RunEvent::BudgetCharged {
-                    stage: StageId::custom("test"),
-                    cost: Cost::metric_calls(1),
-                    remaining: BudgetSnapshot::default(),
-                },
-                RunEventSummary::BudgetCharged,
-            ),
-            (
-                leaven_engine::RunEvent::ProposalBatchProduced {
-                    iteration: Some(IterationId::new()),
-                    batch_id: ProposalBatchId::new(),
-                    proposer: StageId::custom("proposer"),
-                    proposal_count: 1,
-                },
-                RunEventSummary::ProposalBatchProduced,
-            ),
-            (
-                leaven_engine::RunEvent::ProposalRecorded {
-                    proposal_id: ProposalId::new(),
-                    batch_id: ProposalBatchId::new(),
-                    effect: ProposalEffectKind::Create,
-                    causal: CausalInputs::None,
-                    informed_by_count: 0,
-                },
-                RunEventSummary::ProposalRecorded,
-            ),
-            (
-                leaven_engine::RunEvent::StageAttemptRecorded {
-                    stage_call_id: StageCallId::new(),
-                    role: StageRole::reflect(),
-                    receipt,
-                    outcome: StageAttemptOutcome::Failed(StageAttemptFailure::OutputParse),
-                },
-                RunEventSummary::StageAttemptRecorded,
-            ),
-            (
-                leaven_engine::RunEvent::ApplySucceeded {
-                    proposal_id: ProposalId::new(),
-                    candidate_id: CandidateId::new(),
-                },
-                RunEventSummary::ApplySucceeded,
-            ),
-            (
-                leaven_engine::RunEvent::ApplyFailed {
-                    proposal_id: ProposalId::new(),
-                    error: error.clone(),
-                },
-                RunEventSummary::ApplyFailed,
-            ),
-            (
-                leaven_engine::RunEvent::EvaluationRequested {
-                    request_id: EvaluationRequestId::new(),
-                    evaluator: EvaluatorId::PRIMARY,
-                    request: leaven_engine::EvaluationRequestSummary { candidate_count: 1 },
-                },
-                RunEventSummary::EvaluationRequested,
-            ),
-            (
-                completed(
-                    EvaluationRequestId::new(),
-                    EvaluatorId::PRIMARY,
-                    leaven_engine::CacheStatus::Miss,
-                    Cost::zero(),
-                ),
-                RunEventSummary::EvaluationCompleted,
-            ),
-            (
-                leaven_engine::RunEvent::PopulationUpdated {
-                    population_id: PopulationId::new(),
-                    events: Vec::new(),
-                },
-                RunEventSummary::PopulationUpdated,
-            ),
-            (
-                leaven_engine::RunEvent::IterationEnded {
-                    iteration: IterationId::new(),
-                },
-                RunEventSummary::IterationEnded,
-            ),
-            (
-                leaven_engine::RunEvent::OptimizationStopping {
-                    reason: leaven_engine::StopReason::OptimizerDone,
-                },
-                RunEventSummary::OptimizationStopping,
-            ),
-            (
-                leaven_engine::RunEvent::OptimizationEnded {
-                    run_id: leaven_kernel::RunId::new(),
-                    best: None,
-                    budget: BudgetSnapshot::default(),
-                },
-                RunEventSummary::OptimizationEnded,
-            ),
-            (
-                leaven_engine::RunEvent::Error {
-                    stage: None,
-                    error,
-                    policy: leaven_engine::ErrorPolicy::StoppedRun,
-                },
-                RunEventSummary::Error,
-            ),
-        ];
-
-        for (event, expected) in events {
-            assert_eq!(event_summary(&event), expected);
-        }
+            RunEventSummary::EvaluationCompleted,
+        );
+        assert_event_summary(
+            leaven_engine::RunEvent::PopulationUpdated {
+                population_id: PopulationId::new(),
+                events: Vec::new(),
+            },
+            RunEventSummary::PopulationUpdated,
+        );
+        assert_event_summary(
+            leaven_engine::RunEvent::Error {
+                stage: None,
+                error,
+                policy: leaven_engine::ErrorPolicy::StoppedRun,
+            },
+            RunEventSummary::Error,
+        );
     }
 
     #[test]
@@ -732,7 +726,12 @@ mod tests {
         assert_eq!(scores[0].output, "inline answer");
         assert_eq!(scores[0].feedback, "inline feedback");
         assert_eq!(scores[1].output, "blob:blob-store:answer.txt");
-        assert_eq!(scores[1].score, 0.25);
+        assert!((scores[1].score - 0.25).abs() < f64::EPSILON);
+    }
+
+    fn assert_event_summary(event: leaven_engine::RunEvent, expected: RunEventSummary) {
+        assert_eq!(event_summary(&event), expected);
+        drop(event);
     }
 
     fn completed(

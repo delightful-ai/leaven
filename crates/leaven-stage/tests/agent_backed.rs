@@ -1,7 +1,10 @@
 use std::collections::BTreeMap;
 
 use futures::executor::block_on;
-use leaven_agent::{AgentSession, FakeAgentAction, FakeAgentRuntime};
+use leaven_agent::{
+    AgentRunContext, AgentRunRequest, AgentRuntime, AgentRuntimeError, AgentSession,
+    FakeAgentAction, FakeAgentRuntime,
+};
 use leaven_core::{
     Artifact, ArtifactIdentity, CacheIdentity, Evidence, OptimizationProblem, Proposal,
     ProposalBatch, ProposalBatchSemantics,
@@ -239,6 +242,51 @@ fn agent_backed_surfaces_serialization_allocation_and_parse_failures() {
         );
         assert_eq!(receipt.outputs.len(), 1);
         assert_eq!(receipt.outputs[0].status, OutputEntryStatus::Present);
+        assert_eq!(receipt.parse.as_ref().unwrap().status, ParseStatus::Failed);
+    });
+}
+
+#[test]
+fn agent_backed_records_missing_outputs_before_parse_failure() {
+    block_on(async {
+        let (mut graph, mut budget) = graph_and_budget();
+        let parent = {
+            let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+            ctx.insert_seed(TextArtifact("seed".to_owned()), 0).unwrap()
+        };
+        let proposer = AgentBacked::<ProposerSlot<ReflectRequest>, _, _, _>::from_factory(
+            LocalWorkspaceFactory::temp(),
+            MissingOutputRuntime,
+            ReflectBootstrap,
+            JsonProposalParser,
+            Default::default(),
+        );
+
+        let err = {
+            let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+            ctx.propose(&proposer, ReflectRequest { parent })
+                .await
+                .unwrap_err()
+        };
+        assert!(
+            err.to_string().contains("agent stage output parse failed"),
+            "{err:?} / {err}"
+        );
+
+        let ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+        let receipt_ref = stage_receipt_ref(
+            &ctx,
+            &StageAttemptOutcome::Failed(StageAttemptFailure::OutputParse),
+        );
+        let receipt = proposer
+            .receipt_store()
+            .read(receipt_ref.id)
+            .await
+            .unwrap()
+            .expect("parse failure receipt is persisted");
+        assert_eq!(receipt.outputs.len(), 1);
+        assert_eq!(receipt.outputs[0].status, OutputEntryStatus::Missing);
+        assert!(receipt.outputs[0].fingerprint.is_none());
         assert_eq!(receipt.parse.as_ref().unwrap().status, ParseStatus::Failed);
     });
 }
@@ -628,6 +676,30 @@ impl leaven_workspace::WorkspaceFactory for CleanupFailingFactory {
                 fail_cleanup: true,
                 ..Default::default()
             }),
+        ))
+    }
+}
+
+struct MissingOutputRuntime;
+
+impl AgentRuntime for MissingOutputRuntime {
+    fn id(&self) -> leaven_kernel::AgentRuntimeId {
+        leaven_kernel::AgentRuntimeId::new_const("missing-output")
+    }
+
+    fn fingerprint(&self) -> leaven_kernel::Fingerprint {
+        leaven_kernel::Fingerprint::from_bytes([0x17; 32])
+    }
+
+    async fn run_session(
+        &self,
+        _workspace: &mut WorkspaceView<'_>,
+        _request: AgentRunRequest,
+        ctx: AgentRunContext<'_>,
+    ) -> Result<Metered<AgentSession>, AgentRuntimeError> {
+        Ok(Metered::new(
+            AgentSession::succeeded(ctx.session_id()),
+            Cost::zero(),
         ))
     }
 }

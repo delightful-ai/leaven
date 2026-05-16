@@ -25,3 +25,4 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
+rusqlite = { workspace = true }

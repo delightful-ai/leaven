@@ -79,7 +79,7 @@ impl SqliteEvaluationCache {
         &self,
         key: &EvaluationCacheKey,
     ) -> Result<Option<Vec<AssessmentId>>, EvaluationCacheStoreError> {
-        let key_hash = key_hash(key)?;
+        let key_hash = key_hash(key);
         let mut connection = self.connection.lock();
         let transaction =
             connection
@@ -423,17 +423,9 @@ fn insert_entry(
     assessment_ids: &[AssessmentId],
     created_at: &str,
 ) -> Result<(), EvaluationCacheStoreError> {
-    let key_json =
-        serde_json::to_string(key).map_err(|source| EvaluationCacheStoreError::Codec {
-            operation: "encode key",
-            source,
-        })?;
-    let assessment_ids_json = serde_json::to_string(assessment_ids).map_err(|source| {
-        EvaluationCacheStoreError::Codec {
-            operation: "encode assessment ids",
-            source,
-        }
-    })?;
+    let key_json = serde_json::to_string(key).expect("evaluation cache keys are JSON-serializable");
+    let assessment_ids_json =
+        serde_json::to_string(assessment_ids).expect("assessment id vectors are JSON-serializable");
     transaction
         .execute(
             "INSERT INTO evaluation_cache_entries
@@ -478,13 +470,9 @@ fn decode_assessment_ids(
     })
 }
 
-fn key_hash(key: &EvaluationCacheKey) -> Result<String, EvaluationCacheStoreError> {
-    let key_json =
-        serde_json::to_string(key).map_err(|source| EvaluationCacheStoreError::Codec {
-            operation: "encode key",
-            source,
-        })?;
-    Ok(key_hash_from_json(&key_json))
+fn key_hash(key: &EvaluationCacheKey) -> String {
+    let key_json = serde_json::to_string(key).expect("evaluation cache keys are JSON-serializable");
+    key_hash_from_json(&key_json)
 }
 
 fn key_hash_from_json(key_json: &str) -> String {

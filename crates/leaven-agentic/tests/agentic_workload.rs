@@ -8,8 +8,8 @@ use std::sync::{
 
 use futures::future::{BoxFuture, FutureExt};
 use leaven_agent::{
-    AgentInstructions, AgentRunRequest, AgentSession, FakeAgentAction, FakeAgentRuntime,
-    JsonSchemaRef, OutputContract,
+    AgentInstructions, AgentRunContext, AgentRunRequest, AgentRuntime, AgentRuntimeError,
+    AgentSession, FakeAgentAction, FakeAgentRuntime, JsonSchemaRef, OutputContract,
 };
 use leaven_agentic::{
     AgentCase, AgentCaseEvaluator, AgentCaseEvaluatorConfig, AgentCasePresentation,
@@ -1033,6 +1033,87 @@ fn agent_case_evaluator_retries_case_errors_and_records_attempt_history() {
 }
 
 #[test]
+fn agent_case_evaluator_refuses_retry_history_cost_overflow_before_recording_score() {
+    futures::executor::block_on(async {
+        let case = AgentCase::text(
+            CaseId::new(0),
+            "question",
+            CaseTarget::Text("expected".to_owned()),
+        );
+        let suite = CaseSuite::from_cases([case]).unwrap();
+        let config = AgentCaseEvaluatorConfig::new(
+            EvaluatorId::from("agent-case/retry-cost-overflow"),
+            Fingerprint::from_bytes([4; 32]),
+        )
+        .with_run_policy(AgentCaseRunPolicy {
+            retry_on_error: 1,
+            ..AgentCaseRunPolicy::default()
+        });
+        let evaluator = AgentCaseEvaluator::new(
+            config,
+            suite,
+            LocalWorkspaceFactory::temp(),
+            FirstAttemptMaxCostRuntime::default(),
+            TestPresenter,
+            FlakyScorer::default(),
+        );
+        let mut graph = RunGraph::<CaseProblem>::new(RunId::new());
+        let mut budget = BudgetLedger::default();
+        let store = InlineEvidenceStore::<CaseEvidence>::new("case-evidence");
+        let case_set = CaseSet::new(vec!["case-0"]);
+        let candidate = {
+            let mut ctx = RunContext::<CaseProblem>::new(&mut graph, &mut budget);
+            ctx.insert_seed(CaseArtifact("seed".to_owned()), 0).unwrap()
+        };
+        let mut ctx = RunContext::<CaseProblem>::new(&mut graph, &mut budget)
+            .with_case_set(&case_set)
+            .with_evidence_store(&store);
+
+        let error = ctx
+            .evaluate_with(
+                &evaluator,
+                EvaluationRequest::Independent {
+                    candidates: vec![candidate],
+                    set: EvaluationSet::All,
+                    granularity: AssessmentGranularity::PerCase,
+                    purpose: EvaluationPurpose::Search,
+                },
+            )
+            .await
+            .unwrap_err();
+
+        let leaven_engine::RunContextError::Evaluation(
+            leaven_engine::EvaluationError::WithSource { source, .. },
+        ) = error
+        else {
+            panic!("expected sourced evaluation error");
+        };
+        let source = source
+            .downcast_ref::<AgenticAdapterError>()
+            .expect("agentic adapter source");
+        let AgenticAdapterError::CaseRunFailed {
+            records_len,
+            records,
+            ..
+        } = source
+        else {
+            panic!("expected case-run failure");
+        };
+        assert_eq!(*records_len, 2);
+        assert_eq!(records.len(), 2);
+        assert_eq!(
+            serde_json::to_value(&records[0].error).unwrap()["kind"],
+            serde_json::json!("scoring")
+        );
+        assert_eq!(
+            serde_json::to_value(&records[1].error).unwrap()["kind"],
+            serde_json::json!("scoring")
+        );
+        assert!(records.iter().all(|record| !record.score_recorded));
+    });
+}
+
+#[test]
 fn agent_case_evaluator_exhausted_retries_surface_attempt_records() {
     futures::executor::block_on(async {
         let case = AgentCase::text(
@@ -1703,6 +1784,46 @@ impl AgentCaseScorer<CaseProblem> for AlwaysFailingScorer {
         Err(AgenticAdapterError::Input(
             "synthetic permanent scorer failure".to_owned(),
         ))
+    }
+}
+
+#[derive(Clone, Default)]
+struct FirstAttemptMaxCostRuntime {
+    attempts: Arc<AtomicUsize>,
+}
+
+impl AgentRuntime for FirstAttemptMaxCostRuntime {
+    fn id(&self) -> leaven_kernel::AgentRuntimeId {
+        leaven_kernel::AgentRuntimeId::new_const("first-attempt-max-cost")
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        Fingerprint::from_bytes([13; 32])
+    }
+
+    async fn run_session(
+        &self,
+        workspace: &mut WorkspaceView<'_>,
+        _request: AgentRunRequest,
+        ctx: AgentRunContext<'_>,
+    ) -> Result<Metered<AgentSession>, AgentRuntimeError> {
+        workspace.write_file(
+            &WorkspacePath::new("output/result.txt").unwrap(),
+            b"observed",
+        )?;
+        let mut session = AgentSession::succeeded(ctx.session_id());
+        session
+            .output_files
+            .push(WorkspacePath::new("output/result.txt").unwrap());
+        let cost = if self.attempts.fetch_add(1, Ordering::SeqCst) == 0 {
+            Cost {
+                metric_calls: u64::MAX,
+                ..Cost::zero()
+            }
+        } else {
+            Cost::zero()
+        };
+        Ok(Metered::new(session, cost))
     }
 }
 

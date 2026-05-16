@@ -29,6 +29,7 @@ use leaven_run::{
 };
 use leaven_store::{EvidenceStore, StoreError};
 use leaven_store_inline::InlineEvidenceStore;
+use rusqlite::Connection;
 
 const TEST_RUNNER_FINGERPRINT: Fingerprint = Fingerprint::from_bytes([7; 32]);
 const TEST_SCORER_FINGERPRINT: Fingerprint = Fingerprint::from_bytes([8; 32]);
@@ -263,6 +264,226 @@ fn run_builder_run_dir_reports_blocked_summary_file() {
         }
     ));
     cleanup_path(&run_dir);
+}
+
+#[test]
+fn run_builder_run_dir_reports_blocked_compatibility_manifest() {
+    let run_dir = temp_run_dir("blocked-compatibility-manifest");
+    std::fs::create_dir_all(run_dir.join("compatibility.json")).unwrap();
+
+    let error = block_on(
+        optimize(TextArtifact(40))
+            .train_inputs(vec![TextCase(2)])
+            .runner(|artifact, case| async move { text_runner(&artifact, &case) })
+            .score(text_score)
+            .using(SeedBest::default())
+            .budget(Budget::unlimited())
+            .run_dir(&run_dir)
+            .test_runtime_fingerprints()
+            .run(),
+    )
+    .unwrap_err();
+
+    assert!(matches!(
+        error,
+        OptimizeError::CompatibilityStore {
+            operation: "write compatibility manifest",
+            ..
+        }
+    ));
+    cleanup_path(&run_dir);
+}
+
+#[test]
+fn run_builder_run_dir_reports_corrupt_sqlite_eval_cache_on_resume() {
+    let run_dir = temp_run_dir("corrupt-eval-cache-resume");
+    let first = block_on(
+        optimize(TextArtifact(40))
+            .train_inputs(vec![TextCase(2)])
+            .runner(|artifact, case| async move { text_runner(&artifact, &case) })
+            .score(text_score)
+            .using(SeedBest::default())
+            .budget(Budget::unlimited())
+            .run_dir(&run_dir)
+            .test_runtime_fingerprints()
+            .run(),
+    )
+    .unwrap();
+    assert!(first.summary().storage.is_resumable());
+
+    let connection = Connection::open(run_dir.join("run.sqlite")).unwrap();
+    connection
+        .execute("DROP TABLE evaluation_cache_entries", [])
+        .unwrap();
+    drop(connection);
+
+    let error = block_on(
+        optimize(TextArtifact(40))
+            .train_inputs(vec![TextCase(2)])
+            .runner(|artifact, case| async move { text_runner(&artifact, &case) })
+            .score(text_score)
+            .using(SeedBest::default())
+            .budget(Budget::unlimited())
+            .run_dir(&run_dir)
+            .test_runtime_fingerprints()
+            .run(),
+    )
+    .unwrap_err();
+
+    assert!(matches!(
+        error,
+        OptimizeError::EvaluationCache {
+            operation: "load sqlite evaluation cache",
+            ..
+        }
+    ));
+    cleanup_path(&run_dir);
+}
+
+#[test]
+fn run_builder_run_dir_refuses_missing_or_malformed_compatibility_manifest_on_resume() {
+    enum ManifestMutation {
+        Missing,
+        Malformed,
+    }
+    for (name, mutate, expected) in [
+        (
+            "missing-compatibility-manifest",
+            ManifestMutation::Missing,
+            "read",
+        ),
+        (
+            "malformed-compatibility-manifest",
+            ManifestMutation::Malformed,
+            "decode",
+        ),
+    ] {
+        let run_dir = temp_run_dir(name);
+        block_on(
+            optimize(TextArtifact(40))
+                .train_inputs(vec![TextCase(2)])
+                .runner(|artifact, case| async move { text_runner(&artifact, &case) })
+                .score(text_score)
+                .using(ResumeOnce::new(Arc::new(AtomicUsize::new(0))))
+                .budget(Budget::metric_calls(1))
+                .run_dir(&run_dir)
+                .test_runtime_fingerprints()
+                .run(),
+        )
+        .unwrap();
+
+        match mutate {
+            ManifestMutation::Missing => {
+                std::fs::remove_file(run_dir.join("compatibility.json")).unwrap();
+            }
+            ManifestMutation::Malformed => {
+                std::fs::write(run_dir.join("compatibility.json"), b"{not-json").unwrap();
+            }
+        }
+
+        let error = block_on(
+            optimize(TextArtifact(40))
+                .train_inputs(vec![TextCase(2)])
+                .runner(|artifact, case| async move { text_runner(&artifact, &case) })
+                .score(text_score)
+                .using(ResumeOnce::new(Arc::new(AtomicUsize::new(0))))
+                .budget(Budget::metric_calls(1))
+                .run_dir(&run_dir)
+                .test_runtime_fingerprints()
+                .run(),
+        )
+        .unwrap_err();
+
+        assert!(
+            matches!(
+                error,
+                OptimizeError::ResumeCompatibility(ref source)
+                    if source.to_string().contains(expected)
+            ),
+            "expected {expected} compatibility error, got {error:?}"
+        );
+        cleanup_path(&run_dir);
+    }
+}
+
+#[test]
+fn run_builder_run_dir_refuses_evaluator_cache_and_budget_compatibility_drift() {
+    enum ManifestDrift {
+        Evaluator,
+        Cache,
+        Budget,
+    }
+    for (name, drift, expected) in [
+        (
+            "evaluator-compatibility-drift",
+            ManifestDrift::Evaluator,
+            "evaluator fingerprint",
+        ),
+        (
+            "cache-compatibility-drift",
+            ManifestDrift::Cache,
+            "cache compatibility",
+        ),
+        (
+            "budget-compatibility-drift",
+            ManifestDrift::Budget,
+            "budget compatibility",
+        ),
+    ] {
+        let run_dir = temp_run_dir(name);
+        block_on(
+            optimize(TextArtifact(40))
+                .train_inputs(vec![TextCase(2)])
+                .runner(|artifact, case| async move { text_runner(&artifact, &case) })
+                .score(text_score)
+                .using(ResumeOnce::new(Arc::new(AtomicUsize::new(0))))
+                .budget(Budget::metric_calls(1))
+                .run_dir(&run_dir)
+                .test_runtime_fingerprints()
+                .run(),
+        )
+        .unwrap();
+
+        let path = run_dir.join("compatibility.json");
+        let mut manifest: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        match drift {
+            ManifestDrift::Evaluator => {
+                manifest["evaluator"]["fingerprint"] =
+                    serde_json::to_value(Fingerprint::from_bytes([1; 32])).unwrap();
+            }
+            ManifestDrift::Cache => {
+                manifest["cache"] = serde_json::json!("cache:changed");
+            }
+            ManifestDrift::Budget => {
+                manifest["budget"] = serde_json::json!("budget:changed");
+            }
+        }
+        std::fs::write(&path, serde_json::to_vec_pretty(&manifest).unwrap()).unwrap();
+
+        let error = block_on(
+            optimize(TextArtifact(40))
+                .train_inputs(vec![TextCase(2)])
+                .runner(|artifact, case| async move { text_runner(&artifact, &case) })
+                .score(text_score)
+                .using(ResumeOnce::new(Arc::new(AtomicUsize::new(0))))
+                .budget(Budget::metric_calls(1))
+                .run_dir(&run_dir)
+                .test_runtime_fingerprints()
+                .run(),
+        )
+        .unwrap_err();
+
+        assert!(
+            matches!(
+                error,
+                OptimizeError::ResumeCompatibility(ref source)
+                    if source.to_string().contains(expected)
+            ),
+            "expected {expected} compatibility error, got {error:?}"
+        );
+        cleanup_path(&run_dir);
+    }
 }
 
 #[test]
@@ -532,6 +753,40 @@ fn run_builder_missing_runtime_fingerprint_refuses_durable_but_not_ephemeral() {
 }
 
 #[test]
+fn run_builder_missing_scorer_fingerprint_refuses_durable_before_runner_call() {
+    let run_dir = temp_run_dir("missing-scorer-fingerprint");
+    let runner_calls = Arc::new(AtomicUsize::new(0));
+    let error = block_on(
+        optimize(TextArtifact(40))
+            .train_inputs(vec![TextCase(2)])
+            .runner({
+                let runner_calls = Arc::clone(&runner_calls);
+                move |artifact, case| {
+                    let runner_calls = Arc::clone(&runner_calls);
+                    async move {
+                        runner_calls.fetch_add(1, Ordering::SeqCst);
+                        text_runner(&artifact, &case)
+                    }
+                }
+            })
+            .score(text_score)
+            .using(SeedBest::default())
+            .budget(Budget::metric_calls(1))
+            .run_dir(&run_dir)
+            .runner_fingerprint(TEST_RUNNER_FINGERPRINT)
+            .run(),
+    )
+    .unwrap_err();
+
+    assert!(matches!(
+        error,
+        OptimizeError::RuntimeFingerprintMissing { runtime: "scorer" }
+    ));
+    assert_eq!(runner_calls.load(Ordering::SeqCst), 0);
+    cleanup_path(&run_dir);
+}
+
+#[test]
 fn public_stop_reason_preserves_all_engine_stop_variants() {
     let cases = [
         (
@@ -687,6 +942,46 @@ fn run_builder_reports_final_train_scores_when_optimizer_does_not_evaluate_train
     assert_eq!(result.summary().baseline_train_score, Some(42.0));
     assert_eq!(result.summary().optimized_train_score, Some(42.0));
     assert_eq!(result.report().splits_reported.len(), 1);
+}
+
+#[test]
+fn run_builder_surfaces_final_evaluation_failures() {
+    let error = block_on(
+        optimize(TextArtifact(40))
+            .train_inputs(vec![TextCase(2)])
+            .runner(|artifact, case| async move { text_runner(&artifact, &case) })
+            .score(|_ctx| async move { Err(ScoreError::new("final judge offline")) })
+            .using(SeedBest::default())
+            .budget(Budget::unlimited())
+            .ephemeral()
+            .run(),
+    )
+    .unwrap_err();
+
+    assert!(
+        error.to_string().contains("final evaluation failed"),
+        "{error:?} / {error}"
+    );
+}
+
+#[test]
+fn run_builder_surfaces_report_evidence_lookup_failures() {
+    let error = block_on(
+        optimize(TextArtifact(40))
+            .train_inputs(vec![TextCase(2)])
+            .runner(|artifact, case| async move { text_runner(&artifact, &case) })
+            .score(text_score)
+            .using(SeedBest::default())
+            .budget(Budget::unlimited())
+            .store(OptimizeStore::evidence(FailingGetEvidenceStore::default()))
+            .run(),
+    )
+    .unwrap_err();
+
+    assert!(
+        error.to_string().contains("report evidence lookup failed"),
+        "{error:?} / {error}"
+    );
 }
 
 #[test]
@@ -1415,6 +1710,39 @@ impl EvidenceStore<CasewiseEvidence<CaseAssessmentEvidence>> for CountingEvidenc
     ) -> Result<CasewiseEvidence<CaseAssessmentEvidence>, StoreError> {
         self.inner.gets.fetch_add(1, Ordering::SeqCst);
         self.inner.store.get(reference)
+    }
+}
+
+struct FailingGetEvidenceStore {
+    inner: InlineEvidenceStore<CasewiseEvidence<CaseAssessmentEvidence>>,
+}
+
+impl Default for FailingGetEvidenceStore {
+    fn default() -> Self {
+        Self {
+            inner: InlineEvidenceStore::new("failing-get"),
+        }
+    }
+}
+
+impl EvidenceStore<CasewiseEvidence<CaseAssessmentEvidence>> for FailingGetEvidenceStore {
+    fn put(
+        &self,
+        evidence: CasewiseEvidence<CaseAssessmentEvidence>,
+    ) -> Result<leaven_kernel::EvidenceRef, StoreError> {
+        self.inner.put(evidence)
+    }
+
+    fn get(
+        &self,
+        _reference: &leaven_kernel::EvidenceRef,
+    ) -> Result<CasewiseEvidence<CaseAssessmentEvidence>, StoreError> {
+        Err(StoreError::OperationFailed {
+            store: "failing-get".to_owned(),
+            operation: "get evidence",
+            reason: "synthetic lookup refusal".to_owned(),
+            retryable: Some(false),
+        })
     }
 }
 

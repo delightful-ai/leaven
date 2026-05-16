@@ -1,7 +1,7 @@
 set shell := ["bash", "-eu", "-o", "pipefail", "-c"]
 
-coverage_line_floor := '98.5'
-coverage_branch_floor := '85.8'
+coverage_line_floor := '98.51'
+coverage_branch_floor := '88.29'
 
 lint:
     cargo fmt --check

@@ -45,6 +45,30 @@ fn openai_request_uses_previous_response_id_for_uncovered_suffix() {
 }
 
 #[test]
+fn openai_request_keeps_system_message_in_uncovered_continuation_suffix() {
+    let lm = OpenAiLm::new(OpenAiConfig::new("test-key"));
+    let request = LmRequest::new(
+        ModelName::new("gpt-4.1-mini"),
+        Messages::new()
+            .with_user("covered")
+            .with_system("new instruction")
+            .with_user("new question"),
+    )
+    .with_continuation(LmContinuation {
+        provider: ProviderName::new("openai"),
+        response_id: "resp_123".to_owned(),
+        covered_messages: 1,
+    });
+
+    let wire = lm.to_wire_request(&request).unwrap();
+
+    assert_eq!(wire["previous_response_id"], "resp_123");
+    assert_eq!(wire["instructions"], "new instruction");
+    assert_eq!(wire["input"][0]["role"], "user");
+    assert_eq!(wire["input"][0]["content"], "new question");
+}
+
+#[test]
 fn openai_identity_and_fingerprint_are_stable() {
     let lm = OpenAiLm::new(OpenAiConfig::new("test-key"));
 
@@ -515,6 +539,44 @@ async fn openai_complete_respects_configured_concurrency_limit() {
     first.unwrap();
     second.unwrap();
     assert_eq!(max_active.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn openai_complete_times_out_waiting_for_throttle_permit() {
+    let body = r#"{
+        "id": "resp_throttled",
+        "output": [{
+            "type": "message",
+            "role": "assistant",
+            "content": [{"type": "output_text", "text": "ok"}]
+        }]
+    }"#;
+    let (url, _max_active) = serve_concurrent(1, body);
+    let lm = OpenAiLm::new(
+        OpenAiConfig::new("test-key")
+            .with_base_url(url)
+            .with_retry_policy(OpenAiRetryPolicy::none())
+            .with_throttle_policy(OpenAiThrottlePolicy::new(
+                NonZeroUsize::new(1).unwrap(),
+                Duration::from_millis(1),
+            )),
+    );
+    let first = tokio::spawn({
+        let lm = lm.clone();
+        async move {
+            lm.complete(LmRequest::new("gpt-4.1-mini", Messages::from_user("one")))
+                .await
+        }
+    });
+    tokio::time::sleep(Duration::from_millis(5)).await;
+
+    let second = lm
+        .complete(LmRequest::new("gpt-4.1-mini", Messages::from_user("two")))
+        .await
+        .unwrap_err();
+
+    assert!(second.to_string().contains("throttle timed out"));
+    first.await.unwrap().unwrap();
 }
 
 #[tokio::test]

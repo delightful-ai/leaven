@@ -211,6 +211,43 @@ fn sqlite_eval_cache_rejects_hash_and_key_mismatch_rows() {
 }
 
 #[test]
+fn sqlite_eval_cache_rejects_malformed_key_json_on_get_and_load() {
+    let temp = tempdir().unwrap();
+    let path = temp.path().join("run.sqlite");
+    let backend = SqliteEvaluationCache::open(&path).unwrap();
+    let key = cache_key(CachePolicy::Deterministic);
+    backend.insert(&key, &[AssessmentId::new()]).unwrap();
+    drop(backend);
+
+    let connection = Connection::open(&path).unwrap();
+    connection
+        .execute(
+            "UPDATE evaluation_cache_entries SET key_json = '{not-json'",
+            [],
+        )
+        .unwrap();
+    drop(connection);
+
+    let backend = SqliteEvaluationCache::open(&path).unwrap();
+    let get_error = backend.get(&key).unwrap_err();
+    assert!(matches!(
+        get_error,
+        EvaluationCacheStoreError::Codec {
+            operation: "decode key",
+            ..
+        }
+    ));
+    let load_error = backend.load_snapshot().unwrap_err();
+    assert!(matches!(
+        load_error,
+        EvaluationCacheStoreError::Codec {
+            operation: "decode key",
+            ..
+        }
+    ));
+}
+
+#[test]
 fn sqlite_eval_cache_reports_missing_schema_for_operations_without_recreating() {
     let temp = tempdir().unwrap();
     let path = temp.path().join("run.sqlite");
