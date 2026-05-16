@@ -1,5 +1,7 @@
 //! Reusable GEPA optimizer loop.
 
+mod step;
+
 use std::collections::BTreeSet;
 
 use leaven_core::{
@@ -436,127 +438,12 @@ where
         &mut self,
         ctx: &mut RunContext<'_, P>,
     ) -> Result<leaven_engine::StepStatus, OptimizerError> {
-        if self.completed_iterations >= self.max_iterations {
-            self.best = self
-                .reference_state
-                .best_candidate()
-                .or_else(|| self.population.best());
-            let best = self
-                .best
-                .and_then(|candidate| self.reference_state.index_of(candidate));
-            self.events
-                .push(GepaEventSummary::OptimizationEnded { best });
-            return Ok(leaven_engine::StepStatus::Done);
+        if let Some(status) = self.finish_if_iteration_limit() {
+            return Ok(status);
         }
 
-        let seed = ctx
-            .graph()
-            .candidate_tree()
-            .roots()
-            .first()
-            .copied()
-            .ok_or_else(|| {
-                OptimizerError::Message("GEPA requires at least one seed candidate".to_owned())
-            })?;
-
-        self.events.push(GepaEventSummary::IterationStarted {
-            iteration: self.completed_iterations + 1,
-        });
-        let evaluation_set = self.batch_sampler.sample_train(&self.train_partition);
-        self.events.push(GepaEventSummary::TrainMinibatchSampled);
-        let (parent_index, parent) = self
-            .reference_state
-            .select_by_validation_frontier_frequency()
-            .or_else(|| {
-                let parent = self.select_candidate(ctx.graph()).unwrap_or(seed);
-                self.reference_state
-                    .index_of(parent)
-                    .map(|index| (index, parent))
-            })
-            .ok_or_else(|| {
-                OptimizerError::Message("GEPA selected a parent outside reference state".to_owned())
-            })?;
-        self.events.push(GepaEventSummary::ParentSelected {
-            candidate_index: parent_index,
-        });
-        let parent_screening = self
-            .evaluate_casewise(
-                ctx,
-                parent,
-                evaluation_set.clone(),
-                EvaluationPurpose::SeedBaseline,
-            )
-            .await?;
-        self.reference_state
-            .add_metric_calls(parent_screening.metric_calls_new);
-        self.events.push(GepaEventSummary::ParentEvaluated {
-            metric_calls_delta: parent_screening.metric_calls_new,
-        });
-        if self.observed.insert(parent) {
-            self.candidate_history
-                .push(parent_screening.history_entry(parent));
-            let events = self.population.observe_gepa(
-                Some(&self.train_partition),
-                parent,
-                &parent_screening.assessments,
-                &parent_screening.scalar_evidence,
-            );
-            ctx.emit(leaven_engine::RunEvent::PopulationUpdated {
-                population_id: self.population.id(),
-                events,
-            });
-        }
-        for _ in 0..self.proposal_count {
-            let Some(candidate) = self
-                .propose_candidate(ctx, parent, &parent_screening.assessments)
-                .await?
-            else {
-                continue;
-            };
-
-            let screened = self
-                .evaluate_casewise(
-                    ctx,
-                    candidate,
-                    evaluation_set.clone(),
-                    EvaluationPurpose::Search,
-                )
-                .await?;
-            self.reference_state
-                .add_metric_calls(screened.metric_calls_new);
-            self.events.push(GepaEventSummary::ChildEvaluated {
-                metric_calls_delta: screened.metric_calls_new,
-            });
-            if self
-                .gate
-                .decide(parent_screening.average_score, screened.average_score)
-                .is_accept()
-            {
-                self.events
-                    .push(GepaEventSummary::ProposalAccepted { child: candidate });
-                self.candidate_history
-                    .push(screened.history_entry(candidate));
-                let events = self.population.observe_gepa(
-                    Some(&self.train_partition),
-                    candidate,
-                    &screened.assessments,
-                    &screened.scalar_evidence,
-                );
-                ctx.emit(leaven_engine::RunEvent::PopulationUpdated {
-                    population_id: self.population.id(),
-                    events,
-                });
-                self.best = self.population.best();
-                self.validate_candidate(ctx, candidate, vec![parent_index], false)
-                    .await?;
-                if self.reference_state.index_of(candidate).is_none() {
-                    self.reference_state
-                        .add_unvalidated_candidate(candidate, vec![parent_index]);
-                }
-            } else {
-                self.events.push(GepaEventSummary::ProposalRejected);
-            }
-        }
+        let seed = Self::seed_candidate(ctx)?;
+        self.run_iteration(ctx, seed).await?;
         self.completed_iterations += 1;
 
         if self.completed_iterations >= self.max_iterations {
