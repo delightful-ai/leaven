@@ -3,6 +3,13 @@
 Status: planning surface contract.
 Date: 2026-05-10.
 
+Supersession note, 2026-05-16: this document remains the Layer 1/Layer 2/Layer
+3 audience-separation contract, but GEPA parity semantics and GEPA-specific
+library API choices now live in `docs/specs/gepa_reference_behavior.md`. If this
+document's examples imply train-only parent selection, generic population-backed
+GEPA defaults, stale reflection request names, or a validation cadence that
+conflicts with real GEPA, follow the reference behavior document.
+
 This spec defines the user-facing GEPA surface and the private/lowered contracts
 that support it. It is the coordination document for the current GEPA/eval
 specs:

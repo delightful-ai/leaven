@@ -3,6 +3,14 @@
 Status: planning spec.
 Date: 2026-05-10.
 
+Supersession note, 2026-05-16: this document is still useful for GEPA layering
+intent and early API pressure, but real-GEPA loop semantics, phase boundaries,
+defaults, cache parity, and library API choices now live in
+`docs/specs/gepa_reference_behavior.md`. Where this document mentions stale
+names or defaults such as `SelectedFeedback`, `MinibatchThenValidation` as a
+GEPA default, generic population-backed parent selection, or scaffold
+reflectors as product reflection, follow the reference behavior document.
+
 This spec defines the product-grade GEPA optimizer Leaven should expose next.
 It is the GEPA-specific companion to:
 

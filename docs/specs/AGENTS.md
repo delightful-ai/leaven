@@ -55,6 +55,12 @@ The top of the stack is:
   frontier update, merge, and final reporting separable in specs/tests even
   when an early implementation stores several phase implementations in one
   module.
+- GEPA library API choices also come from
+  `gepa_reference_behavior.md#21-library-api-choice-ledger`. Older GEPA public
+  surface specs remain useful for layering intent, but where they expose stale
+  names or defaults such as `SelectedFeedback`, scaffold reflectors,
+  train-filtered populations, or `MinibatchThenValidation` as GEPA defaults,
+  treat the reference behavior document as the authority.
 - `milestone_examples_behavioral_contract.md` currently covers P0 through P4. For P5-P8, use the example package docs, `docs/testing/README.md`, and the recent review tree until a durable spec is added.
 - `docs/specs/tracing-vision/README.md` still references `first_two_subsystems.md` as governing context. Reconcile that stale reference before using tracing-vision text to route new code.
 

@@ -2572,3 +2572,593 @@ Use this checklist before calling a Leaven run "real GEPA":
 
 If any answer is "no", the run can still be useful, but it is a Leaven GEPA
 variant, not real GEPA parity.
+
+## 21. Library API Choice Ledger
+
+This section tracks the public Rust API choices required before Leaven can call
+its library surface "real GEPA". It is about `lib` shape: what ordinary users
+import, what GEPA customizers can swap, what optimizer authors can implement,
+and what stays private state. It is not an implementation checklist by itself;
+the implementation checklist is Section 8 plus the phase contract above.
+
+The governing rule is audience separation:
+
+```text
+leaven::prelude     ordinary optimization users
+leaven::gepa        GEPA users and GEPA customizers
+leaven::extend      optimizer/stage/provider authors
+leaven::plumbing    doc-hidden cross-crate/test reach
+```
+
+No GEPA parity work should move engine graph, actor/trust, evaluation-request,
+or cache-key internals into the ordinary prelude. No ordinary user should need
+to know `RunContext`, `EvaluationRequest`, `AssessmentId`, or
+`GepaReferenceState` just to run GEPA.
+
+### 21.1 API Decision Summary
+
+| Area | Decision to make | Recommended library shape | Current state |
+| --- | --- | --- | --- |
+| Ordinary import route | Should GEPA enter `leaven::prelude`? | No. Keep ordinary optimizer import namespaced as `leaven::gepa::Gepa`; `prelude` keeps `optimize`, `Budget`, `Score`, `Optimized`, case/result vocabulary. | `leaven::prelude` does not re-export GEPA. Good. |
+| GEPA crate route | Should `leaven::gepa` expose every slot type? | Yes for behavior-bearing customizer slots; no for scaffolds and private checkpoint details. | `leaven-gepa` re-exports slots and `FixedSurfaceEdit`; scaffold exposure needs cleanup. |
+| Profile constructors | How does a user ask for "real GEPA"? | Add named constructors/presets: `Gepa::reference()`, `Gepa::dspy_reference()`, and a Leaven-plus preset. AIME should probably be an example/domain preset, not a generic core constructor, unless it encodes only algorithm knobs. | Only `Gepa::builder()`, `Gepa::new(...)`, and `Gepa::reflect_with_lm(...)` exist. |
+| Bare default | What should `Gepa::default()` mean? | Avoid teaching bare `Default` until it can equal `Gepa::reference()` with a resolved surface and reflector, or keep it unavailable. Bare default must not mean scaffold. | No public `Default` for `Gepa`, but examples can still build scaffold defaults manually. |
+| Builder style | Typestate builder or freeform config? | Typestate builder for required surface/reflector; profile builder for reference defaults; explicit advanced slot methods. | Typestate-ish builder exists but does not encode reference profile semantics. |
+| Surface acquisition | Explicit surface, derived surface, or implicit whole artifact? | Explicit in `leaven-gepa`; optional `DefaultEditSurface<A>` or domain adapter in `leaven-run`; never implicit string/whole-artifact fallback. | `Gepa::builder().surface(...)` is explicit. No default surface route yet. |
+| Generic type exposure | Do users see nine generic slots? | Customizers may; ordinary examples should use named aliases/builders so slot noise is hidden. | `Gepa<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>` is public. |
+| Candidate selection slot | What does the default selector read? | A GEPA parent selector reads validation frontier state from `GepaReferenceState`; `SelectBestCandidate` is explicit ablation. | `ParetoFrequencyWeighted` delegates to `population.best_candidate()`. Non-parity. |
+| Population slot | Is `Population` a user-facing GEPA dependency? | Not for reference GEPA. Validation frontier and accepted-candidate table are GEPA private state. A generic population slot can survive only as an advanced variant/ablation. | Builder accepts `population(ParetoFrontier)`, and selection is population-backed. |
+| Part selection slot | Is part/component selection public? | Yes. Keep `PartSelector` with checkpointed state; default `RoundRobinPart`. | Exists and roughly matches reference. |
+| Batch sampler slot | Public name and placement? | Public GEPA slot should be `TrainBatchSampler` or `BatchSampler` at crate top, not hidden under `validation`; default `EpochShuffled { minibatch_size: 3 }`. | Trait is `validation::BatchSampler`, re-exported only through module path. |
+| Acceptance slot | Public name? | Public slot should be `AcceptancePolicy`, not `Gate`. Keep `StrictImprovement`, `ImprovementOrEqual`, maybe `NoRegression` as policies. | Public trait is `Gate`; `GateDecision` leaks implementation vocabulary. |
+| Validation slot | What is the default and what can swap? | Default `FullValidation`. Public `ValidationPolicy` may swap only when profile labels a delta. | Default generic is now `FullValidation`; seed validation still not in initialize. |
+| Reflective dataset slot | Is dataset construction separate from renderer/proposer? | Yes. Public `ReflectiveDatasetBuilder` is the task-specific "what reflection sees" seam; LM/agent reflectors consume its output only. | Exists and is documented locally. Needs reference-phase event/report integration. |
+| Reflective example shape | Flat strings or structured sections? | Keep a compact public record, but it must be able to represent AIME and DSPy shapes. Either enrich `ReflectiveExample` with named sections or add a structured companion record before DSPy parity. | Current `ReflectiveExample` has `input`, `output`, `score`, `feedback`, refs. Good for AIME, partial for DSPy. |
+| Reflection proposer API | `GepaReflector`, `Proposer`, or both? | Keep `GepaReflector` as GEPA-facing convenience, but LM/agent-backed implementations should route through `RunContext::propose` so proposal recording/cost is uniform. | `GepaReflector` exists; LM path has proposer adapter support; API must keep build-once request invariant. |
+| Reflection LM config | How many knobs at ordinary layer? | Ordinary layer: `reflect_with_lm(lm, model)` plus small config methods. Customizer layer: `LmBackedReflectorConfig`, renderer, parser, prompt template, sampling/output. | `reflect_with_lm` and `with_reflector_config` exist. |
+| Agent-backed reflection | Where does it live? | `leaven::gepa` customizer route, not `prelude`; consumes same `ReflectRequest`. | `gepa_stage_proposer` and bootstrap are re-exported by `leaven-gepa`. |
+| Merge API | How to expose merge? | Core profile disables. DSPy profile enables. Public API should have explicit `.merge(SystemAwareMerge::...)` / `.without_merge()` and report labels. | No real merge path. |
+| Skip policy | Is skip-perfect public? | Defaults should be encoded in profile. Customizer can expose `SkipPolicy` or builder knobs for `skip_perfect_score` and `perfect_score`. | No typed skip policy; empty dataset can error instead of skip. |
+| Budget API | New GEPA budget type? | No ordinary new budget type. Use `Budget::metric_calls(...)`; GEPA report separates search metric calls, reflection cost, and final report evaluations. | Engine stopper exists; GEPA search/final distinction needs report work. |
+| Evaluation cache API | GEPA-specific cache knob? | Ordinary users keep `.evaluation_cache_policy(...)`; GEPA per-case cache adapter is internal. Reports expose per-case hit/miss/bypass. | Request-level cache exists; per-case GEPA parity missing. |
+| Validation absence | What if no validation set is supplied? | Core/reference profile: preflight error. DSPy profile: explicit train-as-validation fallback with warning/report. Inference-time mode: explicit train=validation. | `leaven-run` allows empty validation; GEPA currently validates only if policy requests existing partition. |
+| Inference-time search | How does user request train=validation? | Explicit mode/profile, for example `Gepa::inference_search()` or `.mode(GepaMode::InferenceSearch)`, never silent fallback. | No named mode. |
+| Detailed result | How does user get GEPA candidate/frontier tables? | Keep `Optimized<A>` small, but add a typed GEPA detail/report route. Choose one: typed `optimizer_report`, report sidecar path with typed loader, or `GepaOptimized<A>` from a GEPA-specific runner. | `Optimized<A>` has generic summary/events only. |
+| Event/progress API | Generic run events or GEPA phase events? | Add typed `GepaEvent`/`GepaEventSummary` and surface it through callbacks/reports without requiring ordinary users to match engine internals. | P8 callback maps generic engine events only. |
+| Error API | Stringy optimizer errors or typed phase errors? | Add `GepaBuildError`, `GepaPhaseError`, `GepaSkipReason`, and reflection/proposal/cache variants; map to `OptimizerError` at engine boundary. | `ReflectionError` exists; many GEPA failures use generic optimizer/proposal errors. |
+| Checkpoint state | Public or private? | Private. Public report exposes stable candidate indices/frontier summaries; resume uses `OptimizeBuilder`/run store. | `GepaCheckpointState` is public because checkpoint trait type leaks. Needs classification. |
+| Candidate index | `CandidateId` only or GEPA index too? | Both. Public report needs `GepaCandidateIndex` newtype with seed at 0 and discovery order. Runtime APIs can still use `CandidateId`. | No public candidate index. |
+| Feature routing | Is GEPA a default umbrella feature? | Acceptable while GEPA is the flagship optimizer, but `prelude` must stay clean and `leaven::gepa` must not export scaffolds as product. | `leaven` default features include `gepa`; `prelude` stays clean. |
+
+### 21.2 Recommended Layer 1 Shape
+
+Ordinary users should be able to write:
+
+```rust
+use leaven::prelude::*;
+use leaven::gepa::Gepa;
+
+let result = optimize(seed_prompt)
+    .train(train_cases)
+    .validation(dev_cases)
+    .test(test_cases)
+    .runner(run_prompt)
+    .score(score_answer)
+    .using(
+        Gepa::reference()
+            .surface(PromptSurface::instructions())
+            .reflect_with_lm(reflection_lm, "gpt-5.4-mini")
+    )
+    .budget(Budget::metric_calls(500))
+    .run()
+    .await?;
+
+let best = result.best();
+let gepa = result.gepa_report(); // exact API still to decide
+```
+
+This shape intentionally keeps `RunContext`, `EvaluationRequest`,
+`AssessmentId`, `ParetoFrontier`, and `GepaReferenceState` out of the ordinary
+path. The ordinary user picks data, runner, scorer, optimizer profile, budget,
+and result.
+
+Open API choice:
+
+```text
+Should GEPA details hang off Optimized<A>, or should GEPA runs return a
+GepaOptimized<A> wrapper?
+```
+
+Recommended answer:
+
+```text
+Keep Optimized<A> as the ordinary facade and add a typed optimizer-detail route
+that can expose GepaReport when the optimizer produced one. Do not make every
+ordinary run result generic over optimizer-specific report shape.
+```
+
+Rationale: ordinary users should not pay type-system complexity for optimizer
+details, but parity experiments need candidate/frontier tables without parsing
+text reports.
+
+### 21.3 Recommended Layer 2 GEPA Customizer Shape
+
+Customizer APIs should line up with the phase contract:
+
+```rust
+let gepa = Gepa::reference()
+    .surface(surface)
+    .candidate_selector(ParetoCandidateSelector::frequency_weighted())
+    .part_selector(RoundRobinPart::new())
+    .train_batch_sampler(EpochShuffled::new(3).with_seed(0))
+    .reflective_dataset(GepaReflectiveDataset)
+    .reflection_renderer(DefaultReflectionRenderer)
+    .reflection_parser(PlainTextEditParser)
+    .reflector(LmBackedReflector::new(lm, model))
+    .acceptance(StrictImprovement)
+    .validation(FullValidation)
+    .skip_perfect_score(true)
+    .perfect_score(1.0)
+    .merge(Merge::disabled())
+    .build();
+```
+
+The exact builder can be typestate, chained config, or separate profile config,
+but the visible slots should preserve these concepts:
+
+```text
+profile/preflight
+surface
+candidate selector / parent selector
+part selector
+train batch sampler
+parent evaluator adapter
+skip policy
+reflective dataset builder
+reflection renderer/proposer/parser
+child evaluator adapter
+acceptance policy
+validation policy
+frontier state/report policy
+merge strategy
+final report policy
+```
+
+Do not make `Population` one of the ordinary reference GEPA slots. The reference
+frontier is not a generic population chosen by the user; it is validation
+subscore state maintained by GEPA. If Leaven keeps a generic population slot, it
+must be clearly labeled as an advanced variant/ablation.
+
+### 21.4 `Gepa` Type Shape
+
+Current code exposes:
+
+```text
+Gepa<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
+```
+
+Reference GEPA wants a different conceptual center:
+
+```text
+Gepa<S, Reflect, ParentSel, PartSel, Batch, Dataset, Accept, Validate, Merge>
+  owns GepaReferenceState
+```
+
+API choices:
+
+1. Keep a highly generic `Gepa<...>` type for customizers and add aliases:
+
+   ```rust
+   type ReferenceGepa<S, R> = Gepa<
+       S,
+       R,
+       ParetoCandidateSelector,
+       RoundRobinPart,
+       EpochShuffled,
+       GepaReflectiveDataset,
+       StrictImprovement,
+       FullValidation,
+       MergeDisabled,
+   >;
+   ```
+
+2. Hide generics behind a profile builder that returns a concrete internal type.
+3. Type-erase slots behind boxed trait objects.
+
+Recommended answer:
+
+```text
+Use option 1 first. It preserves static Rust composition and keeps customizers
+powerful, while named aliases/profile builders keep ordinary examples legible.
+Avoid type erasure until object-safe phase traits are proven necessary.
+```
+
+Hard cutover implication:
+
+```text
+Remove `Pop` from the reference-profile type center. Validation frontier state
+belongs to `GepaReferenceState`; generic population is an ablation slot, not the
+default parent-selection substrate.
+```
+
+### 21.5 Constructor And Profile API
+
+Required public constructors/presets:
+
+```rust
+Gepa::reference()
+Gepa::dspy_reference()
+Gepa::leaven_plus()
+Gepa::builder()
+Gepa::reflect_with_lm(lm, model) // shortcut only if it uses reference defaults
+```
+
+Open AIME choice:
+
+```text
+Should `Gepa::aime_reference()` live in `leaven-gepa`?
+```
+
+Recommended answer:
+
+```text
+No, not as a generic library constructor if it bakes in dataset/model/provider
+facts. Put exact AIME dataset/model/report settings in the P8/domain adapter.
+If a library preset exists, it should be named to show it is only an algorithm
+knob bundle, for example `Gepa::optimize_anything_reference()`, not a dataset
+loader.
+```
+
+Reason:
+
+```text
+`leaven-gepa` must not learn Hugging Face datasets, MathArena, OpenAI provider
+names, or AIME report denominators. Those are example/domain concerns.
+```
+
+This slightly refines Section 6.3: the strict AIME profile remains required for
+P8, but its home should be the P8/domain adapter unless we deliberately create a
+domain-profile crate.
+
+### 21.6 Builder Method Names
+
+The public GEPA builder should teach GEPA words, not internal engine words.
+
+Recommended names:
+
+| User word | Rust method/type |
+| --- | --- |
+| profile | `Gepa::reference()`, `GepaProfile` |
+| surface | `.surface(surface)` |
+| candidate selection | `.candidate_selector(...)` or `.parent_selector(...)` |
+| part/component selection | `.part_selector(...)` |
+| feedback minibatch | `.train_batch_sampler(...)` |
+| reflection examples | `.reflective_dataset(...)` |
+| reflection LM | `.reflect_with_lm(lm, model)` |
+| custom reflector | `.reflector(...)` |
+| acceptance | `.acceptance(...)` |
+| validation | `.validation(...)` |
+| skip perfect | `.skip_perfect_score(bool)` |
+| perfect score | `.perfect_score(f64)` |
+| merge | `.merge(...)` / `.without_merge()` |
+| search budget | ordinary `.budget(...)` on `OptimizeBuilder` |
+| GEPA report | `.gepa_report()` or typed report accessor on result |
+
+Rename pressure:
+
+- `Gate` should become `AcceptancePolicy`.
+- `GateDecision` should become `AcceptanceDecision`.
+- `BatchSampler` should move out of `validation.rs` or be re-exported as a
+  first-class train-batch slot.
+- `ParetoFrequencyWeighted` should not keep that name until it actually samples
+  by Pareto frontier frequency.
+- `FixedSurfaceEdit` should be test support/scaffold, not a product prelude or
+  ordinary example type.
+
+### 21.7 Ordinary `OptimizeBuilder` Choices
+
+The GEPA API relies on `leaven-run` decisions too:
+
+| Choice | Recommended answer |
+| --- | --- |
+| Can a scorer be the only runner? | Yes. `.runner(...)` remains optional; scorer may own execution, but reports must distinguish runner/scorer cost when both exist. |
+| Should scoring closure return scalar/bool directly? | Eventually yes via `IntoScore`; current async `Result<Score, ScoreError>` is enough for P8 but not the full Layer 1 spec. |
+| How does GEPA require validation? | Optimizer preflight should inspect lowered split metadata and reject missing validation for reference profile. `OptimizeBuilder` should not globally require validation because other optimizers/modes may not. |
+| Does `.test(...)` affect GEPA? | No. Test is final-report-only under default profiles. |
+| How does final report evaluation interact with budget? | Search budget and final report evaluations must be reported separately. Current `run_with_engine` lifts budget to unlimited for final report; report must make that explicit. |
+| How does cache policy expose GEPA per-case cache? | Keep one public `.evaluation_cache_policy(...)`; GEPA implements/reports per-case reuse internally. |
+| How does a user resume? | Through run dir/store on `OptimizeBuilder`, not through public GEPA state constructors. |
+
+### 21.8 Detailed Result API Choices
+
+Parity requires a detail surface that ordinary `Optimized<A>` does not yet
+provide.
+
+Minimum GEPA detail types:
+
+```rust
+pub struct GepaReport {
+    pub profile: GepaProfileLabel,
+    pub upstream_reference: Option<UpstreamReference>,
+    pub best: Option<GepaCandidateIndex>,
+    pub candidates: Vec<GepaCandidateReport>,
+    pub validation_frontier: GepaFrontierReport,
+    pub metric_calls: GepaMetricCallReport,
+    pub cache: GepaCacheReport,
+    pub reflection: GepaReflectionReport,
+    pub events: Vec<GepaEventSummary>,
+}
+
+pub struct GepaCandidateReport {
+    pub index: GepaCandidateIndex,
+    pub candidate: CandidateId,
+    pub parents: Vec<GepaCandidateIndex>,
+    pub discovery_metric_calls: u64,
+    pub validation_score: Option<f64>,
+    pub validation_cases: Vec<GepaValidationCaseScore>,
+}
+
+pub struct GepaCandidateIndex(pub u32);
+```
+
+Open result-routing options:
+
+1. `Optimized<A>::gepa_report() -> Option<&GepaReport>`.
+2. `Optimized<A>::optimizer_report<T>() -> Option<&T>`.
+3. `Optimized<A>::reports.optimizer: Option<OptimizerReport>` with an enum.
+4. `Gepa::run(...) -> GepaOptimized<A>` outside the generic `optimize(...)`
+   facade.
+5. Report sidecar only: `summary.reports.optimizer_json` plus typed loader.
+
+Recommended answer:
+
+```text
+Use an ordinary typed accessor plus sidecar persistence. Avoid a GEPA-only run
+entrypoint that bypasses `leaven-run`, because the public product story is
+`optimize(seed).using(Gepa...)`.
+```
+
+The sidecar is still required for long runs and resumption, but a parity test
+should not need to parse JSON to assert candidate index `0` is the seed.
+
+### 21.9 Event And Callback API Choices
+
+Current public callbacks see engine events. GEPA parity needs phase visibility.
+
+Required event vocabulary:
+
+```rust
+pub enum GepaEvent {
+    ProfileResolved { profile: GepaProfileLabel },
+    SeedValidationStarted { candidate: CandidateId },
+    SeedValidationCompleted { candidate_index: GepaCandidateIndex, score: f64 },
+    ParentSelected { candidate_index: GepaCandidateIndex, weight: u64 },
+    TrainMinibatchSampled { cases: Vec<CaseId> },
+    ParentEvaluated { metric_calls_delta: u64, cache_hits: u64 },
+    ProposalSkipped { reason: GepaSkipReason },
+    ComponentsSelected { parts: Vec<String> },
+    ReflectiveDatasetBuilt { records: usize, cases: Vec<CaseId> },
+    ReflectionLmCompleted { cache_hit: bool },
+    ChildBuilt { candidate: CandidateId },
+    ChildEvaluated { metric_calls_delta: u64 },
+    ProposalAccepted { child: CandidateId },
+    ProposalRejected { reason: String },
+    AcceptedValidationCompleted { candidate_index: GepaCandidateIndex },
+    FrontierUpdated,
+    MergeAttempted,
+    MergeAccepted,
+    MergeRejected,
+}
+```
+
+Open routing options:
+
+1. Emit `GepaEvent` as typed optimizer event inside `RunEvent`.
+2. Keep engine events generic and write `GepaEventSummary` only to optimizer
+   report.
+3. Add `OptimizeBuilder::on_gepa_event(...)` when the optimizer is GEPA.
+
+Recommended answer:
+
+```text
+Implement typed report events first, then bridge them into generic callbacks if
+the engine event model has a clean optimizer-event extension point. Do not make
+ordinary callbacks parse string log lines.
+```
+
+### 21.10 Error And Skip API Choices
+
+Reference GEPA has many non-fatal proposal outcomes. They need typed names:
+
+```rust
+pub enum GepaSkipReason {
+    NoTrajectories,
+    NoReflectiveExamples,
+    AllScoresPerfect,
+    ReflectionDatasetFailed,
+    ReflectionProposalFailed,
+    ChildEvaluationFailed,
+    BudgetStoppedBeforeProposal,
+}
+```
+
+Public errors should distinguish:
+
+- build/preflight errors, before provider calls;
+- phase errors, during optimizer execution;
+- reflection dataset errors;
+- proposer/LM/parser errors;
+- surface edit lowering errors;
+- validation/frontier invariant errors;
+- cache identity/cache restore errors.
+
+Recommended public shape:
+
+```rust
+pub enum GepaBuildError { ... }
+pub enum GepaPhaseError { ... }
+pub enum ReflectionError { ... }
+```
+
+The engine boundary can still return `OptimizerError`, but the GEPA report and
+source errors must preserve typed context. Do not collapse these into
+`OptimizerError::Message` if the caller can act on them.
+
+### 21.11 Cache And Identity API Choices
+
+GEPA cache parity introduces API pressure but not necessarily new ordinary
+knobs.
+
+Required public/report facts:
+
+- whether evaluation caching was enabled;
+- candidate identity policy;
+- bypass reason when a candidate lacks deterministic identity;
+- per-case hit/miss counts;
+- request-level versus per-case cache behavior;
+- LM cache hit/miss by role: solver, reflection, judge/scorer if any.
+
+Open API choices:
+
+1. Add GEPA-specific cache policy methods.
+2. Reuse `OptimizeBuilder::evaluation_cache_policy(...)` and report GEPA
+   details only.
+
+Recommended answer:
+
+```text
+Reuse the existing public cache knob. Add internal per-case GEPA cache support
+and detailed reports. New public GEPA cache methods are only needed if a user
+must choose per-case cache behavior independently from ordinary evaluation
+cache behavior.
+```
+
+### 21.12 Validation, DSPy Fallback, And Inference Search API
+
+The same train/validation data relation means different things in three modes.
+
+Required modes:
+
+```rust
+pub enum GepaMode {
+    Generalization,       // train feedback, validation Pareto, test final only
+    DspyFallback,         // validation omitted -> train reused with warning
+    InferenceSearch,      // train == validation by design, optimize this set
+}
+```
+
+Exact enum name is open, but the distinction is not optional.
+
+Recommended behavior:
+
+- `Gepa::reference()` defaults to `Generalization` and requires validation.
+- `Gepa::dspy_reference()` may enter `DspyFallback` if validation is omitted,
+  and must emit a warning/report field.
+- `Gepa::inference_search()` explicitly sets train and validation/Pareto to the
+  same case set and labels the result as inference-time search.
+
+Do not infer inference-time search merely because validation is empty.
+
+### 21.13 Reflection Dataset API Choices
+
+Current `ReflectiveExample` is enough for simple AIME:
+
+```text
+input
+output
+score
+feedback
+source refs
+```
+
+DSPy parity needs sectioned records:
+
+```text
+Inputs
+Generated Outputs
+Feedback
+failed parse raw completion
+optional history/context block
+```
+
+API choices:
+
+1. Enrich `ReflectiveExample`:
+
+   ```rust
+   pub struct ReflectiveExample {
+       pub case: Option<CaseId>,
+       pub sections: Vec<ReflectiveSection>,
+       pub score: Option<f64>,
+       pub source_refs: Vec<InfoRef>,
+   }
+   ```
+
+2. Keep `ReflectiveExample` flat and add renderer-specific metadata.
+3. Add a separate `StructuredReflectiveExample` and convert flat AIME examples
+   into it.
+
+Recommended answer:
+
+```text
+Move toward structured sections while preserving a simple constructor for AIME.
+DSPy-compatible rendering should not be forced through ad hoc string
+concatenation inside the LM renderer.
+```
+
+The builder remains the projection seam. The renderer formats records; it does
+not decide which assessments become examples.
+
+### 21.14 Scaffold And Test-Support API
+
+Scaffolds that should not appear in ordinary product docs:
+
+- `FixedSurfaceEdit`;
+- train-filtered `ParetoFrontier` as "GEPA parity";
+- `MinibatchThenValidation` as default GEPA;
+- string-message optimizer errors as expected skip outcomes;
+- generic `Population` slot as reference GEPA state.
+
+API choices:
+
+1. Keep scaffolds public in `leaven-gepa` but remove from `prelude` and docs.
+2. Move scaffolds under `test_support` feature/module.
+3. Keep some as examples-only private fixtures.
+
+Recommended answer:
+
+```text
+Hard-cut scaffolds out of ordinary routes. If downstream tests need them,
+create an explicit `leaven_gepa::test_support` module or keep them crate-test
+private. Do not re-export `FixedSurfaceEdit` from `leaven_gepa::prelude` as if
+it were a production reflector.
+```
+
+### 21.15 Public Surface Contract Updates Required
+
+When these API choices land, update the mechanical route tests:
+
+- `crates/leaven/tests/public_surface_contract.rs` if any GEPA types move into
+  `leaven::prelude`, `leaven::extend`, or `plumbing`;
+- `crates/leaven-gepa/src/lib.rs` so it remains a map only;
+- `crates/leaven-gepa/AGENTS.md` with any renamed slots or scaffold routing;
+- `docs/specs/gepa_public_private_surface.md` and
+  `docs/specs/gepa_optimizer_surface.md` to remove stale API names that this
+  reference supersedes;
+- focused compile tests proving the ordinary Layer 1 example still imports
+  only `leaven::prelude::*` plus `leaven::gepa::Gepa`.
+
+Minimum API proof tests:
+
+```text
+test_reference_gepa_layer1_import_shape
+test_reference_gepa_profile_requires_validation
+test_dspy_profile_labels_train_as_validation_fallback
+test_inference_search_profile_labels_train_equals_validation
+test_gepa_report_exposes_candidate_indices_and_frontier
+test_fixed_surface_edit_is_not_in_ordinary_gepa_prelude
+test_gate_public_name_cutover_to_acceptance_policy
+test_population_slot_is_not_required_for_reference_profile
+test_reflective_dataset_builder_is_public_customizer_slot
+test_gepa_event_summary_exposes_phase_order
+```
