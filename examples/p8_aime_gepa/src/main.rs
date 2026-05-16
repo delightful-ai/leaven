@@ -515,37 +515,39 @@ async fn try_run_aime(
     let solver_config = config.solver.clone();
     let report_metadata = dataset.report_metadata.clone();
     let reflective_dataset = dataset.reflective_dataset();
-    let optimized = leaven::prelude::optimize(AimePrompt::new(config.seed_prompt))
-        .train(dataset.train)
-        .validation(dataset.validation)
-        .test(dataset.test)
-        .runner(move |prompt, case| {
-            let solver = solver.clone();
-            let solver_config = solver_config.clone();
-            async move { run_solver(prompt, case, solver, solver_config).await }
-        })
-        .score(score_answer)
-        .runner_fingerprint(runner_fingerprint)
-        .scorer_fingerprint(scorer_fingerprint)
-        .evaluation_cache_policy(config.evaluation_cache_policy.clone())
-        .evaluation_parallelism(config.evaluation_parallelism)
-        .on_event(AimeProgressCallback::default())
-        .using(
-            Gepa::reflect_with_lm(
-                aime_reflection_lm(&config.reflection, reflection_telemetry.clone(), &run_dir),
-                config.reflection.model.clone(),
+    let optimized = Box::pin(
+        leaven::prelude::optimize(AimePrompt::new(config.seed_prompt))
+            .train(dataset.train)
+            .validation(dataset.validation)
+            .test(dataset.test)
+            .runner(move |prompt, case| {
+                let solver = solver.clone();
+                let solver_config = solver_config.clone();
+                async move { run_solver(prompt, case, solver, solver_config).await }
+            })
+            .score(score_answer)
+            .runner_fingerprint(runner_fingerprint)
+            .scorer_fingerprint(scorer_fingerprint)
+            .evaluation_cache_policy(config.evaluation_cache_policy.clone())
+            .evaluation_parallelism(config.evaluation_parallelism)
+            .on_event(AimeProgressCallback::default())
+            .using(
+                Gepa::reflect_with_lm(
+                    aime_reflection_lm(&config.reflection, reflection_telemetry.clone(), &run_dir),
+                    config.reflection.model.clone(),
+                )
+                .with_reflector_config(aime_reflector_config(&config.reflection))
+                .surface(AimePromptSurface)
+                .build()
+                .reflective_dataset(reflective_dataset)
+                .max_iterations(config.max_iterations),
             )
-            .with_reflector_config(aime_reflector_config(&config.reflection))
-            .surface(AimePromptSurface)
-            .build()
-            .reflective_dataset(reflective_dataset)
-            .max_iterations(config.max_iterations),
-        )
-        .budget(config.budget.clone())
-        .run_id(run_id)
-        .run_dir(run_dir)
-        .run()
-        .await?;
+            .budget(config.budget.clone())
+            .run_id(run_id)
+            .run_dir(run_dir)
+            .run(),
+    )
+    .await?;
     let role_reports = AimeRoleReports::from_config(
         &config,
         solver_telemetry.snapshot(),
@@ -732,9 +734,9 @@ impl AimeRunProfile {
 
     const fn reflection_prompt_claim(self) -> &'static str {
         match self {
-            Self::DeterministicSmoke => "upstream_gepa_instruction_template",
-            Self::DspyQuickstart => "upstream_gepa_instruction_template",
-            Self::GepaAime => "upstream_gepa_instruction_template",
+            Self::DeterministicSmoke | Self::DspyQuickstart | Self::GepaAime => {
+                "upstream_gepa_instruction_template"
+            }
         }
     }
 
@@ -2598,31 +2600,33 @@ mod tests {
         let run_id = RunId::new();
         let run_dir = leaven::run::default_local_run_dir(run_id);
         let error = block_on(async {
-            leaven::prelude::optimize(AimePrompt::new(config.seed_prompt))
-                .train(dataset.train)
-                .runner(move |prompt, case| {
-                    let solver_config = solver_config.clone();
-                    async move { run_solver(prompt, case, None, solver_config).await }
-                })
-                .using(
-                    Gepa::reflect_with_lm(
-                        aime_reflection_lm(
-                            &config.reflection,
-                            AimeLmTelemetry::new(config.reflection.cache_policy),
-                            &run_dir,
-                        ),
-                        config.reflection.model.clone(),
+            Box::pin(
+                leaven::prelude::optimize(AimePrompt::new(config.seed_prompt))
+                    .train(dataset.train)
+                    .runner(move |prompt, case| {
+                        let solver_config = solver_config.clone();
+                        async move { run_solver(prompt, case, None, solver_config).await }
+                    })
+                    .using(
+                        Gepa::reflect_with_lm(
+                            aime_reflection_lm(
+                                &config.reflection,
+                                AimeLmTelemetry::new(config.reflection.cache_policy),
+                                &run_dir,
+                            ),
+                            config.reflection.model.clone(),
+                        )
+                        .with_reflector_config(aime_reflector_config(&config.reflection))
+                        .surface(AimePromptSurface)
+                        .build()
+                        .reflective_dataset(reflective_dataset),
                     )
-                    .with_reflector_config(aime_reflector_config(&config.reflection))
-                    .surface(AimePromptSurface)
-                    .build()
-                    .reflective_dataset(reflective_dataset),
-                )
-                .budget(Budget::metric_calls(8))
-                .run_id(run_id)
-                .run_dir(run_dir)
-                .run()
-                .await
+                    .budget(Budget::metric_calls(8))
+                    .run_id(run_id)
+                    .run_dir(run_dir)
+                    .run(),
+            )
+            .await
         })
         .unwrap_err();
 
