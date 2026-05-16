@@ -223,10 +223,15 @@ fn gepa_stage_proposer_routes_fake_runtime_through_run_context() {
 #[test]
 fn gepa_optimizer_uses_agent_backed_reflection_path() {
     block_on(async {
-        let case_set = CaseSet::new(vec![()]).with_partition(
-            leaven_core::PartitionId::from("TRAIN"),
-            vec![leaven_kernel::CaseId::new(0)],
-        );
+        let case_set = CaseSet::new(vec![()])
+            .with_partition(
+                leaven_core::PartitionId::from("TRAIN"),
+                vec![leaven_kernel::CaseId::new(0)],
+            )
+            .with_partition(
+                leaven_core::PartitionId::from("VALIDATION"),
+                vec![leaven_kernel::CaseId::new(0)],
+            );
         let store = InlineEvidenceStore::<TestEvidence>::new("inline");
         let mut engine = Engine::<TestProblem>::builder()
             .evaluator(ConstantEvaluator)

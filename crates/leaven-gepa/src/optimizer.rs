@@ -1,6 +1,6 @@
 //! Reusable GEPA optimizer loop.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use leaven_core::{
     AssessmentGranularity, AssessmentTarget, EvaluationPurpose, EvaluationRequest, EvaluationSet,
@@ -12,6 +12,7 @@ use leaven_engine::{
     RunContext, RunGraphView, StateFormat, restore_checkpointable_optimizer_state,
 };
 use leaven_evidence::{CaseAssessmentEvidence, CaseOutcome, CasewiseEvidence, ScalarEvidence};
+use leaven_kernel::CaseId;
 use leaven_kernel::{AssessmentId, CandidateId, EvaluatorId, Fingerprint, PopulationId};
 use leaven_population::{KeepBest, ParetoFrontier};
 use leaven_surface::{EditSurface, SurfaceError};
@@ -178,6 +179,259 @@ struct GepaValidationBest {
     score: f64,
 }
 
+/// Stable GEPA candidate index in discovery order.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
+pub struct GepaCandidateIndex(u32);
+
+impl GepaCandidateIndex {
+    /// Build a GEPA candidate index from a discovery-order value.
+    #[must_use]
+    pub const fn new(index: u32) -> Self {
+        Self(index)
+    }
+
+    /// Raw discovery-order index. The seed candidate is always `0`.
+    #[must_use]
+    pub const fn get(self) -> u32 {
+        self.0
+    }
+}
+
+/// One accepted candidate in GEPA reference state.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct GepaCandidateRecord {
+    index: GepaCandidateIndex,
+    candidate: CandidateId,
+    parents: Vec<GepaCandidateIndex>,
+    discovery_metric_calls: u64,
+    validation_score: Option<f64>,
+    validation_rows: Vec<AssessmentId>,
+}
+
+impl GepaCandidateRecord {
+    /// GEPA discovery-order index.
+    #[must_use]
+    pub const fn index(&self) -> GepaCandidateIndex {
+        self.index
+    }
+
+    /// Candidate id in graph truth.
+    #[must_use]
+    pub const fn candidate(&self) -> CandidateId {
+        self.candidate
+    }
+
+    /// Parent GEPA indices.
+    #[must_use]
+    pub fn parents(&self) -> &[GepaCandidateIndex] {
+        &self.parents
+    }
+
+    /// Metric calls spent when this candidate was admitted.
+    #[must_use]
+    pub const fn discovery_metric_calls(&self) -> u64 {
+        self.discovery_metric_calls
+    }
+
+    /// Aggregate validation score.
+    #[must_use]
+    pub const fn validation_score(&self) -> Option<f64> {
+        self.validation_score
+    }
+
+    /// Validation assessment rows backing this candidate.
+    #[must_use]
+    pub fn validation_rows(&self) -> &[AssessmentId] {
+        &self.validation_rows
+    }
+}
+
+/// GEPA-owned reference state used for validation-frontier selection and reports.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct GepaReferenceState {
+    records: Vec<GepaCandidateRecord>,
+    candidate_to_index: BTreeMap<CandidateId, GepaCandidateIndex>,
+    validation_subscores: Vec<BTreeMap<CaseId, ScalarEvidence>>,
+    validation_frontier_scores: BTreeMap<CaseId, ScalarEvidence>,
+    validation_frontier_candidates: BTreeMap<CaseId, BTreeSet<GepaCandidateIndex>>,
+    total_metric_calls: u64,
+    full_validation_evals: u64,
+}
+
+impl GepaReferenceState {
+    /// Accepted candidate records in GEPA discovery order.
+    #[must_use]
+    pub fn records(&self) -> &[GepaCandidateRecord] {
+        &self.records
+    }
+
+    /// Per-validation-case frontier membership.
+    #[must_use]
+    pub const fn validation_frontier(&self) -> &BTreeMap<CaseId, BTreeSet<GepaCandidateIndex>> {
+        &self.validation_frontier_candidates
+    }
+
+    /// Total new evaluator metric calls charged to GEPA search.
+    #[must_use]
+    pub const fn total_metric_calls(&self) -> u64 {
+        self.total_metric_calls
+    }
+
+    /// Number of full validation evaluations GEPA has run.
+    #[must_use]
+    pub const fn full_validation_evals(&self) -> u64 {
+        self.full_validation_evals
+    }
+
+    fn index_of(&self, candidate: CandidateId) -> Option<GepaCandidateIndex> {
+        self.candidate_to_index.get(&candidate).copied()
+    }
+
+    fn best_candidate(&self) -> Option<CandidateId> {
+        self.records
+            .iter()
+            .filter_map(|record| {
+                record
+                    .validation_score
+                    .map(|score| (score, record.candidate))
+            })
+            .max_by(|left, right| left.0.total_cmp(&right.0))
+            .map(|(_, candidate)| candidate)
+    }
+
+    fn add_validated_candidate(
+        &mut self,
+        candidate: CandidateId,
+        parents: Vec<GepaCandidateIndex>,
+        discovery_metric_calls: u64,
+        validation: &GepaAssessment,
+    ) -> GepaCandidateIndex {
+        if let Some(index) = self.index_of(candidate) {
+            return index;
+        }
+        let index = GepaCandidateIndex::new(
+            u32::try_from(self.records.len()).expect("GEPA candidate count fits u32"),
+        );
+        let mut subscores = BTreeMap::new();
+        for outcome in validation.scalar_evidence.outcomes() {
+            let case = outcome.case();
+            let score = *outcome.evidence();
+            subscores.insert(case, score);
+            match self.validation_frontier_scores.get(&case).copied() {
+                None => {
+                    self.validation_frontier_scores.insert(case, score);
+                    self.validation_frontier_candidates
+                        .insert(case, BTreeSet::from([index]));
+                }
+                Some(best) if score.score() > best.score() => {
+                    self.validation_frontier_scores.insert(case, score);
+                    self.validation_frontier_candidates
+                        .insert(case, BTreeSet::from([index]));
+                }
+                Some(best) if (score.score() - best.score()).abs() < f64::EPSILON => {
+                    self.validation_frontier_candidates
+                        .entry(case)
+                        .or_default()
+                        .insert(index);
+                }
+                Some(_) => {}
+            }
+        }
+        self.candidate_to_index.insert(candidate, index);
+        self.validation_subscores.push(subscores);
+        self.records.push(GepaCandidateRecord {
+            index,
+            candidate,
+            parents,
+            discovery_metric_calls,
+            validation_score: Some(validation.average_score),
+            validation_rows: validation.assessments.clone(),
+        });
+        index
+    }
+
+    fn add_unvalidated_candidate(
+        &mut self,
+        candidate: CandidateId,
+        parents: Vec<GepaCandidateIndex>,
+    ) -> GepaCandidateIndex {
+        if let Some(index) = self.index_of(candidate) {
+            return index;
+        }
+        let index = GepaCandidateIndex::new(
+            u32::try_from(self.records.len()).expect("GEPA candidate count fits u32"),
+        );
+        self.candidate_to_index.insert(candidate, index);
+        self.validation_subscores.push(BTreeMap::new());
+        self.records.push(GepaCandidateRecord {
+            index,
+            candidate,
+            parents,
+            discovery_metric_calls: self.total_metric_calls,
+            validation_score: None,
+            validation_rows: Vec::new(),
+        });
+        index
+    }
+
+    fn add_metric_calls(&mut self, calls: u64) {
+        self.total_metric_calls = self.total_metric_calls.saturating_add(calls);
+    }
+
+    fn note_full_validation(&mut self) {
+        self.full_validation_evals = self.full_validation_evals.saturating_add(1);
+    }
+}
+
+/// Non-fatal GEPA proposal skip reason.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+pub enum GepaSkipReason {
+    /// The reflective dataset builder produced no examples.
+    NoReflectiveExamples,
+    /// All selected parent rows were already perfect.
+    AllScoresPerfect,
+}
+
+/// Structured GEPA phase event summary for reports/tests.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum GepaEventSummary {
+    /// Profile was resolved.
+    ProfileResolved,
+    /// Seed validation started.
+    SeedValidationStarted { candidate: CandidateId },
+    /// Seed validation completed.
+    SeedValidationCompleted {
+        candidate_index: GepaCandidateIndex,
+        score: String,
+    },
+    /// One GEPA iteration started.
+    IterationStarted { iteration: usize },
+    /// Parent was selected for mutation.
+    ParentSelected { candidate_index: GepaCandidateIndex },
+    /// Train minibatch was sampled.
+    TrainMinibatchSampled,
+    /// Parent evaluation completed.
+    ParentEvaluated { metric_calls_delta: u64 },
+    /// Proposal was skipped before provider work.
+    ProposalSkipped { reason: GepaSkipReason },
+    /// Reflective examples were built.
+    ReflectiveDatasetBuilt { records: usize },
+    /// Child candidate was built.
+    ChildBuilt { candidate: CandidateId },
+    /// Child evaluation completed.
+    ChildEvaluated { metric_calls_delta: u64 },
+    /// Proposal was accepted by the train-screening policy.
+    ProposalAccepted { child: CandidateId },
+    /// Proposal was rejected by the train-screening policy.
+    ProposalRejected,
+    /// Accepted candidate validation completed.
+    AcceptedValidationCompleted { candidate_index: GepaCandidateIndex },
+    /// Validation frontier was updated.
+    FrontierUpdated,
+    /// GEPA reached the end of optimizer execution.
+    OptimizationEnded { best: Option<GepaCandidateIndex> },
+}
+
 /// One candidate observation tracked by GEPA's private history.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GepaCandidateHistoryEntry {
@@ -236,6 +490,8 @@ pub struct Gepa<
     validation_best: Option<GepaValidationBest>,
     observed: BTreeSet<CandidateId>,
     candidate_history: Vec<GepaCandidateHistoryEntry>,
+    reference_state: GepaReferenceState,
+    events: Vec<GepaEventSummary>,
 }
 
 /// Serializable GEPA private state.
@@ -256,6 +512,8 @@ pub struct GepaCheckpointState<
     validation_best: Option<GepaValidationBest>,
     observed: BTreeSet<CandidateId>,
     candidate_history: Vec<GepaCandidateHistoryEntry>,
+    reference_state: GepaReferenceState,
+    events: Vec<GepaEventSummary>,
     population: PopulationState,
     candidate_selector: CandidateSelectorState,
     part_selector: PartSelectorState,
@@ -328,6 +586,8 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             validation_best: None,
             observed: BTreeSet::new(),
             candidate_history: Vec::new(),
+            reference_state: GepaReferenceState::default(),
+            events: Vec::new(),
         }
     }
 
@@ -379,6 +639,8 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             validation_best: self.validation_best,
             observed: self.observed,
             candidate_history: self.candidate_history,
+            reference_state: self.reference_state,
+            events: self.events,
         }
     }
 
@@ -406,6 +668,8 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             validation_best: self.validation_best,
             observed: self.observed,
             candidate_history: self.candidate_history,
+            reference_state: self.reference_state,
+            events: self.events,
         }
     }
 
@@ -437,6 +701,8 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             validation_best: self.validation_best,
             observed: self.observed,
             candidate_history: self.candidate_history,
+            reference_state: self.reference_state,
+            events: self.events,
         }
     }
 
@@ -458,6 +724,18 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
     #[must_use]
     pub fn candidate_history(&self) -> &[GepaCandidateHistoryEntry] {
         &self.candidate_history
+    }
+
+    /// GEPA reference state used for candidate indices and validation frontier reports.
+    #[must_use]
+    pub const fn reference_state(&self) -> &GepaReferenceState {
+        &self.reference_state
+    }
+
+    /// Structured GEPA phase events emitted by this optimizer.
+    #[must_use]
+    pub fn events(&self) -> &[GepaEventSummary] {
+        &self.events
     }
 
     /// Select the next candidate to mutate.
@@ -522,7 +800,26 @@ where
     Validate: ValidationPolicy + CheckpointValidationPolicy + Send + Sync,
     Dataset: ReflectiveDatasetBuilder<P, S>,
 {
-    async fn initialize(&mut self, _ctx: &mut RunContext<'_, P>) -> Result<(), OptimizerError> {
+    async fn initialize(&mut self, ctx: &mut RunContext<'_, P>) -> Result<(), OptimizerError> {
+        self.events.push(GepaEventSummary::ProfileResolved);
+        let seed = ctx
+            .graph()
+            .candidate_tree()
+            .roots()
+            .first()
+            .copied()
+            .ok_or_else(|| {
+                OptimizerError::Message("GEPA requires at least one seed candidate".to_owned())
+            })?;
+        if self.reference_state.index_of(seed).is_none() {
+            self.events
+                .push(GepaEventSummary::SeedValidationStarted { candidate: seed });
+            self.validate_candidate(ctx, seed, Vec::new(), true).await?;
+            if self.reference_state.index_of(seed).is_none() {
+                self.reference_state
+                    .add_unvalidated_candidate(seed, Vec::new());
+            }
+        }
         Ok(())
     }
 
@@ -531,56 +828,71 @@ where
         ctx: &mut RunContext<'_, P>,
     ) -> Result<leaven_engine::StepStatus, OptimizerError> {
         if self.completed_iterations >= self.max_iterations {
-            self.best = self.population.best();
+            self.best = self
+                .reference_state
+                .best_candidate()
+                .or_else(|| self.population.best());
+            let best = self
+                .best
+                .and_then(|candidate| self.reference_state.index_of(candidate));
+            self.events
+                .push(GepaEventSummary::OptimizationEnded { best });
             return Ok(leaven_engine::StepStatus::Done);
         }
 
-        let seed = self
-            .select_candidate(ctx.graph())
-            .or_else(|| ctx.graph().candidate_tree().roots().first().copied())
+        let seed = ctx
+            .graph()
+            .candidate_tree()
+            .roots()
+            .first()
+            .copied()
             .ok_or_else(|| {
                 OptimizerError::Message("GEPA requires at least one seed candidate".to_owned())
             })?;
 
+        self.events.push(GepaEventSummary::IterationStarted {
+            iteration: self.completed_iterations + 1,
+        });
         let evaluation_set = self.batch_sampler.sample_train(&self.train_partition);
-        let parent_baseline = self
+        self.events.push(GepaEventSummary::TrainMinibatchSampled);
+        let parent = self
+            .reference_state
+            .best_candidate()
+            .or_else(|| self.select_candidate(ctx.graph()))
+            .unwrap_or(seed);
+        let parent_index = self.reference_state.index_of(parent).ok_or_else(|| {
+            OptimizerError::Message("GEPA selected a parent outside reference state".to_owned())
+        })?;
+        self.events.push(GepaEventSummary::ParentSelected {
+            candidate_index: parent_index,
+        });
+        let parent_screening = self
             .evaluate_casewise(
                 ctx,
-                seed,
+                parent,
                 evaluation_set.clone(),
                 EvaluationPurpose::SeedBaseline,
             )
             .await?;
-        if self.observed.insert(seed) {
+        self.reference_state
+            .add_metric_calls(parent_screening.metric_calls_new);
+        self.events.push(GepaEventSummary::ParentEvaluated {
+            metric_calls_delta: parent_screening.metric_calls_new,
+        });
+        if self.observed.insert(parent) {
             self.candidate_history
-                .push(parent_baseline.history_entry(seed));
+                .push(parent_screening.history_entry(parent));
             let events = self.population.observe_gepa(
                 Some(&self.train_partition),
-                seed,
-                &parent_baseline.assessments,
-                &parent_baseline.scalar_evidence,
+                parent,
+                &parent_screening.assessments,
+                &parent_screening.scalar_evidence,
             );
             ctx.emit(leaven_engine::RunEvent::PopulationUpdated {
                 population_id: self.population.id(),
                 events,
             });
         }
-        if self.validation_best.is_none() {
-            self.validate_candidate(ctx, seed).await?;
-        }
-
-        let parent = self.select_candidate(ctx.graph()).unwrap_or(seed);
-        let parent_screening = if parent == seed {
-            parent_baseline
-        } else {
-            self.evaluate_casewise(
-                ctx,
-                parent,
-                evaluation_set.clone(),
-                EvaluationPurpose::SeedBaseline,
-            )
-            .await?
-        };
         for _ in 0..self.proposal_count {
             let Some(candidate) = self
                 .propose_candidate(ctx, parent, &parent_screening.assessments)
@@ -597,11 +909,18 @@ where
                     EvaluationPurpose::Search,
                 )
                 .await?;
+            self.reference_state
+                .add_metric_calls(screened.metric_calls_new);
+            self.events.push(GepaEventSummary::ChildEvaluated {
+                metric_calls_delta: screened.metric_calls_new,
+            });
             if self
                 .gate
                 .decide(parent_screening.average_score, screened.average_score)
                 .is_accept()
             {
+                self.events
+                    .push(GepaEventSummary::ProposalAccepted { child: candidate });
                 self.candidate_history
                     .push(screened.history_entry(candidate));
                 let events = self.population.observe_gepa(
@@ -615,7 +934,14 @@ where
                     events,
                 });
                 self.best = self.population.best();
-                self.validate_candidate(ctx, candidate).await?;
+                self.validate_candidate(ctx, candidate, vec![parent_index], false)
+                    .await?;
+                if self.reference_state.index_of(candidate).is_none() {
+                    self.reference_state
+                        .add_unvalidated_candidate(candidate, vec![parent_index]);
+                }
+            } else {
+                self.events.push(GepaEventSummary::ProposalRejected);
             }
         }
         self.completed_iterations += 1;
@@ -731,6 +1057,12 @@ where
                 )?;
             }
         }
+        for record in self.reference_state.records() {
+            ensure_checkpoint_candidate(&graph, record.candidate(), "GEPA reference candidate")?;
+            for assessment in record.validation_rows() {
+                ensure_checkpoint_assessment(&graph, *assessment, "GEPA reference validation row")?;
+            }
+        }
         if let Some(population_best) = self.population.best() {
             ensure_checkpoint_candidate(&graph, population_best, "population best candidate")?;
         }
@@ -743,6 +1075,8 @@ where
             validation_best: self.validation_best.clone(),
             observed: self.observed.clone(),
             candidate_history: self.candidate_history.clone(),
+            reference_state: self.reference_state.clone(),
+            events: self.events.clone(),
             population: CheckpointPopulation::checkpoint_state(&self.population),
             candidate_selector: CheckpointCandidateSelector::checkpoint_state(
                 &self.candidate_selector,
@@ -792,6 +1126,12 @@ where
                 )?;
             }
         }
+        for record in state.reference_state.records() {
+            ensure_checkpoint_candidate(&graph, record.candidate(), "GEPA reference candidate")?;
+            for assessment in record.validation_rows() {
+                ensure_checkpoint_assessment(&graph, *assessment, "GEPA reference validation row")?;
+            }
+        }
         self.train_partition = state.train_partition;
         self.max_iterations = state.max_iterations;
         self.proposal_count = state.proposal_count;
@@ -799,6 +1139,8 @@ where
         self.best = state.best;
         self.observed = state.observed;
         self.candidate_history = state.candidate_history;
+        self.reference_state = state.reference_state;
+        self.events = state.events;
         self.population.restore_state(state.population);
         self.candidate_selector
             .restore_state(state.candidate_selector);
@@ -886,6 +1228,15 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             .map_err(|source| {
                 OptimizerError::with_source("GEPA reflective-dataset build failed", source)
             })?;
+        if examples.is_empty() {
+            self.events.push(GepaEventSummary::ProposalSkipped {
+                reason: GepaSkipReason::NoReflectiveExamples,
+            });
+            return Ok(None);
+        }
+        self.events.push(GepaEventSummary::ReflectiveDatasetBuilt {
+            records: examples.len(),
+        });
         let source_refs = std::iter::once(leaven_core::InfoRef::Candidate(parent))
             .chain(
                 parent_assessments
@@ -901,15 +1252,22 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             examples,
             source_refs,
         };
-        self.reflector
+        let candidate = self
+            .reflector
             .reflect_candidate(ctx, &self.surface, request)
-            .await
+            .await?;
+        if let Some(candidate) = candidate {
+            self.events.push(GepaEventSummary::ChildBuilt { candidate });
+        }
+        Ok(candidate)
     }
 
     async fn validate_candidate<P>(
         &mut self,
         ctx: &mut RunContext<'_, P>,
         candidate: CandidateId,
+        parents: Vec<GepaCandidateIndex>,
+        seed_validation: bool,
     ) -> Result<(), OptimizerError>
     where
         P: OptimizationProblem,
@@ -930,6 +1288,15 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
         let assessment = self
             .evaluate_casewise(ctx, candidate, set, EvaluationPurpose::Validation)
             .await?;
+        self.reference_state
+            .add_metric_calls(assessment.metric_calls_new);
+        self.reference_state.note_full_validation();
+        let index = self.reference_state.add_validated_candidate(
+            candidate,
+            parents,
+            self.reference_state.total_metric_calls(),
+            &assessment,
+        );
         if self
             .validation_best
             .as_ref()
@@ -941,6 +1308,18 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
                 score: assessment.average_score,
             });
         }
+        if seed_validation {
+            self.events.push(GepaEventSummary::SeedValidationCompleted {
+                candidate_index: index,
+                score: assessment.average_score.to_string(),
+            });
+        } else {
+            self.events
+                .push(GepaEventSummary::AcceptedValidationCompleted {
+                    candidate_index: index,
+                });
+        }
+        self.events.push(GepaEventSummary::FrontierUpdated);
         Ok(())
     }
 
@@ -1020,6 +1399,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             assessments: report.assessment_ids,
             scalar_evidence,
             average_score,
+            metric_calls_new: report.cost.metric_calls,
         })
     }
 }
@@ -1028,6 +1408,7 @@ struct GepaAssessment {
     assessments: Vec<AssessmentId>,
     scalar_evidence: CasewiseEvidence<ScalarEvidence>,
     average_score: f64,
+    metric_calls_new: u64,
 }
 
 impl GepaAssessment {

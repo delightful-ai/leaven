@@ -602,7 +602,8 @@ fn gepa_default_sampler_uses_train_minibatches_without_validation_or_test_cases(
             ParetoFrontier::by_case().build(),
             FixedSurfaceEdit::new("improved".to_owned()),
         )
-        .reflective_dataset(NoReflectiveExamples)
+        .reflective_dataset(OneReflectiveExample)
+        .validation_policy(MinibatchThenValidation)
         .max_iterations(1);
 
         engine.run(&mut gepa, &case_set, &store).await.unwrap();
@@ -639,7 +640,8 @@ fn gepa_candidate_history_tracks_seed_and_accepted_children_by_assessment() {
             ParetoFrontier::by_case().build(),
             FixedSurfaceEdit::new("improved".to_owned()),
         )
-        .reflective_dataset(NoReflectiveExamples)
+        .reflective_dataset(OneReflectiveExample)
+        .validation_policy(MinibatchThenValidation)
         .max_iterations(1);
 
         engine.run(&mut gepa, &case_set, &store).await.unwrap();
@@ -859,6 +861,7 @@ fn gepa_run_surfaces_reflective_dataset_build_failure() {
             FixedSurfaceEdit::new("improved".to_owned()),
         )
         .reflective_dataset(failing_dataset)
+        .validation_policy(MinibatchThenValidation)
         .max_iterations(1);
 
         let error = engine.run(&mut gepa, &case_set, &store).await.unwrap_err();
@@ -930,8 +933,9 @@ fn gepa_batch_sampler_builder_uses_custom_minibatches() {
             ParetoFrontier::by_case().build(),
             FixedSurfaceEdit::new("improved".to_owned()),
         )
-        .reflective_dataset(NoReflectiveExamples)
+        .reflective_dataset(OneReflectiveExample)
         .batch_sampler(EpochShuffled::new(2).with_seed(7))
+        .validation_policy(MinibatchThenValidation)
         .max_iterations(1);
 
         engine.run(&mut gepa, &case_set, &store).await.unwrap();
@@ -961,7 +965,8 @@ fn gepa_proposal_count_applies_multiple_reflections_in_one_iteration() {
             ParetoFrontier::by_case().build(),
             SequentialSurfaceEdits::new(["improved-a", "improved-b"]),
         )
-        .reflective_dataset(NoReflectiveExamples)
+        .reflective_dataset(OneReflectiveExample)
+        .validation_policy(MinibatchThenValidation)
         .proposal_count(2)
         .max_iterations(1);
 
@@ -1018,7 +1023,7 @@ fn full_validation_policy_evaluates_accepted_candidates_and_selects_validation_b
             ParetoFrontier::by_case().build(),
             FixedSurfaceEdit::new("improved".to_owned()),
         )
-        .reflective_dataset(NoReflectiveExamples)
+        .reflective_dataset(OneReflectiveExample)
         .validation_policy(FullValidation)
         .max_iterations(1);
 
@@ -1027,12 +1032,165 @@ fn full_validation_policy_evaluates_accepted_candidates_and_selects_validation_b
 
         let seen = seen.lock().expect("seen lock").clone();
         assert_eq!(seen.len(), 4);
-        assert_eq!(seen[0], vec![leaven_kernel::CaseId::new(0)]);
-        assert_eq!(seen[1], vec![leaven_kernel::CaseId::new(1)]);
+        assert_eq!(seen[0], vec![leaven_kernel::CaseId::new(1)]);
+        assert_eq!(seen[1], vec![leaven_kernel::CaseId::new(0)]);
         assert_eq!(seen[2], vec![leaven_kernel::CaseId::new(0)]);
         assert_eq!(seen[3], vec![leaven_kernel::CaseId::new(1)]);
         assert_eq!(gepa.population().best(), Some(child));
         assert_eq!(run.best, Some(seed));
+    });
+}
+
+#[test]
+fn reference_state_seed_validation_initializes_candidate_zero_before_train() {
+    block_on(async {
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let case_set = CaseSet::new(vec![(), (), ()])
+            .with_partition(
+                leaven_core::PartitionId::from("TRAIN"),
+                vec![leaven_kernel::CaseId::new(0)],
+            )
+            .with_partition(
+                leaven_core::PartitionId::from("VALIDATION"),
+                vec![leaven_kernel::CaseId::new(1), leaven_kernel::CaseId::new(2)],
+            );
+        let store = InlineEvidenceStore::<ScalarEvidence>::new("inline");
+        let mut engine = Engine::<SamplingProblem>::builder()
+            .evaluator(ValidationSelectionEvaluator {
+                seen_sets: seen.clone(),
+            })
+            .build();
+        let seed = engine
+            .insert_seed(
+                PartMapArtifact(BTreeMap::from([("answer".to_owned(), "draft".to_owned())])),
+                0,
+            )
+            .unwrap();
+        let mut gepa = Gepa::new(
+            PartMapSurface,
+            ParetoFrontier::by_case().build(),
+            FixedSurfaceEdit::new("improved".to_owned()),
+        )
+        .reflective_dataset(NoReflectiveExamples)
+        .validation_policy(FullValidation)
+        .max_iterations(0);
+
+        engine.run(&mut gepa, &case_set, &store).await.unwrap();
+
+        let state = gepa.reference_state();
+        assert_eq!(state.records().len(), 1);
+        assert_eq!(state.records()[0].index().get(), 0);
+        assert_eq!(state.records()[0].candidate(), seed);
+        assert_eq!(state.full_validation_evals(), 1);
+        assert_eq!(state.validation_frontier().len(), 2);
+        assert_eq!(state.total_metric_calls(), 2);
+        assert_eq!(
+            seen.lock().expect("seen lock").as_slice(),
+            &[vec![
+                leaven_kernel::CaseId::new(1),
+                leaven_kernel::CaseId::new(2)
+            ]]
+        );
+    });
+}
+
+#[test]
+fn accepted_child_enters_reference_state_only_after_full_validation() {
+    block_on(async {
+        let case_set = CaseSet::new(vec![(), ()])
+            .with_partition(
+                leaven_core::PartitionId::from("TRAIN"),
+                vec![leaven_kernel::CaseId::new(0)],
+            )
+            .with_partition(
+                leaven_core::PartitionId::from("VALIDATION"),
+                vec![leaven_kernel::CaseId::new(1)],
+            );
+        let store = InlineEvidenceStore::<ScalarEvidence>::new("inline");
+        let mut engine = Engine::<SamplingProblem>::builder()
+            .evaluator(PrefixImprovementEvaluator)
+            .build();
+        let seed = engine
+            .insert_seed(
+                PartMapArtifact(BTreeMap::from([("answer".to_owned(), "draft".to_owned())])),
+                0,
+            )
+            .unwrap();
+        let mut gepa = Gepa::new(
+            PartMapSurface,
+            ParetoFrontier::by_case().build(),
+            FixedSurfaceEdit::new("improved".to_owned()),
+        )
+        .reflective_dataset(OneReflectiveExample)
+        .validation_policy(FullValidation)
+        .max_iterations(1);
+
+        engine.run(&mut gepa, &case_set, &store).await.unwrap();
+
+        let child = engine.view().candidate_tree().children(seed)[0];
+        let state = gepa.reference_state();
+        assert_eq!(state.records().len(), 2);
+        assert_eq!(state.records()[1].index().get(), 1);
+        assert_eq!(state.records()[1].candidate(), child);
+        assert_eq!(state.records()[1].parents(), &[state.records()[0].index()]);
+        assert_eq!(state.full_validation_evals(), 2);
+        assert!(state.records()[1].validation_score().is_some());
+        assert!(gepa.events().iter().any(|event| {
+            matches!(
+                event,
+                leaven_gepa::GepaEventSummary::AcceptedValidationCompleted {
+                    candidate_index
+                } if candidate_index.get() == 1
+            )
+        }));
+    });
+}
+
+#[test]
+fn no_reflective_examples_skip_before_reflector_provider_work() {
+    block_on(async {
+        let case_set = CaseSet::new(vec![(), ()])
+            .with_partition(
+                leaven_core::PartitionId::from("TRAIN"),
+                vec![leaven_kernel::CaseId::new(0)],
+            )
+            .with_partition(
+                leaven_core::PartitionId::from("VALIDATION"),
+                vec![leaven_kernel::CaseId::new(1)],
+            );
+        let store = InlineEvidenceStore::<ScalarEvidence>::new("inline");
+        let calls = Arc::new(Mutex::new(0usize));
+        let mut engine = Engine::<SamplingProblem>::builder()
+            .evaluator(PrefixImprovementEvaluator)
+            .build();
+        engine
+            .insert_seed(
+                PartMapArtifact(BTreeMap::from([("answer".to_owned(), "draft".to_owned())])),
+                0,
+            )
+            .unwrap();
+        let mut gepa = Gepa::new(
+            PartMapSurface,
+            ParetoFrontier::by_case().build(),
+            CountingReflector {
+                calls: calls.clone(),
+            },
+        )
+        .reflective_dataset(NoReflectiveExamples)
+        .validation_policy(FullValidation)
+        .max_iterations(1);
+
+        engine.run(&mut gepa, &case_set, &store).await.unwrap();
+
+        assert_eq!(*calls.lock().expect("calls lock"), 0);
+        assert!(gepa.events().iter().any(|event| {
+            matches!(
+                event,
+                leaven_gepa::GepaEventSummary::ProposalSkipped {
+                    reason: leaven_gepa::GepaSkipReason::NoReflectiveExamples
+                }
+            )
+        }));
     });
 }
 
@@ -1504,6 +1662,32 @@ where
     }
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+struct OneReflectiveExample;
+
+impl<P, S> ReflectiveDatasetBuilder<P, S> for OneReflectiveExample
+where
+    P: OptimizationProblem,
+    S: EditSurface<P::Artifact>,
+{
+    async fn build(
+        &self,
+        _ctx: &mut RunContext<'_, P>,
+        _parent: leaven_kernel::CandidateId,
+        _parent_assessments: &[leaven_kernel::AssessmentId],
+        _part: &S::PartId,
+    ) -> Result<Vec<ReflectiveExample>, leaven_gepa::ReflectionError> {
+        Ok(vec![ReflectiveExample {
+            case: Some(leaven_kernel::CaseId::new(0)),
+            input: "input".to_owned(),
+            output: Some("output".to_owned()),
+            score: Some(0.0),
+            feedback: "feedback".to_owned(),
+            source_refs: Vec::new(),
+        }])
+    }
+}
+
 /// `SmokeProblem` GEPA value: default strategies plus the no-example dataset
 /// builder, because `SmokeEvidence` has no GEPA-parity projection.
 type SmokeGepa = Gepa<
@@ -1815,6 +1999,25 @@ impl GepaReflector<SamplingProblem, PartMapSurface> for SequentialSurfaceEdits {
     ) -> Result<Option<leaven_kernel::CandidateId>, leaven_engine::OptimizerError> {
         let edit = self.edits.pop_front().expect("enough scripted edits");
         FixedSurfaceEdit::new(edit)
+            .reflect_candidate(ctx, surface, request)
+            .await
+    }
+}
+
+#[derive(Clone, Debug)]
+struct CountingReflector {
+    calls: Arc<Mutex<usize>>,
+}
+
+impl GepaReflector<SamplingProblem, PartMapSurface> for CountingReflector {
+    async fn reflect_candidate(
+        &mut self,
+        ctx: &mut RunContext<'_, SamplingProblem>,
+        surface: &PartMapSurface,
+        request: ReflectRequest<String>,
+    ) -> Result<Option<leaven_kernel::CandidateId>, leaven_engine::OptimizerError> {
+        *self.calls.lock().expect("calls lock") += 1;
+        FixedSurfaceEdit::new("improved".to_owned())
             .reflect_candidate(ctx, surface, request)
             .await
     }

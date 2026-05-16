@@ -117,10 +117,13 @@ impl CodexHistory {
         raw_event_policy: CodexRawEventPolicy,
     ) {
         if raw_event_policy.retains() {
-            self.raw_events.push(raw_jsonrpc_notification_event(notification));
+            self.raw_events
+                .push(raw_jsonrpc_notification_event(notification));
         }
-        self.warnings
-            .push(format!("skipped Codex notification `{}`: {error}", notification.method));
+        self.warnings.push(format!(
+            "skipped Codex notification `{}`: {error}",
+            notification.method
+        ));
     }
 
     pub(crate) fn into_agent_session(

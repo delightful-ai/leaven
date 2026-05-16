@@ -10,8 +10,8 @@ use leaven_engine::{CachePolicy, CaseSet, Engine, EvaluationContext, EvaluationE
 use leaven_evidence::{CaseAssessmentEvidence, OutputRecord, ScalarEvidence};
 use leaven_gepa::{
     DEFAULT_REFLECTION_PROMPT_TEMPLATE, DefaultReflectionRenderer, Gepa, LmBackedReflector,
-    LmBackedReflectorConfig, PlainTextEditParser, ReflectRequest, ReflectionOutputParser,
-    ReflectionRenderInput, ReflectionRenderer, ReflectiveExample,
+    LmBackedReflectorConfig, MinibatchThenValidation, PlainTextEditParser, ReflectRequest,
+    ReflectionOutputParser, ReflectionRenderInput, ReflectionRenderer, ReflectiveExample,
 };
 use leaven_kernel::{
     AssessmentId, Budget, CandidateId, CaseId, ContentId, Cost, EvaluatorId, Fingerprint,
@@ -52,6 +52,7 @@ fn lm_backed_reflector_renders_feedback_records_and_applies_candidate() {
             ParetoFrontier::by_case().build(),
             reflector,
         )
+        .validation_policy(MinibatchThenValidation)
         .max_iterations(1);
 
         engine.run(&mut gepa, &case_set, &store).await.unwrap();
@@ -139,6 +140,7 @@ fn multi_iteration_reflection_uses_selected_parent_assessment_feedback() {
             ParetoFrontier::by_case().build(),
             reflector,
         )
+        .validation_policy(MinibatchThenValidation)
         .max_iterations(2);
 
         engine.run(&mut gepa, &case_set, &store).await.unwrap();
@@ -457,7 +459,8 @@ fn lm_backed_reflector_surfaces_lm_failures_without_candidate() {
             WholeTextSurface,
             ParetoFrontier::by_case().build(),
             reflector,
-        );
+        )
+        .validation_policy(MinibatchThenValidation);
 
         let error = engine.run(&mut gepa, &case_set, &store).await.unwrap_err();
 
@@ -491,7 +494,8 @@ fn lm_backed_reflector_surfaces_parser_failures_without_candidate() {
             RejectingSurface,
             ParetoFrontier::by_case().build(),
             reflector,
-        );
+        )
+        .validation_policy(MinibatchThenValidation);
 
         let error = engine.run(&mut gepa, &case_set, &store).await.unwrap_err();
 
