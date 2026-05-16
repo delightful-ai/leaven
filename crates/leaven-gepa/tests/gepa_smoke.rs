@@ -21,11 +21,10 @@ use leaven_evidence::{
 };
 use leaven_gepa::{
     CandidateSelector, CheckpointCandidateSelector, CheckpointGate, CheckpointPopulation,
-    FixedSurfaceEdit, FullValidation, Gate, GateDecision, Gepa, GepaReflector, ImprovementOrEqual,
-    NoRegression, ParetoFrequencyWeighted, ReflectRequest, ReflectiveCaseInput,
+    FixedSurfaceEdit, FullValidation, Gate, GateDecision, Gepa, GepaPopulation, GepaReflector,
+    ImprovementOrEqual, NoRegression, ParetoFrequencyWeighted, ReflectRequest, ReflectiveCaseInput,
     ReflectiveDatasetBuilder, ReflectiveExample, SelectBestCandidate, StrictImprovement,
     SurfaceProposer,
-    optimizer::GepaPopulation,
     validation::{
         BatchSampler, CheckpointBatchSampler, CheckpointValidationPolicy, EpochShuffled,
         MinibatchThenValidation, ValidationPolicy,
@@ -537,7 +536,7 @@ fn keep_best_gepa_population_ignores_empty_casewise_and_averages_scores() {
     assert!(matches!(
         &ignored[..],
         [leaven_engine::PopulationEvent::Ignored { candidate: observed, .. }]
-            if *observed == candidate
+            if observed == &candidate
     ));
     assert_eq!(GepaPopulation::best(&keep_best), None);
 
