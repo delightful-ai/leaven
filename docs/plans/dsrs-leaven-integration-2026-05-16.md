@@ -2,7 +2,7 @@
 
 ## Goal
 
-Make DSRs a real Leaven optimization target after DSRs PR #87 lands. The bridge lives in `DSRs/crates/dsrs-leaven`, implements Leaven capability traits directly, and proves its first usable milestone by matching native `dsrs-gepa` behavior on the shared train-set denominator of an AIME-style GEPA fixture, while the Leaven-driven path additionally proves honest validation/test reporting before any `dsrs-gepa` sunset.
+Make DSRs a real Leaven optimization target after DSRs PR #87 lands. The bridge lives in `DSRs/crates/dsrs-leaven`, implements Leaven capability traits directly, and proves its first usable milestone by matching native `dsrs-gepa` behavior on a deterministic AIME-style train/validation fixture, while the Leaven-driven path additionally reports post-optimization test behavior before any `dsrs-gepa` sunset. Predictor state serialization is a hard prerequisite, not a follow-up.
 
 This is a cross-repo plan. It does not implement code and does not reintroduce Leaven’s orphan `crates/leaven-dsrs` path.
 
@@ -16,7 +16,7 @@ This is a cross-repo plan. It does not implement code and does not reintroduce L
 
 ### DSRs PR #87 bridge baseline
 
-- DSRs PR #87 (`krypticmouse/DSRs#87`, head `codex/dsrs-crate-split`) introduces split crates plus a compile-only `dsrs-leaven` scaffold.
+- DSRs PR #87 (`krypticmouse/DSRs#87`, head `codex/dsrs-crate-split`) is still open as of the refinement pass on 2026-05-16; current head `88d0c887628ab41c5dfef16cbcb0676d60c5593e` introduces split crates plus a compile-only `dsrs-leaven` scaffold.
 - The split-design doc frames DSRs as “a thing leaven optimizes” and decides that DSRs implements Leaven capability traits directly in `dsrs-leaven`: `DSRs/docs/plans/2026-05-08-dsrs-crate-split-design.md:20`, `:36`.
 - The dependency DAG keeps Leaven types out of normal DSRs users’ paths; `dsrs-leaven` is the only crate that pulls Leaven crates into DSRs: `DSRs/docs/plans/2026-05-08-dsrs-crate-split-design.md:110-123`.
 - `dsrs-leaven` currently depends on `dsrs-core`, `dsrs-evaluate`, `dsrs-predict`, `leaven-core`, `leaven-surface`, `leaven-engine`, and `leaven-evidence`: `DSRs/crates/dsrs-leaven/Cargo.toml:10-18` on PR #87.
@@ -27,11 +27,12 @@ This is a cross-repo plan. It does not implement code and does not reintroduce L
 ### DSRs seams the bridge must preserve
 
 - `dsrs-core::Module` is the typed execution contract with associated `Input`, `Output`, async `forward`, and default `call`: `DSRs/crates/dsrs-core/src/module.rs:56-88` on PR #87.
-- `DynPredictor` is the mutable optimizer seam: schema, instruction read/write, demo read/write, and state dump/load: `DSRs/crates/dsrs-core/src/dyn_predictor.rs:13-65` on PR #87.
+- `DynPredictor` is the mutable optimizer seam: schema, instruction read/write, demo read/write, and state dump/load: `DSRs/crates/dsrs-core/src/dyn_predictor.rs:13-65` on PR #87. Current `PredictState` is `Clone + Debug + Default` only; despite its doc comment saying “Serializable,” it lacks `Serialize` / `Deserialize` derives and must be made serializable before `dsrs-leaven` claims immutable artifact snapshots.
+- `RawExample` is an alias for the raw example type that already derives `Serialize` / `Deserialize` / `Clone`, so `PredictState { demos: Vec<RawExample>, instruction_override: Option<String> }` can become serializable without inventing a parallel snapshot format: `DSRs/crates/dsrs-core/src/lib.rs:25`, `DSRs/crates/dsrs-core/src/example.rs:5-13` on PR #87.
 - Predictor discovery walks Facet-shaped modules and yields dotted paths plus `&mut dyn DynPredictor`: `DSRs/crates/dsrs-core/src/dyn_predictor.rs:105-125` on PR #87.
 - `Predict<S>` is the LM-calling optimizer leaf, stores tools/demos/instruction override/optional LM, implements `Module`, and implements `DynPredictor`: `DSRs/crates/dsrs-predict/src/predict.rs:48-106`, `:526-594` on PR #87.
-- `dsrs-evaluate::TypedMetric<S, M>` scores `Example<S>` against `Predicted<M::Output>` and returns `MetricOutcome { score, feedback }`: `DSRs/crates/dsrs-evaluate/src/evaluator.rs:10-37`, `:67-81` on PR #87.
-- `dsrs-gepa::Optimizer::compile` mutates a typed module in place and requires `M: Module<Input = S::Input> + Facet`, `S::Input: Clone`, and `TypedMetric<S, M>`: `DSRs/crates/dsrs-gepa/src/lib.rs:48-65` on PR #87.
+- `dsrs-evaluate::TypedMetric<S, M>` exposes the clean per-example metric call the bridge needs: `evaluate(&Example<S>, &Predicted<M::Output>) -> Result<MetricOutcome>`. `evaluate_trainset` is only a sequential helper layered over that call: `DSRs/crates/dsrs-evaluate/src/evaluator.rs:10-37`, `:67-124` on PR #87.
+- `dsrs-gepa::Optimizer::compile` mutates a typed module in place and remains trainset-only at the trait surface: `DSRs/crates/dsrs-gepa/src/lib.rs:48-65` on PR #87. The concrete `GEPA` type also exposes `compile_with_valset(trainset, valset, metric)`, where `valset` is used as the evaluation set for initial/child scoring and train minibatches still drive parent feedback: `DSRs/crates/dsrs-gepa/src/gepa.rs:271-329`, `:480-497` on PR #87.
 - Native DSRs GEPA currently requires feedback-bearing outcomes, snapshots/restores predictor state for candidate evaluation, mutates instructions from feedback summaries, and finally installs the best frontier candidate: `DSRs/crates/dsrs-gepa/src/gepa.rs:169-226`, `:332-391` on PR #87.
 
 ### Current Leaven seams and constraints
@@ -95,7 +96,7 @@ The implementation plan should name these pieces explicitly so agents do not red
 
 - `DsrsModuleFactory<M>` lives in `dsrs-leaven` for phase 1 and provides fresh module instances for candidate evaluation. The first AIME fixture may use an example-local factory/config, but the trait itself belongs to the bridge if more than one module path uses it.
 - `PredictorPath` is a typed wrapper around the discovered dotted predictor path. Use it for surface part ids, addresses, change targets, and snapshot map keys rather than raw `String`.
-- `DsrsPredictorSnapshot` preserves instruction text plus the landed DSRs predictor dump/load state. If the landed state is JSON-shaped, keep JSON internal and do not expose raw JSON as the bridge change/evidence API.
+- `DsrsPredictorSnapshot` preserves instruction text plus serializable DSRs `PredictState`. The bridge should not define a parallel JSON blob if `PredictState` can honestly derive `Serialize` / `Deserialize`; serialization belongs on the state type itself.
 - `DsrsProgramState` is the immutable map from `PredictorPath` to predictor snapshot.
 - `DsrsProgramLayout` records ordered predictor parts, layout fingerprint inputs, and any schema/signature metadata needed to validate state against a fresh module.
 - `DsrsProgramArtifact` owns or references the module factory, layout, and immutable state.
@@ -107,7 +108,7 @@ The implementation plan should name these pieces explicitly so agents do not red
 - **Evaluator route:** use a custom `Evaluator<P>` and custom reflective dataset builder. Treat the default GEPA reflection projection as not reusable for DSRs unless implementation proves otherwise; the safe baseline is custom because default projection details are Leaven-internal and only cover existing Leaven evidence shapes.
 - **State semantics:** use immutable artifacts internally and final install-back at the DSRs API boundary.
 - **Surface shape:** support multiple predictor parts structurally, but prove the first milestone with one `Predict` / `ChainOfThought` leaf.
-- **Parity denominator:** native `dsrs-gepa` currently has a trainset-only `compile` surface. Exact parity against native `dsrs-gepa` is therefore defined over the shared deterministic train-set fixture and final installed predictor behavior. Validation/test reporting is a Leaven-bridge maturity requirement, not a native `dsrs-gepa` split-parity assertion.
+- **Parity denominator:** use native `GEPA::compile_with_valset` for deterministic train/validation parity, because current PR #87 concrete GEPA supports a validation set even though the public `Optimizer::compile` trait remains trainset-only. Test-set behavior is evaluated after optimization for both paths and reported honestly; it is not part of the native optimizer API contract.
 - **Leaven changes:** none by default. If implementation exposes a real generic seam gap during Items 2–5, make the narrow Leaven change at that point with a DSRs-agnostic test and simultaneous `dsrs-leaven` consumption. Do not leave this as a terminal “cleanup” step.
 
 ## Preflight Before Implementation
@@ -115,14 +116,35 @@ The implementation plan should name these pieces explicitly so agents do not red
 Before starting implementation, reconcile this plan against the landed PR #87 code:
 
 - confirm exact `dsrs-leaven`, `dsrs-core`, `dsrs-evaluate`, `dsrs-predict`, and `dsrs-gepa` paths;
-- confirm predictor dump/load state shape and whether it is cloneable/serializable enough for immutable snapshots;
-- confirm whether `dsrs-evaluate` exposes per-example metric evaluation or only batch helpers;
-- confirm whether native `dsrs-gepa` has gained validation/test split support since the inspected PR state;
+- confirm `PredictState` still has `demos: Vec<RawExample>` and `instruction_override: Option<String>`; if so, add `Serialize` / `Deserialize` directly to `PredictState` before bridge artifacts;
+- confirm `TypedMetric::evaluate` remains public and per-example; if it does, no DSRs-side metric helper is needed;
+- confirm native `GEPA::compile_with_valset` remains available; if so, use it for deterministic train/validation parity and keep test as post-hoc report evaluation;
 - adjust names/paths in this plan if the PR landed differently, but do not add compatibility wrappers for the old monolith or for draft-name drift.
 
 ## Work Items
 
-### Item 1 — Replace raw scaffold boundaries with typed bridge vocabulary and factory support
+### Item 1 — Make predictor state serializable at the owning DSRs seam
+
+**Goal:** Resolve the snapshot question by making the existing DSRs predictor state type serializable instead of inventing an adapter-local JSON format.
+
+**Done when:**
+
+- `PredictState` derives or otherwise implements `Serialize` and `Deserialize` in `dsrs-core`.
+- The serialization round trip preserves demos and instruction override exactly enough for `DynPredictor::load_state` to reconstruct behavior.
+- `RawExample` serialization remains the representation for demos; no parallel `dsrs-leaven` demo snapshot format is introduced.
+- A law/example test proves `dump_state -> serde_json -> load_state -> dump_state` is stable for a `Predict<S>` with instruction override and at least one demo.
+
+**Key files:**
+
+- `DSRs/crates/dsrs-core/src/dyn_predictor.rs:55-65` on PR #87.
+- `DSRs/crates/dsrs-core/src/example.rs:5-13` on PR #87.
+- `DSRs/crates/dsrs-predict/src/predict.rs:625-650` on PR #87.
+
+**Dependencies:** PR #87 merged or checked out as implementation base; preflight complete.
+
+**Size:** Small.
+
+### Item 2 — Replace raw scaffold boundaries with typed bridge vocabulary and factory support
 
 **Goal:** Turn `dsrs-leaven` from compile-only stubs into a typed public bridge surface by replacing JSON-shaped placeholders with names that preserve DSRs and Leaven truth, including the fresh-module factory needed by immutable Leaven search.
 
@@ -142,11 +164,11 @@ Before starting implementation, reconcile this plan against the landed PR #87 co
 - `DSRs/crates/dsrs-leaven/src/lib.rs:1-17` on PR #87.
 - New `DSRs/crates/dsrs-leaven/src/factory.rs`, if the landed scaffold does not already provide an equivalent home.
 
-**Dependencies:** PR #87 merged or checked out as implementation base; preflight complete.
+**Dependencies:** Item 1.
 
 **Size:** Medium.
 
-### Item 2 — Implement immutable DSRs program artifacts over mutable predictor state
+### Item 3 — Implement immutable DSRs program artifacts over mutable predictor state
 
 **Goal:** Make DSRs predictor state satisfy Leaven’s `Artifact` contract without mutating the caller’s module during search.
 
@@ -165,11 +187,11 @@ Before starting implementation, reconcile this plan against the landed PR #87 co
 - `DSRs/crates/dsrs-core/src/dyn_predictor.rs:13-65`, `:105-125` on PR #87.
 - `crates/leaven-core/src/artifact.rs:40-111`.
 
-**Dependencies:** Item 1.
+**Dependencies:** Items 1–2.
 
 **Size:** Large.
 
-### Item 3 — Implement `DsrsProgramSurface` as the GEPA edit surface
+### Item 4 — Implement `DsrsProgramSurface` as the GEPA edit surface
 
 **Goal:** Expose DSRs predictor instructions as Leaven-editable parts while keeping mutation in artifact changes, not in the surface.
 
@@ -187,11 +209,11 @@ Before starting implementation, reconcile this plan against the landed PR #87 co
 - `crates/leaven-surface/src/edit_surface.rs:38-127`.
 - `crates/leaven-gepa/src/reflection.rs:396-427`.
 
-**Dependencies:** Items 1–2.
+**Dependencies:** Items 2–3.
 
 **Size:** Medium.
 
-### Item 4 — Implement DSRs-native evaluator, problem, evidence projection, and reflective dataset
+### Item 5 — Implement DSRs-native evaluator, problem, evidence projection, and reflective dataset
 
 **Goal:** Preserve DSRs typed execution and metric semantics while feeding Leaven GEPA enough score/output/feedback to select and reflect.
 
@@ -199,7 +221,7 @@ Before starting implementation, reconcile this plan against the landed PR #87 co
 
 - `DsrsLeavenProblem` uses `DsrsProgramArtifact` as its artifact and casewise DSRs evidence as its evidence.
 - `DsrsEvaluator` materializes a fresh module per candidate evaluation, installs the candidate snapshot, calls the typed module, calls the typed metric, and records score/output/feedback.
-- If `dsrs-evaluate` is batch-only after PR #87 lands, the smallest DSRs-side per-example metric helper is added before the evaluator relies on it.
+- `DsrsEvaluator` calls the existing public per-example `TypedMetric::evaluate`; no DSRs-side metric helper is planned unless the landed PR removes that seam.
 - `GepaScoreEvidence` is implemented for the DSRs casewise evidence shape, projecting scalar score only.
 - A custom DSRs reflective dataset builder projects case input, candidate output, scalar score, feedback text, and source refs without exposing held-out answers except through intentionally returned scorer feedback.
 - The implementation uses Leaven trust/read-scope machinery or an equivalent engine-visible policy to keep validation/test hidden from proposer/reflection input.
@@ -214,11 +236,11 @@ Before starting implementation, reconcile this plan against the landed PR #87 co
 - `crates/leaven-gepa/src/optimizer.rs:35-70`, `:896-924`.
 - `crates/leaven-gepa/src/reflection.rs:43-174`, `:220-340`.
 
-**Dependencies:** Items 1–3.
+**Dependencies:** Items 2–4.
 
 **Size:** Large.
 
-### Item 5 — Add the DSRs-owned Leaven optimization entrypoint and minimum report
+### Item 6 — Add the DSRs-owned Leaven optimization entrypoint and minimum report
 
 **Goal:** Provide a DSRs-side orchestration API that can run train/validation/test GEPA through Leaven without pretending it is the current DSRs `Optimizer::compile` surface or the Leaven `optimize(...)` public builder.
 
@@ -237,34 +259,35 @@ Before starting implementation, reconcile this plan against the landed PR #87 co
 - `crates/leaven-engine/src/context/run_context.rs:146-277`, `:355-483`.
 - `crates/leaven-gepa/src/optimizer.rs:535-633`.
 
-**Dependencies:** Items 2–4.
+**Dependencies:** Items 3–5.
 
 **Size:** Large.
 
-### Item 6 — Prove deterministic AIME-style GEPA parity against native DSRs GEPA
+### Item 7 — Prove deterministic AIME-style GEPA parity against native DSRs GEPA
 
-**Goal:** Establish the first real success denominator: the Leaven-driven bridge matches native `dsrs-gepa` on the shared train-only deterministic fixture, while also proving bridge-owned validation/test reporting.
+**Goal:** Establish the first real success denominator: the Leaven-driven bridge matches native concrete `GEPA::compile_with_valset` on a deterministic train/validation fixture, while both paths also receive the same post-optimization test evaluation.
 
 **Done when:**
 
 - A DSRs-owned AIME-style example exists under `DSRs/crates/dsrs-leaven`, with one math solver signature, one optimizable `Predict` / `ChainOfThought` leaf, exact-integer metric, and feedback text suitable for reflection.
-- The same deterministic train fixture, seed prompt, metric, and budget run through both native `dsrs-gepa` and `dsrs-leaven` + Leaven GEPA.
-- Shared train-denominator parity is explicit: both paths improve over seed and match final train-set behavior under deterministic conditions, or any intentional algorithmic difference is documented as blocking parity.
-- The Leaven-driven path additionally reports validation/test scores honestly, but those scores are not asserted as native `dsrs-gepa` parity unless native `dsrs-gepa` has gained split support.
+- The same deterministic train fixture, validation fixture, seed prompt, metric, and budget run through native concrete `GEPA::compile_with_valset` and through `dsrs-leaven` + Leaven GEPA.
+- Parity is explicit: both paths improve over seed and match final train/validation behavior under deterministic conditions, or any intentional algorithmic difference is documented as blocking parity.
+- The same held-out test fixture is evaluated after optimization for both final modules/artifacts and reported, but it is not treated as part of native `Optimizer::compile` semantics.
+- The deterministic lane uses both a deterministic module-execution fixture/LM adapter and a deterministic proposal/reflection fixture; exact parity should not depend on provider calls.
 - The proof explicitly distinguishes deterministic parity from provider-backed live quality.
 
 **Key files:**
 
 - New `DSRs/crates/dsrs-leaven/examples/aime_gepa.rs`.
 - New `DSRs/crates/dsrs-leaven/tests/gepa_parity_deterministic.rs`.
-- `DSRs/crates/dsrs-gepa/src/gepa.rs:169-226`, `:332-391` on PR #87.
+- `DSRs/crates/dsrs-gepa/src/gepa.rs:169-226`, `:271-329`, `:332-391`, `:480-497` on PR #87.
 - DSPy AIME reference: <https://dspy.ai/tutorials/gepa_aime/>.
 
-**Dependencies:** Items 1–5.
+**Dependencies:** Items 1–6.
 
 **Size:** Large.
 
-### Item 7 — Add proof tests and public maturity labels
+### Item 8 — Add proof tests and public maturity labels
 
 **Goal:** Make the bridge hard to accidentally turn into proxy proof or public lies.
 
@@ -283,11 +306,11 @@ Before starting implementation, reconcile this plan against the landed PR #87 co
 - `docs/plans/2026-05-15-gepa-aime-parity/requirements-summary.md`.
 - `examples/p8_aime_gepa/AGENTS.md`.
 
-**Dependencies:** Items 2–6.
+**Dependencies:** Items 3–7.
 
 **Size:** Medium.
 
-### Item 8 — Add provider-backed or cached AIME smoke after deterministic parity
+### Item 9 — Add provider-backed or cached AIME smoke after deterministic parity
 
 **Goal:** Confirm that the bridge carries real runtime semantics without making provider variability the exact parity gate.
 
@@ -305,7 +328,7 @@ Before starting implementation, reconcile this plan against the landed PR #87 co
 - DSPy AIME reference: <https://dspy.ai/tutorials/gepa_aime/>.
 - `docs/specs/gepa_aime_paper_parity.md:108-132`.
 
-**Dependencies:** Item 6.
+**Dependencies:** Item 7.
 
 **Size:** Medium.
 
@@ -326,7 +349,7 @@ During implementation, use narrow gates first, then the owning full gates:
 - DSRs bridge iteration:
   - `cargo check -p dsrs-leaven`
   - `cargo test -p dsrs-leaven`
-  - native `dsrs-gepa` parity test against the deterministic AIME-style train fixture
+  - native `GEPA::compile_with_valset` parity test against the deterministic AIME-style train/validation fixture
   - DSRs workspace check/test command after PR #87 defines the canonical split-crate gate
 - Leaven only if generic Leaven code changes are made:
   - the owning crate test for the changed Leaven seam
@@ -344,14 +367,14 @@ The plan does not require a Leaven production-code change. If implementation doe
 - No generic durable/resumable DSRs module blueprint in phase 1.
 - No demo-edit, tool-edit, routing, structural graph, or online adaptation edits in the first bridge; instruction replacement is enough for the AIME-style parity proof.
 
-## Open Questions
+## Resolved Questions
 
-These should be resolved by inspecting the landed PR #87 code, not by guessing now:
+Resolved against current PR #87 head `88d0c887628ab41c5dfef16cbcb0676d60c5593e` on 2026-05-16:
 
-- What exact predictor dump/load state type lands in `dsrs-core`, and is it cloneable/serializable enough for immutable artifact snapshots?
-- Does `dsrs-evaluate` expose a per-example metric call cleanly, or does `DsrsEvaluator` need a small DSRs-side helper to avoid using batch-only APIs internally?
-- Has native `dsrs-gepa` gained validation/test split support? If not, keep native parity scoped to the shared train denominator.
-- Does the first deterministic parity fixture use a deterministic reflector fixture, deterministic LM adapter, or both?
+- **Predictor state:** `PredictState` is the exact dump/load type. It is cloneable but not serializable yet. Make it `Serialize` / `Deserialize` in `dsrs-core`; do not create a parallel `dsrs-leaven` JSON snapshot.
+- **Metric call:** `dsrs-evaluate` already exposes clean per-example `TypedMetric::evaluate`; `DsrsEvaluator` should call it directly.
+- **Native GEPA splits:** public `Optimizer::compile` is trainset-only, but concrete `GEPA::compile_with_valset` exists and should be the parity target for train/validation. Test remains post-hoc final evaluation/reporting for both paths.
+- **Deterministic fixture:** use both deterministic module execution (LM adapter/fixture) and deterministic proposal generation (reflector fixture matching native feedback-append semantics).
 
 ## References
 
