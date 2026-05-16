@@ -28,6 +28,16 @@ impl<C> CaseSet<C> {
         Self::builder().cases(cases).build()
     }
 
+    /// Builds a case set from explicit case identifiers and ordered cases.
+    #[must_use]
+    pub fn from_entries(cases: impl IntoIterator<Item = (CaseId, C)>) -> Self {
+        Self {
+            cases: cases.into_iter().collect(),
+            partitions: BTreeMap::new(),
+            version: 0,
+        }
+    }
+
     /// Adds or replaces a named partition and increments the case-set version.
     #[must_use]
     pub fn with_partition(mut self, partition: PartitionId, case_ids: Vec<CaseId>) -> Self {

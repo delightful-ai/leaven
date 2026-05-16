@@ -19,7 +19,7 @@ use leaven_engine::{
     StepStatus,
 };
 use leaven_eval::Case;
-use leaven_evidence::{CaseAssessmentEvidence, CasewiseEvidence};
+use leaven_evidence::CaseAssessmentEvidence;
 use leaven_kernel::{Budget, CandidateId, CaseId, ContentId, EvaluatorId, Fingerprint, RunId};
 use leaven_run::{
     EvaluationCacheBackend, EvaluationCacheBypassReason, OptimizationStopReason, OptimizeBuilder,
@@ -1206,6 +1206,7 @@ fn run_builder_reports_case_ids_output_and_feedback_for_case_level_rows() {
         .expect("best candidate train summary exists");
 
     assert_eq!(candidate.average_score, Some(42.5));
+    assert_eq!(candidate.assessments.len(), 2);
     assert_eq!(candidate.cases.len(), 2);
     assert_eq!(candidate.cases[0].case_id, CaseId::from_index(0));
     assert_eq!(candidate.cases[0].output, "42");
@@ -1275,6 +1276,7 @@ fn run_builder_preserves_case_envelope_ids_and_targets_score_only() {
         .find(|split| split.partition.0 == "TRAIN")
         .expect("train split is reported");
     let candidate = &train.candidates[0];
+    assert_eq!(candidate.assessments.len(), 1);
     assert_eq!(candidate.cases[0].case_id, CaseId::new(77));
     assert_eq!(candidate.cases[0].feedback, "target checked");
 }
@@ -1702,7 +1704,7 @@ struct CountingEvidenceStore {
 }
 
 struct CountingEvidenceInner {
-    store: InlineEvidenceStore<CasewiseEvidence<CaseAssessmentEvidence>>,
+    store: InlineEvidenceStore<CaseAssessmentEvidence>,
     puts: AtomicUsize,
     gets: AtomicUsize,
 }
@@ -1727,10 +1729,10 @@ impl CountingEvidenceStore {
     }
 }
 
-impl EvidenceStore<CasewiseEvidence<CaseAssessmentEvidence>> for CountingEvidenceStore {
+impl EvidenceStore<CaseAssessmentEvidence> for CountingEvidenceStore {
     fn put(
         &self,
-        evidence: CasewiseEvidence<CaseAssessmentEvidence>,
+        evidence: CaseAssessmentEvidence,
     ) -> Result<leaven_kernel::EvidenceRef, StoreError> {
         self.inner.puts.fetch_add(1, Ordering::SeqCst);
         self.inner.store.put(evidence)
@@ -1739,14 +1741,14 @@ impl EvidenceStore<CasewiseEvidence<CaseAssessmentEvidence>> for CountingEvidenc
     fn get(
         &self,
         reference: &leaven_kernel::EvidenceRef,
-    ) -> Result<CasewiseEvidence<CaseAssessmentEvidence>, StoreError> {
+    ) -> Result<CaseAssessmentEvidence, StoreError> {
         self.inner.gets.fetch_add(1, Ordering::SeqCst);
         self.inner.store.get(reference)
     }
 }
 
 struct FailingGetEvidenceStore {
-    inner: InlineEvidenceStore<CasewiseEvidence<CaseAssessmentEvidence>>,
+    inner: InlineEvidenceStore<CaseAssessmentEvidence>,
 }
 
 impl Default for FailingGetEvidenceStore {
@@ -1757,10 +1759,10 @@ impl Default for FailingGetEvidenceStore {
     }
 }
 
-impl EvidenceStore<CasewiseEvidence<CaseAssessmentEvidence>> for FailingGetEvidenceStore {
+impl EvidenceStore<CaseAssessmentEvidence> for FailingGetEvidenceStore {
     fn put(
         &self,
-        evidence: CasewiseEvidence<CaseAssessmentEvidence>,
+        evidence: CaseAssessmentEvidence,
     ) -> Result<leaven_kernel::EvidenceRef, StoreError> {
         self.inner.put(evidence)
     }
@@ -1768,7 +1770,7 @@ impl EvidenceStore<CasewiseEvidence<CaseAssessmentEvidence>> for FailingGetEvide
     fn get(
         &self,
         _reference: &leaven_kernel::EvidenceRef,
-    ) -> Result<CasewiseEvidence<CaseAssessmentEvidence>, StoreError> {
+    ) -> Result<CaseAssessmentEvidence, StoreError> {
         Err(StoreError::OperationFailed {
             store: "failing-get".to_owned(),
             operation: "get evidence",

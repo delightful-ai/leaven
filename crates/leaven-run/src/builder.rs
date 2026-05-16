@@ -13,7 +13,7 @@ use futures::{FutureExt, future::BoxFuture};
 use leaven_core::{Artifact, EvaluationPurpose, OptimizationProblem, PartitionId};
 use leaven_engine::{CachePolicy, Callback, Optimizer, OptimizerError, TrustPolicy};
 use leaven_eval::{Case, Dataset, DatasetSplits, NoTarget, SplitPolicy, SplitRole};
-use leaven_evidence::{CaseAssessmentEvidence, CasewiseEvidence};
+use leaven_evidence::CaseAssessmentEvidence;
 use leaven_kernel::{Budget, CaseId, Cost, Fingerprint, RunId};
 use leaven_store::EvidenceStore;
 use serde::{Serialize, de::DeserializeOwned};
@@ -62,7 +62,7 @@ where
 {
     type Artifact = A;
     type Case = Case<I, T>;
-    type Evidence = CasewiseEvidence<CaseAssessmentEvidence>;
+    type Evidence = CaseAssessmentEvidence;
     type ProposalAnnotations = ();
 }
 
@@ -843,14 +843,25 @@ fn case_set<I: Clone, T: Clone>(
     validation: usize,
     test: usize,
 ) -> leaven_engine::CaseSet<Case<I, T>> {
-    let train_ids = (0..train).map(CaseId::from_index).collect::<Vec<_>>();
-    let validation_ids = (train..train + validation)
-        .map(CaseId::from_index)
+    let train_ids = cases
+        .iter()
+        .take(train)
+        .map(|case| case.id)
         .collect::<Vec<_>>();
-    let test_ids = (train + validation..train + validation + test)
-        .map(CaseId::from_index)
+    let validation_ids = cases
+        .iter()
+        .skip(train)
+        .take(validation)
+        .map(|case| case.id)
         .collect::<Vec<_>>();
-    leaven_engine::CaseSet::new(cases)
+    let test_ids = cases
+        .iter()
+        .skip(train + validation)
+        .take(test)
+        .map(|case| case.id)
+        .collect::<Vec<_>>();
+    let entries = cases.into_iter().map(|case| (case.id, case));
+    leaven_engine::CaseSet::from_entries(entries)
         .with_partition(PartitionId::from("TRAIN"), train_ids)
         .with_partition(PartitionId::from("VALIDATION"), validation_ids)
         .with_partition(PartitionId::from("TEST"), test_ids)
@@ -900,7 +911,7 @@ fn dataset_splits<I, T>(
 async fn run_final_evaluations<A, I, T>(
     engine: &mut leaven_engine::Engine<RunProblem<A, I, T>>,
     case_set: &leaven_engine::CaseSet<Case<I, T>>,
-    store: &dyn EvidenceStore<CasewiseEvidence<CaseAssessmentEvidence>>,
+    store: &dyn EvidenceStore<CaseAssessmentEvidence>,
     inputs: FinalEvaluationInputs,
 ) -> Result<FinalEvaluations, leaven_engine::OptimizerError>
 where
@@ -974,7 +985,7 @@ where
 async fn final_eval_partition<A, I, T>(
     engine: &mut leaven_engine::Engine<RunProblem<A, I, T>>,
     case_set: &leaven_engine::CaseSet<Case<I, T>>,
-    store: &dyn EvidenceStore<CasewiseEvidence<CaseAssessmentEvidence>>,
+    store: &dyn EvidenceStore<CaseAssessmentEvidence>,
     inputs: &FinalEvaluationInputs,
     evaluation: FinalPartitionEvaluation,
 ) -> Result<FinalPartitionResults, leaven_engine::OptimizerError>

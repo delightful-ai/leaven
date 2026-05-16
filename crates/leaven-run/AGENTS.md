@@ -81,10 +81,10 @@ around engine graph mutation or a home for optimizer strategy state.
   `leaven_eval::Case<I, T>` envelopes and preserves caller-provided case IDs in
   datasets, scoring evidence, and reports. `.train_inputs`,
   `.validation_inputs`, and `.test_inputs` are input-only toy conveniences that
-  lower to `Case<I, NoTarget>` with dense generated IDs. Engine `CaseSet`
-  partition resolution is still internally positional; do not cite engine
-  resolved-set case IDs as caller-stable product IDs until the engine owns
-  explicit-id case sets.
+  lower to `Case<I, NoTarget>` with dense generated IDs. The builder installs
+  engine `CaseSet` entries with the case envelope IDs, so resolved-set IDs,
+  assessment targets, scoring evidence, and reports cite the same product case
+  identity.
 - Durable local runs write a product-layer compatibility manifest before work
   and compare it before resume. Arbitrary closure runners/scorers are not
   introspectable; `.runner_fingerprint(...)` and `.scorer_fingerprint(...)`

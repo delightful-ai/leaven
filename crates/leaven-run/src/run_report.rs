@@ -3,15 +3,17 @@
 use std::{collections::BTreeMap, fs};
 
 use leaven_core::{
-    Artifact, AssessmentGranularity, EvaluationPurpose, EvaluationRequest, EvaluationSet,
-    PartitionId,
+    Artifact, AssessmentGranularity, AssessmentTarget, EvaluationPurpose, EvaluationRequest,
+    EvaluationSet, PartitionId,
 };
 use leaven_eval::{
     CandidateEvaluationSummary, Case, Dataset, DatasetSplits, EvaluationReport, ReportScore,
     SplitReport, SplitRole,
 };
-use leaven_evidence::{CaseAssessmentEvidence, CasewiseEvidence, OutputRecord};
-use leaven_kernel::{BudgetSnapshot, CandidateId, Cost, EvaluatorId};
+use leaven_evidence::{CaseAssessmentEvidence, OutputRecord};
+use leaven_kernel::{
+    AssessmentId, BudgetSnapshot, CandidateId, Cost, EvaluationRequestId, EvaluatorId,
+};
 use leaven_store::EvidenceStore;
 
 use crate::{
@@ -79,7 +81,7 @@ type SummaryBuild<A> = (
 
 pub fn build_summary<A, I, T>(
     engine: &leaven_engine::Engine<RunProblem<A, I, T>>,
-    store: &dyn EvidenceStore<CasewiseEvidence<CaseAssessmentEvidence>>,
+    store: &dyn EvidenceStore<CaseAssessmentEvidence>,
     inputs: ReportInputs<'_, I, T>,
 ) -> Result<SummaryBuild<A>, leaven_engine::OptimizerError>
 where
@@ -149,7 +151,7 @@ where
 pub async fn final_eval<A, I, T>(
     engine: &mut leaven_engine::Engine<RunProblem<A, I, T>>,
     case_set: &leaven_engine::CaseSet<Case<I, T>>,
-    store: &dyn EvidenceStore<CasewiseEvidence<CaseAssessmentEvidence>>,
+    store: &dyn EvidenceStore<CaseAssessmentEvidence>,
     candidate: leaven_kernel::CandidateId,
     partition: PartitionId,
     purpose: EvaluationPurpose,
@@ -177,14 +179,14 @@ where
         })?;
     let view = engine.view();
     Ok((
-        assessment_summary(&view, store, report.assessment_ids[0])?,
+        assessment_summary(&view, store, &report.assessment_ids)?,
         report.cost,
     ))
 }
 
 fn split_reports_for<A, I, T>(
     view: &leaven_engine::RunGraphView<'_, RunProblem<A, I, T>>,
-    store: &dyn EvidenceStore<CasewiseEvidence<CaseAssessmentEvidence>>,
+    store: &dyn EvidenceStore<CaseAssessmentEvidence>,
     splits: &DatasetSplits,
 ) -> Result<Vec<SplitReport>, leaven_engine::OptimizerError>
 where
@@ -192,7 +194,10 @@ where
     I: Clone + Send + Sync + 'static,
     T: Clone + Send + Sync + 'static,
 {
-    let mut reports = BTreeMap::<PartitionId, SplitReport>::new();
+    let mut groups = BTreeMap::<
+        (PartitionId, SplitRole, EvaluationRequestId, CandidateId),
+        Vec<AssessmentId>,
+    >::new();
     for assessment in view.all_assessments() {
         let Some((partition, role)) = assessment_split(view, assessment.id()) else {
             continue;
@@ -200,7 +205,20 @@ where
         if splits.role(&partition).is_none() {
             continue;
         }
-        let summary = assessment_summary(view, store, assessment.id())?;
+        let candidate = assessment.independent_candidate().ok_or_else(|| {
+            leaven_engine::OptimizerError::Message(
+                "report expected independent assessment".to_owned(),
+            )
+        })?;
+        groups
+            .entry((partition, role, assessment.request_id(), candidate))
+            .or_default()
+            .push(assessment.id());
+    }
+
+    let mut reports = BTreeMap::<PartitionId, SplitReport>::new();
+    for ((partition, role, _, _), assessments) in groups {
+        let summary = assessment_summary(view, store, &assessments)?;
         reports
             .entry(partition.clone())
             .or_insert_with(|| SplitReport {
@@ -216,7 +234,7 @@ where
 
 fn assessment_split<A, I, T>(
     view: &leaven_engine::RunGraphView<'_, RunProblem<A, I, T>>,
-    assessment: leaven_kernel::AssessmentId,
+    assessment: AssessmentId,
 ) -> Option<(PartitionId, SplitRole)>
 where
     A: Artifact,
@@ -244,46 +262,81 @@ where
 
 fn assessment_summary<A, I, T>(
     view: &leaven_engine::RunGraphView<'_, RunProblem<A, I, T>>,
-    store: &dyn EvidenceStore<CasewiseEvidence<CaseAssessmentEvidence>>,
-    assessment: leaven_kernel::AssessmentId,
+    store: &dyn EvidenceStore<CaseAssessmentEvidence>,
+    assessments: &[AssessmentId],
 ) -> Result<CandidateEvaluationSummary, leaven_engine::OptimizerError>
 where
     A: Artifact,
     I: Clone + Send + Sync + 'static,
     T: Clone + Send + Sync + 'static,
 {
-    let assessment_view = view.assessment(assessment).ok_or_else(|| {
-        leaven_engine::OptimizerError::Message("assessment missing from graph".to_owned())
-    })?;
-    let candidate = assessment_view.independent_candidate().ok_or_else(|| {
-        leaven_engine::OptimizerError::Message("report expected independent assessment".to_owned())
-    })?;
-    let evidence = store
-        .get(assessment_view.evidence_ref())
-        .map_err(|source| {
-            leaven_engine::OptimizerError::with_source("report evidence lookup failed", source)
+    let mut candidate = None;
+    let mut request = None;
+    let mut rows = Vec::with_capacity(assessments.len());
+    for assessment in assessments {
+        let assessment_view = view.assessment(*assessment).ok_or_else(|| {
+            leaven_engine::OptimizerError::Message("assessment missing from graph".to_owned())
         })?;
-    let cases = report_scores(&evidence);
+        let row_candidate = assessment_view.independent_candidate().ok_or_else(|| {
+            leaven_engine::OptimizerError::Message(
+                "report expected independent assessment".to_owned(),
+            )
+        })?;
+        let row_request = assessment_view.request_id();
+        if candidate.is_some_and(|candidate| candidate != row_candidate) {
+            return Err(leaven_engine::OptimizerError::Message(
+                "report assessment group mixed candidates".to_owned(),
+            ));
+        }
+        if request.is_some_and(|request| request != row_request) {
+            return Err(leaven_engine::OptimizerError::Message(
+                "report assessment group mixed requests".to_owned(),
+            ));
+        }
+        let case = match assessment_view.target() {
+            AssessmentTarget::Case { case, .. } => *case,
+            AssessmentTarget::Unscoped | AssessmentTarget::EvaluationSet(_) => {
+                return Err(leaven_engine::OptimizerError::Message(
+                    "report expected case-targeted assessment".to_owned(),
+                ));
+            }
+        };
+        let evidence = store
+            .get(assessment_view.evidence_ref())
+            .map_err(|source| {
+                leaven_engine::OptimizerError::with_source("report evidence lookup failed", source)
+            })?;
+        candidate = Some(row_candidate);
+        request = Some(row_request);
+        rows.push((*assessment, report_score(case, &evidence)));
+    }
+    rows.sort_by_key(|(_, score)| score.case_id);
+    let assessments = rows.iter().map(|(assessment, _)| *assessment).collect();
+    let cases = rows.into_iter().map(|(_, score)| score).collect::<Vec<_>>();
     Ok(CandidateEvaluationSummary {
-        candidate,
-        request: assessment_view.request_id(),
-        assessment,
+        candidate: candidate.ok_or_else(|| {
+            leaven_engine::OptimizerError::Message(
+                "report expected at least one assessment".to_owned(),
+            )
+        })?,
+        request: request.ok_or_else(|| {
+            leaven_engine::OptimizerError::Message(
+                "report expected at least one assessment".to_owned(),
+            )
+        })?,
+        assessments,
         average_score: average(&cases),
         cases,
     })
 }
 
-fn report_scores(evidence: &CasewiseEvidence<CaseAssessmentEvidence>) -> Vec<ReportScore> {
-    evidence
-        .outcomes()
-        .iter()
-        .map(|outcome| ReportScore {
-            case_id: outcome.case(),
-            score: outcome.evidence().score().score(),
-            feedback: outcome.evidence().feedback().to_owned(),
-            output: output_record_text(outcome.evidence().output()),
-        })
-        .collect()
+fn report_score(case_id: leaven_kernel::CaseId, evidence: &CaseAssessmentEvidence) -> ReportScore {
+    ReportScore {
+        case_id,
+        score: evidence.score().score(),
+        feedback: evidence.feedback().to_owned(),
+        output: output_record_text(evidence.output()),
+    }
 }
 
 fn output_record_text(output: &OutputRecord) -> String {
@@ -455,7 +508,7 @@ fn increment_bypass(
 #[cfg(test)]
 mod tests {
     use leaven_core::{CausalInputs, ProposalEffectKind};
-    use leaven_evidence::{CaseOutcome, ScalarEvidence};
+    use leaven_evidence::ScalarEvidence;
     use leaven_kernel::{
         AssessmentId, BudgetSnapshot, CandidateId, Cost, ErrorKind, ErrorRecord,
         EvaluationRequestId, EvaluatorId, IterationId, PopulationId, ProposalBatchId, ProposalId,
@@ -699,34 +752,30 @@ mod tests {
 
     #[test]
     fn report_scores_preserve_inline_and_blob_outputs() {
-        let evidence = CasewiseEvidence::new(vec![
-            CaseOutcome::new(
-                leaven_kernel::CaseId::new(2),
-                CaseAssessmentEvidence::new(
-                    ScalarEvidence::new(0.25).unwrap(),
-                    OutputRecord::BlobRef(leaven_kernel::BlobRef {
-                        store: "blob-store".to_owned(),
-                        key: "answer.txt".to_owned(),
-                    }),
-                    "blob feedback",
-                ),
+        let inline = report_score(
+            leaven_kernel::CaseId::new(1),
+            &CaseAssessmentEvidence::new(
+                ScalarEvidence::new(1.0).unwrap(),
+                OutputRecord::inline("inline answer"),
+                "inline feedback",
             ),
-            CaseOutcome::new(
-                leaven_kernel::CaseId::new(1),
-                CaseAssessmentEvidence::new(
-                    ScalarEvidence::new(1.0).unwrap(),
-                    OutputRecord::inline("inline answer"),
-                    "inline feedback",
-                ),
+        );
+        let blob = report_score(
+            leaven_kernel::CaseId::new(2),
+            &CaseAssessmentEvidence::new(
+                ScalarEvidence::new(0.25).unwrap(),
+                OutputRecord::BlobRef(leaven_kernel::BlobRef {
+                    store: "blob-store".to_owned(),
+                    key: "answer.txt".to_owned(),
+                }),
+                "blob feedback",
             ),
-        ]);
+        );
 
-        let scores = report_scores(&evidence);
-
-        assert_eq!(scores[0].output, "inline answer");
-        assert_eq!(scores[0].feedback, "inline feedback");
-        assert_eq!(scores[1].output, "blob:blob-store:answer.txt");
-        assert!((scores[1].score - 0.25).abs() < f64::EPSILON);
+        assert_eq!(inline.output, "inline answer");
+        assert_eq!(inline.feedback, "inline feedback");
+        assert_eq!(blob.output, "blob:blob-store:answer.txt");
+        assert!((blob.score - 0.25).abs() < f64::EPSILON);
     }
 
     fn assert_event_summary(event: leaven_engine::RunEvent, expected: RunEventSummary) {

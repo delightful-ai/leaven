@@ -9,9 +9,7 @@ use leaven_core::{
 };
 use leaven_engine::{CachePolicy, EvaluationContext, EvaluationError, Evaluator};
 use leaven_eval::{Case, NoTarget};
-use leaven_evidence::{
-    CaseAssessmentEvidence, CaseOutcome, CasewiseEvidence, OutputRecord, ScalarEvidence,
-};
+use leaven_evidence::{CaseAssessmentEvidence, OutputRecord, ScalarEvidence};
 use leaven_kernel::{BudgetSnapshot, Cost, EvaluationSetId, EvaluatorId, Fingerprint, Metered};
 
 use crate::compatibility::ScoringEvaluatorIdentity;
@@ -22,8 +20,7 @@ type Scorer<A, I, T> = Arc<
     dyn Fn(ScoreContext<A, I, T>) -> BoxFuture<'static, Result<Score, ScoreError>> + Send + Sync,
 >;
 
-/// Evaluator that runs a candidate on cases and normalizes scores into
-/// casewise feedback evidence.
+/// Evaluator that runs a candidate on cases and emits one feedback row per case.
 pub struct ScoringEvaluator<A, I, T = NoTarget> {
     cases: Arc<Vec<Case<I, T>>>,
     runner: Runner<A, I>,
@@ -109,19 +106,21 @@ where
         let case_count = request.set.case_ids.len();
         let mut jobs = Vec::with_capacity(candidates.len().saturating_mul(case_count));
         let budget = ctx.budget();
+        let set = EvaluationSetId::from_uuid(request.set.id.as_uuid());
         for (candidate_index, candidate) in candidates.iter().copied().enumerate() {
             let artifact = ctx.graph().artifact(candidate).ok_or_else(|| {
                 EvaluationError::Message(format!("candidate {candidate} is missing"))
             })?;
             for (case_index, case_id) in request.set.case_ids.iter().copied().enumerate() {
-                let index = usize::try_from(case_id.0).map_err(|_| {
-                    EvaluationError::Message(format!("case id {case_id} does not fit usize"))
-                })?;
-                let case = self.cases.get(index).ok_or_else(|| {
-                    EvaluationError::Message(format!(
-                        "case {case_id} is missing from evaluator cases"
-                    ))
-                })?;
+                let case = self
+                    .cases
+                    .iter()
+                    .find(|case| case.id == case_id)
+                    .ok_or_else(|| {
+                        EvaluationError::Message(format!(
+                            "case {case_id} is missing from evaluator cases"
+                        ))
+                    })?;
                 jobs.push(EvaluationJob {
                     candidate_index,
                     case_index,
@@ -141,35 +140,30 @@ where
             let EvaluationOutcome {
                 candidate_index,
                 case_index,
-                visible_case_id,
+                case_id,
                 evidence,
                 cost,
             } = outcome;
             total_cost = total_cost.combine(&cost);
-            by_candidate[candidate_index][case_index] =
-                Some((CaseOutcome::new(visible_case_id, evidence), cost));
+            by_candidate[candidate_index][case_index] = Some((case_id, evidence, cost));
         }
 
-        let mut assessments = Vec::with_capacity(candidates.len());
+        let mut assessments = Vec::with_capacity(candidates.len().saturating_mul(case_count));
         for (candidate, outcomes) in candidates.into_iter().zip(by_candidate) {
-            let mut candidate_cost = Cost::zero();
-            let mut candidate_outcomes = Vec::with_capacity(outcomes.len());
             for outcome in outcomes {
-                let (outcome, cost) = outcome.ok_or_else(|| {
+                let (case, evidence, cost) = outcome.ok_or_else(|| {
                     EvaluationError::Message(
                         "parallel evaluator did not return every case outcome".to_owned(),
                     )
                 })?;
-                candidate_cost = candidate_cost.combine(&cost);
-                candidate_outcomes.push(outcome);
+                assessments.push(Assessment::Independent {
+                    candidate,
+                    target: AssessmentTarget::Case { set, case },
+                    evidence,
+                    cost,
+                    metadata: leaven_kernel::MetadataBag::new(),
+                });
             }
-            assessments.push(Assessment::Independent {
-                candidate,
-                target: AssessmentTarget::EvaluationSet(EvaluationSetId::new()),
-                evidence: CasewiseEvidence::new(candidate_outcomes),
-                cost: candidate_cost,
-                metadata: leaven_kernel::MetadataBag::new(),
-            });
         }
         Ok(Metered::new(assessments, total_cost))
     }
@@ -186,7 +180,7 @@ struct EvaluationJob<A, I, T> {
 struct EvaluationOutcome {
     candidate_index: usize,
     case_index: usize,
-    visible_case_id: leaven_kernel::CaseId,
+    case_id: leaven_kernel::CaseId,
     evidence: CaseAssessmentEvidence,
     cost: Cost,
 }
@@ -231,7 +225,7 @@ where
 {
     let run_case = RunCase::from_case(&job.case);
     let score_case = crate::ScoreCase::from_case(&job.case);
-    let visible_case_id = job.case.id;
+    let case_id = job.case.id;
     let output = runner(job.artifact.clone(), run_case).await;
     let score = scorer(ScoreContext {
         artifact: job.artifact.clone(),
@@ -256,7 +250,7 @@ where
     Ok(EvaluationOutcome {
         candidate_index: job.candidate_index,
         case_index: job.case_index,
-        visible_case_id,
+        case_id,
         evidence: CaseAssessmentEvidence::new(scalar, generated_output, score.feedback),
         cost,
     })

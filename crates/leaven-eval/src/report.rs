@@ -25,8 +25,8 @@ pub struct CandidateEvaluationSummary {
     pub candidate: CandidateId,
     /// Request that produced the assessment.
     pub request: EvaluationRequestId,
-    /// Assessment id.
-    pub assessment: AssessmentId,
+    /// Assessment rows summarized here.
+    pub assessments: Vec<AssessmentId>,
     /// Average score across present case scores.
     pub average_score: Option<f64>,
     /// Per-case score and feedback evidence.

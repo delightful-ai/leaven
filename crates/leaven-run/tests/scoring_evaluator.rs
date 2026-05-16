@@ -9,9 +9,9 @@ use std::{
 
 use futures::{FutureExt, channel::oneshot, executor::block_on};
 use leaven_core::{
-    Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, CaseSetVersion,
-    EvaluationPurpose, EvaluationSet, PairOrder, ResolvedEvaluationRequest, ResolvedEvaluationSet,
-    ResolvedRequestKind,
+    Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, AssessmentTarget,
+    CaseSetVersion, EvaluationPurpose, EvaluationSet, PairOrder, ResolvedEvaluationRequest,
+    ResolvedEvaluationSet, ResolvedRequestKind,
 };
 use leaven_engine::{BudgetLedger, CachePolicy, Evaluator, RunContext, RunGraph};
 use leaven_eval::Case;
@@ -200,15 +200,28 @@ fn scoring_evaluator_reports_per_candidate_cost_for_independent_batches() {
                 _ => panic!("expected independent assessment"),
             })
             .collect::<Vec<_>>();
-        assert_eq!(assessment_costs, vec![(2, 7), (2, 7)]);
-        let [Assessment::Independent { evidence, .. }, ..] = metered.value.as_slice() else {
+        assert_eq!(assessment_costs, vec![(1, 3), (1, 4), (1, 3), (1, 4)]);
+        let [
+            Assessment::Independent {
+                target, evidence, ..
+            },
+            ..,
+        ] = metered.value.as_slice()
+        else {
             panic!("expected independent assessments");
         };
+        assert!(matches!(
+            target,
+            AssessmentTarget::Case {
+                case,
+                ..
+            } if *case == CaseId::from_index(0)
+        ));
         assert_eq!(
-            evidence.outcomes()[0].evidence().output(),
+            evidence.output(),
             &leaven_evidence::OutputRecord::inline("42")
         );
-        assert_eq!(evidence.outcomes()[0].evidence().feedback(), "ok");
+        assert_eq!(evidence.feedback(), "ok");
     });
 }
 
@@ -292,7 +305,7 @@ fn scoring_evaluator_hides_target_from_runner_and_passes_target_to_scorer() {
                     ResolvedRequestKind::Independent {
                         candidates: vec![candidate],
                     },
-                    vec![CaseId::new(0)],
+                    vec![CaseId::new(700)],
                     AssessmentGranularity::PerCase,
                 ),
                 ctx.evaluation_context(StageId::from_evaluator(Evaluator::id(&evaluator))),
@@ -308,11 +321,7 @@ fn scoring_evaluator_hides_target_from_runner_and_passes_target_to_scorer() {
         let [Assessment::Independent { evidence, .. }] = metered.value.as_slice() else {
             panic!("expected one independent assessment");
         };
-        assert_eq!(evidence.outcomes()[0].case(), CaseId::new(700));
-        assert_eq!(
-            evidence.outcomes()[0].evidence().feedback(),
-            "target checked"
-        );
+        assert_eq!(evidence.feedback(), "target checked");
     });
 }
 
@@ -485,13 +494,18 @@ fn scoring_evaluator_runs_case_jobs_with_bounded_parallelism_and_stable_order() 
 
         assert_eq!(metered.cost.metric_calls, 4);
         assert_eq!(max_active.load(Ordering::SeqCst), 2);
-        let [Assessment::Independent { evidence, .. }] = metered.value.as_slice() else {
-            panic!("expected one independent assessment");
-        };
-        let scores = evidence
-            .outcomes()
+        let scores = metered
+            .value
             .iter()
-            .map(|outcome| outcome.evidence().score().score())
+            .map(|assessment| match assessment {
+                Assessment::Independent {
+                    target, evidence, ..
+                } => {
+                    assert!(matches!(target, AssessmentTarget::Case { .. }));
+                    evidence.score().score()
+                }
+                _ => panic!("expected independent assessment"),
+            })
             .collect::<Vec<_>>();
         assert_eq!(scores, vec![41.0, 42.0, 43.0, 44.0]);
     });

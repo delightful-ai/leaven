@@ -41,6 +41,23 @@ fn get_returns_present_cases_and_none_for_unknown_ids() {
 }
 
 #[test]
+fn explicit_case_ids_resolve_and_lookup_without_positional_rewrite() {
+    let train = PartitionId::from("train");
+    let alpha = CaseId::new(700);
+    let beta = CaseId::new(900);
+    let cases = CaseSet::from_entries([(alpha, "a"), (beta, "b")])
+        .with_partition(train.clone(), vec![beta, alpha]);
+
+    assert_eq!(ids(&cases, &EvaluationSet::All), vec![700, 900]);
+    assert_eq!(
+        ids(&cases, &EvaluationSet::Partition(train)),
+        vec![900, 700]
+    );
+    assert_eq!(cases.get(alpha), Some(&"a"));
+    assert_eq!(cases.get(CaseId::from_index(0)), None);
+}
+
+#[test]
 fn set_combinators_resolve_stably() {
     let left = EvaluationSet::Cases(vec![CaseId::new(0), CaseId::new(1)]);
     let right = EvaluationSet::Cases(vec![CaseId::new(1), CaseId::new(2)]);
