@@ -30,6 +30,9 @@ The top of the stack is:
 - `p8_live_provider_budget_reliability.md`: live-provider role identity, budget
   split, retry/idempotency semantics, cache hit cost rules, and P8 live-mode
   cost reporting.
+- `gepa_reference_behavior.md`: single source of truth for real GEPA algorithm
+  semantics, reference profiles, cache parity, Leaven abstraction deltas, and
+  systematic fix order.
 - `gepa_aime_paper_parity.md`: implementation spec for the GEPA/AIME paper-parity path, including budget stopping, GEPA loop continuation, reflection, LM/provider/cache use, AIME runner/scorer/reporting, and the proof denominator for P8.
 - `milestone_examples_behavioral_contract.md`: executable behavior contract for milestone examples.
 - `docs/testing/README.md`: proof model and coverage/SLA contract.
@@ -41,6 +44,10 @@ The top of the stack is:
 - Do not route from directory presence alone. `crates/leaven-dsrs` is currently an orphan placeholder rather than a workspace crate, while `crates/leaven/tests/topology_contract.rs` is the executable inventory guard.
 - Provider-adapter specs such as Codex CLI/app-server own provider boundaries only. They do not move agent, engine, GEPA, or skill concepts into provider crates.
 - Eval/GEPA nomenclature specs distinguish public product words from lowered machinery. Do not expose lowered graph/eval vocabulary at the Layer 1 user surface.
+- GEPA loop semantics come from `gepa_reference_behavior.md`. AIME, DSPy,
+  optimize-anything, and Leaven-plus profiles may refine model/data/operator
+  settings, but they must not redefine what parent selection, validation
+  Pareto state, cache parity, or accepted-candidate validation means.
 - `milestone_examples_behavioral_contract.md` currently covers P0 through P4. For P5-P8, use the example package docs, `docs/testing/README.md`, and the recent review tree until a durable spec is added.
 - `docs/specs/tracing-vision/README.md` still references `first_two_subsystems.md` as governing context. Reconcile that stale reference before using tracing-vision text to route new code.
 

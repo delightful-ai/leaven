@@ -8,6 +8,7 @@ on:
 
 - `docs/specs/gepa_public_private_surface.md`
 - `docs/specs/gepa_optimizer_surface.md`
+- `docs/specs/gepa_reference_behavior.md`
 - `docs/specs/durable_runs_and_resume.md`
 - `docs/specs/lm_runtime_and_response_cache.md`
 - `docs/specs/eval_lowering_detail.md`
@@ -21,6 +22,13 @@ The immediate paper target is the GEPA CAIS AIME Math artifact under
 `~/vendor/github.com/gepa-ai/gepa-cais26-artifact/acm_cais_artifact_evaluation/domains/aime_math`.
 The adjacent reference implementation is
 `~/vendor/github.com/gepa-ai/gepa/examples/aime_math`.
+
+Algorithm authority: `gepa_reference_behavior.md` owns the definition of real
+GEPA. This AIME spec owns the AIME dataset, runner, scorer, model-role, report,
+and operator-path requirements. If this document describes train-only parent
+selection, optional accepted-candidate validation, request-level-only evaluation
+caching, or a different GEPA default, treat that text as superseded by
+`gepa_reference_behavior.md`.
 
 ## 1. Product Outcome
 
