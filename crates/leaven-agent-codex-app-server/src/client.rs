@@ -9,8 +9,8 @@ use codex_app_server_protocol::{
     CommandExecutionRequestApprovalResponse, FileChangeApprovalDecision,
     FileChangeRequestApprovalResponse, InitializeCapabilities, InitializeParams,
     InitializeResponse, JSONRPCError, JSONRPCMessage, JSONRPCNotification, JSONRPCRequest,
-    JSONRPCResponse, RequestId, ServerNotification, ServerRequest, ThreadReadParams,
-    ThreadReadResponse, ThreadStartParams, ThreadStartResponse, TurnStartParams, TurnStartResponse,
+    JSONRPCResponse, RequestId, ServerRequest, ThreadReadParams, ThreadReadResponse,
+    ThreadStartParams, ThreadStartResponse, TurnStartParams, TurnStartResponse,
 };
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -82,6 +82,7 @@ where
                         },
                         capabilities: Some(InitializeCapabilities {
                             experimental_api: options.experimental_api,
+                            request_attestation: false,
                             opt_out_notification_methods: options.opt_out_notification_methods,
                         }),
                     },
@@ -148,14 +149,8 @@ where
         .await
     }
 
-    pub(crate) async fn next_server_notification(&mut self) -> Result<ServerNotification> {
-        let notification = self.next_notification().await?;
-        match ServerNotification::try_from(notification) {
-            Ok(notification) => Ok(notification),
-            Err(error) => Err(CodexAppServerError::Protocol(format!(
-                "failed to decode server notification: {error}"
-            ))),
-        }
+    pub(crate) async fn next_raw_notification(&mut self) -> Result<JSONRPCNotification> {
+        self.next_notification().await
     }
 
     pub(crate) async fn shutdown(&mut self) -> Result<()> {

@@ -3,7 +3,7 @@
 #![cfg(feature = "app-server")]
 
 use codex_app_server_protocol::{
-    ServerNotification, Thread, ThreadItem, Turn, TurnCompletedNotification,
+    JSONRPCNotification, ServerNotification, Thread, ThreadItem, Turn, TurnCompletedNotification,
     TurnStartedNotification, TurnStatus, UserInput,
 };
 use leaven_agent::{
@@ -108,6 +108,19 @@ impl CodexHistory {
             }
             _ => {}
         }
+    }
+
+    pub(crate) fn record_raw_notification(
+        &mut self,
+        notification: &JSONRPCNotification,
+        error: &str,
+        raw_event_policy: CodexRawEventPolicy,
+    ) {
+        if raw_event_policy.retains() {
+            self.raw_events.push(raw_jsonrpc_notification_event(notification));
+        }
+        self.warnings
+            .push(format!("skipped Codex notification `{}`: {error}", notification.method));
     }
 
     pub(crate) fn into_agent_session(
@@ -335,8 +348,8 @@ fn user_input_text(content: &[UserInput]) -> Vec<String> {
         .iter()
         .map(|input| match input {
             UserInput::Text { text, .. } => text.clone(),
-            UserInput::Image { url } => format!("[image: {url}]"),
-            UserInput::LocalImage { path } => format!("[local image: {}]", path.display()),
+            UserInput::Image { url, .. } => format!("[image: {url}]"),
+            UserInput::LocalImage { path, .. } => format!("[local image: {}]", path.display()),
             UserInput::Skill { name, path } => {
                 format!("[skill: {name} at {}]", path.display())
             }
@@ -380,6 +393,18 @@ fn agent_status(turn: &Turn, warnings: &[String]) -> AgentStatus {
 fn raw_provider_event(notification: &ServerNotification) -> RawProviderEvent {
     RawProviderEvent {
         kind: notification_method(notification),
+        payload: serde_json::to_string(notification).unwrap_or_else(|error| {
+            format!(
+                "{{\"serialization_error\":{}}}",
+                serde_json::Value::String(error.to_string())
+            )
+        }),
+    }
+}
+
+fn raw_jsonrpc_notification_event(notification: &JSONRPCNotification) -> RawProviderEvent {
+    RawProviderEvent {
+        kind: notification.method.clone(),
         payload: serde_json::to_string(notification).unwrap_or_else(|error| {
             format!(
                 "{{\"serialization_error\":{}}}",

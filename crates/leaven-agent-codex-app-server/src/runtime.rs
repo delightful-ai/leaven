@@ -232,7 +232,20 @@ where
     T: crate::CodexAppServerTransport,
 {
     loop {
-        let notification = client.next_server_notification().await?;
+        let raw_notification = client.next_raw_notification().await?;
+        let notification =
+            match codex_app_server_protocol::ServerNotification::try_from(raw_notification.clone())
+            {
+                Ok(notification) => notification,
+                Err(error) => {
+                    history.record_raw_notification(
+                        &raw_notification,
+                        &error.to_string(),
+                        raw_event_policy,
+                    );
+                    continue;
+                }
+            };
         history.record_notification(&notification, raw_event_policy);
         if let codex_app_server_protocol::ServerNotification::TurnCompleted(payload) = notification
             && payload.turn.id == expected_turn_id
@@ -547,6 +560,34 @@ mod tests {
         ));
     }
 
+    #[test]
+    fn request_params_expose_model_effort_and_service_tier_controls() {
+        let mut config = CodexAppServerConfig::default();
+        config.thread.model = Some("gpt-5.4-mini".to_owned());
+        config.thread.service_tier = Some("fast".to_owned());
+        config.turn.model = Some("gpt-5.4-mini".to_owned());
+        config.turn.service_tier = Some("fast".to_owned());
+        config.turn.effort = Some(crate::CodexReasoningEffort::Low);
+
+        let request = AgentRunRequest::new(
+            AgentInstructions::task("write the file"),
+            OutputContract::FinalMessage,
+        );
+
+        let thread = thread_start_params(&config, Path::new("/workspace"));
+        let turn = turn_start_params(&config, "thread-1", Path::new("/workspace"), &request)
+            .expect("turn params");
+
+        assert_eq!(thread.model.as_deref(), Some("gpt-5.4-mini"));
+        assert_eq!(thread.service_tier, Some(Some("fast".to_owned())));
+        assert_eq!(turn.model.as_deref(), Some("gpt-5.4-mini"));
+        assert_eq!(turn.service_tier, Some(Some("fast".to_owned())));
+        assert!(matches!(
+            turn.effort,
+            Some(codex_protocol::openai_models::ReasoningEffort::Low)
+        ));
+    }
+
     fn json_response(id: &str, result: serde_json::Value) -> String {
         serde_json::to_string(&JSONRPCMessage::Response(JSONRPCResponse {
             id: RequestId::String(id.to_owned()),
@@ -595,7 +636,7 @@ mod tests {
             approvals_reviewer: serde_json::from_value(serde_json::json!("user")).unwrap(),
             sandbox: serde_json::from_value(serde_json::json!({"type": "dangerFullAccess"}))
                 .unwrap(),
-            permission_profile: None,
+            runtime_workspace_roots: Vec::new(),
             active_permission_profile: None,
             reasoning_effort: None,
         })
