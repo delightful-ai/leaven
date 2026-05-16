@@ -3,7 +3,7 @@
 use std::collections::BTreeSet;
 
 use leaven_core::{
-    AssessmentGranularity, EvaluationPurpose, EvaluationRequest, EvaluationSet,
+    AssessmentGranularity, AssessmentTarget, EvaluationPurpose, EvaluationRequest, EvaluationSet,
     OptimizationProblem, PartitionId,
 };
 use leaven_engine::{
@@ -31,41 +31,21 @@ const GEPA_OPTIMIZER_FINGERPRINT: Fingerprint = Fingerprint::from_bytes([8; 32])
 const DEFAULT_MAX_ITERATIONS: usize = 500;
 const GEPA_CHECKPOINT_SCHEMA: Fingerprint = Fingerprint::from_bytes([9; 32]);
 
-/// Evidence shape GEPA can compare as casewise scalar scores.
-pub trait GepaScoreEvidence: leaven_core::Evidence {
-    /// Project comparable per-case scalar evidence for population updates.
-    fn scalar_casewise(&self) -> CasewiseEvidence<ScalarEvidence>;
+/// One assessment-row evidence shape GEPA can compare as a scalar score.
+pub trait GepaCaseEvidence: leaven_core::Evidence {
+    /// Project the comparable scalar score for this case row.
+    fn scalar_score(&self) -> Option<ScalarEvidence>;
+}
 
-    /// Average comparable score over present case outcomes.
-    fn average_score(&self) -> Option<f64> {
-        let evidence = self.scalar_casewise();
-        if evidence.outcomes().is_empty() {
-            return None;
-        }
-        let total: f64 = evidence
-            .outcomes()
-            .iter()
-            .map(|outcome| outcome.evidence().score())
-            .sum();
-        let count = u32::try_from(evidence.outcomes().len()).expect("case count fits into u32");
-        Some(total / f64::from(count))
+impl GepaCaseEvidence for ScalarEvidence {
+    fn scalar_score(&self) -> Option<ScalarEvidence> {
+        Some(*self)
     }
 }
 
-impl GepaScoreEvidence for CasewiseEvidence<ScalarEvidence> {
-    fn scalar_casewise(&self) -> CasewiseEvidence<ScalarEvidence> {
-        self.clone()
-    }
-}
-
-impl GepaScoreEvidence for CasewiseEvidence<CaseAssessmentEvidence> {
-    fn scalar_casewise(&self) -> CasewiseEvidence<ScalarEvidence> {
-        CasewiseEvidence::new(
-            self.outcomes()
-                .iter()
-                .map(|outcome| CaseOutcome::new(outcome.case(), outcome.evidence().score()))
-                .collect(),
-        )
+impl GepaCaseEvidence for CaseAssessmentEvidence {
+    fn scalar_score(&self) -> Option<ScalarEvidence> {
+        Some(self.score())
     }
 }
 
@@ -80,7 +60,7 @@ pub trait GepaPopulation {
         &mut self,
         partition: Option<&PartitionId>,
         candidate: CandidateId,
-        assessment: AssessmentId,
+        assessments: &[AssessmentId],
         evidence: &CasewiseEvidence<ScalarEvidence>,
     ) -> Vec<PopulationEvent>;
 }
@@ -110,9 +90,16 @@ impl GepaPopulation for ParetoFrontier {
         &mut self,
         partition: Option<&PartitionId>,
         candidate: CandidateId,
-        assessment: AssessmentId,
+        assessments: &[AssessmentId],
         evidence: &CasewiseEvidence<ScalarEvidence>,
     ) -> Vec<PopulationEvent> {
+        let Some(assessment) = assessments.first().copied() else {
+            return vec![PopulationEvent::Ignored {
+                population: self.id(),
+                candidate,
+                reason: "casewise evidence had no assessment source rows".to_owned(),
+            }];
+        };
         match partition {
             Some(partition) => {
                 self.observe_partitioned_casewise_scalar(partition, candidate, assessment, evidence)
@@ -147,9 +134,16 @@ impl GepaPopulation for KeepBest {
         &mut self,
         _partition: Option<&PartitionId>,
         candidate: CandidateId,
-        assessment: AssessmentId,
+        assessments: &[AssessmentId],
         evidence: &CasewiseEvidence<ScalarEvidence>,
     ) -> Vec<PopulationEvent> {
+        let Some(assessment) = assessments.first().copied() else {
+            return vec![PopulationEvent::Ignored {
+                population: self.id(),
+                candidate,
+                reason: "casewise evidence had no assessment source rows".to_owned(),
+            }];
+        };
         let Some(score) = average_scalar(evidence) else {
             return vec![PopulationEvent::Ignored {
                 population: self.id(),
@@ -177,18 +171,18 @@ impl CheckpointPopulation for KeepBest {
     }
 }
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 struct GepaValidationBest {
     candidate: CandidateId,
-    assessment: AssessmentId,
+    assessments: Vec<AssessmentId>,
     score: f64,
 }
 
 /// One candidate observation tracked by GEPA's private history.
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GepaCandidateHistoryEntry {
     candidate: CandidateId,
-    assessment: AssessmentId,
+    assessments: Vec<AssessmentId>,
     score: f64,
 }
 
@@ -199,10 +193,10 @@ impl GepaCandidateHistoryEntry {
         self.candidate
     }
 
-    /// Assessment that justified the observation.
+    /// Assessment rows that justified the observation.
     #[must_use]
-    pub const fn assessment(&self) -> AssessmentId {
-        self.assessment
+    pub fn assessments(&self) -> &[AssessmentId] {
+        &self.assessments
     }
 
     /// Comparable average score GEPA used for screening.
@@ -512,7 +506,7 @@ impl<P, S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Datase
     for Gepa<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
 where
     P: OptimizationProblem,
-    P::Evidence: GepaScoreEvidence,
+    P::Evidence: GepaCaseEvidence,
     P::ProposalAnnotations: Default,
     S: EditSurface<P::Artifact> + Send + Sync,
     S::PartId: std::fmt::Debug,
@@ -563,7 +557,7 @@ where
             let events = self.population.observe_gepa(
                 Some(&self.train_partition),
                 seed,
-                parent_baseline.assessment,
+                &parent_baseline.assessments,
                 &parent_baseline.scalar_evidence,
             );
             ctx.emit(leaven_engine::RunEvent::PopulationUpdated {
@@ -589,7 +583,7 @@ where
         };
         for _ in 0..self.proposal_count {
             let Some(candidate) = self
-                .propose_candidate(ctx, parent, parent_screening.assessment)
+                .propose_candidate(ctx, parent, &parent_screening.assessments)
                 .await?
             else {
                 continue;
@@ -613,7 +607,7 @@ where
                 let events = self.population.observe_gepa(
                     Some(&self.train_partition),
                     candidate,
-                    screened.assessment,
+                    &screened.assessments,
                     &screened.scalar_evidence,
                 );
                 ctx.emit(leaven_engine::RunEvent::PopulationUpdated {
@@ -635,6 +629,7 @@ where
 
     fn best_candidate(&self, _graph: RunGraphView<'_, P>) -> Option<CandidateId> {
         self.validation_best
+            .as_ref()
             .map(|best| best.candidate)
             .or(self.best)
             .or_else(|| self.population.best())
@@ -665,7 +660,7 @@ impl<P, S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Datase
     for Gepa<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
 where
     P: OptimizationProblem,
-    P::Evidence: GepaScoreEvidence,
+    P::Evidence: GepaCaseEvidence,
     P::ProposalAnnotations: Default,
     S: EditSurface<P::Artifact> + Send + Sync,
     S::PartId: std::fmt::Debug,
@@ -709,15 +704,32 @@ where
         if let Some(best) = self.best {
             ensure_checkpoint_candidate(&graph, best, "best candidate")?;
         }
-        if let Some(validation_best) = self.validation_best {
+        if let Some(validation_best) = &self.validation_best {
             ensure_checkpoint_candidate(
                 &graph,
                 validation_best.candidate,
                 "validation best candidate",
             )?;
+            for assessment in &validation_best.assessments {
+                ensure_checkpoint_assessment(
+                    &graph,
+                    *assessment,
+                    "validation best assessment row",
+                )?;
+            }
         }
         for observed in &self.observed {
             ensure_checkpoint_candidate(&graph, *observed, "observed candidate")?;
+        }
+        for entry in &self.candidate_history {
+            ensure_checkpoint_candidate(&graph, entry.candidate, "candidate history candidate")?;
+            for assessment in entry.assessments() {
+                ensure_checkpoint_assessment(
+                    &graph,
+                    *assessment,
+                    "candidate history assessment row",
+                )?;
+            }
         }
         if let Some(population_best) = self.population.best() {
             ensure_checkpoint_candidate(&graph, population_best, "population best candidate")?;
@@ -728,7 +740,7 @@ where
             proposal_count: self.proposal_count,
             completed_iterations: self.completed_iterations,
             best: self.best,
-            validation_best: self.validation_best,
+            validation_best: self.validation_best.clone(),
             observed: self.observed.clone(),
             candidate_history: self.candidate_history.clone(),
             population: CheckpointPopulation::checkpoint_state(&self.population),
@@ -753,15 +765,32 @@ where
         if let Some(best) = state.best {
             ensure_checkpoint_candidate(&graph, best, "best candidate")?;
         }
-        if let Some(validation_best) = state.validation_best {
+        if let Some(validation_best) = &state.validation_best {
             ensure_checkpoint_candidate(
                 &graph,
                 validation_best.candidate,
                 "validation best candidate",
             )?;
+            for assessment in &validation_best.assessments {
+                ensure_checkpoint_assessment(
+                    &graph,
+                    *assessment,
+                    "validation best assessment row",
+                )?;
+            }
         }
         for observed in &state.observed {
             ensure_checkpoint_candidate(&graph, *observed, "observed candidate")?;
+        }
+        for entry in &state.candidate_history {
+            ensure_checkpoint_candidate(&graph, entry.candidate, "candidate history candidate")?;
+            for assessment in entry.assessments() {
+                ensure_checkpoint_assessment(
+                    &graph,
+                    *assessment,
+                    "candidate history assessment row",
+                )?;
+            }
         }
         self.train_partition = state.train_partition;
         self.max_iterations = state.max_iterations;
@@ -802,6 +831,22 @@ where
     Ok(())
 }
 
+fn ensure_checkpoint_assessment<P>(
+    graph: &RunGraphView<'_, P>,
+    assessment: AssessmentId,
+    role: &str,
+) -> Result<(), CheckpointError>
+where
+    P: OptimizationProblem,
+{
+    if graph.assessment(assessment).is_none() {
+        return Err(CheckpointError::MissingGraphTruth {
+            reason: format!("{role} `{assessment}` is not in the graph"),
+        });
+    }
+    Ok(())
+}
+
 impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
     Gepa<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
 {
@@ -809,7 +854,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
         &mut self,
         ctx: &mut RunContext<'_, P>,
         parent: CandidateId,
-        parent_assessment: AssessmentId,
+        parent_assessments: &[AssessmentId],
     ) -> Result<Option<CandidateId>, OptimizerError>
     where
         P: OptimizationProblem,
@@ -836,20 +881,25 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
         let part_label = format!("{part:?}");
         let examples = self
             .dataset
-            .build(ctx, parent, parent_assessment, &part)
+            .build(ctx, parent, parent_assessments, &part)
             .await
             .map_err(|source| {
                 OptimizerError::with_source("GEPA reflective-dataset build failed", source)
             })?;
+        let source_refs = std::iter::once(leaven_core::InfoRef::Candidate(parent))
+            .chain(
+                parent_assessments
+                    .iter()
+                    .copied()
+                    .map(leaven_core::InfoRef::Assessment),
+            )
+            .collect();
         let request = ReflectRequest {
             parent,
             part,
             part_label,
             examples,
-            source_refs: vec![
-                leaven_core::InfoRef::Candidate(parent),
-                leaven_core::InfoRef::Assessment(parent_assessment),
-            ],
+            source_refs,
         };
         self.reflector
             .reflect_candidate(ctx, &self.surface, request)
@@ -863,7 +913,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
     ) -> Result<(), OptimizerError>
     where
         P: OptimizationProblem,
-        P::Evidence: GepaScoreEvidence,
+        P::Evidence: GepaCaseEvidence,
         Validate: ValidationPolicy + Sync,
         S: Sync,
         Pop: Sync,
@@ -882,11 +932,12 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             .await?;
         if self
             .validation_best
+            .as_ref()
             .is_none_or(|best| assessment.average_score > best.score)
         {
             self.validation_best = Some(GepaValidationBest {
                 candidate,
-                assessment: assessment.assessment,
+                assessments: assessment.assessments.clone(),
                 score: assessment.average_score,
             });
         }
@@ -902,7 +953,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
     ) -> Result<GepaAssessment, OptimizerError>
     where
         P: OptimizationProblem,
-        P::Evidence: GepaScoreEvidence,
+        P::Evidence: GepaCaseEvidence,
         S: Sync,
         Pop: Sync,
         Reflect: Sync,
@@ -925,16 +976,48 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             )
             .await
             .map_err(|source| OptimizerError::with_source("GEPA evaluation failed", source))?;
-        let assessment = report.assessment_ids[0];
-        let evidence = ctx
-            .assessment_evidence(assessment)
-            .map_err(|source| OptimizerError::with_source("GEPA evidence lookup failed", source))?;
-        let scalar_evidence = evidence.scalar_casewise();
-        let average_score = evidence.average_score().ok_or_else(|| {
-            OptimizerError::Message("GEPA expected comparable casewise scores".to_owned())
+        if report.assessment_ids.is_empty() {
+            return Err(OptimizerError::Message(
+                "GEPA expected at least one case assessment row".to_owned(),
+            ));
+        }
+        let mut outcomes = Vec::with_capacity(report.assessment_ids.len());
+        for assessment in &report.assessment_ids {
+            let assessment_view = ctx.graph().assessment(*assessment).ok_or_else(|| {
+                OptimizerError::Message(format!(
+                    "GEPA assessment row `{assessment}` is missing from graph"
+                ))
+            })?;
+            let row_candidate = assessment_view.independent_candidate().ok_or_else(|| {
+                OptimizerError::Message("GEPA expected independent assessment rows".to_owned())
+            })?;
+            if row_candidate != candidate {
+                return Err(OptimizerError::Message(
+                    "GEPA evaluation returned a row for the wrong candidate".to_owned(),
+                ));
+            }
+            let case = match assessment_view.target() {
+                AssessmentTarget::Case { case, .. } => *case,
+                AssessmentTarget::Unscoped | AssessmentTarget::EvaluationSet(_) => {
+                    return Err(OptimizerError::Message(
+                        "GEPA expected case-targeted assessment rows".to_owned(),
+                    ));
+                }
+            };
+            let evidence = ctx.assessment_evidence(*assessment).map_err(|source| {
+                OptimizerError::with_source("GEPA evidence lookup failed", source)
+            })?;
+            let score = evidence.scalar_score().ok_or_else(|| {
+                OptimizerError::Message("GEPA expected comparable case scores".to_owned())
+            })?;
+            outcomes.push(CaseOutcome::new(case, score));
+        }
+        let scalar_evidence = CasewiseEvidence::new(outcomes);
+        let average_score = average_scalar(&scalar_evidence).ok_or_else(|| {
+            OptimizerError::Message("GEPA expected comparable case scores".to_owned())
         })?;
         Ok(GepaAssessment {
-            assessment,
+            assessments: report.assessment_ids,
             scalar_evidence,
             average_score,
         })
@@ -942,7 +1025,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
 }
 
 struct GepaAssessment {
-    assessment: AssessmentId,
+    assessments: Vec<AssessmentId>,
     scalar_evidence: CasewiseEvidence<ScalarEvidence>,
     average_score: f64,
 }
@@ -951,7 +1034,7 @@ impl GepaAssessment {
     fn history_entry(&self, candidate: CandidateId) -> GepaCandidateHistoryEntry {
         GepaCandidateHistoryEntry {
             candidate,
-            assessment: self.assessment,
+            assessments: self.assessments.clone(),
             score: self.average_score,
         }
     }

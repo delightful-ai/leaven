@@ -19,8 +19,8 @@ pub use gate::{
     CheckpointGate, Gate, GateDecision, ImprovementOrEqual, NoRegression, StrictImprovement,
 };
 pub use optimizer::{
-    CheckpointPopulation, Gepa, GepaCandidateHistoryEntry, GepaCheckpointState, GepaPopulation,
-    GepaScoreEvidence,
+    CheckpointPopulation, Gepa, GepaCandidateHistoryEntry, GepaCaseEvidence, GepaCheckpointState,
+    GepaPopulation,
 };
 pub use part_selector::{CheckpointPartSelector, PartSelector, RoundRobinPart};
 pub use proposer::{FixedSurfaceEdit, GepaReflector, LmBackedReflector, SurfaceProposer};
@@ -40,14 +40,14 @@ pub mod prelude {
     pub use crate::{
         CandidateSelector, CaseInputProjectedDataset, CheckpointCandidateSelector, CheckpointGate,
         CheckpointPopulation, DEFAULT_REFLECTION_PROMPT_TEMPLATE, DefaultReflectionRenderer,
-        FixedSurfaceEdit, FullValidation, Gate, Gepa, GepaCandidateHistoryEntry, GepaPopulation,
-        GepaReflectWithLmBuilder, GepaReflectWithLmBuilderWithSurface, GepaReflectionBootstrap,
-        GepaReflectiveDataset, GepaReflector, GepaStageProposer, HasBestCandidate,
-        ImprovementOrEqual, LmBackedReflector, LmBackedReflectorConfig, MinibatchThenValidation,
-        ParetoFrequencyWeighted, PartSelector, PlainTextEditParser, ReflectRequest,
-        ReflectionError, ReflectionOutputParser, ReflectionRenderInput, ReflectionRenderer,
-        ReflectiveCaseInput, ReflectiveDatasetBuilder, ReflectiveExample, RoundRobinPart,
-        SelectBestCandidate, StrictImprovement, SurfaceProposer, ValidationPolicy,
+        FixedSurfaceEdit, FullValidation, Gate, Gepa, GepaCandidateHistoryEntry, GepaCaseEvidence,
+        GepaPopulation, GepaReflectWithLmBuilder, GepaReflectWithLmBuilderWithSurface,
+        GepaReflectionBootstrap, GepaReflectiveDataset, GepaReflector, GepaStageProposer,
+        HasBestCandidate, ImprovementOrEqual, LmBackedReflector, LmBackedReflectorConfig,
+        MinibatchThenValidation, ParetoFrequencyWeighted, PartSelector, PlainTextEditParser,
+        ReflectRequest, ReflectionError, ReflectionOutputParser, ReflectionRenderInput,
+        ReflectionRenderer, ReflectiveCaseInput, ReflectiveDatasetBuilder, ReflectiveExample,
+        RoundRobinPart, SelectBestCandidate, StrictImprovement, SurfaceProposer, ValidationPolicy,
         gepa_stage_proposer,
     };
 }

@@ -492,38 +492,29 @@ fn gepa_selectors_delegate_to_population_best_candidate() {
 }
 
 #[test]
-fn gepa_score_evidence_projects_feedback_scores_to_scalar_casewise() {
-    let scored = CasewiseEvidence::new(vec![
-        CaseOutcome::new(
-            leaven_kernel::CaseId::new(0),
-            CaseAssessmentEvidence::new(
-                ScalarEvidence::new(1.0).unwrap(),
-                OutputRecord::inline("correct output"),
-                "correct".to_owned(),
-            ),
-        ),
-        CaseOutcome::new(
-            leaven_kernel::CaseId::new(1),
-            CaseAssessmentEvidence::new(
-                ScalarEvidence::new(0.5).unwrap(),
-                OutputRecord::inline("partial output"),
-                "partial".to_owned(),
-            ),
-        ),
-    ]);
-    let scalar = leaven_gepa::GepaScoreEvidence::scalar_casewise(&scored);
-
-    assert_eq!(
-        leaven_gepa::GepaScoreEvidence::average_score(&scored),
-        Some(0.75)
+fn gepa_case_evidence_projects_feedback_scores_to_scalar_rows() {
+    let scored = CaseAssessmentEvidence::new(
+        ScalarEvidence::new(1.0).unwrap(),
+        OutputRecord::inline("correct output"),
+        "correct".to_owned(),
     );
-    assert!((scalar.outcomes()[0].evidence().score() - 1.0).abs() < f64::EPSILON);
-    assert!((scalar.outcomes()[1].evidence().score() - 0.5).abs() < f64::EPSILON);
-    assert_eq!(
-        leaven_gepa::GepaScoreEvidence::average_score(&CasewiseEvidence::<ScalarEvidence>::new(
-            Vec::new()
-        )),
-        None
+    let scalar = ScalarEvidence::new(0.5).unwrap();
+
+    assert!(
+        (leaven_gepa::GepaCaseEvidence::scalar_score(&scored)
+            .unwrap()
+            .score()
+            - 1.0)
+            .abs()
+            < f64::EPSILON
+    );
+    assert!(
+        (leaven_gepa::GepaCaseEvidence::scalar_score(&scalar)
+            .unwrap()
+            .score()
+            - 0.5)
+            .abs()
+            < f64::EPSILON
     );
 }
 
@@ -539,7 +530,7 @@ fn keep_best_gepa_population_ignores_empty_casewise_and_averages_scores() {
         &mut keep_best,
         Some(&leaven_core::PartitionId::from("TRAIN")),
         candidate,
-        assessment,
+        &[assessment],
         &empty,
     );
 
@@ -560,14 +551,15 @@ fn keep_best_gepa_population_ignores_empty_casewise_and_averages_scores() {
             ScalarEvidence::new(0.75).unwrap(),
         ),
     ]);
-    let events = GepaPopulation::observe_gepa(&mut keep_best, None, candidate, assessment, &scored);
+    let events =
+        GepaPopulation::observe_gepa(&mut keep_best, None, candidate, &[assessment], &scored);
 
     assert!(!events.is_empty());
     assert_eq!(GepaPopulation::best(&keep_best), Some(candidate));
 
     let mut frontier = ParetoFrontier::by_case().build();
     let frontier_events =
-        GepaPopulation::observe_gepa(&mut frontier, None, candidate, assessment, &scored);
+        GepaPopulation::observe_gepa(&mut frontier, None, candidate, &[assessment], &scored);
     assert!(!frontier_events.is_empty());
 }
 
@@ -593,7 +585,7 @@ fn gepa_default_sampler_uses_train_minibatches_without_validation_or_test_cases(
                 leaven_core::PartitionId::from("TEST"),
                 vec![leaven_kernel::CaseId::new(5)],
             );
-        let store = InlineEvidenceStore::<CasewiseEvidence<ScalarEvidence>>::new("inline");
+        let store = InlineEvidenceStore::<ScalarEvidence>::new("inline");
         let mut engine = Engine::<SamplingProblem>::builder()
             .evaluator(RecordingCaseSetEvaluator {
                 seen_sets: seen_sets.clone(),
@@ -632,7 +624,7 @@ fn gepa_default_sampler_uses_train_minibatches_without_validation_or_test_cases(
 fn gepa_candidate_history_tracks_seed_and_accepted_children_by_assessment() {
     block_on(async {
         let case_set = train_case_set();
-        let store = InlineEvidenceStore::<CasewiseEvidence<ScalarEvidence>>::new("inline");
+        let store = InlineEvidenceStore::<ScalarEvidence>::new("inline");
         let mut engine = Engine::<SamplingProblem>::builder()
             .evaluator(PrefixImprovementEvaluator)
             .build();
@@ -659,8 +651,20 @@ fn gepa_candidate_history_tracks_seed_and_accepted_children_by_assessment() {
         assert!((history[0].score() - 0.0).abs() < f64::EPSILON);
         assert_eq!(history[1].candidate(), child);
         assert!((history[1].score() - 1.0).abs() < f64::EPSILON);
-        assert!(engine.view().assessment(history[0].assessment()).is_some());
-        assert!(engine.view().assessment(history[1].assessment()).is_some());
+        assert_eq!(history[0].assessments().len(), 1);
+        assert_eq!(history[1].assessments().len(), 1);
+        assert!(
+            history[0]
+                .assessments()
+                .iter()
+                .all(|assessment| engine.view().assessment(*assessment).is_some())
+        );
+        assert!(
+            history[1]
+                .assessments()
+                .iter()
+                .all(|assessment| engine.view().assessment(*assessment).is_some())
+        );
     });
 }
 
@@ -671,7 +675,7 @@ fn gepa_reflective_dataset_default_projects_scalar_examples_with_case_input() {
             leaven_core::PartitionId::from("TRAIN"),
             vec![leaven_kernel::CaseId::new(0)],
         );
-        let store = InlineEvidenceStore::<CasewiseEvidence<ScalarEvidence>>::new("inline");
+        let store = InlineEvidenceStore::<ScalarEvidence>::new("inline");
         let mut graph = RunGraph::<DisplayScalarProblem>::new(RunId::new());
         let mut budget = BudgetLedger::new(Budget::unlimited());
         let candidate = {
@@ -682,14 +686,14 @@ fn gepa_reflective_dataset_default_projects_scalar_examples_with_case_input() {
             )
             .unwrap()
         };
-        let assessment = {
+        let assessments = {
             let mut ctx = RunContext::<DisplayScalarProblem>::new(&mut graph, &mut budget)
                 .with_case_set(&case_set)
                 .with_evidence_store(&store);
             ctx.evaluate_with(&ScalarCaseEvaluator, independent_train_request(candidate))
                 .await
                 .unwrap()
-                .assessment_ids[0]
+                .assessment_ids
         };
 
         let mut ctx = RunContext::<DisplayScalarProblem>::new(&mut graph, &mut budget)
@@ -699,7 +703,7 @@ fn gepa_reflective_dataset_default_projects_scalar_examples_with_case_input() {
             &leaven_gepa::GepaReflectiveDataset,
             &mut ctx,
             candidate,
-            assessment,
+            &assessments,
             &"answer".to_owned(),
         )
         .await
@@ -713,7 +717,7 @@ fn gepa_reflective_dataset_default_projects_scalar_examples_with_case_input() {
         assert!(
             examples[0]
                 .source_refs
-                .contains(&leaven_core::InfoRef::Assessment(assessment))
+                .contains(&leaven_core::InfoRef::Assessment(assessments[0]))
         );
     });
 }
@@ -730,7 +734,7 @@ fn gepa_reflective_dataset_uses_target_safe_case_projection() {
             leaven_core::PartitionId::from("TRAIN"),
             vec![leaven_kernel::CaseId::new(0)],
         );
-        let store = InlineEvidenceStore::<CasewiseEvidence<CaseAssessmentEvidence>>::new("inline");
+        let store = InlineEvidenceStore::<CaseAssessmentEvidence>::new("inline");
         let mut graph = RunGraph::<HiddenTargetProblem>::new(RunId::new());
         let mut budget = BudgetLedger::new(Budget::unlimited());
         let candidate = {
@@ -741,14 +745,14 @@ fn gepa_reflective_dataset_uses_target_safe_case_projection() {
             )
             .unwrap()
         };
-        let assessment = {
+        let assessments = {
             let mut ctx = RunContext::<HiddenTargetProblem>::new(&mut graph, &mut budget)
                 .with_case_set(&case_set)
                 .with_evidence_store(&store);
             ctx.evaluate_with(&HiddenTargetEvaluator, independent_train_request(candidate))
                 .await
                 .unwrap()
-                .assessment_ids[0]
+                .assessment_ids
         };
 
         let mut ctx = RunContext::<HiddenTargetProblem>::new(&mut graph, &mut budget)
@@ -758,7 +762,7 @@ fn gepa_reflective_dataset_uses_target_safe_case_projection() {
             &leaven_gepa::GepaReflectiveDataset,
             &mut ctx,
             candidate,
-            assessment,
+            &assessments,
             &"answer".to_owned(),
         )
         .await
@@ -770,7 +774,7 @@ fn gepa_reflective_dataset_uses_target_safe_case_projection() {
                 }),
                 &mut ctx,
                 candidate,
-                assessment,
+                &assessments,
                 &"answer".to_owned(),
             )
             .await
@@ -786,7 +790,7 @@ fn gepa_reflective_dataset_uses_target_safe_case_projection() {
         assert!(
             examples[0]
                 .source_refs
-                .contains(&leaven_core::InfoRef::Assessment(assessment))
+                .contains(&leaven_core::InfoRef::Assessment(assessments[0]))
         );
 
         let serialized = serde_json::to_string(&examples).unwrap();
@@ -799,7 +803,7 @@ fn gepa_reflective_dataset_uses_target_safe_case_projection() {
 #[test]
 fn gepa_reflective_dataset_default_reports_missing_assessment_evidence() {
     block_on(async {
-        let store = InlineEvidenceStore::<CasewiseEvidence<ScalarEvidence>>::new("inline");
+        let store = InlineEvidenceStore::<ScalarEvidence>::new("inline");
         let mut graph = RunGraph::<DisplayScalarProblem>::new(RunId::new());
         let mut budget = BudgetLedger::new(Budget::unlimited());
         let candidate = {
@@ -814,17 +818,13 @@ fn gepa_reflective_dataset_default_reports_missing_assessment_evidence() {
             &leaven_gepa::GepaReflectiveDataset,
             &mut ctx,
             candidate,
-            leaven_kernel::AssessmentId::new(),
+            &[leaven_kernel::AssessmentId::new()],
             &"answer".to_owned(),
         )
         .await
         .unwrap_err();
 
-        assert!(
-            error
-                .to_string()
-                .contains("GEPA reflective-dataset projection failed")
-        );
+        assert!(error.to_string().contains("parent assessment row"));
     });
 }
 
@@ -835,7 +835,7 @@ fn gepa_run_surfaces_reflective_dataset_build_failure() {
             leaven_core::PartitionId::from("TRAIN"),
             vec![leaven_kernel::CaseId::new(0)],
         );
-        let store = InlineEvidenceStore::<CasewiseEvidence<ScalarEvidence>>::new("inline");
+        let store = InlineEvidenceStore::<ScalarEvidence>::new("inline");
         let mut engine = Engine::<DisplayScalarProblem>::builder()
             .evaluator(ScalarCaseEvaluator)
             .build();
@@ -847,7 +847,7 @@ fn gepa_run_surfaces_reflective_dataset_build_failure() {
             .unwrap();
         let failing_dataset = |_ctx: &mut RunContext<'_, DisplayScalarProblem>,
                                _parent: leaven_kernel::CandidateId,
-                               _assessment: leaven_kernel::AssessmentId,
+                               _assessments: &[leaven_kernel::AssessmentId],
                                _part: &String| async move {
             Result::<Vec<ReflectiveExample>, leaven_gepa::ReflectionError>::Err(
                 leaven_gepa::ReflectionError::builder("scripted dataset failure"),
@@ -876,7 +876,7 @@ fn gepa_reflective_dataset_closure_builder_can_refuse() {
     block_on(async {
         let builder = |_ctx: &mut RunContext<'_, DisplayScalarProblem>,
                        _parent: leaven_kernel::CandidateId,
-                       _assessment: leaven_kernel::AssessmentId,
+                       _assessments: &[leaven_kernel::AssessmentId],
                        _part: &String| async move {
             Result::<Vec<ReflectiveExample>, leaven_gepa::ReflectionError>::Err(
                 leaven_gepa::ReflectionError::builder("custom dataset declined"),
@@ -890,7 +890,7 @@ fn gepa_reflective_dataset_closure_builder_can_refuse() {
             &builder,
             &mut ctx,
             leaven_kernel::CandidateId::new(),
-            leaven_kernel::AssessmentId::new(),
+            &[leaven_kernel::AssessmentId::new()],
             &"answer".to_owned(),
         )
         .await
@@ -913,7 +913,7 @@ fn gepa_batch_sampler_builder_uses_custom_minibatches() {
                 leaven_kernel::CaseId::new(3),
             ],
         );
-        let store = InlineEvidenceStore::<CasewiseEvidence<ScalarEvidence>>::new("inline");
+        let store = InlineEvidenceStore::<ScalarEvidence>::new("inline");
         let mut engine = Engine::<SamplingProblem>::builder()
             .evaluator(RecordingCaseSetEvaluator {
                 seen_sets: seen_sets.clone(),
@@ -946,7 +946,7 @@ fn gepa_batch_sampler_builder_uses_custom_minibatches() {
 fn gepa_proposal_count_applies_multiple_reflections_in_one_iteration() {
     block_on(async {
         let case_set = train_case_set();
-        let store = InlineEvidenceStore::<CasewiseEvidence<ScalarEvidence>>::new("inline");
+        let store = InlineEvidenceStore::<ScalarEvidence>::new("inline");
         let mut engine = Engine::<SamplingProblem>::builder()
             .evaluator(PrefixImprovementEvaluator)
             .build();
@@ -1001,7 +1001,7 @@ fn full_validation_policy_evaluates_accepted_candidates_and_selects_validation_b
                 leaven_core::PartitionId::from("VALIDATION"),
                 vec![leaven_kernel::CaseId::new(1)],
             );
-        let store = InlineEvidenceStore::<CasewiseEvidence<ScalarEvidence>>::new("inline");
+        let store = InlineEvidenceStore::<ScalarEvidence>::new("inline");
         let mut engine = Engine::<SamplingProblem>::builder()
             .evaluator(ValidationSelectionEvaluator {
                 seen_sets: seen.clone(),
@@ -1048,7 +1048,7 @@ fn gepa_checkpoint_restore_rejects_missing_validation_best_candidate() {
                 leaven_core::PartitionId::from("VALIDATION"),
                 vec![leaven_kernel::CaseId::new(1)],
             );
-        let store = InlineEvidenceStore::<CasewiseEvidence<ScalarEvidence>>::new("inline");
+        let store = InlineEvidenceStore::<ScalarEvidence>::new("inline");
         let mut engine = Engine::<SamplingProblem>::builder()
             .evaluator(ValidationSelectionEvaluator {
                 seen_sets: Arc::new(Mutex::new(Vec::new())),
@@ -1167,7 +1167,7 @@ fn gepa_run_reports_empty_casewise_scores() {
 
         let error = engine.run(&mut gepa, &case_set, &store).await.unwrap_err();
 
-        assert!(error.to_string().contains("casewise scores"));
+        assert!(error.to_string().contains("comparable case scores"));
     });
 }
 
@@ -1307,7 +1307,7 @@ struct SamplingProblem;
 impl OptimizationProblem for SamplingProblem {
     type Artifact = PartMapArtifact;
     type Case = ();
-    type Evidence = CasewiseEvidence<ScalarEvidence>;
+    type Evidence = ScalarEvidence;
     type ProposalAnnotations = ();
 }
 
@@ -1318,7 +1318,7 @@ struct DisplayScalarProblem;
 impl OptimizationProblem for DisplayScalarProblem {
     type Artifact = PartMapArtifact;
     type Case = &'static str;
-    type Evidence = CasewiseEvidence<ScalarEvidence>;
+    type Evidence = ScalarEvidence;
     type ProposalAnnotations = ();
 }
 
@@ -1330,7 +1330,7 @@ struct HiddenTargetProblem;
 impl OptimizationProblem for HiddenTargetProblem {
     type Artifact = PartMapArtifact;
     type Case = HiddenTargetCase;
-    type Evidence = CasewiseEvidence<CaseAssessmentEvidence>;
+    type Evidence = CaseAssessmentEvidence;
     type ProposalAnnotations = ();
 }
 
@@ -1386,40 +1386,31 @@ impl Evaluator<HiddenTargetProblem> for HiddenTargetEvaluator {
         request: ResolvedEvaluationRequest,
         _ctx: EvaluationContext<'_, HiddenTargetProblem>,
     ) -> Result<Metered<Vec<Assessment<HiddenTargetProblem>>>, EvaluationError> {
+        let set = leaven_kernel::EvaluationSetId::from_uuid(request.set.id.as_uuid());
         let ResolvedRequestKind::Independent { candidates } = request.kind else {
             return Err(EvaluationError::Message(
                 "expected independent request".to_owned(),
             ));
         };
-        Ok(Metered::new(
-            candidates
-                .into_iter()
-                .map(|candidate| Assessment::Independent {
+        let mut assessments = Vec::new();
+        for candidate in candidates {
+            for case in request.set.case_ids.iter().copied() {
+                assessments.push(Assessment::Independent {
                     candidate,
-                    target: AssessmentTarget::EvaluationSet(leaven_kernel::EvaluationSetId::new()),
-                    evidence: CasewiseEvidence::new(
-                        request
-                            .set
-                            .case_ids
-                            .iter()
-                            .copied()
-                            .map(|case| {
-                                CaseOutcome::new(
-                                    case,
-                                    CaseAssessmentEvidence::new(
-                                        ScalarEvidence::new(0.25).unwrap(),
-                                        OutputRecord::inline("candidate output"),
-                                        "visible scorer feedback",
-                                    ),
-                                )
-                            })
-                            .collect(),
+                    target: AssessmentTarget::Case { set, case },
+                    evidence: CaseAssessmentEvidence::new(
+                        ScalarEvidence::new(0.25).unwrap(),
+                        OutputRecord::inline("candidate output"),
+                        "visible scorer feedback",
                     ),
                     cost: Cost::metric_calls(1),
                     metadata: MetadataBag::new(),
-                })
-                .collect(),
-            Cost::metric_calls(1),
+                });
+            }
+        }
+        Ok(Metered::new(
+            assessments,
+            Cost::metric_calls(request.set.case_ids.len() as u64),
         ))
     }
 }
@@ -1444,31 +1435,27 @@ impl Evaluator<DisplayScalarProblem> for ScalarCaseEvaluator {
         request: ResolvedEvaluationRequest,
         _ctx: EvaluationContext<'_, DisplayScalarProblem>,
     ) -> Result<Metered<Vec<Assessment<DisplayScalarProblem>>>, EvaluationError> {
+        let set = leaven_kernel::EvaluationSetId::from_uuid(request.set.id.as_uuid());
         let ResolvedRequestKind::Independent { candidates } = request.kind else {
             return Err(EvaluationError::Message(
                 "expected independent request".to_owned(),
             ));
         };
-        Ok(Metered::new(
-            candidates
-                .into_iter()
-                .map(|candidate| Assessment::Independent {
+        let mut assessments = Vec::new();
+        for candidate in candidates {
+            for case in request.set.case_ids.iter().copied() {
+                assessments.push(Assessment::Independent {
                     candidate,
-                    target: AssessmentTarget::EvaluationSet(leaven_kernel::EvaluationSetId::new()),
-                    evidence: CasewiseEvidence::new(
-                        request
-                            .set
-                            .case_ids
-                            .iter()
-                            .copied()
-                            .map(|case| CaseOutcome::new(case, ScalarEvidence::new(0.5).unwrap()))
-                            .collect(),
-                    ),
+                    target: AssessmentTarget::Case { set, case },
+                    evidence: ScalarEvidence::new(0.5).unwrap(),
                     cost: Cost::metric_calls(1),
                     metadata: MetadataBag::new(),
-                })
-                .collect(),
-            Cost::metric_calls(1),
+                });
+            }
+        }
+        Ok(Metered::new(
+            assessments,
+            Cost::metric_calls(request.set.case_ids.len() as u64),
         ))
     }
 }
@@ -1478,9 +1465,9 @@ struct SmokeEvidence;
 
 impl Evidence for SmokeEvidence {}
 
-impl leaven_gepa::GepaScoreEvidence for SmokeEvidence {
-    fn scalar_casewise(&self) -> CasewiseEvidence<ScalarEvidence> {
-        CasewiseEvidence::new(Vec::new())
+impl leaven_gepa::GepaCaseEvidence for SmokeEvidence {
+    fn scalar_score(&self) -> Option<ScalarEvidence> {
+        None
     }
 }
 
@@ -1498,7 +1485,7 @@ where
         &self,
         _ctx: &mut RunContext<'_, P>,
         _parent: leaven_kernel::CandidateId,
-        _parent_assessment: leaven_kernel::AssessmentId,
+        _parent_assessments: &[leaven_kernel::AssessmentId],
         _part: &S::PartId,
     ) -> Result<Vec<ReflectiveExample>, leaven_gepa::ReflectionError> {
         Ok(Vec::new())
@@ -1557,44 +1544,33 @@ impl Evaluator<SamplingProblem> for RecordingCaseSetEvaluator {
             .lock()
             .expect("seen sets lock")
             .push(request.set.case_ids.clone());
+        let set = leaven_kernel::EvaluationSetId::from_uuid(request.set.id.as_uuid());
         let ResolvedRequestKind::Independent { candidates } = request.kind else {
             return Err(EvaluationError::Message(
                 "expected independent request".to_owned(),
             ));
         };
+        let mut assessments = Vec::new();
+        for candidate in candidates {
+            let artifact = ctx.graph().artifact(candidate).expect("candidate artifact");
+            let score = if artifact.0.get("answer").map(String::as_str) == Some("improved") {
+                1.0
+            } else {
+                0.0
+            };
+            for case in request.set.case_ids.iter().copied() {
+                assessments.push(Assessment::Independent {
+                    candidate,
+                    target: AssessmentTarget::Case { set, case },
+                    evidence: ScalarEvidence::new(score).unwrap(),
+                    cost: Cost::metric_calls(1),
+                    metadata: MetadataBag::new(),
+                });
+            }
+        }
         Ok(Metered::new(
-            candidates
-                .into_iter()
-                .map(|candidate| {
-                    let artifact = ctx.graph().artifact(candidate).expect("candidate artifact");
-                    let score = if artifact.0.get("answer").map(String::as_str) == Some("improved")
-                    {
-                        1.0
-                    } else {
-                        0.0
-                    };
-                    Assessment::Independent {
-                        candidate,
-                        target: AssessmentTarget::EvaluationSet(
-                            leaven_kernel::EvaluationSetId::new(),
-                        ),
-                        evidence: CasewiseEvidence::new(
-                            request
-                                .set
-                                .case_ids
-                                .iter()
-                                .copied()
-                                .map(|case| {
-                                    CaseOutcome::new(case, ScalarEvidence::new(score).unwrap())
-                                })
-                                .collect(),
-                        ),
-                        cost: Cost::metric_calls(1),
-                        metadata: MetadataBag::new(),
-                    }
-                })
-                .collect(),
-            Cost::metric_calls(1),
+            assessments,
+            Cost::metric_calls(request.set.case_ids.len() as u64),
         ))
     }
 }
@@ -1625,46 +1601,36 @@ impl Evaluator<SamplingProblem> for ValidationSelectionEvaluator {
             .lock()
             .expect("seen sets lock")
             .push(request.set.case_ids.clone());
+        let set = leaven_kernel::EvaluationSetId::from_uuid(request.set.id.as_uuid());
         let ResolvedRequestKind::Independent { candidates } = request.kind else {
             return Err(EvaluationError::Message(
                 "expected independent request".to_owned(),
             ));
         };
+        let mut assessments = Vec::new();
+        for candidate in candidates {
+            let artifact = ctx.graph().artifact(candidate).expect("candidate artifact");
+            let improved = artifact.0.get("answer").map(String::as_str) == Some("improved");
+            for case in request.set.case_ids.iter().copied() {
+                let score = if case == leaven_kernel::CaseId::new(1) {
+                    if improved { 0.0 } else { 1.0 }
+                } else if improved {
+                    1.0
+                } else {
+                    0.0
+                };
+                assessments.push(Assessment::Independent {
+                    candidate,
+                    target: AssessmentTarget::Case { set, case },
+                    evidence: ScalarEvidence::new(score).unwrap(),
+                    cost: Cost::metric_calls(1),
+                    metadata: MetadataBag::new(),
+                });
+            }
+        }
         Ok(Metered::new(
-            candidates
-                .into_iter()
-                .map(|candidate| {
-                    let artifact = ctx.graph().artifact(candidate).expect("candidate artifact");
-                    let improved = artifact.0.get("answer").map(String::as_str) == Some("improved");
-                    Assessment::Independent {
-                        candidate,
-                        target: AssessmentTarget::EvaluationSet(
-                            leaven_kernel::EvaluationSetId::new(),
-                        ),
-                        evidence: CasewiseEvidence::new(
-                            request
-                                .set
-                                .case_ids
-                                .iter()
-                                .copied()
-                                .map(|case| {
-                                    let score = if case == leaven_kernel::CaseId::new(1) {
-                                        if improved { 0.0 } else { 1.0 }
-                                    } else if improved {
-                                        1.0
-                                    } else {
-                                        0.0
-                                    };
-                                    CaseOutcome::new(case, ScalarEvidence::new(score).unwrap())
-                                })
-                                .collect(),
-                        ),
-                        cost: Cost::metric_calls(1),
-                        metadata: MetadataBag::new(),
-                    }
-                })
-                .collect(),
-            Cost::metric_calls(1),
+            assessments,
+            Cost::metric_calls(request.set.case_ids.len() as u64),
         ))
     }
 }
@@ -1689,40 +1655,37 @@ impl Evaluator<SamplingProblem> for PrefixImprovementEvaluator {
         request: ResolvedEvaluationRequest,
         ctx: EvaluationContext<'_, SamplingProblem>,
     ) -> Result<Metered<Vec<Assessment<SamplingProblem>>>, EvaluationError> {
+        let set = leaven_kernel::EvaluationSetId::from_uuid(request.set.id.as_uuid());
         let ResolvedRequestKind::Independent { candidates } = request.kind else {
             return Err(EvaluationError::Message(
                 "expected independent request".to_owned(),
             ));
         };
+        let mut assessments = Vec::new();
+        for candidate in candidates {
+            let artifact = ctx.graph().artifact(candidate).expect("candidate artifact");
+            let score = if artifact
+                .0
+                .get("answer")
+                .is_some_and(|value| value.starts_with("improved"))
+            {
+                1.0
+            } else {
+                0.0
+            };
+            for case in request.set.case_ids.iter().copied() {
+                assessments.push(Assessment::Independent {
+                    candidate,
+                    target: AssessmentTarget::Case { set, case },
+                    evidence: ScalarEvidence::new(score).unwrap(),
+                    cost: Cost::metric_calls(1),
+                    metadata: MetadataBag::new(),
+                });
+            }
+        }
         Ok(Metered::new(
-            candidates
-                .into_iter()
-                .map(|candidate| {
-                    let artifact = ctx.graph().artifact(candidate).expect("candidate artifact");
-                    let score = if artifact
-                        .0
-                        .get("answer")
-                        .is_some_and(|value| value.starts_with("improved"))
-                    {
-                        1.0
-                    } else {
-                        0.0
-                    };
-                    Assessment::Independent {
-                        candidate,
-                        target: AssessmentTarget::EvaluationSet(
-                            leaven_kernel::EvaluationSetId::new(),
-                        ),
-                        evidence: CasewiseEvidence::new(vec![CaseOutcome::new(
-                            leaven_kernel::CaseId::new(0),
-                            ScalarEvidence::new(score).unwrap(),
-                        )]),
-                        cost: Cost::metric_calls(1),
-                        metadata: MetadataBag::new(),
-                    }
-                })
-                .collect(),
-            Cost::metric_calls(1),
+            assessments,
+            Cost::metric_calls(request.set.case_ids.len() as u64),
         ))
     }
 }
@@ -1747,24 +1710,39 @@ impl Evaluator<SmokeProblem> for VisibilityEvaluator {
         request: ResolvedEvaluationRequest,
         _ctx: EvaluationContext<'_, SmokeProblem>,
     ) -> Result<Metered<Vec<Assessment<SmokeProblem>>>, EvaluationError> {
+        let set = leaven_kernel::EvaluationSetId::from_uuid(request.set.id.as_uuid());
         let ResolvedRequestKind::Independent { candidates } = request.kind else {
             return Err(EvaluationError::Message(
                 "expected independent request".to_owned(),
             ));
         };
-        Ok(Metered::new(
-            candidates
-                .into_iter()
-                .map(|candidate| Assessment::Independent {
-                    candidate,
-                    target: AssessmentTarget::EvaluationSet(leaven_kernel::EvaluationSetId::new()),
-                    evidence: SmokeEvidence,
-                    cost: Cost::metric_calls(1),
-                    metadata: MetadataBag::new(),
-                })
-                .collect(),
-            Cost::metric_calls(1),
-        ))
+        let mut assessments = Vec::new();
+        for candidate in candidates {
+            match request.granularity {
+                AssessmentGranularity::PerCase | AssessmentGranularity::Both => {
+                    for case in request.set.case_ids.iter().copied() {
+                        assessments.push(Assessment::Independent {
+                            candidate,
+                            target: AssessmentTarget::Case { set, case },
+                            evidence: SmokeEvidence,
+                            cost: Cost::metric_calls(1),
+                            metadata: MetadataBag::new(),
+                        });
+                    }
+                }
+                AssessmentGranularity::Aggregate => {
+                    assessments.push(Assessment::Independent {
+                        candidate,
+                        target: AssessmentTarget::EvaluationSet(set),
+                        evidence: SmokeEvidence,
+                        cost: Cost::metric_calls(1),
+                        metadata: MetadataBag::new(),
+                    });
+                }
+            }
+        }
+        let cost = Cost::metric_calls(assessments.len() as u64);
+        Ok(Metered::new(assessments, cost))
     }
 }
 

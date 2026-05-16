@@ -7,9 +7,7 @@ use leaven_core::{
     ResolvedRequestKind,
 };
 use leaven_engine::{CachePolicy, CaseSet, Engine, EvaluationContext, EvaluationError, Evaluator};
-use leaven_evidence::{
-    CaseAssessmentEvidence, CaseOutcome, CasewiseEvidence, OutputRecord, ScalarEvidence,
-};
+use leaven_evidence::{CaseAssessmentEvidence, OutputRecord, ScalarEvidence};
 use leaven_gepa::{
     DEFAULT_REFLECTION_PROMPT_TEMPLATE, DefaultReflectionRenderer, Gepa, LmBackedReflector,
     LmBackedReflectorConfig, PlainTextEditParser, ReflectRequest, ReflectionOutputParser,
@@ -31,7 +29,7 @@ fn lm_backed_reflector_renders_feedback_records_and_applies_candidate() {
             leaven_core::PartitionId::from("TRAIN"),
             vec![leaven_kernel::CaseId::new(0)],
         );
-        let store = InlineEvidenceStore::<CasewiseEvidence<CaseAssessmentEvidence>>::new("inline");
+        let store = InlineEvidenceStore::<CaseAssessmentEvidence>::new("inline");
         let mut engine = Engine::<TestProblem>::builder()
             .budget(Budget::unlimited())
             .evaluator(FeedbackEvaluator)
@@ -120,7 +118,7 @@ fn multi_iteration_reflection_uses_selected_parent_assessment_feedback() {
             leaven_core::PartitionId::from("TRAIN"),
             vec![leaven_kernel::CaseId::new(0)],
         );
-        let store = InlineEvidenceStore::<CasewiseEvidence<CaseAssessmentEvidence>>::new("inline");
+        let store = InlineEvidenceStore::<CaseAssessmentEvidence>::new("inline");
         let mut engine = Engine::<TestProblem>::builder()
             .budget(Budget::unlimited())
             .evaluator(ArtifactFeedbackEvaluator)
@@ -441,7 +439,7 @@ fn lm_backed_reflector_surfaces_lm_failures_without_candidate() {
             leaven_core::PartitionId::from("TRAIN"),
             vec![leaven_kernel::CaseId::new(0)],
         );
-        let store = InlineEvidenceStore::<CasewiseEvidence<CaseAssessmentEvidence>>::new("inline");
+        let store = InlineEvidenceStore::<CaseAssessmentEvidence>::new("inline");
         let mut engine = Engine::<TestProblem>::builder()
             .budget(Budget::unlimited())
             .evaluator(FeedbackEvaluator)
@@ -475,7 +473,7 @@ fn lm_backed_reflector_surfaces_parser_failures_without_candidate() {
             leaven_core::PartitionId::from("TRAIN"),
             vec![leaven_kernel::CaseId::new(0)],
         );
-        let store = InlineEvidenceStore::<CasewiseEvidence<CaseAssessmentEvidence>>::new("inline");
+        let store = InlineEvidenceStore::<CaseAssessmentEvidence>::new("inline");
         let mut engine = Engine::<TestProblem>::builder()
             .budget(Budget::unlimited())
             .evaluator(FeedbackEvaluator)
@@ -527,7 +525,7 @@ struct TestProblem;
 impl OptimizationProblem for TestProblem {
     type Artifact = TestArtifact;
     type Case = &'static str;
-    type Evidence = CasewiseEvidence<CaseAssessmentEvidence>;
+    type Evidence = CaseAssessmentEvidence;
     type ProposalAnnotations = ();
 }
 
@@ -614,40 +612,35 @@ impl Evaluator<TestProblem> for ArtifactFeedbackEvaluator {
         request: ResolvedEvaluationRequest,
         ctx: EvaluationContext<'_, TestProblem>,
     ) -> Result<Metered<Vec<Assessment<TestProblem>>>, EvaluationError> {
+        let set = leaven_kernel::EvaluationSetId::from_uuid(request.set.id.as_uuid());
         let ResolvedRequestKind::Independent { candidates } = request.kind else {
             return Err(EvaluationError::Message(
                 "expected independent request".to_owned(),
             ));
         };
-        Ok(Metered::new(
-            candidates
-                .into_iter()
-                .map(|candidate| {
-                    let artifact = ctx.graph().artifact(candidate).expect("candidate artifact");
-                    let improvement_count = artifact.0.matches("-lm").count();
-                    let improvement_score = f64::from(
-                        u32::try_from(improvement_count).expect("test improvement count fits u32"),
-                    );
-                    Assessment::Independent {
-                        candidate,
-                        target: AssessmentTarget::EvaluationSet(
-                            leaven_kernel::EvaluationSetId::new(),
-                        ),
-                        evidence: CasewiseEvidence::new(vec![CaseOutcome::new(
-                            leaven_kernel::CaseId::new(0),
-                            CaseAssessmentEvidence::new(
-                                ScalarEvidence::new(improvement_score).unwrap(),
-                                OutputRecord::inline(format!("output for {}", artifact.0)),
-                                format!("feedback for {}", artifact.0),
-                            ),
-                        )]),
-                        cost: Cost::metric_calls(1),
-                        metadata: MetadataBag::new(),
-                    }
-                })
-                .collect(),
-            Cost::metric_calls(1),
-        ))
+        let mut assessments = Vec::new();
+        for candidate in candidates {
+            let artifact = ctx.graph().artifact(candidate).expect("candidate artifact");
+            let improvement_count = artifact.0.matches("-lm").count();
+            let improvement_score = f64::from(
+                u32::try_from(improvement_count).expect("test improvement count fits u32"),
+            );
+            for case in request.set.case_ids.iter().copied() {
+                assessments.push(Assessment::Independent {
+                    candidate,
+                    target: AssessmentTarget::Case { set, case },
+                    evidence: CaseAssessmentEvidence::new(
+                        ScalarEvidence::new(improvement_score).unwrap(),
+                        OutputRecord::inline(format!("output for {}", artifact.0)),
+                        format!("feedback for {}", artifact.0),
+                    ),
+                    cost: Cost::metric_calls(1),
+                    metadata: MetadataBag::new(),
+                });
+            }
+        }
+        let cost = Cost::metric_calls(assessments.len() as u64);
+        Ok(Metered::new(assessments, cost))
     }
 }
 
@@ -671,36 +664,35 @@ impl Evaluator<TestProblem> for FeedbackEvaluator {
         request: ResolvedEvaluationRequest,
         _ctx: EvaluationContext<'_, TestProblem>,
     ) -> Result<Metered<Vec<Assessment<TestProblem>>>, EvaluationError> {
+        let set = leaven_kernel::EvaluationSetId::from_uuid(request.set.id.as_uuid());
         let ResolvedRequestKind::Independent { candidates } = request.kind else {
             return Err(EvaluationError::Message(
                 "expected independent request".to_owned(),
             ));
         };
-        Ok(Metered::new(
-            candidates
-                .into_iter()
-                .map(|candidate| Assessment::Independent {
+        let mut assessments = Vec::new();
+        for candidate in candidates {
+            for case in request.set.case_ids.iter().copied() {
+                assessments.push(Assessment::Independent {
                     candidate,
-                    target: AssessmentTarget::EvaluationSet(leaven_kernel::EvaluationSetId::new()),
-                    evidence: CasewiseEvidence::new(vec![CaseOutcome::new(
-                        leaven_kernel::CaseId::new(0),
-                        CaseAssessmentEvidence::new(
-                            ScalarEvidence::new(if candidate_suffix(candidate) {
-                                1.0
-                            } else {
-                                0.0
-                            })
-                            .unwrap(),
-                            OutputRecord::inline("candidate output"),
-                            "candidate missed the target suffix",
-                        ),
-                    )]),
+                    target: AssessmentTarget::Case { set, case },
+                    evidence: CaseAssessmentEvidence::new(
+                        ScalarEvidence::new(if candidate_suffix(candidate) {
+                            1.0
+                        } else {
+                            0.0
+                        })
+                        .unwrap(),
+                        OutputRecord::inline("candidate output"),
+                        "candidate missed the target suffix",
+                    ),
                     cost: Cost::metric_calls(1),
                     metadata: MetadataBag::new(),
-                })
-                .collect(),
-            Cost::metric_calls(1),
-        ))
+                });
+            }
+        }
+        let cost = Cost::metric_calls(assessments.len() as u64);
+        Ok(Metered::new(assessments, cost))
     }
 }
 

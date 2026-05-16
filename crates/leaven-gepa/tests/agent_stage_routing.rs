@@ -9,7 +9,7 @@ use leaven_engine::{
     CachePolicy, CaseSet, Engine, EvaluationContext, EvaluationError, Evaluator, RunContext,
     RunEvent,
 };
-use leaven_evidence::{CaseOutcome, CasewiseEvidence, ScalarEvidence};
+use leaven_evidence::ScalarEvidence;
 use leaven_gepa::{
     FixedSurfaceEdit, Gepa, GepaReflectionBootstrap, GepaReflector, LmBackedReflector,
     PlainTextEditParser, ReflectRequest, ReflectionError, ReflectionRenderInput,
@@ -100,12 +100,9 @@ struct TestEvidence;
 
 impl Evidence for TestEvidence {}
 
-impl leaven_gepa::GepaScoreEvidence for TestEvidence {
-    fn scalar_casewise(&self) -> CasewiseEvidence<ScalarEvidence> {
-        CasewiseEvidence::new(vec![CaseOutcome::new(
-            leaven_kernel::CaseId::new(0),
-            ScalarEvidence::new(1.0).unwrap(),
-        )])
+impl leaven_gepa::GepaCaseEvidence for TestEvidence {
+    fn scalar_score(&self) -> Option<ScalarEvidence> {
+        Some(ScalarEvidence::new(1.0).unwrap())
     }
 }
 
@@ -139,7 +136,7 @@ impl ReflectiveDatasetBuilder<TestProblem, WholeTextSurface> for ScriptedDataset
         &self,
         _ctx: &mut RunContext<'_, TestProblem>,
         _parent: CandidateId,
-        _parent_assessment: AssessmentId,
+        _parent_assessments: &[AssessmentId],
         _part: &&'static str,
     ) -> Result<Vec<ReflectiveExample>, ReflectionError> {
         Ok(scripted_examples())
@@ -631,24 +628,26 @@ impl Evaluator<TestProblem> for ConstantEvaluator {
         request: ResolvedEvaluationRequest,
         _ctx: EvaluationContext<'_, TestProblem>,
     ) -> Result<Metered<Vec<Assessment<TestProblem>>>, EvaluationError> {
+        let set = leaven_kernel::EvaluationSetId::from_uuid(request.set.id.as_uuid());
         let ResolvedRequestKind::Independent { candidates } = request.kind else {
             return Err(EvaluationError::Message(
                 "expected independent request".to_owned(),
             ));
         };
-        Ok(Metered::new(
-            candidates
-                .into_iter()
-                .map(|candidate| Assessment::Independent {
+        let mut assessments = Vec::new();
+        for candidate in candidates {
+            for case in request.set.case_ids.iter().copied() {
+                assessments.push(Assessment::Independent {
                     candidate,
-                    target: AssessmentTarget::EvaluationSet(leaven_kernel::EvaluationSetId::new()),
+                    target: AssessmentTarget::Case { set, case },
                     evidence: TestEvidence,
                     cost: Cost::metric_calls(1),
                     metadata: MetadataBag::new(),
-                })
-                .collect(),
-            Cost::metric_calls(1),
-        ))
+                });
+            }
+        }
+        let cost = Cost::metric_calls(assessments.len() as u64);
+        Ok(Metered::new(assessments, cost))
     }
 }
 

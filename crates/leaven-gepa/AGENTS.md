@@ -8,9 +8,10 @@ It composes core, surface, engine, evidence, population, render, and LM vocabula
 - `src/selector.rs`, `src/part_selector.rs`, `src/gate.rs`, and `src/validation.rs` own GEPA-specific strategy policy.
 - `src/proposer.rs` owns GEPA reflection/proposal helpers that are provider-neutral; concrete LM/provider lowering belongs in `leaven-lm-*` or agent crates.
 - Surface ownership is explicit: GEPA selects a part from an `EditSurface` and lowers edits through that surface into artifact-native changes. Artifact-specific surfaces belong in `leaven-surface` or `leaven-artifact-*`.
-- The current live loop is: select parent from population, evaluate train
-  partition casewise, project evidence to scalar scores, select a surface part,
-  build the reflective dataset once via the configured
+- The current live loop is: select parent from population, evaluate the train
+  partition into case-targeted assessment rows, normalize those rows into scalar
+  casewise evidence for frontier math, select a surface part, build the
+  reflective dataset once from the full parent row set via the configured
   `ReflectiveDatasetBuilder`, assemble one `ReflectRequest`, call a
   `GepaReflector` with that request, apply the returned proposal batch through
   `RunContext`, then update population. `FixedSurfaceEdit` is still a
@@ -44,10 +45,11 @@ It composes core, surface, engine, evidence, population, render, and LM vocabula
   superseded public names and have been removed. `WorstEvidencePart` was a
   `PartSelector` placeholder struct with no trait impl; reintroduce trace-aware
   part selection only as a behavior-bearing, tested selector. `SelectedFeedback` collapsed into
-  `ReflectRequest` (`examples` plus `source_refs`); the per-case record is
-  `ReflectiveExample`; the evidence-type-keyed `GepaReflectionEvidence`
-  projection became the swappable `ReflectiveDatasetBuilder` seam with the
-  `GepaReflectiveDataset` default. Do not reintroduce the removed names.
+  `ReflectRequest` (`examples` plus `source_refs`); the per-case reflection row
+  is `ReflectiveExample`; per-case scoring is row-local through
+  `GepaCaseEvidence`, and the dataset selection/projection seam is
+  `ReflectiveDatasetBuilder` with the `GepaReflectiveDataset` default. Do not
+  reintroduce the removed names.
 
 ## Proof Anchors
 - `cargo nextest run -p leaven-gepa` proves local GEPA surface ownership, edit lowering, selectors, gates, checkpoint/restore, validation, and proposer read-scope behavior.
@@ -76,8 +78,8 @@ It composes core, surface, engine, evidence, population, render, and LM vocabula
   verify: run `cargo nextest run -p leaven-gepa --test agent_stage_routing`, then `cargo nextest run -p leaven-gepa --test gepa_smoke`
 
 - when: changing what data reflection sees
-  do: implement or swap a `ReflectiveDatasetBuilder` (named type or closure); `GepaReflectiveDataset` is the GEPA-parity default and requires `P::Case: ReflectiveCaseInput` plus a projectable evidence shape, or `GepaReflectiveDataset::with_case_input(...)` for an explicit target-safe projection
-  preserve: the builder as the single selection seam, separate from backend presentation (LM renderer vs agent workspace materialization)
+  do: implement or swap a `ReflectiveDatasetBuilder` (named type or closure); the builder receives every parent assessment row id, not one bundled assessment; `GepaReflectiveDataset` is the GEPA-parity default and requires `P::Case: ReflectiveCaseInput` plus row-local projectable evidence, or `GepaReflectiveDataset::with_case_input(...)` for an explicit target-safe projection
+  preserve: the builder as the single selection seam, separate from backend presentation (LM renderer vs agent workspace materialization), and full row provenance in each example/source ref
   avoid: keying projection on the evidence type, merging selection and presentation into one seam, or relying on `Display` for a whole target-bearing case envelope
   verify: run `cargo nextest run -p leaven-gepa --test agent_stage_routing --test lm_reflection`
 

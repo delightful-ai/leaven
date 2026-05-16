@@ -4,10 +4,11 @@ use std::fmt::Write as _;
 use std::future::Future;
 
 use leaven_core::{
-    Evidence, InfoRef, OptimizationProblem, Proposal, ProposalBatch, ProposalBatchSemantics,
+    AssessmentTarget, Evidence, InfoRef, OptimizationProblem, Proposal, ProposalBatch,
+    ProposalBatchSemantics,
 };
 use leaven_engine::{ProposalError, RunContext, RunContextError};
-use leaven_evidence::{CaseAssessmentEvidence, CasewiseEvidence, OutputRecord, ScalarEvidence};
+use leaven_evidence::{CaseAssessmentEvidence, OutputRecord, ScalarEvidence};
 use leaven_kernel::{AssessmentId, CandidateId, CaseId, MetadataBag};
 use leaven_lm::{LmRequest, Messages};
 use leaven_surface::EditSurface;
@@ -159,7 +160,7 @@ where
         &self,
         ctx: &mut RunContext<'_, P>,
         parent: CandidateId,
-        parent_assessment: AssessmentId,
+        parent_assessments: &[AssessmentId],
         part: &S::PartId,
     ) -> Result<Vec<ReflectiveExample>, ReflectionError>;
 }
@@ -168,17 +169,17 @@ impl<P, S, F, Fut> ReflectiveDatasetBuilder<P, S> for F
 where
     P: OptimizationProblem,
     S: EditSurface<P::Artifact>,
-    F: Fn(&mut RunContext<'_, P>, CandidateId, AssessmentId, &S::PartId) -> Fut + Send + Sync,
+    F: Fn(&mut RunContext<'_, P>, CandidateId, &[AssessmentId], &S::PartId) -> Fut + Send + Sync,
     Fut: Future<Output = Result<Vec<ReflectiveExample>, ReflectionError>> + Send,
 {
     async fn build(
         &self,
         ctx: &mut RunContext<'_, P>,
         parent: CandidateId,
-        parent_assessment: AssessmentId,
+        parent_assessments: &[AssessmentId],
         part: &S::PartId,
     ) -> Result<Vec<ReflectiveExample>, ReflectionError> {
-        self(ctx, parent, parent_assessment, part).await
+        self(ctx, parent, parent_assessments, part).await
     }
 }
 
@@ -257,12 +258,12 @@ where
         &self,
         ctx: &mut RunContext<'_, P>,
         _parent: CandidateId,
-        parent_assessment: AssessmentId,
+        parent_assessments: &[AssessmentId],
         _part: &S::PartId,
     ) -> Result<Vec<ReflectiveExample>, ReflectionError> {
         build_gepa_reflective_examples(
             ctx,
-            parent_assessment,
+            parent_assessments,
             ReflectiveCaseInput::reflective_input,
         )
     }
@@ -279,10 +280,10 @@ where
         &self,
         ctx: &mut RunContext<'_, P>,
         _parent: CandidateId,
-        parent_assessment: AssessmentId,
+        parent_assessments: &[AssessmentId],
         _part: &S::PartId,
     ) -> Result<Vec<ReflectiveExample>, ReflectionError> {
-        build_gepa_reflective_examples(ctx, parent_assessment, &self.project_case_input)
+        build_gepa_reflective_examples(ctx, parent_assessments, &self.project_case_input)
     }
 }
 
@@ -292,61 +293,70 @@ where
 /// `P::Evidence` shape into per-case examples without an `input`, which the
 /// default builder fills from the case set.
 pub(crate) trait ReflectionProjection: Evidence {
-    /// Project per-case examples, leaving `input` empty.
-    fn reflection_examples(&self) -> Vec<ReflectiveExample>;
+    /// Project one case-row example, leaving `input` empty.
+    fn reflection_example(&self, case: CaseId) -> ReflectiveExample;
 }
 
 fn build_gepa_reflective_examples<P>(
     ctx: &RunContext<'_, P>,
-    parent_assessment: AssessmentId,
+    parent_assessments: &[AssessmentId],
     project_case_input: impl Fn(&P::Case) -> String,
 ) -> Result<Vec<ReflectiveExample>, ReflectionError>
 where
     P: OptimizationProblem,
     P::Evidence: ReflectionProjection,
 {
-    let evidence = ctx.assessment_evidence(parent_assessment)?;
-    let mut examples = evidence.reflection_examples();
-    for example in &mut examples {
+    let mut examples = Vec::with_capacity(parent_assessments.len());
+    for parent_assessment in parent_assessments {
+        let assessment = ctx.graph().assessment(*parent_assessment).ok_or_else(|| {
+            ReflectionError::builder(format!(
+                "parent assessment row `{parent_assessment}` is missing from graph"
+            ))
+        })?;
+        let case = match assessment.target() {
+            AssessmentTarget::Case { case, .. } => *case,
+            AssessmentTarget::Unscoped | AssessmentTarget::EvaluationSet(_) => {
+                return Err(ReflectionError::builder(
+                    "GEPA reflective dataset expected case-targeted assessment rows",
+                ));
+            }
+        };
+        let evidence = ctx.assessment_evidence(*parent_assessment)?;
+        let mut example = evidence.reflection_example(case);
         example
             .source_refs
-            .push(InfoRef::Assessment(parent_assessment));
+            .push(InfoRef::Assessment(*parent_assessment));
         if let Some(case) = example.case.and_then(|case_id| ctx.case(case_id)) {
             example.input = project_case_input(case);
         }
+        examples.push(example);
     }
     Ok(examples)
 }
 
-impl ReflectionProjection for CasewiseEvidence<ScalarEvidence> {
-    fn reflection_examples(&self) -> Vec<ReflectiveExample> {
-        self.outcomes()
-            .iter()
-            .map(|outcome| ReflectiveExample {
-                case: Some(outcome.case()),
-                input: String::new(),
-                output: None,
-                score: Some(outcome.evidence().score()),
-                feedback: String::new(),
-                source_refs: Vec::new(),
-            })
-            .collect()
+impl ReflectionProjection for ScalarEvidence {
+    fn reflection_example(&self, case: CaseId) -> ReflectiveExample {
+        ReflectiveExample {
+            case: Some(case),
+            input: String::new(),
+            output: None,
+            score: Some(self.score()),
+            feedback: String::new(),
+            source_refs: Vec::new(),
+        }
     }
 }
 
-impl ReflectionProjection for CasewiseEvidence<CaseAssessmentEvidence> {
-    fn reflection_examples(&self) -> Vec<ReflectiveExample> {
-        self.outcomes()
-            .iter()
-            .map(|outcome| ReflectiveExample {
-                case: Some(outcome.case()),
-                input: String::new(),
-                output: Some(output_record_text(outcome.evidence().output())),
-                score: Some(outcome.evidence().score().score()),
-                feedback: outcome.evidence().feedback().to_owned(),
-                source_refs: Vec::new(),
-            })
-            .collect()
+impl ReflectionProjection for CaseAssessmentEvidence {
+    fn reflection_example(&self, case: CaseId) -> ReflectiveExample {
+        ReflectiveExample {
+            case: Some(case),
+            input: String::new(),
+            output: Some(output_record_text(self.output())),
+            score: Some(self.score().score()),
+            feedback: self.feedback().to_owned(),
+            source_refs: Vec::new(),
+        }
     }
 }
 

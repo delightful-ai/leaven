@@ -6,7 +6,7 @@ use std::{
     time::Duration,
 };
 
-use leaven::core::InfoRef;
+use leaven::core::{AssessmentTarget, InfoRef};
 use leaven::engine::RunContext;
 use leaven::eval::{Case, SplitRole};
 use leaven::extend::PartitionId;
@@ -1936,26 +1936,41 @@ impl ReflectiveDatasetBuilder<RunProblem<AimePrompt, AimeInput, AimeTarget>, Aim
     async fn build(
         &self,
         ctx: &mut RunContext<'_, RunProblem<AimePrompt, AimeInput, AimeTarget>>,
-        _parent: CandidateId,
-        parent_assessment: AssessmentId,
+        parent: CandidateId,
+        parent_assessments: &[AssessmentId],
         _part: &&'static str,
     ) -> Result<Vec<ReflectiveExample>, ReflectionError> {
-        let evidence = ctx.assessment_evidence(parent_assessment)?;
-        Ok(evidence
-            .outcomes()
-            .iter()
-            .map(|outcome| {
-                let case = outcome.case();
-                ReflectiveExample {
-                    case: Some(case),
-                    input: self.inputs_by_case.get(&case).cloned().unwrap_or_default(),
-                    output: Some(format!("{:?}", outcome.evidence().output())),
-                    score: Some(outcome.evidence().score().score()),
-                    feedback: outcome.evidence().feedback().to_owned(),
-                    source_refs: vec![InfoRef::Assessment(parent_assessment)],
+        let mut examples = Vec::with_capacity(parent_assessments.len());
+        for parent_assessment in parent_assessments {
+            let assessment = ctx.graph().assessment(*parent_assessment).ok_or_else(|| {
+                ReflectionError::builder(format!(
+                    "AIME reflection assessment row `{parent_assessment}` is missing from graph"
+                ))
+            })?;
+            if assessment.independent_candidate() != Some(parent) {
+                return Err(ReflectionError::builder(
+                    "AIME reflection assessment row belongs to a different candidate",
+                ));
+            }
+            let case = match assessment.target() {
+                AssessmentTarget::Case { case, .. } => *case,
+                AssessmentTarget::Unscoped | AssessmentTarget::EvaluationSet(_) => {
+                    return Err(ReflectionError::builder(
+                        "AIME reflection expected case-targeted assessment rows",
+                    ));
                 }
-            })
-            .collect())
+            };
+            let evidence = ctx.assessment_evidence(*parent_assessment)?;
+            examples.push(ReflectiveExample {
+                case: Some(case),
+                input: self.inputs_by_case.get(&case).cloned().unwrap_or_default(),
+                output: Some(format!("{:?}", evidence.output())),
+                score: Some(evidence.score().score()),
+                feedback: evidence.feedback().to_owned(),
+                source_refs: vec![InfoRef::Assessment(*parent_assessment)],
+            });
+        }
+        Ok(examples)
     }
 }
 
