@@ -1,7 +1,7 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     num::NonZeroUsize,
-    path::{Path, PathBuf},
+    path::Path,
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -1117,11 +1117,11 @@ impl AimeLmCachePolicies {
 
 fn parse_lm_cache_policy(env_name: &str, value: Option<&str>) -> LmCachePolicy {
     let Some(raw) = value.map(str::trim).filter(|value| !value.is_empty()) else {
-        return LmCachePolicy::Never;
+        return LmCachePolicy::ReadWrite;
     };
     match raw.to_ascii_lowercase().as_str() {
         "never" | "none" | "off" => LmCachePolicy::Never,
-        "read-write" | "read_write" | "readwrite" => LmCachePolicy::ReadWrite,
+        "auto" | "read-write" | "read_write" | "readwrite" => LmCachePolicy::ReadWrite,
         "read-only" | "read_only" | "readonly" => LmCachePolicy::ReadOnly,
         "refresh" => LmCachePolicy::Refresh,
         _ => panic!(
@@ -1905,17 +1905,13 @@ fn cached_openai_lm(
         AimeLmCacheBackend::Sqlite => AimeOpenAiLm {
             inner: AimeOpenAiCachedLm::Sqlite(CachedLm::new(
                 inner,
-                SqliteLmCache::open(lm_cache_path(run_dir)).unwrap_or_else(|source| {
+                SqliteLmCache::open_run_dir(run_dir).unwrap_or_else(|source| {
                     panic!("failed to open SQLite LM cache for {role}: {source}")
                 }),
                 cache_policy,
             )),
         },
     }
-}
-
-fn lm_cache_path(run_dir: &Path) -> PathBuf {
-    run_dir.join("lm-cache.sqlite")
 }
 
 async fn run_solver(
@@ -2296,7 +2292,7 @@ mod tests {
         assert_eq!(config.max_iterations, GEPA_AIME_INTERNAL_ITERATION_CEILING);
         assert!(config.solver.live);
         assert_eq!(config.solver.model, openai_model_name());
-        assert_eq!(config.solver.cache_policy, LmCachePolicy::Never);
+        assert_eq!(config.solver.cache_policy, LmCachePolicy::ReadWrite);
         assert_eq!(
             config.solver.sampling.temperature.map(FiniteF64::as_f64),
             Some(1.0)
@@ -2306,7 +2302,7 @@ mod tests {
             Some(GEPA_AIME_MAX_OUTPUT_TOKENS)
         );
         assert_eq!(config.reflection.model, aime_reflection_model_name());
-        assert_eq!(config.reflection.cache_policy, LmCachePolicy::Never);
+        assert_eq!(config.reflection.cache_policy, LmCachePolicy::ReadWrite);
         assert_eq!(
             config.reflection.sampling.reasoning_effort,
             Some(ReasoningEffort::Medium)
@@ -2443,13 +2439,17 @@ mod tests {
     }
 
     #[test]
-    fn legacy_cache_policy_parser_keeps_solver_and_reflection_role_knobs_scaffolded() {
+    fn live_cache_policy_parser_defaults_to_read_write_and_keeps_overrides_scaffolded() {
         let policies = AimeLmCachePolicies::from_values(Some("read-write"), Some("refresh"));
 
         assert_eq!(policies.solver, LmCachePolicy::ReadWrite);
         assert_eq!(policies.reflection, LmCachePolicy::Refresh);
         assert_eq!(
             AimeLmCachePolicies::from_values(None, None).solver,
+            LmCachePolicy::ReadWrite
+        );
+        assert_eq!(
+            AimeLmCachePolicies::from_values(Some("auto"), Some("off")).reflection,
             LmCachePolicy::Never
         );
     }
@@ -2546,7 +2546,10 @@ mod tests {
         let run_id = RunId::new();
         let run_dir = leaven::run::default_local_run_dir(run_id);
 
-        assert_eq!(lm_cache_path(&run_dir), run_dir.join("lm-cache.sqlite"));
+        assert_eq!(
+            SqliteLmCache::path_in_run_dir(&run_dir),
+            run_dir.join("lm-cache.sqlite")
+        );
     }
 
     #[test]

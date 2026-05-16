@@ -31,11 +31,10 @@ P8 owns the example artifact, edit surface, deterministic AIME-shaped import rec
   role. It returns `RunOutput` with the LM cost attached so solver spend is
   charged through normal evaluation accounting. The live solver/reflection
   cache policy env knobs (`LEAVEN_AIME_SOLVER_CACHE_POLICY` and
-  `LEAVEN_AIME_REFLECTION_CACHE_POLICY`) are legacy P8 scaffolding for role
-  experiments, not final product behavior. The product default is one durable
-  cache/resume path governed by `docs/specs/default_cache_storage.md` and
-  `docs/specs/resume_compatibility_fingerprints.md`; deterministic smoke keeps
-  both legacy knobs at `never`.
+  `LEAVEN_AIME_REFLECTION_CACHE_POLICY`) are advanced P8 scaffolding for role
+  experiments, not required product setup. Omitted live-role policy means
+  read/write response-cache use; deterministic smoke remains explicitly
+  no-cache with `never`.
   `LEAVEN_AIME_LM_CACHE_BACKEND` defaults to `sqlite` for live OpenAI roles and
   stores the reusable `leaven-lm-cache` database at `<run-dir>/lm-cache.sqlite`.
   Explicit `in-memory` is the throwaway/debug backend and reports

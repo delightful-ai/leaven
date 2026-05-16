@@ -197,6 +197,18 @@ async fn sqlite_cache_opens_and_creates_parent_directories() {
 }
 
 #[tokio::test]
+async fn sqlite_cache_default_run_dir_path_is_shared() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("lm-cache.sqlite");
+
+    let cache = SqliteLmCache::open_run_dir(dir.path()).unwrap();
+
+    assert_eq!(SqliteLmCache::path_in_run_dir(dir.path()), path);
+    assert_eq!(cache.path(), path.as_path());
+    assert!(path.exists());
+}
+
+#[tokio::test]
 async fn sqlite_cache_schema_carries_audit_columns() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("lm-cache.sqlite");

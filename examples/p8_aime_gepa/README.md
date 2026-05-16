@@ -78,10 +78,12 @@ The OpenAI path is an opt-in native async solver swap over the same
 surface. Both live solver and live reflection use `leaven-lm-openai` wrapped by
 the P8-local OpenAI LM role, with response caching configured internally;
 solver LM spend is attached to `RunOutput` and charged through evaluation
-accounting. The role-specific cache env vars are legacy/advanced P8 scaffold
-for experiments, not final product defaults:
+accounting. Live roles use the run's LM response cache by default. The
+role-specific cache env vars are advanced P8 scaffold for experiments, not
+required product setup:
 `LEAVEN_AIME_SOLVER_CACHE_POLICY` and `LEAVEN_AIME_REFLECTION_CACHE_POLICY`
-accept `never`, `read-write`, `read-only`, or `refresh`, and default to `never`.
+accept `auto`, `never`, `read-write`, `read-only`, or `refresh`, and omitted
+values default to read/write cache use.
 `LEAVEN_AIME_LM_CACHE_BACKEND` defaults to `sqlite`, placing the reusable
 `leaven-lm-cache` store at `<run-dir>/lm-cache.sqlite`; explicit `in-memory`
 is the throwaway/debug backend and prints `lm_cache_durable=false`.

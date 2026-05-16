@@ -231,6 +231,10 @@ the hash is the lookup key, `request_json`/`provider_fingerprint`/`model`
 make operator inspection possible, and the full entry preserves the exact
 response plus write timestamp returned on cache hits.
 
+`SqliteLmCache::open_run_dir(run_dir)` is the shared run-directory helper for
+milestone bridges and lower-level adapters. It resolves to
+`run_dir/lm-cache.sqlite`; examples must not duplicate that filename policy.
+
 Policy behavior:
 
 | Policy | Reads cache | Calls inner on miss | Writes result |

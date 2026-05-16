@@ -13,6 +13,7 @@ use crate::{LmCacheEntry, LmCacheError, LmCacheKey, LmCacheStore};
 
 const SCHEMA_VERSION: i64 = 2;
 const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
+const DEFAULT_LM_CACHE_FILE: &str = "lm-cache.sqlite";
 
 /// Durable `SQLite` response-cache backend.
 #[derive(Clone)]
@@ -51,6 +52,22 @@ impl SqliteLmCache {
             path: Arc::new(path),
             connection: Arc::new(Mutex::new(connection)),
         })
+    }
+
+    /// Opens the default durable LM cache file under a Leaven run directory.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LmCacheError`] if the run-directory cache file cannot be
+    /// opened or initialized.
+    pub fn open_run_dir(run_dir: impl AsRef<Path>) -> Result<Self, LmCacheError> {
+        Self::open(Self::path_in_run_dir(run_dir))
+    }
+
+    /// Returns the default durable LM cache file path for a Leaven run dir.
+    #[must_use]
+    pub fn path_in_run_dir(run_dir: impl AsRef<Path>) -> PathBuf {
+        run_dir.as_ref().join(DEFAULT_LM_CACHE_FILE)
     }
 
     /// Returns the `SQLite` file backing this cache.
