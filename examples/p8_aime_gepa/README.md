@@ -82,10 +82,9 @@ accounting. The role-specific cache env vars are legacy/advanced P8 scaffold
 for experiments, not final product defaults:
 `LEAVEN_AIME_SOLVER_CACHE_POLICY` and `LEAVEN_AIME_REFLECTION_CACHE_POLICY`
 accept `never`, `read-write`, `read-only`, or `refresh`, and default to `never`.
-`LEAVEN_AIME_LM_CACHE_BACKEND` currently accepts only `in-memory`; the example
-prints `lm_cache_durable=false` so operators do not mistake this for a durable
-cross-process cache. One durable run cache/resume default is specified in
-`docs/specs/default_cache_storage.md` and is not owned by this example.
+`LEAVEN_AIME_LM_CACHE_BACKEND` defaults to `sqlite`, placing the reusable
+`leaven-lm-cache` store at `<run-dir>/lm-cache.sqlite`; explicit `in-memory`
+is the throwaway/debug backend and prints `lm_cache_durable=false`.
 `LEAVEN_OPENAI_MAX_CONCURRENT_REQUESTS` bounds in-process OpenAI request
 concurrency for both live roles and defaults to `32`.
 The score function is the normal async/fallible Leaven scorer surface. This

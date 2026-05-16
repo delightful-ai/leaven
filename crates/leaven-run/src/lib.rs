@@ -26,6 +26,7 @@ pub use result::{
     RunCacheSummary, RunCompatibilitySummary, RunEventSummary, RunNotResumableReason,
     RunReportPaths, RunResumability, RunStorage, StandardRunSummary,
 };
+pub use run_store::default_local_run_dir;
 pub use store::{IntoOptimizeStore, OptimizeStore};
 
 pub mod prelude {
@@ -37,6 +38,7 @@ pub mod prelude {
         OptimizationStopReason, OptimizeBuilder, OptimizeError, OptimizeStore, Optimized,
         RunCacheSummary, RunCase, RunCompatibilitySummary, RunEventSummary, RunNotResumableReason,
         RunOutput, RunProblem, RunReportPaths, RunResumability, RunStorage, Score, ScoreCase,
-        ScoreContext, ScoreError, ScoreMetadataView, StandardRunSummary, optimize,
+        ScoreContext, ScoreError, ScoreMetadataView, StandardRunSummary, default_local_run_dir,
+        optimize,
     };
 }

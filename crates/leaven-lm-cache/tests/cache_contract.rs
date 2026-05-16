@@ -88,7 +88,7 @@ fn cache_entry(key: LmCacheKey, content: &str) -> LmCacheEntry {
     let response = LmResponse::new(Message::assistant(content), usage)
         .unwrap()
         .with_provider_response_id("resp_original");
-    LmCacheEntry::new(key, response)
+    LmCacheEntry::new(key, Fingerprint::from_bytes([9; 32]), request(), response)
 }
 
 #[tokio::test]
@@ -194,6 +194,43 @@ async fn sqlite_cache_opens_and_creates_parent_directories() {
     assert_eq!(cache.path(), path.as_path());
     assert!(path.exists());
     assert_eq!(cache.get(cache_key()).await.unwrap(), None);
+}
+
+#[tokio::test]
+async fn sqlite_cache_schema_carries_audit_columns() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("lm-cache.sqlite");
+    let key = cache_key();
+    let entry = cache_entry(key, "schema");
+
+    SqliteLmCache::open(&path)
+        .unwrap()
+        .put(key, entry.clone())
+        .await
+        .unwrap();
+
+    let connection = rusqlite::Connection::open(&path).unwrap();
+    let version: i64 = connection
+        .pragma_query_value(None, "user_version", |row| row.get(0))
+        .unwrap();
+    assert_eq!(version, 2);
+
+    let (provider_fingerprint, model, request_json): (String, String, String) = connection
+        .query_row(
+            "SELECT provider_fingerprint, model, request_json FROM lm_cache_entries",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .unwrap();
+    assert_eq!(
+        provider_fingerprint,
+        "0909090909090909090909090909090909090909090909090909090909090909"
+    );
+    assert_eq!(model, "mock-model");
+    assert_eq!(
+        serde_json::from_str::<LmRequest>(&request_json).unwrap(),
+        entry.request
+    );
 }
 
 #[tokio::test]

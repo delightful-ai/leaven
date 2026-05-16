@@ -1,7 +1,7 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     num::NonZeroUsize,
-    path::Path,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -11,7 +11,9 @@ use leaven::engine::RunContext;
 use leaven::eval::{Case, SplitRole};
 use leaven::extend::PartitionId;
 use leaven::gepa::{Gepa, ReflectionError, ReflectiveDatasetBuilder, ReflectiveExample};
-use leaven::kernel::{AssessmentId, CandidateId, CaseId, Cost, FingerprintBuilder, MetadataValue};
+use leaven::kernel::{
+    AssessmentId, CandidateId, CaseId, Cost, FingerprintBuilder, MetadataValue, RunId,
+};
 use leaven::plumbing::{ContentId, Fingerprint, FiniteF64, MetadataBag};
 use leaven::prelude::{
     Artifact, ArtifactIdentity, Budget, EditSurface, Optimized, Part, PartAddress, RunOutput,
@@ -24,7 +26,7 @@ use leaven_lm::{
     Lm, LmError, LmId, LmRequest, LmResponse, Message, Messages, ReasoningEffort, SamplingOptions,
     TokenUsage,
 };
-use leaven_lm_cache::{CachedLm, InMemoryLmCache, LmCachePolicy};
+use leaven_lm_cache::{CachedLm, InMemoryLmCache, LmCachePolicy, SqliteLmCache};
 use leaven_lm_openai::{OpenAiConfig, OpenAiLm, OpenAiThrottlePolicy};
 use serde::{Deserialize, Serialize};
 
@@ -49,7 +51,7 @@ const DETERMINISTIC_SMOKE_ITERATIONS: usize = 1;
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
     let config = AimeRunConfig::configured();
-    let result = run_configured_aime(config.clone()).await;
+    let result = Box::pin(run_configured_aime(config.clone())).await;
     for line in report_lines(&config, &result) {
         println!("{line}");
     }
@@ -417,6 +419,7 @@ fn report_lm_cache_policy(policy: LmCachePolicy) -> &'static str {
 fn report_lm_cache_backend(backend: AimeLmCacheBackend) -> &'static str {
     match backend {
         AimeLmCacheBackend::InMemory => "in-memory",
+        AimeLmCacheBackend::Sqlite => "sqlite",
     }
 }
 
@@ -435,18 +438,20 @@ fn report_stop_reason(reason: leaven::run::OptimizationStopReason) -> &'static s
 async fn run_deterministic_aime() -> AimeRunResult {
     let config = AimeRunConfig::deterministic_smoke();
     let dataset = deterministic_dataset();
-    run_aime(config, dataset).await
+    Box::pin(run_aime(config, dataset)).await
 }
 
 async fn run_configured_aime(config: AimeRunConfig) -> AimeRunResult {
     let dataset = configured_dataset();
-    run_aime(config, dataset).await
+    Box::pin(run_aime(config, dataset)).await
 }
 
 async fn run_aime(config: AimeRunConfig, dataset: AimeDataset) -> AimeRunResult {
+    let run_id = RunId::new();
+    let run_dir = leaven::run::default_local_run_dir(run_id);
     let solver_telemetry = AimeLmTelemetry::new(config.solver.cache_policy);
     let reflection_telemetry = AimeLmTelemetry::new(config.reflection.cache_policy);
-    let solver = aime_solver_lm(&config.solver, solver_telemetry.clone());
+    let solver = aime_solver_lm(&config.solver, solver_telemetry.clone(), &run_dir);
     let runner_fingerprint = aime_runner_fingerprint(&config.solver);
     let scorer_fingerprint = aime_scorer_fingerprint();
     let solver_config = config.solver.clone();
@@ -467,7 +472,7 @@ async fn run_aime(config: AimeRunConfig, dataset: AimeDataset) -> AimeRunResult 
         .evaluation_parallelism(config.evaluation_parallelism)
         .using(
             Gepa::reflect_with_lm(
-                aime_reflection_lm(&config.reflection, reflection_telemetry.clone()),
+                aime_reflection_lm(&config.reflection, reflection_telemetry.clone(), &run_dir),
                 config.reflection.model.clone(),
             )
             .with_reflector_config(aime_reflector_config(&config.reflection))
@@ -483,6 +488,8 @@ async fn run_aime(config: AimeRunConfig, dataset: AimeDataset) -> AimeRunResult 
             .max_iterations(config.max_iterations),
         )
         .budget(config.budget.clone())
+        .run_id(run_id)
+        .run_dir(run_dir)
         .run()
         .await
         .expect("AIME GEPA run succeeds");
@@ -1155,12 +1162,14 @@ impl AimeOpenAiRuntimeConfig {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum AimeLmCacheBackend {
     InMemory,
+    Sqlite,
 }
 
 impl AimeLmCacheBackend {
     const fn is_durable(self) -> bool {
         match self {
             Self::InMemory => false,
+            Self::Sqlite => true,
         }
     }
 }
@@ -1180,12 +1189,13 @@ fn parse_max_concurrent_requests(value: Option<&str>) -> NonZeroUsize {
 
 fn parse_lm_cache_backend(value: Option<&str>) -> AimeLmCacheBackend {
     let Some(raw) = value.map(str::trim).filter(|value| !value.is_empty()) else {
-        return AimeLmCacheBackend::InMemory;
+        return AimeLmCacheBackend::Sqlite;
     };
     match raw.to_ascii_lowercase().as_str() {
         "in-memory" | "in_memory" | "memory" => AimeLmCacheBackend::InMemory,
+        "sqlite" | "durable" | "local-sqlite" | "local_sqlite" => AimeLmCacheBackend::Sqlite,
         _ => panic!(
-            "unsupported {LEAVEN_AIME_LM_CACHE_BACKEND}={raw:?}; only in-memory is implemented in this branch"
+            "unsupported {LEAVEN_AIME_LM_CACHE_BACKEND}={raw:?}; expected sqlite or in-memory"
         ),
     }
 }
@@ -1201,10 +1211,16 @@ fn gepa_aime_sampling() -> SamplingOptions {
 fn aime_reflection_lm(
     config: &AimeReflectionConfig,
     telemetry: AimeLmTelemetry,
+    run_dir: &Path,
 ) -> AimeReflectionLm {
     if config.live {
         AimeReflectionLm::OpenAi(AimeInstrumentedLm::new(
-            cached_openai_lm(config.cache_policy, config.runtime, "live reflection"),
+            cached_openai_lm(
+                config.cache_policy,
+                config.runtime,
+                run_dir,
+                "live reflection",
+            ),
             telemetry,
         ))
     } else {
@@ -1798,7 +1814,7 @@ impl ReflectiveDatasetBuilder<RunProblem<AimePrompt, AimeInput, AimeTarget>, Aim
 
 #[derive(Clone)]
 struct AimeOpenAiLm {
-    inner: CachedLm<OpenAiLm, InMemoryLmCache>,
+    inner: AimeOpenAiCachedLm,
 }
 
 impl std::fmt::Debug for AimeOpenAiLm {
@@ -1821,13 +1837,43 @@ impl Lm for AimeOpenAiLm {
     }
 }
 
+#[derive(Clone)]
+enum AimeOpenAiCachedLm {
+    InMemory(CachedLm<OpenAiLm, InMemoryLmCache>),
+    Sqlite(CachedLm<OpenAiLm, SqliteLmCache>),
+}
+
+impl Lm for AimeOpenAiCachedLm {
+    fn id(&self) -> LmId {
+        match self {
+            Self::InMemory(inner) => inner.id(),
+            Self::Sqlite(inner) => inner.id(),
+        }
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        match self {
+            Self::InMemory(inner) => inner.fingerprint(),
+            Self::Sqlite(inner) => inner.fingerprint(),
+        }
+    }
+
+    async fn complete(&self, request: LmRequest) -> Result<Metered<LmResponse>, LmError> {
+        match self {
+            Self::InMemory(inner) => inner.complete(request).await,
+            Self::Sqlite(inner) => inner.complete(request).await,
+        }
+    }
+}
+
 fn aime_solver_lm(
     config: &AimeSolverConfig,
     telemetry: AimeLmTelemetry,
+    run_dir: &Path,
 ) -> Option<AimeInstrumentedLm<AimeOpenAiLm>> {
     if config.live {
         Some(AimeInstrumentedLm::new(
-            cached_openai_lm(config.cache_policy, config.runtime, "live solver"),
+            cached_openai_lm(config.cache_policy, config.runtime, run_dir, "live solver"),
             telemetry,
         ))
     } else {
@@ -1838,6 +1884,7 @@ fn aime_solver_lm(
 fn cached_openai_lm(
     cache_policy: LmCachePolicy,
     runtime: AimeOpenAiRuntimeConfig,
+    run_dir: &Path,
     role: &str,
 ) -> AimeOpenAiLm {
     let config = OpenAiConfig::from_env()
@@ -1849,9 +1896,26 @@ fn cached_openai_lm(
     let inner = OpenAiLm::new(config);
     match runtime.cache_backend {
         AimeLmCacheBackend::InMemory => AimeOpenAiLm {
-            inner: CachedLm::new(inner, InMemoryLmCache::default(), cache_policy),
+            inner: AimeOpenAiCachedLm::InMemory(CachedLm::new(
+                inner,
+                InMemoryLmCache::default(),
+                cache_policy,
+            )),
+        },
+        AimeLmCacheBackend::Sqlite => AimeOpenAiLm {
+            inner: AimeOpenAiCachedLm::Sqlite(CachedLm::new(
+                inner,
+                SqliteLmCache::open(lm_cache_path(run_dir)).unwrap_or_else(|source| {
+                    panic!("failed to open SQLite LM cache for {role}: {source}")
+                }),
+                cache_policy,
+            )),
         },
     }
+}
+
+fn lm_cache_path(run_dir: &Path) -> PathBuf {
+    run_dir.join("lm-cache.sqlite")
 }
 
 async fn run_solver(
@@ -2187,6 +2251,8 @@ mod tests {
         let solver_config = config.solver.clone();
         let dataset = deterministic_dataset();
         let reflective_dataset = dataset.reflective_dataset();
+        let run_id = RunId::new();
+        let run_dir = leaven::run::default_local_run_dir(run_id);
         let error = block_on(async {
             leaven::prelude::optimize(AimePrompt::new(config.seed_prompt))
                 .train(dataset.train)
@@ -2199,6 +2265,7 @@ mod tests {
                         aime_reflection_lm(
                             &config.reflection,
                             AimeLmTelemetry::new(config.reflection.cache_policy),
+                            &run_dir,
                         ),
                         config.reflection.model.clone(),
                     )
@@ -2208,6 +2275,8 @@ mod tests {
                     .reflective_dataset(reflective_dataset),
                 )
                 .budget(Budget::metric_calls(8))
+                .run_id(run_id)
+                .run_dir(run_dir)
                 .run()
                 .await
         })
@@ -2386,16 +2455,21 @@ mod tests {
     }
 
     #[test]
-    fn live_openai_runtime_config_names_in_memory_cache_and_provider_throttle() {
-        let runtime = AimeOpenAiRuntimeConfig::from_values(Some("8"), Some("in-memory"));
+    fn live_openai_runtime_config_defaults_to_sqlite_cache_and_names_provider_throttle() {
+        let runtime = AimeOpenAiRuntimeConfig::from_values(Some("8"), None);
 
         assert_eq!(runtime.max_concurrent_requests.get(), 8);
-        assert_eq!(runtime.cache_backend, AimeLmCacheBackend::InMemory);
+        assert_eq!(runtime.cache_backend, AimeLmCacheBackend::Sqlite);
+        assert!(runtime.cache_backend.is_durable());
         assert_eq!(
             AimeOpenAiRuntimeConfig::from_values(None, None)
                 .max_concurrent_requests
                 .get(),
             GEPA_AIME_MAX_WORKERS
+        );
+        assert_eq!(
+            AimeOpenAiRuntimeConfig::from_values(None, Some("in-memory")).cache_backend,
+            AimeLmCacheBackend::InMemory
         );
     }
 
@@ -2406,7 +2480,7 @@ mod tests {
         config.solver.live = true;
         config.solver.model = "solver-model".to_owned();
         config.solver.cache_policy = LmCachePolicy::ReadWrite;
-        config.solver.runtime = AimeOpenAiRuntimeConfig::from_values(Some("7"), Some("in-memory"));
+        config.solver.runtime = AimeOpenAiRuntimeConfig::from_values(Some("7"), Some("sqlite"));
         config.reflection.live = true;
         config.reflection.model = "reflection-model".to_owned();
         config.reflection.cache_policy = LmCachePolicy::Refresh;
@@ -2436,12 +2510,8 @@ mod tests {
                 .iter()
                 .any(|line| line == "reflection_cache_policy=refresh")
         );
-        assert!(
-            lines
-                .iter()
-                .any(|line| line == "lm_cache_backend=in-memory")
-        );
-        assert!(lines.iter().any(|line| line == "lm_cache_durable=false"));
+        assert!(lines.iter().any(|line| line == "lm_cache_backend=sqlite"));
+        assert!(lines.iter().any(|line| line == "lm_cache_durable=true"));
         assert!(
             lines
                 .iter()
@@ -2459,7 +2529,7 @@ mod tests {
             )
         }));
         assert!(lines.iter().any(|line| {
-            line == "lm_role_runtime=solver cache_policy=read-write cache_backend=in-memory cache_durable=false max_concurrent_requests=7 output=answer-text parser=trimmed-answer"
+            line == "lm_role_runtime=solver cache_policy=read-write cache_backend=sqlite cache_durable=true max_concurrent_requests=7 output=answer-text parser=trimmed-answer"
         }));
         assert!(lines.iter().any(|line| {
             line.starts_with(
@@ -2467,8 +2537,16 @@ mod tests {
             )
         }));
         assert!(lines.iter().any(|line| {
-            line == "lm_role_runtime=reflection cache_policy=refresh cache_backend=in-memory cache_durable=false max_concurrent_requests=7 output=text parser=plain-text-fenced"
+            line == "lm_role_runtime=reflection cache_policy=refresh cache_backend=sqlite cache_durable=true max_concurrent_requests=7 output=text parser=plain-text-fenced"
         }));
+    }
+
+    #[test]
+    fn p8_live_lm_cache_path_lives_in_run_dir() {
+        let run_id = RunId::new();
+        let run_dir = leaven::run::default_local_run_dir(run_id);
+
+        assert_eq!(lm_cache_path(&run_dir), run_dir.join("lm-cache.sqlite"));
     }
 
     #[test]

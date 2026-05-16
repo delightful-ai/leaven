@@ -61,10 +61,14 @@ impl LmCacheKey {
 }
 
 /// Stored response-cache entry.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct LmCacheEntry {
     /// Cache key for this entry.
     pub key: LmCacheKey,
+    /// Fingerprint of the provider behavior that produced this response.
+    pub provider_fingerprint: Fingerprint,
+    /// Canonical provider-neutral request that produced this response.
+    pub request: LmRequest,
     /// Provider response preserved from the original call.
     pub response: LmResponse,
     /// UTC time when the entry was written.
@@ -74,9 +78,16 @@ pub struct LmCacheEntry {
 impl LmCacheEntry {
     /// Builds a cache entry with the current UTC timestamp.
     #[must_use]
-    pub fn new(key: LmCacheKey, response: LmResponse) -> Self {
+    pub fn new(
+        key: LmCacheKey,
+        provider_fingerprint: Fingerprint,
+        request: LmRequest,
+        response: LmResponse,
+    ) -> Self {
         Self {
             key,
+            provider_fingerprint,
+            request,
             response,
             stored_at: now(),
         }

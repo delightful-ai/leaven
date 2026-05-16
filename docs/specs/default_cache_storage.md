@@ -176,11 +176,13 @@ SQLite table shape should be equivalent to:
 ```text
 lm_cache_entries
   key_hash primary key
-  key_json_or_bytes
-  response_json
   provider_fingerprint
   model
-  created_at
+  request_json
+  key_json_or_bytes
+  entry_json_or_bytes
+  response_json
+  stored_at
   last_hit_at
   hit_count
 ```
@@ -296,7 +298,10 @@ For P8 AIME paper-parity runs:
    declared deterministic and candidate/case identities are safe.
 4. Cache hits do not spend new metric calls.
 5. Reports include source ids, cache status, run dir, checkpoint, and cost.
-6. P8 code does not manually construct SQLite stores for normal operation.
+6. P8 code must not define a P8-private LM cache schema. Until generic LM-role
+   provisioning is owned by `leaven-run`, P8 may instantiate
+   `leaven-lm-cache::SqliteLmCache` against `<run-dir>/lm-cache.sqlite` as the
+   example-level bridge.
 
 If P8 must turn caching off for a smoke test, it should use an explicit whole-run
 override or `ephemeral()`, and the report must say so.
@@ -351,4 +356,3 @@ cargo test -p leaven --test topology_contract
 ```
 
 Run `just check` before claiming full product completion.
-

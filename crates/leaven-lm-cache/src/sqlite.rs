@@ -11,7 +11,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::{LmCacheEntry, LmCacheError, LmCacheKey, LmCacheStore};
 
-const SCHEMA_VERSION: i64 = 1;
+const SCHEMA_VERSION: i64 = 2;
 const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Durable `SQLite` response-cache backend.
@@ -117,8 +117,12 @@ impl SqliteLmCache {
             serde_json::to_string(&key).map_err(|error| LmCacheError::codec(error.to_string()))?;
         let entry_json = serde_json::to_string(&entry)
             .map_err(|error| LmCacheError::codec(error.to_string()))?;
+        let request_json = serde_json::to_string(&entry.request)
+            .map_err(|error| LmCacheError::codec(error.to_string()))?;
         let response_json = serde_json::to_string(&entry.response)
             .map_err(|error| LmCacheError::codec(error.to_string()))?;
+        let provider_fingerprint = fingerprint_hex(&entry.provider_fingerprint);
+        let model = entry.request.model.as_str();
 
         let mut connection = self.connection.lock();
         let transaction = connection
@@ -127,10 +131,14 @@ impl SqliteLmCache {
         transaction
             .execute(
                 "INSERT INTO lm_cache_entries
-                    (key_hash, key_json, entry_json, response_json, stored_at, last_hit_at, hit_count)
-                 VALUES (?1, ?2, ?3, ?4, ?5, NULL, 0)
+                    (key_hash, key_json, provider_fingerprint, model, request_json, entry_json,
+                     response_json, stored_at, last_hit_at, hit_count)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, NULL, 0)
                  ON CONFLICT(key_hash) DO UPDATE SET
                     key_json = excluded.key_json,
+                    provider_fingerprint = excluded.provider_fingerprint,
+                    model = excluded.model,
+                    request_json = excluded.request_json,
                     entry_json = excluded.entry_json,
                     response_json = excluded.response_json,
                     stored_at = excluded.stored_at,
@@ -139,6 +147,9 @@ impl SqliteLmCache {
                 params![
                     key_hash,
                     key_json,
+                    provider_fingerprint,
+                    model,
+                    request_json,
                     entry_json,
                     response_json,
                     entry.stored_at.to_rfc3339()
@@ -193,7 +204,7 @@ fn configure_connection(connection: &mut Connection) -> Result<(), LmCacheError>
         version => Err(LmCacheError::backend(
             "open",
             format!(
-                "lm cache sqlite schema version {version} is newer than supported version {SCHEMA_VERSION}"
+                "lm cache sqlite schema version {version} is not supported by version {SCHEMA_VERSION}"
             ),
         )),
     }
@@ -209,6 +220,9 @@ fn create_schema(connection: &mut Connection) -> Result<(), LmCacheError> {
             CREATE TABLE IF NOT EXISTS lm_cache_entries (
                 key_hash TEXT PRIMARY KEY NOT NULL,
                 key_json TEXT NOT NULL,
+                provider_fingerprint TEXT NOT NULL,
+                model TEXT NOT NULL,
+                request_json TEXT NOT NULL,
                 entry_json TEXT NOT NULL,
                 response_json TEXT NOT NULL,
                 stored_at TEXT NOT NULL,
@@ -216,7 +230,13 @@ fn create_schema(connection: &mut Connection) -> Result<(), LmCacheError> {
                 hit_count INTEGER NOT NULL DEFAULT 0 CHECK (hit_count >= 0)
             );
 
-            PRAGMA user_version = 1;
+            CREATE INDEX IF NOT EXISTS idx_lm_cache_entries_model
+                ON lm_cache_entries(model);
+
+            CREATE INDEX IF NOT EXISTS idx_lm_cache_entries_stored_at
+                ON lm_cache_entries(stored_at);
+
+            PRAGMA user_version = 2;
             ",
         )
         .map_err(|error| LmCacheError::backend("open", error.to_string()))?;
@@ -228,8 +248,12 @@ fn create_schema(connection: &mut Connection) -> Result<(), LmCacheError> {
 }
 
 fn key_hash(key: &LmCacheKey) -> String {
+    fingerprint_hex(&key.fingerprint)
+}
+
+fn fingerprint_hex(fingerprint: &leaven_kernel::Fingerprint) -> String {
     let mut hash = String::with_capacity(64);
-    for byte in key.fingerprint.0 {
+    for byte in fingerprint.0 {
         write!(&mut hash, "{byte:02x}").expect("writing to string cannot fail");
     }
     hash

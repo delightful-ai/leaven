@@ -25,7 +25,7 @@ use leaven_run::{
     EvaluationCacheBackend, EvaluationCacheBypassReason, OptimizationStopReason, OptimizeBuilder,
     OptimizeError, OptimizeStore, ResumeCompatibilityError, RunCase, RunEventSummary,
     RunNotResumableReason, RunOutput, RunProblem, RunResumability, RunStorage, Score, ScoreContext,
-    ScoreError, optimize,
+    ScoreError, default_local_run_dir, optimize,
 };
 use leaven_store::{EvidenceStore, StoreError};
 use leaven_store_inline::InlineEvidenceStore;
@@ -86,6 +86,38 @@ fn run_builder_accepts_explicit_unlimited_budget() {
     assert_eq!(result.best(), Some(&TextArtifact(40)));
     assert_eq!(result.stop, OptimizationStopReason::OptimizerDone);
     assert_resumable_storage(result.summary().storage.clone(), result.run_id);
+    cleanup_result_storage(&result.summary().storage);
+}
+
+#[test]
+fn run_builder_uses_supplied_fresh_run_id_for_default_durable_dir() {
+    let run_id = RunId::new();
+    let result = block_on(
+        optimize(TextArtifact(40))
+            .train_inputs(vec![TextCase(2)])
+            .runner(|artifact, case| async move { text_runner(&artifact, &case) })
+            .score(text_score)
+            .using(SeedBest::default())
+            .budget(Budget::unlimited())
+            .run_id(run_id)
+            .test_runtime_fingerprints()
+            .run(),
+    )
+    .unwrap();
+
+    assert_eq!(result.run_id, run_id);
+    match result.summary().storage.clone() {
+        RunStorage::Stored {
+            run_id: stored_run,
+            run_dir: Some(run_dir),
+            latest_checkpoint: Some(_),
+            resumability: RunResumability::Resumable,
+        } => {
+            assert_eq!(stored_run, run_id);
+            assert_eq!(run_dir, default_local_run_dir(run_id));
+        }
+        other => panic!("expected default durable run-dir storage, got {other:?}"),
+    }
     cleanup_result_storage(&result.summary().storage);
 }
 

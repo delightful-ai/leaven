@@ -76,7 +76,7 @@ where
 {
     match config {
         StoreConfig::Source(StoreSource::DefaultDurable) => {
-            prepare_local_store(&default_run_dir(run_id), run_id)
+            prepare_local_store(&default_local_run_dir(run_id), run_id)
         }
         StoreConfig::Source(StoreSource::RunDir(run_dir)) => prepare_local_store(&run_dir, run_id),
         StoreConfig::Source(StoreSource::Ephemeral) => Ok(PreparedStore {
@@ -129,7 +129,9 @@ where
     })
 }
 
-fn default_run_dir(run_id: RunId) -> PathBuf {
+/// Returns the Leaven-managed local run directory for a fresh run id.
+#[must_use]
+pub fn default_local_run_dir(run_id: RunId) -> PathBuf {
     PathBuf::from(".leaven")
         .join("runs")
         .join(run_id.to_string())

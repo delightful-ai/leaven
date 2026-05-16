@@ -86,6 +86,7 @@ where
         evaluation_parallelism: default_parallelism(),
         callbacks: Vec::new(),
         store: StoreConfig::Source(StoreSource::DefaultDurable),
+        run_id: RunId::new(),
     }
 }
 
@@ -109,6 +110,7 @@ where
     evaluation_parallelism: NonZeroUsize,
     callbacks: Vec<Box<dyn Callback<RunProblem<A, I, T>>>>,
     store: StoreConfig<RunProblem<A, I, T>>,
+    run_id: RunId,
 }
 
 impl<A> OptimizeBuilder<A, (), NoTarget, ()>
@@ -136,6 +138,7 @@ where
             evaluation_parallelism: self.evaluation_parallelism,
             callbacks: Vec::new(),
             store: StoreConfig::Source(self.store.into_source()),
+            run_id: self.run_id,
         }
     }
 
@@ -222,6 +225,7 @@ where
             evaluation_parallelism: self.evaluation_parallelism,
             callbacks: self.callbacks,
             store: self.store,
+            run_id: self.run_id,
         }
     }
 
@@ -253,6 +257,16 @@ where
     #[must_use]
     pub fn run_dir(mut self, run_dir: impl Into<PathBuf>) -> Self {
         self.store = StoreConfig::Source(StoreSource::RunDir(run_dir.into()));
+        self
+    }
+
+    /// Sets the fresh run id used by default durable storage.
+    ///
+    /// Resumed runs keep the stored checkpoint run id from the selected run
+    /// directory; this value only names a fresh run.
+    #[must_use]
+    pub const fn run_id(mut self, run_id: RunId) -> Self {
+        self.run_id = run_id;
         self
     }
 
@@ -316,7 +330,7 @@ where
         let case_plan = build_case_plan(&self.train, &self.validation, &self.test, case_content)?;
         let store_config =
             std::mem::replace(&mut self.store, StoreConfig::Source(StoreSource::Ephemeral));
-        let mut prepared_store = prepare_store::<RunProblem<A, I, T>>(store_config, RunId::new())?;
+        let mut prepared_store = prepare_store::<RunProblem<A, I, T>>(store_config, self.run_id)?;
         let runner_fingerprint = durable_runtime_fingerprint(
             prepared_store.run_dir.as_deref(),
             self.runner_fingerprint,

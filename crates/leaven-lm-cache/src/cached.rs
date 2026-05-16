@@ -56,16 +56,26 @@ where
         request: LmRequest,
         policy: LmCachePolicy,
     ) -> Result<Metered<LmResponse>, LmError> {
-        let key = LmCacheKey::for_request(self.inner.fingerprint(), &request);
+        let provider_fingerprint = self.inner.fingerprint();
+        let key = LmCacheKey::for_request(provider_fingerprint, &request);
         match policy {
             LmCachePolicy::Never => self.inner.complete(request).await,
             LmCachePolicy::ReadWrite => {
                 if let Some(entry) = self.cache.get(key).await.map_err(LmError::from)? {
                     return Ok(cached_response(entry));
                 }
+                let request_for_entry = request.clone();
                 let metered = self.inner.complete(request).await?;
                 self.cache
-                    .put(key, LmCacheEntry::new(key, metered.value.clone()))
+                    .put(
+                        key,
+                        LmCacheEntry::new(
+                            key,
+                            provider_fingerprint,
+                            request_for_entry,
+                            metered.value.clone(),
+                        ),
+                    )
                     .await
                     .map_err(LmError::from)?;
                 Ok(metered)
@@ -77,9 +87,18 @@ where
                 self.inner.complete(request).await
             }
             LmCachePolicy::Refresh => {
+                let request_for_entry = request.clone();
                 let metered = self.inner.complete(request).await?;
                 self.cache
-                    .put(key, LmCacheEntry::new(key, metered.value.clone()))
+                    .put(
+                        key,
+                        LmCacheEntry::new(
+                            key,
+                            provider_fingerprint,
+                            request_for_entry,
+                            metered.value.clone(),
+                        ),
+                    )
                     .await
                     .map_err(LmError::from)?;
                 Ok(metered)

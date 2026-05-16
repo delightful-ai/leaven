@@ -196,6 +196,40 @@ Durable local runs should use a SQLite-backed implementation of
 `LmCacheStore`. In-memory storage remains valid for unit tests and explicit
 ephemeral runs, but ordinary `.run()`/`.run_dir(...)` must not require examples
 to manually wire `InMemoryLmCache` or any other cache backend.
+Until generic run-owned LM role provisioning lands, milestone examples may
+select the shared durable backend for their provider roles, but they must use
+the run directory and the `leaven-lm-cache` schema instead of a local schema.
+
+The default durable backend is `leaven-lm-cache::SqliteLmCache`. It owns the
+shared SQLite file format so examples and optimizers do not invent local cache
+schemas. The current schema uses `PRAGMA user_version = 2` and this table:
+
+```sql
+CREATE TABLE lm_cache_entries (
+    key_hash TEXT PRIMARY KEY NOT NULL,
+    key_json TEXT NOT NULL,
+    provider_fingerprint TEXT NOT NULL,
+    model TEXT NOT NULL,
+    request_json TEXT NOT NULL,
+    entry_json TEXT NOT NULL,
+    response_json TEXT NOT NULL,
+    stored_at TEXT NOT NULL,
+    last_hit_at TEXT,
+    hit_count INTEGER NOT NULL DEFAULT 0 CHECK (hit_count >= 0)
+);
+
+CREATE INDEX idx_lm_cache_entries_model
+    ON lm_cache_entries(model);
+
+CREATE INDEX idx_lm_cache_entries_stored_at
+    ON lm_cache_entries(stored_at);
+```
+
+`key_hash` is the hexadecimal semantic cache-key fingerprint. `key_json`,
+`request_json`, `entry_json`, and `response_json` are redundant by design:
+the hash is the lookup key, `request_json`/`provider_fingerprint`/`model`
+make operator inspection possible, and the full entry preserves the exact
+response plus write timestamp returned on cache hits.
 
 Policy behavior:
 
