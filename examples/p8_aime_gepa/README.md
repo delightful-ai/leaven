@@ -19,7 +19,7 @@ profile:
 - metric-call budget: `500`
 - evaluation parallelism: `32`
 - reflection: Leaven GEPA default upstream-style reflection prompt,
-  fenced replacement parser, and `gpt-5.1` with medium reasoning by default
+  fenced replacement parser, and `gpt-5.4-mini` with medium reasoning by default
 
 The GEPA AIME reference does not set a max-iterations hyperparameter. This
 example currently has to set a Leaven-local internal iteration ceiling because
@@ -91,7 +91,7 @@ shape: exact-match scalar score, correctness text, full reference solution, and
 takeaway prompt for reflection. Model judges can return `ScoreError`, scorer
 cost, and feedback attachments through the same path.
 The live reflection path uses `LmBackedReflector`, text output, and the
-plain-text fenced parser, with `gpt-5.1` and medium reasoning as the default
+plain-text fenced parser, with `gpt-5.4-mini` and medium reasoning as the default
 reflection model controls. `LEAVEN_OPENAI_MODEL` and
 `LEAVEN_AIME_REFLECTION_MODEL` keep solver and reflection models independently
 swappable. The deterministic path proves public API mechanics and LM-backed
@@ -102,5 +102,6 @@ AIME Math test accuracy improving from 46.67% to 60.00%, with validation
 reaching 57.78%. The DSPy tutorial reports an
 `auto="light"` run from 46.6% to 56.6% and repeats AIME 2025 five times for a
 more stable test estimate. Leaven's current P8 profile matches the public
-dataset roles and the available optimizer/provider knobs. The main
+dataset roles and the available optimizer/provider knobs, except that Leaven
+deliberately defaults reflection to `gpt-5.4-mini` with medium reasoning. The main
 remaining exact-parity gap is that this Rust example uses a Rust-native solver contract: the optimized system prompt is passed directly to `leaven-lm`, and the user turn asks for an answer-only response. That is intentionally not DSPy's full `ChainOfThought` prompt lowering, signature formatting, or rationale-field extraction. Leaven's public report now separates optimization cost from final validation/test report cost; the remaining local control difference is the Leaven-local iteration ceiling described above.

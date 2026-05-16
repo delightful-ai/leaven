@@ -39,7 +39,7 @@ const GEPA_AIME_MAX_OUTPUT_TOKENS: u32 = 32_000;
 // Leaven-local safety ceiling; the public metric-call budget is the stop control.
 const GEPA_AIME_INTERNAL_ITERATION_CEILING: usize = 500;
 const GEPA_AIME_SOLVER_MODEL: &str = "gpt-4.1-mini";
-const GEPA_AIME_REFLECTION_MODEL: &str = "gpt-5.1";
+const GEPA_AIME_REFLECTION_MODEL: &str = "gpt-5.4-mini";
 const DETERMINISTIC_SOLVER_MODEL: &str = "deterministic-aime-solver";
 const LEAVEN_AIME_SOLVER_CACHE_POLICY: &str = "LEAVEN_AIME_SOLVER_CACHE_POLICY";
 const LEAVEN_AIME_REFLECTION_CACHE_POLICY: &str = "LEAVEN_AIME_REFLECTION_CACHE_POLICY";
@@ -2412,6 +2412,7 @@ mod tests {
         );
         assert!(config.reflection.live);
         assert_eq!(config.reflection.model, aime_reflection_model_name());
+        assert_eq!(config.reflection.model, "gpt-5.4-mini");
         assert_eq!(config.reflection.cache_policy, LmCachePolicy::ReadWrite);
         assert_eq!(
             config.reflection.sampling.reasoning_effort,

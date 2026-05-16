@@ -14,7 +14,7 @@ P8 owns the example artifact, edit surface, deterministic AIME-shaped import rec
   Reusable surface rules belong in `leaven-surface` or GEPA docs, not here.
 - `aime_lm_reflector` is the LM-backed reflector. The deterministic smoke path
   injects a local `DeterministicReflectionLm`. The live GEPA AIME profile
-  injects the P8-local OpenAI reflection role by default with `gpt-5.1` and
+  injects the P8-local OpenAI reflection role by default with `gpt-5.4-mini` and
   medium reasoning unless `LEAVEN_AIME_REFLECTION_MODEL` overrides the model.
   `LEAVEN_AIME_DETERMINISTIC_REFLECTION=1` is the explicit debug/scaffold path
   for live solver plus deterministic reflection. Both routes use
@@ -62,7 +62,7 @@ P8 owns the example artifact, edit surface, deterministic AIME-shaped import rec
 ## Proof Paths
 - Clean deterministic proof: `just milestone-p8` with `LEAVEN_AIME_CACHE` and `LEAVEN_AIME_LIVE_OPENAI` unset proves public builder mechanics, split reporting, and the production LM-backed GEPA reflection route through provider-neutral `leaven-lm`. It does not prove live provider quality.
 - Local cached-data proof: materialize `target/leaven-aime-cache/aime.json` with `uv run --with datasets python examples/p8_aime_gepa/scripts/materialize_hf_aime.py --out target/leaven-aime-cache/aime.json`, then run `LEAVEN_AIME_CACHE=target/leaven-aime-cache/aime.json cargo run -p p8_aime_gepa`; this proves the same harness can consume the upstream-shaped AIME cache under the deterministic provider fixture, not live GEPA AIME quality.
-- Full live GEPA AIME proof: `OPENAI_API_KEY=... LEAVEN_AIME_LIVE_OPENAI=1 LEAVEN_AIME_CACHE=target/leaven-aime-cache/aime.json cargo run -p p8_aime_gepa` swaps both solver and reflection to native `leaven-lm-openai`, uses durable SQLite LM response caching, enables deterministic evaluator caching on the durable run store, and uses `gpt-5.1` reflection by default. It spends provider resources, records solver LM cost in evaluation budget, and is not part of the cheap milestone lane.
+- Full live GEPA AIME proof: `OPENAI_API_KEY=... LEAVEN_AIME_LIVE_OPENAI=1 LEAVEN_AIME_CACHE=target/leaven-aime-cache/aime.json cargo run -p p8_aime_gepa` swaps both solver and reflection to native `leaven-lm-openai`, uses durable SQLite LM response caching, enables deterministic evaluator caching on the durable run store, and uses `gpt-5.4-mini` medium-reasoning reflection by default. It spends provider resources, records solver LM cost in evaluation budget, and is not part of the cheap milestone lane.
 - Unit tests in `src/main.rs` prove deterministic improvement, target-safe AIME
   lowering, runner target-invisibility by type route, scorer target visibility,
   source-id report projection without target disclosure, duplicate source-id
