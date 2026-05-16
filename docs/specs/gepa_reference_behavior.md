@@ -160,6 +160,51 @@ model delta rather than algorithm parity.
 
 ## 4. Phase Contract
 
+GEPA must be implemented as a phase pipeline, not as one opaque `step()`.
+Swappability is allowed at phase ports, not by reordering or collapsing the
+reference algorithm. A phase is "real" only if it has:
+
+- a typed input produced by earlier phases;
+- a typed output consumed by later phases;
+- explicit state mutations, if any;
+- explicit budget/cache effects;
+- an event/report boundary that lets an operator see progress;
+- a checkpoint/resume story when the phase changes durable state.
+
+The minimum implementation surface is therefore a coordinator plus phase
+interfaces. It is acceptable for early implementations to put several phase
+implementations in one file, but the state and event model must still preserve
+the boundaries below. In particular, building the reflective dataset is its own
+phase between component selection and proposal rendering. It must not be hidden
+inside an LM renderer, prompt template, or task-specific AIME scorer.
+
+The reference phase order is:
+
+```text
+0 profile/preflight
+1 seed validation and GEPA state initialization
+2 stop gate, checkpoint, iteration start
+3 parent selection from validation Pareto frontier
+4 train minibatch sampling
+5 parent evaluation with trace capture
+6 skip gates over parent evidence
+7 component/part selection
+8 build reflective dataset
+9 render reflection request and call proposer
+10 parse proposal and build child candidate
+11 child screening on same train minibatch
+12 train-screen acceptance
+13 accepted-candidate validation
+14 validation frontier/report update
+15 optional merge scheduling/proposal
+16 final selection and report
+```
+
+Any implementation may expose more granular internals, but it may not make the
+reference phases observationally disappear. For example, a custom reflection LM
+can replace the default proposer, but the run must still emit a reflective
+dataset event before the LM call and a proposal event after the LM response.
+
 ### 4.1 Preflight
 
 Before any provider call or candidate evaluation, GEPA must resolve:
@@ -478,6 +523,852 @@ Final result must expose:
 
 The ordinary Leaven `Optimized<A>` facade may keep a smaller user surface, but a
 GEPA detailed result/report must exist for audits and parity experiments.
+
+### 4.15 Phase Interface Matrix
+
+This matrix is the implementation contract future code should follow. The
+"port" names are descriptive; exact Rust type names may differ, but each port
+must exist as a separable concept in `leaven-gepa` or the owning lower crate.
+
+#### Phase 0: Profile And Preflight
+
+Reference anchor:
+`src/gepa/api.py:43 optimize`, `src/gepa/optimize_anything.py:1119
+optimize_anything`, `dspy/teleprompt/gepa/gepa.py:336 GEPA.__init__`.
+
+Port:
+`GepaProfileResolver` / `GepaPreflight`.
+
+Input:
+
+- user builder options;
+- seed artifact and edit surface;
+- train, validation, and optional test case partitions;
+- runner/evaluator/scorer identities;
+- cache, run-store, stopper, RNG, parallelism, and LM role config.
+
+Output:
+
+- `ResolvedGepaProfile`;
+- fingerprinted train/validation/test partition descriptors;
+- seed `CandidateId`;
+- mutable part inventory with stable ordering;
+- initialized but empty `GepaReferenceState`;
+- opened run directory/cache handles.
+
+State/cache/budget effects:
+
+- no metric calls;
+- no LM calls;
+- no candidate admission beyond identifying the seed;
+- may create run directory and durable manifest.
+
+Events:
+
+- `gepa.optimization_start`;
+- `gepa.profile_resolved`;
+- preflight failure events for missing validation set, missing reflection
+  backend, missing edit surface, or deterministic cache identity refusal.
+
+Swappable:
+
+- profile presets;
+- dataset loader;
+- partition source;
+- provider roles;
+- cache backend.
+
+Not swappable under a parity label:
+
+- validation/Pareto partition must exist for ordinary generalization mode;
+- inference-time train=validation reuse must be explicitly labeled;
+- candidate cache identity must be deterministic when evaluation cache is
+  deterministic.
+
+#### Phase 1: Seed Validation And State Initialization
+
+Reference anchor:
+`src/gepa/core/engine.py:527` seed valset eval,
+`src/gepa/core/state.py:660 initialize_gepa_state`.
+
+Port:
+`SeedValidationInitializer`.
+
+Input:
+
+- resolved seed candidate;
+- validation/Pareto case ids;
+- validation evaluator;
+- per-case evaluation cache;
+- `track_best_outputs` setting.
+
+Output:
+
+- admitted candidate index `0`;
+- seed validation rows;
+- seed aggregate validation score;
+- initialized per-case validation frontier;
+- initialized discovery count and total metric-call count.
+
+State/cache/budget effects:
+
+- writes per-case evaluation cache entries for seed validation misses;
+- charges uncached validation cases as metric calls;
+- writes candidate record `0`, validation subscores, frontier scores, and
+  frontier membership;
+- increments `full_validation_evals`.
+
+Events:
+
+- `gepa.seed_validation_started`;
+- `gepa.seed_validation_completed`;
+- `gepa.validation_frontier_initialized`;
+- initial checkpoint event.
+
+Swappable:
+
+- validation policy only if the profile explicitly changes from full validation.
+
+Not swappable under core GEPA:
+
+- this phase must happen before the first train minibatch;
+- seed must be candidate index `0`;
+- validation subscores must be casewise, not only aggregate.
+
+#### Phase 2: Stop Gate, Checkpoint, Iteration Start
+
+Reference anchor:
+`src/gepa/core/engine.py:620` main loop.
+
+Port:
+`GepaIterationController`.
+
+Input:
+
+- current `GepaReferenceState`;
+- stopper;
+- budget ledger;
+- dirty adapter/cache state.
+
+Output:
+
+- either `StopNow` or an `IterationContext` with the next iteration number;
+- durable checkpoint before mutable proposal work starts.
+
+State/cache/budget effects:
+
+- no new metric calls;
+- serializes GEPA state, graph refs, sampler/selector/part selector state,
+  cache refs, and budget counters.
+
+Events:
+
+- `gepa.state_saved`;
+- `gepa.iteration_started`;
+- `gepa.optimization_stopping` when the stopper fires before new work.
+
+Swappable:
+
+- stopper implementation;
+- checkpoint backend.
+
+Not swappable under parity:
+
+- no new evaluation, reflection, or proposal may begin after the metric-call
+  stopper has fired, except reported overshoot from already-scheduled parallel
+  work.
+
+#### Phase 3: Parent Selection From Validation Pareto Frontier
+
+Reference anchor:
+`src/gepa/strategies/candidate_selector.py:11
+ParetoCandidateSelector`, `src/gepa/gepa_utils.py:90
+select_program_candidate_from_pareto_front`.
+
+Port:
+`ParentSelector`.
+
+Input:
+
+- `validation_frontier_candidates`;
+- `validation_subscores`;
+- admitted candidate records;
+- stored RNG.
+
+Output:
+
+- selected parent GEPA candidate index;
+- selected parent `CandidateId`;
+- parent validation aggregate score;
+- selection explanation: frontier memberships, dominance removals, sampling
+  weight.
+
+State/cache/budget effects:
+
+- advances RNG state;
+- no metric calls.
+
+Events:
+
+- `gepa.parent_selected`.
+
+Swappable:
+
+- selector strategy, when the run profile labels it.
+
+Not swappable under core/DSPy GEPA:
+
+- default parent selection reads validation Pareto frontier state;
+- `current_best` and beam search are ablations, not the default;
+- selector must not read train-only screening scores as its frontier.
+
+#### Phase 4: Train Minibatch Sampling
+
+Reference anchor:
+`ReflectiveMutationProposer.prepare_proposal` in
+`src/gepa/proposer/reflective_mutation/reflective_mutation.py:176`.
+
+Port:
+`TrainBatchSampler`.
+
+Input:
+
+- train/search case set;
+- sampler state;
+- selected parent candidate index;
+- iteration number.
+
+Output:
+
+- ordered train minibatch ids;
+- fetched target-safe runner views;
+- sampler continuation state.
+
+State/cache/budget effects:
+
+- no metric calls;
+- mutates sampler state.
+
+Events:
+
+- `gepa.train_minibatch_sampled`.
+
+Swappable:
+
+- epoch sampler;
+- random sampler;
+- deterministic fixture sampler for tests.
+
+Not swappable under parity:
+
+- the same minibatch ids must be reused for parent evaluation and child
+  screening;
+- validation/test cases must not enter the ordinary reflection minibatch.
+
+#### Phase 5: Parent Evaluation With Trace Capture
+
+Reference anchor:
+`ReflectiveMutationProposer.execute_proposal` parent evaluation at
+`reflective_mutation.py:260`.
+
+Port:
+`CasewiseEvaluator`.
+
+Input:
+
+- selected parent candidate;
+- ordered train minibatch;
+- `capture_traces=true`;
+- evaluation cache;
+- runner/scorer/evaluator.
+
+Output:
+
+- `ParentEvaluationBatch` with output, scalar score, objective scores, trace
+  refs, scorer feedback, assessment refs, cache hit/miss rows, and metric-call
+  delta per case.
+
+State/cache/budget effects:
+
+- reads/writes per `(candidate, case, evaluator)` evaluation cache;
+- charges only uncached case evaluations as GEPA metric calls;
+- records assessment rows and trace refs.
+
+Events:
+
+- `gepa.parent_evaluation_started`;
+- `gepa.parent_evaluation_completed`;
+- `gepa.budget_updated`;
+- cache-hit/miss progress.
+
+Swappable:
+
+- evaluator implementation;
+- trace capture backend;
+- scorer feedback adapter;
+- per-case cache backend.
+
+Not swappable under parity:
+
+- trace capture must be requested for parent evaluation;
+- parent evaluation cache entries are prepared even if the later proposal is
+  skipped;
+- hidden raw targets may only influence reflection through scorer feedback.
+
+#### Phase 6: Parent Evidence Skip Gates
+
+Reference anchor:
+`reflective_mutation.py:294` no trajectories and `:309` all-perfect skip.
+
+Port:
+`ProposalSkipPolicy`.
+
+Input:
+
+- `ParentEvaluationBatch`;
+- `skip_perfect_score`;
+- `perfect_score`;
+- trace/side-info availability.
+
+Output:
+
+- `Proceed` or a typed skip reason:
+  `NoTrajectories`, `NoReflectiveExamplesCandidate`, `AllScoresPerfect`,
+  `EvaluationFailed`.
+
+State/cache/budget effects:
+
+- no LM calls;
+- no child candidate creation;
+- parent evaluation cache writes still survive.
+
+Events:
+
+- `gepa.proposal_skipped`.
+
+Swappable:
+
+- perfect-score threshold;
+- profile-specific skip policy.
+
+Not swappable under reference defaults:
+
+- all-perfect parent minibatch skips reflection;
+- absent trace/side-info skips reflection before the LM call.
+
+#### Phase 7: Component Or Part Selection
+
+Reference anchor:
+`reflective_mutation.py:325` call to `module_selector`.
+
+Port:
+`ComponentSelector`.
+
+Input:
+
+- GEPA state;
+- parent candidate;
+- parent traces;
+- parent scores;
+- selected parent candidate index;
+- mutable part inventory.
+
+Output:
+
+- ordered selected component/part ids;
+- selector continuation state.
+
+State/cache/budget effects:
+
+- mutates selector state, for example round-robin cursor;
+- no metric calls.
+
+Events:
+
+- `gepa.components_selected`.
+
+Swappable:
+
+- round-robin selector;
+- update-all selector;
+- trace-aware selector;
+- custom selector.
+
+Not swappable under core/DSPy defaults:
+
+- default is one round-robin component per reflective mutation iteration;
+- selector state must checkpoint and restore.
+
+#### Phase 8: Build Reflective Dataset
+
+Reference anchor:
+`reflective_mutation.py:329` adapter call to
+`make_reflective_dataset`; DSPy adapter at
+`dspy/teleprompt/gepa/gepa_utils.py:198`.
+
+Port:
+`ReflectiveDatasetBuilder`.
+
+Input:
+
+- parent candidate;
+- selected component/part ids;
+- `ParentEvaluationBatch`;
+- trace projection policy;
+- scorer feedback projection policy;
+- target-safe case input projections.
+
+Output:
+
+- `ReflectiveDataset` keyed by component/part;
+- concrete rendered-record data before prompt templating;
+- evidence refs back to parent evaluation rows/traces;
+- `NoValidReflectiveExamples` error when no selected component has examples.
+
+Required AIME record content:
+
+- problem input projection;
+- current prompt/instruction context;
+- generated answer;
+- generated reasoning when available;
+- scalar score;
+- feedback text, including parse/format failure when available;
+- parent candidate and case refs.
+
+Required DSPy-compatible record content:
+
+- `Inputs`;
+- `Generated Outputs`;
+- `Feedback`;
+- optional history/context converted to a readable text block;
+- failed parse output text when format failure feedback is enabled.
+
+State/cache/budget effects:
+
+- no LM calls;
+- no metric calls;
+- no candidate mutation;
+- may write durable reflection-evidence records.
+
+Events:
+
+- `gepa.reflective_dataset_built`, including component ids, case ids, record
+  counts, and evidence refs;
+- `gepa.proposal_skipped` with `NoValidReflectiveExamples` if empty.
+
+Swappable:
+
+- task-specific dataset builder;
+- trace instance selection policy;
+- feedback projector;
+- record renderer from typed fields to textual side-info.
+
+Not swappable under parity:
+
+- this phase must happen after component selection and before the reflection LM
+  call;
+- hidden target values must not be read directly by the builder;
+- parse failures must be preserved as feedback when the profile enables that
+  behavior;
+- a score returned by a component feedback helper must not replace the
+  evaluation score unless the profile implements predictor-level scoring.
+
+This is the key modularity seam for Leaven. AIME, DSPy, code-generation, and
+agentic tasks should share the same phase boundary while swapping only the
+builder/projector implementation.
+
+#### Phase 9: Render Reflection Request And Call Proposer
+
+Reference anchor:
+`src/gepa/strategies/instruction_proposal.py:12`.
+
+Port:
+`ReflectionRenderer` plus `InstructionProposer`.
+
+Input:
+
+- selected component current text;
+- `ReflectiveDataset`;
+- prompt template;
+- reflection model/runtime role;
+- parser/output-mode config.
+
+Output:
+
+- rendered prompt/messages;
+- raw LM/proposer output;
+- proposed text per selected component;
+- LM cache hit/miss telemetry.
+
+State/cache/budget effects:
+
+- reads/writes reflection LM cache;
+- charges reflection token/cost ledger but not GEPA metric calls;
+- no candidate admission.
+
+Events:
+
+- `gepa.proposal_started`;
+- `gepa.reflection_lm_completed`;
+- `gepa.proposal_completed` or `gepa.proposal_failed`.
+
+Swappable:
+
+- LM-backed proposer;
+- agent-backed proposer;
+- custom instruction proposer;
+- prompt template, if profile labels the delta.
+
+Not swappable under default parity:
+
+- default prompt is the fenced upstream replacement prompt;
+- default parser expects fenced text output;
+- reflection cost does not count against `max_metric_calls`.
+
+#### Phase 10: Parse Proposal And Build Child Candidate
+
+Reference anchor:
+candidate copy and component replacement in `reflective_mutation.py:371`.
+
+Port:
+`ProposalParser` plus `ChildCandidateBuilder`.
+
+Input:
+
+- raw proposer output;
+- selected component ids;
+- parent candidate artifact;
+- edit surface;
+- parent candidate index.
+
+Output:
+
+- parsed replacement text/edit;
+- graph proposal/effect refs;
+- child `CandidateId` or typed parse/build failure.
+
+State/cache/budget effects:
+
+- records proposal in graph truth through `RunContext`;
+- applies surface edit to create child artifact;
+- no GEPA candidate index yet;
+- no metric calls.
+
+Events:
+
+- `gepa.child_candidate_built`;
+- `gepa.proposal_parse_failed`.
+
+Swappable:
+
+- parser;
+- child builder for typed artifacts;
+- edit surface implementation.
+
+Not swappable under parity:
+
+- child must be a copy of the selected parent with only selected component
+  text changed;
+- rejected children may exist in graph truth but must not enter
+  `GepaReferenceState.records`.
+
+#### Phase 11: Child Screening On Same Train Minibatch
+
+Reference anchor:
+child evaluation in `reflective_mutation.py:388`.
+
+Port:
+`CasewiseEvaluator` reused for child screening.
+
+Input:
+
+- child candidate;
+- exact same ordered train minibatch ids from Phase 4;
+- `capture_traces=true`;
+- evaluation cache.
+
+Output:
+
+- `ChildEvaluationBatch` with output, scores, objective scores, traces,
+  assessment refs, cache hit/miss rows, and metric-call delta.
+
+State/cache/budget effects:
+
+- reads/writes per-case evaluation cache;
+- charges only uncached child screening cases as GEPA metric calls.
+
+Events:
+
+- `gepa.child_evaluation_started`;
+- `gepa.child_evaluation_completed`;
+- `gepa.budget_updated`.
+
+Swappable:
+
+- same evaluator/cache seams as Phase 5.
+
+Not swappable under parity:
+
+- child and parent screening must compare on the exact same case ids;
+- child screening comes before acceptance and before full validation.
+
+#### Phase 12: Train-Screen Acceptance
+
+Reference anchor:
+`src/gepa/core/engine.py:287 _accept_reflective_proposal`,
+`engine.py:350 _process_proposal_output`.
+
+Port:
+`AcceptancePolicy`.
+
+Input:
+
+- parent minibatch scores;
+- child minibatch scores;
+- acceptance criterion;
+- proposal metadata.
+
+Output:
+
+- accepted/rejected decision;
+- acceptance score delta;
+- rejection reason.
+
+State/cache/budget effects:
+
+- no new evaluations;
+- if rejected, no GEPA candidate admission;
+- if accepted, produces `AcceptedProposal` for validation.
+
+Events:
+
+- `gepa.proposal_accepted`;
+- `gepa.proposal_rejected`.
+
+Swappable:
+
+- strict improvement;
+- improvement-or-equal;
+- custom scalar/objective acceptance, if labeled.
+
+Not swappable under reference defaults:
+
+- acceptance is based on train/search screening evidence only;
+- validation cannot retroactively create or reject the child.
+
+#### Phase 13: Accepted-Candidate Full Validation
+
+Reference anchor:
+`src/gepa/core/engine.py:175 _run_full_eval_and_add`.
+
+Port:
+`AcceptedCandidateValidator`.
+
+Input:
+
+- accepted child candidate;
+- validation/Pareto case ids;
+- validation policy;
+- evaluation cache;
+- parent GEPA candidate indices.
+
+Output:
+
+- validation rows for the accepted child;
+- aggregate validation score;
+- per-case validation scores;
+- metric-call delta.
+
+State/cache/budget effects:
+
+- reads/writes per-case evaluation cache;
+- charges uncached validation cases as metric calls;
+- increments `full_validation_evals`.
+
+Events:
+
+- `gepa.accepted_validation_started`;
+- `gepa.accepted_validation_completed`;
+- `gepa.budget_updated`.
+
+Swappable:
+
+- validation policy only when profile labels the delta.
+
+Not swappable under core GEPA:
+
+- full validation is default;
+- every accepted child is validated before it can influence future parent
+  selection.
+
+#### Phase 14: Candidate Admission, Frontier Update, And Report Rows
+
+Reference anchor:
+`GEPAState.add_program` and frontier updates in
+`src/gepa/core/state.py`.
+
+Port:
+`GepaStateUpdater`.
+
+Input:
+
+- accepted child candidate id;
+- parent indices;
+- validation result from Phase 13;
+- current `GepaReferenceState`.
+
+Output:
+
+- new GEPA candidate index;
+- updated records, validation subscores, aggregate scores, frontier scores,
+  frontier candidate sets, best-output rows, discovery counts, and report
+  tables.
+
+State/cache/budget effects:
+
+- admits the candidate into GEPA state;
+- records discovery metric-call count;
+- updates validation frontier used by the next Phase 3.
+
+Events:
+
+- `gepa.candidate_admitted`;
+- `gepa.validation_frontier_updated`;
+- `gepa.best_candidate_changed` when applicable.
+
+Swappable:
+
+- frontier type, if profile labels objective/hybrid variants;
+- best-output tracking.
+
+Not swappable under parity:
+
+- candidate admission happens only after train acceptance and accepted
+  validation;
+- next parent selection must see the updated validation frontier.
+
+#### Phase 15: Optional Merge
+
+Reference anchor:
+merge branch in `src/gepa/core/engine.py:672`.
+
+Port:
+`MergeScheduler` plus `MergeProposer`.
+
+Input:
+
+- current `GepaReferenceState`;
+- merge budget/config;
+- eligible candidate lineages;
+- validation frontier.
+
+Output:
+
+- either no merge attempt, rejected merge, or accepted merge candidate that goes
+  through Phase 13 and Phase 14.
+
+State/cache/budget effects:
+
+- same child screening and validation accounting as reflective mutation when a
+  merge candidate is evaluated;
+- merge-attempt counters update according to profile rules.
+
+Events:
+
+- `gepa.merge_attempted`;
+- `gepa.merge_accepted`;
+- `gepa.merge_rejected`.
+
+Swappable:
+
+- merge strategy;
+- scheduling policy.
+
+Not swappable under profile labels:
+
+- core GEPA profile disables merge by default;
+- DSPy profile enables merge by default;
+- accepted merge must update the same validation frontier as mutations.
+
+#### Phase 16: Final Selection And Report
+
+Reference anchor:
+`src/gepa/core/engine.py:795` optimization end and
+`src/gepa/core/result.py:246 from_state`.
+
+Port:
+`GepaFinalizer`.
+
+Input:
+
+- final `GepaReferenceState`;
+- validation evaluation policy;
+- optional held-out test/report evaluator;
+- run report sinks.
+
+Output:
+
+- best GEPA candidate index by validation policy;
+- `Optimized<A>` facade;
+- detailed GEPA result/report;
+- optional held-out test report that is clearly outside search budget.
+
+State/cache/budget effects:
+
+- no more search metric calls;
+- optional final-report evaluations must be separately accounted;
+- final checkpoint saved.
+
+Events:
+
+- `gepa.optimization_ended`;
+- `gepa.final_report_written`.
+
+Swappable:
+
+- report format;
+- final test/report evaluator;
+- ordinary facade shape.
+
+Not swappable under parity:
+
+- final best is validation-policy best, not train-frontier best;
+- detailed result must preserve candidate indices, lineage, validation
+  subscores, frontier membership, and metric-call counters.
+
+### 4.16 Swappability Rules
+
+The following ports are designed to be high-level and replaceable without
+changing GEPA's phase semantics:
+
+- `TrainBatchSampler`;
+- `ParentSelector`, when the profile explicitly names a non-default ablation;
+- `ComponentSelector`;
+- `CasewiseEvaluator`;
+- `TraceProjector`;
+- `ReflectiveDatasetBuilder`;
+- `ReflectionRenderer`;
+- `InstructionProposer`;
+- `ProposalParser`;
+- `ChildCandidateBuilder`;
+- `AcceptancePolicy`, when labeled;
+- `ValidationEvaluationPolicy`, when labeled;
+- `MergeProposer`, when merge is enabled;
+- cache backend;
+- report sink.
+
+The following are not replaceable under an unqualified "real GEPA" claim:
+
+- seed validation before the first train minibatch;
+- validation/Pareto frontier as the default parent-selection source;
+- same train minibatch for parent and child screening;
+- reflection dataset built before the LM/proposer call;
+- train-screen acceptance before accepted-candidate validation;
+- full validation for accepted children under the core default;
+- accepted candidate admission only after validation frontier update;
+- metric-call budget counted over evaluator rollouts, not reflection tokens;
+- per-candidate/per-case evaluation cache semantics;
+- hidden target data visible to reflection only through scorer feedback.
 
 ## 5. Cache Parity
 
@@ -1469,6 +2360,17 @@ Potential module split:
 ```text
 state.rs              GepaReferenceState, candidate records, checkpoint shape
 frontier.rs           validation frontier update and weighted sampling helpers
+phase.rs              shared phase context/result types and phase event names
+preflight.rs          profile resolution, edit-surface and partition checks
+seed.rs               seed full-validation initialization
+iteration.rs          stop/checkpoint/iteration controller
+sampling.rs           train minibatch sampler adapters
+evaluate.rs           GEPA casewise evaluator adapter and metric-call deltas
+dataset.rs            ReflectiveDatasetBuilder and trace/feedback projection
+reflection.rs         renderer, proposer, parser, and LM/agent bridge
+acceptance.rs         train-screen acceptance policies
+validation.rs         accepted-candidate validation policy integration
+report.rs             detailed GEPA result/report facade
 events.rs             GEPA strategy events and report summaries
 cache.rs              GEPA per-case cache adapter if not engine-owned
 profiles.rs           reference/dspy/aime/leaven-plus presets
@@ -1476,6 +2378,12 @@ merge.rs              merge scheduler and proposer when implemented
 ```
 
 Keep `lib.rs` as a map.
+
+The module split is not merely tidiness. It protects the algorithm's phase
+ports. In particular, `dataset.rs` must build reflection examples before
+`reflection.rs` renders or calls any LM, and `validation.rs` must update
+`state.rs` frontier data before `frontier.rs` is allowed to select another
+parent.
 
 ### 18.2 `leaven-engine`
 
@@ -1525,6 +2433,50 @@ Required changes:
 
 These are not optional polish tests. Without them, future implementers will
 still need to re-read Python.
+
+### 19.0 Phase Boundary Tests
+
+```text
+test_reference_phase_event_order_matches_pipeline
+test_reflective_dataset_builder_runs_before_lm_proposer
+test_reflective_dataset_builder_is_swappable_without_changing_parent_eval
+test_renderer_is_swappable_without_rebuilding_dataset_rows
+test_acceptance_policy_swap_does_not_change_parent_child_case_ids
+test_validation_policy_swap_is_reported_as_profile_delta
+test_no_phase_after_metric_stopper_starts_new_provider_work
+```
+
+The event-order test should assert at least this ordered subsequence for one
+accepted reflective mutation:
+
+```text
+optimization_start
+profile_resolved
+seed_validation_started
+seed_validation_completed
+validation_frontier_initialized
+state_saved
+iteration_started
+parent_selected
+train_minibatch_sampled
+parent_evaluation_started
+parent_evaluation_completed
+components_selected
+reflective_dataset_built
+proposal_started
+reflection_lm_completed
+proposal_completed
+child_candidate_built
+child_evaluation_started
+child_evaluation_completed
+proposal_accepted
+accepted_validation_started
+accepted_validation_completed
+candidate_admitted
+validation_frontier_updated
+iteration_ended
+optimization_ended
+```
 
 ### 19.1 Seed And Frontier Tests
 
@@ -1580,9 +2532,11 @@ test_no_reflective_examples_skips_lm_call
 test_all_perfect_minibatch_skips_lm_call
 test_reflection_prompt_matches_upstream_template_snapshot
 test_fenced_parser_matches_upstream_extractor_cases
+test_reflective_dataset_builder_outputs_typed_rows_before_prompt_rendering
 test_aime_reflection_examples_include_input_output_score_feedback
 test_aime_reflection_examples_exclude_raw_target_except_scorer_feedback
 test_dspy_trace_projection_prefers_failed_prediction_when_enabled
+test_dspy_trace_projection_raises_no_valid_examples_before_lm_call
 ```
 
 ### 19.6 Result/Report Tests

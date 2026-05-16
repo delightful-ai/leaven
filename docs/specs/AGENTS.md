@@ -48,6 +48,13 @@ The top of the stack is:
   optimize-anything, and Leaven-plus profiles may refine model/data/operator
   settings, but they must not redefine what parent selection, validation
   Pareto state, cache parity, or accepted-candidate validation means.
+- GEPA phase boundaries also come from `gepa_reference_behavior.md`. Keep
+  preflight, seed validation, parent selection, minibatch sampling, parent
+  evaluation, skip gates, component selection, reflective dataset construction,
+  proposer call, child screening, acceptance, accepted-candidate validation,
+  frontier update, merge, and final reporting separable in specs/tests even
+  when an early implementation stores several phase implementations in one
+  module.
 - `milestone_examples_behavioral_contract.md` currently covers P0 through P4. For P5-P8, use the example package docs, `docs/testing/README.md`, and the recent review tree until a durable spec is added.
 - `docs/specs/tracing-vision/README.md` still references `first_two_subsystems.md` as governing context. Reconcile that stale reference before using tracing-vision text to route new code.
 
