@@ -4,7 +4,7 @@ This subtree holds repository scripts with local side effects. Scripts are part 
 Current scripts:
 - `lint-line-count.py`: enforces production Rust source size limits.
 - `test-suite-sla.py`: runs nextest plus doctests and enforces the `<30s` suite SLA.
-- `coverage-gate.py`: runs coverage over workspace tests, milestone binaries, and `xtask`, then enforces line and branch floors. It excludes live P5 from workspace coverage and runs the P5 package without `--live-codex`; it does not prove live Codex behavior.
+- `coverage-gate.py`: runs coverage over workspace tests, milestone binaries, and `xtask`, then enforces line and branch floors over production/source behavior. It excludes test harness files and `#[cfg(test)] mod ...` blocks from the denominator after execution, excludes live P5 from workspace coverage, and runs the P5 package without `--live-codex`; it does not prove live Codex behavior.
 
 ## Local Rules
 - Keep script defaults local and credential-free. Network, cloud, live model, or destructive behavior must be an explicit flag or environment opt-in.
@@ -13,6 +13,7 @@ Current scripts:
 - Generated reports and temporary run directories belong under `target/` unless the caller explicitly provides another output path.
 - If a script changes a canonical check, update `Justfile` and `docs/testing/README.md` in the same change.
 - Coverage scripts may execute milestone binaries, but they must not classify product maturity. If a script starts reporting example proof status, it must preserve the product-proof / mechanics-smoke / proxy-demo distinction from `examples/AGENTS.md`.
+- Coverage denominator exclusions are for test harness code only. Keep production source, examples, scripts, and scaffold crates in the report once they have executable behavior.
 - Do not add implicit credentials, provider calls, dataset downloads, or destructive filesystem cleanup to canonical scripts. Make those opt-in flags with printed side effects.
 - Keep generated coverage summaries, lcov files, run stores, and temporary example outputs under `target/` by default; scripts should not dirty the repo root.
 

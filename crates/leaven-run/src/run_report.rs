@@ -507,14 +507,22 @@ fn increment_bypass(
 
 #[cfg(test)]
 mod tests {
-    use leaven_core::{CausalInputs, ProposalEffectKind};
+    use std::collections::{BTreeMap, BTreeSet};
+
+    use leaven_core::{
+        Artifact, ArtifactIdentity, Assessment, CaseSetVersion, CausalInputs, ProposalEffectKind,
+        ResolvedEvaluationRequest, ResolvedRequestKind,
+    };
+    use leaven_eval::SplitPolicy;
     use leaven_evidence::ScalarEvidence;
     use leaven_kernel::{
-        AssessmentId, BudgetSnapshot, CandidateId, Cost, ErrorKind, ErrorRecord,
-        EvaluationRequestId, EvaluatorId, IterationId, PopulationId, ProposalBatchId, ProposalId,
-        StageAttemptFailure, StageAttemptOutcome, StageAttemptReceiptId, StageAttemptReceiptRef,
-        StageCallId, StageId, StageRole,
+        AssessmentId, BudgetSnapshot, CandidateId, CaseId, ContentId, Cost, ErrorKind, ErrorRecord,
+        EvaluationRequestId, EvaluationSetId, EvaluatorId, Fingerprint, IterationId, MetadataBag,
+        Metered, PopulationId, ProposalBatchId, ProposalId, RunId, StageAttemptFailure,
+        StageAttemptOutcome, StageAttemptReceiptId, StageAttemptReceiptRef, StageCallId, StageId,
+        StageRole,
     };
+    use leaven_store_inline::InlineEvidenceStore;
 
     use super::*;
 
@@ -778,6 +786,258 @@ mod tests {
         assert!((blob.score - 0.25).abs() < f64::EPSILON);
     }
 
+    #[test]
+    fn final_report_edges_refuse_empty_assessments_and_missing_checkpoints() {
+        let no_splits = FinalEvaluationInputs {
+            seed: CandidateId::new(),
+            best: None,
+            has_train: false,
+            has_validation: false,
+            has_test: false,
+        };
+        assert!(!no_splits.has_any_split());
+        assert!(
+            FinalEvaluationInputs {
+                has_validation: true,
+                ..no_splits
+            }
+            .has_any_split()
+        );
+        let explicit_store =
+            crate::run_store::StoreConfig::<RunProblem<TestArtifact, (), ()>>::Explicit(
+                crate::OptimizeStore::inline("explicit-source"),
+            );
+        assert!(matches!(
+            explicit_store.into_source(),
+            crate::run_store::StoreSource::DefaultDurable
+        ));
+        let run_case = crate::RunCase::from_case(&leaven_eval::Case::targeted(
+            CaseId::from_index(99),
+            "runner input",
+            "hidden target",
+        ));
+        assert_eq!(run_case.id(), CaseId::from_index(99));
+        assert_eq!(*run_case.input(), "runner input");
+        assert_eq!(run_case.into_input(), "runner input");
+
+        let engine = leaven_engine::Engine::<RunProblem<TestArtifact, (), ()>>::builder()
+            .budget(leaven_kernel::Budget::unlimited())
+            .build();
+        let store = InlineEvidenceStore::<CaseAssessmentEvidence>::new("report-test");
+        let error = assessment_summary(&engine.view(), &store, &[])
+            .expect_err("empty assessment group must be rejected");
+        assert!(error.to_string().contains("at least one assessment"));
+        let error = assessment_summary(&engine.view(), &store, &[AssessmentId::new()])
+            .expect_err("unknown assessment group member must be rejected");
+        assert!(error.to_string().contains("assessment missing"));
+
+        let run_id = RunId::new();
+        let prepared = PreparedStore::<RunProblem<TestArtifact, (), ()>> {
+            store: crate::OptimizeStore::durable(
+                InlineEvidenceStore::<CaseAssessmentEvidence>::new("durable-report-test"),
+                NoopPersistence,
+            ),
+            run_dir: Some(".leaven/runs/report-test".into()),
+            local_persistence: None,
+            evaluation_cache: None,
+            start: crate::run_store::StoreStart::Fresh { run_id },
+        };
+        let storage = run_storage(run_id, &prepared, None);
+        assert!(matches!(
+            storage,
+            RunStorage::Stored {
+                latest_checkpoint: None,
+                resumability: RunResumability::NotResumable {
+                    reason: RunNotResumableReason::MissingLatestCheckpoint
+                },
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn split_reports_group_custom_partitions_and_refuse_bad_assessment_groups() {
+        futures::executor::block_on(async {
+            let train = PartitionId::from("TRAIN");
+            let audit = PartitionId::from("audit");
+            let ignored = PartitionId::from("ignored");
+            let train_case = CaseId::from_index(0);
+            let audit_case = CaseId::from_index(1);
+            let case_set = leaven_engine::CaseSet::from_entries([
+                (train_case, leaven_eval::Case::input(train_case, "train")),
+                (audit_case, leaven_eval::Case::input(audit_case, "audit")),
+            ])
+            .with_partition(train.clone(), vec![train_case])
+            .with_partition(audit.clone(), vec![audit_case])
+            .with_partition(ignored.clone(), vec![audit_case]);
+            let mut engine =
+                leaven_engine::Engine::<RunProblem<TestArtifact, &'static str>>::builder()
+                    .budget(leaven_kernel::Budget::unlimited())
+                    .evaluator(ReportEvaluator)
+                    .build();
+            let first = engine.insert_seed(TestArtifact, 0).unwrap();
+            let second = engine.insert_seed(TestArtifact, 1).unwrap();
+            let store = InlineEvidenceStore::<CaseAssessmentEvidence>::new("report-groups");
+
+            engine
+                .evaluate(
+                    EvaluatorId::PRIMARY,
+                    partition_request(first, train.clone()),
+                    &case_set,
+                    &store,
+                )
+                .await
+                .unwrap();
+            engine
+                .evaluate(
+                    EvaluatorId::PRIMARY,
+                    partition_request(first, audit.clone()),
+                    &case_set,
+                    &store,
+                )
+                .await
+                .unwrap();
+            engine
+                .evaluate(
+                    EvaluatorId::PRIMARY,
+                    partition_request(first, ignored),
+                    &case_set,
+                    &store,
+                )
+                .await
+                .unwrap();
+
+            let splits = DatasetSplits::new(
+                CaseSetVersion("report-v1".to_owned()),
+                BTreeMap::from([
+                    (train.clone(), SplitRole::Train),
+                    (audit.clone(), SplitRole::Custom("audit".into())),
+                ]),
+                BTreeMap::from([(train, vec![train_case]), (audit, vec![audit_case])]),
+                &BTreeSet::from([train_case, audit_case]),
+                SplitPolicy::DisjointRequired,
+            )
+            .unwrap();
+            let reports = split_reports_for(&engine.view(), &store, &splits).unwrap();
+
+            assert_eq!(reports.len(), 2);
+            assert!(reports.iter().any(|report| report.role == SplitRole::Train));
+            assert!(
+                reports
+                    .iter()
+                    .any(|report| report.role == SplitRole::Custom("audit".into()))
+            );
+
+            let mixed_candidates = engine
+                .evaluate(
+                    EvaluatorId::PRIMARY,
+                    EvaluationRequest::Independent {
+                        candidates: vec![first, second],
+                        set: EvaluationSet::All,
+                        granularity: AssessmentGranularity::PerCase,
+                        purpose: EvaluationPurpose::Probe,
+                    },
+                    &case_set,
+                    &store,
+                )
+                .await
+                .unwrap();
+            let error =
+                assessment_summary(&engine.view(), &store, &mixed_candidates.assessment_ids)
+                    .expect_err("mixed candidate assessment group must be rejected");
+            assert!(error.to_string().contains("mixed candidates"));
+
+            let first_request = engine
+                .evaluate(
+                    EvaluatorId::PRIMARY,
+                    all_cases_request(first, AssessmentGranularity::PerCase),
+                    &case_set,
+                    &store,
+                )
+                .await
+                .unwrap();
+            let second_request = engine
+                .evaluate(
+                    EvaluatorId::PRIMARY,
+                    all_cases_request(first, AssessmentGranularity::PerCase),
+                    &case_set,
+                    &store,
+                )
+                .await
+                .unwrap();
+            let error = assessment_summary(
+                &engine.view(),
+                &store,
+                &[
+                    first_request.assessment_ids[0],
+                    second_request.assessment_ids[0],
+                ],
+            )
+            .expect_err("mixed request assessment group must be rejected");
+            assert!(error.to_string().contains("mixed requests"));
+
+            let aggregate = engine
+                .evaluate(
+                    EvaluatorId::PRIMARY,
+                    all_cases_request(first, AssessmentGranularity::Aggregate),
+                    &case_set,
+                    &store,
+                )
+                .await
+                .unwrap();
+            let error = assessment_summary(&engine.view(), &store, &aggregate.assessment_ids)
+                .expect_err("aggregate assessment group must be rejected");
+            assert!(error.to_string().contains("case-targeted"));
+
+            let pairwise = engine
+                .evaluate(
+                    EvaluatorId::PRIMARY,
+                    EvaluationRequest::Pairwise {
+                        left: first,
+                        right: second,
+                        set: EvaluationSet::All,
+                        granularity: AssessmentGranularity::PerCase,
+                        purpose: EvaluationPurpose::Probe,
+                        order: leaven_core::PairOrder::Ordered,
+                    },
+                    &case_set,
+                    &store,
+                )
+                .await
+                .unwrap();
+            let error = assessment_summary(&engine.view(), &store, &pairwise.assessment_ids)
+                .expect_err("non-independent assessment group must be rejected");
+            assert!(error.to_string().contains("independent assessment"));
+
+            let mut bad_engine =
+                leaven_engine::Engine::<RunProblem<TestArtifact, &'static str>>::builder()
+                    .budget(leaven_kernel::Budget::unlimited())
+                    .evaluator(BadPartitionEvaluator)
+                    .build();
+            let bad_first = bad_engine.insert_seed(TestArtifact, 0).unwrap();
+            let bad_second = bad_engine.insert_seed(TestArtifact, 1).unwrap();
+            let bad_store = InlineEvidenceStore::<CaseAssessmentEvidence>::new("bad-report-group");
+            let malformed = bad_engine
+                .evaluate(
+                    EvaluatorId::PRIMARY,
+                    EvaluationRequest::Independent {
+                        candidates: vec![bad_first, bad_second],
+                        set: EvaluationSet::Partition(PartitionId::from("TRAIN")),
+                        granularity: AssessmentGranularity::PerCase,
+                        purpose: EvaluationPurpose::Probe,
+                    },
+                    &case_set,
+                    &bad_store,
+                )
+                .await
+                .unwrap();
+            assert!(!malformed.assessment_ids.is_empty());
+            let error = split_reports_for(&bad_engine.view(), &bad_store, &splits)
+                .expect_err("split reports must reject non-independent partition rows");
+            assert!(error.to_string().contains("independent assessment"));
+        });
+    }
+
     fn assert_event_summary(event: leaven_engine::RunEvent, expected: RunEventSummary) {
         assert_eq!(event_summary(&event), expected);
         drop(event);
@@ -795,6 +1055,187 @@ mod tests {
             assessment_ids: vec![AssessmentId::new()],
             cost,
             cache,
+        }
+    }
+
+    fn partition_request(candidate: CandidateId, partition: PartitionId) -> EvaluationRequest {
+        EvaluationRequest::Independent {
+            candidates: vec![candidate],
+            set: EvaluationSet::Partition(partition),
+            granularity: AssessmentGranularity::PerCase,
+            purpose: EvaluationPurpose::Probe,
+        }
+    }
+
+    fn all_cases_request(
+        candidate: CandidateId,
+        granularity: AssessmentGranularity,
+    ) -> EvaluationRequest {
+        EvaluationRequest::Independent {
+            candidates: vec![candidate],
+            set: EvaluationSet::All,
+            granularity,
+            purpose: EvaluationPurpose::Probe,
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    struct TestArtifact;
+
+    #[derive(Debug)]
+    struct TestArtifactError;
+
+    impl std::fmt::Display for TestArtifactError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str("test artifact error")
+        }
+    }
+
+    impl std::error::Error for TestArtifactError {}
+
+    impl Artifact for TestArtifact {
+        type Change = ();
+        type ApplyError = TestArtifactError;
+
+        fn identity(&self) -> ArtifactIdentity {
+            ArtifactIdentity::Content(ContentId::from_bytes([7; ContentId::BYTES]))
+        }
+
+        fn apply_change(&self, _change: &Self::Change) -> Result<Self, Self::ApplyError> {
+            Ok(Self)
+        }
+    }
+
+    struct NoopPersistence;
+
+    impl leaven_engine::RunPersistence<RunProblem<TestArtifact, (), ()>> for NoopPersistence {
+        fn checkpoint(
+            &self,
+            _request: leaven_engine::RunCheckpointRequest<'_, RunProblem<TestArtifact, (), ()>>,
+        ) -> Result<(), leaven_engine::RunPersistenceError> {
+            Ok(())
+        }
+    }
+
+    struct ReportEvaluator;
+
+    impl leaven_engine::Evaluator<RunProblem<TestArtifact, &'static str>> for ReportEvaluator {
+        fn id(&self) -> EvaluatorId {
+            EvaluatorId::PRIMARY
+        }
+
+        fn fingerprint(&self) -> Fingerprint {
+            Fingerprint::from_bytes([9; 32])
+        }
+
+        async fn evaluate(
+            &self,
+            request: ResolvedEvaluationRequest,
+            _ctx: leaven_engine::EvaluationContext<'_, RunProblem<TestArtifact, &'static str>>,
+        ) -> Result<
+            Metered<Vec<Assessment<RunProblem<TestArtifact, &'static str>>>>,
+            leaven_engine::EvaluationError,
+        > {
+            let mut assessments = Vec::new();
+            match request.kind {
+                ResolvedRequestKind::Independent { candidates } => {
+                    for candidate in candidates {
+                        if matches!(request.granularity, AssessmentGranularity::Aggregate) {
+                            assessments.push(Assessment::Independent {
+                                candidate,
+                                target: AssessmentTarget::EvaluationSet(EvaluationSetId::new()),
+                                evidence: report_evidence("aggregate"),
+                                cost: Cost::metric_calls(1),
+                                metadata: MetadataBag::new(),
+                            });
+                            continue;
+                        }
+                        for case in &request.set.case_ids {
+                            assessments.push(Assessment::Independent {
+                                candidate,
+                                target: AssessmentTarget::Case {
+                                    set: EvaluationSetId::new(),
+                                    case: *case,
+                                },
+                                evidence: report_evidence("case"),
+                                cost: Cost::metric_calls(1),
+                                metadata: MetadataBag::new(),
+                            });
+                        }
+                    }
+                }
+                ResolvedRequestKind::Pairwise { left, right, .. } => {
+                    for case in &request.set.case_ids {
+                        assessments.push(Assessment::Pairwise {
+                            left,
+                            right,
+                            target: AssessmentTarget::Case {
+                                set: EvaluationSetId::new(),
+                                case: *case,
+                            },
+                            evidence: report_evidence("pairwise"),
+                            cost: Cost::metric_calls(1),
+                            metadata: MetadataBag::new(),
+                        });
+                    }
+                }
+                ResolvedRequestKind::Listwise { .. } => {}
+            }
+            Ok(Metered::new(
+                assessments,
+                Cost::metric_calls(request.set.case_ids.len() as u64),
+            ))
+        }
+    }
+
+    fn report_evidence(label: &'static str) -> CaseAssessmentEvidence {
+        CaseAssessmentEvidence::new(
+            ScalarEvidence::new(1.0).unwrap(),
+            OutputRecord::inline(label),
+            format!("{label} feedback"),
+        )
+    }
+
+    struct BadPartitionEvaluator;
+
+    impl leaven_engine::Evaluator<RunProblem<TestArtifact, &'static str>> for BadPartitionEvaluator {
+        fn id(&self) -> EvaluatorId {
+            EvaluatorId::PRIMARY
+        }
+
+        fn fingerprint(&self) -> Fingerprint {
+            Fingerprint::from_bytes([8; 32])
+        }
+
+        async fn evaluate(
+            &self,
+            request: ResolvedEvaluationRequest,
+            _ctx: leaven_engine::EvaluationContext<'_, RunProblem<TestArtifact, &'static str>>,
+        ) -> Result<
+            Metered<Vec<Assessment<RunProblem<TestArtifact, &'static str>>>>,
+            leaven_engine::EvaluationError,
+        > {
+            let ResolvedRequestKind::Independent { candidates } = request.kind else {
+                return Ok(Metered::new(Vec::new(), Cost::zero()));
+            };
+            let [left, right, ..] = candidates.as_slice() else {
+                return Ok(Metered::new(Vec::new(), Cost::zero()));
+            };
+            let case = request.set.case_ids[0];
+            Ok(Metered::new(
+                vec![Assessment::Pairwise {
+                    left: *left,
+                    right: *right,
+                    target: AssessmentTarget::Case {
+                        set: EvaluationSetId::new(),
+                        case,
+                    },
+                    evidence: report_evidence("bad pairwise"),
+                    cost: Cost::metric_calls(1),
+                    metadata: MetadataBag::new(),
+                }],
+                Cost::metric_calls(1),
+            ))
         }
     }
 }

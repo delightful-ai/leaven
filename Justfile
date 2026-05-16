@@ -1,5 +1,6 @@
 set shell := ["bash", "-eu", "-o", "pipefail", "-c"]
 
+# Floors apply to the production/source denominator enforced by scripts/coverage-gate.py.
 coverage_line_floor := '98.51'
 coverage_branch_floor := '88.29'
 

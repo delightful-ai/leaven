@@ -79,17 +79,18 @@ lower either floor to land weaker tests.
 
 The v0.2.1b topology cutover adds many spec-listed crate skeletons whose job is
 to enforce dependency direction before their behavior lands. The coverage gate
-keeps a `98.5` line floor and `85.8` branch floor without a source-path ignore
-regex. It runs the workspace tests, then runs every milestone binary and
-`xtask` under `cargo llvm-cov run` before reporting. Line coverage is enforced
-from the lcov source-line report so generic monomorphizations do not create
-duplicate missed-line denominators; branch coverage is enforced from the
-branch-enabled JSON summary. Empty map crates and unimplemented skeleton crates
-naturally add no executable denominator; once a crate gains runtime behavior,
-that behavior is part of the canonical coverage surface and needs contract
-tests in the same change. Coverage keeps the exercised surface honest; it does
-not promote proxy examples or placeholder public names into mature product
-contracts.
+keeps a `98.5` line floor and `85.8` branch floor over production/source
+behavior. It runs the workspace tests, then runs every milestone binary and
+`xtask` under `cargo llvm-cov run` before reporting. The enforced denominator
+excludes test harness files and `#[cfg(test)] mod ...` blocks after execution,
+so tests can exercise production code without becoming code that must itself
+be covered. Line and branch coverage are both enforced from the lcov report so
+generic monomorphizations do not create duplicate missed-line denominators.
+Empty map crates and unimplemented skeleton crates naturally add no executable
+denominator; once a crate gains runtime behavior, that behavior is part of the
+canonical coverage surface and needs contract tests in the same change.
+Coverage keeps the exercised surface honest; it does not promote proxy examples
+or placeholder public names into mature product contracts.
 
 Coverage's P5 run is not the same as `just milestone-p5`: the coverage script
 runs the package with a generated `--run-dir` and without the live Codex gate.

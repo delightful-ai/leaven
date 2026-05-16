@@ -9,7 +9,7 @@ Tests in this repo are design constraints. They should kill plausible wrong impl
 - Milestone examples are workspace packages under `examples/p*/`. `cargo check --workspace --examples` is not a proof command for them.
 - `just milestone-p8` is a P8 public-builder proof for LM-backed GEPA reflection through provider-neutral `leaven-lm`. Do not cite it as proof of concrete provider transport, LM cache behavior, or live AIME improvement.
 - `just milestone-examples` currently includes the live-gated P5 recipe from the root `Justfile`; do not treat it as a cheap default smoke unless that recipe is made deterministic by default.
-- `scripts/coverage-gate.py` runs milestone packages under coverage, but that is execution coverage, not product proof. It runs P5 without the `--live-codex` gate and P8 through the deterministic LM-backed path.
+- `scripts/coverage-gate.py` runs milestone packages under coverage, but that is execution coverage, not product proof. It excludes test harness files and `#[cfg(test)] mod ...` blocks from the enforced denominator after execution, runs P5 without the `--live-codex` gate, and runs P8 through the deterministic LM-backed path.
 - Coverage proves executed code stayed covered. It does not answer public maturity; classify examples as product-proof, mechanics-smoke, or proxy-demo before using them as release evidence.
 - Keep `just test` under the `<30s` SLA by reducing fixture/setup cost instead of adding a slow lane.
 - Coverage floors in the root `Justfile` are ratchets. Raise them when coverage improves; do not lower them to land weaker work.

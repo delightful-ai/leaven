@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import argparse
-import json
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -26,6 +26,8 @@ RUN_PACKAGES = [
 LIVE_PACKAGES = [
     "p5_evoskill_iteration",
 ]
+
+TEST_SOURCE_RE = re.compile(r"(^|/)(tests|benches)/|(^|/)target/tests/")
 
 
 def main() -> int:
@@ -90,9 +92,9 @@ def main() -> int:
     if result.returncode != 0:
         return result.returncode
 
-    summary = load_summary(output_path)
-    lines = load_lcov_lines(lcov_path)
-    branches = summary["branches"]
+    coverage = load_lcov_coverage(lcov_path)
+    lines = coverage["lines"]
+    branches = coverage["branches"]
 
     print(
         "line coverage: "
@@ -145,29 +147,96 @@ def exclude_args() -> list[str]:
     return args
 
 
-def load_summary(path: Path) -> dict[str, Any]:
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    data = payload.get("data")
-    if not isinstance(data, list) or not data:
-        raise ValueError(f"coverage summary at {path} has no data")
-    totals = data[0].get("totals")
-    if not isinstance(totals, dict):
-        raise ValueError(f"coverage summary at {path} has no totals")
-    return totals
-
-
-def load_lcov_lines(path: Path) -> dict[str, Any]:
-    count = 0
-    covered = 0
+def load_lcov_coverage(path: Path) -> dict[str, Any]:
+    line_count = 0
+    line_covered = 0
+    branch_count = 0
+    branch_covered = 0
+    current_source: Path | None = None
+    test_ranges: list[tuple[int, int]] = []
     for line in path.read_text(encoding="utf-8").splitlines():
-        if not line.startswith("DA:"):
+        if line.startswith("SF:"):
+            current_source = Path(line[3:])
+            test_ranges = source_test_ranges(current_source)
             continue
-        count += 1
-        _, hits, *_ = line[3:].split(",")
-        if int(hits) > 0:
-            covered += 1
-    percent = 100.0 * covered / count if count else 0.0
-    return {"count": count, "covered": covered, "percent": percent}
+        if current_source is None or TEST_SOURCE_RE.search(current_source.as_posix()):
+            continue
+        if line.startswith("DA:"):
+            raw_line, hits, *_ = line[3:].split(",")
+            source_line = int(raw_line)
+            if in_ranges(source_line, test_ranges):
+                continue
+            line_count += 1
+            if int(hits) > 0:
+                line_covered += 1
+            continue
+        if line.startswith("BRDA:"):
+            raw_line, _, _, hits = line[5:].split(",")
+            if hits == "-":
+                continue
+            source_line = int(raw_line)
+            if in_ranges(source_line, test_ranges):
+                continue
+            branch_count += 1
+            if int(hits) > 0:
+                branch_covered += 1
+    line_percent = 100.0 * line_covered / line_count if line_count else 0.0
+    branch_percent = 100.0 * branch_covered / branch_count if branch_count else 0.0
+    return {
+        "lines": {
+            "count": line_count,
+            "covered": line_covered,
+            "percent": line_percent,
+        },
+        "branches": {
+            "count": branch_count,
+            "covered": branch_covered,
+            "percent": branch_percent,
+        },
+    }
+
+
+def source_test_ranges(path: Path) -> list[tuple[int, int]]:
+    if not path.is_file():
+        return []
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except UnicodeDecodeError:
+        return []
+
+    ranges: list[tuple[int, int]] = []
+    pending_cfg_test = False
+    for index, line in enumerate(lines, start=1):
+        stripped = line.strip()
+        if stripped.startswith("#[cfg(test)]"):
+            pending_cfg_test = True
+            continue
+        if not pending_cfg_test:
+            continue
+        if not stripped or stripped.startswith("#["):
+            continue
+        if re.match(r"(?:pub(?:\([^)]*\))?\s+)?mod\s+\w+\s*\{", stripped):
+            ranges.append(module_range(lines, index))
+        pending_cfg_test = False
+    return ranges
+
+
+def module_range(lines: list[str], start: int) -> tuple[int, int]:
+    depth = 0
+    seen_open = False
+    for index in range(start, len(lines) + 1):
+        line = lines[index - 1]
+        depth += line.count("{")
+        if "{" in line:
+            seen_open = True
+        depth -= line.count("}")
+        if seen_open and depth <= 0:
+            return (start, index)
+    return (start, len(lines))
+
+
+def in_ranges(line: int, ranges: list[tuple[int, int]]) -> bool:
+    return any(start <= line <= end for start, end in ranges)
 
 
 if __name__ == "__main__":
