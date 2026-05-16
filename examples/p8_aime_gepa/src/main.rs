@@ -6,8 +6,10 @@ use std::{
     time::Duration,
 };
 
-use leaven::core::{AssessmentTarget, InfoRef};
-use leaven::engine::RunContext;
+use leaven::core::{AssessmentTarget, CacheIdentity, InfoRef};
+use leaven::engine::{
+    CacheBypassReason, CacheStatus, Callback, RunContext, RunEvent, RunGraphView,
+};
 use leaven::eval::{Case, SplitRole};
 use leaven::extend::PartitionId;
 use leaven::gepa::{Gepa, ReflectionError, ReflectiveDatasetBuilder, ReflectiveExample};
@@ -528,6 +530,7 @@ async fn try_run_aime(
         .scorer_fingerprint(scorer_fingerprint)
         .evaluation_cache_policy(config.evaluation_cache_policy.clone())
         .evaluation_parallelism(config.evaluation_parallelism)
+        .on_event(AimeProgressCallback::default())
         .using(
             Gepa::reflect_with_lm(
                 aime_reflection_lm(&config.reflection, reflection_telemetry.clone(), &run_dir),
@@ -1505,10 +1508,126 @@ impl Artifact for AimePrompt {
         ArtifactIdentity::Content(content_id(self.system.as_bytes()))
     }
 
+    fn cache_identity(&self) -> Option<CacheIdentity> {
+        Some(CacheIdentity::Content(content_id(self.system.as_bytes())))
+    }
+
     fn apply_change(&self, change: &Self::Change) -> Result<Self, Self::ApplyError> {
         Ok(Self {
             system: change.system.clone(),
         })
+    }
+}
+
+#[derive(Default)]
+struct AimeProgressCallback {
+    evaluation_requests: u64,
+    assessment_rows: u64,
+}
+
+impl Callback<RunProblem<AimePrompt, AimeInput, AimeTarget>> for AimeProgressCallback {
+    fn on_event(
+        &mut self,
+        event: &RunEvent,
+        _graph: RunGraphView<'_, RunProblem<AimePrompt, AimeInput, AimeTarget>>,
+    ) {
+        if let Some(line) = self.progress_line(event) {
+            eprintln!("{line}");
+        }
+    }
+}
+
+impl AimeProgressCallback {
+    fn progress_line(&mut self, event: &RunEvent) -> Option<String> {
+        match event {
+            RunEvent::OptimizationStarted { run_id } => Some(format!(
+                "progress_event=optimization_started run_id={run_id}"
+            )),
+            RunEvent::IterationStarted { iteration } => Some(format!(
+                "progress_event=iteration_started iteration={iteration}"
+            )),
+            RunEvent::IterationEnded { iteration } => Some(format!(
+                "progress_event=iteration_ended iteration={iteration}"
+            )),
+            RunEvent::ProposalRecorded {
+                proposal_id,
+                batch_id,
+                effect,
+                informed_by_count,
+                ..
+            } => Some(format!(
+                "progress_event=proposal_recorded proposal_id={proposal_id} batch_id={batch_id} effect={effect:?} informed_by_count={informed_by_count}"
+            )),
+            RunEvent::ApplySucceeded {
+                proposal_id,
+                candidate_id,
+            } => Some(format!(
+                "progress_event=apply_succeeded proposal_id={proposal_id} candidate_id={candidate_id}"
+            )),
+            RunEvent::EvaluationCompleted {
+                request_id,
+                evaluator,
+                assessment_ids,
+                cost,
+                cache,
+            } => {
+                self.evaluation_requests += 1;
+                self.assessment_rows += assessment_ids.len() as u64;
+                Some(format!(
+                    "progress_event=evaluation_completed request_id={request_id} evaluator={evaluator} request_count={} assessment_rows={} total_assessment_rows={} metric_calls={} llm_calls={} cache={}",
+                    self.evaluation_requests,
+                    assessment_ids.len(),
+                    self.assessment_rows,
+                    cost.metric_calls,
+                    cost.llm_calls,
+                    progress_cache_status(cache)
+                ))
+            }
+            RunEvent::PopulationUpdated {
+                population_id,
+                events,
+            } => Some(format!(
+                "progress_event=population_updated population_id={population_id} event_count={}",
+                events.len()
+            )),
+            RunEvent::OptimizationStopping { reason } => Some(format!(
+                "progress_event=optimization_stopping reason={reason:?}"
+            )),
+            RunEvent::OptimizationEnded {
+                run_id,
+                best,
+                budget,
+            } => Some(format!(
+                "progress_event=optimization_ended run_id={run_id} best={} metric_calls={} llm_calls={}",
+                best.map_or_else(|| "none".to_owned(), |candidate| candidate.to_string()),
+                budget.spent.metric_calls,
+                budget.spent.llm_calls
+            )),
+            RunEvent::Error {
+                stage,
+                error,
+                policy,
+            } => Some(format!(
+                "progress_event=error stage={} kind={:?} policy={policy:?}",
+                stage
+                    .as_ref()
+                    .map_or_else(|| "none".to_owned(), ToString::to_string),
+                error.kind
+            )),
+            _ => None,
+        }
+    }
+}
+
+fn progress_cache_status(cache: &CacheStatus) -> &'static str {
+    match cache {
+        CacheStatus::Hit => "hit",
+        CacheStatus::Miss => "miss",
+        CacheStatus::Bypassed(CacheBypassReason::DisabledByPolicy) => "bypass-disabled-by-policy",
+        CacheStatus::Bypassed(CacheBypassReason::CacheUnavailable) => "bypass-cache-unavailable",
+        CacheStatus::Bypassed(CacheBypassReason::MissingCandidateIdentity { .. }) => {
+            "bypass-missing-candidate-identity"
+        }
     }
 }
 
@@ -2295,7 +2414,7 @@ fn content_id(bytes: &[u8]) -> ContentId {
 mod tests {
     use super::*;
     use futures::executor::block_on;
-    use leaven::kernel::CaseId;
+    use leaven::kernel::{EvaluationRequestId, EvaluatorId};
     use leaven::prelude::RunEventSummary;
 
     fn assert_score(actual: f64, expected: f64) {
@@ -2336,6 +2455,39 @@ mod tests {
         assert!(runner_case_type.contains("AimeInput"));
         assert!(!runner_case_type.contains("AimeTarget"));
         assert!(!runner_case_type.contains("AimeReportMetadata"));
+    }
+
+    #[test]
+    fn aime_prompt_exposes_cache_safe_content_identity() {
+        let prompt = AimePrompt::new("cache me");
+        let expected = content_id(prompt.system.as_bytes());
+
+        assert_eq!(prompt.identity(), ArtifactIdentity::Content(expected));
+        assert_eq!(
+            prompt.cache_identity(),
+            Some(CacheIdentity::Content(expected))
+        );
+    }
+
+    #[test]
+    fn progress_callback_reports_evaluations_and_cache_status() {
+        let mut progress = AimeProgressCallback::default();
+        let line = progress
+            .progress_line(&RunEvent::EvaluationCompleted {
+                request_id: EvaluationRequestId::new(),
+                evaluator: EvaluatorId::PRIMARY,
+                assessment_ids: vec![AssessmentId::new(), AssessmentId::new()],
+                cost: Cost::metric_calls(2),
+                cache: CacheStatus::Miss,
+            })
+            .expect("evaluation event emits progress");
+
+        assert!(line.starts_with("progress_event=evaluation_completed "));
+        assert!(line.contains("request_count=1"));
+        assert!(line.contains("assessment_rows=2"));
+        assert!(line.contains("total_assessment_rows=2"));
+        assert!(line.contains("metric_calls=2"));
+        assert!(line.contains("cache=miss"));
     }
 
     #[test]
