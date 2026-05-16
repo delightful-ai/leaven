@@ -1281,23 +1281,59 @@ fn gepa_checkpoint_restore_rejects_missing_validation_best_candidate() {
         let state = gepa
             .checkpoint_state(CheckpointContext::new(engine.view()))
             .unwrap();
-        let mut missing_validation_best = serde_json::to_value(&state).unwrap();
+        let state_value = serde_json::to_value(&state).unwrap();
+        let restore_error = |value: serde_json::Value| {
+            let missing_state = serde_json::from_value(value).unwrap();
+            let mut restored = Gepa::new(
+                PartMapSurface,
+                ParetoFrontier::by_case().build(),
+                FixedSurfaceEdit::new("unused".to_owned()),
+            )
+            .reflective_dataset(NoReflectiveExamples)
+            .validation_policy(FullValidation);
+            restored
+                .restore_state(missing_state, RestoreContext::new(engine.view()))
+                .unwrap_err()
+        };
+
+        let mut missing_validation_best = state_value.clone();
         missing_validation_best["validation_best"]["candidate"] =
             serde_json::to_value(leaven_kernel::CandidateId::new()).unwrap();
-        let missing_state = serde_json::from_value(missing_validation_best).unwrap();
-        let mut restored = Gepa::new(
-            PartMapSurface,
-            ParetoFrontier::by_case().build(),
-            FixedSurfaceEdit::new("unused".to_owned()),
-        )
-        .reflective_dataset(NoReflectiveExamples)
-        .validation_policy(FullValidation);
-
-        let error = restored
-            .restore_state(missing_state, RestoreContext::new(engine.view()))
-            .unwrap_err();
+        let error = restore_error(missing_validation_best);
 
         assert!(error.to_string().contains("validation best candidate"));
+
+        let mut missing_validation_assessment = state_value.clone();
+        missing_validation_assessment["validation_best"]["assessments"][0] =
+            serde_json::to_value(leaven_kernel::AssessmentId::new()).unwrap();
+        let error = restore_error(missing_validation_assessment);
+
+        assert!(error.to_string().contains("validation best assessment row"));
+
+        let mut missing_history_assessment = state_value.clone();
+        missing_history_assessment["candidate_history"][0]["assessments"][0] =
+            serde_json::to_value(leaven_kernel::AssessmentId::new()).unwrap();
+        let error = restore_error(missing_history_assessment);
+
+        assert!(
+            error
+                .to_string()
+                .contains("candidate history assessment row")
+        );
+
+        let mut missing_reference_candidate = state_value.clone();
+        missing_reference_candidate["reference_state"]["records"][0]["candidate"] =
+            serde_json::to_value(leaven_kernel::CandidateId::new()).unwrap();
+        let error = restore_error(missing_reference_candidate);
+
+        assert!(error.to_string().contains("GEPA reference candidate"));
+
+        let mut missing_reference_assessment = state_value;
+        missing_reference_assessment["reference_state"]["records"][0]["validation_rows"][0] =
+            serde_json::to_value(leaven_kernel::AssessmentId::new()).unwrap();
+        let error = restore_error(missing_reference_assessment);
+
+        assert!(error.to_string().contains("GEPA reference validation row"));
     });
 }
 

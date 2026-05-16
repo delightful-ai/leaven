@@ -643,3 +643,108 @@ fn strip_optional_language(text: &str) -> &str {
         None => trimmed,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use leaven_evidence::OutputRecord;
+    use leaven_kernel::BlobRef;
+
+    use super::{
+        ReflectiveCaseInput, ReflectiveExample, extract_replacement_text, output_record_text,
+        render_prompt_template, render_reflective_examples, strip_optional_language,
+    };
+
+    #[test]
+    fn reflective_case_input_impls_project_target_safe_text() {
+        assert_eq!(().reflective_input(), "");
+        assert_eq!("borrowed".reflective_input(), "borrowed");
+        assert_eq!(String::from("owned").reflective_input(), "owned");
+        let borrowed: &str = "explicit-ref";
+        assert_eq!(borrowed.reflective_input(), "explicit-ref");
+    }
+
+    #[test]
+    fn reflection_helpers_cover_prompt_and_output_variants() {
+        let prompt = render_prompt_template(
+            "current=<curr_param>\nexamples=<side_info>",
+            "seed instruction",
+            "case feedback",
+        )
+        .expect("valid template");
+        assert!(prompt.contains("seed instruction"));
+        assert!(prompt.contains("case feedback"));
+
+        let missing = render_prompt_template("<curr_param>", "seed", "side")
+            .expect_err("missing side-info placeholder");
+        assert!(missing.to_string().contains("<side_info>"));
+
+        let blob = OutputRecord::BlobRef(BlobRef {
+            store: "file".to_owned(),
+            key: "outputs/1".to_owned(),
+        });
+        assert_eq!(output_record_text(&blob), "blob:file:outputs/1");
+        assert_eq!(
+            output_record_text(&OutputRecord::inline("inline answer")),
+            "inline answer"
+        );
+
+        assert!(render_reflective_examples(&[]).contains("no reflective examples"));
+
+        let rendered_examples = render_reflective_examples(&[ReflectiveExample {
+            case: Some(leaven_kernel::CaseId::new(7)),
+            input: "  question  ".to_owned(),
+            output: Some("  answer  ".to_owned()),
+            score: Some(0.5),
+            feedback: "  improve arithmetic  ".to_owned(),
+            source_refs: Vec::new(),
+        }]);
+        assert!(rendered_examples.contains("## Case"));
+        assert!(rendered_examples.contains("## Input"));
+        assert!(rendered_examples.contains("## Score"));
+        assert!(rendered_examples.contains("## Output"));
+        assert!(rendered_examples.contains("## Feedback"));
+
+        let sparse_example = render_reflective_examples(&[ReflectiveExample {
+            case: None,
+            input: String::new(),
+            output: None,
+            score: None,
+            feedback: String::new(),
+            source_refs: Vec::new(),
+        }]);
+        assert!(sparse_example.contains("# Example 1"));
+        assert!(!sparse_example.contains("## Case"));
+        assert!(!sparse_example.contains("## Input"));
+        assert!(!sparse_example.contains("## Score"));
+        assert!(!sparse_example.contains("## Output"));
+        assert!(!sparse_example.contains("## Feedback"));
+    }
+
+    #[test]
+    fn plain_text_parser_extracts_fenced_and_unfenced_replacements() {
+        assert_eq!(
+            extract_replacement_text("  use this directly  "),
+            "use this directly"
+        );
+        assert_eq!(
+            extract_replacement_text("before\n```text\nreplacement\n```\nafter"),
+            "replacement"
+        );
+        assert_eq!(
+            extract_replacement_text("```rust\nreplacement without close"),
+            "replacement without close"
+        );
+        assert_eq!(extract_replacement_text("```\nopen only"), "open only");
+        assert_eq!(extract_replacement_text("```"), "");
+        assert_eq!(extract_replacement_text("``````"), "");
+        assert_eq!(
+            strip_optional_language("not a language line\nbody"),
+            "not a language line\nbody"
+        );
+        assert_eq!(strip_optional_language("\nbody"), "body");
+        assert_eq!(
+            strip_optional_language("json\n{\"ok\":true}"),
+            "{\"ok\":true}"
+        );
+    }
+}

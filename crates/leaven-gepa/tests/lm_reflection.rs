@@ -432,6 +432,12 @@ fn plain_text_parser_handles_unclosed_and_inline_fences() {
 fn default_lm_backed_reflector_constructor_is_typed() {
     let _reflector: LmBackedReflector<RecordingLm, DefaultReflectionRenderer, PlainTextEditParser> =
         LmBackedReflector::with_default_renderer(RecordingLm::new("-default", 1, 1), "default");
+    let gepa = Gepa::reflect_with_lm(RecordingLm::new("-builder", 1, 1), "builder")
+        .with_reflector_config(LmBackedReflectorConfig::default())
+        .surface(WholeTextSurface)
+        .population(ParetoFrontier::by_case().build());
+
+    assert!(gepa.population().best().is_none());
 }
 
 #[test]

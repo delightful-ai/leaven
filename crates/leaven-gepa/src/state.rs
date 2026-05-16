@@ -241,3 +241,112 @@ impl GepaReferenceState {
         self.records.get(usize::try_from(index.get()).ok()?)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use leaven_evidence::{CaseOutcome, CasewiseEvidence, ScalarEvidence};
+    use leaven_kernel::{AssessmentId, CandidateId, CaseId};
+
+    use super::{GepaCandidateIndex, GepaReferenceState};
+
+    fn scalar_rows(rows: &[(u64, f64)]) -> CasewiseEvidence<ScalarEvidence> {
+        CasewiseEvidence::new(
+            rows.iter()
+                .map(|(case, score)| {
+                    CaseOutcome::new(
+                        CaseId::new(*case),
+                        ScalarEvidence::new(*score).expect("finite score"),
+                    )
+                })
+                .collect(),
+        )
+    }
+
+    #[test]
+    fn reference_state_preserves_records_frontier_ties_and_duplicate_admission() {
+        let mut state = GepaReferenceState::default();
+        assert!(state.records().is_empty());
+        assert_eq!(state.validation_frontier().len(), 0);
+        assert_eq!(state.total_metric_calls(), 0);
+        assert_eq!(state.full_validation_evals(), 0);
+        assert_eq!(state.best_candidate(), None);
+        assert_eq!(state.select_by_validation_frontier_frequency(), None);
+
+        state.add_metric_calls(4);
+        state.note_full_validation();
+        let seed = CandidateId::new();
+        let seed_rows = vec![AssessmentId::new(), AssessmentId::new()];
+        let seed_index = state.add_validated_candidate(
+            seed,
+            Vec::new(),
+            state.total_metric_calls(),
+            0.6,
+            seed_rows.clone(),
+            &scalar_rows(&[(0, 0.5), (1, 0.7)]),
+        );
+        assert_eq!(seed_index, GepaCandidateIndex::new(0));
+
+        let child = CandidateId::new();
+        let child_index = state.add_validated_candidate(
+            child,
+            vec![seed_index],
+            9,
+            0.55,
+            vec![AssessmentId::new()],
+            &scalar_rows(&[(0, 0.5), (1, 0.2), (2, 0.9)]),
+        );
+        assert_eq!(child_index, GepaCandidateIndex::new(1));
+
+        assert_eq!(
+            state.add_validated_candidate(
+                child,
+                Vec::new(),
+                99,
+                1.0,
+                Vec::new(),
+                &scalar_rows(&[(0, 1.0)]),
+            ),
+            child_index
+        );
+        assert_eq!(state.index_of(seed), Some(seed_index));
+        assert_eq!(state.best_candidate(), Some(seed));
+        assert_eq!(state.full_validation_evals(), 1);
+        assert_eq!(
+            state.select_by_validation_frontier_frequency(),
+            Some((seed_index, seed))
+        );
+
+        let seed_record = &state.records()[0];
+        assert_eq!(seed_record.index(), seed_index);
+        assert_eq!(seed_record.candidate(), seed);
+        assert_eq!(seed_record.parents(), &[]);
+        assert_eq!(seed_record.discovery_metric_calls(), 4);
+        assert_eq!(seed_record.validation_score(), Some(0.6));
+        assert_eq!(seed_record.validation_rows(), seed_rows.as_slice());
+        assert!(
+            state
+                .validation_frontier()
+                .get(&CaseId::new(0))
+                .expect("case 0 frontier")
+                .contains(&child_index)
+        );
+
+        let unvalidated = CandidateId::new();
+        let unvalidated_index = state.add_unvalidated_candidate(unvalidated, vec![child_index]);
+        assert_eq!(unvalidated_index, GepaCandidateIndex::new(2));
+        assert_eq!(
+            state.add_unvalidated_candidate(unvalidated, Vec::new()),
+            unvalidated_index
+        );
+        let unvalidated_record = &state.records()[2];
+        assert_eq!(unvalidated_record.parents(), &[child_index]);
+        assert_eq!(unvalidated_record.validation_score(), None);
+        assert_eq!(unvalidated_record.validation_rows(), &[]);
+        assert_eq!(
+            state
+                .record(GepaCandidateIndex::new(u32::MAX))
+                .map(super::GepaCandidateRecord::candidate),
+            None
+        );
+    }
+}

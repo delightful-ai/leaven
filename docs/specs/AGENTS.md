@@ -34,6 +34,11 @@ The top of the stack is:
   semantics, reference profiles, cache parity, Leaven abstraction deltas, and
   systematic fix order.
 - `gepa_aime_paper_parity.md`: implementation spec for the GEPA/AIME paper-parity path, including budget stopping, GEPA loop continuation, reflection, LM/provider/cache use, AIME runner/scorer/reporting, and the proof denominator for P8.
+- `agentic_reflection.md`: companion spec (pre-implementation roadmap) for
+  agentic GEPA reflection — artifact materialization into agent workspaces, the
+  converged agentic stage proposer, and the path to git/jj repo optimization.
+  It evolves `agentic_stage_materialization.md` layer B and records the
+  current-state gaps verified on 2026-05-16.
 - `milestone_examples_behavioral_contract.md`: executable behavior contract for milestone examples.
 - `docs/testing/README.md`: proof model and coverage/SLA contract.
 

@@ -141,3 +141,96 @@ fn average_scalar(evidence: &CasewiseEvidence<ScalarEvidence>) -> Option<f64> {
     let count = u32::try_from(evidence.outcomes().len()).expect("case count fits into u32");
     Some(total / f64::from(count))
 }
+
+#[cfg(test)]
+mod tests {
+    use leaven_evidence::{CaseOutcome, CasewiseEvidence, ScalarEvidence};
+    use leaven_kernel::{AssessmentId, CandidateId, CaseId};
+    use leaven_population::{KeepBest, ParetoFrontier};
+
+    use super::GepaPopulation;
+
+    #[test]
+    fn pareto_frontier_gepa_population_reports_missing_assessment_rows() {
+        let candidate = CandidateId::new();
+        let evidence = CasewiseEvidence::new(vec![CaseOutcome::new(
+            CaseId::new(0),
+            ScalarEvidence::new(1.0).expect("finite score"),
+        )]);
+        let mut frontier = ParetoFrontier::default();
+
+        let events = GepaPopulation::observe_gepa(&mut frontier, None, candidate, &[], &evidence);
+
+        assert_eq!(events.len(), 1);
+        let event = format!("{:?}", events[0]);
+        assert!(event.contains(&candidate.to_string()));
+        assert!(event.contains("no assessment"));
+        assert_eq!(GepaPopulation::best(&frontier), None);
+    }
+
+    #[test]
+    fn keep_best_gepa_population_reports_missing_assessment_rows() {
+        let candidate = CandidateId::new();
+        let evidence = CasewiseEvidence::new(vec![CaseOutcome::new(
+            CaseId::new(0),
+            ScalarEvidence::new(1.0).expect("finite score"),
+        )]);
+        let mut keep_best = KeepBest::new();
+
+        let events = GepaPopulation::observe_gepa(&mut keep_best, None, candidate, &[], &evidence);
+
+        assert_eq!(events.len(), 1);
+        let event = format!("{:?}", events[0]);
+        assert!(event.contains(&candidate.to_string()));
+        assert!(event.contains("no assessment"));
+        assert_eq!(GepaPopulation::best(&keep_best), None);
+    }
+
+    #[test]
+    fn keep_best_gepa_population_reports_empty_casewise_evidence() {
+        let candidate = CandidateId::new();
+        let evidence = CasewiseEvidence::new(Vec::new());
+        let mut keep_best = KeepBest::new();
+
+        let events = GepaPopulation::observe_gepa(
+            &mut keep_best,
+            None,
+            candidate,
+            &[AssessmentId::new()],
+            &evidence,
+        );
+
+        assert_eq!(events.len(), 1);
+        let event = format!("{:?}", events[0]);
+        assert!(event.contains(&candidate.to_string()));
+        assert!(event.contains("no comparable score"));
+        assert_eq!(GepaPopulation::best(&keep_best), None);
+    }
+
+    #[test]
+    fn keep_best_gepa_population_restores_checkpoint_state() {
+        let candidate = CandidateId::new();
+        let assessment = AssessmentId::new();
+        let evidence = CasewiseEvidence::new(vec![
+            CaseOutcome::new(CaseId::new(0), ScalarEvidence::new(0.25).unwrap()),
+            CaseOutcome::new(CaseId::new(1), ScalarEvidence::new(0.75).unwrap()),
+        ]);
+        let mut keep_best = KeepBest::new();
+        assert!(
+            !GepaPopulation::observe_gepa(
+                &mut keep_best,
+                None,
+                candidate,
+                &[assessment],
+                &evidence,
+            )
+            .is_empty()
+        );
+        let state = <KeepBest as super::CheckpointPopulation>::checkpoint_state(&keep_best);
+
+        let mut restored = KeepBest::new();
+        <KeepBest as super::CheckpointPopulation>::restore_state(&mut restored, state);
+
+        assert_eq!(GepaPopulation::best(&restored), Some(candidate));
+    }
+}

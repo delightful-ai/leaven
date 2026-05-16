@@ -935,3 +935,40 @@ fn average_scalar(evidence: &CasewiseEvidence<ScalarEvidence>) -> Option<f64> {
     let count = u32::try_from(evidence.outcomes().len()).expect("case count fits into u32");
     Some(total / f64::from(count))
 }
+
+#[cfg(test)]
+mod tests {
+    use leaven_evidence::{CaseOutcome, CasewiseEvidence, ScalarEvidence};
+    use leaven_kernel::{AssessmentId, CandidateId, CaseId};
+
+    use super::{GepaAssessment, GepaCandidateHistoryEntry, average_scalar};
+
+    #[test]
+    fn assessment_helpers_preserve_casewise_average_and_history_rows() {
+        let evidence = CasewiseEvidence::new(vec![
+            CaseOutcome::new(CaseId::new(0), ScalarEvidence::new(0.25).unwrap()),
+            CaseOutcome::new(CaseId::new(1), ScalarEvidence::new(0.75).unwrap()),
+        ]);
+        assert_eq!(average_scalar(&evidence), Some(0.5));
+        assert_eq!(
+            average_scalar(&CasewiseEvidence::<ScalarEvidence>::new(Vec::new())),
+            None
+        );
+
+        let candidate = CandidateId::new();
+        let rows = vec![AssessmentId::new(), AssessmentId::new()];
+        let assessment = GepaAssessment {
+            assessments: rows.clone(),
+            scalar_evidence: evidence,
+            average_score: 0.5,
+            metric_calls_new: 2,
+        };
+        let entry: GepaCandidateHistoryEntry = assessment.history_entry(candidate);
+
+        assert_eq!(entry.candidate(), candidate);
+        assert_eq!(entry.assessments(), rows.as_slice());
+        assert!((entry.score() - 0.5).abs() < f64::EPSILON);
+        assert_eq!(assessment.metric_calls_new, 2);
+        assert_eq!(assessment.scalar_evidence.outcomes().len(), 2);
+    }
+}
