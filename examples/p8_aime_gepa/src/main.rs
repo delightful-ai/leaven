@@ -33,6 +33,8 @@ use serde::{Deserialize, Serialize};
 const BASELINE: &str = "Solve the math problem carefully. Break down the steps and provide the final answer as a single number.";
 const OPTIMIZED: &str = "Solve with modular arithmetic when useful. Verify arithmetic before the final answer. Provide only the final integer.";
 const GEPA_AIME_METRIC_CALLS: u64 = 500;
+const DSPY_QUICKSTART_METRIC_CALLS: u64 = 150;
+const DSPY_QUICKSTART_TEST_SCORE_TARGET: f64 = 0.566;
 const GEPA_AIME_MAX_WORKERS: usize = 32;
 const GEPA_AIME_MAX_OUTPUT_TOKENS: u32 = 32_000;
 // GEPA AIME is controlled by max_metric_calls, not max_iterations. This is a
@@ -44,6 +46,7 @@ const DETERMINISTIC_SOLVER_MODEL: &str = "deterministic-aime-solver";
 const LEAVEN_AIME_SOLVER_CACHE_POLICY: &str = "LEAVEN_AIME_SOLVER_CACHE_POLICY";
 const LEAVEN_AIME_REFLECTION_CACHE_POLICY: &str = "LEAVEN_AIME_REFLECTION_CACHE_POLICY";
 const LEAVEN_AIME_LM_CACHE_BACKEND: &str = "LEAVEN_AIME_LM_CACHE_BACKEND";
+const LEAVEN_AIME_PROFILE: &str = "LEAVEN_AIME_PROFILE";
 const LEAVEN_AIME_RUN_DIR: &str = "LEAVEN_AIME_RUN_DIR";
 const LEAVEN_AIME_DETERMINISTIC_REFLECTION: &str = "LEAVEN_AIME_DETERMINISTIC_REFLECTION";
 const LEAVEN_OPENAI_MAX_CONCURRENT_REQUESTS: &str = "LEAVEN_OPENAI_MAX_CONCURRENT_REQUESTS";
@@ -81,9 +84,18 @@ fn report_lines(config: &AimeRunConfig, run: &AimeRunResult) -> Vec<String> {
 }
 
 fn report_run_header_lines(config: &AimeRunConfig, result: &Optimized<AimePrompt>) -> Vec<String> {
-    vec![
+    let mut lines = vec![
         format!("run_profile={}", config.profile.label()),
         format!("proof_classification={}", config.proof_classification()),
+        format!("comparison_target={}", config.profile.comparison_target()),
+        format!(
+            "comparison_published_test_score={}",
+            report_score(config.profile.published_test_score())
+        ),
+        format!(
+            "comparison_reflection_prompt={}",
+            config.profile.reflection_prompt_claim()
+        ),
         format!("data_source={}", config.data_source.label()),
         format!("run_id={}", result.run_id),
         format!(
@@ -111,7 +123,15 @@ fn report_run_header_lines(config: &AimeRunConfig, result: &Optimized<AimePrompt
                 .unwrap_or_else(|| "none".to_owned())
         ),
         format!("compatibility={}", report_compatibility(result)),
-    ]
+    ];
+    lines.extend(
+        config
+            .profile
+            .comparison_notes()
+            .into_iter()
+            .map(|note| format!("comparison_note={note}")),
+    );
+    lines
 }
 
 fn report_compatibility(result: &Optimized<AimePrompt>) -> String {
@@ -559,10 +579,17 @@ struct AimeRunConfig {
 impl AimeRunConfig {
     fn configured() -> Self {
         let data_source = AimeDataSource::configured();
-        if std::env::var_os("LEAVEN_AIME_LIVE_OPENAI").is_some() {
-            Self::gepa_aime_with_data_source(data_source)
-        } else {
-            Self::deterministic_smoke_with_data_source(data_source)
+        match std::env::var(LEAVEN_AIME_PROFILE).as_deref() {
+            Ok("dspy-quickstart") => Self::dspy_quickstart_with_data_source(data_source),
+            Ok("gepa-aime") => Self::gepa_aime_with_data_source(data_source),
+            Ok("deterministic-smoke") => Self::deterministic_smoke_with_data_source(data_source),
+            Ok(raw) => panic!(
+                "unsupported {LEAVEN_AIME_PROFILE}={raw:?}; expected deterministic-smoke, dspy-quickstart, or gepa-aime"
+            ),
+            Err(_) if std::env::var_os("LEAVEN_AIME_LIVE_OPENAI").is_some() => {
+                Self::gepa_aime_with_data_source(data_source)
+            }
+            Err(_) => Self::deterministic_smoke_with_data_source(data_source),
         }
     }
 
@@ -571,14 +598,39 @@ impl AimeRunConfig {
         Self::gepa_aime_with_data_source(AimeDataSource::configured())
     }
 
+    #[cfg(test)]
+    fn dspy_quickstart() -> Self {
+        Self::dspy_quickstart_with_data_source(AimeDataSource::configured())
+    }
+
     fn gepa_aime_with_data_source(data_source: AimeDataSource) -> Self {
+        Self::live_openai_with_data_source(
+            AimeRunProfile::GepaAime,
+            data_source,
+            GEPA_AIME_METRIC_CALLS,
+        )
+    }
+
+    fn dspy_quickstart_with_data_source(data_source: AimeDataSource) -> Self {
+        Self::live_openai_with_data_source(
+            AimeRunProfile::DspyQuickstart,
+            data_source,
+            DSPY_QUICKSTART_METRIC_CALLS,
+        )
+    }
+
+    fn live_openai_with_data_source(
+        profile: AimeRunProfile,
+        data_source: AimeDataSource,
+        metric_calls: u64,
+    ) -> Self {
         let cache_policies = AimeLmCachePolicies::from_env();
         let runtime = AimeOpenAiRuntimeConfig::from_env();
         Self {
-            profile: AimeRunProfile::GepaAime,
+            profile,
             data_source,
             seed_prompt: BASELINE,
-            budget: Budget::metric_calls(GEPA_AIME_METRIC_CALLS),
+            budget: Budget::metric_calls(metric_calls),
             evaluation_parallelism: NonZeroUsize::new(GEPA_AIME_MAX_WORKERS)
                 .expect("GEPA AIME worker count is non-zero"),
             max_iterations: GEPA_AIME_INTERNAL_ITERATION_CEILING,
@@ -641,7 +693,11 @@ impl AimeRunConfig {
             (false, false, AimeDataSource::HuggingFaceCache) => "local_cached_data_proof",
             (true, false, _) => "live_solver_proof",
             (false, true, _) => "live_reflection_proof",
-            (true, true, _) => "full_live_aime_reproduction_attempt",
+            (true, true, _) => match self.profile {
+                AimeRunProfile::DspyQuickstart => "live_dspy_quickstart_comparison_attempt",
+                AimeRunProfile::GepaAime => "full_live_aime_reproduction_attempt",
+                AimeRunProfile::DeterministicSmoke => "live_smoke_override",
+            },
         }
     }
 }
@@ -649,6 +705,7 @@ impl AimeRunConfig {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum AimeRunProfile {
     DeterministicSmoke,
+    DspyQuickstart,
     GepaAime,
 }
 
@@ -656,7 +713,48 @@ impl AimeRunProfile {
     const fn label(self) -> &'static str {
         match self {
             Self::DeterministicSmoke => "deterministic-smoke",
+            Self::DspyQuickstart => "dspy-quickstart",
             Self::GepaAime => "gepa-aime",
+        }
+    }
+
+    const fn comparison_target(self) -> &'static str {
+        match self {
+            Self::DeterministicSmoke => "none",
+            Self::DspyQuickstart => "dspy_gepa_quickstart_aime_2025",
+            Self::GepaAime => "gepa_cais_aime_math_artifact",
+        }
+    }
+
+    const fn published_test_score(self) -> Option<f64> {
+        match self {
+            Self::DeterministicSmoke => None,
+            Self::DspyQuickstart => Some(DSPY_QUICKSTART_TEST_SCORE_TARGET),
+            Self::GepaAime => Some(0.600),
+        }
+    }
+
+    const fn reflection_prompt_claim(self) -> &'static str {
+        match self {
+            Self::DeterministicSmoke => "upstream_gepa_instruction_template",
+            Self::DspyQuickstart => "upstream_gepa_instruction_template",
+            Self::GepaAime => "upstream_gepa_instruction_template",
+        }
+    }
+
+    fn comparison_notes(self) -> Vec<&'static str> {
+        match self {
+            Self::DeterministicSmoke => Vec::new(),
+            Self::DspyQuickstart => vec![
+                "published_dspy_quickstart_reports_46.6_to_56.6_percent_on_aime_2025",
+                "leaven_runs_without_dspy_runtime_or_dspy_chainofthought_lowering",
+                "leaven_uses_gpt_5_4_mini_reflection_model_by_default",
+            ],
+            Self::GepaAime => vec![
+                "published_gepa_cais_artifact_reports_46.67_to_60.00_percent_on_aime_2025",
+                "leaven_runs_without_dspy_chainofthought_lowering",
+                "leaven_uses_gpt_5_4_mini_reflection_model_by_default",
+            ],
         }
     }
 }
@@ -2417,6 +2515,60 @@ mod tests {
         assert_eq!(
             config.reflection.sampling.reasoning_effort,
             Some(ReasoningEffort::Medium)
+        );
+    }
+
+    #[test]
+    fn dspy_quickstart_profile_matches_published_comparison_denominator() {
+        let config = AimeRunConfig::dspy_quickstart();
+
+        assert_eq!(config.profile, AimeRunProfile::DspyQuickstart);
+        assert_eq!(config.seed_prompt, BASELINE);
+        assert_eq!(
+            config.budget.metric_calls,
+            Some(DSPY_QUICKSTART_METRIC_CALLS)
+        );
+        assert_eq!(
+            config.profile.comparison_target(),
+            "dspy_gepa_quickstart_aime_2025"
+        );
+        assert_eq!(
+            config.profile.published_test_score(),
+            Some(DSPY_QUICKSTART_TEST_SCORE_TARGET)
+        );
+        assert!(config.solver.live);
+        assert!(config.reflection.live);
+        assert_eq!(config.solver.model, openai_model_name());
+        assert_eq!(config.reflection.model, "gpt-5.4-mini");
+        assert_eq!(
+            config.reflection.sampling.reasoning_effort,
+            Some(ReasoningEffort::Medium)
+        );
+    }
+
+    #[test]
+    fn leaven_reflection_prompt_matches_upstream_gepa_instruction_template() {
+        const UPSTREAM_GEPA_INSTRUCTION_TEMPLATE: &str = r"I provided an assistant with the following instructions to perform a task for me:
+```
+<curr_param>
+```
+
+The following are examples of different task inputs provided to the assistant along with the assistant's response for each of them, and some feedback on how the assistant's response could be better:
+```
+<side_info>
+```
+
+Your task is to write a new instruction for the assistant.
+
+Read the inputs carefully and identify the input format and infer detailed task description about the task I wish to solve with the assistant.
+
+Read all the assistant responses and the corresponding feedback. Identify all niche and domain specific factual information about the task and include it in the instruction, as a lot of it may not be available to the assistant in the future. The assistant may have utilized a generalizable strategy to solve the task, if so, include that in the instruction as well.
+
+Provide the new instructions within ``` blocks.";
+
+        assert_eq!(
+            leaven::gepa::DEFAULT_REFLECTION_PROMPT_TEMPLATE,
+            UPSTREAM_GEPA_INSTRUCTION_TEMPLATE
         );
     }
 

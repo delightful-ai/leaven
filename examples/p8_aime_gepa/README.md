@@ -61,6 +61,23 @@ export LEAVEN_AIME_CACHE=target/leaven-aime-cache/aime.json
 cargo run -p p8_aime_gepa
 ```
 
+To compare Leaven against the published DSPy/GEPA AIME quickstart denominator
+without running DSPy, use the Leaven DSPy-comparison profile:
+
+```bash
+export OPENAI_API_KEY=...
+export LEAVEN_AIME_PROFILE=dspy-quickstart
+export LEAVEN_AIME_CACHE=target/leaven-aime-cache/aime.json
+cargo run -p p8_aime_gepa
+```
+
+That profile uses the same real AIME cache and the same upstream GEPA
+instruction-reflection prompt template, but caps Leaven search at the DSPy
+quickstart's `150` metric calls and reports
+`comparison_target=dspy_gepa_quickstart_aime_2025` with the published
+`56.6%` held-out test target. It remains a Leaven-native run: no DSPy runtime
+or DSPy `ChainOfThought` prompt lowering is used.
+
 The OpenAI path is an opt-in native async solver swap over the same
 `leaven::optimize(...).train(...).validation(...).test(...).runner(...).score(...).using(...).run()`
 surface. `LEAVEN_AIME_LIVE_OPENAI=1` enables both live solver and live
