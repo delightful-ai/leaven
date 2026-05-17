@@ -13,7 +13,7 @@ use leaven::engine::{
 use leaven::eval::{Case, SplitRole};
 use leaven::gepa::{
     Gepa, GepaCandidateIndex, GepaEventSummary, GepaSkipReason, ReflectionError,
-    ReflectiveDatasetBuilder, ReflectiveExample,
+    ReflectiveDatasetBuilder, ReflectiveExample, ReflectiveSideInfoValue,
 };
 use leaven::kernel::Metered;
 use leaven::kernel::{
@@ -2749,14 +2749,19 @@ fn dspy_field_header(line: &str) -> Option<String> {
     }
 }
 
-fn aime_reflection_side_info_example(info: AimeReflectionSideInfo) -> Vec<(String, String)> {
+fn aime_reflection_side_info_example(
+    info: AimeReflectionSideInfo,
+) -> Vec<(String, ReflectiveSideInfoValue)> {
     vec![
-        ("score".to_owned(), format!("{:.1}", info.score)),
-        ("input".to_owned(), info.input),
-        ("prompt".to_owned(), info.prompt),
-        ("output".to_owned(), info.output),
-        ("reasoning".to_owned(), info.reasoning),
-        ("execution_feedback".to_owned(), info.execution_feedback),
+        ("score".to_owned(), format!("{:.1}", info.score).into()),
+        ("input".to_owned(), info.input.into()),
+        ("prompt".to_owned(), info.prompt.into()),
+        ("output".to_owned(), info.output.into()),
+        ("reasoning".to_owned(), info.reasoning.into()),
+        (
+            "execution_feedback".to_owned(),
+            info.execution_feedback.into(),
+        ),
     ]
 }
 
@@ -3697,14 +3702,14 @@ Provide the new parameter value within ``` blocks.";
         assert_eq!(
             rendered,
             vec![
-                ("score".to_owned(), "0.0".to_owned()),
-                ("input".to_owned(), "What is 19 + 23?".to_owned()),
-                ("prompt".to_owned(), "Solve carefully.".to_owned()),
-                ("output".to_owned(), "44".to_owned()),
-                ("reasoning".to_owned(), "I added incorrectly.".to_owned()),
+                ("score".to_owned(), "0.0".into()),
+                ("input".to_owned(), "What is 19 + 23?".into()),
+                ("prompt".to_owned(), "Solve carefully.".into()),
+                ("output".to_owned(), "44".into()),
+                ("reasoning".to_owned(), "I added incorrectly.".into()),
                 (
                     "execution_feedback".to_owned(),
-                    "Your answer is incorrect. The correct answer is '42'.".to_owned(),
+                    "Your answer is incorrect. The correct answer is '42'.".into(),
                 ),
             ]
         );

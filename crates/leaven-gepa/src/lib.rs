@@ -32,7 +32,7 @@ pub use reflection::{
     CaseInputProjectedDataset, DEFAULT_REFLECTION_PROMPT_TEMPLATE, DefaultReflectionRenderer,
     GepaReflectiveDataset, LmBackedReflectorConfig, PlainTextEditParser, ReflectRequest,
     ReflectionError, ReflectionOutputParser, ReflectionRenderInput, ReflectionRenderer,
-    ReflectiveCaseInput, ReflectiveDatasetBuilder, ReflectiveExample,
+    ReflectiveCaseInput, ReflectiveDatasetBuilder, ReflectiveExample, ReflectiveSideInfoValue,
 };
 pub use selector::{
     CandidateSelector, CheckpointCandidateSelector, HasBestCandidate, ParetoFrequencyWeighted,
@@ -53,8 +53,8 @@ pub mod prelude {
         LmBackedReflector, LmBackedReflectorConfig, MinibatchThenValidation,
         ParetoFrequencyWeighted, PartSelector, PlainTextEditParser, ReflectRequest,
         ReflectionError, ReflectionOutputParser, ReflectionRenderInput, ReflectionRenderer,
-        ReflectiveCaseInput, ReflectiveDatasetBuilder, ReflectiveExample, RoundRobinPart,
-        SelectBestCandidate, StrictImprovement, SurfaceProposer, ValidationPolicy,
+        ReflectiveCaseInput, ReflectiveDatasetBuilder, ReflectiveExample, ReflectiveSideInfoValue,
+        RoundRobinPart, SelectBestCandidate, StrictImprovement, SurfaceProposer, ValidationPolicy,
         gepa_stage_proposer,
     };
 }

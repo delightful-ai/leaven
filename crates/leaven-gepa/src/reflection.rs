@@ -51,7 +51,7 @@ pub struct ReflectiveExample {
     /// case/input/output/feedback projection. This is for adapters such as
     /// GEPA optimize-anything where the scorer returns a domain-specific
     /// side-info record.
-    pub side_info: Vec<(String, String)>,
+    pub side_info: Vec<(String, ReflectiveSideInfoValue)>,
     /// Case the artifact ran on, when the projection knows it.
     pub case: Option<CaseId>,
     /// The input the artifact ran on, rendered for the reflector.
@@ -64,6 +64,42 @@ pub struct ReflectiveExample {
     pub feedback: String,
     /// Provenance refs for this example.
     pub source_refs: Vec<InfoRef>,
+}
+
+/// Upstream GEPA side-info value rendered into markdown for reflection.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "kind", content = "value", rename_all = "snake_case")]
+pub enum ReflectiveSideInfoValue {
+    /// Scalar text rendered as-is after trimming surrounding whitespace.
+    Text(String),
+    /// Ordered mapping rendered as nested markdown headings.
+    Mapping(Vec<(String, ReflectiveSideInfoValue)>),
+    /// Ordered list rendered as `Item N` nested markdown headings.
+    List(Vec<ReflectiveSideInfoValue>),
+}
+
+impl ReflectiveSideInfoValue {
+    /// Build an ordered mapping value.
+    pub fn mapping(fields: impl IntoIterator<Item = (String, ReflectiveSideInfoValue)>) -> Self {
+        Self::Mapping(fields.into_iter().collect())
+    }
+
+    /// Build an ordered list value.
+    pub fn list(items: impl IntoIterator<Item = ReflectiveSideInfoValue>) -> Self {
+        Self::List(items.into_iter().collect())
+    }
+}
+
+impl From<String> for ReflectiveSideInfoValue {
+    fn from(value: String) -> Self {
+        Self::Text(value)
+    }
+}
+
+impl From<&str> for ReflectiveSideInfoValue {
+    fn from(value: &str) -> Self {
+        Self::Text(value.to_owned())
+    }
 }
 
 /// Shared GEPA reflection request.
@@ -584,7 +620,8 @@ fn render_reflective_examples(examples: &[ReflectiveExample]) -> String {
 fn render_reflective_example_sections(rendered: &mut String, example: &ReflectiveExample) {
     if !example.side_info.is_empty() {
         for (name, value) in &example.side_info {
-            let _ = writeln!(rendered, "## {}\n{}\n", name.trim(), value.trim());
+            let _ = writeln!(rendered, "## {}", name.trim());
+            render_side_info_value(rendered, value, 3);
         }
         return;
     }
@@ -604,6 +641,32 @@ fn render_reflective_example_sections(rendered: &mut String, example: &Reflectiv
         let _ = writeln!(rendered, "## Feedback\n{}", example.feedback.trim());
     }
     rendered.push('\n');
+}
+
+fn render_side_info_value(rendered: &mut String, value: &ReflectiveSideInfoValue, level: usize) {
+    match value {
+        ReflectiveSideInfoValue::Text(text) => {
+            let _ = writeln!(rendered, "{}\n", text.trim());
+        }
+        ReflectiveSideInfoValue::Mapping(fields) => {
+            for (name, value) in fields {
+                let _ = writeln!(rendered, "{} {}", "#".repeat(level), name.trim());
+                render_side_info_value(rendered, value, (level + 1).min(6));
+            }
+            if fields.is_empty() {
+                rendered.push('\n');
+            }
+        }
+        ReflectiveSideInfoValue::List(items) => {
+            for (index, value) in items.iter().enumerate() {
+                let _ = writeln!(rendered, "{} Item {}", "#".repeat(level), index + 1);
+                render_side_info_value(rendered, value, (level + 1).min(6));
+            }
+            if items.is_empty() {
+                rendered.push('\n');
+            }
+        }
+    }
 }
 
 fn render_prompt_template(
@@ -675,8 +738,9 @@ mod tests {
     use leaven_kernel::BlobRef;
 
     use super::{
-        ReflectiveCaseInput, ReflectiveExample, extract_replacement_text, output_record_text,
-        render_prompt_template, render_reflective_examples, strip_optional_language,
+        ReflectiveCaseInput, ReflectiveExample, ReflectiveSideInfoValue, extract_replacement_text,
+        output_record_text, render_prompt_template, render_reflective_examples,
+        strip_optional_language,
     };
 
     #[test]
@@ -751,14 +815,14 @@ mod tests {
     fn reflective_examples_can_render_upstream_side_info_records() {
         let rendered = render_reflective_examples(&[ReflectiveExample {
             side_info: vec![
-                ("score".to_owned(), "0".to_owned()),
-                ("input".to_owned(), "What is 19 + 23?".to_owned()),
-                ("prompt".to_owned(), "Solve carefully.".to_owned()),
-                ("output".to_owned(), "44".to_owned()),
-                ("reasoning".to_owned(), "I added incorrectly.".to_owned()),
+                ("score".to_owned(), "0".into()),
+                ("input".to_owned(), "What is 19 + 23?".into()),
+                ("prompt".to_owned(), "Solve carefully.".into()),
+                ("output".to_owned(), "44".into()),
+                ("reasoning".to_owned(), "I added incorrectly.".into()),
                 (
                     "execution_feedback".to_owned(),
-                    "Your answer is incorrect. The correct answer is '42'.".to_owned(),
+                    "Your answer is incorrect. The correct answer is '42'.".into(),
                 ),
             ],
             source_refs: Vec::new(),
@@ -774,14 +838,39 @@ mod tests {
     }
 
     #[test]
+    fn reflective_examples_render_nested_side_info_like_upstream_gepa() {
+        let rendered = render_reflective_examples(&[ReflectiveExample {
+            side_info: vec![(
+                "scores".to_owned(),
+                ReflectiveSideInfoValue::mapping([
+                    ("exact".to_owned(), "0.0".into()),
+                    (
+                        "attempts".to_owned(),
+                        ReflectiveSideInfoValue::list([
+                            ReflectiveSideInfoValue::mapping([("answer".to_owned(), "44".into())]),
+                            ReflectiveSideInfoValue::mapping([("answer".to_owned(), "42".into())]),
+                        ]),
+                    ),
+                ]),
+            )],
+            ..ReflectiveExample::default()
+        }]);
+
+        assert_eq!(
+            rendered,
+            "# Example 1\n## scores\n### exact\n0.0\n\n### attempts\n#### Item 1\n##### answer\n44\n\n#### Item 2\n##### answer\n42\n\n"
+        );
+    }
+
+    #[test]
     fn reflective_examples_join_multiple_side_info_records_like_upstream_gepa() {
         let rendered = render_reflective_examples(&[
             ReflectiveExample {
-                side_info: vec![("score".to_owned(), "0.0".to_owned())],
+                side_info: vec![("score".to_owned(), "0.0".into())],
                 ..ReflectiveExample::default()
             },
             ReflectiveExample {
-                side_info: vec![("score".to_owned(), "1.0".to_owned())],
+                side_info: vec![("score".to_owned(), "1.0".into())],
                 ..ReflectiveExample::default()
             },
         ]);
