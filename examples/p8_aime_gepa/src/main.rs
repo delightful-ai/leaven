@@ -23,7 +23,10 @@ use leaven::prelude::{
 };
 use leaven::run::{CachePolicy, RunCase, RunProblem, RunResumability, RunStorage};
 use leaven::stdlib::evidence::OutputRecord;
-use leaven_gepa::LmBackedReflectorConfig;
+use leaven_gepa::{
+    DefaultReflectionRenderer, LmBackedReflectorConfig, ReflectRequest, ReflectionRenderInput,
+    ReflectionRenderer,
+};
 use leaven_lm::{
     Lm, LmError, LmId, LmRequest, LmResponse, Message, Messages, ReasoningEffort, SamplingOptions,
     TokenUsage,
@@ -3356,6 +3359,91 @@ Provide the new parameter value within ``` blocks.";
                     "Your answer is incorrect. The correct answer is '42'.".to_owned(),
                 ),
             ]
+        );
+    }
+
+    #[test]
+    fn aime_full_reflection_prompt_renders_upstream_optimize_anything_markdown() {
+        let config = AimeRunConfig::gepa_aime();
+        let reflector = aime_reflector_config(&config.reflection);
+        let artifact = AimePrompt::new("Solve carefully.");
+        let surface = AimePromptSurface;
+        let request = ReflectRequest::for_part(CandidateId::new(), "system", "system")
+            .with_examples([ReflectiveExample {
+                side_info: aime_reflection_side_info_example(AimeReflectionSideInfo {
+                    score: 0.0,
+                    input: "What is 19 + 23?".to_owned(),
+                    prompt: "Solve carefully.".to_owned(),
+                    output: "44".to_owned(),
+                    reasoning: "I added incorrectly.".to_owned(),
+                    execution_feedback: "Your answer is incorrect. The correct answer is '42'."
+                        .to_owned(),
+                }),
+                ..ReflectiveExample::default()
+            }]);
+
+        let lm_request = DefaultReflectionRenderer
+            .render(ReflectionRenderInput::<
+                RunProblem<AimePrompt, AimeInput, AimeTarget>,
+                AimePromptSurface,
+            > {
+                request: &request,
+                artifact: &artifact,
+                surface: &surface,
+                model: config.reflection.model.clone().into(),
+                config: &reflector,
+            })
+            .expect("AIME reflection prompt renders");
+        let rendered = lm_request
+            .messages
+            .iter()
+            .map(Message::content)
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert_eq!(
+            rendered,
+            r"I am optimizing a parameter in my system. The current parameter value is:
+```
+Solve carefully.
+```
+
+Below is evaluation data showing how this parameter value performed across multiple test cases. The data contains performance metrics, diagnostic information, and other relevant details from the evaluation:
+```
+# Example 1
+## score
+0.0
+
+## input
+What is 19 + 23?
+
+## prompt
+Solve carefully.
+
+## output
+44
+
+## reasoning
+I added incorrectly.
+
+## execution_feedback
+Your answer is incorrect. The correct answer is '42'.
+
+
+```
+
+Your task is to propose a new, improved parameter value that can be used as a drop-in replacement for the current one.
+
+Carefully analyze all the evaluation data provided above. Look for patterns that indicate what works and what doesn't. Pay special attention to:
+- Performance metrics and how they correlate with parameter behavior
+- Recurring issues, errors, or failure patterns across multiple test cases
+- Successful patterns or behaviors that should be preserved or enhanced
+- Any domain-specific requirements, constraints, or factual information revealed in the evaluation data
+- Specific technical details that are crucial for understanding the parameter's role
+
+Based on your analysis, propose a new parameter value that addresses the identified issues while maintaining or improving upon what works well. Your proposal should be directly informed by the patterns and insights from the evaluation data.
+
+Provide the new parameter value within ``` blocks."
         );
     }
 
