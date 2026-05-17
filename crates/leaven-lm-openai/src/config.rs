@@ -13,6 +13,8 @@ pub struct OpenAiConfig {
 }
 
 impl OpenAiConfig {
+    const REQUEST_TIMEOUT_ENV: &'static str = "LEAVEN_OPENAI_REQUEST_TIMEOUT_SECONDS";
+
     /// Creates config with the default `OpenAI` Responses API URL.
     pub fn new(api_key: impl Into<String>) -> Self {
         Self {
@@ -26,13 +28,20 @@ impl OpenAiConfig {
 
     /// Reads `OPENAI_API_KEY` from the process environment.
     ///
+    /// `LEAVEN_OPENAI_REQUEST_TIMEOUT_SECONDS` may override the default
+    /// per-request transport timeout for long-running release calls.
+    ///
     /// # Errors
     ///
     /// Returns [`LmError::InvalidRequest`] when the key is missing.
     pub fn from_env() -> Result<Self, LmError> {
         let api_key = std::env::var("OPENAI_API_KEY")
             .map_err(|_| LmError::invalid_request("OPENAI_API_KEY is not set"))?;
-        Ok(Self::new(api_key))
+        let mut config = Self::new(api_key);
+        if let Some(timeout) = request_timeout_from_env()? {
+            config = config.with_request_timeout(timeout);
+        }
+        Ok(config)
     }
 
     /// Overrides the Responses API endpoint.
@@ -82,6 +91,26 @@ impl OpenAiConfig {
     pub(crate) const fn throttle_policy(&self) -> &OpenAiThrottlePolicy {
         &self.throttle_policy
     }
+}
+
+fn request_timeout_from_env() -> Result<Option<Duration>, LmError> {
+    let Some(raw) = std::env::var_os(OpenAiConfig::REQUEST_TIMEOUT_ENV) else {
+        return Ok(None);
+    };
+    let raw = raw.to_string_lossy();
+    let seconds = raw.parse::<u64>().map_err(|_| {
+        LmError::invalid_request(format!(
+            "{} must be a positive integer number of seconds",
+            OpenAiConfig::REQUEST_TIMEOUT_ENV
+        ))
+    })?;
+    if seconds == 0 {
+        return Err(LmError::invalid_request(format!(
+            "{} must be a positive integer number of seconds",
+            OpenAiConfig::REQUEST_TIMEOUT_ENV
+        )));
+    }
+    Ok(Some(Duration::from_secs(seconds)))
 }
 
 /// Proactive concurrency throttle for `OpenAI` Responses API requests.

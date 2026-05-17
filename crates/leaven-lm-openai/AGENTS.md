@@ -8,8 +8,10 @@ runtime fingerprint that excludes secrets.
 
 ## Map
 - `OpenAiConfig` owns endpoint, API-key sourcing, request timeout, and retry
-  policy. It does not currently own a model default; `LmRequest.model` is what
-  lowers to the wire `model`.
+  policy. `from_env()` reads `OPENAI_API_KEY` and may read
+  `LEAVEN_OPENAI_REQUEST_TIMEOUT_SECONDS` for long-running operator calls; the
+  effective timeout is fingerprinted. It does not currently own a model
+  default; `LmRequest.model` is what lowers to the wire `model`.
 - `OpenAiLm::to_wire_request` is the local seam for request lowering tests.
 - OpenAI `previous_response_id` is used only when `LmContinuation` says the
   covered canonical messages line up safely.
