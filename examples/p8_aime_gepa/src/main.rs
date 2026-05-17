@@ -731,6 +731,9 @@ fn p8_aime_report_json(config: &AimeRunConfig, run: &AimeRunResult) -> serde_jso
         "schema": "leaven.p8_aime.report.v1",
         "run_profile": config.profile.label(),
         "proof_classification": proof_classification_for_report(config, &run.role_reports),
+        "comparison_target": config.profile.comparison_target(),
+        "comparison_published_test_score": config.profile.published_test_score(),
+        "comparison_reflection_prompt": config.profile.reflection_prompt_claim(),
         "comparison": {
             "target": config.profile.comparison_target(),
             "published_test_score": config.profile.published_test_score(),
@@ -4296,6 +4299,18 @@ Provide the new parameter value within ``` blocks."
         assert_eq!(
             report["proof_classification"],
             config.proof_classification()
+        );
+        assert_eq!(
+            report["comparison_target"],
+            config.profile.comparison_target()
+        );
+        assert_eq!(
+            report["comparison"]["target"],
+            config.profile.comparison_target()
+        );
+        assert_eq!(
+            report["comparison_reflection_prompt"],
+            config.profile.reflection_prompt_claim()
         );
         assert_eq!(report["lm_roles"].as_array().unwrap().len(), 2);
         assert_eq!(report["lm_roles"][0]["role"], "solver");
