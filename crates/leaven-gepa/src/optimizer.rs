@@ -867,25 +867,41 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
         Validate: Sync,
         Dataset: Sync,
     {
-        let report = ctx
-            .evaluate(
-                EvaluatorId::PRIMARY,
-                EvaluationRequest::Independent {
-                    candidates: vec![candidate],
-                    set,
-                    granularity: AssessmentGranularity::PerCase,
-                    purpose: purpose.clone(),
-                },
-            )
-            .await
-            .map_err(|source| OptimizerError::with_source("GEPA evaluation failed", source))?;
-        if report.assessment_ids.is_empty() {
+        let request = EvaluationRequest::Independent {
+            candidates: vec![candidate],
+            set,
+            granularity: AssessmentGranularity::PerCase,
+            purpose: purpose.clone(),
+        };
+        let case_ids = ctx
+            .resolve_evaluation_request(&request)
+            .map_err(|source| OptimizerError::with_source("GEPA evaluation failed", source))?
+            .case_ids;
+        let mut assessments = Vec::with_capacity(case_ids.len());
+        let mut metric_calls_new = 0_u64;
+        for case in case_ids {
+            let report = ctx
+                .evaluate(
+                    EvaluatorId::PRIMARY,
+                    EvaluationRequest::Independent {
+                        candidates: vec![candidate],
+                        set: EvaluationSet::Cases(vec![case]),
+                        granularity: AssessmentGranularity::PerCase,
+                        purpose: purpose.clone(),
+                    },
+                )
+                .await
+                .map_err(|source| OptimizerError::with_source("GEPA evaluation failed", source))?;
+            metric_calls_new = metric_calls_new.saturating_add(report.cost.metric_calls);
+            assessments.extend(report.assessment_ids);
+        }
+        if assessments.is_empty() {
             return Err(OptimizerError::Message(format!(
                 "GEPA {purpose:?} expected at least one case assessment row"
             )));
         }
-        let mut outcomes = Vec::with_capacity(report.assessment_ids.len());
-        for assessment in &report.assessment_ids {
+        let mut outcomes = Vec::with_capacity(assessments.len());
+        for assessment in &assessments {
             let assessment_view = ctx.graph().assessment(*assessment).ok_or_else(|| {
                 OptimizerError::Message(format!(
                     "GEPA assessment row `{assessment}` is missing from graph"
@@ -920,10 +936,10 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             OptimizerError::Message("GEPA expected comparable case scores".to_owned())
         })?;
         Ok(GepaAssessment {
-            assessments: report.assessment_ids,
+            assessments,
             scalar_evidence,
             average_score,
-            metric_calls_new: report.cost.metric_calls,
+            metric_calls_new,
         })
     }
 }
