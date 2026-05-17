@@ -65,6 +65,7 @@ const SURFACE: &[(&str, Route, &str)] = &[
     ("OptimizeBuilder", Route::Prelude, ""),
     ("OptimizeError", Route::Prelude, ""),
     ("RunEventSummary", Route::Prelude, ""),
+    ("RunError", Route::Prelude, ""),
     ("RunOutput", Route::Prelude, ""),
     ("Score", Route::Prelude, ""),
     ("ScoreContext", Route::Prelude, ""),

@@ -20,7 +20,7 @@ use leaven_kernel::{
     ResolvedEvaluationSetId, RunId, StageId, now,
 };
 use leaven_run::{
-    RunCase, RunOutput, RunProblem, RuntimeFingerprint, Score, ScoreContext, ScoreError,
+    RunCase, RunError, RunOutput, RunProblem, RuntimeFingerprint, Score, ScoreContext, ScoreError,
     ScoringEvaluator, ScoringEvaluatorIdentity,
 };
 
@@ -160,8 +160,8 @@ fn scoring_evaluator_reports_per_candidate_cost_for_independent_batches() {
             Arc::new(|artifact: TextArtifact, case| {
                 async move {
                     let input = *case.input();
-                    RunOutput::new((artifact.0 + input).to_string())
-                        .with_cost(Cost::llm_calls(u64::try_from(input).unwrap()))
+                    Ok(RunOutput::new((artifact.0 + input).to_string())
+                        .with_cost(Cost::llm_calls(u64::try_from(input).unwrap())))
                 }
                 .boxed()
             }),
@@ -271,7 +271,9 @@ fn scoring_evaluator_hides_target_from_runner_and_passes_target_to_scorer() {
                             .lock()
                             .unwrap()
                             .push((case.id(), case.input().addend));
-                        RunOutput::new((artifact.0 + case.input().addend).to_string())
+                        Ok(RunOutput::new(
+                            (artifact.0 + case.input().addend).to_string(),
+                        ))
                     }
                     .boxed()
                 })
@@ -343,6 +345,72 @@ fn score_error_preserves_source_trace_message_and_cost() {
 }
 
 #[test]
+fn run_error_preserves_source_trace_message_and_cost() {
+    let error = RunError::with_source("solver failed", JudgeSourceError)
+        .with_trace("cache-only replay missed")
+        .with_cost(Cost::llm_calls(2));
+
+    assert_eq!(error.message(), "solver failed");
+    assert_eq!(error.trace(), &["cache-only replay missed".to_owned()]);
+    assert_eq!(error.cost().llm_calls, 2);
+    assert_eq!(error.to_string(), "runner failed: solver failed");
+    let source = std::error::Error::source(&error).expect("source is preserved");
+    assert_eq!(source.to_string(), "judge source");
+}
+
+#[test]
+fn scoring_evaluator_surfaces_async_runner_failures_before_scoring() {
+    block_on(async {
+        let (mut graph, mut budget, candidate) = graph_with_seed();
+        let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
+        let scorer_calls = Arc::new(AtomicUsize::new(0));
+        let evaluator = ScoringEvaluator::new(
+            Arc::new(vec![input_case(0, 2)]),
+            Arc::new(|_artifact: TextArtifact, _case| {
+                async move {
+                    Err(RunError::new("solver cache miss")
+                        .with_trace("cache-only replay failed before provider call")
+                        .with_cost(Cost::llm_calls(2)))
+                }
+                .boxed()
+            }),
+            Arc::new({
+                let scorer_calls = Arc::clone(&scorer_calls);
+                move |_ctx: ScoreContext<TextArtifact, i32>| {
+                    let scorer_calls = Arc::clone(&scorer_calls);
+                    async move {
+                        scorer_calls.fetch_add(1, Ordering::Relaxed);
+                        Ok(Score::new(0.0, "should not score"))
+                    }
+                    .boxed()
+                }
+            }),
+            &identity("scoring-evaluator-runner-failure-test"),
+        );
+
+        let error = evaluator
+            .evaluate(
+                request(
+                    ResolvedRequestKind::Independent {
+                        candidates: vec![candidate],
+                    },
+                    vec![CaseId::new(0)],
+                    AssessmentGranularity::PerCase,
+                ),
+                ctx.evaluation_context(StageId::from_evaluator(Evaluator::id(&evaluator))),
+            )
+            .await
+            .err()
+            .expect("evaluation should fail");
+
+        assert!(error.to_string().contains("runner function failed"));
+        assert_eq!(error.cost().metric_calls, 0);
+        assert_eq!(error.cost().llm_calls, 2);
+        assert_eq!(scorer_calls.load(Ordering::Relaxed), 0);
+    });
+}
+
+#[test]
 fn scoring_evaluator_surfaces_async_scorer_failures_with_metered_cost() {
     block_on(async {
         let (mut graph, mut budget, candidate) = graph_with_seed();
@@ -351,8 +419,8 @@ fn scoring_evaluator_surfaces_async_scorer_failures_with_metered_cost() {
             Arc::new(vec![input_case(0, 2)]),
             Arc::new(|artifact: TextArtifact, case| {
                 async move {
-                    RunOutput::new((artifact.0 + *case.input()).to_string())
-                        .with_cost(Cost::llm_calls(2))
+                    Ok(RunOutput::new((artifact.0 + *case.input()).to_string())
+                        .with_cost(Cost::llm_calls(2)))
                 }
                 .boxed()
             }),
@@ -400,7 +468,7 @@ fn scoring_evaluator_passes_budget_snapshot_to_scorer() {
         let evaluator = ScoringEvaluator::new(
             Arc::new(vec![input_case(0, 2)]),
             Arc::new(|artifact: TextArtifact, case| {
-                async move { RunOutput::new((artifact.0 + *case.input()).to_string()) }.boxed()
+                async move { Ok(RunOutput::new((artifact.0 + *case.input()).to_string())) }.boxed()
             }),
             Arc::new(|ctx: ScoreContext<TextArtifact, i32>| {
                 async move {
@@ -460,7 +528,7 @@ fn scoring_evaluator_runs_case_jobs_with_bounded_parallelism_and_stable_order() 
                         });
                         let output = rx.await.expect("worker sends output");
                         active.fetch_sub(1, Ordering::SeqCst);
-                        output
+                        Ok(output)
                     }
                     .boxed()
                 })
@@ -518,7 +586,7 @@ fn scoring_evaluator(
     ScoringEvaluator::new(
         Arc::new(vec![input_case(0, 2)]),
         Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
-            async move { RunOutput::new((artifact.0 + *case.input()).to_string()) }.boxed()
+            async move { Ok(RunOutput::new((artifact.0 + *case.input()).to_string())) }.boxed()
         }),
         Arc::new(move |ctx| {
             let score = scorer(ctx);
@@ -645,7 +713,7 @@ fn scoring_evaluator_fingerprint_includes_runtime_and_case_identity() {
     let base = ScoringEvaluator::new(
         Arc::new(vec![input_case(0, 2)]),
         Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
-            async move { RunOutput::new((artifact.0 + *case.input()).to_string()) }.boxed()
+            async move { Ok(RunOutput::new((artifact.0 + *case.input()).to_string())) }.boxed()
         }),
         Arc::new(|ctx: ScoreContext<TextArtifact, i32>| {
             async move { Ok(Score::new(ctx.output.output.parse().unwrap(), "ok")) }.boxed()
@@ -655,7 +723,7 @@ fn scoring_evaluator_fingerprint_includes_runtime_and_case_identity() {
     let changed_runner = ScoringEvaluator::new(
         Arc::new(vec![input_case(0, 2)]),
         Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
-            async move { RunOutput::new((artifact.0 + *case.input()).to_string()) }.boxed()
+            async move { Ok(RunOutput::new((artifact.0 + *case.input()).to_string())) }.boxed()
         }),
         Arc::new(|ctx: ScoreContext<TextArtifact, i32>| {
             async move { Ok(Score::new(ctx.output.output.parse().unwrap(), "ok")) }.boxed()
@@ -668,7 +736,7 @@ fn scoring_evaluator_fingerprint_includes_runtime_and_case_identity() {
     let changed_cases = ScoringEvaluator::new(
         Arc::new(vec![input_case(0, 2), input_case(1, 3)]),
         Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
-            async move { RunOutput::new((artifact.0 + *case.input()).to_string()) }.boxed()
+            async move { Ok(RunOutput::new((artifact.0 + *case.input()).to_string())) }.boxed()
         }),
         Arc::new(|ctx: ScoreContext<TextArtifact, i32>| {
             async move { Ok(Score::new(ctx.output.output.parse().unwrap(), "ok")) }.boxed()
@@ -682,7 +750,7 @@ fn scoring_evaluator_fingerprint_includes_runtime_and_case_identity() {
     let changed_cache_policy = ScoringEvaluator::new(
         Arc::new(vec![input_case(0, 2)]),
         Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
-            async move { RunOutput::new((artifact.0 + *case.input()).to_string()) }.boxed()
+            async move { Ok(RunOutput::new((artifact.0 + *case.input()).to_string())) }.boxed()
         }),
         Arc::new(|ctx: ScoreContext<TextArtifact, i32>| {
             async move { Ok(Score::new(ctx.output.output.parse().unwrap(), "ok")) }.boxed()

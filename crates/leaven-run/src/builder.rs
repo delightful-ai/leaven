@@ -19,7 +19,8 @@ use leaven_store::EvidenceStore;
 use serde::{Serialize, de::DeserializeOwned};
 
 use crate::{
-    IntoOptimizeStore, OptimizeError, RunCase, RunOutput, Score, ScoreContext, ScoreError,
+    IntoOptimizeStore, IntoRunResult, OptimizeError, RunCase, RunError, RunOutput, Score,
+    ScoreContext, ScoreError,
     compatibility::{
         DatasetCompatibility, RunCompatibilityManifest, RuntimeFingerprint, RuntimeKind,
         ScoringEvaluatorIdentity, case_content_fingerprint, case_set_version,
@@ -38,7 +39,8 @@ use crate::{
     },
 };
 
-type Runner<A, I> = Arc<dyn Fn(A, RunCase<I>) -> BoxFuture<'static, RunOutput> + Send + Sync>;
+type Runner<A, I> =
+    Arc<dyn Fn(A, RunCase<I>) -> BoxFuture<'static, Result<RunOutput, RunError>> + Send + Sync>;
 type Scorer<A, I, T> = Arc<
     dyn Fn(ScoreContext<A, I, T>) -> BoxFuture<'static, Result<Score, ScoreError>> + Send + Sync,
 >;
@@ -77,7 +79,7 @@ where
         train: Vec::new(),
         validation: Vec::new(),
         test: Vec::new(),
-        runner: Arc::new(|_artifact, _case| async { RunOutput::default() }.boxed()),
+        runner: Arc::new(|_artifact, _case| async { Ok(RunOutput::default()) }.boxed()),
         scorer: None,
         runner_fingerprint: None,
         scorer_fingerprint: None,
@@ -131,7 +133,7 @@ where
             train,
             validation: Vec::new(),
             test: Vec::new(),
-            runner: Arc::new(|_artifact, _case| async { RunOutput::default() }.boxed()),
+            runner: Arc::new(|_artifact, _case| async { Ok(RunOutput::default()) }.boxed()),
             scorer: None,
             runner_fingerprint: self.runner_fingerprint,
             scorer_fingerprint: self.scorer_fingerprint,
@@ -180,9 +182,13 @@ where
     pub fn runner<F, Fut>(mut self, runner: F) -> Self
     where
         F: Fn(A, RunCase<I>) -> Fut + Send + Sync + 'static,
-        Fut: Future<Output = RunOutput> + Send + 'static,
+        Fut: Future + Send + 'static,
+        Fut::Output: IntoRunResult,
     {
-        self.runner = Arc::new(move |artifact, case| runner(artifact, case).boxed());
+        self.runner = Arc::new(move |artifact, case| {
+            let output = runner(artifact, case);
+            async move { output.await.into_run_result() }.boxed()
+        });
         self
     }
 

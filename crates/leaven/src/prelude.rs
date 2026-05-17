@@ -50,6 +50,7 @@ pub use leaven_run::BestCandidate;
 pub use leaven_run::OptimizeBuilder;
 pub use leaven_run::OptimizeError;
 pub use leaven_run::Optimized;
+pub use leaven_run::RunError;
 pub use leaven_run::RunEventSummary;
 pub use leaven_run::RunOutput;
 pub use leaven_run::Score;

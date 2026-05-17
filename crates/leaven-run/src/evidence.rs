@@ -30,6 +30,94 @@ impl RunOutput {
     }
 }
 
+/// Failure returned by a user runner function.
+#[derive(Debug, thiserror::Error)]
+#[error("runner failed: {message}")]
+pub struct RunError {
+    message: String,
+    trace: Vec<String>,
+    cost: Cost,
+    #[source]
+    source: Option<Box<dyn std::error::Error + Send + Sync + 'static>>,
+}
+
+impl RunError {
+    /// Builds a runner failure.
+    #[must_use]
+    pub fn new(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+            trace: Vec::new(),
+            cost: Cost::zero(),
+            source: None,
+        }
+    }
+
+    /// Builds a runner failure while preserving a lower-level source.
+    #[must_use]
+    pub fn with_source(
+        message: impl Into<String>,
+        source: impl std::error::Error + Send + Sync + 'static,
+    ) -> Self {
+        Self {
+            message: message.into(),
+            trace: Vec::new(),
+            cost: Cost::zero(),
+            source: Some(Box::new(source)),
+        }
+    }
+
+    /// Adds one trace line.
+    #[must_use]
+    pub fn with_trace(mut self, line: impl Into<String>) -> Self {
+        self.trace.push(line.into());
+        self
+    }
+
+    /// Attaches metered runner cost incurred before failure.
+    #[must_use]
+    pub fn with_cost(mut self, cost: Cost) -> Self {
+        self.cost = cost;
+        self
+    }
+
+    /// Human-facing failure message.
+    #[must_use]
+    pub fn message(&self) -> &str {
+        &self.message
+    }
+
+    /// Trace lines captured before failure.
+    #[must_use]
+    pub fn trace(&self) -> &[String] {
+        &self.trace
+    }
+
+    /// Metered cost incurred before failure.
+    #[must_use]
+    pub fn cost(&self) -> &Cost {
+        &self.cost
+    }
+}
+
+/// Conversion accepted by the public runner builder.
+pub trait IntoRunResult {
+    /// Converts a runner return value into the fallible runner contract.
+    fn into_run_result(self) -> Result<RunOutput, RunError>;
+}
+
+impl IntoRunResult for RunOutput {
+    fn into_run_result(self) -> Result<RunOutput, RunError> {
+        Ok(self)
+    }
+}
+
+impl IntoRunResult for Result<RunOutput, RunError> {
+    fn into_run_result(self) -> Result<RunOutput, RunError> {
+        self
+    }
+}
+
 /// Scoring result for one case.
 #[derive(Clone, Debug)]
 pub struct Score {

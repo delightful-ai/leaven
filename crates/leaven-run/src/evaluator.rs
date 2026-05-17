@@ -13,9 +13,10 @@ use leaven_evidence::{CaseAssessmentEvidence, OutputRecord, ScalarEvidence};
 use leaven_kernel::{BudgetSnapshot, Cost, EvaluationSetId, EvaluatorId, Fingerprint, Metered};
 
 use crate::compatibility::ScoringEvaluatorIdentity;
-use crate::{RunCase, RunOutput, RunProblem, Score, ScoreContext, ScoreError};
+use crate::{RunCase, RunError, RunOutput, RunProblem, Score, ScoreContext, ScoreError};
 
-type Runner<A, I> = Arc<dyn Fn(A, RunCase<I>) -> BoxFuture<'static, RunOutput> + Send + Sync>;
+type Runner<A, I> =
+    Arc<dyn Fn(A, RunCase<I>) -> BoxFuture<'static, Result<RunOutput, RunError>> + Send + Sync>;
 type Scorer<A, I, T> = Arc<
     dyn Fn(ScoreContext<A, I, T>) -> BoxFuture<'static, Result<Score, ScoreError>> + Send + Sync,
 >;
@@ -226,7 +227,12 @@ where
     let run_case = RunCase::from_case(&job.case);
     let score_case = crate::ScoreCase::from_case(&job.case);
     let case_id = job.case.id;
-    let output = runner(job.artifact.clone(), run_case).await;
+    let output = runner(job.artifact.clone(), run_case)
+        .await
+        .map_err(|source| {
+            let cost = source.cost().clone();
+            EvaluationError::with_cost_source("runner function failed", cost, source)
+        })?;
     let score = scorer(ScoreContext {
         artifact: job.artifact.clone(),
         case: score_case,

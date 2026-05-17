@@ -24,7 +24,7 @@ use leaven::prelude::{
     Artifact, ArtifactIdentity, Budget, EditSurface, Optimized, Part, PartAddress, RunOutput,
     Score, ScoreContext, ScoreError, SurfaceError, SurfaceFingerprint,
 };
-use leaven::run::{CachePolicy, RunCase, RunProblem, RunResumability, RunStorage};
+use leaven::run::{CachePolicy, RunCase, RunError, RunProblem, RunResumability, RunStorage};
 use leaven::stdlib::evidence::OutputRecord;
 use leaven_gepa::{
     DefaultReflectionRenderer, LmBackedReflectorConfig, ReflectRequest, ReflectionRenderInput,
@@ -93,10 +93,25 @@ async fn main() {
             }
         }
         Err(error) => {
-            eprintln!("p8_aime_gepa_failed={error}");
+            for line in error_report_lines(&error) {
+                eprintln!("{line}");
+            }
             std::process::exit(1);
         }
     }
+}
+
+fn error_report_lines(error: &(dyn std::error::Error + 'static)) -> Vec<String> {
+    let mut lines = vec![format!("p8_aime_gepa_failed={error}")];
+    for (index, source) in
+        std::iter::successors(error.source(), |source| source.source()).enumerate()
+    {
+        lines.push(format!(
+            "p8_aime_gepa_failure_source_{}={source}",
+            index + 1
+        ));
+    }
+    lines
 }
 
 fn report_lines(config: &AimeRunConfig, run: &AimeRunResult) -> Vec<String> {
@@ -3071,7 +3086,7 @@ async fn run_solver(
     solver: Option<AimeInstrumentedLm<AimeOpenAiLm>>,
     solver_config: AimeSolverConfig,
     side_infos: AimeSolverSideInfoStore,
-) -> RunOutput {
+) -> Result<RunOutput, RunError> {
     if let Some(solver) = solver {
         return run_openai_solver(solver, &prompt, &case, &solver_config, side_infos).await;
     }
@@ -3090,7 +3105,7 @@ async fn run_solver(
         raw: answer.to_string(),
     };
     side_infos.insert(&prompt, case.id(), output.clone());
-    RunOutput::new(output.answer)
+    Ok(RunOutput::new(output.answer))
 }
 
 async fn run_openai_solver(
@@ -3099,7 +3114,7 @@ async fn run_openai_solver(
     case: &RunCase<AimeInput>,
     solver_config: &AimeSolverConfig,
     side_infos: AimeSolverSideInfoStore,
-) -> RunOutput {
+) -> Result<RunOutput, RunError> {
     let dspy_request =
         render_dspy_aime_chain_of_thought_request(&prompt.system, &case.input().problem);
     let request = LmRequest::new(
@@ -3109,20 +3124,18 @@ async fn run_openai_solver(
             .with_user(dspy_request.user),
     )
     .with_sampling(solver_config.sampling.clone());
-    match solver.complete(request).await {
-        Ok(metered) => {
-            let raw = metered.value.assistant.content().trim().to_owned();
-            let output =
-                parse_dspy_aime_chain_of_thought_response(&raw).unwrap_or_else(|_| AimeRunOutput {
-                    answer: String::new(),
-                    reasoning: String::new(),
-                    raw,
-                });
-            side_infos.insert(prompt, case.id(), output.clone());
-            RunOutput::new(output.answer).with_cost(metered.cost)
-        }
-        Err(_) => RunOutput::new(String::new()),
-    }
+    let metered = solver
+        .complete(request)
+        .await
+        .map_err(|source| RunError::with_source("AIME solver LM failed", source))?;
+    let raw = metered.value.assistant.content().trim().to_owned();
+    let output = parse_dspy_aime_chain_of_thought_response(&raw).map_err(|source| {
+        RunError::new("AIME solver response did not match DSPy ChainOfThought fields")
+            .with_trace(source)
+            .with_cost(metered.cost.clone())
+    })?;
+    side_infos.insert(prompt, case.id(), output.clone());
+    Ok(RunOutput::new(output.answer).with_cost(metered.cost))
 }
 
 fn openai_model_name() -> String {
@@ -4110,6 +4123,36 @@ Provide the new parameter value within ``` blocks."
         assert_eq!(
             p8_aime_report_json(&config, &run)["proof_classification"],
             "cache_only_aime_replay_not_live_proof"
+        );
+    }
+
+    #[test]
+    fn live_solver_failures_fail_closed_instead_of_empty_answer_scoring() {
+        let mut config = AimeRunConfig::deterministic_smoke();
+        config.solver.live = true;
+        config.solver.cache_policy = LmCachePolicy::CacheOnly;
+        config.solver.runtime.cache_backend = AimeLmCacheBackend::InMemory;
+        config.reflection.live = false;
+        config.reflection.cache_policy = LmCachePolicy::Never;
+        config.evaluation_parallelism = NonZeroUsize::new(1).expect("one is non-zero");
+
+        let error = block_on(try_run_aime(config, deterministic_dataset())).unwrap_err();
+        let rendered = std::iter::successors(Some(&error as &dyn std::error::Error), |source| {
+            source.source()
+        })
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join("\n");
+        assert!(
+            rendered.contains("runner function failed")
+                || rendered.contains("AIME solver LM failed"),
+            "{rendered}"
+        );
+        assert!(
+            error_report_lines(&error)
+                .iter()
+                .any(|line| line.starts_with("p8_aime_gepa_failure_source_")),
+            "CLI failure output should expose the safe source chain"
         );
     }
 
