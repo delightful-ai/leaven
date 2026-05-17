@@ -95,7 +95,7 @@ async fn main() {
 
 fn report_lines(config: &AimeRunConfig, run: &AimeRunResult) -> Vec<String> {
     let result = &run.optimized;
-    let mut lines = report_run_header_lines(config, result);
+    let mut lines = report_run_header_lines(config, run);
     lines.extend(report_score_lines(result));
     lines.extend(report_runtime_lines(config, result));
     lines.extend(report_budget_and_cache_lines(config, result));
@@ -107,10 +107,14 @@ fn report_lines(config: &AimeRunConfig, run: &AimeRunResult) -> Vec<String> {
     lines
 }
 
-fn report_run_header_lines(config: &AimeRunConfig, result: &Optimized<AimePrompt>) -> Vec<String> {
+fn report_run_header_lines(config: &AimeRunConfig, run: &AimeRunResult) -> Vec<String> {
+    let result = &run.optimized;
     let mut lines = vec![
         format!("run_profile={}", config.profile.label()),
-        format!("proof_classification={}", config.proof_classification()),
+        format!(
+            "proof_classification={}",
+            proof_classification_for_report(config, &run.role_reports)
+        ),
         format!("comparison_target={}", config.profile.comparison_target()),
         format!(
             "comparison_published_test_score={}",
@@ -666,7 +670,7 @@ fn p8_aime_report_json(config: &AimeRunConfig, run: &AimeRunResult) -> serde_jso
     serde_json::json!({
         "schema": "leaven.p8_aime.report.v1",
         "run_profile": config.profile.label(),
-        "proof_classification": config.proof_classification(),
+        "proof_classification": proof_classification_for_report(config, &run.role_reports),
         "comparison": {
             "target": config.profile.comparison_target(),
             "published_test_score": config.profile.published_test_score(),
@@ -948,6 +952,19 @@ impl AimeRunConfig {
             },
         }
     }
+}
+
+fn proof_classification_for_report(
+    config: &AimeRunConfig,
+    role_reports: &AimeRoleReports,
+) -> &'static str {
+    if role_reports
+        .iter()
+        .any(|role| role.live && role.cache_policy == LmCachePolicy::CacheOnly)
+    {
+        return "cache_only_aime_replay_not_live_proof";
+    }
+    config.proof_classification()
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -3574,6 +3591,38 @@ Provide the new parameter value within ``` blocks.";
         assert_eq!(
             parse_lm_cache_policy(LEAVEN_AIME_SOLVER_CACHE_POLICY, Some("cache-only")),
             LmCachePolicy::CacheOnly
+        );
+    }
+
+    #[test]
+    fn cache_only_live_replay_classification_does_not_claim_provider_proof() {
+        let mut config = AimeRunConfig::gepa_aime();
+        config.solver.cache_policy = LmCachePolicy::CacheOnly;
+        config.reflection.cache_policy = LmCachePolicy::CacheOnly;
+        let reports = AimeRoleReports::from_config(
+            &config,
+            AimeLmRoleMetrics::default(),
+            AimeLmRoleMetrics::default(),
+        );
+
+        assert_eq!(
+            proof_classification_for_report(&config, &reports),
+            "cache_only_aime_replay_not_live_proof"
+        );
+
+        let mut run = block_on(run_aime(
+            AimeRunConfig::deterministic_smoke(),
+            deterministic_dataset(),
+        ));
+        run.role_reports = reports;
+        assert!(
+            report_lines(&config, &run)
+                .iter()
+                .any(|line| line == "proof_classification=cache_only_aime_replay_not_live_proof")
+        );
+        assert_eq!(
+            p8_aime_report_json(&config, &run)["proof_classification"],
+            "cache_only_aime_replay_not_live_proof"
         );
     }
 
