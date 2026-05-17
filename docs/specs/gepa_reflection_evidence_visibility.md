@@ -68,6 +68,9 @@ The effective product shape is:
 
 ```rust
 pub struct ReflectiveExample {
+    /// Ordered upstream-style side-info fields. When non-empty, these are the
+    /// model-facing reflection record.
+    pub side_info: Vec<(String, String)>,
     pub case: Option<CaseId>,
     pub input: String,
     pub output: Option<String>,
@@ -78,7 +81,23 @@ pub struct ReflectiveExample {
 ```
 
 This type remains GEPA-level and benchmark-neutral. Domain-specific data must be
-lowered into these fields through an explicit reflective dataset builder.
+lowered through an explicit reflective dataset builder. Flat fields cover simple
+case reflection; `side_info` covers upstream parity surfaces where field names
+and ordering are part of the model-facing behavior, such as optimize-anything
+AIME records:
+
+```text
+score
+input
+prompt
+output
+reasoning
+execution_feedback
+```
+
+When `side_info` is present, the renderer emits those ordered fields directly
+instead of wrapping Rust `OutputRecord` debug strings or inventing generic
+headings.
 
 P8 AIME should use an AIME-specific reflective dataset builder or a generic
 target-safe case projection that renders `AimeInput.problem`, never

@@ -122,6 +122,7 @@ struct ScriptedDataset;
 
 fn scripted_examples() -> Vec<ReflectiveExample> {
     vec![ReflectiveExample {
+        side_info: Vec::new(),
         case: Some(leaven_kernel::CaseId::new(0)),
         input: "scripted reflection input".to_owned(),
         output: Some("scripted output".to_owned()),
@@ -407,6 +408,7 @@ fn lm_and_agent_reflectors_receive_byte_identical_examples() {
     block_on(async {
         let examples = vec![
             ReflectiveExample {
+                side_info: Vec::new(),
                 case: Some(leaven_kernel::CaseId::new(0)),
                 input: "find the remainder when 2^10 is divided by 7".to_owned(),
                 output: Some("3".to_owned()),
@@ -415,6 +417,7 @@ fn lm_and_agent_reflectors_receive_byte_identical_examples() {
                 source_refs: Vec::new(),
             },
             ReflectiveExample {
+                side_info: Vec::new(),
                 case: Some(leaven_kernel::CaseId::new(1)),
                 input: "what is 19 + 23".to_owned(),
                 output: Some("42".to_owned()),

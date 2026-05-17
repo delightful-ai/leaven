@@ -44,6 +44,14 @@ Provide the new instructions within ``` blocks.";
 /// the artifact ran on is materially weaker.
 #[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ReflectiveExample {
+    /// Fully projected upstream-style side-info fields.
+    ///
+    /// When non-empty, the default renderer emits these fields verbatim as
+    /// ordered markdown sections (`## name`) and skips the generic
+    /// case/input/output/feedback projection. This is for adapters such as
+    /// GEPA optimize-anything where the scorer returns a domain-specific
+    /// side-info record.
+    pub side_info: Vec<(String, String)>,
     /// Case the artifact ran on, when the projection knows it.
     pub case: Option<CaseId>,
     /// The input the artifact ran on, rendered for the reflector.
@@ -337,6 +345,7 @@ where
 impl ReflectionProjection for ScalarEvidence {
     fn reflection_example(&self, case: CaseId) -> ReflectiveExample {
         ReflectiveExample {
+            side_info: Vec::new(),
             case: Some(case),
             input: String::new(),
             output: None,
@@ -350,6 +359,7 @@ impl ReflectionProjection for ScalarEvidence {
 impl ReflectionProjection for CaseAssessmentEvidence {
     fn reflection_example(&self, case: CaseId) -> ReflectiveExample {
         ReflectiveExample {
+            side_info: Vec::new(),
             case: Some(case),
             input: String::new(),
             output: Some(output_record_text(self.output())),
@@ -561,6 +571,12 @@ fn render_reflective_examples(examples: &[ReflectiveExample]) -> String {
     let mut feedback = String::new();
     for (index, example) in examples.iter().enumerate() {
         let _ = writeln!(feedback, "# Example {}", index + 1);
+        if !example.side_info.is_empty() {
+            for (name, value) in &example.side_info {
+                let _ = writeln!(feedback, "## {}\n{}\n", name.trim(), value.trim());
+            }
+            continue;
+        }
         if let Some(case) = example.case {
             let _ = writeln!(feedback, "## Case\n{case}");
         }
@@ -691,6 +707,7 @@ mod tests {
         assert!(render_reflective_examples(&[]).contains("no reflective examples"));
 
         let rendered_examples = render_reflective_examples(&[ReflectiveExample {
+            side_info: Vec::new(),
             case: Some(leaven_kernel::CaseId::new(7)),
             input: "  question  ".to_owned(),
             output: Some("  answer  ".to_owned()),
@@ -705,6 +722,7 @@ mod tests {
         assert!(rendered_examples.contains("## Feedback"));
 
         let sparse_example = render_reflective_examples(&[ReflectiveExample {
+            side_info: Vec::new(),
             case: None,
             input: String::new(),
             output: None,
@@ -718,6 +736,32 @@ mod tests {
         assert!(!sparse_example.contains("## Score"));
         assert!(!sparse_example.contains("## Output"));
         assert!(!sparse_example.contains("## Feedback"));
+    }
+
+    #[test]
+    fn reflective_examples_can_render_upstream_side_info_records() {
+        let rendered = render_reflective_examples(&[ReflectiveExample {
+            side_info: vec![
+                ("score".to_owned(), "0".to_owned()),
+                ("input".to_owned(), "What is 19 + 23?".to_owned()),
+                ("prompt".to_owned(), "Solve carefully.".to_owned()),
+                ("output".to_owned(), "44".to_owned()),
+                ("reasoning".to_owned(), "I added incorrectly.".to_owned()),
+                (
+                    "execution_feedback".to_owned(),
+                    "Your answer is incorrect. The correct answer is '42'.".to_owned(),
+                ),
+            ],
+            source_refs: Vec::new(),
+            ..ReflectiveExample::default()
+        }]);
+
+        assert_eq!(
+            rendered,
+            "# Example 1\n## score\n0\n\n## input\nWhat is 19 + 23?\n\n## prompt\nSolve carefully.\n\n## output\n44\n\n## reasoning\nI added incorrectly.\n\n## execution_feedback\nYour answer is incorrect. The correct answer is '42'.\n\n"
+        );
+        assert!(!rendered.contains("## Input"));
+        assert!(!rendered.contains("Inline {"));
     }
 
     #[test]

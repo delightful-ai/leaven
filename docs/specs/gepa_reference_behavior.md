@@ -3061,7 +3061,8 @@ Do not infer inference-time search merely because validation is empty.
 
 ### 21.13 Reflection Dataset API Choices
 
-Current `ReflectiveExample` is enough for simple AIME:
+`ReflectiveExample` supports two rendering modes. The flat fields are enough
+for simple case reflection:
 
 ```text
 input
@@ -3071,9 +3072,16 @@ feedback
 source refs
 ```
 
-DSPy parity needs sectioned records:
+Optimize-anything and DSPy parity need sectioned records whose field names are
+part of the upstream model-facing contract:
 
 ```text
+score
+input
+prompt
+output
+reasoning
+execution_feedback
 Inputs
 Generated Outputs
 Feedback
@@ -3083,31 +3091,37 @@ optional history/context block
 
 API choices:
 
-1. Enrich `ReflectiveExample`:
+1. Enrich `ReflectiveExample` with an ordered side-info record:
 
    ```rust
    pub struct ReflectiveExample {
+       pub side_info: Vec<(String, String)>,
        pub case: Option<CaseId>,
-       pub sections: Vec<ReflectiveSection>,
+       pub input: String,
+       pub output: Option<String>,
        pub score: Option<f64>,
+       pub feedback: String,
        pub source_refs: Vec<InfoRef>,
    }
    ```
 
-2. Keep `ReflectiveExample` flat and add renderer-specific metadata.
+2. Replace flat fields with only generic `ReflectiveSection`.
 3. Add a separate `StructuredReflectiveExample` and convert flat AIME examples
    into it.
 
 Recommended answer:
 
 ```text
-Move toward structured sections while preserving a simple constructor for AIME.
-DSPy-compatible rendering should not be forced through ad hoc string
-concatenation inside the LM renderer.
+Move toward structured/ordered side-info while preserving simple flat fields for
+ordinary AIME and case reflection. DSPy-compatible and optimize-anything
+rendering must not be forced through Rust debug strings or ad hoc concatenation
+inside the LM renderer.
 ```
 
-The builder remains the projection seam. The renderer formats records; it does
-not decide which assessments become examples.
+The builder remains the projection seam. The renderer formats ordered records;
+it does not decide which assessments become examples. When `side_info` is
+non-empty, the default renderer emits it as upstream-style markdown sections and
+does not also synthesize generic `Input`/`Output`/`Feedback` sections.
 
 ### 21.14 Scaffold And Test-Support API
 

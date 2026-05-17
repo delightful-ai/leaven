@@ -22,6 +22,7 @@ use leaven::prelude::{
     Score, ScoreContext, ScoreError, SurfaceError, SurfaceFingerprint,
 };
 use leaven::run::{CachePolicy, RunCase, RunProblem, RunResumability, RunStorage};
+use leaven::stdlib::evidence::OutputRecord;
 use leaven_gepa::LmBackedReflectorConfig;
 use leaven_lm::{
     Lm, LmError, LmId, LmRequest, LmResponse, Message, Messages, ReasoningEffort, SamplingOptions,
@@ -53,6 +54,28 @@ const LEAVEN_AIME_DETERMINISTIC_REFLECTION: &str = "LEAVEN_AIME_DETERMINISTIC_RE
 const LEAVEN_OPENAI_MAX_CONCURRENT_REQUESTS: &str = "LEAVEN_OPENAI_MAX_CONCURRENT_REQUESTS";
 const DETERMINISTIC_SMOKE_METRIC_CALLS: u64 = 512;
 const DETERMINISTIC_SMOKE_ITERATIONS: usize = 1;
+const OPTIMIZE_ANYTHING_REFLECTION_PROMPT_TEMPLATE: &str = r"I am optimizing a parameter in my system. The current parameter value is:
+```
+<curr_param>
+```
+
+Below is evaluation data showing how this parameter value performed across multiple test cases. The data contains performance metrics, diagnostic information, and other relevant details from the evaluation:
+```
+<side_info>
+```
+
+Your task is to propose a new, improved parameter value that can be used as a drop-in replacement for the current one.
+
+Carefully analyze all the evaluation data provided above. Look for patterns that indicate what works and what doesn't. Pay special attention to:
+- Performance metrics and how they correlate with parameter behavior
+- Recurring issues, errors, or failure patterns across multiple test cases
+- Successful patterns or behaviors that should be preserved or enhanced
+- Any domain-specific requirements, constraints, or factual information revealed in the evaluation data
+- Specific technical details that are crucial for understanding the parameter's role
+
+Based on your analysis, propose a new parameter value that addresses the identified issues while maintaining or improving upon what works well. Your proposal should be directly informed by the patterns and insights from the evaluation data.
+
+Provide the new parameter value within ``` blocks.";
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
@@ -536,8 +559,9 @@ async fn try_run_aime(
     let runner_fingerprint = aime_runner_fingerprint(&config.solver);
     let scorer_fingerprint = aime_scorer_fingerprint();
     let solver_config = config.solver.clone();
+    let side_infos = AimeSolverSideInfoStore::default();
     let report_metadata = dataset.report_metadata.clone();
-    let reflective_dataset = dataset.reflective_dataset();
+    let reflective_dataset = dataset.reflective_dataset(side_infos.clone());
     let optimized = Box::pin(
         leaven::prelude::optimize(AimePrompt::new(config.seed_prompt))
             .train(dataset.train)
@@ -546,7 +570,8 @@ async fn try_run_aime(
             .runner(move |prompt, case| {
                 let solver = solver.clone();
                 let solver_config = solver_config.clone();
-                async move { run_solver(prompt, case, solver, solver_config).await }
+                let side_infos = side_infos.clone();
+                async move { run_solver(prompt, case, solver, solver_config, side_infos).await }
             })
             .score(score_answer)
             .runner_fingerprint(runner_fingerprint)
@@ -878,8 +903,8 @@ impl AimeRoleReports {
                 cache_backend: config.solver.runtime.cache_backend,
                 cache_durable: config.solver.runtime.cache_backend.is_durable(),
                 max_concurrent_requests: config.solver.runtime.max_concurrent_requests,
-                output: "answer-text",
-                parser: "trimmed-answer",
+                output: "dspy-chain-of-thought",
+                parser: "dspy-chat-adapter-fields",
                 metrics: solver_metrics,
             },
             reflection: AimeLmRoleReport {
@@ -1400,7 +1425,7 @@ fn aime_reflector_config(config: &AimeReflectionConfig) -> LmBackedReflectorConf
     LmBackedReflectorConfig {
         sampling: config.sampling.clone(),
         output: leaven_lm::OutputMode::Text,
-        prompt_template: None,
+        prompt_template: Some(OPTIMIZE_ANYTHING_REFLECTION_PROMPT_TEMPLATE.to_owned()),
     }
 }
 
@@ -1826,7 +1851,7 @@ impl AimeDataset {
         })
     }
 
-    fn reflective_dataset(&self) -> AimeReflectiveDataset {
+    fn reflective_dataset(&self, side_infos: AimeSolverSideInfoStore) -> AimeReflectiveDataset {
         AimeReflectiveDataset {
             inputs_by_case: self
                 .train
@@ -1835,6 +1860,7 @@ impl AimeDataset {
                 .chain(&self.test)
                 .map(|case| (case.id, case.input.problem.clone()))
                 .collect(),
+            side_infos,
         }
     }
 }
@@ -2071,8 +2097,150 @@ fn case_id_from_source_id(source_id: &str) -> CaseId {
 }
 
 #[derive(Clone, Debug)]
+struct AimeDspyChatRequest {
+    system: String,
+    user: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct AimeRunOutput {
+    answer: String,
+    reasoning: String,
+    raw: String,
+}
+
+#[derive(Clone, Debug)]
+struct AimeReflectionSideInfo {
+    score: f64,
+    input: String,
+    prompt: String,
+    output: String,
+    reasoning: String,
+    execution_feedback: String,
+}
+
+#[derive(Clone, Debug, Default)]
+struct AimeSolverSideInfoStore {
+    entries: Arc<Mutex<BTreeMap<AimeSolverSideInfoKey, AimeRunOutput>>>,
+}
+
+impl AimeSolverSideInfoStore {
+    fn insert(&self, prompt: &AimePrompt, case: CaseId, output: AimeRunOutput) {
+        self.entries
+            .lock()
+            .expect("AIME side-info store lock is not poisoned")
+            .insert(
+                AimeSolverSideInfoKey {
+                    prompt: prompt.system.clone(),
+                    case,
+                },
+                output,
+            );
+    }
+
+    fn get(&self, prompt: &AimePrompt, case: CaseId) -> Option<AimeRunOutput> {
+        self.entries
+            .lock()
+            .expect("AIME side-info store lock is not poisoned")
+            .get(&AimeSolverSideInfoKey {
+                prompt: prompt.system.clone(),
+                case,
+            })
+            .cloned()
+    }
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct AimeSolverSideInfoKey {
+    prompt: String,
+    case: CaseId,
+}
+
+fn render_dspy_aime_chain_of_thought_request(
+    instructions: &str,
+    input: &str,
+) -> AimeDspyChatRequest {
+    let objective = instructions
+        .lines()
+        .map(|line| format!("        {line}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let system = format!(
+        "Your input fields are:\n1. `input` (str): The math problem to solve.\nYour output fields are:\n1. `reasoning` (str): \n2. `answer` (str): The final numerical answer.\nAll interactions will be structured in the following way, with the appropriate values filled in.\n\n[[ ## input ## ]]\n{{input}}\n\n[[ ## reasoning ## ]]\n{{reasoning}}\n\n[[ ## answer ## ]]\n{{answer}}\n\n[[ ## completed ## ]]\n\nIn adhering to this structure, your objective is: \n{objective}"
+    );
+    let user = format!(
+        "[[ ## input ## ]]\n{input}\n\nRespond with the corresponding output fields, starting with the field `[[ ## reasoning ## ]]`, then `[[ ## answer ## ]]`, and then ending with the marker for `[[ ## completed ## ]]`."
+    );
+    AimeDspyChatRequest { system, user }
+}
+
+fn parse_dspy_aime_chain_of_thought_response(raw: &str) -> Result<AimeRunOutput, String> {
+    let mut fields = BTreeMap::<String, String>::new();
+    let mut current: Option<String> = None;
+    let mut buffer = Vec::<String>::new();
+    for line in raw.lines() {
+        if let Some(field) = dspy_field_header(line.trim()) {
+            if let Some(name) = current.replace(field) {
+                fields
+                    .entry(name)
+                    .or_insert_with(|| buffer.join("\n").trim().to_owned());
+                buffer.clear();
+            }
+        } else {
+            buffer.push(line.to_owned());
+        }
+    }
+    if let Some(name) = current {
+        fields
+            .entry(name)
+            .or_insert_with(|| buffer.join("\n").trim().to_owned());
+    }
+    let reasoning = fields.get("reasoning").cloned().unwrap_or_default();
+    let answer = fields
+        .get("answer")
+        .cloned()
+        .ok_or_else(|| "missing DSPy `answer` field".to_owned())?;
+    Ok(AimeRunOutput {
+        answer,
+        reasoning,
+        raw: raw.to_owned(),
+    })
+}
+
+fn dspy_field_header(line: &str) -> Option<String> {
+    let field = line.strip_prefix("[[ ## ")?.strip_suffix(" ## ]]")?;
+    if field
+        .chars()
+        .all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
+    {
+        Some(field.to_owned())
+    } else {
+        None
+    }
+}
+
+fn aime_reflection_side_info_example(info: AimeReflectionSideInfo) -> Vec<(String, String)> {
+    vec![
+        ("score".to_owned(), format!("{:.1}", info.score)),
+        ("input".to_owned(), info.input),
+        ("prompt".to_owned(), info.prompt),
+        ("output".to_owned(), info.output),
+        ("reasoning".to_owned(), info.reasoning),
+        ("execution_feedback".to_owned(), info.execution_feedback),
+    ]
+}
+
+fn output_record_text(output: &OutputRecord) -> String {
+    match output {
+        OutputRecord::Inline { text, .. } => text.clone(),
+        OutputRecord::BlobRef(reference) => format!("blob:{}:{}", reference.store, reference.key),
+    }
+}
+
+#[derive(Clone, Debug)]
 struct AimeReflectiveDataset {
     inputs_by_case: BTreeMap<CaseId, String>,
+    side_infos: AimeSolverSideInfoStore,
 }
 
 impl ReflectiveDatasetBuilder<RunProblem<AimePrompt, AimeInput, AimeTarget>, AimePromptSurface>
@@ -2086,6 +2254,11 @@ impl ReflectiveDatasetBuilder<RunProblem<AimePrompt, AimeInput, AimeTarget>, Aim
         _part: &&'static str,
     ) -> Result<Vec<ReflectiveExample>, ReflectionError> {
         let mut examples = Vec::with_capacity(parent_assessments.len());
+        let parent_prompt = ctx.graph().artifact(parent).ok_or_else(|| {
+            ReflectionError::builder(format!(
+                "AIME reflection parent candidate `{parent}` is missing from graph"
+            ))
+        })?;
         for parent_assessment in parent_assessments {
             let assessment = ctx.graph().assessment(*parent_assessment).ok_or_else(|| {
                 ReflectionError::builder(format!(
@@ -2106,12 +2279,28 @@ impl ReflectiveDatasetBuilder<RunProblem<AimePrompt, AimeInput, AimeTarget>, Aim
                 }
             };
             let evidence = ctx.assessment_evidence(*parent_assessment)?;
+            let trace = self.side_infos.get(parent_prompt, case);
+            let output = trace.as_ref().map_or_else(
+                || output_record_text(evidence.output()),
+                |trace| trace.answer.clone(),
+            );
+            let reasoning = trace.map_or_else(String::new, |trace| trace.reasoning);
+            let input = self.inputs_by_case.get(&case).cloned().unwrap_or_default();
+            let feedback = evidence.feedback().to_owned();
             examples.push(ReflectiveExample {
+                side_info: aime_reflection_side_info_example(AimeReflectionSideInfo {
+                    score: evidence.score().score(),
+                    input: input.clone(),
+                    prompt: parent_prompt.system.clone(),
+                    output: output.clone(),
+                    reasoning: reasoning.clone(),
+                    execution_feedback: feedback.clone(),
+                }),
                 case: Some(case),
-                input: self.inputs_by_case.get(&case).cloned().unwrap_or_default(),
-                output: Some(format!("{:?}", evidence.output())),
+                input,
+                output: Some(output),
                 score: Some(evidence.score().score()),
-                feedback: evidence.feedback().to_owned(),
+                feedback,
                 source_refs: vec![InfoRef::Assessment(*parent_assessment)],
             });
         }
@@ -2300,9 +2489,10 @@ async fn run_solver(
     case: RunCase<AimeInput>,
     solver: Option<AimeInstrumentedLm<AimeOpenAiLm>>,
     solver_config: AimeSolverConfig,
+    side_infos: AimeSolverSideInfoStore,
 ) -> RunOutput {
     if let Some(solver) = solver {
-        return run_openai_solver(solver, &prompt, &case, &solver_config).await;
+        return run_openai_solver(solver, &prompt, &case, &solver_config, side_infos).await;
     }
     let has_modular = prompt.system.contains("modular arithmetic");
     let verifies = prompt.system.contains("Verify arithmetic");
@@ -2313,7 +2503,13 @@ async fn run_solver(
     } else {
         target_answer + 1
     };
-    RunOutput::new(answer.to_string())
+    let output = AimeRunOutput {
+        answer: answer.to_string(),
+        reasoning: "deterministic fixture evaluated the target-safe arithmetic rule".to_owned(),
+        raw: answer.to_string(),
+    };
+    side_infos.insert(&prompt, case.id(), output.clone());
+    RunOutput::new(output.answer)
 }
 
 async fn run_openai_solver(
@@ -2321,21 +2517,28 @@ async fn run_openai_solver(
     prompt: &AimePrompt,
     case: &RunCase<AimeInput>,
     solver_config: &AimeSolverConfig,
+    side_infos: AimeSolverSideInfoStore,
 ) -> RunOutput {
+    let dspy_request =
+        render_dspy_aime_chain_of_thought_request(&prompt.system, &case.input().problem);
     let request = LmRequest::new(
         solver_config.model.clone(),
         Messages::new()
-            .with_system(prompt.system.clone())
-            .with_user(format!(
-                "Problem:\n{}\n\nReturn only the final numerical answer.",
-                case.input().problem
-            )),
+            .with_system(dspy_request.system)
+            .with_user(dspy_request.user),
     )
     .with_sampling(solver_config.sampling.clone());
     match solver.complete(request).await {
         Ok(metered) => {
-            let answer = metered.value.assistant.content().trim().to_owned();
-            RunOutput::new(answer).with_cost(metered.cost)
+            let raw = metered.value.assistant.content().trim().to_owned();
+            let output =
+                parse_dspy_aime_chain_of_thought_response(&raw).unwrap_or_else(|_| AimeRunOutput {
+                    answer: String::new(),
+                    reasoning: String::new(),
+                    raw,
+                });
+            side_infos.insert(prompt, case.id(), output.clone());
+            RunOutput::new(output.answer).with_cost(metered.cost)
         }
         Err(_) => RunOutput::new(String::new()),
     }
@@ -2347,7 +2550,7 @@ fn openai_model_name() -> String {
 
 fn aime_runner_fingerprint(config: &AimeSolverConfig) -> Fingerprint {
     let mut builder = FingerprintBuilder::new();
-    builder.update(b"p8-aime-runner.v1");
+    builder.update(b"p8-aime-runner.dspy-chain-of-thought.v1");
     builder.update([u8::from(config.live)]);
     builder.update(config.model.as_bytes());
     builder.update(
@@ -2372,6 +2575,7 @@ fn aime_reflection_role_fingerprint(config: &AimeReflectionConfig) -> Fingerprin
     builder.update(config.runtime.max_concurrent_requests.get().to_le_bytes());
     builder.update(b"output:text");
     builder.update(b"parser:plain-text-fenced");
+    builder.update(b"prompt:optimize-anything");
     builder.finish()
 }
 
@@ -2643,39 +2847,44 @@ mod tests {
         let config = AimeRunConfig::deterministic_smoke();
         let solver_config = config.solver.clone();
         let dataset = deterministic_dataset();
-        let reflective_dataset = dataset.reflective_dataset();
+        let side_infos = AimeSolverSideInfoStore::default();
+        let reflective_dataset = dataset.reflective_dataset(side_infos.clone());
         let run_id = RunId::new();
         let run_dir = leaven::run::default_local_run_dir(run_id);
-        let error = block_on(async {
-            Box::pin(
-                leaven::prelude::optimize(AimePrompt::new(config.seed_prompt))
-                    .train(dataset.train)
-                    .runner(move |prompt, case| {
-                        let solver_config = solver_config.clone();
-                        async move { run_solver(prompt, case, None, solver_config).await }
-                    })
-                    .using(
-                        Gepa::reflect_with_lm(
-                            aime_reflection_lm(
-                                &config.reflection,
-                                AimeLmTelemetry::new(config.reflection.cache_policy),
-                                &run_dir,
-                            ),
-                            config.reflection.model.clone(),
+        let error =
+            block_on(async {
+                Box::pin(
+                    leaven::prelude::optimize(AimePrompt::new(config.seed_prompt))
+                        .train(dataset.train)
+                        .runner(move |prompt, case| {
+                            let solver_config = solver_config.clone();
+                            let side_infos = side_infos.clone();
+                            async move {
+                                run_solver(prompt, case, None, solver_config, side_infos).await
+                            }
+                        })
+                        .using(
+                            Gepa::reflect_with_lm(
+                                aime_reflection_lm(
+                                    &config.reflection,
+                                    AimeLmTelemetry::new(config.reflection.cache_policy),
+                                    &run_dir,
+                                ),
+                                config.reflection.model.clone(),
+                            )
+                            .with_reflector_config(aime_reflector_config(&config.reflection))
+                            .surface(AimePromptSurface)
+                            .build()
+                            .reflective_dataset(reflective_dataset),
                         )
-                        .with_reflector_config(aime_reflector_config(&config.reflection))
-                        .surface(AimePromptSurface)
-                        .build()
-                        .reflective_dataset(reflective_dataset),
-                    )
-                    .budget(Budget::metric_calls(8))
-                    .run_id(run_id)
-                    .run_dir(run_dir)
-                    .run(),
-            )
-            .await
-        })
-        .unwrap_err();
+                        .budget(Budget::metric_calls(8))
+                        .run_id(run_id)
+                        .run_dir(run_dir)
+                        .run(),
+                )
+                .await
+            })
+            .unwrap_err();
 
         assert!(error.to_string().contains("score function is required"));
     }
@@ -2763,6 +2972,106 @@ Provide the new instructions within ``` blocks.";
         assert_eq!(
             leaven::gepa::DEFAULT_REFLECTION_PROMPT_TEMPLATE,
             UPSTREAM_GEPA_INSTRUCTION_TEMPLATE
+        );
+    }
+
+    #[test]
+    fn p8_reflection_uses_upstream_optimize_anything_template() {
+        const UPSTREAM_OPTIMIZE_ANYTHING_TEMPLATE: &str = r"I am optimizing a parameter in my system. The current parameter value is:
+```
+<curr_param>
+```
+
+Below is evaluation data showing how this parameter value performed across multiple test cases. The data contains performance metrics, diagnostic information, and other relevant details from the evaluation:
+```
+<side_info>
+```
+
+Your task is to propose a new, improved parameter value that can be used as a drop-in replacement for the current one.
+
+Carefully analyze all the evaluation data provided above. Look for patterns that indicate what works and what doesn't. Pay special attention to:
+- Performance metrics and how they correlate with parameter behavior
+- Recurring issues, errors, or failure patterns across multiple test cases
+- Successful patterns or behaviors that should be preserved or enhanced
+- Any domain-specific requirements, constraints, or factual information revealed in the evaluation data
+- Specific technical details that are crucial for understanding the parameter's role
+
+Based on your analysis, propose a new parameter value that addresses the identified issues while maintaining or improving upon what works well. Your proposal should be directly informed by the patterns and insights from the evaluation data.
+
+Provide the new parameter value within ``` blocks.";
+
+        let config = AimeRunConfig::gepa_aime();
+        let reflector = aime_reflector_config(&config.reflection);
+
+        assert_eq!(
+            reflector.prompt_template.as_deref(),
+            Some(UPSTREAM_OPTIMIZE_ANYTHING_TEMPLATE)
+        );
+    }
+
+    #[test]
+    fn aime_solver_request_matches_dspy_chain_of_thought_chat_adapter() {
+        let request = render_dspy_aime_chain_of_thought_request(
+            "Solve the math problem carefully.",
+            "What is 19 + 23?",
+        );
+
+        assert!(
+            request
+                .system
+                .contains("Your input fields are:\n1. `input` (str): The math problem to solve.")
+        );
+        assert!(request.system.contains("Your output fields are:\n1. `reasoning` (str): \n2. `answer` (str): The final numerical answer."));
+        assert!(request.system.contains("[[ ## input ## ]]\n{input}"));
+        assert!(
+            request
+                .system
+                .contains("[[ ## reasoning ## ]]\n{reasoning}")
+        );
+        assert!(request.system.contains("[[ ## answer ## ]]\n{answer}"));
+        assert!(request.system.contains("In adhering to this structure, your objective is: \n        Solve the math problem carefully."));
+        assert_eq!(
+            request.user,
+            "[[ ## input ## ]]\nWhat is 19 + 23?\n\nRespond with the corresponding output fields, starting with the field `[[ ## reasoning ## ]]`, then `[[ ## answer ## ]]`, and then ending with the marker for `[[ ## completed ## ]]`."
+        );
+    }
+
+    #[test]
+    fn aime_solver_parser_preserves_reasoning_and_scores_only_answer_field() {
+        let parsed = parse_dspy_aime_chain_of_thought_response(
+            "[[ ## reasoning ## ]]\n19 + 23 = 42.\n\n[[ ## answer ## ]]\n42\n\n[[ ## completed ## ]]",
+        )
+        .expect("DSPy chat adapter output parses");
+
+        assert_eq!(parsed.reasoning, "19 + 23 = 42.");
+        assert_eq!(parsed.answer, "42");
+        assert!(parsed.raw.trim_start().starts_with("[[ ## reasoning ## ]]"));
+    }
+
+    #[test]
+    fn aime_side_info_renders_upstream_optimize_anything_keys() {
+        let rendered = aime_reflection_side_info_example(AimeReflectionSideInfo {
+            score: 0.0,
+            input: "What is 19 + 23?".to_owned(),
+            prompt: "Solve carefully.".to_owned(),
+            output: "44".to_owned(),
+            reasoning: "I added incorrectly.".to_owned(),
+            execution_feedback: "Your answer is incorrect. The correct answer is '42'.".to_owned(),
+        });
+
+        assert_eq!(
+            rendered,
+            vec![
+                ("score".to_owned(), "0.0".to_owned()),
+                ("input".to_owned(), "What is 19 + 23?".to_owned()),
+                ("prompt".to_owned(), "Solve carefully.".to_owned()),
+                ("output".to_owned(), "44".to_owned()),
+                ("reasoning".to_owned(), "I added incorrectly.".to_owned()),
+                (
+                    "execution_feedback".to_owned(),
+                    "Your answer is incorrect. The correct answer is '42'.".to_owned(),
+                ),
+            ]
         );
     }
 
@@ -3024,7 +3333,7 @@ Provide the new instructions within ``` blocks.";
             )
         }));
         assert!(lines.iter().any(|line| {
-            line == "lm_role_runtime=solver cache_policy=read-write cache_backend=sqlite cache_durable=true max_concurrent_requests=7 output=answer-text parser=trimmed-answer"
+            line == "lm_role_runtime=solver cache_policy=read-write cache_backend=sqlite cache_durable=true max_concurrent_requests=7 output=dspy-chain-of-thought parser=dspy-chat-adapter-fields"
         }));
         assert!(lines.iter().any(|line| {
             line.starts_with(

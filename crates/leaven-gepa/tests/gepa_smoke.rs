@@ -1764,6 +1764,7 @@ where
         _part: &S::PartId,
     ) -> Result<Vec<ReflectiveExample>, leaven_gepa::ReflectionError> {
         Ok(vec![ReflectiveExample {
+            side_info: Vec::new(),
             case: Some(leaven_kernel::CaseId::new(0)),
             input: "input".to_owned(),
             output: Some("output".to_owned()),

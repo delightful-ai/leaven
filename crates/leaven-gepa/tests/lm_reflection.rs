@@ -174,6 +174,7 @@ fn reflect_request_informed_by_unions_request_and_example_source_refs() {
             InfoRef::Assessment(assessment),
         ])
         .with_examples([ReflectiveExample {
+            side_info: Vec::new(),
             case: Some(CaseId::new(7)),
             input: "find the remainder".to_owned(),
             output: Some("31".to_owned()),
@@ -215,6 +216,7 @@ fn default_renderer_and_plain_text_parser_cover_empty_feedback_and_bad_part() {
 
     let no_output_request =
         ReflectRequest::for_part(parent, "text", "text").with_examples([ReflectiveExample {
+            side_info: Vec::new(),
             case: Some(CaseId::new(9)),
             input: "the input".to_owned(),
             score: Some(1.0),
@@ -272,6 +274,7 @@ fn default_renderer_uses_gepa_prompt_template_and_config_override() {
     let surface = WholeTextSurface;
     let request =
         ReflectRequest::for_part(parent, "text", "text").with_examples([ReflectiveExample {
+            side_info: Vec::new(),
             case: Some(CaseId::new(1)),
             input: "an example input".to_owned(),
             score: Some(0.0),
