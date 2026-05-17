@@ -783,7 +783,7 @@ impl AimeRunProfile {
     const fn reflection_prompt_claim(self) -> &'static str {
         match self {
             Self::DeterministicSmoke | Self::DspyQuickstart | Self::GepaAime => {
-                "upstream_gepa_instruction_template"
+                "upstream_optimize_anything_reflection_template"
             }
         }
     }
@@ -793,12 +793,12 @@ impl AimeRunProfile {
             Self::DeterministicSmoke => Vec::new(),
             Self::DspyQuickstart => vec![
                 "published_dspy_quickstart_reports_46.6_to_56.6_percent_on_aime_2025",
-                "leaven_runs_without_dspy_runtime_or_dspy_chainofthought_lowering",
+                "leaven_uses_rust_local_dspy_chainofthought_prompt_rendering_without_dspy_runtime",
                 "leaven_uses_gpt_5_4_mini_reflection_model_by_default",
             ],
             Self::GepaAime => vec![
                 "published_gepa_cais_artifact_reports_46.67_to_60.00_percent_on_aime_2025",
-                "leaven_runs_without_dspy_chainofthought_lowering",
+                "leaven_uses_rust_local_dspy_chainofthought_prompt_rendering_without_dspy_runtime",
                 "leaven_uses_gpt_5_4_mini_reflection_model_by_default",
             ],
         }
@@ -2851,9 +2851,8 @@ mod tests {
         let reflective_dataset = dataset.reflective_dataset(side_infos.clone());
         let run_id = RunId::new();
         let run_dir = leaven::run::default_local_run_dir(run_id);
-        let error =
-            block_on(async {
-                Box::pin(
+        let error = block_on(async {
+            Box::pin(
                     leaven::prelude::optimize(AimePrompt::new(config.seed_prompt))
                         .train(dataset.train)
                         .runner(move |prompt, case| {
@@ -2883,8 +2882,8 @@ mod tests {
                         .run(),
                 )
                 .await
-            })
-            .unwrap_err();
+        })
+        .unwrap_err();
 
         assert!(error.to_string().contains("score function is required"));
     }

@@ -125,4 +125,9 @@ reaching 57.78%. The DSPy tutorial reports an
 more stable test estimate. Leaven's current P8 profile matches the public
 dataset roles and the available optimizer/provider knobs, except that Leaven
 deliberately defaults reflection to `gpt-5.4-mini` with medium reasoning. The main
-remaining exact-parity gap is that this Rust example uses a Rust-native solver contract: the optimized system prompt is passed directly to `leaven-lm`, and the user turn asks for an answer-only response. That is intentionally not DSPy's full `ChainOfThought` prompt lowering, signature formatting, or rationale-field extraction. Leaven's public report now separates optimization cost from final validation/test report cost; the remaining local control difference is the Leaven-local iteration ceiling described above.
+remaining exact-parity gap is implementation provenance rather than model
+experience: this Rust example locally renders DSPy's `ChainOfThought`
+ChatAdapter message shape and parses the `answer` field, but it does not link
+or execute the DSPy Python runtime. Leaven's public report separates
+optimization cost from final validation/test report cost; the remaining local
+control difference is the Leaven-local iteration ceiling described above.

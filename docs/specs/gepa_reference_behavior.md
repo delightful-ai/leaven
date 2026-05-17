@@ -1516,13 +1516,13 @@ not the target; the preceding sections are the target.
 | Metric-call budget | `max_metric_calls` counts evaluator rollouts | Leaven budget ledger charges generic costs and proposal costs too | Expose GEPA search metric-call stopper over evaluator rollouts |
 | Skip perfect | Default skips all-perfect parent minibatches | No default skip-perfect GEPA policy yet | Add skip-perfect policy and events |
 | No trajectories | Skip proposal when no trajectories/examples exist | Reflective dataset may be empty and renderer can continue | Refuse/skip no-example reflection by default |
-| Reflection prompt | Upstream fenced text replacement prompt | Leaven default template matches the text shape | Preserve as default; label custom JSON prompts |
+| Reflection prompt | Upstream fenced text replacement prompt; optimize-anything AIME uses the optimize-anything reflection template | Leaven default template matches generic GEPA instruction reflection; P8 AIME config uses the optimize-anything template | Preserve both labels and test the selected profile template |
 | Reflection examples | Inputs, outputs, feedback, trace/format failures | Leaven carries input/output/score/feedback; module trace parity is partial | Add trace/format-failure projection for multi-module parity |
 | Component selection | Round-robin default over components after parent eval | `RoundRobinPart` exists | Ensure state is checkpointed and ordering fingerprinted |
 | Merge | Core default off; DSPy default on | No real merge path in Leaven GEPA loop | Implement or disclose per profile |
 | Parallel proposals | Optimize-anything can run parallel proposals | Leaven evaluates cases in parallel, but proposals are serial | Not required for core parity; label if absent in optimize-anything parity |
 | Progress | Upstream callbacks cover candidate selection, minibatch, eval, reflection, accept/reject, validation, budget, state save | P8 progress callback maps generic engine events only | Add GEPA-specific events/callback summaries |
-| AIME solver | DSPy ChainOfThought answer field | P8 Rust solver returns answer text through `leaven-lm` | Acceptable Rust-native delta if report labels prompt/trace difference |
+| AIME solver | DSPy ChainOfThought answer field | P8 Rust solver locally renders the DSPy ChatAdapter ChainOfThought message shape and parses only the `answer` field | Keep local renderer tests pinned to upstream DSPy source; no DSPy runtime dependency is required for this Rust profile |
 | AIME dataset | HF AIME split and MathArena test | P8 cache materialization is intended to match | Add parity test/report that prints source counts and split hash |
 
 ## 8. Systematic Fix Plan
