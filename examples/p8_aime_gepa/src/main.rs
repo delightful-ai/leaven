@@ -2746,8 +2746,7 @@ fn line_indent_width(line: &str) -> Option<usize> {
     let mut width = 0;
     for ch in line.chars() {
         match ch {
-            ' ' => width += 1,
-            '\t' => width += 1,
+            ' ' | '\t' => width += 1,
             _ => return Some(width),
         }
     }
@@ -2756,13 +2755,11 @@ fn line_indent_width(line: &str) -> Option<usize> {
 
 fn strip_indent_width(line: &str, width: usize) -> &str {
     let mut byte_index = 0;
-    let mut stripped = 0;
-    for (index, ch) in line.char_indices() {
+    for (stripped, (index, ch)) in line.char_indices().enumerate() {
         if stripped >= width || (ch != ' ' && ch != '\t') {
             byte_index = index;
             break;
         }
-        stripped += 1;
         byte_index = index + ch.len_utf8();
     }
     &line[byte_index..]
@@ -3321,7 +3318,11 @@ fn aime_score_feedback(target: &AimeTarget, raw_answer: &str) -> (f64, String) {
     match raw_answer.parse::<i64>() {
         Ok(answer) => {
             let score = f64::from(answer == correct_answer);
-            let status = if score == 1.0 { "correct" } else { "incorrect" };
+            let status = if answer == correct_answer {
+                "correct"
+            } else {
+                "incorrect"
+            };
             (
                 score,
                 format!(
@@ -3805,7 +3806,7 @@ Provide the new parameter value within ``` blocks.";
                 request: &request,
                 artifact: &artifact,
                 surface: &surface,
-                model: config.reflection.model.clone().into(),
+                model: config.reflection.model.as_str().into(),
                 config: &reflector,
             })
             .expect("AIME reflection prompt renders");
@@ -3904,7 +3905,7 @@ Provide the new parameter value within ``` blocks."
 
         let (score, feedback) = aime_score_feedback(&target, "forty-two");
 
-        assert_eq!(score, 0.0);
+        assert!(score.abs() < f64::EPSILON);
         assert_eq!(
             feedback,
             "The final answer must be a valid integer and nothing else. You responded with 'forty-two', which couldn't be parsed as a python integer. Please ensure your answer is a valid integer without any additional text or formatting. The correct answer is '42'. Here's the full step-by-step solution:\n19 + 23 = 42.\n\nThink about what takeaways you can learn from this solution to improve your future answers and approach to similar problems and ensure your final answer is a valid integer."
@@ -4294,6 +4295,19 @@ Provide the new parameter value within ``` blocks."
             serde_json::from_slice(&std::fs::read(&path).expect("P8 AIME report JSON is written"))
                 .expect("P8 AIME report JSON parses");
 
+        assert_p8_report_identity(&report, &config);
+        assert_p8_report_lm_roles(&report);
+        assert_p8_report_gepa_summary(&report);
+        assert_p8_report_case_safety(&report);
+        let lines = report_lines(&config, &run);
+        assert!(
+            lines
+                .iter()
+                .any(|line| line == &format!("p8_aime_json={}", path.display()))
+        );
+    }
+
+    fn assert_p8_report_identity(report: &serde_json::Value, config: &AimeRunConfig) {
         assert_eq!(report["schema"], "leaven.p8_aime.report.v1");
         assert_eq!(report["run_profile"], config.profile.label());
         assert_eq!(
@@ -4312,6 +4326,10 @@ Provide the new parameter value within ``` blocks."
             report["comparison_reflection_prompt"],
             config.profile.reflection_prompt_claim()
         );
+        assert_eq!(report["budget"]["search_metric_calls_overshoot"], 0);
+    }
+
+    fn assert_p8_report_lm_roles(report: &serde_json::Value) {
         assert_eq!(report["lm_roles"].as_array().unwrap().len(), 2);
         assert_eq!(report["lm_roles"][0]["role"], "solver");
         assert_eq!(report["lm_roles"][1]["role"], "reflection");
@@ -4375,7 +4393,9 @@ Provide the new parameter value within ``` blocks."
                 })
         );
         assert_eq!(report["lm_roles"][1]["metrics"]["cost"]["llm_calls"], 1);
-        assert_eq!(report["budget"]["search_metric_calls_overshoot"], 0);
+    }
+
+    fn assert_p8_report_gepa_summary(report: &serde_json::Value) {
         let gepa_events = report["gepa_events"].as_array().unwrap();
         assert!(
             gepa_events
@@ -4424,19 +4444,15 @@ Provide the new parameter value within ``` blocks."
                     .as_array()
                     .is_some_and(|members| members.iter().any(|member| member == 1))))
         );
+    }
+
+    fn assert_p8_report_case_safety(report: &serde_json::Value) {
         assert!(report["cases"].as_array().unwrap().iter().all(|case| {
             case.get("source_id").is_some()
                 && case.get("feedback_chars").is_some()
                 && case.get("target_answer").is_none()
                 && case.get("reference_solution").is_none()
         }));
-
-        let lines = report_lines(&config, &run);
-        assert!(
-            lines
-                .iter()
-                .any(|line| line == &format!("p8_aime_json={}", path.display()))
-        );
     }
 
     #[test]

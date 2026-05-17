@@ -1,19 +1,15 @@
 //! `RunContext` mutation surface.
 
-use std::{
-    collections::{BTreeMap, VecDeque},
-    sync::Arc,
-};
+use std::{collections::BTreeMap, sync::Arc};
 
 use leaven_core::{
-    Artifact, Assessment, AssessmentGranularity, AssessmentTarget, CacheIdentity,
-    EvaluationPurpose, EvaluationRequest, EvaluationSet, OptimizationProblem, ProposalBatch,
+    Artifact, Assessment, CacheIdentity, EvaluationRequest, OptimizationProblem, ProposalBatch,
     ResolvedEvaluationRequest, ResolvedRequestKind,
 };
 use leaven_kernel::{
-    AssessmentId, BudgetExceeded, BudgetSnapshot, CandidateId, CaseId, Cost, ErrorKind,
-    ErrorRecord, EvaluationRequestId, EvaluatorId, IterationId, ProposalBatchId, ProposalId,
-    StageCallId, StageId,
+    AssessmentId, BudgetExceeded, BudgetSnapshot, CandidateId, Cost, ErrorKind, ErrorRecord,
+    EvaluationRequestId, EvaluatorId, IterationId, ProposalBatchId, ProposalId, StageCallId,
+    StageId,
 };
 use leaven_store::{EvidenceStore, StoreError};
 use thiserror::Error;
@@ -22,14 +18,16 @@ use crate::graph::storage::AssessmentRecordTarget;
 use crate::graph::storage::{ApplyAttemptOutcome, ApplyProposalError};
 use crate::{
     ApplyOneReport, ApplyOutcome, ApplyReport, BudgetHandle, BudgetLedger, CacheBypassReason,
-    CachePolicy, CacheStatus, CaseSet, CasewiseEvaluationReport, DynCallback, DynEvaluator,
-    ErrorPolicy, EvaluationCache, EvaluationCacheKey, EvaluationContext, EvaluationError,
-    EvaluationReport, EvaluationResolveError, Evaluator, OptimizerStateWrite, ProposalBatchReport,
-    ProposalContext, ProposalError, Proposer, ReadScope, RenderContext, RunCheckpointRequest,
-    RunEvent, RunGraph, RunGraphView, RunPersistence, TrustPolicy, TrustViolation,
+    CachePolicy, CacheStatus, CaseSet, DynCallback, DynEvaluator, ErrorPolicy, EvaluationCache,
+    EvaluationCacheKey, EvaluationContext, EvaluationError, EvaluationReport,
+    EvaluationResolveError, Evaluator, OptimizerStateWrite, ProposalBatchReport, ProposalContext,
+    ProposalError, Proposer, ReadScope, RenderContext, RunCheckpointRequest, RunEvent, RunGraph,
+    RunGraphView, RunPersistence, TrustPolicy, TrustViolation,
 };
 
 use super::proposal_context::StageAttemptEventSink;
+
+mod casewise;
 
 pub struct RunContext<'a, P: OptimizationProblem> {
     graph: &'a mut RunGraph<P>,
@@ -397,36 +395,6 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
         self.evaluate_dyn(evaluator.as_ref(), request).await
     }
 
-    /// Evaluate one candidate casewise while preserving per-case cache keys.
-    ///
-    /// Cache hits are returned immediately from their single-case cache entries.
-    /// Cache misses are batched into one evaluator call so evaluators can use
-    /// their own internal parallelism, then each returned case row is written
-    /// back under the single-case cache key.
-    pub async fn evaluate_independent_casewise_cached(
-        &mut self,
-        evaluator_id: EvaluatorId,
-        candidate: CandidateId,
-        set: EvaluationSet,
-        purpose: EvaluationPurpose,
-    ) -> Result<CasewiseEvaluationReport, RunContextError> {
-        let Some(evaluator) = self
-            .evaluators
-            .and_then(|evaluators| evaluators.get(&evaluator_id))
-            .cloned()
-        else {
-            let error = RunContextError::UnknownEvaluator(evaluator_id);
-            self.emit(RunEvent::Error {
-                stage: Some(StageId::custom("optimizer")),
-                error: ErrorRecord::from_error(ErrorKind::Evaluation, &error),
-                policy: ErrorPolicy::Continued,
-            });
-            return Err(error);
-        };
-        self.evaluate_independent_casewise_cached_dyn(evaluator.as_ref(), candidate, set, purpose)
-            .await
-    }
-
     async fn evaluate_static<T>(
         &mut self,
         evaluator: &T,
@@ -555,175 +523,6 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
             cache_key,
             metered,
         )
-    }
-
-    async fn evaluate_independent_casewise_cached_dyn(
-        &mut self,
-        evaluator: &dyn DynEvaluator<P>,
-        candidate: CandidateId,
-        set: EvaluationSet,
-        purpose: EvaluationPurpose,
-    ) -> Result<CasewiseEvaluationReport, RunContextError> {
-        let evaluator_id = evaluator.id();
-        let full_request = EvaluationRequest::Independent {
-            candidates: vec![candidate],
-            set,
-            granularity: AssessmentGranularity::PerCase,
-            purpose: purpose.clone(),
-        };
-        if let Err(error) = self
-            .trust
-            .check_evaluation_request(&crate::Actor::Optimizer, &full_request)
-        {
-            self.emit(RunEvent::Error {
-                stage: Some(StageId::custom("optimizer")),
-                error: ErrorRecord::from_error(ErrorKind::Trust, &error),
-                policy: ErrorPolicy::Continued,
-            });
-            return Err(RunContextError::TrustViolation(error));
-        }
-        let case_ids = self.resolve_evaluation_request(&full_request)?.case_ids;
-        let mut rows = Vec::with_capacity(case_ids.len());
-        let mut missing = Vec::new();
-        let mut cache_hits = 0_usize;
-
-        for (index, case) in case_ids.iter().copied().enumerate() {
-            let request = single_case_request(candidate, case, purpose.clone());
-            let resolved_set = self.resolve_evaluation_request(&request)?;
-            let resolved_request = ResolvedEvaluationRequest {
-                kind: resolved_kind(&request),
-                set: resolved_set.clone(),
-                granularity: request_granularity(&request),
-                purpose: request_purpose(&request),
-            };
-            let policy = evaluator.cache_policy(&resolved_request);
-            let cache_key = self.evaluation_cache_key(
-                evaluator.fingerprint(),
-                policy.clone(),
-                &resolved_request,
-            );
-            if let Some(assessment_ids) =
-                self.cached_assessment_ids(&policy, cache_key.as_ref().ok())
-            {
-                let request_id = self.record_evaluation_request(
-                    &evaluator_id,
-                    request,
-                    resolved_set,
-                    candidate_count(&resolved_request),
-                );
-                let report = EvaluationReport {
-                    request_id,
-                    resolved_set: resolved_request.set.id,
-                    assessment_ids,
-                    cost: Cost::zero(),
-                    cache: CacheStatus::Hit,
-                };
-                self.emit_evaluation_completed(&evaluator_id, &report);
-                cache_hits = cache_hits.saturating_add(1);
-                rows.push((index, report.assessment_ids));
-            } else {
-                missing.push(CasewiseCacheMiss {
-                    index,
-                    case,
-                    cache_key,
-                });
-            }
-        }
-
-        let mut cost = Cost::zero();
-        let cache_misses = missing.len();
-        if !missing.is_empty() {
-            let missing_cases = missing.iter().map(|miss| miss.case).collect::<Vec<_>>();
-            let request = EvaluationRequest::Independent {
-                candidates: vec![candidate],
-                set: EvaluationSet::Cases(missing_cases.clone()),
-                granularity: AssessmentGranularity::PerCase,
-                purpose,
-            };
-            let resolved_set = self.resolve_evaluation_request(&request)?;
-            let resolved_request = ResolvedEvaluationRequest {
-                kind: resolved_kind(&request),
-                set: resolved_set.clone(),
-                granularity: request_granularity(&request),
-                purpose: request_purpose(&request),
-            };
-            let batch_policy = evaluator.cache_policy(&resolved_request);
-            let batch_cache_key =
-                self.evaluation_cache_key(evaluator.fingerprint(), batch_policy, &resolved_request);
-            let request_id = self.record_evaluation_request(
-                &evaluator_id,
-                request,
-                resolved_set,
-                candidate_count(&resolved_request),
-            );
-            let stage = StageId::from_evaluator(evaluator_id.clone());
-            let eval_ctx = self.evaluation_context(stage.clone());
-            let metered = match evaluator
-                .evaluate_boxed(resolved_request.clone(), eval_ctx)
-                .await
-            {
-                Ok(metered) => metered,
-                Err(error) => {
-                    self.charge_failed_evaluation_cost(&stage, &error)?;
-                    self.emit_stage_error(Some(stage.clone()), ErrorKind::Evaluation, &error);
-                    return Err(RunContextError::Evaluation(error));
-                }
-            };
-            let report = self.complete_evaluation(
-                &evaluator_id,
-                request_id,
-                &resolved_request,
-                batch_cache_key,
-                metered,
-            )?;
-            cost = report.cost.clone();
-            let mut by_case = BTreeMap::<CaseId, VecDeque<AssessmentId>>::new();
-            for assessment in &report.assessment_ids {
-                let assessment_view = self.graph().assessment(*assessment).ok_or_else(|| {
-                    RunContextError::Evaluation(EvaluationError::Message(format!(
-                        "casewise batch assessment `{assessment}` is missing from graph"
-                    )))
-                })?;
-                let AssessmentTarget::Case { case, .. } = assessment_view.target() else {
-                    return Err(RunContextError::Evaluation(EvaluationError::Message(
-                        "casewise batch expected case-targeted assessments".to_owned(),
-                    )));
-                };
-                by_case.entry(*case).or_default().push_back(*assessment);
-            }
-            for miss in missing {
-                let assessment = by_case
-                    .get_mut(&miss.case)
-                    .and_then(VecDeque::pop_front)
-                    .ok_or_else(|| {
-                        RunContextError::Evaluation(EvaluationError::Message(format!(
-                            "casewise batch did not return case `{}`",
-                            miss.case
-                        )))
-                    })?;
-                if let Ok(cache_key) = miss.cache_key
-                    && let Some(cache) = self.cache.as_mut()
-                {
-                    cache.insert(cache_key, vec![assessment]);
-                }
-                rows.push((miss.index, vec![assessment]));
-            }
-            if self.cache.is_some() {
-                self.checkpoint()?;
-            }
-        }
-
-        rows.sort_by_key(|(index, _)| *index);
-        let assessment_ids = rows
-            .into_iter()
-            .flat_map(|(_, assessments)| assessments)
-            .collect();
-        Ok(CasewiseEvaluationReport {
-            assessment_ids,
-            cost,
-            cache_hits,
-            cache_misses,
-        })
     }
 
     fn charge_failed_evaluation_cost(
@@ -1034,25 +833,6 @@ fn candidate_count(request: &ResolvedEvaluationRequest) -> usize {
         ResolvedRequestKind::Independent { candidates }
         | ResolvedRequestKind::Listwise { candidates } => candidates.len(),
         ResolvedRequestKind::Pairwise { .. } => 2,
-    }
-}
-
-struct CasewiseCacheMiss {
-    index: usize,
-    case: CaseId,
-    cache_key: Result<EvaluationCacheKey, CacheBypassReason>,
-}
-
-fn single_case_request(
-    candidate: CandidateId,
-    case: CaseId,
-    purpose: EvaluationPurpose,
-) -> EvaluationRequest {
-    EvaluationRequest::Independent {
-        candidates: vec![candidate],
-        set: EvaluationSet::Cases(vec![case]),
-        granularity: AssessmentGranularity::PerCase,
-        purpose,
     }
 }
 

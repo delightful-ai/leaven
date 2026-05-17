@@ -73,19 +73,19 @@ pub enum ReflectiveSideInfoValue {
     /// Scalar text rendered as-is after trimming surrounding whitespace.
     Text(String),
     /// Ordered mapping rendered as nested markdown headings.
-    Mapping(Vec<(String, ReflectiveSideInfoValue)>),
+    Mapping(Vec<(String, Self)>),
     /// Ordered list rendered as `Item N` nested markdown headings.
-    List(Vec<ReflectiveSideInfoValue>),
+    List(Vec<Self>),
 }
 
 impl ReflectiveSideInfoValue {
     /// Build an ordered mapping value.
-    pub fn mapping(fields: impl IntoIterator<Item = (String, ReflectiveSideInfoValue)>) -> Self {
+    pub fn mapping(fields: impl IntoIterator<Item = (String, Self)>) -> Self {
         Self::Mapping(fields.into_iter().collect())
     }
 
     /// Build an ordered list value.
-    pub fn list(items: impl IntoIterator<Item = ReflectiveSideInfoValue>) -> Self {
+    pub fn list(items: impl IntoIterator<Item = Self>) -> Self {
         Self::List(items.into_iter().collect())
     }
 }

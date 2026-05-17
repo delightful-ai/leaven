@@ -36,7 +36,7 @@ impl RunOutput {
 pub struct RunError {
     message: String,
     trace: Vec<String>,
-    cost: Cost,
+    cost: Box<Cost>,
     #[source]
     source: Option<Box<dyn std::error::Error + Send + Sync + 'static>>,
 }
@@ -48,7 +48,7 @@ impl RunError {
         Self {
             message: message.into(),
             trace: Vec::new(),
-            cost: Cost::zero(),
+            cost: Box::new(Cost::zero()),
             source: None,
         }
     }
@@ -62,7 +62,7 @@ impl RunError {
         Self {
             message: message.into(),
             trace: Vec::new(),
-            cost: Cost::zero(),
+            cost: Box::new(Cost::zero()),
             source: Some(Box::new(source)),
         }
     }
@@ -77,7 +77,7 @@ impl RunError {
     /// Attaches metered runner cost incurred before failure.
     #[must_use]
     pub fn with_cost(mut self, cost: Cost) -> Self {
-        self.cost = cost;
+        self.cost = Box::new(cost);
         self
     }
 
@@ -154,7 +154,7 @@ impl Score {
 pub struct ScoreError {
     message: String,
     trace: Vec<String>,
-    cost: Cost,
+    cost: Box<Cost>,
     #[source]
     source: Option<Box<dyn std::error::Error + Send + Sync + 'static>>,
 }
@@ -166,7 +166,7 @@ impl ScoreError {
         Self {
             message: message.into(),
             trace: Vec::new(),
-            cost: Cost::zero(),
+            cost: Box::new(Cost::zero()),
             source: None,
         }
     }
@@ -180,7 +180,7 @@ impl ScoreError {
         Self {
             message: message.into(),
             trace: Vec::new(),
-            cost: Cost::zero(),
+            cost: Box::new(Cost::zero()),
             source: Some(Box::new(source)),
         }
     }
@@ -195,7 +195,7 @@ impl ScoreError {
     /// Attaches metered scorer cost incurred before failure.
     #[must_use]
     pub fn with_cost(mut self, cost: Cost) -> Self {
-        self.cost = cost;
+        self.cost = Box::new(cost);
         self
     }
 

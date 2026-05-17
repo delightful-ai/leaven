@@ -1158,6 +1158,33 @@ fn checkpointable_optimizer_restore_default_refuses_unhandled_private_state() {
 }
 
 #[test]
+fn checkpointable_optimizer_restore_accepts_absent_private_state_for_stateless_optimizers() {
+    let engine = Engine::<TestProblem>::builder().build();
+    let checkpoint_without_state = checkpoint_referencing_graph(BlobRef {
+        store: "recording".to_owned(),
+        key: "graph".to_owned(),
+    });
+
+    let mut plain = PlainStatelessOptimizer;
+    plain
+        .restore_checkpoint_state(
+            &checkpoint_without_state,
+            &JsonStateReader::missing(),
+            RestoreContext::new(engine.view()),
+        )
+        .unwrap();
+
+    let mut graph_derived = DerivedStateOptimizer;
+    restore_checkpointable_optimizer_state(
+        &mut graph_derived,
+        &checkpoint_without_state,
+        &JsonStateReader::missing(),
+        RestoreContext::new(engine.view()),
+    )
+    .unwrap();
+}
+
+#[test]
 fn checkpointable_optimizer_restore_helper_validates_policy_and_reader_state() {
     let engine = Engine::<TestProblem>::builder().build();
     let checkpoint_without_state = checkpoint_referencing_graph(BlobRef {

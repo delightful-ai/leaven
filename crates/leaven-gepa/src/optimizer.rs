@@ -1044,10 +1044,20 @@ fn average_scalar(evidence: &CasewiseEvidence<ScalarEvidence>) -> Option<f64> {
 
 #[cfg(test)]
 mod tests {
-    use leaven_evidence::{CaseOutcome, CasewiseEvidence, ScalarEvidence};
-    use leaven_kernel::{AssessmentId, CandidateId, CaseId};
+    use std::sync::Arc;
 
-    use super::{GepaAssessment, GepaCandidateHistoryEntry, average_scalar};
+    use leaven_engine::{BudgetLedger, OptimizerError};
+    use leaven_evidence::{CaseOutcome, CasewiseEvidence, ScalarEvidence};
+    use leaven_kernel::{
+        AssessmentId, Budget, BudgetDimension, BudgetExceeded, CandidateId, CaseId, Cost, StageId,
+    };
+
+    use crate::{GepaEventSummary, GepaReport};
+
+    use super::{
+        GepaAssessment, GepaCandidateHistoryEntry, GepaEventSink, GepaReportSink, average_scalar,
+        optimizer_error_contains_budget_exceeded,
+    };
 
     #[test]
     fn assessment_helpers_preserve_casewise_average_and_history_rows() {
@@ -1076,5 +1086,30 @@ mod tests {
         assert!((entry.score() - 0.5).abs() < f64::EPSILON);
         assert_eq!(assessment.metric_calls_new, 2);
         assert_eq!(assessment.scalar_evidence.outcomes().len(), 2);
+    }
+
+    #[test]
+    fn event_and_report_sinks_have_stable_debug_names() {
+        let event_sink = GepaEventSink(Arc::new(|_: &GepaEventSummary| {}));
+        let report_sink = GepaReportSink(Arc::new(|_: &GepaReport| {}));
+
+        assert_eq!(format!("{event_sink:?}"), "GepaEventSink(..)");
+        assert_eq!(format!("{report_sink:?}"), "GepaReportSink(..)");
+    }
+
+    #[test]
+    fn optimizer_error_budget_detection_walks_source_chain() {
+        let plain = OptimizerError::Message("plain failure".to_owned());
+        assert!(!optimizer_error_contains_budget_exceeded(&plain));
+
+        let exceeded = BudgetExceeded {
+            stage: StageId::custom("test"),
+            requested: Box::new(Cost::metric_calls(1)),
+            snapshot: Box::new(BudgetLedger::new(Budget::metric_calls(0)).snapshot()),
+            dimension: BudgetDimension::MetricCalls,
+        };
+        let wrapped = OptimizerError::with_source("wrapped budget refusal", exceeded);
+
+        assert!(optimizer_error_contains_budget_exceeded(&wrapped));
     }
 }
