@@ -146,6 +146,12 @@ fn report_run_header_lines(config: &AimeRunConfig, result: &Optimized<AimePrompt
                 .map(|path| path.display().to_string())
                 .unwrap_or_else(|| "none".to_owned())
         ),
+        format!(
+            "p8_aime_json={}",
+            p8_aime_report_path(&result.summary.storage)
+                .map(|path| path.display().to_string())
+                .unwrap_or_else(|| "none".to_owned())
+        ),
         format!("compatibility={}", report_compatibility(result)),
     ];
     lines.extend(
@@ -362,6 +368,16 @@ fn report_run_dir(storage: &RunStorage) -> String {
             ..
         } => run_dir.display().to_string(),
         RunStorage::Stored { .. } | RunStorage::Ephemeral { .. } => "none".to_owned(),
+    }
+}
+
+fn p8_aime_report_path(storage: &RunStorage) -> Option<PathBuf> {
+    match storage {
+        RunStorage::Stored {
+            run_dir: Some(run_dir),
+            ..
+        } => Some(run_dir.join("reports").join("p8-aime.json")),
+        RunStorage::Stored { .. } | RunStorage::Ephemeral { .. } => None,
     }
 }
 
@@ -602,11 +618,181 @@ async fn try_run_aime(
         solver_telemetry.snapshot(),
         reflection_telemetry.snapshot(),
     );
-    Ok(AimeRunResult {
+    let result = AimeRunResult {
         optimized,
         report_metadata,
         role_reports,
+    };
+    write_p8_aime_report(&config, &result)?;
+    Ok(result)
+}
+
+fn write_p8_aime_report(
+    config: &AimeRunConfig,
+    run: &AimeRunResult,
+) -> Result<(), leaven::run::OptimizeError> {
+    let Some(path) = p8_aime_report_path(&run.optimized.summary.storage) else {
+        return Ok(());
+    };
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|source| {
+            leaven::run::OptimizeError::ReportStore {
+                operation: "create P8 AIME report directory",
+                source,
+            }
+        })?;
+    }
+    let bytes = serde_json::to_vec_pretty(&p8_aime_report_json(config, run))
+        .expect("P8 AIME report JSON serializes");
+    std::fs::write(&path, bytes).map_err(|source| leaven::run::OptimizeError::ReportStore {
+        operation: "write P8 AIME report json",
+        source,
     })
+}
+
+fn p8_aime_report_json(config: &AimeRunConfig, run: &AimeRunResult) -> serde_json::Value {
+    let result = &run.optimized;
+    serde_json::json!({
+        "schema": "leaven.p8_aime.report.v1",
+        "run_profile": config.profile.label(),
+        "proof_classification": config.proof_classification(),
+        "comparison": {
+            "target": config.profile.comparison_target(),
+            "published_test_score": config.profile.published_test_score(),
+            "reflection_prompt": config.profile.reflection_prompt_claim(),
+            "notes": config.profile.comparison_notes(),
+        },
+        "data_source": config.data_source.label(),
+        "run": {
+            "id": result.run_id.to_string(),
+            "storage": report_run_storage(&result.summary.storage),
+            "resumable": result.summary.storage.is_resumable(),
+            "resumability": report_resumability(&result.summary.storage),
+            "run_dir": report_run_dir(&result.summary.storage),
+            "latest_checkpoint": report_latest_checkpoint(&result.summary.storage),
+            "summary_json": result.summary.reports.summary_json.as_ref().map(|path| path.display().to_string()),
+        },
+        "scores": {
+            "baseline_train": result.summary.baseline_train_score,
+            "optimized_train": result.summary.optimized_train_score,
+            "baseline_validation": result.summary.baseline_validation_score,
+            "validation": result.summary.validation_score,
+            "baseline_test": result.summary.baseline_test_score,
+            "test": result.summary.test_score,
+            "test_score_use": "final_report_only",
+        },
+        "budget": {
+            "stop_reason": report_stop_reason(result.stop),
+            "search_metric_call_cap": config.budget.metric_calls,
+            "search_metric_calls_spent": result.summary.optimization_cost.metric_calls,
+            "final_report_metric_call_cap": serde_json::Value::String("unlimited".to_owned()),
+            "final_report_metric_calls_spent": result.summary.final_report_cost.metric_calls,
+            "total_metric_calls": result.budget.spent.metric_calls,
+            "total_lm_calls": result.budget.spent.llm_calls,
+        },
+        "cache": {
+            "evaluation": {
+                "policy": report_evaluation_cache_policy(&config.evaluation_cache_policy),
+                "backend": result.summary.cache.evaluation.backend.as_str(),
+                "durable": result.summary.cache.evaluation.durable,
+                "hits": result.summary.cache.evaluation.hits,
+                "misses": result.summary.cache.evaluation.misses,
+                "bypasses": evaluation_cache_bypass_count(&result.summary.cache.evaluation),
+                "bypass_reasons": report_evaluation_cache_bypasses(&result.summary.cache.evaluation),
+                "write_errors": result.summary.cache.evaluation.write_errors,
+                "hit_cost_zero": result.summary.cache.evaluation.hit_cost_zero,
+            },
+            "lm_backend": report_lm_cache_backend(config.solver.runtime.cache_backend),
+            "lm_durable": config.solver.runtime.cache_backend.is_durable(),
+            "lm_path": report_lm_cache_path(config.solver.runtime.cache_backend, &result.summary.storage),
+        },
+        "best": {
+            "system_prompt": result.best().map(|best| best.system.clone()),
+        },
+        "lm_roles": run.role_reports.iter().map(p8_lm_role_report_json).collect::<Vec<_>>(),
+        "cases": p8_case_report_json(run),
+        "events": result.events.iter().map(|event| event.as_str()).collect::<Vec<_>>(),
+    })
+}
+
+fn p8_lm_role_report_json(role: &AimeLmRoleReport) -> serde_json::Value {
+    serde_json::json!({
+        "role": role.role.label(),
+        "provider": role.provider.label(),
+        "live": role.live,
+        "model": role.model,
+        "runtime_fingerprint": report_fingerprint(role.runtime_fingerprint),
+        "runtime": {
+            "cache_policy": report_lm_cache_policy(role.cache_policy),
+            "cache_backend": report_lm_cache_backend(role.cache_backend),
+            "cache_durable": role.cache_durable,
+            "max_concurrent_requests": role.max_concurrent_requests.get(),
+            "output": role.output,
+            "parser": role.parser,
+        },
+        "metrics": {
+            "calls": role.metrics.calls,
+            "tokens": {
+                "prompt": role.metrics.usage.input_tokens,
+                "cached_input": role.metrics.usage.cached_input_tokens,
+                "completion": role.metrics.usage.output_tokens,
+                "reasoning": role.metrics.usage.reasoning_tokens,
+            },
+            "cost": {
+                "llm_calls": role.metrics.cost.llm_calls,
+                "prompt_tokens": role.metrics.cost.prompt_tokens,
+                "completion_tokens": role.metrics.cost.completion_tokens,
+            },
+            "cache": {
+                "hits": role.metrics.cache.hits,
+                "misses": role.metrics.cache.misses,
+                "bypasses": role.metrics.cache.bypasses(),
+                "bypass_policy_never": role.metrics.cache.bypass_policy_never,
+                "bypass_refresh": role.metrics.cache.bypass_refresh,
+                "write_errors": role.metrics.cache.write_errors,
+                "hit_cost_zero": role.metrics.cache.hit_cost_zero,
+            },
+            "failures": {
+                "count": role.metrics.failures.total(),
+                "missing_credentials": role.metrics.failures.missing_credentials,
+                "authentication": role.metrics.failures.authentication,
+                "rate_limit": role.metrics.failures.rate_limit,
+                "retry_exhausted": role.metrics.failures.retry_exhausted,
+                "malformed_provider_response": role.metrics.failures.malformed_provider_response,
+                "answer_parse": role.metrics.failures.answer_parse,
+                "scorer_parse": role.metrics.failures.scorer_parse,
+                "budget_refusal": role.metrics.failures.budget_refusal,
+                "cache": role.metrics.failures.cache,
+                "transport": role.metrics.failures.transport,
+                "provider": role.metrics.failures.provider,
+                "unknown": role.metrics.failures.unknown,
+            },
+        },
+    })
+}
+
+fn p8_case_report_json(run: &AimeRunResult) -> Vec<serde_json::Value> {
+    let mut cases = Vec::new();
+    for split in &run.optimized.summary.evaluation.splits_reported {
+        for candidate in &split.candidates {
+            for case in &candidate.cases {
+                cases.push(serde_json::json!({
+                    "case_id": case.case_id.to_string(),
+                    "source_id": run
+                        .report_metadata
+                        .get(&case.case_id)
+                        .map(AimeReportMetadata::source_id)
+                        .unwrap_or_else(|| "missing-source-id".to_owned()),
+                    "split": split_role_label(&split.role),
+                    "candidate": candidate.candidate.to_string(),
+                    "score": case.score,
+                    "output_chars": case.output.len(),
+                    "feedback_chars": case.feedback.len(),
+                }));
+            }
+        }
+    }
+    cases
 }
 
 #[derive(Clone, Debug)]
@@ -3476,6 +3662,41 @@ Provide the new parameter value within ``` blocks.";
         assert_eq!(
             SqliteLmCache::path_in_workspace("."),
             std::path::PathBuf::from(".leaven").join("lm-cache.sqlite")
+        );
+    }
+
+    #[test]
+    fn p8_aime_json_report_persists_role_and_proof_facts() {
+        let config = AimeRunConfig::deterministic_smoke();
+        let run = block_on(run_aime(config.clone(), deterministic_dataset()));
+        let path = p8_aime_report_path(&run.optimized.summary.storage)
+            .expect("stored deterministic P8 run has a P8 report path");
+        let report: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&path).expect("P8 AIME report JSON is written"))
+                .expect("P8 AIME report JSON parses");
+
+        assert_eq!(report["schema"], "leaven.p8_aime.report.v1");
+        assert_eq!(report["run_profile"], config.profile.label());
+        assert_eq!(
+            report["proof_classification"],
+            config.proof_classification()
+        );
+        assert_eq!(report["lm_roles"].as_array().unwrap().len(), 2);
+        assert_eq!(report["lm_roles"][0]["role"], "solver");
+        assert_eq!(report["lm_roles"][1]["role"], "reflection");
+        assert_eq!(report["lm_roles"][1]["metrics"]["cost"]["llm_calls"], 1);
+        assert!(report["cases"].as_array().unwrap().iter().all(|case| {
+            case.get("source_id").is_some()
+                && case.get("feedback_chars").is_some()
+                && case.get("target_answer").is_none()
+                && case.get("reference_solution").is_none()
+        }));
+
+        let lines = report_lines(&config, &run);
+        assert!(
+            lines
+                .iter()
+                .any(|line| line == &format!("p8_aime_json={}", path.display()))
         );
     }
 
