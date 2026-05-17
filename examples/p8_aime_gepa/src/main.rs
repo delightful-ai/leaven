@@ -12,7 +12,7 @@ use leaven::engine::{
 };
 use leaven::eval::{Case, SplitRole};
 use leaven::gepa::{
-    Gepa, GepaCandidateIndex, GepaEventSummary, GepaSkipReason, ReflectionError,
+    Gepa, GepaCandidateIndex, GepaEventSummary, GepaReport, GepaSkipReason, ReflectionError,
     ReflectiveDatasetBuilder, ReflectiveExample, ReflectiveSideInfoValue,
 };
 use leaven::kernel::Metered;
@@ -616,9 +616,11 @@ async fn try_run_aime(
     let solver_config = config.solver.clone();
     let side_infos = AimeSolverSideInfoStore::default();
     let gepa_events = Arc::new(Mutex::new(Vec::<GepaEventSummary>::new()));
+    let gepa_report = Arc::new(Mutex::new(None::<GepaReport>));
     let report_metadata = dataset.report_metadata.clone();
     let reflective_dataset = dataset.reflective_dataset(side_infos.clone());
     let gepa_event_sink = gepa_events.clone();
+    let gepa_report_sink = gepa_report.clone();
     let optimized = Box::pin(
         leaven::prelude::optimize(AimePrompt::new(config.seed_prompt))
             .train(dataset.train)
@@ -650,6 +652,10 @@ async fn try_run_aime(
                         .expect("AIME GEPA event sink lock")
                         .push(event.clone());
                 })
+                .on_report(move |report| {
+                    *gepa_report_sink.lock().expect("AIME GEPA report sink lock") =
+                        Some(report.clone());
+                })
                 .reflective_dataset(reflective_dataset)
                 .max_iterations(config.max_iterations),
             )
@@ -671,6 +677,10 @@ async fn try_run_aime(
         gepa_events: gepa_events
             .lock()
             .expect("AIME GEPA event sink lock")
+            .clone(),
+        gepa_report: gepa_report
+            .lock()
+            .expect("AIME GEPA report sink lock")
             .clone(),
     };
     write_p8_aime_report(&config, &result)?;
@@ -765,8 +775,43 @@ fn p8_aime_report_json(config: &AimeRunConfig, run: &AimeRunResult) -> serde_jso
         },
         "lm_roles": run.role_reports.iter().map(p8_lm_role_report_json).collect::<Vec<_>>(),
         "gepa_events": run.gepa_events.iter().map(p8_gepa_event_json).collect::<Vec<_>>(),
+        "gepa_report": run.gepa_report.as_ref().map(p8_gepa_report_json),
         "cases": p8_case_report_json(run),
         "events": result.events.iter().map(|event| event.as_str()).collect::<Vec<_>>(),
+    })
+}
+
+fn p8_gepa_report_json(report: &GepaReport) -> serde_json::Value {
+    serde_json::json!({
+        "best_index": report.best_index.map(GepaCandidateIndex::get),
+        "best_candidate": report.best_candidate.map(|candidate| candidate.to_string()),
+        "validation_best_index": report.validation_best_index.map(GepaCandidateIndex::get),
+        "validation_best_candidate": report.validation_best_candidate.map(|candidate| candidate.to_string()),
+        "total_metric_calls": report.total_metric_calls,
+        "full_validation_evals": report.full_validation_evals,
+        "candidates": report.candidates.iter().map(|candidate| serde_json::json!({
+            "index": candidate.index.get(),
+            "candidate": candidate.candidate.to_string(),
+            "parents": candidate.parents.iter().map(|index| index.get()).collect::<Vec<_>>(),
+            "discovery_metric_calls": candidate.discovery_metric_calls,
+            "validation_score": candidate.validation_score,
+            "validation_rows": candidate.validation_rows.iter().map(ToString::to_string).collect::<Vec<_>>(),
+            "validation_subscores": candidate.validation_subscores.iter().map(|subscore| serde_json::json!({
+                "case": subscore.case.to_string(),
+                "score": subscore.score,
+            })).collect::<Vec<_>>(),
+        })).collect::<Vec<_>>(),
+        "validation_frontier": report.validation_frontier.iter().map(|frontier| serde_json::json!({
+            "case": frontier.case.to_string(),
+            "candidates": frontier.candidates.iter().map(|index| index.get()).collect::<Vec<_>>(),
+        })).collect::<Vec<_>>(),
+        "candidate_history": report.candidate_history.iter().map(|entry| serde_json::json!({
+            "candidate": entry.candidate.to_string(),
+            "candidate_index": entry.candidate_index.map(GepaCandidateIndex::get),
+            "assessments": entry.assessments.iter().map(ToString::to_string).collect::<Vec<_>>(),
+            "score": entry.score,
+        })).collect::<Vec<_>>(),
+        "events": report.events.iter().map(p8_gepa_event_json).collect::<Vec<_>>(),
     })
 }
 
@@ -2206,6 +2251,7 @@ struct AimeRunResult {
     report_metadata: BTreeMap<CaseId, AimeReportMetadata>,
     role_reports: AimeRoleReports,
     gepa_events: Vec<GepaEventSummary>,
+    gepa_report: Option<GepaReport>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -4287,6 +4333,38 @@ Provide the new parameter value within ``` blocks."
             gepa_events
                 .iter()
                 .any(|event| event["phase"] == "proposal_accepted")
+        );
+        assert!(
+            gepa_events
+                .iter()
+                .any(|event| event["phase"] == "optimization_ended")
+        );
+        let gepa_report = &report["gepa_report"];
+        assert_eq!(gepa_report["total_metric_calls"], 8);
+        assert_eq!(gepa_report["full_validation_evals"], 2);
+        assert_eq!(gepa_report["best_index"], 1);
+        assert!(gepa_report["candidates"].as_array().unwrap().len() >= 2);
+        assert_eq!(gepa_report["candidates"][0]["index"], 0);
+        assert_eq!(
+            gepa_report["candidates"][0]["parents"],
+            serde_json::json!([])
+        );
+        assert_eq!(gepa_report["candidates"][1]["index"], 1);
+        assert_eq!(
+            gepa_report["candidates"][1]["parents"],
+            serde_json::json!([0])
+        );
+        assert!(
+            gepa_report["candidates"][1]["validation_subscores"]
+                .as_array()
+                .is_some_and(|rows| !rows.is_empty())
+        );
+        assert!(
+            gepa_report["validation_frontier"]
+                .as_array()
+                .is_some_and(|rows| rows.iter().any(|row| row["candidates"]
+                    .as_array()
+                    .is_some_and(|members| members.iter().any(|member| member == 1))))
         );
         assert!(report["cases"].as_array().unwrap().iter().all(|case| {
             case.get("source_id").is_some()

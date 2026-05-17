@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     CandidateSelector, CheckpointCandidateSelector, CheckpointGate, CheckpointPartSelector, Gate,
     GateDecision, GepaCandidateIndex, GepaCaseEvidence, GepaEventSummary, GepaPopulation,
-    GepaReferenceState, GepaReflectiveDataset, GepaReflector, GepaSkipReason,
+    GepaReferenceState, GepaReflectiveDataset, GepaReflector, GepaReport, GepaSkipReason,
     ParetoFrequencyWeighted, PartSelector, ReflectRequest, ReflectiveDatasetBuilder,
     RoundRobinPart, StrictImprovement,
     population::CheckpointPopulation,
@@ -104,6 +104,7 @@ pub struct Gepa<
     reference_state: GepaReferenceState,
     events: Vec<GepaEventSummary>,
     event_sink: Option<GepaEventSink>,
+    report_sink: Option<GepaReportSink>,
 }
 
 #[derive(Clone)]
@@ -112,6 +113,15 @@ struct GepaEventSink(Arc<dyn Fn(&GepaEventSummary) + Send + Sync>);
 impl std::fmt::Debug for GepaEventSink {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("GepaEventSink(..)")
+    }
+}
+
+#[derive(Clone)]
+struct GepaReportSink(Arc<dyn Fn(&GepaReport) + Send + Sync>);
+
+impl std::fmt::Debug for GepaReportSink {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("GepaReportSink(..)")
     }
 }
 
@@ -210,6 +220,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             reference_state: GepaReferenceState::default(),
             events: Vec::new(),
             event_sink: None,
+            report_sink: None,
         }
     }
 
@@ -264,6 +275,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             reference_state: self.reference_state,
             events: self.events,
             event_sink: self.event_sink,
+            report_sink: self.report_sink,
         }
     }
 
@@ -294,6 +306,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             reference_state: self.reference_state,
             events: self.events,
             event_sink: self.event_sink,
+            report_sink: self.report_sink,
         }
     }
 
@@ -328,6 +341,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             reference_state: self.reference_state,
             events: self.events,
             event_sink: self.event_sink,
+            report_sink: self.report_sink,
         }
     }
 
@@ -363,6 +377,18 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
         &self.events
     }
 
+    /// Detailed GEPA report snapshot for accepted candidates and validation frontier state.
+    #[must_use]
+    pub fn report(&self) -> GepaReport {
+        GepaReport::from_reference_state(
+            &self.reference_state,
+            &self.candidate_history,
+            &self.events,
+            self.best,
+            self.validation_best.as_ref().map(|best| best.candidate),
+        )
+    }
+
     /// Register a GEPA phase event observer.
     ///
     /// This observes optimizer-level GEPA phases without requiring callers to
@@ -377,11 +403,31 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
         self
     }
 
+    /// Register a detailed GEPA report observer.
+    ///
+    /// The sink is called when GEPA reaches a terminal optimizer status. It is
+    /// intentionally not checkpointed; resumed runs install observers from the
+    /// fresh builder configuration.
+    #[must_use]
+    pub fn on_report<F>(mut self, sink: F) -> Self
+    where
+        F: Fn(&GepaReport) + Send + Sync + 'static,
+    {
+        self.report_sink = Some(GepaReportSink(Arc::new(sink)));
+        self
+    }
+
     pub(crate) fn record_event(&mut self, event: GepaEventSummary) {
         if let Some(sink) = &self.event_sink {
             (sink.0)(&event);
         }
         self.events.push(event);
+    }
+
+    pub(crate) fn emit_report(&self) {
+        if let Some(sink) = &self.report_sink {
+            (sink.0)(&self.report());
+        }
     }
 
     /// Select the next candidate to mutate.
@@ -486,7 +532,9 @@ where
         self.completed_iterations += 1;
 
         if self.completed_iterations >= self.max_iterations {
-            Ok(leaven_engine::StepStatus::Done)
+            Ok(self
+                .finish_if_iteration_limit()
+                .unwrap_or(leaven_engine::StepStatus::Done))
         } else {
             Ok(leaven_engine::StepStatus::Continue)
         }

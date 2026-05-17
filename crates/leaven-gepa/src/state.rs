@@ -98,6 +98,12 @@ impl GepaReferenceState {
         &self.validation_frontier_candidates
     }
 
+    /// Per-candidate validation subscores in discovery order.
+    #[must_use]
+    pub fn validation_subscores(&self) -> &[BTreeMap<CaseId, ScalarEvidence>] {
+        &self.validation_subscores
+    }
+
     /// Total new evaluator metric calls charged to GEPA search.
     #[must_use]
     pub const fn total_metric_calls(&self) -> u64 {

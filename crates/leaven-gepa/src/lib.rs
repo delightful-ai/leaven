@@ -10,6 +10,7 @@ pub mod part_selector;
 pub mod population;
 pub mod proposer;
 pub mod reflection;
+pub mod report;
 pub mod selector;
 pub mod state;
 pub mod validation;
@@ -34,6 +35,10 @@ pub use reflection::{
     ReflectionError, ReflectionOutputParser, ReflectionRenderInput, ReflectionRenderer,
     ReflectiveCaseInput, ReflectiveDatasetBuilder, ReflectiveExample, ReflectiveSideInfoValue,
 };
+pub use report::{
+    GepaReport, GepaReportCandidate, GepaReportFrontierCase, GepaReportHistoryEntry,
+    GepaReportValidationSubscore,
+};
 pub use selector::{
     CandidateSelector, CheckpointCandidateSelector, HasBestCandidate, ParetoFrequencyWeighted,
     SelectBestCandidate,
@@ -49,12 +54,13 @@ pub mod prelude {
         GepaCandidateIndex, GepaCandidateRecord, GepaCaseEvidence, GepaEventSummary,
         GepaPopulation, GepaReferenceState, GepaReflectWithLmBuilder,
         GepaReflectWithLmBuilderWithSurface, GepaReflectionBootstrap, GepaReflectiveDataset,
-        GepaReflector, GepaSkipReason, GepaStageProposer, HasBestCandidate, ImprovementOrEqual,
-        LmBackedReflector, LmBackedReflectorConfig, MinibatchThenValidation,
-        ParetoFrequencyWeighted, PartSelector, PlainTextEditParser, ReflectRequest,
-        ReflectionError, ReflectionOutputParser, ReflectionRenderInput, ReflectionRenderer,
-        ReflectiveCaseInput, ReflectiveDatasetBuilder, ReflectiveExample, ReflectiveSideInfoValue,
-        RoundRobinPart, SelectBestCandidate, StrictImprovement, SurfaceProposer, ValidationPolicy,
-        gepa_stage_proposer,
+        GepaReflector, GepaReport, GepaReportCandidate, GepaReportFrontierCase,
+        GepaReportHistoryEntry, GepaReportValidationSubscore, GepaSkipReason, GepaStageProposer,
+        HasBestCandidate, ImprovementOrEqual, LmBackedReflector, LmBackedReflectorConfig,
+        MinibatchThenValidation, ParetoFrequencyWeighted, PartSelector, PlainTextEditParser,
+        ReflectRequest, ReflectionError, ReflectionOutputParser, ReflectionRenderInput,
+        ReflectionRenderer, ReflectiveCaseInput, ReflectiveDatasetBuilder, ReflectiveExample,
+        ReflectiveSideInfoValue, RoundRobinPart, SelectBestCandidate, StrictImprovement,
+        SurfaceProposer, ValidationPolicy, gepa_stage_proposer,
     };
 }

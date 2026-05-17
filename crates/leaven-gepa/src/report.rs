@@ -1,0 +1,147 @@
+//! GEPA report snapshots.
+
+use leaven_kernel::{AssessmentId, CandidateId, CaseId};
+use serde::{Deserialize, Serialize};
+
+use crate::{GepaCandidateHistoryEntry, GepaCandidateIndex, GepaEventSummary, GepaReferenceState};
+
+/// Detailed GEPA optimizer report.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct GepaReport {
+    /// Best candidate index selected by GEPA validation/frontier state.
+    pub best_index: Option<GepaCandidateIndex>,
+    /// Best candidate id selected by GEPA validation/frontier state.
+    pub best_candidate: Option<CandidateId>,
+    /// Best validation candidate index.
+    pub validation_best_index: Option<GepaCandidateIndex>,
+    /// Best validation candidate id.
+    pub validation_best_candidate: Option<CandidateId>,
+    /// Accepted candidates in GEPA discovery order.
+    pub candidates: Vec<GepaReportCandidate>,
+    /// Per-validation-case frontier membership.
+    pub validation_frontier: Vec<GepaReportFrontierCase>,
+    /// Train-screening observations GEPA used during search.
+    pub candidate_history: Vec<GepaReportHistoryEntry>,
+    /// Total new evaluator metric calls charged during GEPA search.
+    pub total_metric_calls: u64,
+    /// Number of full validation passes run by GEPA.
+    pub full_validation_evals: u64,
+    /// GEPA phase events emitted by the optimizer.
+    pub events: Vec<GepaEventSummary>,
+}
+
+impl GepaReport {
+    pub(crate) fn from_reference_state(
+        reference_state: &GepaReferenceState,
+        candidate_history: &[GepaCandidateHistoryEntry],
+        events: &[GepaEventSummary],
+        best_candidate: Option<CandidateId>,
+        validation_best_candidate: Option<CandidateId>,
+    ) -> Self {
+        let best_index = best_candidate.and_then(|candidate| reference_state.index_of(candidate));
+        let validation_best_index =
+            validation_best_candidate.and_then(|candidate| reference_state.index_of(candidate));
+        let candidates = reference_state
+            .records()
+            .iter()
+            .enumerate()
+            .map(|(ordinal, record)| GepaReportCandidate {
+                index: record.index(),
+                candidate: record.candidate(),
+                parents: record.parents().to_vec(),
+                discovery_metric_calls: record.discovery_metric_calls(),
+                validation_score: record.validation_score(),
+                validation_rows: record.validation_rows().to_vec(),
+                validation_subscores: reference_state
+                    .validation_subscores()
+                    .get(ordinal)
+                    .into_iter()
+                    .flat_map(|rows| rows.iter())
+                    .map(|(case, score)| GepaReportValidationSubscore {
+                        case: *case,
+                        score: score.score(),
+                    })
+                    .collect(),
+            })
+            .collect();
+        let validation_frontier = reference_state
+            .validation_frontier()
+            .iter()
+            .map(|(case, candidates)| GepaReportFrontierCase {
+                case: *case,
+                candidates: candidates.iter().copied().collect(),
+            })
+            .collect();
+        let candidate_history = candidate_history
+            .iter()
+            .map(|entry| GepaReportHistoryEntry {
+                candidate: entry.candidate(),
+                candidate_index: reference_state.index_of(entry.candidate()),
+                assessments: entry.assessments().to_vec(),
+                score: entry.score(),
+            })
+            .collect();
+        Self {
+            best_index,
+            best_candidate,
+            validation_best_index,
+            validation_best_candidate,
+            candidates,
+            validation_frontier,
+            candidate_history,
+            total_metric_calls: reference_state.total_metric_calls(),
+            full_validation_evals: reference_state.full_validation_evals(),
+            events: events.to_vec(),
+        }
+    }
+}
+
+/// One accepted candidate row in a GEPA report.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct GepaReportCandidate {
+    /// GEPA discovery-order index.
+    pub index: GepaCandidateIndex,
+    /// Candidate id in graph truth.
+    pub candidate: CandidateId,
+    /// Parent GEPA indices.
+    pub parents: Vec<GepaCandidateIndex>,
+    /// Metric calls spent when this candidate was admitted.
+    pub discovery_metric_calls: u64,
+    /// Aggregate validation score.
+    pub validation_score: Option<f64>,
+    /// Validation assessment rows backing this candidate.
+    pub validation_rows: Vec<AssessmentId>,
+    /// Per-case validation scores for this candidate.
+    pub validation_subscores: Vec<GepaReportValidationSubscore>,
+}
+
+/// Per-case validation subscore for a candidate.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct GepaReportValidationSubscore {
+    /// Validation case id.
+    pub case: CaseId,
+    /// Scalar validation score.
+    pub score: f64,
+}
+
+/// Frontier membership for one validation case.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct GepaReportFrontierCase {
+    /// Validation case id.
+    pub case: CaseId,
+    /// Candidate indices tied for this case frontier.
+    pub candidates: Vec<GepaCandidateIndex>,
+}
+
+/// One train-screening observation in GEPA history.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct GepaReportHistoryEntry {
+    /// Candidate id in graph truth.
+    pub candidate: CandidateId,
+    /// GEPA candidate index, when the observation belongs to admitted state.
+    pub candidate_index: Option<GepaCandidateIndex>,
+    /// Assessment rows used for this observation.
+    pub assessments: Vec<AssessmentId>,
+    /// Average train-screening score.
+    pub score: f64,
+}

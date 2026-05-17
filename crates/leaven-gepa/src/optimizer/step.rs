@@ -23,6 +23,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             .best
             .and_then(|candidate| self.reference_state.index_of(candidate));
         self.record_event(GepaEventSummary::OptimizationEnded { best });
+        self.emit_report();
         Some(leaven_engine::StepStatus::Done)
     }
 
@@ -40,6 +41,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             .best
             .and_then(|candidate| self.reference_state.index_of(candidate));
         self.record_event(GepaEventSummary::OptimizationEnded { best });
+        self.emit_report();
         leaven_engine::StepStatus::Stopped(leaven_engine::StopReason::BudgetReached)
     }
 
