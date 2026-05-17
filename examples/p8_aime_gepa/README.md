@@ -72,11 +72,12 @@ cargo run -p p8_aime_gepa
 ```
 
 That profile uses the same real AIME cache and the same upstream GEPA
-instruction-reflection prompt template, but caps Leaven search at the DSPy
+optimize-anything reflection prompt template plus DSPy `ChainOfThought`
+ChatAdapter solver message format, but caps Leaven search at the DSPy
 quickstart's `150` metric calls and reports
 `comparison_target=dspy_gepa_quickstart_aime_2025` with the published
 `56.6%` held-out test target. It remains a Leaven-native run: no DSPy runtime
-or DSPy `ChainOfThought` prompt lowering is used.
+is linked into the Rust example.
 
 The OpenAI path is an opt-in native async solver swap over the same
 `leaven::optimize(...).train(...).validation(...).test(...).runner(...).score(...).using(...).run()`
