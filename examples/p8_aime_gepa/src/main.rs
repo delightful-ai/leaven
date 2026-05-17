@@ -450,6 +450,13 @@ fn report_lm_role_lines(role: &AimeLmRoleReport) -> Vec<String> {
             role.parser
         ),
         format!(
+            "lm_role_prompt_contract={} renderer={} upstream={} request_shape_fingerprint={}",
+            role.role.label(),
+            role.prompt_contract.renderer,
+            role.prompt_contract.upstream,
+            report_full_fingerprint(role.prompt_contract.request_shape_fingerprint)
+        ),
+        format!(
             "lm_role_cost={} calls={} prompt_tokens={} cached_input_tokens={} completion_tokens={} reasoning_tokens={} cost_llm_calls={} cost_prompt_tokens={} cost_completion_tokens={}",
             role.role.label(),
             role.metrics.calls,
@@ -496,6 +503,16 @@ fn report_fingerprint(fingerprint: Fingerprint) -> String {
     const HEX: &[u8; 16] = b"0123456789abcdef";
     let mut out = String::with_capacity(16);
     for byte in &fingerprint.0[..8] {
+        out.push(char::from(HEX[usize::from(byte >> 4)]));
+        out.push(char::from(HEX[usize::from(byte & 0x0f)]));
+    }
+    out
+}
+
+fn report_full_fingerprint(fingerprint: Fingerprint) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut out = String::with_capacity(64);
+    for byte in &fingerprint.0 {
         out.push(char::from(HEX[usize::from(byte >> 4)]));
         out.push(char::from(HEX[usize::from(byte & 0x0f)]));
     }
@@ -744,6 +761,13 @@ fn p8_lm_role_report_json(role: &AimeLmRoleReport) -> serde_json::Value {
         "live": role.live,
         "model": role.model,
         "runtime_fingerprint": report_fingerprint(role.runtime_fingerprint),
+        "prompt_contract": {
+            "renderer": role.prompt_contract.renderer,
+            "upstream": role.prompt_contract.upstream,
+            "request_shape_fingerprint": report_full_fingerprint(
+                role.prompt_contract.request_shape_fingerprint
+            ),
+        },
         "runtime": {
             "cache_policy": report_lm_cache_policy(role.cache_policy),
             "cache_backend": report_lm_cache_backend(role.cache_backend),
@@ -1127,6 +1151,11 @@ impl AimeRoleReports {
                 max_concurrent_requests: config.solver.runtime.max_concurrent_requests,
                 output: "dspy-chain-of-thought",
                 parser: "dspy-chat-adapter-fields",
+                prompt_contract: AimePromptContractReport {
+                    renderer: "dspy-chat-adapter-chain-of-thought",
+                    upstream: "dspy.ChatAdapter",
+                    request_shape_fingerprint: aime_solver_request_shape_fingerprint(),
+                },
                 metrics: solver_metrics,
             },
             reflection: AimeLmRoleReport {
@@ -1145,6 +1174,11 @@ impl AimeRoleReports {
                 max_concurrent_requests: config.reflection.runtime.max_concurrent_requests,
                 output: "text",
                 parser: "plain-text-fenced",
+                prompt_contract: AimePromptContractReport {
+                    renderer: "gepa-default-markdown-side-info",
+                    upstream: "gepa.optimize_anything",
+                    request_shape_fingerprint: aime_reflection_request_shape_fingerprint(),
+                },
                 metrics: reflection_metrics,
             },
         }
@@ -1168,7 +1202,15 @@ struct AimeLmRoleReport {
     max_concurrent_requests: NonZeroUsize,
     output: &'static str,
     parser: &'static str,
+    prompt_contract: AimePromptContractReport,
     metrics: AimeLmRoleMetrics,
+}
+
+#[derive(Clone, Debug)]
+struct AimePromptContractReport {
+    renderer: &'static str,
+    upstream: &'static str,
+    request_shape_fingerprint: Fingerprint,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -2837,6 +2879,19 @@ fn aime_runner_fingerprint(config: &AimeSolverConfig) -> Fingerprint {
     builder.finish()
 }
 
+fn aime_solver_request_shape_fingerprint() -> Fingerprint {
+    let request = render_dspy_aime_chain_of_thought_request("<instructions>", "<input>");
+    let mut builder = FingerprintBuilder::new();
+    builder.update(b"p8-aime-solver-request-shape.v1");
+    builder.update(b"upstream:dspy.ChatAdapter");
+    builder.update(b"adapter:dspy-chain-of-thought");
+    builder.update(b"system");
+    builder.update(request.system.as_bytes());
+    builder.update(b"user");
+    builder.update(request.user.as_bytes());
+    builder.finish()
+}
+
 fn aime_reflection_role_fingerprint(config: &AimeReflectionConfig) -> Fingerprint {
     let mut builder = FingerprintBuilder::new();
     builder.update(b"p8-aime-reflection-role.v1");
@@ -2851,6 +2906,53 @@ fn aime_reflection_role_fingerprint(config: &AimeReflectionConfig) -> Fingerprin
     builder.update(b"output:text");
     builder.update(b"parser:plain-text-fenced");
     builder.update(b"prompt:optimize-anything");
+    builder.finish()
+}
+
+fn aime_reflection_request_shape_fingerprint() -> Fingerprint {
+    let config = LmBackedReflectorConfig {
+        sampling: SamplingOptions::default(),
+        output: leaven_lm::OutputMode::Text,
+        prompt_template: Some(OPTIMIZE_ANYTHING_REFLECTION_PROMPT_TEMPLATE.to_owned()),
+    };
+    let artifact = AimePrompt::new("<curr_param>");
+    let surface = AimePromptSurface;
+    let request = ReflectRequest::for_part(CandidateId::new(), "system", "system").with_examples([
+        ReflectiveExample {
+            side_info: aime_reflection_side_info_example(AimeReflectionSideInfo {
+                score: 0.0,
+                input: "<input>".to_owned(),
+                prompt: "<prompt>".to_owned(),
+                output: "<output>".to_owned(),
+                reasoning: "<reasoning>".to_owned(),
+                execution_feedback: "<execution_feedback>".to_owned(),
+            }),
+            ..ReflectiveExample::default()
+        },
+    ]);
+    let lm_request = DefaultReflectionRenderer
+        .render(ReflectionRenderInput::<
+            RunProblem<AimePrompt, AimeInput, AimeTarget>,
+            AimePromptSurface,
+        > {
+            request: &request,
+            artifact: &artifact,
+            surface: &surface,
+            model: "shape-model".into(),
+            config: &config,
+        })
+        .expect("canonical AIME reflection prompt renders");
+    let rendered = lm_request
+        .messages
+        .iter()
+        .map(Message::content)
+        .collect::<Vec<_>>()
+        .join("\n");
+    let mut builder = FingerprintBuilder::new();
+    builder.update(b"p8-aime-reflection-request-shape.v1");
+    builder.update(b"upstream:gepa.optimize_anything");
+    builder.update(b"renderer:gepa-default-markdown-side-info");
+    builder.update(rendered.as_bytes());
     builder.finish()
 }
 
@@ -3798,6 +3900,16 @@ Provide the new parameter value within ``` blocks."
         );
         assert!(lines.iter().any(|line| {
             line.starts_with(
+                "lm_role_prompt_contract=solver renderer=dspy-chat-adapter-chain-of-thought upstream=dspy.ChatAdapter request_shape_fingerprint=",
+            )
+        }));
+        assert!(lines.iter().any(|line| {
+            line.starts_with(
+                "lm_role_prompt_contract=reflection renderer=gepa-default-markdown-side-info upstream=gepa.optimize_anything request_shape_fingerprint=",
+            )
+        }));
+        assert!(lines.iter().any(|line| {
+            line.starts_with(
                 "lm_role=solver provider=openai live=true model=solver-model runtime_fingerprint=",
             )
         }));
@@ -3848,6 +3960,24 @@ Provide the new parameter value within ``` blocks."
         assert_eq!(report["lm_roles"].as_array().unwrap().len(), 2);
         assert_eq!(report["lm_roles"][0]["role"], "solver");
         assert_eq!(report["lm_roles"][1]["role"], "reflection");
+        assert_eq!(
+            report["lm_roles"][0]["prompt_contract"]["renderer"],
+            "dspy-chat-adapter-chain-of-thought"
+        );
+        assert_eq!(
+            report["lm_roles"][1]["prompt_contract"]["renderer"],
+            "gepa-default-markdown-side-info"
+        );
+        assert!(
+            report["lm_roles"][0]["prompt_contract"]["request_shape_fingerprint"]
+                .as_str()
+                .is_some_and(|value| value.len() == 64)
+        );
+        assert!(
+            report["lm_roles"][1]["prompt_contract"]["request_shape_fingerprint"]
+                .as_str()
+                .is_some_and(|value| value.len() == 64)
+        );
         assert_eq!(report["lm_roles"][1]["metrics"]["cost"]["llm_calls"], 1);
         assert_eq!(report["budget"]["search_metric_calls_overshoot"], 0);
         assert!(report["cases"].as_array().unwrap().iter().all(|case| {
