@@ -442,6 +442,21 @@ async fn sqlite_cache_read_miss_returns_none() {
 }
 
 #[tokio::test]
+async fn sqlite_cache_get_does_not_read_before_await() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("lm-cache.sqlite");
+    let cache = SqliteLmCache::open(path).unwrap();
+    let key = cache_key();
+    let entry = cache_entry(key.clone(), "stored after future construction");
+
+    let read_cache = cache.clone();
+    let pending_read = read_cache.get(key.clone());
+    cache.put(key, entry.clone()).await.unwrap();
+
+    assert_eq!(pending_read.await.unwrap(), Some(entry));
+}
+
+#[tokio::test]
 async fn sqlite_cache_refresh_overwrites_cached_entry_through_cached_lm() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("lm-cache.sqlite");

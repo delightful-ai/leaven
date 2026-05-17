@@ -1,6 +1,5 @@
 use std::fmt::Write as _;
 use std::fs;
-use std::future;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
@@ -206,19 +205,18 @@ impl SqliteLmCache {
 }
 
 impl LmCacheStore for SqliteLmCache {
-    fn get(
-        &self,
-        key: LmCacheKey,
-    ) -> impl Future<Output = Result<Option<LmCacheEntry>, LmCacheError>> + Send + '_ {
-        future::ready(self.get_sync(key))
+    async fn get(&self, key: LmCacheKey) -> Result<Option<LmCacheEntry>, LmCacheError> {
+        let cache = self.clone();
+        tokio::task::spawn_blocking(move || cache.get_sync(key))
+            .await
+            .map_err(|error| LmCacheError::backend("get", error.to_string()))?
     }
 
-    fn put(
-        &self,
-        key: LmCacheKey,
-        entry: LmCacheEntry,
-    ) -> impl Future<Output = Result<(), LmCacheError>> + Send + '_ {
-        future::ready(self.put_sync(key, &entry))
+    async fn put(&self, key: LmCacheKey, entry: LmCacheEntry) -> Result<(), LmCacheError> {
+        let cache = self.clone();
+        tokio::task::spawn_blocking(move || cache.put_sync(key, &entry))
+            .await
+            .map_err(|error| LmCacheError::backend("put", error.to_string()))?
     }
 }
 

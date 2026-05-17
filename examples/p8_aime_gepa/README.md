@@ -103,7 +103,9 @@ runs can reuse compatible solver/reflection responses from earlier runs
 without reusing the whole run directory. Explicit `in-memory` is the
 throwaway/debug backend and prints `lm_cache_durable=false`.
 `LEAVEN_OPENAI_MAX_CONCURRENT_REQUESTS` bounds in-process OpenAI request
-concurrency for both live roles and defaults to `32`.
+concurrency for both live roles and defaults to `32`. The P8 binary runs on a
+32-worker Tokio runtime so cache-missing case batches can make real progress
+up to that provider throttle instead of serializing on the executable runtime.
 `LEAVEN_AIME_RUN_DIR` is the explicit resume handle and uses the same durable
 run-directory layout as `.run_dir(path)`. Omit it to get a managed
 `.leaven/runs/<run-id>/` directory. `LEAVEN_AIME_DETERMINISTIC_REFLECTION=1`

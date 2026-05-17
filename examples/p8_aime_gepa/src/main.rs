@@ -83,7 +83,7 @@ Based on your analysis, propose a new parameter value that addresses the identif
 
 Provide the new parameter value within ``` blocks.";
 
-#[tokio::main(flavor = "current_thread")]
+#[tokio::main(flavor = "multi_thread", worker_threads = 32)]
 async fn main() {
     let config = AimeRunConfig::configured();
     match Box::pin(try_run_configured_aime(config.clone())).await {
