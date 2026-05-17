@@ -1152,13 +1152,22 @@ impl AimeRunConfig {
     ) -> Self {
         let cache_policies = AimeLmCachePolicies::from_env();
         let runtime = AimeOpenAiRuntimeConfig::from_env();
+        Self::live_openai_with_controls(profile, data_source, metric_calls, cache_policies, runtime)
+    }
+
+    fn live_openai_with_controls(
+        profile: AimeRunProfile,
+        data_source: AimeDataSource,
+        metric_calls: u64,
+        cache_policies: AimeLmCachePolicies,
+        runtime: AimeOpenAiRuntimeConfig,
+    ) -> Self {
         Self {
             profile,
             data_source,
             seed_prompt: BASELINE,
             budget: Budget::metric_calls(metric_calls),
-            evaluation_parallelism: NonZeroUsize::new(GEPA_AIME_MAX_WORKERS)
-                .expect("GEPA AIME worker count is non-zero"),
+            evaluation_parallelism: runtime.max_concurrent_requests,
             max_iterations: GEPA_AIME_INTERNAL_ITERATION_CEILING,
             evaluation_cache_policy: CachePolicy::Deterministic,
             run_dir: aime_run_dir_from_env(),
@@ -3808,6 +3817,31 @@ mod tests {
         assert_eq!(
             config.reflection.sampling.reasoning_effort,
             Some(ReasoningEffort::Medium)
+        );
+    }
+
+    #[test]
+    fn live_profile_evaluator_fanout_tracks_provider_concurrency() {
+        let runtime = AimeOpenAiRuntimeConfig::from_values(Some("7"), Some("sqlite"));
+        let config = AimeRunConfig::live_openai_with_controls(
+            AimeRunProfile::GepaAime,
+            AimeDataSource::HuggingFaceCache,
+            GEPA_AIME_METRIC_CALLS,
+            AimeLmCachePolicies::from_values(Some("read-write"), Some("read-write")),
+            runtime,
+        );
+
+        assert_eq!(
+            config.evaluation_parallelism,
+            runtime.max_concurrent_requests
+        );
+        assert_eq!(
+            config.solver.runtime.max_concurrent_requests,
+            runtime.max_concurrent_requests
+        );
+        assert_eq!(
+            config.reflection.runtime.max_concurrent_requests,
+            runtime.max_concurrent_requests
         );
     }
 
