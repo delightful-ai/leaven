@@ -11,7 +11,10 @@ use leaven::engine::{
     CacheBypassReason, CacheStatus, Callback, ErrorPolicy, RunContext, RunEvent, RunGraphView,
 };
 use leaven::eval::{Case, SplitRole};
-use leaven::gepa::{Gepa, ReflectionError, ReflectiveDatasetBuilder, ReflectiveExample};
+use leaven::gepa::{
+    Gepa, GepaCandidateIndex, GepaEventSummary, GepaSkipReason, ReflectionError,
+    ReflectiveDatasetBuilder, ReflectiveExample,
+};
 use leaven::kernel::Metered;
 use leaven::kernel::{
     AssessmentId, CandidateId, CaseId, Cost, ErrorKind, FingerprintBuilder, MetadataValue, RunId,
@@ -612,8 +615,10 @@ async fn try_run_aime(
     let scorer_fingerprint = aime_scorer_fingerprint();
     let solver_config = config.solver.clone();
     let side_infos = AimeSolverSideInfoStore::default();
+    let gepa_events = Arc::new(Mutex::new(Vec::<GepaEventSummary>::new()));
     let report_metadata = dataset.report_metadata.clone();
     let reflective_dataset = dataset.reflective_dataset(side_infos.clone());
+    let gepa_event_sink = gepa_events.clone();
     let optimized = Box::pin(
         leaven::prelude::optimize(AimePrompt::new(config.seed_prompt))
             .train(dataset.train)
@@ -639,6 +644,12 @@ async fn try_run_aime(
                 .with_reflector_config(aime_reflector_config(&config.reflection))
                 .surface(AimePromptSurface)
                 .build()
+                .on_event(move |event| {
+                    gepa_event_sink
+                        .lock()
+                        .expect("AIME GEPA event sink lock")
+                        .push(event.clone());
+                })
                 .reflective_dataset(reflective_dataset)
                 .max_iterations(config.max_iterations),
             )
@@ -657,6 +668,10 @@ async fn try_run_aime(
         optimized,
         report_metadata,
         role_reports,
+        gepa_events: gepa_events
+            .lock()
+            .expect("AIME GEPA event sink lock")
+            .clone(),
     };
     write_p8_aime_report(&config, &result)?;
     Ok(result)
@@ -749,9 +764,86 @@ fn p8_aime_report_json(config: &AimeRunConfig, run: &AimeRunResult) -> serde_jso
             "system_prompt": result.best().map(|best| best.system.clone()),
         },
         "lm_roles": run.role_reports.iter().map(p8_lm_role_report_json).collect::<Vec<_>>(),
+        "gepa_events": run.gepa_events.iter().map(p8_gepa_event_json).collect::<Vec<_>>(),
         "cases": p8_case_report_json(run),
         "events": result.events.iter().map(|event| event.as_str()).collect::<Vec<_>>(),
     })
+}
+
+fn p8_gepa_event_json(event: &GepaEventSummary) -> serde_json::Value {
+    match event {
+        GepaEventSummary::ProfileResolved => serde_json::json!({
+            "phase": "profile_resolved",
+        }),
+        GepaEventSummary::SeedValidationStarted { candidate } => serde_json::json!({
+            "phase": "seed_validation_started",
+            "candidate": candidate.to_string(),
+        }),
+        GepaEventSummary::SeedValidationCompleted {
+            candidate_index,
+            score,
+        } => serde_json::json!({
+            "phase": "seed_validation_completed",
+            "candidate_index": candidate_index.get(),
+            "score": score,
+        }),
+        GepaEventSummary::IterationStarted { iteration } => serde_json::json!({
+            "phase": "iteration_started",
+            "iteration": iteration,
+        }),
+        GepaEventSummary::ParentSelected { candidate_index } => serde_json::json!({
+            "phase": "parent_selected",
+            "candidate_index": candidate_index.get(),
+        }),
+        GepaEventSummary::TrainMinibatchSampled => serde_json::json!({
+            "phase": "train_minibatch_sampled",
+        }),
+        GepaEventSummary::ParentEvaluated { metric_calls_delta } => serde_json::json!({
+            "phase": "parent_evaluated",
+            "metric_calls_delta": metric_calls_delta,
+        }),
+        GepaEventSummary::ProposalSkipped { reason } => serde_json::json!({
+            "phase": "proposal_skipped",
+            "reason": p8_gepa_skip_reason(*reason),
+        }),
+        GepaEventSummary::ReflectiveDatasetBuilt { records } => serde_json::json!({
+            "phase": "reflective_dataset_built",
+            "records": records,
+        }),
+        GepaEventSummary::ChildBuilt { candidate } => serde_json::json!({
+            "phase": "child_built",
+            "candidate": candidate.to_string(),
+        }),
+        GepaEventSummary::ChildEvaluated { metric_calls_delta } => serde_json::json!({
+            "phase": "child_evaluated",
+            "metric_calls_delta": metric_calls_delta,
+        }),
+        GepaEventSummary::ProposalAccepted { child } => serde_json::json!({
+            "phase": "proposal_accepted",
+            "child": child.to_string(),
+        }),
+        GepaEventSummary::ProposalRejected => serde_json::json!({
+            "phase": "proposal_rejected",
+        }),
+        GepaEventSummary::AcceptedValidationCompleted { candidate_index } => serde_json::json!({
+            "phase": "accepted_validation_completed",
+            "candidate_index": candidate_index.get(),
+        }),
+        GepaEventSummary::FrontierUpdated => serde_json::json!({
+            "phase": "frontier_updated",
+        }),
+        GepaEventSummary::OptimizationEnded { best } => serde_json::json!({
+            "phase": "optimization_ended",
+            "best": best.map(GepaCandidateIndex::get),
+        }),
+    }
+}
+
+fn p8_gepa_skip_reason(reason: GepaSkipReason) -> &'static str {
+    match reason {
+        GepaSkipReason::NoReflectiveExamples => "no_reflective_examples",
+        GepaSkipReason::AllScoresPerfect => "all_scores_perfect",
+    }
 }
 
 fn p8_lm_role_report_json(role: &AimeLmRoleReport) -> serde_json::Value {
@@ -1993,6 +2085,7 @@ struct AimeRunResult {
     optimized: Optimized<AimePrompt>,
     report_metadata: BTreeMap<CaseId, AimeReportMetadata>,
     role_reports: AimeRoleReports,
+    gepa_events: Vec<GepaEventSummary>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -3980,6 +4073,22 @@ Provide the new parameter value within ``` blocks."
         );
         assert_eq!(report["lm_roles"][1]["metrics"]["cost"]["llm_calls"], 1);
         assert_eq!(report["budget"]["search_metric_calls_overshoot"], 0);
+        let gepa_events = report["gepa_events"].as_array().unwrap();
+        assert!(
+            gepa_events
+                .iter()
+                .any(|event| event["phase"] == "parent_selected")
+        );
+        assert!(
+            gepa_events
+                .iter()
+                .any(|event| event["phase"] == "reflective_dataset_built")
+        );
+        assert!(
+            gepa_events
+                .iter()
+                .any(|event| event["phase"] == "proposal_accepted")
+        );
         assert!(report["cases"].as_array().unwrap().iter().all(|case| {
             case.get("source_id").is_some()
                 && case.get("feedback_chars").is_some()

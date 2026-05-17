@@ -22,8 +22,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
         let best = self
             .best
             .and_then(|candidate| self.reference_state.index_of(candidate));
-        self.events
-            .push(GepaEventSummary::OptimizationEnded { best });
+        self.record_event(GepaEventSummary::OptimizationEnded { best });
         Some(leaven_engine::StepStatus::Done)
     }
 
@@ -40,8 +39,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
         let best = self
             .best
             .and_then(|candidate| self.reference_state.index_of(candidate));
-        self.events
-            .push(GepaEventSummary::OptimizationEnded { best });
+        self.record_event(GepaEventSummary::OptimizationEnded { best });
         leaven_engine::StepStatus::Stopped(leaven_engine::StopReason::BudgetReached)
     }
 
@@ -79,11 +77,11 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
         Validate: ValidationPolicy + Sync,
         Dataset: ReflectiveDatasetBuilder<P, S> + Sync,
     {
-        self.events.push(GepaEventSummary::IterationStarted {
+        self.record_event(GepaEventSummary::IterationStarted {
             iteration: self.completed_iterations + 1,
         });
         let evaluation_set = self.batch_sampler.sample_train(&self.train_partition);
-        self.events.push(GepaEventSummary::TrainMinibatchSampled);
+        self.record_event(GepaEventSummary::TrainMinibatchSampled);
         let (parent_index, parent) = self.select_reference_parent(ctx.graph(), seed)?;
         let parent_screening = self
             .screen_parent(ctx, parent, evaluation_set.clone())
@@ -128,7 +126,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             .ok_or_else(|| {
                 OptimizerError::Message("GEPA selected a parent outside reference state".to_owned())
             })?;
-        self.events.push(GepaEventSummary::ParentSelected {
+        self.record_event(GepaEventSummary::ParentSelected {
             candidate_index: selected.0,
         });
         Ok(selected)
@@ -158,7 +156,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             .await?;
         self.reference_state
             .add_metric_calls(parent_screening.metric_calls_new);
-        self.events.push(GepaEventSummary::ParentEvaluated {
+        self.record_event(GepaEventSummary::ParentEvaluated {
             metric_calls_delta: parent_screening.metric_calls_new,
         });
         Ok(parent_screening)
@@ -199,7 +197,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             .await?;
         self.reference_state
             .add_metric_calls(screened.metric_calls_new);
-        self.events.push(GepaEventSummary::ChildEvaluated {
+        self.record_event(GepaEventSummary::ChildEvaluated {
             metric_calls_delta: screened.metric_calls_new,
         });
         if self
@@ -210,7 +208,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             self.accept_child(ctx, candidate, parent_index, screened)
                 .await?;
         } else {
-            self.events.push(GepaEventSummary::ProposalRejected);
+            self.record_event(GepaEventSummary::ProposalRejected);
         }
         Ok(())
     }
@@ -235,8 +233,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
         Validate: ValidationPolicy + Sync,
         Dataset: Sync,
     {
-        self.events
-            .push(GepaEventSummary::ProposalAccepted { child: candidate });
+        self.record_event(GepaEventSummary::ProposalAccepted { child: candidate });
         self.candidate_history
             .push(screened.history_entry(candidate));
         self.observe_train_candidate(ctx, candidate, &screened);

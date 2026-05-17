@@ -2,7 +2,7 @@
 
 mod step;
 
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, sync::Arc};
 
 use leaven_core::{
     AssessmentGranularity, AssessmentTarget, EvaluationPurpose, EvaluationRequest, EvaluationSet,
@@ -103,6 +103,16 @@ pub struct Gepa<
     candidate_history: Vec<GepaCandidateHistoryEntry>,
     reference_state: GepaReferenceState,
     events: Vec<GepaEventSummary>,
+    event_sink: Option<GepaEventSink>,
+}
+
+#[derive(Clone)]
+struct GepaEventSink(Arc<dyn Fn(&GepaEventSummary) + Send + Sync>);
+
+impl std::fmt::Debug for GepaEventSink {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("GepaEventSink(..)")
+    }
 }
 
 /// Serializable GEPA private state.
@@ -199,6 +209,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             candidate_history: Vec::new(),
             reference_state: GepaReferenceState::default(),
             events: Vec::new(),
+            event_sink: None,
         }
     }
 
@@ -252,6 +263,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             candidate_history: self.candidate_history,
             reference_state: self.reference_state,
             events: self.events,
+            event_sink: self.event_sink,
         }
     }
 
@@ -281,6 +293,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             candidate_history: self.candidate_history,
             reference_state: self.reference_state,
             events: self.events,
+            event_sink: self.event_sink,
         }
     }
 
@@ -314,6 +327,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             candidate_history: self.candidate_history,
             reference_state: self.reference_state,
             events: self.events,
+            event_sink: self.event_sink,
         }
     }
 
@@ -347,6 +361,27 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
     #[must_use]
     pub fn events(&self) -> &[GepaEventSummary] {
         &self.events
+    }
+
+    /// Register a GEPA phase event observer.
+    ///
+    /// This observes optimizer-level GEPA phases without requiring callers to
+    /// parse generic engine events. The sink is intentionally not checkpointed;
+    /// resumed runs install the observer from the fresh builder configuration.
+    #[must_use]
+    pub fn on_event<F>(mut self, sink: F) -> Self
+    where
+        F: Fn(&GepaEventSummary) + Send + Sync + 'static,
+    {
+        self.event_sink = Some(GepaEventSink(Arc::new(sink)));
+        self
+    }
+
+    pub(crate) fn record_event(&mut self, event: GepaEventSummary) {
+        if let Some(sink) = &self.event_sink {
+            (sink.0)(&event);
+        }
+        self.events.push(event);
     }
 
     /// Select the next candidate to mutate.
@@ -412,7 +447,7 @@ where
     Dataset: ReflectiveDatasetBuilder<P, S>,
 {
     async fn initialize(&mut self, ctx: &mut RunContext<'_, P>) -> Result<(), OptimizerError> {
-        self.events.push(GepaEventSummary::ProfileResolved);
+        self.record_event(GepaEventSummary::ProfileResolved);
         let seed = ctx
             .graph()
             .candidate_tree()
@@ -423,8 +458,7 @@ where
                 OptimizerError::Message("GEPA requires at least one seed candidate".to_owned())
             })?;
         if self.reference_state.index_of(seed).is_none() {
-            self.events
-                .push(GepaEventSummary::SeedValidationStarted { candidate: seed });
+            self.record_event(GepaEventSummary::SeedValidationStarted { candidate: seed });
             self.validate_candidate(ctx, seed, Vec::new(), true).await?;
             if self.reference_state.index_of(seed).is_none() {
                 self.reference_state
@@ -751,12 +785,12 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
                 OptimizerError::with_source("GEPA reflective-dataset build failed", source)
             })?;
         if examples.is_empty() {
-            self.events.push(GepaEventSummary::ProposalSkipped {
+            self.record_event(GepaEventSummary::ProposalSkipped {
                 reason: GepaSkipReason::NoReflectiveExamples,
             });
             return Ok(None);
         }
-        self.events.push(GepaEventSummary::ReflectiveDatasetBuilt {
+        self.record_event(GepaEventSummary::ReflectiveDatasetBuilt {
             records: examples.len(),
         });
         let source_refs = std::iter::once(leaven_core::InfoRef::Candidate(parent))
@@ -779,7 +813,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             .reflect_candidate(ctx, &self.surface, request)
             .await?;
         if let Some(candidate) = candidate {
-            self.events.push(GepaEventSummary::ChildBuilt { candidate });
+            self.record_event(GepaEventSummary::ChildBuilt { candidate });
         }
         Ok(candidate)
     }
@@ -833,17 +867,16 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             });
         }
         if seed_validation {
-            self.events.push(GepaEventSummary::SeedValidationCompleted {
+            self.record_event(GepaEventSummary::SeedValidationCompleted {
                 candidate_index: index,
                 score: assessment.average_score.to_string(),
             });
         } else {
-            self.events
-                .push(GepaEventSummary::AcceptedValidationCompleted {
-                    candidate_index: index,
-                });
+            self.record_event(GepaEventSummary::AcceptedValidationCompleted {
+                candidate_index: index,
+            });
         }
-        self.events.push(GepaEventSummary::FrontierUpdated);
+        self.record_event(GepaEventSummary::FrontierUpdated);
         Ok(())
     }
 
