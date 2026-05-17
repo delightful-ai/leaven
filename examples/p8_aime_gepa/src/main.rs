@@ -31,8 +31,8 @@ use leaven_gepa::{
     ReflectionRenderer,
 };
 use leaven_lm::{
-    Lm, LmError, LmId, LmRequest, LmResponse, Message, Messages, ReasoningEffort, SamplingOptions,
-    TokenUsage,
+    Lm, LmError, LmId, LmRequest, LmResponse, Message, Messages, ReasoningEffort, Role,
+    SamplingOptions, TokenUsage,
 };
 use leaven_lm_cache::{CachedLm, InMemoryLmCache, LmCachePolicy, SqliteLmCache};
 use leaven_lm_openai::{OpenAiConfig, OpenAiLm, OpenAiThrottlePolicy};
@@ -859,7 +859,14 @@ fn p8_lm_role_report_json(role: &AimeLmRoleReport) -> serde_json::Value {
             "request_shape_fingerprint": report_full_fingerprint(
                 role.prompt_contract.request_shape_fingerprint
             ),
+            "request_example": p8_lm_request_json(&role.prompt_contract.request_example),
         },
+        "observed_requests": role
+            .metrics
+            .requests
+            .iter()
+            .map(p8_lm_request_json)
+            .collect::<Vec<_>>(),
         "runtime": {
             "cache_policy": report_lm_cache_policy(role.cache_policy),
             "cache_backend": report_lm_cache_backend(role.cache_backend),
@@ -906,6 +913,26 @@ fn p8_lm_role_report_json(role: &AimeLmRoleReport) -> serde_json::Value {
                 "unknown": role.metrics.failures.unknown,
             },
         },
+    })
+}
+
+fn p8_lm_request_json(request: &AimeLmRequestRecord) -> serde_json::Value {
+    serde_json::json!({
+        "model": request.model,
+        "messages": request.messages.iter().map(p8_lm_message_json).collect::<Vec<_>>(),
+        "output": request.output,
+        "sampling": {
+            "temperature": request.sampling.temperature,
+            "max_output_tokens": request.sampling.max_output_tokens,
+            "reasoning_effort": request.sampling.reasoning_effort,
+        },
+    })
+}
+
+fn p8_lm_message_json(message: &AimeLmMessageRecord) -> serde_json::Value {
+    serde_json::json!({
+        "role": message.role,
+        "content": message.content,
     })
 }
 
@@ -1214,6 +1241,24 @@ impl AimeLmProvider {
     }
 }
 
+const fn lm_role_label(role: Role) -> &'static str {
+    match role {
+        Role::System => "system",
+        Role::User => "user",
+        Role::Assistant => "assistant",
+    }
+}
+
+const fn reasoning_effort_label(effort: ReasoningEffort) -> &'static str {
+    match effort {
+        ReasoningEffort::None => "none",
+        ReasoningEffort::Low => "low",
+        ReasoningEffort::Medium => "medium",
+        ReasoningEffort::High => "high",
+        ReasoningEffort::XHigh => "xhigh",
+    }
+}
+
 #[derive(Clone, Debug)]
 struct AimeRoleReports {
     solver: AimeLmRoleReport,
@@ -1247,6 +1292,7 @@ impl AimeRoleReports {
                     renderer: "dspy-chat-adapter-chain-of-thought",
                     upstream: "dspy.ChatAdapter",
                     request_shape_fingerprint: aime_solver_request_shape_fingerprint(),
+                    request_example: aime_solver_request_example(&config.solver),
                 },
                 metrics: solver_metrics,
             },
@@ -1270,6 +1316,7 @@ impl AimeRoleReports {
                     renderer: "gepa-default-markdown-side-info",
                     upstream: "gepa.optimize_anything",
                     request_shape_fingerprint: aime_reflection_request_shape_fingerprint(),
+                    request_example: aime_reflection_request_example(&config.reflection),
                 },
                 metrics: reflection_metrics,
             },
@@ -1303,6 +1350,65 @@ struct AimePromptContractReport {
     renderer: &'static str,
     upstream: &'static str,
     request_shape_fingerprint: Fingerprint,
+    request_example: AimeLmRequestRecord,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct AimeLmRequestRecord {
+    model: String,
+    messages: Vec<AimeLmMessageRecord>,
+    output: String,
+    sampling: AimeLmSamplingRecord,
+}
+
+impl AimeLmRequestRecord {
+    fn from_request(request: &LmRequest) -> Self {
+        Self {
+            model: request.model.to_string(),
+            messages: request
+                .messages
+                .iter()
+                .map(AimeLmMessageRecord::from_message)
+                .collect(),
+            output: format!("{:?}", request.output),
+            sampling: AimeLmSamplingRecord::from_sampling(&request.sampling),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct AimeLmMessageRecord {
+    role: &'static str,
+    content: String,
+}
+
+impl AimeLmMessageRecord {
+    fn from_message(message: &Message) -> Self {
+        Self {
+            role: lm_role_label(message.role()),
+            content: message.content().to_owned(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct AimeLmSamplingRecord {
+    temperature: Option<String>,
+    max_output_tokens: Option<u32>,
+    reasoning_effort: Option<String>,
+}
+
+impl AimeLmSamplingRecord {
+    fn from_sampling(sampling: &SamplingOptions) -> Self {
+        Self {
+            temperature: sampling.temperature.map(|value| value.as_f64().to_string()),
+            max_output_tokens: sampling.max_output_tokens,
+            reasoning_effort: sampling
+                .reasoning_effort
+                .as_ref()
+                .map(|effort| reasoning_effort_label(*effort).to_owned()),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -1312,9 +1418,15 @@ struct AimeLmRoleMetrics {
     cost: Cost,
     cache: AimeLmCacheMetrics,
     failures: AimeProviderFailureCounts,
+    requests: Vec<AimeLmRequestRecord>,
 }
 
 impl AimeLmRoleMetrics {
+    fn record_request(&mut self, request: &LmRequest) {
+        self.requests
+            .push(AimeLmRequestRecord::from_request(request));
+    }
+
     fn record_success(&mut self, policy: LmCachePolicy, response: &LmResponse, cost: &Cost) {
         self.calls += 1;
         self.usage.input_tokens += response.usage.input_tokens;
@@ -1408,6 +1520,13 @@ impl AimeLmTelemetry {
         }
     }
 
+    fn record_request(&self, request: &LmRequest) {
+        self.metrics
+            .lock()
+            .expect("AIME telemetry lock is valid")
+            .record_request(request);
+    }
+
     fn snapshot(&self) -> AimeLmRoleMetrics {
         self.metrics
             .lock()
@@ -1446,6 +1565,7 @@ impl<L: Lm> Lm for AimeInstrumentedLm<L> {
     }
 
     async fn complete(&self, request: LmRequest) -> Result<Metered<LmResponse>, LmError> {
+        self.telemetry.record_request(&request);
         let result = self.inner.complete(request).await;
         self.telemetry.record(&result);
         result
@@ -2985,6 +3105,18 @@ fn aime_solver_request_shape_fingerprint() -> Fingerprint {
     builder.finish()
 }
 
+fn aime_solver_request_example(config: &AimeSolverConfig) -> AimeLmRequestRecord {
+    let request = render_dspy_aime_chain_of_thought_request("<instructions>", "<input>");
+    let lm_request = LmRequest::new(
+        config.model.clone(),
+        Messages::new()
+            .with_system(request.system)
+            .with_user(request.user),
+    )
+    .with_sampling(config.sampling.clone());
+    AimeLmRequestRecord::from_request(&lm_request)
+}
+
 fn aime_reflection_role_fingerprint(config: &AimeReflectionConfig) -> Fingerprint {
     let mut builder = FingerprintBuilder::new();
     builder.update(b"p8-aime-reflection-role.v1");
@@ -3003,8 +3135,41 @@ fn aime_reflection_role_fingerprint(config: &AimeReflectionConfig) -> Fingerprin
 }
 
 fn aime_reflection_request_shape_fingerprint() -> Fingerprint {
+    let lm_request = canonical_aime_reflection_request();
+    let rendered = lm_request
+        .messages
+        .iter()
+        .map(Message::content)
+        .collect::<Vec<_>>()
+        .join("\n");
+    let mut builder = FingerprintBuilder::new();
+    builder.update(b"p8-aime-reflection-request-shape.v1");
+    builder.update(b"upstream:gepa.optimize_anything");
+    builder.update(b"renderer:gepa-default-markdown-side-info");
+    builder.update(rendered.as_bytes());
+    builder.finish()
+}
+
+fn aime_reflection_request_example(config: &AimeReflectionConfig) -> AimeLmRequestRecord {
+    AimeLmRequestRecord::from_request(&canonical_aime_reflection_request_with_sampling(
+        config.model.clone().into(),
+        config.sampling.clone(),
+    ))
+}
+
+fn canonical_aime_reflection_request() -> LmRequest {
+    canonical_aime_reflection_request_with_sampling(
+        "shape-model".into(),
+        SamplingOptions::default(),
+    )
+}
+
+fn canonical_aime_reflection_request_with_sampling(
+    model: leaven_lm::ModelName,
+    sampling: SamplingOptions,
+) -> LmRequest {
     let config = LmBackedReflectorConfig {
-        sampling: SamplingOptions::default(),
+        sampling,
         output: leaven_lm::OutputMode::Text,
         prompt_template: Some(OPTIMIZE_ANYTHING_REFLECTION_PROMPT_TEMPLATE.to_owned()),
     };
@@ -3023,7 +3188,7 @@ fn aime_reflection_request_shape_fingerprint() -> Fingerprint {
             ..ReflectiveExample::default()
         },
     ]);
-    let lm_request = DefaultReflectionRenderer
+    DefaultReflectionRenderer
         .render(ReflectionRenderInput::<
             RunProblem<AimePrompt, AimeInput, AimeTarget>,
             AimePromptSurface,
@@ -3031,22 +3196,10 @@ fn aime_reflection_request_shape_fingerprint() -> Fingerprint {
             request: &request,
             artifact: &artifact,
             surface: &surface,
-            model: "shape-model".into(),
+            model,
             config: &config,
         })
-        .expect("canonical AIME reflection prompt renders");
-    let rendered = lm_request
-        .messages
-        .iter()
-        .map(Message::content)
-        .collect::<Vec<_>>()
-        .join("\n");
-    let mut builder = FingerprintBuilder::new();
-    builder.update(b"p8-aime-reflection-request-shape.v1");
-    builder.update(b"upstream:gepa.optimize_anything");
-    builder.update(b"renderer:gepa-default-markdown-side-info");
-    builder.update(rendered.as_bytes());
-    builder.finish()
+        .expect("canonical AIME reflection prompt renders")
 }
 
 fn aime_scorer_fingerprint() -> Fingerprint {
@@ -4070,6 +4223,47 @@ Provide the new parameter value within ``` blocks."
             report["lm_roles"][1]["prompt_contract"]["request_shape_fingerprint"]
                 .as_str()
                 .is_some_and(|value| value.len() == 64)
+        );
+        assert_eq!(
+            report["lm_roles"][0]["prompt_contract"]["request_example"]["messages"][0]["role"],
+            "system"
+        );
+        assert!(
+            report["lm_roles"][0]["prompt_contract"]["request_example"]["messages"][0]["content"]
+                .as_str()
+                .is_some_and(|content| content.contains("Your input fields are:"))
+        );
+        assert_eq!(
+            report["lm_roles"][0]["prompt_contract"]["request_example"]["messages"][1]["role"],
+            "user"
+        );
+        assert_eq!(
+            report["lm_roles"][1]["prompt_contract"]["request_example"]["messages"][0]["role"],
+            "user"
+        );
+        assert!(
+            report["lm_roles"][1]["prompt_contract"]["request_example"]["messages"][0]["content"]
+                .as_str()
+                .is_some_and(|content| {
+                    content.contains("I am optimizing a parameter in my system.")
+                        && content.contains("## execution_feedback")
+                })
+        );
+        let observed_reflection_requests = report["lm_roles"][1]["observed_requests"]
+            .as_array()
+            .expect("reflection observed requests are reported");
+        assert!(!observed_reflection_requests.is_empty());
+        assert_eq!(
+            observed_reflection_requests[0]["messages"][0]["role"],
+            "user"
+        );
+        assert!(
+            observed_reflection_requests[0]["messages"][0]["content"]
+                .as_str()
+                .is_some_and(|content| {
+                    content.contains("I am optimizing a parameter in my system.")
+                        && content.contains("## execution_feedback")
+                })
         );
         assert_eq!(report["lm_roles"][1]["metrics"]["cost"]["llm_calls"], 1);
         assert_eq!(report["budget"]["search_metric_calls_overshoot"], 0);
