@@ -3,7 +3,7 @@ use std::{
     num::NonZeroUsize,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use leaven::core::{AssessmentTarget, CacheIdentity, InfoRef};
@@ -85,6 +85,7 @@ Provide the new parameter value within ``` blocks.";
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 32)]
 async fn main() {
+    let started_at = Instant::now();
     let config = AimeRunConfig::configured();
     match Box::pin(try_run_configured_aime(config.clone())).await {
         Ok(result) => {
@@ -93,7 +94,7 @@ async fn main() {
             }
         }
         Err(error) => {
-            for line in error_report_lines(&error) {
+            for line in error_report_lines(&error, started_at.elapsed()) {
                 eprintln!("{line}");
             }
             std::process::exit(1);
@@ -101,8 +102,15 @@ async fn main() {
     }
 }
 
-fn error_report_lines(error: &(dyn std::error::Error + 'static)) -> Vec<String> {
+fn error_report_lines(
+    error: &(dyn std::error::Error + 'static),
+    wall_time: Duration,
+) -> Vec<String> {
     let mut lines = vec![format!("p8_aime_gepa_failed={error}")];
+    lines.push(format!(
+        "p8_aime_gepa_failed_wall_time_ms={}",
+        wall_time.as_millis()
+    ));
     for (index, source) in
         std::iter::successors(error.source(), |source| source.source()).enumerate()
     {
@@ -118,7 +126,7 @@ fn report_lines(config: &AimeRunConfig, run: &AimeRunResult) -> Vec<String> {
     let result = &run.optimized;
     let mut lines = report_run_header_lines(config, run);
     lines.extend(report_score_lines(result));
-    lines.extend(report_runtime_lines(config, result));
+    lines.extend(report_runtime_lines(config, run));
     lines.extend(report_budget_and_cache_lines(config, result));
     lines.extend(report_best_and_event_lines(result));
     for role in run.role_reports.iter() {
@@ -239,8 +247,13 @@ fn report_score_lines(result: &Optimized<AimePrompt>) -> Vec<String> {
     ]
 }
 
-fn report_runtime_lines(config: &AimeRunConfig, result: &Optimized<AimePrompt>) -> Vec<String> {
+fn report_runtime_lines(config: &AimeRunConfig, run: &AimeRunResult) -> Vec<String> {
+    let result = &run.optimized;
     vec![
+        format!(
+            "optimizer_wall_time_ms={}",
+            run.optimizer_wall_time.as_millis()
+        ),
         format!("solver_model={}", config.solver.model),
         format!("reflection_model={}", config.reflection.model),
         format!(
@@ -618,6 +631,7 @@ async fn try_run_aime(
     config: AimeRunConfig,
     dataset: AimeDataset,
 ) -> Result<AimeRunResult, leaven::run::OptimizeError> {
+    let optimizer_started_at = Instant::now();
     let run_id = RunId::new();
     let run_dir = config
         .run_dir
@@ -680,6 +694,7 @@ async fn try_run_aime(
             .run(),
     )
     .await?;
+    let optimizer_wall_time = optimizer_started_at.elapsed();
     let role_reports = AimeRoleReports::from_config(
         &config,
         solver_telemetry.snapshot(),
@@ -689,6 +704,7 @@ async fn try_run_aime(
         optimized,
         report_metadata,
         role_reports,
+        optimizer_wall_time,
         gepa_events: gepa_events
             .lock()
             .expect("AIME GEPA event sink lock")
@@ -743,6 +759,7 @@ fn p8_aime_report_json(config: &AimeRunConfig, run: &AimeRunResult) -> serde_jso
         "data_source": config.data_source.label(),
         "run": {
             "id": result.run_id.to_string(),
+            "optimizer_wall_time_ms": run.optimizer_wall_time.as_millis(),
             "storage": report_run_storage(&result.summary.storage),
             "resumable": result.summary.storage.is_resumable(),
             "resumability": report_resumability(&result.summary.storage),
@@ -2268,6 +2285,7 @@ struct AimeRunResult {
     optimized: Optimized<AimePrompt>,
     report_metadata: BTreeMap<CaseId, AimeReportMetadata>,
     role_reports: AimeRoleReports,
+    optimizer_wall_time: Duration,
     gepa_events: Vec<GepaEventSummary>,
     gepa_report: Option<GepaReport>,
 }
@@ -4153,10 +4171,16 @@ Provide the new parameter value within ``` blocks."
             "{rendered}"
         );
         assert!(
-            error_report_lines(&error)
+            error_report_lines(&error, Duration::ZERO)
                 .iter()
                 .any(|line| line.starts_with("p8_aime_gepa_failure_source_")),
             "CLI failure output should expose the safe source chain"
+        );
+        assert!(
+            error_report_lines(&error, Duration::from_millis(7))
+                .iter()
+                .any(|line| line == "p8_aime_gepa_failed_wall_time_ms=7"),
+            "CLI failure output should expose wall time for cache-only/debug failures"
         );
     }
 
@@ -4230,6 +4254,11 @@ Provide the new parameter value within ``` blocks."
             lines.iter().any(
                 |line| line.ends_with("/lm-cache.sqlite") && line.starts_with("lm_cache_path=")
             )
+        );
+        assert!(
+            lines
+                .iter()
+                .any(|line| line.starts_with("optimizer_wall_time_ms="))
         );
         assert!(
             lines
@@ -4326,6 +4355,7 @@ Provide the new parameter value within ``` blocks."
             report["comparison_reflection_prompt"],
             config.profile.reflection_prompt_claim()
         );
+        assert!(report["run"]["optimizer_wall_time_ms"].is_number());
         assert_eq!(report["budget"]["search_metric_calls_overshoot"], 0);
     }
 
