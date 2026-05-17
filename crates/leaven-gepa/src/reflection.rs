@@ -568,33 +568,42 @@ fn render_reflective_examples(examples: &[ReflectiveExample]) -> String {
         return "(no reflective examples were selected)".to_owned();
     }
 
-    let mut feedback = String::new();
-    for (index, example) in examples.iter().enumerate() {
-        let _ = writeln!(feedback, "# Example {}", index + 1);
-        if !example.side_info.is_empty() {
-            for (name, value) in &example.side_info {
-                let _ = writeln!(feedback, "## {}\n{}\n", name.trim(), value.trim());
-            }
-            continue;
+    examples
+        .iter()
+        .enumerate()
+        .map(|(index, example)| {
+            let mut rendered = String::new();
+            let _ = writeln!(rendered, "# Example {}", index + 1);
+            render_reflective_example_sections(&mut rendered, example);
+            rendered
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n")
+}
+
+fn render_reflective_example_sections(rendered: &mut String, example: &ReflectiveExample) {
+    if !example.side_info.is_empty() {
+        for (name, value) in &example.side_info {
+            let _ = writeln!(rendered, "## {}\n{}\n", name.trim(), value.trim());
         }
-        if let Some(case) = example.case {
-            let _ = writeln!(feedback, "## Case\n{case}");
-        }
-        if !example.input.is_empty() {
-            let _ = writeln!(feedback, "## Input\n{}", example.input.trim());
-        }
-        if let Some(score) = example.score {
-            let _ = writeln!(feedback, "## Score\n{score}");
-        }
-        if let Some(output) = &example.output {
-            let _ = writeln!(feedback, "## Output\n{}", output.trim());
-        }
-        if !example.feedback.is_empty() {
-            let _ = writeln!(feedback, "## Feedback\n{}", example.feedback.trim());
-        }
-        feedback.push('\n');
+        return;
     }
-    feedback
+    if let Some(case) = example.case {
+        let _ = writeln!(rendered, "## Case\n{case}");
+    }
+    if !example.input.is_empty() {
+        let _ = writeln!(rendered, "## Input\n{}", example.input.trim());
+    }
+    if let Some(score) = example.score {
+        let _ = writeln!(rendered, "## Score\n{score}");
+    }
+    if let Some(output) = &example.output {
+        let _ = writeln!(rendered, "## Output\n{}", output.trim());
+    }
+    if !example.feedback.is_empty() {
+        let _ = writeln!(rendered, "## Feedback\n{}", example.feedback.trim());
+    }
+    rendered.push('\n');
 }
 
 fn render_prompt_template(
@@ -762,6 +771,25 @@ mod tests {
         );
         assert!(!rendered.contains("## Input"));
         assert!(!rendered.contains("Inline {"));
+    }
+
+    #[test]
+    fn reflective_examples_join_multiple_side_info_records_like_upstream_gepa() {
+        let rendered = render_reflective_examples(&[
+            ReflectiveExample {
+                side_info: vec![("score".to_owned(), "0.0".to_owned())],
+                ..ReflectiveExample::default()
+            },
+            ReflectiveExample {
+                side_info: vec![("score".to_owned(), "1.0".to_owned())],
+                ..ReflectiveExample::default()
+            },
+        ]);
+
+        assert_eq!(
+            rendered,
+            "# Example 1\n## score\n0.0\n\n\n\n# Example 2\n## score\n1.0\n\n"
+        );
     }
 
     #[test]

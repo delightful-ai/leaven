@@ -2170,7 +2170,7 @@ fn render_dspy_aime_chain_of_thought_request(
         .collect::<Vec<_>>()
         .join("\n");
     let system = format!(
-        "Your input fields are:\n1. `input` (str): The math problem to solve.\nYour output fields are:\n1. `reasoning` (str): \n2. `answer` (str): The final numerical answer.\nAll interactions will be structured in the following way, with the appropriate values filled in.\n\n[[ ## input ## ]]\n{{input}}\n\n[[ ## reasoning ## ]]\n{{reasoning}}\n\n[[ ## answer ## ]]\n{{answer}}\n\n[[ ## completed ## ]]\n\nIn adhering to this structure, your objective is: \n{objective}"
+        "Your input fields are:\n1. `input` (str): The math problem to solve.\nYour output fields are:\n1. `reasoning` (str): \n2. `answer` (str): The final numerical answer.\nAll interactions will be structured in the following way, with the appropriate values filled in.\n\n[[ ## input ## ]]\n{{input}}\n\n[[ ## reasoning ## ]]\n{{reasoning}}\n\n[[ ## answer ## ]]\n{{answer}}\n\n[[ ## completed ## ]]\nIn adhering to this structure, your objective is: \n{objective}"
     );
     let user = format!(
         "[[ ## input ## ]]\n{input}\n\nRespond with the corresponding output fields, starting with the field `[[ ## reasoning ## ]]`, then `[[ ## answer ## ]]`, and then ending with the marker for `[[ ## completed ## ]]`."
@@ -3019,20 +3019,10 @@ Provide the new parameter value within ``` blocks.";
             "What is 19 + 23?",
         );
 
-        assert!(
-            request
-                .system
-                .contains("Your input fields are:\n1. `input` (str): The math problem to solve.")
+        assert_eq!(
+            request.system,
+            "Your input fields are:\n1. `input` (str): The math problem to solve.\nYour output fields are:\n1. `reasoning` (str): \n2. `answer` (str): The final numerical answer.\nAll interactions will be structured in the following way, with the appropriate values filled in.\n\n[[ ## input ## ]]\n{input}\n\n[[ ## reasoning ## ]]\n{reasoning}\n\n[[ ## answer ## ]]\n{answer}\n\n[[ ## completed ## ]]\nIn adhering to this structure, your objective is: \n        Solve the math problem carefully."
         );
-        assert!(request.system.contains("Your output fields are:\n1. `reasoning` (str): \n2. `answer` (str): The final numerical answer."));
-        assert!(request.system.contains("[[ ## input ## ]]\n{input}"));
-        assert!(
-            request
-                .system
-                .contains("[[ ## reasoning ## ]]\n{reasoning}")
-        );
-        assert!(request.system.contains("[[ ## answer ## ]]\n{answer}"));
-        assert!(request.system.contains("In adhering to this structure, your objective is: \n        Solve the math problem carefully."));
         assert_eq!(
             request.user,
             "[[ ## input ## ]]\nWhat is 19 + 23?\n\nRespond with the corresponding output fields, starting with the field `[[ ## reasoning ## ]]`, then `[[ ## answer ## ]]`, and then ending with the marker for `[[ ## completed ## ]]`."
