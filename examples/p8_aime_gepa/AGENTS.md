@@ -31,12 +31,18 @@ P8 owns the example artifact, edit surface, deterministic AIME-shaped import rec
   quality or domain-specific score semantics.
 - `run_openai_solver` is a native async runner over the P8-local OpenAI solver
   role. It returns `RunOutput` with the LM cost attached so solver spend is
-  charged through normal evaluation accounting. The live solver/reflection
+  charged through normal evaluation accounting. The solver renders the
+  upstream DSPy `ChainOfThought(MathSolverSignature)` ChatAdapter-style
+  system/user messages locally and parses the `answer` field while preserving
+  the `reasoning` field for reflection side-info. This is model-experience
+  parity for the P8 AIME profile, not a dependency on the Python DSPy runtime.
+  The live solver/reflection
   cache policy env knobs (`LEAVEN_AIME_SOLVER_CACHE_POLICY` and
   `LEAVEN_AIME_REFLECTION_CACHE_POLICY`) are advanced P8 scaffolding for role
   experiments, not required product setup. Omitted live-role policy means
-  read/write response-cache use; deterministic smoke remains explicitly
-  no-cache with `never`.
+  read/write response-cache use; `cache-only` is the no-spend replay mode that
+  fails on cache misses without calling the provider; deterministic smoke
+  remains explicitly no-cache with `never`.
   `LEAVEN_AIME_LM_CACHE_BACKEND` defaults to `sqlite` for live OpenAI roles and
   stores the reusable `leaven-lm-cache` database at `<run-dir>/lm-cache.sqlite`.
   `eager-sqlite` stores the same cache schema at `.leaven/lm-cache.sqlite` so
@@ -92,10 +98,13 @@ P8 owns the example artifact, edit surface, deterministic AIME-shaped import rec
   mechanics and becomes a noisy fixture tweak.
 - If you change the live solver path, preserve native Leaven LM/runtime role
   construction, metered `RunOutput` cost, and source-id report projection
-  outside the runner. The solver prompt is intentionally Rust-native: system
-  prompt plus answer-only user turn through `leaven-lm`, not DSPy
-  `ChainOfThought` prompt lowering or rationale-field extraction. Do not add
-  provider-specific behavior beyond the local example adapter.
+  outside the runner. The solver prompt must continue to render the upstream
+  DSPy `ChainOfThought` ChatAdapter field structure locally, including
+  `[[ ## input ## ]]`, `[[ ## reasoning ## ]]`, `[[ ## answer ## ]]`, and
+  `[[ ## completed ## ]]` markers. Preserve answer-only scoring plus
+  reasoning retention for reflection; do not replace this with a simpler
+  Leaven-native prompt unless the paper-parity spec and README are changed in
+  the same slice.
 
 ## Bait
 - A passing deterministic p8 run proves public API mechanics, invariant

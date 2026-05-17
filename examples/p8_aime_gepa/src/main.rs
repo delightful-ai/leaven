@@ -473,6 +473,7 @@ fn report_lm_cache_policy(policy: LmCachePolicy) -> &'static str {
         LmCachePolicy::Never => "never",
         LmCachePolicy::ReadWrite => "read-write",
         LmCachePolicy::ReadOnly => "read-only",
+        LmCachePolicy::CacheOnly => "cache-only",
         LmCachePolicy::Refresh => "refresh",
     }
 }
@@ -1010,7 +1011,7 @@ impl AimeLmCacheMetrics {
             LmCachePolicy::Refresh => {
                 self.bypass_refresh += 1;
             }
-            LmCachePolicy::ReadWrite | LmCachePolicy::ReadOnly => {
+            LmCachePolicy::ReadWrite | LmCachePolicy::ReadOnly | LmCachePolicy::CacheOnly => {
                 if cost.is_zero() && !usage.to_cost().is_zero() {
                     self.hits += 1;
                     self.hit_cost_zero &= cost.is_zero();
@@ -1310,9 +1311,12 @@ fn parse_lm_cache_policy(env_name: &str, value: Option<&str>) -> LmCachePolicy {
         "never" | "none" | "off" => LmCachePolicy::Never,
         "auto" | "read-write" | "read_write" | "readwrite" => LmCachePolicy::ReadWrite,
         "read-only" | "read_only" | "readonly" => LmCachePolicy::ReadOnly,
+        "cache-only" | "cache_only" | "cacheonly" | "require-hit" | "require_hit" | "required" => {
+            LmCachePolicy::CacheOnly
+        }
         "refresh" => LmCachePolicy::Refresh,
         _ => panic!(
-            "unsupported {env_name}={raw:?}; expected never, read-write, read-only, or refresh"
+            "unsupported {env_name}={raw:?}; expected never, read-write, read-only, cache-only, or refresh"
         ),
     }
 }
@@ -3241,6 +3245,10 @@ Provide the new parameter value within ``` blocks.";
         assert_eq!(
             AimeLmCachePolicies::from_values(Some("auto"), Some("off")).reflection,
             LmCachePolicy::Never
+        );
+        assert_eq!(
+            parse_lm_cache_policy(LEAVEN_AIME_SOLVER_CACHE_POLICY, Some("cache-only")),
+            LmCachePolicy::CacheOnly
         );
     }
 

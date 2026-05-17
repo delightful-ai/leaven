@@ -185,6 +185,33 @@ async fn read_only_policy_reads_but_does_not_write() {
 }
 
 #[tokio::test]
+async fn cache_only_policy_requires_hit_without_inner_call() {
+    let inner = CountingLm::new();
+    let cache = InMemoryLmCache::default();
+    let lm = CachedLm::new(inner.clone(), cache.clone(), LmCachePolicy::CacheOnly);
+
+    let miss = lm.complete(request()).await.unwrap_err();
+
+    assert_eq!(
+        miss.to_string(),
+        "lm response cache failed: required lm cache entry was missing"
+    );
+    assert_eq!(inner.calls(), 0);
+
+    let key = LmCacheKey::for_request(inner.fingerprint(), &request());
+    cache
+        .put(key, cache_entry(key, "seeded response"))
+        .await
+        .unwrap();
+
+    let hit = lm.complete(request()).await.unwrap();
+
+    assert_eq!(hit.value.assistant.content(), "seeded response");
+    assert_eq!(hit.cost, Cost::zero());
+    assert_eq!(inner.calls(), 0);
+}
+
+#[tokio::test]
 async fn sqlite_cache_opens_and_creates_parent_directories() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("nested/cache/lm-cache.sqlite");

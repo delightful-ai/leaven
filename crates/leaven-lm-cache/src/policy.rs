@@ -10,6 +10,8 @@ pub enum LmCachePolicy {
     ReadWrite,
     /// Read existing entries but do not write misses.
     ReadOnly,
+    /// Read existing entries and fail closed on misses without calling the LM.
+    CacheOnly,
     /// Bypass reads and overwrite the entry with the fresh provider response.
     Refresh,
 }

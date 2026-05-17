@@ -92,8 +92,10 @@ run store to match GEPA's `cache_evaluation=True` behavior. The
 role-specific cache env vars are advanced P8 scaffold for experiments, not
 required product setup:
 `LEAVEN_AIME_SOLVER_CACHE_POLICY` and `LEAVEN_AIME_REFLECTION_CACHE_POLICY`
-accept `auto`, `never`, `read-write`, `read-only`, or `refresh`, and omitted
-values default to read/write cache use.
+accept `auto`, `never`, `read-write`, `read-only`, `cache-only`, or `refresh`,
+and omitted values default to read/write cache use. `cache-only` is the
+fail-closed replay mode for no-spend release proof: it reads compatible cache
+entries and errors on any miss instead of calling the provider.
 `LEAVEN_AIME_LM_CACHE_BACKEND` defaults to `sqlite`, placing the reusable
 `leaven-lm-cache` store at `<run-dir>/lm-cache.sqlite`. `eager-sqlite`
 uses a shared workspace cache at `.leaven/lm-cache.sqlite` so fresh release

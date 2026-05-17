@@ -169,6 +169,7 @@ pub enum LmCachePolicy {
     Never,
     ReadWrite,
     ReadOnly,
+    CacheOnly,
     Refresh,
 }
 
@@ -246,6 +247,7 @@ Policy behavior:
 | `Never` | no | yes | no |
 | `ReadWrite` | yes | yes | yes |
 | `ReadOnly` | yes | yes | no |
+| `CacheOnly` | yes | no; cache miss is an error | no |
 | `Refresh` | no | yes | yes |
 
 Cache key ingredients:

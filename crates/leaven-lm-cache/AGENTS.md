@@ -80,10 +80,10 @@ evaluation cache.
   verify: run `cargo nextest run -p leaven-lm-cache -p leaven-lm`
 
 - when: changing cache policy behavior
-  do: keep all four policy laws explicit: `Never`, `ReadWrite`, `ReadOnly`, and
-    `Refresh`
+  do: keep all five policy laws explicit: `Never`, `ReadWrite`, `ReadOnly`,
+    `CacheOnly`, and `Refresh`
   preserve: read misses call the inner LM where the policy says they should, and
     cache hits do not charge new cost
   avoid: silently making `ReadOnly` write, or making `Refresh` read before the
-    provider call
+    provider call, or making `CacheOnly` call the inner LM on a miss
   verify: run `cargo nextest run -p leaven-lm-cache`

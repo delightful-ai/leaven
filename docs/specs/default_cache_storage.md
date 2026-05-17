@@ -320,19 +320,26 @@ Current known implementation state:
 - ordinary runs are now durable by default;
 - engine checkpoints can persist an evaluation-cache snapshot;
 - GEPA continuation is JSON optimizer state in checkpoints;
-- `leaven-lm-cache` has an in-memory backend only;
+- `leaven-lm-cache` has in-memory and SQLite backends, with run-directory and
+  workspace `.leaven/lm-cache.sqlite` open helpers;
+- P8 wires live OpenAI solver/reflection roles to run-directory SQLite by
+  default and exposes an explicit `eager-sqlite` workspace-cache override for
+  release reruns, plus `cache-only` policy for no-spend replays that fail
+  closed on cache misses;
 - local run store currently uses file/blob/checkpoint/evidence directories.
 
 Migration order:
 
-1. Introduce SQLite LM response-cache backend and contract tests.
-2. Introduce SQLite evaluation-cache backend or a run-store table that can
+1. Introduce SQLite LM response-cache backend and contract tests. Done.
+2. Wire P8 live LM roles to run-directory SQLite by default and explicit
+   workspace eager-cache mode. Done at the example bridge layer.
+3. Introduce SQLite evaluation-cache backend or a run-store table that can
    materialize `EvaluationCache` semantics without weakening engine ownership.
-3. Wire both stores from `leaven-run` when a durable run dir is opened.
-4. Add `CacheMode::Auto` and report cache summaries.
-5. Teach product scorers/evaluators to declare deterministic cache eligibility
+4. Wire both stores from `leaven-run` when a durable run dir is opened.
+5. Add `CacheMode::Auto` and report cache summaries.
+6. Teach product scorers/evaluators to declare deterministic cache eligibility
    without requiring users to set low-level cache policies.
-6. Keep JSON optimizer continuation until there is a concrete reason to move it.
+7. Keep JSON optimizer continuation until there is a concrete reason to move it.
 
 ## 11. Proof Requirements
 

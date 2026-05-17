@@ -86,6 +86,12 @@ where
                 }
                 self.inner.complete(request).await
             }
+            LmCachePolicy::CacheOnly => {
+                if let Some(entry) = self.cache.get(key).await.map_err(LmError::from)? {
+                    return Ok(cached_response(entry));
+                }
+                Err(LmError::cache("required lm cache entry was missing"))
+            }
             LmCachePolicy::Refresh => {
                 let request_for_entry = request.clone();
                 let metered = self.inner.complete(request).await?;
