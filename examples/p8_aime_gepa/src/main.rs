@@ -261,6 +261,13 @@ fn report_budget_and_cache_lines(
             "search_metric_calls_spent={}",
             result.summary.optimization_cost.metric_calls
         ),
+        format!(
+            "search_metric_calls_overshoot={}",
+            metric_calls_overshoot(
+                config.budget.metric_calls,
+                result.summary.optimization_cost.metric_calls,
+            )
+        ),
         "final_report_metric_call_cap=unlimited".to_owned(),
         format!(
             "final_report_metric_calls_spent={}",
@@ -393,6 +400,10 @@ fn report_latest_checkpoint(storage: &RunStorage) -> String {
 
 fn report_optional_u64(value: Option<u64>) -> String {
     value.map_or_else(|| "unlimited".to_owned(), |value| value.to_string())
+}
+
+fn metric_calls_overshoot(cap: Option<u64>, spent: u64) -> u64 {
+    cap.map_or(0, |cap| spent.saturating_sub(cap))
 }
 
 fn evaluation_cache_bypass_count(summary: &leaven::run::EvaluationCacheSummary) -> u64 {
@@ -685,6 +696,10 @@ fn p8_aime_report_json(config: &AimeRunConfig, run: &AimeRunResult) -> serde_jso
             "stop_reason": report_stop_reason(result.stop),
             "search_metric_call_cap": config.budget.metric_calls,
             "search_metric_calls_spent": result.summary.optimization_cost.metric_calls,
+            "search_metric_calls_overshoot": metric_calls_overshoot(
+                config.budget.metric_calls,
+                result.summary.optimization_cost.metric_calls,
+            ),
             "final_report_metric_call_cap": serde_json::Value::String("unlimited".to_owned()),
             "final_report_metric_calls_spent": result.summary.final_report_cost.metric_calls,
             "total_metric_calls": result.budget.spent.metric_calls,
@@ -3424,6 +3439,11 @@ Provide the new parameter value within ``` blocks.";
         assert!(
             lines
                 .iter()
+                .any(|line| line == "search_metric_calls_overshoot=0")
+        );
+        assert!(
+            lines
+                .iter()
                 .any(|line| line == "final_report_metric_call_cap=unlimited")
         );
         assert!(
@@ -3504,6 +3524,13 @@ Provide the new parameter value within ``` blocks.";
                 .iter()
                 .any(|line| line == "optimization_metric_calls=8")
         );
+    }
+
+    #[test]
+    fn metric_call_overshoot_reports_spent_minus_cap_without_clamping_spent() {
+        assert_eq!(metric_calls_overshoot(Some(500), 498), 0);
+        assert_eq!(metric_calls_overshoot(Some(500), 512), 12);
+        assert_eq!(metric_calls_overshoot(None, 512), 0);
     }
 
     #[test]
@@ -3685,6 +3712,7 @@ Provide the new parameter value within ``` blocks.";
         assert_eq!(report["lm_roles"][0]["role"], "solver");
         assert_eq!(report["lm_roles"][1]["role"], "reflection");
         assert_eq!(report["lm_roles"][1]["metrics"]["cost"]["llm_calls"], 1);
+        assert_eq!(report["budget"]["search_metric_calls_overshoot"], 0);
         assert!(report["cases"].as_array().unwrap().iter().all(|case| {
             case.get("source_id").is_some()
                 && case.get("feedback_chars").is_some()
