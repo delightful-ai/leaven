@@ -234,6 +234,10 @@ response plus write timestamp returned on cache hits.
 `SqliteLmCache::open_run_dir(run_dir)` is the shared run-directory helper for
 milestone bridges and lower-level adapters. It resolves to
 `run_dir/lm-cache.sqlite`; examples must not duplicate that filename policy.
+`SqliteLmCache::open_workspace(workspace_root)` is the shared workspace-cache
+helper for explicit eager reuse across fresh run directories. It resolves to
+`workspace_root/.leaven/lm-cache.sqlite` and uses the same schema and key
+contract as the run-directory helper.
 
 Policy behavior:
 

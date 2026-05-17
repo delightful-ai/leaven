@@ -74,7 +74,7 @@ fn report_lines(config: &AimeRunConfig, run: &AimeRunResult) -> Vec<String> {
     let result = &run.optimized;
     let mut lines = report_run_header_lines(config, result);
     lines.extend(report_score_lines(result));
-    lines.extend(report_runtime_lines(config));
+    lines.extend(report_runtime_lines(config, result));
     lines.extend(report_budget_and_cache_lines(config, result));
     lines.extend(report_best_and_event_lines(result));
     for role in run.role_reports.iter() {
@@ -185,7 +185,7 @@ fn report_score_lines(result: &Optimized<AimePrompt>) -> Vec<String> {
     ]
 }
 
-fn report_runtime_lines(config: &AimeRunConfig) -> Vec<String> {
+fn report_runtime_lines(config: &AimeRunConfig, result: &Optimized<AimePrompt>) -> Vec<String> {
     vec![
         format!("solver_model={}", config.solver.model),
         format!("reflection_model={}", config.reflection.model),
@@ -204,6 +204,10 @@ fn report_runtime_lines(config: &AimeRunConfig) -> Vec<String> {
         format!(
             "lm_cache_durable={}",
             config.solver.runtime.cache_backend.is_durable()
+        ),
+        format!(
+            "lm_cache_path={}",
+            report_lm_cache_path(config.solver.runtime.cache_backend, &result.summary.storage)
         ),
         format!(
             "openai_max_concurrent_requests={}",
@@ -463,6 +467,25 @@ fn report_lm_cache_backend(backend: AimeLmCacheBackend) -> &'static str {
     match backend {
         AimeLmCacheBackend::InMemory => "in-memory",
         AimeLmCacheBackend::Sqlite => "sqlite",
+        AimeLmCacheBackend::EagerSqlite => "eager-sqlite",
+    }
+}
+
+fn report_lm_cache_path(backend: AimeLmCacheBackend, storage: &RunStorage) -> String {
+    match backend {
+        AimeLmCacheBackend::InMemory => "none".to_owned(),
+        AimeLmCacheBackend::Sqlite => match storage {
+            RunStorage::Stored {
+                run_dir: Some(run_dir),
+                ..
+            } => SqliteLmCache::path_in_run_dir(run_dir)
+                .display()
+                .to_string(),
+            RunStorage::Stored { .. } | RunStorage::Ephemeral { .. } => "none".to_owned(),
+        },
+        AimeLmCacheBackend::EagerSqlite => {
+            SqliteLmCache::path_in_workspace(".").display().to_string()
+        }
     }
 }
 
@@ -1302,13 +1325,14 @@ impl AimeOpenAiRuntimeConfig {
 enum AimeLmCacheBackend {
     InMemory,
     Sqlite,
+    EagerSqlite,
 }
 
 impl AimeLmCacheBackend {
     const fn is_durable(self) -> bool {
         match self {
             Self::InMemory => false,
-            Self::Sqlite => true,
+            Self::Sqlite | Self::EagerSqlite => true,
         }
     }
 }
@@ -1333,8 +1357,10 @@ fn parse_lm_cache_backend(value: Option<&str>) -> AimeLmCacheBackend {
     match raw.to_ascii_lowercase().as_str() {
         "in-memory" | "in_memory" | "memory" => AimeLmCacheBackend::InMemory,
         "sqlite" | "durable" | "local-sqlite" | "local_sqlite" => AimeLmCacheBackend::Sqlite,
+        "eager" | "eager-sqlite" | "eager_sqlite" | "workspace-sqlite" | "workspace_sqlite"
+        | "shared-sqlite" | "shared_sqlite" => AimeLmCacheBackend::EagerSqlite,
         _ => panic!(
-            "unsupported {LEAVEN_AIME_LM_CACHE_BACKEND}={raw:?}; expected sqlite or in-memory"
+            "unsupported {LEAVEN_AIME_LM_CACHE_BACKEND}={raw:?}; expected sqlite, eager-sqlite, or in-memory"
         ),
     }
 }
@@ -2225,6 +2251,22 @@ fn cached_openai_lm(
                 cache_policy,
             )),
         },
+        AimeLmCacheBackend::EagerSqlite => AimeOpenAiLm {
+            inner: AimeOpenAiCachedLm::Sqlite(CachedLm::new(
+                inner,
+                match SqliteLmCache::open_workspace(".") {
+                    Ok(cache) => cache,
+                    Err(source) => {
+                        return unavailable_openai_lm(
+                            role,
+                            AimeOpenAiUnavailableReason::Cache,
+                            format!("failed to open eager SQLite LM cache for {role}: {source}"),
+                        );
+                    }
+                },
+                cache_policy,
+            )),
+        },
     }
 }
 
@@ -2882,6 +2924,14 @@ Provide the new instructions within ``` blocks.";
             AimeOpenAiRuntimeConfig::from_values(None, Some("in-memory")).cache_backend,
             AimeLmCacheBackend::InMemory
         );
+        assert_eq!(
+            AimeOpenAiRuntimeConfig::from_values(None, Some("eager")).cache_backend,
+            AimeLmCacheBackend::EagerSqlite
+        );
+        assert_eq!(
+            AimeOpenAiRuntimeConfig::from_values(None, Some("workspace-sqlite")).cache_backend,
+            AimeLmCacheBackend::EagerSqlite
+        );
     }
 
     #[test]
@@ -2924,6 +2974,11 @@ Provide the new instructions within ``` blocks.";
         assert!(lines.iter().any(|line| line == "lm_cache_backend=sqlite"));
         assert!(lines.iter().any(|line| line == "lm_cache_durable=true"));
         assert!(
+            lines.iter().any(
+                |line| line.ends_with("/lm-cache.sqlite") && line.starts_with("lm_cache_path=")
+            )
+        );
+        assert!(
             lines
                 .iter()
                 .any(|line| line == "openai_max_concurrent_requests=7")
@@ -2960,6 +3015,10 @@ Provide the new instructions within ``` blocks.";
         assert_eq!(
             SqliteLmCache::path_in_run_dir(&run_dir),
             run_dir.join("lm-cache.sqlite")
+        );
+        assert_eq!(
+            SqliteLmCache::path_in_workspace("."),
+            std::path::PathBuf::from(".leaven").join("lm-cache.sqlite")
         );
     }
 

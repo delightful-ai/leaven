@@ -94,8 +94,11 @@ required product setup:
 accept `auto`, `never`, `read-write`, `read-only`, or `refresh`, and omitted
 values default to read/write cache use.
 `LEAVEN_AIME_LM_CACHE_BACKEND` defaults to `sqlite`, placing the reusable
-`leaven-lm-cache` store at `<run-dir>/lm-cache.sqlite`; explicit `in-memory`
-is the throwaway/debug backend and prints `lm_cache_durable=false`.
+`leaven-lm-cache` store at `<run-dir>/lm-cache.sqlite`. `eager-sqlite`
+uses a shared workspace cache at `.leaven/lm-cache.sqlite` so fresh release
+runs can reuse compatible solver/reflection responses from earlier runs
+without reusing the whole run directory. Explicit `in-memory` is the
+throwaway/debug backend and prints `lm_cache_durable=false`.
 `LEAVEN_OPENAI_MAX_CONCURRENT_REQUESTS` bounds in-process OpenAI request
 concurrency for both live roles and defaults to `32`.
 `LEAVEN_AIME_RUN_DIR` is the explicit resume handle and uses the same durable

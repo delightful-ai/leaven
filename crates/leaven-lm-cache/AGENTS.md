@@ -17,8 +17,10 @@ evaluation cache.
 - `LmCacheStore` is the cache backend capability; concrete persistent stores can
   grow from this trait without changing provider crates.
 - Durable product runs should use the SQLite backend described in
-  `docs/specs/default_cache_storage.md`; `InMemoryLmCache` remains the cheap
-  test/ephemeral backend.
+  `docs/specs/default_cache_storage.md`; `open_run_dir` scopes cache reuse to
+  one durable run directory, while `open_workspace` scopes cache reuse to the
+  workspace-level `.leaven/lm-cache.sqlite` database. `InMemoryLmCache` remains
+  the cheap test/ephemeral backend.
 - `CachedLm::id()` and `CachedLm::fingerprint()` delegate to the inner provider.
   Cache policy and backend are wrapper/runtime composition, not provider
   identity. Role-level resume identity belongs above this crate.

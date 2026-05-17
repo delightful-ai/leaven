@@ -13,6 +13,7 @@ use crate::{LmCacheEntry, LmCacheError, LmCacheKey, LmCacheStore};
 
 const SCHEMA_VERSION: i64 = 2;
 const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
+const DEFAULT_LEAVEN_DIR: &str = ".leaven";
 const DEFAULT_LM_CACHE_FILE: &str = "lm-cache.sqlite";
 
 /// Durable `SQLite` response-cache backend.
@@ -64,10 +65,33 @@ impl SqliteLmCache {
         Self::open(Self::path_in_run_dir(run_dir))
     }
 
+    /// Opens the default durable LM cache shared by runs in a Leaven workspace.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LmCacheError`] if the workspace cache file cannot be opened or
+    /// initialized.
+    pub fn open_workspace(workspace_root: impl AsRef<Path>) -> Result<Self, LmCacheError> {
+        Self::open(Self::path_in_workspace(workspace_root))
+    }
+
     /// Returns the default durable LM cache file path for a Leaven run dir.
     #[must_use]
     pub fn path_in_run_dir(run_dir: impl AsRef<Path>) -> PathBuf {
         run_dir.as_ref().join(DEFAULT_LM_CACHE_FILE)
+    }
+
+    /// Returns the default durable LM cache file path shared by runs in a
+    /// Leaven workspace.
+    #[must_use]
+    pub fn path_in_workspace(workspace_root: impl AsRef<Path>) -> PathBuf {
+        let workspace_root = workspace_root.as_ref();
+        if workspace_root.as_os_str().is_empty() || workspace_root == Path::new(".") {
+            return PathBuf::from(DEFAULT_LEAVEN_DIR).join(DEFAULT_LM_CACHE_FILE);
+        }
+        workspace_root
+            .join(DEFAULT_LEAVEN_DIR)
+            .join(DEFAULT_LM_CACHE_FILE)
     }
 
     /// Returns the `SQLite` file backing this cache.

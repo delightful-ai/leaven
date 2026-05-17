@@ -209,6 +209,25 @@ async fn sqlite_cache_default_run_dir_path_is_shared() {
 }
 
 #[tokio::test]
+async fn sqlite_cache_workspace_path_is_shared_across_run_dirs() {
+    let workspace = tempfile::tempdir().unwrap();
+    let path = workspace.path().join(".leaven").join("lm-cache.sqlite");
+    let key = cache_key();
+    let entry = cache_entry(key, "workspace");
+
+    SqliteLmCache::open_workspace(workspace.path())
+        .unwrap()
+        .put(key, entry.clone())
+        .await
+        .unwrap();
+    let reopened = SqliteLmCache::open_workspace(workspace.path()).unwrap();
+
+    assert_eq!(SqliteLmCache::path_in_workspace(workspace.path()), path);
+    assert_eq!(reopened.path(), path.as_path());
+    assert_eq!(reopened.get(key).await.unwrap(), Some(entry));
+}
+
+#[tokio::test]
 async fn sqlite_cache_schema_carries_audit_columns() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("lm-cache.sqlite");

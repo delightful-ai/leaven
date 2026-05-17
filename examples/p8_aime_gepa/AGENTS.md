@@ -39,9 +39,12 @@ P8 owns the example artifact, edit surface, deterministic AIME-shaped import rec
   no-cache with `never`.
   `LEAVEN_AIME_LM_CACHE_BACKEND` defaults to `sqlite` for live OpenAI roles and
   stores the reusable `leaven-lm-cache` database at `<run-dir>/lm-cache.sqlite`.
-  Explicit `in-memory` is the throwaway/debug backend and reports
-  `lm_cache_durable=false`. `LEAVEN_OPENAI_MAX_CONCURRENT_REQUESTS` configures
-  the OpenAI provider semaphore for both live roles.
+  `eager-sqlite` stores the same cache schema at `.leaven/lm-cache.sqlite` so
+  fresh release run dirs can reuse compatible solver/reflection responses from
+  prior runs without resuming the whole run. Explicit `in-memory` is the
+  throwaway/debug backend and reports `lm_cache_durable=false`.
+  `LEAVEN_OPENAI_MAX_CONCURRENT_REQUESTS` configures the OpenAI provider
+  semaphore for both live roles.
 - P8 report lines project `source_id` through a local sidecar keyed by stable
   AIME case id because the generic `leaven-run` report facade does not yet carry
   a `CaseSourceRef`. Default lines include output/feedback lengths only and

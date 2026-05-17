@@ -306,7 +306,9 @@ For P8 AIME paper-parity runs:
 6. P8 code must not define a P8-private LM cache schema. Until generic LM-role
    provisioning is owned by `leaven-run`, P8 may instantiate
    `leaven-lm-cache::SqliteLmCache` against `<run-dir>/lm-cache.sqlite` as the
-   example-level bridge.
+   example-level bridge. It may also expose an explicit eager workspace-cache
+   mode backed by `.leaven/lm-cache.sqlite` for release reruns that should reuse
+   prior compatible LM responses without resuming the whole run directory.
 
 If P8 must turn caching off for a smoke test, it should use an explicit whole-run
 override or `ephemeral()`, and the report must say so.
