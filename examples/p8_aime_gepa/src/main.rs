@@ -37,6 +37,7 @@ use leaven_lm::{
 use leaven_lm_cache::{CachedLm, InMemoryLmCache, LmCachePolicy, SqliteLmCache};
 use leaven_lm_openai::{OpenAiConfig, OpenAiLm, OpenAiThrottlePolicy};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 const BASELINE: &str = "Solve the math problem carefully. Break down the steps and provide the final answer as a single number.";
 const OPTIMIZED: &str = "Solve with modular arithmetic when useful. Verify arithmetic before the final answer. Provide only the final integer.";
@@ -154,6 +155,28 @@ fn report_run_header_lines(config: &AimeRunConfig, run: &AimeRunResult) -> Vec<S
             config.profile.reflection_prompt_claim()
         ),
         format!("data_source={}", config.data_source.label()),
+        format!("aime_train_count={}", run.dataset_proof.train_count),
+        format!(
+            "aime_validation_count={}",
+            run.dataset_proof.validation_count
+        ),
+        format!("aime_test_count={}", run.dataset_proof.test_count),
+        format!(
+            "aime_split_seed={}",
+            run.dataset_proof
+                .split_seed
+                .map(|seed| seed.to_string())
+                .unwrap_or_else(|| "none".to_owned())
+        ),
+        format!("aime_test_repeated={}", run.dataset_proof.test_repeated),
+        format!(
+            "aime_cache_hash={}",
+            run.dataset_proof
+                .materialized_cache
+                .as_ref()
+                .map(|cache| cache.sha256.as_str())
+                .unwrap_or("none")
+        ),
         format!("run_id={}", result.run_id),
         format!(
             "run_storage={}",
@@ -647,6 +670,7 @@ async fn try_run_aime(
     let gepa_events = Arc::new(Mutex::new(Vec::<GepaEventSummary>::new()));
     let gepa_report = Arc::new(Mutex::new(None::<GepaReport>));
     let report_metadata = dataset.report_metadata.clone();
+    let dataset_proof = dataset.proof.clone();
     let reflective_dataset = dataset.reflective_dataset(side_infos.clone());
     let gepa_event_sink = gepa_events.clone();
     let gepa_report_sink = gepa_report.clone();
@@ -703,6 +727,7 @@ async fn try_run_aime(
     let result = AimeRunResult {
         optimized,
         report_metadata,
+        dataset_proof,
         role_reports,
         optimizer_wall_time,
         gepa_events: gepa_events
@@ -757,6 +782,7 @@ fn p8_aime_report_json(config: &AimeRunConfig, run: &AimeRunResult) -> serde_jso
             "notes": config.profile.comparison_notes(),
         },
         "data_source": config.data_source.label(),
+        "dataset": p8_dataset_proof_json(&run.dataset_proof),
         "run": {
             "id": result.run_id.to_string(),
             "optimizer_wall_time_ms": run.optimizer_wall_time.as_millis(),
@@ -813,6 +839,28 @@ fn p8_aime_report_json(config: &AimeRunConfig, run: &AimeRunResult) -> serde_jso
         "gepa_report": run.gepa_report.as_ref().map(p8_gepa_report_json),
         "cases": p8_case_report_json(run),
         "events": result.events.iter().map(|event| event.as_str()).collect::<Vec<_>>(),
+    })
+}
+
+fn p8_dataset_proof_json(proof: &AimeDatasetProof) -> serde_json::Value {
+    serde_json::json!({
+        "train_count": proof.train_count,
+        "validation_count": proof.validation_count,
+        "test_count": proof.test_count,
+        "source_splits": proof.source_splits.iter().map(|source| serde_json::json!({
+            "role": source.role,
+            "dataset": source.dataset,
+            "config": source.config,
+            "split": source.split,
+            "count": source.count,
+        })).collect::<Vec<_>>(),
+        "materialized_cache": proof.materialized_cache.as_ref().map(|cache| serde_json::json!({
+            "path": cache.path,
+            "sha256": cache.sha256,
+            "bytes": cache.bytes,
+        })),
+        "split_seed": proof.split_seed,
+        "test_repeated": proof.test_repeated,
     })
 }
 
@@ -2284,6 +2332,7 @@ type AimeRunCase = Case<AimeInput, AimeTarget>;
 struct AimeRunResult {
     optimized: Optimized<AimePrompt>,
     report_metadata: BTreeMap<CaseId, AimeReportMetadata>,
+    dataset_proof: AimeDatasetProof,
     role_reports: AimeRoleReports,
     optimizer_wall_time: Duration,
     gepa_events: Vec<GepaEventSummary>,
@@ -2391,25 +2440,113 @@ struct AimeDatasetCache {
     test: Vec<AimeImportRecord>,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct AimeDatasetProof {
+    train_count: usize,
+    validation_count: usize,
+    test_count: usize,
+    source_splits: Vec<AimeSourceSplitProof>,
+    materialized_cache: Option<AimeMaterializedCacheProof>,
+    split_seed: Option<u64>,
+    test_repeated: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct AimeSourceSplitProof {
+    role: String,
+    dataset: String,
+    config: String,
+    split: String,
+    count: usize,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct AimeMaterializedCacheProof {
+    path: String,
+    sha256: String,
+    bytes: usize,
+}
+
+impl AimeDatasetProof {
+    fn from_parts(
+        train_count: usize,
+        validation_count: usize,
+        test_count: usize,
+        report_metadata: &BTreeMap<CaseId, AimeReportMetadata>,
+        materialized_cache: Option<AimeMaterializedCacheProof>,
+        split_seed: Option<u64>,
+    ) -> Self {
+        let mut source_split_counts = BTreeMap::<(String, String, String, String), usize>::new();
+        for metadata in report_metadata.values() {
+            let key = (
+                split_role_label(&metadata.split).to_owned(),
+                metadata.source.dataset.clone(),
+                metadata.source.config.clone(),
+                metadata.source.split.clone(),
+            );
+            *source_split_counts.entry(key).or_default() += 1;
+        }
+        let source_splits = source_split_counts
+            .into_iter()
+            .map(
+                |((role, dataset, config, split), count)| AimeSourceSplitProof {
+                    role,
+                    dataset,
+                    config,
+                    split,
+                    count,
+                },
+            )
+            .collect();
+        Self {
+            train_count,
+            validation_count,
+            test_count,
+            source_splits,
+            materialized_cache,
+            split_seed,
+            test_repeated: false,
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 struct AimeDataset {
     train: Vec<AimeRunCase>,
     validation: Vec<AimeRunCase>,
     test: Vec<AimeRunCase>,
     report_metadata: BTreeMap<CaseId, AimeReportMetadata>,
+    proof: AimeDatasetProof,
 }
 
 impl AimeDataset {
     fn from_cache(cache: AimeDatasetCache) -> Result<Self, AimeDatasetError> {
+        Self::from_cache_with_proof(cache, None, None)
+    }
+
+    fn from_cache_with_proof(
+        cache: AimeDatasetCache,
+        materialized_cache: Option<AimeMaterializedCacheProof>,
+        split_seed: Option<u64>,
+    ) -> Result<Self, AimeDatasetError> {
         let mut lowerer = AimeDatasetLowerer::default();
         let train = lowerer.lower_split(&SplitRole::Train, cache.train)?;
         let validation = lowerer.lower_split(&SplitRole::Validation, cache.validation)?;
         let test = lowerer.lower_split(&SplitRole::Test, cache.test)?;
+        let proof = AimeDatasetProof::from_parts(
+            train.len(),
+            validation.len(),
+            test.len(),
+            &lowerer.report_metadata,
+            materialized_cache,
+            split_seed,
+        );
         Ok(Self {
             train,
             validation,
             test,
             report_metadata: lowerer.report_metadata,
+            proof,
         })
     }
 
@@ -2547,18 +2684,35 @@ fn dataset_from_cache(path: &Path) -> AimeDataset {
             path.display()
         )
     });
+    let materialized_cache = AimeMaterializedCacheProof {
+        path: path.display().to_string(),
+        sha256: sha256_hex(&bytes),
+        bytes: bytes.len(),
+    };
     let cache: AimeDatasetCache = serde_json::from_slice(&bytes).unwrap_or_else(|source| {
         panic!(
             "failed to parse LEAVEN_AIME_CACHE={}: {source}",
             path.display()
         )
     });
-    AimeDataset::from_cache(cache).unwrap_or_else(|source| {
-        panic!(
-            "failed to lower LEAVEN_AIME_CACHE={}: {source}",
-            path.display()
-        )
-    })
+    AimeDataset::from_cache_with_proof(cache, Some(materialized_cache), Some(0)).unwrap_or_else(
+        |source| {
+            panic!(
+                "failed to lower LEAVEN_AIME_CACHE={}: {source}",
+                path.display()
+            )
+        },
+    )
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    let digest = Sha256::digest(bytes);
+    let mut rendered = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        use std::fmt::Write as _;
+        write!(&mut rendered, "{byte:02x}").expect("writing to a String cannot fail");
+    }
+    rendered
 }
 
 fn deterministic_dataset() -> AimeDataset {
@@ -3411,6 +3565,23 @@ mod tests {
         assert_eq!(dataset.report_metadata[&first_id].source_id(), first_source);
         assert_eq!(dataset.report_metadata[&first_id].split, SplitRole::Train);
         assert!(dataset.report_metadata[&first_id].tags.needs_modular);
+        assert_eq!(dataset.proof.train_count, 3);
+        assert_eq!(dataset.proof.validation_count, 1);
+        assert_eq!(dataset.proof.test_count, 2);
+        assert_eq!(dataset.proof.split_seed, None);
+        assert!(!dataset.proof.test_repeated);
+        assert_eq!(dataset.proof.materialized_cache, None);
+        assert!(
+            dataset
+                .proof
+                .source_splits
+                .iter()
+                .any(|source| source.role == "train"
+                    && source.dataset == "deterministic"
+                    && source.config == "default"
+                    && source.split == "train"
+                    && source.count == 3)
+        );
         assert_ne!(first.id, CaseId::from_index(0));
     }
 
@@ -4260,6 +4431,12 @@ Provide the new parameter value within ``` blocks."
                 .iter()
                 .any(|line| line.starts_with("optimizer_wall_time_ms="))
         );
+        assert!(lines.iter().any(|line| line == "aime_train_count=3"));
+        assert!(lines.iter().any(|line| line == "aime_validation_count=1"));
+        assert!(lines.iter().any(|line| line == "aime_test_count=2"));
+        assert!(lines.iter().any(|line| line == "aime_split_seed=none"));
+        assert!(lines.iter().any(|line| line == "aime_test_repeated=false"));
+        assert!(lines.iter().any(|line| line == "aime_cache_hash=none"));
         assert!(
             lines
                 .iter()
@@ -4354,6 +4531,15 @@ Provide the new parameter value within ``` blocks."
         assert_eq!(
             report["comparison_reflection_prompt"],
             config.profile.reflection_prompt_claim()
+        );
+        assert_eq!(report["dataset"]["train_count"], 3);
+        assert_eq!(report["dataset"]["validation_count"], 1);
+        assert_eq!(report["dataset"]["test_count"], 2);
+        assert_eq!(report["dataset"]["split_seed"], serde_json::Value::Null);
+        assert_eq!(report["dataset"]["test_repeated"], false);
+        assert_eq!(
+            report["dataset"]["source_splits"][0]["dataset"],
+            "deterministic"
         );
         assert!(report["run"]["optimizer_wall_time_ms"].is_number());
         assert_eq!(report["budget"]["search_metric_calls_overshoot"], 0);
@@ -4614,6 +4800,28 @@ Provide the new parameter value within ``` blocks."
         assert_eq!(dataset.test[0].id, test_id);
         assert_eq!(dataset.test[0].input.problem, "test");
         assert_eq!(dataset.report_metadata[&test_id].split, SplitRole::Test);
+        assert_eq!(dataset.proof.train_count, 1);
+        assert_eq!(dataset.proof.validation_count, 1);
+        assert_eq!(dataset.proof.test_count, 1);
+        assert_eq!(dataset.proof.split_seed, Some(0));
+        assert!(!dataset.proof.test_repeated);
+        let cache_proof = dataset
+            .proof
+            .materialized_cache
+            .as_ref()
+            .expect("loaded cache records materialized cache proof");
+        assert_eq!(cache_proof.path, path.display().to_string());
+        assert_eq!(cache_proof.sha256.len(), 64);
+        assert!(cache_proof.sha256.chars().all(|ch| ch.is_ascii_hexdigit()));
+        assert!(cache_proof.bytes > 0);
+        assert_eq!(dataset.proof.source_splits.len(), 3);
+        assert!(dataset.proof.source_splits.iter().any(|source| {
+            source.role == "test"
+                && source.dataset == "MathArena/aime_2025"
+                && source.config == "default"
+                && source.split == "train"
+                && source.count == 1
+        }));
         std::fs::remove_file(path).unwrap();
     }
 }

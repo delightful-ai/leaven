@@ -35,7 +35,9 @@ metric-call cap/spent, final-report metric-call cost, total budget usage,
 evaluation-cache counts, solver/reflection runtime fingerprints, LM
 calls/tokens/cost by role, LM cache hit/miss/bypass counts by role, typed
 provider-failure counters, emitted events, case IDs/source IDs for reported
-cases, and the selected prompt.
+cases, selected prompt, and AIME dataset proof fields: train/validation/test
+counts, source dataset/config/split counts, split seed, test-repeat policy, and
+the materialized cache SHA-256 when `LEAVEN_AIME_CACHE` is used.
 GEPA search minibatches remain optimization evidence only; the public
 baseline/optimized train scores come from explicit full-train final report
 evaluations so report aggregates are not confused with sampled feedback.
