@@ -680,18 +680,30 @@ where
     let optimization_budget = engine.budget().snapshot();
     let stop_reason = stop_reason_from_events(&engine.view())?;
     let best = run.best;
+    if has_persistence(&prepared_store) {
+        engine.checkpoint_optimizer_state(&builder.optimizer)?;
+    }
     let final_inputs = final_evaluation_inputs(seed, best, &builder);
     if final_inputs.has_any_split() {
         engine.set_budget_limit(Budget::unlimited());
     }
 
-    let final_evaluations = run_final_evaluations(
+    let final_evaluations = match run_final_evaluations(
         &mut engine,
         case_set,
         prepared_store.store.evidence_store(),
         final_inputs,
     )
-    .await?;
+    .await
+    {
+        Ok(final_evaluations) => final_evaluations,
+        Err(source) => {
+            if has_persistence(&prepared_store) {
+                engine.checkpoint_optimizer_state(&builder.optimizer)?;
+            }
+            return Err(source.into());
+        }
+    };
     if has_persistence(&prepared_store) {
         engine.checkpoint_optimizer_state(&builder.optimizer)?;
     }

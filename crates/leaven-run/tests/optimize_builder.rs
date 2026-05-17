@@ -22,10 +22,10 @@ use leaven_eval::Case;
 use leaven_evidence::CaseAssessmentEvidence;
 use leaven_kernel::{Budget, CandidateId, CaseId, ContentId, EvaluatorId, Fingerprint, RunId};
 use leaven_run::{
-    EvaluationCacheBackend, EvaluationCacheBypassReason, OptimizationStopReason, OptimizeBuilder,
-    OptimizeError, OptimizeStore, ResumeCompatibilityError, RunCase, RunEventSummary,
-    RunNotResumableReason, RunOutput, RunProblem, RunResumability, RunStorage, Score, ScoreContext,
-    ScoreError, default_local_run_dir, optimize,
+    CachePolicy, EvaluationCacheBackend, EvaluationCacheBypassReason, OptimizationStopReason,
+    OptimizeBuilder, OptimizeError, OptimizeStore, ResumeCompatibilityError, RunCase,
+    RunEventSummary, RunNotResumableReason, RunOutput, RunProblem, RunResumability, RunStorage,
+    Score, ScoreContext, ScoreError, default_local_run_dir, optimize,
 };
 use leaven_store::{EvidenceStore, StoreError};
 use leaven_store_inline::InlineEvidenceStore;
@@ -994,6 +994,62 @@ fn run_builder_surfaces_final_evaluation_failures() {
         error.to_string().contains("final evaluation failed"),
         "{error:?} / {error}"
     );
+}
+
+#[test]
+fn run_builder_checkpoints_search_state_before_final_evaluation_failures() {
+    let run_dir = temp_run_dir("resume-after-final-eval-failure");
+    let first_scores = Arc::new(AtomicUsize::new(0));
+    let first_error = block_on(
+        optimize(TextArtifact(40))
+            .train_inputs(vec![TextCase(2)])
+            .runner(|artifact, case| async move { text_runner(&artifact, &case) })
+            .score({
+                let first_scores = Arc::clone(&first_scores);
+                move |ctx| {
+                    let first_scores = Arc::clone(&first_scores);
+                    async move {
+                        let calls = first_scores.fetch_add(1, Ordering::SeqCst);
+                        if calls == 0 {
+                            text_score(ctx).await
+                        } else {
+                            Err(ScoreError::new("final judge offline"))
+                        }
+                    }
+                }
+            })
+            .using(ResumeOnce::new(Arc::new(AtomicUsize::new(0))))
+            .budget(Budget::metric_calls(1))
+            .evaluation_cache_policy(CachePolicy::Never)
+            .run_dir(&run_dir)
+            .test_runtime_fingerprints()
+            .run(),
+    )
+    .unwrap_err();
+
+    assert!(
+        first_error.to_string().contains("final evaluation failed"),
+        "{first_error:?} / {first_error}"
+    );
+
+    let restored_steps = Arc::new(AtomicUsize::new(0));
+    let restored = block_on(
+        optimize(TextArtifact(999))
+            .train_inputs(vec![TextCase(2)])
+            .runner(|artifact, case| async move { text_runner(&artifact, &case) })
+            .score(text_score)
+            .using(ResumeOnce::new(Arc::clone(&restored_steps)))
+            .budget(Budget::metric_calls(1))
+            .evaluation_cache_policy(CachePolicy::Never)
+            .run_dir(&run_dir)
+            .test_runtime_fingerprints()
+            .run(),
+    )
+    .unwrap();
+
+    assert_eq!(restored_steps.load(Ordering::SeqCst), 0);
+    assert!(restored.summary().optimization_budget.spent.metric_calls >= 1);
+    cleanup_path(&run_dir);
 }
 
 #[test]
