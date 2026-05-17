@@ -69,9 +69,11 @@ just test must finish in <30s
 ```
 
 `just test` enforces this directly. The SLA covers the nextest workspace suite
-and workspace doctests together. If the suite crosses the line, do not add a
-second slow lane; reduce fixture cost, property-test case count, setup work, or
-assertion altitude until the default suite is back under the SLA.
+and workspace doctests for packages that contain Rust doctest fences. Empty
+doctest harnesses are skipped because they prove no examples while adding
+process-startup cost. If the suite crosses the line, do not add a second slow
+lane; reduce fixture cost, property-test case count, setup work, doctest harness
+fan-out, or assertion altitude until the default suite is back under the SLA.
 
 Coverage is a ratchet. Raise `coverage_line_floor` and
 `coverage_branch_floor` in the root `Justfile` when coverage improves; do not

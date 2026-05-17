@@ -12,6 +12,7 @@ lint:
 clippy: lint
 
 test:
+    python3 scripts/test_test_suite_sla.py
     python3 scripts/test-suite-sla.py --sla-seconds 30
 
 test-one +args:
