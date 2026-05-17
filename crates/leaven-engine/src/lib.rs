@@ -42,7 +42,8 @@ pub use persistence::{
     StageStateSnapshot, StoreRunPersistence, WorkspaceJournalSnapshot,
 };
 pub use reports::{
-    ApplyOneReport, ApplyOutcome, ApplyReport, EvaluationReport, ProposalBatchReport,
+    ApplyOneReport, ApplyOutcome, ApplyReport, CasewiseEvaluationReport, EvaluationReport,
+    ProposalBatchReport,
 };
 pub use sqlite_cache::{EvaluationCacheStoreError, SqliteEvaluationCache};
 pub use stage::{

@@ -633,9 +633,9 @@ fn gepa_default_sampler_uses_train_minibatches_without_validation_or_test_cases(
         engine.run(&mut gepa, &case_set, &store).await.unwrap();
 
         let seen_sets = seen_sets.lock().expect("seen sets lock").clone();
-        assert_eq!(seen_sets.len(), 6);
+        assert_eq!(seen_sets.len(), 2);
         for case_ids in seen_sets {
-            assert_eq!(case_ids.len(), 1);
+            assert_eq!(case_ids.len(), 3);
             assert!(
                 case_ids
                     .iter()
@@ -965,8 +965,11 @@ fn gepa_batch_sampler_builder_uses_custom_minibatches() {
         engine.run(&mut gepa, &case_set, &store).await.unwrap();
 
         let seen_sets = seen_sets.lock().expect("seen sets lock").clone();
-        assert_eq!(seen_sets.len(), 4);
-        assert!(seen_sets.iter().all(|case_ids| case_ids.len() == 1));
+        let expected_minibatch = vec![leaven_kernel::CaseId::new(3), leaven_kernel::CaseId::new(0)];
+        assert_eq!(
+            seen_sets,
+            vec![expected_minibatch.clone(), expected_minibatch]
+        );
     });
 }
 
@@ -1110,10 +1113,10 @@ fn reference_state_seed_validation_initializes_candidate_zero_before_train() {
         assert_eq!(state.total_metric_calls(), 2);
         assert_eq!(
             seen.lock().expect("seen lock").as_slice(),
-            &[
-                vec![leaven_kernel::CaseId::new(1)],
-                vec![leaven_kernel::CaseId::new(2)]
-            ]
+            &[vec![
+                leaven_kernel::CaseId::new(1),
+                leaven_kernel::CaseId::new(2)
+            ]]
         );
     });
 }
@@ -1161,8 +1164,8 @@ fn gepa_reuses_evaluation_cache_per_candidate_case_across_different_requests() {
         );
         assert_eq!(
             seen.lock().expect("seen lock").as_slice(),
-            &[vec![case_zero], vec![case_one]],
-            "GEPA should evaluate/cache one candidate-case row at a time"
+            &[vec![case_zero, case_one]],
+            "GEPA should batch cache misses while backfilling per-case cache entries"
         );
     });
 }

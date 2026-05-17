@@ -52,3 +52,11 @@ pub struct EvaluationReport {
     pub cost: Cost,
     pub cache: CacheStatus,
 }
+
+#[derive(Clone, Debug)]
+pub struct CasewiseEvaluationReport {
+    pub assessment_ids: Vec<AssessmentId>,
+    pub cost: Cost,
+    pub cache_hits: usize,
+    pub cache_misses: usize,
+}
