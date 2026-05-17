@@ -139,6 +139,10 @@ impl<P: OptimizationProblem> Engine<P> {
     {
         for _ in 0..MAX_ITERATIONS {
             if let Some(reason) = self.stop_reason() {
+                if let Err(error) = optimizer.on_engine_stop(reason) {
+                    self.record_optimizer_error(&error);
+                    return Err(error);
+                }
                 return self.finish_clean_stop(optimizer, reason);
             }
 

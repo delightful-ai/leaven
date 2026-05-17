@@ -4,7 +4,7 @@ use leaven_core::OptimizationProblem;
 use leaven_kernel::{BlobRef, CandidateId, Fingerprint};
 use serde::{Serialize, de::DeserializeOwned};
 
-use crate::{OptimizerStateWrite, RunCheckpoint, RunGraphView, RunPersistenceError};
+use crate::{OptimizerStateWrite, RunCheckpoint, RunGraphView, RunPersistenceError, StopReason};
 
 #[allow(async_fn_in_trait)]
 pub trait Optimizer<P: OptimizationProblem>: Send {
@@ -21,6 +21,14 @@ pub trait Optimizer<P: OptimizationProblem>: Send {
     ) -> Result<StepStatus, OptimizerError>;
 
     fn best_candidate(&self, graph: RunGraphView<'_, P>) -> Option<CandidateId>;
+
+    /// Observe a clean engine-owned stop before another optimizer step runs.
+    ///
+    /// This covers stops decided by the engine loop itself, such as a restored
+    /// run whose budget is already exhausted before `step()` is called.
+    fn on_engine_stop(&mut self, _reason: StopReason) -> Result<(), OptimizerError> {
+        Ok(())
+    }
 
     /// Captures serialized optimizer continuation state for a clean run
     /// checkpoint.

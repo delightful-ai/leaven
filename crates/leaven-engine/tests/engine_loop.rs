@@ -171,6 +171,33 @@ fn metric_call_budget_stopper_stops_before_next_step_without_budget_error() {
 }
 
 #[test]
+fn engine_notifies_optimizer_when_budget_stop_prevents_next_step() {
+    block_on(async {
+        let stopped = Arc::new(Mutex::new(Vec::new()));
+        let mut engine = Engine::<TestProblem>::builder()
+            .budget(Budget::metric_calls(1))
+            .metric_call_budget_stopper(1)
+            .build();
+        let seed = engine
+            .insert_seed(TextArtifact("seed".to_owned()), 0)
+            .unwrap();
+        let cases = CaseSet::new(vec!["case"]);
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let mut optimizer = StopNotifiedAfterCharge {
+            best: Some(seed),
+            steps: 0,
+            stopped: Arc::clone(&stopped),
+        };
+
+        let result = engine.run(&mut optimizer, &cases, &store).await.unwrap();
+
+        assert_eq!(result.best, Some(seed));
+        assert_eq!(optimizer.steps, 1);
+        assert_eq!(*stopped.lock().unwrap(), vec![StopReason::BudgetReached]);
+    });
+}
+
+#[test]
 fn metric_budget_hard_guard_stops_as_budget_not_optimizer_error() {
     block_on(async {
         let mut engine = Engine::<TestProblem>::builder()
@@ -1429,6 +1456,12 @@ struct ChargeMetricThenContinue {
     steps: usize,
 }
 
+struct StopNotifiedAfterCharge {
+    best: Option<CandidateId>,
+    steps: usize,
+    stopped: Arc<Mutex<Vec<StopReason>>>,
+}
+
 struct StopWithReason {
     best: Option<CandidateId>,
     reason: StopReason,
@@ -1768,6 +1801,28 @@ impl Optimizer<TestProblem> for ChargeMetricThenContinue {
 
     fn best_candidate(&self, _graph: RunGraphView<'_, TestProblem>) -> Option<CandidateId> {
         self.best
+    }
+}
+
+impl Optimizer<TestProblem> for StopNotifiedAfterCharge {
+    async fn step(
+        &mut self,
+        ctx: &mut RunContext<'_, TestProblem>,
+    ) -> Result<StepStatus, OptimizerError> {
+        assert!(ctx.iteration().is_some());
+        ctx.charge(StageId::custom("metric"), Cost::metric_calls(1))
+            .map_err(|error| OptimizerError::with_source("metric charge failed", error))?;
+        self.steps += 1;
+        Ok(StepStatus::Continue)
+    }
+
+    fn best_candidate(&self, _graph: RunGraphView<'_, TestProblem>) -> Option<CandidateId> {
+        self.best
+    }
+
+    fn on_engine_stop(&mut self, reason: StopReason) -> Result<(), OptimizerError> {
+        self.stopped.lock().unwrap().push(reason);
+        Ok(())
     }
 }
 

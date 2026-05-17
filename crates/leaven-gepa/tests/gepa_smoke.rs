@@ -14,7 +14,7 @@ use leaven_engine::{
     EvaluationCache, EvaluationContext, EvaluationError, Evaluator, GraphSnapshotRef, Optimizer,
     OptimizerStateReader, PrivateStatePolicy, ProposalContext, ProposalError, Proposer,
     RestoreContext, RunCheckpoint, RunContext, RunGraph, RunPersistenceError, StateFormat,
-    TrustPolicy,
+    StopReason, TrustPolicy,
 };
 use leaven_evidence::{
     CaseAssessmentEvidence, CaseOutcome, CasewiseEvidence, OutputRecord, ScalarEvidence,
@@ -327,6 +327,31 @@ fn gepa_restore_checkpoint_state_uses_engine_resume_contract() {
     .unwrap_err();
 
     assert!(format!("{error:?}").contains("does not contain optimizer private state"));
+}
+
+#[test]
+fn gepa_engine_stop_emits_detailed_report_for_budget_resume() {
+    let captured = Arc::new(Mutex::new(None));
+    let captured_sink = Arc::clone(&captured);
+    let mut gepa =
+        smoke_gepa(FixedSurfaceEdit::new("unused".to_owned())).on_report(move |report| {
+            *captured_sink.lock().unwrap() = Some(report.clone());
+        });
+
+    Optimizer::<SmokeProblem>::on_engine_stop(&mut gepa, StopReason::BudgetReached).unwrap();
+
+    let report = captured
+        .lock()
+        .unwrap()
+        .clone()
+        .expect("GEPA report is emitted on engine-owned stop");
+    assert_eq!(report.total_metric_calls, 0);
+    assert!(report.events.iter().any(|event| {
+        matches!(
+            event,
+            leaven_gepa::GepaEventSummary::OptimizationEnded { .. }
+        )
+    }));
 }
 
 #[test]
