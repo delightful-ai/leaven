@@ -554,7 +554,7 @@ fn run_builder_run_dir_resume_preserves_existing_budget_and_graph_state() {
     assert_eq!(restored_steps.load(Ordering::SeqCst), 0);
     assert_eq!(
         restored.summary().optimization_budget.spent.metric_calls,
-        first.summary().budget.spent.metric_calls
+        first.summary().optimization_budget.spent.metric_calls
     );
     assert!(restored.events.len() > first.events.len());
     cleanup_path(&run_dir);

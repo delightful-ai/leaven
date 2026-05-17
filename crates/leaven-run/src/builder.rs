@@ -35,7 +35,7 @@ use crate::{
     },
     run_store::{
         PreparedStore, StoreConfig, StoreSource, StoreStart, has_persistence, latest_checkpoint,
-        prepare_store,
+        mark_latest_checkpoint, prepare_store,
     },
 };
 
@@ -680,9 +680,12 @@ where
     let optimization_budget = engine.budget().snapshot();
     let stop_reason = stop_reason_from_events(&engine.view())?;
     let best = run.best;
-    if has_persistence(&prepared_store) {
+    let search_checkpoint = if has_persistence(&prepared_store) {
         engine.checkpoint_optimizer_state(&builder.optimizer)?;
-    }
+        latest_checkpoint(&prepared_store)?
+    } else {
+        None
+    };
     let final_inputs = final_evaluation_inputs(seed, best, &builder);
     if final_inputs.has_any_split() {
         engine.set_budget_limit(Budget::unlimited());
@@ -697,8 +700,12 @@ where
     .await
     {
         Ok(final_evaluations) => final_evaluations,
-        Err(source) => return Err(source.into()),
+        Err(source) => {
+            mark_latest_checkpoint(&prepared_store, search_checkpoint)?;
+            return Err(source.into());
+        }
     };
+    mark_latest_checkpoint(&prepared_store, search_checkpoint)?;
     if let Some(evaluation_cache) = prepared_store.evaluation_cache.as_ref() {
         evaluation_cache
             .replace_from_snapshot(&engine.evaluation_cache_snapshot())

@@ -159,3 +159,26 @@ where
             source,
         })
 }
+
+pub fn mark_latest_checkpoint<P>(
+    store: &PreparedStore<P>,
+    checkpoint: Option<CheckpointId>,
+) -> Result<(), OptimizeError>
+where
+    P: OptimizationProblem,
+{
+    let Some(checkpoint) = checkpoint else {
+        return Ok(());
+    };
+    let Some(persistence) = &store.local_persistence else {
+        return Ok(());
+    };
+    persistence
+        .store()
+        .checkpoint_store()
+        .mark_latest(checkpoint)
+        .map_err(|source| OptimizeError::Store {
+            operation: "restore latest checkpoint pointer",
+            source,
+        })
+}

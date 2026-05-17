@@ -141,9 +141,11 @@ fn file_checkpoint_round_trips_latest_pointer() {
     assert_eq!(store.get(first).unwrap().0, Bytes::from_static(b"first"));
     assert_eq!(store.get(second).unwrap().0, Bytes::from_static(b"second"));
     assert_eq!(store.latest().unwrap(), Some(second));
+    store.mark_latest(first).unwrap();
+    assert_eq!(store.latest().unwrap(), Some(first));
 
     let reopened = FileCheckpointStore::open(root).unwrap();
-    assert_eq!(reopened.latest().unwrap(), Some(second));
+    assert_eq!(reopened.latest().unwrap(), Some(first));
 }
 
 #[test]

@@ -78,6 +78,17 @@ impl FileCheckpointStore {
             .map_err(|err| StoreError::Serialization(err.to_string()))?;
         Ok(Some(CheckpointId::from_uuid(uuid)))
     }
+
+    /// Marks an existing checkpoint id as the latest resumable checkpoint.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError`] when the pointer file cannot be written.
+    pub fn mark_latest(&self, id: CheckpointId) -> Result<(), StoreError> {
+        let latest = self.root.join("LATEST");
+        std::fs::write(&latest, id.to_string())
+            .map_err(|err| operation_failed("latest", &latest, &err))
+    }
 }
 
 impl<T> FileJsonCheckpointStore<T> {
@@ -156,9 +167,7 @@ impl CheckpointStore for FileCheckpointStore {
         let id = CheckpointId::new();
         let path = checkpoint_path(&self.root, id);
         std::fs::write(&path, checkpoint.0).map_err(|err| operation_failed("put", &path, &err))?;
-        let latest = self.root.join("LATEST");
-        std::fs::write(&latest, id.to_string())
-            .map_err(|err| operation_failed("latest", &latest, &err))?;
+        self.mark_latest(id)?;
         Ok(id)
     }
 
