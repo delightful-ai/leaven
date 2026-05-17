@@ -8,13 +8,13 @@ use std::{
 
 use leaven::core::{AssessmentTarget, CacheIdentity, InfoRef};
 use leaven::engine::{
-    CacheBypassReason, CacheStatus, Callback, RunContext, RunEvent, RunGraphView,
+    CacheBypassReason, CacheStatus, Callback, ErrorPolicy, RunContext, RunEvent, RunGraphView,
 };
 use leaven::eval::{Case, SplitRole};
 use leaven::gepa::{Gepa, ReflectionError, ReflectiveDatasetBuilder, ReflectiveExample};
 use leaven::kernel::Metered;
 use leaven::kernel::{
-    AssessmentId, CandidateId, CaseId, Cost, FingerprintBuilder, MetadataValue, RunId,
+    AssessmentId, CandidateId, CaseId, Cost, ErrorKind, FingerprintBuilder, MetadataValue, RunId,
 };
 use leaven::plumbing::{ContentId, Fingerprint, FiniteF64, MetadataBag};
 use leaven::prelude::{
@@ -1625,6 +1625,11 @@ impl AimeProgressCallback {
                 budget.spent.llm_calls
             )),
             RunEvent::Error {
+                stage: _,
+                error,
+                policy: ErrorPolicy::StoppedRun,
+            } if error.kind == ErrorKind::Budget => None,
+            RunEvent::Error {
                 stage,
                 error,
                 policy,
@@ -2888,6 +2893,30 @@ Provide the new instructions within ``` blocks.";
             lines
                 .iter()
                 .any(|line| line == "optimization_metric_calls=8")
+        );
+    }
+
+    #[test]
+    fn deterministic_metric_budget_refusal_finishes_with_budget_stop() {
+        let mut config = AimeRunConfig::deterministic_smoke();
+        config.budget = Budget::metric_calls(7);
+        config.max_iterations = 2;
+        let run = block_on(run_aime(config, deterministic_dataset()));
+        let result = &run.optimized;
+
+        assert_eq!(
+            result.stop,
+            leaven::run::OptimizationStopReason::BudgetReached
+        );
+        assert_eq!(result.summary.optimization_cost.metric_calls, 7);
+        assert!(
+            result
+                .events
+                .contains(&RunEventSummary::OptimizationStopping)
+        );
+        assert!(
+            !result.events.contains(&RunEventSummary::Error),
+            "budget refusal at a GEPA step boundary should become a clean stop"
         );
     }
 

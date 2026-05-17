@@ -12,7 +12,7 @@ use leaven_eval::{
 };
 use leaven_evidence::{CaseAssessmentEvidence, OutputRecord};
 use leaven_kernel::{
-    AssessmentId, BudgetSnapshot, CandidateId, Cost, EvaluationRequestId, EvaluatorId,
+    AssessmentId, BudgetSnapshot, CandidateId, Cost, ErrorKind, EvaluationRequestId, EvaluatorId,
 };
 use leaven_store::EvidenceStore;
 
@@ -71,6 +71,7 @@ pub struct ReportInputs<'a, I, T> {
     pub storage: RunStorage,
     pub reports: RunReportPaths,
     pub compatibility: Option<crate::result::RunCompatibilitySummary>,
+    pub stop_reason: leaven_engine::StopReason,
 }
 
 type SummaryBuild<A> = (
@@ -144,7 +145,11 @@ where
             splits_reported: split_reports_for(&view, store, inputs.splits)?,
         },
     };
-    let events = view.events().map(event_summary).collect();
+    let events = view
+        .events()
+        .filter(|event| should_include_event_summary(event, inputs.stop_reason))
+        .map(event_summary)
+        .collect();
     Ok((best, summary, events))
 }
 
@@ -431,6 +436,23 @@ fn event_summary(event: &leaven_engine::RunEvent) -> RunEventSummary {
         leaven_engine::RunEvent::OptimizationEnded { .. } => RunEventSummary::OptimizationEnded,
         leaven_engine::RunEvent::Error { .. } => RunEventSummary::Error,
     }
+}
+
+fn should_include_event_summary(
+    event: &leaven_engine::RunEvent,
+    stop_reason: leaven_engine::StopReason,
+) -> bool {
+    !matches!(
+        (stop_reason, event),
+        (
+            leaven_engine::StopReason::BudgetReached,
+            leaven_engine::RunEvent::Error {
+                error,
+                policy: leaven_engine::ErrorPolicy::StoppedRun,
+                ..
+            }
+        ) if error.kind == ErrorKind::Budget
+    )
 }
 
 fn run_cache_summary<'a>(

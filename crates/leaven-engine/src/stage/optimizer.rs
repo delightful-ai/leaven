@@ -266,6 +266,7 @@ impl<'a, P: OptimizationProblem> RestoreContext<'a, P> {
 pub enum StepStatus {
     Continue,
     Done,
+    Stopped(crate::StopReason),
 }
 
 #[derive(Debug, thiserror::Error)]

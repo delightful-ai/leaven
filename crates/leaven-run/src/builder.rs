@@ -717,6 +717,7 @@ where
             storage,
             reports,
             compatibility: compatibility_summary,
+            stop_reason,
         },
     )?;
     write_summary_report(&summary)?;

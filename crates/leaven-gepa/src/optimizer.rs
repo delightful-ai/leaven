@@ -443,7 +443,12 @@ where
         }
 
         let seed = Self::seed_candidate(ctx)?;
-        self.run_iteration(ctx, seed).await?;
+        if let Err(error) = self.run_iteration(ctx, seed).await {
+            if optimizer_error_contains_budget_exceeded(&error) {
+                return Ok(self.finish_for_budget_stop());
+            }
+            return Err(error);
+        }
         self.completed_iterations += 1;
 
         if self.completed_iterations >= self.max_iterations {
@@ -655,6 +660,23 @@ where
         }
         Ok(())
     }
+}
+
+fn optimizer_error_contains_budget_exceeded(error: &OptimizerError) -> bool {
+    let mut current: Option<&(dyn std::error::Error + 'static)> = Some(error);
+    while let Some(source) = current {
+        if source.is::<leaven_kernel::BudgetExceeded>() {
+            return true;
+        }
+        if matches!(
+            source.downcast_ref::<leaven_engine::RunContextError>(),
+            Some(leaven_engine::RunContextError::Budget(_))
+        ) {
+            return true;
+        }
+        current = source.source();
+    }
+    false
 }
 
 fn ensure_checkpoint_candidate<P>(

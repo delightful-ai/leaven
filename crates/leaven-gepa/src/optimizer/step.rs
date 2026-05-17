@@ -27,6 +27,24 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
         Some(leaven_engine::StepStatus::Done)
     }
 
+    pub(super) fn finish_for_budget_stop(&mut self) -> leaven_engine::StepStatus
+    where
+        Pop: GepaPopulation,
+    {
+        self.best = self
+            .validation_best
+            .as_ref()
+            .map(|best| best.candidate)
+            .or_else(|| self.reference_state.best_candidate())
+            .or_else(|| self.population.best());
+        let best = self
+            .best
+            .and_then(|candidate| self.reference_state.index_of(candidate));
+        self.events
+            .push(GepaEventSummary::OptimizationEnded { best });
+        leaven_engine::StepStatus::Stopped(leaven_engine::StopReason::BudgetReached)
+    }
+
     pub(super) fn seed_candidate<P>(ctx: &RunContext<'_, P>) -> Result<CandidateId, OptimizerError>
     where
         P: OptimizationProblem,

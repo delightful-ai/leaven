@@ -168,6 +168,9 @@ impl<P: OptimizationProblem> Engine<P> {
                 Ok(StepStatus::Done) => {
                     return self.finish_clean_stop(optimizer, StopReason::OptimizerDone);
                 }
+                Ok(StepStatus::Stopped(reason)) => {
+                    return self.finish_clean_stop(optimizer, reason);
+                }
                 Err(error) => {
                     self.record_optimizer_error(&error);
                     return Err(error);

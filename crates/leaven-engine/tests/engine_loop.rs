@@ -218,6 +218,40 @@ fn metric_budget_hard_guard_stops_as_budget_not_optimizer_error() {
 }
 
 #[test]
+fn optimizer_can_request_clean_budget_stop_mid_step() {
+    block_on(async {
+        let mut engine = Engine::<TestProblem>::builder()
+            .budget(Budget::metric_calls(10))
+            .build();
+        let seed = engine
+            .insert_seed(TextArtifact("seed".to_owned()), 0)
+            .unwrap();
+        let cases = CaseSet::new(vec!["case"]);
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let mut optimizer = StopWithReason {
+            best: Some(seed),
+            reason: StopReason::BudgetReached,
+        };
+
+        let result = engine.run(&mut optimizer, &cases, &store).await.unwrap();
+
+        assert_eq!(result.best, Some(seed));
+        assert!(engine.view().events().any(|event| matches!(
+            event,
+            RunEvent::OptimizationStopping {
+                reason: StopReason::BudgetReached,
+            }
+        )));
+        assert!(
+            !engine
+                .view()
+                .events()
+                .any(|event| matches!(event, RunEvent::Error { .. }))
+        );
+    });
+}
+
+#[test]
 fn engine_trust_policy_reaches_optimizer_context() {
     block_on(async {
         let secret = PartitionId::from("secret");
@@ -1395,6 +1429,11 @@ struct ChargeMetricThenContinue {
     steps: usize,
 }
 
+struct StopWithReason {
+    best: Option<CandidateId>,
+    reason: StopReason,
+}
+
 struct StopImmediately;
 
 struct CountingCallback {
@@ -1725,6 +1764,19 @@ impl Optimizer<TestProblem> for ChargeMetricThenContinue {
             .map_err(|error| OptimizerError::with_source("metric charge failed", error))?;
         self.steps += 1;
         Ok(StepStatus::Continue)
+    }
+
+    fn best_candidate(&self, _graph: RunGraphView<'_, TestProblem>) -> Option<CandidateId> {
+        self.best
+    }
+}
+
+impl Optimizer<TestProblem> for StopWithReason {
+    async fn step(
+        &mut self,
+        _ctx: &mut RunContext<'_, TestProblem>,
+    ) -> Result<StepStatus, OptimizerError> {
+        Ok(StepStatus::Stopped(self.reason))
     }
 
     fn best_candidate(&self, _graph: RunGraphView<'_, TestProblem>) -> Option<CandidateId> {
