@@ -2164,18 +2164,68 @@ fn render_dspy_aime_chain_of_thought_request(
     instructions: &str,
     input: &str,
 ) -> AimeDspyChatRequest {
-    let objective = instructions
+    let dedented_instructions = dedent_dspy_instructions(instructions);
+    let objective = dedented_instructions
         .lines()
         .map(|line| format!("        {line}"))
         .collect::<Vec<_>>()
         .join("\n");
+    let objective = if objective.is_empty() {
+        String::new()
+    } else {
+        format!("\n{objective}")
+    };
     let system = format!(
-        "Your input fields are:\n1. `input` (str): The math problem to solve.\nYour output fields are:\n1. `reasoning` (str): \n2. `answer` (str): The final numerical answer.\nAll interactions will be structured in the following way, with the appropriate values filled in.\n\n[[ ## input ## ]]\n{{input}}\n\n[[ ## reasoning ## ]]\n{{reasoning}}\n\n[[ ## answer ## ]]\n{{answer}}\n\n[[ ## completed ## ]]\nIn adhering to this structure, your objective is: \n{objective}"
+        "Your input fields are:\n1. `input` (str): The math problem to solve.\nYour output fields are:\n1. `reasoning` (str): \n2. `answer` (str): The final numerical answer.\nAll interactions will be structured in the following way, with the appropriate values filled in.\n\n[[ ## input ## ]]\n{{input}}\n\n[[ ## reasoning ## ]]\n{{reasoning}}\n\n[[ ## answer ## ]]\n{{answer}}\n\n[[ ## completed ## ]]\nIn adhering to this structure, your objective is: {objective}"
     );
     let user = format!(
         "[[ ## input ## ]]\n{input}\n\nRespond with the corresponding output fields, starting with the field `[[ ## reasoning ## ]]`, then `[[ ## answer ## ]]`, and then ending with the marker for `[[ ## completed ## ]]`."
     );
     AimeDspyChatRequest { system, user }
+}
+
+fn dedent_dspy_instructions(instructions: &str) -> String {
+    let common_indent = instructions
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .filter_map(line_indent_width)
+        .min()
+        .unwrap_or(0);
+    if common_indent == 0 {
+        return instructions.to_owned();
+    }
+
+    instructions
+        .lines()
+        .map(|line| strip_indent_width(line, common_indent))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn line_indent_width(line: &str) -> Option<usize> {
+    let mut width = 0;
+    for ch in line.chars() {
+        match ch {
+            ' ' => width += 1,
+            '\t' => width += 1,
+            _ => return Some(width),
+        }
+    }
+    None
+}
+
+fn strip_indent_width(line: &str, width: usize) -> &str {
+    let mut byte_index = 0;
+    let mut stripped = 0;
+    for (index, ch) in line.char_indices() {
+        if stripped >= width || (ch != ' ' && ch != '\t') {
+            byte_index = index;
+            break;
+        }
+        stripped += 1;
+        byte_index = index + ch.len_utf8();
+    }
+    &line[byte_index..]
 }
 
 fn parse_dspy_aime_chain_of_thought_response(raw: &str) -> Result<AimeRunOutput, String> {
@@ -3038,6 +3088,18 @@ Provide the new parameter value within ``` blocks.";
             request.user,
             "[[ ## input ## ]]\nWhat is 19 + 23?\n\nRespond with the corresponding output fields, starting with the field `[[ ## reasoning ## ]]`, then `[[ ## answer ## ]]`, and then ending with the marker for `[[ ## completed ## ]]`."
         );
+    }
+
+    #[test]
+    fn aime_solver_request_dedents_multiline_instructions_like_dspy_chat_adapter() {
+        let request = render_dspy_aime_chain_of_thought_request(
+            "    First line.\n      Preserve relative indent.",
+            "What is 19 + 23?",
+        );
+
+        assert!(request.system.ends_with(
+            "In adhering to this structure, your objective is: \n        First line.\n          Preserve relative indent."
+        ));
     }
 
     #[test]
