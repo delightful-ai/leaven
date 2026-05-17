@@ -2598,29 +2598,8 @@ async fn score_answer(
         .case
         .target()
         .ok_or_else(|| ScoreError::new("AIME scorer requires a target answer"))?;
-    let parsed = ctx.output.output.parse::<i64>();
-    let score = match parsed {
-        Ok(answer) if answer == target.answer.integer => {
-            Score::new(1.0, format!("correct.{}", solution_feedback(target)))
-        }
-        Ok(answer) => Score::new(
-            0.0,
-            format!(
-                "incorrect; got {answer}, expected {}.{}",
-                target.answer.integer,
-                solution_feedback(target)
-            ),
-        ),
-        Err(_) => Score::new(
-            0.0,
-            format!(
-                "final answer must parse as an integer; expected {}.{}",
-                target.answer.integer,
-                solution_feedback(target)
-            ),
-        ),
-    };
-    Ok(score)
+    let (score, feedback) = aime_score_feedback(target, &ctx.output.output);
+    Ok(Score::new(score, feedback))
 }
 
 fn input_needs_modular(input: &AimeInput) -> bool {
@@ -2640,10 +2619,42 @@ fn deterministic_fixture_answer(input: &AimeInput) -> i64 {
 }
 
 fn solution_feedback(target: &AimeTarget) -> String {
-    format!(
-        " Here's the full step-by-step solution:\n{}\n\nThink about what takeaways you can learn from this solution to improve your future answers and approach to similar problems.",
-        target.solution
-    )
+    if target.solution.is_empty() {
+        String::new()
+    } else {
+        format!(
+            " Here's the full step-by-step solution:\n{}\n\nThink about what takeaways you can learn from this solution to improve your future answers and approach to similar problems",
+            target.solution
+        )
+    }
+}
+
+fn aime_score_feedback(target: &AimeTarget, raw_answer: &str) -> (f64, String) {
+    let correct_answer = target.answer.integer;
+    let solution_suffix = solution_feedback(target);
+    match raw_answer.parse::<i64>() {
+        Ok(answer) => {
+            let score = f64::from(answer == correct_answer);
+            let status = if score == 1.0 { "correct" } else { "incorrect" };
+            (
+                score,
+                format!(
+                    "Your answer is {status}. The correct answer is '{correct_answer}'.{solution_suffix}"
+                ),
+            )
+        }
+        Err(_) => (
+            0.0,
+            format!(
+                "The final answer must be a valid integer and nothing else. You responded with '{raw_answer}', which couldn't be parsed as a python integer. Please ensure your answer is a valid integer without any additional text or formatting. The correct answer is '{correct_answer}'.{solution_suffix}{}",
+                if target.solution.is_empty() {
+                    ""
+                } else {
+                    " and ensure your final answer is a valid integer."
+                }
+            ),
+        ),
+    }
 }
 
 fn content_id(bytes: &[u8]) -> ContentId {
@@ -3065,6 +3076,55 @@ Provide the new parameter value within ``` blocks.";
                     "Your answer is incorrect. The correct answer is '42'.".to_owned(),
                 ),
             ]
+        );
+    }
+
+    #[test]
+    fn aime_scorer_feedback_matches_upstream_gepa_aime_wording() {
+        let run = block_on(run_deterministic_aime());
+        let feedback = run
+            .optimized
+            .summary
+            .evaluation
+            .splits_reported
+            .iter()
+            .flat_map(|split| &split.candidates)
+            .flat_map(|candidate| &candidate.cases)
+            .map(|case| case.feedback.as_str())
+            .collect::<Vec<_>>();
+
+        assert!(
+            feedback.iter().any(|line| line
+                == &"Your answer is incorrect. The correct answer is '2'. Here's the full step-by-step solution:\n2^3 = 8 == 1 mod 7, so 2^10 == 2 mod 7.\n\nThink about what takeaways you can learn from this solution to improve your future answers and approach to similar problems"),
+            "incorrect feedback should match upstream GEPA AIME wording"
+        );
+        assert!(
+            feedback.iter().any(|line| line
+                == &"Your answer is correct. The correct answer is '42'. Here's the full step-by-step solution:\n19 + 23 = 42.\n\nThink about what takeaways you can learn from this solution to improve your future answers and approach to similar problems"),
+            "correct feedback should match upstream GEPA AIME wording"
+        );
+        assert!(
+            !feedback.iter().any(|line| line.contains("incorrect; got")),
+            "old Leaven scorer wording must not enter reflection side-info"
+        );
+    }
+
+    #[test]
+    fn aime_scorer_parse_failure_feedback_matches_upstream_gepa_aime_wording() {
+        let target = AimeTarget {
+            answer: AimeAnswer {
+                integer: 42,
+                raw: "42".to_owned(),
+            },
+            solution: "19 + 23 = 42.".to_owned(),
+        };
+
+        let (score, feedback) = aime_score_feedback(&target, "forty-two");
+
+        assert_eq!(score, 0.0);
+        assert_eq!(
+            feedback,
+            "The final answer must be a valid integer and nothing else. You responded with 'forty-two', which couldn't be parsed as a python integer. Please ensure your answer is a valid integer without any additional text or formatting. The correct answer is '42'. Here's the full step-by-step solution:\n19 + 23 = 42.\n\nThink about what takeaways you can learn from this solution to improve your future answers and approach to similar problems and ensure your final answer is a valid integer."
         );
     }
 
