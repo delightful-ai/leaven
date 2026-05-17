@@ -697,16 +697,8 @@ where
     .await
     {
         Ok(final_evaluations) => final_evaluations,
-        Err(source) => {
-            if has_persistence(&prepared_store) {
-                engine.checkpoint_optimizer_state(&builder.optimizer)?;
-            }
-            return Err(source.into());
-        }
+        Err(source) => return Err(source.into()),
     };
-    if has_persistence(&prepared_store) {
-        engine.checkpoint_optimizer_state(&builder.optimizer)?;
-    }
     if let Some(evaluation_cache) = prepared_store.evaluation_cache.as_ref() {
         evaluation_cache
             .replace_from_snapshot(&engine.evaluation_cache_snapshot())

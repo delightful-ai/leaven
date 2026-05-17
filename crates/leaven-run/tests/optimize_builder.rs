@@ -1048,7 +1048,7 @@ fn run_builder_checkpoints_search_state_before_final_evaluation_failures() {
     .unwrap();
 
     assert_eq!(restored_steps.load(Ordering::SeqCst), 0);
-    assert!(restored.summary().optimization_budget.spent.metric_calls >= 1);
+    assert_eq!(restored.summary().optimization_budget.spent.metric_calls, 1);
     cleanup_path(&run_dir);
 }
 
