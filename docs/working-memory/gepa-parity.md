@@ -1,7 +1,7 @@
 # GEPA Parity Working Ledger
 
 Status: active.
-Updated: 2026-05-18T09:50:08Z.
+Updated: 2026-05-18T09:53:26Z.
 
 ## Authority
 
@@ -591,6 +591,11 @@ Cache/replay attempts after the report-schema fixes:
 - failed P8 runs with `LEAVEN_AIME_RUN_DIR` now write
   `reports/p8-aime-failure.json` with safe profile/runtime/error context, so the
   next failed live attempt does not depend on terminal scrollback for diagnosis.
+- configured P8 run directories now write `reports/p8-aime-start.json` before
+  optimizer/provider work. This fixes the run-operator rough edge exposed by
+  the active release run: profile/model/cache/timeout/budget facts no longer
+  depend on an ad hoc shell wrapper if the process is interrupted before final
+  or failure reports.
 - current-binary release run is now active:
   `.leaven/release-runs/p8-aime-gepa-current-release-20260518-094902-d2d15a36d364`.
   It uses `gepa-aime`, reference GEPA profile, read-write solver/reflection LM

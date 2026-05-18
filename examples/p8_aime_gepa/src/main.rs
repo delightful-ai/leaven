@@ -98,7 +98,11 @@ Provide the new parameter value within ``` blocks.";
 async fn main() {
     let started_at = Instant::now();
     let config = AimeRunConfig::configured();
-    match Box::pin(try_run_configured_aime(config.clone())).await {
+    let result = match write_p8_aime_start_report(&config, SystemTime::now()) {
+        Ok(_) => Box::pin(try_run_configured_aime(config.clone())).await,
+        Err(error) => Err(error),
+    };
+    match result {
         Ok(result) => {
             for line in report_lines(&config, &result) {
                 println!("{line}");
@@ -950,11 +954,39 @@ fn write_p8_aime_failure_report(
     Ok(Some(path))
 }
 
+fn write_p8_aime_start_report(
+    config: &AimeRunConfig,
+    started_at: SystemTime,
+) -> Result<Option<PathBuf>, leaven::run::OptimizeError> {
+    let Some(path) = p8_aime_start_report_path(config) else {
+        return Ok(None);
+    };
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|source| {
+            leaven::run::OptimizeError::ReportStore {
+                operation: "create P8 AIME start report directory",
+                source,
+            }
+        })?;
+    }
+    let bytes = serde_json::to_vec_pretty(&p8_aime_start_report_json(config, started_at))
+        .expect("P8 AIME start report JSON serializes");
+    write_p8_report_atomic(&path, &bytes, "write P8 AIME start report json")?;
+    Ok(Some(path))
+}
+
 fn p8_aime_failure_report_path(config: &AimeRunConfig) -> Option<PathBuf> {
     config
         .run_dir
         .as_ref()
         .map(|run_dir| run_dir.join("reports").join("p8-aime-failure.json"))
+}
+
+fn p8_aime_start_report_path(config: &AimeRunConfig) -> Option<PathBuf> {
+    config
+        .run_dir
+        .as_ref()
+        .map(|run_dir| run_dir.join("reports").join("p8-aime-start.json"))
 }
 
 fn write_p8_report_atomic(
@@ -1134,6 +1166,40 @@ fn p8_aime_failure_report_json(
             config.reflection.runtime
         ),
     })
+}
+
+fn p8_aime_start_report_json(config: &AimeRunConfig, started_at: SystemTime) -> serde_json::Value {
+    serde_json::json!({
+        "schema": "leaven.p8_aime.start_report.v1",
+        "run_profile": config.profile.label(),
+        "gepa_profile": config.gepa_profile.label(),
+        "proof_classification": proof_classification_for_config(config),
+        "data_source": config.data_source.label(),
+        "run_dir": config
+            .run_dir
+            .as_ref()
+            .map(|path| path.display().to_string()),
+        "started_unix_ms": system_time_unix_millis(started_at),
+        "search_metric_call_cap": config.budget.metric_calls,
+        "solver_runtime": p8_failure_runtime_json(
+            config.solver.live,
+            &config.solver.model,
+            config.solver.cache_policy,
+            config.solver.runtime
+        ),
+        "reflection_runtime": p8_failure_runtime_json(
+            config.reflection.live,
+            &config.reflection.model,
+            config.reflection.cache_policy,
+            config.reflection.runtime
+        ),
+    })
+}
+
+fn system_time_unix_millis(time: SystemTime) -> u128 {
+    time.duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
 }
 
 fn p8_failure_runtime_json(
@@ -6923,6 +6989,47 @@ Provide the new parameter value within ``` blocks."
         assert_eq!(report["schema"], "leaven.p8_aime.failure_report.v1");
         assert_eq!(report["error"], "synthetic failure");
         assert_eq!(report["wall_time_ms"], 9);
+        let _ = std::fs::remove_dir_all(run_dir);
+    }
+
+    #[test]
+    fn p8_start_report_writes_before_long_provider_work() {
+        let run_dir = std::env::temp_dir().join(format!(
+            "leaven-p8-start-report-{}-{}",
+            std::process::id(),
+            RunId::new()
+        ));
+        let mut config = AimeRunConfig::gepa_aime();
+        config.run_dir = Some(run_dir.clone());
+        config.gepa_profile = GepaProfile::Reference;
+        config.solver.model = GEPA_AIME_SOLVER_MODEL.to_owned();
+        config.solver.runtime = AimeOpenAiRuntimeConfig::default_for_p8();
+        config.reflection.model = GEPA_AIME_REFLECTION_MODEL.to_owned();
+        config.reflection.runtime = AimeOpenAiRuntimeConfig::default_for_p8();
+        let started_at = UNIX_EPOCH + Duration::from_millis(1234);
+
+        let path = write_p8_aime_start_report(&config, started_at)
+            .unwrap()
+            .expect("configured run dir writes a start report");
+
+        assert_eq!(path, run_dir.join("reports").join("p8-aime-start.json"));
+        let report: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        assert_eq!(report["schema"], "leaven.p8_aime.start_report.v1");
+        assert_eq!(report["run_profile"], "gepa-aime");
+        assert_eq!(report["gepa_profile"], "reference");
+        assert_eq!(
+            report["proof_classification"],
+            "full_live_aime_reproduction_attempt"
+        );
+        assert_eq!(report["started_unix_ms"], 1234);
+        assert_eq!(report["search_metric_call_cap"], GEPA_AIME_METRIC_CALLS);
+        assert_eq!(report["solver_runtime"]["model"], GEPA_AIME_SOLVER_MODEL);
+        assert_eq!(
+            report["reflection_runtime"]["model"],
+            GEPA_AIME_REFLECTION_MODEL
+        );
+        assert_eq!(report["solver_runtime"]["request_timeout_seconds"], 120);
         let _ = std::fs::remove_dir_all(run_dir);
     }
 

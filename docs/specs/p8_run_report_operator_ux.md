@@ -216,13 +216,22 @@ For the default local run dir, the target layout is:
   checkpoints/
   evidence/
   reports/
+    p8-aime-start.json
     summary.json
     p8-aime.json
+    p8-aime-failure.json
 ```
 
 `summary.json` is generic Leaven run summary. `p8-aime.json` is optional
 domain-specific projection when the example has richer AIME report fields than
 the generic result facade.
+
+`p8-aime-start.json` is written before optimizer/provider work for configured
+durable P8 run directories. It records safe operator facts needed to audit an
+interrupted run: run profile, selected GEPA strategy profile, proof
+classification, data source, run directory, metric-call cap, live/cache/runtime
+settings, and solver/reflection models. It is not result-quality evidence and
+must not be used as a substitute for `p8-aime.json`.
 
 Reports must be deterministic JSON where practical so they can be diffed across
 resume attempts. Report writers must replace JSON files atomically, so a killed
@@ -251,6 +260,9 @@ Required tests:
 - failed operator runs include the same safe profile, cache, run-dir, and proof
   classification context needed to diagnose cache-only replay or compatibility
   refusals without reconstructing environment variables;
+- configured durable P8 run directories write `reports/p8-aime-start.json`
+  before long provider work so interrupted live runs expose profile, model,
+  cache, timeout, and budget facts without relying on shell wrappers;
 - failed operator runs with a configured durable run directory write
   `reports/p8-aime-failure.json` with safe profile/runtime/error context;
 - P8 report lines include run profile, GEPA strategy profile, run dir,
