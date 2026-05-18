@@ -795,6 +795,7 @@ The P8 result must expose:
 - baseline held-out test score;
 - optimized held-out test score;
 - case-level scores, feedback, traces, and source ids;
+- target-safe case-level baseline/optimized deltas grouped by split;
 - best prompt;
 - remaining parity deltas from GEPA CAIS artifact.
 

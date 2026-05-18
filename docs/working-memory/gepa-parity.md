@@ -139,6 +139,11 @@ Current speed stance:
   normalized to one serial proposal, matching upstream's "parallel proposal
   count <= 1 means serial" behavior, and the resolved profile reports
   `proposal_count=1`.
+- P8 reports now include `case_deltas`: per split/source baseline score,
+  optimized score, score delta, and outcome (`improved`, `regressed`,
+  `unchanged_correct`, `unchanged_wrong`, or missing-row states), plus split
+  summary counts. This keeps future live quality diagnosis data-first and
+  target-safe without manual reconstruction from flat final-report case rows.
 
 Current feedback/reflection answer:
 
@@ -235,6 +240,8 @@ profile/experiment plan.
   reflector. Because LM cache keys include provider hints, resume of the same
   attempt remains cacheable while identical prompt text in a later GEPA attempt
   no longer burns search diversity by replaying the older stochastic response.
+- next paid/live release reports should use the new `case_deltas` section
+  instead of ad hoc jq scripts for improved/regressed/still-wrong source ids.
 
 ## Current Audit-Wave Disposition
 
@@ -699,6 +706,12 @@ Cache/replay attempts after the report-schema fixes:
   optimized held-out test `0.433 -> 0.500`; optimized train was lower
   `0.600 -> 0.556`. This is a real live improvement over seed on validation
   and held-out test, but remains below the pinned GEPA CAIS target `0.600`.
+- no-spend case-delta audit of the completed report: train changed by
+  `4` improved / `6` regressed / `35` unchanged cases; validation changed by
+  `6` improved / `4` regressed / `35` unchanged cases; held-out test changed
+  by `4` improved / `2` regressed / `24` unchanged cases. The next P8 report
+  schema now emits these target-safe deltas directly as `case_deltas` instead
+  of forcing auditors to reconstruct them from per-candidate rows.
 - post-run audit found the completed report's aggregate metric counters were
   internally consistent, but `gepa_events` did not carry seed-validation or
   accepted-full-validation metric deltas. The owning event contract now carries
@@ -731,3 +744,7 @@ Cache/replay attempts after the report-schema fixes:
    the GEPA report metric total directly. The current completed release report
    remains valid for aggregate budget proof but predates those per-phase
    validation deltas.
+4. Future release reports should include `case_deltas.summary` and
+   `case_deltas.cases` so quality diagnosis starts from exact improved,
+   regressed, unchanged-correct, and unchanged-wrong case IDs without exposing
+   raw hidden targets or reference solutions.

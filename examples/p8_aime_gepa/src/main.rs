@@ -1129,6 +1129,7 @@ fn p8_aime_report_json(config: &AimeRunConfig, run: &AimeRunResult) -> serde_jso
             .as_ref()
             .map(|report| p8_gepa_report_json(report, &run.role_reports, &config.seed_prompt)),
         "cases": p8_case_report_json(run),
+        "case_deltas": p8_case_delta_report_json(run),
         "events": result.events.iter().map(|event| event.as_str()).collect::<Vec<_>>(),
     })
 }
@@ -1947,6 +1948,146 @@ fn p8_case_report_json(run: &AimeRunResult) -> Vec<serde_json::Value> {
         }
     }
     cases
+}
+
+#[derive(Clone, Debug, Default)]
+struct P8CaseDeltaRow {
+    case_id: String,
+    source_id: String,
+    split: String,
+    baseline_score: Option<f64>,
+    optimized_score: Option<f64>,
+}
+
+#[derive(Clone, Debug, Default)]
+struct P8CaseDeltaSummary {
+    improved: u64,
+    regressed: u64,
+    unchanged_correct: u64,
+    unchanged_wrong: u64,
+    unchanged_other: u64,
+    missing_baseline: u64,
+    missing_optimized: u64,
+}
+
+impl P8CaseDeltaSummary {
+    fn record(&mut self, outcome: &str) {
+        match outcome {
+            "improved" => self.improved += 1,
+            "regressed" => self.regressed += 1,
+            "unchanged_correct" => self.unchanged_correct += 1,
+            "unchanged_wrong" => self.unchanged_wrong += 1,
+            "missing_baseline" => self.missing_baseline += 1,
+            "missing_optimized" => self.missing_optimized += 1,
+            _ => self.unchanged_other += 1,
+        }
+    }
+
+    fn total(&self) -> u64 {
+        self.improved
+            + self.regressed
+            + self.unchanged_correct
+            + self.unchanged_wrong
+            + self.unchanged_other
+            + self.missing_baseline
+            + self.missing_optimized
+    }
+}
+
+fn p8_case_delta_report_json(run: &AimeRunResult) -> serde_json::Value {
+    let mut rows = BTreeMap::<(String, String), P8CaseDeltaRow>::new();
+    for split in &run.optimized.summary.evaluation.splits_reported {
+        let split_label = split_role_label(&split.role).to_owned();
+        for (candidate_index, candidate) in split.candidates.iter().enumerate() {
+            let is_baseline = candidate_index == 0;
+            for case in &candidate.cases {
+                let source_id = run
+                    .report_metadata
+                    .get(&case.case_id)
+                    .map(AimeReportMetadata::source_id)
+                    .unwrap_or_else(|| "missing-source-id".to_owned());
+                let row = rows
+                    .entry((split_label.clone(), source_id.clone()))
+                    .or_insert_with(|| P8CaseDeltaRow {
+                        case_id: case.case_id.to_string(),
+                        source_id,
+                        split: split_label.clone(),
+                        baseline_score: None,
+                        optimized_score: None,
+                    });
+                if is_baseline {
+                    row.baseline_score = Some(case.score);
+                } else {
+                    row.optimized_score = Some(case.score);
+                }
+            }
+        }
+    }
+
+    let mut summary = BTreeMap::<String, P8CaseDeltaSummary>::new();
+    let mut cases = Vec::new();
+    for row in rows.into_values() {
+        let (score_delta, outcome) = p8_case_delta_outcome(row.baseline_score, row.optimized_score);
+        summary
+            .entry(row.split.clone())
+            .or_default()
+            .record(outcome);
+        cases.push(serde_json::json!({
+            "case_id": row.case_id,
+            "source_id": row.source_id,
+            "split": row.split,
+            "baseline_score": row.baseline_score,
+            "optimized_score": row.optimized_score,
+            "score_delta": score_delta,
+            "outcome": outcome,
+        }));
+    }
+
+    serde_json::json!({
+        "summary": summary
+            .into_iter()
+            .map(|(split, counts)| {
+                (split, serde_json::json!({
+                    "total": counts.total(),
+                    "improved": counts.improved,
+                    "regressed": counts.regressed,
+                    "unchanged_correct": counts.unchanged_correct,
+                    "unchanged_wrong": counts.unchanged_wrong,
+                    "unchanged_other": counts.unchanged_other,
+                    "missing_baseline": counts.missing_baseline,
+                    "missing_optimized": counts.missing_optimized,
+                }))
+            })
+            .collect::<serde_json::Map<_, _>>(),
+        "cases": cases,
+    })
+}
+
+fn p8_case_delta_outcome(
+    baseline_score: Option<f64>,
+    optimized_score: Option<f64>,
+) -> (Option<f64>, &'static str) {
+    const EPSILON: f64 = 1e-12;
+    match (baseline_score, optimized_score) {
+        (Some(baseline), Some(optimized)) => {
+            let delta = optimized - baseline;
+            let outcome = if delta > EPSILON {
+                "improved"
+            } else if delta < -EPSILON {
+                "regressed"
+            } else if optimized >= 1.0 - EPSILON {
+                "unchanged_correct"
+            } else if optimized <= EPSILON {
+                "unchanged_wrong"
+            } else {
+                "unchanged_other"
+            };
+            (Some(delta), outcome)
+        }
+        (None, Some(_)) => (None, "missing_baseline"),
+        (Some(_), None) => (None, "missing_optimized"),
+        (None, None) => (None, "unchanged_other"),
+    }
 }
 
 fn p8_candidate_report_role(candidate_index: usize) -> &'static str {
@@ -6915,6 +7056,33 @@ Provide the new parameter value within ``` blocks."
                     .and_then(serde_json::Value::as_array)
                     .is_some_and(|trace_refs| !trace_refs.is_empty())
                 && case.get("feedback_chars").is_some()
+                && case.get("target_answer").is_none()
+                && case.get("reference_solution").is_none()
+        }));
+        let case_deltas = report["case_deltas"]["cases"].as_array().unwrap();
+        for split in ["train", "validation", "test"] {
+            assert!(
+                case_deltas
+                    .iter()
+                    .any(|case| case["split"] == split && case["outcome"] == "improved"),
+                "missing improved {split} case delta"
+            );
+            assert!(
+                report["case_deltas"]["summary"][split]["improved"]
+                    .as_u64()
+                    .is_some_and(|count| count > 0),
+                "missing improved {split} summary count"
+            );
+            assert_eq!(
+                report["case_deltas"]["summary"][split]["regressed"],
+                serde_json::json!(0)
+            );
+        }
+        assert!(case_deltas.iter().all(|case| {
+            case.get("source_id").is_some()
+                && case.get("baseline_score").is_some()
+                && case.get("optimized_score").is_some()
+                && case.get("score_delta").is_some()
                 && case.get("target_answer").is_none()
                 && case.get("reference_solution").is_none()
         }));
