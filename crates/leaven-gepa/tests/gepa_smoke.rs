@@ -1440,9 +1440,7 @@ fn gepa_resume_restores_sampler_cursor_and_does_not_repeat_seed_validation() {
                 seen: control_seen.clone(),
             })
             .build();
-        control_engine
-            .insert_seed(resume_trace_seed(), 0)
-            .unwrap();
+        control_engine.insert_seed(resume_trace_seed(), 0).unwrap();
         let mut control_gepa = resume_trace_gepa();
         control_engine
             .run(&mut control_gepa, &case_set, &store)
@@ -1456,9 +1454,7 @@ fn gepa_resume_restores_sampler_cursor_and_does_not_repeat_seed_validation() {
             .budget(Budget::unlimited())
             .metric_call_budget_stopper(3)
             .build();
-        partial_engine
-            .insert_seed(resume_trace_seed(), 0)
-            .unwrap();
+        partial_engine.insert_seed(resume_trace_seed(), 0).unwrap();
         let mut partial_gepa = resume_trace_gepa();
         partial_engine
             .run(&mut partial_gepa, &case_set, &store)
@@ -1735,6 +1731,136 @@ fn parent_and_child_screen_on_same_ordered_train_cases() {
         assert!(
             parent_selected < minibatch_sampled,
             "GEPA must select the parent from validation frontier before sampling train cases"
+        );
+    });
+}
+
+#[test]
+fn accepted_iteration_emits_reference_phase_order() {
+    block_on(async {
+        let case_set = CaseSet::new(vec![(), ()])
+            .with_partition(
+                leaven_core::PartitionId::from("TRAIN"),
+                vec![leaven_kernel::CaseId::new(0)],
+            )
+            .with_partition(
+                leaven_core::PartitionId::from("VALIDATION"),
+                vec![leaven_kernel::CaseId::new(1)],
+            );
+        let store = InlineEvidenceStore::<ScalarEvidence>::new("inline");
+        let mut engine = Engine::<SamplingProblem>::builder()
+            .evaluator(PrefixImprovementEvaluator)
+            .build();
+        engine
+            .insert_seed(
+                PartMapArtifact(BTreeMap::from([("answer".to_owned(), "draft".to_owned())])),
+                0,
+            )
+            .unwrap();
+        let mut gepa = Gepa::new(
+            PartMapSurface,
+            ParetoFrontier::by_case().build(),
+            FixedSurfaceEdit::new("improved".to_owned()),
+        )
+        .reflective_dataset(OneReflectiveExample)
+        .validation_policy(FullValidation)
+        .max_iterations(1);
+
+        engine.run(&mut gepa, &case_set, &store).await.unwrap();
+
+        let events = gepa.events();
+        let profile = event_position(events, |event| {
+            matches!(event, leaven_gepa::GepaEventSummary::ProfileResolved)
+        });
+        let seed_started = event_position(events, |event| {
+            matches!(
+                event,
+                leaven_gepa::GepaEventSummary::SeedValidationStarted { .. }
+            )
+        });
+        let seed_completed = event_position(events, |event| {
+            matches!(
+                event,
+                leaven_gepa::GepaEventSummary::SeedValidationCompleted { .. }
+            )
+        });
+        let seed_frontier = event_position(events, |event| {
+            matches!(event, leaven_gepa::GepaEventSummary::FrontierUpdated)
+        });
+        let iteration = event_position(events, |event| {
+            matches!(
+                event,
+                leaven_gepa::GepaEventSummary::IterationStarted { .. }
+            )
+        });
+        let parent_selected = event_position(events, |event| {
+            matches!(event, leaven_gepa::GepaEventSummary::ParentSelected { .. })
+        });
+        let minibatch = event_position(events, |event| {
+            matches!(
+                event,
+                leaven_gepa::GepaEventSummary::TrainMinibatchSampled { .. }
+            )
+        });
+        let parent_evaluated = event_position(events, |event| {
+            matches!(event, leaven_gepa::GepaEventSummary::ParentEvaluated { .. })
+        });
+        let dataset = event_position(events, |event| {
+            matches!(
+                event,
+                leaven_gepa::GepaEventSummary::ReflectiveDatasetBuilt { .. }
+            )
+        });
+        let child_built = event_position(events, |event| {
+            matches!(event, leaven_gepa::GepaEventSummary::ChildBuilt { .. })
+        });
+        let child_evaluated = event_position(events, |event| {
+            matches!(event, leaven_gepa::GepaEventSummary::ChildEvaluated { .. })
+        });
+        let accepted = event_position(events, |event| {
+            matches!(
+                event,
+                leaven_gepa::GepaEventSummary::ProposalAccepted { .. }
+            )
+        });
+        let accepted_validation = event_position(events, |event| {
+            matches!(
+                event,
+                leaven_gepa::GepaEventSummary::AcceptedValidationCompleted { .. }
+            )
+        });
+        let accepted_frontier = events
+            .iter()
+            .rposition(|event| matches!(event, leaven_gepa::GepaEventSummary::FrontierUpdated))
+            .expect("accepted frontier update event");
+        let ended = event_position(events, |event| {
+            matches!(
+                event,
+                leaven_gepa::GepaEventSummary::OptimizationEnded { .. }
+            )
+        });
+
+        assert!(
+            [
+                profile,
+                seed_started,
+                seed_completed,
+                seed_frontier,
+                iteration,
+                parent_selected,
+                minibatch,
+                parent_evaluated,
+                dataset,
+                child_built,
+                child_evaluated,
+                accepted,
+                accepted_validation,
+                accepted_frontier,
+                ended,
+            ]
+            .windows(2)
+            .all(|pair| pair[0] < pair[1]),
+            "GEPA phase events must preserve reference loop order: {events:?}"
         );
     });
 }
@@ -2271,6 +2397,16 @@ fn resume_reflection_seed() -> PartMapArtifact {
         ("answer".to_owned(), "draft".to_owned()),
         ("search".to_owned(), "query".to_owned()),
     ]))
+}
+
+fn event_position(
+    events: &[leaven_gepa::GepaEventSummary],
+    predicate: impl Fn(&leaven_gepa::GepaEventSummary) -> bool,
+) -> usize {
+    events
+        .iter()
+        .position(predicate)
+        .expect("expected GEPA event")
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
