@@ -156,6 +156,7 @@ fn report_run_header_lines(config: &AimeRunConfig, run: &AimeRunResult) -> Vec<S
             config.profile.reflection_prompt_claim()
         ),
         format!("data_source={}", config.data_source.label()),
+        format!("seed_system_prompt={}", config.seed_prompt),
         format!("aime_train_count={}", run.dataset_proof.train_count),
         format!(
             "aime_validation_count={}",
@@ -793,6 +794,9 @@ fn p8_aime_report_json(config: &AimeRunConfig, run: &AimeRunResult) -> serde_jso
         },
         "data_source": config.data_source.label(),
         "dataset": p8_dataset_proof_json(&run.dataset_proof),
+        "seed": {
+            "system_prompt": config.seed_prompt,
+        },
         "run": {
             "id": result.run_id.to_string(),
             "optimizer_wall_time_ms": run.optimizer_wall_time.as_millis(),
@@ -4688,6 +4692,11 @@ Provide the new parameter value within ``` blocks."
                 .iter()
                 .any(|line| line.starts_with("optimizer_wall_time_ms="))
         );
+        assert!(
+            lines
+                .iter()
+                .any(|line| line == &format!("seed_system_prompt={BASELINE}"))
+        );
         assert!(lines.iter().any(|line| line == "aime_train_count=3"));
         assert!(lines.iter().any(|line| line == "aime_validation_count=1"));
         assert!(lines.iter().any(|line| line == "aime_test_count=2"));
@@ -4761,7 +4770,7 @@ Provide the new parameter value within ``` blocks."
         assert_p8_report_identity(&report, &config);
         assert_p8_report_lm_roles(&report);
         assert_p8_report_gepa_summary(&report);
-        assert_p8_report_run_summary_equivalence(&report, &run);
+        assert_p8_report_run_summary_equivalence(&report, &config, &run);
         assert_p8_report_case_safety(&report);
         let lines = report_lines(&config, &run);
         assert!(
@@ -4869,8 +4878,13 @@ Provide the new parameter value within ``` blocks."
         assert_eq!(report["lm_roles"][1]["metrics"]["cost"]["llm_calls"], 1);
     }
 
-    fn assert_p8_report_run_summary_equivalence(report: &serde_json::Value, run: &AimeRunResult) {
+    fn assert_p8_report_run_summary_equivalence(
+        report: &serde_json::Value,
+        config: &AimeRunConfig,
+        run: &AimeRunResult,
+    ) {
         let result = &run.optimized;
+        assert_eq!(report["seed"]["system_prompt"], config.seed_prompt);
         assert_eq!(report["run"]["id"], result.run_id.to_string());
         assert_eq!(
             report["run"]["storage"],
