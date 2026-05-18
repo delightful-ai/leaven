@@ -6,16 +6,23 @@ It composes core, surface, engine, evidence, population, render, and LM vocabula
 ## Routing
 - `src/optimizer.rs` owns GEPA loop state, checkpoint/restore shape, selected train partition, observed candidates, and population observation through `GepaPopulation`.
 - `src/selector.rs`, `src/part_selector.rs`, `src/gate.rs`, and `src/validation.rs` own GEPA-specific strategy policy.
-- `src/proposer.rs` owns GEPA reflection/proposal helpers that are provider-neutral; concrete LM/provider lowering belongs in `leaven-lm-*` or agent crates.
+- `src/proposer.rs` owns GEPA reflection/proposal helpers that are provider-neutral; concrete LM/provider lowering belongs in `leaven-lm-*` or agent crates. The module is private; behavior-bearing types are curated at the crate root, and scaffolds route through `test_support`.
 - Surface ownership is explicit: GEPA selects a part from an `EditSurface` and lowers edits through that surface into artifact-native changes. Artifact-specific surfaces belong in `leaven-surface` or `leaven-artifact-*`.
-- The current live loop is: select parent from population, evaluate the train
-  partition into case-targeted assessment rows, normalize those rows into scalar
-  casewise evidence for frontier math, select a surface part, build the
+- The current reference loop is: full-validate the seed into
+  `GepaReferenceState`, select a parent from the validation frontier frequency
+  map, resolve the TRAIN partition through `RunContext`, sample an explicit
+  epoch-shuffled minibatch, evaluate parent and child on the same minibatch,
+  accept only strict minibatch improvements, full-validate accepted children,
+  and admit validated candidates back into `GepaReferenceState`. Train
+  population observation is still maintained as an internal adapter/ablation
+  surface, not as reference parent selection truth.
+- Reflection remains single-part by default: select one surface part, build the
   reflective dataset once from the full parent row set via the configured
   `ReflectiveDatasetBuilder`, assemble one `ReflectRequest`, call a
   `GepaReflector` with that request, apply the returned proposal batch through
-  `RunContext`, then update population. `FixedSurfaceEdit` is still a
-  scaffold reflector; agent-backed reflection must route through
+  `RunContext`, then update GEPA state. `FixedSurfaceEdit` lives under
+  `leaven_gepa::test_support`; it is a scaffold reflector, not a product
+  reflection path. Agent-backed reflection must route through
   `RunContext::propose` before `apply_batch`.
 - Reflection is build-once-pass-down: `reflect_candidate` receives a fully
   built `ReflectRequest` and never projects its own data. The LM-backed and
@@ -27,9 +34,10 @@ It composes core, surface, engine, evidence, population, render, and LM vocabula
 - Engine tests use local optimizer wrappers; do not move GEPA selector, gate, or checkpoint private state into `leaven-engine` to make those tests shorter.
 - `leaven-lm` is a neutral vocabulary dependency here, not permission to place OpenAI/Anthropic request fields or CLI/session behavior in GEPA.
 - Population defaults such as `ParetoFrontier` and `KeepBest` are consumed here; reusable population behavior still belongs in `leaven-population`.
-- The fixed-edit fixture is `FixedSurfaceEdit`. The name is deliberately plain:
-  it is scaffolding for GEPA's `Reflect` type parameter, not reflection. Do not
-  re-export or document it as production GEPA reflection.
+- The fixed-edit fixture is `test_support::FixedSurfaceEdit`. The name is
+  deliberately plain: it is scaffolding for GEPA's `Reflect` type parameter,
+  not reflection. Do not re-export or document it as production GEPA
+  reflection.
 - Product-facing GEPA proof requires slot contracts for candidate selection,
   part selection, feedback/evidence rendering, reflection/proposal, acceptance,
   validation, population, merge, stopping, and checkpoint state. Topology and

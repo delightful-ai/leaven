@@ -5,7 +5,7 @@ use leaven::extend::{
     CachePolicy, EvaluationRequest, Evaluator, InfoRef, Optimizer, Proposal, ProposalBatch,
     ProposalBatchSemantics, ProposalEffect, RunEvent, TrustPolicy,
 };
-use leaven::gepa::{FixedSurfaceEdit, Gepa, SurfaceProposer};
+use leaven::gepa::{Gepa, SurfaceProposer, test_support::FixedSurfaceEdit};
 use leaven::plumbing::ContentId;
 use leaven::prelude::{
     Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, AssessmentTarget, Budget,

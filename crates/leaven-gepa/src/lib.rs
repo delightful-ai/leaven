@@ -8,7 +8,7 @@ pub mod gate;
 pub mod optimizer;
 pub mod part_selector;
 pub mod population;
-pub mod proposer;
+mod proposer;
 pub mod reflection;
 pub mod report;
 pub mod selector;
@@ -17,8 +17,8 @@ pub mod validation;
 
 pub use agent_stage::{GepaReflectionBootstrap, GepaStageProposer, gepa_stage_proposer};
 pub use builder::{
-    GepaBuilder, GepaBuilderWithPopulation, GepaBuilderWithSurface, GepaReflectWithLmBuilder,
-    GepaReflectWithLmBuilderWithSurface,
+    GepaBuilder, GepaBuilderWithPopulation, GepaBuilderWithSurface, GepaReferenceBuilder,
+    GepaReferenceBuilderWithSurface, GepaReflectWithLmBuilder, GepaReflectWithLmBuilderWithSurface,
 };
 pub use events::{GepaEventSummary, GepaSkipReason};
 pub use evidence::GepaCaseEvidence;
@@ -28,7 +28,9 @@ pub use gate::{
 pub use optimizer::{Gepa, GepaCandidateHistoryEntry, GepaCheckpointState};
 pub use part_selector::{CheckpointPartSelector, PartSelector, RoundRobinPart};
 pub use population::{CheckpointPopulation, GepaPopulation};
-pub use proposer::{FixedSurfaceEdit, GepaReflector, LmBackedReflector, SurfaceProposer};
+#[doc(hidden)]
+pub use proposer::MissingReflector;
+pub use proposer::{GepaReflector, LmBackedReflector, SurfaceProposer};
 pub use reflection::{
     CaseInputProjectedDataset, DEFAULT_REFLECTION_PROMPT_TEMPLATE, DefaultReflectionRenderer,
     GepaReflectiveDataset, LmBackedReflectorConfig, PlainTextEditParser, ReflectRequest,
@@ -46,21 +48,26 @@ pub use selector::{
 pub use state::{GepaCandidateIndex, GepaCandidateRecord, GepaReferenceState};
 pub use validation::{FullValidation, MinibatchThenValidation, ValidationPolicy};
 
+/// Explicit scaffold and test-support fixtures.
+pub mod test_support {
+    pub use crate::proposer::FixedSurfaceEdit;
+}
+
 pub mod prelude {
     pub use crate::{
         CandidateSelector, CaseInputProjectedDataset, CheckpointCandidateSelector, CheckpointGate,
         CheckpointPopulation, DEFAULT_REFLECTION_PROMPT_TEMPLATE, DefaultReflectionRenderer,
-        FixedSurfaceEdit, FullValidation, Gate, Gepa, GepaCandidateHistoryEntry,
-        GepaCandidateIndex, GepaCandidateRecord, GepaCaseEvidence, GepaEventSummary,
-        GepaPopulation, GepaReferenceState, GepaReflectWithLmBuilder,
-        GepaReflectWithLmBuilderWithSurface, GepaReflectionBootstrap, GepaReflectiveDataset,
-        GepaReflector, GepaReport, GepaReportCandidate, GepaReportFrontierCase,
-        GepaReportHistoryEntry, GepaReportValidationSubscore, GepaSkipReason, GepaStageProposer,
-        HasBestCandidate, ImprovementOrEqual, LmBackedReflector, LmBackedReflectorConfig,
-        MinibatchThenValidation, ParetoFrequencyWeighted, PartSelector, PlainTextEditParser,
-        ReflectRequest, ReflectionError, ReflectionOutputParser, ReflectionRenderInput,
-        ReflectionRenderer, ReflectiveCaseInput, ReflectiveDatasetBuilder, ReflectiveExample,
-        ReflectiveSideInfoValue, RoundRobinPart, SelectBestCandidate, StrictImprovement,
-        SurfaceProposer, ValidationPolicy, gepa_stage_proposer,
+        FullValidation, Gate, Gepa, GepaCandidateHistoryEntry, GepaCandidateIndex,
+        GepaCandidateRecord, GepaCaseEvidence, GepaEventSummary, GepaPopulation,
+        GepaReferenceBuilder, GepaReferenceBuilderWithSurface, GepaReferenceState,
+        GepaReflectWithLmBuilder, GepaReflectWithLmBuilderWithSurface, GepaReflectionBootstrap,
+        GepaReflectiveDataset, GepaReflector, GepaReport, GepaReportCandidate,
+        GepaReportFrontierCase, GepaReportHistoryEntry, GepaReportValidationSubscore,
+        GepaSkipReason, GepaStageProposer, HasBestCandidate, ImprovementOrEqual, LmBackedReflector,
+        LmBackedReflectorConfig, MinibatchThenValidation, ParetoFrequencyWeighted, PartSelector,
+        PlainTextEditParser, ReflectRequest, ReflectionError, ReflectionOutputParser,
+        ReflectionRenderInput, ReflectionRenderer, ReflectiveCaseInput, ReflectiveDatasetBuilder,
+        ReflectiveExample, ReflectiveSideInfoValue, RoundRobinPart, SelectBestCandidate,
+        StrictImprovement, SurfaceProposer, ValidationPolicy, gepa_stage_proposer,
     };
 }

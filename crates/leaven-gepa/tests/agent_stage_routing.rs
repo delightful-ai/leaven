@@ -10,10 +10,11 @@ use leaven_engine::{
     RunEvent,
 };
 use leaven_evidence::ScalarEvidence;
+use leaven_gepa::test_support::FixedSurfaceEdit;
 use leaven_gepa::{
-    FixedSurfaceEdit, Gepa, GepaReflectionBootstrap, GepaReflector, LmBackedReflector,
-    PlainTextEditParser, ReflectRequest, ReflectionError, ReflectionRenderInput,
-    ReflectionRenderer, ReflectiveDatasetBuilder, ReflectiveExample, gepa_stage_proposer,
+    Gepa, GepaReflectionBootstrap, GepaReflector, LmBackedReflector, PlainTextEditParser,
+    ReflectRequest, ReflectionError, ReflectionRenderInput, ReflectionRenderer,
+    ReflectiveDatasetBuilder, ReflectiveExample, gepa_stage_proposer,
 };
 use leaven_kernel::{
     AssessmentId, Budget, BudgetSnapshot, CandidateId, ContentId, Cost, EvaluatorId, Fingerprint,

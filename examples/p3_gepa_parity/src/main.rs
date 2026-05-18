@@ -16,7 +16,7 @@ use leaven_core::{
 };
 use leaven_engine::{CaseSet, EvaluationContext, EvaluationError, OptimizerError, RunContext};
 use leaven_evidence::{CaseOutcome, CasewiseEvidence, ScalarEvidence};
-use leaven_gepa::{FixedSurfaceEdit, GateDecision, Gepa, SurfaceProposer};
+use leaven_gepa::{GateDecision, Gepa, SurfaceProposer, test_support::FixedSurfaceEdit};
 use leaven_kernel::{CaseId, EvaluatorId, Fingerprint, MetadataBag, Metered, StageId};
 use leaven_population::ParetoFrontier;
 use leaven_store_inline::InlineEvidenceStore;

@@ -98,10 +98,11 @@ symbol, make it `pub(crate)` instead of routing it.
   live in `leaven::extend`; identity/finite-number/error internals live in
   `leaven::plumbing`. Moving a symbol between routes is a public-surface
   change: update `SURFACE` in `public_surface_contract.rs` in the same edit.
-- GEPA's fixture-shaped names live under `leaven::gepa::` (e.g.
-  `leaven::gepa::FixedSurfaceEdit`) and intentionally do not appear in any
-  route module. A topology pass can prove the gepa edge is allowed; only a
-  public-maturity pass proves a fixture is honest for ordinary users.
+- GEPA's fixture-shaped names live under explicit test-support routing (for
+  example `leaven::gepa::test_support::FixedSurfaceEdit`) and intentionally do
+  not appear in any route module or the ordinary `leaven::gepa` root. A topology
+  pass can prove the gepa edge is allowed; only a public-maturity pass proves a
+  fixture is honest for ordinary users.
 - Every change to `src/lib.rs` or a route module must keep the
   `public_surface_contract.rs` `SURFACE` registry in sync: a new re-export
   needs a route and (for `extend`/`plumbing`) a consumer reason, and a removed

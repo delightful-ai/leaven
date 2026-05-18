@@ -75,7 +75,7 @@ impl GepaCandidateHistoryEntry {
 pub struct Gepa<
     S,
     Pop = ParetoFrontier,
-    Reflect = crate::FixedSurfaceEdit<<S as EditSurfacePlaceholder>::Edit>,
+    Reflect = crate::MissingReflector,
     CandidateSel = ParetoFrequencyWeighted,
     PartSel = RoundRobinPart,
     GatePol = StrictImprovement,

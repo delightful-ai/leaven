@@ -12,6 +12,11 @@ use crate::reflection::{
     ReflectionOutputParser, ReflectionRenderInput, ReflectionRenderer,
 };
 
+/// Placeholder reflector used only so bare `Gepa<S>` never means a scaffold.
+#[doc(hidden)]
+#[derive(Clone, Debug, Default)]
+pub struct MissingReflector;
+
 /// Produces a surface-native edit for one selected part.
 pub trait SurfaceProposer<A, S>
 where

@@ -3,11 +3,17 @@
 use leaven_population::ParetoFrontier;
 
 use crate::{
-    DefaultReflectionRenderer, FixedSurfaceEdit, Gepa, LmBackedReflector, LmBackedReflectorConfig,
+    DefaultReflectionRenderer, Gepa, LmBackedReflector, LmBackedReflectorConfig, MissingReflector,
     ParetoFrequencyWeighted, PlainTextEditParser, RoundRobinPart, StrictImprovement,
 };
 
-impl Gepa<(), ParetoFrontier, FixedSurfaceEdit<()>> {
+impl Gepa<(), ParetoFrontier, MissingReflector> {
+    /// Starts the reference GEPA profile.
+    #[must_use]
+    pub fn reference() -> GepaReferenceBuilder {
+        GepaReferenceBuilder
+    }
+
     /// Starts a GEPA builder.
     #[must_use]
     pub fn builder() -> GepaBuilder {
@@ -25,6 +31,65 @@ impl Gepa<(), ParetoFrontier, FixedSurfaceEdit<()>> {
         GepaReflectWithLmBuilder {
             reflector: LmBackedReflector::with_default_renderer(lm, model),
         }
+    }
+}
+
+/// Builder for the reference GEPA profile.
+#[derive(Clone, Debug, Default)]
+pub struct GepaReferenceBuilder;
+
+impl GepaReferenceBuilder {
+    /// Supplies the required edit surface.
+    #[must_use]
+    pub fn surface<S>(self, surface: S) -> GepaReferenceBuilderWithSurface<S> {
+        GepaReferenceBuilderWithSurface { surface }
+    }
+
+    /// Starts a reference GEPA builder with the standard LM-backed reflection path.
+    #[must_use]
+    pub fn reflect_with_lm<L>(
+        self,
+        lm: L,
+        model: impl Into<leaven_lm::ModelName>,
+    ) -> GepaReflectWithLmBuilder<
+        LmBackedReflector<L, DefaultReflectionRenderer, PlainTextEditParser>,
+    > {
+        Gepa::reflect_with_lm(lm, model)
+    }
+}
+
+/// Reference GEPA profile builder after the edit surface is known.
+#[derive(Clone, Debug)]
+pub struct GepaReferenceBuilderWithSurface<S> {
+    surface: S,
+}
+
+impl<S> GepaReferenceBuilderWithSurface<S> {
+    /// Supplies an explicit reflector and builds reference GEPA defaults.
+    #[must_use]
+    pub fn reflector<Reflect>(
+        self,
+        reflector: Reflect,
+    ) -> Gepa<S, ParetoFrontier, Reflect, ParetoFrequencyWeighted, RoundRobinPart, StrictImprovement>
+    {
+        Gepa::new(self.surface, ParetoFrontier::by_case().build(), reflector)
+    }
+
+    /// Supplies the standard LM-backed reflector and builds reference GEPA defaults.
+    #[must_use]
+    pub fn reflect_with_lm<L>(
+        self,
+        lm: L,
+        model: impl Into<leaven_lm::ModelName>,
+    ) -> Gepa<
+        S,
+        ParetoFrontier,
+        LmBackedReflector<L, DefaultReflectionRenderer, PlainTextEditParser>,
+        ParetoFrequencyWeighted,
+        RoundRobinPart,
+        StrictImprovement,
+    > {
+        self.reflector(LmBackedReflector::with_default_renderer(lm, model))
     }
 }
 

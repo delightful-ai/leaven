@@ -19,10 +19,11 @@ use leaven_engine::{
 use leaven_evidence::{
     CaseAssessmentEvidence, CaseOutcome, CasewiseEvidence, OutputRecord, ScalarEvidence,
 };
+use leaven_gepa::test_support::FixedSurfaceEdit;
 use leaven_gepa::{
     CandidateSelector, CheckpointCandidateSelector, CheckpointGate, CheckpointPopulation,
-    FixedSurfaceEdit, FullValidation, Gate, GateDecision, Gepa, GepaPopulation, GepaReflector,
-    ImprovementOrEqual, NoRegression, ParetoFrequencyWeighted, ReflectRequest, ReflectiveCaseInput,
+    FullValidation, Gate, GateDecision, Gepa, GepaPopulation, GepaReflector, ImprovementOrEqual,
+    NoRegression, ParetoFrequencyWeighted, ReflectRequest, ReflectiveCaseInput,
     ReflectiveDatasetBuilder, ReflectiveExample, SelectBestCandidate, StrictImprovement,
     SurfaceProposer,
     validation::{
@@ -83,6 +84,25 @@ fn public_builder_supports_explicit_population_before_reflector() {
         .unwrap();
 
     assert_eq!(changed.0.get("answer").unwrap(), "builder-edit");
+}
+
+#[test]
+fn public_reference_builder_requires_surface_then_reflector() {
+    let mut gepa = Gepa::reference()
+        .surface(PartMapSurface)
+        .reflector(FixedSurfaceEdit::new("reference-edit".to_owned()));
+    let artifact = PartMapArtifact(BTreeMap::from([("answer".to_owned(), "draft".to_owned())]));
+
+    let part = gepa.select_part(&artifact).unwrap();
+    let changed = artifact
+        .apply_change(
+            &gepa
+                .change_part(&artifact, part, "reference-edit".to_owned())
+                .unwrap(),
+        )
+        .unwrap();
+
+    assert_eq!(changed.0.get("answer").unwrap(), "reference-edit");
 }
 
 proptest! {
