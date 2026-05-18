@@ -1008,12 +1008,20 @@ fn stage_engine_context_uses_scoped_graph_without_exposing_raw_view() {
             .unwrap()
         };
 
-        let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
-            .with_trust_policy(TrustPolicy::default().hide_from_proposers([test_partition]));
+        let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget).with_trust_policy(
+            TrustPolicy::default().hide_from_proposers([test_partition.clone()]),
+        );
         let proposal_ctx = ctx.proposal_context(StageId::from_proposer(ProposerId::from("stage")));
         let stage_ctx = proposal_ctx.stage_engine_context();
 
         assert_eq!(stage_ctx.stage_call_id(), proposal_ctx.stage_call_id());
+        assert!(
+            stage_ctx
+                .graph()
+                .read_scope()
+                .hidden_partitions
+                .contains(&test_partition)
+        );
         assert_eq!(
             stage_ctx.graph().candidate(candidate).unwrap().id(),
             candidate

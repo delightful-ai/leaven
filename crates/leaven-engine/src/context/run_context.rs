@@ -147,11 +147,11 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
         state: OptimizerStateWrite,
     ) -> Result<(), RunContextError> {
         if let Some(persistence) = self.persistence {
-            persistence.checkpoint(
+            let request =
                 RunCheckpointRequest::new(&*self.graph, &*self.budget, self.cache.as_deref())
                     .with_optimizer_state(state)
-                    .advance_latest(),
-            )?;
+                    .advance_latest();
+            persistence.checkpoint(request)?;
         }
         Ok(())
     }
@@ -751,11 +751,8 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
 
     fn checkpoint(&self) -> Result<(), RunContextError> {
         if let Some(persistence) = self.persistence {
-            persistence.checkpoint(RunCheckpointRequest::new(
-                self.graph,
-                self.budget,
-                self.cache.as_deref(),
-            ))?;
+            let request = RunCheckpointRequest::new(self.graph, self.budget, self.cache.as_deref());
+            persistence.checkpoint(request)?;
         }
         Ok(())
     }

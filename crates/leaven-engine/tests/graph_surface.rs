@@ -369,7 +369,9 @@ fn graph_views_expose_record_details_without_storage_maps() {
     let view = ctx.graph();
     let batch = view.proposal_batch(report.batch_id).unwrap();
     let proposal = view.proposal_that_created(candidate).unwrap();
+    let proposal_by_id = view.proposal(proposal.id()).unwrap();
 
+    assert_eq!(view.candidate_count(), 1);
     assert_eq!(
         view.proposal_batches()
             .map(|batch| batch.id())
@@ -377,6 +379,8 @@ fn graph_views_expose_record_details_without_storage_maps() {
         [report.batch_id]
     );
     assert_eq!(batch.stage(), &stage);
+    assert_eq!(proposal_by_id.id(), proposal.id());
+    assert_eq!(proposal_by_id.batch_id(), report.batch_id);
     assert!(matches!(
         batch.metadata().get(&MetadataKey::from("batch")),
         Some(MetadataValue::Bool(true))

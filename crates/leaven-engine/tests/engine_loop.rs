@@ -1002,6 +1002,18 @@ fn store_run_persistence_reports_store_write_refusals() {
             ..
         }
     ));
+
+    let latest_failure = StoreRunPersistence::new(FaultyStore::new("recording").fail_mark_latest());
+    let latest_err = latest_failure
+        .checkpoint(RunCheckpointRequest::new(&graph, &budget, None).advance_latest())
+        .unwrap_err();
+    assert!(matches!(
+        latest_err,
+        RunPersistenceError::Store {
+            operation: "advance latest checkpoint pointer",
+            ..
+        }
+    ));
 }
 
 #[test]
@@ -1091,6 +1103,35 @@ fn run_context_checkpoints_after_graph_mutation_boundaries() {
 
     assert_eq!(checkpoints.load(Ordering::SeqCst), 3);
     assert_eq!(cache_absent.load(Ordering::SeqCst), 3);
+}
+
+#[test]
+fn run_context_checkpoint_with_optimizer_state_advances_latest() {
+    let optimizer_state_presence = Arc::new(Mutex::new(Vec::new()));
+    let persistence = OptimizerStatePresencePersistence {
+        optimizer_state_presence: optimizer_state_presence.clone(),
+    };
+    let (mut graph, mut budget) = graph_and_budget();
+    let ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
+        .with_persistence(Some(&persistence));
+
+    ctx.checkpoint_with_optimizer_state(
+        OptimizerStateWrite::json(
+            Fingerprint::from_bytes([7; 32]),
+            Fingerprint::from_bytes([8; 32]),
+            &StatefulOptimizerState {
+                selected: None,
+                cursor: 7,
+            },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+
+    assert_eq!(
+        *optimizer_state_presence.lock().unwrap(),
+        vec![(true, true)]
+    );
 }
 
 fn checkpoint_referencing_graph(graph: BlobRef) -> RunCheckpoint {
@@ -1775,6 +1816,7 @@ struct FaultyStore {
     fail_checkpoint_put: bool,
     fail_checkpoint_get: bool,
     fail_latest: bool,
+    fail_mark_latest: bool,
 }
 
 impl FaultyStore {
@@ -1786,6 +1828,7 @@ impl FaultyStore {
             fail_checkpoint_put: false,
             fail_checkpoint_get: false,
             fail_latest: false,
+            fail_mark_latest: false,
         }
     }
 
@@ -1806,6 +1849,11 @@ impl FaultyStore {
 
     fn fail_latest(mut self) -> Self {
         self.fail_latest = true;
+        self
+    }
+
+    fn fail_mark_latest(mut self) -> Self {
+        self.fail_mark_latest = true;
         self
     }
 
@@ -1856,6 +1904,9 @@ impl CheckpointStore for FaultyStore {
     }
 
     fn mark_latest(&self, id: leaven_kernel::CheckpointId) -> Result<(), StoreError> {
+        if self.fail_mark_latest {
+            return Err(self.store_error("mark_latest_checkpoint"));
+        }
         CheckpointStore::mark_latest(&self.inner, id)
     }
 }
