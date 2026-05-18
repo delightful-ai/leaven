@@ -123,6 +123,9 @@ pub struct ReflectRequest<Part = String> {
     pub examples: Vec<ReflectiveExample>,
     /// Provenance refs lowered into the resulting proposal's `informed_by`.
     pub source_refs: Vec<InfoRef>,
+    /// Stable GEPA proposal-attempt ordinal, when the request comes from the
+    /// reference loop.
+    pub attempt_index: Option<usize>,
 }
 
 impl ReflectRequest<String> {
@@ -136,6 +139,7 @@ impl ReflectRequest<String> {
             part_label,
             examples: Vec::new(),
             source_refs: Vec::new(),
+            attempt_index: None,
         }
     }
 }
@@ -150,6 +154,7 @@ impl<Part> ReflectRequest<Part> {
             part_label: part_label.into(),
             examples: Vec::new(),
             source_refs: Vec::new(),
+            attempt_index: None,
         }
     }
 
@@ -164,6 +169,14 @@ impl<Part> ReflectRequest<Part> {
     #[must_use]
     pub fn with_source_refs(mut self, refs: impl IntoIterator<Item = InfoRef>) -> Self {
         self.source_refs.extend(refs);
+        self
+    }
+
+    /// Attach the GEPA proposal-attempt ordinal for cache-stable reflection
+    /// diversity.
+    #[must_use]
+    pub const fn with_attempt_index(mut self, attempt_index: usize) -> Self {
+        self.attempt_index = Some(attempt_index);
         self
     }
 
@@ -462,9 +475,16 @@ where
             .unwrap_or(DEFAULT_REFLECTION_PROMPT_TEMPLATE);
         let prompt = render_prompt_template(template, &current_instruction, &feedback)?;
 
+        let mut provider_hints = leaven_lm::ProviderHints::default();
+        if let Some(attempt_index) = input.request.attempt_index {
+            provider_hints
+                .metadata
+                .insert("gepa_attempt_index".to_owned(), attempt_index.to_string());
+        }
         Ok(LmRequest::new(input.model, Messages::from_user(prompt))
             .with_sampling(input.config.sampling.clone())
-            .with_output(input.config.output.clone()))
+            .with_output(input.config.output.clone())
+            .with_provider_hints(provider_hints))
     }
 }
 

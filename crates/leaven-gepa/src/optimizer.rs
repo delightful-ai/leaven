@@ -32,7 +32,7 @@ use crate::{
     PartSelector, PopulationBestFallback, ReflectRequest, ReflectiveDatasetBuilder, RoundRobinPart,
     StrictImprovement,
     population::CheckpointPopulation,
-    report::GepaReportInput,
+    report::{GepaReportInput, GepaReportProfile},
     validation::{
         BatchSampler, CheckpointBatchSampler, CheckpointValidationPolicy, EpochShuffled,
         FullValidation, GepaRandom, ValidationPolicy,
@@ -41,7 +41,7 @@ use crate::{
 
 const GEPA_OPTIMIZER_FINGERPRINT: Fingerprint = Fingerprint::from_bytes([8; 32]);
 const DEFAULT_MAX_ITERATIONS: usize = 500;
-const GEPA_CHECKPOINT_SCHEMA: Fingerprint = Fingerprint::from_bytes([12; 32]);
+const GEPA_CHECKPOINT_SCHEMA: Fingerprint = Fingerprint::from_bytes([13; 32]);
 const DEFAULT_PERFECT_SCORE: f64 = 1.0;
 const FAST_CERTIFIED_MINIBATCH_SIZE: usize = 1;
 const FAST_CERTIFIED_PROPOSAL_COUNT: usize = 2;
@@ -152,6 +152,7 @@ pub struct Gepa<
     batch_sampler: Batch,
     validation_policy: Validate,
     dataset: Dataset,
+    profile: GepaReportProfile,
     train_partition: PartitionId,
     max_iterations: usize,
     proposal_count: usize,
@@ -288,6 +289,16 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             batch_sampler: Batch::default(),
             validation_policy: Validate::default(),
             dataset: Dataset::default(),
+            profile: GepaReportProfile {
+                label: GepaProfile::Reference.label().to_owned(),
+                train_minibatch_size: Some(GepaProfile::Reference.minibatch_size()),
+                proposal_count: GepaProfile::Reference.proposal_count(),
+                proposal_mode: "serial".to_owned(),
+                validation_policy: "full-validation".to_owned(),
+                certification_mode: "full-validation-before-admission".to_owned(),
+                skip_perfect_score: GepaProfile::Reference.skip_perfect_score(),
+                perfect_score: DEFAULT_PERFECT_SCORE.to_string(),
+            },
             train_partition: PartitionId::from("TRAIN"),
             max_iterations: DEFAULT_MAX_ITERATIONS,
             proposal_count: 1,
@@ -347,6 +358,11 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             batch_sampler,
             validation_policy: self.validation_policy,
             dataset: self.dataset,
+            profile: GepaReportProfile {
+                label: "custom".to_owned(),
+                train_minibatch_size: None,
+                ..self.profile
+            },
             train_partition: self.train_partition,
             max_iterations: self.max_iterations,
             proposal_count: self.proposal_count,
@@ -382,6 +398,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             batch_sampler: self.batch_sampler,
             validation_policy,
             dataset: self.dataset,
+            profile: validation_policy_profile::<NextValidate>(self.profile),
             train_partition: self.train_partition,
             max_iterations: self.max_iterations,
             proposal_count: self.proposal_count,
@@ -421,6 +438,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             batch_sampler: self.batch_sampler,
             validation_policy: self.validation_policy,
             dataset,
+            profile: self.profile,
             train_partition: self.train_partition,
             max_iterations: self.max_iterations,
             proposal_count: self.proposal_count,
@@ -462,6 +480,12 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             .validation_policy(FullValidation)
             .proposal_count(profile.proposal_count())
             .skip_perfect_score(profile.skip_perfect_score())
+            .with_resolved_profile(
+                profile.label(),
+                Some(profile.minibatch_size()),
+                "full-validation",
+                "full-validation-before-admission",
+            )
     }
 
     /// Set how many serial proposal attempts to run for the selected candidate
@@ -472,22 +496,43 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
     /// minibatch, and they are processed through the reference admission path
     /// one at a time.
     #[must_use]
-    pub const fn proposal_count(mut self, proposal_count: usize) -> Self {
+    pub fn proposal_count(mut self, proposal_count: usize) -> Self {
+        let proposal_count = proposal_count.max(1);
         self.proposal_count = proposal_count;
+        self.profile.label = "custom".to_owned();
+        self.profile.proposal_count = proposal_count;
         self
     }
 
     /// Enable or disable upstream GEPA's all-perfect parent-minibatch skip.
     #[must_use]
-    pub const fn skip_perfect_score(mut self, skip: bool) -> Self {
+    pub fn skip_perfect_score(mut self, skip: bool) -> Self {
         self.skip_perfect_score = skip;
+        self.profile.label = "custom".to_owned();
+        self.profile.skip_perfect_score = skip;
         self
     }
 
     /// Set the score threshold considered perfect by the skip-perfect policy.
     #[must_use]
-    pub const fn perfect_score(mut self, perfect_score: f64) -> Self {
+    pub fn perfect_score(mut self, perfect_score: f64) -> Self {
         self.perfect_score = perfect_score;
+        self.profile.label = "custom".to_owned();
+        self.profile.perfect_score = perfect_score.to_string();
+        self
+    }
+
+    fn with_resolved_profile(
+        mut self,
+        label: &str,
+        train_minibatch_size: Option<usize>,
+        validation_policy: &str,
+        certification_mode: &str,
+    ) -> Self {
+        self.profile.label = label.to_owned();
+        self.profile.train_minibatch_size = train_minibatch_size;
+        self.profile.validation_policy = validation_policy.to_owned();
+        self.profile.certification_mode = certification_mode.to_owned();
         self
     }
 
@@ -513,6 +558,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
     #[must_use]
     pub fn report(&self) -> GepaReport {
         GepaReport::from_reference_state(&GepaReportInput {
+            profile: &self.profile,
             reference_state: &self.reference_state,
             candidate_history: &self.candidate_history,
             proposal_attempts: &self.proposal_attempts,
@@ -613,6 +659,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
         );
         fingerprint.update(self.train_partition.0.as_str().as_bytes());
         fingerprint.update(self.max_iterations.to_le_bytes());
+        update_checkpoint_state(&mut fingerprint, b"profile", &self.profile);
         fingerprint.update(self.proposal_count.to_le_bytes());
         fingerprint.update([u8::from(self.skip_perfect_score)]);
         fingerprint.update(self.perfect_score.to_le_bytes());
@@ -661,6 +708,23 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
     }
 }
 
+fn validation_policy_profile<Validate>(profile: GepaReportProfile) -> GepaReportProfile {
+    if std::any::type_name::<Validate>() == std::any::type_name::<FullValidation>() {
+        GepaReportProfile {
+            validation_policy: "full-validation".to_owned(),
+            certification_mode: "full-validation-before-admission".to_owned(),
+            ..profile
+        }
+    } else {
+        GepaReportProfile {
+            label: "custom".to_owned(),
+            validation_policy: std::any::type_name::<Validate>().to_owned(),
+            certification_mode: "custom-validation-before-admission".to_owned(),
+            ..profile
+        }
+    }
+}
+
 fn update_type<T>(fingerprint: &mut FingerprintBuilder) {
     fingerprint.update(std::any::type_name::<T>().as_bytes());
 }
@@ -703,7 +767,9 @@ where
     Dataset: ReflectiveDatasetBuilder<P, S>,
 {
     async fn initialize(&mut self, ctx: &mut RunContext<'_, P>) -> Result<(), OptimizerError> {
-        self.record_event(GepaEventSummary::ProfileResolved);
+        self.record_event(GepaEventSummary::ProfileResolved {
+            profile: self.profile.clone(),
+        });
         let seed = ctx
             .graph()
             .candidate_tree()
@@ -822,6 +888,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
         ctx: &mut RunContext<'_, P>,
         parent: CandidateId,
         parent_screening: &GepaAssessment,
+        attempt_index: usize,
     ) -> Result<ProposalOutcome, OptimizerError>
     where
         P: OptimizationProblem,
@@ -898,7 +965,9 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             part_label: part_label.clone(),
             examples,
             source_refs,
-        };
+            attempt_index: None,
+        }
+        .with_attempt_index(attempt_index);
         self.record_event(GepaEventSummary::ReflectionStarted {
             parent,
             part_label: part_label.clone(),

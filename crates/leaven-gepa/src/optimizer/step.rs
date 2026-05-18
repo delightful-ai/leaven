@@ -225,10 +225,10 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
         Validate: ValidationPolicy + Sync,
         Dataset: ReflectiveDatasetBuilder<P, S> + Sync,
     {
-        let outcome = self
-            .propose_candidate(ctx, parent, parent_screening)
-            .await?;
         let attempt_index = self.proposal_attempts.len() + 1;
+        let outcome = self
+            .propose_candidate(ctx, parent, parent_screening, attempt_index)
+            .await?;
         let Some(candidate) = outcome.candidate else {
             self.proposal_attempts.push(GepaProposalAttempt {
                 attempt_index,

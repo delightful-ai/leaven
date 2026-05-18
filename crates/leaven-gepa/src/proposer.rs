@@ -157,6 +157,7 @@ where
             part_label: request.part_label,
             examples: request.examples,
             source_refs: request.source_refs,
+            attempt_index: request.attempt_index,
         };
         let batch = ctx
             .propose(self, request)

@@ -125,6 +125,20 @@ Current speed stance:
   expose accepted-but-unadmitted children, attempt counts, and validation
   counts in reports so long runs can be cut off or resumed from data, and keep
   `proposal_count` labeled as serial rather than async island GEPA.
+- `GepaReport.profile` and `gepa.profile_resolved` now carry the optimizer's
+  resolved profile facts: label, known train minibatch size, serial proposal
+  count/mode, validation policy, certification mode, skip-perfect policy, and
+  perfect-score threshold. P8 JSON mirrors those facts under
+  `gepa_report.profile`, so an operator can distinguish `reference`,
+  `fast-certified`, and custom AIME overrides without reading builder code.
+- Serial multi-proposal reflection requests carry `gepa_attempt_index` in
+  provider hints while keeping the rendered prompt text identical. This makes
+  cache/eager-cache behavior inspectable for repeated parent/minibatch
+  proposals without changing the model-visible prompt.
+- public `.proposal_count(0)` no longer creates parent-only iterations. It is
+  normalized to one serial proposal, matching upstream's "parallel proposal
+  count <= 1 means serial" behavior, and the resolved profile reports
+  `proposal_count=1`.
 
 Current feedback/reflection answer:
 
@@ -215,6 +229,12 @@ whether side-info compression, active failure sampling, stronger reflector model
 or multi-proposal diversity produces more specific proposals. Do not run another
 paid release attempt before this diagnosis is translated into an explicit
 profile/experiment plan.
+- post-run report audit found one duplicate reflection request/response pair in
+  the completed run. The generic reflection renderer now adds stable
+  `gepa_attempt_index` provider metadata when GEPA calls the LM-backed
+  reflector. Because LM cache keys include provider hints, resume of the same
+  attempt remains cacheable while identical prompt text in a later GEPA attempt
+  no longer burns search diversity by replaying the older stochastic response.
 
 ## Current Audit-Wave Disposition
 

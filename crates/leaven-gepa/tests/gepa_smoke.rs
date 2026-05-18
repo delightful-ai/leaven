@@ -87,6 +87,7 @@ fn fixed_reflector_rejects_missing_parent_before_recording_proposal() {
                 source_refs: Vec::new(),
             }],
             source_refs: Vec::new(),
+            attempt_index: None,
         };
 
         let error = reflector
@@ -125,6 +126,7 @@ fn fixed_reflector_surfaces_apply_failures_after_recording_proposal() {
                 source_refs: Vec::new(),
             }],
             source_refs: Vec::new(),
+            attempt_index: None,
         };
 
         let candidate = reflector
@@ -1254,6 +1256,47 @@ fn gepa_proposal_count_applies_multiple_reflections_in_one_iteration() {
 }
 
 #[test]
+fn gepa_proposal_count_zero_normalizes_to_one_serial_proposal() {
+    block_on(async {
+        let case_set = train_case_set();
+        let store = InlineEvidenceStore::<ScalarEvidence>::new("inline");
+        let mut engine = Engine::<SamplingProblem>::builder()
+            .evaluator(PrefixImprovementEvaluator)
+            .build();
+        let seed = engine
+            .insert_seed(
+                PartMapArtifact(BTreeMap::from([("answer".to_owned(), "draft".to_owned())])),
+                0,
+            )
+            .unwrap();
+        let mut gepa = Gepa::new(
+            PartMapSurface,
+            ParetoFrontier::by_case().build(),
+            FixedSurfaceEdit::new("improved".to_owned()),
+        )
+        .reflective_dataset(OneReflectiveExample)
+        .batch_sampler(EpochShuffled::new(1))
+        .validation_policy(MinibatchThenValidation)
+        .skip_perfect_score(false)
+        .proposal_count(0)
+        .max_iterations(1);
+
+        engine.run(&mut gepa, &case_set, &store).await.unwrap();
+
+        let child_count = engine.view().candidate_tree().children(seed).len();
+        let report = gepa.report();
+        assert!(
+            child_count == 1
+                && report.profile.proposal_count == 1
+                && report.proposal_attempts.len() == 1,
+            "proposal_count(0) should normalize to one proposal, got child_count={child_count}, profile={:?}, attempts={}",
+            report.profile,
+            report.proposal_attempts.len()
+        );
+    });
+}
+
+#[test]
 fn fast_certified_profile_keeps_full_validation_admission() {
     block_on(async {
         let case_set = CaseSet::new(vec![(), ()])
@@ -1288,6 +1331,16 @@ fn fast_certified_profile_keeps_full_validation_admission() {
 
         let report = gepa.report();
         assert_eq!(GepaProfile::FastCertified.label(), "fast-certified");
+        assert_eq!(report.profile.label, "fast-certified");
+        assert_eq!(report.profile.train_minibatch_size, Some(1));
+        assert_eq!(report.profile.proposal_count, 2);
+        assert_eq!(report.profile.proposal_mode, "serial");
+        assert_eq!(report.profile.validation_policy, "full-validation");
+        assert_eq!(
+            report.profile.certification_mode,
+            "full-validation-before-admission"
+        );
+        assert!(report.profile.skip_perfect_score);
         assert_eq!(report.proposal_attempts.len(), 2);
         assert_eq!(report.candidates.len(), 3);
         assert_eq!(report.full_validation_evals, 3);
@@ -2094,7 +2147,15 @@ fn accepted_iteration_emits_reference_phase_order() {
 
         let events = gepa.events();
         let profile = event_position(events, |event| {
-            matches!(event, leaven_gepa::GepaEventSummary::ProfileResolved)
+            matches!(
+                event,
+                leaven_gepa::GepaEventSummary::ProfileResolved { profile }
+                    if profile.label == "reference"
+                        && profile.train_minibatch_size == Some(3)
+                        && profile.proposal_count == 1
+                        && profile.validation_policy == "full-validation"
+                        && profile.certification_mode == "full-validation-before-admission"
+            )
         });
         let seed_started = event_position(events, |event| {
             matches!(

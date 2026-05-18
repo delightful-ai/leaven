@@ -11,6 +11,8 @@ use crate::{
 /// Detailed GEPA optimizer report.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct GepaReport {
+    /// Effective GEPA profile label and report-relevant knobs.
+    pub profile: GepaReportProfile,
     /// Best candidate index selected by GEPA validation/frontier state.
     pub best_index: Option<GepaCandidateIndex>,
     /// Best candidate id selected by GEPA validation/frontier state.
@@ -90,6 +92,7 @@ impl GepaReport {
             })
             .collect();
         Self {
+            profile: input.profile.clone(),
             best_index,
             best_candidate: input.best_candidate,
             validation_best_index,
@@ -108,6 +111,7 @@ impl GepaReport {
 }
 
 pub(crate) struct GepaReportInput<'a> {
+    pub(crate) profile: &'a GepaReportProfile,
     pub(crate) reference_state: &'a GepaReferenceState,
     pub(crate) candidate_history: &'a [GepaCandidateHistoryEntry],
     pub(crate) proposal_attempts: &'a [GepaProposalAttempt],
@@ -116,6 +120,42 @@ pub(crate) struct GepaReportInput<'a> {
     pub(crate) validation_best_candidate: Option<CandidateId>,
     pub(crate) skip_perfect_score: bool,
     pub(crate) perfect_score: f64,
+}
+
+/// Effective GEPA profile facts reported with every run.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct GepaReportProfile {
+    /// Stable profile label after public builder overrides are applied.
+    pub label: String,
+    /// Train minibatch size when the sampler is a known GEPA profile sampler.
+    pub train_minibatch_size: Option<usize>,
+    /// Serial proposal attempts per selected parent/minibatch.
+    pub proposal_count: usize,
+    /// Proposal scheduling mode.
+    pub proposal_mode: String,
+    /// Validation/admission policy label.
+    pub validation_policy: String,
+    /// Certification mode reported for accepted candidates.
+    pub certification_mode: String,
+    /// Whether all-perfect parent minibatches are skipped before reflection.
+    pub skip_perfect_score: bool,
+    /// Score threshold treated as perfect by the skip-perfect policy.
+    pub perfect_score: String,
+}
+
+impl Default for GepaReportProfile {
+    fn default() -> Self {
+        Self {
+            label: "reference".to_owned(),
+            train_minibatch_size: Some(3),
+            proposal_count: 1,
+            proposal_mode: "serial".to_owned(),
+            validation_policy: "full-validation".to_owned(),
+            certification_mode: "full-validation-before-admission".to_owned(),
+            skip_perfect_score: true,
+            perfect_score: "1".to_owned(),
+        }
+    }
 }
 
 /// One accepted candidate row in a GEPA report.

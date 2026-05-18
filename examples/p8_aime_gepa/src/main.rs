@@ -1251,6 +1251,7 @@ fn p8_gepa_report_json(
     let candidate_admissions = p8_gepa_candidate_admission_map(report);
     let (accepted_count, accepted_unadmitted_count) = gepa_attempt_counts(report);
     serde_json::json!({
+        "profile": &report.profile,
         "best_index": report.best_index.map(GepaCandidateIndex::get),
         "best_candidate": report.best_candidate.map(|candidate| candidate.to_string()),
         "validation_best_index": report.validation_best_index.map(GepaCandidateIndex::get),
@@ -1503,8 +1504,16 @@ fn p8_gepa_events_for_report(run: &AimeRunResult) -> &[GepaEventSummary] {
 
 fn p8_gepa_event_json(event: &GepaEventSummary) -> serde_json::Value {
     match event {
-        GepaEventSummary::ProfileResolved => serde_json::json!({
+        GepaEventSummary::ProfileResolved { profile } => serde_json::json!({
             "phase": "profile_resolved",
+            "profile": &profile.label,
+            "train_minibatch_size": profile.train_minibatch_size,
+            "proposal_count": profile.proposal_count,
+            "proposal_mode": &profile.proposal_mode,
+            "validation_policy": &profile.validation_policy,
+            "certification_mode": &profile.certification_mode,
+            "skip_perfect_score": profile.skip_perfect_score,
+            "perfect_score": &profile.perfect_score,
         }),
         GepaEventSummary::SeedValidationStarted { candidate } => serde_json::json!({
             "phase": "seed_validation_started",
@@ -6672,6 +6681,12 @@ Provide the new parameter value within ``` blocks."
 
     fn assert_p8_report_gepa_summary(report: &serde_json::Value) {
         let gepa_events = report["gepa_events"].as_array().unwrap();
+        assert!(gepa_events.iter().any(|event| {
+            event["phase"] == "profile_resolved"
+                && event["profile"] == "custom"
+                && event["proposal_count"] == 1
+                && event["skip_perfect_score"] == OPTIMIZE_ANYTHING_SKIP_PERFECT_SCORE
+        }));
         assert!(
             gepa_events
                 .iter()
@@ -6747,6 +6762,22 @@ Provide the new parameter value within ``` blocks."
                 .any(|event| event["phase"] == "optimization_ended")
         );
         let gepa_report = &report["gepa_report"];
+        assert_eq!(gepa_report["profile"]["label"], "custom");
+        assert_eq!(gepa_report["profile"]["train_minibatch_size"], 3);
+        assert_eq!(gepa_report["profile"]["proposal_count"], 1);
+        assert_eq!(gepa_report["profile"]["proposal_mode"], "serial");
+        assert_eq!(
+            gepa_report["profile"]["validation_policy"],
+            "full-validation"
+        );
+        assert_eq!(
+            gepa_report["profile"]["certification_mode"],
+            "full-validation-before-admission"
+        );
+        assert_eq!(
+            gepa_report["profile"]["skip_perfect_score"],
+            OPTIMIZE_ANYTHING_SKIP_PERFECT_SCORE
+        );
         assert_eq!(gepa_report["total_metric_calls"], 8);
         let event_metric_calls: u64 = gepa_events
             .iter()

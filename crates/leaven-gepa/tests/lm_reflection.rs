@@ -318,6 +318,44 @@ fn default_renderer_and_plain_text_parser_cover_empty_feedback_and_bad_part() {
     assert!(no_output_text.contains("## Input\nthe input"));
     assert!(!no_output_text.contains("## Trace"));
 
+    let first_attempt = ReflectRequest::for_part(parent, "text", "text").with_attempt_index(1);
+    let second_attempt = ReflectRequest::for_part(parent, "text", "text").with_attempt_index(2);
+    let first_rendered = DefaultReflectionRenderer
+        .render(ReflectionRenderInput::<TestProblem, WholeTextSurface> {
+            request: &first_attempt,
+            artifact: &artifact,
+            surface: &surface,
+            model: "mock-renderer".into(),
+            config: &config,
+        })
+        .unwrap();
+    let second_rendered = DefaultReflectionRenderer
+        .render(ReflectionRenderInput::<TestProblem, WholeTextSurface> {
+            request: &second_attempt,
+            artifact: &artifact,
+            surface: &surface,
+            model: "mock-renderer".into(),
+            config: &config,
+        })
+        .unwrap();
+    assert_eq!(first_rendered.messages, second_rendered.messages);
+    assert_eq!(
+        first_rendered
+            .provider_hints
+            .metadata
+            .get("gepa_attempt_index")
+            .map(String::as_str),
+        Some("1")
+    );
+    assert_eq!(
+        second_rendered
+            .provider_hints
+            .metadata
+            .get("gepa_attempt_index")
+            .map(String::as_str),
+        Some("2")
+    );
+
     let request = request.with_source_refs([
         InfoRef::Candidate(parent),
         InfoRef::Assessment(AssessmentId::new()),
@@ -549,6 +587,7 @@ fn lm_backed_reflector_rejects_missing_parent_before_lm_call() {
             part_label: "text".to_owned(),
             examples: Vec::new(),
             source_refs: Vec::new(),
+            attempt_index: None,
         };
 
         let error = reflector

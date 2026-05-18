@@ -12,8 +12,8 @@ use serde::{Deserialize, Serialize};
 use crate::{
     CandidateSelector, CheckpointCandidateSelector, CheckpointGate, CheckpointPartSelector,
     CheckpointPopulation, Gate, GepaCaseEvidence, GepaEventSummary, GepaPopulation,
-    GepaProposalAttempt, GepaReferenceState, GepaReflector, PartSelector, ReflectiveDatasetBuilder,
-    ValidationPolicy,
+    GepaProposalAttempt, GepaReferenceState, GepaReflector, GepaReportProfile, PartSelector,
+    ReflectiveDatasetBuilder, ValidationPolicy,
     validation::{BatchSampler, CheckpointBatchSampler, CheckpointValidationPolicy, GepaRandom},
 };
 
@@ -33,6 +33,7 @@ pub struct GepaCheckpointState<
     ValidationPolicyState,
 > {
     train_partition: PartitionId,
+    profile: GepaReportProfile,
     max_iterations: usize,
     proposal_count: usize,
     skip_perfect_score: bool,
@@ -161,6 +162,7 @@ where
         }
         Ok(GepaCheckpointState {
             train_partition: self.train_partition.clone(),
+            profile: self.profile.clone(),
             max_iterations: self.max_iterations,
             proposal_count: self.proposal_count,
             skip_perfect_score: self.skip_perfect_score,
@@ -250,6 +252,7 @@ where
             }
         }
         self.train_partition = state.train_partition;
+        self.profile = state.profile;
         self.max_iterations = state.max_iterations;
         self.proposal_count = state.proposal_count;
         self.skip_perfect_score = state.skip_perfect_score;

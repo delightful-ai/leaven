@@ -4,6 +4,7 @@ use leaven_kernel::{CandidateId, CaseId};
 use serde::{Deserialize, Serialize};
 
 use crate::GepaCandidateIndex;
+use crate::report::GepaReportProfile;
 
 /// Non-fatal GEPA proposal skip reason.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
@@ -18,7 +19,10 @@ pub enum GepaSkipReason {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum GepaEventSummary {
     /// Profile was resolved.
-    ProfileResolved,
+    ProfileResolved {
+        /// Effective profile label and report-relevant knobs.
+        profile: GepaReportProfile,
+    },
     /// Seed validation started.
     SeedValidationStarted { candidate: CandidateId },
     /// Seed validation completed.
