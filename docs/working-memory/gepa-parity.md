@@ -1,7 +1,7 @@
 # GEPA Parity Working Ledger
 
 Status: active.
-Updated: 2026-05-18T12:10:33Z.
+Updated: 2026-05-18T12:31:41Z.
 
 ## Authority
 
@@ -139,6 +139,10 @@ Current speed stance:
   normalized to one serial proposal, matching upstream's "parallel proposal
   count <= 1 means serial" behavior, and the resolved profile reports
   `proposal_count=1`.
+- P8 README now documents the opt-in `LEAVEN_AIME_GEPA_PROFILE=fast-certified`
+  profile explicitly. Keep calling the implemented speed preset
+  `FastCertified`: it is a full-validation certified profile, not lazy or
+  async FastGEPA.
 - P8 reports now include `case_deltas`: per split/source baseline score,
   optimized score, score delta, and outcome (`improved`, `regressed`,
   `unchanged_correct`, `unchanged_wrong`, or missing-row states), plus split
@@ -156,6 +160,11 @@ Current speed stance:
   `gpt-5.1` reflection row was absent, and both `reports/p8-aime-start.json`
   and `reports/p8-aime-failure.json` recorded
   `comparison.reflection_model_alignment=upstream-matched`.
+- P8 reports now expose LM cache read order and write destination separately.
+  This matters for `eager-sqlite`: exact selected-run rows are read before
+  compatible workspace rows, while new responses write to the workspace cache.
+  The old single `lm_path` field is still present but is no longer the only
+  cache-location evidence operators should inspect.
 - P8 cache-only replay now reports the LM cache path topology explicitly:
   `eager-sqlite` reads the selected run-dir cache first, then workspace
   `.leaven/lm-cache.sqlite`, and writes through to the workspace cache. Failure
