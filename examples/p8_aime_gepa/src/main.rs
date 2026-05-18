@@ -394,7 +394,8 @@ fn report_best_and_event_lines(result: &Optimized<AimePrompt>) -> Vec<String> {
 fn report_case_lines(run: &AimeRunResult) -> Vec<String> {
     let mut lines = Vec::new();
     for split in &run.optimized.summary.evaluation.splits_reported {
-        for candidate in &split.candidates {
+        for (candidate_index, candidate) in split.candidates.iter().enumerate() {
+            let candidate_role = p8_candidate_report_role(candidate_index);
             for case in &candidate.cases {
                 let source_id = run
                     .report_metadata
@@ -402,10 +403,11 @@ fn report_case_lines(run: &AimeRunResult) -> Vec<String> {
                     .map(AimeReportMetadata::source_id)
                     .unwrap_or_else(|| "missing-source-id".to_owned());
                 lines.push(format!(
-                    "report_case={} source_id={} split={:?} score_state=present score={:.3} output_ref={} feedback_ref={} trace_refs={} output_chars={} feedback_chars={}",
+                    "report_case={} source_id={} split={:?} candidate_role={} score_state=present score={:.3} output_ref={} feedback_ref={} trace_refs={} output_chars={} feedback_chars={}",
                     case.case_id,
                     source_id,
                     split.role,
+                    candidate_role,
                     case.score,
                     case.output_ref
                         .as_ref()
@@ -572,6 +574,23 @@ fn report_lm_role_lines(role: &AimeLmRoleReport) -> Vec<String> {
             role.metrics.failures.provider,
             role.metrics.failures.unknown
         ),
+        format!(
+            "lm_role_durable_failures={} scope=run_dir_jsonl count={} missing_credentials={} authentication={} rate_limit={} retry_exhausted={} malformed_provider_response={} answer_parse={} scorer_parse={} budget_refusal={} cache={} transport={} provider={} unknown={}",
+            role.role.label(),
+            role.durable_failures.total(),
+            role.durable_failures.missing_credentials,
+            role.durable_failures.authentication,
+            role.durable_failures.rate_limit,
+            role.durable_failures.retry_exhausted,
+            role.durable_failures.malformed_provider_response,
+            role.durable_failures.answer_parse,
+            role.durable_failures.scorer_parse,
+            role.durable_failures.budget_refusal,
+            role.durable_failures.cache,
+            role.durable_failures.transport,
+            role.durable_failures.provider,
+            role.durable_failures.unknown
+        ),
     ]
 }
 
@@ -682,8 +701,11 @@ async fn try_run_aime(
         .run_dir
         .clone()
         .unwrap_or_else(|| leaven::run::default_local_run_dir(run_id));
-    let solver_telemetry = AimeLmTelemetry::new(config.solver.cache_policy);
-    let reflection_telemetry = AimeLmTelemetry::new(config.reflection.cache_policy);
+    let provider_failures_path = aime_provider_failures_path(&run_dir);
+    let solver_telemetry = AimeLmTelemetry::new(config.solver.cache_policy)
+        .with_durable_provider_failures(AimeLmRole::Solver, provider_failures_path.clone());
+    let reflection_telemetry = AimeLmTelemetry::new(config.reflection.cache_policy)
+        .with_durable_provider_failures(AimeLmRole::Reflection, provider_failures_path.clone());
     let solver = aime_solver_lm(&config.solver, solver_telemetry.clone(), &run_dir);
     let runner_fingerprint = aime_runner_fingerprint(&config.solver);
     let scorer_fingerprint = aime_scorer_fingerprint();
@@ -744,7 +766,8 @@ async fn try_run_aime(
         &config,
         solver_telemetry.snapshot(),
         reflection_telemetry.snapshot(),
-    );
+    )
+    .with_durable_failures(AimeDurableProviderFailures::read(&provider_failures_path));
     let result = AimeRunResult {
         optimized,
         report_metadata,
@@ -1186,9 +1209,23 @@ fn p8_live_provider_proof_json(roles: &AimeRoleReports) -> serde_json::Value {
 
 fn p8_provider_failures_json(roles: &AimeRoleReports) -> serde_json::Value {
     let failures = p8_provider_failure_totals(roles);
+    let durable_failures = p8_durable_provider_failure_totals(roles);
     serde_json::json!({
         "count": failures.total(),
+        "scope": "process_local",
         "totals": p8_provider_failure_counts_json(&failures),
+        "durable": {
+            "scope": "run_dir_jsonl",
+            "count": durable_failures.total(),
+            "totals": p8_provider_failure_counts_json(&durable_failures),
+            "roles": roles.iter().map(|role| serde_json::json!({
+                "role": role.role.label(),
+                "provider": role.provider.label(),
+                "live": role.live,
+                "model": role.model,
+                "failures": p8_provider_failure_counts_json(&role.durable_failures),
+            })).collect::<Vec<_>>(),
+        },
         "roles": roles.iter().map(|role| serde_json::json!({
             "role": role.role.label(),
             "provider": role.provider.label(),
@@ -1197,6 +1234,53 @@ fn p8_provider_failures_json(roles: &AimeRoleReports) -> serde_json::Value {
             "failures": p8_provider_failure_counts_json(&role.metrics.failures),
         })).collect::<Vec<_>>(),
     })
+}
+
+fn p8_durable_provider_failure_totals(roles: &AimeRoleReports) -> AimeProviderFailureCounts {
+    AimeProviderFailureCounts {
+        missing_credentials: roles
+            .iter()
+            .map(|role| role.durable_failures.missing_credentials)
+            .sum(),
+        authentication: roles
+            .iter()
+            .map(|role| role.durable_failures.authentication)
+            .sum(),
+        rate_limit: roles
+            .iter()
+            .map(|role| role.durable_failures.rate_limit)
+            .sum(),
+        retry_exhausted: roles
+            .iter()
+            .map(|role| role.durable_failures.retry_exhausted)
+            .sum(),
+        malformed_provider_response: roles
+            .iter()
+            .map(|role| role.durable_failures.malformed_provider_response)
+            .sum(),
+        answer_parse: roles
+            .iter()
+            .map(|role| role.durable_failures.answer_parse)
+            .sum(),
+        scorer_parse: roles
+            .iter()
+            .map(|role| role.durable_failures.scorer_parse)
+            .sum(),
+        budget_refusal: roles
+            .iter()
+            .map(|role| role.durable_failures.budget_refusal)
+            .sum(),
+        cache: roles.iter().map(|role| role.durable_failures.cache).sum(),
+        transport: roles
+            .iter()
+            .map(|role| role.durable_failures.transport)
+            .sum(),
+        provider: roles
+            .iter()
+            .map(|role| role.durable_failures.provider)
+            .sum(),
+        unknown: roles.iter().map(|role| role.durable_failures.unknown).sum(),
+    }
 }
 
 fn p8_provider_failure_totals(roles: &AimeRoleReports) -> AimeProviderFailureCounts {
@@ -1317,6 +1401,7 @@ fn p8_lm_role_report_json(role: &AimeLmRoleReport) -> serde_json::Value {
                 "hit_cost_zero": role.metrics.cache.hit_cost_zero,
             },
             "failures": p8_provider_failure_counts_json(&role.metrics.failures),
+            "durable_failures": p8_provider_failure_counts_json(&role.durable_failures),
         },
     })
 }
@@ -1357,7 +1442,8 @@ fn p8_lm_response_json(response: &AimeLmResponseRecord) -> serde_json::Value {
 fn p8_case_report_json(run: &AimeRunResult) -> Vec<serde_json::Value> {
     let mut cases = Vec::new();
     for split in &run.optimized.summary.evaluation.splits_reported {
-        for candidate in &split.candidates {
+        for (candidate_index, candidate) in split.candidates.iter().enumerate() {
+            let candidate_role = p8_candidate_report_role(candidate_index);
             for case in &candidate.cases {
                 cases.push(serde_json::json!({
                     "case_id": case.case_id.to_string(),
@@ -1367,6 +1453,7 @@ fn p8_case_report_json(run: &AimeRunResult) -> Vec<serde_json::Value> {
                         .map(AimeReportMetadata::source_id)
                         .unwrap_or_else(|| "missing-source-id".to_owned()),
                     "split": split_role_label(&split.role),
+                    "candidate_role": candidate_role,
                     "candidate": candidate.candidate.to_string(),
                     "score_state": "present",
                     "score": case.score,
@@ -1384,6 +1471,13 @@ fn p8_case_report_json(run: &AimeRunResult) -> Vec<serde_json::Value> {
         }
     }
     cases
+}
+
+fn p8_candidate_report_role(candidate_index: usize) -> &'static str {
+    match candidate_index {
+        0 => "baseline",
+        _ => "optimized",
+    }
 }
 
 fn evidence_ref_text(reference: &leaven::kernel::EvidenceRef) -> String {
@@ -1742,6 +1836,7 @@ impl AimeRoleReports {
                     request_example: aime_solver_request_example(&config.solver),
                 },
                 metrics: solver_metrics,
+                durable_failures: AimeProviderFailureCounts::default(),
             },
             reflection: AimeLmRoleReport {
                 role: AimeLmRole::Reflection,
@@ -1767,12 +1862,19 @@ impl AimeRoleReports {
                     request_example: aime_reflection_request_example(&config.reflection),
                 },
                 metrics: reflection_metrics,
+                durable_failures: AimeProviderFailureCounts::default(),
             },
         }
     }
 
     fn iter(&self) -> impl Iterator<Item = &AimeLmRoleReport> {
         [&self.solver, &self.reflection].into_iter()
+    }
+
+    fn with_durable_failures(mut self, failures: AimeDurableProviderFailures) -> Self {
+        self.solver.durable_failures = failures.solver;
+        self.reflection.durable_failures = failures.reflection;
+        self
     }
 }
 
@@ -1792,6 +1894,7 @@ struct AimeLmRoleReport {
     parser: &'static str,
     prompt_contract: AimePromptContractReport,
     metrics: AimeLmRoleMetrics,
+    durable_failures: AimeProviderFailureCounts,
 }
 
 #[derive(Clone, Debug)]
@@ -1990,6 +2093,7 @@ impl AimeLmCacheMetrics {
 struct AimeLmTelemetry {
     policy: LmCachePolicy,
     metrics: Arc<Mutex<AimeLmRoleMetrics>>,
+    durable_failures: Option<AimeDurableProviderFailureLog>,
 }
 
 impl AimeLmTelemetry {
@@ -1997,7 +2101,17 @@ impl AimeLmTelemetry {
         Self {
             policy,
             metrics: Arc::new(Mutex::new(AimeLmRoleMetrics::default())),
+            durable_failures: None,
         }
+    }
+
+    fn with_durable_provider_failures(mut self, role: AimeLmRole, path: PathBuf) -> Self {
+        self.durable_failures = Some(AimeDurableProviderFailureLog {
+            role,
+            path: Arc::new(path),
+            lock: Arc::new(Mutex::new(())),
+        });
+        self
     }
 
     fn record(&self, result: &Result<Metered<LmResponse>, LmError>) {
@@ -2008,6 +2122,9 @@ impl AimeLmTelemetry {
             }
             Err(error) => {
                 metrics.record_failure(error);
+                if let Some(durable) = &self.durable_failures {
+                    durable.record_failure(AimeProviderFailureKind::from_lm_error(error));
+                }
             }
         }
     }
@@ -2032,6 +2149,95 @@ impl AimeLmTelemetry {
             .expect("AIME telemetry lock is valid")
             .clone()
     }
+}
+
+#[derive(Clone, Debug)]
+struct AimeDurableProviderFailureLog {
+    role: AimeLmRole,
+    path: Arc<PathBuf>,
+    lock: Arc<Mutex<()>>,
+}
+
+impl AimeDurableProviderFailureLog {
+    fn record_failure(&self, kind: AimeProviderFailureKind) {
+        let _guard = self.lock.lock().expect("AIME durable failure log lock");
+        if let Some(parent) = self.path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let line = serde_json::json!({
+            "schema": "leaven.p8_aime.provider_failure.v1",
+            "role": self.role.label(),
+            "kind": kind.label(),
+        })
+        .to_string();
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&*self.path)
+        {
+            use std::io::Write as _;
+            let _ = writeln!(file, "{line}");
+            let _ = file.sync_all();
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+struct AimeDurableProviderFailures {
+    solver: AimeProviderFailureCounts,
+    reflection: AimeProviderFailureCounts,
+}
+
+impl AimeDurableProviderFailures {
+    fn read(path: &Path) -> Self {
+        let Ok(text) = std::fs::read_to_string(path) else {
+            return Self::default();
+        };
+        let mut failures = Self::default();
+        for line in text.lines().filter(|line| !line.trim().is_empty()) {
+            let Ok(record) = serde_json::from_str::<serde_json::Value>(line) else {
+                continue;
+            };
+            let Some(role) = record.get("role").and_then(serde_json::Value::as_str) else {
+                continue;
+            };
+            let Some(kind) = record
+                .get("kind")
+                .and_then(serde_json::Value::as_str)
+                .and_then(aime_provider_failure_kind_from_label)
+            else {
+                continue;
+            };
+            match role {
+                "solver" => failures.solver.increment(kind),
+                "reflection" => failures.reflection.increment(kind),
+                _ => {}
+            }
+        }
+        failures
+    }
+}
+
+fn aime_provider_failures_path(run_dir: &Path) -> PathBuf {
+    run_dir.join("lm-provider-failures.jsonl")
+}
+
+fn aime_provider_failure_kind_from_label(label: &str) -> Option<AimeProviderFailureKind> {
+    Some(match label {
+        "missing_credentials" => AimeProviderFailureKind::MissingCredentials,
+        "authentication" => AimeProviderFailureKind::Authentication,
+        "rate_limit" => AimeProviderFailureKind::RateLimit,
+        "retry_exhausted" => AimeProviderFailureKind::RetryExhausted,
+        "malformed_provider_response" => AimeProviderFailureKind::MalformedProviderResponse,
+        "answer_parse" => AimeProviderFailureKind::AnswerParse,
+        "scorer_parse" => AimeProviderFailureKind::ScorerParse,
+        "budget_refusal" => AimeProviderFailureKind::BudgetRefusal,
+        "cache" => AimeProviderFailureKind::Cache,
+        "transport" => AimeProviderFailureKind::Transport,
+        "provider" => AimeProviderFailureKind::Provider,
+        "unknown" => AimeProviderFailureKind::Unknown,
+        _ => return None,
+    })
 }
 
 #[derive(Clone)]
@@ -2119,7 +2325,6 @@ impl AimeProviderFailureKind {
         }
     }
 
-    #[cfg(test)]
     const fn label(self) -> &'static str {
         match self {
             Self::MissingCredentials => "missing_credentials",
@@ -4068,6 +4273,14 @@ mod tests {
         assert_optional_score(result.summary.baseline_test_score, 0.0);
         assert_optional_score(result.summary.test_score, 1.0);
         assert_eq!(result.summary.evaluation.splits_reported.len(), 3);
+        assert!(
+            result
+                .summary
+                .evaluation
+                .splits_reported
+                .iter()
+                .all(|split| split.candidates.len() == 2)
+        );
         assert!(result.budget.spent.metric_calls > 0);
         assert_eq!(result.budget.spent.llm_calls, 1);
         assert_eq!(result.budget.spent.prompt_tokens, 37);
@@ -5237,6 +5450,10 @@ Provide the new parameter value within ``` blocks."
                 })
         );
         assert_eq!(report["lm_roles"][1]["metrics"]["cost"]["llm_calls"], 1);
+        assert_eq!(
+            report["lm_roles"][0]["metrics"]["durable_failures"]["count"],
+            0
+        );
         assert_eq!(report["live_provider_proof"]["role_count"], 2);
         assert_eq!(report["live_provider_proof"]["live_roles"], 0);
         assert_eq!(report["live_provider_proof"]["all_roles_live"], false);
@@ -5245,7 +5462,13 @@ Provide the new parameter value within ``` blocks."
             GEPA_AIME_OPENAI_REQUEST_TIMEOUT_SECONDS
         );
         assert_eq!(report["provider_failures"]["count"], 0);
+        assert_eq!(report["provider_failures"]["scope"], "process_local");
         assert_eq!(report["provider_failures"]["totals"]["count"], 0);
+        assert_eq!(
+            report["provider_failures"]["durable"]["scope"],
+            "run_dir_jsonl"
+        );
+        assert_eq!(report["provider_failures"]["durable"]["count"], 0);
         assert_eq!(
             report["provider_failures"]["roles"][0]["failures"]["count"],
             0
@@ -5254,6 +5477,49 @@ Provide the new parameter value within ``` blocks."
             report["provider_failures"]["roles"][1]["failures"]["count"],
             0
         );
+    }
+
+    #[test]
+    fn p8_provider_failure_report_includes_durable_resume_counts() {
+        let path = std::env::temp_dir().join(format!(
+            "leaven-p8-provider-failures-{}-{}.jsonl",
+            std::process::id(),
+            RunId::new()
+        ));
+        let _ = std::fs::remove_file(&path);
+        let telemetry = AimeLmTelemetry::new(LmCachePolicy::Never)
+            .with_durable_provider_failures(AimeLmRole::Solver, path.clone());
+        telemetry.record(&Err(LmError::invalid_request(
+            "OPENAI_API_KEY is required for live OpenAI AIME",
+        )));
+
+        let reports = AimeRoleReports::from_config(
+            &AimeRunConfig::deterministic_smoke(),
+            AimeLmRoleMetrics::default(),
+            AimeLmRoleMetrics::default(),
+        )
+        .with_durable_failures(AimeDurableProviderFailures::read(&path));
+        let report = p8_provider_failures_json(&reports);
+
+        assert_eq!(report["count"], 0);
+        assert_eq!(report["totals"]["count"], 0);
+        assert_eq!(report["durable"]["count"], 1);
+        assert_eq!(report["durable"]["totals"]["missing_credentials"], 1);
+        assert_eq!(
+            report["durable"]["roles"][0]["failures"]["missing_credentials"],
+            1
+        );
+        assert_eq!(report["durable"]["roles"][1]["failures"]["count"], 0);
+
+        let lines = report_lm_role_lines(&reports.solver);
+        assert!(lines.iter().any(|line| {
+            line == "lm_role_failures=solver count=0 missing_credentials=0 authentication=0 rate_limit=0 retry_exhausted=0 malformed_provider_response=0 answer_parse=0 scorer_parse=0 budget_refusal=0 cache=0 transport=0 provider=0 unknown=0"
+        }));
+        assert!(lines.iter().any(|line| {
+            line == "lm_role_durable_failures=solver scope=run_dir_jsonl count=1 missing_credentials=1 authentication=0 rate_limit=0 retry_exhausted=0 malformed_provider_response=0 answer_parse=0 scorer_parse=0 budget_refusal=0 cache=0 transport=0 provider=0 unknown=0"
+        }));
+
+        let _ = std::fs::remove_file(path);
     }
 
     fn assert_p8_report_run_summary_equivalence(
@@ -5445,8 +5711,24 @@ Provide the new parameter value within ``` blocks."
     }
 
     fn assert_p8_report_case_safety(report: &serde_json::Value) {
+        let cases = report["cases"].as_array().unwrap();
+        for split in ["train", "validation", "test"] {
+            assert!(
+                cases
+                    .iter()
+                    .any(|case| case["split"] == split && case["candidate_role"] == "baseline"),
+                "missing baseline {split} case rows"
+            );
+            assert!(
+                cases
+                    .iter()
+                    .any(|case| case["split"] == split && case["candidate_role"] == "optimized"),
+                "missing optimized {split} case rows"
+            );
+        }
         assert!(report["cases"].as_array().unwrap().iter().all(|case| {
             case.get("source_id").is_some()
+                && case.get("candidate_role").is_some()
                 && case.get("score_state").is_some()
                 && case.get("output_ref").is_some()
                 && case.get("feedback_ref").is_some()

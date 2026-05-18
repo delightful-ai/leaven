@@ -1,6 +1,6 @@
 //! Product-run report and summary construction.
 
-use std::{collections::BTreeMap, fs};
+use std::fs;
 
 use leaven_core::{
     Artifact, AssessmentGranularity, AssessmentTarget, EvaluationPurpose, EvaluationRequest,
@@ -11,9 +11,7 @@ use leaven_eval::{
     SplitReport, SplitRole,
 };
 use leaven_evidence::{CaseAssessmentEvidence, OutputRecord};
-use leaven_kernel::{
-    AssessmentId, BudgetSnapshot, CandidateId, Cost, ErrorKind, EvaluationRequestId, EvaluatorId,
-};
+use leaven_kernel::{AssessmentId, BudgetSnapshot, CandidateId, Cost, ErrorKind, EvaluatorId};
 use leaven_store::EvidenceStore;
 
 use crate::{
@@ -82,7 +80,6 @@ type SummaryBuild<A> = (
 
 pub fn build_summary<A, I, T>(
     engine: &leaven_engine::Engine<RunProblem<A, I, T>>,
-    store: &dyn EvidenceStore<CaseAssessmentEvidence>,
     inputs: ReportInputs<'_, I, T>,
 ) -> Result<SummaryBuild<A>, leaven_engine::OptimizerError>
 where
@@ -142,7 +139,7 @@ where
             dataset: inputs.dataset.fingerprint(),
             splits: inputs.splits.fingerprint(),
             cost,
-            splits_reported: split_reports_for(&view, store, inputs.splits)?,
+            splits_reported: final_evaluation_split_reports(inputs.final_evaluations),
         },
     };
     let events = view
@@ -151,6 +148,55 @@ where
         .map(event_summary)
         .collect();
     Ok((best, summary, events))
+}
+
+fn final_evaluation_split_reports(final_evaluations: &FinalEvaluations) -> Vec<SplitReport> {
+    let mut reports = Vec::new();
+    push_final_split_report(
+        &mut reports,
+        SplitRole::Train,
+        PartitionId::from("TRAIN"),
+        final_evaluations.baseline_train.clone(),
+        final_evaluations.train.clone(),
+    );
+    push_final_split_report(
+        &mut reports,
+        SplitRole::Validation,
+        PartitionId::from("VALIDATION"),
+        final_evaluations.baseline_validation.clone(),
+        final_evaluations.validation.clone(),
+    );
+    push_final_split_report(
+        &mut reports,
+        SplitRole::Test,
+        PartitionId::from("TEST"),
+        final_evaluations.baseline_test.clone(),
+        final_evaluations.test.clone(),
+    );
+    reports
+}
+
+fn push_final_split_report(
+    reports: &mut Vec<SplitReport>,
+    role: SplitRole,
+    partition: PartitionId,
+    baseline: Option<CandidateEvaluationSummary>,
+    optimized: Option<CandidateEvaluationSummary>,
+) {
+    let mut candidates = Vec::new();
+    if let Some(baseline) = baseline {
+        candidates.push(baseline);
+    }
+    if let Some(optimized) = optimized {
+        candidates.push(optimized);
+    }
+    if !candidates.is_empty() {
+        reports.push(SplitReport {
+            role,
+            partition,
+            candidates,
+        });
+    }
 }
 
 pub async fn final_eval<A, I, T>(
@@ -189,6 +235,7 @@ where
     ))
 }
 
+#[cfg(test)]
 fn split_reports_for<A, I, T>(
     view: &leaven_engine::RunGraphView<'_, RunProblem<A, I, T>>,
     store: &dyn EvidenceStore<CaseAssessmentEvidence>,
@@ -199,6 +246,10 @@ where
     I: Clone + Send + Sync + 'static,
     T: Clone + Send + Sync + 'static,
 {
+    use std::collections::BTreeMap;
+
+    use leaven_kernel::EvaluationRequestId;
+
     let mut groups = BTreeMap::<
         (PartitionId, SplitRole, EvaluationRequestId, CandidateId),
         Vec<AssessmentId>,
@@ -237,6 +288,7 @@ where
     Ok(reports.into_values().collect())
 }
 
+#[cfg(test)]
 fn assessment_split<A, I, T>(
     view: &leaven_engine::RunGraphView<'_, RunProblem<A, I, T>>,
     assessment: AssessmentId,
@@ -562,6 +614,16 @@ mod tests {
     use leaven_store_inline::InlineEvidenceStore;
 
     use super::*;
+
+    fn report_summary(candidate: CandidateId, score: f64) -> CandidateEvaluationSummary {
+        CandidateEvaluationSummary {
+            candidate,
+            request: EvaluationRequestId::new(),
+            assessments: Vec::new(),
+            average_score: Some(score),
+            cases: Vec::new(),
+        }
+    }
 
     #[test]
     fn cache_summary_groups_hits_misses_and_bypasses_by_storage_status() {
@@ -934,6 +996,33 @@ mod tests {
                     .any(|report| report.role == SplitRole::Custom("audit".into()))
             );
         });
+    }
+
+    #[test]
+    fn final_evaluation_split_reports_preserve_baseline_and_optimized_roles() {
+        let candidate = CandidateId::new();
+        let train = report_summary(candidate, 1.0);
+        let validation = report_summary(candidate, 0.5);
+        let test = report_summary(candidate, 0.0);
+        let reports = final_evaluation_split_reports(&FinalEvaluations {
+            baseline_train: Some(train.clone()),
+            train: Some(train),
+            baseline_validation: Some(validation.clone()),
+            validation: Some(validation),
+            baseline_test: Some(test.clone()),
+            test: Some(test),
+            cost: Cost::zero(),
+        });
+
+        assert_eq!(reports.len(), 3);
+        for report in &reports {
+            assert_eq!(report.candidates.len(), 2);
+            assert_eq!(report.candidates[0].candidate, candidate);
+            assert_eq!(report.candidates[1].candidate, candidate);
+        }
+        assert_eq!(reports[0].role, SplitRole::Train);
+        assert_eq!(reports[1].role, SplitRole::Validation);
+        assert_eq!(reports[2].role, SplitRole::Test);
     }
 
     #[test]

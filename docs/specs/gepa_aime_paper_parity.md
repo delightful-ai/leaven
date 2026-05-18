@@ -932,7 +932,10 @@ Minimum test cases:
 - live P8 stops by metric-call budget and returns a stored/resumable run;
 - resumed P8 does not repeat committed evaluations;
 - final report includes baseline/optimized train, validation, and held-out test
-  scores plus case-level feedback.
+  scores plus case-level feedback;
+- final report case rows preserve the baseline and optimized roles even when
+  the optimized best candidate is the seed and evaluation-cache hits reuse the
+  same assessment rows.
 
 Minimum test cases/smokes:
 

@@ -1,7 +1,7 @@
 # GEPA Parity Working Ledger
 
 Status: active.
-Updated: 2026-05-18T06:43:44Z.
+Updated: 2026-05-18T07:12:00Z.
 
 ## Authority
 
@@ -27,9 +27,11 @@ documented, tested, and reported.
 The parity matrix currently records the core GEPA reference-loop rows as proven
 or intentional deltas. The remaining P0 row is P8/AIME result parity: a live
 release run/report now proves the operator path, source counts/cache hash,
-cache/resume behavior, search budget, model profile, and zero provider
-failures, but the completed run did not improve over the seed and therefore
-does not prove "as good as GEPA" benchmark quality.
+cache/resume behavior, search budget, and model profile. The completed report
+predates durable provider-failure counters, so it cannot by itself prove zero
+provider failures across the failed/resumed release attempt. The completed run
+also did not improve over the seed and therefore does not prove "as good as
+GEPA" benchmark quality.
 
 Important currently proven rows include:
 
@@ -175,9 +177,13 @@ Report caveat from the diagnosis pass:
   release attempt;
 - the earlier OpenAI transport timeouts are real attempt history and are only
   captured in this ledger/output logs, not in the final `lm_roles[].metrics`;
-- until LM telemetry/failure counters are durable across resume, final P8 JSON
-  must not be used alone to prove "zero provider failures" for a multi-process
-  release attempt.
+- post-run P8 code now appends provider failures to
+  `lm-provider-failures.jsonl` in the run directory and projects those counts
+  under `provider_failures.durable`, while keeping process-local role metrics
+  separate;
+- the completed `.leaven/release-runs/p8-aime-gepa-20260518-043717` report
+  predates that durable field, so it still must not be used alone to prove
+  "zero provider failures" for the multi-process release attempt.
 
 Result-parity conclusion:
 
@@ -209,9 +215,13 @@ Comparison notes against the older improving artifact:
 - the current materialized-cache run accepted eight train-screening children,
   but candidate `5` only tied seed validation (`0.533`) and no child exceeded
   seed validation, so strict result-quality parity remains open;
-- top-level `cases` in the current report lists final train/test rows only;
-  validation detail is currently available through
-  `gepa_report.candidates[*].validation_subscores`.
+- the completed report's top-level `cases` listed final train/test rows only
+  because final validation reused cache rows from GEPA casewise validation and
+  the run summary rebuilt split reports by scanning partition requests;
+- post-run `leaven-run` now builds `splits_reported` from explicit final
+  evaluation summaries, so future P8 reports keep baseline/optimized
+  train/validation/test case rows with a `candidate_role` label even when best
+  equals seed and cache hits reuse the same assessment rows.
 
 ## Existing Prior Live Artifact
 
@@ -247,9 +257,8 @@ not by itself close the current live release row.
    cases, and parser outcomes.
 2. Diff the completed live report against the prior live artifact and upstream
    GEPA/DSPy AIME traces where available. Treat result-quality parity as open.
-3. Make LM role telemetry/failure counters durable or explicitly report their
-   process-local scope before using resumed live runs as provider-reliability
-   proof.
+3. Regenerate a live P8 report after the durable provider-failure field lands
+   before using resumed live runs as provider-reliability proof.
 4. Re-run live P8 only after the diagnosis identifies a concrete fix or
    intentional runtime/profile delta worth testing.
 5. Future release reports should be generated with the post-run report-schema

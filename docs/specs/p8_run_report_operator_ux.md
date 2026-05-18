@@ -61,6 +61,9 @@ The public result/report must expose:
 - case-level rows with case id, source id, split, candidate, score state,
   output/feedback/trace refs;
 - role/runtime summary for solver and reflection;
+- provider-failure summary by role, with process-local counters separated from
+  durable run-directory counters when a run resumes after a failed provider
+  process;
 - GEPA parity deltas and proof classification.
 
 Absent scores must remain absent. A missing validation/test score is not `0.0`.

@@ -741,7 +741,6 @@ where
         .clone();
     let (best, summary, events) = build_summary(
         &engine,
-        prepared_store.store.evidence_store(),
         ReportInputs {
             dataset,
             splits,
