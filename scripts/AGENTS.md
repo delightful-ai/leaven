@@ -5,6 +5,7 @@ Current scripts:
 - `lint-line-count.py`: enforces production Rust source size limits.
 - `test-suite-sla.py`: runs nextest plus doctests and enforces the `<30s` suite SLA.
 - `coverage-gate.py`: runs coverage over workspace tests, milestone binaries, and `xtask`, then enforces line and branch floors over production/source behavior. It excludes test harness files and `#[cfg(test)] mod ...` blocks from the denominator after execution, excludes live P5 from workspace coverage, and runs the P5 package without `--live-codex`; it does not prove live Codex behavior.
+- `p8-gepa-debug-sqlite.py`: exports an existing P8 `reports/p8-aime.json` file, and optionally an upstream GEPA `gepa_state.bin`, into local SQLite tables for optimizer debugging. It does not call providers, fetch datasets, or mutate source.
 
 ## Local Rules
 - Keep script defaults local and credential-free. Network, cloud, live model, or destructive behavior must be an explicit flag or environment opt-in.

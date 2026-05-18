@@ -59,24 +59,20 @@ matrix records current audit anchors and does not repin the spec.
 ## Current Priority
 
 The next implementation pass should not spend live provider budget by default.
-The completed live report remains historical operator/result evidence, and the
-current cache-only failure report proves current `optimize-anything` profile
-and failure-report disclosure. A completed current-profile live report is still
-required before treating the operator row as current release proof.
-Result-quality parity remains open. Use the historical completed report's
-emitted prompts, proposal attempts, candidate lineage, and case deltas to
-decide the next library-level quality/speed change.
-The first no-spend diagnosis found current-source prompt/render parity still
-plausible, but not model-experience parity: the paid run's `gpt-5.4-mini`
-reflections often collapsed rich failure feedback into short generic prompts,
-while the CAIS checkpoint candidate history retained more specific solution
-discipline. The checkpoint does not persist proposal/reflection assistant text,
-so it supports prompt-outcome comparison rather than direct reflection-text
-diffing. A strict `gpt-5.1` reflector run is the clean next paid comparison;
-anything else should be labeled as a Leaven-plus profile experiment.
+The current strict upstream-reflector live report now proves the current
+`optimize-anything` operator path. Result-quality parity remains open, but the
+remaining validation gap is narrow and trajectory-shaped: Leaven strict best is
+`25/45`, CAIS checkpoint best is `26/45`, the same seed prompt disagrees on
+`15/45` validation cases under live stochastic solver evaluation, and the two
+best candidates have `6` Leaven-only correct cases versus `7` CAIS-only correct
+cases. Use `scripts/p8-gepa-debug-sqlite.py` to turn P8 reports and optional
+CAIS `gepa_state.bin` files into SQL before making another algorithm change.
+The local CAIS checkpoint still does not persist proposal/reflection assistant
+text, so it supports candidate/score/prompt trajectory comparison rather than
+direct reflection-response diffs.
 
-1. Compare accepted/rejected Leaven reflections against pinned upstream
-   GEPA/AIME traces or source behavior where available.
+1. Compare accepted/rejected Leaven reflections and candidate trajectories
+   through the SQLite debug export before spending another live run.
 2. Decide whether the next experiment is a strict-reference larger-model run or
    a labeled Leaven-plus profile such as active failure sampling, side-info
    compression, serial multi-proposal diversity, or lazy certified racing.
