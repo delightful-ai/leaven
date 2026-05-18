@@ -1,7 +1,7 @@
 # GEPA Parity Working Ledger
 
 Status: active.
-Updated: 2026-05-18T09:41:21Z.
+Updated: 2026-05-18T09:47:08Z.
 
 ## Authority
 
@@ -25,13 +25,12 @@ documented, tested, and reported.
 ## Current Matrix State
 
 The parity matrix currently records the core GEPA reference-loop rows as proven
-or intentional deltas. The remaining P0 row is P8/AIME result parity: a live
-release run/report now proves the operator path, source counts/cache hash,
-cache/resume behavior, search budget, and model profile. The completed report
-predates durable provider-failure counters, so it cannot by itself prove zero
-provider failures across the failed/resumed release attempt. The completed run
-also did not improve over the seed and therefore does not prove "as good as
-GEPA" benchmark quality.
+or intentional deltas. The remaining P0 rows are P8 live release-report
+freshness and P8/AIME result parity. A stale live release run/report proves an
+earlier operator path, source counts/cache hash, cache/resume behavior, search
+budget, and model profile, but it predates current report/profile/cache fixes.
+The completed run also did not improve over the seed and therefore does not
+prove "as good as GEPA" benchmark quality.
 
 Important currently proven rows include:
 
@@ -145,6 +144,36 @@ Current feedback/reflection answer:
   `aime_side_info_renders_upstream_optimize_anything_keys`, and
   `aime_full_reflection_prompt_renders_upstream_optimize_anything_markdown`.
 
+## Current Model-Quality Position
+
+Do not collapse the live quality gap into "the model is bad" or "the prompt is
+bad" without a fresh completed report.
+
+Current evidence split:
+
+- the stale completed run
+  `.leaven/release-runs/p8-aime-gepa-20260518-043717/reports/p8-aime.json`
+  used solver `gpt-4.1-mini` and reflection `gpt-5.4-mini`, admitted children,
+  and finished with `baseline == optimized`;
+- the older summary
+  `.leaven/release-runs/p8-aime-gepa-20260516-221231/reports/summary.json`
+  improved validation `0.444 -> 0.533` and held-out test `0.367 -> 0.467`,
+  but lacks the current P8 proof fields and cannot close parity;
+- the current JSON-fallback run reached live traffic with 200 metric calls and
+  130 LM calls, then failed on an old-binary cache-row bug before final reports;
+- current code fixes that cache-row bug by rematerializing same-content cache
+  hits for the requested candidate, and a cache-only replay proves the old
+  wrong-candidate assertion no longer reproduces;
+- a later read-write resume against the same run dir replayed the rematerialized
+  cache hits and spent 12 new metric calls before being stopped because its
+  compile log showed it predates the latest P8 profile/failure-report slices.
+
+Conclusion: a longer or stronger-model run may be necessary for quality, but it
+is only meaningful after running the current binary with current
+cache/report/profile fixes. Do not spend another overnight run until the
+intended command, run dir, cache policy, GEPA profile, solver model, reflection
+model, and fresh-binary commit are explicit in the operator notes.
+
 ## Current Audit-Wave Disposition
 
 2026-05-18 verifier wave disposition against the current tree:
@@ -154,9 +183,10 @@ Current feedback/reflection answer:
   remains stale proof and result-quality gap evidence only. It does not prove
   current report schema, zero durable provider failures, or "as good as GEPA"
   result quality because it kept `best_index=0` and `baseline == optimized`;
-- true blocker: the current in-flight JSON-fallback run below must finish and
-  emit reports before its profile/model/dataset/cache/budget/provider-failure
-  and result fields can be used as proof;
+- true blocker: the current JSON-fallback run below is not completion proof. It
+  found the old-binary wrong-candidate cache bug, then a newer read-write
+  resume was stopped after cache-fix proof because its binary predates latest
+  P8 report/profile slices;
 - already fixed in current code: P8 role fingerprints include the actual
   `OpenAiLm::fingerprint()` for timeout/base-URL/retry/provider runtime
   compatibility, while cache replay controls are intentionally ignored by the
@@ -197,7 +227,7 @@ Current quality diagnosis from completed stale report:
   proof. It currently supports "seed stochasticity plus budget-boundary
   unresolved child" more than "reflection prompt/parser was malformed."
 
-Current in-flight JSON-fallback run:
+Current JSON-fallback run:
 
 ```text
 .leaven/release-runs/p8-aime-gepa-current-json-fallback-20260518-084304
@@ -212,11 +242,30 @@ Pointer file currently points at this run. Observed process:
 - no run-local `run.log` was present at the check; inspect the process/tee
   owner or emitted reports instead of assuming a sidecar log path;
 - no `reports/summary.json`, `reports/p8-aime.json`, or durable provider
-  failure file had been emitted yet;
+  failure file had been emitted at the first check;
+- the process later exited with
+  `p8_aime_gepa_failed=optimizer failed: GEPA evaluation returned a row for the wrong candidate`
+  after `metric_calls=200`, `llm_calls=130`, and `2632809` ms;
+- root cause was engine casewise content-cache reuse returning raw cached
+  `AssessmentId`s for a same-content child under a different `CandidateId`;
+- current code rematerializes cache-hit assessment rows for the requested
+  candidate without charging metric calls or overwriting the content cache;
+- cache-only replay log:
+  `.leaven/release-runs/p8-aime-gepa-current-json-fallback-20260518-084304.cache-only-after-engine-fix.log`;
+- replay proof: the wrong-candidate assertion did not recur before cache-only
+  mode refused the next uncached reflection request;
+- a read-write resume log:
+  `.leaven/release-runs/p8-aime-gepa-current-json-fallback-20260518-084304.resume-after-engine-fix.log`;
+- read-write resume proof before stop: cache hits rematerialized requested
+  candidate rows, the wrong-candidate assertion did not recur, and the process
+  spent 12 new metric calls before stop;
+- stop reason: the compile log showed the run binary predates latest P8
+  profile/failure-report code, so letting it continue overnight would not close
+  the current release-report freshness row.
 
-Do not treat this run as a completed live proof until it emits reports and the
-profile/model/dataset/cache/budget/provider-failure/result fields are inspected.
-Do not start another provider run while this one is active.
+Do not treat this run as completed live proof. It is a live infrastructure and
+cache-fix proof, not result-quality evidence. The next release proof needs a
+fresh binary and a completed `reports/p8-aime.json`.
 
 Current live release run directory:
 
@@ -534,6 +583,11 @@ Cache/replay attempts after the report-schema fixes:
   wrong-candidate assertion, and failed closed at the next uncached reflection
   request with no additional LM calls. Log:
   `.leaven/release-runs/p8-aime-gepa-current-json-fallback-20260518-084304.cache-only-after-engine-fix.log`.
+- read-write resume against that same run after the engine fix replayed the
+  same zero-cost cache hits, then spent 12 additional metric calls before being
+  stopped because the compile log showed it predates latest P8
+  profile/failure-report slices. Log:
+  `.leaven/release-runs/p8-aime-gepa-current-json-fallback-20260518-084304.resume-after-engine-fix.log`.
 - failed P8 runs with `LEAVEN_AIME_RUN_DIR` now write
   `reports/p8-aime-failure.json` with safe profile/runtime/error context, so the
   next failed live attempt does not depend on terminal scrollback for diagnosis.
@@ -544,10 +598,11 @@ Cache/replay attempts after the report-schema fixes:
    cases, and parser outcomes.
 2. Diff the completed live report against the prior live artifact and upstream
    GEPA/DSPy AIME traces where available. Treat result-quality parity as open.
-3. Regenerate a live P8 report after the durable provider-failure field lands
-   before using resumed live runs as provider-reliability proof.
-4. Re-run live P8 only after the diagnosis identifies a concrete fix or
-   intentional runtime/profile delta worth testing.
+3. Regenerate a live P8 report with the current binary before using resumed
+   live runs as provider-reliability, profile-disclosure, or cache-fix proof.
+4. Re-run live P8 only with an explicit operator note naming run dir, cache
+   policy, GEPA profile, solver model, reflection model, request timeout, and
+   fresh code slice.
 5. Future release reports should be generated with the post-run report-schema
    fixes so live-proof checks do not have to re-aggregate role telemetry by hand
    and so resumed `gepa_events` are cumulative.
