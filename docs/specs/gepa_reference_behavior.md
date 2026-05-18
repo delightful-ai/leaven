@@ -1703,8 +1703,10 @@ cargo run --release -p p8_aime_gepa
 ```
 
 The live gate must not be claimed as GEPA parity until the report proves the
-reference profile, split sources, cache behavior, budget accounting, and model
-deltas named above.
+selected GEPA/AIME profile, split sources, cache behavior, budget accounting,
+and model deltas named above. For the current AIME reproduction path, that means
+`GepaProfile::OptimizeAnything` unless `LEAVEN_AIME_GEPA_PROFILE` explicitly
+selects another reported profile.
 
 ## 10. Source Crosswalk For Implementation
 

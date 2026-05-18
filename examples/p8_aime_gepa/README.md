@@ -79,17 +79,25 @@ only when the effective reflection model matches the upstream AIME profile. The
 default `gpt-5.4-mini` reflector remains a deliberate Leaven model delta, not a
 byte-for-byte upstream runtime claim.
 
-The GEPA optimizer profile defaults to the reference-compatible certified loop.
+The GEPA optimizer profile defaults to the upstream optimize-anything loop used
+by the AIME profile: minibatch size 3, one serial proposal, full validation
+before candidate admission, and skip-perfect disabled. To force the core
+reference profile, set:
+
+```bash
+export LEAVEN_AIME_GEPA_PROFILE=reference
+```
+
 For an opt-in faster certified run, set:
 
 ```bash
 export LEAVEN_AIME_GEPA_PROFILE=fast-certified
 ```
 
-`fast-certified` reduces the train probe size and tries two serial proposals per
-selected parent, but it still requires full validation before a child enters the
-GEPA reference state. It is not the future lazy-certification or async-island
-FastGEPA design.
+`reference` keeps the core GEPA skip-perfect policy. `fast-certified` reduces
+the train probe size and tries two serial proposals per selected parent, but it
+still requires full validation before a child enters the GEPA reference state.
+It is not the future lazy-certification or async-island FastGEPA design.
 
 To compare Leaven against the published DSPy/GEPA AIME quickstart denominator
 without running DSPy, use the Leaven DSPy-comparison profile:

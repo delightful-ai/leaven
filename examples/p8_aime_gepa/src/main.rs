@@ -8085,12 +8085,10 @@ Provide the new parameter value within ``` blocks."
             std::process::id(),
             RunId::new()
         ));
-        let mut config = AimeRunConfig::deterministic_smoke();
+        let mut config = AimeRunConfig::gepa_aime();
         config.run_dir = Some(run_dir.clone());
-        config.profile = AimeRunProfile::GepaAime;
         config.solver.runtime.cache_backend = AimeLmCacheBackend::EagerSqlite;
         config.reflection.model = "gpt-5.1".to_owned();
-        config.reflection.live = true;
         config.reflection.cache_policy = LmCachePolicy::CacheOnly;
         config.reflection.runtime.cache_backend = AimeLmCacheBackend::EagerSqlite;
         std::fs::create_dir_all(&run_dir).unwrap();
@@ -8115,6 +8113,7 @@ Provide the new parameter value within ``` blocks."
             report["comparison"]["reflection_model_alignment"],
             "upstream-matched"
         );
+        assert_eq!(report["gepa_profile"], "optimize-anything");
         assert_eq!(report["comparison"]["leaven_reflection_model"], "gpt-5.1");
         assert_eq!(report["cache"]["lm_backend"], "eager-sqlite");
         assert_eq!(report["cache"]["lm_path"], ".leaven/lm-cache.sqlite");
@@ -8184,7 +8183,6 @@ Provide the new parameter value within ``` blocks."
         ));
         let mut config = AimeRunConfig::gepa_aime();
         config.run_dir = Some(run_dir.clone());
-        config.gepa_profile = GepaProfile::Reference;
         config.solver.model = GEPA_AIME_SOLVER_MODEL.to_owned();
         config.solver.runtime = AimeOpenAiRuntimeConfig::default_for_p8();
         config.reflection.model = "gpt-5.1".to_owned();
@@ -8200,7 +8198,7 @@ Provide the new parameter value within ``` blocks."
             serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
         assert_eq!(report["schema"], "leaven.p8_aime.start_report.v1");
         assert_eq!(report["run_profile"], "gepa-aime");
-        assert_eq!(report["gepa_profile"], "reference");
+        assert_eq!(report["gepa_profile"], "optimize-anything");
         assert_eq!(
             report["proof_classification"],
             "full_live_aime_reproduction_attempt"

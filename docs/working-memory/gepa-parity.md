@@ -25,10 +25,14 @@ documented, tested, and reported.
 ## Current Matrix State
 
 The parity matrix currently records the core GEPA reference-loop rows as proven
-or intentional deltas. The P8 live release-report freshness row is now proven
-by the current completed live report. The remaining P0 gap is P8/AIME result
-quality: current code improves over the seed, but the held-out score still
-trails the pinned GEPA CAIS artifact target.
+or intentional deltas. The P8 finished live report is now historical evidence:
+it proves a real live improvement and the completed operator path for the
+pre-`OptimizeAnything` profile slice, while the current-code cache-only failure
+report proves current profile/runtime/failure-report evidence without provider
+spend. The remaining P0 gap is P8/AIME result quality: current finished live
+quality evidence improves over the seed, but the held-out score still trails
+the pinned GEPA CAIS artifact target and predates the current
+`gepa_profile=optimize-anything` default.
 
 Important currently proven rows include:
 
@@ -318,11 +322,15 @@ Current evidence split:
   `reports/p8-aime.json` before interpreting result quality against the pinned
   upstream target.
 
-Conclusion: current code now proves live improvement and the release-report
-operator path, but it still does not prove "as good as GEPA" because the
-held-out test score is `0.500` versus the pinned upstream target `0.600`. Further
-quality work should start from the emitted candidate lineage, reflections,
-proposal attempts, and prompt examples in the current report.
+Conclusion: the latest completed live report proves live improvement and the
+finished release-report operator path for the then-current reference-profile
+AIME run, while the latest cache-only failure report proves current
+`optimize-anything` profile disclosure and failure evidence. The stack still
+does not prove "as good as GEPA" because the held-out test score is `0.500`
+versus the pinned upstream target `0.600`, and no completed live report has yet
+used the current `gepa_profile=optimize-anything` default. Further quality work
+should start from the emitted candidate lineage, reflections, proposal attempts,
+and prompt examples in the completed report.
 
 ## Current No-Spend Quality Diagnosis
 
@@ -383,8 +391,10 @@ profile/experiment plan.
   found the old-binary wrong-candidate cache bug, then a newer read-write
   resume was stopped after cache-fix proof because its binary predates latest
   P8 report/profile slices;
-- no longer blocker: the fresh current-binary live report below proves the
-  current operator/report path and zero process-local/durable provider failures;
+- no longer blocker for historical operator proof: the fresh current-binary
+  live report below proves a completed live operator/report path and zero
+  process-local/durable provider failures. It is no longer current-profile
+  proof after the `GepaProfile::OptimizeAnything` default slice;
 - already fixed in current code: P8 role fingerprints include the actual
   `OpenAiLm::fingerprint()` for timeout/base-URL/retry/provider runtime
   compatibility, while cache replay controls are intentionally ignored by the
@@ -806,7 +816,8 @@ Cache/replay attempts after the report-schema fixes:
   the active release run: profile/model/cache/timeout/budget facts no longer
   depend on an ad hoc shell wrapper if the process is interrupted before final
   or failure reports.
-- current-binary release run completed:
+- now-historical current-binary release run completed before the
+  `GepaProfile::OptimizeAnything` default slice:
   `.leaven/release-runs/p8-aime-gepa-current-release-20260518-094902-d2d15a36d364`.
   It uses `gepa-aime`, reference GEPA profile, read-write solver/reflection LM
   cache policies, eager SQLite LM cache, 600s request timeout, and 32 OpenAI
@@ -833,6 +844,8 @@ Cache/replay attempts after the report-schema fixes:
   optimized held-out test `0.433 -> 0.500`; optimized train was lower
   `0.600 -> 0.556`. This is a real live improvement over seed on validation
   and held-out test, but remains below the pinned GEPA CAIS target `0.600`.
+  The next paid report must be treated as the current-profile release proof and
+  should show `gepa_profile=optimize-anything`.
 - no-spend case-delta audit of the completed report: train changed by
   `4` improved / `6` regressed / `35` unchanged cases; validation changed by
   `6` improved / `4` regressed / `35` unchanged cases; held-out test changed
@@ -904,7 +917,17 @@ Cache/replay attempts after the report-schema fixes:
     because the cache lacks the required `gpt-5.1` reflection row;
   - still open and current: final-report replay proof. Solver/reflection LM
     cache replay is proven for search checkpoints, but final-report-only rows
-    are not yet checkpoint-restored as report-visible graph evidence.
+    are not yet checkpoint-restored as report-visible graph evidence. A
+    no-edit audit on 2026-05-18 found no small safe fix: `leaven-run` flushes
+    the SQLite evaluation cache from the search checkpoint before final
+    reporting, then runs final train/validation/test report evaluations against
+    the live engine, and deliberately points latest checkpoint back at the
+    search checkpoint. `RunContext` refuses cached assessment ids absent from
+    the restored graph, and `run_builder_sqlite_cache_keeps_only_search_rows_at_search_checkpoint`
+    locks in that final-report-only rows are not resume-authoritative. Do not
+    "fix" this by flushing final-report rows into the search checkpoint cache;
+    the next safe design is either a post-final-report snapshot contract or a
+    report-row backfill/materialization contract.
 
 2026-05-18T12:23:38Z:
 
