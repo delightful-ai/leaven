@@ -953,10 +953,12 @@ async fn try_run_aime(
     let solver_config = config.solver.clone();
     let side_infos = AimeSolverSideInfoStore::default();
     let gepa_events = Arc::new(Mutex::new(Vec::<GepaEventSummary>::new()));
+    let gepa_progress = Arc::new(Mutex::new(AimeGepaProgress::default()));
     let report_metadata = dataset.report_metadata.clone();
     let dataset_proof = dataset.proof.clone();
     let reflective_dataset = dataset.reflective_dataset(side_infos.clone());
     let gepa_event_sink = gepa_events.clone();
+    let gepa_progress_sink = gepa_progress.clone();
     let optimized = Box::pin(
         leaven::prelude::optimize(AimePrompt::new(config.seed_prompt))
             .train(dataset.train)
@@ -987,6 +989,13 @@ async fn try_run_aime(
                             .lock()
                             .expect("AIME GEPA event sink lock")
                             .push(event.clone());
+                        if let Some(line) = gepa_progress_sink
+                            .lock()
+                            .expect("AIME GEPA progress lock")
+                            .progress_line(event)
+                        {
+                            eprintln!("{line}");
+                        }
                     })
                     .reflective_dataset(reflective_dataset)
                     .max_iterations(config.max_iterations),
@@ -4159,6 +4168,204 @@ fn progress_cache_status(cache: &CacheStatus) -> &'static str {
     }
 }
 
+#[derive(Default)]
+struct AimeGepaProgress {
+    seed_validation_score: Option<f64>,
+    best_validation_score: Option<f64>,
+    last_parent_train_score: Option<f64>,
+    accepted_count: u64,
+    admitted_count: u64,
+    rejected_count: u64,
+    skipped_count: u64,
+    full_validation_evals: u64,
+}
+
+impl AimeGepaProgress {
+    fn progress_line(&mut self, event: &GepaEventSummary) -> Option<String> {
+        match event {
+            GepaEventSummary::ProfileResolved { profile } => Some(format!(
+                "progress_event=gepa_profile_resolved profile={} train_minibatch_size={} proposal_count={} validation_policy={} certification_mode={} skip_perfect_score={} perfect_score={}",
+                profile.label,
+                progress_optional_usize(profile.train_minibatch_size),
+                profile.proposal_count,
+                profile.validation_policy,
+                profile.certification_mode,
+                profile.skip_perfect_score,
+                profile.perfect_score
+            )),
+            GepaEventSummary::IterationStarted { iteration } => Some(format!(
+                "progress_event=gepa_iteration_started iteration={} current_best_validation_score={} baseline_validation_score={} accepted_count={} admitted_count={} rejected_count={} skipped_count={} full_validation_evals={}",
+                iteration,
+                progress_score(self.best_validation_score),
+                progress_score(self.seed_validation_score),
+                self.accepted_count,
+                self.admitted_count,
+                self.rejected_count,
+                self.skipped_count,
+                self.full_validation_evals
+            )),
+            GepaEventSummary::ParentSelected { candidate_index } => Some(format!(
+                "progress_event=gepa_parent_selected candidate_index={}",
+                candidate_index.get()
+            )),
+            GepaEventSummary::ParentEvaluated {
+                metric_calls_delta,
+                score,
+            } => {
+                self.last_parent_train_score = parse_gepa_score(score);
+                Some(format!(
+                    "progress_event=gepa_parent_evaluated train_screen_score={} metric_calls_delta={metric_calls_delta}",
+                    progress_score(self.last_parent_train_score)
+                ))
+            }
+            GepaEventSummary::ProposalSkipped { reason } => {
+                self.skipped_count += 1;
+                Some(format!(
+                    "progress_event=gepa_proposal_skipped reason={} skipped_count={}",
+                    p8_gepa_skip_reason(*reason),
+                    self.skipped_count
+                ))
+            }
+            GepaEventSummary::ReflectionStarted {
+                parent,
+                part_label,
+                records,
+                cases,
+                source_ref_count,
+            } => Some(format!(
+                "progress_event=gepa_reflection_started parent={parent} part_label={part_label} records={records} cases={} source_ref_count={source_ref_count}",
+                cases.len()
+            )),
+            GepaEventSummary::ReflectionCompleted { parent, child } => Some(format!(
+                "progress_event=gepa_reflection_completed parent={parent} child={}",
+                child.map_or_else(|| "none".to_owned(), |candidate| candidate.to_string())
+            )),
+            GepaEventSummary::ChildEvaluated {
+                metric_calls_delta,
+                score,
+            } => {
+                let child_score = parse_gepa_score(score);
+                Some(format!(
+                    "progress_event=gepa_child_evaluated train_screen_score={} parent_train_screen_score={} delta_vs_parent={} signal={} metric_calls_delta={metric_calls_delta}",
+                    progress_score(child_score),
+                    progress_score(self.last_parent_train_score),
+                    progress_delta(child_score, self.last_parent_train_score),
+                    progress_signal(child_score, self.last_parent_train_score)
+                ))
+            }
+            GepaEventSummary::ProposalAccepted { child } => {
+                self.accepted_count += 1;
+                Some(format!(
+                    "progress_event=gepa_proposal_accepted child={child} accepted_count={}",
+                    self.accepted_count
+                ))
+            }
+            GepaEventSummary::ProposalRejected => {
+                self.rejected_count += 1;
+                Some(format!(
+                    "progress_event=gepa_proposal_rejected rejected_count={}",
+                    self.rejected_count
+                ))
+            }
+            GepaEventSummary::SeedValidationCompleted {
+                candidate_index,
+                metric_calls_delta,
+                score,
+            } => {
+                let validation_score = parse_gepa_score(score);
+                self.seed_validation_score = validation_score;
+                self.best_validation_score = validation_score;
+                self.full_validation_evals += 1;
+                Some(format!(
+                    "progress_event=gepa_seed_validation_completed candidate_index={} validation_score={} current_best_validation_score={} metric_calls_delta={metric_calls_delta} full_validation_evals={}",
+                    candidate_index.get(),
+                    progress_score(validation_score),
+                    progress_score(self.best_validation_score),
+                    self.full_validation_evals
+                ))
+            }
+            GepaEventSummary::AcceptedValidationCompleted {
+                candidate_index,
+                metric_calls_delta,
+                score,
+            } => {
+                let validation_score = parse_gepa_score(score);
+                let previous_best = self.best_validation_score;
+                if let Some(score) = validation_score {
+                    if self.best_validation_score.is_none_or(|best| score > best) {
+                        self.best_validation_score = Some(score);
+                    }
+                }
+                self.full_validation_evals += 1;
+                Some(format!(
+                    "progress_event=gepa_accepted_validation_completed candidate_index={} validation_score={} baseline_validation_score={} delta_vs_baseline={} previous_best_validation_score={} delta_vs_previous_best={} signal={} current_best_validation_score={} metric_calls_delta={metric_calls_delta} full_validation_evals={}",
+                    candidate_index.get(),
+                    progress_score(validation_score),
+                    progress_score(self.seed_validation_score),
+                    progress_delta(validation_score, self.seed_validation_score),
+                    progress_score(previous_best),
+                    progress_delta(validation_score, previous_best),
+                    progress_signal(validation_score, previous_best),
+                    progress_score(self.best_validation_score),
+                    self.full_validation_evals
+                ))
+            }
+            GepaEventSummary::CandidateAdmitted {
+                candidate,
+                candidate_index,
+            } => {
+                self.admitted_count += 1;
+                Some(format!(
+                    "progress_event=gepa_candidate_admitted candidate={candidate} candidate_index={} admitted_count={}",
+                    candidate_index.get(),
+                    self.admitted_count
+                ))
+            }
+            GepaEventSummary::OptimizationEnded { best } => Some(format!(
+                "progress_event=gepa_optimization_ended best_index={} current_best_validation_score={} baseline_validation_score={} delta_vs_baseline={} accepted_count={} admitted_count={} rejected_count={} skipped_count={} full_validation_evals={}",
+                best.map_or_else(|| "none".to_owned(), |index| index.get().to_string()),
+                progress_score(self.best_validation_score),
+                progress_score(self.seed_validation_score),
+                progress_delta(self.best_validation_score, self.seed_validation_score),
+                self.accepted_count,
+                self.admitted_count,
+                self.rejected_count,
+                self.skipped_count,
+                self.full_validation_evals
+            )),
+            _ => None,
+        }
+    }
+}
+
+fn parse_gepa_score(score: &str) -> Option<f64> {
+    score.parse::<f64>().ok().filter(|score| score.is_finite())
+}
+
+fn progress_score(score: Option<f64>) -> String {
+    score.map_or_else(|| "absent".to_owned(), |value| format!("{value:.3}"))
+}
+
+fn progress_delta(score: Option<f64>, baseline: Option<f64>) -> String {
+    match (score, baseline) {
+        (Some(score), Some(baseline)) => format!("{:+.3}", score - baseline),
+        _ => "absent".to_owned(),
+    }
+}
+
+fn progress_optional_usize(value: Option<usize>) -> String {
+    value.map_or_else(|| "unknown".to_owned(), |value| value.to_string())
+}
+
+fn progress_signal(score: Option<f64>, baseline: Option<f64>) -> &'static str {
+    match (score, baseline) {
+        (Some(score), Some(baseline)) if score > baseline => "improved",
+        (Some(score), Some(baseline)) if score < baseline => "regressed",
+        (Some(_), Some(_)) => "tied",
+        _ => "unknown",
+    }
+}
+
 #[derive(Clone, Debug)]
 struct AimePromptSurface;
 
@@ -5735,6 +5942,71 @@ mod tests {
         assert!(line.contains("total_assessment_rows=2"));
         assert!(line.contains("metric_calls=2"));
         assert!(line.contains("cache=miss"));
+    }
+
+    #[test]
+    fn gepa_progress_reports_validation_signal_before_final_report() {
+        let mut progress = AimeGepaProgress::default();
+        let seed = progress
+            .progress_line(&GepaEventSummary::SeedValidationCompleted {
+                candidate_index: GepaCandidateIndex::new(0),
+                metric_calls_delta: 45,
+                score: "0.467".to_owned(),
+            })
+            .expect("seed validation emits progress");
+        let accepted = progress
+            .progress_line(&GepaEventSummary::AcceptedValidationCompleted {
+                candidate_index: GepaCandidateIndex::new(1),
+                metric_calls_delta: 44,
+                score: "0.578".to_owned(),
+            })
+            .expect("accepted validation emits progress");
+        let iteration = progress
+            .progress_line(&GepaEventSummary::IterationStarted { iteration: 2 })
+            .expect("iteration emits current signal");
+
+        assert_eq!(
+            seed,
+            "progress_event=gepa_seed_validation_completed candidate_index=0 validation_score=0.467 current_best_validation_score=0.467 metric_calls_delta=45 full_validation_evals=1"
+        );
+        assert!(
+            accepted.starts_with(
+                "progress_event=gepa_accepted_validation_completed candidate_index=1 "
+            )
+        );
+        assert!(accepted.contains("validation_score=0.578"));
+        assert!(accepted.contains("baseline_validation_score=0.467"));
+        assert!(accepted.contains("delta_vs_baseline=+0.111"));
+        assert!(accepted.contains("previous_best_validation_score=0.467"));
+        assert!(accepted.contains("delta_vs_previous_best=+0.111"));
+        assert!(accepted.contains("signal=improved"));
+        assert!(accepted.contains("current_best_validation_score=0.578"));
+        assert!(accepted.contains("full_validation_evals=2"));
+        assert!(iteration.contains("current_best_validation_score=0.578"));
+        assert!(iteration.contains("baseline_validation_score=0.467"));
+        assert!(iteration.contains("full_validation_evals=2"));
+    }
+
+    #[test]
+    fn gepa_progress_reports_train_screen_delta() {
+        let mut progress = AimeGepaProgress::default();
+        progress
+            .progress_line(&GepaEventSummary::ParentEvaluated {
+                metric_calls_delta: 3,
+                score: "0.333".to_owned(),
+            })
+            .expect("parent evaluation emits progress");
+        let child = progress
+            .progress_line(&GepaEventSummary::ChildEvaluated {
+                metric_calls_delta: 3,
+                score: "0.667".to_owned(),
+            })
+            .expect("child evaluation emits progress");
+
+        assert_eq!(
+            child,
+            "progress_event=gepa_child_evaluated train_screen_score=0.667 parent_train_screen_score=0.333 delta_vs_parent=+0.334 signal=improved metric_calls_delta=3"
+        );
     }
 
     #[test]

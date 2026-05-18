@@ -1050,6 +1050,22 @@ Cache/replay attempts after the report-schema fixes:
   Leaven's public parser path. This is a source-parity fix, not a
   quality-profile change.
 
+2026-05-18T17:50:16Z:
+
+- While the strict upstream-reflector live release run was still in flight, P8
+  operator UX gained live GEPA semantic progress lines instead of waiting for
+  final `p8-aime.json` to learn whether search is working. Future runs print
+  profile facts, current best validation score, seed validation score,
+  accepted/admitted/rejected/skipped counters, train-screen parent/child deltas,
+  accepted-child full-validation score, delta versus seed, delta versus previous
+  best, signal (`improved`/`tied`/`regressed`), metric-call delta, and
+  full-validation count. This is diagnostic-only: it does not affect GEPA parent
+  selection, train-screen acceptance, validation admission, or result selection.
+- Focused proof:
+  `gepa_progress_reports_validation_signal_before_final_report`,
+  `gepa_progress_reports_train_screen_delta`, and
+  `progress_callback_reports_evaluations_and_cache_status`.
+
 1. Continue no-spend quality diagnosis only where it can produce new evidence:
    use emitted Leaven prompts, candidate lineage, reflection outputs, child
    admission history, minibatch cases, parser outcomes, and the CAIS checkpoint

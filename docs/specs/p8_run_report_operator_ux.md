@@ -241,7 +241,33 @@ resume attempts. Report writers must replace JSON files atomically, so a killed
 process leaves either the previous complete report or the next complete report,
 not a torn JSON payload.
 
-## 9. Implementation Routing
+## 9. Live Progress
+
+Long live P8 runs must emit enough terminal progress to answer whether GEPA is
+mechanically working before the final report exists. Generic engine events may
+continue to report request counts, row counts, costs, and cache status, but P8
+must also project GEPA phase events into operator-readable progress lines.
+
+Required GEPA progress signal:
+
+- profile-resolved lines with the selected GEPA profile, minibatch size,
+  proposal count, validation policy, certification mode, and skip-perfect
+  setting;
+- iteration-start lines with current best validation score, seed validation
+  score, accepted/admitted/rejected/skipped counters, and full-validation count;
+- parent and child train-screen lines with parent score, child score, delta, and
+  improvement/tie/regression signal;
+- proposal-accepted/rejected/skipped counters;
+- seed-validation and accepted-child full-validation lines with validation
+  score, baseline score, previous best score, deltas, improvement/tie/regression
+  signal, metric-call delta, and full-validation count;
+- final GEPA progress line with best index, current best validation score,
+  delta versus seed validation, counters, and full-validation count.
+
+These lines are live operator diagnostics. They must not change GEPA parent
+selection, train-screen acceptance, validation admission, or result selection.
+
+## 10. Implementation Routing
 
 - `leaven-run` owns generic `Optimized`, `StandardRunSummary`, storage status,
   cache summary, compatibility summary, and durable summary writing.
@@ -253,7 +279,7 @@ not a torn JSON payload.
 Do not make examples scrape private engine graph internals. Do not invent a
 separate P8-only storage path for facts the generic result already owns.
 
-## 10. Proof Requirements
+## 11. Proof Requirements
 
 Required tests:
 
@@ -275,6 +301,8 @@ Required tests:
   target payloads;
 - P8 case report rows include non-empty trace refs when runner/scorer traces are
   attached;
+- P8 live progress lines expose GEPA validation-best and train-screen deltas
+  before the final report exists;
 - absent validation/test scores remain absent;
 - corrupt/missing manifest reports a typed non-resumable reason.
 - generic `summary.json` and P8 `p8-aime.json` report writes are atomic.
