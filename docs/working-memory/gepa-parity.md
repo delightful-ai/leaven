@@ -756,6 +756,22 @@ Cache/replay attempts after the report-schema fixes:
   - `leaven-run` flushes the SQLite evaluation cache again after final reports,
     so final train/validation/test rows are durably reusable by later
     same-run-dir invocations.
+- Current cache/resume audit reopened two real P8 replay gaps and one deeper
+  engine/run-dir gap:
+  - fixed in current code: `cache-only` P8 OpenAI replay now constructs the
+    provider identity with a placeholder key, because OpenAI fingerprints do
+    not include the secret and `CacheOnly` never calls the provider on a miss;
+  - fixed in current code: `eager-sqlite` now reads the selected run-dir
+    `lm-cache.sqlite` first, falls back to workspace `.leaven` cache, and
+    writes through to the workspace cache. Exact paid-run replay takes
+    precedence over compatible workspace reuse so a stochastic response from
+    another run cannot mask the selected run-dir row;
+  - still open: final-report evaluation-cache rows can be flushed to SQLite but
+    a later resume from the search checkpoint may ignore them because cached
+    assessment ids are absent from the restored graph. Do not claim completed
+    final-report replay proof until either the final graph checkpoint becomes
+    the resume target without corrupting search budget semantics or the
+    evaluation cache can restore/backfill report-visible assessment rows.
 
 1. Diagnose why the current completed report improves over seed but still lands
    below the pinned GEPA CAIS target. Start from emitted prompts, candidate

@@ -38,8 +38,8 @@ use leaven_lm::{
     ReasoningEffort, Role, SamplingOptions, TokenUsage,
 };
 use leaven_lm_cache::{
-    CachedLm, InMemoryLmCache, LmCacheEntry, LmCacheError, LmCacheKey, LmCachePolicy,
-    LmCacheStore, SqliteLmCache,
+    CachedLm, InMemoryLmCache, LmCacheEntry, LmCacheError, LmCacheKey, LmCachePolicy, LmCacheStore,
+    SqliteLmCache,
 };
 #[cfg(test)]
 use leaven_lm_openai::OpenAiRetryPolicy;
@@ -4696,8 +4696,12 @@ struct AimeEagerSqliteLmCache {
 
 impl AimeEagerSqliteLmCache {
     fn open(run_dir: &Path) -> Result<Self, LmCacheError> {
+        Self::open_with_workspace(run_dir, Path::new("."))
+    }
+
+    fn open_with_workspace(run_dir: &Path, workspace_root: &Path) -> Result<Self, LmCacheError> {
         Ok(Self {
-            workspace: SqliteLmCache::open_workspace(".")?,
+            workspace: SqliteLmCache::open_workspace(workspace_root)?,
             run_dir: SqliteLmCache::open_run_dir(run_dir)?,
         })
     }
@@ -4705,10 +4709,10 @@ impl AimeEagerSqliteLmCache {
 
 impl LmCacheStore for AimeEagerSqliteLmCache {
     async fn get(&self, key: LmCacheKey) -> Result<Option<LmCacheEntry>, LmCacheError> {
-        if let Some(entry) = self.workspace.get(key).await? {
+        if let Some(entry) = self.run_dir.get(key).await? {
             return Ok(Some(entry));
         }
-        self.run_dir.get(key).await
+        self.workspace.get(key).await
     }
 
     async fn put(&self, key: LmCacheKey, entry: LmCacheEntry) -> Result<(), LmCacheError> {
@@ -5139,6 +5143,18 @@ mod tests {
 
     fn assert_optional_score(actual: Option<f64>, expected: f64) {
         assert_score(actual.expect("score is present"), expected);
+    }
+
+    fn unique_temp_dir(prefix: &str) -> PathBuf {
+        let path = std::env::temp_dir().join(format!("{prefix}-{}", RunId::new()));
+        fs::create_dir_all(&path).expect("temporary test directory can be created");
+        path
+    }
+
+    fn block_on_tokio<T>(future: impl std::future::Future<Output = T>) -> T {
+        tokio::runtime::Runtime::new()
+            .expect("tokio test runtime")
+            .block_on(future)
     }
 
     #[test]
@@ -5579,6 +5595,97 @@ mod tests {
             aime_reflection_role_fingerprint(&cache_only.reflection, provider),
             "reflection role identity should track model/runtime/prompt shape, not cache transport"
         );
+    }
+
+    #[test]
+    fn cache_only_openai_lm_uses_provider_identity_without_credentials() {
+        let runtime = AimeOpenAiRuntimeConfig::from_values(Some("7"), Some("sqlite"), Some("600"));
+        let run_dir = unique_temp_dir("p8-aime-cache-only");
+        let lm = cached_openai_lm(LmCachePolicy::CacheOnly, runtime, &run_dir, "live solver");
+
+        assert_eq!(
+            lm.fingerprint(),
+            openai_provider_fingerprint_for_runtime(runtime)
+        );
+        let request = LmRequest::new("gpt-4.1-mini", Messages::from_user("cached?"));
+        let error = block_on_tokio(lm.complete(request)).expect_err("empty cache must fail closed");
+        assert!(
+            matches!(error, LmError::Cache { .. }),
+            "cache-only replay should fail as a cache miss, not as missing credentials: {error}"
+        );
+
+        let _ = fs::remove_dir_all(run_dir);
+    }
+
+    #[test]
+    fn eager_sqlite_cache_prefers_run_dir_and_writes_workspace() {
+        let root = unique_temp_dir("p8-aime-eager-cache");
+        let run_dir = root.join("run");
+        let workspace = root.join("workspace");
+        let runtime = AimeOpenAiRuntimeConfig::from_values(Some("7"), Some("sqlite"), Some("600"));
+        let provider = openai_provider_fingerprint_for_runtime(runtime);
+        let request = LmRequest::new("gpt-4.1-mini", Messages::from_user("cached request"));
+        let key = LmCacheKey::for_request(provider, &request);
+        let run_dir_cache = SqliteLmCache::open_run_dir(&run_dir).expect("run-dir cache opens");
+        let workspace_cache =
+            SqliteLmCache::open_workspace(&workspace).expect("workspace cache opens");
+        let response = LmResponse::new(
+            Message::new(Role::Assistant, "from run dir"),
+            TokenUsage::default(),
+        )
+        .expect("assistant response");
+        block_on_tokio(run_dir_cache.put(
+            key,
+            LmCacheEntry::new(key, provider, request.clone(), response.clone()),
+        ))
+        .expect("run-dir cache write");
+        let stale_workspace_response = LmResponse::new(
+            Message::new(Role::Assistant, "from workspace"),
+            TokenUsage::default(),
+        )
+        .expect("assistant response");
+        block_on_tokio(workspace_cache.put(
+            key,
+            LmCacheEntry::new(
+                key,
+                provider,
+                request.clone(),
+                stale_workspace_response.clone(),
+            ),
+        ))
+        .expect("workspace cache write");
+
+        let eager =
+            AimeEagerSqliteLmCache::open_with_workspace(&run_dir, &workspace).expect("eager cache");
+        let from_run_dir = block_on_tokio(eager.get(key))
+            .expect("eager cache read")
+            .expect("run-dir fallback hit");
+        assert_eq!(from_run_dir.response, response);
+
+        let workspace_request =
+            LmRequest::new("gpt-4.1-mini", Messages::from_user("workspace request"));
+        let workspace_key = LmCacheKey::for_request(provider, &workspace_request);
+        let workspace_response = LmResponse::new(
+            Message::new(Role::Assistant, "to workspace"),
+            TokenUsage::default(),
+        )
+        .expect("assistant response");
+        block_on_tokio(eager.put(
+            workspace_key,
+            LmCacheEntry::new(
+                workspace_key,
+                provider,
+                workspace_request.clone(),
+                workspace_response.clone(),
+            ),
+        ))
+        .expect("eager cache write");
+        let from_workspace = block_on_tokio(workspace_cache.get(workspace_key))
+            .expect("workspace cache read")
+            .expect("workspace write-through hit");
+        assert_eq!(from_workspace.response, workspace_response);
+
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]
