@@ -185,6 +185,19 @@ Prompt-audit finding:
   proposals and solver transcripts are inspectable from the report artifact
   without another provider call.
 
+Comparison notes against the older improving artifact:
+
+- older artifact `.leaven/runs/2a582001-8fb7-4cdc-9926-6054ab5a1846` is not a
+  clean apples-to-apples proof for the current materialized-cache run: it lacks
+  the current dataset proof fields, reports doubled case rows, and starts from
+  a different baseline validation score (`0.444` instead of `0.533`);
+- the current materialized-cache run accepted eight train-screening children,
+  but candidate `5` only tied seed validation (`0.533`) and no child exceeded
+  seed validation, so strict result-quality parity remains open;
+- top-level `cases` in the current report lists final train/test rows only;
+  validation detail is currently available through
+  `gepa_report.candidates[*].validation_subscores`.
+
 ## Existing Prior Live Artifact
 
 Prior report worth comparing, but not sufficient as current proof:
