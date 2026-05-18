@@ -217,6 +217,15 @@ Prompt-audit finding:
   in the current process. This keeps resumed reports honest until prompt text is
   recovered from durable graph/checkpoint state instead of process-local LM
   telemetry.
+- Public `optimize(...).budget(Budget::metric_calls(n))` now feeds the engine
+  metric-call stopper rather than a hard metric-call ledger cap. That matches
+  GEPA `max_metric_calls`: started evaluator batches/full validations can
+  finish, and the run stops before the next optimizer step. Non-metric budget
+  axes remain hard ledger caps.
+- GEPA sampler and validation-frontier parent selection now use a private
+  Python `random.Random`-compatible MT19937 implementation for the needed
+  `randbelow`/`shuffle` paths. This removes the old splitmix delta for
+  default seed 0 and explicit `.with_seed(...)` sampler tests.
 - post-run P8 proposal attempts now cross-link accepted children back to
   `child_index` and `child_validation_score`, so an operator can inspect why
   an accepted train-screening child did or did not become validation-best

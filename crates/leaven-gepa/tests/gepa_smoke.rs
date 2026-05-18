@@ -219,9 +219,24 @@ fn epoch_shuffled_samples_train_with_seed_and_restores_cursor() {
 
     let first = sampler.sample_train(&train, &train_cases).unwrap();
     let second = sampler.sample_train(&train, &train_cases).unwrap();
-    assert_ne!(format!("{first:?}"), format!("{second:?}"));
-    assert!(matches!(first, EvaluationSet::Cases(ref cases) if cases.len() == 2));
-    assert!(matches!(second, EvaluationSet::Cases(ref cases) if cases.len() == 2));
+    assert!(
+        matches!(
+            first,
+            EvaluationSet::Cases(ref cases)
+                if cases.as_slice()
+                    == [leaven_kernel::CaseId::new(0), leaven_kernel::CaseId::new(2)]
+        ),
+        "seed 41 must match upstream Python random.Random shuffle; got {first:?}"
+    );
+    assert!(
+        matches!(
+            second,
+            EvaluationSet::Cases(ref cases)
+                if cases.as_slice()
+                    == [leaven_kernel::CaseId::new(1), leaven_kernel::CaseId::new(1)]
+        ),
+        "epoch padding must match upstream least-frequent tie behavior; got {second:?}"
+    );
 
     let state = CheckpointBatchSampler::checkpoint_state(&sampler);
     let mut restored = EpochShuffled::default();
@@ -1126,7 +1141,7 @@ fn gepa_batch_sampler_builder_uses_custom_minibatches() {
         engine.run(&mut gepa, &case_set, &store).await.unwrap();
 
         let seen_sets = seen_sets.lock().expect("seen sets lock").clone();
-        let expected_minibatch = vec![leaven_kernel::CaseId::new(1), leaven_kernel::CaseId::new(2)];
+        let expected_minibatch = vec![leaven_kernel::CaseId::new(3), leaven_kernel::CaseId::new(1)];
         assert_eq!(
             seen_sets,
             vec![expected_minibatch.clone(), expected_minibatch]
@@ -2146,7 +2161,11 @@ fn default_parent_selection_samples_validation_frontier_frequency() {
                 _ => None,
             })
             .collect::<Vec<_>>();
-        assert_eq!(selected, vec![0, 0]);
+        assert_eq!(
+            selected,
+            vec![0, 1],
+            "default parent selection must follow upstream Python random.Random draws"
+        );
     });
 }
 

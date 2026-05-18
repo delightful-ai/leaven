@@ -12,10 +12,10 @@ use leaven_engine::{
 };
 use leaven_evidence::{CaseAssessmentEvidence, OutputRecord, ScalarEvidence};
 use leaven_gepa::{
-    DEFAULT_REFLECTION_PROMPT_TEMPLATE, DefaultReflectionRenderer, Gepa, GepaReflectiveDataset,
-    GepaReflector, LmBackedReflector, LmBackedReflectorConfig, MinibatchThenValidation,
-    PlainTextEditParser, ReflectRequest, ReflectionOutputParser, ReflectionRenderInput,
-    ReflectionRenderer, ReflectiveExample,
+    DEFAULT_REFLECTION_PROMPT_TEMPLATE, DefaultReflectionRenderer, FullValidation, Gepa,
+    GepaReflectiveDataset, GepaReflector, LmBackedReflector, LmBackedReflectorConfig,
+    MinibatchThenValidation, PlainTextEditParser, ReflectRequest, ReflectionOutputParser,
+    ReflectionRenderInput, ReflectionRenderer, ReflectiveExample,
 };
 use leaven_kernel::{
     AssessmentId, Budget, CandidateId, CaseId, ContentId, Cost, EvaluatorId, Fingerprint,
@@ -29,10 +29,15 @@ use leaven_surface::{EditSurface, Part, PartAddress, SurfaceError, SurfaceFinger
 #[test]
 fn lm_backed_reflector_renders_feedback_records_and_applies_candidate() {
     block_on(async {
-        let case_set = CaseSet::new(vec!["the case input"]).with_partition(
-            leaven_core::PartitionId::from("TRAIN"),
-            vec![leaven_kernel::CaseId::new(0)],
-        );
+        let case_set = CaseSet::new(vec!["the case input", "validation input"])
+            .with_partition(
+                leaven_core::PartitionId::from("TRAIN"),
+                vec![leaven_kernel::CaseId::new(0)],
+            )
+            .with_partition(
+                leaven_core::PartitionId::from("VALIDATION"),
+                vec![leaven_kernel::CaseId::new(1)],
+            );
         let store = InlineEvidenceStore::<CaseAssessmentEvidence>::new("inline");
         let mut engine = Engine::<TestProblem>::builder()
             .budget(Budget::unlimited())
@@ -119,10 +124,15 @@ fn lm_backed_reflector_renders_feedback_records_and_applies_candidate() {
 #[test]
 fn multi_iteration_reflection_uses_selected_parent_assessment_feedback() {
     block_on(async {
-        let case_set = CaseSet::new(vec!["the case input"]).with_partition(
-            leaven_core::PartitionId::from("TRAIN"),
-            vec![leaven_kernel::CaseId::new(0)],
-        );
+        let case_set = CaseSet::new(vec!["the case input", "validation input"])
+            .with_partition(
+                leaven_core::PartitionId::from("TRAIN"),
+                vec![leaven_kernel::CaseId::new(0)],
+            )
+            .with_partition(
+                leaven_core::PartitionId::from("VALIDATION"),
+                vec![leaven_kernel::CaseId::new(1)],
+            );
         let store = InlineEvidenceStore::<CaseAssessmentEvidence>::new("inline");
         let mut engine = Engine::<TestProblem>::builder()
             .budget(Budget::unlimited())
@@ -145,7 +155,7 @@ fn multi_iteration_reflection_uses_selected_parent_assessment_feedback() {
             reflector,
         )
         .skip_perfect_score(false)
-        .validation_policy(MinibatchThenValidation)
+        .validation_policy(FullValidation)
         .max_iterations(2);
 
         engine.run(&mut gepa, &case_set, &store).await.unwrap();
@@ -196,10 +206,12 @@ fn default_reflective_dataset_projects_parse_failures_without_hidden_case_target
             ParetoFrontier::by_case().build(),
             reflector,
         )
-        .reflective_dataset(GepaReflectiveDataset::with_case_input(|case: &SecretCase| {
-            let _hidden_target_is_available_but_not_projected = case.hidden_target;
-            case.input.to_owned()
-        }))
+        .reflective_dataset(GepaReflectiveDataset::with_case_input(
+            |case: &SecretCase| {
+                let _hidden_target_is_available_but_not_projected = case.hidden_target;
+                case.input.to_owned()
+            },
+        ))
         .validation_policy(MinibatchThenValidation)
         .max_iterations(1);
 

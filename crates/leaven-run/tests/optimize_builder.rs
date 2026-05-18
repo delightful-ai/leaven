@@ -1278,6 +1278,31 @@ fn run_builder_reports_budget_stop_reason_from_metric_call_budget() {
 }
 
 #[test]
+fn run_builder_metric_budget_stops_after_started_optimizer_batch() {
+    let result = block_on(
+        optimize(TextArtifact(40))
+            .train_inputs(vec![TextCase(2), TextCase(3)])
+            .runner(|artifact, case| async move { text_runner(&artifact, &case) })
+            .score(text_score)
+            .using(ContinueAfterSeedEvaluation::default())
+            .budget(Budget::metric_calls(1))
+            .evaluation_parallelism(NonZeroUsize::new(1).unwrap())
+            .test_runtime_fingerprints()
+            .run(),
+    )
+    .unwrap();
+
+    assert_eq!(result.best(), Some(&TextArtifact(40)));
+    assert_eq!(result.stop, OptimizationStopReason::BudgetReached);
+    assert_eq!(
+        result.summary().optimization_cost.metric_calls,
+        2,
+        "metric-call budget is a search stopper, so the already-started train batch finishes"
+    );
+    cleanup_result_storage(&result.summary().storage);
+}
+
+#[test]
 fn run_builder_runs_final_reports_after_metric_budget_stop() {
     let result = block_on(
         optimize(TextArtifact(40))

@@ -6,6 +6,8 @@ use leaven_evidence::{CasewiseEvidence, ScalarEvidence};
 use leaven_kernel::{AssessmentId, CandidateId, CaseId};
 use serde::{Deserialize, Serialize};
 
+use crate::python_random::PythonRandom;
+
 /// Stable GEPA candidate index in discovery order.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct GepaCandidateIndex(u32);
@@ -83,7 +85,7 @@ pub struct GepaReferenceState {
     validation_frontier_candidates: BTreeMap<CaseId, BTreeSet<GepaCandidateIndex>>,
     total_metric_calls: u64,
     full_validation_evals: u64,
-    selector_rng_state: u64,
+    selector_rng: PythonRandom,
 }
 
 impl GepaReferenceState {
@@ -156,10 +158,7 @@ impl GepaReferenceState {
         if sampling_list.is_empty() {
             return None;
         }
-        let selected = bounded_index(
-            splitmix64(&mut self.selector_rng_state),
-            sampling_list.len(),
-        );
+        let selected = self.selector_rng.randbelow(sampling_list.len());
         let index = sampling_list[selected];
         Some((index, self.record(index)?.candidate()))
     }
@@ -323,19 +322,6 @@ fn is_dominated(
         }
     }
     true
-}
-
-fn bounded_index(value: u64, upper: usize) -> usize {
-    let upper = u64::try_from(upper).expect("usize fits in u64");
-    usize::try_from(value % upper).expect("bounded index fits in usize")
-}
-
-fn splitmix64(state: &mut u64) -> u64 {
-    *state = state.wrapping_add(0x9E37_79B9_7F4A_7C15);
-    let mut z = *state;
-    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
-    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
-    z ^ (z >> 31)
 }
 
 #[cfg(test)]

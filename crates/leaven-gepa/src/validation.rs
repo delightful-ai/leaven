@@ -6,6 +6,8 @@ use leaven_core::{EvaluationSet, PartitionId};
 use leaven_kernel::{CandidateId, CaseId};
 use serde::{Deserialize, Serialize};
 
+use crate::python_random::PythonRandom;
+
 /// Selects the train/search cases used for one GEPA feedback iteration.
 pub trait BatchSampler {
     /// Return the evaluation set for one parent/child screening minibatch.
@@ -44,7 +46,7 @@ pub trait CheckpointBatchSampler {
 pub struct EpochShuffled {
     minibatch_size: usize,
     cursor: u64,
-    rng_state: u64,
+    rng: PythonRandom,
     shuffled_ids: Vec<CaseId>,
     epoch: Option<u64>,
     last_trainset_size: usize,
@@ -55,7 +57,7 @@ impl Default for EpochShuffled {
         Self {
             minibatch_size: 3,
             cursor: 0,
-            rng_state: 0,
+            rng: PythonRandom::default(),
             shuffled_ids: Vec::new(),
             epoch: None,
             last_trainset_size: 0,
@@ -66,11 +68,11 @@ impl Default for EpochShuffled {
 impl EpochShuffled {
     /// Build a deterministic sampler with a fixed minibatch size.
     #[must_use]
-    pub const fn new(minibatch_size: usize) -> Self {
+    pub fn new(minibatch_size: usize) -> Self {
         Self {
             minibatch_size,
             cursor: 0,
-            rng_state: 0,
+            rng: PythonRandom::seeded(0),
             shuffled_ids: Vec::new(),
             epoch: None,
             last_trainset_size: 0,
@@ -79,14 +81,14 @@ impl EpochShuffled {
 
     /// Set the deterministic sampling seed.
     #[must_use]
-    pub const fn with_seed(mut self, seed: u64) -> Self {
-        self.rng_state = seed;
+    pub fn with_seed(mut self, seed: u64) -> Self {
+        self.rng = PythonRandom::seeded(seed);
         self
     }
 
     fn refresh(&mut self, train_cases: &[CaseId]) {
         self.shuffled_ids = train_cases.to_vec();
-        shuffle_with_splitmix(&mut self.shuffled_ids, &mut self.rng_state);
+        self.rng.shuffle(&mut self.shuffled_ids);
         self.last_trainset_size = train_cases.len();
 
         let remainder = train_cases.len() % self.minibatch_size;
@@ -155,26 +157,6 @@ impl CheckpointBatchSampler for EpochShuffled {
     fn restore_state(&mut self, state: Self::State) {
         *self = state;
     }
-}
-
-fn shuffle_with_splitmix<T>(values: &mut [T], state: &mut u64) {
-    for i in (1..values.len()).rev() {
-        let j = bounded_index(splitmix64(state), i + 1);
-        values.swap(i, j);
-    }
-}
-
-fn bounded_index(value: u64, upper: usize) -> usize {
-    let upper = u64::try_from(upper).expect("usize fits in u64");
-    usize::try_from(value % upper).expect("bounded index fits in usize")
-}
-
-fn splitmix64(state: &mut u64) -> u64 {
-    *state = state.wrapping_add(0x9E37_79B9_7F4A_7C15);
-    let mut z = *state;
-    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
-    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
-    z ^ (z >> 31)
 }
 
 /// Decides which held-out validation request, if any, follows an accepted candidate.

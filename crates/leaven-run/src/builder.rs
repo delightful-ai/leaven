@@ -361,6 +361,7 @@ where
         let scorer = self.scorer.take().ok_or(OptimizeError::MissingScore)?;
         let budget = self.budget.take().ok_or(OptimizeError::MissingBudget)?;
         let metric_call_limit = budget.metric_calls;
+        let engine_budget = search_ledger_budget(budget);
         if self.train.is_empty() && (!self.validation.is_empty() || !self.test.is_empty()) {
             return Err(OptimizeError::HeldOutWithoutTrain);
         }
@@ -411,7 +412,7 @@ where
             resumed,
             checkpoint,
         } = start_engine(EngineStartInputs {
-            budget,
+            budget: engine_budget,
             metric_call_limit,
             evaluator,
             prepared_store: &mut prepared_store,
@@ -494,6 +495,15 @@ where
     } else {
         CachePolicy::Never
     }
+}
+
+fn search_ledger_budget(mut budget: Budget) -> Budget {
+    // `Budget::metric_calls` on the public optimize path is the GEPA-compatible
+    // search stopper. The engine ledger still enforces non-metric hard caps,
+    // while metric calls stop before the next optimizer step so started
+    // evaluator batches can finish.
+    budget.metric_calls = None;
+    budget
 }
 
 fn scoring_evaluator_identity(

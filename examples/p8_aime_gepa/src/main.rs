@@ -5462,18 +5462,21 @@ Provide the new parameter value within ``` blocks."
     }
 
     #[test]
-    fn deterministic_metric_budget_refusal_finishes_with_budget_stop() {
+    fn deterministic_metric_budget_overshoot_finishes_started_validation() {
         let mut config = AimeRunConfig::deterministic_smoke();
         config.budget = Budget::metric_calls(7);
         config.max_iterations = 2;
-        let run = block_on(run_aime(config, deterministic_dataset()));
+        let run = block_on(run_aime(config.clone(), deterministic_dataset()));
         let result = &run.optimized;
 
         assert_eq!(
             result.stop,
             leaven::run::OptimizationStopReason::BudgetReached
         );
-        assert_eq!(result.summary.optimization_cost.metric_calls, 7);
+        assert_eq!(
+            result.summary.optimization_cost.metric_calls, 8,
+            "GEPA checks max_metric_calls before the next optimizer step, so the accepted child's started validation finishes"
+        );
         assert!(
             result
                 .events
@@ -5481,7 +5484,18 @@ Provide the new parameter value within ``` blocks."
         );
         assert!(
             !result.events.contains(&RunEventSummary::Error),
-            "budget refusal at a GEPA step boundary should become a clean stop"
+            "metric-call overshoot should be a clean stop, not a hard budget refusal"
+        );
+        let lines = report_lines(&config, &run);
+        assert!(
+            lines
+                .iter()
+                .any(|line| line == "search_metric_calls_spent=8")
+        );
+        assert!(
+            lines
+                .iter()
+                .any(|line| line == "search_metric_calls_overshoot=1")
         );
     }
 
