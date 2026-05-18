@@ -1045,7 +1045,10 @@ Cache/replay attempts after the report-schema fixes:
   language detection, so ``` text\n...``` was parsed as if `text` were a
   language label. Current code now matches the upstream extractor and
   `plain_text_parser_matches_upstream_language_fence_detection` pins the edge.
-  This is a source-parity fix, not a quality-profile change.
+  `plain_text_parser_matches_upstream_output_extractor_cases` ports the
+  upstream `tests/test_instruction_proposal.py` extractor table through
+  Leaven's public parser path. This is a source-parity fix, not a
+  quality-profile change.
 
 1. Continue no-spend quality diagnosis only where it can produce new evidence:
    use emitted Leaven prompts, candidate lineage, reflection outputs, child

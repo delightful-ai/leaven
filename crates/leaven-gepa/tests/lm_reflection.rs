@@ -543,6 +543,63 @@ fn plain_text_parser_matches_upstream_language_fence_detection() {
 }
 
 #[test]
+fn plain_text_parser_matches_upstream_output_extractor_cases() {
+    let parent = CandidateId::new();
+    let artifact = TestArtifact("seed".to_owned());
+    let surface = WholeTextSurface;
+    let request = ReflectRequest::for_part(parent, "text", "text");
+
+    let cases = [
+        (
+            "Here's the improved instruction:\n```markdown\nThis is the actual instruction content.\nIt should not include the word 'markdown'.\n```\n",
+            "This is the actual instruction content.\nIt should not include the word 'markdown'.",
+        ),
+        (
+            "Here's the instruction:\n```\nThis is the instruction without language specifier.\n```\nDone.",
+            "This is the instruction without language specifier.",
+        ),
+        (
+            "```markdown\nDon't get confused by these backticks: ```\n```",
+            "Don't get confused by these backticks: ```",
+        ),
+        (
+            "```\n\nHere are the instructions.\n\n```",
+            "Here are the instructions.",
+        ),
+        (
+            "Begin text\n```plaintext\nBegin instructions\n\n```\nInternal block 1\n```\n\n```python\nInternal block 2\n```\n\nEnd instructions\n```\nEnd text\n",
+            "Begin instructions\n\n```\nInternal block 1\n```\n\n```python\nInternal block 2\n```\n\nEnd instructions",
+        ),
+        (
+            "```text\nHere are the instructions.",
+            "Here are the instructions.",
+        ),
+        (
+            "Here are the instructions.\n```",
+            "Here are the instructions.",
+        ),
+        (
+            "\nHere are some backticks:\n```\nI hope you didn't get confused.\n                ",
+            "Here are some backticks:\n```\nI hope you didn't get confused.",
+        ),
+        (
+            "\n                Here are the instructions.\n                ",
+            "Here are the instructions.",
+        ),
+    ];
+
+    for (assistant_text, expected) in cases {
+        let batch: ProposalBatch<TestProblem> = PlainTextEditParser
+            .parse(assistant_text, &request, &artifact, &surface)
+            .unwrap();
+        let leaven_core::ProposalEffect::Change { change, .. } = &batch.proposals[0].effect else {
+            panic!("plain text parser should produce a mutation proposal");
+        };
+        assert_eq!(change, expected);
+    }
+}
+
+#[test]
 fn plain_text_parser_handles_unclosed_and_inline_fences() {
     let parent = CandidateId::new();
     let artifact = TestArtifact("seed".to_owned());
