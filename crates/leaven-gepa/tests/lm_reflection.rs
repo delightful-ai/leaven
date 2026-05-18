@@ -12,10 +12,10 @@ use leaven_engine::{
 };
 use leaven_evidence::{CaseAssessmentEvidence, OutputRecord, ScalarEvidence};
 use leaven_gepa::{
-    DEFAULT_REFLECTION_PROMPT_TEMPLATE, DefaultReflectionRenderer, Gepa, GepaReflector,
-    LmBackedReflector, LmBackedReflectorConfig, MinibatchThenValidation, PlainTextEditParser,
-    ReflectRequest, ReflectionOutputParser, ReflectionRenderInput, ReflectionRenderer,
-    ReflectiveExample,
+    DEFAULT_REFLECTION_PROMPT_TEMPLATE, DefaultReflectionRenderer, Gepa, GepaReflectiveDataset,
+    GepaReflector, LmBackedReflector, LmBackedReflectorConfig, MinibatchThenValidation,
+    PlainTextEditParser, ReflectRequest, ReflectionOutputParser, ReflectionRenderInput,
+    ReflectionRenderer, ReflectiveExample,
 };
 use leaven_kernel::{
     AssessmentId, Budget, CandidateId, CaseId, ContentId, Cost, EvaluatorId, Fingerprint,
@@ -161,6 +161,64 @@ fn multi_iteration_reflection_uses_selected_parent_assessment_feedback() {
         assert!(second_rendered.contains("seed-lm"));
         assert!(second_rendered.contains("## Feedback\nfeedback for seed-lm\n"));
         assert!(!second_rendered.contains("## Feedback\nfeedback for seed\n"));
+    });
+}
+
+#[test]
+fn default_reflective_dataset_projects_parse_failures_without_hidden_case_targets() {
+    block_on(async {
+        let case_set = CaseSet::new(vec![SecretCase {
+            input: "what is 19 + 23?",
+            hidden_target: "SECRET_TARGET_DO_NOT_RENDER",
+        }])
+        .with_partition(
+            leaven_core::PartitionId::from("TRAIN"),
+            vec![leaven_kernel::CaseId::new(0)],
+        );
+        let store = InlineEvidenceStore::<CaseAssessmentEvidence>::new("inline");
+        let mut engine = Engine::<SecretProblem>::builder()
+            .budget(Budget::unlimited())
+            .evaluator(ParseFailureEvaluator)
+            .build();
+        engine
+            .insert_seed(TestArtifact("seed".to_owned()), 0)
+            .unwrap();
+        let lm = RecordingLm::new("-lm", 1, 1);
+        let requests = lm.requests();
+        let reflector = LmBackedReflector::new(
+            lm,
+            "mock-reflector",
+            DefaultReflectionRenderer,
+            PlainTextEditParser,
+        );
+        let mut gepa = Gepa::new(
+            WholeTextSurface,
+            ParetoFrontier::by_case().build(),
+            reflector,
+        )
+        .reflective_dataset(GepaReflectiveDataset::with_case_input(|case: &SecretCase| {
+            let _hidden_target_is_available_but_not_projected = case.hidden_target;
+            case.input.to_owned()
+        }))
+        .validation_policy(MinibatchThenValidation)
+        .max_iterations(1);
+
+        engine.run(&mut gepa, &case_set, &store).await.unwrap();
+
+        let captured = requests.lock().expect("requests lock").clone();
+        assert_eq!(captured.len(), 1);
+        let rendered = captured[0]
+            .messages
+            .iter()
+            .map(Message::content)
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(rendered.contains("## Input\nwhat is 19 + 23?"));
+        assert!(rendered.contains("## Output\nforty-two"));
+        assert!(rendered.contains("## Score\n0"));
+        assert!(rendered.contains("could not be parsed as an integer"));
+        assert!(rendered.contains("The correct answer is 42"));
+        assert!(!rendered.contains("SECRET_TARGET_DO_NOT_RENDER"));
     });
 }
 
@@ -590,6 +648,21 @@ impl OptimizationProblem for TestProblem {
     type ProposalAnnotations = ();
 }
 
+struct SecretProblem;
+
+impl OptimizationProblem for SecretProblem {
+    type Artifact = TestArtifact;
+    type Case = SecretCase;
+    type Evidence = CaseAssessmentEvidence;
+    type ProposalAnnotations = ();
+}
+
+#[derive(Clone, Debug)]
+struct SecretCase {
+    input: &'static str,
+    hidden_target: &'static str,
+}
+
 #[derive(Clone)]
 struct RecordingLm {
     response: String,
@@ -746,6 +819,53 @@ impl Evaluator<TestProblem> for FeedbackEvaluator {
                         .unwrap(),
                         OutputRecord::inline("candidate output"),
                         "candidate missed the target suffix",
+                    ),
+                    cost: Cost::metric_calls(1),
+                    metadata: MetadataBag::new(),
+                });
+            }
+        }
+        let cost = Cost::metric_calls(assessments.len() as u64);
+        Ok(Metered::new(assessments, cost))
+    }
+}
+
+struct ParseFailureEvaluator;
+
+impl Evaluator<SecretProblem> for ParseFailureEvaluator {
+    fn id(&self) -> EvaluatorId {
+        EvaluatorId::PRIMARY
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        Fingerprint::from_bytes([10; 32])
+    }
+
+    fn cache_policy(&self, _request: &ResolvedEvaluationRequest) -> CachePolicy {
+        CachePolicy::Never
+    }
+
+    async fn evaluate(
+        &self,
+        request: ResolvedEvaluationRequest,
+        _ctx: EvaluationContext<'_, SecretProblem>,
+    ) -> Result<Metered<Vec<Assessment<SecretProblem>>>, EvaluationError> {
+        let set = leaven_kernel::EvaluationSetId::from_uuid(request.set.id.as_uuid());
+        let ResolvedRequestKind::Independent { candidates } = request.kind else {
+            return Err(EvaluationError::Message(
+                "expected independent request".to_owned(),
+            ));
+        };
+        let mut assessments = Vec::new();
+        for candidate in candidates {
+            for case in request.set.case_ids.iter().copied() {
+                assessments.push(Assessment::Independent {
+                    candidate,
+                    target: AssessmentTarget::Case { set, case },
+                    evidence: CaseAssessmentEvidence::new(
+                        ScalarEvidence::new(0.0).unwrap(),
+                        OutputRecord::inline("forty-two"),
+                        "The answer could not be parsed as an integer. The correct answer is 42.",
                     ),
                     cost: Cost::metric_calls(1),
                     metadata: MetadataBag::new(),
