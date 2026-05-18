@@ -76,15 +76,16 @@ where
     }
 }
 
-/// Pareto-frequency selector.
+/// Population-best fallback selector for explicit ablations.
 ///
-/// The current deterministic implementation selects the best candidate exposed
-/// by the population. Future stochastic weighting belongs here, not in the
-/// engine.
+/// Reference GEPA parent selection is validation-frontier frequency sampling
+/// from `GepaReferenceState`, coordinated by the optimizer loop. This selector
+/// exists for advanced population-backed variants and fallback/legacy state
+/// only; it is not the reference GEPA Pareto selector.
 #[derive(Clone, Debug, Default)]
-pub struct ParetoFrequencyWeighted;
+pub struct PopulationBestFallback;
 
-impl CheckpointCandidateSelector for ParetoFrequencyWeighted {
+impl CheckpointCandidateSelector for PopulationBestFallback {
     type State = ();
 
     fn checkpoint_state(&self) -> Self::State {}
@@ -92,7 +93,7 @@ impl CheckpointCandidateSelector for ParetoFrequencyWeighted {
     fn restore_state(&mut self, _state: Self::State) {}
 }
 
-impl<P, Pop> CandidateSelector<P, Pop> for ParetoFrequencyWeighted
+impl<P, Pop> CandidateSelector<P, Pop> for PopulationBestFallback
 where
     P: OptimizationProblem,
     Pop: HasBestCandidate,

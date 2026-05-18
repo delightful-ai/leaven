@@ -255,6 +255,7 @@ fn gepa_optimizer_uses_agent_backed_reflection_path() {
             ParetoFrontier::by_case().build(),
             proposer,
         )
+        .skip_perfect_score(false)
         .reflective_dataset(ScriptedDataset);
 
         engine.run(&mut gepa, &case_set, &store).await.unwrap();

@@ -25,7 +25,7 @@ pub use evidence::GepaCaseEvidence;
 pub use gate::{
     CheckpointGate, Gate, GateDecision, ImprovementOrEqual, NoRegression, StrictImprovement,
 };
-pub use optimizer::{Gepa, GepaCandidateHistoryEntry, GepaCheckpointState};
+pub use optimizer::{Gepa, GepaCandidateHistoryEntry, GepaCheckpointState, GepaProposalAttempt};
 pub use part_selector::{CheckpointPartSelector, PartSelector, RoundRobinPart};
 pub use population::{CheckpointPopulation, GepaPopulation};
 #[doc(hidden)]
@@ -42,7 +42,7 @@ pub use report::{
     GepaReportValidationSubscore,
 };
 pub use selector::{
-    CandidateSelector, CheckpointCandidateSelector, HasBestCandidate, ParetoFrequencyWeighted,
+    CandidateSelector, CheckpointCandidateSelector, HasBestCandidate, PopulationBestFallback,
     SelectBestCandidate,
 };
 pub use state::{GepaCandidateIndex, GepaCandidateRecord, GepaReferenceState};
@@ -55,19 +55,18 @@ pub mod test_support {
 
 pub mod prelude {
     pub use crate::{
-        CandidateSelector, CaseInputProjectedDataset, CheckpointCandidateSelector, CheckpointGate,
-        CheckpointPopulation, DEFAULT_REFLECTION_PROMPT_TEMPLATE, DefaultReflectionRenderer,
-        FullValidation, Gate, Gepa, GepaCandidateHistoryEntry, GepaCandidateIndex,
-        GepaCandidateRecord, GepaCaseEvidence, GepaEventSummary, GepaPopulation,
-        GepaReferenceBuilder, GepaReferenceBuilderWithSurface, GepaReferenceState,
-        GepaReflectWithLmBuilder, GepaReflectWithLmBuilderWithSurface, GepaReflectionBootstrap,
-        GepaReflectiveDataset, GepaReflector, GepaReport, GepaReportCandidate,
-        GepaReportFrontierCase, GepaReportHistoryEntry, GepaReportValidationSubscore,
-        GepaSkipReason, GepaStageProposer, HasBestCandidate, ImprovementOrEqual, LmBackedReflector,
-        LmBackedReflectorConfig, MinibatchThenValidation, ParetoFrequencyWeighted, PartSelector,
+        CaseInputProjectedDataset, CheckpointGate, CheckpointPopulation,
+        DEFAULT_REFLECTION_PROMPT_TEMPLATE, DefaultReflectionRenderer, FullValidation, Gate, Gepa,
+        GepaCandidateHistoryEntry, GepaCandidateIndex, GepaCandidateRecord, GepaCaseEvidence,
+        GepaEventSummary, GepaPopulation, GepaReferenceBuilder, GepaReferenceBuilderWithSurface,
+        GepaReferenceState, GepaReflectWithLmBuilder, GepaReflectWithLmBuilderWithSurface,
+        GepaReflectionBootstrap, GepaReflectiveDataset, GepaReflector, GepaReport,
+        GepaReportCandidate, GepaReportFrontierCase, GepaReportHistoryEntry,
+        GepaReportValidationSubscore, GepaSkipReason, GepaStageProposer, ImprovementOrEqual,
+        LmBackedReflector, LmBackedReflectorConfig, MinibatchThenValidation, PartSelector,
         PlainTextEditParser, ReflectRequest, ReflectionError, ReflectionOutputParser,
         ReflectionRenderInput, ReflectionRenderer, ReflectiveCaseInput, ReflectiveDatasetBuilder,
-        ReflectiveExample, ReflectiveSideInfoValue, RoundRobinPart, SelectBestCandidate,
-        StrictImprovement, SurfaceProposer, ValidationPolicy, gepa_stage_proposer,
+        ReflectiveExample, ReflectiveSideInfoValue, RoundRobinPart, StrictImprovement,
+        SurfaceProposer, ValidationPolicy, gepa_stage_proposer,
     };
 }

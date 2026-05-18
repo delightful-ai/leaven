@@ -1,8 +1,8 @@
 use super::{
     BatchSampler, CandidateId, CandidateSelector, EditSurface, EvaluationPurpose, EvaluationSet,
     Gate, Gepa, GepaAssessment, GepaCandidateIndex, GepaCaseEvidence, GepaEventSummary,
-    GepaPopulation, GepaReflector, OptimizationProblem, OptimizerError, PartSelector,
-    ReflectiveDatasetBuilder, RunContext, RunGraphView, ValidationPolicy,
+    GepaPopulation, GepaProposalAttempt, GepaReflector, OptimizationProblem, OptimizerError,
+    PartSelector, ReflectiveDatasetBuilder, RunContext, RunGraphView, ValidationPolicy,
 };
 
 impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
@@ -99,6 +99,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
         self.record_event(GepaEventSummary::IterationStarted {
             iteration: self.completed_iterations + 1,
         });
+        let (parent_index, parent) = self.select_reference_parent(ctx.graph(), seed)?;
         let train_set = EvaluationSet::Partition(self.train_partition.clone());
         let train_cases = ctx
             .resolve_optimizer_evaluation_set(&train_set)
@@ -112,8 +113,15 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             .map_err(|error| {
                 OptimizerError::with_source("GEPA could not sample train minibatch", error)
             })?;
-        self.record_event(GepaEventSummary::TrainMinibatchSampled);
-        let (parent_index, parent) = self.select_reference_parent(ctx.graph(), seed)?;
+        let sampled_cases = ctx
+            .resolve_optimizer_evaluation_set(&evaluation_set)
+            .map_err(|error| {
+                OptimizerError::with_source("GEPA could not resolve train minibatch", error)
+            })?
+            .case_ids;
+        self.record_event(GepaEventSummary::TrainMinibatchSampled {
+            cases: sampled_cases,
+        });
         let parent_screening = self
             .screen_parent(ctx, parent, evaluation_set.clone())
             .await?;
@@ -216,10 +224,28 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
         Validate: ValidationPolicy + Sync,
         Dataset: ReflectiveDatasetBuilder<P, S> + Sync,
     {
-        let Some(candidate) = self
-            .propose_candidate(ctx, parent, &parent_screening.assessments)
-            .await?
-        else {
+        let outcome = self
+            .propose_candidate(ctx, parent, parent_screening)
+            .await?;
+        let attempt_index = self.proposal_attempts.len() + 1;
+        let Some(candidate) = outcome.candidate else {
+            self.proposal_attempts.push(GepaProposalAttempt {
+                attempt_index,
+                iteration: self.completed_iterations + 1,
+                parent_index,
+                parent,
+                parent_assessments: parent_screening.assessments.clone(),
+                parent_cases: parent_screening.cases(),
+                parent_score: parent_screening.average_score,
+                part_label: outcome.part_label,
+                reflective_example_count: outcome.reflective_example_count,
+                child: None,
+                child_assessments: Vec::new(),
+                child_cases: Vec::new(),
+                child_score: None,
+                accepted: None,
+                skip_reason: outcome.skip_reason,
+            });
             return Ok(());
         };
 
@@ -231,11 +257,28 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
         self.record_event(GepaEventSummary::ChildEvaluated {
             metric_calls_delta: screened.metric_calls_new,
         });
-        if self
+        let accepted = self
             .gate
             .decide(parent_screening.average_score, screened.average_score)
-            .is_accept()
-        {
+            .is_accept();
+        self.proposal_attempts.push(GepaProposalAttempt {
+            attempt_index,
+            iteration: self.completed_iterations + 1,
+            parent_index,
+            parent,
+            parent_assessments: parent_screening.assessments.clone(),
+            parent_cases: parent_screening.cases(),
+            parent_score: parent_screening.average_score,
+            part_label: outcome.part_label,
+            reflective_example_count: outcome.reflective_example_count,
+            child: Some(candidate),
+            child_assessments: screened.assessments.clone(),
+            child_cases: screened.cases(),
+            child_score: Some(screened.average_score),
+            accepted: Some(accepted),
+            skip_reason: None,
+        });
+        if accepted {
             self.accept_child(ctx, candidate, parent_index, screened)
                 .await?;
         } else {

@@ -1,6 +1,6 @@
 //! GEPA phase event summaries.
 
-use leaven_kernel::CandidateId;
+use leaven_kernel::{CandidateId, CaseId};
 use serde::{Deserialize, Serialize};
 
 use crate::GepaCandidateIndex;
@@ -31,13 +31,17 @@ pub enum GepaEventSummary {
     /// Parent was selected for mutation.
     ParentSelected { candidate_index: GepaCandidateIndex },
     /// Train minibatch was sampled.
-    TrainMinibatchSampled,
+    TrainMinibatchSampled { cases: Vec<CaseId> },
     /// Parent evaluation completed.
     ParentEvaluated { metric_calls_delta: u64 },
     /// Proposal was skipped before provider work.
     ProposalSkipped { reason: GepaSkipReason },
     /// Reflective examples were built.
-    ReflectiveDatasetBuilt { records: usize },
+    ReflectiveDatasetBuilt {
+        records: usize,
+        cases: Vec<CaseId>,
+        source_ref_count: usize,
+    },
     /// Child candidate was built.
     ChildBuilt { candidate: CandidateId },
     /// Child evaluation completed.

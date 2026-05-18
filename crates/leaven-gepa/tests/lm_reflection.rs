@@ -6,12 +6,16 @@ use leaven_core::{
     OptimizationProblem, ProposalBatch, ProposalBatchSemantics, ResolvedEvaluationRequest,
     ResolvedRequestKind,
 };
-use leaven_engine::{CachePolicy, CaseSet, Engine, EvaluationContext, EvaluationError, Evaluator};
+use leaven_engine::{
+    BudgetLedger, CachePolicy, CaseSet, Engine, EvaluationContext, EvaluationError, Evaluator,
+    RunContext, RunGraph,
+};
 use leaven_evidence::{CaseAssessmentEvidence, OutputRecord, ScalarEvidence};
 use leaven_gepa::{
-    DEFAULT_REFLECTION_PROMPT_TEMPLATE, DefaultReflectionRenderer, Gepa, LmBackedReflector,
-    LmBackedReflectorConfig, MinibatchThenValidation, PlainTextEditParser, ReflectRequest,
-    ReflectionOutputParser, ReflectionRenderInput, ReflectionRenderer, ReflectiveExample,
+    DEFAULT_REFLECTION_PROMPT_TEMPLATE, DefaultReflectionRenderer, Gepa, GepaReflector,
+    LmBackedReflector, LmBackedReflectorConfig, MinibatchThenValidation, PlainTextEditParser,
+    ReflectRequest, ReflectionOutputParser, ReflectionRenderInput, ReflectionRenderer,
+    ReflectiveExample,
 };
 use leaven_kernel::{
     AssessmentId, Budget, CandidateId, CaseId, ContentId, Cost, EvaluatorId, Fingerprint,
@@ -140,6 +144,7 @@ fn multi_iteration_reflection_uses_selected_parent_assessment_feedback() {
             ParetoFrontier::by_case().build(),
             reflector,
         )
+        .skip_perfect_score(false)
         .validation_policy(MinibatchThenValidation)
         .max_iterations(2);
 
@@ -441,6 +446,49 @@ fn default_lm_backed_reflector_constructor_is_typed() {
         .population(ParetoFrontier::by_case().build());
 
     assert!(gepa.population().best().is_none());
+
+    let gepa = Gepa::reflect_with_lm(RecordingLm::new("-build", 1, 1), "builder")
+        .surface(WholeTextSurface)
+        .build();
+    assert!(gepa.population().best().is_none());
+
+    let gepa = Gepa::reference()
+        .reflect_with_lm(RecordingLm::new("-reference", 1, 1), "reference")
+        .surface(WholeTextSurface)
+        .build();
+    assert!(gepa.population().best().is_none());
+
+    let gepa = Gepa::reference()
+        .surface(WholeTextSurface)
+        .reflect_with_lm(RecordingLm::new("-surface-reference", 1, 1), "reference");
+    assert!(gepa.population().best().is_none());
+}
+
+#[test]
+fn lm_backed_reflector_rejects_missing_parent_before_lm_call() {
+    block_on(async {
+        let lm = RecordingLm::new("-unused", 1, 1);
+        let requests = lm.requests();
+        let mut reflector = LmBackedReflector::with_default_renderer(lm, "missing-parent");
+        let mut graph = RunGraph::<TestProblem>::new(leaven_kernel::RunId::new());
+        let mut budget = BudgetLedger::default();
+        let mut ctx = RunContext::new(&mut graph, &mut budget);
+        let request = ReflectRequest {
+            parent: CandidateId::new(),
+            part: "text",
+            part_label: "text".to_owned(),
+            examples: Vec::new(),
+            source_refs: Vec::new(),
+        };
+
+        let error = reflector
+            .reflect_candidate(&mut ctx, &WholeTextSurface, request)
+            .await
+            .expect_err("missing parent must fail before LM request");
+
+        assert!(format!("{error:?}").contains("selected parent"));
+        assert!(requests.lock().expect("requests lock").is_empty());
+    });
 }
 
 #[test]

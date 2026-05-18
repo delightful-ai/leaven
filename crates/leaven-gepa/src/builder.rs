@@ -4,7 +4,7 @@ use leaven_population::ParetoFrontier;
 
 use crate::{
     DefaultReflectionRenderer, Gepa, LmBackedReflector, LmBackedReflectorConfig, MissingReflector,
-    ParetoFrequencyWeighted, PlainTextEditParser, RoundRobinPart, StrictImprovement,
+    PlainTextEditParser, PopulationBestFallback, RoundRobinPart, StrictImprovement,
 };
 
 impl Gepa<(), ParetoFrontier, MissingReflector> {
@@ -70,7 +70,7 @@ impl<S> GepaReferenceBuilderWithSurface<S> {
     pub fn reflector<Reflect>(
         self,
         reflector: Reflect,
-    ) -> Gepa<S, ParetoFrontier, Reflect, ParetoFrequencyWeighted, RoundRobinPart, StrictImprovement>
+    ) -> Gepa<S, ParetoFrontier, Reflect, PopulationBestFallback, RoundRobinPart, StrictImprovement>
     {
         Gepa::new(self.surface, ParetoFrontier::by_case().build(), reflector)
     }
@@ -85,7 +85,7 @@ impl<S> GepaReferenceBuilderWithSurface<S> {
         S,
         ParetoFrontier,
         LmBackedReflector<L, DefaultReflectionRenderer, PlainTextEditParser>,
-        ParetoFrequencyWeighted,
+        PopulationBestFallback,
         RoundRobinPart,
         StrictImprovement,
     > {
@@ -146,7 +146,7 @@ impl<S, Reflect> GepaReflectWithLmBuilderWithSurface<S, Reflect> {
     #[must_use]
     pub fn build(
         self,
-    ) -> Gepa<S, ParetoFrontier, Reflect, ParetoFrequencyWeighted, RoundRobinPart, StrictImprovement>
+    ) -> Gepa<S, ParetoFrontier, Reflect, PopulationBestFallback, RoundRobinPart, StrictImprovement>
     {
         Gepa::new(
             self.surface,
@@ -160,7 +160,7 @@ impl<S, Reflect> GepaReflectWithLmBuilderWithSurface<S, Reflect> {
     pub fn population<Pop>(
         self,
         population: Pop,
-    ) -> Gepa<S, Pop, Reflect, ParetoFrequencyWeighted, RoundRobinPart, StrictImprovement> {
+    ) -> Gepa<S, Pop, Reflect, PopulationBestFallback, RoundRobinPart, StrictImprovement> {
         Gepa::new(self.surface, population, self.reflector)
     }
 }
@@ -177,7 +177,7 @@ impl<S> GepaBuilderWithSurface<S> {
     pub fn reflector<Reflect>(
         self,
         reflector: Reflect,
-    ) -> Gepa<S, ParetoFrontier, Reflect, ParetoFrequencyWeighted, RoundRobinPart, StrictImprovement>
+    ) -> Gepa<S, ParetoFrontier, Reflect, PopulationBestFallback, RoundRobinPart, StrictImprovement>
     {
         Gepa::new(self.surface, ParetoFrontier::by_case().build(), reflector)
     }
@@ -205,7 +205,7 @@ impl<S, Pop> GepaBuilderWithPopulation<S, Pop> {
     pub fn reflector<Reflect>(
         self,
         reflector: Reflect,
-    ) -> Gepa<S, Pop, Reflect, ParetoFrequencyWeighted, RoundRobinPart, StrictImprovement> {
+    ) -> Gepa<S, Pop, Reflect, PopulationBestFallback, RoundRobinPart, StrictImprovement> {
         Gepa::new(self.surface, self.population, reflector)
     }
 }

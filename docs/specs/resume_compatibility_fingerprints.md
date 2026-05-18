@@ -170,6 +170,13 @@ Optimizer compatibility includes:
 - strategy roles such as proposer, reflector, selector, batch sampler, gate, and
   validation policy when they affect future decisions.
 
+For the static GEPA slot API, the current implementation includes strategy slot
+type names plus checkpointed selector, part-selector, gate, batch-sampler, and
+validation-policy state in the optimizer compatibility fingerprint, and restores
+that state from the optimizer checkpoint. Custom strategy values whose behavior
+can change without appearing in checkpoint state still need an explicit
+value-level compatibility declaration before they are safe for durable resume.
+
 `CheckpointableOptimizer::optimizer_fingerprint()` and optimizer state schema
 checking are the existing engine primitive. Optimizer crates own the optimizer
 state payload and restore validation; `leaven-run` must not inspect GEPA private

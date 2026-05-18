@@ -3,7 +3,10 @@
 use leaven_kernel::{AssessmentId, CandidateId, CaseId};
 use serde::{Deserialize, Serialize};
 
-use crate::{GepaCandidateHistoryEntry, GepaCandidateIndex, GepaEventSummary, GepaReferenceState};
+use crate::{
+    GepaCandidateHistoryEntry, GepaCandidateIndex, GepaEventSummary, GepaProposalAttempt,
+    GepaReferenceState,
+};
 
 /// Detailed GEPA optimizer report.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -22,25 +25,29 @@ pub struct GepaReport {
     pub validation_frontier: Vec<GepaReportFrontierCase>,
     /// Train-screening observations GEPA used during search.
     pub candidate_history: Vec<GepaReportHistoryEntry>,
+    /// Proposal attempts GEPA made, including skipped and rejected attempts.
+    pub proposal_attempts: Vec<GepaProposalAttempt>,
     /// Total new evaluator metric calls charged during GEPA search.
     pub total_metric_calls: u64,
     /// Number of full validation passes run by GEPA.
     pub full_validation_evals: u64,
+    /// Whether all-perfect parent minibatches are skipped before reflection.
+    pub skip_perfect_score: bool,
+    /// Score threshold treated as perfect by the skip-perfect policy.
+    pub perfect_score: f64,
     /// GEPA phase events emitted by the optimizer.
     pub events: Vec<GepaEventSummary>,
 }
 
 impl GepaReport {
-    pub(crate) fn from_reference_state(
-        reference_state: &GepaReferenceState,
-        candidate_history: &[GepaCandidateHistoryEntry],
-        events: &[GepaEventSummary],
-        best_candidate: Option<CandidateId>,
-        validation_best_candidate: Option<CandidateId>,
-    ) -> Self {
-        let best_index = best_candidate.and_then(|candidate| reference_state.index_of(candidate));
-        let validation_best_index =
-            validation_best_candidate.and_then(|candidate| reference_state.index_of(candidate));
+    pub(crate) fn from_reference_state(input: &GepaReportInput<'_>) -> Self {
+        let reference_state = input.reference_state;
+        let best_index = input
+            .best_candidate
+            .and_then(|candidate| reference_state.index_of(candidate));
+        let validation_best_index = input
+            .validation_best_candidate
+            .and_then(|candidate| reference_state.index_of(candidate));
         let candidates = reference_state
             .records()
             .iter()
@@ -72,7 +79,8 @@ impl GepaReport {
                 candidates: candidates.iter().copied().collect(),
             })
             .collect();
-        let candidate_history = candidate_history
+        let candidate_history = input
+            .candidate_history
             .iter()
             .map(|entry| GepaReportHistoryEntry {
                 candidate: entry.candidate(),
@@ -83,17 +91,31 @@ impl GepaReport {
             .collect();
         Self {
             best_index,
-            best_candidate,
+            best_candidate: input.best_candidate,
             validation_best_index,
-            validation_best_candidate,
+            validation_best_candidate: input.validation_best_candidate,
             candidates,
             validation_frontier,
             candidate_history,
+            proposal_attempts: input.proposal_attempts.to_vec(),
             total_metric_calls: reference_state.total_metric_calls(),
             full_validation_evals: reference_state.full_validation_evals(),
-            events: events.to_vec(),
+            skip_perfect_score: input.skip_perfect_score,
+            perfect_score: input.perfect_score,
+            events: input.events.to_vec(),
         }
     }
+}
+
+pub(crate) struct GepaReportInput<'a> {
+    pub(crate) reference_state: &'a GepaReferenceState,
+    pub(crate) candidate_history: &'a [GepaCandidateHistoryEntry],
+    pub(crate) proposal_attempts: &'a [GepaProposalAttempt],
+    pub(crate) events: &'a [GepaEventSummary],
+    pub(crate) best_candidate: Option<CandidateId>,
+    pub(crate) validation_best_candidate: Option<CandidateId>,
+    pub(crate) skip_perfect_score: bool,
+    pub(crate) perfect_score: f64,
 }
 
 /// One accepted candidate row in a GEPA report.

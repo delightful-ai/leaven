@@ -42,6 +42,10 @@ It composes core, surface, engine, evidence, population, render, and LM vocabula
   part selection, feedback/evidence rendering, reflection/proposal, acceptance,
   validation, population, merge, stopping, and checkpoint state. Topology and
   scalar-score improvement are not sufficient.
+- `PopulationBestFallback` is an explicit advanced fallback/ablation selector.
+  It is not reference GEPA Pareto selection. The reference parent selector reads
+  `GepaReferenceState` validation-frontier frequency state in the optimizer
+  loop.
 - Public GEPA nomenclature matters. `CandidateSelector`, `PartSelector`,
   `BatchSampler`, `Acceptance`, `ValidationPolicy`,
   `Population`/`ParetoFrontier`, and `Merge` are the teachable slot names.

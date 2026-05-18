@@ -165,7 +165,8 @@ fn shuffle_with_splitmix<T>(values: &mut [T], state: &mut u64) {
 }
 
 fn bounded_index(value: u64, upper: usize) -> usize {
-    (value % upper as u64) as usize
+    let upper = u64::try_from(upper).expect("usize fits in u64");
+    usize::try_from(value % upper).expect("bounded index fits in usize")
 }
 
 fn splitmix64(state: &mut u64) -> u64 {

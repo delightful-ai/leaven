@@ -320,7 +320,8 @@ fn is_dominated(
 }
 
 fn bounded_index(value: u64, upper: usize) -> usize {
-    (value % upper as u64) as usize
+    let upper = u64::try_from(upper).expect("usize fits in u64");
+    usize::try_from(value % upper).expect("bounded index fits in usize")
 }
 
 fn splitmix64(state: &mut u64) -> u64 {
@@ -439,6 +440,122 @@ mod tests {
                 .record(GepaCandidateIndex::new(u32::MAX))
                 .map(super::GepaCandidateRecord::candidate),
             None
+        );
+    }
+
+    #[test]
+    fn reference_state_selector_repeats_candidates_by_frontier_frequency() {
+        let mut state = GepaReferenceState::default();
+        let candidate_zero = CandidateId::new();
+        let candidate_one = CandidateId::new();
+        state.add_validated_candidate(
+            candidate_zero,
+            Vec::new(),
+            3,
+            1.0,
+            vec![AssessmentId::new()],
+            &scalar_rows(&[(0, 1.0), (1, 0.0), (2, 0.0)]),
+        );
+        state.add_validated_candidate(
+            candidate_one,
+            Vec::new(),
+            6,
+            2.0,
+            vec![AssessmentId::new()],
+            &scalar_rows(&[(0, 0.0), (1, 1.0), (2, 1.0)]),
+        );
+
+        let fronts = state.non_dominated_validation_frontier();
+        assert_eq!(
+            fronts.get(&CaseId::new(0)).cloned().unwrap_or_default(),
+            std::collections::BTreeSet::from([GepaCandidateIndex::new(0)])
+        );
+        assert_eq!(
+            fronts.get(&CaseId::new(1)).cloned().unwrap_or_default(),
+            std::collections::BTreeSet::from([GepaCandidateIndex::new(1)])
+        );
+        assert_eq!(
+            fronts.get(&CaseId::new(2)).cloned().unwrap_or_default(),
+            std::collections::BTreeSet::from([GepaCandidateIndex::new(1)])
+        );
+
+        assert_eq!(
+            state.select_by_validation_frontier_frequency(),
+            Some((GepaCandidateIndex::new(1), candidate_one))
+        );
+    }
+
+    #[test]
+    fn reference_state_selector_removes_dominated_candidates() {
+        let mut state = GepaReferenceState::default();
+        let dominated = CandidateId::new();
+        let dominator = CandidateId::new();
+        state.add_validated_candidate(
+            dominated,
+            Vec::new(),
+            2,
+            0.5,
+            vec![AssessmentId::new()],
+            &scalar_rows(&[(0, 1.0)]),
+        );
+        state.add_validated_candidate(
+            dominator,
+            Vec::new(),
+            4,
+            1.0,
+            vec![AssessmentId::new()],
+            &scalar_rows(&[(0, 1.0), (1, 1.0)]),
+        );
+
+        let fronts = state.non_dominated_validation_frontier();
+        assert_eq!(
+            fronts.get(&CaseId::new(0)).cloned().unwrap_or_default(),
+            std::collections::BTreeSet::from([GepaCandidateIndex::new(1)])
+        );
+        assert_eq!(
+            fronts.get(&CaseId::new(1)).cloned().unwrap_or_default(),
+            std::collections::BTreeSet::from([GepaCandidateIndex::new(1)])
+        );
+        assert_eq!(
+            state.select_by_validation_frontier_frequency(),
+            Some((GepaCandidateIndex::new(1), dominator))
+        );
+    }
+
+    #[test]
+    fn reference_state_selector_rng_state_round_trips() {
+        let mut state = GepaReferenceState::default();
+        let candidate_zero = CandidateId::new();
+        let candidate_one = CandidateId::new();
+        state.add_validated_candidate(
+            candidate_zero,
+            Vec::new(),
+            2,
+            1.0,
+            vec![AssessmentId::new()],
+            &scalar_rows(&[(0, 1.0)]),
+        );
+        state.add_validated_candidate(
+            candidate_one,
+            Vec::new(),
+            4,
+            1.0,
+            vec![AssessmentId::new()],
+            &scalar_rows(&[(1, 1.0)]),
+        );
+
+        let mut restored = serde_json::from_value::<GepaReferenceState>(
+            serde_json::to_value(&state).expect("reference state serializes"),
+        )
+        .expect("reference state restores");
+
+        assert_eq!(
+            restored.select_by_validation_frontier_frequency(),
+            state.select_by_validation_frontier_frequency()
+        );
+        assert_eq!(
+            restored.select_by_validation_frontier_frequency(),
+            state.select_by_validation_frontier_frequency()
         );
     }
 }
