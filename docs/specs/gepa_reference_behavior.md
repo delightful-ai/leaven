@@ -1404,12 +1404,14 @@ Cache parity requirements:
 - accepted-candidate validation uses the same cache;
 - durable resume restores cache entries consistently with graph/evidence truth.
 
-Leaven's current request-level `EvaluationCacheKey` is useful but not enough for
-GEPA parity because a request containing case IDs `[a, b, c]` cannot satisfy a
-later request containing `[a]` or `[a, c, d]`. GEPA parity requires a per-case
-cache adapter for independent per-case evaluations, or evaluation lowering that
-decomposes GEPA requests into per-case cacheable units while preserving one
-GEPA-level evaluation event.
+Leaven keeps the generic request-level `EvaluationCacheKey` for non-GEPA
+evaluations, but GEPA parity requires independent per-case reuse: a request
+containing case IDs `[a, b, c]` must satisfy later requests containing `[a]` or
+`[a, c, d]`. The GEPA path therefore decomposes independent case evaluations
+into per-case cacheable units and backfills request-shaped rows while preserving
+one GEPA-level evaluation event. Final-report-only rows must not be persisted as
+resume authority unless a separate final-report snapshot/backfill design makes
+the graph evidence restorable too.
 
 ### 5.2 LM Response Cache
 
@@ -1517,7 +1519,7 @@ of this spec remain the product target.
 | Frontier source | Validation/Pareto subscores drive selection | P8 config filters `ParetoFrontier` to `TRAIN`; validation best is scalar-only | Maintain validation frontier separately from train screening |
 | Accepted candidates | Full-validate every accepted child and update Pareto maps | `FullValidation` can evaluate accepted children, but population update remains train-based | Feed validation casewise observations into selection/frontier state |
 | Candidate result | Return best validation aggregate plus detailed candidate table | `Optimized<A>` returns best facade; GEPA detailed result is not parity-shaped | Add detailed GEPA report/result payload |
-| Eval cache | Per candidate/case cache reuse | Engine cache is request-level over full case-id vector | Add GEPA per-case cache adapter or per-case request lowering |
+| Eval cache | Per candidate/case cache reuse | GEPA decomposes independent evaluations into per-case cacheable rows and backfills request-shaped rows while preserving GEPA-level evaluation events | Keep final-report-only rows out of resume authority unless a report snapshot/backfill design restores matching graph evidence |
 | Cache identity | Candidate content identity required for deterministic eval cache | P8 `AimePrompt` now exposes `cache_identity` | Keep and require this in parity tests |
 | Metric-call budget | `max_metric_calls` counts evaluator rollouts | Leaven budget ledger charges generic costs and proposal costs too | Expose GEPA search metric-call stopper over evaluator rollouts |
 | Skip perfect | Default skips all-perfect parent minibatches | GEPA now defaults `skip_perfect_score=true` with `perfect_score=1.0`; all-perfect parent minibatches emit `AllScoresPerfect` and skip before part selection, reflective-dataset construction, reflector calls, or provider work. | Add richer upstream-style skip payloads if report consumers need raw score vectors. |
@@ -1715,7 +1717,7 @@ numbers drift, the function names remain the authority.
 | Build DSPy defaults | `dspy/teleprompt/gepa/gepa.py:336 GEPA.__init__`, `:476 compile` | future DSPy-profile adapter or report profile | DSPy wrapper turns merge on by default and uses DSPy trace capture. Do not mix this with plain GEPA unless the report says so. |
 | Seed validation before loop | `src/gepa/core/engine.py:458 run`, especially seed eval at `:527` | `Gepa::initialize` | This must happen before train minibatch sampling. |
 | Initialize GEPA state | `src/gepa/core/state.py:660 initialize_gepa_state`, `GEPAState.__init__` at `:142` | new `GepaReferenceState` in `leaven-gepa` | Seed candidate is candidate index 0. Validation subscores and frontier maps start from seed full validation. |
-| Per-case evaluation cache | `src/gepa/core/state.py:46 EvaluationCache` | `leaven-engine` per-case cache or GEPA adapter cache | Upstream key is candidate content hash plus example id. Leaven request-level cache is currently too coarse. |
+| Per-case evaluation cache | `src/gepa/core/state.py:46 EvaluationCache` | GEPA evaluation lowering plus run evaluation cache | Upstream key is candidate content hash plus example id. Leaven keeps request-level cache for general evaluators and decomposes/backfills GEPA independent case evaluations for parity. |
 | Parent selection from validation Pareto | `src/gepa/strategies/candidate_selector.py:11 ParetoCandidateSelector`, `src/gepa/gepa_utils.py:90 select_program_candidate_from_pareto_front` | `crates/leaven-gepa/src/selector.rs` | The default selector must not call `population.best_candidate()` directly. |
 | Dominance pruning | `src/gepa/gepa_utils.py:23 is_dominated`, `:37 remove_dominated_programs` | `leaven-population` helper or `leaven-gepa` selector helper | Dominance is over frontier membership sets, not only average score. |
 | Full validation policy | `src/gepa/strategies/eval_policy.py:34 FullEvaluationPolicy` | `crates/leaven-gepa/src/validation.rs` | Full validation returns all validation ids and picks best aggregate with coverage tie-break. |
@@ -2631,7 +2633,7 @@ to know `RunContext`, `EvaluationRequest`, `AssessmentId`, or
 | Merge API | How to expose merge? | Core profile disables. DSPy profile enables. Public API should have explicit `.merge(SystemAwareMerge::...)` / `.without_merge()` and report labels. | No real merge path. |
 | Skip policy | Is skip-perfect public? | Defaults should be encoded in profile. Customizer can expose `SkipPolicy` or builder knobs for `skip_perfect_score` and `perfect_score`. | `Gepa` exposes `.skip_perfect_score(...)` and `.perfect_score(...)`; empty reflective datasets skip with `NoReflectiveExamples`. |
 | Budget API | New GEPA budget type? | No ordinary new budget type. Use `Budget::metric_calls(...)`; GEPA report separates search metric calls, reflection cost, and final report evaluations. | Engine stopper exists; GEPA search/final distinction needs report work. |
-| Evaluation cache API | GEPA-specific cache knob? | Ordinary users keep `.evaluation_cache_policy(...)`; GEPA per-case cache adapter is internal. Reports expose per-case hit/miss/bypass. | Request-level cache exists; per-case GEPA parity missing. |
+| Evaluation cache API | GEPA-specific cache knob? | Ordinary users keep `.evaluation_cache_policy(...)`; GEPA per-case decomposition/backfill is internal. Reports expose per-case hit/miss/bypass. | Keep the ordinary API stable; do not expose a GEPA-specific cache knob unless report/resume semantics need a new explicit contract. |
 | Validation absence | What if no validation set is supplied? | Core/reference profile: preflight error. DSPy profile: explicit train-as-validation fallback with warning/report. Inference-time mode: explicit train=validation. | GEPA reference validation now refuses an empty validation set before evaluator/provider work; `leaven-run` remains generic and may still allow empty validation for non-GEPA optimizers. |
 | Inference-time search | How does user request train=validation? | Explicit mode/profile, for example `Gepa::inference_search()` or `.mode(GepaMode::InferenceSearch)`, never silent fallback. | No named mode. |
 | Detailed result | How does user get GEPA candidate/frontier tables? | Keep `Optimized<A>` small, but add a typed GEPA detail/report route. Choose one: typed `optimizer_report`, report sidecar path with typed loader, or `GepaOptimized<A>` from a GEPA-specific runner. | `Optimized<A>::optimizer_report::<GepaReport>()` exposes typed candidate/frontier/history/proposal-attempt state from the public `optimize(...).using(Gepa...)` path. Proposal attempts carry a stable `attempt_index`; P8 renders `reflection_request_index`, admitted `child_index`/validation score, plus a compact reflection request/response/proposed-text object and reconstructs accepted AIME candidate system prompts from seed/proposal data so live AIME failures can be debugged from the report artifact. Generic artifact/prompt text projection and generic sidecar persistence are still absent. |
