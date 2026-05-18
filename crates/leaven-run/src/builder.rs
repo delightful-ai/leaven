@@ -635,6 +635,7 @@ struct SearchRun {
     optimization_budget: BudgetSnapshot,
     stop_reason: leaven_engine::StopReason,
     checkpoint: Option<CheckpointId>,
+    optimizer_report: Option<leaven_engine::OptimizerReportPayload>,
 }
 
 async fn run_with_engine<A, I, T, O>(
@@ -727,6 +728,7 @@ where
         best,
         summary,
         events,
+        optimizer_report: search.optimizer_report,
     })
 }
 
@@ -769,12 +771,14 @@ where
     } else {
         None
     };
+    let optimizer_report = builder.optimizer.optimizer_report();
     Ok(SearchRun {
         seed,
         run,
         optimization_budget,
         stop_reason,
         checkpoint,
+        optimizer_report,
     })
 }
 

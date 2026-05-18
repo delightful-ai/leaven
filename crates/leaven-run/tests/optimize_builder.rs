@@ -1405,6 +1405,29 @@ fn run_builder_dispatches_callbacks_and_supplied_store_capabilities() {
     assert!(events.contains(&"optimization_ended"));
 }
 
+#[test]
+fn run_builder_exposes_typed_optimizer_report_payload() {
+    let result = block_on(
+        optimize(TextArtifact(40))
+            .train_inputs(vec![TextCase(2)])
+            .runner(|artifact, case| async move { text_runner(&artifact, &case) })
+            .score(text_score)
+            .using(SeedBestWithReport::default())
+            .budget(Budget::unlimited())
+            .test_runtime_fingerprints()
+            .run(),
+    )
+    .unwrap();
+
+    let report = result
+        .optimizer_report::<TestOptimizerReport>()
+        .expect("optimizer report should downcast to the concrete report type");
+    assert_eq!(report.label, "seed-best-report");
+    assert_eq!(report.best, result.best_id());
+    assert!(result.optimizer_report::<String>().is_none());
+    cleanup_result_storage(&result.summary().storage);
+}
+
 fn assert_resumable_storage(storage: RunStorage, run_id: RunId) {
     match storage {
         RunStorage::Stored {
@@ -1469,6 +1492,47 @@ impl Optimizer<RunProblem<TextArtifact, TextCase>> for SeedBest {
         self.best
             .or_else(|| graph.candidate_tree().roots().first().copied())
     }
+}
+
+#[derive(Default)]
+struct SeedBestWithReport {
+    inner: SeedBest,
+}
+
+impl Optimizer<RunProblem<TextArtifact, TextCase>> for SeedBestWithReport {
+    async fn initialize(
+        &mut self,
+        ctx: &mut RunContext<'_, RunProblem<TextArtifact, TextCase>>,
+    ) -> Result<(), OptimizerError> {
+        self.inner.initialize(ctx).await
+    }
+
+    async fn step(
+        &mut self,
+        ctx: &mut RunContext<'_, RunProblem<TextArtifact, TextCase>>,
+    ) -> Result<StepStatus, OptimizerError> {
+        self.inner.step(ctx).await
+    }
+
+    fn best_candidate(
+        &self,
+        graph: RunGraphView<'_, RunProblem<TextArtifact, TextCase>>,
+    ) -> Option<CandidateId> {
+        self.inner.best_candidate(graph)
+    }
+
+    fn optimizer_report(&self) -> Option<leaven_engine::OptimizerReportPayload> {
+        Some(Arc::new(TestOptimizerReport {
+            label: "seed-best-report",
+            best: self.inner.best,
+        }))
+    }
+}
+
+#[derive(Debug, Eq, PartialEq)]
+struct TestOptimizerReport {
+    label: &'static str,
+    best: Option<CandidateId>,
 }
 
 #[derive(Default)]

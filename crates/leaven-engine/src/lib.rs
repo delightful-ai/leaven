@@ -49,8 +49,9 @@ pub use sqlite_cache::{EvaluationCacheStoreError, SqliteEvaluationCache};
 pub use stage::{
     Arity, Callback, DynCallback, DynEvaluator, DynPreferenceRelation, DynProposer, DynStopper,
     EvaluationError, Evaluator, MaterializationReport, MaterializeError, Materializer, Optimizer,
-    OptimizerError, OptimizerStateReader, Population, PopulationEvent, PopulationView,
-    PreferenceRelation, ProposalError, Proposer, RenderError, Renderer, StepStatus, Stopper,
+    OptimizerError, OptimizerReport, OptimizerReportPayload, OptimizerStateReader, Population,
+    PopulationEvent, PopulationView, PreferenceRelation, ProposalError, Proposer, RenderError,
+    Renderer, StepStatus, Stopper,
 };
 pub use stage::{
     CheckpointContext, CheckpointError, CheckpointableOptimizer, OptimizerStateSnapshot,
@@ -68,12 +69,12 @@ pub mod prelude {
         CheckpointContext, CheckpointError, CheckpointableOptimizer, Engine, EngineBuilder,
         EvaluationCacheSnapshot, EvaluationCacheStoreError, EvaluationContext, Evaluator,
         GraphSnapshotRef, MaterializationReport, MaterializeContext, MaterializeError,
-        Materializer, Optimizer, OptimizerStateReader, OptimizerStateSnapshot, Population,
-        PreferenceRelation, PrivateStatePolicy, ProposalContext, Proposer, ReadScope,
-        RenderContext, Renderer, RestoreContext, RestoredRunState, RunCheckpoint, RunContext,
-        RunEvent, RunGraphRestoreError, RunGraphSnapshot, RunGraphView, RunResult,
-        ScopedRunGraphView, SqliteEvaluationCache, StageEngineContext, StateFormat, StepStatus,
-        Stopper, StoreRunPersistence, TrustPolicy, optimize,
-        restore_checkpointable_optimizer_state,
+        Materializer, Optimizer, OptimizerReport, OptimizerReportPayload, OptimizerStateReader,
+        OptimizerStateSnapshot, Population, PreferenceRelation, PrivateStatePolicy,
+        ProposalContext, Proposer, ReadScope, RenderContext, Renderer, RestoreContext,
+        RestoredRunState, RunCheckpoint, RunContext, RunEvent, RunGraphRestoreError,
+        RunGraphSnapshot, RunGraphView, RunResult, ScopedRunGraphView, SqliteEvaluationCache,
+        StageEngineContext, StateFormat, StepStatus, Stopper, StoreRunPersistence, TrustPolicy,
+        optimize, restore_checkpointable_optimizer_state,
     };
 }

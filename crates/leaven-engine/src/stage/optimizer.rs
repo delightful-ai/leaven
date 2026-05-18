@@ -1,5 +1,7 @@
 //! Optimizer trait.
 
+use std::{any::Any, sync::Arc};
+
 use leaven_core::OptimizationProblem;
 use leaven_kernel::{BlobRef, CandidateId, Fingerprint};
 use serde::{Serialize, de::DeserializeOwned};
@@ -21,6 +23,12 @@ pub trait Optimizer<P: OptimizationProblem>: Send {
     ) -> Result<StepStatus, OptimizerError>;
 
     fn best_candidate(&self, graph: RunGraphView<'_, P>) -> Option<CandidateId>;
+
+    /// Optional typed optimizer-specific report captured by product result
+    /// facades after a run finishes.
+    fn optimizer_report(&self) -> Option<OptimizerReportPayload> {
+        None
+    }
 
     /// Observe a clean engine-owned stop before another optimizer step runs.
     ///
@@ -65,6 +73,24 @@ pub trait Optimizer<P: OptimizationProblem>: Send {
             ));
         }
         Ok(())
+    }
+}
+
+/// Type-erased optimizer-specific report payload.
+pub type OptimizerReportPayload = Arc<dyn OptimizerReport>;
+
+/// Optimizer-specific report payload that can be downcast by product facades.
+pub trait OptimizerReport: std::fmt::Debug + Send + Sync + 'static {
+    /// Type-erased view for downcasting.
+    fn as_any(&self) -> &(dyn Any + 'static);
+}
+
+impl<T> OptimizerReport for T
+where
+    T: std::fmt::Debug + Send + Sync + 'static,
+{
+    fn as_any(&self) -> &(dyn Any + 'static) {
+        self
     }
 }
 

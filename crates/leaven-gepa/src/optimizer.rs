@@ -9,8 +9,9 @@ use leaven_core::{
 };
 use leaven_engine::{
     CheckpointContext, CheckpointError, CheckpointableOptimizer, Optimizer, OptimizerError,
-    OptimizerStateReader, OptimizerStateWrite, PrivateStatePolicy, RestoreContext, RunContext,
-    RunGraphView, StateFormat, StopReason, restore_checkpointable_optimizer_state,
+    OptimizerReportPayload, OptimizerStateReader, OptimizerStateWrite, PrivateStatePolicy,
+    RestoreContext, RunContext, RunGraphView, StateFormat, StopReason,
+    restore_checkpointable_optimizer_state,
 };
 use leaven_evidence::{CaseOutcome, CasewiseEvidence, ScalarEvidence};
 use leaven_kernel::{AssessmentId, CandidateId, EvaluatorId, Fingerprint};
@@ -545,6 +546,10 @@ where
             .map(|best| best.candidate)
             .or(self.best)
             .or_else(|| self.population.best())
+    }
+
+    fn optimizer_report(&self) -> Option<OptimizerReportPayload> {
+        Some(std::sync::Arc::new(self.report()))
     }
 
     fn on_engine_stop(&mut self, _reason: StopReason) -> Result<(), OptimizerError> {

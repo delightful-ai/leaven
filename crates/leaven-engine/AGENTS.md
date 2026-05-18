@@ -16,7 +16,8 @@ must not reach into graph storage to make progress.
   charging belong on `RunContext` or adjacent engine modules.
 - Stage contracts: proposer, evaluator, preference relation, population,
   optimizer, stopper, callback, renderer, materializer, checkpointable
-  optimizer, and dynamic trait adapters belong here.
+  optimizer, type-erased optimizer report payloads, and dynamic trait adapters
+  belong here.
 - Runtime policy shared by all optimizers: trust/read scopes, case-set
   resolution, cache keys/status, persistence envelopes, reports, and stop/error
   event shapes belong here.
@@ -26,6 +27,9 @@ must not reach into graph storage to make progress.
   `leaven-core`; do not define a second run-language here.
 - Optimizer strategy state, search rhythm, GEPA gates/selectors, MIPRO,
   TextGrad, and trace policy belong in optimizer crates.
+- Optimizer-specific report contents belong in optimizer crates. Engine may
+  carry a type-erased report payload hook, but it must not know GEPA fields or
+  synthesize optimizer strategy reports.
 - Product-builder defaults, train/validation/test ergonomics, runner/scorer
   helpers, and default store wiring belong in `leaven-run`.
 - Reusable evidence, preference, population, renderer, artifact, workspace,

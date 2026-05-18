@@ -668,12 +668,10 @@ async fn try_run_aime(
     let solver_config = config.solver.clone();
     let side_infos = AimeSolverSideInfoStore::default();
     let gepa_events = Arc::new(Mutex::new(Vec::<GepaEventSummary>::new()));
-    let gepa_report = Arc::new(Mutex::new(None::<GepaReport>));
     let report_metadata = dataset.report_metadata.clone();
     let dataset_proof = dataset.proof.clone();
     let reflective_dataset = dataset.reflective_dataset(side_infos.clone());
     let gepa_event_sink = gepa_events.clone();
-    let gepa_report_sink = gepa_report.clone();
     let optimized = Box::pin(
         leaven::prelude::optimize(AimePrompt::new(config.seed_prompt))
             .train(dataset.train)
@@ -705,10 +703,6 @@ async fn try_run_aime(
                         .expect("AIME GEPA event sink lock")
                         .push(event.clone());
                 })
-                .on_report(move |report| {
-                    *gepa_report_sink.lock().expect("AIME GEPA report sink lock") =
-                        Some(report.clone());
-                })
                 .reflective_dataset(reflective_dataset)
                 .max_iterations(config.max_iterations),
             )
@@ -719,6 +713,7 @@ async fn try_run_aime(
     )
     .await?;
     let optimizer_wall_time = optimizer_started_at.elapsed();
+    let gepa_report = optimized.optimizer_report::<GepaReport>().cloned();
     let role_reports = AimeRoleReports::from_config(
         &config,
         solver_telemetry.snapshot(),
@@ -734,10 +729,7 @@ async fn try_run_aime(
             .lock()
             .expect("AIME GEPA event sink lock")
             .clone(),
-        gepa_report: gepa_report
-            .lock()
-            .expect("AIME GEPA report sink lock")
-            .clone(),
+        gepa_report,
     };
     write_p8_aime_report(&config, &result)?;
     Ok(result)

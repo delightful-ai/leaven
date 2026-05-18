@@ -9,7 +9,8 @@ around engine graph mutation or a home for optimizer strategy state.
 ## Route Here
 - Builder ergonomics belong here: required budget policy, train vs held-out
   validation/test rules, callbacks, store selection, runner/scorer wiring, and
-  `Optimized` facades.
+  `Optimized` facades, including typed optimizer-report accessors over
+  engine-carried payloads.
 - Ordinary durability belongs here: omitted `.store(...)` opens a managed local
   `.leaven/runs/<run-id>/` directory, `.run_dir(path)` is the user-facing
   durable override/resume handle, and `.ephemeral()` is the explicit
@@ -28,6 +29,9 @@ around engine graph mutation or a home for optimizer strategy state.
 ## Route Away
 - Graph records, checkpoint envelopes, budget ledgers, trust, cache,
   `RunContext`, and stage traits belong in `leaven-engine`.
+- Optimizer report content belongs in the optimizer crate. `leaven-run` may
+  retain and downcast an engine-provided report payload; it must not depend on
+  `leaven-gepa` or know GEPA report fields.
 - Dataset/split/report vocabulary that is reusable below the builder belongs
   in `leaven-eval`.
 - Evidence shapes belong in `leaven-evidence`; store capabilities and concrete

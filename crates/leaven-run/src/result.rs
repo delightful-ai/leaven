@@ -2,6 +2,7 @@
 
 use std::path::PathBuf;
 
+use leaven_engine::OptimizerReportPayload;
 use leaven_eval::EvaluationReport;
 use leaven_kernel::{BudgetSnapshot, CandidateId, CheckpointId, Cost, RunId};
 use serde::Serialize;
@@ -23,6 +24,7 @@ pub struct Optimized<A> {
     pub summary: StandardRunSummary,
     /// Public event summaries emitted during the run.
     pub events: Vec<RunEventSummary>,
+    pub(crate) optimizer_report: Option<OptimizerReportPayload>,
 }
 
 impl<A> Optimized<A> {
@@ -54,6 +56,18 @@ impl<A> Optimized<A> {
     #[must_use]
     pub const fn report(&self) -> &EvaluationReport {
         &self.summary.evaluation
+    }
+
+    /// Typed optimizer-specific report, when the configured optimizer produced
+    /// one.
+    #[must_use]
+    pub fn optimizer_report<T>(&self) -> Option<&T>
+    where
+        T: std::fmt::Debug + Send + Sync + 'static,
+    {
+        self.optimizer_report
+            .as_deref()
+            .and_then(|report| report.as_any().downcast_ref::<T>())
     }
 }
 
