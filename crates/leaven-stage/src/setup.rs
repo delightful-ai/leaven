@@ -18,89 +18,73 @@ pub fn setup_stage_workspace(
 ) -> Result<WorkspaceSetupReceipt, WorkspaceSetupError> {
     let mut receipt = WorkspaceSetupReceipt::default();
     let brief = render_brief(plan);
-    let brief_path = WorkspacePath::new("BRIEF.md")?;
-    workspace.write_file(&brief_path, brief.as_bytes())?;
-    receipt.plan_entries.push(entry_receipt(
+    write_plan_entry(
         workspace,
-        brief_path,
+        &mut receipt,
+        "BRIEF.md",
+        brief.as_bytes(),
         WorkspaceEntryRole::brief(),
-        EntrySourceRef::Generated,
-        EntryProjection::Generated,
-    )?);
+    )?;
 
-    let role_path = WorkspacePath::new("focus/stage_role.txt")?;
-    workspace.write_file(&role_path, plan.role.as_str().as_bytes())?;
-    receipt.plan_entries.push(entry_receipt(
+    write_plan_entry(
         workspace,
-        role_path,
+        &mut receipt,
+        "focus/stage_role.txt",
+        plan.role.as_str().as_bytes(),
         WorkspaceEntryRole::stage_plan(),
-        EntrySourceRef::Generated,
-        EntryProjection::Generated,
-    )?);
+    )?;
 
-    let request_path = WorkspacePath::new("focus/request.json")?;
     let request_json = serde_json::to_vec_pretty(&plan.request_json)?;
-    workspace.write_file(&request_path, &request_json)?;
-    receipt.plan_entries.push(entry_receipt(
+    write_plan_entry(
         workspace,
-        request_path,
+        &mut receipt,
+        "focus/request.json",
+        &request_json,
         WorkspaceEntryRole::stage_plan(),
-        EntrySourceRef::Generated,
-        EntryProjection::Generated,
-    )?);
+    )?;
 
-    let instructions_path = WorkspacePath::new("focus/instructions.md")?;
-    workspace.write_file(&instructions_path, plan.directive.instructions.as_bytes())?;
-    receipt.plan_entries.push(entry_receipt(
+    write_plan_entry(
         workspace,
-        instructions_path,
+        &mut receipt,
+        "focus/instructions.md",
+        plan.directive.instructions.as_bytes(),
         WorkspaceEntryRole::brief(),
-        EntrySourceRef::Generated,
-        EntryProjection::Generated,
-    )?);
+    )?;
 
-    let plan_path = WorkspacePath::new(".leaven/stage-plan.json")?;
     let plan_json = serde_json::to_vec_pretty(plan)?;
-    workspace.write_file(&plan_path, &plan_json)?;
-    receipt.plan_entries.push(entry_receipt(
+    write_plan_entry(
         workspace,
-        plan_path,
+        &mut receipt,
+        ".leaven/stage-plan.json",
+        &plan_json,
         WorkspaceEntryRole::stage_plan(),
-        EntrySourceRef::Generated,
-        EntryProjection::Generated,
-    )?);
+    )?;
 
-    let output_schema_path = WorkspacePath::new(".leaven/output_schema.json")?;
     let output_schema = serde_json::to_vec_pretty(&plan.output)?;
-    workspace.write_file(&output_schema_path, &output_schema)?;
-    receipt.plan_entries.push(entry_receipt(
+    write_plan_entry(
         workspace,
-        output_schema_path,
+        &mut receipt,
+        ".leaven/output_schema.json",
+        &output_schema,
         WorkspaceEntryRole::stage_plan(),
-        EntrySourceRef::Generated,
-        EntryProjection::Generated,
-    )?);
+    )?;
 
-    let query_policy_path = WorkspacePath::new(".leaven/query_policy.json")?;
     let query_policy = serde_json::to_vec_pretty(&plan.query)?;
-    workspace.write_file(&query_policy_path, &query_policy)?;
-    receipt.plan_entries.push(entry_receipt(
+    write_plan_entry(
         workspace,
-        query_policy_path,
+        &mut receipt,
+        ".leaven/query_policy.json",
+        &query_policy,
         WorkspaceEntryRole::stage_plan(),
-        EntrySourceRef::Generated,
-        EntryProjection::Generated,
-    )?);
+    )?;
 
-    let keep_path = WorkspacePath::new("output/.gitkeep")?;
-    workspace.write_file(&keep_path, b"")?;
-    receipt.plan_entries.push(entry_receipt(
+    write_plan_entry(
         workspace,
-        keep_path,
+        &mut receipt,
+        "output/.gitkeep",
+        b"",
         WorkspaceEntryRole::output_skeleton(),
-        EntrySourceRef::Generated,
-        EntryProjection::Generated,
-    )?);
+    )?;
 
     let tool_path = WorkspacePath::new("tools/leaven_query")?;
     workspace.write_file(&tool_path, leaven_query_tool_script().as_bytes())?;
@@ -222,6 +206,25 @@ fn leaven_query_tool_script() -> String {
     format!("#!/bin/sh\ncat <<'EOF'\n{}EOF\n", leaven_query_help())
 }
 
+fn write_plan_entry(
+    workspace: &mut WorkspaceSlot<'_>,
+    receipt: &mut WorkspaceSetupReceipt,
+    path: &str,
+    bytes: &[u8],
+    role: WorkspaceEntryRole,
+) -> Result<(), WorkspaceSetupError> {
+    let path = WorkspacePath::new(path)?;
+    workspace.write_file(&path, bytes)?;
+    receipt.plan_entries.push(entry_receipt(
+        workspace,
+        path,
+        role,
+        EntrySourceRef::Generated,
+        EntryProjection::Generated,
+    )?);
+    Ok(())
+}
+
 fn entry_receipt(
     workspace: &WorkspaceSlot<'_>,
     path: WorkspacePath,
@@ -243,4 +246,72 @@ fn entry_receipt(
         produced_by_query: None,
         metadata: MetadataBag::new(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use futures::executor::block_on;
+    use leaven_kernel::StageRole;
+    use leaven_workspace::{WorkspaceConfig, WorkspaceFactory, WorkspacePath};
+    use leaven_workspace_local::LocalWorkspaceFactory;
+
+    use super::*;
+    use crate::{
+        AgentStagePlan, StageDirective, StageOutputContract, StageQueryPolicy,
+        parser::ErasedStagePlan,
+    };
+
+    #[test]
+    fn setup_stage_workspace_receipts_cover_every_generated_plan_entry() {
+        block_on(async {
+            let mut directive = StageDirective::new("Reflect", "Write the candidate edit.");
+            directive.success_criteria.push("patch applies".to_owned());
+            directive
+                .cautions
+                .push("do not inspect hidden labels".to_owned());
+            let plan = AgentStagePlan::new(
+                StageRole::reflect(),
+                serde_json::json!({"candidate": "seed"}),
+                directive,
+                StageOutputContract::proposal_json(
+                    WorkspacePath::new("output/proposal.json").unwrap(),
+                ),
+            )
+            .with_query_policy(StageQueryPolicy::minimal());
+            let erased = ErasedStagePlan::from_plan(&plan).unwrap();
+            let mut workspace = LocalWorkspaceFactory::temp()
+                .allocate(WorkspaceConfig::default())
+                .await
+                .unwrap();
+            let mut slot = workspace.slot(WorkspacePath::root()).unwrap();
+
+            let receipt = setup_stage_workspace(&mut slot, &erased).unwrap();
+
+            assert_eq!(receipt.plan_entries.len(), 9);
+            assert!(receipt.cost.is_zero());
+            assert!(
+                receipt
+                    .plan_entries
+                    .iter()
+                    .all(|entry| entry.file.is_some())
+            );
+            assert!(receipt.plan_entries.iter().any(|entry| {
+                entry.path == WorkspacePath::new("tools/leaven_query").unwrap()
+                    && entry.role == WorkspaceEntryRole::tool()
+            }));
+            assert!(
+                String::from_utf8(
+                    slot.read_file(&WorkspacePath::new("BRIEF.md").unwrap())
+                        .unwrap()
+                )
+                .unwrap()
+                .contains("do not inspect hidden labels")
+            );
+            assert!(
+                slot.view()
+                    .is_executable(&WorkspacePath::new("tools/leaven_query").unwrap())
+                    .unwrap()
+            );
+        });
+    }
 }
