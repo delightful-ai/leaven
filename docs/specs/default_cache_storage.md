@@ -306,9 +306,11 @@ For P8 AIME paper-parity runs:
 6. P8 code must not define a P8-private LM cache schema. Until generic LM-role
    provisioning is owned by `leaven-run`, P8 may instantiate
    `leaven-lm-cache::SqliteLmCache` against `<run-dir>/lm-cache.sqlite` as the
-   example-level bridge. It may also expose an explicit eager workspace-cache
-   mode backed by `.leaven/lm-cache.sqlite` for release reruns that should reuse
-   prior compatible LM responses without resuming the whole run directory.
+   example-level bridge. It may also expose an explicit eager cache mode that
+   reads the selected run-dir cache first, falls back to
+   `.leaven/lm-cache.sqlite`, and writes new responses to the workspace cache
+   for release reruns that should prefer exact run rows while still reusing
+   prior compatible LM responses.
 
 If P8 must turn caching off for a smoke test, it should use an explicit whole-run
 override or `ephemeral()`, and the report must say so.
@@ -323,16 +325,17 @@ Current known implementation state:
 - `leaven-lm-cache` has in-memory and SQLite backends, with run-directory and
   workspace `.leaven/lm-cache.sqlite` open helpers;
 - P8 wires live OpenAI solver/reflection roles to run-directory SQLite by
-  default and exposes an explicit `eager-sqlite` workspace-cache override for
-  release reruns, plus `cache-only` policy for no-spend replays that fail
-  closed on cache misses;
+  default and exposes an explicit `eager-sqlite` exact-run-first/workspace
+  fallback override for release reruns, plus `cache-only` policy for no-spend
+  replays that fail closed on cache misses;
 - local run store currently uses file/blob/checkpoint/evidence directories.
 
 Migration order:
 
 1. Introduce SQLite LM response-cache backend and contract tests. Done.
 2. Wire P8 live LM roles to run-directory SQLite by default and explicit
-   workspace eager-cache mode. Done at the example bridge layer.
+   exact-run-first/workspace eager-cache mode. Done at the example bridge
+   layer.
 3. Introduce SQLite evaluation-cache backend or a run-store table that can
    materialize `EvaluationCache` semantics without weakening engine ownership.
 4. Wire both stores from `leaven-run` when a durable run dir is opened.

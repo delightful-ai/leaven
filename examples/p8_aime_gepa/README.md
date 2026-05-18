@@ -79,6 +79,18 @@ only when the effective reflection model matches the upstream AIME profile. The
 default `gpt-5.4-mini` reflector remains a deliberate Leaven model delta, not a
 byte-for-byte upstream runtime claim.
 
+The GEPA optimizer profile defaults to the reference-compatible certified loop.
+For an opt-in faster certified run, set:
+
+```bash
+export LEAVEN_AIME_GEPA_PROFILE=fast-certified
+```
+
+`fast-certified` reduces the train probe size and tries two serial proposals per
+selected parent, but it still requires full validation before a child enters the
+GEPA reference state. It is not the future lazy-certification or async-island
+FastGEPA design.
+
 To compare Leaven against the published DSPy/GEPA AIME quickstart denominator
 without running DSPy, use the Leaven DSPy-comparison profile:
 
@@ -116,9 +128,13 @@ fail-closed replay mode for no-spend release proof: it reads compatible cache
 entries and errors on any miss instead of calling the provider.
 `LEAVEN_AIME_LM_CACHE_BACKEND` defaults to `sqlite`, placing the reusable
 `leaven-lm-cache` store at `<run-dir>/lm-cache.sqlite`. `eager-sqlite`
-uses a shared workspace cache at `.leaven/lm-cache.sqlite` so fresh release
-runs can reuse compatible solver/reflection responses from earlier runs
-without reusing the whole run directory. Explicit `in-memory` is the
+reads the selected run directory's `<run-dir>/lm-cache.sqlite` first, then falls
+back to the shared workspace cache at `.leaven/lm-cache.sqlite`, and writes new
+responses to the workspace cache. This lets exact run replays win over
+compatible workspace reuse without requiring the whole run directory to be the
+only cache source. Reports include `lm_cache_read_paths` and
+`lm_cache_write_path` so cache-only misses can be diagnosed without
+reconstructing environment variables. Explicit `in-memory` is the
 throwaway/debug backend and prints `lm_cache_durable=false`.
 `LEAVEN_OPENAI_MAX_CONCURRENT_REQUESTS` bounds in-process OpenAI request
 concurrency for both live roles and defaults to `32`. The P8 binary runs on a
