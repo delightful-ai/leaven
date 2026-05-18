@@ -521,6 +521,28 @@ fn plain_text_parser_extracts_gepa_fenced_replacement() {
 }
 
 #[test]
+fn plain_text_parser_matches_upstream_language_fence_detection() {
+    let parent = CandidateId::new();
+    let artifact = TestArtifact("seed".to_owned());
+    let surface = WholeTextSurface;
+    let request = ReflectRequest::for_part(parent, "text", "text");
+
+    let batch: ProposalBatch<TestProblem> = PlainTextEditParser
+        .parse(
+            "``` text\nnew instruction\n```",
+            &request,
+            &artifact,
+            &surface,
+        )
+        .unwrap();
+
+    let leaven_core::ProposalEffect::Change { change, .. } = &batch.proposals[0].effect else {
+        panic!("plain text parser should produce a mutation proposal");
+    };
+    assert_eq!(change, "text\nnew instruction");
+}
+
+#[test]
 fn plain_text_parser_handles_unclosed_and_inline_fences() {
     let parent = CandidateId::new();
     let artifact = TestArtifact("seed".to_owned());

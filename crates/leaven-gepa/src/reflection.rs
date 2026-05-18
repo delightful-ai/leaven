@@ -738,17 +738,16 @@ fn strip_opening_fence(text: &str) -> String {
 }
 
 fn strip_optional_language(text: &str) -> &str {
-    let trimmed = text.trim_start();
-    match trimmed.find('\n') {
+    match text.find('\n') {
         Some(newline) => {
-            let first_line = &trimmed[..newline];
+            let first_line = &text[..newline];
             if !first_line.is_empty() && !first_line.contains(char::is_whitespace) {
-                &trimmed[newline + 1..]
+                &text[newline + 1..]
             } else {
-                trimmed
+                text
             }
         }
-        None => trimmed,
+        None => text,
     }
 }
 

@@ -415,9 +415,10 @@ Provide the new instructions within ``` blocks.
 ````
 
 The default parser extracts the text between the first and last triple-backtick
-fences, strips an optional language line, and otherwise falls back to stripped
-assistant text. JSON reflection output is a non-default Leaven extension and
-must be labeled as such.
+fences, strips an optional language line only when the first fenced line is an
+immediate non-whitespace token followed by a newline, and otherwise falls back
+to stripped assistant text. JSON reflection output is a non-default Leaven
+extension and must be labeled as such.
 
 ### 4.10 Proposal And Child Evaluation
 
@@ -2549,6 +2550,7 @@ test_no_reflective_examples_skips_lm_call
 test_all_perfect_minibatch_skips_lm_call
 test_reflection_prompt_matches_upstream_template_snapshot
 test_fenced_parser_matches_upstream_extractor_cases
+test_plain_text_parser_matches_upstream_language_fence_detection
 test_reflective_dataset_builder_outputs_typed_rows_before_prompt_rendering
 test_aime_reflection_examples_include_input_output_score_feedback
 test_aime_reflection_examples_exclude_raw_target_except_scorer_feedback

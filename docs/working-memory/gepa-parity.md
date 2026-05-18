@@ -1,7 +1,7 @@
 # GEPA Parity Working Ledger
 
 Status: active.
-Updated: 2026-05-18T14:13:00Z.
+Updated: 2026-05-18T14:18:00Z.
 
 ## Authority
 
@@ -1035,6 +1035,17 @@ Cache/replay attempts after the report-schema fixes:
   GEPA parent selection, acceptance, admission, or final result selection.
   `docs/specs/p8_run_report_operator_ux.md` now names the accepted/rejected
   breakdown as part of the operator report contract.
+
+2026-05-18T14:18:00Z:
+
+- No-spend parser audit found one small Leaven-looser-than-upstream mismatch in
+  `PlainTextEditParser`: upstream `InstructionProposalSignature.output_extractor`
+  strips a fence language line only when it is an immediate non-whitespace
+  token after the opening fence. Leaven trimmed leading whitespace before
+  language detection, so ``` text\n...``` was parsed as if `text` were a
+  language label. Current code now matches the upstream extractor and
+  `plain_text_parser_matches_upstream_language_fence_detection` pins the edge.
+  This is a source-parity fix, not a quality-profile change.
 
 1. Continue no-spend quality diagnosis only where it can produce new evidence:
    use emitted Leaven prompts, candidate lineage, reflection outputs, child
