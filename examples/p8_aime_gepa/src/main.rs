@@ -38,7 +38,9 @@ use leaven_lm::{
     ReasoningEffort, Role, SamplingOptions, TokenUsage,
 };
 use leaven_lm_cache::{CachedLm, InMemoryLmCache, LmCachePolicy, SqliteLmCache};
-use leaven_lm_openai::{OpenAiConfig, OpenAiLm, OpenAiRetryPolicy, OpenAiThrottlePolicy};
+#[cfg(test)]
+use leaven_lm_openai::OpenAiRetryPolicy;
+use leaven_lm_openai::{OpenAiConfig, OpenAiLm, OpenAiThrottlePolicy};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -2072,6 +2074,7 @@ struct AimeRoleRuntimeFingerprints {
 }
 
 impl AimeRoleRuntimeFingerprints {
+    #[cfg(test)]
     fn from_config(config: &AimeRunConfig) -> Self {
         let solver_lm = if config.solver.live {
             Some(openai_provider_fingerprint_for_runtime(
@@ -4238,6 +4241,7 @@ fn cached_openai_lm(
     }
 }
 
+#[cfg(test)]
 fn openai_provider_fingerprint_for_runtime(runtime: AimeOpenAiRuntimeConfig) -> Fingerprint {
     OpenAiLm::new(apply_aime_openai_runtime_config(
         OpenAiConfig::new("p8-aime-fingerprint-placeholder"),
@@ -4387,6 +4391,7 @@ where
     Ok((output, cost))
 }
 
+#[cfg(test)]
 fn parse_openai_solver_response<L>(
     solver: &AimeInstrumentedLm<L>,
     raw: &str,

@@ -336,6 +336,14 @@ Cache/replay attempts after the report-schema fixes:
   `stored runner fingerprint does not match live runner fingerprint` because
   changing LM cache policy from read-write to cache-only changes the live role
   fingerprint.
+- current-code JSON-fallback cache probe in
+  `.leaven/release-runs/p8-aime-gepa-current-json-fallback-cache-probe` failed
+  closed before provider work at the first reflection call:
+  `lm response cache failed: required lm cache entry was missing`. It reached
+  seed validation plus one train minibatch (`metric_calls=48`, `llm_calls=0`),
+  wrote one durable `reflection/cache` failure row, and did not reach solver
+  ChatAdapter/JSONAdapter fallback. The next paid run must expect missing
+  reflection cache rows before any solver-fallback cache deltas matter.
 - post-run P8 error output now prints safe profile/cache/run-dir/proof context
   on failures, so future cache-only or compatibility refusals are diagnosable
   without reconstructing the shell environment from logs.
