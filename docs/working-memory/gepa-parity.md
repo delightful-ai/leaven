@@ -1,7 +1,7 @@
 # GEPA Parity Working Ledger
 
 Status: active.
-Updated: 2026-05-18T07:32:00Z.
+Updated: 2026-05-18T09:06:44Z.
 
 ## Authority
 
@@ -55,7 +55,80 @@ Do not claim DSPy-default parity. Current claims are core GEPA or
 optimize-anything/AIME profile; DSPy merge and DSPy trace defaults are not
 implemented as default parity.
 
+## Current Prompt-Parity Finding
+
+2026-05-18 prompt audit:
+
+- upstream generic GEPA reflection prompt:
+  `/Users/darin/vendor/github.com/gepa-ai/gepa/src/gepa/strategies/instruction_proposal.py`
+  `InstructionProposalSignature.default_prompt_template`;
+- Leaven generic GEPA reflection prompt:
+  `crates/leaven-gepa/src/reflection.rs`
+  `DEFAULT_REFLECTION_PROMPT_TEMPLATE`;
+- byte check: exact match, length `942` on both sides;
+- upstream optimize-anything reflection prompt:
+  `/Users/darin/vendor/github.com/gepa-ai/gepa/src/gepa/optimize_anything.py`
+  `optimize_anything_reflection_prompt_template`;
+- Leaven P8 optimize-anything reflection prompt:
+  `examples/p8_aime_gepa/src/main.rs`
+  `OPTIMIZE_ANYTHING_REFLECTION_PROMPT_TEMPLATE`;
+- byte check: exact match, length `1287` on both sides;
+- upstream renderer:
+  `InstructionProposalSignature.prompt_renderer` emits one prompt string for
+  non-image data, with `# Example N`, ordered `## field` sections, recursive
+  `###`/`Item N` headings for structured values, and `str(value).strip()`
+  followed by blank lines;
+- Leaven renderer:
+  `DefaultReflectionRenderer` emits a single user message for text-only
+  reflection and uses ordered `ReflectiveExample.side_info` fields with the
+  same markdown structure;
+- upstream optimize-anything AIME side-info fields:
+  `score`, `input`, `prompt`, `output`, `reasoning`,
+  `execution_feedback`;
+- Leaven P8 AIME side-info fields:
+  `aime_reflection_side_info_example(...)` emits the same fields in the same
+  order;
+- direct upstream Python renderer check on a toy AIME record produced the same
+  markdown prompt as the Leaven snapshot test
+  `aime_full_reflection_prompt_renders_upstream_optimize_anything_markdown`;
+- actual `.leaven/lm-cache.sqlite` live reflection request rows for
+  `gpt-5.4-mini` show the reflection LM saw the optimize-anything prompt as a
+  single user prompt with markdown examples and the expected side-info keys.
+
+Conclusion: for P8 optimize-anything AIME, prompt template/renderer/side-info
+formatting is currently proven 1:1 with pinned upstream GEPA for text-only
+records. Remaining prompt-surface deltas are not P8 blockers: upstream image
+side-info returns multimodal messages, while Leaven currently only represents
+text/mapping/list side-info; DSPy-default trace rendering remains a separate
+non-default parity row.
+
 ## Live P8 Run Ledger
+
+Current in-flight JSON-fallback run:
+
+```text
+.leaven/release-runs/p8-aime-gepa-current-json-fallback-20260518-084304
+```
+
+Pointer file currently points at this run. Observed process:
+
+- PID `2771`, command `target/debug/p8_aime_gepa`;
+- start time `Mon May 18 01:43:04 2026`, elapsed about 23 minutes at the
+  2026-05-18T09:06Z check;
+- stdout/stderr pipe is still open through the launching `tee`;
+- open network sockets to `162.159.140.245:https` indicate provider work is
+  still in flight;
+- latest output line at the check was after `request_count=26`,
+  `total_assessment_rows=120`, immediately after `apply_succeeded` for child
+  `166bd10b-c627-439b-aaf8-060d225b7419`;
+- no `reports/summary.json`, `reports/p8-aime.json`, or durable provider
+  failure file had been emitted yet;
+- run-local `run.sqlite` only contained `evaluation_cache_entries` and had zero
+  persisted rows at the check.
+
+Do not treat this run as a completed live proof until it emits reports and the
+profile/model/dataset/cache/budget/provider-failure/result fields are inspected.
+Do not start another provider run while this one is active.
 
 Current live release run directory:
 

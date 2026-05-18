@@ -1802,6 +1802,78 @@ fn accepted_child_enters_reference_state_only_after_full_validation() {
 }
 
 #[test]
+fn accepted_child_updates_validation_frontier_before_next_parent_selection() {
+    block_on(async {
+        let case_set = CaseSet::new(vec![(), ()])
+            .with_partition(
+                leaven_core::PartitionId::from("TRAIN"),
+                vec![leaven_kernel::CaseId::new(0)],
+            )
+            .with_partition(
+                leaven_core::PartitionId::from("VALIDATION"),
+                vec![leaven_kernel::CaseId::new(1)],
+            );
+        let store = InlineEvidenceStore::<ScalarEvidence>::new("inline");
+        let mut engine = Engine::<SamplingProblem>::builder()
+            .evaluator(PrefixImprovementEvaluator)
+            .build();
+        let seed = engine
+            .insert_seed(
+                PartMapArtifact(BTreeMap::from([("answer".to_owned(), "draft".to_owned())])),
+                0,
+            )
+            .unwrap();
+        let mut gepa = Gepa::new(
+            PartMapSurface,
+            ParetoFrontier::by_case().build(),
+            SequentialSurfaceEdits::new(["improved", "improved-again"]),
+        )
+        .reflective_dataset(OneReflectiveExample)
+        .validation_policy(FullValidation)
+        .max_iterations(2);
+
+        engine.run(&mut gepa, &case_set, &store).await.unwrap();
+
+        let first_child = engine.view().candidate_tree().children(seed)[0];
+        let report = gepa.report();
+        assert_eq!(
+            report.candidates.len(),
+            2,
+            "strict improvement admits the first child, then rejects the equal-scoring follow-up"
+        );
+        assert_eq!(report.candidates[1].candidate, first_child);
+        assert_eq!(
+            report.proposal_attempts[0]
+                .admitted_index
+                .map(|index| index.get()),
+            Some(1),
+            "first child must be full-validated before admission"
+        );
+        assert_eq!(
+            report.proposal_attempts[1].parent, first_child,
+            "second iteration must see the accepted child's validation frontier"
+        );
+        assert_eq!(report.proposal_attempts[1].parent_index.get(), 1);
+
+        let selected_indices = gepa
+            .events()
+            .iter()
+            .filter_map(|event| match event {
+                leaven_gepa::GepaEventSummary::ParentSelected { candidate_index } => {
+                    Some(candidate_index.get())
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            selected_indices,
+            vec![0, 1],
+            "accepted validation must update the parent-selection frontier before the next iteration",
+        );
+    });
+}
+
+#[test]
 fn budget_stop_after_train_acceptance_reports_child_not_admitted() {
     block_on(async {
         let case_set = CaseSet::new(vec![(), (), ()])
