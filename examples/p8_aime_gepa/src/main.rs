@@ -1062,17 +1062,7 @@ fn p8_aime_report_json(config: &AimeRunConfig, run: &AimeRunResult) -> serde_jso
         "comparison_target": config.profile.comparison_target(),
         "comparison_published_test_score": config.profile.published_test_score(),
         "comparison_reflection_prompt": config.profile.reflection_prompt_claim(),
-        "comparison": {
-            "target": config.profile.comparison_target(),
-            "published_test_score": config.profile.published_test_score(),
-            "reflection_prompt": config.profile.reflection_prompt_claim(),
-            "upstream_reflection_model": config.profile.upstream_reflection_model(),
-            "leaven_reflection_model": config.reflection.model,
-            "reflection_model_alignment": config
-                .profile
-                .reflection_model_alignment(&config.reflection.model),
-            "notes": config.profile.comparison_notes(&config.reflection.model),
-        },
+        "comparison": p8_comparison_json(config),
         "data_source": config.data_source.label(),
         "dataset": p8_dataset_proof_json(&run.dataset_proof),
         "seed": {
@@ -1146,6 +1136,20 @@ fn p8_aime_report_json(config: &AimeRunConfig, run: &AimeRunResult) -> serde_jso
     })
 }
 
+fn p8_comparison_json(config: &AimeRunConfig) -> serde_json::Value {
+    serde_json::json!({
+        "target": config.profile.comparison_target(),
+        "published_test_score": config.profile.published_test_score(),
+        "reflection_prompt": config.profile.reflection_prompt_claim(),
+        "upstream_reflection_model": config.profile.upstream_reflection_model(),
+        "leaven_reflection_model": config.reflection.model,
+        "reflection_model_alignment": config
+            .profile
+            .reflection_model_alignment(&config.reflection.model),
+        "notes": config.profile.comparison_notes(&config.reflection.model),
+    })
+}
+
 fn p8_aime_failure_report_json(
     config: &AimeRunConfig,
     error: &(dyn std::error::Error + 'static),
@@ -1156,6 +1160,10 @@ fn p8_aime_failure_report_json(
         "run_profile": config.profile.label(),
         "gepa_profile": config.gepa_profile.label(),
         "proof_classification": proof_classification_for_config(config),
+        "comparison_target": config.profile.comparison_target(),
+        "comparison_published_test_score": config.profile.published_test_score(),
+        "comparison_reflection_prompt": config.profile.reflection_prompt_claim(),
+        "comparison": p8_comparison_json(config),
         "data_source": config.data_source.label(),
         "run_dir": config
             .run_dir
@@ -1187,6 +1195,10 @@ fn p8_aime_start_report_json(config: &AimeRunConfig, started_at: SystemTime) -> 
         "run_profile": config.profile.label(),
         "gepa_profile": config.gepa_profile.label(),
         "proof_classification": proof_classification_for_config(config),
+        "comparison_target": config.profile.comparison_target(),
+        "comparison_published_test_score": config.profile.published_test_score(),
+        "comparison_reflection_prompt": config.profile.reflection_prompt_claim(),
+        "comparison": p8_comparison_json(config),
         "data_source": config.data_source.label(),
         "run_dir": config
             .run_dir
@@ -7449,6 +7461,8 @@ Provide the new parameter value within ``` blocks."
         ));
         let mut config = AimeRunConfig::deterministic_smoke();
         config.run_dir = Some(run_dir.clone());
+        config.profile = AimeRunProfile::GepaAime;
+        config.reflection.model = "gpt-5.1".to_owned();
         let error = std::io::Error::other("synthetic failure");
 
         let path = write_p8_aime_failure_report(&config, &error, Duration::from_millis(9))
@@ -7461,6 +7475,11 @@ Provide the new parameter value within ``` blocks."
         assert_eq!(report["schema"], "leaven.p8_aime.failure_report.v1");
         assert_eq!(report["error"], "synthetic failure");
         assert_eq!(report["wall_time_ms"], 9);
+        assert_eq!(
+            report["comparison"]["reflection_model_alignment"],
+            "upstream-matched"
+        );
+        assert_eq!(report["comparison"]["leaven_reflection_model"], "gpt-5.1");
         let _ = std::fs::remove_dir_all(run_dir);
     }
 
@@ -7476,7 +7495,7 @@ Provide the new parameter value within ``` blocks."
         config.gepa_profile = GepaProfile::Reference;
         config.solver.model = GEPA_AIME_SOLVER_MODEL.to_owned();
         config.solver.runtime = AimeOpenAiRuntimeConfig::default_for_p8();
-        config.reflection.model = GEPA_AIME_REFLECTION_MODEL.to_owned();
+        config.reflection.model = "gpt-5.1".to_owned();
         config.reflection.runtime = AimeOpenAiRuntimeConfig::default_for_p8();
         let started_at = UNIX_EPOCH + Duration::from_millis(1234);
 
@@ -7497,9 +7516,14 @@ Provide the new parameter value within ``` blocks."
         assert_eq!(report["started_unix_ms"], 1234);
         assert_eq!(report["search_metric_call_cap"], GEPA_AIME_METRIC_CALLS);
         assert_eq!(report["solver_runtime"]["model"], GEPA_AIME_SOLVER_MODEL);
+        assert_eq!(report["reflection_runtime"]["model"], "gpt-5.1");
         assert_eq!(
-            report["reflection_runtime"]["model"],
-            GEPA_AIME_REFLECTION_MODEL
+            report["comparison"]["reflection_model_alignment"],
+            "upstream-matched"
+        );
+        assert_eq!(
+            report["comparison"]["upstream_reflection_model"],
+            UPSTREAM_GEPA_AIME_REFLECTION_MODEL
         );
         assert_eq!(report["solver_runtime"]["request_timeout_seconds"], 120);
         let _ = std::fs::remove_dir_all(run_dir);
