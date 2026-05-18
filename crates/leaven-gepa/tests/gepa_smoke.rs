@@ -32,8 +32,8 @@ use leaven_gepa::{
     },
 };
 use leaven_kernel::{
-    BlobRef, Budget, BudgetSnapshot, ContentId, Cost, EvaluatorId, Fingerprint, MetadataBag,
-    Metered, ProposerId, RunId,
+    BlobRef, Budget, BudgetSnapshot, CaseId, ContentId, Cost, EvaluatorId, Fingerprint,
+    MetadataBag, Metered, ProposerId, RunId,
 };
 use leaven_population::{KeepBest, ParetoFrontier, TournamentPopulation};
 use leaven_store_inline::InlineEvidenceStore;
@@ -1463,6 +1463,7 @@ fn fast_certified_profile_keeps_full_validation_admission() {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn full_validation_policy_evaluates_accepted_candidates_and_selects_validation_best() {
     block_on(async {
         let seen = Arc::new(Mutex::new(Vec::new()));
@@ -1523,7 +1524,12 @@ fn full_validation_policy_evaluates_accepted_candidates_and_selects_validation_b
         assert_eq!(attempt.child_cases, vec![leaven_kernel::CaseId::new(0)]);
         assert_eq!(attempt.child, Some(child));
         assert_eq!(attempt.accepted, Some(true));
-        assert_eq!(attempt.admitted_index.map(|index| index.get()), Some(1));
+        assert_eq!(
+            attempt
+                .admitted_index
+                .map(leaven_gepa::GepaCandidateIndex::get),
+            Some(1)
+        );
         assert_eq!(attempt.reflective_example_count, Some(1));
         assert_eq!(report.quality_summary.proposal_attempt_count, 1);
         assert_eq!(report.quality_summary.screened_count, 1);
@@ -1565,7 +1571,9 @@ fn full_validation_policy_evaluates_accepted_candidates_and_selects_validation_b
         assert_eq!(restored_attempt.parent, seed);
         assert_eq!(restored_attempt.child, Some(child));
         assert_eq!(
-            restored_attempt.admitted_index.map(|index| index.get()),
+            restored_attempt
+                .admitted_index
+                .map(leaven_gepa::GepaCandidateIndex::get),
             Some(1)
         );
         assert_eq!(
@@ -2072,7 +2080,7 @@ fn accepted_child_updates_validation_frontier_before_next_parent_selection() {
         assert_eq!(
             report.proposal_attempts[0]
                 .admitted_index
-                .map(|index| index.get()),
+                .map(leaven_gepa::GepaCandidateIndex::get),
             Some(1),
             "first child must be full-validated before admission"
         );
@@ -2221,6 +2229,7 @@ fn parent_and_child_screen_on_same_ordered_train_cases() {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn accepted_iteration_emits_reference_phase_order() {
     block_on(async {
         let case_set = CaseSet::new(vec![(), ()])
@@ -2900,6 +2909,124 @@ fn gepa_run_reports_empty_casewise_scores() {
 
         assert!(error.to_string().contains("comparable case scores"));
     });
+}
+
+#[test]
+fn gepa_rejects_evaluator_that_returns_no_case_rows() {
+    block_on(async {
+        let case_set = train_case_set();
+        let store = InlineEvidenceStore::<SmokeEvidence>::new("inline");
+        let mut engine = Engine::<SmokeProblem>::builder()
+            .evaluator(EmptyAssessmentEvaluator)
+            .build();
+        engine
+            .insert_seed(
+                PartMapArtifact(BTreeMap::from([("answer".to_owned(), "draft".to_owned())])),
+                0,
+            )
+            .unwrap();
+        let mut gepa = smoke_gepa(FixedSurfaceEdit::new("unused".to_owned()));
+
+        let error = engine.run(&mut gepa, &case_set, &store).await.unwrap_err();
+
+        assert!(
+            error.to_string().contains("GEPA evaluation failed"),
+            "unexpected error: {error}"
+        );
+    });
+}
+
+#[test]
+fn gepa_rejects_aggregate_rows_from_casewise_evaluator() {
+    block_on(async {
+        let case_set = train_case_set();
+        let store = InlineEvidenceStore::<SmokeEvidence>::new("inline");
+        let mut engine = Engine::<SmokeProblem>::builder()
+            .evaluator(AggregateAssessmentEvaluator)
+            .build();
+        engine
+            .insert_seed(
+                PartMapArtifact(BTreeMap::from([("answer".to_owned(), "draft".to_owned())])),
+                0,
+            )
+            .unwrap();
+        let mut gepa = smoke_gepa(FixedSurfaceEdit::new("unused".to_owned()));
+
+        let error = engine.run(&mut gepa, &case_set, &store).await.unwrap_err();
+
+        assert!(
+            error.to_string().contains("GEPA evaluation failed"),
+            "unexpected error: {error}"
+        );
+    });
+}
+
+#[test]
+fn gepa_rejects_case_rows_for_wrong_candidate() {
+    block_on(async {
+        let case_set = train_case_set();
+        let store = InlineEvidenceStore::<SmokeEvidence>::new("inline");
+        let mut engine = Engine::<SmokeProblem>::builder()
+            .evaluator(WrongCandidateAssessmentEvaluator)
+            .build();
+        engine
+            .insert_seed(
+                PartMapArtifact(BTreeMap::from([("answer".to_owned(), "draft".to_owned())])),
+                0,
+            )
+            .unwrap();
+        let mut gepa = smoke_gepa(FixedSurfaceEdit::new("unused".to_owned()));
+
+        let error = engine.run(&mut gepa, &case_set, &store).await.unwrap_err();
+
+        assert!(
+            error.to_string().contains("GEPA evaluation failed"),
+            "unexpected error: {error}"
+        );
+    });
+}
+
+#[test]
+fn gepa_rejects_case_rows_that_do_not_match_requested_set() {
+    for (mode, label, expected) in [
+        (
+            CaseRowMismatch::Missing,
+            "missing",
+            "GEPA evaluation failed",
+        ),
+        (
+            CaseRowMismatch::Duplicate,
+            "duplicate",
+            "GEPA evaluation failed",
+        ),
+        (
+            CaseRowMismatch::Different,
+            "different",
+            "GEPA evaluation failed",
+        ),
+    ] {
+        block_on(async {
+            let case_set = train_case_set();
+            let store = InlineEvidenceStore::<SmokeEvidence>::new("inline");
+            let mut engine = Engine::<SmokeProblem>::builder()
+                .evaluator(MismatchedCaseRowsEvaluator { mode })
+                .build();
+            engine
+                .insert_seed(
+                    PartMapArtifact(BTreeMap::from([("answer".to_owned(), "draft".to_owned())])),
+                    0,
+                )
+                .unwrap();
+            let mut gepa = smoke_gepa(FixedSurfaceEdit::new("unused".to_owned()));
+
+            let error = engine.run(&mut gepa, &case_set, &store).await.unwrap_err();
+
+            assert!(
+                error.to_string().contains(expected),
+                "unexpected {label} mismatch error: {error}"
+            );
+        });
+    }
 }
 
 #[test]
@@ -3596,8 +3723,10 @@ impl Evaluator<SamplingProblem> for CachedValidationSelectionEvaluator {
     }
 }
 
+type ResumeTraceSeen = Arc<Mutex<Vec<(EvaluationPurpose, Vec<leaven_kernel::CaseId>)>>>;
+
 struct ResumeTraceEvaluator {
-    seen: Arc<Mutex<Vec<(EvaluationPurpose, Vec<leaven_kernel::CaseId>)>>>,
+    seen: ResumeTraceSeen,
 }
 
 impl Evaluator<SamplingProblem> for ResumeTraceEvaluator {
@@ -3805,6 +3934,170 @@ impl Evaluator<SamplingProblem> for ConstantScoreEvaluator {
             assessments,
             Cost::metric_calls(request.set.case_ids.len() as u64),
         ))
+    }
+}
+
+struct EmptyAssessmentEvaluator;
+
+impl Evaluator<SmokeProblem> for EmptyAssessmentEvaluator {
+    fn id(&self) -> EvaluatorId {
+        EvaluatorId::PRIMARY
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        Fingerprint::from_bytes([17; 32])
+    }
+
+    fn cache_policy(&self, _request: &ResolvedEvaluationRequest) -> CachePolicy {
+        CachePolicy::Never
+    }
+
+    async fn evaluate(
+        &self,
+        _request: ResolvedEvaluationRequest,
+        _ctx: EvaluationContext<'_, SmokeProblem>,
+    ) -> Result<Metered<Vec<Assessment<SmokeProblem>>>, EvaluationError> {
+        Ok(Metered::new(Vec::new(), Cost::zero()))
+    }
+}
+
+struct AggregateAssessmentEvaluator;
+
+impl Evaluator<SmokeProblem> for AggregateAssessmentEvaluator {
+    fn id(&self) -> EvaluatorId {
+        EvaluatorId::PRIMARY
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        Fingerprint::from_bytes([18; 32])
+    }
+
+    fn cache_policy(&self, _request: &ResolvedEvaluationRequest) -> CachePolicy {
+        CachePolicy::Never
+    }
+
+    async fn evaluate(
+        &self,
+        request: ResolvedEvaluationRequest,
+        _ctx: EvaluationContext<'_, SmokeProblem>,
+    ) -> Result<Metered<Vec<Assessment<SmokeProblem>>>, EvaluationError> {
+        let ResolvedRequestKind::Independent { candidates } = request.kind else {
+            return Err(EvaluationError::Message(
+                "expected independent request".to_owned(),
+            ));
+        };
+        let set = leaven_kernel::EvaluationSetId::from_uuid(request.set.id.as_uuid());
+        let candidate = candidates[0];
+        Ok(Metered::new(
+            vec![Assessment::Independent {
+                candidate,
+                target: AssessmentTarget::EvaluationSet(set),
+                evidence: SmokeEvidence,
+                cost: Cost::metric_calls(1),
+                metadata: MetadataBag::new(),
+            }],
+            Cost::metric_calls(1),
+        ))
+    }
+}
+
+struct WrongCandidateAssessmentEvaluator;
+
+impl Evaluator<SmokeProblem> for WrongCandidateAssessmentEvaluator {
+    fn id(&self) -> EvaluatorId {
+        EvaluatorId::PRIMARY
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        Fingerprint::from_bytes([19; 32])
+    }
+
+    fn cache_policy(&self, _request: &ResolvedEvaluationRequest) -> CachePolicy {
+        CachePolicy::Never
+    }
+
+    async fn evaluate(
+        &self,
+        request: ResolvedEvaluationRequest,
+        _ctx: EvaluationContext<'_, SmokeProblem>,
+    ) -> Result<Metered<Vec<Assessment<SmokeProblem>>>, EvaluationError> {
+        let set = leaven_kernel::EvaluationSetId::from_uuid(request.set.id.as_uuid());
+        let case = request.set.case_ids[0];
+        Ok(Metered::new(
+            vec![Assessment::Independent {
+                candidate: leaven_kernel::CandidateId::new(),
+                target: AssessmentTarget::Case { set, case },
+                evidence: SmokeEvidence,
+                cost: Cost::metric_calls(1),
+                metadata: MetadataBag::new(),
+            }],
+            Cost::metric_calls(1),
+        ))
+    }
+}
+
+#[derive(Clone, Copy)]
+enum CaseRowMismatch {
+    Missing,
+    Duplicate,
+    Different,
+}
+
+struct MismatchedCaseRowsEvaluator {
+    mode: CaseRowMismatch,
+}
+
+impl Evaluator<SmokeProblem> for MismatchedCaseRowsEvaluator {
+    fn id(&self) -> EvaluatorId {
+        EvaluatorId::PRIMARY
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        match self.mode {
+            CaseRowMismatch::Missing => Fingerprint::from_bytes([20; 32]),
+            CaseRowMismatch::Duplicate => Fingerprint::from_bytes([21; 32]),
+            CaseRowMismatch::Different => Fingerprint::from_bytes([22; 32]),
+        }
+    }
+
+    fn cache_policy(&self, _request: &ResolvedEvaluationRequest) -> CachePolicy {
+        CachePolicy::Never
+    }
+
+    async fn evaluate(
+        &self,
+        request: ResolvedEvaluationRequest,
+        _ctx: EvaluationContext<'_, SmokeProblem>,
+    ) -> Result<Metered<Vec<Assessment<SmokeProblem>>>, EvaluationError> {
+        let set = leaven_kernel::EvaluationSetId::from_uuid(request.set.id.as_uuid());
+        let ResolvedRequestKind::Independent { candidates } = request.kind else {
+            return Err(EvaluationError::Message(
+                "expected independent request".to_owned(),
+            ));
+        };
+        let candidate = candidates[0];
+        let first = request.set.case_ids[0];
+        let mut cases = match self.mode {
+            CaseRowMismatch::Missing => vec![first],
+            CaseRowMismatch::Duplicate | CaseRowMismatch::Different => request.set.case_ids.clone(),
+        };
+        match self.mode {
+            CaseRowMismatch::Missing => {}
+            CaseRowMismatch::Duplicate => cases.push(first),
+            CaseRowMismatch::Different => cases.push(CaseId::new(999)),
+        }
+        let rows = cases
+            .iter()
+            .copied()
+            .map(|case| Assessment::Independent {
+                candidate,
+                target: AssessmentTarget::Case { set, case },
+                evidence: SmokeEvidence,
+                cost: Cost::metric_calls(1),
+                metadata: MetadataBag::new(),
+            })
+            .collect::<Vec<_>>();
+        Ok(Metered::new(rows, Cost::metric_calls(cases.len() as u64)))
     }
 }
 

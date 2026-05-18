@@ -9,35 +9,37 @@ use leaven_core::{
 };
 use leaven_engine::{CachePolicy, EvaluationContext, EvaluationError, Evaluator};
 use leaven_eval::{Case, NoTarget};
-use leaven_evidence::{CaseAssessmentEvidence, OutputRecord, ScalarEvidence};
+use leaven_evidence::{CaseAssessmentEvidence, ScalarEvidence};
 use leaven_kernel::{BudgetSnapshot, Cost, EvaluationSetId, EvaluatorId, Fingerprint, Metered};
 
 use crate::compatibility::ScoringEvaluatorIdentity;
 use crate::{RunCase, RunError, RunOutput, RunProblem, Score, ScoreContext, ScoreError};
 
-type Runner<A, I> =
-    Arc<dyn Fn(A, RunCase<I>) -> BoxFuture<'static, Result<RunOutput, RunError>> + Send + Sync>;
-type Scorer<A, I, T> = Arc<
-    dyn Fn(ScoreContext<A, I, T>) -> BoxFuture<'static, Result<Score, ScoreError>> + Send + Sync,
+type Runner<A, I, Out> = Arc<
+    dyn Fn(A, RunCase<I>) -> BoxFuture<'static, Result<RunOutput<Out>, RunError>> + Send + Sync,
 >;
-
+type Scorer<A, I, T, Out> = Arc<
+    dyn Fn(ScoreContext<A, I, T, Out>) -> BoxFuture<'static, Result<Score, ScoreError>>
+        + Send
+        + Sync,
+>;
 /// Evaluator that runs a candidate on cases and emits one feedback row per case.
-pub struct ScoringEvaluator<A, I, T = NoTarget> {
+pub struct ScoringEvaluator<A, I, T = NoTarget, Out = ()> {
     cases: Arc<Vec<Case<I, T>>>,
-    runner: Runner<A, I>,
-    scorer: Scorer<A, I, T>,
+    runner: Runner<A, I, Out>,
+    scorer: Scorer<A, I, T, Out>,
     fingerprint: Fingerprint,
     cache_policy: CachePolicy,
     parallelism: NonZeroUsize,
 }
 
-impl<A, I, T> ScoringEvaluator<A, I, T> {
+impl<A, I, T, Out> ScoringEvaluator<A, I, T, Out> {
     /// Builds a scoring evaluator.
     #[must_use]
     pub fn new(
         cases: Arc<Vec<Case<I, T>>>,
-        runner: Runner<A, I>,
-        scorer: Scorer<A, I, T>,
+        runner: Runner<A, I, Out>,
+        scorer: Scorer<A, I, T, Out>,
         identity: &ScoringEvaluatorIdentity,
     ) -> Self {
         Self {
@@ -71,11 +73,12 @@ impl<A, I, T> ScoringEvaluator<A, I, T> {
     }
 }
 
-impl<A, I, T> Evaluator<RunProblem<A, I, T>> for ScoringEvaluator<A, I, T>
+impl<A, I, T, Out> Evaluator<RunProblem<A, I, T>> for ScoringEvaluator<A, I, T, Out>
 where
     A: leaven_core::Artifact,
     I: Clone + Send + Sync + 'static,
     T: Clone + Send + Sync + 'static,
+    Out: Clone + Send + Sync + 'static,
 {
     fn id(&self) -> EvaluatorId {
         EvaluatorId::PRIMARY
@@ -186,16 +189,17 @@ struct EvaluationOutcome {
     cost: Cost,
 }
 
-fn evaluate_jobs<A, I, T>(
+fn evaluate_jobs<A, I, T, Out>(
     jobs: Vec<EvaluationJob<A, I, T>>,
-    runner: &Runner<A, I>,
-    scorer: &Scorer<A, I, T>,
+    runner: &Runner<A, I, Out>,
+    scorer: &Scorer<A, I, T, Out>,
     parallelism: NonZeroUsize,
 ) -> impl Future<Output = Result<Vec<EvaluationOutcome>, EvaluationError>> + Send + 'static
 where
     A: leaven_core::Artifact,
     I: Clone + Send + Sync + 'static,
     T: Clone + Send + Sync + 'static,
+    Out: Clone + Send + Sync + 'static,
 {
     let parallelism = parallelism.get().min(jobs.len().max(1));
     let runner = Arc::clone(runner);
@@ -214,15 +218,16 @@ where
     .boxed()
 }
 
-async fn evaluate_job<A, I, T>(
+async fn evaluate_job<A, I, T, Out>(
     job: EvaluationJob<A, I, T>,
-    runner: &Runner<A, I>,
-    scorer: &Scorer<A, I, T>,
+    runner: &Runner<A, I, Out>,
+    scorer: &Scorer<A, I, T, Out>,
 ) -> Result<EvaluationOutcome, EvaluationError>
 where
     A: leaven_core::Artifact,
     I: Clone + Send + Sync + 'static,
     T: Clone + Send + Sync + 'static,
+    Out: Clone + Send + Sync + 'static,
 {
     let run_case = RunCase::from_case(&job.case);
     let score_case = crate::ScoreCase::from_case(&job.case);
@@ -233,7 +238,7 @@ where
             let cost = source.cost().clone();
             EvaluationError::with_cost_source("runner function failed", cost, source)
         })?;
-    let score = scorer(ScoreContext {
+    let mut score = scorer(ScoreContext {
         artifact: job.artifact.clone(),
         case: score_case,
         output: output.clone(),
@@ -252,7 +257,13 @@ where
     let scalar = ScalarEvidence::new(score.value).map_err(|source| {
         EvaluationError::with_cost_source("score was not finite", cost.clone(), source)
     })?;
-    let generated_output = OutputRecord::inline(output.output);
+    let generated_output = score.output.take().ok_or_else(|| {
+        EvaluationError::with_cost_source(
+            "score did not provide reportable output",
+            cost.clone(),
+            MissingReportableOutput,
+        )
+    })?;
     let trace = output
         .trace
         .into_iter()
@@ -267,6 +278,15 @@ where
         cost,
     })
 }
+
+#[derive(Debug, thiserror::Error)]
+#[error(
+    "scorer returned `Score` without supplying reportable output; \
+     every successful score must call `Score::with_output(...)` or \
+     `Score::with_text_output(...)` so reports, evidence stores, and GEPA \
+     reflection see a durable rendering of the runner's typed output"
+)]
+struct MissingReportableOutput;
 
 pub fn default_parallelism() -> NonZeroUsize {
     std::thread::available_parallelism()

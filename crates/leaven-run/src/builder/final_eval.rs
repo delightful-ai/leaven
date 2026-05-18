@@ -12,10 +12,10 @@ use crate::{
     },
 };
 
-pub(super) fn final_evaluation_inputs<A, I, T, O>(
+pub(super) fn final_evaluation_inputs<A, I, T, O, Out>(
     seed: leaven_kernel::CandidateId,
     best: Option<leaven_kernel::CandidateId>,
-    builder: &OptimizeBuilder<A, I, T, O>,
+    builder: &OptimizeBuilder<A, I, T, O, Out>,
 ) -> FinalEvaluationInputs
 where
     A: Artifact,

@@ -103,7 +103,7 @@ fn proposal_render(
         route: "GepaSkillBankAgenticReflector -> ReflectionWorkspace<SkillBankReflector>",
         proof: "render_only",
         parent: input.parent.to_string(),
-        part: input.part_label.clone(),
+        part: input.part_label,
         workspace_files,
         agent_request: run_request,
         gaps: vec![

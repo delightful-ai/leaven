@@ -1,3 +1,5 @@
+#![allow(clippy::too_many_lines)]
+
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
@@ -989,11 +991,11 @@ async fn try_run_aime(
                             .lock()
                             .expect("AIME GEPA event sink lock")
                             .push(event.clone());
-                        if let Some(line) = gepa_progress_sink
+                        let progress_line = gepa_progress_sink
                             .lock()
                             .expect("AIME GEPA progress lock")
-                            .progress_line(event)
-                        {
+                            .progress_line(event);
+                        if let Some(line) = progress_line {
                             eprintln!("{line}");
                         }
                     })
@@ -1245,7 +1247,7 @@ fn p8_aime_report_json(config: &AimeRunConfig, run: &AimeRunResult) -> serde_jso
         "gepa_report": run
             .gepa_report
             .as_ref()
-            .map(|report| p8_gepa_report_json(report, &run.role_reports, &config.seed_prompt)),
+            .map(|report| p8_gepa_report_json(report, &run.role_reports, config.seed_prompt)),
         "cases": p8_case_report_json(run),
         "case_deltas": p8_case_delta_report_json(run),
         "events": result.events.iter().map(|event| event.as_str()).collect::<Vec<_>>(),
@@ -1307,6 +1309,9 @@ fn p8_failure_compatibility_line(error: &(dyn std::error::Error + 'static)) -> O
         ResumeCompatibilityError::DatasetFingerprintMismatch { .. } => {
             "resume_compatibility_mismatch=dataset".to_owned()
         }
+        ResumeCompatibilityError::SchemaMismatch { stored, live } => {
+            format!("resume_compatibility_mismatch=schema stored={stored} live={live}")
+        }
         ResumeCompatibilityError::OptimizerCompatibilityMismatch { .. } => {
             "resume_compatibility_mismatch=optimizer".to_owned()
         }
@@ -1355,6 +1360,9 @@ fn p8_failure_compatibility_json(error: &(dyn std::error::Error + 'static)) -> s
         }
         ResumeCompatibilityError::DatasetFingerprintMismatch { .. } => {
             serde_json::json!({ "kind": "dataset" })
+        }
+        ResumeCompatibilityError::SchemaMismatch { stored, live } => {
+            serde_json::json!({ "kind": "schema", "stored": stored, "live": live })
         }
         ResumeCompatibilityError::OptimizerCompatibilityMismatch { .. } => {
             serde_json::json!({ "kind": "optimizer" })
@@ -1802,15 +1810,18 @@ fn duplicate_string_count(values: &[String]) -> usize {
 fn p8_len_summary_json(lengths: &[usize]) -> serde_json::Value {
     let count = lengths.len();
     let sum = lengths.iter().sum::<usize>();
+    let average = if count == 0 {
+        serde_json::Value::Null
+    } else {
+        let sum = u32::try_from(sum).expect("AIME report length sum fits u32");
+        let count = u32::try_from(count).expect("AIME report length count fits u32");
+        serde_json::json!(f64::from(sum) / f64::from(count))
+    };
     serde_json::json!({
         "count": count,
         "min": lengths.iter().min().copied(),
         "max": lengths.iter().max().copied(),
-        "average": if count == 0 {
-            serde_json::Value::Null
-        } else {
-            serde_json::json!(sum as f64 / count as f64)
-        },
+        "average": average,
     })
 }
 
@@ -3870,9 +3881,10 @@ fn parse_request_timeout_seconds(value: Option<&str>) -> u64 {
     let parsed = raw.parse::<u64>().unwrap_or_else(|source| {
         panic!("unsupported {LEAVEN_OPENAI_REQUEST_TIMEOUT_SECONDS}={raw:?}: {source}")
     });
-    if parsed == 0 {
-        panic!("unsupported {LEAVEN_OPENAI_REQUEST_TIMEOUT_SECONDS}=0; expected a positive integer")
-    }
+    assert!(
+        parsed != 0,
+        "unsupported {LEAVEN_OPENAI_REQUEST_TIMEOUT_SECONDS}=0; expected a positive integer"
+    );
     parsed
 }
 
@@ -5481,7 +5493,7 @@ async fn run_solver(
     solver: Option<AimeInstrumentedLm<AimeOpenAiLm>>,
     solver_config: AimeSolverConfig,
     side_infos: AimeSolverSideInfoStore,
-) -> Result<RunOutput, RunError> {
+) -> Result<RunOutput<AimeRunOutput>, RunError> {
     if let Some(solver) = solver {
         return run_openai_solver(solver, &prompt, &case, &solver_config, side_infos).await;
     }
@@ -5500,7 +5512,8 @@ async fn run_solver(
         raw: answer.to_string(),
     };
     side_infos.insert(&prompt, case.id(), output.clone());
-    Ok(RunOutput::new(output.answer).with_trace(format!("reasoning: {}", output.reasoning)))
+    let reasoning_trace = format!("reasoning: {}", output.reasoning);
+    Ok(RunOutput::typed(output).with_trace(reasoning_trace))
 }
 
 async fn run_openai_solver<L>(
@@ -5509,7 +5522,7 @@ async fn run_openai_solver<L>(
     case: &RunCase<AimeInput>,
     solver_config: &AimeSolverConfig,
     side_infos: AimeSolverSideInfoStore,
-) -> Result<RunOutput, RunError>
+) -> Result<RunOutput<AimeRunOutput>, RunError>
 where
     L: Lm,
 {
@@ -5521,9 +5534,11 @@ where
     )
     .await?;
     side_infos.insert(prompt, case.id(), output.clone());
-    Ok(RunOutput::new(output.answer)
-        .with_trace(format!("reasoning: {}", output.reasoning))
-        .with_trace(format!("raw_response: {}", output.raw))
+    let reasoning_trace = format!("reasoning: {}", output.reasoning);
+    let raw_trace = format!("raw_response: {}", output.raw);
+    Ok(RunOutput::typed(output)
+        .with_trace(reasoning_trace)
+        .with_trace(raw_trace)
         .with_cost(cost))
 }
 
@@ -5764,14 +5779,14 @@ fn aime_scorer_fingerprint() -> Fingerprint {
 }
 
 async fn score_answer(
-    ctx: ScoreContext<AimePrompt, AimeInput, AimeTarget>,
+    ctx: ScoreContext<AimePrompt, AimeInput, AimeTarget, AimeRunOutput>,
 ) -> Result<Score, ScoreError> {
     let target = ctx
         .case
         .target()
         .ok_or_else(|| ScoreError::new("AIME scorer requires a target answer"))?;
-    let (score, feedback) = aime_score_feedback(target, &ctx.output.output);
-    Ok(Score::new(score, feedback))
+    let (score, feedback) = aime_score_feedback(target, &ctx.output.output.answer);
+    Ok(Score::new(score, feedback).with_text_output(ctx.output.output.answer))
 }
 
 fn input_needs_modular(input: &AimeInput) -> bool {
@@ -6175,7 +6190,7 @@ mod tests {
         assert_eq!(gepa_report.total_metric_calls, 8);
         assert_eq!(gepa_report.full_validation_evals, 2);
         assert!(gepa_report.skip_perfect_score);
-        assert_eq!(gepa_report.perfect_score, 1.0);
+        assert!((gepa_report.perfect_score - 1.0).abs() < f64::EPSILON);
         assert!(
             gepa_report
                 .events
@@ -6428,12 +6443,7 @@ mod tests {
         .expect("assistant response");
         block_on_tokio(workspace_cache.put(
             key,
-            LmCacheEntry::new(
-                key,
-                provider,
-                request.clone(),
-                stale_workspace_response.clone(),
-            ),
+            LmCacheEntry::new(key, provider, request, stale_workspace_response),
         ))
         .expect("workspace cache write");
 
@@ -6457,7 +6467,7 @@ mod tests {
             LmCacheEntry::new(
                 workspace_key,
                 provider,
-                workspace_request.clone(),
+                workspace_request,
                 workspace_response.clone(),
             ),
         ))
@@ -6912,7 +6922,7 @@ Provide the new parameter value within ``` blocks."
                     && line.ends_with("/reports/summary.json"))
         );
         assert!(lines.iter().any(|line| {
-            line.starts_with("compatibility=schema=leaven-run.compatibility.v1")
+            line.starts_with("compatibility=schema=leaven-run.compatibility.v3")
                 && line.contains(" run_kind=leaven-run.optimize ")
                 && line.contains(" cache=cache:auto/")
                 && line.contains(" lm_roles=2")

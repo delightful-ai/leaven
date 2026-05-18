@@ -107,7 +107,7 @@ fn deterministic_example_run_id(
     score: Option<f64>,
     feedback: &str,
 ) -> CaseRunId {
-    deterministic_run_id_from_parts(DeterministicRunIdParts {
+    deterministic_run_id_from_parts(&DeterministicRunIdParts {
         input,
         expected,
         agent_id: None,
@@ -145,7 +145,7 @@ fn deterministic_run_id(
     expected: Option<&ReflectiveValue>,
     run: &ReflectiveRun,
 ) -> CaseRunId {
-    deterministic_run_id_from_parts(DeterministicRunIdParts {
+    deterministic_run_id_from_parts(&DeterministicRunIdParts {
         input,
         expected,
         agent_id: run.agent_id.as_ref(),
@@ -162,7 +162,7 @@ fn deterministic_run_id(
     })
 }
 
-fn deterministic_run_id_from_parts(parts: DeterministicRunIdParts<'_>) -> CaseRunId {
+fn deterministic_run_id_from_parts(parts: &DeterministicRunIdParts<'_>) -> CaseRunId {
     let mut hash = 0x6c62_272e_07bb_0142_62b8_2175_6295_c58d_u128;
     feed_hash(&mut hash, b"leaven.gepa.reflective_run.v2");
     feed_json(&mut hash, parts.input);
@@ -227,13 +227,16 @@ pub struct ReflectiveRun {
 }
 
 /// Reflective value material that can be rendered or materialized.
+///
+/// `serde_json::Value` carries `f64`, so this enum stays `PartialEq` only.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "kind", content = "value", rename_all = "snake_case")]
 pub enum ReflectiveValue {
     Text(String),
     Json(serde_json::Value),
     File(TraceRef),
-    Mapping(Vec<(String, ReflectiveValue)>),
+    Mapping(Vec<(String, Self)>),
 }
 
 impl Default for ReflectiveValue {
@@ -243,14 +246,14 @@ impl Default for ReflectiveValue {
 }
 
 /// Structured pass/fail checks for a reflective run.
-#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Checks {
     pub passes: Vec<Check>,
     pub fails: Vec<Check>,
 }
 
 /// One structured pass/fail check.
-#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Check {
     pub id: String,
     pub requirement: String,

@@ -11,7 +11,7 @@ use std::{
 
 use futures::{FutureExt, future::BoxFuture};
 use leaven_core::{Artifact, OptimizationProblem, PartitionId};
-use leaven_engine::{CachePolicy, Callback, Optimizer, OptimizerError, TrustPolicy};
+use leaven_engine::{CachePolicy, Callback, Optimizer, TrustPolicy};
 use leaven_eval::{Case, Dataset, DatasetSplits, NoTarget, SplitPolicy, SplitRole};
 use leaven_evidence::CaseAssessmentEvidence;
 use leaven_kernel::{
@@ -19,7 +19,10 @@ use leaven_kernel::{
 };
 use serde::{Serialize, de::DeserializeOwned};
 
-use self::final_eval::{final_evaluation_inputs, run_final_evaluations};
+use self::{
+    final_eval::{final_evaluation_inputs, run_final_evaluations},
+    resume::restore_optimizer_checkpoint,
+};
 use crate::{
     IntoOptimizeStore, IntoRunResult, OptimizeError, RunCase, RunError, RunOutput, Score,
     ScoreContext, ScoreError,
@@ -39,13 +42,17 @@ use crate::{
     },
 };
 
-type Runner<A, I> =
-    Arc<dyn Fn(A, RunCase<I>) -> BoxFuture<'static, Result<RunOutput, RunError>> + Send + Sync>;
-type Scorer<A, I, T> = Arc<
-    dyn Fn(ScoreContext<A, I, T>) -> BoxFuture<'static, Result<Score, ScoreError>> + Send + Sync,
+type Runner<A, I, Out> = Arc<
+    dyn Fn(A, RunCase<I>) -> BoxFuture<'static, Result<RunOutput<Out>, RunError>> + Send + Sync,
+>;
+type Scorer<A, I, T, Out> = Arc<
+    dyn Fn(ScoreContext<A, I, T, Out>) -> BoxFuture<'static, Result<Score, ScoreError>>
+        + Send
+        + Sync,
 >;
 
 mod final_eval;
+mod resume;
 
 struct CasePlan<I, T> {
     dataset: Dataset<Case<I, T>>,
@@ -72,7 +79,7 @@ where
 
 /// Starts optimizing a seed artifact through the high-level product API.
 #[must_use]
-pub fn optimize<A>(seed: A) -> OptimizeBuilder<A, (), NoTarget, ()>
+pub fn optimize<A>(seed: A) -> OptimizeBuilder<A, (), NoTarget, (), ()>
 where
     A: Artifact,
 {
@@ -97,7 +104,7 @@ where
 }
 
 /// Public optimize/train/validation/test builder.
-pub struct OptimizeBuilder<A, I, T, O>
+pub struct OptimizeBuilder<A, I, T, O, Out = ()>
 where
     A: Artifact,
     I: Send + Sync + 'static,
@@ -107,8 +114,8 @@ where
     train: Vec<Case<I, T>>,
     validation: Vec<Case<I, T>>,
     test: Vec<Case<I, T>>,
-    runner: Runner<A, I>,
-    scorer: Option<Scorer<A, I, T>>,
+    runner: Runner<A, I, Out>,
+    scorer: Option<Scorer<A, I, T, Out>>,
     runner_fingerprint: Option<RuntimeFingerprint>,
     scorer_fingerprint: Option<RuntimeFingerprint>,
     lm_role_fingerprints: BTreeMap<String, RuntimeFingerprint>,
@@ -121,13 +128,13 @@ where
     run_id: RunId,
 }
 
-impl<A> OptimizeBuilder<A, (), NoTarget, ()>
+impl<A> OptimizeBuilder<A, (), NoTarget, (), ()>
 where
     A: Artifact,
 {
     /// Supplies training case envelopes and fixes the run case type.
     #[must_use]
-    pub fn train<I, T>(self, train: Vec<Case<I, T>>) -> OptimizeBuilder<A, I, T, ()>
+    pub fn train<I, T>(self, train: Vec<Case<I, T>>) -> OptimizeBuilder<A, I, T, (), ()>
     where
         I: Clone + Send + Sync + 'static,
         T: Clone + Send + Sync + 'static,
@@ -154,7 +161,7 @@ where
 
     /// Supplies input-only toy training cases with dense generated IDs.
     #[must_use]
-    pub fn train_inputs<I>(self, train: Vec<I>) -> OptimizeBuilder<A, I, NoTarget, ()>
+    pub fn train_inputs<I>(self, train: Vec<I>) -> OptimizeBuilder<A, I, NoTarget, (), ()>
     where
         I: Clone + Send + Sync + 'static,
     {
@@ -162,7 +169,7 @@ where
     }
 }
 
-impl<A, I, T, O> OptimizeBuilder<A, I, T, O>
+impl<A, I, T, O, Out> OptimizeBuilder<A, I, T, O, Out>
 where
     A: Artifact,
     I: Clone + Send + Sync + 'static,
@@ -183,25 +190,44 @@ where
     }
 
     /// Supplies the runner/executor.
+    /// Must be called before [`Self::score`]; changing output type after scoring is a hard error.
     #[must_use]
-    pub fn runner<F, Fut>(mut self, runner: F) -> Self
+    pub fn runner<F, Fut, NextOut>(self, runner: F) -> OptimizeBuilder<A, I, T, O, NextOut>
     where
         F: Fn(A, RunCase<I>) -> Fut + Send + Sync + 'static,
         Fut: Future + Send + 'static,
-        Fut::Output: IntoRunResult,
+        Fut::Output: IntoRunResult<NextOut>,
+        NextOut: Clone + Send + Sync + 'static,
     {
-        self.runner = Arc::new(move |artifact, case| {
-            let output = runner(artifact, case);
-            async move { output.await.into_run_result() }.boxed()
-        });
-        self
+        assert!(self.scorer.is_none(), "runner after score");
+        OptimizeBuilder {
+            seed: self.seed,
+            train: self.train,
+            validation: self.validation,
+            test: self.test,
+            runner: Arc::new(move |artifact, case| {
+                let output = runner(artifact, case);
+                async move { output.await.into_run_result() }.boxed()
+            }),
+            scorer: None,
+            runner_fingerprint: self.runner_fingerprint,
+            scorer_fingerprint: self.scorer_fingerprint,
+            lm_role_fingerprints: self.lm_role_fingerprints,
+            optimizer: self.optimizer,
+            budget: self.budget,
+            evaluation_cache_policy: self.evaluation_cache_policy,
+            evaluation_parallelism: self.evaluation_parallelism,
+            callbacks: self.callbacks,
+            store: self.store,
+            run_id: self.run_id,
+        }
     }
 
     /// Supplies the async scoring function.
     #[must_use]
     pub fn score<F, Fut>(mut self, scorer: F) -> Self
     where
-        F: Fn(ScoreContext<A, I, T>) -> Fut + Send + Sync + 'static,
+        F: Fn(ScoreContext<A, I, T, Out>) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Result<Score, ScoreError>> + Send + 'static,
     {
         self.scorer = Some(Arc::new(move |ctx| scorer(ctx).boxed()));
@@ -236,7 +262,7 @@ where
 
     /// Supplies the optimizer.
     #[must_use]
-    pub fn using<Next>(self, optimizer: Next) -> OptimizeBuilder<A, I, T, Next> {
+    pub fn using<Next>(self, optimizer: Next) -> OptimizeBuilder<A, I, T, Next, Out> {
         OptimizeBuilder {
             seed: self.seed,
             train: self.train,
@@ -328,7 +354,7 @@ where
     }
 }
 
-impl<A, I, O> OptimizeBuilder<A, I, NoTarget, O>
+impl<A, I, O, Out> OptimizeBuilder<A, I, NoTarget, O, Out>
 where
     A: Artifact,
     I: Clone + Send + Sync + 'static,
@@ -348,13 +374,14 @@ where
     }
 }
 
-impl<A, I, T, O> OptimizeBuilder<A, I, T, O>
+impl<A, I, T, O, Out> OptimizeBuilder<A, I, T, O, Out>
 where
     A: Artifact + Serialize + DeserializeOwned,
     <A as Artifact>::Change: Serialize + DeserializeOwned,
     I: Clone + Serialize + Send + Sync + 'static,
     T: Clone + Serialize + Send + Sync + 'static,
     O: Optimizer<RunProblem<A, I, T>>,
+    Out: Clone + Send + Sync + 'static,
 {
     /// Runs the optimization.
     pub async fn run(mut self) -> Result<Optimized<A>, OptimizeError> {
@@ -420,15 +447,11 @@ where
             callbacks,
         })?;
         if let Some(checkpoint) = checkpoint {
-            let reader = prepared_store.local_persistence.as_ref().ok_or_else(|| {
-                OptimizeError::Optimizer(OptimizerError::Message(
-                    "stored run resume requires a readable local persistence store".to_owned(),
-                ))
-            })?;
-            self.optimizer.restore_checkpoint_state(
+            restore_optimizer_checkpoint(
+                &mut self.optimizer,
                 &checkpoint,
-                reader,
-                leaven_engine::RestoreContext::new(engine.view()),
+                &prepared_store,
+                engine.view(),
             )?;
             return run_with_engine(
                 self,
@@ -523,7 +546,7 @@ fn scoring_evaluator_identity(
     }
 }
 
-struct EngineStartInputs<'a, A, I, T>
+struct EngineStartInputs<'a, A, I, T, Out>
 where
     A: Artifact,
     I: Send + Sync + 'static,
@@ -531,7 +554,7 @@ where
 {
     budget: Budget,
     metric_call_limit: Option<u64>,
-    evaluator: ScoringEvaluator<A, I, T>,
+    evaluator: ScoringEvaluator<A, I, T, Out>,
     prepared_store: &'a mut PreparedStore<RunProblem<A, I, T>>,
     compatibility: &'a RunCompatibilityManifest,
     callbacks: Vec<Box<dyn Callback<RunProblem<A, I, T>>>>,
@@ -559,13 +582,14 @@ where
     checkpoint: Option<Box<leaven_engine::RunCheckpoint>>,
 }
 
-fn start_engine<A, I, T>(
-    inputs: EngineStartInputs<'_, A, I, T>,
+fn start_engine<A, I, T, Out>(
+    inputs: EngineStartInputs<'_, A, I, T, Out>,
 ) -> Result<EngineStart<A, I, T>, OptimizeError>
 where
     A: Artifact,
     I: Clone + Send + Sync + 'static,
     T: Clone + Send + Sync + 'static,
+    Out: Clone + Send + Sync + 'static,
 {
     let EngineStartInputs {
         budget,
@@ -679,8 +703,8 @@ struct SearchRun {
     optimizer_report: Option<leaven_engine::OptimizerReportPayload>,
 }
 
-async fn run_with_engine<A, I, T, O>(
-    mut builder: OptimizeBuilder<A, I, T, O>,
+async fn run_with_engine<A, I, T, O, Out>(
+    mut builder: OptimizeBuilder<A, I, T, O, Out>,
     mut engine: leaven_engine::Engine<RunProblem<A, I, T>>,
     inputs: EngineRunInputs<'_, A, I, T>,
 ) -> Result<Optimized<A>, OptimizeError>
@@ -690,6 +714,7 @@ where
     I: Clone + Send + Sync + 'static,
     T: Clone + Send + Sync + 'static,
     O: Optimizer<RunProblem<A, I, T>>,
+    Out: Clone + Send + Sync + 'static,
 {
     let EngineRunInputs {
         case_set,
@@ -762,7 +787,7 @@ where
             compatibility: compatibility_summary,
             stop_reason: search.stop_reason,
         },
-    )?;
+    );
     write_summary_report(&summary)?;
     let budget = summary.budget.clone();
     Ok(Optimized {
@@ -777,8 +802,8 @@ where
     })
 }
 
-async fn run_optimizer_search<A, I, T, O>(
-    builder: &mut OptimizeBuilder<A, I, T, O>,
+async fn run_optimizer_search<A, I, T, O, Out>(
+    builder: &mut OptimizeBuilder<A, I, T, O, Out>,
     engine: &mut leaven_engine::Engine<RunProblem<A, I, T>>,
     case_set: &leaven_engine::CaseSet<Case<I, T>>,
     prepared_store: &PreparedStore<RunProblem<A, I, T>>,

@@ -72,6 +72,8 @@ Use `DSRs/crates/dsrs-leaven` as a DSRs-owned adapter to Leaven’s generic opti
 
 ### Why not `leaven-run` first
 
+> 2026-05-18 update: Leaven Option B (`docs/plans/leaven-run-dsrs-option-b-2026-05-17.md`) supersedes the string-first rationale below once that work lands. `leaven-run` now preserves typed `RunOutput<Out>` through `.score(...)` and explicitly renders to `OutputRecord` for durable evidence, reports, and GEPA reflection. DSRs may adapt `TypedMetric` through `.score(...)`; a `.metric(...)` helper remains deferred ergonomic sugar, not required infrastructure.
+
 Use a custom `Evaluator<P>` route before any `leaven-run` redesign because:
 
 1. `leaven-run` output lowering is text-first; DSRs metrics want typed module output and typed prediction context.

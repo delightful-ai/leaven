@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 use crate::result::RunCompatibilitySummary;
 
 const MANIFEST_FILE: &str = "compatibility.json";
-const MANIFEST_SCHEMA: &str = "leaven-run.compatibility.v1";
+const MANIFEST_SCHEMA: &str = "leaven-run.compatibility.v3";
 const CACHE_PLACEHOLDER: &str = "cache:auto/eval-schema-pending/lm-schema-pending";
 const BUDGET_PLACEHOLDER: &str = "budget:ledger-compatibility-pending";
 
@@ -232,6 +232,14 @@ pub enum ResumeCompatibilityError {
         /// Live runtime fingerprint.
         live: RuntimeFingerprint,
     },
+    /// Manifest schema changed.
+    #[error("stored compatibility schema `{stored}` does not match live schema `{live}`")]
+    SchemaMismatch {
+        /// Stored schema.
+        stored: String,
+        /// Live schema.
+        live: String,
+    },
     /// Composed evaluator identity changed.
     #[error("stored evaluator fingerprint does not match live evaluator fingerprint")]
     EvaluatorFingerprintMismatch {
@@ -340,6 +348,12 @@ fn compare_manifests(
     stored: &RunCompatibilityManifest,
     live: &RunCompatibilityManifest,
 ) -> Result<(), ResumeCompatibilityError> {
+    if stored.schema != live.schema {
+        return Err(ResumeCompatibilityError::SchemaMismatch {
+            stored: stored.schema.clone(),
+            live: live.schema.clone(),
+        });
+    }
     if stored.dataset != live.dataset {
         return Err(ResumeCompatibilityError::DatasetFingerprintMismatch {
             stored: Box::new(stored.dataset.clone()),

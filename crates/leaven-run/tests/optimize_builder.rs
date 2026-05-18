@@ -40,11 +40,12 @@ trait TestRuntimeFingerprints {
     fn test_runtime_fingerprints(self) -> Self;
 }
 
-impl<A, I, T, O> TestRuntimeFingerprints for OptimizeBuilder<A, I, T, O>
+impl<A, I, T, O, Out> TestRuntimeFingerprints for OptimizeBuilder<A, I, T, O, Out>
 where
     A: Artifact,
     I: Clone + Send + Sync + 'static,
     T: Clone + Send + Sync + 'static,
+    Out: Clone + Send + Sync + 'static,
 {
     fn test_runtime_fingerprints(self) -> Self {
         self.runner_fingerprint(TEST_RUNNER_FINGERPRINT)
@@ -216,7 +217,7 @@ fn run_builder_run_dir_writes_discoverable_durable_artifacts() {
         .compatibility
         .as_ref()
         .expect("durable run reports compatibility summary");
-    assert_eq!(compatibility.schema, "leaven-run.compatibility.v1");
+    assert_eq!(compatibility.schema, "leaven-run.compatibility.v3");
     assert_eq!(compatibility.run_kind, "leaven-run.optimize");
     assert_eq!(compatibility.lm_role_count, 0);
     assert_eq!(
@@ -436,6 +437,68 @@ fn run_builder_run_dir_refuses_missing_or_malformed_compatibility_manifest_on_re
         );
         cleanup_path(&run_dir);
     }
+}
+
+#[test]
+fn run_builder_run_dir_refuses_older_compatibility_schema_before_runtime_work() {
+    let run_dir = temp_run_dir("old-compatibility-schema");
+    block_on(
+        optimize(TextArtifact(40))
+            .train_inputs(vec![TextCase(2)])
+            .runner(|artifact, case| async move { text_runner(&artifact, &case) })
+            .score(text_score)
+            .using(ResumeOnce::new(Arc::new(AtomicUsize::new(0))))
+            .budget(Budget::metric_calls(1))
+            .run_dir(&run_dir)
+            .test_runtime_fingerprints()
+            .run(),
+    )
+    .unwrap();
+
+    let path = run_dir.join("compatibility.json");
+    let mut manifest: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    manifest["schema"] = serde_json::json!("leaven-run.compatibility.v2");
+    std::fs::write(&path, serde_json::to_vec_pretty(&manifest).unwrap()).unwrap();
+
+    let runner_calls = Arc::new(AtomicUsize::new(0));
+    let scorer_calls = Arc::new(AtomicUsize::new(0));
+    let error = block_on(
+        optimize(TextArtifact(40))
+            .train_inputs(vec![TextCase(2)])
+            .runner({
+                let runner_calls = Arc::clone(&runner_calls);
+                move |artifact, case| {
+                    runner_calls.fetch_add(1, Ordering::SeqCst);
+                    async move { text_runner(&artifact, &case) }
+                }
+            })
+            .score({
+                let scorer_calls = Arc::clone(&scorer_calls);
+                move |ctx| {
+                    scorer_calls.fetch_add(1, Ordering::SeqCst);
+                    text_score(ctx)
+                }
+            })
+            .using(ResumeOnce::new(Arc::new(AtomicUsize::new(0))))
+            .budget(Budget::metric_calls(1))
+            .run_dir(&run_dir)
+            .test_runtime_fingerprints()
+            .run(),
+    )
+    .unwrap_err();
+
+    assert!(
+        matches!(
+            error,
+            OptimizeError::ResumeCompatibility(ref source)
+                if matches!(source.as_ref(), ResumeCompatibilityError::SchemaMismatch { .. })
+        ),
+        "older compatibility schemas are hard refusals, got {error:?}"
+    );
+    assert_eq!(runner_calls.load(Ordering::SeqCst), 0);
+    assert_eq!(scorer_calls.load(Ordering::SeqCst), 0);
+    cleanup_path(&run_dir);
 }
 
 #[test]
@@ -690,6 +753,40 @@ fn run_builder_refuses_scorer_fingerprint_mismatch_before_scorer_call() {
 }
 
 #[test]
+fn run_builder_preserves_predeclared_scorer_fingerprint_across_runner_transition() {
+    let run_dir = temp_run_dir("predeclared-scorer-fingerprint");
+    let result = block_on(
+        optimize(TextArtifact(40))
+            .train_inputs(vec![TextCase(2)])
+            .scorer_fingerprint(TEST_SCORER_FINGERPRINT)
+            .runner(|artifact, case| async move { text_runner(&artifact, &case) })
+            .score(text_score)
+            .using(SeedBest::default())
+            .budget(Budget::metric_calls(1))
+            .run_dir(&run_dir)
+            .runner_fingerprint(TEST_RUNNER_FINGERPRINT)
+            .run(),
+    )
+    .unwrap();
+
+    assert!(result.best().is_some());
+    cleanup_path(&run_dir);
+}
+
+#[test]
+#[should_panic(expected = "runner after score")]
+fn run_builder_refuses_runner_after_score_instead_of_silently_dropping_scorer() {
+    // `.score` first against the default `Out = ()`; `.runner` then attempts
+    // to switch `Out`, which would silently drop the typed scorer.
+    let _builder = optimize(TextArtifact(40))
+        .train_inputs(vec![TextCase(2)])
+        .score(|_ctx: ScoreContext<TextArtifact, TextCase>| async move {
+            Ok(Score::new(0.0, "ok").with_text_output(""))
+        })
+        .runner(|artifact, case| async move { text_runner(&artifact, &case) });
+}
+
+#[test]
 fn run_builder_refuses_case_content_or_split_identity_mismatch() {
     let run_dir = temp_run_dir("resume-case-mismatch");
     block_on(
@@ -701,13 +798,15 @@ fn run_builder_refuses_case_content_or_split_identity_mismatch() {
             )])
             .runner(|artifact, case| async move { text_runner(&artifact, &case) })
             .score(
-                |ctx: ScoreContext<TextArtifact, TextCase, TextTarget>| async move {
+                |ctx: ScoreContext<TextArtifact, TextCase, TextTarget, String>| async move {
+                    let rendered = ctx.output.output.clone();
                     Ok(Score::new(
                         f64::from(u8::from(
-                            ctx.output.output == ctx.case.target().unwrap().0.to_string(),
+                            rendered == ctx.case.target().unwrap().0.to_string(),
                         )),
                         "ok",
-                    ))
+                    )
+                    .with_text_output(rendered))
                 },
             )
             .using(TargetSeedBest::default())
@@ -732,13 +831,15 @@ fn run_builder_refuses_case_content_or_split_identity_mismatch() {
             )])
             .runner(|artifact, case| async move { text_runner(&artifact, &case) })
             .score(
-                |ctx: ScoreContext<TextArtifact, TextCase, TextTarget>| async move {
+                |ctx: ScoreContext<TextArtifact, TextCase, TextTarget, String>| async move {
+                    let rendered = ctx.output.output.clone();
                     Ok(Score::new(
                         f64::from(u8::from(
-                            ctx.output.output == ctx.case.target().unwrap().0.to_string(),
+                            rendered == ctx.case.target().unwrap().0.to_string(),
                         )),
                         "ok",
-                    ))
+                    )
+                    .with_text_output(rendered))
                 },
             )
             .using(TargetSeedBest::default())
@@ -841,6 +942,48 @@ fn run_builder_missing_scorer_fingerprint_refuses_durable_before_runner_call() {
     ));
     assert_eq!(runner_calls.load(Ordering::SeqCst), 0);
     cleanup_path(&run_dir);
+}
+
+#[test]
+fn run_builder_typed_output_uses_score_supplied_report_output() {
+    #[derive(Clone)]
+    struct TypedPrediction(i32);
+
+    let runner_calls = Arc::new(AtomicUsize::new(0));
+    let result = block_on(
+        optimize(TextArtifact(40))
+            .train_inputs(vec![TextCase(2)])
+            .runner({
+                let runner_calls = Arc::clone(&runner_calls);
+                move |artifact, case| {
+                    let runner_calls = Arc::clone(&runner_calls);
+                    async move {
+                        runner_calls.fetch_add(1, Ordering::SeqCst);
+                        RunOutput::typed(TypedPrediction(artifact.0 + case.input().0))
+                    }
+                }
+            })
+            .score(
+                |ctx: ScoreContext<
+                    TextArtifact,
+                    TextCase,
+                    leaven_eval::NoTarget,
+                    TypedPrediction,
+                >| async move {
+                    Ok(Score::new(f64::from(ctx.output.output.0), "typed")
+                        .with_text_output(format!("typed answer: {}", ctx.output.output.0)))
+                },
+            )
+            .using(SeedBest::default())
+            .budget(Budget::metric_calls(1))
+            .ephemeral()
+            .run(),
+    )
+    .unwrap();
+
+    assert_eq!(runner_calls.load(Ordering::SeqCst), 2);
+    assert_eq!(result.summary().baseline_train_score, Some(42.0));
+    assert_eq!(result.summary().optimized_train_score, Some(42.0));
 }
 
 #[test]
@@ -1397,15 +1540,17 @@ fn run_builder_preserves_case_envelope_ids_and_targets_score_only() {
             })
             .score({
                 let scorer_seen_target = Arc::clone(&scorer_seen_target);
-                move |ctx: ScoreContext<TextArtifact, TextCase, TextTarget>| {
+                move |ctx: ScoreContext<TextArtifact, TextCase, TextTarget, String>| {
                     let scorer_seen_target = Arc::clone(&scorer_seen_target);
                     async move {
                         let target = ctx.case.target().expect("target is scorer-visible");
                         *scorer_seen_target.lock().unwrap() = Some(target.0);
+                        let rendered = ctx.output.output.clone();
                         Ok(Score::new(
-                            f64::from(u8::from(ctx.output.output == target.0.to_string())),
+                            f64::from(u8::from(rendered == target.0.to_string())),
                             "target checked",
-                        ))
+                        )
+                        .with_text_output(rendered))
                     }
                 }
             })
@@ -2080,15 +2225,17 @@ impl Callback<RunProblem<TextArtifact, TextCase>> for RecordingCallback {
     }
 }
 
-fn text_runner(artifact: &TextArtifact, case: &RunCase<TextCase>) -> RunOutput {
+fn text_runner(artifact: &TextArtifact, case: &RunCase<TextCase>) -> RunOutput<String> {
     RunOutput::new((artifact.0 + case.input().0).to_string())
 }
 
 #[allow(clippy::needless_pass_by_value)]
-async fn text_score(ctx: ScoreContext<TextArtifact, TextCase>) -> Result<Score, ScoreError> {
+async fn text_score(
+    ctx: ScoreContext<TextArtifact, TextCase, leaven_eval::NoTarget, String>,
+) -> Result<Score, ScoreError> {
     let ScoreContext { case, output, .. } = ctx;
     let value = output.output.parse::<f64>().unwrap();
-    Ok(Score::new(value, format!("case {}", case.input().0)))
+    Ok(Score::new(value, format!("case {}", case.input().0)).with_text_output(output.output))
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]

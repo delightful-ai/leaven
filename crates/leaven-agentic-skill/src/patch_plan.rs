@@ -356,6 +356,7 @@ impl SkillPatchPlan {
     /// Returns [`SkillPatchPlanError`] when the plan is empty, targets an
     /// invalid parent state, has zero-support edits, or contains conflicting
     /// edits to the same file range.
+    #[allow(clippy::too_many_lines)]
     pub fn validate(
         parent: &SkillBank,
         edits: impl Into<Vec<SkillPatchPlanEdit>>,

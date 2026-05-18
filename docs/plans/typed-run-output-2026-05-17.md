@@ -1,5 +1,30 @@
 # Typed Run Output for Leaven Scoring: Plan
 
+> **Closeout note (2026-05-20).** Status: landed as **hard cutover**, slimmer
+> than this plan originally drafted. The Option-B renderer-with-fingerprint
+> seam was not adopted; instead the scorer always supplies reportable output
+> via `Score::with_output(...)` / `Score::with_text_output(...)`. The default
+> `Out` was set to `()` to match
+> `docs/specs/case_visibility_and_target_isolation.md` §6, with no String
+> auto-render and no `TypeId`-based defaulting. P8 AIME uses
+> `RunOutput<AimeRunOutput>` end-to-end as the concrete typed proof
+> (`examples/p8_aime_gepa/src/main.rs::run_solver`, `score_answer`). DSRs went
+> Option A (custom `Evaluator<P>`) for its own bridge and does not consume
+> this surface yet; see `dsrs-leaven-integration-2026-05-16.md` and the
+> companion `leaven-run-dsrs-option-b-2026-05-17.md` closeout.
+>
+> Shape deltas from `case_visibility_and_target_isolation.md` §6 that did
+> **not** land in this slice (deliberately deferred):
+>
+> - `ScoreContext.output` is owned `RunOutput<Out>`, not `Option<&'a Out>`.
+> - `run_error: Option<RunErrorView<'a, Out>>` is not exposed; scorers still
+>   short-circuit on `RunError` and do not see runner failures.
+> - Score history is not exposed.
+>
+> `crates/leaven-run/AGENTS.md` records these gaps as "still does not expose
+> the full spec target." Move to the borrowed/optional shape and add
+> score-on-error in a follow-up slice.
+
 ## Goal
 
 Make Leaven's ordinary `leaven-run::optimize(...)` scoring path preserve typed runner outputs through scoring, while still lowering generated outputs deliberately into text/blob evidence for reports and GEPA reflection. The immediate pressure is faithful DSPy-style GEPA: a typed module prediction must reach typed metric code intact instead of being flattened into `String` before scoring; DSRs supplies the Rust typed substrate that exposes this gap.

@@ -1,10 +1,46 @@
 # Leaven Run Option B for DSRs: Plan
 
+> **Closeout note (2026-05-20).** Status: landed as **hard cutover**, with the
+> shape simplified from the original plan. Items 1–2 (typed `RunOutput<Out>`
+> and `ScoreContext<..., Out>` threaded through builder/evaluator) landed.
+> Items 3–4 (explicit renderer seam, renderer fingerprint as a `RuntimeKind`
+> slot, renderer mismatch on resume) did **not** land — the implementation
+> review (2026-05-19) replaced them with a simpler contract: the scorer is the
+> rendering boundary via `Score::with_output(...)` /
+> `Score::with_text_output(...)`, missing output is a hard
+> `MissingReportableOutput` evaluation failure with runner+scorer cost
+> preserved, and there is no separate output-renderer identity in the
+> compatibility manifest. Renderer-fingerprint cache invalidation is therefore
+> not a current concern: any rendering change is part of scorer identity,
+> which is already in the compatibility manifest.
+>
+> The compatibility schema bumped to `v3` (the v1→v3 jump reflects iterative
+> work; v2 never reached `main`) and any older manifest is refused with
+> `ResumeCompatibilityError::SchemaMismatch` before runtime work.
+>
+> Default `Out` landed as `()` (not `String`) per
+> `docs/specs/case_visibility_and_target_isolation.md` §6. The String default
+> back-compat shim and the `TypeId`-based auto-render for `Out = String` were
+> removed. The "runner after score" type-changing ordering is a runtime panic
+> (`assert!`); a future type-state pass could promote it to a compile error.
+>
+> **DSRs reality check.** As of 2026-05-20 DSRs went Option A
+> (`DSRs/crates/dsrs-leaven/src/evaluator.rs` implements
+> `leaven_engine::Evaluator<DsrsLeavenProblem>` directly) and does not depend
+> on `leaven-run`. The typed-`Out` work in this plan is still valid as a
+> leaven-side spec slot (`case_visibility_and_target_isolation.md`); it is
+> just not consumed by DSRs today. If DSRs reconsiders, the `.score(...)`
+> path is now available.
+
 ## Goal
 
 Define the smallest Leaven-side improvement that lets DSRs build DSPy-like `Module` / `Predicted` / `TypedMetric` primitives on top of Leaven while using the ordinary `leaven-run::optimize(...).runner(...).score(...).using(Gepa...)` path. Leaven should not become DSPy or DSRs; it should preserve typed runner output through scoring, then deliberately lower that output into existing Leaven evidence/report/GEPA reflection records.
 
 ## Background
+
+### Supersession note
+
+- 2026-05-19 implementation review changed the lowering shape: the public builder does **not** expose an output-renderer API or renderer fingerprint axis. Typed runner output is scorer-local; `.score(...)` supplies reportable generated output through `Score::with_output(...)` / `Score::with_text_output(...)`, and ordinary `String` runner output still defaults into report output.
 
 ### Provenance
 

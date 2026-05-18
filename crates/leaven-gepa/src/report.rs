@@ -326,3 +326,93 @@ pub struct GepaReportHistoryEntry {
     /// Average train-screening score.
     pub score: f64,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::GepaProposalAttempt;
+
+    fn attempt(
+        child_score: Option<f64>,
+        accepted: Option<bool>,
+        admitted_index: Option<GepaCandidateIndex>,
+    ) -> GepaProposalAttempt {
+        GepaProposalAttempt {
+            attempt_index: 1,
+            iteration: 1,
+            parent_index: GepaCandidateIndex::new(0),
+            parent: CandidateId::new(),
+            parent_assessments: Vec::new(),
+            parent_cases: Vec::new(),
+            parent_score: 0.5,
+            part_label: None,
+            reflective_example_count: None,
+            child: Some(CandidateId::new()),
+            child_assessments: Vec::new(),
+            child_cases: Vec::new(),
+            child_score,
+            accepted,
+            admitted_index,
+            skip_reason: None,
+        }
+    }
+
+    #[test]
+    fn default_report_profile_is_reference_profile() {
+        let report = GepaReport::default();
+
+        assert_eq!(report.profile.label, "reference");
+        assert_eq!(report.profile.train_minibatch_size, Some(3));
+        assert_eq!(report.profile.proposal_count, 1);
+        assert_eq!(report.profile.proposal_mode, "serial");
+        assert_eq!(report.profile.validation_policy, "full-validation");
+        assert_eq!(
+            report.profile.certification_mode,
+            "full-validation-before-admission"
+        );
+        assert!(report.profile.skip_perfect_score);
+        assert_eq!(report.profile.perfect_score, "1");
+    }
+
+    #[test]
+    fn quality_summary_counts_regression_rejection_and_unknown_validation() {
+        let parent = GepaCandidateIndex::new(0);
+        let child = GepaCandidateIndex::new(1);
+        let candidates = vec![
+            GepaReportCandidate {
+                index: parent,
+                candidate: CandidateId::new(),
+                parents: Vec::new(),
+                discovery_metric_calls: 0,
+                validation_score: Some(0.8),
+                validation_rows: Vec::new(),
+                validation_subscores: Vec::new(),
+            },
+            GepaReportCandidate {
+                index: child,
+                candidate: CandidateId::new(),
+                parents: vec![parent],
+                discovery_metric_calls: 1,
+                validation_score: None,
+                validation_rows: Vec::new(),
+                validation_subscores: Vec::new(),
+            },
+        ];
+        let attempts = vec![
+            attempt(Some(0.25), Some(false), None),
+            attempt(Some(0.75), Some(true), Some(child)),
+            attempt(None, None, None),
+        ];
+
+        let summary = GepaReportQualitySummary::from_report_rows(&attempts, &candidates);
+
+        assert_eq!(summary.proposal_attempt_count, 3);
+        assert_eq!(summary.screened_count, 2);
+        assert_eq!(summary.screened_train_improved_count, 1);
+        assert_eq!(summary.screened_train_regressed_count, 1);
+        assert_eq!(summary.rejected_count, 1);
+        assert_eq!(summary.accepted_count, 1);
+        assert_eq!(summary.admitted_count, 1);
+        assert_eq!(summary.accepted_validation_unknown_count, 1);
+    }
+}
