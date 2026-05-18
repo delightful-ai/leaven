@@ -1,7 +1,7 @@
 # GEPA Parity Working Ledger
 
 Status: active.
-Updated: 2026-05-18T09:06:44Z.
+Updated: 2026-05-18T09:09:09Z.
 
 ## Authority
 
@@ -101,6 +101,36 @@ records. Remaining prompt-surface deltas are not P8 blockers: upstream image
 side-info returns multimodal messages, while Leaven currently only represents
 text/mapping/list side-info; DSPy-default trace rendering remains a separate
 non-default parity row.
+
+## Current Audit-Wave Disposition
+
+2026-05-18 verifier wave disposition against the current tree:
+
+- true blocker: the completed live report
+  `.leaven/release-runs/p8-aime-gepa-20260518-043717/reports/p8-aime.json`
+  remains stale proof and result-quality gap evidence only. It does not prove
+  current report schema, zero durable provider failures, or "as good as GEPA"
+  result quality because it kept `best_index=0` and `baseline == optimized`;
+- true blocker: the current in-flight JSON-fallback run below must finish and
+  emit reports before its profile/model/dataset/cache/budget/provider-failure
+  and result fields can be used as proof;
+- already fixed in current code: P8 role fingerprints include the actual
+  `OpenAiLm::fingerprint()` for timeout/base-URL/retry/provider runtime
+  compatibility, while cache replay controls are intentionally ignored by the
+  role identity. The focused proof is
+  `p8_role_fingerprints_include_observed_openai_provider_runtime` plus
+  `p8_role_fingerprints_ignore_lm_cache_replay_controls`;
+- already fixed in current code: non-reference no-validation train acceptance
+  does not fill `GepaProposalAttempt.admitted_index`; `accept_child` only sets
+  it when accepted-child validation returns a GEPA candidate index. The focused
+  proof is `train_accepted_child_without_validation_is_not_reference_admitted`,
+  and `MinibatchThenValidation` is not in `leaven_gepa::prelude`;
+- already fixed in current code: malformed solver output after DSPy
+  ChatAdapter and JSONAdapter parsing records `AnswerParse`, and LM cache
+  telemetry separates required cache-only misses, read errors, and write
+  errors. The focused proofs are
+  `aime_solver_records_answer_parse_failure_after_json_fallback_parse_failure`
+  and `lm_cache_failures_distinguish_required_miss_read_and_write_errors`.
 
 ## Live P8 Run Ledger
 
