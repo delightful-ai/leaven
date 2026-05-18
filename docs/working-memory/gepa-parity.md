@@ -153,6 +153,10 @@ Current speed stance:
   validation outcomes versus each parent. This is report-only diagnostic state
   for spotting train-minibatch overfit; it must not influence parent selection,
   acceptance, admission, or final GEPA result choice.
+- P8 `gepa_report` now includes `reflection_summary`: attempted/observed
+  reflection counts, visible prompt duplicate count, and request/assistant/
+  proposed-text character summaries. This is report-only diagnosis for the
+  current speed/quality question; it must not influence GEPA search behavior.
 - Level 2 GEPA report access now has an umbrella convenience route:
   `leaven::gepa::GepaOptimizedExt::gepa_report()`. The method is a facade over
   generic `Optimized::optimizer_report::<GepaReport>()`, lives under

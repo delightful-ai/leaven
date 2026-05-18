@@ -1533,6 +1533,7 @@ fn p8_gepa_report_json(
         "accepted_count": accepted_count,
         "accepted_unadmitted_count": accepted_unadmitted_count,
         "quality_summary": &report.quality_summary,
+        "reflection_summary": p8_gepa_reflection_summary_json(report, reflection_requests),
         "skip_perfect_score": report.skip_perfect_score,
         "perfect_score": report.perfect_score,
         "candidates": report.candidates.iter().map(|candidate| serde_json::json!({
@@ -1603,6 +1604,81 @@ fn p8_gepa_report_json(
             }))
         }).collect::<Vec<_>>(),
         "events": report.events.iter().map(p8_gepa_event_json).collect::<Vec<_>>(),
+    })
+}
+
+fn p8_gepa_reflection_summary_json(
+    report: &GepaReport,
+    reflection_requests: &[AimeLmRequestRecord],
+) -> serde_json::Value {
+    let attempted_count = report
+        .proposal_attempts
+        .iter()
+        .filter(|attempt| attempt.skip_reason.is_none())
+        .count();
+    let visible_prompts = reflection_requests
+        .iter()
+        .map(p8_lm_visible_prompt_text)
+        .collect::<Vec<_>>();
+    let request_chars = visible_prompts
+        .iter()
+        .map(|prompt| prompt.chars().count())
+        .collect::<Vec<_>>();
+    let assistant_chars = reflection_requests
+        .iter()
+        .filter_map(|request| request.response.as_ref())
+        .map(|response| response.assistant.content.chars().count())
+        .collect::<Vec<_>>();
+    let proposed_text_chars = reflection_requests
+        .iter()
+        .filter_map(|request| request.response.as_ref())
+        .map(|response| p8_extract_reflection_replacement(&response.assistant.content))
+        .map(|text| text.chars().count())
+        .collect::<Vec<_>>();
+    serde_json::json!({
+        "attempted_count": attempted_count,
+        "observed_request_count": reflection_requests.len(),
+        "observed_response_count": assistant_chars.len(),
+        "visible_prompt_unique_count": unique_string_count(&visible_prompts),
+        "visible_prompt_duplicate_count": duplicate_string_count(&visible_prompts),
+        "request_chars": p8_len_summary_json(&request_chars),
+        "assistant_chars": p8_len_summary_json(&assistant_chars),
+        "proposed_text_chars": p8_len_summary_json(&proposed_text_chars),
+    })
+}
+
+fn p8_lm_visible_prompt_text(request: &AimeLmRequestRecord) -> String {
+    request
+        .messages
+        .iter()
+        .map(|message| format!("{}:{}", message.role, message.content))
+        .collect::<Vec<_>>()
+        .join("\n\n")
+}
+
+fn unique_string_count(values: &[String]) -> usize {
+    values
+        .iter()
+        .collect::<std::collections::BTreeSet<_>>()
+        .len()
+}
+
+fn duplicate_string_count(values: &[String]) -> usize {
+    values.len().saturating_sub(unique_string_count(values))
+}
+
+fn p8_len_summary_json(lengths: &[usize]) -> serde_json::Value {
+    let count = lengths.len();
+    let sum = lengths.iter().sum::<usize>();
+    serde_json::json!({
+        "count": count,
+        "min": lengths.iter().min().copied(),
+        "max": lengths.iter().max().copied(),
+        "average": if count == 0 {
+            serde_json::Value::Null
+        } else {
+            serde_json::json!(sum as f64 / count as f64)
+        },
     })
 }
 
@@ -7591,6 +7667,38 @@ Provide the new parameter value within ``` blocks."
         assert_eq!(
             gepa_report["quality_summary"]["accepted_validation_improved_count"],
             1
+        );
+        assert_eq!(gepa_report["reflection_summary"]["attempted_count"], 1);
+        assert_eq!(
+            gepa_report["reflection_summary"]["observed_request_count"],
+            1
+        );
+        assert_eq!(
+            gepa_report["reflection_summary"]["observed_response_count"],
+            1
+        );
+        assert_eq!(
+            gepa_report["reflection_summary"]["visible_prompt_unique_count"],
+            1
+        );
+        assert_eq!(
+            gepa_report["reflection_summary"]["visible_prompt_duplicate_count"],
+            0
+        );
+        assert!(
+            gepa_report["reflection_summary"]["request_chars"]["average"]
+                .as_f64()
+                .is_some_and(|chars| chars > 0.0)
+        );
+        assert!(
+            gepa_report["reflection_summary"]["assistant_chars"]["average"]
+                .as_f64()
+                .is_some_and(|chars| chars > 0.0)
+        );
+        assert!(
+            gepa_report["reflection_summary"]["proposed_text_chars"]["average"]
+                .as_f64()
+                .is_some_and(|chars| chars > 0.0)
         );
         assert_eq!(
             gepa_report["skip_perfect_score"],
