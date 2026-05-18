@@ -707,6 +707,12 @@ The runner must preserve:
 
 The stable runner wrapper may ask the solver to return an answer field or parse
 a final answer from the raw text. That wrapper is not the optimized artifact.
+For the Rust-native DSPy profile, the first solver request must match
+`dspy.ChatAdapter` for `ChainOfThought(MathSolverSignature)`. If ChatAdapter
+parsing fails, the wrapper must mirror DSPy's public adapter call path by
+rerunning the same signature through `JSONAdapter` before treating the case as a
+solver parse failure. This fallback is runner/parser behavior, not a mutated
+prompt artifact.
 
 Required runner output:
 

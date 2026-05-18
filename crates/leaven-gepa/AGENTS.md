@@ -16,10 +16,11 @@ It composes core, surface, engine, evidence, population, render, and LM vocabula
   and admit validated candidates back into `GepaReferenceState`. Train
   population observation is still maintained as an internal adapter/ablation
   surface, not as reference parent selection truth.
-- Reference parent selection and epoch-shuffled minibatch sampling use GEPA's
-  upstream `random.Random(seed)` draw order. Keep the Python-compatible RNG
-  private to this crate; it is optimizer replay state, not a reusable Leaven
-  random facility.
+- Reference parent selection and epoch-shuffled minibatch sampling share GEPA's
+  upstream `random.Random(seed)` draw order. The Python-compatible RNG is
+  reachable through an opaque `#[doc(hidden)]` parameter type only because the
+  public `BatchSampler` extension hook needs to name it; it is optimizer replay
+  state, not an ordinary Leaven random facility.
 - Reflection remains single-part by default: select one surface part, build the
   reflective dataset once from the full parent row set via the configured
   `ReflectiveDatasetBuilder`, assemble one `ReflectRequest`, call a

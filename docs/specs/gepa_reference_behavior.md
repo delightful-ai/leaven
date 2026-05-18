@@ -1528,7 +1528,7 @@ of this spec remain the product target.
 | Merge | Core default off; DSPy default on | No real merge path in Leaven GEPA loop | Implement or disclose per profile |
 | Parallel proposals | Optimize-anything can run parallel proposals | Leaven evaluates cases in parallel, but proposals are serial | Not required for core parity; label if absent in optimize-anything parity |
 | Progress | Upstream callbacks cover candidate selection, minibatch, eval, reflection, accept/reject, validation, budget, state save | P8 progress callback maps generic engine events only | Add GEPA-specific events/callback summaries |
-| AIME solver | DSPy ChainOfThought answer field | P8 Rust solver locally renders the DSPy ChatAdapter ChainOfThought message shape and parses only the `answer` field | Keep local renderer tests pinned to upstream DSPy source; no DSPy runtime dependency is required for this Rust profile |
+| AIME solver | DSPy ChainOfThought answer field with ChatAdapter -> JSONAdapter fallback on adapter parse errors | P8 Rust solver locally renders the DSPy ChatAdapter ChainOfThought message shape, requires all ChatAdapter fields, and reruns through a JSONAdapter-shaped request before classifying a solver parse failure | Keep local renderer/fallback tests pinned to upstream DSPy source; no DSPy runtime dependency is required for this Rust profile |
 | AIME dataset | HF AIME split and MathArena test | P8 cache materialization is intended to match | Add parity test/report that prints source counts and split hash |
 
 ## 8. Systematic Fix Plan

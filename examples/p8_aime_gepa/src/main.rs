@@ -34,8 +34,8 @@ use leaven_gepa::{
     ReflectionRenderer,
 };
 use leaven_lm::{
-    Lm, LmError, LmId, LmRequest, LmResponse, Message, Messages, ReasoningEffort, Role,
-    SamplingOptions, TokenUsage,
+    JsonSchemaOutput, Lm, LmError, LmId, LmRequest, LmResponse, Message, Messages, OutputMode,
+    ReasoningEffort, Role, SamplingOptions, TokenUsage,
 };
 use leaven_lm_cache::{CachedLm, InMemoryLmCache, LmCachePolicy, SqliteLmCache};
 use leaven_lm_openai::{OpenAiConfig, OpenAiLm, OpenAiRetryPolicy, OpenAiThrottlePolicy};
@@ -2115,11 +2115,11 @@ impl AimeRoleReports {
                 cache_durable: config.solver.runtime.cache_backend.is_durable(),
                 max_concurrent_requests: config.solver.runtime.max_concurrent_requests,
                 request_timeout_seconds: config.solver.runtime.request_timeout_seconds,
-                output: "dspy-chain-of-thought",
-                parser: "dspy-chat-adapter-fields",
+                output: "dspy-chain-of-thought-with-json-fallback",
+                parser: "dspy-chat-adapter-fields-or-json-adapter",
                 prompt_contract: AimePromptContractReport {
-                    renderer: "dspy-chat-adapter-chain-of-thought",
-                    upstream: "dspy.ChatAdapter",
+                    renderer: "dspy-chat-adapter-chain-of-thought-with-json-fallback",
+                    upstream: "dspy.ChatAdapter->JSONAdapter",
                     request_shape_fingerprint: aime_solver_request_shape_fingerprint(),
                     request_example: aime_solver_request_example(&config.solver),
                 },
@@ -3829,6 +3829,43 @@ fn render_dspy_aime_chain_of_thought_request(
     AimeDspyChatRequest { system, user }
 }
 
+fn render_dspy_aime_json_adapter_request(instructions: &str, input: &str) -> AimeDspyChatRequest {
+    let dedented_instructions = dedent_dspy_instructions(instructions);
+    let objective = dedented_instructions
+        .lines()
+        .map(|line| format!("        {line}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let objective = if objective.is_empty() {
+        String::new()
+    } else {
+        format!("\n{objective}")
+    };
+    let system = format!(
+        "Your input fields are:\n1. `input` (str): The math problem to solve.\nYour output fields are:\n1. `reasoning` (str): \n2. `answer` (str): The final numerical answer.\nAll interactions will be structured in the following way, with the appropriate values filled in.\n\nInputs will have the following structure:\n[[ ## input ## ]]\n{{input}}\n\nOutputs will be a JSON object with the following fields.\n{{\n  \"reasoning\": \"{{reasoning}}\",\n  \"answer\": \"{{answer}}\"\n}}\nIn adhering to this structure, your objective is: {objective}"
+    );
+    let user = format!(
+        "[[ ## input ## ]]\n{input}\n\nRespond with a JSON object in the following order of fields: `reasoning`, then `answer`."
+    );
+    AimeDspyChatRequest { system, user }
+}
+
+fn dspy_aime_json_adapter_output_schema() -> OutputMode {
+    OutputMode::JsonSchema(JsonSchemaOutput {
+        name: "DSPyProgramOutputs".to_owned(),
+        strict: true,
+        schema: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "reasoning": { "type": "string" },
+                "answer": { "type": "string" }
+            },
+            "required": ["reasoning", "answer"],
+            "additionalProperties": false
+        }),
+    })
+}
+
 fn dedent_dspy_instructions(instructions: &str) -> String {
     let common_indent = instructions
         .lines()
@@ -3902,6 +3939,38 @@ fn parse_dspy_aime_chain_of_thought_response(raw: &str) -> Result<AimeRunOutput,
         .get("answer")
         .cloned()
         .ok_or_else(|| "missing DSPy `answer` field".to_owned())?;
+    Ok(AimeRunOutput {
+        answer,
+        reasoning,
+        raw: raw.to_owned(),
+    })
+}
+
+fn parse_dspy_aime_json_adapter_response(raw: &str) -> Result<AimeRunOutput, String> {
+    let value = serde_json::from_str::<serde_json::Value>(raw)
+        .or_else(|_| {
+            let start = raw.find('{').ok_or_else(|| {
+                serde_json::Error::io(std::io::Error::other("missing JSON object"))
+            })?;
+            let end = raw.rfind('}').ok_or_else(|| {
+                serde_json::Error::io(std::io::Error::other("missing JSON object"))
+            })?;
+            serde_json::from_str(&raw[start..=end])
+        })
+        .map_err(|source| format!("DSPy JSONAdapter response was not JSON: {source}"))?;
+    let object = value
+        .as_object()
+        .ok_or_else(|| "DSPy JSONAdapter response was not a JSON object".to_owned())?;
+    let reasoning = object
+        .get("reasoning")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| "missing DSPy JSONAdapter `reasoning` field".to_owned())?
+        .to_owned();
+    let answer = object
+        .get("answer")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| "missing DSPy JSONAdapter `answer` field".to_owned())?
+        .to_owned();
     Ok(AimeRunOutput {
         answer,
         reasoning,
@@ -4247,8 +4316,30 @@ async fn run_openai_solver<L>(
 where
     L: Lm,
 {
-    let dspy_request =
-        render_dspy_aime_chain_of_thought_request(&prompt.system, &case.input().problem);
+    let (output, cost) = complete_openai_solver_output(
+        &solver,
+        &prompt.system,
+        &case.input().problem,
+        solver_config,
+    )
+    .await?;
+    side_infos.insert(prompt, case.id(), output.clone());
+    Ok(RunOutput::new(output.answer)
+        .with_trace(format!("reasoning: {}", output.reasoning))
+        .with_trace(format!("raw_response: {}", output.raw))
+        .with_cost(cost))
+}
+
+async fn complete_openai_solver_output<L>(
+    solver: &AimeInstrumentedLm<L>,
+    prompt_system: &str,
+    problem: &str,
+    solver_config: &AimeSolverConfig,
+) -> Result<(AimeRunOutput, Cost), RunError>
+where
+    L: Lm,
+{
+    let dspy_request = render_dspy_aime_chain_of_thought_request(prompt_system, problem);
     let request = LmRequest::new(
         solver_config.model.clone(),
         Messages::new()
@@ -4261,12 +4352,39 @@ where
         .await
         .map_err(|source| RunError::with_source("AIME solver LM failed", source))?;
     let raw = metered.value.assistant.content().trim().to_owned();
-    let output = parse_openai_solver_response(&solver, &raw, &metered.cost)?;
-    side_infos.insert(prompt, case.id(), output.clone());
-    Ok(RunOutput::new(output.answer)
-        .with_trace(format!("reasoning: {}", output.reasoning))
-        .with_trace(format!("raw_response: {}", output.raw))
-        .with_cost(metered.cost))
+    let (output, cost) = match parse_dspy_aime_chain_of_thought_response(&raw) {
+        Ok(output) => (output, metered.cost),
+        Err(chat_parse_error) => {
+            let dspy_request = render_dspy_aime_json_adapter_request(prompt_system, problem);
+            let fallback_request = LmRequest::new(
+                solver_config.model.clone(),
+                Messages::new()
+                    .with_system(dspy_request.system)
+                    .with_user(dspy_request.user),
+            )
+            .with_sampling(solver_config.sampling.clone())
+            .with_output(dspy_aime_json_adapter_output_schema());
+            let fallback = solver.complete(fallback_request).await.map_err(|source| {
+                RunError::with_source("AIME solver JSONAdapter fallback LM failed", source)
+                    .with_trace(chat_parse_error.clone())
+                    .with_cost(metered.cost.clone())
+            })?;
+            let fallback_raw = fallback.value.assistant.content().trim().to_owned();
+            match parse_dspy_aime_json_adapter_response(&fallback_raw) {
+                Ok(output) => (output, metered.cost.combine(&fallback.cost)),
+                Err(json_parse_error) => {
+                    solver.record_failure_kind(AimeProviderFailureKind::AnswerParse);
+                    return Err(RunError::new(
+                        "AIME solver response did not match DSPy ChatAdapter or JSONAdapter fields",
+                    )
+                    .with_trace(chat_parse_error)
+                    .with_trace(json_parse_error)
+                    .with_cost(metered.cost.combine(&fallback.cost)));
+                }
+            }
+        }
+    };
+    Ok((output, cost))
 }
 
 fn parse_openai_solver_response<L>(
@@ -4291,7 +4409,7 @@ fn aime_runner_fingerprint(
     solver_lm_fingerprint: Option<Fingerprint>,
 ) -> Fingerprint {
     let mut builder = FingerprintBuilder::new();
-    builder.update(b"p8-aime-runner.dspy-chain-of-thought.v1");
+    builder.update(b"p8-aime-runner.dspy-chain-of-thought-json-fallback.v2");
     builder.update([u8::from(config.live)]);
     builder.update(config.model.as_bytes());
     builder.update(
@@ -4310,14 +4428,25 @@ fn aime_runner_fingerprint(
 
 fn aime_solver_request_shape_fingerprint() -> Fingerprint {
     let request = render_dspy_aime_chain_of_thought_request("<instructions>", "<input>");
+    let fallback = render_dspy_aime_json_adapter_request("<instructions>", "<input>");
     let mut builder = FingerprintBuilder::new();
-    builder.update(b"p8-aime-solver-request-shape.v1");
-    builder.update(b"upstream:dspy.ChatAdapter");
+    builder.update(b"p8-aime-solver-request-shape.v2");
+    builder.update(b"upstream:dspy.ChatAdapter->JSONAdapter");
     builder.update(b"adapter:dspy-chain-of-thought");
     builder.update(b"system");
     builder.update(request.system.as_bytes());
     builder.update(b"user");
     builder.update(request.user.as_bytes());
+    builder.update(b"fallback-adapter:dspy-json-adapter");
+    builder.update(b"fallback-system");
+    builder.update(fallback.system.as_bytes());
+    builder.update(b"fallback-user");
+    builder.update(fallback.user.as_bytes());
+    builder.update(b"fallback-output");
+    builder.update(
+        serde_json::to_vec(&dspy_aime_json_adapter_output_schema())
+            .expect("DSPy JSONAdapter output schema serializes"),
+    );
     builder.finish()
 }
 
@@ -5089,6 +5218,23 @@ Provide the new parameter value within ``` blocks.";
     }
 
     #[test]
+    fn aime_solver_json_fallback_request_matches_dspy_json_adapter() {
+        let request = render_dspy_aime_json_adapter_request(
+            "Solve the math problem carefully.",
+            "What is 19 + 23?",
+        );
+
+        assert_eq!(
+            request.system,
+            "Your input fields are:\n1. `input` (str): The math problem to solve.\nYour output fields are:\n1. `reasoning` (str): \n2. `answer` (str): The final numerical answer.\nAll interactions will be structured in the following way, with the appropriate values filled in.\n\nInputs will have the following structure:\n[[ ## input ## ]]\n{input}\n\nOutputs will be a JSON object with the following fields.\n{\n  \"reasoning\": \"{reasoning}\",\n  \"answer\": \"{answer}\"\n}\nIn adhering to this structure, your objective is: \n        Solve the math problem carefully."
+        );
+        assert_eq!(
+            request.user,
+            "[[ ## input ## ]]\nWhat is 19 + 23?\n\nRespond with a JSON object in the following order of fields: `reasoning`, then `answer`."
+        );
+    }
+
+    #[test]
     fn aime_solver_parser_preserves_reasoning_and_scores_only_answer_field() {
         let parsed = parse_dspy_aime_chain_of_thought_response(
             "[[ ## reasoning ## ]]\n19 + 23 = 42.\n\n[[ ## answer ## ]]\n42\n\n[[ ## completed ## ]]",
@@ -5119,6 +5265,80 @@ Provide the new parameter value within ``` blocks.";
         .expect_err("DSPy chat adapter requires the ChainOfThought reasoning field");
 
         assert_eq!(error, "missing DSPy `reasoning` field");
+    }
+
+    #[test]
+    fn aime_solver_falls_back_to_json_adapter_after_chat_parse_failure() {
+        #[derive(Clone, Debug)]
+        struct ChatThenJsonLm {
+            requests: Arc<Mutex<Vec<LmRequest>>>,
+        }
+
+        impl Lm for ChatThenJsonLm {
+            fn id(&self) -> LmId {
+                LmId::from("chat-then-json")
+            }
+
+            fn fingerprint(&self) -> Fingerprint {
+                Fingerprint::from_bytes([19; 32])
+            }
+
+            async fn complete(&self, request: LmRequest) -> Result<Metered<LmResponse>, LmError> {
+                let response = if request.output == OutputMode::Text {
+                    "[[ ## answer ## ]]\n42\n\n[[ ## completed ## ]]"
+                } else {
+                    "{\"reasoning\":\"19 + 23 = 42.\",\"answer\":\"42\"}"
+                };
+                self.requests
+                    .lock()
+                    .expect("request log lock")
+                    .push(request);
+                let response = LmResponse::new(
+                    Message::assistant(response),
+                    TokenUsage {
+                        input_tokens: 1,
+                        cached_input_tokens: 0,
+                        output_tokens: 1,
+                        reasoning_tokens: 0,
+                    },
+                )
+                .expect("assistant response is valid");
+                Ok(Metered::new(response, Cost::llm_calls(1)))
+            }
+        }
+
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let lm = AimeInstrumentedLm::new(
+            ChatThenJsonLm {
+                requests: Arc::clone(&requests),
+            },
+            AimeLmTelemetry::new(LmCachePolicy::Never),
+        );
+        let config = AimeRunConfig::gepa_aime();
+
+        let (output, cost) = block_on(complete_openai_solver_output(
+            &lm,
+            "Solve the math problem carefully.",
+            "What is 19 + 23?",
+            &config.solver,
+        ))
+        .expect("JSONAdapter fallback recovers the output");
+
+        assert_eq!(output.reasoning, "19 + 23 = 42.");
+        assert_eq!(output.answer, "42");
+        assert_eq!(cost.llm_calls, 2);
+        let requests = requests.lock().expect("request log lock");
+        assert_eq!(requests.len(), 2);
+        assert_eq!(requests[0].output, OutputMode::Text);
+        assert!(matches!(requests[1].output, OutputMode::JsonSchema(_)));
+        assert!(
+            requests[1].messages.iter().any(|message| {
+                message
+                    .content()
+                    .contains("Respond with a JSON object in the following order of fields")
+            }),
+            "fallback request should use DSPy JSONAdapter user instructions"
+        );
     }
 
     #[test]
@@ -5771,7 +5991,7 @@ Provide the new parameter value within ``` blocks."
         );
         assert!(lines.iter().any(|line| {
             line.starts_with(
-                "lm_role_prompt_contract=solver renderer=dspy-chat-adapter-chain-of-thought upstream=dspy.ChatAdapter request_shape_fingerprint=",
+                "lm_role_prompt_contract=solver renderer=dspy-chat-adapter-chain-of-thought-with-json-fallback upstream=dspy.ChatAdapter->JSONAdapter request_shape_fingerprint=",
             )
         }));
         assert!(lines.iter().any(|line| {
@@ -5785,7 +6005,7 @@ Provide the new parameter value within ``` blocks."
             )
         }));
         assert!(lines.iter().any(|line| {
-            line == "lm_role_runtime=solver cache_policy=read-write cache_backend=sqlite cache_durable=true max_concurrent_requests=7 request_timeout_seconds=600 output=dspy-chain-of-thought parser=dspy-chat-adapter-fields"
+            line == "lm_role_runtime=solver cache_policy=read-write cache_backend=sqlite cache_durable=true max_concurrent_requests=7 request_timeout_seconds=600 output=dspy-chain-of-thought-with-json-fallback parser=dspy-chat-adapter-fields-or-json-adapter"
         }));
         assert!(lines.iter().any(|line| {
             line.starts_with(
@@ -5909,7 +6129,7 @@ Provide the new parameter value within ``` blocks."
         assert_eq!(report["lm_roles"][1]["role"], "reflection");
         assert_eq!(
             report["lm_roles"][0]["prompt_contract"]["renderer"],
-            "dspy-chat-adapter-chain-of-thought"
+            "dspy-chat-adapter-chain-of-thought-with-json-fallback"
         );
         assert_eq!(
             report["lm_roles"][1]["prompt_contract"]["renderer"],

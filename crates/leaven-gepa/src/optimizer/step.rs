@@ -109,7 +109,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             .case_ids;
         let evaluation_set = self
             .batch_sampler
-            .sample_train(&self.train_partition, &train_cases)
+            .sample_train_with_gepa_rng(&self.train_partition, &train_cases, &mut self.rng)
             .map_err(|error| {
                 OptimizerError::with_source("GEPA could not sample train minibatch", error)
             })?;
@@ -155,7 +155,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
     {
         let selected = self
             .reference_state
-            .select_by_validation_frontier_frequency()
+            .select_by_validation_frontier_frequency_with_rng(&mut self.rng)
             .or_else(|| {
                 let parent = self.select_candidate(graph).unwrap_or(seed);
                 self.reference_state

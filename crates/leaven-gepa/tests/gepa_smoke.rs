@@ -1150,6 +1150,62 @@ fn gepa_batch_sampler_builder_uses_custom_minibatches() {
 }
 
 #[test]
+fn reference_profile_shares_rng_between_parent_selection_and_epoch_sampler() {
+    block_on(async {
+        let seen_sets = Arc::new(Mutex::new(Vec::new()));
+        let case_set = CaseSet::new(vec![(), (), (), (), (), (), ()])
+            .with_partition(
+                leaven_core::PartitionId::from("TRAIN"),
+                vec![
+                    leaven_kernel::CaseId::new(0),
+                    leaven_kernel::CaseId::new(1),
+                    leaven_kernel::CaseId::new(2),
+                    leaven_kernel::CaseId::new(3),
+                ],
+            )
+            .with_partition(
+                leaven_core::PartitionId::from("VALIDATION"),
+                vec![
+                    leaven_kernel::CaseId::new(4),
+                    leaven_kernel::CaseId::new(5),
+                    leaven_kernel::CaseId::new(6),
+                ],
+            );
+        let store = InlineEvidenceStore::<ScalarEvidence>::new("inline");
+        let mut engine = Engine::<SamplingProblem>::builder()
+            .evaluator(RecordingCaseSetEvaluator {
+                seen_sets: seen_sets.clone(),
+            })
+            .build();
+        engine
+            .insert_seed(
+                PartMapArtifact(BTreeMap::from([("answer".to_owned(), "draft".to_owned())])),
+                0,
+            )
+            .unwrap();
+        let mut gepa = Gepa::new(
+            PartMapSurface,
+            ParetoFrontier::by_case().build(),
+            FixedSurfaceEdit::new("improved".to_owned()),
+        )
+        .reflective_dataset(OneReflectiveExample)
+        .batch_sampler(EpochShuffled::new(2))
+        .validation_policy(FullValidation)
+        .max_iterations(1);
+
+        engine.run(&mut gepa, &case_set, &store).await.unwrap();
+
+        let seen_sets = seen_sets.lock().expect("seen sets lock").clone();
+        assert_eq!(
+            seen_sets[1],
+            vec![leaven_kernel::CaseId::new(2), leaven_kernel::CaseId::new(1)],
+            "parent selection consumes one upstream RNG draw before epoch shuffle"
+        );
+        assert_eq!(seen_sets[2], seen_sets[1]);
+    });
+}
+
+#[test]
 fn gepa_proposal_count_applies_multiple_reflections_in_one_iteration() {
     block_on(async {
         let case_set = train_case_set();

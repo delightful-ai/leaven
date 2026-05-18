@@ -35,13 +35,13 @@ use crate::{
     report::GepaReportInput,
     validation::{
         BatchSampler, CheckpointBatchSampler, CheckpointValidationPolicy, EpochShuffled,
-        FullValidation, ValidationPolicy,
+        FullValidation, GepaRandom, ValidationPolicy,
     },
 };
 
 const GEPA_OPTIMIZER_FINGERPRINT: Fingerprint = Fingerprint::from_bytes([8; 32]);
 const DEFAULT_MAX_ITERATIONS: usize = 500;
-const GEPA_CHECKPOINT_SCHEMA: Fingerprint = Fingerprint::from_bytes([11; 32]);
+const GEPA_CHECKPOINT_SCHEMA: Fingerprint = Fingerprint::from_bytes([12; 32]);
 const DEFAULT_PERFECT_SCORE: f64 = 1.0;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -113,6 +113,7 @@ pub struct Gepa<
     candidate_history: Vec<GepaCandidateHistoryEntry>,
     proposal_attempts: Vec<GepaProposalAttempt>,
     reference_state: GepaReferenceState,
+    rng: GepaRandom,
     events: Vec<GepaEventSummary>,
     event_sink: Option<GepaEventSink>,
     report_sink: Option<GepaReportSink>,
@@ -248,6 +249,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             candidate_history: Vec::new(),
             proposal_attempts: Vec::new(),
             reference_state: GepaReferenceState::default(),
+            rng: GepaRandom::default(),
             events: Vec::new(),
             event_sink: None,
             report_sink: None,
@@ -306,6 +308,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             candidate_history: self.candidate_history,
             proposal_attempts: self.proposal_attempts,
             reference_state: self.reference_state,
+            rng: self.rng,
             events: self.events,
             event_sink: self.event_sink,
             report_sink: self.report_sink,
@@ -340,6 +343,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             candidate_history: self.candidate_history,
             proposal_attempts: self.proposal_attempts,
             reference_state: self.reference_state,
+            rng: self.rng,
             events: self.events,
             event_sink: self.event_sink,
             report_sink: self.report_sink,
@@ -378,6 +382,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             candidate_history: self.candidate_history,
             proposal_attempts: self.proposal_attempts,
             reference_state: self.reference_state,
+            rng: self.rng,
             events: self.events,
             event_sink: self.event_sink,
             report_sink: self.report_sink,

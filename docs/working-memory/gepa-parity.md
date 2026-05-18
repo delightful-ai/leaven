@@ -222,15 +222,23 @@ Prompt-audit finding:
   GEPA `max_metric_calls`: started evaluator batches/full validations can
   finish, and the run stops before the next optimizer step. Non-metric budget
   axes remain hard ledger caps.
-- GEPA sampler and validation-frontier parent selection now use a private
+- GEPA sampler and validation-frontier parent selection now use a shared
   Python `random.Random`-compatible MT19937 implementation for the needed
-  `randbelow`/`shuffle` paths. This removes the old splitmix delta for
-  default seed 0 and explicit `.with_seed(...)` sampler tests.
+  `randbelow`/`shuffle` paths. This removes the old splitmix delta and the old
+  separate-selector/sampler RNG delta for the reference profile. The public
+  sampler hook names only an opaque doc-hidden `GepaRandom`; explicit
+  `EpochShuffled::with_seed(...)` still uses sampler-local custom RNG state.
 - P8 live-role telemetry now counts malformed DSPy solver output as
   `answer_parse` even when the LM call itself succeeded. LM response-cache
   failures are split into cache-only required misses, read errors, write
   errors, and other cache errors, so cache-only replay reports do not imply a
   failed cache write.
+- Live AIME data showed GPT-4.1-mini can answer a DSPy ChainOfThought request
+  with plain markdown reasoning followed by `[[ ## answer ## ]]`, omitting the
+  `[[ ## reasoning ## ]]` header. Upstream `dspy.ChatAdapter` still treats that
+  as a parse failure, but its public call path catches adapter errors and
+  reruns through `JSONAdapter`. The P8 solver now mirrors that fallback instead
+  of aborting the GEPA evaluation at the first ChatAdapter parse error.
 - post-run P8 proposal attempts now cross-link accepted children back to
   `child_index` and `child_validation_score`, so an operator can inspect why
   an accepted train-screening child did or did not become validation-best

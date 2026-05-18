@@ -6,7 +6,7 @@ use leaven_evidence::{CasewiseEvidence, ScalarEvidence};
 use leaven_kernel::{AssessmentId, CandidateId, CaseId};
 use serde::{Deserialize, Serialize};
 
-use crate::python_random::PythonRandom;
+use crate::validation::GepaRandom;
 
 /// Stable GEPA candidate index in discovery order.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
@@ -85,7 +85,7 @@ pub struct GepaReferenceState {
     validation_frontier_candidates: BTreeMap<CaseId, BTreeSet<GepaCandidateIndex>>,
     total_metric_calls: u64,
     full_validation_evals: u64,
-    selector_rng: PythonRandom,
+    selector_rng: GepaRandom,
 }
 
 impl GepaReferenceState {
@@ -141,8 +141,19 @@ impl GepaReferenceState {
             .map(|(_, candidate)| candidate)
     }
 
+    #[cfg(test)]
     pub(crate) fn select_by_validation_frontier_frequency(
         &mut self,
+    ) -> Option<(GepaCandidateIndex, CandidateId)> {
+        let mut rng = std::mem::take(&mut self.selector_rng);
+        let selected = self.select_by_validation_frontier_frequency_with_rng(&mut rng);
+        self.selector_rng = rng;
+        selected
+    }
+
+    pub(crate) fn select_by_validation_frontier_frequency_with_rng(
+        &self,
+        rng: &mut GepaRandom,
     ) -> Option<(GepaCandidateIndex, CandidateId)> {
         let fronts = self.non_dominated_validation_frontier();
         let mut frequencies = BTreeMap::<GepaCandidateIndex, usize>::new();
@@ -158,7 +169,7 @@ impl GepaReferenceState {
         if sampling_list.is_empty() {
             return None;
         }
-        let selected = self.selector_rng.randbelow(sampling_list.len());
+        let selected = rng.randbelow(sampling_list.len());
         let index = sampling_list[selected];
         Some((index, self.record(index)?.candidate()))
     }

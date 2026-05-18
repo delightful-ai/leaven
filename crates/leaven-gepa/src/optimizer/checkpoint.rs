@@ -14,7 +14,7 @@ use crate::{
     CheckpointPopulation, Gate, GepaCaseEvidence, GepaEventSummary, GepaPopulation,
     GepaProposalAttempt, GepaReferenceState, GepaReflector, PartSelector, ReflectiveDatasetBuilder,
     ValidationPolicy,
-    validation::{BatchSampler, CheckpointBatchSampler, CheckpointValidationPolicy},
+    validation::{BatchSampler, CheckpointBatchSampler, CheckpointValidationPolicy, GepaRandom},
 };
 
 use super::{
@@ -44,6 +44,7 @@ pub struct GepaCheckpointState<
     candidate_history: Vec<GepaCandidateHistoryEntry>,
     proposal_attempts: Vec<GepaProposalAttempt>,
     reference_state: GepaReferenceState,
+    rng: GepaRandom,
     events: Vec<GepaEventSummary>,
     population: PopulationState,
     candidate_selector: CandidateSelectorState,
@@ -171,6 +172,7 @@ where
             candidate_history: self.candidate_history.clone(),
             proposal_attempts: self.proposal_attempts.clone(),
             reference_state: self.reference_state.clone(),
+            rng: self.rng.clone(),
             events: self.events.clone(),
             population: CheckpointPopulation::checkpoint_state(&self.population),
             candidate_selector: CheckpointCandidateSelector::checkpoint_state(
@@ -258,6 +260,7 @@ where
         self.candidate_history = state.candidate_history;
         self.proposal_attempts = state.proposal_attempts;
         self.reference_state = state.reference_state;
+        self.rng = state.rng;
         self.events = state.events;
         self.population.restore_state(state.population);
         self.candidate_selector
