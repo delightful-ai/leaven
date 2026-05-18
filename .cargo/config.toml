@@ -1,0 +1,5 @@
+# Parallel rustc frontend: parallelizes the front-end (parse/typeck/borrowck)
+# of each crate, shortening the deep `kernel -> core -> engine -> run -> ...`
+# critical path. Nightly-only; the repo pins nightly via `rust-toolchain.toml`.
+[build]
+rustflags = ["-Zthreads=8"]

@@ -10,13 +10,18 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+# The dev/test profiles select the Cranelift codegen backend for workspace
+# crates (see root Cargo.toml). Coverage instrumentation (`-Cinstrument-coverage`)
+# requires the LLVM backend, so every build/report command runs under the
+# `coverage` profile, which inherits `dev` but pins `codegen-backend = llvm`.
+COVERAGE_PROFILE = ["--profile", "coverage"]
+
 RUN_PACKAGES = [
     "p0_graph_skeleton",
     "p1_keep_best",
     "p2_pairwise_tournament",
     "p3_gepa_parity",
     "p4_meta_harness_lite",
-    "p5_evoskill_iteration",
     "p6_optimizer_policy_self_opt",
     "p7_self_optimization_kernel",
     "p8_aime_gepa",
@@ -55,6 +60,7 @@ def main() -> int:
             "--workspace",
             "--no-report",
             "--branch",
+            *COVERAGE_PROFILE,
             *exclude_args(),
         ],
         *[run_package_command(package, p5_run_dir) for package in RUN_PACKAGES],
@@ -71,6 +77,7 @@ def main() -> int:
         "report",
         "--lcov",
         "--branch",
+        *COVERAGE_PROFILE,
         "--output-path",
         str(lcov_path),
     ]
@@ -85,6 +92,7 @@ def main() -> int:
         "--json",
         "--summary-only",
         "--branch",
+        *COVERAGE_PROFILE,
         "--output-path",
         str(output_path),
     ]
@@ -134,7 +142,7 @@ def run(command: list[str]) -> subprocess.CompletedProcess[bytes]:
 
 
 def run_package_command(package: str, p5_run_dir: Path) -> list[str]:
-    command = ["cargo", "llvm-cov", "run", "--no-report", "-p", package]
+    command = ["cargo", "llvm-cov", "run", "--no-report", *COVERAGE_PROFILE, "-p", package]
     if package == "p5_evoskill_iteration":
         command.extend(["--", "--run-dir", str(p5_run_dir)])
     return command

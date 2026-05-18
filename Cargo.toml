@@ -1,5 +1,12 @@
+# `codegen-backend` profile key is nightly-only; the repo pins nightly via
+# `rust-toolchain.toml` so the dev profile can select the Cranelift backend.
+cargo-features = ["codegen-backend"]
+
 [workspace]
 resolver = "3"
+# Bare `cargo build`/`check`/`nextest` (no `--workspace`) skip the example
+# milestones; `just check`/`just test` still cover them via `--workspace`.
+default-members = ["crates/*"]
 members = [
     "crates/leaven",
     "crates/leaven-agent",
@@ -73,6 +80,29 @@ repository = "https://github.com/darinkishore/leaven"
 
 [profile.release]
 debug = "line-tables-only"
+
+# Dev builds default to full debuginfo (=2), which is slow to emit and bloats
+# target/. Line tables keep backtraces useful while cutting build time + size.
+#
+# Workspace crates compile through the Cranelift backend (faster codegen for
+# unoptimized builds). It applies to workspace members only — every `leaven-*`
+# crate is `unsafe_code = "forbid"`, so none carry inline asm Cranelift's
+# assembler rejects. Dependencies stay on LLVM via the `*` override below:
+# they build once and cache, and some (e.g. `constant_time_eq`) use asm
+# extensions Cranelift cannot assemble.
+[profile.dev]
+debug = "line-tables-only"
+codegen-backend = "cranelift"
+
+[profile.dev.package."*"]
+codegen-backend = "llvm"
+
+# Coverage profile: `scripts/coverage-gate.py` builds under `--profile coverage`.
+# `cargo llvm-cov` instruments with `-Cinstrument-coverage`, which the Cranelift
+# backend does not support, so workspace crates are pinned back to LLVM here.
+[profile.coverage]
+inherits = "dev"
+codegen-backend = "llvm"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
