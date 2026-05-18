@@ -266,8 +266,8 @@ Required tests:
 - failed operator runs with a configured durable run directory write
   `reports/p8-aime-failure.json` with safe profile/runtime/error context;
 - P8 report lines include run profile, GEPA strategy profile, run dir,
-  resumability, stop reason, cache summary, budget split, source ids, and proof
-  classification;
+  resumability, stop reason, cache summary, LM cache read/write paths, budget
+  split, source ids, and proof classification;
 - P8 case report rows include output/feedback refs and do not include hidden
   target payloads;
 - P8 case report rows include non-empty trace refs when runner/scorer traces are

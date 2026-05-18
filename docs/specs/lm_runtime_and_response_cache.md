@@ -240,6 +240,12 @@ helper for explicit eager reuse across fresh run directories. It resolves to
 `workspace_root/.leaven/lm-cache.sqlite` and uses the same schema and key
 contract as the run-directory helper.
 
+Example-level eager replay may compose both helpers without inventing a new
+schema: read the selected run directory first for exact-run rows, fall back to
+the workspace cache for compatible prior responses, and report both read order
+and write destination. New writes should go to the workspace cache when the
+operator intentionally selected eager reuse across fresh run directories.
+
 Policy behavior:
 
 | Policy | Reads cache | Calls inner on miss | Writes result |
