@@ -63,9 +63,9 @@ The completed live report remains historical operator/result evidence, and the
 current cache-only failure report proves current `optimize-anything` profile
 and failure-report disclosure. A completed current-profile live report is still
 required before treating the operator row as current release proof.
-Result-quality parity remains open. Use the completed report's emitted prompts,
-proposal attempts, candidate lineage, and case deltas to decide the next
-library-level quality/speed change.
+Result-quality parity remains open. Use the historical completed report's
+emitted prompts, proposal attempts, candidate lineage, and case deltas to
+decide the next library-level quality/speed change.
 The first no-spend diagnosis found current-source prompt/render parity still
 plausible, but not model-experience parity: the paid run's `gpt-5.4-mini`
 reflections often collapsed rich failure feedback into short generic prompts,

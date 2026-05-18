@@ -1,7 +1,7 @@
 # GEPA Parity Working Ledger
 
 Status: active.
-Updated: 2026-05-18T14:04:00Z.
+Updated: 2026-05-18T14:12:00Z.
 
 ## Authority
 
@@ -974,6 +974,24 @@ Cache/replay attempts after the report-schema fixes:
   the checkpoint as an inspectable artifact/source conflict with the documented
   500-call config, not as proof that Leaven should raise its cap or implement
   proposal fanout for the current-source AIME profile.
+- The same checkpoint exposes upstream candidate prompt history but not
+  proposal/reflection assistant text. `full_program_trace` has 33 compact rows
+  with selected parent, three validation ids, old/new train-screen scores, and
+  accepted child index/full-validation marker; `adapter_state` is empty. The
+  checkpoint therefore supports prompt-outcome comparison, not a direct
+  accepted/rejected reflection-text diff.
+- The CAIS prompt trajectory is materially more directive than the current
+  Leaven live outcome. The upstream winning candidate is candidate `6`, parent
+  `[4]`, validation `0.5778`, and `1627` prompt chars; it keeps concrete
+  directives for restating the problem, setting notation/constraints, naming
+  applicable theorems, handling dead ends, avoiding approximation, and placing
+  the final answer alone. Later upstream candidates `8` and `9` are even more
+  specialized (`2372` and `6705` chars) while scoring `0.5556`. The completed
+  Leaven report has 7 candidates, best validation `0.4889`, and best candidate
+  `3` is `760` prompt chars; accepted child prompts often stayed generic or
+  overfit to a few topics. This keeps the quality gap centered on reflection
+  model/search outcome, not on the already-proven optimize-anything prompt
+  renderer.
 - Intentional delta still current: `FastCertified` and future FastGEPA ideas
   are Leaven-plus profiles, not reference parity. Spec the profile before
   adding lazy certification, active sampling, async islands, evaluator pyramids,
