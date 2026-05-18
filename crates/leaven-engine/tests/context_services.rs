@@ -624,6 +624,81 @@ fn deterministic_evaluation_cache_skips_second_evaluator_call() {
 }
 
 #[test]
+fn casewise_cache_hit_rematerializes_rows_for_same_content_candidate() {
+    block_on(async {
+        let (mut graph, mut budget) = graph_and_budget();
+        let mut cache = leaven_engine::EvaluationCache::default();
+        let case_set = CaseSet::new(vec!["case"]);
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let (first_candidate, second_candidate) = {
+            let mut seed_ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+            (
+                seed_ctx
+                    .insert_seed(TextArtifact("abcd".to_owned()), 0)
+                    .unwrap(),
+                seed_ctx
+                    .insert_seed(TextArtifact("abcd".to_owned()), 1)
+                    .unwrap(),
+            )
+        };
+        let evaluator = CountingEvaluator::new(CachePolicy::Deterministic);
+        let mut evaluators = std::collections::BTreeMap::new();
+        evaluators.insert(
+            EvaluatorId::PRIMARY,
+            Arc::new(evaluator) as Arc<dyn leaven_engine::DynEvaluator<TestProblem>>,
+        );
+
+        let first = {
+            let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
+                .with_case_set(&case_set)
+                .with_cache(&mut cache)
+                .with_evidence_store(&store)
+                .with_evaluators(&evaluators);
+            ctx.evaluate_independent_casewise_cached(
+                EvaluatorId::PRIMARY,
+                first_candidate,
+                EvaluationSet::All,
+                EvaluationPurpose::Search,
+            )
+            .await
+            .unwrap()
+        };
+        let (second, second_row_candidate, second_row_target) = {
+            let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
+                .with_case_set(&case_set)
+                .with_cache(&mut cache)
+                .with_evidence_store(&store)
+                .with_evaluators(&evaluators);
+            let report = ctx
+                .evaluate_independent_casewise_cached(
+                    EvaluatorId::PRIMARY,
+                    second_candidate,
+                    EvaluationSet::All,
+                    EvaluationPurpose::Search,
+                )
+                .await
+                .unwrap();
+            let row = ctx
+                .graph()
+                .assessment(report.assessment_ids[0])
+                .expect("rematerialized row is in graph");
+            (report, row.independent_candidate(), row.target().clone())
+        };
+
+        assert_eq!(first.cache_misses, 1);
+        assert_eq!(second.cache_hits, 1);
+        assert_eq!(second.cache_misses, 0);
+        assert_eq!(second.cost, Cost::zero());
+        assert_ne!(first.assessment_ids, second.assessment_ids);
+        assert_eq!(second_row_candidate, Some(second_candidate));
+        assert!(matches!(
+            second_row_target,
+            AssessmentTarget::Case { case, .. } if case == CaseId::from_index(0)
+        ));
+    });
+}
+
+#[test]
 fn deterministic_evaluation_cache_restores_from_checkpoint_without_recalling_evaluator() {
     block_on(async {
         let (mut graph, mut budget) = graph_and_budget();
@@ -1525,12 +1600,22 @@ impl Evaluator<TestProblem> for CountingEvaluator {
         let leaven_core::ResolvedRequestKind::Independent { candidates } = request.kind else {
             return Err(EvaluationError::Message("expected independent".to_owned()));
         };
+        let target = if request.granularity == AssessmentGranularity::PerCase
+            && request.set.case_ids.len() == 1
+        {
+            AssessmentTarget::Case {
+                set: leaven_kernel::EvaluationSetId::from_uuid(request.set.id.as_uuid()),
+                case: request.set.case_ids[0],
+            }
+        } else {
+            AssessmentTarget::Unscoped
+        };
         Ok(Metered::new(
             candidates
                 .into_iter()
                 .map(|candidate| Assessment::Independent {
                     candidate,
-                    target: AssessmentTarget::Unscoped,
+                    target: target.clone(),
                     evidence: TestEvidence { score: 3.0 },
                     cost: Cost::metric_calls(1),
                     metadata: MetadataBag::new(),

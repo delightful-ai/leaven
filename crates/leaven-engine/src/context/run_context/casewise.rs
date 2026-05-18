@@ -9,6 +9,7 @@ use leaven_kernel::{AssessmentId, CandidateId, CaseId, Cost, ErrorKind, Evaluato
 use crate::{
     CacheBypassReason, CacheStatus, CasewiseEvaluationReport, DynEvaluator, ErrorPolicy,
     EvaluationCacheKey, EvaluationError, EvaluationReport, RunEvent,
+    graph::storage::AssessmentRecordTarget,
 };
 
 use super::{
@@ -160,6 +161,13 @@ impl<P: OptimizationProblem> RunContext<'_, P> {
                     resolved_set,
                     candidate_count(&resolved_request),
                 );
+                let assessment_ids = self.materialize_casewise_cache_hit(
+                    evaluator_id,
+                    request_id,
+                    candidate,
+                    case,
+                    assessment_ids,
+                )?;
                 let report = EvaluationReport {
                     request_id,
                     resolved_set: resolved_request.set.id,
@@ -288,6 +296,57 @@ fn pop_casewise_batch_assessment(
                 "casewise batch did not return case `{case}`"
             )))
         })
+}
+
+impl<P: OptimizationProblem> RunContext<'_, P> {
+    fn materialize_casewise_cache_hit(
+        &mut self,
+        evaluator_id: &EvaluatorId,
+        request_id: leaven_kernel::EvaluationRequestId,
+        candidate: CandidateId,
+        case: CaseId,
+        assessment_ids: Vec<AssessmentId>,
+    ) -> Result<Vec<AssessmentId>, RunContextError> {
+        let mut remapped = Vec::with_capacity(assessment_ids.len());
+        let mut recorded_alias_rows = false;
+        for assessment in assessment_ids {
+            let Some(view) = self.graph().assessment(assessment) else {
+                return Err(RunContextError::Evaluation(EvaluationError::Message(
+                    format!("casewise cache hit referenced missing assessment `{assessment}`"),
+                )));
+            };
+            let AssessmentTarget::Case { case: row_case, .. } = view.target() else {
+                return Err(RunContextError::Evaluation(EvaluationError::Message(
+                    "casewise cache hit expected case-targeted assessment".to_owned(),
+                )));
+            };
+            if *row_case != case {
+                return Err(RunContextError::Evaluation(EvaluationError::Message(
+                    "casewise cache hit returned assessment for the wrong case".to_owned(),
+                )));
+            }
+            if view.independent_candidate() == Some(candidate) {
+                remapped.push(assessment);
+                continue;
+            }
+            let target = view.target().clone();
+            let metadata = view.metadata().clone();
+            let evidence = view.evidence_ref().clone();
+            let id = self.graph.record_assessment(
+                request_id,
+                evaluator_id.clone(),
+                AssessmentRecordTarget::Independent { candidate, target },
+                metadata,
+                evidence,
+            );
+            recorded_alias_rows = true;
+            remapped.push(id);
+        }
+        if recorded_alias_rows {
+            self.checkpoint()?;
+        }
+        Ok(remapped)
+    }
 }
 
 fn single_case_request(

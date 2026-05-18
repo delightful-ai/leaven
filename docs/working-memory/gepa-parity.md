@@ -514,6 +514,18 @@ Cache/replay attempts after the report-schema fixes:
   `.lm_role_fingerprint(...)`, including OpenAI runtime timeout/throttle
   configuration and provider fingerprint. This keeps report disclosure aligned
   with compatibility checks.
+- current-code live run
+  `.leaven/release-runs/p8-aime-gepa-current-json-fallback-20260518-084304`
+  reached 200 metric calls and 130 LM calls. It proved the DSPy JSONAdapter
+  fallback path in live traffic: the first accepted-child full validation
+  evaluated 45 rows with 46 LM calls instead of aborting on the missing
+  `reasoning` header shape. The run then failed closed with
+  `GEPA evaluation returned a row for the wrong candidate` after zero-cost
+  casewise cache hits for a same-content/new-candidate request. Root cause:
+  engine evaluation cache keys use candidate content identity, but cache values
+  were raw assessment ids whose target still named the older candidate id.
+  Fix in progress: rematerialize zero-cost assessment rows for the requested
+  candidate on casewise content-cache hits.
 
 1. Diagnose why the completed live run produced no improvement while the older
    live artifact improved validation/test. Start from emitted prompts,
