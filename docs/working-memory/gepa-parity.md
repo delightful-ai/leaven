@@ -162,11 +162,22 @@ Completed report snapshot:
 - evaluation cache: `15` hits, `56` misses, durable SQLite run-store,
   zero-cost hit accounting true;
 - solver role metrics: `259` calls, `81` cache hits, `178` misses, `0`
-  failures;
+  failures in the successful resumed process;
 - reflection role metrics: `10` calls, `0` cache hits, `10` misses, `0`
-  failures;
+  failures in the successful resumed process;
 - GEPA report: best index `0`, candidates `8`, full-validation evals `8`,
   proposal attempts `24`, skip-perfect `false`.
+
+Report caveat from the diagnosis pass:
+
+- the final JSON role metrics are LM telemetry from the successful resumed
+  process, not a durable aggregate across every failed/resumed process in the
+  release attempt;
+- the earlier OpenAI transport timeouts are real attempt history and are only
+  captured in this ledger/output logs, not in the final `lm_roles[].metrics`;
+- until LM telemetry/failure counters are durable across resume, final P8 JSON
+  must not be used alone to prove "zero provider failures" for a multi-process
+  release attempt.
 
 Result-parity conclusion:
 
@@ -232,8 +243,11 @@ not by itself close the current live release row.
    cases, and parser outcomes.
 2. Diff the completed live report against the prior live artifact and upstream
    GEPA/DSPy AIME traces where available. Treat result-quality parity as open.
-3. Re-run live P8 only after the diagnosis identifies a concrete fix or
+3. Make LM role telemetry/failure counters durable or explicitly report their
+   process-local scope before using resumed live runs as provider-reliability
+   proof.
+4. Re-run live P8 only after the diagnosis identifies a concrete fix or
    intentional runtime/profile delta worth testing.
-4. Future release reports should be generated with the post-run report-schema
+5. Future release reports should be generated with the post-run report-schema
    fixes so live-proof checks do not have to re-aggregate role telemetry by hand
    and so resumed `gepa_events` are cumulative.
