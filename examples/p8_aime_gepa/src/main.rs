@@ -46,6 +46,7 @@ const DSPY_QUICKSTART_METRIC_CALLS: u64 = 150;
 const DSPY_QUICKSTART_TEST_SCORE_TARGET: f64 = 0.566;
 const GEPA_AIME_MAX_WORKERS: usize = 32;
 const GEPA_AIME_MAX_OUTPUT_TOKENS: u32 = 32_000;
+const OPTIMIZE_ANYTHING_SKIP_PERFECT_SCORE: bool = false;
 // GEPA AIME is controlled by max_metric_calls, not max_iterations. This is a
 // Leaven-local safety ceiling; the public metric-call budget is the stop control.
 const GEPA_AIME_INTERNAL_ITERATION_CEILING: usize = 500;
@@ -713,6 +714,7 @@ async fn try_run_aime(
                 .with_reflector_config(aime_reflector_config(&config.reflection))
                 .surface(AimePromptSurface)
                 .build()
+                .skip_perfect_score(OPTIMIZE_ANYTHING_SKIP_PERFECT_SCORE)
                 .on_event(move |event| {
                     gepa_event_sink
                         .lock()
@@ -3860,7 +3862,10 @@ mod tests {
         assert_eq!(attempt.skip_reason, None);
         assert_eq!(gepa_report.total_metric_calls, 8);
         assert_eq!(gepa_report.full_validation_evals, 2);
-        assert!(gepa_report.skip_perfect_score);
+        assert_eq!(
+            gepa_report.skip_perfect_score,
+            OPTIMIZE_ANYTHING_SKIP_PERFECT_SCORE
+        );
         assert_eq!(gepa_report.perfect_score, 1.0);
         assert!(
             gepa_report
@@ -4879,7 +4884,10 @@ Provide the new parameter value within ``` blocks."
         let gepa_report = &report["gepa_report"];
         assert_eq!(gepa_report["total_metric_calls"], 8);
         assert_eq!(gepa_report["full_validation_evals"], 2);
-        assert_eq!(gepa_report["skip_perfect_score"], true);
+        assert_eq!(
+            gepa_report["skip_perfect_score"],
+            OPTIMIZE_ANYTHING_SKIP_PERFECT_SCORE
+        );
         assert_eq!(gepa_report["perfect_score"], 1.0);
         assert_eq!(gepa_report["best_index"], 1);
         assert!(gepa_report["candidates"].as_array().unwrap().len() >= 2);
