@@ -251,6 +251,8 @@ Required tests:
 - failed operator runs include the same safe profile, cache, run-dir, and proof
   classification context needed to diagnose cache-only replay or compatibility
   refusals without reconstructing environment variables;
+- failed operator runs with a configured durable run directory write
+  `reports/p8-aime-failure.json` with safe profile/runtime/error context;
 - P8 report lines include run profile, GEPA strategy profile, run dir,
   resumability, stop reason, cache summary, budget split, source ids, and proof
   classification;

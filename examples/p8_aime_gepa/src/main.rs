@@ -105,8 +105,15 @@ async fn main() {
             }
         }
         Err(error) => {
-            for line in error_report_lines(&config, &error, started_at.elapsed()) {
+            let wall_time = started_at.elapsed();
+            let failure_report = write_p8_aime_failure_report(&config, &error, wall_time);
+            for line in error_report_lines(&config, &error, wall_time) {
                 eprintln!("{line}");
+            }
+            match failure_report {
+                Ok(Some(path)) => eprintln!("p8_aime_failure_json={}", path.display()),
+                Ok(None) => {}
+                Err(report_error) => eprintln!("p8_aime_failure_json_error={report_error}"),
             }
             std::process::exit(1);
         }
@@ -921,6 +928,35 @@ fn write_p8_aime_report(
     write_p8_report_atomic(&path, &bytes, "write P8 AIME report json")
 }
 
+fn write_p8_aime_failure_report(
+    config: &AimeRunConfig,
+    error: &(dyn std::error::Error + 'static),
+    wall_time: Duration,
+) -> Result<Option<PathBuf>, leaven::run::OptimizeError> {
+    let Some(path) = p8_aime_failure_report_path(config) else {
+        return Ok(None);
+    };
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|source| {
+            leaven::run::OptimizeError::ReportStore {
+                operation: "create P8 AIME failure report directory",
+                source,
+            }
+        })?;
+    }
+    let bytes = serde_json::to_vec_pretty(&p8_aime_failure_report_json(config, error, wall_time))
+        .expect("P8 AIME failure report JSON serializes");
+    write_p8_report_atomic(&path, &bytes, "write P8 AIME failure report json")?;
+    Ok(Some(path))
+}
+
+fn p8_aime_failure_report_path(config: &AimeRunConfig) -> Option<PathBuf> {
+    config
+        .run_dir
+        .as_ref()
+        .map(|run_dir| run_dir.join("reports").join("p8-aime-failure.json"))
+}
+
 fn write_p8_report_atomic(
     path: &Path,
     bytes: &[u8],
@@ -1062,6 +1098,58 @@ fn p8_aime_report_json(config: &AimeRunConfig, run: &AimeRunResult) -> serde_jso
             .map(|report| p8_gepa_report_json(report, &run.role_reports, &config.seed_prompt)),
         "cases": p8_case_report_json(run),
         "events": result.events.iter().map(|event| event.as_str()).collect::<Vec<_>>(),
+    })
+}
+
+fn p8_aime_failure_report_json(
+    config: &AimeRunConfig,
+    error: &(dyn std::error::Error + 'static),
+    wall_time: Duration,
+) -> serde_json::Value {
+    serde_json::json!({
+        "schema": "leaven.p8_aime.failure_report.v1",
+        "run_profile": config.profile.label(),
+        "gepa_profile": config.gepa_profile.label(),
+        "proof_classification": proof_classification_for_config(config),
+        "data_source": config.data_source.label(),
+        "run_dir": config
+            .run_dir
+            .as_ref()
+            .map(|path| path.display().to_string()),
+        "wall_time_ms": wall_time.as_millis(),
+        "error": error.to_string(),
+        "sources": std::iter::successors(error.source(), |source| source.source())
+            .map(ToString::to_string)
+            .collect::<Vec<_>>(),
+        "solver_runtime": p8_failure_runtime_json(
+            config.solver.live,
+            &config.solver.model,
+            config.solver.cache_policy,
+            config.solver.runtime
+        ),
+        "reflection_runtime": p8_failure_runtime_json(
+            config.reflection.live,
+            &config.reflection.model,
+            config.reflection.cache_policy,
+            config.reflection.runtime
+        ),
+    })
+}
+
+fn p8_failure_runtime_json(
+    live: bool,
+    model: &str,
+    cache_policy: LmCachePolicy,
+    runtime: AimeOpenAiRuntimeConfig,
+) -> serde_json::Value {
+    serde_json::json!({
+        "live": live,
+        "model": model,
+        "cache_policy": report_lm_cache_policy(cache_policy),
+        "cache_backend": report_lm_cache_backend(runtime.cache_backend),
+        "cache_durable": runtime.cache_backend.is_durable(),
+        "max_concurrent_requests": runtime.max_concurrent_requests.get(),
+        "request_timeout_seconds": runtime.request_timeout_seconds,
     })
 }
 
@@ -6006,6 +6094,21 @@ Provide the new parameter value within ``` blocks."
                 .iter()
                 .any(|line| line == "solver_runtime=live=true model=deterministic-aime-solver cache_policy=cache-only cache_backend=in-memory cache_durable=false max_concurrent_requests=32 request_timeout_seconds=120")
         );
+        let report = p8_aime_failure_report_json(&config, &error, Duration::from_millis(7));
+        assert_eq!(report["schema"], "leaven.p8_aime.failure_report.v1");
+        assert_eq!(report["run_profile"], config.profile.label());
+        assert_eq!(report["gepa_profile"], config.gepa_profile.label());
+        assert_eq!(
+            report["proof_classification"],
+            proof_classification_for_config(&config)
+        );
+        assert_eq!(report["wall_time_ms"], 7);
+        assert!(
+            report["error"]
+                .as_str()
+                .unwrap()
+                .contains("optimizer failed")
+        );
     }
 
     #[test]
@@ -6797,6 +6900,30 @@ Provide the new parameter value within ``` blocks."
             error.to_string(),
             "run report failed during write P8 AIME report json"
         );
+    }
+
+    #[test]
+    fn p8_failure_report_writes_under_configured_run_dir() {
+        let run_dir = std::env::temp_dir().join(format!(
+            "leaven-p8-failure-report-{}-{}",
+            std::process::id(),
+            RunId::new()
+        ));
+        let mut config = AimeRunConfig::deterministic_smoke();
+        config.run_dir = Some(run_dir.clone());
+        let error = std::io::Error::other("synthetic failure");
+
+        let path = write_p8_aime_failure_report(&config, &error, Duration::from_millis(9))
+            .unwrap()
+            .expect("configured run dir writes a failure report");
+
+        assert_eq!(path, run_dir.join("reports").join("p8-aime-failure.json"));
+        let report: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        assert_eq!(report["schema"], "leaven.p8_aime.failure_report.v1");
+        assert_eq!(report["error"], "synthetic failure");
+        assert_eq!(report["wall_time_ms"], 9);
+        let _ = std::fs::remove_dir_all(run_dir);
     }
 
     #[test]

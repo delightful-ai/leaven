@@ -1,7 +1,7 @@
 # GEPA Parity Working Ledger
 
 Status: active.
-Updated: 2026-05-18T09:35:13Z.
+Updated: 2026-05-18T09:41:21Z.
 
 ## Authority
 
@@ -534,6 +534,9 @@ Cache/replay attempts after the report-schema fixes:
   wrong-candidate assertion, and failed closed at the next uncached reflection
   request with no additional LM calls. Log:
   `.leaven/release-runs/p8-aime-gepa-current-json-fallback-20260518-084304.cache-only-after-engine-fix.log`.
+- failed P8 runs with `LEAVEN_AIME_RUN_DIR` now write
+  `reports/p8-aime-failure.json` with safe profile/runtime/error context, so the
+  next failed live attempt does not depend on terminal scrollback for diagnosis.
 
 1. Diagnose why the completed live run produced no improvement while the older
    live artifact improved validation/test. Start from emitted prompts,
