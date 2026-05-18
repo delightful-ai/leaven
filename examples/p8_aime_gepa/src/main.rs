@@ -2585,6 +2585,7 @@ impl AimeRunProfile {
             Self::GepaAime => {
                 let mut notes = vec![
                     "published_gepa_cais_artifact_reports_46.67_to_60.00_percent_on_aime_2025",
+                    "local_gepa_cais_checkpoint_has_10_candidates_621_metric_calls_and_missing_run_log",
                     "leaven_uses_rust_local_dspy_chainofthought_prompt_rendering_without_dspy_runtime",
                 ];
                 notes.push(self.reflection_model_note(reflection_model));
@@ -6846,6 +6847,9 @@ Provide the new parameter value within ``` blocks."
                 .any(|line| { line == "comparison_reflection_model_alignment=model-delta" })
         );
         assert!(lines.iter().any(|line| {
+            line == "comparison_note=local_gepa_cais_checkpoint_has_10_candidates_621_metric_calls_and_missing_run_log"
+        }));
+        assert!(lines.iter().any(|line| {
             line == "comparison_note=leaven_reflection_model_differs_from_upstream_aime_profile"
         }));
         assert!(
@@ -6996,6 +7000,15 @@ Provide the new parameter value within ``` blocks."
                 .unwrap()
                 .iter()
                 .any(|note| note == "leaven_reflection_model_matches_upstream_aime_profile")
+        );
+        assert!(
+            report["comparison"]["notes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|note| {
+                    note == "local_gepa_cais_checkpoint_has_10_candidates_621_metric_calls_and_missing_run_log"
+                })
         );
         assert!(
             lines

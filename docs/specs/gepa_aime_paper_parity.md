@@ -141,6 +141,18 @@ The GEPA CAIS artifact reports AIME Math test accuracy from `46.67%` to
 `60.00%`, with validation reaching `57.78%`. Leaven must treat those numbers as
 the reproduction target, not as a result until a live run proves them.
 
+The local CAIS checkout currently has a provenance conflict that reports must
+disclose. `domains/aime_math/README.md` and
+`acm_cais_artifact_evaluation/OFFLINE_ARTIFACTS.md` reference
+`logs/run.log` as the source for the validation/test score lines, but that file
+is absent from this checkout. The inspectable `logs/gepa_state.bin` checkpoint
+loads as an instance-frontier AIME run with 10 candidates, best validation
+`26/45 = 0.577777...`, and `621` total metric calls. That is compatible with
+already-scheduled parallel work overshooting a nominal cap, but without
+`run.log` it must be labeled as an artifact/checkpoint fact rather than proof
+that the current source `main.py` was run with exactly the documented
+`max_metric_calls=500` configuration.
+
 ## 3. Budget And Stop Semantics
 
 ### 3.1 Search Budget
@@ -246,6 +258,18 @@ cap by the number of in-flight jobs. This is acceptable only if:
 - the overshoot is caused by already-scheduled jobs;
 - no new optimizer step is scheduled after the cap is observed;
 - the report records spent calls honestly.
+
+For AIME parity, reports must distinguish three numbers:
+
+- configured search cap (`500`);
+- search metric calls actually spent by Leaven;
+- inspectable upstream checkpoint metric calls (`621` in the local CAIS bundle,
+  unless a newer artifact with `run.log` supersedes it).
+
+Do not silently tune Leaven's cap upward to match the checkpoint. If Leaven adds
+parallel proposal scheduling to match optimize-anything behavior, the report
+must label proposal fanout and overshoot separately from case-evaluation
+parallelism.
 
 ## 4. GEPA Loop Requirements
 
