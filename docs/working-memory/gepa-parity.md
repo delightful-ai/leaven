@@ -110,9 +110,12 @@ Completed 600s-timeout resume attempt:
 
 The 600s timeout changes the OpenAI provider fingerprint. The run accepted the
 resume and disclosed role runtime fingerprints, but this live report predates
-the new top-level `live_provider_proof` / `provider_failures` JSON fields added
-after the run. Future release reports should include those fields directly
-instead of requiring aggregation from `lm_roles`.
+two report-schema fixes added after the run:
+
+- top-level `live_provider_proof` / `provider_failures` JSON fields now derive
+  directly from `lm_roles`;
+- top-level `gepa_events` now uses checkpoint-restored `GepaReport.events` when
+  available, so resumed reports do not expose only the fresh observer tail.
 
 Duplicate run guard:
 
@@ -208,6 +211,6 @@ not by itself close the current live release row.
    GEPA/DSPy AIME traces where available. Treat result-quality parity as open.
 3. Re-run live P8 only after the diagnosis identifies a concrete fix or
    intentional runtime/profile delta worth testing.
-4. Future release reports should contain top-level `live_provider_proof` and
-   `provider_failures` fields so live-proof checks do not have to re-aggregate
-   role telemetry by hand.
+4. Future release reports should be generated with the post-run report-schema
+   fixes so live-proof checks do not have to re-aggregate role telemetry by hand
+   and so resumed `gepa_events` are cumulative.
