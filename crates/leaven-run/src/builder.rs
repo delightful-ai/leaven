@@ -735,14 +735,6 @@ where
             return Err(source.into());
         }
     };
-    if let Some(evaluation_cache) = prepared_store.evaluation_cache.as_ref() {
-        evaluation_cache
-            .replace_from_snapshot(&engine.evaluation_cache_snapshot())
-            .map_err(|source| OptimizeError::EvaluationCache {
-                operation: "flush sqlite evaluation cache after final reports",
-                source,
-            })?;
-    }
     mark_latest_checkpoint(&prepared_store, search.checkpoint)?;
     let latest_checkpoint = latest_checkpoint(&prepared_store)?;
     let storage = run_storage(

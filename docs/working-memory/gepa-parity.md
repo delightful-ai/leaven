@@ -753,9 +753,9 @@ Cache/replay attempts after the report-schema fixes:
   - P8 role fingerprints ignore LM cache policy/backend replay controls, so
     switching a paid run to `cache-only` / `eager-sqlite` should not block
     resume compatibility;
-  - `leaven-run` flushes the SQLite evaluation cache again after final reports,
-    so final train/validation/test rows are durably reusable by later
-    same-run-dir invocations.
+  - stale after the latest cache audit: `leaven-run` no longer flushes
+    final-report-only rows into the durable evaluation cache, because those
+    assessment ids are not graph-valid from the search checkpoint resume point.
 - Current cache/resume audit reopened two real P8 replay gaps and one deeper
   engine/run-dir gap:
   - fixed in current code: `cache-only` P8 OpenAI replay now constructs the
@@ -766,12 +766,28 @@ Cache/replay attempts after the report-schema fixes:
     writes through to the workspace cache. Exact paid-run replay takes
     precedence over compatible workspace reuse so a stochastic response from
     another run cannot mask the selected run-dir row;
-  - still open: final-report evaluation-cache rows can be flushed to SQLite but
-    a later resume from the search checkpoint may ignore them because cached
-    assessment ids are absent from the restored graph. Do not claim completed
-    final-report replay proof until either the final graph checkpoint becomes
-    the resume target without corrupting search budget semantics or the
-    evaluation cache can restore/backfill report-visible assessment rows.
+  - fixed conservatively in current code: final-report evaluation-cache rows are
+    no longer flushed to SQLite when the latest resume point remains the search
+    checkpoint. Do not claim completed final-report replay proof until either
+    the final graph checkpoint becomes the resume target without corrupting
+    search budget semantics or the evaluation cache can restore/backfill
+    report-visible assessment rows.
+- Final verifier wave disposition:
+  - still open and current: result-quality parity. The current completed report
+    improved seed but still trails the pinned GEPA CAIS target, so another paid
+    run should be justified by a specific profile/model experiment, not by
+    hope that duration alone fixes it;
+  - still open and current: strict upstream-reflector proof. The next
+    model-matched run should set `LEAVEN_AIME_REFLECTION_MODEL=gpt-5.1` and
+    verify `comparison_reflection_model_alignment=upstream-matched` before its
+    score is compared to the upstream AIME target;
+  - still open and current: final-report replay proof. Solver/reflection LM
+    cache replay is safer now, but final train/validation/test report rows are
+    not claimed resumable from search checkpoints;
+  - intentional delta: `FastCertified` and future FastGEPA ideas are Leaven-plus
+    profiles, not reference parity. Spec the profile before adding lazy
+    certification, active sampling, async islands, evaluator pyramids, or trace
+    distillation to ordinary GEPA.
 
 1. Diagnose why the current completed report improves over seed but still lands
    below the pinned GEPA CAIS target. Start from emitted prompts, candidate
