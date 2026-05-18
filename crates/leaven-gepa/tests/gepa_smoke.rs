@@ -1143,6 +1143,49 @@ fn reference_state_seed_validation_initializes_candidate_zero_before_train() {
 }
 
 #[test]
+fn reference_gepa_refuses_empty_validation_before_evaluator_work() {
+    block_on(async {
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let case_set = CaseSet::new(vec![()]).with_partition(
+            leaven_core::PartitionId::from("TRAIN"),
+            vec![leaven_kernel::CaseId::new(0)],
+        );
+        let store = InlineEvidenceStore::<ScalarEvidence>::new("inline");
+        let mut engine = Engine::<SamplingProblem>::builder()
+            .evaluator(ValidationSelectionEvaluator {
+                seen_sets: seen.clone(),
+            })
+            .build();
+        engine
+            .insert_seed(
+                PartMapArtifact(BTreeMap::from([("answer".to_owned(), "draft".to_owned())])),
+                0,
+            )
+            .unwrap();
+        let mut gepa = Gepa::new(
+            PartMapSurface,
+            ParetoFrontier::by_case().build(),
+            FixedSurfaceEdit::new("improved".to_owned()),
+        )
+        .reflective_dataset(NoReflectiveExamples)
+        .validation_policy(FullValidation)
+        .max_iterations(0);
+
+        let error = engine.run(&mut gepa, &case_set, &store).await.unwrap_err();
+
+        let debug = format!("{error:?}");
+        assert!(
+            debug.contains("requires a non-empty validation set"),
+            "{debug}"
+        );
+        assert!(
+            seen.lock().expect("seen lock").is_empty(),
+            "empty validation should be refused before evaluator/provider work"
+        );
+    });
+}
+
+#[test]
 fn gepa_reuses_evaluation_cache_per_candidate_case_across_different_requests() {
     block_on(async {
         let seen = Arc::new(Mutex::new(Vec::new()));

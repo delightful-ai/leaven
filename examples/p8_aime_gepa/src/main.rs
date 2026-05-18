@@ -3731,7 +3731,11 @@ mod tests {
         dataset.test.clear();
         let error = block_on(try_run_aime(config, dataset)).unwrap_err();
 
-        assert!(error.to_string().contains("Validation"));
+        assert!(
+            error
+                .to_string()
+                .contains("requires a non-empty validation set")
+        );
     }
 
     #[test]

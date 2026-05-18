@@ -5,7 +5,8 @@ mod step;
 use std::{collections::BTreeSet, sync::Arc};
 
 use leaven_core::{
-    AssessmentTarget, EvaluationPurpose, EvaluationSet, OptimizationProblem, PartitionId,
+    AssessmentGranularity, AssessmentTarget, EvaluationPurpose, EvaluationRequest, EvaluationSet,
+    OptimizationProblem, PartitionId,
 };
 use leaven_engine::{
     CheckpointContext, CheckpointError, CheckpointableOptimizer, Optimizer, OptimizerError,
@@ -957,6 +958,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
         Validate: Sync,
         Dataset: Sync,
     {
+        self.ensure_non_empty_casewise_set(ctx, candidate, &set, &purpose)?;
         let report = ctx
             .evaluate_independent_casewise_cached(
                 EvaluatorId::PRIMARY,
@@ -1015,6 +1017,51 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             metric_calls_new,
         })
     }
+
+    fn ensure_non_empty_casewise_set<P>(
+        &self,
+        ctx: &RunContext<'_, P>,
+        candidate: CandidateId,
+        set: &EvaluationSet,
+        purpose: &EvaluationPurpose,
+    ) -> Result<(), OptimizerError>
+    where
+        P: OptimizationProblem,
+    {
+        let request = EvaluationRequest::Independent {
+            candidates: vec![candidate],
+            set: set.clone(),
+            granularity: AssessmentGranularity::PerCase,
+            purpose: purpose.clone(),
+        };
+        let resolved = match ctx.resolve_evaluation_request(&request) {
+            Ok(resolved) => resolved,
+            Err(source) if matches!(purpose, EvaluationPurpose::Validation) => {
+                return Err(OptimizerError::with_source(
+                    reference_validation_required_message(),
+                    source,
+                ));
+            }
+            Err(source) => {
+                return Err(OptimizerError::with_source(
+                    "GEPA could not resolve casewise evaluation set",
+                    source,
+                ));
+            }
+        };
+        if !resolved.case_ids.is_empty() {
+            return Ok(());
+        }
+        let reason = match purpose {
+            EvaluationPurpose::Validation => reference_validation_required_message(),
+            _ => "GEPA casewise evaluation requires at least one visible case",
+        };
+        Err(OptimizerError::Message(reason.to_owned()))
+    }
+}
+
+fn reference_validation_required_message() -> &'static str {
+    "GEPA reference profile requires a non-empty validation set; supply `.validation(...)` or choose an explicit non-reference fallback profile"
 }
 
 struct GepaAssessment {
