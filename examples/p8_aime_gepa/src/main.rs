@@ -4480,6 +4480,15 @@ Provide the new parameter value within ``` blocks."
             "restored GEPA must not call reflection again after budget-stopped checkpoint"
         );
         assert!(resumed.optimized.summary.storage.is_resumable());
+        assert!(resumed.optimized.summary.cache.evaluation.durable);
+        assert!(
+            resumed.optimized.summary.cache.evaluation.hits > 0,
+            "resumed final reporting should hit search-cache rows restored from the run dir"
+        );
+        assert!(
+            resumed.optimized.summary.cache.evaluation.hit_cost_zero,
+            "evaluation cache hits must report zero run cost"
+        );
 
         std::fs::remove_dir_all(run_dir).unwrap();
     }
