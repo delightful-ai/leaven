@@ -309,7 +309,7 @@ Current evidence split:
 - a later read-write resume against the same run dir replayed the rematerialized
   cache hits and spent 12 new metric calls before being stopped because its
   compile log showed it predates the latest P8 profile/failure-report slices;
-- the current completed live report
+- the historical completed live report
   `.leaven/release-runs/p8-aime-gepa-current-release-20260518-094902-d2d15a36d364/reports/p8-aime.json`
   used current report/cache code at the time it was produced, zero provider
   failures, solver `gpt-4.1-mini`, reflection `gpt-5.4-mini`, reference GEPA
@@ -322,8 +322,8 @@ Current evidence split:
   `reports/p8-aime.json` before interpreting result quality against the pinned
   upstream target.
 
-Conclusion: the latest completed live report proves live improvement and the
-finished release-report operator path for the then-current reference-profile
+Conclusion: the historical completed live report proves live improvement and
+the finished release-report operator path for the then-current reference-profile
 AIME run, while the latest cache-only failure report proves current
 `optimize-anything` profile disclosure and failure evidence. The stack still
 does not prove "as good as GEPA" because the held-out test score is `0.500`
