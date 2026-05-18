@@ -3136,7 +3136,7 @@ Scaffolds that should not appear in ordinary product docs:
 
 - `FixedSurfaceEdit`;
 - train-filtered `ParetoFrontier` as "GEPA parity";
-- `MinibatchThenValidation` as default GEPA;
+- `MinibatchThenValidation` as default GEPA or ordinary prelude export;
 - string-message optimizer errors as expected skip outcomes;
 - generic `Population` slot as reference GEPA state.
 

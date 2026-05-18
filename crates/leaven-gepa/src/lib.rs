@@ -63,10 +63,10 @@ pub mod prelude {
         GepaReflectionBootstrap, GepaReflectiveDataset, GepaReflector, GepaReport,
         GepaReportCandidate, GepaReportFrontierCase, GepaReportHistoryEntry,
         GepaReportValidationSubscore, GepaSkipReason, GepaStageProposer, ImprovementOrEqual,
-        LmBackedReflector, LmBackedReflectorConfig, MinibatchThenValidation, PartSelector,
-        PlainTextEditParser, ReflectRequest, ReflectionError, ReflectionOutputParser,
-        ReflectionRenderInput, ReflectionRenderer, ReflectiveCaseInput, ReflectiveDatasetBuilder,
-        ReflectiveExample, ReflectiveSideInfoValue, RoundRobinPart, StrictImprovement,
-        SurfaceProposer, ValidationPolicy, gepa_stage_proposer,
+        LmBackedReflector, LmBackedReflectorConfig, PartSelector, PlainTextEditParser,
+        ReflectRequest, ReflectionError, ReflectionOutputParser, ReflectionRenderInput,
+        ReflectionRenderer, ReflectiveCaseInput, ReflectiveDatasetBuilder, ReflectiveExample,
+        ReflectiveSideInfoValue, RoundRobinPart, StrictImprovement, SurfaceProposer,
+        ValidationPolicy, gepa_stage_proposer,
     };
 }

@@ -808,6 +808,54 @@ fn gepa_candidate_history_tracks_seed_and_accepted_children_by_assessment() {
 }
 
 #[test]
+fn train_accepted_child_without_validation_is_not_reference_admitted() {
+    block_on(async {
+        let case_set = train_case_set();
+        let store = InlineEvidenceStore::<ScalarEvidence>::new("inline");
+        let mut engine = Engine::<SamplingProblem>::builder()
+            .evaluator(PrefixImprovementEvaluator)
+            .build();
+        let seed = engine
+            .insert_seed(
+                PartMapArtifact(BTreeMap::from([("answer".to_owned(), "draft".to_owned())])),
+                0,
+            )
+            .unwrap();
+        let mut gepa = Gepa::new(
+            PartMapSurface,
+            ParetoFrontier::by_case().build(),
+            FixedSurfaceEdit::new("improved".to_owned()),
+        )
+        .reflective_dataset(OneReflectiveExample)
+        .batch_sampler(EpochShuffled::new(1))
+        .validation_policy(MinibatchThenValidation)
+        .max_iterations(1);
+
+        engine.run(&mut gepa, &case_set, &store).await.unwrap();
+
+        let child = engine.view().candidate_tree().children(seed)[0];
+        let report = gepa.report();
+        let attempt = report
+            .proposal_attempts
+            .first()
+            .expect("accepted train-screen attempt is reported");
+
+        assert_eq!(attempt.child, Some(child));
+        assert_eq!(attempt.accepted, Some(true));
+        assert_eq!(attempt.admitted_index, None);
+        assert_eq!(report.candidates.len(), 1);
+        assert_eq!(report.candidates[0].candidate, seed);
+        assert!(!report.events.iter().any(|event| {
+            matches!(
+                event,
+                leaven_gepa::GepaEventSummary::CandidateAdmitted { .. }
+            )
+        }));
+        assert_eq!(gepa.population().best(), Some(child));
+    });
+}
+
+#[test]
 fn gepa_reflective_dataset_default_projects_scalar_examples_with_case_input() {
     block_on(async {
         let case_set = CaseSet::new(vec!["input alpha"]).with_partition(

@@ -238,6 +238,11 @@ Prompt-audit finding:
   durable compatibility manifest before runner/LM work. The old completed live
   report still predates this repair and must not be cited as provider-runtime
   compatibility proof.
+- Verifier wave 3 also found the scaffold no-validation policy could mark a
+  train-screen accepted child as `admitted_index=Some(_)`. `accept_child` now
+  assigns `admitted_index` only when accepted-child validation returns a GEPA
+  reference-state index, and `MinibatchThenValidation` is no longer in the
+  ordinary `leaven_gepa::prelude` route.
 
 Comparison notes against the older improving artifact:
 

@@ -319,13 +319,13 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
         let admitted_index = self
             .validate_candidate(ctx, candidate, vec![parent_index], false)
             .await?;
-        let admitted_index = admitted_index.unwrap_or_else(|| {
-            self.reference_state
-                .add_unvalidated_candidate(candidate, vec![parent_index])
-        });
-        if let Some(attempt) = self.proposal_attempts.last_mut() {
-            if attempt.child == Some(candidate) {
-                attempt.admitted_index = Some(admitted_index);
+        // Only full validation admits a child into GEPA reference state; a
+        // train-accepted child can still remain train-population-only.
+        if let Some(admitted_index) = admitted_index {
+            if let Some(attempt) = self.proposal_attempts.last_mut() {
+                if attempt.child == Some(candidate) {
+                    attempt.admitted_index = Some(admitted_index);
+                }
             }
         }
         Ok(())
