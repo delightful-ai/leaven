@@ -60,6 +60,8 @@ const LEAVEN_AIME_PROFILE: &str = "LEAVEN_AIME_PROFILE";
 const LEAVEN_AIME_RUN_DIR: &str = "LEAVEN_AIME_RUN_DIR";
 const LEAVEN_AIME_DETERMINISTIC_REFLECTION: &str = "LEAVEN_AIME_DETERMINISTIC_REFLECTION";
 const LEAVEN_OPENAI_MAX_CONCURRENT_REQUESTS: &str = "LEAVEN_OPENAI_MAX_CONCURRENT_REQUESTS";
+const LEAVEN_OPENAI_REQUEST_TIMEOUT_SECONDS: &str = "LEAVEN_OPENAI_REQUEST_TIMEOUT_SECONDS";
+const GEPA_AIME_OPENAI_REQUEST_TIMEOUT_SECONDS: u64 = 120;
 const DETERMINISTIC_SMOKE_METRIC_CALLS: u64 = 512;
 const DETERMINISTIC_SMOKE_ITERATIONS: usize = 1;
 const OPTIMIZE_ANYTHING_REFLECTION_PROMPT_TEMPLATE: &str = r"I am optimizing a parameter in my system. The current parameter value is:
@@ -305,6 +307,10 @@ fn report_runtime_lines(config: &AimeRunConfig, run: &AimeRunResult) -> Vec<Stri
             "openai_max_concurrent_requests={}",
             config.solver.runtime.max_concurrent_requests
         ),
+        format!(
+            "openai_request_timeout_seconds={}",
+            config.solver.runtime.request_timeout_seconds
+        ),
         "reflection_output=text".to_owned(),
         "reflection_parser=plain-text-fenced".to_owned(),
     ]
@@ -509,12 +515,13 @@ fn report_lm_role_lines(role: &AimeLmRoleReport) -> Vec<String> {
             report_fingerprint(role.runtime_fingerprint)
         ),
         format!(
-            "lm_role_runtime={} cache_policy={} cache_backend={} cache_durable={} max_concurrent_requests={} output={} parser={}",
+            "lm_role_runtime={} cache_policy={} cache_backend={} cache_durable={} max_concurrent_requests={} request_timeout_seconds={} output={} parser={}",
             role.role.label(),
             report_lm_cache_policy(role.cache_policy),
             report_lm_cache_backend(role.cache_backend),
             role.cache_durable,
             role.max_concurrent_requests,
+            role.request_timeout_seconds,
             role.output,
             role.parser
         ),
@@ -1094,6 +1101,7 @@ fn p8_lm_role_report_json(role: &AimeLmRoleReport) -> serde_json::Value {
             "cache_backend": report_lm_cache_backend(role.cache_backend),
             "cache_durable": role.cache_durable,
             "max_concurrent_requests": role.max_concurrent_requests.get(),
+            "request_timeout_seconds": role.request_timeout_seconds,
             "output": role.output,
             "parser": role.parser,
         },
@@ -1536,6 +1544,7 @@ impl AimeRoleReports {
                 cache_backend: config.solver.runtime.cache_backend,
                 cache_durable: config.solver.runtime.cache_backend.is_durable(),
                 max_concurrent_requests: config.solver.runtime.max_concurrent_requests,
+                request_timeout_seconds: config.solver.runtime.request_timeout_seconds,
                 output: "dspy-chain-of-thought",
                 parser: "dspy-chat-adapter-fields",
                 prompt_contract: AimePromptContractReport {
@@ -1560,6 +1569,7 @@ impl AimeRoleReports {
                 cache_backend: config.reflection.runtime.cache_backend,
                 cache_durable: config.reflection.runtime.cache_backend.is_durable(),
                 max_concurrent_requests: config.reflection.runtime.max_concurrent_requests,
+                request_timeout_seconds: config.reflection.runtime.request_timeout_seconds,
                 output: "text",
                 parser: "plain-text-fenced",
                 prompt_contract: AimePromptContractReport {
@@ -1589,6 +1599,7 @@ struct AimeLmRoleReport {
     cache_backend: AimeLmCacheBackend,
     cache_durable: bool,
     max_concurrent_requests: NonZeroUsize,
+    request_timeout_seconds: u64,
     output: &'static str,
     parser: &'static str,
     prompt_contract: AimePromptContractReport,
@@ -2050,19 +2061,30 @@ fn parse_lm_cache_policy(env_name: &str, value: Option<&str>) -> LmCachePolicy {
 struct AimeOpenAiRuntimeConfig {
     max_concurrent_requests: NonZeroUsize,
     cache_backend: AimeLmCacheBackend,
+    request_timeout_seconds: u64,
 }
 
 impl AimeOpenAiRuntimeConfig {
     fn from_env() -> Self {
         let max_concurrent = std::env::var(LEAVEN_OPENAI_MAX_CONCURRENT_REQUESTS).ok();
         let cache_backend = std::env::var(LEAVEN_AIME_LM_CACHE_BACKEND).ok();
-        Self::from_values(max_concurrent.as_deref(), cache_backend.as_deref())
+        let request_timeout = std::env::var(LEAVEN_OPENAI_REQUEST_TIMEOUT_SECONDS).ok();
+        Self::from_values(
+            max_concurrent.as_deref(),
+            cache_backend.as_deref(),
+            request_timeout.as_deref(),
+        )
     }
 
-    fn from_values(max_concurrent: Option<&str>, cache_backend: Option<&str>) -> Self {
+    fn from_values(
+        max_concurrent: Option<&str>,
+        cache_backend: Option<&str>,
+        request_timeout: Option<&str>,
+    ) -> Self {
         Self {
             max_concurrent_requests: parse_max_concurrent_requests(max_concurrent),
             cache_backend: parse_lm_cache_backend(cache_backend),
+            request_timeout_seconds: parse_request_timeout_seconds(request_timeout),
         }
     }
 
@@ -2071,6 +2093,7 @@ impl AimeOpenAiRuntimeConfig {
             max_concurrent_requests: NonZeroUsize::new(GEPA_AIME_MAX_WORKERS)
                 .expect("GEPA AIME worker count is non-zero"),
             cache_backend: AimeLmCacheBackend::InMemory,
+            request_timeout_seconds: GEPA_AIME_OPENAI_REQUEST_TIMEOUT_SECONDS,
         }
     }
 }
@@ -2117,6 +2140,19 @@ fn parse_lm_cache_backend(value: Option<&str>) -> AimeLmCacheBackend {
             "unsupported {LEAVEN_AIME_LM_CACHE_BACKEND}={raw:?}; expected sqlite, eager-sqlite, or in-memory"
         ),
     }
+}
+
+fn parse_request_timeout_seconds(value: Option<&str>) -> u64 {
+    let Some(raw) = value.map(str::trim).filter(|value| !value.is_empty()) else {
+        return GEPA_AIME_OPENAI_REQUEST_TIMEOUT_SECONDS;
+    };
+    let parsed = raw.parse::<u64>().unwrap_or_else(|source| {
+        panic!("unsupported {LEAVEN_OPENAI_REQUEST_TIMEOUT_SECONDS}={raw:?}: {source}")
+    });
+    if parsed == 0 {
+        panic!("unsupported {LEAVEN_OPENAI_REQUEST_TIMEOUT_SECONDS}=0; expected a positive integer")
+    }
+    parsed
 }
 
 fn gepa_aime_sampling() -> SamplingOptions {
@@ -3298,10 +3334,12 @@ fn cached_openai_lm(
     role: &str,
 ) -> AimeOpenAiLm {
     let config = match OpenAiConfig::from_env() {
-        Ok(config) => config.with_throttle_policy(OpenAiThrottlePolicy::new(
-            runtime.max_concurrent_requests,
-            Duration::ZERO,
-        )),
+        Ok(config) => config
+            .with_throttle_policy(OpenAiThrottlePolicy::new(
+                runtime.max_concurrent_requests,
+                Duration::ZERO,
+            ))
+            .with_request_timeout(Duration::from_secs(runtime.request_timeout_seconds)),
         Err(source) => {
             return unavailable_openai_lm(
                 role,
@@ -4001,7 +4039,7 @@ mod tests {
 
     #[test]
     fn live_profile_evaluator_fanout_tracks_provider_concurrency() {
-        let runtime = AimeOpenAiRuntimeConfig::from_values(Some("7"), Some("sqlite"));
+        let runtime = AimeOpenAiRuntimeConfig::from_values(Some("7"), Some("sqlite"), None);
         let config = AimeRunConfig::live_openai_with_controls(
             AimeRunProfile::GepaAime,
             AimeDataSource::HuggingFaceCache,
@@ -4645,27 +4683,33 @@ Provide the new parameter value within ``` blocks."
 
     #[test]
     fn live_openai_runtime_config_defaults_to_sqlite_cache_and_names_provider_throttle() {
-        let runtime = AimeOpenAiRuntimeConfig::from_values(Some("8"), None);
+        let runtime = AimeOpenAiRuntimeConfig::from_values(Some("8"), None, Some("600"));
 
         assert_eq!(runtime.max_concurrent_requests.get(), 8);
         assert_eq!(runtime.cache_backend, AimeLmCacheBackend::Sqlite);
+        assert_eq!(runtime.request_timeout_seconds, 600);
         assert!(runtime.cache_backend.is_durable());
         assert_eq!(
-            AimeOpenAiRuntimeConfig::from_values(None, None)
+            AimeOpenAiRuntimeConfig::from_values(None, None, None)
                 .max_concurrent_requests
                 .get(),
             GEPA_AIME_MAX_WORKERS
         );
         assert_eq!(
-            AimeOpenAiRuntimeConfig::from_values(None, Some("in-memory")).cache_backend,
+            AimeOpenAiRuntimeConfig::from_values(None, None, None).request_timeout_seconds,
+            GEPA_AIME_OPENAI_REQUEST_TIMEOUT_SECONDS
+        );
+        assert_eq!(
+            AimeOpenAiRuntimeConfig::from_values(None, Some("in-memory"), None).cache_backend,
             AimeLmCacheBackend::InMemory
         );
         assert_eq!(
-            AimeOpenAiRuntimeConfig::from_values(None, Some("eager")).cache_backend,
+            AimeOpenAiRuntimeConfig::from_values(None, Some("eager"), None).cache_backend,
             AimeLmCacheBackend::EagerSqlite
         );
         assert_eq!(
-            AimeOpenAiRuntimeConfig::from_values(None, Some("workspace-sqlite")).cache_backend,
+            AimeOpenAiRuntimeConfig::from_values(None, Some("workspace-sqlite"), None)
+                .cache_backend,
             AimeLmCacheBackend::EagerSqlite
         );
     }
@@ -4677,7 +4721,8 @@ Provide the new parameter value within ``` blocks."
         config.solver.live = true;
         config.solver.model = "solver-model".to_owned();
         config.solver.cache_policy = LmCachePolicy::ReadWrite;
-        config.solver.runtime = AimeOpenAiRuntimeConfig::from_values(Some("7"), Some("sqlite"));
+        config.solver.runtime =
+            AimeOpenAiRuntimeConfig::from_values(Some("7"), Some("sqlite"), Some("600"));
         config.reflection.live = true;
         config.reflection.model = "reflection-model".to_owned();
         config.reflection.cache_policy = LmCachePolicy::Refresh;
@@ -4735,6 +4780,11 @@ Provide the new parameter value within ``` blocks."
                 .iter()
                 .any(|line| line == "openai_max_concurrent_requests=7")
         );
+        assert!(
+            lines
+                .iter()
+                .any(|line| line == "openai_request_timeout_seconds=600")
+        );
         assert!(lines.iter().any(|line| line == "reflection_output=text"));
         assert!(
             lines
@@ -4757,7 +4807,7 @@ Provide the new parameter value within ``` blocks."
             )
         }));
         assert!(lines.iter().any(|line| {
-            line == "lm_role_runtime=solver cache_policy=read-write cache_backend=sqlite cache_durable=true max_concurrent_requests=7 output=dspy-chain-of-thought parser=dspy-chat-adapter-fields"
+            line == "lm_role_runtime=solver cache_policy=read-write cache_backend=sqlite cache_durable=true max_concurrent_requests=7 request_timeout_seconds=600 output=dspy-chain-of-thought parser=dspy-chat-adapter-fields"
         }));
         assert!(lines.iter().any(|line| {
             line.starts_with(
@@ -4765,7 +4815,7 @@ Provide the new parameter value within ``` blocks."
             )
         }));
         assert!(lines.iter().any(|line| {
-            line == "lm_role_runtime=reflection cache_policy=refresh cache_backend=sqlite cache_durable=true max_concurrent_requests=7 output=text parser=plain-text-fenced"
+            line == "lm_role_runtime=reflection cache_policy=refresh cache_backend=sqlite cache_durable=true max_concurrent_requests=7 request_timeout_seconds=600 output=text parser=plain-text-fenced"
         }));
     }
 
@@ -4850,6 +4900,14 @@ Provide the new parameter value within ``` blocks."
         assert_eq!(
             report["lm_roles"][1]["prompt_contract"]["renderer"],
             "gepa-default-markdown-side-info"
+        );
+        assert_eq!(
+            report["lm_roles"][0]["runtime"]["request_timeout_seconds"],
+            GEPA_AIME_OPENAI_REQUEST_TIMEOUT_SECONDS
+        );
+        assert_eq!(
+            report["lm_roles"][1]["runtime"]["request_timeout_seconds"],
+            GEPA_AIME_OPENAI_REQUEST_TIMEOUT_SECONDS
         );
         assert!(
             report["lm_roles"][0]["prompt_contract"]["request_shape_fingerprint"]
@@ -4993,7 +5051,9 @@ Provide the new parameter value within ``` blocks."
                 && event["source_ref_count"]
                     .as_u64()
                     .is_some_and(|refs| refs > 0)
-                && event["cases"].as_array().is_some_and(|cases| !cases.is_empty())
+                && event["cases"]
+                    .as_array()
+                    .is_some_and(|cases| !cases.is_empty())
         }));
         assert!(gepa_events.iter().any(|event| {
             event["phase"] == "reflection_completed" && event["child"].as_str().is_some()
@@ -5003,14 +5063,18 @@ Provide the new parameter value within ``` blocks."
                 && event["metric_calls_delta"]
                     .as_u64()
                     .is_some_and(|calls| calls > 0)
-                && event["score"].as_str().is_some_and(|score| !score.is_empty())
+                && event["score"]
+                    .as_str()
+                    .is_some_and(|score| !score.is_empty())
         }));
         assert!(gepa_events.iter().any(|event| {
             event["phase"] == "child_evaluated"
                 && event["metric_calls_delta"]
                     .as_u64()
                     .is_some_and(|calls| calls > 0)
-                && event["score"].as_str().is_some_and(|score| !score.is_empty())
+                && event["score"]
+                    .as_str()
+                    .is_some_and(|score| !score.is_empty())
         }));
         assert!(
             gepa_events

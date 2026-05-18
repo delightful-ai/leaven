@@ -108,6 +108,10 @@ throwaway/debug backend and prints `lm_cache_durable=false`.
 concurrency for both live roles and defaults to `32`. The P8 binary runs on a
 32-worker Tokio runtime so cache-missing case batches can make real progress
 up to that provider throttle instead of serializing on the executable runtime.
+`LEAVEN_OPENAI_REQUEST_TIMEOUT_SECONDS` controls the per-request OpenAI
+transport timeout and defaults to `120`; long release runs that encounter slow
+Responses API calls should set it explicitly, for example `600`, and the P8
+report prints the effective timeout for both live roles.
 `LEAVEN_AIME_RUN_DIR` is the explicit resume handle and uses the same durable
 run-directory layout as `.run_dir(path)`. Omit it to get a managed
 `.leaven/runs/<run-id>/` directory. `LEAVEN_AIME_DETERMINISTIC_REFLECTION=1`
