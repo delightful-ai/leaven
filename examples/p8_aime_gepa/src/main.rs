@@ -27,7 +27,10 @@ use leaven::prelude::{
     Artifact, ArtifactIdentity, Budget, EditSurface, Optimized, Part, PartAddress, RunOutput,
     Score, ScoreContext, ScoreError, SurfaceError, SurfaceFingerprint,
 };
-use leaven::run::{CachePolicy, RunCase, RunError, RunProblem, RunResumability, RunStorage};
+use leaven::run::{
+    CachePolicy, OptimizeError, ResumeCompatibilityError, RunCase, RunError, RunProblem,
+    RunResumability, RunStorage, RuntimeFingerprint,
+};
 use leaven::stdlib::evidence::OutputRecord;
 use leaven_gepa::{
     DefaultReflectionRenderer, LmBackedReflectorConfig, ReflectRequest, ReflectionRenderInput,
@@ -145,6 +148,9 @@ fn error_report_lines(
             "p8_aime_gepa_failure_source_{}={source}",
             index + 1
         ));
+    }
+    if let Some(line) = p8_failure_compatibility_line(error) {
+        lines.push(line);
     }
     lines
 }
@@ -380,6 +386,20 @@ fn report_runtime_lines(config: &AimeRunConfig, run: &AimeRunResult) -> Vec<Stri
         format!(
             "lm_cache_path={}",
             report_lm_cache_path(config.solver.runtime.cache_backend, &result.summary.storage)
+        ),
+        format!(
+            "lm_cache_read_paths={}",
+            report_lm_cache_read_paths_line(
+                config.solver.runtime.cache_backend,
+                &result.summary.storage
+            )
+        ),
+        format!(
+            "lm_cache_write_path={}",
+            report_lm_cache_write_path(
+                config.solver.runtime.cache_backend,
+                &result.summary.storage
+            )
         ),
         format!(
             "openai_max_concurrent_requests={}",
@@ -790,6 +810,58 @@ fn report_lm_cache_path(backend: AimeLmCacheBackend, storage: &RunStorage) -> St
     }
 }
 
+fn report_lm_cache_read_paths(backend: AimeLmCacheBackend, storage: &RunStorage) -> Vec<String> {
+    match backend {
+        AimeLmCacheBackend::InMemory => Vec::new(),
+        AimeLmCacheBackend::Sqlite => match storage {
+            RunStorage::Stored {
+                run_dir: Some(run_dir),
+                ..
+            } => vec![
+                SqliteLmCache::path_in_run_dir(run_dir)
+                    .display()
+                    .to_string(),
+            ],
+            RunStorage::Stored { .. } | RunStorage::Ephemeral { .. } => Vec::new(),
+        },
+        AimeLmCacheBackend::EagerSqlite => {
+            let mut paths = Vec::new();
+            if let RunStorage::Stored {
+                run_dir: Some(run_dir),
+                ..
+            } = storage
+            {
+                paths.push(
+                    SqliteLmCache::path_in_run_dir(run_dir)
+                        .display()
+                        .to_string(),
+                );
+            }
+            paths.push(SqliteLmCache::path_in_workspace(".").display().to_string());
+            paths
+        }
+    }
+}
+
+fn report_lm_cache_read_paths_line(backend: AimeLmCacheBackend, storage: &RunStorage) -> String {
+    let paths = report_lm_cache_read_paths(backend, storage);
+    if paths.is_empty() {
+        "none".to_owned()
+    } else {
+        paths.join(";")
+    }
+}
+
+fn report_lm_cache_write_path(backend: AimeLmCacheBackend, storage: &RunStorage) -> String {
+    match backend {
+        AimeLmCacheBackend::InMemory => "none".to_owned(),
+        AimeLmCacheBackend::Sqlite => report_lm_cache_path(backend, storage),
+        AimeLmCacheBackend::EagerSqlite => {
+            SqliteLmCache::path_in_workspace(".").display().to_string()
+        }
+    }
+}
+
 fn report_stop_reason(reason: leaven::run::OptimizationStopReason) -> &'static str {
     match reason {
         leaven::run::OptimizationStopReason::OptimizerDone => "optimizer_done",
@@ -1115,6 +1187,8 @@ fn p8_aime_report_json(config: &AimeRunConfig, run: &AimeRunResult) -> serde_jso
             "lm_backend": report_lm_cache_backend(config.solver.runtime.cache_backend),
             "lm_durable": config.solver.runtime.cache_backend.is_durable(),
             "lm_path": report_lm_cache_path(config.solver.runtime.cache_backend, &result.summary.storage),
+            "lm_read_paths": report_lm_cache_read_paths(config.solver.runtime.cache_backend, &result.summary.storage),
+            "lm_write_path": report_lm_cache_write_path(config.solver.runtime.cache_backend, &result.summary.storage),
         },
         "best": {
             "system_prompt": result.best().map(|best| best.system.clone()),
@@ -1150,6 +1224,134 @@ fn p8_comparison_json(config: &AimeRunConfig) -> serde_json::Value {
     })
 }
 
+fn p8_failure_compatibility_line(error: &(dyn std::error::Error + 'static)) -> Option<String> {
+    let compatibility = p8_resume_compatibility_error(error)?;
+    Some(match compatibility {
+        ResumeCompatibilityError::RunnerFingerprintMismatch { stored, live } => format!(
+            "resume_compatibility_mismatch=runner stored={} live={}",
+            report_runtime_fingerprint(*stored),
+            report_runtime_fingerprint(*live)
+        ),
+        ResumeCompatibilityError::ScorerFingerprintMismatch { stored, live } => format!(
+            "resume_compatibility_mismatch=scorer stored={} live={}",
+            report_runtime_fingerprint(*stored),
+            report_runtime_fingerprint(*live)
+        ),
+        ResumeCompatibilityError::EvaluatorFingerprintMismatch { stored, live } => format!(
+            "resume_compatibility_mismatch=evaluator stored={} live={}",
+            report_runtime_fingerprint(*stored),
+            report_runtime_fingerprint(*live)
+        ),
+        ResumeCompatibilityError::LmRoleFingerprintMismatch { role, stored, live } => format!(
+            "resume_compatibility_mismatch=lm-role role={} stored={} live={}",
+            role,
+            stored
+                .as_ref()
+                .copied()
+                .map(report_runtime_fingerprint)
+                .unwrap_or_else(|| "none".to_owned()),
+            live.as_ref()
+                .copied()
+                .map(report_runtime_fingerprint)
+                .unwrap_or_else(|| "none".to_owned())
+        ),
+        ResumeCompatibilityError::DatasetFingerprintMismatch { .. } => {
+            "resume_compatibility_mismatch=dataset".to_owned()
+        }
+        ResumeCompatibilityError::OptimizerCompatibilityMismatch { .. } => {
+            "resume_compatibility_mismatch=optimizer".to_owned()
+        }
+        ResumeCompatibilityError::CacheCompatibilityMismatch => {
+            "resume_compatibility_mismatch=cache".to_owned()
+        }
+        ResumeCompatibilityError::BudgetPolicyMismatch => {
+            "resume_compatibility_mismatch=budget".to_owned()
+        }
+        ResumeCompatibilityError::Read { path, .. } => {
+            format!(
+                "resume_compatibility_mismatch=manifest-read path={}",
+                path.display()
+            )
+        }
+        ResumeCompatibilityError::Decode { path, .. } => {
+            format!(
+                "resume_compatibility_mismatch=manifest-decode path={}",
+                path.display()
+            )
+        }
+    })
+}
+
+fn p8_failure_compatibility_json(error: &(dyn std::error::Error + 'static)) -> serde_json::Value {
+    let Some(compatibility) = p8_resume_compatibility_error(error) else {
+        return serde_json::Value::Null;
+    };
+    match compatibility {
+        ResumeCompatibilityError::RunnerFingerprintMismatch { stored, live } => {
+            runtime_compatibility_json("runner", *stored, *live)
+        }
+        ResumeCompatibilityError::ScorerFingerprintMismatch { stored, live } => {
+            runtime_compatibility_json("scorer", *stored, *live)
+        }
+        ResumeCompatibilityError::EvaluatorFingerprintMismatch { stored, live } => {
+            runtime_compatibility_json("evaluator", *stored, *live)
+        }
+        ResumeCompatibilityError::LmRoleFingerprintMismatch { role, stored, live } => {
+            serde_json::json!({
+                "kind": "lm-role",
+                "role": role,
+                "stored": stored.as_ref().copied().map(report_runtime_fingerprint),
+                "live": live.as_ref().copied().map(report_runtime_fingerprint),
+            })
+        }
+        ResumeCompatibilityError::DatasetFingerprintMismatch { .. } => {
+            serde_json::json!({ "kind": "dataset" })
+        }
+        ResumeCompatibilityError::OptimizerCompatibilityMismatch { .. } => {
+            serde_json::json!({ "kind": "optimizer" })
+        }
+        ResumeCompatibilityError::CacheCompatibilityMismatch => {
+            serde_json::json!({ "kind": "cache" })
+        }
+        ResumeCompatibilityError::BudgetPolicyMismatch => {
+            serde_json::json!({ "kind": "budget" })
+        }
+        ResumeCompatibilityError::Read { path, .. } => {
+            serde_json::json!({ "kind": "manifest-read", "path": path.display().to_string() })
+        }
+        ResumeCompatibilityError::Decode { path, .. } => {
+            serde_json::json!({ "kind": "manifest-decode", "path": path.display().to_string() })
+        }
+    }
+}
+
+fn p8_resume_compatibility_error<'a>(
+    error: &'a (dyn std::error::Error + 'static),
+) -> Option<&'a ResumeCompatibilityError> {
+    error
+        .downcast_ref::<OptimizeError>()
+        .and_then(|error| match error {
+            OptimizeError::ResumeCompatibility(source) => Some(source.as_ref()),
+            _ => None,
+        })
+}
+
+fn runtime_compatibility_json(
+    kind: &'static str,
+    stored: RuntimeFingerprint,
+    live: RuntimeFingerprint,
+) -> serde_json::Value {
+    serde_json::json!({
+        "kind": kind,
+        "stored": report_runtime_fingerprint(stored),
+        "live": report_runtime_fingerprint(live),
+    })
+}
+
+fn report_runtime_fingerprint(fingerprint: RuntimeFingerprint) -> String {
+    report_full_fingerprint(fingerprint.fingerprint())
+}
+
 fn p8_aime_failure_report_json(
     config: &AimeRunConfig,
     error: &(dyn std::error::Error + 'static),
@@ -1171,6 +1373,7 @@ fn p8_aime_failure_report_json(
             .map(|path| path.display().to_string()),
         "wall_time_ms": wall_time.as_millis(),
         "error": error.to_string(),
+        "resume_compatibility": p8_failure_compatibility_json(error),
         "sources": std::iter::successors(error.source(), |source| source.source())
             .map(ToString::to_string)
             .collect::<Vec<_>>(),
@@ -6445,6 +6648,40 @@ Provide the new parameter value within ``` blocks."
     }
 
     #[test]
+    fn eager_sqlite_cache_reports_exact_read_before_workspace_write() {
+        let run_dir = std::env::temp_dir()
+            .join("leaven-p8-aime")
+            .join(RunId::new().to_string());
+        let storage = RunStorage::Stored {
+            run_id: RunId::new(),
+            run_dir: Some(run_dir.clone()),
+            latest_checkpoint: None,
+            resumability: RunResumability::Resumable,
+        };
+        let run_cache = SqliteLmCache::path_in_run_dir(&run_dir)
+            .display()
+            .to_string();
+        let workspace_cache = SqliteLmCache::path_in_workspace(".").display().to_string();
+
+        assert_eq!(
+            report_lm_cache_path(AimeLmCacheBackend::EagerSqlite, &storage),
+            workspace_cache
+        );
+        assert_eq!(
+            report_lm_cache_read_paths(AimeLmCacheBackend::EagerSqlite, &storage),
+            vec![run_cache.clone(), workspace_cache.clone()]
+        );
+        assert_eq!(
+            report_lm_cache_read_paths_line(AimeLmCacheBackend::EagerSqlite, &storage),
+            format!("{run_cache};{workspace_cache}")
+        );
+        assert_eq!(
+            report_lm_cache_write_path(AimeLmCacheBackend::EagerSqlite, &storage),
+            workspace_cache
+        );
+    }
+
+    #[test]
     fn cache_only_live_replay_classification_does_not_claim_provider_proof() {
         let mut config = AimeRunConfig::gepa_aime();
         config.solver.cache_policy = LmCachePolicy::CacheOnly;
@@ -6625,6 +6862,14 @@ Provide the new parameter value within ``` blocks."
             lines.iter().any(
                 |line| line.ends_with("/lm-cache.sqlite") && line.starts_with("lm_cache_path=")
             )
+        );
+        assert!(
+            lines.iter().any(|line| line.ends_with("/lm-cache.sqlite")
+                && line.starts_with("lm_cache_read_paths="))
+        );
+        assert!(
+            lines.iter().any(|line| line.ends_with("/lm-cache.sqlite")
+                && line.starts_with("lm_cache_write_path="))
         );
         assert!(
             lines
@@ -7072,6 +7317,21 @@ Provide the new parameter value within ``` blocks."
             report["cache"]["evaluation"]["hit_cost_zero"],
             result.summary.cache.evaluation.hit_cost_zero
         );
+        assert_eq!(
+            report["cache"]["lm_read_paths"],
+            serde_json::to_value(report_lm_cache_read_paths(
+                config.solver.runtime.cache_backend,
+                &result.summary.storage
+            ))
+            .unwrap()
+        );
+        assert_eq!(
+            report["cache"]["lm_write_path"],
+            report_lm_cache_write_path(
+                config.solver.runtime.cache_backend,
+                &result.summary.storage
+            )
+        );
     }
 
     fn assert_p8_report_gepa_summary(report: &serde_json::Value) {
@@ -7481,6 +7741,35 @@ Provide the new parameter value within ``` blocks."
         );
         assert_eq!(report["comparison"]["leaven_reflection_model"], "gpt-5.1");
         let _ = std::fs::remove_dir_all(run_dir);
+    }
+
+    #[test]
+    fn p8_failure_report_exposes_resume_compatibility_mismatch() {
+        let mut config = AimeRunConfig::deterministic_smoke();
+        config.run_dir = Some(unique_temp_dir("p8-compatibility-failure-report"));
+        let error = OptimizeError::ResumeCompatibility(Box::new(
+            ResumeCompatibilityError::RunnerFingerprintMismatch {
+                stored: RuntimeFingerprint::new(Fingerprint::from_bytes([81; 32])),
+                live: RuntimeFingerprint::new(Fingerprint::from_bytes([82; 32])),
+            },
+        ));
+
+        let report = p8_aime_failure_report_json(&config, &error, Duration::from_millis(3));
+        let lines = error_report_lines(&config, &error, Duration::from_millis(3));
+
+        assert_eq!(report["resume_compatibility"]["kind"], "runner");
+        assert_eq!(
+            report["resume_compatibility"]["stored"],
+            "5151515151515151515151515151515151515151515151515151515151515151"
+        );
+        assert_eq!(
+            report["resume_compatibility"]["live"],
+            "5252525252525252525252525252525252525252525252525252525252525252"
+        );
+        assert!(lines.iter().any(|line| {
+            line == "resume_compatibility_mismatch=runner stored=5151515151515151515151515151515151515151515151515151515151515151 live=5252525252525252525252525252525252525252525252525252525252525252"
+        }));
+        let _ = std::fs::remove_dir_all(config.run_dir.as_ref().unwrap());
     }
 
     #[test]

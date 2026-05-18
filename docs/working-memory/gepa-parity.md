@@ -156,6 +156,19 @@ Current speed stance:
   `gpt-5.1` reflection row was absent, and both `reports/p8-aime-start.json`
   and `reports/p8-aime-failure.json` recorded
   `comparison.reflection_model_alignment=upstream-matched`.
+- P8 cache-only replay now reports the LM cache path topology explicitly:
+  `eager-sqlite` reads the selected run-dir cache first, then workspace
+  `.leaven/lm-cache.sqlite`, and writes through to the workspace cache. Failure
+  reports also include structured `resume_compatibility` details plus a CLI
+  `resume_compatibility_mismatch=...` line. A no-spend replay copy of the
+  current completed run at
+  `.leaven/release-runs/p8-aime-gepa-current-release-cache-only-replay-20260518-120826`
+  correctly refused before LM work because the stored runner fingerprint
+  `51c456483b4d49c646aa738f9651642928714e2616a927872216f3a658504fd4` predates
+  the live runner fingerprint
+  `1b1fdd24eab5a9bb6035c2b71172a2877c888005650b8ca83d6ef507bc0a1d43`.
+  This is an intentional compatibility refusal, not a cache miss or provider
+  spend.
 
 Current feedback/reflection answer:
 
@@ -813,4 +826,7 @@ Cache/replay attempts after the report-schema fixes:
 4. Future release reports should include `case_deltas.summary` and
    `case_deltas.cases` so quality diagnosis starts from exact improved,
    regressed, unchanged-correct, and unchanged-wrong case IDs without exposing
-   raw hidden targets or reference solutions.
+   raw hidden targets or reference solutions. The current paid report predates
+   this schema, and cache-only regeneration from its run directory is blocked by
+   an intentional runner-fingerprint mismatch after the DSPy JSON-fallback
+   runner cutover.
