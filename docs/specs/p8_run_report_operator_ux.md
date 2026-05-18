@@ -206,7 +206,9 @@ domain-specific projection when the example has richer AIME report fields than
 the generic result facade.
 
 Reports must be deterministic JSON where practical so they can be diffed across
-resume attempts.
+resume attempts. Report writers must replace JSON files atomically, so a killed
+process leaves either the previous complete report or the next complete report,
+not a torn JSON payload.
 
 ## 9. Implementation Routing
 
@@ -236,6 +238,7 @@ Required tests:
   target payloads;
 - absent validation/test scores remain absent;
 - corrupt/missing manifest reports a typed non-resumable reason.
+- generic `summary.json` and P8 `p8-aime.json` report writes are atomic.
 
 Focused commands:
 

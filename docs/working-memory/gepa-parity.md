@@ -219,6 +219,11 @@ Prompt-audit finding:
   `admitted` / `admitted_index`. This matters for the live budget-boundary
   case where a child can pass the train screen but stop before full validation
   and therefore must not be reported as an admitted GEPA candidate.
+- Generic `summary.json` and P8 `p8-aime.json` report writes now use
+  write-temp/fsync/rename/dir-sync replacement instead of direct writes. This is
+  operator-path hardening for the next live release run: interrupted report
+  writes should leave either the prior complete report or the next complete
+  report, not a torn JSON artifact.
 
 Comparison notes against the older improving artifact:
 

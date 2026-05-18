@@ -1,9 +1,12 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
+    fs,
+    fs::OpenOptions,
+    io::Write,
     num::NonZeroUsize,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use leaven::core::{AssessmentTarget, CacheIdentity, InfoRef};
@@ -841,10 +844,61 @@ fn write_p8_aime_report(
     }
     let bytes = serde_json::to_vec_pretty(&p8_aime_report_json(config, run))
         .expect("P8 AIME report JSON serializes");
-    std::fs::write(&path, bytes).map_err(|source| leaven::run::OptimizeError::ReportStore {
-        operation: "write P8 AIME report json",
-        source,
-    })
+    write_p8_report_atomic(&path, &bytes, "write P8 AIME report json")
+}
+
+fn write_p8_report_atomic(
+    path: &Path,
+    bytes: &[u8],
+    operation: &'static str,
+) -> Result<(), leaven::run::OptimizeError> {
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| leaven::run::OptimizeError::ReportStore {
+            operation,
+            source: std::io::Error::new(std::io::ErrorKind::InvalidInput, "path has no file name"),
+        })?;
+    let temp = path.with_file_name(format!(
+        ".{file_name}.{}.{}.tmp",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos()
+    ));
+    let result = write_p8_report_atomic_inner(path, &temp, parent, bytes, operation);
+    if result.is_err() {
+        let _ = fs::remove_file(&temp);
+    }
+    result
+}
+
+fn write_p8_report_atomic_inner(
+    path: &Path,
+    temp: &Path,
+    parent: &Path,
+    bytes: &[u8],
+    operation: &'static str,
+) -> Result<(), leaven::run::OptimizeError> {
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(temp)
+        .map_err(|source| leaven::run::OptimizeError::ReportStore { operation, source })?;
+    file.write_all(bytes)
+        .and_then(|()| file.sync_all())
+        .map_err(|source| leaven::run::OptimizeError::ReportStore { operation, source })?;
+    drop(file);
+    fs::rename(temp, path)
+        .map_err(|source| leaven::run::OptimizeError::ReportStore { operation, source })?;
+    let dir = OpenOptions::new()
+        .read(true)
+        .open(parent)
+        .map_err(|source| leaven::run::OptimizeError::ReportStore { operation, source })?;
+    dir.sync_all()
+        .map_err(|source| leaven::run::OptimizeError::ReportStore { operation, source })
 }
 
 fn p8_aime_report_json(config: &AimeRunConfig, run: &AimeRunResult) -> serde_json::Value {
@@ -5950,6 +6004,21 @@ Provide the new parameter value within ``` blocks."
         assert!(line.contains("kind=missing_credentials"));
         assert!(!line.contains(secret));
         assert_eq!(telemetry.snapshot().failures.missing_credentials, 1);
+    }
+
+    #[test]
+    fn p8_report_atomic_write_rejects_paths_without_file_names() {
+        let error = write_p8_report_atomic(Path::new(""), b"{}", "write P8 AIME report json")
+            .expect_err("P8 report atomic writes require a file path");
+
+        assert!(matches!(
+            error,
+            leaven::run::OptimizeError::ReportStore { .. }
+        ));
+        assert_eq!(
+            error.to_string(),
+            "run report failed during write P8 AIME report json"
+        );
     }
 
     #[test]
