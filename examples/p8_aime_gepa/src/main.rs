@@ -1018,6 +1018,23 @@ fn p8_gepa_skip_reason(reason: GepaSkipReason) -> &'static str {
     }
 }
 
+#[cfg(test)]
+fn gepa_frontier_signature(report: &GepaReport) -> Vec<(String, Vec<u32>)> {
+    report
+        .validation_frontier
+        .iter()
+        .map(|case| {
+            (
+                case.case.to_string(),
+                case.candidates
+                    .iter()
+                    .map(|candidate| candidate.get())
+                    .collect(),
+            )
+        })
+        .collect()
+}
+
 fn p8_lm_role_report_json(role: &AimeLmRoleReport) -> serde_json::Value {
     serde_json::json!({
         "role": role.role.label(),
@@ -4398,6 +4415,68 @@ Provide the new parameter value within ``` blocks."
                 .iter()
                 .any(|line| line == "optimization_metric_calls=8")
         );
+    }
+
+    #[test]
+    fn deterministic_run_dir_resume_restores_gepa_without_repeating_search_work() {
+        let run_dir = std::env::temp_dir().join(format!(
+            "leaven-p8-resume-{}-{}",
+            std::process::id(),
+            RunId::new()
+        ));
+        let mut config = AimeRunConfig::deterministic_smoke();
+        config.budget = Budget::metric_calls(8);
+        config.max_iterations = 2;
+        config.evaluation_cache_policy = CachePolicy::Deterministic;
+        config.run_dir = Some(run_dir.clone());
+
+        let first = block_on(run_aime(config.clone(), deterministic_dataset()));
+        assert_eq!(
+            first.optimized.stop,
+            leaven::run::OptimizationStopReason::BudgetReached
+        );
+        let first_report = first
+            .gepa_report
+            .as_ref()
+            .expect("first run has GEPA report");
+        assert_eq!(first_report.total_metric_calls, 8);
+        assert_eq!(first_report.full_validation_evals, 2);
+        assert_eq!(first_report.proposal_attempts.len(), 1);
+        assert_eq!(first.role_reports.reflection.metrics.calls, 1);
+
+        let resumed = block_on(run_aime(config.clone(), deterministic_dataset()));
+        let resumed_report = resumed
+            .gepa_report
+            .as_ref()
+            .expect("resumed run has GEPA report");
+        assert_eq!(resumed.optimized.run_id, first.optimized.run_id);
+        assert_eq!(
+            resumed.optimized.stop,
+            leaven::run::OptimizationStopReason::BudgetReached
+        );
+        assert_eq!(
+            resumed_report.total_metric_calls,
+            first_report.total_metric_calls
+        );
+        assert_eq!(
+            resumed_report.full_validation_evals,
+            first_report.full_validation_evals
+        );
+        assert_eq!(
+            resumed_report.proposal_attempts.len(),
+            first_report.proposal_attempts.len()
+        );
+        assert_eq!(
+            gepa_frontier_signature(resumed_report),
+            gepa_frontier_signature(first_report)
+        );
+        assert_eq!(
+            resumed.role_reports.reflection.metrics.calls, 0,
+            "restored GEPA must not call reflection again after budget-stopped checkpoint"
+        );
+        assert!(resumed.optimized.summary.storage.is_resumable());
+
+        std::fs::remove_dir_all(run_dir).unwrap();
     }
 
     #[test]

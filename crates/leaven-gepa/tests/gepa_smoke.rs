@@ -1526,6 +1526,106 @@ fn gepa_resume_restores_sampler_cursor_and_does_not_repeat_seed_validation() {
 }
 
 #[test]
+fn gepa_resume_restores_selector_rng_and_part_cursor_after_accepted_child() {
+    block_on(async {
+        let control_seen = Arc::new(Mutex::new(Vec::new()));
+        let resume_seen = Arc::new(Mutex::new(Vec::new()));
+        let case_set = CaseSet::new(vec![(), (), ()])
+            .with_partition(
+                leaven_core::PartitionId::from("TRAIN"),
+                vec![leaven_kernel::CaseId::new(0)],
+            )
+            .with_partition(
+                leaven_core::PartitionId::from("VALIDATION"),
+                vec![leaven_kernel::CaseId::new(1), leaven_kernel::CaseId::new(2)],
+            );
+        let store = InlineEvidenceStore::<ScalarEvidence>::new("inline");
+
+        let mut control_engine = Engine::<SamplingProblem>::builder()
+            .evaluator(ValidationSelectionEvaluator {
+                seen_sets: control_seen.clone(),
+            })
+            .build();
+        control_engine
+            .insert_seed(resume_reflection_seed(), 0)
+            .unwrap();
+        let mut control_gepa = resume_reflection_gepa();
+        control_engine
+            .run(&mut control_gepa, &case_set, &store)
+            .await
+            .unwrap();
+
+        let mut partial_engine = Engine::<SamplingProblem>::builder()
+            .evaluator(ValidationSelectionEvaluator {
+                seen_sets: resume_seen.clone(),
+            })
+            .budget(Budget::unlimited())
+            .metric_call_budget_stopper(6)
+            .build();
+        partial_engine
+            .insert_seed(resume_reflection_seed(), 0)
+            .unwrap();
+        let mut partial_gepa = resume_reflection_gepa();
+        partial_engine
+            .run(&mut partial_gepa, &case_set, &store)
+            .await
+            .unwrap();
+        assert_eq!(partial_gepa.report().proposal_attempts.len(), 1);
+        assert_eq!(partial_gepa.reference_state().records().len(), 2);
+
+        let optimizer_state = partial_gepa
+            .checkpoint_state(CheckpointContext::new(partial_engine.view()))
+            .unwrap();
+        let checkpoint = RunCheckpoint::new(
+            partial_engine.view().run_id(),
+            leaven_kernel::now(),
+            GraphSnapshotRef {
+                schema: Fingerprint::from_bytes([23; 32]),
+                format: StateFormat::Json,
+                bytes: BlobRef {
+                    store: "resume-reflection".to_owned(),
+                    key: "graph".to_owned(),
+                },
+            },
+            partial_engine.budget().snapshot(),
+        );
+        let restored_run = RestoredRunState {
+            checkpoint,
+            graph: RunGraph::from_snapshot(partial_engine.graph().snapshot()).unwrap(),
+            budget: BudgetLedger::from_snapshot(partial_engine.budget().snapshot()),
+            cache: Some(EvaluationCache::from_snapshot(
+                partial_engine.evaluation_cache_snapshot(),
+            )),
+        };
+        let mut restored_engine = Engine::<SamplingProblem>::builder()
+            .evaluator(ValidationSelectionEvaluator {
+                seen_sets: resume_seen.clone(),
+            })
+            .restored_run(restored_run)
+            .build();
+        let mut restored_gepa = resume_reflection_gepa();
+        restored_gepa
+            .restore_state(optimizer_state, RestoreContext::new(restored_engine.view()))
+            .unwrap();
+        restored_engine
+            .resume(&mut restored_gepa, &case_set, &store)
+            .await
+            .unwrap();
+
+        let control_report = control_gepa.report();
+        let restored_report = restored_gepa.report();
+        assert_eq!(restored_report.proposal_attempts.len(), 2);
+        let control_second = &control_report.proposal_attempts[1];
+        let restored_second = &restored_report.proposal_attempts[1];
+        assert_eq!(restored_second.parent_index, control_second.parent_index);
+        assert_eq!(restored_second.part_label, control_second.part_label);
+        assert_eq!(restored_second.parent_cases, control_second.parent_cases);
+        assert_eq!(restored_second.child_cases, control_second.child_cases);
+        assert_eq!(restored_second.accepted, control_second.accepted);
+    });
+}
+
+#[test]
 fn accepted_child_enters_reference_state_only_after_full_validation() {
     block_on(async {
         let case_set = CaseSet::new(vec![(), ()])
