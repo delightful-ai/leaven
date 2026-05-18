@@ -42,7 +42,7 @@ pub use reflection::{
 };
 pub use report::{
     GepaReport, GepaReportCandidate, GepaReportFrontierCase, GepaReportHistoryEntry,
-    GepaReportProfile, GepaReportValidationSubscore,
+    GepaReportProfile, GepaReportQualitySummary, GepaReportValidationSubscore,
 };
 pub use selector::{
     CandidateSelector, CheckpointCandidateSelector, HasBestCandidate, PopulationBestFallback,
@@ -65,11 +65,12 @@ pub mod prelude {
         GepaReferenceBuilderWithSurface, GepaReferenceState, GepaReflectWithLmBuilder,
         GepaReflectWithLmBuilderWithSurface, GepaReflectionBootstrap, GepaReflectiveDataset,
         GepaReflector, GepaReport, GepaReportCandidate, GepaReportFrontierCase,
-        GepaReportHistoryEntry, GepaReportProfile, GepaReportValidationSubscore, GepaSkipReason,
-        GepaStageProposer, ImprovementOrEqual, LmBackedReflector, LmBackedReflectorConfig,
-        PartSelector, PlainTextEditParser, ReflectRequest, ReflectionError, ReflectionOutputParser,
-        ReflectionRenderInput, ReflectionRenderer, ReflectiveCaseInput, ReflectiveDatasetBuilder,
-        ReflectiveExample, ReflectiveSideInfoValue, RoundRobinPart, StrictImprovement,
-        SurfaceProposer, ValidationPolicy, gepa_stage_proposer,
+        GepaReportHistoryEntry, GepaReportProfile, GepaReportQualitySummary,
+        GepaReportValidationSubscore, GepaSkipReason, GepaStageProposer, ImprovementOrEqual,
+        LmBackedReflector, LmBackedReflectorConfig, PartSelector, PlainTextEditParser,
+        ReflectRequest, ReflectionError, ReflectionOutputParser, ReflectionRenderInput,
+        ReflectionRenderer, ReflectiveCaseInput, ReflectiveDatasetBuilder, ReflectiveExample,
+        ReflectiveSideInfoValue, RoundRobinPart, StrictImprovement, SurfaceProposer,
+        ValidationPolicy, gepa_stage_proposer,
     };
 }

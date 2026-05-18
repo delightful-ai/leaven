@@ -2899,6 +2899,7 @@ pub struct GepaReport {
     pub metric_calls: GepaMetricCallReport,
     pub cache: GepaCacheReport,
     pub reflection: GepaReflectionReport,
+    pub quality_summary: GepaQualitySummary,
     pub events: Vec<GepaEventSummary>,
 }
 
@@ -2912,7 +2913,29 @@ pub struct GepaCandidateReport {
 }
 
 pub struct GepaCandidateIndex(pub u32);
+
+pub struct GepaQualitySummary {
+    pub proposal_attempt_count: usize,
+    pub skipped_count: usize,
+    pub screened_count: usize,
+    pub screened_train_improved_count: usize,
+    pub screened_train_tied_count: usize,
+    pub screened_train_regressed_count: usize,
+    pub accepted_count: usize,
+    pub rejected_count: usize,
+    pub admitted_count: usize,
+    pub accepted_unadmitted_count: usize,
+    pub accepted_validation_improved_count: usize,
+    pub accepted_validation_tied_count: usize,
+    pub accepted_validation_regressed_count: usize,
+    pub accepted_validation_unknown_count: usize,
+}
 ```
+
+`GepaQualitySummary` is report-only diagnostic state. It must not change parent
+selection, gate decisions, or final candidate choice. Its purpose is to make the
+GEPA overfit/generalization pattern visible: strict train-screened children can
+improve the sampled train minibatch while tying or regressing full validation.
 
 Open result-routing options:
 

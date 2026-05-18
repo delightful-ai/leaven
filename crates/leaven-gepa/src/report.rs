@@ -1,5 +1,8 @@
 //! GEPA report snapshots.
 
+use std::cmp::Ordering;
+use std::collections::BTreeMap;
+
 use leaven_kernel::{AssessmentId, CandidateId, CaseId};
 use serde::{Deserialize, Serialize};
 
@@ -29,6 +32,8 @@ pub struct GepaReport {
     pub candidate_history: Vec<GepaReportHistoryEntry>,
     /// Proposal attempts GEPA made, including skipped and rejected attempts.
     pub proposal_attempts: Vec<GepaProposalAttempt>,
+    /// Aggregate train-screen and validation outcomes for proposal attempts.
+    pub quality_summary: GepaReportQualitySummary,
     /// Total new evaluator metric calls charged during GEPA search.
     pub total_metric_calls: u64,
     /// Number of full validation passes run by GEPA.
@@ -72,7 +77,7 @@ impl GepaReport {
                     })
                     .collect(),
             })
-            .collect();
+            .collect::<Vec<_>>();
         let validation_frontier = reference_state
             .validation_frontier()
             .iter()
@@ -91,6 +96,9 @@ impl GepaReport {
                 score: entry.score(),
             })
             .collect();
+        let proposal_attempts = input.proposal_attempts.to_vec();
+        let quality_summary =
+            GepaReportQualitySummary::from_report_rows(&proposal_attempts, &candidates);
         Self {
             profile: input.profile.clone(),
             best_index,
@@ -100,13 +108,124 @@ impl GepaReport {
             candidates,
             validation_frontier,
             candidate_history,
-            proposal_attempts: input.proposal_attempts.to_vec(),
+            proposal_attempts,
+            quality_summary,
             total_metric_calls: reference_state.total_metric_calls(),
             full_validation_evals: reference_state.full_validation_evals(),
             skip_perfect_score: input.skip_perfect_score,
             perfect_score: input.perfect_score,
             events: input.events.to_vec(),
         }
+    }
+}
+
+/// Aggregate proposal quality counters for a GEPA report.
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+pub struct GepaReportQualitySummary {
+    /// Total proposal attempts, including skipped attempts.
+    pub proposal_attempt_count: usize,
+    /// Attempts skipped before a child was produced or screened.
+    pub skipped_count: usize,
+    /// Attempts with both parent and child train-screening scores.
+    pub screened_count: usize,
+    /// Screened attempts where child train score exceeded parent train score.
+    pub screened_train_improved_count: usize,
+    /// Screened attempts where child train score tied parent train score.
+    pub screened_train_tied_count: usize,
+    /// Screened attempts where child train score trailed parent train score.
+    pub screened_train_regressed_count: usize,
+    /// Train-screened attempts accepted by the configured gate.
+    pub accepted_count: usize,
+    /// Train-screened attempts rejected by the configured gate.
+    pub rejected_count: usize,
+    /// Accepted attempts admitted into the GEPA reference state.
+    pub admitted_count: usize,
+    /// Accepted attempts not admitted, usually because the run stopped first.
+    pub accepted_unadmitted_count: usize,
+    /// Accepted admitted attempts whose full validation beat the parent.
+    pub accepted_validation_improved_count: usize,
+    /// Accepted admitted attempts whose full validation tied the parent.
+    pub accepted_validation_tied_count: usize,
+    /// Accepted admitted attempts whose full validation trailed the parent.
+    pub accepted_validation_regressed_count: usize,
+    /// Accepted attempts whose validation comparison is unavailable.
+    pub accepted_validation_unknown_count: usize,
+}
+
+impl GepaReportQualitySummary {
+    fn from_report_rows(
+        attempts: &[GepaProposalAttempt],
+        candidates: &[GepaReportCandidate],
+    ) -> Self {
+        let validation_scores = candidates
+            .iter()
+            .map(|candidate| (candidate.index, candidate.validation_score))
+            .collect::<BTreeMap<_, _>>();
+        let mut summary = Self {
+            proposal_attempt_count: attempts.len(),
+            skipped_count: attempts
+                .iter()
+                .filter(|attempt| attempt.skip_reason.is_some())
+                .count(),
+            ..Self::default()
+        };
+
+        for attempt in attempts {
+            if let Some(child_score) = attempt.child_score {
+                summary.screened_count += 1;
+                match compare_scores(child_score, attempt.parent_score) {
+                    Ordering::Greater => summary.screened_train_improved_count += 1,
+                    Ordering::Equal => summary.screened_train_tied_count += 1,
+                    Ordering::Less => summary.screened_train_regressed_count += 1,
+                }
+            }
+
+            match attempt.accepted {
+                Some(true) => {
+                    summary.accepted_count += 1;
+                    if let Some(child_index) = attempt.admitted_index {
+                        summary.admitted_count += 1;
+                        match (
+                            validation_scores
+                                .get(&attempt.parent_index)
+                                .copied()
+                                .flatten(),
+                            validation_scores.get(&child_index).copied().flatten(),
+                        ) {
+                            (Some(parent_score), Some(child_score)) => {
+                                match compare_scores(child_score, parent_score) {
+                                    Ordering::Greater => {
+                                        summary.accepted_validation_improved_count += 1;
+                                    }
+                                    Ordering::Equal => summary.accepted_validation_tied_count += 1,
+                                    Ordering::Less => {
+                                        summary.accepted_validation_regressed_count += 1;
+                                    }
+                                }
+                            }
+                            _ => summary.accepted_validation_unknown_count += 1,
+                        }
+                    } else {
+                        summary.accepted_unadmitted_count += 1;
+                        summary.accepted_validation_unknown_count += 1;
+                    }
+                }
+                Some(false) => summary.rejected_count += 1,
+                None => {}
+            }
+        }
+
+        summary
+    }
+}
+
+fn compare_scores(left: f64, right: f64) -> Ordering {
+    if (left - right).abs() <= f64::EPSILON {
+        Ordering::Equal
+    } else if left > right {
+        Ordering::Greater
+    } else {
+        Ordering::Less
     }
 }
 

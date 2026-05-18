@@ -1434,6 +1434,19 @@ fn full_validation_policy_evaluates_accepted_candidates_and_selects_validation_b
         assert_eq!(attempt.accepted, Some(true));
         assert_eq!(attempt.admitted_index.map(|index| index.get()), Some(1));
         assert_eq!(attempt.reflective_example_count, Some(1));
+        assert_eq!(report.quality_summary.proposal_attempt_count, 1);
+        assert_eq!(report.quality_summary.screened_count, 1);
+        assert_eq!(report.quality_summary.screened_train_improved_count, 1);
+        assert_eq!(report.quality_summary.accepted_count, 1);
+        assert_eq!(report.quality_summary.admitted_count, 1);
+        assert_eq!(report.quality_summary.accepted_unadmitted_count, 0);
+        assert_eq!(report.quality_summary.accepted_validation_improved_count, 0);
+        assert_eq!(report.quality_summary.accepted_validation_tied_count, 0);
+        assert_eq!(
+            report.quality_summary.accepted_validation_regressed_count,
+            1
+        );
+        assert_eq!(report.quality_summary.accepted_validation_unknown_count, 0);
         assert_eq!(gepa.population().best(), Some(child));
         assert_eq!(run.best, Some(seed));
 
@@ -1463,6 +1476,10 @@ fn full_validation_policy_evaluates_accepted_candidates_and_selects_validation_b
         assert_eq!(
             restored_attempt.admitted_index.map(|index| index.get()),
             Some(1)
+        );
+        assert_eq!(
+            restored_report.quality_summary, report.quality_summary,
+            "checkpointed GEPA reports must preserve quality diagnostics"
         );
         assert!(!restored_attempt.parent_assessments.is_empty());
         assert!(!restored_attempt.child_assessments.is_empty());

@@ -1,7 +1,7 @@
 # GEPA Parity Working Ledger
 
 Status: active.
-Updated: 2026-05-18T12:31:41Z.
+Updated: 2026-05-18T13:08:52Z.
 
 ## Authority
 
@@ -148,6 +148,17 @@ Current speed stance:
   `unchanged_correct`, `unchanged_wrong`, or missing-row states), plus split
   summary counts. This keeps future live quality diagnosis data-first and
   target-safe without manual reconstruction from flat final-report case rows.
+- `GepaReport` now includes `quality_summary`: train-screened proposal counts,
+  accepted/rejected/admitted/unadmitted counts, and accepted-child full
+  validation outcomes versus each parent. This is report-only diagnostic state
+  for spotting train-minibatch overfit; it must not influence parent selection,
+  acceptance, admission, or final GEPA result choice.
+- The pinned upstream checkout's DSPy 3.2.1 `JSONAdapter` output for
+  `ChainOfThought(MathSolverSignature)` includes a blank line after "Inputs
+  will have the following structure:" and after "Outputs will be a JSON object
+  with the following fields."; P8 now preserves those exact fallback prompt
+  bytes. The primary ChatAdapter prompt already matched the upstream renderer
+  byte-for-byte for the audited sample.
 - P8 reports now classify the actual reflection model alignment as
   `upstream-matched`, `model-delta`, or `not-applicable`. This makes a
   `LEAVEN_AIME_REFLECTION_MODEL=gpt-5.1` strict upstream-reflector run

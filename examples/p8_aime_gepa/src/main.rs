@@ -1488,6 +1488,7 @@ fn p8_gepa_report_json(
         "full_validation_evals": report.full_validation_evals,
         "accepted_count": accepted_count,
         "accepted_unadmitted_count": accepted_unadmitted_count,
+        "quality_summary": &report.quality_summary,
         "skip_perfect_score": report.skip_perfect_score,
         "perfect_score": report.perfect_score,
         "candidates": report.candidates.iter().map(|candidate| serde_json::json!({
@@ -4492,7 +4493,7 @@ fn render_dspy_aime_json_adapter_request(instructions: &str, input: &str) -> Aim
         format!("\n{objective}")
     };
     let system = format!(
-        "Your input fields are:\n1. `input` (str): The math problem to solve.\nYour output fields are:\n1. `reasoning` (str): \n2. `answer` (str): The final numerical answer.\nAll interactions will be structured in the following way, with the appropriate values filled in.\n\nInputs will have the following structure:\n[[ ## input ## ]]\n{{input}}\n\nOutputs will be a JSON object with the following fields.\n{{\n  \"reasoning\": \"{{reasoning}}\",\n  \"answer\": \"{{answer}}\"\n}}\nIn adhering to this structure, your objective is: {objective}"
+        "Your input fields are:\n1. `input` (str): The math problem to solve.\nYour output fields are:\n1. `reasoning` (str): \n2. `answer` (str): The final numerical answer.\nAll interactions will be structured in the following way, with the appropriate values filled in.\n\nInputs will have the following structure:\n\n[[ ## input ## ]]\n{{input}}\n\nOutputs will be a JSON object with the following fields.\n\n{{\n  \"reasoning\": \"{{reasoning}}\",\n  \"answer\": \"{{answer}}\"\n}}\nIn adhering to this structure, your objective is: {objective}"
     );
     let user = format!(
         "[[ ## input ## ]]\n{input}\n\nRespond with a JSON object in the following order of fields: `reasoning`, then `answer`."
@@ -6029,7 +6030,7 @@ Provide the new parameter value within ``` blocks.";
 
         assert_eq!(
             request.system,
-            "Your input fields are:\n1. `input` (str): The math problem to solve.\nYour output fields are:\n1. `reasoning` (str): \n2. `answer` (str): The final numerical answer.\nAll interactions will be structured in the following way, with the appropriate values filled in.\n\nInputs will have the following structure:\n[[ ## input ## ]]\n{input}\n\nOutputs will be a JSON object with the following fields.\n{\n  \"reasoning\": \"{reasoning}\",\n  \"answer\": \"{answer}\"\n}\nIn adhering to this structure, your objective is: \n        Solve the math problem carefully."
+            "Your input fields are:\n1. `input` (str): The math problem to solve.\nYour output fields are:\n1. `reasoning` (str): \n2. `answer` (str): The final numerical answer.\nAll interactions will be structured in the following way, with the appropriate values filled in.\n\nInputs will have the following structure:\n\n[[ ## input ## ]]\n{input}\n\nOutputs will be a JSON object with the following fields.\n\n{\n  \"reasoning\": \"{reasoning}\",\n  \"answer\": \"{answer}\"\n}\nIn adhering to this structure, your objective is: \n        Solve the math problem carefully."
         );
         assert_eq!(
             request.user,
@@ -7442,6 +7443,18 @@ Provide the new parameter value within ``` blocks."
         assert_eq!(gepa_report["full_validation_evals"], 2);
         assert_eq!(gepa_report["accepted_count"], 1);
         assert_eq!(gepa_report["accepted_unadmitted_count"], 0);
+        assert_eq!(gepa_report["quality_summary"]["proposal_attempt_count"], 1);
+        assert_eq!(gepa_report["quality_summary"]["screened_count"], 1);
+        assert_eq!(
+            gepa_report["quality_summary"]["screened_train_improved_count"],
+            1
+        );
+        assert_eq!(gepa_report["quality_summary"]["accepted_count"], 1);
+        assert_eq!(gepa_report["quality_summary"]["admitted_count"], 1);
+        assert_eq!(
+            gepa_report["quality_summary"]["accepted_validation_improved_count"],
+            1
+        );
         assert_eq!(
             gepa_report["skip_perfect_score"],
             OPTIMIZE_ANYTHING_SKIP_PERFECT_SCORE
