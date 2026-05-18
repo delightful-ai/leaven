@@ -3792,6 +3792,65 @@ mod tests {
                 .contains(&RunEventSummary::EvaluationCompleted)
         );
         assert!(result.events.contains(&RunEventSummary::OptimizationEnded));
+
+        let gepa_report = run
+            .gepa_report
+            .as_ref()
+            .expect("public optimize path exposes typed GEPA report");
+        assert_eq!(gepa_report.best_index.map(GepaCandidateIndex::get), Some(1));
+        assert!(gepa_report.best_candidate.is_some());
+        assert_eq!(
+            gepa_report
+                .validation_best_index
+                .map(GepaCandidateIndex::get),
+            Some(1)
+        );
+        assert!(gepa_report.validation_best_candidate.is_some());
+        assert_eq!(gepa_report.candidates[0].index.get(), 0);
+        assert_eq!(gepa_report.candidates[0].parents, Vec::new());
+        assert_eq!(gepa_report.candidates[1].index.get(), 1);
+        assert_eq!(
+            gepa_report.candidates[1].parents,
+            vec![GepaCandidateIndex::new(0)]
+        );
+        assert!(
+            gepa_report.candidates[1]
+                .validation_subscores
+                .iter()
+                .any(|row| row.score > 0.0)
+        );
+        assert!(
+            gepa_report
+                .validation_frontier
+                .iter()
+                .any(|case| case.candidates.contains(&GepaCandidateIndex::new(1)))
+        );
+        assert!(!gepa_report.candidate_history.is_empty());
+        assert_eq!(gepa_report.proposal_attempts.len(), 1);
+        let attempt = &gepa_report.proposal_attempts[0];
+        assert_eq!(attempt.attempt_index, 1);
+        assert_eq!(attempt.parent_index.get(), 0);
+        assert!(!attempt.parent_assessments.is_empty());
+        assert!(!attempt.parent_cases.is_empty());
+        assert_eq!(
+            attempt.reflective_example_count,
+            Some(attempt.parent_cases.len())
+        );
+        assert!(attempt.child.is_some());
+        assert!(!attempt.child_assessments.is_empty());
+        assert_eq!(attempt.parent_cases, attempt.child_cases);
+        assert_eq!(attempt.accepted, Some(true));
+        assert_eq!(attempt.skip_reason, None);
+        assert_eq!(gepa_report.total_metric_calls, 8);
+        assert_eq!(gepa_report.full_validation_evals, 2);
+        assert!(gepa_report.skip_perfect_score);
+        assert_eq!(gepa_report.perfect_score, 1.0);
+        assert!(
+            gepa_report
+                .events
+                .iter()
+                .any(|event| matches!(event, GepaEventSummary::FrontierUpdated))
+        );
     }
 
     #[test]
