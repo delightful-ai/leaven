@@ -604,6 +604,27 @@ Cache/replay attempts after the report-schema fixes:
   `d2d15a36d364`; that child had the same source tree as current proof-boundary
   commit `427067b745d5` after cleanup, and the run-local `operator-notes.txt`
   now records that correction plus solver/reflection models.
+- 2026-05-18 10:59Z status: the same current-binary release run is still
+  alive, not terminal. It has passed the old wrong-candidate cache bug and
+  reached request 102 / `total_assessment_rows=501` after the nominal 500-call
+  search cap. The post-cap row count is expected under GEPA metric-call stopper
+  semantics because started evaluation/proposal work is allowed to finish. No
+  `reports/` files existed at the last poll, and the process was quiet after
+  applying proposal `4d0c89b6-2a43-489d-ab75-0f520f917a10`, so the next action
+  is to keep polling for either final reports or `p8-aime-failure.json`; do not
+  start another paid P8 run while this one is live.
+- Audit-agent wave after the stale no-improvement report found no obvious
+  prompt-contract, parser, dataset-split, or source-id mismatch explaining the
+  old `best_index=0` result. Their useful diagnosis is that the stale completed
+  run's seed was stronger on the same validation case IDs than the older
+  improving run's seed, while accepted children did not beat the seed after full
+  validation. Treat model stochasticity/cache state as a plausible explanation,
+  not a proof: the current live report must still show whether current code
+  improves seed and how its emitted reflections/proposals compare to upstream.
+- Several audit findings were stale against the current tree: answer-parse
+  telemetry, LM cache required-miss/read/write split, and P8 role fingerprints
+  now have current-code tests/implementation. Re-check live report artifacts
+  before reopening those as active gaps.
 
 1. Diagnose why the completed live run produced no improvement while the older
    live artifact improved validation/test. Start from emitted prompts,
