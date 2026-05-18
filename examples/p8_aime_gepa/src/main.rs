@@ -15,8 +15,8 @@ use leaven::engine::{
 };
 use leaven::eval::{Case, SplitRole};
 use leaven::gepa::{
-    Gepa, GepaCandidateIndex, GepaEventSummary, GepaReport, GepaSkipReason, ReflectionError,
-    ReflectiveDatasetBuilder, ReflectiveExample, ReflectiveSideInfoValue,
+    Gepa, GepaCandidateIndex, GepaEventSummary, GepaProfile, GepaReport, GepaSkipReason,
+    ReflectionError, ReflectiveDatasetBuilder, ReflectiveExample, ReflectiveSideInfoValue,
 };
 use leaven::kernel::Metered;
 use leaven::kernel::{
@@ -63,6 +63,7 @@ const LEAVEN_AIME_SOLVER_CACHE_POLICY: &str = "LEAVEN_AIME_SOLVER_CACHE_POLICY";
 const LEAVEN_AIME_REFLECTION_CACHE_POLICY: &str = "LEAVEN_AIME_REFLECTION_CACHE_POLICY";
 const LEAVEN_AIME_LM_CACHE_BACKEND: &str = "LEAVEN_AIME_LM_CACHE_BACKEND";
 const LEAVEN_AIME_PROFILE: &str = "LEAVEN_AIME_PROFILE";
+const LEAVEN_AIME_GEPA_PROFILE: &str = "LEAVEN_AIME_GEPA_PROFILE";
 const LEAVEN_AIME_RUN_DIR: &str = "LEAVEN_AIME_RUN_DIR";
 const LEAVEN_AIME_DETERMINISTIC_REFLECTION: &str = "LEAVEN_AIME_DETERMINISTIC_REFLECTION";
 const LEAVEN_OPENAI_MAX_CONCURRENT_REQUESTS: &str = "LEAVEN_OPENAI_MAX_CONCURRENT_REQUESTS";
@@ -1795,6 +1796,7 @@ fn p8_evidence_ref_json(reference: &leaven::kernel::EvidenceRef) -> serde_json::
 struct AimeRunConfig {
     profile: AimeRunProfile,
     data_source: AimeDataSource,
+    gepa_profile: GepaProfile,
     seed_prompt: &'static str,
     budget: Budget,
     evaluation_parallelism: NonZeroUsize,
@@ -1868,6 +1870,7 @@ impl AimeRunConfig {
         Self {
             profile,
             data_source,
+            gepa_profile: aime_gepa_profile_from_env(),
             seed_prompt: BASELINE,
             budget: Budget::metric_calls(metric_calls),
             evaluation_parallelism: runtime.max_concurrent_requests,
@@ -1900,6 +1903,7 @@ impl AimeRunConfig {
         Self {
             profile: AimeRunProfile::DeterministicSmoke,
             data_source,
+            gepa_profile: GepaProfile::Reference,
             seed_prompt: BASELINE,
             budget: Budget::metric_calls(DETERMINISTIC_SMOKE_METRIC_CALLS),
             evaluation_parallelism: NonZeroUsize::new(1).expect("smoke worker count is non-zero"),

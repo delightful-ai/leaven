@@ -526,6 +526,11 @@ Cache/replay attempts after the report-schema fixes:
   were raw assessment ids whose target still named the older candidate id.
   Fix in progress: rematerialize zero-cost assessment rows for the requested
   candidate on casewise content-cache hits.
+- cache-only resume against that same run after the engine fix replayed the
+  three formerly bad rows as zero-cost cache hits, did not reproduce the
+  wrong-candidate assertion, and failed closed at the next uncached reflection
+  request with no additional LM calls. Log:
+  `.leaven/release-runs/p8-aime-gepa-current-json-fallback-20260518-084304.cache-only-after-engine-fix.log`.
 
 1. Diagnose why the completed live run produced no improvement while the older
    live artifact improved validation/test. Start from emitted prompts,
