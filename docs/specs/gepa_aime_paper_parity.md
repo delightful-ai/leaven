@@ -733,6 +733,11 @@ The scorer must:
 - attach parse failure details when the output cannot be parsed;
 - preserve feedback and trace for reflection.
 
+Successful runner and scorer trace material must be persisted in case assessment
+evidence and projected through report `trace_refs`. Empty trace refs mean no
+trace was captured, not merely that the report forgot to point at stored
+assessment evidence.
+
 Required scoring result projection:
 
 ```rust

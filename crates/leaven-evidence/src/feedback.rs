@@ -11,6 +11,7 @@ pub struct CaseAssessmentEvidence {
     score: ScalarEvidence,
     output: OutputRecord,
     feedback: String,
+    trace: Vec<String>,
 }
 
 impl CaseAssessmentEvidence {
@@ -21,7 +22,15 @@ impl CaseAssessmentEvidence {
             score,
             output,
             feedback: feedback.into(),
+            trace: Vec::new(),
         }
+    }
+
+    /// Attaches trace lines associated with this case assessment.
+    #[must_use]
+    pub fn with_trace(mut self, trace: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        self.trace = trace.into_iter().map(Into::into).collect();
+        self
     }
 
     /// Comparable scalar score.
@@ -40,6 +49,12 @@ impl CaseAssessmentEvidence {
     #[must_use]
     pub fn feedback(&self) -> &str {
         &self.feedback
+    }
+
+    /// Trace lines attached to the runner/scorer assessment.
+    #[must_use]
+    pub fn trace(&self) -> &[String] {
+        &self.trace
     }
 }
 

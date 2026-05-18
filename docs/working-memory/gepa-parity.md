@@ -224,6 +224,13 @@ Prompt-audit finding:
   operator-path hardening for the next live release run: interrupted report
   writes should leave either the prior complete report or the next complete
   report, not a torn JSON artifact.
+- Successful runner/scorer trace lines now have a public ordinary-run path:
+  `RunOutput::with_trace` and `Score::with_trace` feed
+  `CaseAssessmentEvidence::with_trace`, generic report trace refs, and P8
+  non-empty `trace_refs`. P8 solver outputs attach deterministic/live reasoning
+  and raw live solver response text as target-safe runner trace evidence. This
+  improves one-prompt AIME/operator proof without claiming DSPy module-local
+  trace selection parity.
 
 Comparison notes against the older improving artifact:
 

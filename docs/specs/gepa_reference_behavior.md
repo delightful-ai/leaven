@@ -326,8 +326,11 @@ Required behavior:
   score is at least the configured perfect score.
 
 Leaven can treat scorer feedback plus runner output as trace material for simple
-single-prompt AIME, but multi-module and agentic tasks need module-local trace
-projection, not only final scalar evidence.
+single-prompt AIME. The public run path lets runners and scorers attach
+successful trace lines with `RunOutput::with_trace` and `Score::with_trace`;
+`CaseAssessmentEvidence` carries those lines and reports expose trace refs.
+Multi-module and agentic tasks still need module-local trace projection, not
+only final scalar evidence.
 
 ### 4.7 Part Or Component Selection
 
@@ -1520,7 +1523,7 @@ of this spec remain the product target.
 | Skip perfect | Default skips all-perfect parent minibatches | GEPA now defaults `skip_perfect_score=true` with `perfect_score=1.0`; all-perfect parent minibatches emit `AllScoresPerfect` and skip before part selection, reflective-dataset construction, reflector calls, or provider work. | Add richer upstream-style skip payloads if report consumers need raw score vectors. |
 | No trajectories | Skip proposal when no trajectories/examples exist | Reflective dataset may be empty and renderer can continue | Refuse/skip no-example reflection by default |
 | Reflection prompt | Upstream fenced text replacement prompt; optimize-anything AIME uses the optimize-anything reflection template | Leaven default template matches generic GEPA instruction reflection; P8 AIME config uses the optimize-anything template | Preserve both labels and test the selected profile template |
-| Reflection examples | Inputs, outputs, feedback, trace/format failures | Leaven carries input/output/score/feedback; module trace parity is partial | Add trace/format-failure projection for multi-module parity |
+| Reflection examples | Inputs, outputs, feedback, trace/format failures | Leaven carries input/output/score/feedback plus successful runner/scorer trace refs for one-prompt tasks; module trace parity is partial | Add trace/format-failure projection for multi-module parity |
 | Component selection | Round-robin default over components after parent eval | `RoundRobinPart` exists; GEPA optimizer compatibility includes strategy slot type names and checkpoint schema so changing selector/gate/batch/validation/reflector/dataset types refuses resume. | Add value-level compatibility declarations for custom strategy instances whose behavior changes without changing type. |
 | Merge | Core default off; DSPy default on | No real merge path in Leaven GEPA loop | Implement or disclose per profile |
 | Parallel proposals | Optimize-anything can run parallel proposals | Leaven evaluates cases in parallel, but proposals are serial | Not required for core parity; label if absent in optimize-anything parity |

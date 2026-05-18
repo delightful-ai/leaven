@@ -153,6 +153,9 @@ pub struct P8CaseReport {
 
 Default case rows must not include target answer or reference solution. Feedback
 may include target-derived text only because the scorer emitted it as feedback.
+Runner and scorer implementations may attach successful trace lines through
+`RunOutput::with_trace` and `Score::with_trace`; reports expose those traces by
+evidence ref, not by inlining raw transcripts into the summary JSON.
 
 ## 6. Proof Classification
 
@@ -236,6 +239,8 @@ Required tests:
   budget split, source ids, and proof classification;
 - P8 case report rows include output/feedback refs and do not include hidden
   target payloads;
+- P8 case report rows include non-empty trace refs when runner/scorer traces are
+  attached;
 - absent validation/test scores remain absent;
 - corrupt/missing manifest reports a typed non-resumable reason.
 - generic `summary.json` and P8 `p8-aime.json` report writes are atomic.

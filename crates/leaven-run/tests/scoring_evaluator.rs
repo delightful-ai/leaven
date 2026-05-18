@@ -161,6 +161,7 @@ fn scoring_evaluator_reports_per_candidate_cost_for_independent_batches() {
                 async move {
                     let input = *case.input();
                     Ok(RunOutput::new((artifact.0 + input).to_string())
+                        .with_trace(format!("runner input={input}"))
                         .with_cost(Cost::llm_calls(u64::try_from(input).unwrap())))
                 }
                 .boxed()
@@ -168,6 +169,7 @@ fn scoring_evaluator_reports_per_candidate_cost_for_independent_batches() {
             Arc::new(|ctx: ScoreContext<TextArtifact, i32>| {
                 async move {
                     Ok(Score::new(ctx.output.output.parse::<f64>().unwrap(), "ok")
+                        .with_trace("scorer accepted numeric output")
                         .with_cost(Cost::llm_calls(1)))
                 }
                 .boxed()
@@ -222,6 +224,13 @@ fn scoring_evaluator_reports_per_candidate_cost_for_independent_batches() {
             &leaven_evidence::OutputRecord::inline("42")
         );
         assert_eq!(evidence.feedback(), "ok");
+        assert_eq!(
+            evidence.trace(),
+            &[
+                "runner input=2".to_owned(),
+                "scorer accepted numeric output".to_owned()
+            ]
+        );
     });
 }
 

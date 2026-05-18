@@ -4077,7 +4077,7 @@ async fn run_solver(
         raw: answer.to_string(),
     };
     side_infos.insert(&prompt, case.id(), output.clone());
-    Ok(RunOutput::new(output.answer))
+    Ok(RunOutput::new(output.answer).with_trace(format!("reasoning: {}", output.reasoning)))
 }
 
 async fn run_openai_solver(
@@ -4107,7 +4107,10 @@ async fn run_openai_solver(
             .with_cost(metered.cost.clone())
     })?;
     side_infos.insert(prompt, case.id(), output.clone());
-    Ok(RunOutput::new(output.answer).with_cost(metered.cost))
+    Ok(RunOutput::new(output.answer)
+        .with_trace(format!("reasoning: {}", output.reasoning))
+        .with_trace(format!("raw_response: {}", output.raw))
+        .with_cost(metered.cost))
 }
 
 fn openai_model_name() -> String {
@@ -5953,7 +5956,10 @@ Provide the new parameter value within ``` blocks."
                 && case.get("score_state").is_some()
                 && case.get("output_ref").is_some()
                 && case.get("feedback_ref").is_some()
-                && case.get("trace_refs").is_some()
+                && case
+                    .get("trace_refs")
+                    .and_then(serde_json::Value::as_array)
+                    .is_some_and(|trace_refs| !trace_refs.is_empty())
                 && case.get("feedback_chars").is_some()
                 && case.get("target_answer").is_none()
                 && case.get("reference_solution").is_none()

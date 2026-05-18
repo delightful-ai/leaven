@@ -253,11 +253,17 @@ where
         EvaluationError::with_cost_source("score was not finite", cost.clone(), source)
     })?;
     let generated_output = OutputRecord::inline(output.output);
+    let trace = output
+        .trace
+        .into_iter()
+        .chain(score.trace)
+        .collect::<Vec<_>>();
     Ok(EvaluationOutcome {
         candidate_index: job.candidate_index,
         case_index: job.case_index,
         case_id,
-        evidence: CaseAssessmentEvidence::new(scalar, generated_output, score.feedback),
+        evidence: CaseAssessmentEvidence::new(scalar, generated_output, score.feedback)
+            .with_trace(trace),
         cost,
     })
 }

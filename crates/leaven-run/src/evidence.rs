@@ -10,6 +10,8 @@ pub struct RunOutput {
     pub output: String,
     /// Metered cost incurred while producing the output.
     pub cost: Cost,
+    /// Runner trace lines associated with this successful output.
+    pub trace: Vec<String>,
 }
 
 impl RunOutput {
@@ -19,6 +21,7 @@ impl RunOutput {
         Self {
             output: output.into(),
             cost: Cost::zero(),
+            trace: Vec::new(),
         }
     }
 
@@ -26,6 +29,13 @@ impl RunOutput {
     #[must_use]
     pub fn with_cost(mut self, cost: Cost) -> Self {
         self.cost = cost;
+        self
+    }
+
+    /// Adds one successful-run trace line.
+    #[must_use]
+    pub fn with_trace(mut self, line: impl Into<String>) -> Self {
+        self.trace.push(line.into());
         self
     }
 }
@@ -127,6 +137,8 @@ pub struct Score {
     pub feedback: String,
     /// Metered cost incurred while producing the score.
     pub cost: Cost,
+    /// Scorer trace lines associated with this successful score.
+    pub trace: Vec<String>,
 }
 
 impl Score {
@@ -137,6 +149,7 @@ impl Score {
             value,
             feedback: feedback.into(),
             cost: Cost::zero(),
+            trace: Vec::new(),
         }
     }
 
@@ -144,6 +157,13 @@ impl Score {
     #[must_use]
     pub fn with_cost(mut self, cost: Cost) -> Self {
         self.cost = cost;
+        self
+    }
+
+    /// Adds one successful-score trace line.
+    #[must_use]
+    pub fn with_trace(mut self, line: impl Into<String>) -> Self {
+        self.trace.push(line.into());
         self
     }
 }

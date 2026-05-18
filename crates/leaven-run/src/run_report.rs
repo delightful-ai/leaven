@@ -399,8 +399,12 @@ fn report_score(
         case_id,
         score: evidence.score().score(),
         output_ref: Some(evidence_ref.clone()),
-        feedback_ref: Some(evidence_ref),
-        trace_refs: Vec::new(),
+        feedback_ref: Some(evidence_ref.clone()),
+        trace_refs: if evidence.trace().is_empty() {
+            Vec::new()
+        } else {
+            vec![evidence_ref]
+        },
         feedback: evidence.feedback().to_owned(),
         output: output_record_text(evidence.output()),
     }
@@ -927,13 +931,19 @@ mod tests {
                     key: "answer.txt".to_owned(),
                 }),
                 "blob feedback",
-            ),
+            )
+            .with_trace(["provider transcript"]),
         );
 
         assert_eq!(inline.output, "inline answer");
         assert_eq!(inline.feedback, "inline feedback");
         assert_eq!(inline.output_ref.as_ref().unwrap().key, "inline");
         assert_eq!(blob.feedback_ref.as_ref().unwrap().key, "blob");
+        assert!(inline.trace_refs.is_empty());
+        assert_eq!(
+            blob.trace_refs,
+            blob.feedback_ref.iter().cloned().collect::<Vec<_>>()
+        );
         assert_eq!(blob.output, "blob:blob-store:answer.txt");
         assert!((blob.score - 0.25).abs() < f64::EPSILON);
     }
