@@ -856,6 +856,8 @@ fn p8_aime_report_json(config: &AimeRunConfig, run: &AimeRunResult) -> serde_jso
             "system_prompt": result.best().map(|best| best.system.clone()),
         },
         "lm_roles": run.role_reports.iter().map(p8_lm_role_report_json).collect::<Vec<_>>(),
+        "live_provider_proof": p8_live_provider_proof_json(&run.role_reports),
+        "provider_failures": p8_provider_failures_json(&run.role_reports),
         "gepa_events": run.gepa_events.iter().map(p8_gepa_event_json).collect::<Vec<_>>(),
         "gepa_report": run.gepa_report.as_ref().map(p8_gepa_report_json),
         "cases": p8_case_report_json(run),
@@ -1075,6 +1077,111 @@ fn gepa_frontier_signature(report: &GepaReport) -> Vec<(String, Vec<u32>)> {
         .collect()
 }
 
+fn p8_live_provider_proof_json(roles: &AimeRoleReports) -> serde_json::Value {
+    let live_roles = roles.iter().filter(|role| role.live).count();
+    let role_count = roles.iter().count();
+    serde_json::json!({
+        "role_count": role_count,
+        "live_roles": live_roles,
+        "all_roles_live": role_count > 0 && live_roles == role_count,
+        "roles": roles.iter().map(|role| serde_json::json!({
+            "role": role.role.label(),
+            "provider": role.provider.label(),
+            "live": role.live,
+            "model": role.model,
+            "runtime_fingerprint": report_fingerprint(role.runtime_fingerprint),
+            "request_shape_fingerprint": report_full_fingerprint(
+                role.prompt_contract.request_shape_fingerprint
+            ),
+            "cache_policy": report_lm_cache_policy(role.cache_policy),
+            "cache_backend": report_lm_cache_backend(role.cache_backend),
+            "cache_durable": role.cache_durable,
+            "max_concurrent_requests": role.max_concurrent_requests.get(),
+            "request_timeout_seconds": role.request_timeout_seconds,
+        })).collect::<Vec<_>>(),
+    })
+}
+
+fn p8_provider_failures_json(roles: &AimeRoleReports) -> serde_json::Value {
+    let failures = p8_provider_failure_totals(roles);
+    serde_json::json!({
+        "count": failures.total(),
+        "totals": p8_provider_failure_counts_json(&failures),
+        "roles": roles.iter().map(|role| serde_json::json!({
+            "role": role.role.label(),
+            "provider": role.provider.label(),
+            "live": role.live,
+            "model": role.model,
+            "failures": p8_provider_failure_counts_json(&role.metrics.failures),
+        })).collect::<Vec<_>>(),
+    })
+}
+
+fn p8_provider_failure_totals(roles: &AimeRoleReports) -> AimeProviderFailureCounts {
+    AimeProviderFailureCounts {
+        missing_credentials: roles
+            .iter()
+            .map(|role| role.metrics.failures.missing_credentials)
+            .sum(),
+        authentication: roles
+            .iter()
+            .map(|role| role.metrics.failures.authentication)
+            .sum(),
+        rate_limit: roles
+            .iter()
+            .map(|role| role.metrics.failures.rate_limit)
+            .sum(),
+        retry_exhausted: roles
+            .iter()
+            .map(|role| role.metrics.failures.retry_exhausted)
+            .sum(),
+        malformed_provider_response: roles
+            .iter()
+            .map(|role| role.metrics.failures.malformed_provider_response)
+            .sum(),
+        answer_parse: roles
+            .iter()
+            .map(|role| role.metrics.failures.answer_parse)
+            .sum(),
+        scorer_parse: roles
+            .iter()
+            .map(|role| role.metrics.failures.scorer_parse)
+            .sum(),
+        budget_refusal: roles
+            .iter()
+            .map(|role| role.metrics.failures.budget_refusal)
+            .sum(),
+        cache: roles.iter().map(|role| role.metrics.failures.cache).sum(),
+        transport: roles
+            .iter()
+            .map(|role| role.metrics.failures.transport)
+            .sum(),
+        provider: roles
+            .iter()
+            .map(|role| role.metrics.failures.provider)
+            .sum(),
+        unknown: roles.iter().map(|role| role.metrics.failures.unknown).sum(),
+    }
+}
+
+fn p8_provider_failure_counts_json(failures: &AimeProviderFailureCounts) -> serde_json::Value {
+    serde_json::json!({
+        "count": failures.total(),
+        "missing_credentials": failures.missing_credentials,
+        "authentication": failures.authentication,
+        "rate_limit": failures.rate_limit,
+        "retry_exhausted": failures.retry_exhausted,
+        "malformed_provider_response": failures.malformed_provider_response,
+        "answer_parse": failures.answer_parse,
+        "scorer_parse": failures.scorer_parse,
+        "budget_refusal": failures.budget_refusal,
+        "cache": failures.cache,
+        "transport": failures.transport,
+        "provider": failures.provider,
+        "unknown": failures.unknown,
+    })
+}
+
 fn p8_lm_role_report_json(role: &AimeLmRoleReport) -> serde_json::Value {
     serde_json::json!({
         "role": role.role.label(),
@@ -1127,21 +1234,7 @@ fn p8_lm_role_report_json(role: &AimeLmRoleReport) -> serde_json::Value {
                 "write_errors": role.metrics.cache.write_errors,
                 "hit_cost_zero": role.metrics.cache.hit_cost_zero,
             },
-            "failures": {
-                "count": role.metrics.failures.total(),
-                "missing_credentials": role.metrics.failures.missing_credentials,
-                "authentication": role.metrics.failures.authentication,
-                "rate_limit": role.metrics.failures.rate_limit,
-                "retry_exhausted": role.metrics.failures.retry_exhausted,
-                "malformed_provider_response": role.metrics.failures.malformed_provider_response,
-                "answer_parse": role.metrics.failures.answer_parse,
-                "scorer_parse": role.metrics.failures.scorer_parse,
-                "budget_refusal": role.metrics.failures.budget_refusal,
-                "cache": role.metrics.failures.cache,
-                "transport": role.metrics.failures.transport,
-                "provider": role.metrics.failures.provider,
-                "unknown": role.metrics.failures.unknown,
-            },
+            "failures": p8_provider_failure_counts_json(&role.metrics.failures),
         },
     })
 }
@@ -4961,6 +5054,23 @@ Provide the new parameter value within ``` blocks."
                 })
         );
         assert_eq!(report["lm_roles"][1]["metrics"]["cost"]["llm_calls"], 1);
+        assert_eq!(report["live_provider_proof"]["role_count"], 2);
+        assert_eq!(report["live_provider_proof"]["live_roles"], 0);
+        assert_eq!(report["live_provider_proof"]["all_roles_live"], false);
+        assert_eq!(
+            report["live_provider_proof"]["roles"][0]["request_timeout_seconds"],
+            GEPA_AIME_OPENAI_REQUEST_TIMEOUT_SECONDS
+        );
+        assert_eq!(report["provider_failures"]["count"], 0);
+        assert_eq!(report["provider_failures"]["totals"]["count"], 0);
+        assert_eq!(
+            report["provider_failures"]["roles"][0]["failures"]["count"],
+            0
+        );
+        assert_eq!(
+            report["provider_failures"]["roles"][1]["failures"]["count"],
+            0
+        );
     }
 
     fn assert_p8_report_run_summary_equivalence(
