@@ -1,7 +1,7 @@
 # GEPA Parity Working Ledger
 
 Status: active.
-Updated: 2026-05-18T07:12:00Z.
+Updated: 2026-05-18T07:32:00Z.
 
 ## Authority
 
@@ -205,6 +205,11 @@ Prompt-audit finding:
   reflection request index, full request record, assistant text, parsed
   proposed text, and provider response ID so child admission history can be
   audited from the report row itself.
+- post-run P8 code now also projects `system_prompt` onto
+  `gepa_report.candidates[]` for AIME by combining the seed prompt with
+  accepted reflection proposals. This is intentionally P8-local: generic
+  `GepaReport` keeps optimizer state and candidate ids, while the AIME report
+  carries domain prompt text needed for live-quality audits.
 
 Comparison notes against the older improving artifact:
 
@@ -222,6 +227,12 @@ Comparison notes against the older improving artifact:
   evaluation summaries, so future P8 reports keep baseline/optimized
   train/validation/test case rows with a `candidate_role` label even when best
   equals seed and cache hits reuse the same assessment rows.
+- direct data inspection found the current failed-quality run's reflection
+  proposals were short generic solver instructions, while the older improving
+  artifact used longer AIME/contest-specific instructions that forced exact
+  integer-only final answers. Future regenerated reports should expose this
+  comparison directly through candidate `system_prompt` rows instead of forcing
+  reconstruction from `.leaven/lm-cache.sqlite`.
 
 ## Existing Prior Live Artifact
 

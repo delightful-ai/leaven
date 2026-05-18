@@ -888,7 +888,7 @@ fn p8_aime_report_json(config: &AimeRunConfig, run: &AimeRunResult) -> serde_jso
         "gepa_report": run
             .gepa_report
             .as_ref()
-            .map(|report| p8_gepa_report_json(report, &run.role_reports)),
+            .map(|report| p8_gepa_report_json(report, &run.role_reports, &config.seed_prompt)),
         "cases": p8_case_report_json(run),
         "events": result.events.iter().map(|event| event.as_str()).collect::<Vec<_>>(),
     })
@@ -916,8 +916,13 @@ fn p8_dataset_proof_json(proof: &AimeDatasetProof) -> serde_json::Value {
     })
 }
 
-fn p8_gepa_report_json(report: &GepaReport, roles: &AimeRoleReports) -> serde_json::Value {
+fn p8_gepa_report_json(
+    report: &GepaReport,
+    roles: &AimeRoleReports,
+    seed_prompt: &str,
+) -> serde_json::Value {
     let reflection_requests = roles.reflection.metrics.requests.as_slice();
+    let candidate_prompts = p8_gepa_candidate_prompt_map(report, reflection_requests, seed_prompt);
     serde_json::json!({
         "best_index": report.best_index.map(GepaCandidateIndex::get),
         "best_candidate": report.best_candidate.map(|candidate| candidate.to_string()),
@@ -930,6 +935,9 @@ fn p8_gepa_report_json(report: &GepaReport, roles: &AimeRoleReports) -> serde_js
         "candidates": report.candidates.iter().map(|candidate| serde_json::json!({
             "index": candidate.index.get(),
             "candidate": candidate.candidate.to_string(),
+            "system_prompt": candidate_prompts
+                .get(&candidate.candidate)
+                .map(String::as_str),
             "parents": candidate.parents.iter().map(|index| index.get()).collect::<Vec<_>>(),
             "discovery_metric_calls": candidate.discovery_metric_calls,
             "validation_score": candidate.validation_score,
@@ -981,6 +989,46 @@ fn p8_gepa_report_json(report: &GepaReport, roles: &AimeRoleReports) -> serde_js
         }).collect::<Vec<_>>(),
         "events": report.events.iter().map(p8_gepa_event_json).collect::<Vec<_>>(),
     })
+}
+
+fn p8_gepa_candidate_prompt_map(
+    report: &GepaReport,
+    reflection_requests: &[AimeLmRequestRecord],
+    seed_prompt: &str,
+) -> BTreeMap<CandidateId, String> {
+    let mut prompts = BTreeMap::new();
+    if let Some(seed) = report
+        .candidates
+        .iter()
+        .find(|candidate| candidate.index.get() == 0)
+    {
+        prompts.insert(seed.candidate, seed_prompt.to_owned());
+    }
+
+    let mut reflection_request_index = 0usize;
+    for attempt in &report.proposal_attempts {
+        let request_index = if attempt.skip_reason.is_none() {
+            let index = reflection_request_index;
+            reflection_request_index += 1;
+            Some(index)
+        } else {
+            None
+        };
+        let Some(child) = attempt.child.filter(|_| attempt.accepted == Some(true)) else {
+            continue;
+        };
+        let Some(request) = request_index.and_then(|index| reflection_requests.get(index)) else {
+            continue;
+        };
+        let Some(response) = &request.response else {
+            continue;
+        };
+        prompts.insert(
+            child,
+            p8_extract_reflection_replacement(&response.assistant.content),
+        );
+    }
+    prompts
 }
 
 fn p8_gepa_attempt_reflection_json(
@@ -5661,6 +5709,12 @@ Provide the new parameter value within ``` blocks."
             serde_json::json!([])
         );
         assert_eq!(gepa_report["candidates"][1]["index"], 1);
+        assert_eq!(gepa_report["candidates"][0]["system_prompt"], BASELINE);
+        assert!(
+            gepa_report["candidates"][1]["system_prompt"]
+                .as_str()
+                .is_some_and(|prompt| prompt.contains("modular arithmetic"))
+        );
         assert_eq!(
             gepa_report["candidates"][1]["parents"],
             serde_json::json!([0])

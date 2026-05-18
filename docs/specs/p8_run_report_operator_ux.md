@@ -56,6 +56,9 @@ The public result/report must expose:
 - baseline held-out test score when present;
 - optimized held-out test score when present;
 - best candidate id and best prompt/artifact;
+- AIME candidate table rows with candidate id, GEPA index, lineage,
+  validation score/subscores, and system prompt text when the prompt can be
+  reconstructed from the seed or an accepted reflection proposal;
 - cache mode and cache summaries;
 - compatibility manifest summary;
 - case-level rows with case id, source id, split, candidate, score state,
