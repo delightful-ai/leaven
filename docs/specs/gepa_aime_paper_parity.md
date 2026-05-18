@@ -56,6 +56,12 @@ GEPA optimize-anything AIME example's `gpt-5.1` reflection setting; material
 deltas from the GEPA artifact must be documented in the P8 report and example
 README.
 
+Operators may set `LEAVEN_AIME_REFLECTION_MODEL=gpt-5.1` for a strict
+upstream-reflector comparison run. That changes only the live reflection role
+model; it must remain on the same public `optimize(seed).using(Gepa...)` path,
+and the report must classify the actual reflection model as either
+`upstream-matched` or `model-delta`.
+
 ## 1.1 User-Facing API Contract
 
 The ordinary P8 live path must be expressible without engine internals:
@@ -776,6 +782,7 @@ Live AIME run defaults:
 - solver temperature: `1.0`;
 - solver max output tokens: `32000`;
 - reflector: `gpt-5.4-mini` with medium reasoning effort;
+- upstream-reflector comparison override: `LEAVEN_AIME_REFLECTION_MODEL=gpt-5.1`;
 - parallelism: `32`;
 - search budget: `500` metric calls;
 - run mode: durable;

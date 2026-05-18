@@ -37,7 +37,10 @@ use leaven_lm::{
     JsonSchemaOutput, Lm, LmError, LmId, LmRequest, LmResponse, Message, Messages, OutputMode,
     ReasoningEffort, Role, SamplingOptions, TokenUsage,
 };
-use leaven_lm_cache::{CachedLm, InMemoryLmCache, LmCachePolicy, SqliteLmCache};
+use leaven_lm_cache::{
+    CachedLm, InMemoryLmCache, LmCacheEntry, LmCacheError, LmCacheKey, LmCachePolicy,
+    LmCacheStore, SqliteLmCache,
+};
 #[cfg(test)]
 use leaven_lm_openai::OpenAiRetryPolicy;
 use leaven_lm_openai::{OpenAiConfig, OpenAiLm, OpenAiThrottlePolicy};
@@ -226,6 +229,12 @@ fn report_run_header_lines(config: &AimeRunConfig, run: &AimeRunResult) -> Vec<S
             "comparison_leaven_reflection_model={}",
             config.reflection.model
         ),
+        format!(
+            "comparison_reflection_model_alignment={}",
+            config
+                .profile
+                .reflection_model_alignment(&config.reflection.model)
+        ),
         format!("data_source={}", config.data_source.label()),
         format!("seed_system_prompt={}", config.seed_prompt),
         format!("aime_train_count={}", run.dataset_proof.train_count),
@@ -286,7 +295,7 @@ fn report_run_header_lines(config: &AimeRunConfig, run: &AimeRunResult) -> Vec<S
     lines.extend(
         config
             .profile
-            .comparison_notes()
+            .comparison_notes(&config.reflection.model)
             .into_iter()
             .map(|note| format!("comparison_note={note}")),
     );
@@ -1059,7 +1068,10 @@ fn p8_aime_report_json(config: &AimeRunConfig, run: &AimeRunResult) -> serde_jso
             "reflection_prompt": config.profile.reflection_prompt_claim(),
             "upstream_reflection_model": config.profile.upstream_reflection_model(),
             "leaven_reflection_model": config.reflection.model,
-            "notes": config.profile.comparison_notes(),
+            "reflection_model_alignment": config
+                .profile
+                .reflection_model_alignment(&config.reflection.model),
+            "notes": config.profile.comparison_notes(&config.reflection.model),
         },
         "data_source": config.data_source.label(),
         "dataset": p8_dataset_proof_json(&run.dataset_proof),
@@ -2329,21 +2341,51 @@ impl AimeRunProfile {
         }
     }
 
-    fn comparison_notes(self) -> Vec<&'static str> {
+    fn reflection_model_alignment(self, reflection_model: &str) -> &'static str {
         match self {
-            Self::DeterministicSmoke => Vec::new(),
-            Self::DspyQuickstart => vec![
-                "published_dspy_quickstart_reports_46.6_to_56.6_percent_on_aime_2025",
-                "leaven_uses_rust_local_dspy_chainofthought_prompt_rendering_without_dspy_runtime",
-                "leaven_uses_gpt_5_4_mini_reflection_model_by_default",
-            ],
-            Self::GepaAime => vec![
-                "published_gepa_cais_artifact_reports_46.67_to_60.00_percent_on_aime_2025",
-                "leaven_uses_rust_local_dspy_chainofthought_prompt_rendering_without_dspy_runtime",
-                "leaven_uses_gpt_5_4_mini_reflection_model_by_default",
-            ],
+            Self::DeterministicSmoke => "not-applicable",
+            Self::DspyQuickstart | Self::GepaAime
+                if normalized_openai_model_name(reflection_model)
+                    == normalized_openai_model_name(self.upstream_reflection_model()) =>
+            {
+                "upstream-matched"
+            }
+            Self::DspyQuickstart | Self::GepaAime => "model-delta",
         }
     }
+
+    fn comparison_notes(self, reflection_model: &str) -> Vec<&'static str> {
+        match self {
+            Self::DeterministicSmoke => Vec::new(),
+            Self::DspyQuickstart => {
+                let mut notes = vec![
+                    "published_dspy_quickstart_reports_46.6_to_56.6_percent_on_aime_2025",
+                    "leaven_uses_rust_local_dspy_chainofthought_prompt_rendering_without_dspy_runtime",
+                ];
+                notes.push(self.reflection_model_note(reflection_model));
+                notes
+            }
+            Self::GepaAime => {
+                let mut notes = vec![
+                    "published_gepa_cais_artifact_reports_46.67_to_60.00_percent_on_aime_2025",
+                    "leaven_uses_rust_local_dspy_chainofthought_prompt_rendering_without_dspy_runtime",
+                ];
+                notes.push(self.reflection_model_note(reflection_model));
+                notes
+            }
+        }
+    }
+
+    fn reflection_model_note(self, reflection_model: &str) -> &'static str {
+        match self.reflection_model_alignment(reflection_model) {
+            "upstream-matched" => "leaven_reflection_model_matches_upstream_aime_profile",
+            _ => "leaven_reflection_model_differs_from_upstream_aime_profile",
+        }
+    }
+}
+
+fn normalized_openai_model_name(model: &str) -> &str {
+    model.strip_prefix("openai/").unwrap_or(model)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -4507,6 +4549,7 @@ impl Lm for AimeOpenAiLm {
 enum AimeOpenAiCachedLm {
     InMemory(CachedLm<OpenAiLm, InMemoryLmCache>),
     Sqlite(CachedLm<OpenAiLm, SqliteLmCache>),
+    EagerSqlite(CachedLm<OpenAiLm, AimeEagerSqliteLmCache>),
     Unavailable {
         id: LmId,
         fingerprint: Fingerprint,
@@ -4526,6 +4569,7 @@ impl Lm for AimeOpenAiCachedLm {
         match self {
             Self::InMemory(inner) => inner.id(),
             Self::Sqlite(inner) => inner.id(),
+            Self::EagerSqlite(inner) => inner.id(),
             Self::Unavailable { id, .. } => id.clone(),
         }
     }
@@ -4534,6 +4578,7 @@ impl Lm for AimeOpenAiCachedLm {
         match self {
             Self::InMemory(inner) => inner.fingerprint(),
             Self::Sqlite(inner) => inner.fingerprint(),
+            Self::EagerSqlite(inner) => inner.fingerprint(),
             Self::Unavailable { fingerprint, .. } => *fingerprint,
         }
     }
@@ -4542,6 +4587,7 @@ impl Lm for AimeOpenAiCachedLm {
         match self {
             Self::InMemory(inner) => inner.complete(request).await,
             Self::Sqlite(inner) => inner.complete(request).await,
+            Self::EagerSqlite(inner) => inner.complete(request).await,
             Self::Unavailable {
                 reason, message, ..
             } => match reason {
@@ -4577,8 +4623,8 @@ fn cached_openai_lm(
     run_dir: &Path,
     role: &str,
 ) -> AimeOpenAiLm {
-    let config = match OpenAiConfig::from_env() {
-        Ok(config) => apply_aime_openai_runtime_config(config, runtime),
+    let config = match openai_config_for_cache_policy(cache_policy, runtime) {
+        Ok(config) => config,
         Err(source) => {
             return unavailable_openai_lm(
                 role,
@@ -4612,22 +4658,61 @@ fn cached_openai_lm(
                 cache_policy,
             )),
         },
-        AimeLmCacheBackend::EagerSqlite => AimeOpenAiLm {
-            inner: AimeOpenAiCachedLm::Sqlite(CachedLm::new(
-                inner,
-                match SqliteLmCache::open_workspace(".") {
-                    Ok(cache) => cache,
-                    Err(source) => {
-                        return unavailable_openai_lm(
-                            role,
-                            AimeOpenAiUnavailableReason::Cache,
-                            format!("failed to open eager SQLite LM cache for {role}: {source}"),
-                        );
-                    }
-                },
-                cache_policy,
-            )),
-        },
+        AimeLmCacheBackend::EagerSqlite => {
+            let cache = match AimeEagerSqliteLmCache::open(run_dir) {
+                Ok(cache) => cache,
+                Err(source) => {
+                    return unavailable_openai_lm(
+                        role,
+                        AimeOpenAiUnavailableReason::Cache,
+                        format!("failed to open eager SQLite LM cache for {role}: {source}"),
+                    );
+                }
+            };
+            AimeOpenAiLm {
+                inner: AimeOpenAiCachedLm::EagerSqlite(CachedLm::new(inner, cache, cache_policy)),
+            }
+        }
+    }
+}
+
+fn openai_config_for_cache_policy(
+    cache_policy: LmCachePolicy,
+    runtime: AimeOpenAiRuntimeConfig,
+) -> Result<OpenAiConfig, LmError> {
+    let config = if cache_policy == LmCachePolicy::CacheOnly {
+        OpenAiConfig::new("p8-aime-cache-only-placeholder")
+    } else {
+        OpenAiConfig::from_env()?
+    };
+    Ok(apply_aime_openai_runtime_config(config, runtime))
+}
+
+#[derive(Clone)]
+struct AimeEagerSqliteLmCache {
+    workspace: SqliteLmCache,
+    run_dir: SqliteLmCache,
+}
+
+impl AimeEagerSqliteLmCache {
+    fn open(run_dir: &Path) -> Result<Self, LmCacheError> {
+        Ok(Self {
+            workspace: SqliteLmCache::open_workspace(".")?,
+            run_dir: SqliteLmCache::open_run_dir(run_dir)?,
+        })
+    }
+}
+
+impl LmCacheStore for AimeEagerSqliteLmCache {
+    async fn get(&self, key: LmCacheKey) -> Result<Option<LmCacheEntry>, LmCacheError> {
+        if let Some(entry) = self.workspace.get(key).await? {
+            return Ok(Some(entry));
+        }
+        self.run_dir.get(key).await
+    }
+
+    async fn put(&self, key: LmCacheKey, entry: LmCacheEntry) -> Result<(), LmCacheError> {
+        self.workspace.put(key, entry).await
     }
 }
 
@@ -6400,6 +6485,14 @@ Provide the new parameter value within ``` blocks."
         assert!(
             lines
                 .iter()
+                .any(|line| { line == "comparison_reflection_model_alignment=model-delta" })
+        );
+        assert!(lines.iter().any(|line| {
+            line == "comparison_note=leaven_reflection_model_differs_from_upstream_aime_profile"
+        }));
+        assert!(
+            lines
+                .iter()
                 .any(|line| line == "solver_cache_policy=read-write")
         );
         assert!(
@@ -6513,6 +6606,42 @@ Provide the new parameter value within ``` blocks."
     }
 
     #[test]
+    fn p8_comparison_model_alignment_tracks_upstream_reflection_override() {
+        let mut config = AimeRunConfig::deterministic_smoke();
+        config.profile = AimeRunProfile::GepaAime;
+        config.reflection.model = "gpt-5.1".to_owned();
+        let run = block_on(run_deterministic_aime());
+
+        let report = p8_aime_report_json(&config, &run);
+        let lines = report_lines(&config, &run);
+
+        assert_eq!(
+            report["comparison"]["upstream_reflection_model"],
+            UPSTREAM_GEPA_AIME_REFLECTION_MODEL
+        );
+        assert_eq!(report["comparison"]["leaven_reflection_model"], "gpt-5.1");
+        assert_eq!(
+            report["comparison"]["reflection_model_alignment"],
+            "upstream-matched"
+        );
+        assert!(
+            report["comparison"]["notes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|note| note == "leaven_reflection_model_matches_upstream_aime_profile")
+        );
+        assert!(
+            lines
+                .iter()
+                .any(|line| { line == "comparison_reflection_model_alignment=upstream-matched" })
+        );
+        assert!(lines.iter().any(|line| {
+            line == "comparison_note=leaven_reflection_model_matches_upstream_aime_profile"
+        }));
+    }
+
+    #[test]
     fn p8_aime_json_uses_checkpointed_gepa_report_events_after_resume() {
         let config = AimeRunConfig::deterministic_smoke();
         let mut run = block_on(run_aime(config.clone(), deterministic_dataset()));
@@ -6567,6 +6696,12 @@ Provide the new parameter value within ``` blocks."
         assert_eq!(
             report["comparison"]["leaven_reflection_model"],
             config.reflection.model
+        );
+        assert_eq!(
+            report["comparison"]["reflection_model_alignment"],
+            config
+                .profile
+                .reflection_model_alignment(&config.reflection.model)
         );
         assert_eq!(report["dataset"]["train_count"], 3);
         assert_eq!(report["dataset"]["validation_count"], 1);

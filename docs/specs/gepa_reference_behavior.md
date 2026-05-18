@@ -2340,6 +2340,11 @@ That run should be labeled:
 reference-aime-gepa algorithm + Leaven stronger reflection model
 ```
 
+If the operator overrides the live P8 reflection role to `gpt-5.1`, the report
+should instead label the reflection model alignment as `upstream-matched`. The
+same run may still carry non-model deltas such as Rust-local DSPy ChatAdapter
+rendering, so model alignment alone is not a full DSPy-runtime parity claim.
+
 It should not be labeled as strict model parity.
 
 ## 18. Leaven Abstraction Changes Required

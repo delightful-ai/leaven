@@ -63,6 +63,22 @@ export LEAVEN_AIME_CACHE=target/leaven-aime-cache/aime.json
 cargo run -p p8_aime_gepa
 ```
 
+For a strict upstream-reflector comparison run, keep the same profile and set
+the reflection model to the upstream AIME example's model:
+
+```bash
+export OPENAI_API_KEY=...
+export LEAVEN_AIME_LIVE_OPENAI=1
+export LEAVEN_AIME_CACHE=target/leaven-aime-cache/aime.json
+export LEAVEN_AIME_REFLECTION_MODEL=gpt-5.1
+cargo run -p p8_aime_gepa
+```
+
+The P8 report prints `comparison_reflection_model_alignment=upstream-matched`
+only when the effective reflection model matches the upstream AIME profile. The
+default `gpt-5.4-mini` reflector remains a deliberate Leaven model delta, not a
+byte-for-byte upstream runtime claim.
+
 To compare Leaven against the published DSPy/GEPA AIME quickstart denominator
 without running DSPy, use the Leaven DSPy-comparison profile:
 

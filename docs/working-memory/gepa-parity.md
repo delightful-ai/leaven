@@ -144,6 +144,11 @@ Current speed stance:
   `unchanged_correct`, `unchanged_wrong`, or missing-row states), plus split
   summary counts. This keeps future live quality diagnosis data-first and
   target-safe without manual reconstruction from flat final-report case rows.
+- P8 reports now classify the actual reflection model alignment as
+  `upstream-matched`, `model-delta`, or `not-applicable`. This makes a
+  `LEAVEN_AIME_REFLECTION_MODEL=gpt-5.1` strict upstream-reflector run
+  distinguishable from the default `gpt-5.4-mini` Leaven stronger-reflector
+  run before anyone reads terminal history.
 
 Current feedback/reflection answer:
 
@@ -190,6 +195,10 @@ Current evidence split:
   `gpt-4.1-mini`, reflection `gpt-5.4-mini`, reference GEPA profile, 45/45/30
   AIME splits, and improved validation `0.444 -> 0.489` plus held-out test
   `0.433 -> 0.500`.
+- a model-matched paid rerun should set `LEAVEN_AIME_REFLECTION_MODEL=gpt-5.1`
+  and confirm `comparison_reflection_model_alignment=upstream-matched` in
+  `reports/p8-aime.json` before interpreting result quality against the pinned
+  upstream target.
 
 Conclusion: current code now proves live improvement and the release-report
 operator path, but it still does not prove "as good as GEPA" because the
@@ -730,6 +739,23 @@ Cache/replay attempts after the report-schema fixes:
   telemetry, LM cache required-miss/read/write split, and P8 role fingerprints
   now have current-code tests/implementation. Re-check live report artifacts
   before reopening those as active gaps.
+- Post-wave stale finding dispositions against current code:
+  - DSPy ChatAdapter same-line output fields and required ChainOfThought
+    `reasoning` are already covered by `aime_solver_parser_accepts_dspy_same_line_field_content`
+    and `aime_solver_parser_requires_all_dspy_output_fields`;
+  - P8 JSON already discloses `comparison.upstream_reflection_model` beside
+    the Leaven reflection model;
+  - public `Budget::metric_calls(...)` is converted into a GEPA-style
+    metric-call stopper by `search_ledger_budget(...)`, leaving the hard ledger
+    unlimited for metric calls so started validation can finish;
+  - `EpochShuffled` and parent selection now use the doc-hidden
+    Python-compatible GEPA RNG, with seed/shuffle sequence tests;
+  - P8 role fingerprints ignore LM cache policy/backend replay controls, so
+    switching a paid run to `cache-only` / `eager-sqlite` should not block
+    resume compatibility;
+  - `leaven-run` flushes the SQLite evaluation cache again after final reports,
+    so final train/validation/test rows are durably reusable by later
+    same-run-dir invocations.
 
 1. Diagnose why the current completed report improves over seed but still lands
    below the pinned GEPA CAIS target. Start from emitted prompts, candidate
