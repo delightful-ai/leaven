@@ -1,7 +1,7 @@
 # GEPA Parity Working Ledger
 
 Status: active.
-Updated: 2026-05-18T06:38:19Z.
+Updated: 2026-05-18T06:43:44Z.
 
 ## Authority
 
@@ -25,10 +25,11 @@ documented, tested, and reported.
 ## Current Matrix State
 
 The parity matrix currently records the core GEPA reference-loop rows as proven
-or intentional deltas. The remaining P0 row is the P8/AIME live operator proof:
-a release run/report must prove profile, models, source counts/cache hash,
-cache/resume behavior, search budget, baseline/optimized validation/test
-numbers, and deltas versus the GEPA CAIS target.
+or intentional deltas. The remaining P0 row is P8/AIME result parity: a live
+release run/report now proves the operator path, source counts/cache hash,
+cache/resume behavior, search budget, model profile, and zero provider
+failures, but the completed run did not improve over the seed and therefore
+does not prove "as good as GEPA" benchmark quality.
 
 Important currently proven rows include:
 
@@ -98,18 +99,20 @@ Observed resume attempt with default 120s timeout:
 - skipped seed validation and resumed from the run directory;
 - failed again at the same search position with an OpenAI transport timeout.
 
-Current resume attempt:
+Completed 600s-timeout resume attempt:
 
 - added `LEAVEN_OPENAI_REQUEST_TIMEOUT_SECONDS=600`;
 - same run id accepted resume;
 - observed evaluation-cache hits with zero metric calls inside the resumed run;
-- observed through resumed request count 31 / total assessment rows 150;
-- still running as of this ledger update.
+- emitted:
+  - `.leaven/release-runs/p8-aime-gepa-20260518-043717/reports/summary.json`;
+  - `.leaven/release-runs/p8-aime-gepa-20260518-043717/reports/p8-aime.json`.
 
-The 600s timeout changes the OpenAI provider fingerprint. The current run
-accepted the resume, so use the emitted report to verify whether the role
-fingerprints and compatibility disclosures are acceptable before claiming live
-parity.
+The 600s timeout changes the OpenAI provider fingerprint. The run accepted the
+resume and disclosed role runtime fingerprints, but this live report predates
+the new top-level `live_provider_proof` / `provider_failures` JSON fields added
+after the run. Future release reports should include those fields directly
+instead of requiring aggregation from `lm_roles`.
 
 Duplicate run guard:
 
@@ -120,7 +123,54 @@ Duplicate run guard:
 - stopped PID pairs `27627`/`27655` and respawned `56611`/`56646`;
 - stopped a later bare respawned child `59403`;
 - after the second stop, only the intended 600s-timeout process for
-  `.leaven/release-runs/p8-aime-gepa-20260518-043717` remained.
+  `.leaven/release-runs/p8-aime-gepa-20260518-043717` remained;
+- during the report-contract test pass, found and stopped another throttled
+  live process (`LEAVEN_OPENAI_MAX_CONCURRENT_REQUESTS=1`) using
+  `/tmp/leaven-gepa-live-throttle-run-dir.txt` and run directory
+  `.leaven/release-runs/p8-aime-gepa-throttle1-20260517-233940`
+  (PIDs `72859`/`72891`);
+- after final report emission, no `p8_aime_gepa` or `leaven-gepa-live` provider
+  process remained.
+
+Completed report snapshot:
+
+- proof classification: `full_live_aime_reproduction_attempt`;
+- profile: `gepa-aime`;
+- solver model: `gpt-4.1-mini`;
+- reflection model: `gpt-5.4-mini`;
+- OpenAI concurrency: `32`;
+- OpenAI request timeout: `600s` in the resumed process environment;
+- dataset cache: `target/leaven-aime-cache/aime.json`;
+- dataset cache SHA-256:
+  `0f39c54861fd37a609d5bf397902a2086c245ebee879704dbd74b485115402c3`;
+- dataset bytes: `570246`;
+- source splits: train `45`, validation `45`, test `30`;
+- baseline train: `0.600`;
+- optimized train: `0.600`;
+- baseline validation: `0.533`;
+- validation: `0.533`;
+- baseline held-out test: `0.433`;
+- held-out test: `0.433`;
+- stop reason: `budget_reached`;
+- search metric calls spent: `493` of cap `500`;
+- final-report metric calls: `75`;
+- total metric calls: `568`;
+- total LM calls: `436`;
+- evaluation cache: `15` hits, `56` misses, durable SQLite run-store,
+  zero-cost hit accounting true;
+- solver role metrics: `259` calls, `81` cache hits, `178` misses, `0`
+  failures;
+- reflection role metrics: `10` calls, `0` cache hits, `10` misses, `0`
+  failures;
+- GEPA report: best index `0`, candidates `8`, full-validation evals `8`,
+  proposal attempts `24`, skip-perfect `false`.
+
+Result-parity conclusion:
+
+- this run proves the live P8 operator/reporting path, not GEPA-quality parity;
+- best candidate remained the seed (`best_index = 0`);
+- optimized validation and held-out test did not beat baseline;
+- do not cite this run as "as good as GEPA" or paper parity.
 
 ## Existing Prior Live Artifact
 
@@ -150,21 +200,14 @@ not by itself close the current live release row.
 
 ## Next Actions
 
-1. Let the current 600s-timeout resume finish or fail. Do not start a second
-   competing provider run.
-2. If it emits `reports/p8-aime.json`, inspect:
-   - `proof_classification`;
-   - `run_profile`;
-   - `comparison`;
-   - `dataset`/`data_source` materialized cache proof;
-   - `budget`;
-   - `cache`;
-   - `lm_roles`;
-   - `scores`;
-   - `run.summary_json`;
-   - provider-failure counters.
-3. Update `docs/plans/2026-05-17-gepa-upstream-parity-matrix.md` only if the
-   emitted report proves the live row.
-4. If it fails again, record the failure here and decide whether the P8 operator
-   path needs stronger retry/resume behavior, lower concurrency, or provider
-   timeout defaults before spending more.
+1. Diagnose why the completed live run produced no improvement while the older
+   live artifact improved validation/test. Start from emitted prompts,
+   candidate lineage, reflection outputs, child admission history, minibatch
+   cases, and parser outcomes.
+2. Diff the completed live report against the prior live artifact and upstream
+   GEPA/DSPy AIME traces where available. Treat result-quality parity as open.
+3. Re-run live P8 only after the diagnosis identifies a concrete fix or
+   intentional runtime/profile delta worth testing.
+4. Future release reports should contain top-level `live_provider_proof` and
+   `provider_failures` fields so live-proof checks do not have to re-aggregate
+   role telemetry by hand.
