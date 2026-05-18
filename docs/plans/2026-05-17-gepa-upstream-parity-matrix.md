@@ -64,8 +64,5 @@ observable and self-checking before provider spend:
 3. Cache-hit zero-cost accounting after resume on the public run-dir path.
 4. Broader GEPA phase-order assertion covering dataset/reflection/proposal,
    acceptance, validation, frontier update, and stop.
-5. P8 optimize-anything profile skip-policy correction or intentional-delta
-   proof; current P8 reports core skip-perfect true while pinned upstream AIME
-   inherits optimize-anything `skip_perfect_score=false`.
-6. Current AIME cache/source-count materialization before any live
+5. Current AIME cache/source-count materialization before any live
    paper-result run; live provider spend remains an explicit approval gate.
