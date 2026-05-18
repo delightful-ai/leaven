@@ -83,6 +83,7 @@ pub struct GepaReferenceState {
     validation_frontier_candidates: BTreeMap<CaseId, BTreeSet<GepaCandidateIndex>>,
     total_metric_calls: u64,
     full_validation_evals: u64,
+    selector_rng_state: u64,
 }
 
 impl GepaReferenceState {
@@ -133,29 +134,86 @@ impl GepaReferenceState {
     }
 
     pub(crate) fn select_by_validation_frontier_frequency(
-        &self,
+        &mut self,
     ) -> Option<(GepaCandidateIndex, CandidateId)> {
+        let fronts = self.non_dominated_validation_frontier();
+        let mut frequencies = BTreeMap::<GepaCandidateIndex, usize>::new();
+        for candidates in fronts.values() {
+            for candidate in candidates {
+                *frequencies.entry(*candidate).or_default() += 1;
+            }
+        }
+        let mut sampling_list = Vec::new();
+        for (candidate, frequency) in frequencies {
+            sampling_list.extend(std::iter::repeat_n(candidate, frequency));
+        }
+        if sampling_list.is_empty() {
+            return None;
+        }
+        let selected = bounded_index(
+            splitmix64(&mut self.selector_rng_state),
+            sampling_list.len(),
+        );
+        let index = sampling_list[selected];
+        Some((index, self.record(index)?.candidate()))
+    }
+
+    fn non_dominated_validation_frontier(&self) -> BTreeMap<CaseId, BTreeSet<GepaCandidateIndex>> {
         let mut frequencies = BTreeMap::<GepaCandidateIndex, usize>::new();
         for candidates in self.validation_frontier_candidates.values() {
             for candidate in candidates {
                 *frequencies.entry(*candidate).or_default() += 1;
             }
         }
-        let (index, _) = frequencies.into_iter().max_by(|left, right| {
+        let mut programs = frequencies.keys().copied().collect::<Vec<_>>();
+        programs.sort_by(|left, right| {
             let left_score = self
-                .record(left.0)
+                .record(*left)
                 .and_then(GepaCandidateRecord::validation_score)
-                .unwrap_or(f64::NEG_INFINITY);
+                .unwrap_or(1.0);
             let right_score = self
-                .record(right.0)
+                .record(*right)
                 .and_then(GepaCandidateRecord::validation_score)
-                .unwrap_or(f64::NEG_INFINITY);
-            left.1
-                .cmp(&right.1)
-                .then_with(|| left_score.total_cmp(&right_score))
-                .then_with(|| right.0.cmp(&left.0))
-        })?;
-        Some((index, self.record(index)?.candidate()))
+                .unwrap_or(1.0);
+            left_score
+                .total_cmp(&right_score)
+                .then_with(|| left.cmp(right))
+        });
+        let mut dominated = BTreeSet::<GepaCandidateIndex>::new();
+        loop {
+            let mut removed = false;
+            for candidate in &programs {
+                if dominated.contains(candidate) {
+                    continue;
+                }
+                let remaining = programs
+                    .iter()
+                    .copied()
+                    .filter(|program| program != candidate && !dominated.contains(program))
+                    .collect::<BTreeSet<_>>();
+                if is_dominated(*candidate, &remaining, &self.validation_frontier_candidates) {
+                    dominated.insert(*candidate);
+                    removed = true;
+                    break;
+                }
+            }
+            if !removed {
+                break;
+            }
+        }
+        self.validation_frontier_candidates
+            .iter()
+            .map(|(case, candidates)| {
+                (
+                    *case,
+                    candidates
+                        .iter()
+                        .copied()
+                        .filter(|candidate| !dominated.contains(candidate))
+                        .collect(),
+                )
+            })
+            .collect()
     }
 
     pub(crate) fn add_validated_candidate(
@@ -248,6 +306,31 @@ impl GepaReferenceState {
     }
 }
 
+fn is_dominated(
+    candidate: GepaCandidateIndex,
+    programs: &BTreeSet<GepaCandidateIndex>,
+    fronts: &BTreeMap<CaseId, BTreeSet<GepaCandidateIndex>>,
+) -> bool {
+    for front in fronts.values().filter(|front| front.contains(&candidate)) {
+        if !front.iter().any(|other| programs.contains(other)) {
+            return false;
+        }
+    }
+    true
+}
+
+fn bounded_index(value: u64, upper: usize) -> usize {
+    (value % upper as u64) as usize
+}
+
+fn splitmix64(state: &mut u64) -> u64 {
+    *state = state.wrapping_add(0x9E37_79B9_7F4A_7C15);
+    let mut z = *state;
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    z ^ (z >> 31)
+}
+
 #[cfg(test)]
 mod tests {
     use leaven_evidence::{CaseOutcome, CasewiseEvidence, ScalarEvidence};
@@ -317,10 +400,13 @@ mod tests {
         assert_eq!(state.index_of(seed), Some(seed_index));
         assert_eq!(state.best_candidate(), Some(seed));
         assert_eq!(state.full_validation_evals(), 1);
-        assert_eq!(
-            state.select_by_validation_frontier_frequency(),
-            Some((seed_index, seed))
-        );
+        let selected = state.select_by_validation_frontier_frequency();
+        assert!(matches!(
+            selected,
+            Some((index, candidate))
+                if (index, candidate) == (seed_index, seed)
+                    || (index, candidate) == (child_index, child)
+        ));
 
         let seed_record = &state.records()[0];
         assert_eq!(seed_record.index(), seed_index);

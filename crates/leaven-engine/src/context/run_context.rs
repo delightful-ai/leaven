@@ -3,7 +3,8 @@
 use std::{collections::BTreeMap, sync::Arc};
 
 use leaven_core::{
-    Artifact, Assessment, CacheIdentity, EvaluationRequest, OptimizationProblem, ProposalBatch,
+    Artifact, Assessment, AssessmentGranularity, CacheIdentity, EvaluationPurpose,
+    EvaluationRequest, EvaluationSet, OptimizationProblem, ProposalBatch,
     ResolvedEvaluationRequest, ResolvedRequestKind,
 };
 use leaven_kernel::{
@@ -17,9 +18,9 @@ use thiserror::Error;
 use crate::graph::storage::AssessmentRecordTarget;
 use crate::graph::storage::{ApplyAttemptOutcome, ApplyProposalError};
 use crate::{
-    ApplyOneReport, ApplyOutcome, ApplyReport, BudgetHandle, BudgetLedger, CacheBypassReason,
-    CachePolicy, CacheStatus, CaseSet, DynCallback, DynEvaluator, ErrorPolicy, EvaluationCache,
-    EvaluationCacheKey, EvaluationContext, EvaluationError, EvaluationReport,
+    Actor, ApplyOneReport, ApplyOutcome, ApplyReport, BudgetHandle, BudgetLedger,
+    CacheBypassReason, CachePolicy, CacheStatus, CaseSet, DynCallback, DynEvaluator, ErrorPolicy,
+    EvaluationCache, EvaluationCacheKey, EvaluationContext, EvaluationError, EvaluationReport,
     EvaluationResolveError, Evaluator, OptimizerStateWrite, ProposalBatchReport, ProposalContext,
     ProposalError, Proposer, ReadScope, RenderContext, RunCheckpointRequest, RunEvent, RunGraph,
     RunGraphView, RunPersistence, TrustPolicy, TrustViolation,
@@ -360,6 +361,28 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
             .ok_or(RunContextError::MissingCaseSet)?
             .resolve(set)
             .map_err(Into::into)
+    }
+
+    /// Resolve an optimizer-visible evaluation set without recording an
+    /// evaluation request.
+    ///
+    /// This is for optimizer control decisions such as GEPA train minibatch
+    /// sampling. Hidden validation/test partitions still go through the same
+    /// trust check as optimizer-issued evaluations.
+    pub fn resolve_optimizer_evaluation_set(
+        &self,
+        set: &EvaluationSet,
+    ) -> Result<leaven_core::ResolvedEvaluationSet, RunContextError> {
+        let request = EvaluationRequest::Independent {
+            candidates: Vec::new(),
+            set: set.clone(),
+            granularity: AssessmentGranularity::PerCase,
+            purpose: EvaluationPurpose::Probe,
+        };
+        self.trust
+            .check_evaluation_request(&Actor::Optimizer, &request)
+            .map_err(RunContextError::TrustViolation)?;
+        self.resolve_evaluation_request(&request)
     }
 
     /// Evaluate a request, store assessment evidence, and record durable events.

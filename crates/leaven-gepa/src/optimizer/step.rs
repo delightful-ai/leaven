@@ -99,7 +99,19 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
         self.record_event(GepaEventSummary::IterationStarted {
             iteration: self.completed_iterations + 1,
         });
-        let evaluation_set = self.batch_sampler.sample_train(&self.train_partition);
+        let train_set = EvaluationSet::Partition(self.train_partition.clone());
+        let train_cases = ctx
+            .resolve_optimizer_evaluation_set(&train_set)
+            .map_err(|error| {
+                OptimizerError::with_source("GEPA could not resolve train minibatch cases", error)
+            })?
+            .case_ids;
+        let evaluation_set = self
+            .batch_sampler
+            .sample_train(&self.train_partition, &train_cases)
+            .map_err(|error| {
+                OptimizerError::with_source("GEPA could not sample train minibatch", error)
+            })?;
         self.record_event(GepaEventSummary::TrainMinibatchSampled);
         let (parent_index, parent) = self.select_reference_parent(ctx.graph(), seed)?;
         let parent_screening = self

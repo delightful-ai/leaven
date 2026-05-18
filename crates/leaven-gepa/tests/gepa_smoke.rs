@@ -121,27 +121,25 @@ proptest! {
 fn epoch_shuffled_samples_train_with_seed_and_restores_cursor() {
     let train = leaven_core::PartitionId::from("TRAIN");
     let mut sampler = EpochShuffled::new(2).with_seed(41);
+    let train_cases = vec![
+        leaven_kernel::CaseId::new(0),
+        leaven_kernel::CaseId::new(1),
+        leaven_kernel::CaseId::new(2),
+    ];
 
-    assert!(matches!(
-        sampler.sample_train(&train),
-        EvaluationSet::Sample { of, n: 2, seed: 41 }
-            if matches!(*of, EvaluationSet::Partition(ref partition) if partition == &train)
-    ));
-    assert!(matches!(
-        sampler.sample_train(&train),
-        EvaluationSet::Sample { of, n: 2, seed: 42 }
-            if matches!(*of, EvaluationSet::Partition(ref partition) if partition == &train)
-    ));
+    let first = sampler.sample_train(&train, &train_cases).unwrap();
+    let second = sampler.sample_train(&train, &train_cases).unwrap();
+    assert_ne!(format!("{first:?}"), format!("{second:?}"));
+    assert!(matches!(first, EvaluationSet::Cases(ref cases) if cases.len() == 2));
+    assert!(matches!(second, EvaluationSet::Cases(ref cases) if cases.len() == 2));
 
     let state = CheckpointBatchSampler::checkpoint_state(&sampler);
     let mut restored = EpochShuffled::default();
     CheckpointBatchSampler::restore_state(&mut restored, state);
 
-    assert!(matches!(
-        restored.sample_train(&train),
-        EvaluationSet::Sample { of, n: 2, seed: 43 }
-            if matches!(*of, EvaluationSet::Partition(ref partition) if partition == &train)
-    ));
+    let next = sampler.sample_train(&train, &train_cases).unwrap();
+    let restored_next = restored.sample_train(&train, &train_cases).unwrap();
+    assert_eq!(format!("{next:?}"), format!("{restored_next:?}"));
 }
 
 #[test]
@@ -665,6 +663,7 @@ fn gepa_candidate_history_tracks_seed_and_accepted_children_by_assessment() {
             FixedSurfaceEdit::new("improved".to_owned()),
         )
         .reflective_dataset(OneReflectiveExample)
+        .batch_sampler(EpochShuffled::new(1))
         .validation_policy(MinibatchThenValidation)
         .max_iterations(1);
 
@@ -965,7 +964,7 @@ fn gepa_batch_sampler_builder_uses_custom_minibatches() {
         engine.run(&mut gepa, &case_set, &store).await.unwrap();
 
         let seen_sets = seen_sets.lock().expect("seen sets lock").clone();
-        let expected_minibatch = vec![leaven_kernel::CaseId::new(3), leaven_kernel::CaseId::new(0)];
+        let expected_minibatch = vec![leaven_kernel::CaseId::new(1), leaven_kernel::CaseId::new(2)];
         assert_eq!(
             seen_sets,
             vec![expected_minibatch.clone(), expected_minibatch]
@@ -993,6 +992,7 @@ fn gepa_proposal_count_applies_multiple_reflections_in_one_iteration() {
             SequentialSurfaceEdits::new(["improved-a", "improved-b"]),
         )
         .reflective_dataset(OneReflectiveExample)
+        .batch_sampler(EpochShuffled::new(1))
         .validation_policy(MinibatchThenValidation)
         .proposal_count(2)
         .max_iterations(1);
@@ -1051,6 +1051,7 @@ fn full_validation_policy_evaluates_accepted_candidates_and_selects_validation_b
             FixedSurfaceEdit::new("improved".to_owned()),
         )
         .reflective_dataset(OneReflectiveExample)
+        .batch_sampler(EpochShuffled::new(1))
         .validation_policy(FullValidation)
         .max_iterations(1);
 
@@ -1223,7 +1224,7 @@ fn accepted_child_enters_reference_state_only_after_full_validation() {
 }
 
 #[test]
-fn default_parent_selection_uses_validation_frontier_frequency() {
+fn default_parent_selection_samples_validation_frontier_frequency() {
     block_on(async {
         let case_set = CaseSet::new(vec![(), (), (), ()])
             .with_partition(
@@ -1269,7 +1270,7 @@ fn default_parent_selection_uses_validation_frontier_frequency() {
                 _ => None,
             })
             .collect::<Vec<_>>();
-        assert_eq!(selected, vec![0, 1]);
+        assert_eq!(selected, vec![0, 0]);
     });
 }
 
