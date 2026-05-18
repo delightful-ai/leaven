@@ -176,6 +176,12 @@ Current speed stance:
   `gpt-5.1` reflection row was absent, and both `reports/p8-aime-start.json`
   and `reports/p8-aime-failure.json` recorded
   `comparison.reflection_model_alignment=upstream-matched`.
+- P8 comparison blocks now make the local CAIS denominator caveat structured:
+  published validation `26/45`, published test `0.600`, configured upstream
+  search cap `500`, inspectable checkpoint metric calls `621`, checkpoint
+  candidate count `10`, and `upstream_run_log_available=false`. This keeps
+  future live reports from hiding the difference between the published CAIS
+  target, the inspectable `gepa_state.bin`, and the missing local `run.log`.
 - P8 reports now expose LM cache read order and write destination separately.
   This matters for `eager-sqlite`: exact selected-run rows are read before
   compatible workspace rows, while new responses write to the workspace cache.

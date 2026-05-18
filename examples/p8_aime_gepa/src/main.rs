@@ -56,6 +56,11 @@ const OPTIMIZED: &str = "Solve with modular arithmetic when useful. Verify arith
 const GEPA_AIME_METRIC_CALLS: u64 = 500;
 const DSPY_QUICKSTART_METRIC_CALLS: u64 = 150;
 const DSPY_QUICKSTART_TEST_SCORE_TARGET: f64 = 0.566;
+const GEPA_CAIS_AIME_PUBLISHED_TEST_SCORE: f64 = 0.600;
+const GEPA_CAIS_AIME_PUBLISHED_VALIDATION_SCORE: f64 = 26.0 / 45.0;
+const GEPA_CAIS_AIME_CONFIGURED_SEARCH_CAP: u64 = 500;
+const GEPA_CAIS_AIME_CHECKPOINT_METRIC_CALLS: u64 = 621;
+const GEPA_CAIS_AIME_CHECKPOINT_CANDIDATES: u64 = 10;
 const GEPA_AIME_MAX_WORKERS: usize = 32;
 const GEPA_AIME_MAX_OUTPUT_TOKENS: u32 = 32_000;
 const OPTIMIZE_ANYTHING_SKIP_PERFECT_SCORE: bool = false;
@@ -223,6 +228,26 @@ fn report_run_header_lines(config: &AimeRunConfig, run: &AimeRunResult) -> Vec<S
         format!(
             "comparison_published_test_score={}",
             report_score(config.profile.published_test_score())
+        ),
+        format!(
+            "comparison_published_validation_score={}",
+            report_score(config.profile.published_validation_score())
+        ),
+        format!(
+            "comparison_upstream_configured_search_metric_call_cap={}",
+            report_optional_u64_value(config.profile.upstream_configured_search_metric_call_cap())
+        ),
+        format!(
+            "comparison_upstream_checkpoint_metric_calls={}",
+            report_optional_u64_value(config.profile.upstream_checkpoint_metric_calls())
+        ),
+        format!(
+            "comparison_upstream_checkpoint_candidate_count={}",
+            report_optional_u64_value(config.profile.upstream_checkpoint_candidate_count())
+        ),
+        format!(
+            "comparison_upstream_run_log_available={}",
+            report_optional_bool(config.profile.upstream_run_log_available())
         ),
         format!(
             "comparison_reflection_prompt={}",
@@ -633,6 +658,14 @@ fn report_latest_checkpoint(storage: &RunStorage) -> String {
 
 fn report_optional_u64(value: Option<u64>) -> String {
     value.map_or_else(|| "unlimited".to_owned(), |value| value.to_string())
+}
+
+fn report_optional_u64_value(value: Option<u64>) -> String {
+    value.map_or_else(|| "none".to_owned(), |value| value.to_string())
+}
+
+fn report_optional_bool(value: Option<bool>) -> String {
+    value.map_or_else(|| "none".to_owned(), |value| value.to_string())
 }
 
 fn metric_calls_overshoot(cap: Option<u64>, spent: u64) -> u64 {
@@ -1134,6 +1167,7 @@ fn p8_aime_report_json(config: &AimeRunConfig, run: &AimeRunResult) -> serde_jso
         "proof_classification": proof_classification_for_report(config, &run.role_reports),
         "comparison_target": config.profile.comparison_target(),
         "comparison_published_test_score": config.profile.published_test_score(),
+        "comparison_published_validation_score": config.profile.published_validation_score(),
         "comparison_reflection_prompt": config.profile.reflection_prompt_claim(),
         "comparison": p8_comparison_json(config),
         "data_source": config.data_source.label(),
@@ -1215,6 +1249,13 @@ fn p8_comparison_json(config: &AimeRunConfig) -> serde_json::Value {
     serde_json::json!({
         "target": config.profile.comparison_target(),
         "published_test_score": config.profile.published_test_score(),
+        "published_validation_score": config.profile.published_validation_score(),
+        "upstream_configured_search_metric_call_cap": config
+            .profile
+            .upstream_configured_search_metric_call_cap(),
+        "upstream_checkpoint_metric_calls": config.profile.upstream_checkpoint_metric_calls(),
+        "upstream_checkpoint_candidate_count": config.profile.upstream_checkpoint_candidate_count(),
+        "upstream_run_log_available": config.profile.upstream_run_log_available(),
         "reflection_prompt": config.profile.reflection_prompt_claim(),
         "upstream_reflection_model": config.profile.upstream_reflection_model(),
         "leaven_reflection_model": config.reflection.model,
@@ -1365,6 +1406,7 @@ fn p8_aime_failure_report_json(
         "proof_classification": proof_classification_for_config(config),
         "comparison_target": config.profile.comparison_target(),
         "comparison_published_test_score": config.profile.published_test_score(),
+        "comparison_published_validation_score": config.profile.published_validation_score(),
         "comparison_reflection_prompt": config.profile.reflection_prompt_claim(),
         "comparison": p8_comparison_json(config),
         "data_source": config.data_source.label(),
@@ -1401,6 +1443,7 @@ fn p8_aime_start_report_json(config: &AimeRunConfig, started_at: SystemTime) -> 
         "proof_classification": proof_classification_for_config(config),
         "comparison_target": config.profile.comparison_target(),
         "comparison_published_test_score": config.profile.published_test_score(),
+        "comparison_published_validation_score": config.profile.published_validation_score(),
         "comparison_reflection_prompt": config.profile.reflection_prompt_claim(),
         "comparison": p8_comparison_json(config),
         "data_source": config.data_source.label(),
@@ -2539,7 +2582,42 @@ impl AimeRunProfile {
         match self {
             Self::DeterministicSmoke => None,
             Self::DspyQuickstart => Some(DSPY_QUICKSTART_TEST_SCORE_TARGET),
-            Self::GepaAime => Some(0.600),
+            Self::GepaAime => Some(GEPA_CAIS_AIME_PUBLISHED_TEST_SCORE),
+        }
+    }
+
+    const fn published_validation_score(self) -> Option<f64> {
+        match self {
+            Self::DeterministicSmoke | Self::DspyQuickstart => None,
+            Self::GepaAime => Some(GEPA_CAIS_AIME_PUBLISHED_VALIDATION_SCORE),
+        }
+    }
+
+    const fn upstream_configured_search_metric_call_cap(self) -> Option<u64> {
+        match self {
+            Self::DeterministicSmoke | Self::DspyQuickstart => None,
+            Self::GepaAime => Some(GEPA_CAIS_AIME_CONFIGURED_SEARCH_CAP),
+        }
+    }
+
+    const fn upstream_checkpoint_metric_calls(self) -> Option<u64> {
+        match self {
+            Self::DeterministicSmoke | Self::DspyQuickstart => None,
+            Self::GepaAime => Some(GEPA_CAIS_AIME_CHECKPOINT_METRIC_CALLS),
+        }
+    }
+
+    const fn upstream_checkpoint_candidate_count(self) -> Option<u64> {
+        match self {
+            Self::DeterministicSmoke | Self::DspyQuickstart => None,
+            Self::GepaAime => Some(GEPA_CAIS_AIME_CHECKPOINT_CANDIDATES),
+        }
+    }
+
+    const fn upstream_run_log_available(self) -> Option<bool> {
+        match self {
+            Self::DeterministicSmoke | Self::DspyQuickstart => None,
+            Self::GepaAime => Some(false),
         }
     }
 
@@ -2583,6 +2661,9 @@ impl AimeRunProfile {
                 notes
             }
             Self::GepaAime => {
+                // This is intentionally a report-visible provenance caveat:
+                // the local CAIS checkpoint is inspectable, but its README's
+                // cited `logs/run.log` is absent in this checkout.
                 let mut notes = vec![
                     "published_gepa_cais_artifact_reports_46.67_to_60.00_percent_on_aime_2025",
                     "local_gepa_cais_checkpoint_has_10_candidates_621_metric_calls_and_missing_run_log",
@@ -6846,6 +6927,31 @@ Provide the new parameter value within ``` blocks."
                 .iter()
                 .any(|line| { line == "comparison_reflection_model_alignment=model-delta" })
         );
+        assert!(
+            lines
+                .iter()
+                .any(|line| { line == "comparison_published_validation_score=0.578" })
+        );
+        assert!(
+            lines.iter().any(|line| {
+                line == "comparison_upstream_configured_search_metric_call_cap=500"
+            })
+        );
+        assert!(
+            lines
+                .iter()
+                .any(|line| { line == "comparison_upstream_checkpoint_metric_calls=621" })
+        );
+        assert!(
+            lines
+                .iter()
+                .any(|line| { line == "comparison_upstream_checkpoint_candidate_count=10" })
+        );
+        assert!(
+            lines
+                .iter()
+                .any(|line| { line == "comparison_upstream_run_log_available=false" })
+        );
         assert!(lines.iter().any(|line| {
             line == "comparison_note=local_gepa_cais_checkpoint_has_10_candidates_621_metric_calls_and_missing_run_log"
         }));
@@ -6994,6 +7100,23 @@ Provide the new parameter value within ``` blocks."
             report["comparison"]["reflection_model_alignment"],
             "upstream-matched"
         );
+        assert_eq!(
+            report["comparison"]["published_validation_score"],
+            GEPA_CAIS_AIME_PUBLISHED_VALIDATION_SCORE
+        );
+        assert_eq!(
+            report["comparison"]["upstream_configured_search_metric_call_cap"],
+            GEPA_CAIS_AIME_CONFIGURED_SEARCH_CAP
+        );
+        assert_eq!(
+            report["comparison"]["upstream_checkpoint_metric_calls"],
+            GEPA_CAIS_AIME_CHECKPOINT_METRIC_CALLS
+        );
+        assert_eq!(
+            report["comparison"]["upstream_checkpoint_candidate_count"],
+            GEPA_CAIS_AIME_CHECKPOINT_CANDIDATES
+        );
+        assert_eq!(report["comparison"]["upstream_run_log_available"], false);
         assert!(
             report["comparison"]["notes"]
                 .as_array()
@@ -7837,6 +7960,11 @@ Provide the new parameter value within ``` blocks."
             report["comparison"]["reflection_model_alignment"],
             "upstream-matched"
         );
+        assert_eq!(
+            report["comparison"]["upstream_checkpoint_metric_calls"],
+            GEPA_CAIS_AIME_CHECKPOINT_METRIC_CALLS
+        );
+        assert_eq!(report["comparison"]["upstream_run_log_available"], false);
         assert_eq!(
             report["comparison"]["upstream_reflection_model"],
             UPSTREAM_GEPA_AIME_REFLECTION_MODEL
