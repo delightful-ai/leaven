@@ -1,7 +1,7 @@
 # GEPA Parity Working Ledger
 
 Status: active.
-Updated: 2026-05-18T14:12:00Z.
+Updated: 2026-05-18T14:13:00Z.
 
 ## Authority
 
@@ -1026,12 +1026,23 @@ Cache/replay attempts after the report-schema fixes:
     either use strict `LEAVEN_AIME_REFLECTION_MODEL=gpt-5.1` or be labeled as a
     Leaven-plus model/profile experiment.
 
+2026-05-18T14:13:00Z:
+
+- P8 report UX now turns the prompt-specificity audit into report data instead
+  of ad hoc JSON scraping: `reflection_summary` includes
+  `accepted_proposed_text_chars` and `rejected_proposed_text_chars`, each using
+  the existing length-summary shape. This is diagnostic-only and does not feed
+  GEPA parent selection, acceptance, admission, or final result selection.
+  `docs/specs/p8_run_report_operator_ux.md` now names the accepted/rejected
+  breakdown as part of the operator report contract.
+
 1. Continue no-spend quality diagnosis only where it can produce new evidence:
    use emitted Leaven prompts, candidate lineage, reflection outputs, child
    admission history, minibatch cases, parser outcomes, and the CAIS checkpoint
-   candidate prompt trajectory. Do not wait for upstream reflection assistant
-   text from this checkout; `gepa_state.bin` did not persist it and `run.log` is
-   absent.
+   candidate prompt trajectory. Future current-code reports can start from the
+   accepted/rejected proposed-text summaries before drilling into individual
+   attempts. Do not wait for upstream reflection assistant text from this
+   checkout; `gepa_state.bin` did not persist it and `run.log` is absent.
 2. Treat result-quality parity as open until a current-profile live report with
    comparable held-out quality exists, or the specs label the remaining
    model/runtime delta. The clean paid comparison is a strict upstream-reflector
@@ -1042,7 +1053,7 @@ Cache/replay attempts after the report-schema fixes:
    the GEPA report metric total directly. The historical completed release
    report remains valid for aggregate budget proof but predates those per-phase
    validation deltas.
-4. Future release reports should include `case_deltas.summary` and
+4. Current-code release reports include `case_deltas.summary` and
    `case_deltas.cases` so quality diagnosis starts from exact improved,
    regressed, unchanged-correct, and unchanged-wrong case IDs without exposing
    raw hidden targets or reference solutions. The historical paid report

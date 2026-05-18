@@ -64,6 +64,9 @@ The public result/report must expose:
   process-local reflection telemetry, or is unavailable after durable resume;
 - GEPA proposal-attempt rows that distinguish train-screen acceptance from
   admitted candidate index after full validation;
+- GEPA reflection-summary rows that break proposed-text length diagnostics down
+  by accepted and rejected train-screen outcomes, so prompt-specificity audits
+  do not require ad hoc JSON scraping;
 - cache mode and cache summaries;
 - compatibility manifest summary;
 - case-level rows with case id, source id, split, candidate, score state,

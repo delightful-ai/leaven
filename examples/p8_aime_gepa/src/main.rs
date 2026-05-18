@@ -15,8 +15,8 @@ use leaven::engine::{
 };
 use leaven::eval::{Case, SplitRole};
 use leaven::gepa::{
-    Gepa, GepaCandidateIndex, GepaEventSummary, GepaOptimizedExt, GepaProfile, GepaReport,
-    GepaSkipReason, ReflectionError, ReflectiveDatasetBuilder, ReflectiveExample,
+    Gepa, GepaCandidateIndex, GepaEventSummary, GepaOptimizedExt, GepaProfile, GepaProposalAttempt,
+    GepaReport, GepaSkipReason, ReflectionError, ReflectiveDatasetBuilder, ReflectiveExample,
     ReflectiveSideInfoValue,
 };
 use leaven::kernel::Metered;
@@ -1722,6 +1722,21 @@ fn p8_gepa_reflection_summary_json(
         .map(|response| p8_extract_reflection_replacement(&response.assistant.content))
         .map(|text| text.chars().count())
         .collect::<Vec<_>>();
+    let mut accepted_proposed_text_chars = Vec::new();
+    let mut rejected_proposed_text_chars = Vec::new();
+    for (attempt, request) in p8_gepa_attempt_reflection_pairs(report, reflection_requests) {
+        let Some(response) = request.and_then(|request| request.response.as_ref()) else {
+            continue;
+        };
+        let proposed_chars = p8_extract_reflection_replacement(&response.assistant.content)
+            .chars()
+            .count();
+        match attempt.accepted {
+            Some(true) => accepted_proposed_text_chars.push(proposed_chars),
+            Some(false) => rejected_proposed_text_chars.push(proposed_chars),
+            None => {}
+        }
+    }
     serde_json::json!({
         "attempted_count": attempted_count,
         "observed_request_count": reflection_requests.len(),
@@ -1731,7 +1746,28 @@ fn p8_gepa_reflection_summary_json(
         "request_chars": p8_len_summary_json(&request_chars),
         "assistant_chars": p8_len_summary_json(&assistant_chars),
         "proposed_text_chars": p8_len_summary_json(&proposed_text_chars),
+        "accepted_proposed_text_chars": p8_len_summary_json(&accepted_proposed_text_chars),
+        "rejected_proposed_text_chars": p8_len_summary_json(&rejected_proposed_text_chars),
     })
+}
+
+fn p8_gepa_attempt_reflection_pairs<'a>(
+    report: &'a GepaReport,
+    reflection_requests: &'a [AimeLmRequestRecord],
+) -> impl Iterator<Item = (&'a GepaProposalAttempt, Option<&'a AimeLmRequestRecord>)> {
+    report
+        .proposal_attempts
+        .iter()
+        .scan(0usize, |request_index, attempt| {
+            let request = if attempt.skip_reason.is_none() {
+                let request = reflection_requests.get(*request_index);
+                *request_index += 1;
+                request
+            } else {
+                None
+            };
+            Some((attempt, request))
+        })
 }
 
 fn p8_lm_visible_prompt_text(request: &AimeLmRequestRecord) -> String {
@@ -7810,6 +7846,22 @@ Provide the new parameter value within ``` blocks."
             gepa_report["reflection_summary"]["proposed_text_chars"]["average"]
                 .as_f64()
                 .is_some_and(|chars| chars > 0.0)
+        );
+        assert_eq!(
+            gepa_report["reflection_summary"]["accepted_proposed_text_chars"]["count"],
+            1
+        );
+        assert!(
+            gepa_report["reflection_summary"]["accepted_proposed_text_chars"]["average"]
+                .as_f64()
+                .is_some_and(|chars| chars > 0.0)
+        );
+        assert_eq!(
+            gepa_report["reflection_summary"]["rejected_proposed_text_chars"]["count"],
+            0
+        );
+        assert!(
+            gepa_report["reflection_summary"]["rejected_proposed_text_chars"]["average"].is_null()
         );
         assert_eq!(gepa_report["skip_perfect_score"], true);
         assert_eq!(gepa_report["perfect_score"], 1.0);
