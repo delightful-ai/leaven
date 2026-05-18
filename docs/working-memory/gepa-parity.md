@@ -1,7 +1,7 @@
 # GEPA Parity Working Ledger
 
 Status: active.
-Updated: 2026-05-18T11:17:07Z.
+Updated: 2026-05-18T12:10:33Z.
 
 ## Authority
 
@@ -149,6 +149,13 @@ Current speed stance:
   `LEAVEN_AIME_REFLECTION_MODEL=gpt-5.1` strict upstream-reflector run
   distinguishable from the default `gpt-5.4-mini` Leaven stronger-reflector
   run before anyone reads terminal history.
+- P8 start, failure, and final reports now all carry the same comparison block.
+  Cache-only strict upstream-reflector rehearsal at
+  `.leaven/release-runs/p8-aime-gepa-upstream-reflector-cache-only-20260518-050427`
+  failed closed before provider use (`llm_calls=0`) because the selected
+  `gpt-5.1` reflection row was absent, and both `reports/p8-aime-start.json`
+  and `reports/p8-aime-failure.json` recorded
+  `comparison.reflection_model_alignment=upstream-matched`.
 
 Current feedback/reflection answer:
 
@@ -777,10 +784,11 @@ Cache/replay attempts after the report-schema fixes:
     improved seed but still trails the pinned GEPA CAIS target, so another paid
     run should be justified by a specific profile/model experiment, not by
     hope that duration alone fixes it;
-  - still open and current: strict upstream-reflector proof. The next
-    model-matched run should set `LEAVEN_AIME_REFLECTION_MODEL=gpt-5.1` and
-    verify `comparison_reflection_model_alignment=upstream-matched` before its
-    score is compared to the upstream AIME target;
+  - partially closed: strict upstream-reflector reporting proof. Cache-only
+    rehearsal with `LEAVEN_AIME_REFLECTION_MODEL=gpt-5.1` now proves the
+    start/failure reports classify `openai/gpt-5.1` vs `gpt-5.1` as
+    `upstream-matched` without provider spend. The paid quality proof is still
+    open because the cache lacks the required `gpt-5.1` reflection row;
   - still open and current: final-report replay proof. Solver/reflection LM
     cache replay is safer now, but final train/validation/test report rows are
     not claimed resumable from search checkpoints;
