@@ -84,6 +84,11 @@ For durable runs, `RunStorage::Stored` must say:
 - cache file/table locations or backend names;
 - summary/report file location.
 
+The durable evaluation cache reported for the run directory is the optimizer
+resume cache at the latest checkpoint boundary. Final-report-only evaluations
+may appear in summary/report rows, but they must not be published as durable
+cache authority unless a separate report-resume snapshot exists.
+
 For ephemeral runs, the report must say non-resumable and cache non-durable.
 
 If a run is stored but not resumable, the report must explain why, for example
@@ -186,7 +191,10 @@ without exposing secrets:
 - budget policy.
 
 Fingerprints may be redacted or shortened for human output, but the durable
-manifest must store full values.
+manifest must store full values. Live LM role fingerprints must include the
+observed provider/runtime fingerprint, including provider base URL, timeout,
+retry, and throttle policy, so resume refuses behavior-affecting provider
+runtime drift before runner/LM work.
 
 ## 8. Durable Files
 

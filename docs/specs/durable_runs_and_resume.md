@@ -297,8 +297,15 @@ Clean checkpoint boundaries:
 - after seed insertion;
 - after optimizer initialization;
 - after each completed optimizer iteration;
-- after final validation/test report work;
 - after finish.
+
+The latest optimizer-resume checkpoint stays at the clean search boundary.
+Final validation/test report work is a projection over that checkpoint: it may
+add in-memory graph rows used to build the returned report, but it must not
+advance the durable evaluation-cache index beyond the selected latest
+checkpoint. If final report evaluations become independently resumable, they
+need an explicit report-resume snapshot instead of being folded into the
+optimizer checkpoint.
 
 In-flight provider calls, agent sessions, workspaces, or evaluator jobs are not
 resumed as if complete. They are abandoned or rerun according to the owning

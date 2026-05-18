@@ -1221,6 +1221,41 @@ fn run_builder_separates_optimization_cost_from_final_report_cost() {
 }
 
 #[test]
+fn run_builder_sqlite_cache_stops_at_search_checkpoint_boundary() {
+    let run_dir = temp_run_dir("sqlite-cache-search-boundary");
+    let result = block_on(
+        optimize(TextArtifact(40))
+            .train_inputs(vec![TextCase(2)])
+            .validation_inputs(vec![TextCase(3)])
+            .test_inputs(vec![TextCase(4)])
+            .runner(|artifact, case| async move { text_runner(&artifact, &case) })
+            .score(text_score)
+            .using(EvaluateSeedCasewiseCached::default())
+            .budget(Budget::metric_calls(16))
+            .evaluation_cache_policy(CachePolicy::UserKey(Fingerprint::from_bytes([77; 32])))
+            .evaluation_parallelism(NonZeroUsize::new(1).unwrap())
+            .run_dir(&run_dir)
+            .test_runtime_fingerprints()
+            .run(),
+    )
+    .unwrap();
+
+    assert_eq!(result.summary().optimization_cost.metric_calls, 1);
+    assert_eq!(result.summary().final_report_cost.metric_calls, 2);
+    let connection = Connection::open(run_dir.join("run.sqlite")).unwrap();
+    let cached_entries: i64 = connection
+        .query_row("SELECT COUNT(*) FROM evaluation_cache_entries", [], |row| {
+            row.get(0)
+        })
+        .unwrap();
+    assert_eq!(
+        cached_entries, 1,
+        "durable evaluation cache must not persist final-report-only rows past the resume checkpoint",
+    );
+    cleanup_path(&run_dir);
+}
+
+#[test]
 fn run_builder_reports_budget_stop_reason_from_metric_call_budget() {
     let result = block_on(
         optimize(TextArtifact(40))
@@ -1701,6 +1736,48 @@ impl Optimizer<RunProblem<TextArtifact, TextCase>> for EvaluateSeed {
                 granularity: AssessmentGranularity::PerCase,
                 purpose: EvaluationPurpose::Search,
             },
+        )
+        .await
+        .map_err(|source| OptimizerError::with_source("seed evaluation failed", source))?;
+        Ok(StepStatus::Done)
+    }
+
+    fn best_candidate(
+        &self,
+        graph: RunGraphView<'_, RunProblem<TextArtifact, TextCase>>,
+    ) -> Option<CandidateId> {
+        self.best
+            .or_else(|| graph.candidate_tree().roots().first().copied())
+    }
+}
+
+#[derive(Default)]
+struct EvaluateSeedCasewiseCached {
+    best: Option<CandidateId>,
+}
+
+impl Optimizer<RunProblem<TextArtifact, TextCase>> for EvaluateSeedCasewiseCached {
+    async fn initialize(
+        &mut self,
+        ctx: &mut RunContext<'_, RunProblem<TextArtifact, TextCase>>,
+    ) -> Result<(), OptimizerError> {
+        self.best = ctx.graph().candidate_tree().roots().first().copied();
+        Ok(())
+    }
+
+    async fn step(
+        &mut self,
+        ctx: &mut RunContext<'_, RunProblem<TextArtifact, TextCase>>,
+    ) -> Result<StepStatus, OptimizerError> {
+        let seed = self
+            .best
+            .or_else(|| ctx.graph().candidate_tree().roots().first().copied())
+            .ok_or_else(|| OptimizerError::Message("missing seed".to_owned()))?;
+        ctx.evaluate_independent_casewise_cached(
+            EvaluatorId::PRIMARY,
+            seed,
+            EvaluationSet::Partition("TRAIN".into()),
+            EvaluationPurpose::Search,
         )
         .await
         .map_err(|source| OptimizerError::with_source("seed evaluation failed", source))?;

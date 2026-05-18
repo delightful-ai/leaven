@@ -698,6 +698,14 @@ where
     )
     .await?;
     let best = search.run.best;
+    if let Some(evaluation_cache) = prepared_store.evaluation_cache.as_ref() {
+        evaluation_cache
+            .replace_from_snapshot(&engine.evaluation_cache_snapshot())
+            .map_err(|source| OptimizeError::EvaluationCache {
+                operation: "flush sqlite evaluation cache",
+                source,
+            })?;
+    }
     let final_inputs = final_evaluation_inputs(search.seed, best, &builder);
     if final_inputs.has_any_split() {
         engine.set_budget_limit(Budget::unlimited());
@@ -718,14 +726,6 @@ where
         }
     };
     mark_latest_checkpoint(&prepared_store, search.checkpoint)?;
-    if let Some(evaluation_cache) = prepared_store.evaluation_cache.as_ref() {
-        evaluation_cache
-            .replace_from_snapshot(&engine.evaluation_cache_snapshot())
-            .map_err(|source| OptimizeError::EvaluationCache {
-                operation: "flush sqlite evaluation cache",
-                source,
-            })?;
-    }
     let latest_checkpoint = latest_checkpoint(&prepared_store)?;
     let storage = run_storage(
         search.run.run_id,

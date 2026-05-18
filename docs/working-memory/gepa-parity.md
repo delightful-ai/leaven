@@ -231,6 +231,13 @@ Prompt-audit finding:
   and raw live solver response text as target-safe runner trace evidence. This
   improves one-prompt AIME/operator proof without claiming DSPy module-local
   trace selection parity.
+- Verifier wave 3 found P8 live resume compatibility was still using local
+  model/cache/runtime fields but not the observed OpenAI provider fingerprint.
+  Current P8 runner and LM-role fingerprints now include the constructed
+  provider fingerprint, so timeout/base-url/retry/throttle drift changes the
+  durable compatibility manifest before runner/LM work. The old completed live
+  report still predates this repair and must not be cited as provider-runtime
+  compatibility proof.
 
 Comparison notes against the older improving artifact:
 
@@ -298,6 +305,15 @@ Cache/replay attempts after the report-schema fixes:
 - post-run P8 error output now prints safe profile/cache/run-dir/proof context
   on failures, so future cache-only or compatibility refusals are diagnosable
   without reconstructing the shell environment from logs.
+- durable SQLite evaluation-cache flushing now stops at the optimizer search
+  checkpoint boundary. Final-report-only evaluations remain available to the
+  returned summary/report but are not persisted into `run.sqlite` as resume
+  authority unless a separate report-resume snapshot is introduced later.
+- P8 role report fingerprints now reuse the actual solver/reflection runtime
+  fingerprints supplied to `.runner_fingerprint(...)` and
+  `.lm_role_fingerprint(...)`, including OpenAI runtime timeout/throttle
+  configuration and provider fingerprint. This keeps report disclosure aligned
+  with compatibility checks.
 
 1. Diagnose why the completed live run produced no improvement while the older
    live artifact improved validation/test. Start from emitted prompts,

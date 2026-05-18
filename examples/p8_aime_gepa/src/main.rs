@@ -38,7 +38,7 @@ use leaven_lm::{
     SamplingOptions, TokenUsage,
 };
 use leaven_lm_cache::{CachedLm, InMemoryLmCache, LmCachePolicy, SqliteLmCache};
-use leaven_lm_openai::{OpenAiConfig, OpenAiLm, OpenAiThrottlePolicy};
+use leaven_lm_openai::{OpenAiConfig, OpenAiLm, OpenAiRetryPolicy, OpenAiThrottlePolicy};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -750,9 +750,13 @@ async fn try_run_aime(
     let reflection_telemetry = AimeLmTelemetry::new(config.reflection.cache_policy)
         .with_durable_provider_failures(AimeLmRole::Reflection, provider_failures_path.clone());
     let solver = aime_solver_lm(&config.solver, solver_telemetry.clone(), &run_dir);
-    let runner_fingerprint = aime_runner_fingerprint(&config.solver);
+    let solver_lm_fingerprint = solver.as_ref().map(Lm::fingerprint);
+    let runner_fingerprint = aime_runner_fingerprint(&config.solver, solver_lm_fingerprint);
     let scorer_fingerprint = aime_scorer_fingerprint();
-    let reflection_role_fingerprint = aime_reflection_role_fingerprint(&config.reflection);
+    let reflection_lm =
+        aime_reflection_lm(&config.reflection, reflection_telemetry.clone(), &run_dir);
+    let reflection_role_fingerprint =
+        aime_reflection_role_fingerprint(&config.reflection, reflection_lm.fingerprint());
     let solver_config = config.solver.clone();
     let side_infos = AimeSolverSideInfoStore::default();
     let gepa_events = Arc::new(Mutex::new(Vec::<GepaEventSummary>::new()));
@@ -780,22 +784,19 @@ async fn try_run_aime(
             .evaluation_parallelism(config.evaluation_parallelism)
             .on_event(AimeProgressCallback::default())
             .using(
-                Gepa::reflect_with_lm(
-                    aime_reflection_lm(&config.reflection, reflection_telemetry.clone(), &run_dir),
-                    config.reflection.model.clone(),
-                )
-                .with_reflector_config(aime_reflector_config(&config.reflection))
-                .surface(AimePromptSurface)
-                .build()
-                .skip_perfect_score(OPTIMIZE_ANYTHING_SKIP_PERFECT_SCORE)
-                .on_event(move |event| {
-                    gepa_event_sink
-                        .lock()
-                        .expect("AIME GEPA event sink lock")
-                        .push(event.clone());
-                })
-                .reflective_dataset(reflective_dataset)
-                .max_iterations(config.max_iterations),
+                Gepa::reflect_with_lm(reflection_lm, config.reflection.model.clone())
+                    .with_reflector_config(aime_reflector_config(&config.reflection))
+                    .surface(AimePromptSurface)
+                    .build()
+                    .skip_perfect_score(OPTIMIZE_ANYTHING_SKIP_PERFECT_SCORE)
+                    .on_event(move |event| {
+                        gepa_event_sink
+                            .lock()
+                            .expect("AIME GEPA event sink lock")
+                            .push(event.clone());
+                    })
+                    .reflective_dataset(reflective_dataset)
+                    .max_iterations(config.max_iterations),
             )
             .budget(config.budget.clone())
             .run_id(run_id)
@@ -807,6 +808,10 @@ async fn try_run_aime(
     let gepa_report = optimized.optimizer_report::<GepaReport>().cloned();
     let role_reports = AimeRoleReports::from_config(
         &config,
+        AimeRoleRuntimeFingerprints {
+            solver: runner_fingerprint,
+            reflection: reflection_role_fingerprint,
+        },
         solver_telemetry.snapshot(),
         reflection_telemetry.snapshot(),
     )
@@ -1999,9 +2004,37 @@ struct AimeRoleReports {
     reflection: AimeLmRoleReport,
 }
 
+#[derive(Clone, Copy, Debug)]
+struct AimeRoleRuntimeFingerprints {
+    solver: Fingerprint,
+    reflection: Fingerprint,
+}
+
+impl AimeRoleRuntimeFingerprints {
+    fn from_config(config: &AimeRunConfig) -> Self {
+        let solver_lm = if config.solver.live {
+            Some(openai_provider_fingerprint_for_runtime(
+                config.solver.runtime,
+            ))
+        } else {
+            None
+        };
+        let reflection_lm = if config.reflection.live {
+            openai_provider_fingerprint_for_runtime(config.reflection.runtime)
+        } else {
+            DeterministicReflectionLm.fingerprint()
+        };
+        Self {
+            solver: aime_runner_fingerprint(&config.solver, solver_lm),
+            reflection: aime_reflection_role_fingerprint(&config.reflection, reflection_lm),
+        }
+    }
+}
+
 impl AimeRoleReports {
     fn from_config(
         config: &AimeRunConfig,
+        runtime_fingerprints: AimeRoleRuntimeFingerprints,
         solver_metrics: AimeLmRoleMetrics,
         reflection_metrics: AimeLmRoleMetrics,
     ) -> Self {
@@ -2015,7 +2048,7 @@ impl AimeRoleReports {
                 },
                 live: config.solver.live,
                 model: config.solver.model.clone(),
-                runtime_fingerprint: aime_runner_fingerprint(&config.solver),
+                runtime_fingerprint: runtime_fingerprints.solver,
                 cache_policy: config.solver.cache_policy,
                 cache_backend: config.solver.runtime.cache_backend,
                 cache_durable: config.solver.runtime.cache_backend.is_durable(),
@@ -2041,7 +2074,7 @@ impl AimeRoleReports {
                 },
                 live: config.reflection.live,
                 model: config.reflection.model.clone(),
-                runtime_fingerprint: aime_reflection_role_fingerprint(&config.reflection),
+                runtime_fingerprint: runtime_fingerprints.reflection,
                 cache_policy: config.reflection.cache_policy,
                 cache_backend: config.reflection.runtime.cache_backend,
                 cache_durable: config.reflection.runtime.cache_backend.is_durable(),
@@ -3974,12 +4007,7 @@ fn cached_openai_lm(
     role: &str,
 ) -> AimeOpenAiLm {
     let config = match OpenAiConfig::from_env() {
-        Ok(config) => config
-            .with_throttle_policy(OpenAiThrottlePolicy::new(
-                runtime.max_concurrent_requests,
-                Duration::ZERO,
-            ))
-            .with_request_timeout(Duration::from_secs(runtime.request_timeout_seconds)),
+        Ok(config) => apply_aime_openai_runtime_config(config, runtime),
         Err(source) => {
             return unavailable_openai_lm(
                 role,
@@ -4030,6 +4058,26 @@ fn cached_openai_lm(
             )),
         },
     }
+}
+
+fn openai_provider_fingerprint_for_runtime(runtime: AimeOpenAiRuntimeConfig) -> Fingerprint {
+    OpenAiLm::new(apply_aime_openai_runtime_config(
+        OpenAiConfig::new("p8-aime-fingerprint-placeholder"),
+        runtime,
+    ))
+    .fingerprint()
+}
+
+fn apply_aime_openai_runtime_config(
+    config: OpenAiConfig,
+    runtime: AimeOpenAiRuntimeConfig,
+) -> OpenAiConfig {
+    config
+        .with_throttle_policy(OpenAiThrottlePolicy::new(
+            runtime.max_concurrent_requests,
+            Duration::ZERO,
+        ))
+        .with_request_timeout(Duration::from_secs(runtime.request_timeout_seconds))
 }
 
 fn unavailable_openai_lm(
@@ -4117,7 +4165,10 @@ fn openai_model_name() -> String {
     std::env::var("LEAVEN_OPENAI_MODEL").unwrap_or_else(|_| GEPA_AIME_SOLVER_MODEL.to_owned())
 }
 
-fn aime_runner_fingerprint(config: &AimeSolverConfig) -> Fingerprint {
+fn aime_runner_fingerprint(
+    config: &AimeSolverConfig,
+    solver_lm_fingerprint: Option<Fingerprint>,
+) -> Fingerprint {
     let mut builder = FingerprintBuilder::new();
     builder.update(b"p8-aime-runner.dspy-chain-of-thought.v1");
     builder.update([u8::from(config.live)]);
@@ -4128,6 +4179,13 @@ fn aime_runner_fingerprint(config: &AimeSolverConfig) -> Fingerprint {
     builder.update(report_lm_cache_policy(config.cache_policy).as_bytes());
     builder.update(report_lm_cache_backend(config.runtime.cache_backend).as_bytes());
     builder.update(config.runtime.max_concurrent_requests.get().to_le_bytes());
+    builder.update(config.runtime.request_timeout_seconds.to_le_bytes());
+    if let Some(fingerprint) = solver_lm_fingerprint {
+        builder.update(b"solver-lm");
+        builder.update(fingerprint.0);
+    } else {
+        builder.update(b"solver-lm:none");
+    }
     builder.finish()
 }
 
@@ -4156,7 +4214,10 @@ fn aime_solver_request_example(config: &AimeSolverConfig) -> AimeLmRequestRecord
     AimeLmRequestRecord::from_request(&lm_request)
 }
 
-fn aime_reflection_role_fingerprint(config: &AimeReflectionConfig) -> Fingerprint {
+fn aime_reflection_role_fingerprint(
+    config: &AimeReflectionConfig,
+    reflection_lm_fingerprint: Fingerprint,
+) -> Fingerprint {
     let mut builder = FingerprintBuilder::new();
     builder.update(b"p8-aime-reflection-role.v1");
     builder.update([u8::from(config.live)]);
@@ -4167,6 +4228,9 @@ fn aime_reflection_role_fingerprint(config: &AimeReflectionConfig) -> Fingerprin
     builder.update(report_lm_cache_policy(config.cache_policy).as_bytes());
     builder.update(report_lm_cache_backend(config.runtime.cache_backend).as_bytes());
     builder.update(config.runtime.max_concurrent_requests.get().to_le_bytes());
+    builder.update(config.runtime.request_timeout_seconds.to_le_bytes());
+    builder.update(b"reflection-lm");
+    builder.update(reflection_lm_fingerprint.0);
     builder.update(b"output:text");
     builder.update(b"parser:plain-text-fenced");
     builder.update(b"prompt:optimize-anything");
@@ -4711,6 +4775,49 @@ mod tests {
         assert_eq!(
             config.reflection.runtime.max_concurrent_requests,
             runtime.max_concurrent_requests
+        );
+    }
+
+    #[test]
+    fn p8_role_fingerprints_include_observed_openai_provider_runtime() {
+        let runtime = AimeOpenAiRuntimeConfig::from_values(Some("7"), Some("sqlite"), Some("120"));
+        let timeout_runtime =
+            AimeOpenAiRuntimeConfig::from_values(Some("7"), Some("sqlite"), Some("600"));
+        let base_config = AimeRunConfig::live_openai_with_controls(
+            AimeRunProfile::GepaAime,
+            AimeDataSource::HuggingFaceCache,
+            GEPA_AIME_METRIC_CALLS,
+            AimeLmCachePolicies::from_values(Some("read-write"), Some("read-write")),
+            runtime,
+        );
+        let default_provider = openai_provider_fingerprint_for_runtime(runtime);
+        let timeout_provider = openai_provider_fingerprint_for_runtime(timeout_runtime);
+        let base_url_provider = OpenAiLm::new(apply_aime_openai_runtime_config(
+            OpenAiConfig::new("test-key")
+                .with_base_url("https://proxy.example.invalid/v1/responses"),
+            runtime,
+        ))
+        .fingerprint();
+        let retry_provider = OpenAiLm::new(apply_aime_openai_runtime_config(
+            OpenAiConfig::new("test-key").with_retry_policy(OpenAiRetryPolicy::none()),
+            runtime,
+        ))
+        .fingerprint();
+
+        assert_ne!(default_provider, timeout_provider);
+        assert_ne!(default_provider, base_url_provider);
+        assert_ne!(default_provider, retry_provider);
+        assert_ne!(
+            aime_runner_fingerprint(&base_config.solver, Some(default_provider)),
+            aime_runner_fingerprint(&base_config.solver, Some(timeout_provider))
+        );
+        assert_ne!(
+            aime_runner_fingerprint(&base_config.solver, Some(default_provider)),
+            aime_runner_fingerprint(&base_config.solver, Some(base_url_provider))
+        );
+        assert_ne!(
+            aime_reflection_role_fingerprint(&base_config.reflection, default_provider),
+            aime_reflection_role_fingerprint(&base_config.reflection, retry_provider)
         );
     }
 
@@ -5272,6 +5379,7 @@ Provide the new parameter value within ``` blocks."
         config.reflection.cache_policy = LmCachePolicy::CacheOnly;
         let reports = AimeRoleReports::from_config(
             &config,
+            AimeRoleRuntimeFingerprints::from_config(&config),
             AimeLmRoleMetrics::default(),
             AimeLmRoleMetrics::default(),
         );
@@ -5393,6 +5501,7 @@ Provide the new parameter value within ``` blocks."
         let mut result = block_on(run_deterministic_aime());
         result.role_reports = AimeRoleReports::from_config(
             &config,
+            AimeRoleRuntimeFingerprints::from_config(&config),
             AimeLmRoleMetrics::default(),
             AimeLmRoleMetrics::default(),
         );
@@ -5704,6 +5813,7 @@ Provide the new parameter value within ``` blocks."
 
         let reports = AimeRoleReports::from_config(
             &AimeRunConfig::deterministic_smoke(),
+            AimeRoleRuntimeFingerprints::from_config(&AimeRunConfig::deterministic_smoke()),
             AimeLmRoleMetrics::default(),
             AimeLmRoleMetrics::default(),
         )

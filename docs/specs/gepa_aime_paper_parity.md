@@ -498,7 +498,10 @@ The AIME path must enable cache behavior equivalent to GEPA's
   case-set version, resolved case ids, request shape, and relevant LM request
   fingerprint;
 - cache hits do not charge metric calls again;
-- cached evidence is durable in the run store.
+- cached search evidence is durable in the run store at the latest optimizer
+  checkpoint boundary;
+- final-report-only cache rows must not be persisted as resume authority unless
+  the report layer introduces its own explicit resumable snapshot.
 
 GEPA's `track_best_outputs=True` must be implemented either directly or by
 Leaven's durable trace/report model. If Leaven uses the durable trace instead,
