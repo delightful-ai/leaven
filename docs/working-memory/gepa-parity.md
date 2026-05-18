@@ -889,6 +889,27 @@ Cache/replay attempts after the report-schema fixes:
   are Leaven-plus profiles, not reference parity. Spec the profile before
   adding lazy certification, active sampling, async islands, evaluator pyramids,
   or trace distillation to ordinary GEPA.
+- No-spend prompt/trace diagnosis of the completed paid report:
+  - accepted children came from same-case train-screen wins, but several were
+    classic minibatch overfits. Accepted attempts were `15` (`1/3 -> 2/3`,
+    validation `0.400`), `23` (`0/3 -> 1/3`, validation `0.4667`), `24`
+    (`1/3 -> 3/3`, validation `0.4889`, current best), `25` (`2/3 -> 3/3`,
+    validation `0.3778`), `27` (`1/3 -> 3/3`, validation `0.4444`), and `40`
+    (`1/3 -> 3/3`, validation `0.4889`);
+  - the reflection request for accepted attempt `15` included a correct example
+    and two rich incorrect examples with full `execution_feedback`, including
+    the `244` region-count solution and the `127` torus solution. The rendered
+    prompt shape matched optimize-anything, but the `gpt-5.4-mini` response was
+    a short generic first-principles instruction. This is the dominant
+    qualitative difference versus the bundled CAIS best prompt, which retained
+    detailed directives about notation, constraints, theorem use, dead-end
+    handling, exact arithmetic, and answer isolation;
+  - current-source prompt/render parity therefore remains plausible, but model
+    experience parity is not established by the paid run because it used the
+    deliberate `gpt-5.4-mini` reflection-model delta and produced less specific
+    reflection edits than the CAIS checkpoint. The next paid quality run should
+    either use strict `LEAVEN_AIME_REFLECTION_MODEL=gpt-5.1` or be labeled as a
+    Leaven-plus model/profile experiment.
 
 1. Diagnose why the current completed report improves over seed but still lands
    below the pinned GEPA CAIS target. Start from emitted prompts, candidate

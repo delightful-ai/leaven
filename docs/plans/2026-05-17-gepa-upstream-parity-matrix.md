@@ -62,6 +62,12 @@ The next implementation pass should not spend live provider budget by default.
 The current operator/report row is proven; result-quality parity remains open.
 Use the completed report's emitted prompts, proposal attempts, candidate
 lineage, and case deltas to decide the next library-level quality/speed change.
+The first no-spend diagnosis found current-source prompt/render parity still
+plausible, but not model-experience parity: the paid run's `gpt-5.4-mini`
+reflections often collapsed rich failure feedback into short generic prompts,
+while the CAIS checkpoint/best prompt retained more specific solution
+discipline. A strict `gpt-5.1` reflector run is the clean next paid comparison;
+anything else should be labeled as a Leaven-plus profile experiment.
 
 1. Compare accepted/rejected Leaven reflections against pinned upstream
    GEPA/AIME traces or source behavior where available.
