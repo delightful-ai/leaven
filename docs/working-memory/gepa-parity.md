@@ -29,9 +29,9 @@ or intentional deltas. The P8 finished live report is now historical evidence:
 it proves a real live improvement and the completed operator path for the
 pre-`OptimizeAnything` profile slice, while the current-code cache-only failure
 report proves current profile/runtime/failure-report evidence without provider
-spend. The remaining P0 gap is P8/AIME result quality: current finished live
-quality evidence improves over the seed, but the held-out score still trails
-the pinned GEPA CAIS artifact target and predates the current
+spend. The remaining P0 gap is P8/AIME result quality: historical finished
+live quality evidence improves over the seed, but the held-out score still
+trails the pinned GEPA CAIS artifact target and predates the current
 `gepa_profile=optimize-anything` default.
 
 Important currently proven rows include:
@@ -261,7 +261,7 @@ Current speed stance:
   `.leaven/lm-cache.sqlite`, and writes through to the workspace cache. Failure
   reports also include structured `resume_compatibility` details plus a CLI
   `resume_compatibility_mismatch=...` line. A no-spend replay copy of the
-  current completed run at
+  historical completed run at
   `.leaven/release-runs/p8-aime-gepa-current-release-cache-only-replay-20260518-120826`
   correctly refused before LM work because the stored runner fingerprint
   `51c456483b4d49c646aa738f9651642928714e2616a927872216f3a658504fd4` predates
@@ -904,10 +904,10 @@ Cache/replay attempts after the report-schema fixes:
     search budget semantics or the evaluation cache can restore/backfill
     report-visible assessment rows.
 - Final verifier wave disposition:
-  - still open and current: result-quality parity. The current completed report
-    improved seed but still trails the pinned GEPA CAIS target, so another paid
-    run should be justified by a specific profile/model experiment, not by
-    hope that duration alone fixes it;
+  - still open and current: result-quality parity. The historical completed
+    report improved seed but still trails the pinned GEPA CAIS target, so
+    another paid run should be justified by a specific profile/model
+    experiment, not by hope that duration alone fixes it;
   - partially closed: strict upstream-reflector reporting proof. Cache-only
     rehearsal with `LEAVEN_AIME_REFLECTION_MODEL=gpt-5.1` now proves the
     start/failure reports classify `openai/gpt-5.1` vs `gpt-5.1` as
@@ -1000,23 +1000,23 @@ Cache/replay attempts after the report-schema fixes:
     either use strict `LEAVEN_AIME_REFLECTION_MODEL=gpt-5.1` or be labeled as a
     Leaven-plus model/profile experiment.
 
-1. Diagnose why the current completed report improves over seed but still lands
-   below the pinned GEPA CAIS target. Start from emitted prompts, candidate
-   lineage, reflection outputs, child admission history, minibatch cases, and
-   parser outcomes.
-2. Diff the current completed report against the prior live artifacts and
+1. Diagnose why the historical completed report improves over seed but still
+   lands below the pinned GEPA CAIS target. Start from emitted prompts,
+   candidate lineage, reflection outputs, child admission history, minibatch
+   cases, and parser outcomes.
+2. Diff the historical completed report against the prior live artifacts and
    upstream GEPA/DSPy AIME traces where available. Treat result-quality parity
-   as open until held-out quality is comparable to the target or the spec labels
-   the remaining model/runtime delta.
+   as open until held-out quality is comparable to the target or the spec
+   labels the remaining model/runtime delta.
 3. Future release reports should be generated with the post-run event-schema
    fix so live-proof checks can sum `gepa_events[*].metric_calls_delta` back to
-   the GEPA report metric total directly. The current completed release report
-   remains valid for aggregate budget proof but predates those per-phase
+   the GEPA report metric total directly. The historical completed release
+   report remains valid for aggregate budget proof but predates those per-phase
    validation deltas.
 4. Future release reports should include `case_deltas.summary` and
    `case_deltas.cases` so quality diagnosis starts from exact improved,
    regressed, unchanged-correct, and unchanged-wrong case IDs without exposing
-   raw hidden targets or reference solutions. The current paid report predates
-   this schema, and cache-only regeneration from its run directory is blocked by
-   an intentional runner-fingerprint mismatch after the DSPy JSON-fallback
-   runner cutover.
+   raw hidden targets or reference solutions. The historical paid report
+   predates this schema, and cache-only regeneration from its run directory is
+   blocked by an intentional runner-fingerprint mismatch after the DSPy
+   JSON-fallback runner cutover.
