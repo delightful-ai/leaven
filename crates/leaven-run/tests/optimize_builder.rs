@@ -14,9 +14,9 @@ use leaven_core::{
 };
 use leaven_engine::{
     Callback, CheckpointContext, CheckpointError, CheckpointableOptimizer, Optimizer,
-    OptimizerError, OptimizerStateWrite, PrivateStatePolicy, RestoreContext, RunCheckpointRequest,
-    RunContext, RunEvent, RunGraphView, RunPersistence, RunPersistenceError, StateFormat,
-    StepStatus,
+    OptimizerCompatibility, OptimizerError, OptimizerStateWrite, PrivateStatePolicy,
+    RestoreContext, RunCheckpointRequest, RunContext, RunEvent, RunGraphView, RunPersistence,
+    RunPersistenceError, StateFormat, StepStatus,
 };
 use leaven_eval::Case;
 use leaven_evidence::CaseAssessmentEvidence;
@@ -442,6 +442,8 @@ fn run_builder_run_dir_refuses_missing_or_malformed_compatibility_manifest_on_re
 fn run_builder_run_dir_refuses_evaluator_cache_and_budget_compatibility_drift() {
     enum ManifestDrift {
         Evaluator,
+        Optimizer,
+        LmRole,
         Cache,
         Budget,
     }
@@ -455,6 +457,16 @@ fn run_builder_run_dir_refuses_evaluator_cache_and_budget_compatibility_drift() 
             "cache-compatibility-drift",
             ManifestDrift::Cache,
             "cache compatibility",
+        ),
+        (
+            "optimizer-compatibility-drift",
+            ManifestDrift::Optimizer,
+            "optimizer compatibility",
+        ),
+        (
+            "lm-role-compatibility-drift",
+            ManifestDrift::LmRole,
+            "LM role `solver` fingerprint",
         ),
         (
             "budget-compatibility-drift",
@@ -471,6 +483,7 @@ fn run_builder_run_dir_refuses_evaluator_cache_and_budget_compatibility_drift() 
                 .using(ResumeOnce::new(Arc::new(AtomicUsize::new(0))))
                 .budget(Budget::metric_calls(1))
                 .run_dir(&run_dir)
+                .lm_role_fingerprint("solver", TEST_RUNNER_FINGERPRINT)
                 .test_runtime_fingerprints()
                 .run(),
         )
@@ -483,6 +496,17 @@ fn run_builder_run_dir_refuses_evaluator_cache_and_budget_compatibility_drift() 
             ManifestDrift::Evaluator => {
                 manifest["evaluator"]["fingerprint"] =
                     serde_json::to_value(Fingerprint::from_bytes([1; 32])).unwrap();
+            }
+            ManifestDrift::Optimizer => {
+                manifest["optimizer"] = serde_json::to_value(OptimizerCompatibility::new(
+                    Fingerprint::from_bytes([2; 32]),
+                    PrivateStatePolicy::DerivedFromGraph,
+                ))
+                .unwrap();
+            }
+            ManifestDrift::LmRole => {
+                manifest["lm_roles"]["solver"]["fingerprint"] =
+                    serde_json::to_value(Fingerprint::from_bytes([3; 32])).unwrap();
             }
             ManifestDrift::Cache => {
                 manifest["cache"] = serde_json::json!("cache:changed");
@@ -501,6 +525,7 @@ fn run_builder_run_dir_refuses_evaluator_cache_and_budget_compatibility_drift() 
                 .using(ResumeOnce::new(Arc::new(AtomicUsize::new(0))))
                 .budget(Budget::metric_calls(1))
                 .run_dir(&run_dir)
+                .lm_role_fingerprint("solver", TEST_RUNNER_FINGERPRINT)
                 .test_runtime_fingerprints()
                 .run(),
         )

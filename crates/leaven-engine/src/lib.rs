@@ -49,9 +49,9 @@ pub use sqlite_cache::{EvaluationCacheStoreError, SqliteEvaluationCache};
 pub use stage::{
     Arity, Callback, DynCallback, DynEvaluator, DynPreferenceRelation, DynProposer, DynStopper,
     EvaluationError, Evaluator, MaterializationReport, MaterializeError, Materializer, Optimizer,
-    OptimizerError, OptimizerReport, OptimizerReportPayload, OptimizerStateReader, Population,
-    PopulationEvent, PopulationView, PreferenceRelation, ProposalError, Proposer, RenderError,
-    Renderer, StepStatus, Stopper,
+    OptimizerCompatibility, OptimizerError, OptimizerReport, OptimizerReportPayload,
+    OptimizerStateReader, Population, PopulationEvent, PopulationView, PreferenceRelation,
+    ProposalError, Proposer, RenderError, Renderer, StepStatus, Stopper,
 };
 pub use stage::{
     CheckpointContext, CheckpointError, CheckpointableOptimizer, OptimizerStateSnapshot,

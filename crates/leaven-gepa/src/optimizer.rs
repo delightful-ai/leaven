@@ -9,9 +9,9 @@ use leaven_core::{
     OptimizationProblem, PartitionId,
 };
 use leaven_engine::{
-    CheckpointContext, CheckpointError, CheckpointableOptimizer, Optimizer, OptimizerError,
-    OptimizerReportPayload, OptimizerStateReader, OptimizerStateWrite, PrivateStatePolicy,
-    RestoreContext, RunContext, RunGraphView, StateFormat, StopReason,
+    CheckpointContext, CheckpointError, CheckpointableOptimizer, Optimizer, OptimizerCompatibility,
+    OptimizerError, OptimizerReportPayload, OptimizerStateReader, OptimizerStateWrite,
+    PrivateStatePolicy, RestoreContext, RunContext, RunGraphView, StateFormat, StopReason,
     restore_checkpointable_optimizer_state,
 };
 use leaven_evidence::{CaseOutcome, CasewiseEvidence, ScalarEvidence};
@@ -551,6 +551,16 @@ where
 
     fn optimizer_report(&self) -> Option<OptimizerReportPayload> {
         Some(std::sync::Arc::new(self.report()))
+    }
+
+    fn optimizer_compatibility(&self) -> Option<OptimizerCompatibility> {
+        Some(OptimizerCompatibility::new(
+            GEPA_OPTIMIZER_FINGERPRINT,
+            PrivateStatePolicy::ExplicitSnapshot {
+                schema: GEPA_CHECKPOINT_SCHEMA,
+                format: StateFormat::Json,
+            },
+        ))
     }
 
     fn on_engine_stop(&mut self, _reason: StopReason) -> Result<(), OptimizerError> {

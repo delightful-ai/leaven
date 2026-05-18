@@ -16,8 +16,8 @@ must not reach into graph storage to make progress.
   charging belong on `RunContext` or adjacent engine modules.
 - Stage contracts: proposer, evaluator, preference relation, population,
   optimizer, stopper, callback, renderer, materializer, checkpointable
-  optimizer, type-erased optimizer report payloads, and dynamic trait adapters
-  belong here.
+  optimizer, optimizer compatibility identities, type-erased optimizer report
+  payloads, and dynamic trait adapters belong here.
 - Runtime policy shared by all optimizers: trust/read scopes, case-set
   resolution, cache keys/status, persistence envelopes, reports, and stop/error
   event shapes belong here.

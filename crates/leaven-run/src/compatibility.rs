@@ -7,7 +7,7 @@ use std::{
 };
 
 use leaven_core::CaseSetVersion;
-use leaven_engine::CachePolicy;
+use leaven_engine::{CachePolicy, OptimizerCompatibility};
 use leaven_eval::{Case, DatasetSplits};
 use leaven_kernel::{Fingerprint, FingerprintBuilder};
 use serde::{Deserialize, Serialize};
@@ -18,7 +18,6 @@ const MANIFEST_FILE: &str = "compatibility.json";
 const MANIFEST_SCHEMA: &str = "leaven-run.compatibility.v1";
 const CACHE_PLACEHOLDER: &str = "cache:auto/eval-schema-pending/lm-schema-pending";
 const BUDGET_PLACEHOLDER: &str = "budget:ledger-compatibility-pending";
-const OPTIMIZER_PLACEHOLDER: &str = "optimizer:engine-checkpoint-contract";
 
 /// Runtime slot whose behavior must be explicitly fingerprinted for durable runs.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -112,9 +111,9 @@ pub struct RunCompatibilityManifest {
     pub scorer: RuntimeFingerprint,
     /// Composed evaluator/cache-key identity.
     pub evaluator: RuntimeFingerprint,
-    /// Optimizer compatibility placeholder; engine checkpoint restore validates concrete state.
-    pub optimizer: String,
-    /// Role-specific LM runtime fingerprints. Empty until LM roles are plumbed here.
+    /// Optimizer behavior compatibility, when the optimizer declares it.
+    pub optimizer: Option<OptimizerCompatibility>,
+    /// Role-specific LM runtime fingerprints declared by product adapters.
     pub lm_roles: BTreeMap<String, RuntimeFingerprint>,
     /// Cache semantic compatibility placeholder.
     pub cache: String,
@@ -128,6 +127,8 @@ impl RunCompatibilityManifest {
         runner: RuntimeFingerprint,
         scorer: RuntimeFingerprint,
         evaluator: RuntimeFingerprint,
+        optimizer: Option<OptimizerCompatibility>,
+        lm_roles: BTreeMap<String, RuntimeFingerprint>,
     ) -> Self {
         Self {
             schema: MANIFEST_SCHEMA.to_owned(),
@@ -137,8 +138,8 @@ impl RunCompatibilityManifest {
             runner,
             scorer,
             evaluator,
-            optimizer: OPTIMIZER_PLACEHOLDER.to_owned(),
-            lm_roles: BTreeMap::new(),
+            optimizer,
+            lm_roles,
             cache: CACHE_PLACEHOLDER.to_owned(),
             budget: BUDGET_PLACEHOLDER.to_owned(),
         }
@@ -154,7 +155,7 @@ impl RunCompatibilityManifest {
             runner: fingerprint_hex(self.runner.fingerprint()),
             scorer: fingerprint_hex(self.scorer.fingerprint()),
             evaluator: fingerprint_hex(self.evaluator.fingerprint()),
-            optimizer: self.optimizer.clone(),
+            optimizer: optimizer_summary(self.optimizer.as_ref()),
             cache: self.cache.clone(),
             budget: self.budget.clone(),
             lm_role_count: self.lm_roles.len(),
@@ -235,6 +236,24 @@ pub enum ResumeCompatibilityError {
         stored: RuntimeFingerprint,
         /// Live runtime fingerprint.
         live: RuntimeFingerprint,
+    },
+    /// Optimizer behavior changed.
+    #[error("stored optimizer compatibility does not match live optimizer compatibility")]
+    OptimizerCompatibilityMismatch {
+        /// Stored optimizer compatibility.
+        stored: Option<OptimizerCompatibility>,
+        /// Live optimizer compatibility.
+        live: Option<OptimizerCompatibility>,
+    },
+    /// Role-specific LM behavior changed.
+    #[error("stored LM role `{role}` fingerprint does not match live LM role fingerprint")]
+    LmRoleFingerprintMismatch {
+        /// Role whose fingerprint changed.
+        role: String,
+        /// Stored runtime fingerprint.
+        stored: Option<RuntimeFingerprint>,
+        /// Live runtime fingerprint.
+        live: Option<RuntimeFingerprint>,
     },
     /// Cache semantic compatibility changed.
     #[error("stored cache compatibility does not match live cache compatibility")]
@@ -342,6 +361,25 @@ fn compare_manifests(
             live: live.evaluator,
         });
     }
+    if stored.optimizer != live.optimizer {
+        return Err(ResumeCompatibilityError::OptimizerCompatibilityMismatch {
+            stored: stored.optimizer.clone(),
+            live: live.optimizer.clone(),
+        });
+    }
+    if stored.lm_roles != live.lm_roles {
+        for role in stored.lm_roles.keys().chain(live.lm_roles.keys()) {
+            let stored_role = stored.lm_roles.get(role).copied();
+            let live_role = live.lm_roles.get(role).copied();
+            if stored_role != live_role {
+                return Err(ResumeCompatibilityError::LmRoleFingerprintMismatch {
+                    role: role.clone(),
+                    stored: stored_role,
+                    live: live_role,
+                });
+            }
+        }
+    }
     if stored.cache != live.cache {
         return Err(ResumeCompatibilityError::CacheCompatibilityMismatch);
     }
@@ -365,4 +403,30 @@ fn fingerprint_hex(fingerprint: Fingerprint) -> String {
         out.push(HEX[usize::from(byte & 0x0f)] as char);
     }
     out
+}
+
+fn optimizer_summary(optimizer: Option<&OptimizerCompatibility>) -> String {
+    let Some(optimizer) = optimizer else {
+        return "optimizer:undeclared".to_owned();
+    };
+    let mut summary = format!(
+        "optimizer:fingerprint={}",
+        fingerprint_hex(optimizer.fingerprint)
+    );
+    match &optimizer.private_state_policy {
+        leaven_engine::PrivateStatePolicy::DerivedFromGraph => {
+            summary.push_str(";state=derived-from-graph");
+        }
+        leaven_engine::PrivateStatePolicy::ExplicitSnapshot { schema, format } => {
+            summary.push_str(";state=explicit-snapshot;schema=");
+            summary.push_str(&fingerprint_hex(*schema));
+            summary.push_str(";format=");
+            summary.push_str(match format {
+                leaven_engine::StateFormat::Json => "json",
+                leaven_engine::StateFormat::Postcard => "postcard",
+                leaven_engine::StateFormat::Custom(name) => name.as_str(),
+            });
+        }
+    }
+    summary
 }

@@ -92,10 +92,12 @@ around engine graph mutation or a home for optimizer strategy state.
 - Durable local runs write a product-layer compatibility manifest before work
   and compare it before resume. Arbitrary closure runners/scorers are not
   introspectable; `.runner_fingerprint(...)` and `.scorer_fingerprint(...)`
-  are the current explicit declarations for durable mode. Ephemeral runs may
-  omit them. Cache, budget, LM-role, and optimizer compatibility still contain
-  narrow placeholders except where engine optimizer checkpoint validation
-  already owns the concrete refusal.
+  are explicit declarations for durable mode, and `.lm_role_fingerprint(...)`
+  declares role-specific LM/runtime identities for product adapters such as P8.
+  Ephemeral runs may omit them. Optimizers may expose engine-level optimizer
+  compatibility; `leaven-run` records and compares it without inspecting
+  optimizer-private state. Cache and budget compatibility still contain narrow
+  placeholders.
 - `OptimizeBuilder` defaults evaluation caching to automatic deterministic
   candidate/case caching for ordinary durable runs. Explicit
   `.evaluation_cache_policy(CachePolicy::Never)` is the throwaway/debug path.

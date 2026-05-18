@@ -665,6 +665,7 @@ async fn try_run_aime(
     let solver = aime_solver_lm(&config.solver, solver_telemetry.clone(), &run_dir);
     let runner_fingerprint = aime_runner_fingerprint(&config.solver);
     let scorer_fingerprint = aime_scorer_fingerprint();
+    let reflection_role_fingerprint = aime_reflection_role_fingerprint(&config.reflection);
     let solver_config = config.solver.clone();
     let side_infos = AimeSolverSideInfoStore::default();
     let gepa_events = Arc::new(Mutex::new(Vec::<GepaEventSummary>::new()));
@@ -686,6 +687,8 @@ async fn try_run_aime(
             .score(score_answer)
             .runner_fingerprint(runner_fingerprint)
             .scorer_fingerprint(scorer_fingerprint)
+            .lm_role_fingerprint("solver", runner_fingerprint)
+            .lm_role_fingerprint("reflection", reflection_role_fingerprint)
             .evaluation_cache_policy(config.evaluation_cache_policy.clone())
             .evaluation_parallelism(config.evaluation_parallelism)
             .on_event(AimeProgressCallback::default())
@@ -4165,6 +4168,7 @@ Provide the new parameter value within ``` blocks."
             line.starts_with("compatibility=schema=leaven-run.compatibility.v1")
                 && line.contains(" run_kind=leaven-run.optimize ")
                 && line.contains(" cache=cache:auto/")
+                && line.contains(" lm_roles=2")
         }));
         assert!(
             lines

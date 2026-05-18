@@ -85,6 +85,7 @@ where
         scorer: None,
         runner_fingerprint: None,
         scorer_fingerprint: None,
+        lm_role_fingerprints: BTreeMap::new(),
         optimizer: (),
         budget: None,
         evaluation_cache_policy: None,
@@ -110,6 +111,7 @@ where
     scorer: Option<Scorer<A, I, T>>,
     runner_fingerprint: Option<RuntimeFingerprint>,
     scorer_fingerprint: Option<RuntimeFingerprint>,
+    lm_role_fingerprints: BTreeMap<String, RuntimeFingerprint>,
     optimizer: O,
     budget: Option<Budget>,
     evaluation_cache_policy: Option<CachePolicy>,
@@ -139,6 +141,7 @@ where
             scorer: None,
             runner_fingerprint: self.runner_fingerprint,
             scorer_fingerprint: self.scorer_fingerprint,
+            lm_role_fingerprints: self.lm_role_fingerprints,
             optimizer: (),
             budget: self.budget,
             evaluation_cache_policy: self.evaluation_cache_policy,
@@ -219,6 +222,18 @@ where
         self
     }
 
+    /// Declares a durable LM/runtime fingerprint for a role used by this run.
+    #[must_use]
+    pub fn lm_role_fingerprint(
+        mut self,
+        role: impl Into<String>,
+        fingerprint: Fingerprint,
+    ) -> Self {
+        self.lm_role_fingerprints
+            .insert(role.into(), RuntimeFingerprint::new(fingerprint));
+        self
+    }
+
     /// Supplies the optimizer.
     #[must_use]
     pub fn using<Next>(self, optimizer: Next) -> OptimizeBuilder<A, I, T, Next> {
@@ -231,6 +246,7 @@ where
             scorer: self.scorer,
             runner_fingerprint: self.runner_fingerprint,
             scorer_fingerprint: self.scorer_fingerprint,
+            lm_role_fingerprints: self.lm_role_fingerprints,
             optimizer,
             budget: self.budget,
             evaluation_cache_policy: self.evaluation_cache_policy,
@@ -376,6 +392,8 @@ where
             runner_fingerprint,
             scorer_fingerprint,
             evaluator_fingerprint,
+            self.optimizer.optimizer_compatibility(),
+            self.lm_role_fingerprints.clone(),
         );
         let compatibility_summary = prepared_store
             .run_dir

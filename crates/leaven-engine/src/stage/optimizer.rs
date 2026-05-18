@@ -30,6 +30,16 @@ pub trait Optimizer<P: OptimizationProblem>: Send {
         None
     }
 
+    /// Optional durable compatibility identity for this optimizer's behavior.
+    ///
+    /// Product builders persist and compare this before resuming from a stored
+    /// run. Optimizers with strategy/configuration that can affect future
+    /// proposals should override this; checkpoint payload validation still
+    /// remains the authority for serialized private state.
+    fn optimizer_compatibility(&self) -> Option<OptimizerCompatibility> {
+        None
+    }
+
     /// Observe a clean engine-owned stop before another optimizer step runs.
     ///
     /// This covers stops decided by the engine loop itself, such as a restored
@@ -91,6 +101,23 @@ where
 {
     fn as_any(&self) -> &(dyn Any + 'static) {
         self
+    }
+}
+
+/// Durable optimizer behavior identity used by product resume manifests.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, serde::Deserialize)]
+pub struct OptimizerCompatibility {
+    pub fingerprint: Fingerprint,
+    pub private_state_policy: PrivateStatePolicy,
+}
+
+impl OptimizerCompatibility {
+    #[must_use]
+    pub const fn new(fingerprint: Fingerprint, private_state_policy: PrivateStatePolicy) -> Self {
+        Self {
+            fingerprint,
+            private_state_policy,
+        }
     }
 }
 
