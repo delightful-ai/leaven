@@ -313,7 +313,10 @@ where
             })?;
         candidate = Some(row_candidate);
         request = Some(row_request);
-        rows.push((*assessment, report_score(case, &evidence)));
+        rows.push((
+            *assessment,
+            report_score(case, assessment_view.evidence_ref().clone(), &evidence),
+        ));
     }
     rows.sort_by_key(|(_, score)| score.case_id);
     let assessments = rows.iter().map(|(assessment, _)| *assessment).collect();
@@ -335,10 +338,17 @@ where
     })
 }
 
-fn report_score(case_id: leaven_kernel::CaseId, evidence: &CaseAssessmentEvidence) -> ReportScore {
+fn report_score(
+    case_id: leaven_kernel::CaseId,
+    evidence_ref: leaven_kernel::EvidenceRef,
+    evidence: &CaseAssessmentEvidence,
+) -> ReportScore {
     ReportScore {
         case_id,
         score: evidence.score().score(),
+        output_ref: Some(evidence_ref.clone()),
+        feedback_ref: Some(evidence_ref),
+        trace_refs: Vec::new(),
         feedback: evidence.feedback().to_owned(),
         output: output_record_text(evidence.output()),
     }
@@ -355,6 +365,7 @@ pub fn run_storage<P>(
     run_id: leaven_kernel::RunId,
     store: &PreparedStore<P>,
     latest_checkpoint: Option<leaven_kernel::CheckpointId>,
+    has_compatibility_manifest: bool,
 ) -> RunStorage
 where
     P: leaven_core::OptimizationProblem,
@@ -371,6 +382,10 @@ where
             } else if latest_checkpoint.is_none() {
                 RunResumability::NotResumable {
                     reason: RunNotResumableReason::MissingLatestCheckpoint,
+                }
+            } else if !has_compatibility_manifest {
+                RunResumability::NotResumable {
+                    reason: RunNotResumableReason::MissingCompatibilityManifest,
                 }
             } else {
                 RunResumability::Resumable
@@ -784,6 +799,10 @@ mod tests {
     fn report_scores_preserve_inline_and_blob_outputs() {
         let inline = report_score(
             leaven_kernel::CaseId::new(1),
+            leaven_kernel::EvidenceRef {
+                store: "test".to_owned(),
+                key: "inline".to_owned(),
+            },
             &CaseAssessmentEvidence::new(
                 ScalarEvidence::new(1.0).unwrap(),
                 OutputRecord::inline("inline answer"),
@@ -792,6 +811,10 @@ mod tests {
         );
         let blob = report_score(
             leaven_kernel::CaseId::new(2),
+            leaven_kernel::EvidenceRef {
+                store: "test".to_owned(),
+                key: "blob".to_owned(),
+            },
             &CaseAssessmentEvidence::new(
                 ScalarEvidence::new(0.25).unwrap(),
                 OutputRecord::BlobRef(leaven_kernel::BlobRef {
@@ -804,6 +827,8 @@ mod tests {
 
         assert_eq!(inline.output, "inline answer");
         assert_eq!(inline.feedback, "inline feedback");
+        assert_eq!(inline.output_ref.as_ref().unwrap().key, "inline");
+        assert_eq!(blob.feedback_ref.as_ref().unwrap().key, "blob");
         assert_eq!(blob.output, "blob:blob-store:answer.txt");
         assert!((blob.score - 0.25).abs() < f64::EPSILON);
     }
@@ -864,13 +889,29 @@ mod tests {
             evaluation_cache: None,
             start: crate::run_store::StoreStart::Fresh { run_id },
         };
-        let storage = run_storage(run_id, &prepared, None);
+        let storage = run_storage(run_id, &prepared, None, true);
         assert!(matches!(
             storage,
             RunStorage::Stored {
                 latest_checkpoint: None,
                 resumability: RunResumability::NotResumable {
                     reason: RunNotResumableReason::MissingLatestCheckpoint
+                },
+                ..
+            }
+        ));
+
+        let storage = run_storage(
+            run_id,
+            &prepared,
+            Some(leaven_kernel::CheckpointId::new()),
+            false,
+        );
+        assert!(matches!(
+            storage,
+            RunStorage::Stored {
+                resumability: RunResumability::NotResumable {
+                    reason: RunNotResumableReason::MissingCompatibilityManifest
                 },
                 ..
             }

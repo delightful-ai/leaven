@@ -1,7 +1,9 @@
 //! Lowered evaluation reports.
 
 use leaven_core::PartitionId;
-use leaven_kernel::{AssessmentId, CandidateId, CaseId, Cost, EvaluationRequestId, Fingerprint};
+use leaven_kernel::{
+    AssessmentId, CandidateId, CaseId, Cost, EvaluationRequestId, EvidenceRef, Fingerprint,
+};
 
 use crate::{EvaluationUse, SplitRole};
 
@@ -12,6 +14,12 @@ pub struct ReportScore {
     pub case_id: CaseId,
     /// Numeric score for the case.
     pub score: f64,
+    /// Evidence ref containing the generated output, when retained in graph truth.
+    pub output_ref: Option<EvidenceRef>,
+    /// Evidence ref containing scorer feedback, when retained in graph truth.
+    pub feedback_ref: Option<EvidenceRef>,
+    /// Additional trace refs attached to the row.
+    pub trace_refs: Vec<EvidenceRef>,
     /// Human-readable feedback.
     pub feedback: String,
     /// Generated output that was scored.

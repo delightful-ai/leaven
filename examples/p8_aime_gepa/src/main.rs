@@ -394,11 +394,24 @@ fn report_case_lines(run: &AimeRunResult) -> Vec<String> {
                     .map(AimeReportMetadata::source_id)
                     .unwrap_or_else(|| "missing-source-id".to_owned());
                 lines.push(format!(
-                    "report_case={} source_id={} split={:?} score={:.3} output_chars={} feedback_chars={}",
+                    "report_case={} source_id={} split={:?} score_state=present score={:.3} output_ref={} feedback_ref={} trace_refs={} output_chars={} feedback_chars={}",
                     case.case_id,
                     source_id,
                     split.role,
                     case.score,
+                    case.output_ref
+                        .as_ref()
+                        .map(evidence_ref_text)
+                        .unwrap_or_else(|| "none".to_owned()),
+                    case.feedback_ref
+                        .as_ref()
+                        .map(evidence_ref_text)
+                        .unwrap_or_else(|| "none".to_owned()),
+                    case.trace_refs
+                        .iter()
+                        .map(evidence_ref_text)
+                        .collect::<Vec<_>>()
+                        .join(","),
                     case.output.len(),
                     case.feedback.len()
                 ));
@@ -867,6 +880,8 @@ fn p8_gepa_report_json(report: &GepaReport) -> serde_json::Value {
         "validation_best_candidate": report.validation_best_candidate.map(|candidate| candidate.to_string()),
         "total_metric_calls": report.total_metric_calls,
         "full_validation_evals": report.full_validation_evals,
+        "skip_perfect_score": report.skip_perfect_score,
+        "perfect_score": report.perfect_score,
         "candidates": report.candidates.iter().map(|candidate| serde_json::json!({
             "index": candidate.index.get(),
             "candidate": candidate.candidate.to_string(),
@@ -889,6 +904,33 @@ fn p8_gepa_report_json(report: &GepaReport) -> serde_json::Value {
             "assessments": entry.assessments.iter().map(ToString::to_string).collect::<Vec<_>>(),
             "score": entry.score,
         })).collect::<Vec<_>>(),
+        "proposal_attempts": report.proposal_attempts.iter().scan(0usize, |reflection_request_index, attempt| {
+            let request_index = if attempt.skip_reason.is_none() {
+                let index = *reflection_request_index;
+                *reflection_request_index += 1;
+                Some(index)
+            } else {
+                None
+            };
+            Some(serde_json::json!({
+                "attempt_index": attempt.attempt_index,
+                "iteration": attempt.iteration,
+                "reflection_request_index": request_index,
+                "parent_index": attempt.parent_index.get(),
+                "parent": attempt.parent.to_string(),
+                "parent_assessments": attempt.parent_assessments.iter().map(ToString::to_string).collect::<Vec<_>>(),
+                "parent_cases": attempt.parent_cases.iter().map(ToString::to_string).collect::<Vec<_>>(),
+                "parent_score": attempt.parent_score,
+                "part_label": attempt.part_label.as_deref(),
+                "reflective_example_count": attempt.reflective_example_count,
+                "child": attempt.child.map(|candidate| candidate.to_string()),
+                "child_assessments": attempt.child_assessments.iter().map(ToString::to_string).collect::<Vec<_>>(),
+                "child_cases": attempt.child_cases.iter().map(ToString::to_string).collect::<Vec<_>>(),
+                "child_score": attempt.child_score,
+                "accepted": attempt.accepted,
+                "skip_reason": attempt.skip_reason.map(p8_gepa_skip_reason),
+            }))
+        }).collect::<Vec<_>>(),
         "events": report.events.iter().map(p8_gepa_event_json).collect::<Vec<_>>(),
     })
 }
@@ -918,8 +960,9 @@ fn p8_gepa_event_json(event: &GepaEventSummary) -> serde_json::Value {
             "phase": "parent_selected",
             "candidate_index": candidate_index.get(),
         }),
-        GepaEventSummary::TrainMinibatchSampled => serde_json::json!({
+        GepaEventSummary::TrainMinibatchSampled { cases } => serde_json::json!({
             "phase": "train_minibatch_sampled",
+            "cases": cases.iter().map(ToString::to_string).collect::<Vec<_>>(),
         }),
         GepaEventSummary::ParentEvaluated { metric_calls_delta } => serde_json::json!({
             "phase": "parent_evaluated",
@@ -929,9 +972,15 @@ fn p8_gepa_event_json(event: &GepaEventSummary) -> serde_json::Value {
             "phase": "proposal_skipped",
             "reason": p8_gepa_skip_reason(*reason),
         }),
-        GepaEventSummary::ReflectiveDatasetBuilt { records } => serde_json::json!({
+        GepaEventSummary::ReflectiveDatasetBuilt {
+            records,
+            cases,
+            source_ref_count,
+        } => serde_json::json!({
             "phase": "reflective_dataset_built",
             "records": records,
+            "cases": cases.iter().map(ToString::to_string).collect::<Vec<_>>(),
+            "source_ref_count": source_ref_count,
         }),
         GepaEventSummary::ChildBuilt { candidate } => serde_json::json!({
             "phase": "child_built",
@@ -1073,7 +1122,15 @@ fn p8_case_report_json(run: &AimeRunResult) -> Vec<serde_json::Value> {
                         .unwrap_or_else(|| "missing-source-id".to_owned()),
                     "split": split_role_label(&split.role),
                     "candidate": candidate.candidate.to_string(),
+                    "score_state": "present",
                     "score": case.score,
+                    "output_ref": case.output_ref.as_ref().map(p8_evidence_ref_json),
+                    "feedback_ref": case.feedback_ref.as_ref().map(p8_evidence_ref_json),
+                    "trace_refs": case
+                        .trace_refs
+                        .iter()
+                        .map(p8_evidence_ref_json)
+                        .collect::<Vec<_>>(),
                     "output_chars": case.output.len(),
                     "feedback_chars": case.feedback.len(),
                 }));
@@ -1081,6 +1138,17 @@ fn p8_case_report_json(run: &AimeRunResult) -> Vec<serde_json::Value> {
         }
     }
     cases
+}
+
+fn evidence_ref_text(reference: &leaven::kernel::EvidenceRef) -> String {
+    format!("{}:{}", reference.store.as_str(), reference.key.as_str())
+}
+
+fn p8_evidence_ref_json(reference: &leaven::kernel::EvidenceRef) -> serde_json::Value {
+    serde_json::json!({
+        "store": reference.store.as_str(),
+        "key": reference.key.as_str(),
+    })
 }
 
 #[derive(Clone, Debug)]
@@ -4216,23 +4284,26 @@ Provide the new parameter value within ``` blocks."
         assert!(lines.iter().any(|line| {
             line == "lm_role_cache=reflection hits=0 misses=0 bypasses=1 bypass_policy_never=1 bypass_refresh=0 write_errors=0 hit_cost_zero=true"
         }));
-        assert!(lines.iter().any(|line| {
-            line.contains(&format!("report_case={validation_id}"))
-                && line.contains("source_id=deterministic:default:validation:0")
-                && line.contains("output_chars=")
-                && line.contains("feedback_chars=")
-        }));
-        assert!(lines.iter().any(|line| {
-            line.contains(&format!("report_case={test_id}"))
-                && line.contains("source_id=deterministic:default:test:0")
-                && line.contains("output_chars=")
-                && line.contains("feedback_chars=")
-        }));
+        assert_report_case_line(&lines, validation_id, "deterministic:default:validation:0");
+        assert_report_case_line(&lines, test_id, "deterministic:default:test:0");
         assert!(
             !lines
                 .iter()
                 .any(|line| line.contains("step-by-step solution"))
         );
+    }
+
+    fn assert_report_case_line(lines: &[String], case: leaven::kernel::CaseId, source_id: &str) {
+        assert!(lines.iter().any(|line| {
+            line.contains(&format!("report_case={case}"))
+                && line.contains(&format!("source_id={source_id}"))
+                && line.contains("score_state=present")
+                && line.contains("output_ref=")
+                && line.contains("feedback_ref=")
+                && line.contains("trace_refs=")
+                && line.contains("output_chars=")
+                && line.contains("feedback_chars=")
+        }));
     }
 
     #[test]
@@ -4670,6 +4741,8 @@ Provide the new parameter value within ``` blocks."
         let gepa_report = &report["gepa_report"];
         assert_eq!(gepa_report["total_metric_calls"], 8);
         assert_eq!(gepa_report["full_validation_evals"], 2);
+        assert_eq!(gepa_report["skip_perfect_score"], true);
+        assert_eq!(gepa_report["perfect_score"], 1.0);
         assert_eq!(gepa_report["best_index"], 1);
         assert!(gepa_report["candidates"].as_array().unwrap().len() >= 2);
         assert_eq!(gepa_report["candidates"][0]["index"], 0);
@@ -4694,11 +4767,31 @@ Provide the new parameter value within ``` blocks."
                     .as_array()
                     .is_some_and(|members| members.iter().any(|member| member == 1))))
         );
+        let attempts = gepa_report["proposal_attempts"].as_array().unwrap();
+        assert!(!attempts.is_empty());
+        assert_eq!(attempts[0]["attempt_index"], 1);
+        assert_eq!(attempts[0]["reflection_request_index"], 0);
+        assert_eq!(attempts[0]["parent_index"], 0);
+        assert!(
+            attempts[0]["parent_cases"]
+                .as_array()
+                .is_some_and(|cases| !cases.is_empty())
+        );
+        assert!(
+            attempts[0]["child_cases"]
+                .as_array()
+                .is_some_and(|cases| !cases.is_empty())
+        );
+        assert_eq!(attempts[0]["accepted"], true);
     }
 
     fn assert_p8_report_case_safety(report: &serde_json::Value) {
         assert!(report["cases"].as_array().unwrap().iter().all(|case| {
             case.get("source_id").is_some()
+                && case.get("score_state").is_some()
+                && case.get("output_ref").is_some()
+                && case.get("feedback_ref").is_some()
+                && case.get("trace_refs").is_some()
                 && case.get("feedback_chars").is_some()
                 && case.get("target_answer").is_none()
                 && case.get("reference_solution").is_none()

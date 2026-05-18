@@ -480,7 +480,7 @@ They want to replace one part of GEPA:
 
 ```rust
 let gepa = Gepa::default()
-    .candidate_selector(ParetoFrequencyWeighted)
+    .candidate_selector(PopulationBestFallback) // explicit ablation; reference GEPA uses validation-frontier parent selection
     .surface(PartMapSurface::default())
     .part_selector(InvokedAndFailingPart::default())
     .batch_sampler(EpochShuffled::new(4))
@@ -3456,7 +3456,8 @@ substage and feed the result into a normal selector/admission policy.
 Standard GEPA selectors:
 
 ```text
-ParetoFrequencyWeighted   paper-style instance-pareto frequency sampling
+GEPA reference parent selection   GEPA-owned validation-frontier frequency sampling
+PopulationBestFallback       explicit population-best ablation/fallback
 SelectBestCandidate          greedy ablation / TextGrad-like baseline
 BeamCandidateSelector        top-k beam-style candidate choice
 UniformFrontier           exploration over current frontier members
@@ -3656,7 +3657,7 @@ let result = optimize(seed_agent)
         Gepa::default()
             .surface(RepoPathSurface::default())
             .proposer(AgenticProposer::new(runtime))
-            .candidate_selector(ParetoFrequencyWeighted)
+            .candidate_selector(PopulationBestFallback) // explicit ablation/fallback
             .part_selector(InvokedAndFailingPart::default())
             .population(ParetoFrontier::by_case_and_axis())
             .batch_sampler(EpochShuffled::new(4))
@@ -4449,7 +4450,7 @@ NoPopulation
 ```text
 ReflectiveMutation
 SystemAwareMerge
-ParetoFrequencyWeighted
+PopulationBestFallback
 RoundRobinPart
 InvokedAndFailingPart
 EpochShuffled
@@ -4699,7 +4700,7 @@ ProposalBatch::Alternatives
 AssessmentGranularity::PerCase
 CasewiseEvidence
 ParetoFrontier::by_case
-ParetoFrequencyWeighted
+GEPA reference validation-frontier parent selection
 RoundRobinPart
 StrictImprovement
 train/validation partitions

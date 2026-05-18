@@ -902,10 +902,19 @@ fn public_storage_and_cache_names_cover_all_status_variants() {
         latest_checkpoint: Some(leaven_kernel::CheckpointId::new()),
         resumability: RunResumability::Resumable,
     };
+    let missing_manifest = RunStorage::Stored {
+        run_id,
+        run_dir: Some(PathBuf::from("/tmp/leaven-missing-manifest")),
+        latest_checkpoint: Some(leaven_kernel::CheckpointId::new()),
+        resumability: RunResumability::NotResumable {
+            reason: RunNotResumableReason::MissingCompatibilityManifest,
+        },
+    };
 
     assert!(!RunStorage::Ephemeral { run_id }.is_resumable());
     assert!(!missing_checkpoint.is_resumable());
     assert!(!explicit_store.is_resumable());
+    assert!(!missing_manifest.is_resumable());
     assert!(resumable.is_resumable());
     assert_eq!(
         RunNotResumableReason::MissingLatestCheckpoint.as_str(),
@@ -914,6 +923,10 @@ fn public_storage_and_cache_names_cover_all_status_variants() {
     assert_eq!(
         RunNotResumableReason::ExplicitStoreWithoutLocalRunDir.as_str(),
         "explicit_store_without_local_run_dir"
+    );
+    assert_eq!(
+        RunNotResumableReason::MissingCompatibilityManifest.as_str(),
+        "missing_compatibility_manifest"
     );
 
     let backends = [

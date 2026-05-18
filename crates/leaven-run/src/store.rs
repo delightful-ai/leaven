@@ -223,6 +223,26 @@ mod tests {
     }
 
     #[test]
+    fn local_optimize_store_open_maps_evidence_store_failures_to_optimize_errors() {
+        let run_dir = test_run_dir("evidence-store-error");
+        std::fs::create_dir_all(&run_dir).unwrap();
+        std::fs::write(run_dir.join("evidence"), b"not a directory").unwrap();
+
+        let result = LocalOptimizeStore::<TestProblem>::open(&run_dir);
+        assert!(result.is_err());
+        let error = result.err().unwrap().into_optimize_error();
+
+        assert!(matches!(
+            error,
+            OptimizeError::Store {
+                operation: "open local run evidence store",
+                ..
+            }
+        ));
+        std::fs::remove_dir_all(&run_dir).unwrap();
+    }
+
+    #[test]
     fn test_problem_helpers_are_exercised_by_store_tests() {
         assert_eq!(TestArtifactError.to_string(), "test artifact error");
         assert!(matches!(
@@ -230,6 +250,9 @@ mod tests {
             ArtifactIdentity::Content(_)
         ));
         TestArtifact.apply_change(&()).unwrap();
+        let store = OptimizeStore::<TestProblem>::inline("test");
+        let converted = store.into_optimize_store();
+        assert!(converted.persistence().is_none());
     }
 
     fn test_run_dir(label: &str) -> PathBuf {

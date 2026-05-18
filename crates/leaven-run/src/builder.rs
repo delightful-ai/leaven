@@ -367,9 +367,7 @@ where
         let case_content = case_content_fingerprint(&self.train, &self.validation, &self.test)
             .map_err(|source| OptimizeError::CaseFingerprint { source })?;
         let case_plan = build_case_plan(&self.train, &self.validation, &self.test, case_content)?;
-        let store_config =
-            std::mem::replace(&mut self.store, StoreConfig::Source(StoreSource::Ephemeral));
-        let mut prepared_store = prepare_store::<RunProblem<A, I, T>>(store_config, self.run_id)?;
+        let mut prepared_store = prepare_run_store(&mut self.store, self.run_id)?;
         let (runner_fingerprint, scorer_fingerprint) = durable_runtime_fingerprints(
             prepared_store.run_dir.as_deref(),
             self.runner_fingerprint,
@@ -459,6 +457,21 @@ where
         )
         .await
     }
+}
+
+fn prepare_run_store<P>(
+    store: &mut StoreConfig<P>,
+    run_id: RunId,
+) -> Result<PreparedStore<P>, OptimizeError>
+where
+    P: OptimizationProblem,
+    P::Artifact: Serialize + DeserializeOwned,
+    <P::Artifact as Artifact>::Change: Serialize + DeserializeOwned,
+    P::Evidence: Clone + Serialize + DeserializeOwned,
+    P::ProposalAnnotations: Serialize + DeserializeOwned,
+{
+    let store_config = std::mem::replace(store, StoreConfig::Source(StoreSource::Ephemeral));
+    prepare_store::<P>(store_config, run_id)
 }
 
 fn durable_runtime_fingerprints(
@@ -714,7 +727,12 @@ where
             })?;
     }
     let latest_checkpoint = latest_checkpoint(&prepared_store)?;
-    let storage = run_storage(search.run.run_id, &prepared_store, latest_checkpoint);
+    let storage = run_storage(
+        search.run.run_id,
+        &prepared_store,
+        latest_checkpoint,
+        compatibility_summary.is_some(),
+    );
     let reports = report_paths_for(&storage);
     let seed_artifact = engine
         .view()

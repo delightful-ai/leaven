@@ -165,6 +165,8 @@ pub enum RunNotResumableReason {
     ExplicitStoreWithoutLocalRunDir,
     /// No latest checkpoint was discoverable when the result was built.
     MissingLatestCheckpoint,
+    /// No compatibility manifest summary was available for the stored run.
+    MissingCompatibilityManifest,
 }
 
 impl RunNotResumableReason {
@@ -174,6 +176,7 @@ impl RunNotResumableReason {
         match self {
             Self::ExplicitStoreWithoutLocalRunDir => "explicit_store_without_local_run_dir",
             Self::MissingLatestCheckpoint => "missing_latest_checkpoint",
+            Self::MissingCompatibilityManifest => "missing_compatibility_manifest",
         }
     }
 }
@@ -398,4 +401,14 @@ pub fn average(cases: &[leaven_eval::ReportScore]) -> Option<f64> {
     let total: f64 = cases.iter().map(|case| case.score).sum();
     let count = u32::try_from(cases.len()).expect("case count fits into u32");
     Some(total / f64::from(count))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn average_refuses_empty_case_sets() {
+        assert_eq!(average(&[]), None);
+    }
 }

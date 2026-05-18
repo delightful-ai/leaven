@@ -182,3 +182,61 @@ where
             source,
         })
 }
+
+#[cfg(test)]
+mod tests {
+    use std::convert::Infallible;
+
+    use leaven_core::{ArtifactIdentity, Evidence};
+    use leaven_kernel::ContentId;
+    use serde::{Deserialize, Serialize};
+
+    use super::*;
+
+    #[test]
+    fn checkpoint_helpers_are_noops_without_local_persistence() {
+        let run_id = RunId::new();
+        let prepared = PreparedStore::<TestProblem> {
+            store: OptimizeStore::inline("inline"),
+            run_dir: None,
+            local_persistence: None,
+            evaluation_cache: None,
+            start: StoreStart::Fresh { run_id },
+        };
+
+        assert!(!has_persistence(&prepared));
+        assert_eq!(latest_checkpoint(&prepared).unwrap(), None);
+        mark_latest_checkpoint(&prepared, None).unwrap();
+        mark_latest_checkpoint(&prepared, Some(CheckpointId::new())).unwrap();
+    }
+
+    #[derive(Clone, Debug, Serialize, Deserialize)]
+    struct TestArtifact;
+
+    impl Artifact for TestArtifact {
+        type Change = ();
+        type ApplyError = Infallible;
+
+        fn identity(&self) -> ArtifactIdentity {
+            ArtifactIdentity::Content(ContentId::from_bytes([1; 32]))
+        }
+
+        fn apply_change(&self, _change: &Self::Change) -> Result<Self, Self::ApplyError> {
+            Ok(Self)
+        }
+    }
+
+    #[derive(Clone, Debug, Serialize, Deserialize)]
+    struct TestEvidence;
+
+    impl Evidence for TestEvidence {}
+
+    struct TestProblem;
+
+    impl OptimizationProblem for TestProblem {
+        type Artifact = TestArtifact;
+        type Case = ();
+        type Evidence = TestEvidence;
+        type ProposalAnnotations = ();
+    }
+}

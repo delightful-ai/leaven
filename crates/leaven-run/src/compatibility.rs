@@ -2,7 +2,10 @@
 
 use std::{
     collections::BTreeMap,
-    fs, io,
+    fs,
+    fs::OpenOptions,
+    io,
+    io::Write,
     path::{Path, PathBuf},
 };
 
@@ -241,9 +244,9 @@ pub enum ResumeCompatibilityError {
     #[error("stored optimizer compatibility does not match live optimizer compatibility")]
     OptimizerCompatibilityMismatch {
         /// Stored optimizer compatibility.
-        stored: Option<OptimizerCompatibility>,
+        stored: Box<Option<OptimizerCompatibility>>,
         /// Live optimizer compatibility.
-        live: Option<OptimizerCompatibility>,
+        live: Box<Option<OptimizerCompatibility>>,
     },
     /// Role-specific LM behavior changed.
     #[error("stored LM role `{role}` fingerprint does not match live LM role fingerprint")]
@@ -316,7 +319,7 @@ pub fn store_fresh_manifest(
     let path = run_dir.join(MANIFEST_FILE);
     let bytes = serde_json::to_vec_pretty(manifest)
         .expect("compatibility manifest contains only serializable fields");
-    fs::write(path, bytes)
+    write_atomic(&path, &bytes)
 }
 
 pub fn compare_stored_manifest(
@@ -363,8 +366,8 @@ fn compare_manifests(
     }
     if stored.optimizer != live.optimizer {
         return Err(ResumeCompatibilityError::OptimizerCompatibilityMismatch {
-            stored: stored.optimizer.clone(),
-            live: live.optimizer.clone(),
+            stored: Box::new(stored.optimizer.clone()),
+            live: Box::new(live.optimizer.clone()),
         });
     }
     if stored.lm_roles != live.lm_roles {
@@ -387,6 +390,35 @@ fn compare_manifests(
         return Err(ResumeCompatibilityError::BudgetPolicyMismatch);
     }
     Ok(())
+}
+
+fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), io::Error> {
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "path has no file name"))?;
+    let temp = path.with_file_name(format!(".{file_name}.{}.tmp", uuid::Uuid::new_v4()));
+    let result = write_atomic_inner(path, &temp, parent, bytes);
+    if result.is_err() {
+        let _ = fs::remove_file(&temp);
+    }
+    result
+}
+
+fn write_atomic_inner(
+    path: &Path,
+    temp: &Path,
+    parent: &Path,
+    bytes: &[u8],
+) -> Result<(), io::Error> {
+    let mut file = OpenOptions::new().write(true).create_new(true).open(temp)?;
+    file.write_all(bytes)?;
+    file.sync_all()?;
+    drop(file);
+    fs::rename(temp, path)?;
+    let dir = OpenOptions::new().read(true).open(parent)?;
+    dir.sync_all()
 }
 
 fn problem_placeholder() -> Fingerprint {
@@ -429,4 +461,133 @@ fn optimizer_summary(optimizer: Option<&OptimizerCompatibility>) -> String {
         }
     }
     summary
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use leaven_engine::{PrivateStatePolicy, StateFormat};
+
+    use super::*;
+
+    #[test]
+    fn optimizer_summaries_disclose_checkpoint_policy_and_format() {
+        let derived = OptimizerCompatibility::new(
+            Fingerprint::from_bytes([1; 32]),
+            PrivateStatePolicy::DerivedFromGraph,
+        );
+        assert!(optimizer_summary(Some(&derived)).contains(";state=derived-from-graph"));
+
+        let postcard = OptimizerCompatibility::new(
+            Fingerprint::from_bytes([2; 32]),
+            PrivateStatePolicy::ExplicitSnapshot {
+                schema: Fingerprint::from_bytes([3; 32]),
+                format: StateFormat::Postcard,
+            },
+        );
+        let summary = optimizer_summary(Some(&postcard));
+        assert!(summary.contains(";state=explicit-snapshot"));
+        assert!(summary.contains(";format=postcard"));
+
+        let custom = OptimizerCompatibility::new(
+            Fingerprint::from_bytes([4; 32]),
+            PrivateStatePolicy::ExplicitSnapshot {
+                schema: Fingerprint::from_bytes([5; 32]),
+                format: StateFormat::Custom("binary-gepa".to_owned()),
+            },
+        );
+        assert!(optimizer_summary(Some(&custom)).contains(";format=binary-gepa"));
+    }
+
+    #[test]
+    fn compare_manifest_reports_first_differing_lm_role() {
+        let mut stored = manifest_with_roles(BTreeMap::from([
+            (
+                "reflect".to_owned(),
+                RuntimeFingerprint::new(Fingerprint::from_bytes([1; 32])),
+            ),
+            (
+                "judge".to_owned(),
+                RuntimeFingerprint::new(Fingerprint::from_bytes([2; 32])),
+            ),
+        ]));
+        let live = manifest_with_roles(BTreeMap::from([(
+            "reflect".to_owned(),
+            RuntimeFingerprint::new(Fingerprint::from_bytes([1; 32])),
+        )]));
+
+        let error = compare_manifests(&stored, &live)
+            .expect_err("missing live role must reject resume compatibility");
+        assert!(matches!(
+            error,
+            ResumeCompatibilityError::LmRoleFingerprintMismatch {
+                role,
+                stored: Some(_),
+                live: None,
+            } if role == "judge"
+        ));
+
+        stored.lm_roles.insert(
+            "judge".to_owned(),
+            RuntimeFingerprint::new(Fingerprint::from_bytes([7; 32])),
+        );
+        let mut live = live;
+        live.lm_roles.insert(
+            "judge".to_owned(),
+            RuntimeFingerprint::new(Fingerprint::from_bytes([8; 32])),
+        );
+        let error = compare_manifests(&stored, &live)
+            .expect_err("changed live role must reject resume compatibility");
+        assert!(matches!(
+            error,
+            ResumeCompatibilityError::LmRoleFingerprintMismatch {
+                role,
+                stored: Some(_),
+                live: Some(_),
+            } if role == "judge"
+        ));
+    }
+
+    #[test]
+    fn atomic_manifest_write_rejects_paths_without_file_names() {
+        let error = write_atomic(Path::new(""), b"manifest")
+            .expect_err("compatibility manifest writes require a file path");
+
+        assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
+        assert_eq!(error.to_string(), "path has no file name");
+    }
+
+    #[test]
+    fn compare_manifest_reports_missing_manifest_read_error() {
+        let run_dir = std::env::temp_dir().join(format!(
+            "leaven-run-compatibility-missing-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&run_dir).unwrap();
+        let manifest = manifest_with_roles(BTreeMap::new());
+
+        let error = compare_stored_manifest(&run_dir, &manifest)
+            .expect_err("missing compatibility manifest must reject resume");
+
+        assert!(matches!(error, ResumeCompatibilityError::Read { .. }));
+        std::fs::remove_dir_all(run_dir).unwrap();
+    }
+
+    fn manifest_with_roles(
+        lm_roles: BTreeMap<String, RuntimeFingerprint>,
+    ) -> RunCompatibilityManifest {
+        RunCompatibilityManifest::new(
+            DatasetCompatibility {
+                content: Fingerprint::from_bytes([9; 32]),
+                splits: Fingerprint::from_bytes([10; 32]),
+                case_set_version: "cases-v1".to_owned(),
+            },
+            RuntimeFingerprint::new(Fingerprint::from_bytes([11; 32])),
+            RuntimeFingerprint::new(Fingerprint::from_bytes([12; 32])),
+            RuntimeFingerprint::new(Fingerprint::from_bytes([13; 32])),
+            None,
+            lm_roles,
+        )
+    }
 }
