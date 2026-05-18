@@ -4761,6 +4761,7 @@ Provide the new parameter value within ``` blocks."
         assert_p8_report_identity(&report, &config);
         assert_p8_report_lm_roles(&report);
         assert_p8_report_gepa_summary(&report);
+        assert_p8_report_run_summary_equivalence(&report, &run);
         assert_p8_report_case_safety(&report);
         let lines = report_lines(&config, &run);
         assert!(
@@ -4866,6 +4867,71 @@ Provide the new parameter value within ``` blocks."
                 })
         );
         assert_eq!(report["lm_roles"][1]["metrics"]["cost"]["llm_calls"], 1);
+    }
+
+    fn assert_p8_report_run_summary_equivalence(report: &serde_json::Value, run: &AimeRunResult) {
+        let result = &run.optimized;
+        assert_eq!(report["run"]["id"], result.run_id.to_string());
+        assert_eq!(
+            report["run"]["storage"],
+            report_run_storage(&result.summary.storage)
+        );
+        assert_eq!(
+            report["run"]["resumable"],
+            result.summary.storage.is_resumable()
+        );
+        assert_eq!(
+            report["run"]["resumability"],
+            report_resumability(&result.summary.storage)
+        );
+        assert_eq!(
+            report["run"]["run_dir"],
+            report_run_dir(&result.summary.storage)
+        );
+        assert_eq!(
+            report["run"]["latest_checkpoint"],
+            report_latest_checkpoint(&result.summary.storage)
+        );
+        assert_eq!(
+            report["run"]["summary_json"],
+            serde_json::to_value(
+                result
+                    .summary
+                    .reports
+                    .summary_json
+                    .as_ref()
+                    .map(|path| path.display().to_string())
+            )
+            .unwrap()
+        );
+        assert_eq!(
+            report["best"]["system_prompt"],
+            serde_json::to_value(result.best().map(|best| best.system.clone())).unwrap()
+        );
+        assert_eq!(
+            report["cache"]["evaluation"]["backend"],
+            result.summary.cache.evaluation.backend.as_str()
+        );
+        assert_eq!(
+            report["cache"]["evaluation"]["durable"],
+            result.summary.cache.evaluation.durable
+        );
+        assert_eq!(
+            report["cache"]["evaluation"]["hits"],
+            result.summary.cache.evaluation.hits
+        );
+        assert_eq!(
+            report["cache"]["evaluation"]["misses"],
+            result.summary.cache.evaluation.misses
+        );
+        assert_eq!(
+            report["cache"]["evaluation"]["write_errors"],
+            result.summary.cache.evaluation.write_errors
+        );
+        assert_eq!(
+            report["cache"]["evaluation"]["hit_cost_zero"],
+            result.summary.cache.evaluation.hit_cost_zero
+        );
     }
 
     fn assert_p8_report_gepa_summary(report: &serde_json::Value) {
