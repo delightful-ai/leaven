@@ -875,10 +875,12 @@ Cache/replay attempts after the report-schema fixes:
   0.4000, 0.5778, 0.4889, 0.5556, 0.5556]`, and candidate-discovery metric
   calls `[0, 75, 123, 183, 231, 291, 363, 459, 513, 579]`. Leaven's current
   completed P8 report stopped with 7 candidates, best validation `0.4889`, and
-  search metric calls `530/500`. This makes proposal fanout/overshoot a current
-  optimize-anything AIME parity suspect. Because `run.log` is missing, record it
-  as an inspectable-checkpoint conflict with the documented 500-call config, not
-  as proof that Leaven should raise its cap.
+  search metric calls `530/500`. A later source audit found current AIME source
+  leaves `num_parallel_proposals` at the default `1`, so source parity is serial
+  proposals plus 32-way case evaluation. Because `run.log` is missing, record
+  the checkpoint as an inspectable artifact/source conflict with the documented
+  500-call config, not as proof that Leaven should raise its cap or implement
+  proposal fanout for the current-source AIME profile.
 - Intentional delta still current: `FastCertified` and future FastGEPA ideas
   are Leaven-plus profiles, not reference parity. Spec the profile before
   adding lazy certification, active sampling, async islands, evaluator pyramids,

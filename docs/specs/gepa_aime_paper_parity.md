@@ -147,11 +147,13 @@ disclose. `domains/aime_math/README.md` and
 `logs/run.log` as the source for the validation/test score lines, but that file
 is absent from this checkout. The inspectable `logs/gepa_state.bin` checkpoint
 loads as an instance-frontier AIME run with 10 candidates, best validation
-`26/45 = 0.577777...`, and `621` total metric calls. That is compatible with
-already-scheduled parallel work overshooting a nominal cap, but without
-`run.log` it must be labeled as an artifact/checkpoint fact rather than proof
-that the current source `main.py` was run with exactly the documented
-`max_metric_calls=500` configuration.
+`26/45 = 0.577777...`, and `621` total metric calls. The current AIME source
+sets evaluator parallelism (`parallel=True`, `max_workers=32`) but does not set
+`num_parallel_proposals`, whose default is `1`; therefore current-source AIME
+parity means serial proposals plus parallel case evaluation. The checkpoint
+must be labeled as an artifact/source conflict, not proof that proposal fanout
+was enabled or that the current source `main.py` was run with exactly the
+documented `max_metric_calls=500` configuration.
 
 ## 3. Budget And Stop Semantics
 
@@ -266,10 +268,10 @@ For AIME parity, reports must distinguish three numbers:
 - inspectable upstream checkpoint metric calls (`621` in the local CAIS bundle,
   unless a newer artifact with `run.log` supersedes it).
 
-Do not silently tune Leaven's cap upward to match the checkpoint. If Leaven adds
-parallel proposal scheduling to match optimize-anything behavior, the report
-must label proposal fanout and overshoot separately from case-evaluation
-parallelism.
+Do not silently tune Leaven's cap upward to match the checkpoint. If a future
+profile explicitly targets optimize-anything `num_parallel_proposals="auto"` or
+another fanout value, the report must label proposal fanout and overshoot
+separately from case-evaluation parallelism.
 
 ## 4. GEPA Loop Requirements
 
