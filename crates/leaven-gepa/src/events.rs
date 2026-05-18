@@ -24,6 +24,7 @@ pub enum GepaEventSummary {
     /// Seed validation completed.
     SeedValidationCompleted {
         candidate_index: GepaCandidateIndex,
+        metric_calls_delta: u64,
         score: String,
     },
     /// One GEPA iteration started.
@@ -70,7 +71,11 @@ pub enum GepaEventSummary {
     /// Proposal was rejected by the train-screening policy.
     ProposalRejected,
     /// Accepted candidate validation completed.
-    AcceptedValidationCompleted { candidate_index: GepaCandidateIndex },
+    AcceptedValidationCompleted {
+        candidate_index: GepaCandidateIndex,
+        metric_calls_delta: u64,
+        score: String,
+    },
     /// Accepted child was admitted into GEPA candidate-index state.
     CandidateAdmitted {
         candidate: CandidateId,

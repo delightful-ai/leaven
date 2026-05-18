@@ -1859,7 +1859,8 @@ fn accepted_child_enters_reference_state_only_after_full_validation() {
             matches!(
                 event,
                 leaven_gepa::GepaEventSummary::AcceptedValidationCompleted {
-                    candidate_index
+                    candidate_index,
+                    ..
                 } if candidate_index.get() == 1
             )
         }));
@@ -2209,6 +2210,17 @@ fn accepted_iteration_emits_reference_phase_order() {
         assert!(
             events.iter().any(|event| matches!(
                 event,
+                leaven_gepa::GepaEventSummary::SeedValidationCompleted {
+                    metric_calls_delta,
+                    score,
+                    ..
+                } if *metric_calls_delta > 0 && !score.is_empty()
+            )),
+            "seed validation events must include score and metric payloads: {events:?}"
+        );
+        assert!(
+            events.iter().any(|event| matches!(
+                event,
                 leaven_gepa::GepaEventSummary::ParentEvaluated {
                     metric_calls_delta,
                     score
@@ -2244,6 +2256,42 @@ fn accepted_iteration_emits_reference_phase_order() {
                 } if *metric_calls_delta > 0 && !score.is_empty()
             )),
             "child evaluation events must include score and metric payloads: {events:?}"
+        );
+        assert!(
+            events.iter().any(|event| matches!(
+                event,
+                leaven_gepa::GepaEventSummary::AcceptedValidationCompleted {
+                    metric_calls_delta,
+                    score,
+                    ..
+                } if *metric_calls_delta > 0 && !score.is_empty()
+            )),
+            "accepted-validation events must include score and metric payloads: {events:?}"
+        );
+        let event_metric_calls: u64 = events
+            .iter()
+            .map(|event| match event {
+                leaven_gepa::GepaEventSummary::SeedValidationCompleted {
+                    metric_calls_delta,
+                    ..
+                }
+                | leaven_gepa::GepaEventSummary::ParentEvaluated {
+                    metric_calls_delta, ..
+                }
+                | leaven_gepa::GepaEventSummary::ChildEvaluated {
+                    metric_calls_delta, ..
+                }
+                | leaven_gepa::GepaEventSummary::AcceptedValidationCompleted {
+                    metric_calls_delta,
+                    ..
+                } => *metric_calls_delta,
+                _ => 0,
+            })
+            .sum();
+        assert_eq!(
+            event_metric_calls,
+            gepa.report().total_metric_calls,
+            "GEPA event metric deltas must reconstruct report total"
         );
     });
 }

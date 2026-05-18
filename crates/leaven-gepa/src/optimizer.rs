@@ -976,11 +976,14 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
         if seed_validation {
             self.record_event(GepaEventSummary::SeedValidationCompleted {
                 candidate_index: index,
+                metric_calls_delta: assessment.metric_calls_new,
                 score: assessment.average_score.to_string(),
             });
         } else {
             self.record_event(GepaEventSummary::AcceptedValidationCompleted {
                 candidate_index: index,
+                metric_calls_delta: assessment.metric_calls_new,
+                score: assessment.average_score.to_string(),
             });
             self.record_event(GepaEventSummary::CandidateAdmitted {
                 candidate,

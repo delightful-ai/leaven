@@ -1512,10 +1512,12 @@ fn p8_gepa_event_json(event: &GepaEventSummary) -> serde_json::Value {
         }),
         GepaEventSummary::SeedValidationCompleted {
             candidate_index,
+            metric_calls_delta,
             score,
         } => serde_json::json!({
             "phase": "seed_validation_completed",
             "candidate_index": candidate_index.get(),
+            "metric_calls_delta": metric_calls_delta,
             "score": score,
         }),
         GepaEventSummary::IterationStarted { iteration } => serde_json::json!({
@@ -1590,9 +1592,15 @@ fn p8_gepa_event_json(event: &GepaEventSummary) -> serde_json::Value {
         GepaEventSummary::ProposalRejected => serde_json::json!({
             "phase": "proposal_rejected",
         }),
-        GepaEventSummary::AcceptedValidationCompleted { candidate_index } => serde_json::json!({
+        GepaEventSummary::AcceptedValidationCompleted {
+            candidate_index,
+            metric_calls_delta,
+            score,
+        } => serde_json::json!({
             "phase": "accepted_validation_completed",
             "candidate_index": candidate_index.get(),
+            "metric_calls_delta": metric_calls_delta,
+            "score": score,
         }),
         GepaEventSummary::CandidateAdmitted {
             candidate,
@@ -6675,6 +6683,15 @@ Provide the new parameter value within ``` blocks."
                 .any(|event| event["phase"] == "reflective_dataset_built")
         );
         assert!(gepa_events.iter().any(|event| {
+            event["phase"] == "seed_validation_completed"
+                && event["metric_calls_delta"]
+                    .as_u64()
+                    .is_some_and(|calls| calls > 0)
+                && event["score"]
+                    .as_str()
+                    .is_some_and(|score| !score.is_empty())
+        }));
+        assert!(gepa_events.iter().any(|event| {
             event["phase"] == "reflection_started"
                 && event["records"].as_u64().is_some_and(|records| records > 0)
                 && event["source_ref_count"]
@@ -6710,6 +6727,15 @@ Provide the new parameter value within ``` blocks."
                 .iter()
                 .any(|event| event["phase"] == "proposal_accepted")
         );
+        assert!(gepa_events.iter().any(|event| {
+            event["phase"] == "accepted_validation_completed"
+                && event["metric_calls_delta"]
+                    .as_u64()
+                    .is_some_and(|calls| calls > 0)
+                && event["score"]
+                    .as_str()
+                    .is_some_and(|score| !score.is_empty())
+        }));
         assert!(
             gepa_events
                 .iter()
@@ -6722,6 +6748,11 @@ Provide the new parameter value within ``` blocks."
         );
         let gepa_report = &report["gepa_report"];
         assert_eq!(gepa_report["total_metric_calls"], 8);
+        let event_metric_calls: u64 = gepa_events
+            .iter()
+            .filter_map(|event| event["metric_calls_delta"].as_u64())
+            .sum();
+        assert_eq!(event_metric_calls, 8);
         assert_eq!(gepa_report["full_validation_evals"], 2);
         assert_eq!(gepa_report["accepted_count"], 1);
         assert_eq!(gepa_report["accepted_unadmitted_count"], 0);

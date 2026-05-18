@@ -667,6 +667,12 @@ Cache/replay attempts after the report-schema fixes:
   optimized held-out test `0.433 -> 0.500`; optimized train was lower
   `0.600 -> 0.556`. This is a real live improvement over seed on validation
   and held-out test, but remains below the pinned GEPA CAIS target `0.600`.
+- post-run audit found the completed report's aggregate metric counters were
+  internally consistent, but `gepa_events` did not carry seed-validation or
+  accepted-full-validation metric deltas. The owning event contract now carries
+  validation score plus `metric_calls_delta` for both validation-completed
+  phases so future reports can reconstruct GEPA search metric spend from the
+  phase stream itself. The current release artifact predates that schema fix.
 - Audit-agent wave after the stale no-improvement report found no obvious
   prompt-contract, parser, dataset-split, or source-id mismatch explaining the
   old `best_index=0` result. Their useful diagnosis is that the stale completed
@@ -688,6 +694,8 @@ Cache/replay attempts after the report-schema fixes:
    upstream GEPA/DSPy AIME traces where available. Treat result-quality parity
    as open until held-out quality is comparable to the target or the spec labels
    the remaining model/runtime delta.
-3. Future release reports should be generated with the post-run report-schema
-   fixes so live-proof checks do not have to re-aggregate role telemetry by hand
-   and so resumed `gepa_events` are cumulative.
+3. Future release reports should be generated with the post-run event-schema
+   fix so live-proof checks can sum `gepa_events[*].metric_calls_delta` back to
+   the GEPA report metric total directly. The current completed release report
+   remains valid for aggregate budget proof but predates those per-phase
+   validation deltas.
