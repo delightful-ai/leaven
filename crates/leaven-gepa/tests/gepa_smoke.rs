@@ -13,8 +13,8 @@ use leaven_engine::{
     BudgetLedger, CachePolicy, CaseSet, CheckpointContext, CheckpointableOptimizer, Engine,
     EvaluationCache, EvaluationContext, EvaluationError, Evaluator, GraphSnapshotRef, Optimizer,
     OptimizerStateReader, PrivateStatePolicy, ProposalContext, ProposalError, Proposer,
-    RestoreContext, RunCheckpoint, RunContext, RunGraph, RunPersistenceError, StateFormat,
-    StopReason, TrustPolicy,
+    RestoreContext, RestoredRunState, RunCheckpoint, RunContext, RunGraph, RunPersistenceError,
+    StateFormat, StopReason, TrustPolicy,
 };
 use leaven_evidence::{
     CaseAssessmentEvidence, CaseOutcome, CasewiseEvidence, OutputRecord, ScalarEvidence,
@@ -1373,6 +1373,159 @@ fn gepa_reuses_evaluation_cache_per_candidate_case_across_different_requests() {
 }
 
 #[test]
+fn accepted_child_full_validation_reuses_case_cache_hits() {
+    block_on(async {
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let case_zero = leaven_kernel::CaseId::new(0);
+        let case_one = leaven_kernel::CaseId::new(1);
+        let case_set = CaseSet::new(vec![(), ()])
+            .with_partition(leaven_core::PartitionId::from("TRAIN"), vec![case_zero])
+            .with_partition(
+                leaven_core::PartitionId::from("VALIDATION"),
+                vec![case_zero, case_one],
+            );
+        let store = InlineEvidenceStore::<ScalarEvidence>::new("inline");
+        let mut engine = Engine::<SamplingProblem>::builder()
+            .evaluator(CachedValidationSelectionEvaluator {
+                seen_sets: seen.clone(),
+            })
+            .evaluation_cache(EvaluationCache::default())
+            .build();
+        engine
+            .insert_seed(
+                PartMapArtifact(BTreeMap::from([("answer".to_owned(), "draft".to_owned())])),
+                0,
+            )
+            .unwrap();
+        let mut gepa = Gepa::new(
+            PartMapSurface,
+            ParetoFrontier::by_case().build(),
+            FixedSurfaceEdit::new("improved".to_owned()),
+        )
+        .reflective_dataset(OneReflectiveExample)
+        .batch_sampler(EpochShuffled::new(1))
+        .validation_policy(FullValidation)
+        .max_iterations(1);
+
+        engine.run(&mut gepa, &case_set, &store).await.unwrap();
+
+        assert_eq!(
+            seen.lock().expect("seen lock").as_slice(),
+            &[vec![case_zero, case_one], vec![case_zero], vec![case_one]],
+            "accepted-child full validation should reuse the child train-screening row and only evaluate missing validation cases"
+        );
+        assert_eq!(
+            gepa.reference_state().total_metric_calls(),
+            4,
+            "GEPA metric calls should count only seed validation, child train miss, and child validation miss"
+        );
+        assert_eq!(gepa.reference_state().full_validation_evals(), 2);
+        assert!(gepa.events().iter().any(|event| matches!(
+            event,
+            leaven_gepa::GepaEventSummary::AcceptedValidationCompleted { .. }
+        )));
+    });
+}
+
+#[test]
+fn gepa_resume_restores_sampler_cursor_and_does_not_repeat_seed_validation() {
+    block_on(async {
+        let control_seen = Arc::new(Mutex::new(Vec::new()));
+        let resume_seen = Arc::new(Mutex::new(Vec::new()));
+
+        let case_set = resume_trace_case_set();
+        let store = InlineEvidenceStore::<ScalarEvidence>::new("inline");
+        let mut control_engine = Engine::<SamplingProblem>::builder()
+            .evaluator(ResumeTraceEvaluator {
+                seen: control_seen.clone(),
+            })
+            .build();
+        control_engine
+            .insert_seed(resume_trace_seed(), 0)
+            .unwrap();
+        let mut control_gepa = resume_trace_gepa();
+        control_engine
+            .run(&mut control_gepa, &case_set, &store)
+            .await
+            .unwrap();
+
+        let mut partial_engine = Engine::<SamplingProblem>::builder()
+            .evaluator(ResumeTraceEvaluator {
+                seen: resume_seen.clone(),
+            })
+            .budget(Budget::unlimited())
+            .metric_call_budget_stopper(3)
+            .build();
+        partial_engine
+            .insert_seed(resume_trace_seed(), 0)
+            .unwrap();
+        let mut partial_gepa = resume_trace_gepa();
+        partial_engine
+            .run(&mut partial_gepa, &case_set, &store)
+            .await
+            .unwrap();
+        assert_eq!(partial_gepa.reference_state().full_validation_evals(), 1);
+
+        let optimizer_state = partial_gepa
+            .checkpoint_state(CheckpointContext::new(partial_engine.view()))
+            .unwrap();
+        let checkpoint = RunCheckpoint::new(
+            partial_engine.view().run_id(),
+            leaven_kernel::now(),
+            GraphSnapshotRef {
+                schema: Fingerprint::from_bytes([22; 32]),
+                format: StateFormat::Json,
+                bytes: BlobRef {
+                    store: "resume-trace".to_owned(),
+                    key: "graph".to_owned(),
+                },
+            },
+            partial_engine.budget().snapshot(),
+        );
+        let restored_run = RestoredRunState {
+            checkpoint,
+            graph: RunGraph::from_snapshot(partial_engine.graph().snapshot()).unwrap(),
+            budget: BudgetLedger::from_snapshot(partial_engine.budget().snapshot()),
+            cache: Some(EvaluationCache::from_snapshot(
+                partial_engine.evaluation_cache_snapshot(),
+            )),
+        };
+        let mut restored_engine = Engine::<SamplingProblem>::builder()
+            .evaluator(ResumeTraceEvaluator {
+                seen: resume_seen.clone(),
+            })
+            .restored_run(restored_run)
+            .build();
+        let mut restored_gepa = resume_trace_gepa();
+        restored_gepa
+            .restore_state(optimizer_state, RestoreContext::new(restored_engine.view()))
+            .unwrap();
+        restored_engine
+            .resume(&mut restored_gepa, &case_set, &store)
+            .await
+            .unwrap();
+
+        let control_seen = control_seen.lock().expect("control trace lock").clone();
+        let resume_seen = resume_seen.lock().expect("resume trace lock").clone();
+        assert_eq!(
+            resume_seen, control_seen,
+            "restored GEPA should produce the same evaluator trace as an uninterrupted run"
+        );
+        assert_eq!(
+            resume_seen
+                .iter()
+                .filter(|(purpose, cases)| *purpose == EvaluationPurpose::Validation
+                    && cases.as_slice()
+                        == [leaven_kernel::CaseId::new(2), leaven_kernel::CaseId::new(3)])
+                .count(),
+            1,
+            "Engine::resume must not call GEPA initialize or repeat seed validation"
+        );
+        assert_eq!(restored_gepa.reference_state().full_validation_evals(), 1);
+    });
+}
+
+#[test]
 fn accepted_child_enters_reference_state_only_after_full_validation() {
     block_on(async {
         let case_set = CaseSet::new(vec![(), ()])
@@ -1997,10 +2150,26 @@ fn train_case_set() -> CaseSet<()> {
     )
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+fn resume_trace_case_set() -> CaseSet<()> {
+    CaseSet::new(vec![(), (), (), ()])
+        .with_partition(
+            leaven_core::PartitionId::from("TRAIN"),
+            vec![leaven_kernel::CaseId::new(0), leaven_kernel::CaseId::new(1)],
+        )
+        .with_partition(
+            leaven_core::PartitionId::from("VALIDATION"),
+            vec![leaven_kernel::CaseId::new(2), leaven_kernel::CaseId::new(3)],
+        )
+}
+
+fn resume_trace_seed() -> PartMapArtifact {
+    PartMapArtifact(BTreeMap::from([("answer".to_owned(), "draft".to_owned())]))
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 struct PartMapArtifact(BTreeMap<String, String>);
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 struct PartMapChange {
     part: String,
     value: String,
@@ -2332,6 +2501,28 @@ fn smoke_gepa_with_population(
         .reflective_dataset(NoReflectiveExamples)
 }
 
+fn resume_trace_gepa() -> Gepa<
+    PartMapSurface,
+    ParetoFrontier,
+    FixedSurfaceEdit<String>,
+    PopulationBestFallback,
+    leaven_gepa::RoundRobinPart,
+    StrictImprovement,
+    EpochShuffled,
+    FullValidation,
+    NoReflectiveExamples,
+> {
+    Gepa::new(
+        PartMapSurface,
+        ParetoFrontier::by_case().build(),
+        FixedSurfaceEdit::new("unused".to_owned()),
+    )
+    .reflective_dataset(NoReflectiveExamples)
+    .batch_sampler(EpochShuffled::new(1).with_seed(7))
+    .validation_policy(FullValidation)
+    .max_iterations(2)
+}
+
 struct RecordingCaseSetEvaluator {
     seen_sets: Arc<Mutex<Vec<Vec<leaven_kernel::CaseId>>>>,
 }
@@ -2497,6 +2688,57 @@ impl Evaluator<SamplingProblem> for CachedValidationSelectionEvaluator {
                     candidate,
                     target: AssessmentTarget::Case { set, case },
                     evidence: ScalarEvidence::new(score).unwrap(),
+                    cost: Cost::metric_calls(1),
+                    metadata: MetadataBag::new(),
+                });
+            }
+        }
+        Ok(Metered::new(
+            assessments,
+            Cost::metric_calls(request.set.case_ids.len() as u64),
+        ))
+    }
+}
+
+struct ResumeTraceEvaluator {
+    seen: Arc<Mutex<Vec<(EvaluationPurpose, Vec<leaven_kernel::CaseId>)>>>,
+}
+
+impl Evaluator<SamplingProblem> for ResumeTraceEvaluator {
+    fn id(&self) -> EvaluatorId {
+        EvaluatorId::PRIMARY
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        Fingerprint::from_bytes([21; 32])
+    }
+
+    fn cache_policy(&self, _request: &ResolvedEvaluationRequest) -> CachePolicy {
+        CachePolicy::Never
+    }
+
+    async fn evaluate(
+        &self,
+        request: ResolvedEvaluationRequest,
+        _ctx: EvaluationContext<'_, SamplingProblem>,
+    ) -> Result<Metered<Vec<Assessment<SamplingProblem>>>, EvaluationError> {
+        self.seen
+            .lock()
+            .expect("resume trace lock")
+            .push((request.purpose, request.set.case_ids.clone()));
+        let set = leaven_kernel::EvaluationSetId::from_uuid(request.set.id.as_uuid());
+        let ResolvedRequestKind::Independent { candidates } = request.kind else {
+            return Err(EvaluationError::Message(
+                "expected independent request".to_owned(),
+            ));
+        };
+        let mut assessments = Vec::new();
+        for candidate in candidates {
+            for case in request.set.case_ids.iter().copied() {
+                assessments.push(Assessment::Independent {
+                    candidate,
+                    target: AssessmentTarget::Case { set, case },
+                    evidence: ScalarEvidence::new(0.0).unwrap(),
                     cost: Cost::metric_calls(1),
                     metadata: MetadataBag::new(),
                 });
