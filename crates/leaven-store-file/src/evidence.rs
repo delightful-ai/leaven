@@ -10,6 +10,8 @@ use parking_lot::Mutex;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
+use crate::atomic::write_atomic;
+
 /// File-backed evidence store for serializable evidence values.
 ///
 /// Each evidence item is written as `<root>/<key>.json`. Keys are monotonically
@@ -85,8 +87,7 @@ impl FileCheckpointStore {
     /// Returns [`StoreError`] when the pointer file cannot be written.
     pub fn mark_latest(&self, id: CheckpointId) -> Result<(), StoreError> {
         let latest = self.root.join("LATEST");
-        std::fs::write(&latest, id.to_string())
-            .map_err(|err| operation_failed("latest", &latest, &err))
+        write_atomic(&latest, id.to_string(), "latest")
     }
 }
 
@@ -167,7 +168,7 @@ impl CheckpointStore for FileCheckpointStore {
     fn put(&self, checkpoint: CheckpointBytes) -> Result<CheckpointId, StoreError> {
         let id = CheckpointId::new();
         let path = checkpoint_path(&self.root, id);
-        std::fs::write(&path, checkpoint.0).map_err(|err| operation_failed("put", &path, &err))?;
+        write_atomic(&path, checkpoint.0, "put")?;
         Ok(id)
     }
 
@@ -226,7 +227,7 @@ where
         let path = evidence_path(&self.root, &key)?;
         let bytes = serde_json::to_vec_pretty(&evidence)
             .map_err(|err| StoreError::Serialization(err.to_string()))?;
-        std::fs::write(&path, bytes).map_err(|err| operation_failed("put", &path, &err))?;
+        write_atomic(&path, bytes, "put")?;
         *guard += 1;
         Ok(EvidenceRef {
             store: self.name.clone(),

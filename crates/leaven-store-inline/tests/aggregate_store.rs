@@ -59,6 +59,17 @@ fn missing_blob_and_checkpoint_are_typed_store_errors() {
             ..
         }
     ));
+
+    let latest =
+        CheckpointStore::mark_latest(&store, leaven_kernel::CheckpointId::new()).unwrap_err();
+    assert!(matches!(
+        latest,
+        StoreError::OperationFailed {
+            operation: "mark_latest_checkpoint",
+            retryable: Some(false),
+            ..
+        }
+    ));
 }
 
 #[test]

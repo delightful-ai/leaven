@@ -6,7 +6,7 @@ use bytes::Bytes;
 use leaven_kernel::{BlobRef, CheckpointId};
 use leaven_store::{BlobStore, BlobWrite, CheckpointBytes, CheckpointStore, StoreError};
 
-use crate::FileCheckpointStore;
+use crate::{FileCheckpointStore, atomic::write_atomic};
 
 /// Local filesystem store implementing blob and checkpoint capabilities.
 ///
@@ -80,8 +80,7 @@ impl BlobStore for FileStore {
     fn put(&self, write: BlobWrite) -> Result<BlobRef, StoreError> {
         let key = format!("{}.blob", uuid::Uuid::new_v4());
         let path = self.blobs.join(&key);
-        std::fs::write(&path, write.bytes)
-            .map_err(|err| operation_failed("put_blob", &path, &err))?;
+        write_atomic(&path, write.bytes, "put_blob")?;
         Ok(BlobRef {
             store: self.name.clone(),
             key,

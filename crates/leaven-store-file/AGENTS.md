@@ -7,6 +7,8 @@ It depends inward on `leaven-store`; it must not change storage trait meaning,
 choose product defaults, or define engine checkpoint schemas.
 
 ## Map
+- `src/atomic.rs`: private temp-write, fsync, rename, directory-sync helper for
+  durable local file updates.
 - `src/store.rs`: `FileStore`, the aggregate local filesystem store for blobs
   plus byte checkpoints. Its layout is `<root>/blobs/` and
   `<root>/checkpoints/`.
@@ -29,6 +31,8 @@ choose product defaults, or define engine checkpoint schemas.
 - Keep key validation local: evidence keys are non-empty ASCII digits, blob keys
   cannot contain path separators, and `LATEST` is a pointer file rather than a
   checkpoint payload.
+- Blob, checkpoint, evidence, and `LATEST` writes go through the private atomic
+  write helper. Do not reintroduce direct `fs::write` for durable store payloads.
 
 ## Route Away
 - Add or change storage traits in `leaven-store`, then update this backend as

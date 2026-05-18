@@ -149,6 +149,18 @@ fn file_checkpoint_round_trips_latest_pointer() {
 }
 
 #[test]
+fn file_checkpoint_trait_latest_methods_delegate_to_inherent_store() {
+    let root = temp_root("checkpoint-trait-latest");
+    let store = FileCheckpointStore::open(&root).unwrap();
+    let checkpoint =
+        CheckpointStore::put(&store, CheckpointBytes(Bytes::from_static(b"state"))).unwrap();
+
+    assert_eq!(CheckpointStore::latest(&store).unwrap(), None);
+    CheckpointStore::mark_latest(&store, checkpoint).unwrap();
+    assert_eq!(CheckpointStore::latest(&store).unwrap(), Some(checkpoint));
+}
+
+#[test]
 fn file_json_checkpoint_round_trips_latest_typed_checkpoint() {
     let root = temp_root("checkpoint-json");
     let store = FileJsonCheckpointStore::<TestCheckpoint>::open(&root).unwrap();

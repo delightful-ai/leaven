@@ -1,5 +1,6 @@
 //! File-backed store implementations.
 
+mod atomic;
 mod evidence;
 mod store;
 
