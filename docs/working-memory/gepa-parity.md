@@ -226,6 +226,11 @@ Prompt-audit finding:
   Python `random.Random`-compatible MT19937 implementation for the needed
   `randbelow`/`shuffle` paths. This removes the old splitmix delta for
   default seed 0 and explicit `.with_seed(...)` sampler tests.
+- P8 live-role telemetry now counts malformed DSPy solver output as
+  `answer_parse` even when the LM call itself succeeded. LM response-cache
+  failures are split into cache-only required misses, read errors, write
+  errors, and other cache errors, so cache-only replay reports do not imply a
+  failed cache write.
 - post-run P8 proposal attempts now cross-link accepted children back to
   `child_index` and `child_validation_score`, so an operator can inspect why
   an accepted train-screening child did or did not become validation-best

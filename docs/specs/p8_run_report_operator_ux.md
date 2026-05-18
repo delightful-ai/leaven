@@ -129,12 +129,17 @@ pub struct LmRoleCacheSummary {
     pub hits: u64,
     pub misses: u64,
     pub bypasses: Vec<CacheBypassCount>,
+    pub required_misses: u64,
+    pub read_errors: u64,
     pub write_errors: u64,
+    pub other_errors: u64,
 }
 ```
 
 Exact names may differ. Provider-cache status must not be collapsed into
-free-text metadata.
+free-text metadata. Cache-only misses, read failures, and write failures must
+remain distinguishable so no-spend replay reports can be audited without
+confusing a missing cached response for a failed write.
 
 `CacheMode::Auto` is the default durable product mode. Reports should show that
 the storage was available even when an evaluator bypassed cache because its

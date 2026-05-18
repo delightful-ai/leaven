@@ -599,14 +599,17 @@ fn report_lm_role_lines(role: &AimeLmRoleReport) -> Vec<String> {
             role.metrics.cost.completion_tokens
         ),
         format!(
-            "lm_role_cache={} hits={} misses={} bypasses={} bypass_policy_never={} bypass_refresh={} write_errors={} hit_cost_zero={}",
+            "lm_role_cache={} hits={} misses={} bypasses={} bypass_policy_never={} bypass_refresh={} required_misses={} read_errors={} write_errors={} other_errors={} hit_cost_zero={}",
             role.role.label(),
             role.metrics.cache.hits,
             role.metrics.cache.misses,
             role.metrics.cache.bypasses(),
             role.metrics.cache.bypass_policy_never,
             role.metrics.cache.bypass_refresh,
+            role.metrics.cache.required_misses,
+            role.metrics.cache.read_errors,
             role.metrics.cache.write_errors,
+            role.metrics.cache.other_errors,
             role.metrics.cache.hit_cost_zero
         ),
         format!(
@@ -1635,7 +1638,10 @@ fn p8_lm_role_report_json(role: &AimeLmRoleReport) -> serde_json::Value {
                 "bypasses": role.metrics.cache.bypasses(),
                 "bypass_policy_never": role.metrics.cache.bypass_policy_never,
                 "bypass_refresh": role.metrics.cache.bypass_refresh,
+                "required_misses": role.metrics.cache.required_misses,
+                "read_errors": role.metrics.cache.read_errors,
                 "write_errors": role.metrics.cache.write_errors,
+                "other_errors": role.metrics.cache.other_errors,
                 "hit_cost_zero": role.metrics.cache.hit_cost_zero,
             },
             "failures": p8_provider_failure_counts_json(&role.metrics.failures),
@@ -2314,11 +2320,15 @@ impl AimeLmRoleMetrics {
         self.cache.record_success(policy, &response.usage, cost);
     }
 
-    fn record_failure(&mut self, error: &LmError) {
-        let kind = AimeProviderFailureKind::from_lm_error(error);
+    fn record_failure_kind(&mut self, kind: AimeProviderFailureKind) {
         self.failures.increment(kind);
+    }
+
+    fn record_failure(&mut self, policy: LmCachePolicy, error: &LmError) {
+        let kind = AimeProviderFailureKind::from_lm_error(error);
+        self.record_failure_kind(kind);
         if kind == AimeProviderFailureKind::Cache {
-            self.cache.write_errors += 1;
+            self.cache.record_failure(policy, error);
         }
     }
 }
@@ -2329,7 +2339,10 @@ struct AimeLmCacheMetrics {
     misses: u64,
     bypass_policy_never: u64,
     bypass_refresh: u64,
+    required_misses: u64,
+    read_errors: u64,
     write_errors: u64,
+    other_errors: u64,
     hit_cost_zero: bool,
 }
 
@@ -2340,7 +2353,10 @@ impl Default for AimeLmCacheMetrics {
             misses: 0,
             bypass_policy_never: 0,
             bypass_refresh: 0,
+            required_misses: 0,
+            read_errors: 0,
             write_errors: 0,
+            other_errors: 0,
             hit_cost_zero: true,
         }
     }
@@ -2363,6 +2379,23 @@ impl AimeLmCacheMetrics {
                     self.misses += 1;
                 }
             }
+        }
+    }
+
+    fn record_failure(&mut self, policy: LmCachePolicy, error: &LmError) {
+        let LmError::Cache { message } = error else {
+            return;
+        };
+        if message.contains("required lm cache entry was missing") {
+            self.required_misses += 1;
+        } else if message.contains("during put") {
+            self.write_errors += 1;
+        } else if message.contains("during get") || message.contains("codec") {
+            self.read_errors += 1;
+        } else if policy == LmCachePolicy::CacheOnly {
+            self.required_misses += 1;
+        } else {
+            self.other_errors += 1;
         }
     }
 
@@ -2403,11 +2436,21 @@ impl AimeLmTelemetry {
                 metrics.record_success(self.policy, &metered.value, &metered.cost);
             }
             Err(error) => {
-                metrics.record_failure(error);
+                metrics.record_failure(self.policy, error);
                 if let Some(durable) = &self.durable_failures {
                     durable.record_failure(AimeProviderFailureKind::from_lm_error(error));
                 }
             }
+        }
+    }
+
+    fn record_failure_kind(&self, kind: AimeProviderFailureKind) {
+        self.metrics
+            .lock()
+            .expect("AIME telemetry lock is valid")
+            .record_failure_kind(kind);
+        if let Some(durable) = &self.durable_failures {
+            durable.record_failure(kind);
         }
     }
 
@@ -2531,6 +2574,10 @@ struct AimeInstrumentedLm<L> {
 impl<L> AimeInstrumentedLm<L> {
     fn new(inner: L, telemetry: AimeLmTelemetry) -> Self {
         Self { inner, telemetry }
+    }
+
+    fn record_failure_kind(&self, kind: AimeProviderFailureKind) {
+        self.telemetry.record_failure_kind(kind);
     }
 }
 
@@ -4190,13 +4237,16 @@ async fn run_solver(
     Ok(RunOutput::new(output.answer).with_trace(format!("reasoning: {}", output.reasoning)))
 }
 
-async fn run_openai_solver(
-    solver: AimeInstrumentedLm<AimeOpenAiLm>,
+async fn run_openai_solver<L>(
+    solver: AimeInstrumentedLm<L>,
     prompt: &AimePrompt,
     case: &RunCase<AimeInput>,
     solver_config: &AimeSolverConfig,
     side_infos: AimeSolverSideInfoStore,
-) -> Result<RunOutput, RunError> {
+) -> Result<RunOutput, RunError>
+where
+    L: Lm,
+{
     let dspy_request =
         render_dspy_aime_chain_of_thought_request(&prompt.system, &case.input().problem);
     let request = LmRequest::new(
@@ -4211,16 +4261,25 @@ async fn run_openai_solver(
         .await
         .map_err(|source| RunError::with_source("AIME solver LM failed", source))?;
     let raw = metered.value.assistant.content().trim().to_owned();
-    let output = parse_dspy_aime_chain_of_thought_response(&raw).map_err(|source| {
-        RunError::new("AIME solver response did not match DSPy ChainOfThought fields")
-            .with_trace(source)
-            .with_cost(metered.cost.clone())
-    })?;
+    let output = parse_openai_solver_response(&solver, &raw, &metered.cost)?;
     side_infos.insert(prompt, case.id(), output.clone());
     Ok(RunOutput::new(output.answer)
         .with_trace(format!("reasoning: {}", output.reasoning))
         .with_trace(format!("raw_response: {}", output.raw))
         .with_cost(metered.cost))
+}
+
+fn parse_openai_solver_response<L>(
+    solver: &AimeInstrumentedLm<L>,
+    raw: &str,
+    cost: &Cost,
+) -> Result<AimeRunOutput, RunError> {
+    parse_dspy_aime_chain_of_thought_response(raw).map_err(|source| {
+        solver.record_failure_kind(AimeProviderFailureKind::AnswerParse);
+        RunError::new("AIME solver response did not match DSPy ChainOfThought fields")
+            .with_trace(source)
+            .with_cost(cost.clone())
+    })
 }
 
 fn openai_model_name() -> String {
@@ -5303,7 +5362,7 @@ Provide the new parameter value within ``` blocks."
             line == "lm_role_cost=reflection calls=1 prompt_tokens=37 cached_input_tokens=0 completion_tokens=11 reasoning_tokens=0 cost_llm_calls=1 cost_prompt_tokens=37 cost_completion_tokens=11"
         }));
         assert!(lines.iter().any(|line| {
-            line == "lm_role_cache=reflection hits=0 misses=0 bypasses=1 bypass_policy_never=1 bypass_refresh=0 write_errors=0 hit_cost_zero=true"
+            line == "lm_role_cache=reflection hits=0 misses=0 bypasses=1 bypass_policy_never=1 bypass_refresh=0 required_misses=0 read_errors=0 write_errors=0 other_errors=0 hit_cost_zero=true"
         }));
         assert_report_case_line(&lines, validation_id, "deterministic:default:validation:0");
         assert_report_case_line(&lines, test_id, "deterministic:default:test:0");
@@ -6282,6 +6341,55 @@ Provide the new parameter value within ``` blocks."
         assert_eq!(metrics.cache.misses, 1);
         assert_eq!(metrics.cache.hits, 1);
         assert!(metrics.cache.hit_cost_zero);
+    }
+
+    #[test]
+    fn solver_parser_failures_increment_answer_parse_telemetry() {
+        let telemetry = AimeLmTelemetry::new(LmCachePolicy::Never);
+        let lm = AimeInstrumentedLm::new(DeterministicReflectionLm, telemetry.clone());
+
+        let error = parse_openai_solver_response(
+            &lm,
+            "not a dspy chain-of-thought response",
+            &Cost::zero(),
+        )
+        .expect_err("malformed solver response should fail parser");
+
+        assert!(
+            error
+                .to_string()
+                .contains("AIME solver response did not match DSPy ChainOfThought fields")
+        );
+        let metrics = telemetry.snapshot();
+        assert_eq!(metrics.failures.answer_parse, 1);
+        assert_eq!(metrics.failures.total(), 1);
+    }
+
+    #[test]
+    fn lm_cache_failures_distinguish_required_miss_read_and_write_errors() {
+        let cache_only = AimeLmTelemetry::new(LmCachePolicy::CacheOnly);
+        cache_only.record(&Err(LmError::cache("required lm cache entry was missing")));
+        let metrics = cache_only.snapshot();
+        assert_eq!(metrics.failures.cache, 1);
+        assert_eq!(metrics.cache.required_misses, 1);
+        assert_eq!(metrics.cache.read_errors, 0);
+        assert_eq!(metrics.cache.write_errors, 0);
+
+        let read = AimeLmTelemetry::new(LmCachePolicy::ReadWrite);
+        read.record(&Err(LmError::cache(
+            "lm cache backend failed during get: database is locked",
+        )));
+        let metrics = read.snapshot();
+        assert_eq!(metrics.cache.read_errors, 1);
+        assert_eq!(metrics.cache.write_errors, 0);
+
+        let write = AimeLmTelemetry::new(LmCachePolicy::ReadWrite);
+        write.record(&Err(LmError::cache(
+            "lm cache backend failed during put: readonly database",
+        )));
+        let metrics = write.snapshot();
+        assert_eq!(metrics.cache.read_errors, 0);
+        assert_eq!(metrics.cache.write_errors, 1);
     }
 
     #[test]
