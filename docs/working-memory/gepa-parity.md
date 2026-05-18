@@ -1,7 +1,7 @@
 # GEPA Parity Working Ledger
 
 Status: active.
-Updated: 2026-05-18T09:47:08Z.
+Updated: 2026-05-18T09:50:08Z.
 
 ## Authority
 
@@ -591,6 +591,14 @@ Cache/replay attempts after the report-schema fixes:
 - failed P8 runs with `LEAVEN_AIME_RUN_DIR` now write
   `reports/p8-aime-failure.json` with safe profile/runtime/error context, so the
   next failed live attempt does not depend on terminal scrollback for diagnosis.
+- current-binary release run is now active:
+  `.leaven/release-runs/p8-aime-gepa-current-release-20260518-094902-d2d15a36d364`.
+  It uses `gepa-aime`, reference GEPA profile, read-write solver/reflection LM
+  cache policies, eager SQLite LM cache, 600s request timeout, and 32 OpenAI
+  workers. Its original operator note recorded the temporary empty jj child
+  `d2d15a36d364`; that child had the same source tree as current proof-boundary
+  commit `427067b745d5` after cleanup, and the run-local `operator-notes.txt`
+  now records that correction plus solver/reflection models.
 
 1. Diagnose why the completed live run produced no improvement while the older
    live artifact improved validation/test. Start from emitted prompts,
