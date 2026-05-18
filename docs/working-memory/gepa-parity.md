@@ -1,7 +1,7 @@
 # GEPA Parity Working Ledger
 
 Status: active.
-Updated: 2026-05-18T09:10:27Z.
+Updated: 2026-05-18T09:18:50Z.
 
 ## Authority
 
@@ -102,6 +102,42 @@ side-info returns multimodal messages, while Leaven currently only represents
 text/mapping/list side-info; DSPy-default trace rendering remains a separate
 non-default parity row.
 
+## Current Speed/FastGEPA Position
+
+The speed ideas are plausible as a future opt-in GEPA profile, but they must
+not replace the reference `Gepa::reference()` / P8 AIME behavior while the
+parity proof is open. Full validation before reference admission and final
+selection from fully certified candidates remain parity invariants.
+
+Current speed stance:
+
+- reference GEPA stays serial and fully validating until the P8 live quality
+  row is closed;
+- parallel proposals, lazy validation/certification, active failure sampling,
+  evaluator pyramids, and trace distillation should be modeled as explicit
+  library profiles/seams, not P8-only patches;
+- cheap/proxy stages may filter or prioritize, but only the real evaluator and
+  full validation can admit/crown reference candidates;
+- first concrete speed work should be observability and safe opt-in API shape:
+  expose accepted-but-unadmitted children, attempt counts, and validation
+  counts in reports so long runs can be cut off or resumed from data.
+
+Current feedback/reflection answer:
+
+- P8 scoring generates real feedback in `score_answer(...)` via
+  `aime_score_feedback(...)`, including the reference solution visible to the
+  scorer;
+- `AimeReflectiveDataset` reads the parent's case assessments, recovers solver
+  output/reasoning from `AimeSolverSideInfoStore`, and passes ordered
+  optimize-anything side-info fields `score`, `input`, `prompt`, `output`,
+  `reasoning`, and `execution_feedback` to reflection;
+- `DefaultReflectionRenderer` renders those side-info fields directly and does
+  not fall back to the generic `## Feedback` block when adapter side-info is
+  present, matching upstream optimize-anything rendering;
+- focused proof: `aime_scorer_feedback_matches_upstream_gepa_aime_wording`,
+  `aime_side_info_renders_upstream_optimize_anything_keys`, and
+  `aime_full_reflection_prompt_renders_upstream_optimize_anything_markdown`.
+
 ## Current Audit-Wave Disposition
 
 2026-05-18 verifier wave disposition against the current tree:
@@ -163,14 +199,14 @@ Current in-flight JSON-fallback run:
 Pointer file currently points at this run. Observed process:
 
 - PID `2771`, command `target/debug/p8_aime_gepa`;
-- start time `Mon May 18 01:43:04 2026`, elapsed about 27 minutes at the
-  2026-05-18T09:10Z check;
+- start time `Mon May 18 01:43:04 2026`, elapsed about 36 minutes at the
+  2026-05-18T09:18Z check;
 - stdout/stderr pipe is still open through the launching `tee`;
 - open network sockets to `162.159.140.245:https` indicate provider work is
   still in flight;
-- latest output line at the check was after `request_count=28`,
-  `total_assessment_rows=126`, immediately after `apply_succeeded` for child
-  `d80c39e5-18ea-4aa9-8d2f-f51c733b08e3`;
+- latest output line at the check was after `request_count=38`,
+  `total_assessment_rows=189`, immediately after `apply_succeeded` for child
+  `5983fe10-bcd7-4a3a-b5c8-85e82c1beb96`;
 - no `reports/summary.json`, `reports/p8-aime.json`, or durable provider
   failure file had been emitted yet;
 - run-local `run.sqlite` only contained `evaluation_cache_entries` and had zero

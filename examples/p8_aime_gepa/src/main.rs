@@ -179,6 +179,7 @@ fn report_lines(config: &AimeRunConfig, run: &AimeRunResult) -> Vec<String> {
     lines.extend(report_runtime_lines(config, run));
     lines.extend(report_budget_and_cache_lines(config, result));
     lines.extend(report_best_and_event_lines(result));
+    lines.extend(report_gepa_lines(run));
     for role in run.role_reports.iter() {
         lines.extend(report_lm_role_lines(role));
     }
@@ -443,6 +444,56 @@ fn report_best_and_event_lines(result: &Optimized<AimePrompt>) -> Vec<String> {
                 .join(",")
         ),
     ]
+}
+
+fn report_gepa_lines(run: &AimeRunResult) -> Vec<String> {
+    let Some(report) = &run.gepa_report else {
+        return vec!["gepa_report=unavailable".to_owned()];
+    };
+    let (accepted, accepted_unadmitted) = gepa_attempt_counts(report);
+    vec![
+        "gepa_report=available".to_owned(),
+        format!(
+            "gepa_best_index={}",
+            report
+                .best_index
+                .map(|index| index.get().to_string())
+                .unwrap_or_else(|| "none".to_owned())
+        ),
+        format!(
+            "gepa_validation_best_index={}",
+            report
+                .validation_best_index
+                .map(|index| index.get().to_string())
+                .unwrap_or_else(|| "none".to_owned())
+        ),
+        format!("gepa_candidate_count={}", report.candidates.len()),
+        format!(
+            "gepa_proposal_attempt_count={}",
+            report.proposal_attempts.len()
+        ),
+        format!("gepa_accepted_count={accepted}"),
+        format!("gepa_accepted_unadmitted_count={accepted_unadmitted}"),
+        format!(
+            "gepa_full_validation_evals={}",
+            report.full_validation_evals
+        ),
+        format!("gepa_search_metric_calls={}", report.total_metric_calls),
+    ]
+}
+
+fn gepa_attempt_counts(report: &GepaReport) -> (usize, usize) {
+    let accepted = report
+        .proposal_attempts
+        .iter()
+        .filter(|attempt| attempt.accepted == Some(true))
+        .count();
+    let accepted_unadmitted = report
+        .proposal_attempts
+        .iter()
+        .filter(|attempt| attempt.accepted == Some(true) && attempt.admitted_index.is_none())
+        .count();
+    (accepted, accepted_unadmitted)
 }
 
 fn report_case_lines(run: &AimeRunResult) -> Vec<String> {
@@ -1039,6 +1090,7 @@ fn p8_gepa_report_json(
     let reflection_requests = roles.reflection.metrics.requests.as_slice();
     let candidate_prompts = p8_gepa_candidate_prompt_map(report, reflection_requests, seed_prompt);
     let candidate_admissions = p8_gepa_candidate_admission_map(report);
+    let (accepted_count, accepted_unadmitted_count) = gepa_attempt_counts(report);
     serde_json::json!({
         "best_index": report.best_index.map(GepaCandidateIndex::get),
         "best_candidate": report.best_candidate.map(|candidate| candidate.to_string()),
@@ -1046,6 +1098,8 @@ fn p8_gepa_report_json(
         "validation_best_candidate": report.validation_best_candidate.map(|candidate| candidate.to_string()),
         "total_metric_calls": report.total_metric_calls,
         "full_validation_evals": report.full_validation_evals,
+        "accepted_count": accepted_count,
+        "accepted_unadmitted_count": accepted_unadmitted_count,
         "skip_perfect_score": report.skip_perfect_score,
         "perfect_score": report.perfect_score,
         "candidates": report.candidates.iter().map(|candidate| serde_json::json!({
@@ -5583,6 +5637,35 @@ Provide the new parameter value within ``` blocks."
                 .iter()
                 .any(|line| line == "test_score_use=final_report_only")
         );
+        assert!(lines.iter().any(|line| line == "gepa_report=available"));
+        assert!(lines.iter().any(|line| line == "gepa_best_index=1"));
+        assert!(
+            lines
+                .iter()
+                .any(|line| line == "gepa_validation_best_index=1")
+        );
+        assert!(lines.iter().any(|line| line == "gepa_candidate_count=2"));
+        assert!(
+            lines
+                .iter()
+                .any(|line| line == "gepa_proposal_attempt_count=1")
+        );
+        assert!(lines.iter().any(|line| line == "gepa_accepted_count=1"));
+        assert!(
+            lines
+                .iter()
+                .any(|line| line == "gepa_accepted_unadmitted_count=0")
+        );
+        assert!(
+            lines
+                .iter()
+                .any(|line| line == "gepa_full_validation_evals=2")
+        );
+        assert!(
+            lines
+                .iter()
+                .any(|line| line == "gepa_search_metric_calls=8")
+        );
         assert!(lines.iter().any(|line| {
             line == "lm_role_cost=reflection calls=1 prompt_tokens=37 cached_input_tokens=0 completion_tokens=11 reasoning_tokens=0 cost_llm_calls=1 cost_prompt_tokens=37 cost_completion_tokens=11"
         }));
@@ -6428,6 +6511,8 @@ Provide the new parameter value within ``` blocks."
         let gepa_report = &report["gepa_report"];
         assert_eq!(gepa_report["total_metric_calls"], 8);
         assert_eq!(gepa_report["full_validation_evals"], 2);
+        assert_eq!(gepa_report["accepted_count"], 1);
+        assert_eq!(gepa_report["accepted_unadmitted_count"], 0);
         assert_eq!(
             gepa_report["skip_perfect_score"],
             OPTIMIZE_ANYTHING_SKIP_PERFECT_SCORE
@@ -6506,6 +6591,27 @@ Provide the new parameter value within ``` blocks."
         assert_eq!(attempts[0]["accepted"], true);
         assert_eq!(attempts[0]["admitted"], true);
         assert_eq!(attempts[0]["admitted_index"], 1);
+    }
+
+    #[test]
+    fn report_lines_surface_train_accepted_unadmitted_children() {
+        let config = AimeRunConfig::deterministic_smoke();
+        let mut run = block_on(run_deterministic_aime());
+        let report = run.gepa_report.as_mut().expect("deterministic GEPA report");
+        report.proposal_attempts[0].admitted_index = None;
+
+        let lines = report_lines(&config, &run);
+        assert!(
+            lines
+                .iter()
+                .any(|line| line == "gepa_accepted_unadmitted_count=1")
+        );
+
+        let report = p8_aime_report_json(&config, &run);
+        assert_eq!(
+            report["gepa_report"]["accepted_unadmitted_count"],
+            serde_json::json!(1)
+        );
     }
 
     fn assert_p8_report_case_safety(report: &serde_json::Value) {
