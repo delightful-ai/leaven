@@ -1,7 +1,7 @@
 # GEPA Parity Working Ledger
 
 Status: active.
-Updated: 2026-05-18T09:53:26Z.
+Updated: 2026-05-18T11:19:00Z.
 
 ## Authority
 
@@ -25,12 +25,10 @@ documented, tested, and reported.
 ## Current Matrix State
 
 The parity matrix currently records the core GEPA reference-loop rows as proven
-or intentional deltas. The remaining P0 rows are P8 live release-report
-freshness and P8/AIME result parity. A stale live release run/report proves an
-earlier operator path, source counts/cache hash, cache/resume behavior, search
-budget, and model profile, but it predates current report/profile/cache fixes.
-The completed run also did not improve over the seed and therefore does not
-prove "as good as GEPA" benchmark quality.
+or intentional deltas. The P8 live release-report freshness row is now proven
+by the current completed live report. The remaining P0 gap is P8/AIME result
+quality: current code improves over the seed, but the held-out score still
+trails the pinned GEPA CAIS artifact target.
 
 Important currently proven rows include:
 
@@ -166,13 +164,19 @@ Current evidence split:
   wrong-candidate assertion no longer reproduces;
 - a later read-write resume against the same run dir replayed the rematerialized
   cache hits and spent 12 new metric calls before being stopped because its
-  compile log showed it predates the latest P8 profile/failure-report slices.
+  compile log showed it predates the latest P8 profile/failure-report slices;
+- the current completed live report
+  `.leaven/release-runs/p8-aime-gepa-current-release-20260518-094902-d2d15a36d364/reports/p8-aime.json`
+  used current report/profile/cache code, zero provider failures, solver
+  `gpt-4.1-mini`, reflection `gpt-5.4-mini`, reference GEPA profile, 45/45/30
+  AIME splits, and improved validation `0.444 -> 0.489` plus held-out test
+  `0.433 -> 0.500`.
 
-Conclusion: a longer or stronger-model run may be necessary for quality, but it
-is only meaningful after running the current binary with current
-cache/report/profile fixes. Do not spend another overnight run until the
-intended command, run dir, cache policy, GEPA profile, solver model, reflection
-model, and fresh-binary commit are explicit in the operator notes.
+Conclusion: current code now proves live improvement and the release-report
+operator path, but it still does not prove "as good as GEPA" because the
+held-out test score is `0.500` versus the pinned upstream target `0.600`. Further
+quality work should start from the emitted candidate lineage, reflections,
+proposal attempts, and prompt examples in the current report.
 
 ## Current Audit-Wave Disposition
 
@@ -187,6 +191,8 @@ model, and fresh-binary commit are explicit in the operator notes.
   found the old-binary wrong-candidate cache bug, then a newer read-write
   resume was stopped after cache-fix proof because its binary predates latest
   P8 report/profile slices;
+- no longer blocker: the fresh current-binary live report below proves the
+  current operator/report path and zero process-local/durable provider failures;
 - already fixed in current code: P8 role fingerprints include the actual
   `OpenAiLm::fingerprint()` for timeout/base-URL/retry/provider runtime
   compatibility, while cache replay controls are intentionally ignored by the
@@ -596,7 +602,7 @@ Cache/replay attempts after the report-schema fixes:
   the active release run: profile/model/cache/timeout/budget facts no longer
   depend on an ad hoc shell wrapper if the process is interrupted before final
   or failure reports.
-- current-binary release run is now active:
+- current-binary release run completed:
   `.leaven/release-runs/p8-aime-gepa-current-release-20260518-094902-d2d15a36d364`.
   It uses `gepa-aime`, reference GEPA profile, read-write solver/reflection LM
   cache policies, eager SQLite LM cache, 600s request timeout, and 32 OpenAI
@@ -604,15 +610,25 @@ Cache/replay attempts after the report-schema fixes:
   `d2d15a36d364`; that child had the same source tree as current proof-boundary
   commit `427067b745d5` after cleanup, and the run-local `operator-notes.txt`
   now records that correction plus solver/reflection models.
-- 2026-05-18 10:59Z status: the same current-binary release run is still
-  alive, not terminal. It has passed the old wrong-candidate cache bug and
-  reached request 102 / `total_assessment_rows=501` after the nominal 500-call
-  search cap. The post-cap row count is expected under GEPA metric-call stopper
-  semantics because started evaluation/proposal work is allowed to finish. No
-  `reports/` files existed at the last poll, and the process was quiet after
-  applying proposal `4d0c89b6-2a43-489d-ab75-0f520f917a10`, so the next action
-  is to keep polling for either final reports or `p8-aime-failure.json`; do not
-  start another paid P8 run while this one is live.
+- terminal proof: run id `ec039f2d-45b0-4cfa-8615-4d21dcdfbfda`, latest
+  checkpoint `bb29dd4b-0ef5-4fc2-b979-618e50153a7f`, optimizer wall time
+  `4941717` ms, `reports/summary.json` and `reports/p8-aime.json` emitted.
+- budget proof: search stopped with `BudgetReached`, spent `530/500` search
+  metric calls with `30` calls of GEPA-style started-work overshoot, then spent
+  `150` final-report metric calls; total reported budget was `680` metric calls
+  and `401` LM calls.
+- report proof: proof class `full_live_aime_reproduction_attempt`,
+  `gepa_profile=reference`, live provider proof for solver and reflection,
+  zero process-local and durable provider failures, solver cache
+  `hits=300 misses=382`, reflection cache `hits=21 misses=19`, and source
+  splits/counts/hash match the AIME cache proof.
+- GEPA proof: `gepa_best_index=3`, `candidate_count=7`,
+  `proposal_attempt_count=40`, `accepted_count=6`,
+  `accepted_unadmitted_count=0`, and `full_validation_evals=7`.
+- score proof: baseline/optimized validation `0.444 -> 0.489`; baseline/
+  optimized held-out test `0.433 -> 0.500`; optimized train was lower
+  `0.600 -> 0.556`. This is a real live improvement over seed on validation
+  and held-out test, but remains below the pinned GEPA CAIS target `0.600`.
 - Audit-agent wave after the stale no-improvement report found no obvious
   prompt-contract, parser, dataset-split, or source-id mismatch explaining the
   old `best_index=0` result. Their useful diagnosis is that the stale completed
@@ -626,17 +642,14 @@ Cache/replay attempts after the report-schema fixes:
   now have current-code tests/implementation. Re-check live report artifacts
   before reopening those as active gaps.
 
-1. Diagnose why the completed live run produced no improvement while the older
-   live artifact improved validation/test. Start from emitted prompts,
-   candidate lineage, reflection outputs, child admission history, minibatch
-   cases, and parser outcomes.
-2. Diff the completed live report against the prior live artifact and upstream
-   GEPA/DSPy AIME traces where available. Treat result-quality parity as open.
-3. Regenerate a live P8 report with the current binary before using resumed
-   live runs as provider-reliability, profile-disclosure, or cache-fix proof.
-4. Re-run live P8 only with an explicit operator note naming run dir, cache
-   policy, GEPA profile, solver model, reflection model, request timeout, and
-   fresh code slice.
-5. Future release reports should be generated with the post-run report-schema
+1. Diagnose why the current completed report improves over seed but still lands
+   below the pinned GEPA CAIS target. Start from emitted prompts, candidate
+   lineage, reflection outputs, child admission history, minibatch cases, and
+   parser outcomes.
+2. Diff the current completed report against the prior live artifacts and
+   upstream GEPA/DSPy AIME traces where available. Treat result-quality parity
+   as open until held-out quality is comparable to the target or the spec labels
+   the remaining model/runtime delta.
+3. Future release reports should be generated with the post-run report-schema
    fixes so live-proof checks do not have to re-aggregate role telemetry by hand
    and so resumed `gepa_events` are cumulative.
