@@ -57,8 +57,15 @@ matrix records current audit anchors and does not repin the spec.
 
 ## Current Priority
 
-The next implementation pass should close rows that make the algorithm
-observable and self-checking before provider spend:
+The next implementation pass should not spend live provider budget by default.
+The current operator/report row is proven; result-quality parity remains open.
+Use the completed report's emitted prompts, proposal attempts, candidate
+lineage, and case deltas to decide the next library-level quality/speed change.
 
-1. Current AIME cache/source-count materialization before any live
-   paper-result run; live provider spend remains an explicit approval gate.
+1. Compare accepted/rejected Leaven reflections against pinned upstream
+   GEPA/AIME traces or source behavior where available.
+2. Decide whether the next experiment is a strict-reference larger-model run or
+   a labeled Leaven-plus profile such as active failure sampling, side-info
+   compression, serial multi-proposal diversity, or lazy certified racing.
+3. Keep `GepaProfile::Reference` as the parity baseline. Any FastGEPA work must
+   be an explicit non-parity profile until full-certification quality is proven.

@@ -1,7 +1,7 @@
 # GEPA Parity Working Ledger
 
 Status: active.
-Updated: 2026-05-18T11:19:00Z.
+Updated: 2026-05-18T11:17:07Z.
 
 ## Authority
 
@@ -177,6 +177,44 @@ operator path, but it still does not prove "as good as GEPA" because the
 held-out test score is `0.500` versus the pinned upstream target `0.600`. Further
 quality work should start from the emitted candidate lineage, reflections,
 proposal attempts, and prompt examples in the current report.
+
+## Current No-Spend Quality Diagnosis
+
+Current completed live report:
+
+```text
+.leaven/release-runs/p8-aime-gepa-current-release-20260518-094902-d2d15a36d364/reports/p8-aime.json
+```
+
+No-spend inspection of that report found:
+
+- optimization admitted six children and selected candidate index `3`, produced
+  by attempt `24` from parent index `2`;
+- the winning prompt is a generic exact/conservative math instruction, not a
+  domain-specific AIME strategy:
+  "First identify the key theorem/structure", exact arithmetic, justified
+  assumptions, extremum/boundary checks, and final integer only;
+- accepted children had validation scores `0.400`, `0.467`, `0.489`, `0.378`,
+  `0.444`, and `0.489`, so strict train-screen wins frequently regressed or
+  only weakly improved validation;
+- held-out test changed from 13/30 to 15/30: improved source ids
+  `MathArena/aime_2025:default:train:{4,6,7,28}` and regressed source ids
+  `MathArena/aime_2025:default:train:{10,11}`;
+- validation changed by six improvements and four regressions, leaving 19
+  validation cases still wrong under both baseline and optimized prompts;
+- reflection requests remain very large for a minibatch of three examples:
+  `40` reflection prompts, min `23519`, max `92309`, average `49386.525`
+  characters.
+
+Interpretation: the current bottleneck is probably not malformed prompt
+rendering. It is weak search signal and expensive, generic reflective updates:
+the reflector sees full reasoning/feedback, but mostly proposes broad "be
+careful" rules. The next no-spend quality pass should compare accepted and
+rejected reflections against upstream GEPA/AIME traces if available, then test
+whether side-info compression, active failure sampling, stronger reflector model,
+or multi-proposal diversity produces more specific proposals. Do not run another
+paid release attempt before this diagnosis is translated into an explicit
+profile/experiment plan.
 
 ## Current Audit-Wave Disposition
 
