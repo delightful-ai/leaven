@@ -214,6 +214,11 @@ Prompt-audit finding:
   `child_index` and `child_validation_score`, so an operator can inspect why
   an accepted train-screening child did or did not become validation-best
   without manually joining candidate ids.
+- GEPA proposal attempts now distinguish train-screen acceptance from
+  candidate admission with `admitted_index`, and the P8 JSON projects
+  `admitted` / `admitted_index`. This matters for the live budget-boundary
+  case where a child can pass the train screen but stop before full validation
+  and therefore must not be reported as an admitted GEPA candidate.
 
 Comparison notes against the older improving artifact:
 
@@ -265,6 +270,22 @@ It predates the current materialized-cache hash/report proof stack and should
 not by itself close the current live release row.
 
 ## Next Actions
+
+Cache/replay attempts after the report-schema fixes:
+
+- fresh cache-only replay into
+  `.leaven/release-runs/p8-aime-gepa-cache-replay-20260518-071621` failed
+  closed before provider work with `lm response cache failed: required lm cache
+  entry was missing`. A fresh run does not reproduce the exact reflection
+  prompt/cache key stream from the completed live run.
+- cache-only replay against the completed run directory
+  `.leaven/release-runs/p8-aime-gepa-20260518-043717` failed compatibility with
+  `stored runner fingerprint does not match live runner fingerprint` because
+  changing LM cache policy from read-write to cache-only changes the live role
+  fingerprint.
+- post-run P8 error output now prints safe profile/cache/run-dir/proof context
+  on failures, so future cache-only or compatibility refusals are diagnosable
+  without reconstructing the shell environment from logs.
 
 1. Diagnose why the completed live run produced no improvement while the older
    live artifact improved validation/test. Start from emitted prompts,

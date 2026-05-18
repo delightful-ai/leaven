@@ -1195,6 +1195,7 @@ fn full_validation_policy_evaluates_accepted_candidates_and_selects_validation_b
         assert_eq!(attempt.child_cases, vec![leaven_kernel::CaseId::new(0)]);
         assert_eq!(attempt.child, Some(child));
         assert_eq!(attempt.accepted, Some(true));
+        assert_eq!(attempt.admitted_index.map(|index| index.get()), Some(1));
         assert_eq!(attempt.reflective_example_count, Some(1));
         assert_eq!(gepa.population().best(), Some(child));
         assert_eq!(run.best, Some(seed));
@@ -1222,6 +1223,10 @@ fn full_validation_policy_evaluates_accepted_candidates_and_selects_validation_b
             .expect("accepted child attempt survives checkpoint restore");
         assert_eq!(restored_attempt.parent, seed);
         assert_eq!(restored_attempt.child, Some(child));
+        assert_eq!(
+            restored_attempt.admitted_index.map(|index| index.get()),
+            Some(1)
+        );
         assert!(!restored_attempt.parent_assessments.is_empty());
         assert!(!restored_attempt.child_assessments.is_empty());
     });
@@ -1618,6 +1623,10 @@ fn gepa_resume_restores_selector_rng_and_part_cursor_after_accepted_child() {
         assert_eq!(restored_second.parent_cases, control_second.parent_cases);
         assert_eq!(restored_second.child_cases, control_second.child_cases);
         assert_eq!(restored_second.accepted, control_second.accepted);
+        assert_eq!(
+            restored_second.admitted_index,
+            control_second.admitted_index
+        );
     });
 }
 
@@ -1674,6 +1683,63 @@ fn accepted_child_enters_reference_state_only_after_full_validation() {
 }
 
 #[test]
+fn budget_stop_after_train_acceptance_reports_child_not_admitted() {
+    block_on(async {
+        let case_set = CaseSet::new(vec![(), (), ()])
+            .with_partition(
+                leaven_core::PartitionId::from("TRAIN"),
+                vec![leaven_kernel::CaseId::new(0)],
+            )
+            .with_partition(
+                leaven_core::PartitionId::from("VALIDATION"),
+                vec![leaven_kernel::CaseId::new(1), leaven_kernel::CaseId::new(2)],
+            );
+        let store = InlineEvidenceStore::<ScalarEvidence>::new("inline");
+        let mut engine = Engine::<SamplingProblem>::builder()
+            .evaluator(PrefixImprovementEvaluator)
+            .budget(Budget::metric_calls(9))
+            .build();
+        let seed = engine
+            .insert_seed(
+                PartMapArtifact(BTreeMap::from([("answer".to_owned(), "draft".to_owned())])),
+                0,
+            )
+            .unwrap();
+        let mut gepa = Gepa::new(
+            PartMapSurface,
+            ParetoFrontier::by_case().build(),
+            FixedSurfaceEdit::new("improved".to_owned()),
+        )
+        .reflective_dataset(OneReflectiveExample)
+        .validation_policy(FirstSeedThenFullValidation::default())
+        .max_iterations(1);
+
+        let run = engine.run(&mut gepa, &case_set, &store).await.unwrap();
+
+        let report = gepa.report();
+        let attempt = report
+            .proposal_attempts
+            .first()
+            .expect("train-screened attempt should still be reported");
+        assert_ne!(attempt.child, Some(seed));
+        assert_eq!(attempt.accepted, Some(true));
+        assert_eq!(
+            attempt.admitted_index, None,
+            "budget exhaustion before full validation must not look admitted"
+        );
+        assert_eq!(report.candidates.len(), 1);
+        assert_eq!(report.candidates[0].candidate, seed);
+        assert_eq!(gepa.reference_state().full_validation_evals(), 1);
+        assert!(!gepa.events().iter().any(|event| matches!(
+            event,
+            leaven_gepa::GepaEventSummary::AcceptedValidationCompleted { .. }
+                | leaven_gepa::GepaEventSummary::CandidateAdmitted { .. }
+        )));
+        assert_eq!(run.best, Some(seed));
+    });
+}
+
+#[test]
 fn parent_and_child_screen_on_same_ordered_train_cases() {
     block_on(async {
         let train_cases = vec![leaven_kernel::CaseId::new(0), leaven_kernel::CaseId::new(1)];
@@ -1714,6 +1780,7 @@ fn parent_and_child_screen_on_same_ordered_train_cases() {
         assert_eq!(attempt.parent_cases, attempt.child_cases);
         assert_eq!(attempt.parent_cases.len(), train_cases.len());
         assert!(attempt.accepted.is_some());
+        assert!(attempt.admitted_index.is_some());
         let events = gepa.events();
         let parent_selected = events
             .iter()
@@ -1841,6 +1908,12 @@ fn accepted_iteration_emits_reference_phase_order() {
                 leaven_gepa::GepaEventSummary::AcceptedValidationCompleted { .. }
             )
         });
+        let candidate_admitted = event_position(events, |event| {
+            matches!(
+                event,
+                leaven_gepa::GepaEventSummary::CandidateAdmitted { .. }
+            )
+        });
         let accepted_frontier = events
             .iter()
             .rposition(|event| matches!(event, leaven_gepa::GepaEventSummary::FrontierUpdated))
@@ -1869,6 +1942,7 @@ fn accepted_iteration_emits_reference_phase_order() {
                 child_evaluated,
                 accepted,
                 accepted_validation,
+                candidate_admitted,
                 accepted_frontier,
                 ended,
             ]
@@ -1901,10 +1975,7 @@ fn accepted_iteration_emits_reference_phase_order() {
         assert!(
             events.iter().any(|event| matches!(
                 event,
-                leaven_gepa::GepaEventSummary::ReflectionCompleted {
-                    child: Some(_),
-                    ..
-                }
+                leaven_gepa::GepaEventSummary::ReflectionCompleted { child: Some(_), .. }
             )),
             "reflection-completed events must expose child production: {events:?}"
         );
@@ -1966,6 +2037,7 @@ fn strict_equal_score_child_is_rejected_without_full_validation_or_admission() {
             .first()
             .expect("rejected proposal attempt is reported");
         assert_eq!(attempt.accepted, Some(false));
+        assert_eq!(attempt.admitted_index, None);
         assert_eq!(attempt.child, Some(children[0]));
         assert_eq!(attempt.parent_cases, attempt.child_cases);
         assert_eq!(report.candidates.len(), 1);
@@ -2842,6 +2914,36 @@ fn resume_reflection_gepa() -> Gepa<
     .batch_sampler(EpochShuffled::new(1).with_seed(7))
     .validation_policy(FullValidation)
     .max_iterations(2)
+}
+
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
+struct FirstSeedThenFullValidation {
+    calls: usize,
+}
+
+impl ValidationPolicy for FirstSeedThenFullValidation {
+    fn validation_set(&mut self, _accepted: leaven_kernel::CandidateId) -> Option<EvaluationSet> {
+        self.calls += 1;
+        if self.calls == 1 {
+            Some(EvaluationSet::Cases(vec![leaven_kernel::CaseId::new(1)]))
+        } else {
+            Some(EvaluationSet::Partition(leaven_core::PartitionId::from(
+                "VALIDATION",
+            )))
+        }
+    }
+}
+
+impl CheckpointValidationPolicy for FirstSeedThenFullValidation {
+    type State = usize;
+
+    fn checkpoint_state(&self) -> Self::State {
+        self.calls
+    }
+
+    fn restore_state(&mut self, state: Self::State) {
+        self.calls = state;
+    }
 }
 
 struct RecordingCaseSetEvaluator {

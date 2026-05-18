@@ -245,6 +245,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
                 child_cases: Vec::new(),
                 child_score: None,
                 accepted: None,
+                admitted_index: None,
                 skip_reason: outcome.skip_reason,
             });
             return Ok(());
@@ -278,6 +279,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             child_cases: screened.cases(),
             child_score: Some(screened.average_score),
             accepted: Some(accepted),
+            admitted_index: None,
             skip_reason: None,
         });
         if accepted {
@@ -314,11 +316,17 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             .push(screened.history_entry(candidate));
         self.observe_train_candidate(ctx, candidate, &screened);
         self.best = self.population.best();
-        self.validate_candidate(ctx, candidate, vec![parent_index], false)
+        let admitted_index = self
+            .validate_candidate(ctx, candidate, vec![parent_index], false)
             .await?;
-        if self.reference_state.index_of(candidate).is_none() {
+        let admitted_index = admitted_index.unwrap_or_else(|| {
             self.reference_state
-                .add_unvalidated_candidate(candidate, vec![parent_index]);
+                .add_unvalidated_candidate(candidate, vec![parent_index])
+        });
+        if let Some(attempt) = self.proposal_attempts.last_mut() {
+            if attempt.child == Some(candidate) {
+                attempt.admitted_index = Some(admitted_index);
+            }
         }
         Ok(())
     }

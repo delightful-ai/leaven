@@ -193,8 +193,10 @@ pub struct GepaProposalAttempt {
     pub child_cases: Vec<CaseId>,
     /// Child average train-screening score.
     pub child_score: Option<f64>,
-    /// Acceptance decision, when a child was screened.
+    /// Train-screening acceptance decision, when a child was screened.
     pub accepted: Option<bool>,
+    /// GEPA candidate index assigned after accepted-child validation/admission.
+    pub admitted_index: Option<GepaCandidateIndex>,
     /// Skip reason for attempts stopped before child screening.
     pub skip_reason: Option<GepaSkipReason>,
 }
@@ -850,7 +852,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
         candidate: CandidateId,
         parents: Vec<GepaCandidateIndex>,
         seed_validation: bool,
-    ) -> Result<(), OptimizerError>
+    ) -> Result<Option<GepaCandidateIndex>, OptimizerError>
     where
         P: OptimizationProblem,
         P::Evidence: GepaCaseEvidence,
@@ -865,7 +867,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
         Dataset: Sync,
     {
         let Some(set) = self.validation_policy.validation_set(candidate) else {
-            return Ok(());
+            return Ok(None);
         };
         let assessment = self
             .evaluate_casewise(ctx, candidate, set, EvaluationPurpose::Validation)
@@ -901,9 +903,13 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             self.record_event(GepaEventSummary::AcceptedValidationCompleted {
                 candidate_index: index,
             });
+            self.record_event(GepaEventSummary::CandidateAdmitted {
+                candidate,
+                candidate_index: index,
+            });
         }
         self.record_event(GepaEventSummary::FrontierUpdated);
-        Ok(())
+        Ok(Some(index))
     }
 
     async fn evaluate_casewise<P>(

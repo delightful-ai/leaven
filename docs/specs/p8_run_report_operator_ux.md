@@ -59,6 +59,8 @@ The public result/report must expose:
 - AIME candidate table rows with candidate id, GEPA index, lineage,
   validation score/subscores, and system prompt text when the prompt can be
   reconstructed from the seed or an accepted reflection proposal;
+- GEPA proposal-attempt rows that distinguish train-screen acceptance from
+  admitted candidate index after full validation;
 - cache mode and cache summaries;
 - compatibility manifest summary;
 - case-level rows with case id, source id, split, candidate, score state,
@@ -225,6 +227,9 @@ Required tests:
 - durable `.run()` result reports stored/resumable run dir and checkpoint;
 - `.ephemeral()` reports non-resumable and non-durable caches;
 - cache summary counts hit/miss/bypass without extra user knobs;
+- failed operator runs include the same safe profile, cache, run-dir, and proof
+  classification context needed to diagnose cache-only replay or compatibility
+  refusals without reconstructing environment variables;
 - P8 report lines include run dir, resumability, stop reason, cache summary,
   budget split, source ids, and proof classification;
 - P8 case report rows include output/feedback refs and do not include hidden

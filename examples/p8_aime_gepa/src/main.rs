@@ -98,7 +98,7 @@ async fn main() {
             }
         }
         Err(error) => {
-            for line in error_report_lines(&error, started_at.elapsed()) {
+            for line in error_report_lines(&config, &error, started_at.elapsed()) {
                 eprintln!("{line}");
             }
             std::process::exit(1);
@@ -107,10 +107,12 @@ async fn main() {
 }
 
 fn error_report_lines(
+    config: &AimeRunConfig,
     error: &(dyn std::error::Error + 'static),
     wall_time: Duration,
 ) -> Vec<String> {
     let mut lines = vec![format!("p8_aime_gepa_failed={error}")];
+    lines.extend(error_report_context_lines(config));
     lines.push(format!(
         "p8_aime_gepa_failed_wall_time_ms={}",
         wall_time.as_millis()
@@ -124,6 +126,44 @@ fn error_report_lines(
         ));
     }
     lines
+}
+
+fn error_report_context_lines(config: &AimeRunConfig) -> Vec<String> {
+    vec![
+        format!("run_profile={}", config.profile.label()),
+        format!("data_source={}", config.data_source.label()),
+        format!(
+            "proof_classification={}",
+            proof_classification_for_config(config)
+        ),
+        format!(
+            "run_dir={}",
+            config
+                .run_dir
+                .as_ref()
+                .map_or_else(|| "auto".to_owned(), |path| path.display().to_string())
+        ),
+        format!(
+            "solver_runtime=live={} model={} cache_policy={} cache_backend={} cache_durable={} max_concurrent_requests={} request_timeout_seconds={}",
+            config.solver.live,
+            config.solver.model,
+            report_lm_cache_policy(config.solver.cache_policy),
+            report_lm_cache_backend(config.solver.runtime.cache_backend),
+            config.solver.runtime.cache_backend.is_durable(),
+            config.solver.runtime.max_concurrent_requests,
+            config.solver.runtime.request_timeout_seconds
+        ),
+        format!(
+            "reflection_runtime=live={} model={} cache_policy={} cache_backend={} cache_durable={} max_concurrent_requests={} request_timeout_seconds={}",
+            config.reflection.live,
+            config.reflection.model,
+            report_lm_cache_policy(config.reflection.cache_policy),
+            report_lm_cache_backend(config.reflection.runtime.cache_backend),
+            config.reflection.runtime.cache_backend.is_durable(),
+            config.reflection.runtime.max_concurrent_requests,
+            config.reflection.runtime.request_timeout_seconds
+        ),
+    ]
 }
 
 fn report_lines(config: &AimeRunConfig, run: &AimeRunResult) -> Vec<String> {
@@ -993,6 +1033,8 @@ fn p8_gepa_report_json(
                 "child_cases": attempt.child_cases.iter().map(ToString::to_string).collect::<Vec<_>>(),
                 "child_score": attempt.child_score,
                 "accepted": attempt.accepted,
+                "admitted": attempt.admitted_index.is_some(),
+                "admitted_index": attempt.admitted_index.map(GepaCandidateIndex::get),
                 "skip_reason": attempt.skip_reason.map(p8_gepa_skip_reason),
             }))
         }).collect::<Vec<_>>(),
@@ -1047,7 +1089,7 @@ fn p8_gepa_candidate_prompt_map(
         } else {
             None
         };
-        let Some(child) = attempt.child.filter(|_| attempt.accepted == Some(true)) else {
+        let Some(child) = attempt.child.filter(|_| attempt.admitted_index.is_some()) else {
             continue;
         };
         let Some(request) = request_index.and_then(|index| reflection_requests.get(index)) else {
@@ -1227,6 +1269,14 @@ fn p8_gepa_event_json(event: &GepaEventSummary) -> serde_json::Value {
         }),
         GepaEventSummary::AcceptedValidationCompleted { candidate_index } => serde_json::json!({
             "phase": "accepted_validation_completed",
+            "candidate_index": candidate_index.get(),
+        }),
+        GepaEventSummary::CandidateAdmitted {
+            candidate,
+            candidate_index,
+        } => serde_json::json!({
+            "phase": "candidate_admitted",
+            "candidate": candidate.to_string(),
             "candidate_index": candidate_index.get(),
         }),
         GepaEventSummary::FrontierUpdated => serde_json::json!({
@@ -1728,6 +1778,15 @@ fn proof_classification_for_report(
     if role_reports
         .iter()
         .any(|role| role.live && role.cache_policy == LmCachePolicy::CacheOnly)
+    {
+        return "cache_only_aime_replay_not_live_proof";
+    }
+    proof_classification_for_config(config)
+}
+
+fn proof_classification_for_config(config: &AimeRunConfig) -> &'static str {
+    if (config.solver.live && config.solver.cache_policy == LmCachePolicy::CacheOnly)
+        || (config.reflection.live && config.reflection.cache_policy == LmCachePolicy::CacheOnly)
     {
         return "cache_only_aime_replay_not_live_proof";
     }
@@ -4463,6 +4522,7 @@ mod tests {
         assert!(!attempt.child_assessments.is_empty());
         assert_eq!(attempt.parent_cases, attempt.child_cases);
         assert_eq!(attempt.accepted, Some(true));
+        assert_eq!(attempt.admitted_index.map(GepaCandidateIndex::get), Some(1));
         assert_eq!(attempt.skip_reason, None);
         assert_eq!(gepa_report.total_metric_calls, 8);
         assert_eq!(gepa_report.full_validation_evals, 2);
@@ -5190,7 +5250,7 @@ Provide the new parameter value within ``` blocks."
         config.reflection.cache_policy = LmCachePolicy::Never;
         config.evaluation_parallelism = NonZeroUsize::new(1).expect("one is non-zero");
 
-        let error = block_on(try_run_aime(config, deterministic_dataset())).unwrap_err();
+        let error = block_on(try_run_aime(config.clone(), deterministic_dataset())).unwrap_err();
         let rendered = std::iter::successors(Some(&error as &dyn std::error::Error), |source| {
             source.source()
         })
@@ -5203,16 +5263,27 @@ Provide the new parameter value within ``` blocks."
             "{rendered}"
         );
         assert!(
-            error_report_lines(&error, Duration::ZERO)
+            error_report_lines(&config, &error, Duration::ZERO)
                 .iter()
                 .any(|line| line.starts_with("p8_aime_gepa_failure_source_")),
             "CLI failure output should expose the safe source chain"
         );
         assert!(
-            error_report_lines(&error, Duration::from_millis(7))
+            error_report_lines(&config, &error, Duration::from_millis(7))
                 .iter()
                 .any(|line| line == "p8_aime_gepa_failed_wall_time_ms=7"),
             "CLI failure output should expose wall time for cache-only/debug failures"
+        );
+        let lines = error_report_lines(&config, &error, Duration::from_millis(7));
+        assert!(
+            lines
+                .iter()
+                .any(|line| line == "proof_classification=cache_only_aime_replay_not_live_proof")
+        );
+        assert!(
+            lines
+                .iter()
+                .any(|line| line == "solver_runtime=live=true model=deterministic-aime-solver cache_policy=cache-only cache_backend=in-memory cache_durable=false max_concurrent_requests=32 request_timeout_seconds=120")
         );
     }
 
@@ -5724,6 +5795,11 @@ Provide the new parameter value within ``` blocks."
         assert!(
             gepa_events
                 .iter()
+                .any(|event| event["phase"] == "candidate_admitted")
+        );
+        assert!(
+            gepa_events
+                .iter()
                 .any(|event| event["phase"] == "optimization_ended")
         );
         let gepa_report = &report["gepa_report"];
@@ -5797,6 +5873,8 @@ Provide the new parameter value within ``` blocks."
                 .is_some_and(|cases| !cases.is_empty())
         );
         assert_eq!(attempts[0]["accepted"], true);
+        assert_eq!(attempts[0]["admitted"], true);
+        assert_eq!(attempts[0]["admitted_index"], 1);
     }
 
     fn assert_p8_report_case_safety(report: &serde_json::Value) {

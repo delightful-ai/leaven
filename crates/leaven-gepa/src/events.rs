@@ -71,6 +71,11 @@ pub enum GepaEventSummary {
     ProposalRejected,
     /// Accepted candidate validation completed.
     AcceptedValidationCompleted { candidate_index: GepaCandidateIndex },
+    /// Accepted child was admitted into GEPA candidate-index state.
+    CandidateAdmitted {
+        candidate: CandidateId,
+        candidate_index: GepaCandidateIndex,
+    },
     /// Validation frontier was updated.
     FrontierUpdated,
     /// GEPA reached the end of optimizer execution.

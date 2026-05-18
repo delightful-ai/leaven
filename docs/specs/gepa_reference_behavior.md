@@ -2947,6 +2947,7 @@ pub enum GepaEvent {
     ProposalAccepted { child: CandidateId },
     ProposalRejected { reason: String },
     AcceptedValidationCompleted { candidate_index: GepaCandidateIndex },
+    CandidateAdmitted { candidate: CandidateId, candidate_index: GepaCandidateIndex },
     FrontierUpdated,
     MergeAttempted,
     MergeAccepted,
