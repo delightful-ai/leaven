@@ -1,7 +1,7 @@
 # GEPA Parity Working Ledger
 
 Status: active.
-Updated: 2026-05-18T09:09:09Z.
+Updated: 2026-05-18T09:10:27Z.
 
 ## Authority
 
@@ -134,6 +134,26 @@ non-default parity row.
 
 ## Live P8 Run Ledger
 
+Current quality diagnosis from completed stale report:
+
+- report:
+  `.leaven/release-runs/p8-aime-gepa-20260518-043717/reports/p8-aime.json`;
+- search stopped with `search_metric_calls_spent=493`,
+  `search_metric_call_cap=500`, `stop_reason=budget_reached`;
+- GEPA report had 8 reference candidates and 24 proposal attempts;
+- seed stayed `best_index=0` / `validation_best_index=0` with validation
+  `0.5333333333333333` and test `0.43333333333333335`;
+- accepted children were full-validation admitted as candidates 1-7, but none
+  strictly beat the seed validation score. Candidate 5 tied seed validation at
+  `0.5333333333333333`, so strict validation-best update kept seed;
+- attempt 24 produced a train-accepted child
+  `43a538f8-3677-49d2-9180-4cb7130d1795` with train minibatch score
+  `1.0 > 0.6666666666666666`, but budget stopped before full validation, so it
+  was never reference-admitted and cannot be claimed as an optimized result;
+- therefore the stale completed report is useful diagnosis data, not parity
+  proof. It currently supports "seed stochasticity plus budget-boundary
+  unresolved child" more than "reflection prompt/parser was malformed."
+
 Current in-flight JSON-fallback run:
 
 ```text
@@ -143,14 +163,14 @@ Current in-flight JSON-fallback run:
 Pointer file currently points at this run. Observed process:
 
 - PID `2771`, command `target/debug/p8_aime_gepa`;
-- start time `Mon May 18 01:43:04 2026`, elapsed about 23 minutes at the
-  2026-05-18T09:06Z check;
+- start time `Mon May 18 01:43:04 2026`, elapsed about 27 minutes at the
+  2026-05-18T09:10Z check;
 - stdout/stderr pipe is still open through the launching `tee`;
 - open network sockets to `162.159.140.245:https` indicate provider work is
   still in flight;
-- latest output line at the check was after `request_count=26`,
-  `total_assessment_rows=120`, immediately after `apply_succeeded` for child
-  `166bd10b-c627-439b-aaf8-060d225b7419`;
+- latest output line at the check was after `request_count=28`,
+  `total_assessment_rows=126`, immediately after `apply_succeeded` for child
+  `d80c39e5-18ea-4aa9-8d2f-f51c733b08e3`;
 - no `reports/summary.json`, `reports/p8-aime.json`, or durable provider
   failure file had been emitted yet;
 - run-local `run.sqlite` only contained `evaluation_cache_entries` and had zero
