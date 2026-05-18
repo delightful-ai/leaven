@@ -268,6 +268,18 @@ profile/experiment plan.
   errors. The focused proofs are
   `aime_solver_records_answer_parse_failure_after_json_fallback_parse_failure`
   and `lm_cache_failures_distinguish_required_miss_read_and_write_errors`.
+- rejected as an exact-parity bug for now: parent-selection tie order. Upstream
+  `select_program_candidate_from_pareto_front` builds frequencies from
+  `set[int]` fronts after dominance pruning, so there is no stable first-seen
+  order to reproduce. Leaven keeps deterministic candidate-index order plus
+  Python-compatible RNG and treats this as reportable implementation detail
+  unless a pinned upstream trace proves a material mismatch.
+- intentional operator-safety delta: reflection/proposal provider/config errors
+  remain hard errors in Leaven. Upstream catches broad reflection exceptions
+  and returns `proposal=None`, but doing that for live P8 would let missing
+  credentials, cache backend failures, or provider errors turn into a completed
+  no-op run. A future profile can add typed non-fatal proposal failures, but
+  live-provider release proof should fail loudly on provider/config errors.
 
 ## Live P8 Run Ledger
 
