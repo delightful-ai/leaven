@@ -57,6 +57,14 @@ pub enum GepaProfile {
     /// selected parent, skip-perfect enabled, and full validation before
     /// reference admission.
     Reference,
+    /// Upstream optimize-anything GEPA defaults: epoch minibatch 3, one
+    /// proposal per selected parent, skip-perfect disabled, and full
+    /// validation before reference admission.
+    ///
+    /// This is the algorithm profile used by optimize-anything examples such
+    /// as AIME. It is still not DSPy-default parity: DSPy merge and trace
+    /// defaults require their own explicit profile.
+    OptimizeAnything,
     /// Faster certified profile: smaller train probes and two serial proposal
     /// attempts per selected parent, while still requiring full validation
     /// before a child enters the GEPA reference state.
@@ -72,26 +80,30 @@ impl GepaProfile {
     pub const fn label(self) -> &'static str {
         match self {
             Self::Reference => "reference",
+            Self::OptimizeAnything => "optimize-anything",
             Self::FastCertified => "fast-certified",
         }
     }
 
     const fn minibatch_size(self) -> usize {
         match self {
-            Self::Reference => 3,
+            Self::Reference | Self::OptimizeAnything => 3,
             Self::FastCertified => FAST_CERTIFIED_MINIBATCH_SIZE,
         }
     }
 
     const fn proposal_count(self) -> usize {
         match self {
-            Self::Reference => 1,
+            Self::Reference | Self::OptimizeAnything => 1,
             Self::FastCertified => FAST_CERTIFIED_PROPOSAL_COUNT,
         }
     }
 
     const fn skip_perfect_score(self) -> bool {
-        true
+        match self {
+            Self::Reference | Self::FastCertified => true,
+            Self::OptimizeAnything => false,
+        }
     }
 }
 

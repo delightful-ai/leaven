@@ -1468,6 +1468,8 @@ Matches DSPy wrapper semantics:
 
 Matches the upstream optimize-anything AIME example:
 
+- algorithm profile `GepaProfile::OptimizeAnything`: epoch minibatch 3, one
+  serial proposal, full validation before admission, and skip-perfect disabled;
 - AIME seed prompt;
 - AIME dataset split;
 - solver role `gpt-4.1-mini`, temperature 1.0, max tokens 32000;
@@ -2614,7 +2616,7 @@ to know `RunContext`, `EvaluationRequest`, `AssessmentId`, or
 | --- | --- | --- | --- |
 | Ordinary import route | Should GEPA enter `leaven::prelude`? | No. Keep ordinary optimizer import namespaced as `leaven::gepa::Gepa`; `prelude` keeps `optimize`, `Budget`, `Score`, `Optimized`, case/result vocabulary. | `leaven::prelude` does not re-export GEPA. Good. |
 | GEPA crate route | Should `leaven::gepa` expose every slot type? | Yes for behavior-bearing customizer slots; no for scaffolds and private checkpoint details. | Behavior-bearing customizer slots remain root-exported. `leaven_gepa::prelude` excludes population-backed selector internals so ordinary GEPA imports do not teach the fallback as reference Pareto selection. `FixedSurfaceEdit` is routed through explicit `test_support`, not the root or prelude; private checkpoint detail exposure still needs cleanup. |
-| Profile constructors | How does a user ask for "real GEPA"? | Add named constructors/presets: `Gepa::reference()`, `Gepa::dspy_reference()`, and a Leaven-plus preset. AIME should probably be an example/domain preset, not a generic core constructor, unless it encodes only algorithm knobs. | `Gepa::reference()` exists as the reference-profile entrypoint with required surface/reflector typestate. `Gepa::dspy_reference()` and AIME/domain presets remain absent. |
+| Profile constructors | How does a user ask for "real GEPA"? | Add named constructors/presets: `Gepa::reference()`, `Gepa::dspy_reference()`, and a Leaven-plus preset. AIME should probably be an example/domain preset, not a generic core constructor, unless it encodes only algorithm knobs. | `Gepa::reference()` exists as the reference-profile entrypoint with required surface/reflector typestate. `GepaProfile::OptimizeAnything` now names the generic optimize-anything algorithm knobs used by AIME: minibatch 3, one serial proposal, full validation before admission, and skip-perfect disabled. `Gepa::dspy_reference()` and AIME/domain constructors remain absent. |
 | Bare default | What should `Gepa::default()` mean? | Avoid teaching bare `Default` until it can equal `Gepa::reference()` with a resolved surface and reflector, or keep it unavailable. Bare default must not mean scaffold. | No public `Default` for `Gepa`, but examples can still build scaffold defaults manually. |
 | Builder style | Typestate builder or freeform config? | Typestate builder for required surface/reflector; profile builder for reference defaults; explicit advanced slot methods. | `Gepa::reference().surface(...).reflector(...)` encodes the required surface/reflector path; the advanced generic builder still exposes lower-level slots. |
 | Surface acquisition | Explicit surface, derived surface, or implicit whole artifact? | Explicit in `leaven-gepa`; optional `DefaultEditSurface<A>` or domain adapter in `leaven-run`; never implicit string/whole-artifact fallback. | `Gepa::builder().surface(...)` is explicit. No default surface route yet. |
@@ -2842,7 +2844,7 @@ Recommended names:
 
 | User word | Rust method/type |
 | --- | --- |
-| profile | `Gepa::reference()`, `GepaProfile` |
+| profile | `Gepa::reference()`, `GepaProfile::Reference`, `GepaProfile::OptimizeAnything` |
 | surface | `.surface(surface)` |
 | candidate selection | `.candidate_selector(...)` or `.parent_selector(...)` |
 | part/component selection | `.part_selector(...)` |

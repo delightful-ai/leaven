@@ -303,7 +303,7 @@ max_metric_calls(...)
 max_iterations(...)
 seed(u64)
 proposal_count(usize)
-with_profile(GepaProfile::Reference | GepaProfile::FastCertified)
+with_profile(GepaProfile::Reference | GepaProfile::OptimizeAnything | GepaProfile::FastCertified)
 track_best_outputs(bool)
 track_candidate_history(bool)
 split_policy(...)
@@ -337,13 +337,17 @@ fallback unless a concrete surface type implements it.
 ## 8. GEPA Step Contract
 
 Named profiles are presets over this step contract, not separate hidden
-engines. `GepaProfile::Reference` keeps the upstream-compatible certified loop.
-`GepaProfile::FastCertified` is the first opt-in speed profile: it uses smaller
-train probes and multiple serial proposal attempts per selected parent while
-preserving full validation before reference admission. It is deliberately not
-the future lazy-certification / async-island FastGEPA design; those variants
-must land as explicit new policies with report fields that distinguish
-uncertified, approximately certified, and fully certified candidates.
+engines. `GepaProfile::Reference` keeps the upstream-compatible certified loop:
+epoch minibatch 3, one serial proposal, skip-perfect enabled, and full
+validation before admission. `GepaProfile::OptimizeAnything` keeps the same
+certified loop but disables skip-perfect to match upstream optimize-anything
+defaults such as the AIME example. `GepaProfile::FastCertified` is the first
+opt-in speed profile: it uses smaller train probes and multiple serial proposal
+attempts per selected parent while preserving full validation before reference
+admission. It is deliberately not the future lazy-certification / async-island
+FastGEPA design; those variants must land as explicit new policies with report
+fields that distinguish uncertified, approximately certified, and fully
+certified candidates.
 
 One ordinary reflective mutation iteration is:
 

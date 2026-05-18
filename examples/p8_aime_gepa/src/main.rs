@@ -63,7 +63,6 @@ const GEPA_CAIS_AIME_CHECKPOINT_METRIC_CALLS: u64 = 621;
 const GEPA_CAIS_AIME_CHECKPOINT_CANDIDATES: u64 = 10;
 const GEPA_AIME_MAX_WORKERS: usize = 32;
 const GEPA_AIME_MAX_OUTPUT_TOKENS: u32 = 32_000;
-const OPTIMIZE_ANYTHING_SKIP_PERFECT_SCORE: bool = false;
 // GEPA AIME is controlled by max_metric_calls, not max_iterations. This is a
 // Leaven-local safety ceiling; the public metric-call budget is the stop control.
 const GEPA_AIME_INTERNAL_ITERATION_CEILING: usize = 500;
@@ -983,7 +982,6 @@ async fn try_run_aime(
                     .surface(AimePromptSurface)
                     .build()
                     .with_profile(config.gepa_profile)
-                    .skip_perfect_score(OPTIMIZE_ANYTHING_SKIP_PERFECT_SCORE)
                     .on_event(move |event| {
                         gepa_event_sink
                             .lock()
@@ -1399,6 +1397,7 @@ fn p8_aime_failure_report_json(
     error: &(dyn std::error::Error + 'static),
     wall_time: Duration,
 ) -> serde_json::Value {
+    let role_reports = p8_failure_role_reports(config);
     serde_json::json!({
         "schema": "leaven.p8_aime.failure_report.v1",
         "run_profile": config.profile.label(),
@@ -1415,11 +1414,24 @@ fn p8_aime_failure_report_json(
             .as_ref()
             .map(|path| path.display().to_string()),
         "wall_time_ms": wall_time.as_millis(),
+        "search_metric_call_cap": config.budget.metric_calls,
+        "final_report_metric_call_cap": "unlimited",
+        "cache": {
+            "evaluation_policy": report_evaluation_cache_policy(&config.evaluation_cache_policy),
+            "lm_backend": report_lm_cache_backend(config.solver.runtime.cache_backend),
+            "lm_durable": config.solver.runtime.cache_backend.is_durable(),
+            "lm_path": p8_failure_lm_cache_path(config),
+            "lm_read_paths": p8_failure_lm_cache_read_paths(config),
+            "lm_write_path": p8_failure_lm_cache_write_path(config),
+        },
         "error": error.to_string(),
         "resume_compatibility": p8_failure_compatibility_json(error),
         "sources": std::iter::successors(error.source(), |source| source.source())
             .map(ToString::to_string)
             .collect::<Vec<_>>(),
+        "lm_roles": role_reports.iter().map(p8_lm_role_report_json).collect::<Vec<_>>(),
+        "live_provider_proof": p8_live_provider_proof_json(&role_reports),
+        "provider_failures": p8_provider_failures_json(&role_reports),
         "solver_runtime": p8_failure_runtime_json(
             config.solver.live,
             &config.solver.model,
@@ -1433,6 +1445,81 @@ fn p8_aime_failure_report_json(
             config.reflection.runtime
         ),
     })
+}
+
+fn p8_failure_role_reports(config: &AimeRunConfig) -> AimeRoleReports {
+    let reports = AimeRoleReports::from_config(
+        config,
+        AimeRoleRuntimeFingerprints::from_config(config),
+        AimeLmRoleMetrics::default(),
+        AimeLmRoleMetrics::default(),
+    );
+    match &config.run_dir {
+        Some(run_dir) => reports.with_durable_failures(AimeDurableProviderFailures::read(
+            &aime_provider_failures_path(run_dir),
+        )),
+        None => reports,
+    }
+}
+
+fn p8_failure_lm_cache_path(config: &AimeRunConfig) -> String {
+    match config.solver.runtime.cache_backend {
+        AimeLmCacheBackend::InMemory => "none".to_owned(),
+        AimeLmCacheBackend::Sqlite => config
+            .run_dir
+            .as_ref()
+            .map(|run_dir| {
+                SqliteLmCache::path_in_run_dir(run_dir)
+                    .display()
+                    .to_string()
+            })
+            .unwrap_or_else(|| "none".to_owned()),
+        AimeLmCacheBackend::EagerSqlite => {
+            SqliteLmCache::path_in_workspace(".").display().to_string()
+        }
+    }
+}
+
+fn p8_failure_lm_cache_read_paths(config: &AimeRunConfig) -> Vec<String> {
+    match config.solver.runtime.cache_backend {
+        AimeLmCacheBackend::InMemory => Vec::new(),
+        AimeLmCacheBackend::Sqlite => config
+            .run_dir
+            .as_ref()
+            .map(|run_dir| {
+                vec![
+                    SqliteLmCache::path_in_run_dir(run_dir)
+                        .display()
+                        .to_string(),
+                ]
+            })
+            .unwrap_or_default(),
+        AimeLmCacheBackend::EagerSqlite => {
+            let mut paths = config
+                .run_dir
+                .as_ref()
+                .map(|run_dir| {
+                    vec![
+                        SqliteLmCache::path_in_run_dir(run_dir)
+                            .display()
+                            .to_string(),
+                    ]
+                })
+                .unwrap_or_default();
+            paths.push(SqliteLmCache::path_in_workspace(".").display().to_string());
+            paths
+        }
+    }
+}
+
+fn p8_failure_lm_cache_write_path(config: &AimeRunConfig) -> String {
+    match config.solver.runtime.cache_backend {
+        AimeLmCacheBackend::InMemory => "none".to_owned(),
+        AimeLmCacheBackend::Sqlite => p8_failure_lm_cache_path(config),
+        AimeLmCacheBackend::EagerSqlite => {
+            SqliteLmCache::path_in_workspace(".").display().to_string()
+        }
+    }
 }
 
 fn p8_aime_start_report_json(config: &AimeRunConfig, started_at: SystemTime) -> serde_json::Value {
@@ -2865,7 +2952,6 @@ struct AimeRoleRuntimeFingerprints {
 }
 
 impl AimeRoleRuntimeFingerprints {
-    #[cfg(test)]
     fn from_config(config: &AimeRunConfig) -> Self {
         let solver_lm = if config.solver.live {
             Some(openai_provider_fingerprint_for_runtime(
@@ -3633,12 +3719,17 @@ fn aime_gepa_profile_from_env() -> GepaProfile {
 
 fn parse_gepa_profile(env_name: &str, value: Option<&str>) -> GepaProfile {
     let Some(raw) = value.map(str::trim).filter(|value| !value.is_empty()) else {
-        return GepaProfile::Reference;
+        return GepaProfile::OptimizeAnything;
     };
     match raw.to_ascii_lowercase().as_str() {
         "reference" | "ref" => GepaProfile::Reference,
+        "optimize-anything" | "optimize_anything" | "optimizeanything" => {
+            GepaProfile::OptimizeAnything
+        }
         "fast-certified" | "fast_certified" | "fastcertified" => GepaProfile::FastCertified,
-        _ => panic!("unsupported {env_name}={raw:?}; expected reference or fast-certified"),
+        _ => panic!(
+            "unsupported {env_name}={raw:?}; expected optimize-anything, reference, or fast-certified"
+        ),
     }
 }
 
@@ -5095,7 +5186,6 @@ impl LmCacheStore for AimeEagerSqliteLmCache {
     }
 }
 
-#[cfg(test)]
 fn openai_provider_fingerprint_for_runtime(runtime: AimeOpenAiRuntimeConfig) -> Fingerprint {
     OpenAiLm::new(apply_aime_openai_runtime_config(
         OpenAiConfig::new("p8-aime-fingerprint-placeholder"),
@@ -5764,10 +5854,7 @@ mod tests {
         assert_eq!(attempt.skip_reason, None);
         assert_eq!(gepa_report.total_metric_calls, 8);
         assert_eq!(gepa_report.full_validation_evals, 2);
-        assert_eq!(
-            gepa_report.skip_perfect_score,
-            OPTIMIZE_ANYTHING_SKIP_PERFECT_SCORE
-        );
+        assert!(gepa_report.skip_perfect_score);
         assert_eq!(gepa_report.perfect_score, 1.0);
         assert!(
             gepa_report
@@ -5839,11 +5926,11 @@ mod tests {
     }
 
     #[test]
-    fn configured_gepa_aime_profile_matches_reference_knobs() {
+    fn configured_gepa_aime_profile_matches_optimize_anything_knobs() {
         let config = AimeRunConfig::gepa_aime();
 
         assert_eq!(config.profile, AimeRunProfile::GepaAime);
-        assert_eq!(config.gepa_profile, GepaProfile::Reference);
+        assert_eq!(config.gepa_profile, GepaProfile::OptimizeAnything);
         assert_eq!(config.seed_prompt, BASELINE);
         assert_eq!(config.budget.metric_calls, Some(GEPA_AIME_METRIC_CALLS));
         assert_eq!(config.evaluation_parallelism.get(), GEPA_AIME_MAX_WORKERS);
@@ -6792,9 +6879,17 @@ Provide the new parameter value within ``` blocks."
     }
 
     #[test]
-    fn gepa_profile_parser_defaults_to_reference_and_accepts_fast_certified() {
+    fn gepa_profile_parser_accepts_optimize_anything_reference_and_fast_certified() {
         assert_eq!(
             parse_gepa_profile(LEAVEN_AIME_GEPA_PROFILE, None),
+            GepaProfile::OptimizeAnything
+        );
+        assert_eq!(
+            parse_gepa_profile(LEAVEN_AIME_GEPA_PROFILE, Some("optimize-anything")),
+            GepaProfile::OptimizeAnything
+        );
+        assert_eq!(
+            parse_gepa_profile(LEAVEN_AIME_GEPA_PROFILE, Some("reference")),
             GepaProfile::Reference
         );
         assert_eq!(
@@ -6934,6 +7029,25 @@ Provide the new parameter value within ``` blocks."
                 .unwrap()
                 .contains("optimizer failed")
         );
+        assert_eq!(
+            report["search_metric_call_cap"],
+            serde_json::json!(config.budget.metric_calls)
+        );
+        assert_eq!(report["final_report_metric_call_cap"], "unlimited");
+        assert_eq!(report["cache"]["lm_backend"], "in-memory");
+        assert_eq!(
+            report["cache"]["lm_read_paths"].as_array().unwrap().len(),
+            0
+        );
+        assert_eq!(report["lm_roles"].as_array().unwrap().len(), 2);
+        assert_eq!(report["lm_roles"][0]["role"], "solver");
+        assert_eq!(
+            report["lm_roles"][0]["runtime"]["cache_policy"],
+            "cache-only"
+        );
+        assert_eq!(report["live_provider_proof"]["role_count"], 2);
+        assert_eq!(report["live_provider_proof"]["all_roles_live"], false);
+        assert_eq!(report["provider_failures"]["durable"]["count"], 0);
     }
 
     #[test]
@@ -7552,9 +7666,9 @@ Provide the new parameter value within ``` blocks."
         let gepa_events = report["gepa_events"].as_array().unwrap();
         assert!(gepa_events.iter().any(|event| {
             event["phase"] == "profile_resolved"
-                && event["profile"] == "custom"
+                && event["profile"] == "reference"
                 && event["proposal_count"] == 1
-                && event["skip_perfect_score"] == OPTIMIZE_ANYTHING_SKIP_PERFECT_SCORE
+                && event["skip_perfect_score"] == true
         }));
         assert!(
             gepa_events
@@ -7631,7 +7745,7 @@ Provide the new parameter value within ``` blocks."
                 .any(|event| event["phase"] == "optimization_ended")
         );
         let gepa_report = &report["gepa_report"];
-        assert_eq!(gepa_report["profile"]["label"], "custom");
+        assert_eq!(gepa_report["profile"]["label"], "reference");
         assert_eq!(gepa_report["profile"]["train_minibatch_size"], 3);
         assert_eq!(gepa_report["profile"]["proposal_count"], 1);
         assert_eq!(gepa_report["profile"]["proposal_mode"], "serial");
@@ -7643,10 +7757,7 @@ Provide the new parameter value within ``` blocks."
             gepa_report["profile"]["certification_mode"],
             "full-validation-before-admission"
         );
-        assert_eq!(
-            gepa_report["profile"]["skip_perfect_score"],
-            OPTIMIZE_ANYTHING_SKIP_PERFECT_SCORE
-        );
+        assert_eq!(gepa_report["profile"]["skip_perfect_score"], true);
         assert_eq!(gepa_report["total_metric_calls"], 8);
         let event_metric_calls: u64 = gepa_events
             .iter()
@@ -7700,10 +7811,7 @@ Provide the new parameter value within ``` blocks."
                 .as_f64()
                 .is_some_and(|chars| chars > 0.0)
         );
-        assert_eq!(
-            gepa_report["skip_perfect_score"],
-            OPTIMIZE_ANYTHING_SKIP_PERFECT_SCORE
-        );
+        assert_eq!(gepa_report["skip_perfect_score"], true);
         assert_eq!(gepa_report["perfect_score"], 1.0);
         assert_eq!(gepa_report["best_index"], 1);
         assert!(gepa_report["candidates"].as_array().unwrap().len() >= 2);
@@ -7980,7 +8088,17 @@ Provide the new parameter value within ``` blocks."
         let mut config = AimeRunConfig::deterministic_smoke();
         config.run_dir = Some(run_dir.clone());
         config.profile = AimeRunProfile::GepaAime;
+        config.solver.runtime.cache_backend = AimeLmCacheBackend::EagerSqlite;
         config.reflection.model = "gpt-5.1".to_owned();
+        config.reflection.live = true;
+        config.reflection.cache_policy = LmCachePolicy::CacheOnly;
+        config.reflection.runtime.cache_backend = AimeLmCacheBackend::EagerSqlite;
+        std::fs::create_dir_all(&run_dir).unwrap();
+        std::fs::write(
+            aime_provider_failures_path(&run_dir),
+            r#"{"schema":"leaven.p8_aime.provider_failure.v1","role":"reflection","kind":"cache"}"#,
+        )
+        .unwrap();
         let error = std::io::Error::other("synthetic failure");
 
         let path = write_p8_aime_failure_report(&config, &error, Duration::from_millis(9))
@@ -7998,6 +8116,33 @@ Provide the new parameter value within ``` blocks."
             "upstream-matched"
         );
         assert_eq!(report["comparison"]["leaven_reflection_model"], "gpt-5.1");
+        assert_eq!(report["cache"]["lm_backend"], "eager-sqlite");
+        assert_eq!(report["cache"]["lm_path"], ".leaven/lm-cache.sqlite");
+        assert_eq!(
+            report["cache"]["lm_read_paths"],
+            serde_json::json!([
+                run_dir.join("lm-cache.sqlite").display().to_string(),
+                ".leaven/lm-cache.sqlite"
+            ])
+        );
+        assert_eq!(report["cache"]["lm_write_path"], ".leaven/lm-cache.sqlite");
+        assert_eq!(report["lm_roles"].as_array().unwrap().len(), 2);
+        assert_eq!(report["lm_roles"][1]["role"], "reflection");
+        assert_eq!(report["lm_roles"][1]["model"], "gpt-5.1");
+        assert_eq!(
+            report["lm_roles"][1]["metrics"]["durable_failures"]["cache"],
+            1
+        );
+        assert_eq!(report["live_provider_proof"]["role_count"], 2);
+        assert_eq!(
+            report["provider_failures"]["durable"]["scope"],
+            "run_dir_jsonl"
+        );
+        assert_eq!(report["provider_failures"]["durable"]["count"], 1);
+        assert_eq!(
+            report["provider_failures"]["durable"]["roles"][1]["failures"]["cache"],
+            1
+        );
         let _ = std::fs::remove_dir_all(run_dir);
     }
 

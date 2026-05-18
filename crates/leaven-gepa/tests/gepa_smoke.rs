@@ -22,10 +22,10 @@ use leaven_evidence::{
 use leaven_gepa::test_support::FixedSurfaceEdit;
 use leaven_gepa::{
     CandidateSelector, CheckpointCandidateSelector, CheckpointGate, CheckpointPopulation,
-    FullValidation, Gate, GateDecision, Gepa, GepaPopulation, GepaProfile, GepaReflector,
-    ImprovementOrEqual, NoRegression, PopulationBestFallback, ReflectRequest, ReflectiveCaseInput,
-    ReflectiveDatasetBuilder, ReflectiveExample, SelectBestCandidate, StrictImprovement,
-    SurfaceProposer,
+    FullValidation, Gate, GateDecision, Gepa, GepaCandidateIndex, GepaPopulation, GepaProfile,
+    GepaReflector, ImprovementOrEqual, NoRegression, PopulationBestFallback, ReflectRequest,
+    ReflectiveCaseInput, ReflectiveDatasetBuilder, ReflectiveExample, SelectBestCandidate,
+    StrictImprovement, SurfaceProposer,
     validation::{
         BatchSampler, CheckpointBatchSampler, CheckpointValidationPolicy, EpochShuffled,
         MinibatchThenValidation, ValidationPolicy,
@@ -1293,6 +1293,71 @@ fn gepa_proposal_count_zero_normalizes_to_one_serial_proposal() {
             report.profile,
             report.proposal_attempts.len()
         );
+    });
+}
+
+#[test]
+fn optimize_anything_profile_keeps_full_validation_and_disables_skip_perfect() {
+    block_on(async {
+        let case_set = CaseSet::new(vec![(), (), (), ()])
+            .with_partition(
+                leaven_core::PartitionId::from("TRAIN"),
+                vec![
+                    leaven_kernel::CaseId::new(0),
+                    leaven_kernel::CaseId::new(1),
+                    leaven_kernel::CaseId::new(2),
+                ],
+            )
+            .with_partition(
+                leaven_core::PartitionId::from("VALIDATION"),
+                vec![leaven_kernel::CaseId::new(3)],
+            );
+        let store = InlineEvidenceStore::<ScalarEvidence>::new("inline");
+        let mut engine = Engine::<SamplingProblem>::builder()
+            .evaluator(PrefixImprovementEvaluator)
+            .build();
+        let seed = engine
+            .insert_seed(
+                PartMapArtifact(BTreeMap::from([("answer".to_owned(), "draft".to_owned())])),
+                0,
+            )
+            .unwrap();
+        let mut gepa = Gepa::new(
+            PartMapSurface,
+            ParetoFrontier::by_case().build(),
+            SequentialSurfaceEdits::new(["improved-a"]),
+        )
+        .reflective_dataset(OneReflectiveExample)
+        .with_profile(GepaProfile::OptimizeAnything)
+        .max_iterations(1);
+
+        engine.run(&mut gepa, &case_set, &store).await.unwrap();
+
+        let report = gepa.report();
+        assert_eq!(GepaProfile::OptimizeAnything.label(), "optimize-anything");
+        assert_eq!(report.profile.label, "optimize-anything");
+        assert_eq!(report.profile.train_minibatch_size, Some(3));
+        assert_eq!(report.profile.proposal_count, 1);
+        assert_eq!(report.profile.proposal_mode, "serial");
+        assert_eq!(report.profile.validation_policy, "full-validation");
+        assert_eq!(
+            report.profile.certification_mode,
+            "full-validation-before-admission"
+        );
+        assert!(!report.profile.skip_perfect_score);
+        assert_eq!(report.proposal_attempts.len(), 1);
+        assert_eq!(report.candidates.len(), 2);
+        assert_eq!(report.full_validation_evals, 2);
+        assert_eq!(report.proposal_attempts[0].accepted, Some(true));
+        assert_eq!(
+            report.proposal_attempts[0].admitted_index,
+            Some(GepaCandidateIndex::new(1))
+        );
+        assert_eq!(
+            report.proposal_attempts[0].parent_cases,
+            report.proposal_attempts[0].child_cases
+        );
+        assert_eq!(engine.view().candidate_tree().children(seed).len(), 1);
     });
 }
 

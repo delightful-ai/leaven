@@ -1,7 +1,7 @@
 # GEPA Parity Working Ledger
 
 Status: active.
-Updated: 2026-05-18T13:18:23Z.
+Updated: 2026-05-18T14:04:00Z.
 
 ## Authority
 
@@ -51,6 +51,63 @@ Important currently proven rows include:
 Do not claim DSPy-default parity. Current claims are core GEPA or
 optimize-anything/AIME profile; DSPy merge and DSPy trace defaults are not
 implemented as default parity.
+
+## Latest No-Spend Strict-Reflector Rehearsal
+
+2026-05-18 cache-only rehearsal:
+
+- command class: no-spend cache-only live-role rehearsal with
+  `LEAVEN_AIME_REFLECTION_MODEL=gpt-5.1`,
+  `LEAVEN_AIME_SOLVER_CACHE_POLICY=cache-only`,
+  `LEAVEN_AIME_REFLECTION_CACHE_POLICY=cache-only`,
+  `LEAVEN_AIME_LM_CACHE_BACKEND=eager-sqlite`, and
+  `LEAVEN_OPENAI_MAX_CONCURRENT_REQUESTS=32`;
+- run dir:
+  `.leaven/release-runs/p8-aime-gepa-upstream-reflector-cache-only-current-20260518-124009`;
+- run id: `5bce6614-03f3-47bc-a8ae-060bfdd4bcd1`;
+- observed work before refusal: seed validation 45 metric calls plus one
+  three-case train minibatch, `metric_calls=48`, `llm_calls=0`;
+- refusal: first missing `gpt-5.1` reflection cache row, recorded as
+  `lm response cache failed: required lm cache entry was missing`;
+- durable failure row:
+  `lm-provider-failures.jsonl` contains one reflection/cache failure;
+- start/failure reports classify the reflection model as `upstream-matched`
+  and record the CAIS denominator caveat: published validation `26/45`,
+  published test `0.600`, current upstream source search cap `500`,
+  checkpoint metric calls `621`, checkpoint candidates `10`, and missing
+  local `run.log`.
+
+Follow-up fix in current code: P8 failure reports now carry the same
+role/cache/provider-failure evidence as successful reports. In particular,
+cache-only or provider-failure stops include `lm_roles`, `live_provider_proof`,
+`provider_failures`, search/final-report budget caps, and LM cache read/write
+paths. This is required by `p8_run_report_operator_ux.md` and
+`p8_live_provider_budget_reliability.md`: an operator should not need terminal
+history to tell cache-only miss, provider failure, model alignment, and cache
+topology apart.
+
+2026-05-18 current-code rerun:
+
+- run dir:
+  `.leaven/release-runs/p8-aime-gepa-upstream-reflector-cache-only-current-20260518-055000`;
+- run id: `50777a7b-205a-4abb-b6c3-d8d38940eeac`;
+- proof class: `cache_only_aime_replay_not_live_proof`;
+- profile evidence: CLI, start report, and failure report now all show
+  `gepa_profile=optimize-anything`;
+- observed work before refusal: seed validation 45 metric calls plus one
+  three-case train minibatch, `metric_calls=48`, `llm_calls=0`;
+- failure: first missing `gpt-5.1` reflection cache row,
+  `lm response cache failed: required lm cache entry was missing`;
+- failure report evidence now includes `search_metric_call_cap=500`,
+  `final_report_metric_call_cap=unlimited`, eager-cache read paths
+  `[run-dir/lm-cache.sqlite, .leaven/lm-cache.sqlite]`, write path
+  `.leaven/lm-cache.sqlite`, two live OpenAI role fingerprints, and durable
+  provider failure totals with reflection/cache count `1`;
+- the first rerun attempt also caught a production compile break from making
+  failure-role reports production code while leaving
+  `openai_provider_fingerprint_for_runtime(...)` behind `#[cfg(test)]`; that
+  helper is now production code because failure reports need live role
+  fingerprints outside tests.
 
 ## Current Prompt-Parity Finding
 
@@ -113,9 +170,13 @@ Current speed stance:
 - `GepaProfile::FastCertified` is the first implemented speed profile: smaller
   train probes and two serial proposal attempts per selected parent, while
   preserving full validation before reference admission;
-- P8 defaults to `GepaProfile::Reference` and exposes the opt-in speed preset
-  through `LEAVEN_AIME_GEPA_PROFILE=fast-certified`; release reports must
-  disclose the selected GEPA profile before any speed/result claim;
+- P8 live AIME defaults to `GepaProfile::OptimizeAnything`, which names the
+  upstream optimize-anything knobs Leaven uses for AIME: minibatch 3, one
+  serial proposal, full validation before admission, and skip-perfect disabled.
+  Deterministic smoke may still explicitly choose `GepaProfile::Reference`.
+  `LEAVEN_AIME_GEPA_PROFILE=fast-certified` remains an opt-in speed preset;
+  release reports must disclose the selected GEPA profile before any
+  speed/result claim;
 - parallel proposal workers, lazy validation/certification, active failure
   sampling, evaluator pyramids, and trace distillation should be modeled as
   explicit follow-on library profiles/seams, not P8-only patches;
@@ -246,10 +307,12 @@ Current evidence split:
   compile log showed it predates the latest P8 profile/failure-report slices;
 - the current completed live report
   `.leaven/release-runs/p8-aime-gepa-current-release-20260518-094902-d2d15a36d364/reports/p8-aime.json`
-  used current report/profile/cache code, zero provider failures, solver
-  `gpt-4.1-mini`, reflection `gpt-5.4-mini`, reference GEPA profile, 45/45/30
-  AIME splits, and improved validation `0.444 -> 0.489` plus held-out test
-  `0.433 -> 0.500`.
+  used current report/cache code at the time it was produced, zero provider
+  failures, solver `gpt-4.1-mini`, reflection `gpt-5.4-mini`, reference GEPA
+  profile, 45/45/30 AIME splits, and improved validation `0.444 -> 0.489`
+  plus held-out test `0.433 -> 0.500`. It predates the current
+  `GepaProfile::OptimizeAnything` default and failure-report evidence fields;
+  the next live report should show `gepa_profile=optimize-anything`.
 - a model-matched paid rerun should set `LEAVEN_AIME_REFLECTION_MODEL=gpt-5.1`
   and confirm `comparison_reflection_model_alignment=upstream-matched` in
   `reports/p8-aime.json` before interpreting result quality against the pinned
@@ -835,8 +898,10 @@ Cache/replay attempts after the report-schema fixes:
   - partially closed: strict upstream-reflector reporting proof. Cache-only
     rehearsal with `LEAVEN_AIME_REFLECTION_MODEL=gpt-5.1` now proves the
     start/failure reports classify `openai/gpt-5.1` vs `gpt-5.1` as
-    `upstream-matched` without provider spend. The paid quality proof is still
-    open because the cache lacks the required `gpt-5.1` reflection row;
+    `upstream-matched` without provider spend. The latest current-code rerun
+    also proves `gepa_profile=optimize-anything` and failure-report
+    role/cache/provider-failure evidence. The paid quality proof is still open
+    because the cache lacks the required `gpt-5.1` reflection row;
   - still open and current: final-report replay proof. Solver/reflection LM
     cache replay is proven for search checkpoints, but final-report-only rows
     are not yet checkpoint-restored as report-visible graph evidence.
@@ -857,8 +922,9 @@ Cache/replay attempts after the report-schema fixes:
   knobs: solver `gpt-4.1-mini` at `temperature=1.0`, `max_tokens=32000`,
   `max_metric_calls=500`, `parallel=True`, `max_workers=32`,
   `cache_evaluation=True`, `frontier_type="instance"`, and reflection
-  `openai/gpt-5.1`. P8 `configured_gepa_aime_profile_matches_reference_knobs`
-  covers the Leaven-side runtime knobs except the deliberate reflection model
+  `openai/gpt-5.1`. P8
+  `configured_gepa_aime_profile_matches_optimize_anything_knobs` covers the
+  Leaven-side runtime/profile knobs except the deliberate reflection model
   delta (`gpt-5.4-mini` by default, `LEAVEN_AIME_REFLECTION_MODEL=gpt-5.1` for
   strict upstream-reflector comparison).
 - Upstream `InstructionProposalSignature.prompt_renderer` renders
