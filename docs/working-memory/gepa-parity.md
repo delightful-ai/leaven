@@ -195,6 +195,10 @@ Prompt-audit finding:
   plus provider response/continuation IDs in future reports, so reflection
   proposals and solver transcripts are inspectable from the report artifact
   without another provider call.
+- P8 GEPA proposal attempts now include a compact `reflection` object with the
+  reflection request index, full request record, assistant text, parsed
+  proposed text, and provider response ID so child admission history can be
+  audited from the report row itself.
 
 Comparison notes against the older improving artifact:
 

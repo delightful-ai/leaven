@@ -862,7 +862,10 @@ fn p8_aime_report_json(config: &AimeRunConfig, run: &AimeRunResult) -> serde_jso
             .iter()
             .map(p8_gepa_event_json)
             .collect::<Vec<_>>(),
-        "gepa_report": run.gepa_report.as_ref().map(p8_gepa_report_json),
+        "gepa_report": run
+            .gepa_report
+            .as_ref()
+            .map(|report| p8_gepa_report_json(report, &run.role_reports)),
         "cases": p8_case_report_json(run),
         "events": result.events.iter().map(|event| event.as_str()).collect::<Vec<_>>(),
     })
@@ -890,7 +893,8 @@ fn p8_dataset_proof_json(proof: &AimeDatasetProof) -> serde_json::Value {
     })
 }
 
-fn p8_gepa_report_json(report: &GepaReport) -> serde_json::Value {
+fn p8_gepa_report_json(report: &GepaReport, roles: &AimeRoleReports) -> serde_json::Value {
+    let reflection_requests = roles.reflection.metrics.requests.as_slice();
     serde_json::json!({
         "best_index": report.best_index.map(GepaCandidateIndex::get),
         "best_candidate": report.best_candidate.map(|candidate| candidate.to_string()),
@@ -930,10 +934,13 @@ fn p8_gepa_report_json(report: &GepaReport) -> serde_json::Value {
             } else {
                 None
             };
+            let reflection = request_index
+                .and_then(|index| p8_gepa_attempt_reflection_json(index, reflection_requests));
             Some(serde_json::json!({
                 "attempt_index": attempt.attempt_index,
                 "iteration": attempt.iteration,
                 "reflection_request_index": request_index,
+                "reflection": reflection,
                 "parent_index": attempt.parent_index.get(),
                 "parent": attempt.parent.to_string(),
                 "parent_assessments": attempt.parent_assessments.iter().map(ToString::to_string).collect::<Vec<_>>(),
@@ -951,6 +958,70 @@ fn p8_gepa_report_json(report: &GepaReport) -> serde_json::Value {
         }).collect::<Vec<_>>(),
         "events": report.events.iter().map(p8_gepa_event_json).collect::<Vec<_>>(),
     })
+}
+
+fn p8_gepa_attempt_reflection_json(
+    index: usize,
+    requests: &[AimeLmRequestRecord],
+) -> Option<serde_json::Value> {
+    let request = requests.get(index)?;
+    Some(serde_json::json!({
+        "request_index": index,
+        "model": request.model,
+        "request": p8_lm_request_json(request),
+        "assistant_text": request.response.as_ref().map(|response| response.assistant.content.clone()),
+        "proposed_text": request
+            .response
+            .as_ref()
+            .map(|response| p8_extract_reflection_replacement(&response.assistant.content)),
+        "provider_response_id": request
+            .response
+            .as_ref()
+            .and_then(|response| response.provider_response_id.clone()),
+    }))
+}
+
+fn p8_extract_reflection_replacement(assistant_text: &str) -> String {
+    let text = assistant_text.trim();
+    let Some(start) = text.find("```") else {
+        return text.to_owned();
+    };
+    let content_start = start + 3;
+    let Some(end) = text.rfind("```").filter(|end| *end >= content_start) else {
+        return p8_strip_opening_fence(text);
+    };
+    if end == start {
+        return p8_strip_opening_fence(text);
+    }
+
+    p8_strip_optional_language(&text[content_start..end])
+        .trim()
+        .to_owned()
+}
+
+fn p8_strip_opening_fence(text: &str) -> String {
+    text.strip_prefix("```")
+        .map(p8_strip_optional_language)
+        .unwrap_or(text)
+        .trim()
+        .trim_end_matches("```")
+        .trim()
+        .to_owned()
+}
+
+fn p8_strip_optional_language(text: &str) -> &str {
+    let trimmed = text.trim_start();
+    match trimmed.find('\n') {
+        Some(newline) => {
+            let first_line = &trimmed[..newline];
+            if !first_line.is_empty() && !first_line.contains(char::is_whitespace) {
+                &trimmed[newline + 1..]
+            } else {
+                trimmed
+            }
+        }
+        None => trimmed,
+    }
 }
 
 fn p8_gepa_events_for_report(run: &AimeRunResult) -> &[GepaEventSummary] {
@@ -5344,6 +5415,21 @@ Provide the new parameter value within ``` blocks."
         assert!(!attempts.is_empty());
         assert_eq!(attempts[0]["attempt_index"], 1);
         assert_eq!(attempts[0]["reflection_request_index"], 0);
+        assert_eq!(attempts[0]["reflection"]["request_index"], 0);
+        assert_eq!(
+            attempts[0]["reflection"]["model"],
+            "deterministic-aime-reflector"
+        );
+        assert!(
+            attempts[0]["reflection"]["assistant_text"]
+                .as_str()
+                .is_some_and(|text| text.starts_with("```\n"))
+        );
+        assert!(
+            attempts[0]["reflection"]["proposed_text"]
+                .as_str()
+                .is_some_and(|text| text.contains("modular arithmetic"))
+        );
         assert_eq!(attempts[0]["parent_index"], 0);
         assert!(
             attempts[0]["parent_cases"]
