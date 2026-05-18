@@ -66,7 +66,7 @@ impl<P: OptimizationProblem> Engine<P> {
     ) -> Result<CandidateId, RunContextError> {
         let candidate =
             RunContext::new(&mut self.graph, &mut self.budget).insert_seed(artifact, seed_index)?;
-        self.checkpoint(None)
+        self.checkpoint(None, false)
             .map_err(RunContextError::Persistence)?;
         Ok(candidate)
     }
@@ -161,18 +161,31 @@ impl<P: OptimizationProblem> Engine<P> {
                 optimizer.step(&mut ctx).await
             };
             self.emit(RunEvent::IterationEnded { iteration });
-            if let Err(error) =
-                self.checkpoint_optimizer(optimizer, "run checkpoint failed after iteration")
-            {
-                self.record_optimizer_error(&error);
-                return Err(error);
-            }
             match status {
-                Ok(StepStatus::Continue) => {}
+                Ok(StepStatus::Continue) => {
+                    if let Err(error) = self
+                        .checkpoint_optimizer(optimizer, "run checkpoint failed after iteration")
+                    {
+                        self.record_optimizer_error(&error);
+                        return Err(error);
+                    }
+                }
                 Ok(StepStatus::Done) => {
+                    if let Err(error) = self
+                        .checkpoint_optimizer(optimizer, "run checkpoint failed after iteration")
+                    {
+                        self.record_optimizer_error(&error);
+                        return Err(error);
+                    }
                     return self.finish_clean_stop(optimizer, StopReason::OptimizerDone);
                 }
                 Ok(StepStatus::Stopped(reason)) => {
+                    if let Err(error) = self
+                        .checkpoint_optimizer(optimizer, "run checkpoint failed after iteration")
+                    {
+                        self.record_optimizer_error(&error);
+                        return Err(error);
+                    }
                     return self.finish_clean_stop(optimizer, reason);
                 }
                 Err(error) => {
@@ -260,7 +273,23 @@ impl<P: OptimizationProblem> Engine<P> {
             best,
             budget,
         });
-        self.checkpoint(optimizer_state)?;
+        self.checkpoint(optimizer_state, true)?;
+        Ok(RunResult { run_id, best })
+    }
+
+    fn finish_without_advancing_latest(
+        &mut self,
+        best: Option<CandidateId>,
+        optimizer_state: Option<OptimizerStateWrite>,
+    ) -> Result<RunResult, crate::RunPersistenceError> {
+        let run_id = self.graph.run_id;
+        let budget = self.budget.snapshot();
+        self.emit(RunEvent::OptimizationEnded {
+            run_id,
+            best,
+            budget,
+        });
+        self.checkpoint(optimizer_state, false)?;
         Ok(RunResult { run_id, best })
     }
 
@@ -279,10 +308,14 @@ impl<P: OptimizationProblem> Engine<P> {
     fn checkpoint(
         &self,
         optimizer_state: Option<OptimizerStateWrite>,
+        advance_latest: bool,
     ) -> Result<(), crate::RunPersistenceError> {
         if let Some(persistence) = &self.persistence {
             let mut request =
                 RunCheckpointRequest::new(&self.graph, &self.budget, Some(&self.cache));
+            if advance_latest {
+                request = request.advance_latest();
+            }
             if let Some(state) = optimizer_state {
                 request = request.with_optimizer_state(state);
             }
@@ -300,7 +333,7 @@ impl<P: OptimizationProblem> Engine<P> {
         O: Optimizer<P>,
     {
         let optimizer_state = self.optimizer_state_write(optimizer)?;
-        self.checkpoint(optimizer_state)
+        self.checkpoint(optimizer_state, true)
             .map_err(|error| OptimizerError::with_source(failure_message, error))
     }
 
@@ -324,7 +357,7 @@ impl<P: OptimizationProblem> Engine<P> {
             self.emit(RunEvent::OptimizationStopping {
                 reason: StopReason::BudgetExceeded,
             });
-            let _ = self.finish(None, None);
+            let _ = self.finish_without_advancing_latest(None, None);
             return;
         }
 
@@ -336,7 +369,7 @@ impl<P: OptimizationProblem> Engine<P> {
         self.emit(RunEvent::OptimizationStopping {
             reason: StopReason::Error,
         });
-        let _ = self.finish(None, None);
+        let _ = self.finish_without_advancing_latest(None, None);
     }
 
     fn emit(&mut self, event: RunEvent) {

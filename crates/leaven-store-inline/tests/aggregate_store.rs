@@ -31,6 +31,8 @@ fn checkpoints_round_trip_by_id() {
     let bytes = CheckpointStore::get(&store, id).unwrap();
 
     assert_eq!(bytes, CheckpointBytes(Bytes::from_static(b"checkpoint")));
+    assert_eq!(CheckpointStore::latest(&store).unwrap(), None);
+    CheckpointStore::mark_latest(&store, id).unwrap();
     assert_eq!(CheckpointStore::latest(&store).unwrap(), Some(id));
 }
 

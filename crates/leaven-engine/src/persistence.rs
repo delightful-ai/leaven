@@ -290,12 +290,20 @@ where
                 reason: err.to_string(),
             }
         })?;
-        CheckpointStore::put(&self.store, CheckpointBytes(Bytes::from(bytes)))
-            .map(|_| ())
+        let checkpoint_id = CheckpointStore::put(&self.store, CheckpointBytes(Bytes::from(bytes)))
             .map_err(|source| RunPersistenceError::Store {
                 operation: "write checkpoint envelope",
                 source,
-            })
+            })?;
+        if request.advance_latest {
+            CheckpointStore::mark_latest(&self.store, checkpoint_id).map_err(|source| {
+                RunPersistenceError::Store {
+                    operation: "advance latest checkpoint pointer",
+                    source,
+                }
+            })?;
+        }
+        Ok(())
     }
 }
 
@@ -335,6 +343,7 @@ pub struct RunCheckpointRequest<'a, P: OptimizationProblem> {
     pub budget: &'a BudgetLedger,
     pub cache: Option<&'a EvaluationCache>,
     pub optimizer_state: Option<OptimizerStateWrite>,
+    pub advance_latest: bool,
 }
 
 const RUN_GRAPH_SNAPSHOT_SCHEMA: Fingerprint = Fingerprint::from_bytes([11; 32]);
@@ -352,12 +361,19 @@ impl<'a, P: OptimizationProblem> RunCheckpointRequest<'a, P> {
             budget,
             cache,
             optimizer_state: None,
+            advance_latest: false,
         }
     }
 
     #[must_use]
     pub fn with_optimizer_state(mut self, state: OptimizerStateWrite) -> Self {
         self.optimizer_state = Some(state);
+        self
+    }
+
+    #[must_use]
+    pub fn advance_latest(mut self) -> Self {
+        self.advance_latest = true;
         self
     }
 

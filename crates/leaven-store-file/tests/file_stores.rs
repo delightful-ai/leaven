@@ -140,7 +140,7 @@ fn file_checkpoint_round_trips_latest_pointer() {
 
     assert_eq!(store.get(first).unwrap().0, Bytes::from_static(b"first"));
     assert_eq!(store.get(second).unwrap().0, Bytes::from_static(b"second"));
-    assert_eq!(store.latest().unwrap(), Some(second));
+    assert_eq!(store.latest().unwrap(), None);
     store.mark_latest(first).unwrap();
     assert_eq!(store.latest().unwrap(), Some(first));
 
@@ -227,6 +227,8 @@ fn aggregate_file_store_round_trips_blobs_and_checkpoints() {
         CheckpointStore::get(&store, checkpoint).unwrap().0,
         Bytes::from_static(br#"{"checkpoint":true}"#)
     );
+    assert_eq!(store.checkpoint_store().latest().unwrap(), None);
+    CheckpointStore::mark_latest(&store, checkpoint).unwrap();
     assert_eq!(store.checkpoint_store().latest().unwrap(), Some(checkpoint));
 
     let reopened = FileStore::open(root).unwrap();
@@ -257,6 +259,7 @@ fn aggregate_file_store_preserves_custom_blob_namespace_and_latest_trait() {
 
     let checkpoint =
         CheckpointStore::put(&store, CheckpointBytes(Bytes::from_static(b"state"))).unwrap();
+    CheckpointStore::mark_latest(&store, checkpoint).unwrap();
     assert_eq!(CheckpointStore::latest(&store).unwrap(), Some(checkpoint));
 
     let reopened = FileStore::open_named("agent-run", root).unwrap();
@@ -408,6 +411,7 @@ fn file_json_checkpoint_reports_absent_latest_missing_payload_and_bad_payload() 
         .raw_store()
         .put(CheckpointBytes(Bytes::from_static(b"{not json")))
         .unwrap();
+    store.raw_store().mark_latest(id).unwrap();
     assert!(matches!(
         store.get(id).unwrap_err(),
         StoreError::Serialization(_)

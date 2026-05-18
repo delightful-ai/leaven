@@ -345,7 +345,35 @@ fn engine_checkpoints_explicit_optimizer_state_at_clean_run_boundaries() {
         engine.run(&mut optimizer, &cases, &store).await.unwrap();
 
         let calls = optimizer_state_presence.lock().unwrap().clone();
-        assert_eq!(calls, vec![false, true, true, true]);
+        assert_eq!(
+            calls,
+            vec![(false, false), (true, true), (true, true), (true, true)]
+        );
+    });
+}
+
+#[test]
+fn engine_error_checkpoints_do_not_advance_latest_boundary() {
+    block_on(async {
+        let checkpoint_flags = Arc::new(Mutex::new(Vec::new()));
+        let persistence = OptimizerStatePresencePersistence {
+            optimizer_state_presence: Arc::clone(&checkpoint_flags),
+        };
+        let mut engine = Engine::<TestProblem>::builder()
+            .persistence(persistence)
+            .build();
+        let cases = CaseSet::new(vec!["case"]);
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let mut optimizer = FailingStep;
+
+        let err = engine
+            .run(&mut optimizer, &cases, &store)
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("step failed"));
+
+        let calls = checkpoint_flags.lock().unwrap().clone();
+        assert_eq!(calls, vec![(false, true), (false, false)]);
     });
 }
 
@@ -421,17 +449,19 @@ fn store_run_persistence_writes_graph_cache_and_checkpoint_envelope() {
 
     persistence
         .checkpoint(
-            RunCheckpointRequest::new(&graph, &budget, Some(&cache)).with_optimizer_state(
-                OptimizerStateWrite::json(
-                    Fingerprint::from_bytes([5; 32]),
-                    Fingerprint::from_bytes([6; 32]),
-                    &StatefulOptimizerState {
-                        selected: Some(seed),
-                        cursor: 42,
-                    },
+            RunCheckpointRequest::new(&graph, &budget, Some(&cache))
+                .with_optimizer_state(
+                    OptimizerStateWrite::json(
+                        Fingerprint::from_bytes([5; 32]),
+                        Fingerprint::from_bytes([6; 32]),
+                        &StatefulOptimizerState {
+                            selected: Some(seed),
+                            cursor: 42,
+                        },
+                    )
+                    .unwrap(),
                 )
-                .unwrap(),
-            ),
+                .advance_latest(),
         )
         .unwrap();
 
@@ -473,6 +503,75 @@ fn store_run_persistence_writes_graph_cache_and_checkpoint_envelope() {
 }
 
 #[test]
+fn store_run_persistence_keeps_latest_on_clean_resume_boundary() {
+    let store = RecordingStore::new("recording");
+    let persistence = StoreRunPersistence::new(store.clone());
+    let (graph, budget) = graph_and_budget();
+
+    persistence
+        .checkpoint(
+            RunCheckpointRequest::new(&graph, &budget, None)
+                .with_optimizer_state(
+                    OptimizerStateWrite::json(
+                        Fingerprint::from_bytes([5; 32]),
+                        Fingerprint::from_bytes([6; 32]),
+                        &StatefulOptimizerState {
+                            selected: None,
+                            cursor: 42,
+                        },
+                    )
+                    .unwrap(),
+                )
+                .advance_latest(),
+        )
+        .unwrap();
+    let latest_before = CheckpointStore::latest(&store).unwrap();
+    let mut cache = EvaluationCache::default();
+    cache.insert(
+        EvaluationCacheKey {
+            evaluator: Fingerprint::from_bytes([3; 32]),
+            policy: CachePolicy::Deterministic,
+            case_set_version: CaseSetVersion("v1".to_owned()),
+            case_ids: vec![CaseId::new(0)],
+            candidates: vec![CacheIdentity::Content(ContentId::from_bytes([4; 32]))],
+        },
+        vec![AssessmentId::new()],
+    );
+
+    persistence
+        .checkpoint(RunCheckpointRequest::new(&graph, &budget, Some(&cache)))
+        .unwrap();
+
+    assert_eq!(CheckpointStore::latest(&store).unwrap(), latest_before);
+    let graph_only_checkpoint = store
+        .checkpoints()
+        .into_iter()
+        .find(|(id, _)| Some(*id) != latest_before)
+        .map(|(_, bytes)| bytes)
+        .expect("graph/cache checkpoint should still be written");
+    let graph_only_checkpoint: RunCheckpoint =
+        serde_json::from_slice(&graph_only_checkpoint.0).unwrap();
+    let cache_ref = graph_only_checkpoint.cache_index.as_ref().unwrap();
+    let cache_bytes = BlobStore::get(&store, &cache_ref.bytes).unwrap();
+    let cache_snapshot: EvaluationCacheSnapshot = serde_json::from_slice(&cache_bytes).unwrap();
+    assert_eq!(cache_snapshot.entries.len(), 1);
+
+    let restored = persistence
+        .latest_checkpoint::<TestProblem>()
+        .unwrap()
+        .unwrap();
+    let restored_state: StatefulOptimizerState = persistence
+        .load_optimizer_state(
+            &restored.checkpoint,
+            Fingerprint::from_bytes([5; 32]),
+            Fingerprint::from_bytes([6; 32]),
+        )
+        .unwrap()
+        .unwrap();
+    assert_eq!(restored_state.cursor, 42);
+}
+
+#[test]
 fn store_run_persistence_reports_absent_and_corrupt_checkpoints_explicitly() {
     let store = RecordingStore::new("recording");
     let persistence = StoreRunPersistence::new(store.clone());
@@ -484,11 +583,12 @@ fn store_run_persistence_reports_absent_and_corrupt_checkpoints_explicitly() {
             .is_none()
     );
 
-    CheckpointStore::put(
+    let corrupt = CheckpointStore::put(
         &store,
         CheckpointBytes(Bytes::from_static(b"not a checkpoint")),
     )
     .unwrap();
+    CheckpointStore::mark_latest(&store, corrupt).unwrap();
     let err = latest_checkpoint_err(&persistence);
     assert!(matches!(
         err,
@@ -507,11 +607,12 @@ fn store_run_persistence_reports_missing_and_corrupt_referenced_blobs() {
         store: "recording".to_owned(),
         key: "missing".to_owned(),
     });
-    CheckpointStore::put(
+    let missing_graph = CheckpointStore::put(
         &missing_graph_store,
         CheckpointBytes(Bytes::from(serde_json::to_vec(&checkpoint).unwrap())),
     )
     .unwrap();
+    CheckpointStore::mark_latest(&missing_graph_store, missing_graph).unwrap();
     let err = latest_checkpoint_err(&persistence);
     assert!(matches!(
         err,
@@ -531,13 +632,14 @@ fn store_run_persistence_reports_missing_and_corrupt_referenced_blobs() {
     )
     .unwrap();
     let persistence = StoreRunPersistence::new(corrupt_graph_store.clone());
-    CheckpointStore::put(
+    let corrupt_graph = CheckpointStore::put(
         &corrupt_graph_store,
         CheckpointBytes(Bytes::from(
             serde_json::to_vec(&checkpoint_referencing_graph(graph_ref)).unwrap(),
         )),
     )
     .unwrap();
+    CheckpointStore::mark_latest(&corrupt_graph_store, corrupt_graph).unwrap();
     let err = latest_checkpoint_err(&persistence);
     assert!(matches!(
         err,
@@ -554,7 +656,7 @@ fn store_run_persistence_reports_missing_and_corrupt_cache_indexes() {
     let persistence = StoreRunPersistence::new(store);
     let (graph, budget) = graph_and_budget();
     persistence
-        .checkpoint(RunCheckpointRequest::new(&graph, &budget, None))
+        .checkpoint(RunCheckpointRequest::new(&graph, &budget, None).advance_latest())
         .unwrap();
     let mut checkpoint: RunCheckpoint =
         serde_json::from_slice(&persistence.store().latest_checkpoint().unwrap().0).unwrap();
@@ -566,11 +668,12 @@ fn store_run_persistence_reports_missing_and_corrupt_cache_indexes() {
             key: "missing-cache".to_owned(),
         },
     });
-    CheckpointStore::put(
+    let missing_cache = CheckpointStore::put(
         persistence.store(),
         CheckpointBytes(Bytes::from(serde_json::to_vec(&checkpoint).unwrap())),
     )
     .unwrap();
+    CheckpointStore::mark_latest(persistence.store(), missing_cache).unwrap();
 
     let missing = latest_checkpoint_err(&persistence);
     assert!(matches!(
@@ -594,11 +697,12 @@ fn store_run_persistence_reports_missing_and_corrupt_cache_indexes() {
         format: StateFormat::Json,
         bytes: corrupt_cache,
     });
-    CheckpointStore::put(
+    let corrupt_cache_checkpoint = CheckpointStore::put(
         persistence.store(),
         CheckpointBytes(Bytes::from(serde_json::to_vec(&checkpoint).unwrap())),
     )
     .unwrap();
+    CheckpointStore::mark_latest(persistence.store(), corrupt_cache_checkpoint).unwrap();
 
     let corrupt = latest_checkpoint_err(&persistence);
     assert!(matches!(
@@ -616,7 +720,7 @@ fn store_run_persistence_validates_optimizer_state_identity_and_format() {
     let persistence = StoreRunPersistence::new(store.clone());
     let (graph, budget) = graph_and_budget();
     persistence
-        .checkpoint(RunCheckpointRequest::new(&graph, &budget, None))
+        .checkpoint(RunCheckpointRequest::new(&graph, &budget, None).advance_latest())
         .unwrap();
     let mut restored = persistence
         .latest_checkpoint::<TestProblem>()
@@ -716,7 +820,7 @@ fn store_run_persistence_reports_corrupt_optimizer_state_payload() {
     let persistence = StoreRunPersistence::new(store.clone());
     let (graph, budget) = graph_and_budget();
     persistence
-        .checkpoint(RunCheckpointRequest::new(&graph, &budget, None))
+        .checkpoint(RunCheckpointRequest::new(&graph, &budget, None).advance_latest())
         .unwrap();
     let mut restored = persistence
         .latest_checkpoint::<TestProblem>()
@@ -760,7 +864,7 @@ fn store_run_persistence_reports_missing_optimizer_state_payload() {
     let persistence = StoreRunPersistence::new(store);
     let (graph, budget) = graph_and_budget();
     persistence
-        .checkpoint(RunCheckpointRequest::new(&graph, &budget, None))
+        .checkpoint(RunCheckpointRequest::new(&graph, &budget, None).advance_latest())
         .unwrap();
     let mut restored = persistence
         .latest_checkpoint::<TestProblem>()
@@ -1507,7 +1611,7 @@ struct CountingPersistence {
 }
 
 struct OptimizerStatePresencePersistence {
-    optimizer_state_presence: Arc<Mutex<Vec<bool>>>,
+    optimizer_state_presence: Arc<Mutex<Vec<(bool, bool)>>>,
 }
 
 #[derive(Clone)]
@@ -1519,7 +1623,7 @@ struct RecordingStore {
 #[derive(Default)]
 struct RecordingStoreInner {
     blobs: Mutex<Vec<(BlobRef, Bytes)>>,
-    latest_checkpoint: Mutex<Option<CheckpointBytes>>,
+    checkpoints: Mutex<BTreeMap<leaven_kernel::CheckpointId, CheckpointBytes>>,
     latest_checkpoint_id: Mutex<Option<leaven_kernel::CheckpointId>>,
 }
 
@@ -1532,7 +1636,18 @@ impl RecordingStore {
     }
 
     fn latest_checkpoint(&self) -> Option<CheckpointBytes> {
-        self.inner.latest_checkpoint.lock().unwrap().clone()
+        let id = (*self.inner.latest_checkpoint_id.lock().unwrap())?;
+        self.inner.checkpoints.lock().unwrap().get(&id).cloned()
+    }
+
+    fn checkpoints(&self) -> Vec<(leaven_kernel::CheckpointId, CheckpointBytes)> {
+        self.inner
+            .checkpoints
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(id, bytes)| (*id, bytes.clone()))
+            .collect()
     }
 }
 
@@ -1565,23 +1680,44 @@ impl BlobStore for RecordingStore {
 impl CheckpointStore for RecordingStore {
     fn put(&self, checkpoint: CheckpointBytes) -> Result<leaven_kernel::CheckpointId, StoreError> {
         let id = leaven_kernel::CheckpointId::new();
-        *self.inner.latest_checkpoint.lock().unwrap() = Some(checkpoint);
-        *self.inner.latest_checkpoint_id.lock().unwrap() = Some(id);
+        self.inner
+            .checkpoints
+            .lock()
+            .unwrap()
+            .insert(id, checkpoint);
         Ok(id)
     }
 
-    fn get(&self, _id: leaven_kernel::CheckpointId) -> Result<CheckpointBytes, StoreError> {
-        self.latest_checkpoint()
+    fn get(&self, id: leaven_kernel::CheckpointId) -> Result<CheckpointBytes, StoreError> {
+        self.inner
+            .checkpoints
+            .lock()
+            .unwrap()
+            .get(&id)
+            .cloned()
             .ok_or_else(|| StoreError::OperationFailed {
                 store: self.name.clone(),
                 operation: "get_checkpoint",
-                reason: "no checkpoint has been recorded".to_owned(),
+                reason: format!("checkpoint `{id}` was not found"),
                 retryable: Some(false),
             })
     }
 
     fn latest(&self) -> Result<Option<leaven_kernel::CheckpointId>, StoreError> {
         Ok(*self.inner.latest_checkpoint_id.lock().unwrap())
+    }
+
+    fn mark_latest(&self, id: leaven_kernel::CheckpointId) -> Result<(), StoreError> {
+        if !self.inner.checkpoints.lock().unwrap().contains_key(&id) {
+            return Err(StoreError::OperationFailed {
+                store: self.name.clone(),
+                operation: "mark_latest_checkpoint",
+                reason: format!("checkpoint `{id}` was not found"),
+                retryable: Some(false),
+            });
+        }
+        *self.inner.latest_checkpoint_id.lock().unwrap() = Some(id);
+        Ok(())
     }
 }
 
@@ -1612,7 +1748,7 @@ impl RunPersistence<TestProblem> for OptimizerStatePresencePersistence {
         self.optimizer_state_presence
             .lock()
             .unwrap()
-            .push(request.optimizer_state.is_some());
+            .push((request.optimizer_state.is_some(), request.advance_latest));
         Ok(())
     }
 }
@@ -1717,6 +1853,10 @@ impl CheckpointStore for FaultyStore {
             return Err(self.store_error("latest_checkpoint"));
         }
         CheckpointStore::latest(&self.inner)
+    }
+
+    fn mark_latest(&self, id: leaven_kernel::CheckpointId) -> Result<(), StoreError> {
+        CheckpointStore::mark_latest(&self.inner, id)
     }
 }
 

@@ -14,7 +14,8 @@ use leaven_core::{
 use leaven_engine::{
     BudgetLedger, CacheBypassReason, CachePolicy, CacheStatus, Callback, CaseSet,
     EvaluationCacheKey, EvaluationContext, EvaluationError, Evaluator, ProposalContext,
-    ProposalError, Proposer, RunContext, RunEvent, RunGraphView, StoreRunPersistence, TrustPolicy,
+    ProposalError, Proposer, RunCheckpointRequest, RunContext, RunEvent, RunGraphView,
+    RunPersistence, StoreRunPersistence, TrustPolicy,
 };
 use leaven_kernel::{
     AssessmentId, Budget, CaseId, ContentId, Cost, ErrorKind, EvaluatorId, Fingerprint,
@@ -650,6 +651,9 @@ fn deterministic_evaluation_cache_restores_from_checkpoint_without_recalling_eva
         };
         assert_eq!(first.cache, CacheStatus::Miss);
         assert_eq!(evaluator.calls(), 1);
+        persistence
+            .checkpoint(RunCheckpointRequest::new(&graph, &budget, Some(&cache)).advance_latest())
+            .unwrap();
 
         let restored = persistence
             .latest_checkpoint::<TestProblem>()

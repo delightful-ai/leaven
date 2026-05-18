@@ -1925,4 +1925,13 @@ impl CheckpointStore for FailingStore {
     fn latest(&self) -> Result<Option<CheckpointId>, StoreError> {
         Ok(None)
     }
+
+    fn mark_latest(&self, _id: CheckpointId) -> Result<(), StoreError> {
+        Err(StoreError::OperationFailed {
+            store: "failing".to_owned(),
+            operation: "mark_latest_checkpoint",
+            reason: "checkpoint offline".to_owned(),
+            retryable: Some(true),
+        })
+    }
 }

@@ -60,7 +60,6 @@ impl CheckpointStore for InlineStore {
     fn put(&self, checkpoint: CheckpointBytes) -> Result<CheckpointId, StoreError> {
         let id = CheckpointId::new();
         self.checkpoints.lock().insert(id, checkpoint);
-        *self.latest_checkpoint.lock() = Some(id);
         Ok(id)
     }
 
@@ -79,5 +78,18 @@ impl CheckpointStore for InlineStore {
 
     fn latest(&self) -> Result<Option<CheckpointId>, StoreError> {
         Ok(*self.latest_checkpoint.lock())
+    }
+
+    fn mark_latest(&self, id: CheckpointId) -> Result<(), StoreError> {
+        if !self.checkpoints.lock().contains_key(&id) {
+            return Err(StoreError::OperationFailed {
+                store: self.name.clone(),
+                operation: "mark_latest_checkpoint",
+                reason: format!("checkpoint `{id}` was not found"),
+                retryable: Some(false),
+            });
+        }
+        *self.latest_checkpoint.lock() = Some(id);
+        Ok(())
     }
 }

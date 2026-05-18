@@ -25,9 +25,8 @@ pub struct FileEvidenceStore<E> {
 
 /// File-backed checkpoint store for opaque checkpoint bytes.
 ///
-/// Checkpoints are immutable files named by [`CheckpointId`]. The store also
-/// writes `LATEST` with the most recent checkpoint id so consumers can implement
-/// "resume from latest" without inventing their own pointer file.
+/// Checkpoints are immutable files named by [`CheckpointId`]. Callers advance
+/// `LATEST` explicitly when a checkpoint is safe for resume.
 #[derive(Clone, Debug)]
 pub struct FileCheckpointStore {
     root: PathBuf,
@@ -135,7 +134,9 @@ where
     pub fn put(&self, checkpoint: &T) -> Result<CheckpointId, StoreError> {
         let bytes = serde_json::to_vec_pretty(checkpoint)
             .map_err(|err| StoreError::Serialization(err.to_string()))?;
-        self.store.put(CheckpointBytes(Bytes::from(bytes)))
+        let id = self.store.put(CheckpointBytes(Bytes::from(bytes)))?;
+        self.store.mark_latest(id)?;
+        Ok(id)
     }
 
     /// Reads a typed checkpoint by id.
@@ -167,7 +168,6 @@ impl CheckpointStore for FileCheckpointStore {
         let id = CheckpointId::new();
         let path = checkpoint_path(&self.root, id);
         std::fs::write(&path, checkpoint.0).map_err(|err| operation_failed("put", &path, &err))?;
-        self.mark_latest(id)?;
         Ok(id)
     }
 
@@ -184,6 +184,10 @@ impl CheckpointStore for FileCheckpointStore {
 
     fn latest(&self) -> Result<Option<CheckpointId>, StoreError> {
         Self::latest(self)
+    }
+
+    fn mark_latest(&self, id: CheckpointId) -> Result<(), StoreError> {
+        Self::mark_latest(self, id)
     }
 }
 

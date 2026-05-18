@@ -148,7 +148,8 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
         if let Some(persistence) = self.persistence {
             persistence.checkpoint(
                 RunCheckpointRequest::new(&*self.graph, &*self.budget, self.cache.as_deref())
-                    .with_optimizer_state(state),
+                    .with_optimizer_state(state)
+                    .advance_latest(),
             )?;
         }
         Ok(())
