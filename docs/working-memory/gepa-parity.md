@@ -1,7 +1,7 @@
 # GEPA Parity Working Ledger
 
 Status: active.
-Updated: 2026-05-18T06:35:56Z.
+Updated: 2026-05-18T06:38:19Z.
 
 ## Authority
 
@@ -103,7 +103,7 @@ Current resume attempt:
 - added `LEAVEN_OPENAI_REQUEST_TIMEOUT_SECONDS=600`;
 - same run id accepted resume;
 - observed evaluation-cache hits with zero metric calls inside the resumed run;
-- observed through resumed request count 30 / total assessment rows 147;
+- observed through resumed request count 31 / total assessment rows 150;
 - still running as of this ledger update.
 
 The 600s timeout changes the OpenAI provider fingerprint. The current run
@@ -118,6 +118,7 @@ Duplicate run guard:
 - it did not have the 600s timeout override and was appending to the legacy
   `.log` sidecar rather than the current ledger run `output.log`;
 - stopped PID pairs `27627`/`27655` and respawned `56611`/`56646`;
+- stopped a later bare respawned child `59403`;
 - after the second stop, only the intended 600s-timeout process for
   `.leaven/release-runs/p8-aime-gepa-20260518-043717` remained.
 
