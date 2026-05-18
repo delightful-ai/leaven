@@ -41,6 +41,7 @@ surface or encode the warning at the owning layer.
 - `crates/leaven-derive`: derive macros only; no runtime or adapter dependencies without an explicit derive contract.
 - `crates/leaven`: umbrella import experience and re-exports only.
 - `docs/specs`: durable product and architecture specs. Read the relevant spec before implementing spec-derived behavior.
+- `docs/working-memory`: active goal ledgers and continuation notes for long-running Leaven work. These files are durable working memory, not product law; use them to resume investigations, then verify against specs/code/tests before implementing or claiming completion.
 - `docs/testing/README.md`: test contract, suite layout, coverage ratchet, and runtime SLA.
 - `docs/philosophy`: design pressure and agent skills, not implementation status or subsystem plans.
 - `examples`: executable milestone packages. They prove specific public workflows, mechanics, or proxy demos as classified by `examples/AGENTS.md`; do not treat coverage over an example as product maturity by default.

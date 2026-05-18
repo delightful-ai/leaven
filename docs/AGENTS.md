@@ -5,6 +5,7 @@ Use the highest document that is true, actionable, and current. If a doc is mark
 
 ## Routing
 - `specs/`: durable product, topology, and behavior contracts. Start here for spec-derived code.
+- `working-memory/`: active goal ledgers and continuation notes. Treat them as stronger than chat history and weaker than specs/code/tests. Update them when a long-running goal gains new evidence, a live run handle, a concrete blocker, or a verified next action.
 - `plans/`: implementation work logs and task breakdowns. Treat them as dated execution notes, not governing truth when specs or code have moved.
 - `testing/README.md`: canonical proof model, suite layout, coverage ratchet, and runtime SLA.
 - `philosophy/`: design pressure and repo-local skills. It shapes decisions but does not replace specs, tests, or crate ownership docs.
@@ -19,6 +20,7 @@ Use the highest document that is true, actionable, and current. If a doc is mark
 
 ## Local Rules
 - Keep durable behavior in `specs/`, crate docs, tests, or the nearest owning `AGENTS.md`. Do not bury operational rules in a dated plan.
+- Keep active-goal continuity in `working-memory/` when the work is too long for one turn. Do not use a working-memory note as proof by itself; cite the current spec/code/test/report artifact it points to.
 - When updating a plan because reality changed, also update the owning spec or code contract if the change is now durable.
 - When adding or changing a status line, make the authority explicit: implemented contract, implementation spec, companion spec, planning note, superseded, or historical.
 - Do not move philosophy text into specs by quotation. Convert it into concrete crate boundaries, trait laws, error contracts, or test requirements.
