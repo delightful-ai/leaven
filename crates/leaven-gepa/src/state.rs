@@ -129,7 +129,13 @@ impl GepaReferenceState {
                     .validation_score
                     .map(|score| (score, record.candidate))
             })
-            .max_by(|left, right| left.0.total_cmp(&right.0))
+            .fold(
+                None,
+                |best: Option<(f64, CandidateId)>, current| match best {
+                    Some(best) if best.0 >= current.0 => Some(best),
+                    _ => Some(current),
+                },
+            )
             .map(|(_, candidate)| candidate)
     }
 
@@ -400,6 +406,20 @@ mod tests {
         );
         assert_eq!(state.index_of(seed), Some(seed_index));
         assert_eq!(state.best_candidate(), Some(seed));
+        let tied_child = CandidateId::new();
+        let tied_child_index = state.add_validated_candidate(
+            tied_child,
+            vec![seed_index],
+            11,
+            0.6,
+            vec![AssessmentId::new()],
+            &scalar_rows(&[(0, 0.5), (1, 0.7)]),
+        );
+        assert_eq!(
+            state.best_candidate(),
+            Some(seed),
+            "validation-score ties keep the earliest candidate like upstream full-eval best selection"
+        );
         assert_eq!(state.full_validation_evals(), 1);
         let selected = state.select_by_validation_frontier_frequency();
         assert!(matches!(
@@ -407,6 +427,7 @@ mod tests {
             Some((index, candidate))
                 if (index, candidate) == (seed_index, seed)
                     || (index, candidate) == (child_index, child)
+                    || (index, candidate) == (tied_child_index, tied_child)
         ));
 
         let seed_record = &state.records()[0];
@@ -426,12 +447,12 @@ mod tests {
 
         let unvalidated = CandidateId::new();
         let unvalidated_index = state.add_unvalidated_candidate(unvalidated, vec![child_index]);
-        assert_eq!(unvalidated_index, GepaCandidateIndex::new(2));
+        assert_eq!(unvalidated_index, GepaCandidateIndex::new(3));
         assert_eq!(
             state.add_unvalidated_candidate(unvalidated, Vec::new()),
             unvalidated_index
         );
-        let unvalidated_record = &state.records()[2];
+        let unvalidated_record = &state.records()[3];
         assert_eq!(unvalidated_record.parents(), &[child_index]);
         assert_eq!(unvalidated_record.validation_score(), None);
         assert_eq!(unvalidated_record.validation_rows(), &[]);

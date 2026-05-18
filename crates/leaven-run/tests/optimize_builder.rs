@@ -1221,7 +1221,7 @@ fn run_builder_separates_optimization_cost_from_final_report_cost() {
 }
 
 #[test]
-fn run_builder_sqlite_cache_stops_at_search_checkpoint_boundary() {
+fn run_builder_sqlite_cache_persists_final_report_rows_after_search_checkpoint() {
     let run_dir = temp_run_dir("sqlite-cache-search-boundary");
     let result = block_on(
         optimize(TextArtifact(40))
@@ -1249,8 +1249,8 @@ fn run_builder_sqlite_cache_stops_at_search_checkpoint_boundary() {
         })
         .unwrap();
     assert_eq!(
-        cached_entries, 1,
-        "durable evaluation cache must not persist final-report-only rows past the resume checkpoint",
+        cached_entries, 3,
+        "durable evaluation cache should preserve search and final-report rows so same-run replay does not repeat paid evaluations",
     );
     cleanup_path(&run_dir);
 }

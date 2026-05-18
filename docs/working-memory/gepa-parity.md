@@ -210,6 +210,13 @@ Prompt-audit finding:
   accepted reflection proposals. This is intentionally P8-local: generic
   `GepaReport` keeps optimizer state and candidate ids, while the AIME report
   carries domain prompt text needed for live-quality audits.
+- P8 candidate prompt projection now also emits `system_prompt_source`.
+  `seed_config` and `observed_reflection_response` mean the report carries the
+  prompt text; `unavailable_process_local_lm_telemetry` means the candidate was
+  restored from durable GEPA state but the reflection response was not observed
+  in the current process. This keeps resumed reports honest until prompt text is
+  recovered from durable graph/checkpoint state instead of process-local LM
+  telemetry.
 - post-run P8 proposal attempts now cross-link accepted children back to
   `child_index` and `child_validation_score`, so an operator can inspect why
   an accepted train-screening child did or did not become validation-best

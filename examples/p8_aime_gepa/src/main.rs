@@ -55,6 +55,7 @@ const OPTIMIZE_ANYTHING_SKIP_PERFECT_SCORE: bool = false;
 const GEPA_AIME_INTERNAL_ITERATION_CEILING: usize = 500;
 const GEPA_AIME_SOLVER_MODEL: &str = "gpt-4.1-mini";
 const GEPA_AIME_REFLECTION_MODEL: &str = "gpt-5.4-mini";
+const UPSTREAM_GEPA_AIME_REFLECTION_MODEL: &str = "openai/gpt-5.1";
 const DETERMINISTIC_SOLVER_MODEL: &str = "deterministic-aime-solver";
 const LEAVEN_AIME_SOLVER_CACHE_POLICY: &str = "LEAVEN_AIME_SOLVER_CACHE_POLICY";
 const LEAVEN_AIME_REFLECTION_CACHE_POLICY: &str = "LEAVEN_AIME_REFLECTION_CACHE_POLICY";
@@ -199,6 +200,14 @@ fn report_run_header_lines(config: &AimeRunConfig, run: &AimeRunResult) -> Vec<S
         format!(
             "comparison_reflection_prompt={}",
             config.profile.reflection_prompt_claim()
+        ),
+        format!(
+            "comparison_upstream_reflection_model={}",
+            config.profile.upstream_reflection_model()
+        ),
+        format!(
+            "comparison_leaven_reflection_model={}",
+            config.reflection.model
         ),
         format!("data_source={}", config.data_source.label()),
         format!("seed_system_prompt={}", config.seed_prompt),
@@ -919,6 +928,8 @@ fn p8_aime_report_json(config: &AimeRunConfig, run: &AimeRunResult) -> serde_jso
             "target": config.profile.comparison_target(),
             "published_test_score": config.profile.published_test_score(),
             "reflection_prompt": config.profile.reflection_prompt_claim(),
+            "upstream_reflection_model": config.profile.upstream_reflection_model(),
+            "leaven_reflection_model": config.reflection.model,
             "notes": config.profile.comparison_notes(),
         },
         "data_source": config.data_source.label(),
@@ -1035,9 +1046,11 @@ fn p8_gepa_report_json(
         "candidates": report.candidates.iter().map(|candidate| serde_json::json!({
             "index": candidate.index.get(),
             "candidate": candidate.candidate.to_string(),
-            "system_prompt": candidate_prompts
-                .get(&candidate.candidate)
-                .map(String::as_str),
+            "system_prompt": p8_gepa_candidate_prompt_text(&candidate_prompts, candidate.candidate),
+            "system_prompt_source": p8_gepa_candidate_prompt_source(
+                &candidate_prompts,
+                candidate.candidate
+            ),
             "parents": candidate.parents.iter().map(|index| index.get()).collect::<Vec<_>>(),
             "discovery_metric_calls": candidate.discovery_metric_calls,
             "validation_score": candidate.validation_score,
@@ -1107,6 +1120,12 @@ struct P8GepaCandidateAdmission {
     validation_score: Option<f64>,
 }
 
+#[derive(Clone, Debug)]
+struct P8GepaCandidatePrompt {
+    text: String,
+    source: &'static str,
+}
+
 fn p8_gepa_candidate_admission_map(
     report: &GepaReport,
 ) -> BTreeMap<CandidateId, P8GepaCandidateAdmission> {
@@ -1129,14 +1148,20 @@ fn p8_gepa_candidate_prompt_map(
     report: &GepaReport,
     reflection_requests: &[AimeLmRequestRecord],
     seed_prompt: &str,
-) -> BTreeMap<CandidateId, String> {
+) -> BTreeMap<CandidateId, P8GepaCandidatePrompt> {
     let mut prompts = BTreeMap::new();
     if let Some(seed) = report
         .candidates
         .iter()
         .find(|candidate| candidate.index.get() == 0)
     {
-        prompts.insert(seed.candidate, seed_prompt.to_owned());
+        prompts.insert(
+            seed.candidate,
+            P8GepaCandidatePrompt {
+                text: seed_prompt.to_owned(),
+                source: "seed_config",
+            },
+        );
     }
 
     let mut reflection_request_index = 0usize;
@@ -1159,10 +1184,31 @@ fn p8_gepa_candidate_prompt_map(
         };
         prompts.insert(
             child,
-            p8_extract_reflection_replacement(&response.assistant.content),
+            P8GepaCandidatePrompt {
+                text: p8_extract_reflection_replacement(&response.assistant.content),
+                source: "observed_reflection_response",
+            },
         );
     }
     prompts
+}
+
+fn p8_gepa_candidate_prompt_text(
+    prompts: &BTreeMap<CandidateId, P8GepaCandidatePrompt>,
+    candidate: CandidateId,
+) -> Option<&str> {
+    prompts.get(&candidate).map(|prompt| prompt.text.as_str())
+}
+
+fn p8_gepa_candidate_prompt_source(
+    prompts: &BTreeMap<CandidateId, P8GepaCandidatePrompt>,
+    candidate: CandidateId,
+) -> &'static str {
+    prompts
+        .get(&candidate)
+        .map_or("unavailable_process_local_lm_telemetry", |prompt| {
+            prompt.source
+        })
 }
 
 fn p8_gepa_attempt_reflection_json(
@@ -1553,6 +1599,8 @@ fn p8_lm_role_report_json(role: &AimeLmRoleReport) -> serde_json::Value {
             ),
             "request_example": p8_lm_request_json(&role.prompt_contract.request_example),
         },
+        "observed_requests_scope": "process_local",
+        "observed_request_count": role.metrics.requests.len(),
         "observed_requests": role
             .metrics
             .requests
@@ -1889,6 +1937,13 @@ impl AimeRunProfile {
             Self::DeterministicSmoke | Self::DspyQuickstart | Self::GepaAime => {
                 "upstream_optimize_anything_reflection_template"
             }
+        }
+    }
+
+    const fn upstream_reflection_model(self) -> &'static str {
+        match self {
+            Self::DeterministicSmoke => "none",
+            Self::DspyQuickstart | Self::GepaAime => UPSTREAM_GEPA_AIME_REFLECTION_MODEL,
         }
     }
 
@@ -3773,12 +3828,15 @@ fn parse_dspy_aime_chain_of_thought_response(raw: &str) -> Result<AimeRunOutput,
     let mut current: Option<String> = None;
     let mut buffer = Vec::<String>::new();
     for line in raw.lines() {
-        if let Some(field) = dspy_field_header(line.trim()) {
+        if let Some((field, remaining)) = dspy_field_header(line.trim()) {
             if let Some(name) = current.replace(field) {
                 fields
                     .entry(name)
                     .or_insert_with(|| buffer.join("\n").trim().to_owned());
                 buffer.clear();
+            }
+            if !remaining.is_empty() {
+                buffer.push(remaining);
             }
         } else {
             buffer.push(line.to_owned());
@@ -3789,7 +3847,10 @@ fn parse_dspy_aime_chain_of_thought_response(raw: &str) -> Result<AimeRunOutput,
             .entry(name)
             .or_insert_with(|| buffer.join("\n").trim().to_owned());
     }
-    let reasoning = fields.get("reasoning").cloned().unwrap_or_default();
+    let reasoning = fields
+        .get("reasoning")
+        .cloned()
+        .ok_or_else(|| "missing DSPy `reasoning` field".to_owned())?;
     let answer = fields
         .get("answer")
         .cloned()
@@ -3801,13 +3862,14 @@ fn parse_dspy_aime_chain_of_thought_response(raw: &str) -> Result<AimeRunOutput,
     })
 }
 
-fn dspy_field_header(line: &str) -> Option<String> {
-    let field = line.strip_prefix("[[ ## ")?.strip_suffix(" ## ]]")?;
+fn dspy_field_header(line: &str) -> Option<(String, String)> {
+    let rest = line.strip_prefix("[[ ## ")?;
+    let (field, remaining) = rest.split_once(" ## ]]")?;
     if field
         .chars()
         .all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
     {
-        Some(field.to_owned())
+        Some((field.to_owned(), remaining.trim().to_owned()))
     } else {
         None
     }
@@ -4176,8 +4238,6 @@ fn aime_runner_fingerprint(
     builder.update(
         serde_json::to_vec(&config.sampling).expect("AIME solver sampling config serializes"),
     );
-    builder.update(report_lm_cache_policy(config.cache_policy).as_bytes());
-    builder.update(report_lm_cache_backend(config.runtime.cache_backend).as_bytes());
     builder.update(config.runtime.max_concurrent_requests.get().to_le_bytes());
     builder.update(config.runtime.request_timeout_seconds.to_le_bytes());
     if let Some(fingerprint) = solver_lm_fingerprint {
@@ -4225,8 +4285,6 @@ fn aime_reflection_role_fingerprint(
     builder.update(
         serde_json::to_vec(&config.sampling).expect("AIME reflection sampling config serializes"),
     );
-    builder.update(report_lm_cache_policy(config.cache_policy).as_bytes());
-    builder.update(report_lm_cache_backend(config.runtime.cache_backend).as_bytes());
     builder.update(config.runtime.max_concurrent_requests.get().to_le_bytes());
     builder.update(config.runtime.request_timeout_seconds.to_le_bytes());
     builder.update(b"reflection-lm");
@@ -4822,6 +4880,39 @@ mod tests {
     }
 
     #[test]
+    fn p8_role_fingerprints_ignore_lm_cache_replay_controls() {
+        let runtime = AimeOpenAiRuntimeConfig::from_values(Some("7"), Some("sqlite"), Some("600"));
+        let eager_runtime =
+            AimeOpenAiRuntimeConfig::from_values(Some("7"), Some("eager-sqlite"), Some("600"));
+        let read_write = AimeRunConfig::live_openai_with_controls(
+            AimeRunProfile::GepaAime,
+            AimeDataSource::HuggingFaceCache,
+            GEPA_AIME_METRIC_CALLS,
+            AimeLmCachePolicies::from_values(Some("read-write"), Some("read-write")),
+            runtime,
+        );
+        let cache_only = AimeRunConfig::live_openai_with_controls(
+            AimeRunProfile::GepaAime,
+            AimeDataSource::HuggingFaceCache,
+            GEPA_AIME_METRIC_CALLS,
+            AimeLmCachePolicies::from_values(Some("cache-only"), Some("cache-only")),
+            eager_runtime,
+        );
+        let provider = openai_provider_fingerprint_for_runtime(runtime);
+
+        assert_eq!(
+            aime_runner_fingerprint(&read_write.solver, Some(provider)),
+            aime_runner_fingerprint(&cache_only.solver, Some(provider)),
+            "switching from paid read-write to eager cache-only replay must not block resume"
+        );
+        assert_eq!(
+            aime_reflection_role_fingerprint(&read_write.reflection, provider),
+            aime_reflection_role_fingerprint(&cache_only.reflection, provider),
+            "reflection role identity should track model/runtime/prompt shape, not cache transport"
+        );
+    }
+
+    #[test]
     fn dspy_quickstart_profile_matches_published_comparison_denominator() {
         let config = AimeRunConfig::dspy_quickstart();
 
@@ -4948,6 +5039,27 @@ Provide the new parameter value within ``` blocks.";
         assert_eq!(parsed.reasoning, "19 + 23 = 42.");
         assert_eq!(parsed.answer, "42");
         assert!(parsed.raw.trim_start().starts_with("[[ ## reasoning ## ]]"));
+    }
+
+    #[test]
+    fn aime_solver_parser_accepts_dspy_same_line_field_content() {
+        let parsed = parse_dspy_aime_chain_of_thought_response(
+            "[[ ## reasoning ## ]] 19 + 23 = 42.\n[[ ## answer ## ]] 42\n[[ ## completed ## ]]",
+        )
+        .expect("DSPy chat adapter accepts same-line field content");
+
+        assert_eq!(parsed.reasoning, "19 + 23 = 42.");
+        assert_eq!(parsed.answer, "42");
+    }
+
+    #[test]
+    fn aime_solver_parser_requires_all_dspy_output_fields() {
+        let error = parse_dspy_aime_chain_of_thought_response(
+            "[[ ## answer ## ]]\n42\n\n[[ ## completed ## ]]",
+        )
+        .expect_err("DSPy chat adapter requires the ChainOfThought reasoning field");
+
+        assert_eq!(error, "missing DSPy `reasoning` field");
     }
 
     #[test]
@@ -5306,6 +5418,27 @@ Provide the new parameter value within ``` blocks."
         assert_eq!(
             resumed.role_reports.reflection.metrics.calls, 0,
             "restored GEPA must not call reflection again after budget-stopped checkpoint"
+        );
+        let resumed_report_json = p8_aime_report_json(&config, &resumed);
+        assert_eq!(
+            resumed_report_json["lm_roles"][1]["observed_requests_scope"],
+            "process_local"
+        );
+        assert_eq!(
+            resumed_report_json["lm_roles"][1]["observed_request_count"],
+            0
+        );
+        assert_eq!(
+            resumed_report_json["gepa_report"]["candidates"][0]["system_prompt_source"],
+            "seed_config"
+        );
+        assert_eq!(
+            resumed_report_json["gepa_report"]["candidates"][1]["system_prompt_source"],
+            "unavailable_process_local_lm_telemetry"
+        );
+        assert_eq!(
+            resumed_report_json["gepa_report"]["candidates"][1]["system_prompt"],
+            serde_json::Value::Null
         );
         assert!(resumed.optimized.summary.storage.is_resumable());
         assert!(resumed.optimized.summary.cache.evaluation.durable);
@@ -5676,6 +5809,14 @@ Provide the new parameter value within ``` blocks."
             report["comparison_reflection_prompt"],
             config.profile.reflection_prompt_claim()
         );
+        assert_eq!(
+            report["comparison"]["upstream_reflection_model"],
+            config.profile.upstream_reflection_model()
+        );
+        assert_eq!(
+            report["comparison"]["leaven_reflection_model"],
+            config.reflection.model
+        );
         assert_eq!(report["dataset"]["train_count"], 3);
         assert_eq!(report["dataset"]["validation_count"], 1);
         assert_eq!(report["dataset"]["test_count"], 2);
@@ -5735,6 +5876,23 @@ Provide the new parameter value within ``` blocks."
         assert_eq!(
             report["lm_roles"][1]["prompt_contract"]["request_example"]["messages"][0]["role"],
             "user"
+        );
+        assert_eq!(
+            report["lm_roles"][0]["observed_requests_scope"],
+            "process_local"
+        );
+        assert_eq!(
+            report["lm_roles"][1]["observed_requests_scope"],
+            "process_local"
+        );
+        assert_eq!(
+            report["lm_roles"][1]["observed_request_count"],
+            serde_json::json!(
+                report["lm_roles"][1]["observed_requests"]
+                    .as_array()
+                    .unwrap()
+                    .len()
+            )
         );
         assert!(
             report["lm_roles"][1]["prompt_contract"]["request_example"]["messages"][0]["content"]
@@ -5986,10 +6144,18 @@ Provide the new parameter value within ``` blocks."
         );
         assert_eq!(gepa_report["candidates"][1]["index"], 1);
         assert_eq!(gepa_report["candidates"][0]["system_prompt"], BASELINE);
+        assert_eq!(
+            gepa_report["candidates"][0]["system_prompt_source"],
+            "seed_config"
+        );
         assert!(
             gepa_report["candidates"][1]["system_prompt"]
                 .as_str()
                 .is_some_and(|prompt| prompt.contains("modular arithmetic"))
+        );
+        assert_eq!(
+            gepa_report["candidates"][1]["system_prompt_source"],
+            "observed_reflection_response"
         );
         assert_eq!(
             gepa_report["candidates"][1]["parents"],

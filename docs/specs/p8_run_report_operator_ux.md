@@ -58,7 +58,9 @@ The public result/report must expose:
 - best candidate id and best prompt/artifact;
 - AIME candidate table rows with candidate id, GEPA index, lineage,
   validation score/subscores, and system prompt text when the prompt can be
-  reconstructed from the seed or an accepted reflection proposal;
+  reconstructed from the seed or an accepted reflection proposal, plus a
+  prompt-source field that says whether the text came from seed config,
+  process-local reflection telemetry, or is unavailable after durable resume;
 - GEPA proposal-attempt rows that distinguish train-screen acceptance from
   admitted candidate index after full validation;
 - cache mode and cache summaries;
