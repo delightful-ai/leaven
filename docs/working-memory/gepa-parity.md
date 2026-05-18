@@ -1,7 +1,7 @@
 # GEPA Parity Working Ledger
 
 Status: active.
-Updated: 2026-05-18T09:18:50Z.
+Updated: 2026-05-18T09:27:04Z.
 
 ## Authority
 
@@ -113,14 +113,18 @@ Current speed stance:
 
 - reference GEPA stays serial and fully validating until the P8 live quality
   row is closed;
-- parallel proposals, lazy validation/certification, active failure sampling,
-  evaluator pyramids, and trace distillation should be modeled as explicit
-  library profiles/seams, not P8-only patches;
+- `GepaProfile::FastCertified` is the first implemented speed profile: smaller
+  train probes and two serial proposal attempts per selected parent, while
+  preserving full validation before reference admission;
+- parallel proposal workers, lazy validation/certification, active failure
+  sampling, evaluator pyramids, and trace distillation should be modeled as
+  explicit follow-on library profiles/seams, not P8-only patches;
 - cheap/proxy stages may filter or prioritize, but only the real evaluator and
   full validation can admit/crown reference candidates;
-- first concrete speed work should be observability and safe opt-in API shape:
+- current concrete speed work is observability plus safe opt-in API shape:
   expose accepted-but-unadmitted children, attempt counts, and validation
-  counts in reports so long runs can be cut off or resumed from data.
+  counts in reports so long runs can be cut off or resumed from data, and keep
+  `proposal_count` labeled as serial rather than async island GEPA.
 
 Current feedback/reflection answer:
 
@@ -199,18 +203,13 @@ Current in-flight JSON-fallback run:
 Pointer file currently points at this run. Observed process:
 
 - PID `2771`, command `target/debug/p8_aime_gepa`;
-- start time `Mon May 18 01:43:04 2026`, elapsed about 36 minutes at the
-  2026-05-18T09:18Z check;
-- stdout/stderr pipe is still open through the launching `tee`;
-- open network sockets to `162.159.140.245:https` indicate provider work is
-  still in flight;
-- latest output line at the check was after `request_count=38`,
-  `total_assessment_rows=189`, immediately after `apply_succeeded` for child
-  `5983fe10-bcd7-4a3a-b5c8-85e82c1beb96`;
+- start time `Mon May 18 01:43:04 2026`, elapsed about 43 minutes at the
+  2026-05-18T09:27Z check;
+- run directory contained 200 evidence JSON files at the check;
+- no run-local `run.log` was present at the check; inspect the process/tee
+  owner or emitted reports instead of assuming a sidecar log path;
 - no `reports/summary.json`, `reports/p8-aime.json`, or durable provider
   failure file had been emitted yet;
-- run-local `run.sqlite` only contained `evaluation_cache_entries` and had zero
-  persisted rows at the check.
 
 Do not treat this run as a completed live proof until it emits reports and the
 profile/model/dataset/cache/budget/provider-failure/result fields are inspected.

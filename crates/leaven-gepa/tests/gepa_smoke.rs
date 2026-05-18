@@ -22,8 +22,8 @@ use leaven_evidence::{
 use leaven_gepa::test_support::FixedSurfaceEdit;
 use leaven_gepa::{
     CandidateSelector, CheckpointCandidateSelector, CheckpointGate, CheckpointPopulation,
-    FullValidation, Gate, GateDecision, Gepa, GepaPopulation, GepaReflector, ImprovementOrEqual,
-    NoRegression, PopulationBestFallback, ReflectRequest, ReflectiveCaseInput,
+    FullValidation, Gate, GateDecision, Gepa, GepaPopulation, GepaProfile, GepaReflector,
+    ImprovementOrEqual, NoRegression, PopulationBestFallback, ReflectRequest, ReflectiveCaseInput,
     ReflectiveDatasetBuilder, ReflectiveExample, SelectBestCandidate, StrictImprovement,
     SurfaceProposer,
     validation::{
@@ -1250,6 +1250,71 @@ fn gepa_proposal_count_applies_multiple_reflections_in_one_iteration() {
         assert!(child_artifacts.contains(&"improved-b".to_owned()));
         assert_eq!(view.proposal_batch_count(), 2);
         assert_eq!(view.assessment_count(), 3);
+    });
+}
+
+#[test]
+fn fast_certified_profile_keeps_full_validation_admission() {
+    block_on(async {
+        let case_set = CaseSet::new(vec![(), ()])
+            .with_partition(
+                leaven_core::PartitionId::from("TRAIN"),
+                vec![leaven_kernel::CaseId::new(0)],
+            )
+            .with_partition(
+                leaven_core::PartitionId::from("VALIDATION"),
+                vec![leaven_kernel::CaseId::new(1)],
+            );
+        let store = InlineEvidenceStore::<ScalarEvidence>::new("inline");
+        let mut engine = Engine::<SamplingProblem>::builder()
+            .evaluator(PrefixImprovementEvaluator)
+            .build();
+        let seed = engine
+            .insert_seed(
+                PartMapArtifact(BTreeMap::from([("answer".to_owned(), "draft".to_owned())])),
+                0,
+            )
+            .unwrap();
+        let mut gepa = Gepa::new(
+            PartMapSurface,
+            ParetoFrontier::by_case().build(),
+            SequentialSurfaceEdits::new(["improved-a", "improved-b"]),
+        )
+        .reflective_dataset(OneReflectiveExample)
+        .with_profile(GepaProfile::FastCertified)
+        .max_iterations(1);
+
+        engine.run(&mut gepa, &case_set, &store).await.unwrap();
+
+        let report = gepa.report();
+        assert_eq!(GepaProfile::FastCertified.label(), "fast-certified");
+        assert_eq!(report.proposal_attempts.len(), 2);
+        assert_eq!(report.candidates.len(), 3);
+        assert_eq!(report.full_validation_evals, 3);
+        assert_eq!(
+            report
+                .proposal_attempts
+                .iter()
+                .filter(|attempt| attempt.accepted == Some(true))
+                .count(),
+            2
+        );
+        assert!(
+            report
+                .proposal_attempts
+                .iter()
+                .all(|attempt| attempt.admitted_index.is_some()),
+            "fast-certified profile must not make train-only accepted children look certified"
+        );
+        assert_eq!(
+            report.proposal_attempts[0].parent_cases,
+            report.proposal_attempts[0].child_cases
+        );
+        assert_eq!(
+            report.proposal_attempts[1].parent_cases,
+            report.proposal_attempts[1].child_cases
+        );
+        assert_eq!(engine.view().candidate_tree().children(seed).len(), 2);
     });
 }
 

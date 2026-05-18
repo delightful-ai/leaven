@@ -43,6 +43,57 @@ const GEPA_OPTIMIZER_FINGERPRINT: Fingerprint = Fingerprint::from_bytes([8; 32])
 const DEFAULT_MAX_ITERATIONS: usize = 500;
 const GEPA_CHECKPOINT_SCHEMA: Fingerprint = Fingerprint::from_bytes([12; 32]);
 const DEFAULT_PERFECT_SCORE: f64 = 1.0;
+const FAST_CERTIFIED_MINIBATCH_SIZE: usize = 1;
+const FAST_CERTIFIED_PROPOSAL_COUNT: usize = 2;
+
+/// Named GEPA strategy profiles.
+///
+/// Profiles are convenience presets over the existing public strategy seams.
+/// They do not hide a second optimizer loop: reference GEPA still owns state in
+/// this crate, and opt-in profiles must preserve their certification claims.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+pub enum GepaProfile {
+    /// Upstream-reference GEPA defaults: epoch minibatch 3, one proposal per
+    /// selected parent, skip-perfect enabled, and full validation before
+    /// reference admission.
+    Reference,
+    /// Faster certified profile: smaller train probes and two serial proposal
+    /// attempts per selected parent, while still requiring full validation
+    /// before a child enters the GEPA reference state.
+    ///
+    /// This is not the future async/lazy-certification FastGEPA design; it is
+    /// the currently implemented safe speed preset.
+    FastCertified,
+}
+
+impl GepaProfile {
+    /// Stable profile label for reports and operator logs.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Reference => "reference",
+            Self::FastCertified => "fast-certified",
+        }
+    }
+
+    const fn minibatch_size(self) -> usize {
+        match self {
+            Self::Reference => 3,
+            Self::FastCertified => FAST_CERTIFIED_MINIBATCH_SIZE,
+        }
+    }
+
+    const fn proposal_count(self) -> usize {
+        match self {
+            Self::Reference => 1,
+            Self::FastCertified => FAST_CERTIFIED_PROPOSAL_COUNT,
+        }
+    }
+
+    const fn skip_perfect_score(self) -> bool {
+        true
+    }
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct GepaValidationBest {
@@ -396,7 +447,30 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
         self
     }
 
-    /// Set how many proposal attempts to run for the selected candidate in each iteration.
+    /// Apply a named GEPA strategy profile.
+    ///
+    /// Profiles are explicit presets, not hidden compatibility modes. Applying
+    /// a profile replaces the train-batch sampler and accepted-child validation
+    /// policy with the profile's certified settings.
+    #[must_use]
+    pub fn with_profile(
+        self,
+        profile: GepaProfile,
+    ) -> Gepa<S, Pop, Reflect, CandidateSel, PartSel, GatePol, EpochShuffled, FullValidation, Dataset>
+    {
+        self.batch_sampler(EpochShuffled::new(profile.minibatch_size()))
+            .validation_policy(FullValidation)
+            .proposal_count(profile.proposal_count())
+            .skip_perfect_score(profile.skip_perfect_score())
+    }
+
+    /// Set how many serial proposal attempts to run for the selected candidate
+    /// in each iteration.
+    ///
+    /// This is useful for proposal-throughput experiments, but it is not async
+    /// island GEPA: attempts share the same selected parent and train
+    /// minibatch, and they are processed through the reference admission path
+    /// one at a time.
     #[must_use]
     pub const fn proposal_count(mut self, proposal_count: usize) -> Self {
         self.proposal_count = proposal_count;

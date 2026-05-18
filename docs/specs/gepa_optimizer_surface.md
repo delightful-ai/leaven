@@ -303,6 +303,7 @@ max_metric_calls(...)
 max_iterations(...)
 seed(u64)
 proposal_count(usize)
+with_profile(GepaProfile::Reference | GepaProfile::FastCertified)
 track_best_outputs(bool)
 track_candidate_history(bool)
 split_policy(...)
@@ -334,6 +335,15 @@ is no implicit string split, prompt-section split, or whole-artifact mutation
 fallback unless a concrete surface type implements it.
 
 ## 8. GEPA Step Contract
+
+Named profiles are presets over this step contract, not separate hidden
+engines. `GepaProfile::Reference` keeps the upstream-compatible certified loop.
+`GepaProfile::FastCertified` is the first opt-in speed profile: it uses smaller
+train probes and multiple serial proposal attempts per selected parent while
+preserving full validation before reference admission. It is deliberately not
+the future lazy-certification / async-island FastGEPA design; those variants
+must land as explicit new policies with report fields that distinguish
+uncertified, approximately certified, and fully certified candidates.
 
 One ordinary reflective mutation iteration is:
 
