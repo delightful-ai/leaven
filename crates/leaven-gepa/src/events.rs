@@ -33,7 +33,10 @@ pub enum GepaEventSummary {
     /// Train minibatch was sampled.
     TrainMinibatchSampled { cases: Vec<CaseId> },
     /// Parent evaluation completed.
-    ParentEvaluated { metric_calls_delta: u64 },
+    ParentEvaluated {
+        metric_calls_delta: u64,
+        score: String,
+    },
     /// Proposal was skipped before provider work.
     ProposalSkipped { reason: GepaSkipReason },
     /// Reflective examples were built.
@@ -42,10 +45,26 @@ pub enum GepaEventSummary {
         cases: Vec<CaseId>,
         source_ref_count: usize,
     },
+    /// Reflection provider work is about to start.
+    ReflectionStarted {
+        parent: CandidateId,
+        part_label: String,
+        records: usize,
+        cases: Vec<CaseId>,
+        source_ref_count: usize,
+    },
+    /// Reflection provider work completed and produced an optional child candidate.
+    ReflectionCompleted {
+        parent: CandidateId,
+        child: Option<CandidateId>,
+    },
     /// Child candidate was built.
     ChildBuilt { candidate: CandidateId },
     /// Child evaluation completed.
-    ChildEvaluated { metric_calls_delta: u64 },
+    ChildEvaluated {
+        metric_calls_delta: u64,
+        score: String,
+    },
     /// Proposal was accepted by the train-screening policy.
     ProposalAccepted { child: CandidateId },
     /// Proposal was rejected by the train-screening policy.

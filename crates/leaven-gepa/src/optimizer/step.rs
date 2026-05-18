@@ -197,6 +197,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             .add_metric_calls(parent_screening.metric_calls_new);
         self.record_event(GepaEventSummary::ParentEvaluated {
             metric_calls_delta: parent_screening.metric_calls_new,
+            score: parent_screening.average_score.to_string(),
         });
         Ok(parent_screening)
     }
@@ -256,6 +257,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             .add_metric_calls(screened.metric_calls_new);
         self.record_event(GepaEventSummary::ChildEvaluated {
             metric_calls_delta: screened.metric_calls_new,
+            score: screened.average_score.to_string(),
         });
         let accepted = self
             .gate

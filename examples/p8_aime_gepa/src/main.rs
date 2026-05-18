@@ -970,9 +970,13 @@ fn p8_gepa_event_json(event: &GepaEventSummary) -> serde_json::Value {
             "phase": "train_minibatch_sampled",
             "cases": cases.iter().map(ToString::to_string).collect::<Vec<_>>(),
         }),
-        GepaEventSummary::ParentEvaluated { metric_calls_delta } => serde_json::json!({
+        GepaEventSummary::ParentEvaluated {
+            metric_calls_delta,
+            score,
+        } => serde_json::json!({
             "phase": "parent_evaluated",
             "metric_calls_delta": metric_calls_delta,
+            "score": score,
         }),
         GepaEventSummary::ProposalSkipped { reason } => serde_json::json!({
             "phase": "proposal_skipped",
@@ -988,13 +992,36 @@ fn p8_gepa_event_json(event: &GepaEventSummary) -> serde_json::Value {
             "cases": cases.iter().map(ToString::to_string).collect::<Vec<_>>(),
             "source_ref_count": source_ref_count,
         }),
+        GepaEventSummary::ReflectionStarted {
+            parent,
+            part_label,
+            records,
+            cases,
+            source_ref_count,
+        } => serde_json::json!({
+            "phase": "reflection_started",
+            "parent": parent.to_string(),
+            "part_label": part_label,
+            "records": records,
+            "cases": cases.iter().map(ToString::to_string).collect::<Vec<_>>(),
+            "source_ref_count": source_ref_count,
+        }),
+        GepaEventSummary::ReflectionCompleted { parent, child } => serde_json::json!({
+            "phase": "reflection_completed",
+            "parent": parent.to_string(),
+            "child": child.map(|candidate| candidate.to_string()),
+        }),
         GepaEventSummary::ChildBuilt { candidate } => serde_json::json!({
             "phase": "child_built",
             "candidate": candidate.to_string(),
         }),
-        GepaEventSummary::ChildEvaluated { metric_calls_delta } => serde_json::json!({
+        GepaEventSummary::ChildEvaluated {
+            metric_calls_delta,
+            score,
+        } => serde_json::json!({
             "phase": "child_evaluated",
             "metric_calls_delta": metric_calls_delta,
+            "score": score,
         }),
         GepaEventSummary::ProposalAccepted { child } => serde_json::json!({
             "phase": "proposal_accepted",
@@ -4960,6 +4987,31 @@ Provide the new parameter value within ``` blocks."
                 .iter()
                 .any(|event| event["phase"] == "reflective_dataset_built")
         );
+        assert!(gepa_events.iter().any(|event| {
+            event["phase"] == "reflection_started"
+                && event["records"].as_u64().is_some_and(|records| records > 0)
+                && event["source_ref_count"]
+                    .as_u64()
+                    .is_some_and(|refs| refs > 0)
+                && event["cases"].as_array().is_some_and(|cases| !cases.is_empty())
+        }));
+        assert!(gepa_events.iter().any(|event| {
+            event["phase"] == "reflection_completed" && event["child"].as_str().is_some()
+        }));
+        assert!(gepa_events.iter().any(|event| {
+            event["phase"] == "parent_evaluated"
+                && event["metric_calls_delta"]
+                    .as_u64()
+                    .is_some_and(|calls| calls > 0)
+                && event["score"].as_str().is_some_and(|score| !score.is_empty())
+        }));
+        assert!(gepa_events.iter().any(|event| {
+            event["phase"] == "child_evaluated"
+                && event["metric_calls_delta"]
+                    .as_u64()
+                    .is_some_and(|calls| calls > 0)
+                && event["score"].as_str().is_some_and(|score| !score.is_empty())
+        }));
         assert!(
             gepa_events
                 .iter()

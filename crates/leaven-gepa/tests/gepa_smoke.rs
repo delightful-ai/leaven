@@ -1811,6 +1811,18 @@ fn accepted_iteration_emits_reference_phase_order() {
                 leaven_gepa::GepaEventSummary::ReflectiveDatasetBuilt { .. }
             )
         });
+        let reflection_started = event_position(events, |event| {
+            matches!(
+                event,
+                leaven_gepa::GepaEventSummary::ReflectionStarted { .. }
+            )
+        });
+        let reflection_completed = event_position(events, |event| {
+            matches!(
+                event,
+                leaven_gepa::GepaEventSummary::ReflectionCompleted { .. }
+            )
+        });
         let child_built = event_position(events, |event| {
             matches!(event, leaven_gepa::GepaEventSummary::ChildBuilt { .. })
         });
@@ -1851,6 +1863,8 @@ fn accepted_iteration_emits_reference_phase_order() {
                 minibatch,
                 parent_evaluated,
                 dataset,
+                reflection_started,
+                reflection_completed,
                 child_built,
                 child_evaluated,
                 accepted,
@@ -1861,6 +1875,48 @@ fn accepted_iteration_emits_reference_phase_order() {
             .windows(2)
             .all(|pair| pair[0] < pair[1]),
             "GEPA phase events must preserve reference loop order: {events:?}"
+        );
+        assert!(
+            events.iter().any(|event| matches!(
+                event,
+                leaven_gepa::GepaEventSummary::ParentEvaluated {
+                    metric_calls_delta,
+                    score
+                } if *metric_calls_delta > 0 && !score.is_empty()
+            )),
+            "parent evaluation events must include score and metric payloads: {events:?}"
+        );
+        assert!(
+            events.iter().any(|event| matches!(
+                event,
+                leaven_gepa::GepaEventSummary::ReflectionStarted {
+                    records,
+                    cases,
+                    source_ref_count,
+                    ..
+                } if *records > 0 && !cases.is_empty() && *source_ref_count > 0
+            )),
+            "reflection-start events must expose dataset/source payloads: {events:?}"
+        );
+        assert!(
+            events.iter().any(|event| matches!(
+                event,
+                leaven_gepa::GepaEventSummary::ReflectionCompleted {
+                    child: Some(_),
+                    ..
+                }
+            )),
+            "reflection-completed events must expose child production: {events:?}"
+        );
+        assert!(
+            events.iter().any(|event| matches!(
+                event,
+                leaven_gepa::GepaEventSummary::ChildEvaluated {
+                    metric_calls_delta,
+                    score
+                } if *metric_calls_delta > 0 && !score.is_empty()
+            )),
+            "child evaluation events must include score and metric payloads: {events:?}"
         );
     });
 }

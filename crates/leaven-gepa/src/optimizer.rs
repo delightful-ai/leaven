@@ -785,10 +785,11 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
                 OptimizerError::with_source("GEPA reflective-dataset build failed", source)
             })?;
         let reflective_example_count = examples.len();
-        let reflective_cases = examples.iter().filter_map(|example| example.case).collect();
+        let reflective_cases: Vec<CaseId> =
+            examples.iter().filter_map(|example| example.case).collect();
         self.record_event(GepaEventSummary::ReflectiveDatasetBuilt {
             records: reflective_example_count,
-            cases: reflective_cases,
+            cases: reflective_cases.clone(),
             source_ref_count: parent_assessments.len() + 1,
         });
         if examples.is_empty() {
@@ -817,10 +818,21 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             examples,
             source_refs,
         };
+        self.record_event(GepaEventSummary::ReflectionStarted {
+            parent,
+            part_label: part_label.clone(),
+            records: reflective_example_count,
+            cases: reflective_cases,
+            source_ref_count: parent_assessments.len() + 1,
+        });
         let candidate = self
             .reflector
             .reflect_candidate(ctx, &self.surface, request)
             .await?;
+        self.record_event(GepaEventSummary::ReflectionCompleted {
+            parent,
+            child: candidate,
+        });
         if let Some(candidate) = candidate {
             self.record_event(GepaEventSummary::ChildBuilt { candidate });
         }
