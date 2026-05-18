@@ -992,6 +992,14 @@ Cache/replay attempts after the report-schema fixes:
   overfit to a few topics. This keeps the quality gap centered on reflection
   model/search outcome, not on the already-proven optimize-anything prompt
   renderer.
+- Bead tracker check on 2026-05-18 found only one open GEPA/reflection design
+  task besides the P8 proof epic: `leaven-338`, "Multi-part
+  (multi-component) GEPA reflection as an opt-in path." Its own constraints say
+  single-part `RoundRobinPart` reflection stays the GEPA-parity default and
+  multi-part reflection is an explicit divergence for coupled agent kits. Do
+  not block current GEPA/AIME parity on this bead or silently fold it into
+  `GepaProfile::Reference` / `GepaProfile::OptimizeAnything`; if implemented,
+  it needs a named opt-in profile/surface and separate proof.
 - Intentional delta still current: `FastCertified` and future FastGEPA ideas
   are Leaven-plus profiles, not reference parity. Spec the profile before
   adding lazy certification, active sampling, async islands, evaluator pyramids,
@@ -1018,14 +1026,17 @@ Cache/replay attempts after the report-schema fixes:
     either use strict `LEAVEN_AIME_REFLECTION_MODEL=gpt-5.1` or be labeled as a
     Leaven-plus model/profile experiment.
 
-1. Diagnose why the historical completed report improves over seed but still
-   lands below the pinned GEPA CAIS target. Start from emitted prompts,
-   candidate lineage, reflection outputs, child admission history, minibatch
-   cases, and parser outcomes.
-2. Diff the historical completed report against the prior live artifacts and
-   upstream GEPA/DSPy AIME traces where available. Treat result-quality parity
-   as open until held-out quality is comparable to the target or the spec
-   labels the remaining model/runtime delta.
+1. Continue no-spend quality diagnosis only where it can produce new evidence:
+   use emitted Leaven prompts, candidate lineage, reflection outputs, child
+   admission history, minibatch cases, parser outcomes, and the CAIS checkpoint
+   candidate prompt trajectory. Do not wait for upstream reflection assistant
+   text from this checkout; `gepa_state.bin` did not persist it and `run.log` is
+   absent.
+2. Treat result-quality parity as open until a current-profile live report with
+   comparable held-out quality exists, or the specs label the remaining
+   model/runtime delta. The clean paid comparison is a strict upstream-reflector
+   run with `LEAVEN_AIME_REFLECTION_MODEL=gpt-5.1`; Leaven-plus profile
+   experiments should be labeled as such before spend.
 3. Future release reports should be generated with the post-run event-schema
    fix so live-proof checks can sum `gepa_events[*].metric_calls_delta` back to
    the GEPA report metric total directly. The historical completed release
