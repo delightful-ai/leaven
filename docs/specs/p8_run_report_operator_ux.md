@@ -42,6 +42,7 @@ not a private side channel.
 The public result/report must expose:
 
 - run id;
+- public run profile and selected GEPA strategy profile;
 - run directory when local durable storage is used;
 - latest checkpoint id;
 - resumability;
@@ -250,8 +251,9 @@ Required tests:
 - failed operator runs include the same safe profile, cache, run-dir, and proof
   classification context needed to diagnose cache-only replay or compatibility
   refusals without reconstructing environment variables;
-- P8 report lines include run dir, resumability, stop reason, cache summary,
-  budget split, source ids, and proof classification;
+- P8 report lines include run profile, GEPA strategy profile, run dir,
+  resumability, stop reason, cache summary, budget split, source ids, and proof
+  classification;
 - P8 case report rows include output/feedback refs and do not include hidden
   target payloads;
 - P8 case report rows include non-empty trace refs when runner/scorer traces are

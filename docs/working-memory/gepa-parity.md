@@ -1,7 +1,7 @@
 # GEPA Parity Working Ledger
 
 Status: active.
-Updated: 2026-05-18T09:27:04Z.
+Updated: 2026-05-18T09:35:13Z.
 
 ## Authority
 
@@ -116,6 +116,9 @@ Current speed stance:
 - `GepaProfile::FastCertified` is the first implemented speed profile: smaller
   train probes and two serial proposal attempts per selected parent, while
   preserving full validation before reference admission;
+- P8 defaults to `GepaProfile::Reference` and exposes the opt-in speed preset
+  through `LEAVEN_AIME_GEPA_PROFILE=fast-certified`; release reports must
+  disclose the selected GEPA profile before any speed/result claim;
 - parallel proposal workers, lazy validation/certification, active failure
   sampling, evaluator pyramids, and trace distillation should be modeled as
   explicit follow-on library profiles/seams, not P8-only patches;
@@ -524,8 +527,8 @@ Cache/replay attempts after the report-schema fixes:
   casewise cache hits for a same-content/new-candidate request. Root cause:
   engine evaluation cache keys use candidate content identity, but cache values
   were raw assessment ids whose target still named the older candidate id.
-  Fix in progress: rematerialize zero-cost assessment rows for the requested
-  candidate on casewise content-cache hits.
+  Fixed in current code: casewise content-cache hits rematerialize zero-cost
+  assessment rows for the requested candidate.
 - cache-only resume against that same run after the engine fix replayed the
   three formerly bad rows as zero-cost cache hits, did not reproduce the
   wrong-candidate assertion, and failed closed at the next uncached reflection

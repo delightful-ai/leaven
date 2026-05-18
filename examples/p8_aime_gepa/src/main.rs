@@ -138,6 +138,7 @@ fn error_report_lines(
 fn error_report_context_lines(config: &AimeRunConfig) -> Vec<String> {
     vec![
         format!("run_profile={}", config.profile.label()),
+        format!("gepa_profile={}", config.gepa_profile.label()),
         format!("data_source={}", config.data_source.label()),
         format!(
             "proof_classification={}",
@@ -192,6 +193,7 @@ fn report_run_header_lines(config: &AimeRunConfig, run: &AimeRunResult) -> Vec<S
     let result = &run.optimized;
     let mut lines = vec![
         format!("run_profile={}", config.profile.label()),
+        format!("gepa_profile={}", config.gepa_profile.label()),
         format!(
             "proof_classification={}",
             proof_classification_for_report(config, &run.role_reports)
@@ -854,6 +856,7 @@ async fn try_run_aime(
                     .with_reflector_config(aime_reflector_config(&config.reflection))
                     .surface(AimePromptSurface)
                     .build()
+                    .with_profile(config.gepa_profile)
                     .skip_perfect_score(OPTIMIZE_ANYTHING_SKIP_PERFECT_SCORE)
                     .on_event(move |event| {
                         gepa_event_sink
@@ -977,6 +980,7 @@ fn p8_aime_report_json(config: &AimeRunConfig, run: &AimeRunResult) -> serde_jso
     serde_json::json!({
         "schema": "leaven.p8_aime.report.v1",
         "run_profile": config.profile.label(),
+        "gepa_profile": config.gepa_profile.label(),
         "proof_classification": proof_classification_for_report(config, &run.role_reports),
         "comparison_target": config.profile.comparison_target(),
         "comparison_published_test_score": config.profile.published_test_score(),
@@ -2890,6 +2894,22 @@ fn parse_lm_cache_policy(env_name: &str, value: Option<&str>) -> LmCachePolicy {
         _ => panic!(
             "unsupported {env_name}={raw:?}; expected never, read-write, read-only, cache-only, or refresh"
         ),
+    }
+}
+
+fn aime_gepa_profile_from_env() -> GepaProfile {
+    let value = std::env::var(LEAVEN_AIME_GEPA_PROFILE).ok();
+    parse_gepa_profile(LEAVEN_AIME_GEPA_PROFILE, value.as_deref())
+}
+
+fn parse_gepa_profile(env_name: &str, value: Option<&str>) -> GepaProfile {
+    let Some(raw) = value.map(str::trim).filter(|value| !value.is_empty()) else {
+        return GepaProfile::Reference;
+    };
+    match raw.to_ascii_lowercase().as_str() {
+        "reference" | "ref" => GepaProfile::Reference,
+        "fast-certified" | "fast_certified" | "fastcertified" => GepaProfile::FastCertified,
+        _ => panic!("unsupported {env_name}={raw:?}; expected reference or fast-certified"),
     }
 }
 
@@ -5035,6 +5055,7 @@ mod tests {
         let config = AimeRunConfig::gepa_aime();
 
         assert_eq!(config.profile, AimeRunProfile::GepaAime);
+        assert_eq!(config.gepa_profile, GepaProfile::Reference);
         assert_eq!(config.seed_prompt, BASELINE);
         assert_eq!(config.budget.metric_calls, Some(GEPA_AIME_METRIC_CALLS));
         assert_eq!(config.evaluation_parallelism.get(), GEPA_AIME_MAX_WORKERS);
@@ -5576,6 +5597,7 @@ Provide the new parameter value within ``` blocks."
         assert!(lines.iter().any(
             |line| line == "proof_classification=deterministic_mechanics_product_surface_proof"
         ));
+        assert!(lines.iter().any(|line| line == "gepa_profile=reference"));
         assert!(lines.iter().any(|line| line == "eval_cache_policy=never"));
         assert!(lines.iter().any(|line| line == "run_storage=stored"));
         assert!(lines.iter().any(|line| line == "run_resumable=true"));
@@ -5891,6 +5913,22 @@ Provide the new parameter value within ``` blocks."
     }
 
     #[test]
+    fn gepa_profile_parser_defaults_to_reference_and_accepts_fast_certified() {
+        assert_eq!(
+            parse_gepa_profile(LEAVEN_AIME_GEPA_PROFILE, None),
+            GepaProfile::Reference
+        );
+        assert_eq!(
+            parse_gepa_profile(LEAVEN_AIME_GEPA_PROFILE, Some("fast-certified")),
+            GepaProfile::FastCertified
+        );
+        assert_eq!(
+            parse_gepa_profile(LEAVEN_AIME_GEPA_PROFILE, Some("fast_certified")),
+            GepaProfile::FastCertified
+        );
+    }
+
+    #[test]
     fn cache_only_live_replay_classification_does_not_claim_provider_proof() {
         let mut config = AimeRunConfig::gepa_aime();
         config.solver.cache_policy = LmCachePolicy::CacheOnly;
@@ -6178,6 +6216,7 @@ Provide the new parameter value within ``` blocks."
     fn assert_p8_report_identity(report: &serde_json::Value, config: &AimeRunConfig) {
         assert_eq!(report["schema"], "leaven.p8_aime.report.v1");
         assert_eq!(report["run_profile"], config.profile.label());
+        assert_eq!(report["gepa_profile"], config.gepa_profile.label());
         assert_eq!(
             report["proof_classification"],
             config.proof_classification()
