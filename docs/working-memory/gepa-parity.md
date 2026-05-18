@@ -1066,6 +1066,35 @@ Cache/replay attempts after the report-schema fixes:
   `gepa_progress_reports_train_screen_delta`, and
   `progress_callback_reports_evaluations_and_cache_status`.
 
+2026-05-18T18:56:00Z:
+
+- Strict upstream-reflector current-code release run completed:
+  `.leaven/release-runs/p8-aime-gepa-current-strict-reflector-release-20260518-165122/reports/p8-aime.json`.
+  This is the first completed current-schema/profile live report with
+  `gepa_profile=optimize-anything`, solver `gpt-4.1-mini`, reflection
+  `gpt-5.1`, `reflection_model_alignment=upstream-matched`, source counts
+  `45/45/30`, materialized cache SHA-256
+  `0f39c54861fd37a609d5bf397902a2086c245ebee879704dbd74b485115402c3`, run id
+  `bd494358-717b-40a5-9b3c-722815efb482`, zero process-local and durable
+  provider failures, and live provider proof for both roles.
+- Search stopped by budget: `531/500` GEPA metric calls, overshoot `31`,
+  final-report metric calls `150`, total metric calls `681`, total LM calls
+  `551`, `candidate_count=9`, `proposal_attempt_count=21`,
+  `accepted_count=8`, `accepted_unadmitted_count=0`,
+  `full_validation_evals=9`, `gepa_best_index=5`, and
+  `gepa_validation_best_index=5`.
+- Quality result: baseline/optimized validation `0.4444444444444444 ->
+  0.5555555555555556` (`20/45 -> 25/45`) and baseline/optimized held-out test
+  `0.43333333333333335 -> 0.5` (`13/30 -> 15/30`). Validation deltas were
+  `7` improved, `2` regressed, `18` unchanged-correct, and `18`
+  unchanged-wrong. Test deltas were `4` improved, `2` regressed, `11`
+  unchanged-correct, and `13` unchanged-wrong.
+- Interpretation: the live method is real and current-code operator proof is
+  no longer the blocker. Result-quality parity is still open: the strict run is
+  one validation case below the pinned CAIS validation target (`25/45` versus
+  `26/45`) and still trails held-out test (`0.500` versus `0.600`). Treat this
+  as a narrowed quality gap, not a plumbing failure.
+
 1. Continue no-spend quality diagnosis only where it can produce new evidence:
    use emitted Leaven prompts, candidate lineage, reflection outputs, child
    admission history, minibatch cases, parser outcomes, and the CAIS checkpoint
@@ -1075,15 +1104,10 @@ Cache/replay attempts after the report-schema fixes:
    checkout; `gepa_state.bin` did not persist it and `run.log` is absent.
 2. Treat result-quality parity as open until a current-profile live report with
    comparable held-out quality exists, or the specs label the remaining
-   model/runtime delta. The clean paid comparison is a strict upstream-reflector
-   run with `LEAVEN_AIME_REFLECTION_MODEL=gpt-5.1`; Leaven-plus profile
-   experiments should be labeled as such before spend.
-3. Future release reports should be generated with the post-run event-schema
-   fix so live-proof checks can sum `gepa_events[*].metric_calls_delta` back to
-   the GEPA report metric total directly. The historical completed release
-   report remains valid for aggregate budget proof but predates those per-phase
-   validation deltas.
-4. Current-code release reports include `case_deltas.summary` and
+   runtime/algorithm delta. The strict upstream-reflector run substantially
+   narrowed the gap but did not close it: validation reached `25/45` and test
+   reached `15/30`.
+3. Current-code release reports include `case_deltas.summary` and
    `case_deltas.cases` so quality diagnosis starts from exact improved,
    regressed, unchanged-correct, and unchanged-wrong case IDs without exposing
    raw hidden targets or reference solutions. The historical paid report
