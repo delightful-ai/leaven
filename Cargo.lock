@@ -2327,6 +2327,7 @@ dependencies = [
  "leaven-workspace-e2b",
  "leaven-workspace-git",
  "leaven-workspace-local",
+ "serde",
 ]
 
 [[package]]

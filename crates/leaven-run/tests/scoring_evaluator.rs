@@ -15,6 +15,7 @@ use leaven_core::{
 };
 use leaven_engine::{BudgetLedger, CachePolicy, Evaluator, RunContext, RunGraph};
 use leaven_eval::Case;
+use leaven_evidence::OutputRecord;
 use leaven_kernel::{
     Budget, CandidateId, CaseId, ContentId, Cost, EvaluatorId, Fingerprint,
     ResolvedEvaluationSetId, RunId, StageId, now,
@@ -166,14 +167,18 @@ fn scoring_evaluator_reports_per_candidate_cost_for_independent_batches() {
                 }
                 .boxed()
             }),
-            Arc::new(|ctx: ScoreContext<TextArtifact, i32>| {
-                async move {
-                    Ok(Score::new(ctx.output.output.parse::<f64>().unwrap(), "ok")
-                        .with_trace("scorer accepted numeric output")
-                        .with_cost(Cost::llm_calls(1)))
-                }
-                .boxed()
-            }),
+            Arc::new(
+                |ctx: ScoreContext<TextArtifact, i32, leaven_eval::NoTarget, String>| {
+                    async move {
+                        let rendered = ctx.output.output.clone();
+                        Ok(Score::new(rendered.parse::<f64>().unwrap(), "ok")
+                            .with_text_output(rendered)
+                            .with_trace("scorer accepted numeric output")
+                            .with_cost(Cost::llm_calls(1)))
+                    }
+                    .boxed()
+                },
+            ),
             &identity("scoring-evaluator-test"),
         );
         assert!(evaluator.parallelism().get() > 0);
@@ -254,7 +259,7 @@ fn scoring_evaluator_hides_target_from_runner_and_passes_target_to_scorer() {
 
     ordinary_runner_signature_has_no_target_type_parameter(|_artifact, case| async move {
         let _runner_visible = (case.id(), case.input().addend);
-        RunOutput::default()
+        RunOutput::<String>::default()
     });
 
     block_on(async {
@@ -290,7 +295,7 @@ fn scoring_evaluator_hides_target_from_runner_and_passes_target_to_scorer() {
             {
                 let scorer_seen_target = Arc::clone(&scorer_seen_target);
                 Arc::new(
-                    move |ctx: ScoreContext<TextArtifact, PromptInput, AnswerTarget>| {
+                    move |ctx: ScoreContext<TextArtifact, PromptInput, AnswerTarget, String>| {
                         let scorer_seen_target = Arc::clone(&scorer_seen_target);
                         async move {
                             assert_eq!(ctx.case.id(), CaseId::new(700));
@@ -298,10 +303,12 @@ fn scoring_evaluator_hides_target_from_runner_and_passes_target_to_scorer() {
                             assert!(ctx.case.metadata().is_empty());
                             let target = ctx.case.target().expect("target is scorer-visible");
                             *scorer_seen_target.lock().unwrap() = Some(target.answer);
+                            let rendered = ctx.output.output.clone();
                             Ok(Score::new(
-                                f64::from(u8::from(ctx.output.output == target.answer.to_string())),
+                                f64::from(u8::from(rendered == target.answer.to_string())),
                                 "target checked",
-                            ))
+                            )
+                            .with_text_output(rendered))
                         }
                         .boxed()
                     },
@@ -385,7 +392,7 @@ fn scoring_evaluator_surfaces_async_runner_failures_before_scoring() {
             }),
             Arc::new({
                 let scorer_calls = Arc::clone(&scorer_calls);
-                move |_ctx: ScoreContext<TextArtifact, i32>| {
+                move |_ctx: ScoreContext<TextArtifact, i32, leaven_eval::NoTarget, String>| {
                     let scorer_calls = Arc::clone(&scorer_calls);
                     async move {
                         scorer_calls.fetch_add(1, Ordering::Relaxed);
@@ -433,14 +440,16 @@ fn scoring_evaluator_surfaces_async_scorer_failures_with_metered_cost() {
                 }
                 .boxed()
             }),
-            Arc::new(|_ctx: ScoreContext<TextArtifact, i32>| {
-                async move {
-                    Err(ScoreError::new("judge unavailable")
-                        .with_trace("judge call reached provider")
-                        .with_cost(Cost::llm_calls(3)))
-                }
-                .boxed()
-            }),
+            Arc::new(
+                |_ctx: ScoreContext<TextArtifact, i32, leaven_eval::NoTarget, String>| {
+                    async move {
+                        Err(ScoreError::new("judge unavailable")
+                            .with_trace("judge call reached provider")
+                            .with_cost(Cost::llm_calls(3)))
+                    }
+                    .boxed()
+                },
+            ),
             &identity("scoring-evaluator-failure-test"),
         );
 
@@ -479,14 +488,18 @@ fn scoring_evaluator_passes_budget_snapshot_to_scorer() {
             Arc::new(|artifact: TextArtifact, case| {
                 async move { Ok(RunOutput::new((artifact.0 + *case.input()).to_string())) }.boxed()
             }),
-            Arc::new(|ctx: ScoreContext<TextArtifact, i32>| {
-                async move {
-                    assert_eq!(ctx.budget.spent.metric_calls, 3);
-                    assert_eq!(ctx.budget.limit.metric_calls, Some(16));
-                    Ok(Score::new(ctx.output.output.parse::<f64>().unwrap(), "ok"))
-                }
-                .boxed()
-            }),
+            Arc::new(
+                |ctx: ScoreContext<TextArtifact, i32, leaven_eval::NoTarget, String>| {
+                    async move {
+                        assert_eq!(ctx.budget.spent.metric_calls, 3);
+                        assert_eq!(ctx.budget.limit.metric_calls, Some(16));
+                        let rendered = ctx.output.output.clone();
+                        Ok(Score::new(rendered.parse::<f64>().unwrap(), "ok")
+                            .with_text_output(rendered))
+                    }
+                    .boxed()
+                },
+            ),
             &identity("scoring-evaluator-budget-test"),
         );
 
@@ -542,10 +555,16 @@ fn scoring_evaluator_runs_case_jobs_with_bounded_parallelism_and_stable_order() 
                     .boxed()
                 })
             },
-            Arc::new(|ctx: ScoreContext<TextArtifact, i32>| {
-                async move { Ok(Score::new(ctx.output.output.parse::<f64>().unwrap(), "ok")) }
+            Arc::new(
+                |ctx: ScoreContext<TextArtifact, i32, leaven_eval::NoTarget, String>| {
+                    async move {
+                        let rendered = ctx.output.output.clone();
+                        Ok(Score::new(rendered.parse::<f64>().unwrap(), "ok")
+                            .with_text_output(rendered))
+                    }
                     .boxed()
-            }),
+                },
+            ),
             &identity("scoring-evaluator-parallel-test"),
         )
         .with_parallelism(NonZeroUsize::new(2).unwrap());
@@ -588,9 +607,133 @@ fn scoring_evaluator_runs_case_jobs_with_bounded_parallelism_and_stable_order() 
     });
 }
 
+#[test]
+fn scoring_evaluator_preserves_typed_output_through_scoring_then_renders() {
+    #[derive(Clone, Debug)]
+    struct TypedPrediction {
+        answer: i32,
+        rationale: String,
+    }
+
+    block_on(async {
+        let (mut graph, mut budget, candidate) = graph_with_seed();
+        let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
+        let evaluator = ScoringEvaluator::new(
+            Arc::new(vec![input_case(0, 2)]),
+            Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
+                async move {
+                    Ok(RunOutput::typed(TypedPrediction {
+                        answer: artifact.0 + *case.input(),
+                        rationale: "typed metadata".to_owned(),
+                    }))
+                }
+                .boxed()
+            }),
+            Arc::new(
+                |ctx: ScoreContext<TextArtifact, i32, leaven_eval::NoTarget, TypedPrediction>| {
+                    async move {
+                        assert_eq!(ctx.output.output.answer, 42);
+                        assert_eq!(ctx.output.output.rationale, "typed metadata");
+                        Ok(
+                            Score::new(f64::from(ctx.output.output.answer), "scored typed output")
+                                .with_text_output(format!("answer={}", ctx.output.output.answer)),
+                        )
+                    }
+                    .boxed()
+                },
+            ),
+            &identity("typed-output-score-output-test"),
+        );
+
+        let metered = evaluator
+            .evaluate(
+                request(
+                    ResolvedRequestKind::Independent {
+                        candidates: vec![candidate],
+                    },
+                    vec![CaseId::new(0)],
+                    AssessmentGranularity::PerCase,
+                ),
+                ctx.evaluation_context(StageId::from_evaluator(Evaluator::id(&evaluator))),
+            )
+            .await
+            .unwrap();
+
+        let Assessment::Independent { evidence, .. } = &metered.value[0] else {
+            panic!("expected independent assessment");
+        };
+        assert!((evidence.score().score() - 42.0).abs() < f64::EPSILON);
+        assert_eq!(evidence.output(), &OutputRecord::inline("answer=42"));
+    });
+}
+
+#[test]
+fn scoring_evaluator_requires_reportable_output_for_typed_runner_outputs() {
+    #[derive(Clone, Debug)]
+    struct TypedPrediction(i32);
+
+    block_on(async {
+        let (mut graph, mut budget, candidate) = graph_with_seed();
+        let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
+        let evaluator = ScoringEvaluator::new(
+            Arc::new(vec![input_case(0, 2)]),
+            Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
+                async move {
+                    Ok(
+                        RunOutput::typed(TypedPrediction(artifact.0 + *case.input()))
+                            .with_cost(Cost::tokens(3, 0)),
+                    )
+                }
+                .boxed()
+            }),
+            Arc::new(
+                |ctx: ScoreContext<TextArtifact, i32, leaven_eval::NoTarget, TypedPrediction>| {
+                    async move {
+                        Ok(Score::new(f64::from(ctx.output.output.0), "ok")
+                            .with_cost(Cost::metric_calls(5)))
+                    }
+                    .boxed()
+                },
+            ),
+            &identity("typed-output-missing-report-output-test"),
+        );
+
+        let error = evaluator
+            .evaluate(
+                request(
+                    ResolvedRequestKind::Independent {
+                        candidates: vec![candidate],
+                    },
+                    vec![CaseId::new(0)],
+                    AssessmentGranularity::PerCase,
+                ),
+                ctx.evaluation_context(StageId::from_evaluator(Evaluator::id(&evaluator))),
+            )
+            .await
+            .err()
+            .expect("typed output without score-provided report output should fail evaluation");
+
+        assert_eq!(error.cost().metric_calls, 6);
+        assert_eq!(error.cost().prompt_tokens, 3);
+        assert!(
+            error
+                .to_string()
+                .contains("score did not provide reportable output")
+        );
+    });
+}
+
+// Test helper. The scorer closure must produce a `Score` with reportable
+// output already attached (`Score::with_output` / `with_text_output`) — same
+// contract as the production scorer path. Earlier revisions of this helper
+// auto-filled the output, mirroring the back-compat shim that was removed
+// from production; that was reintroducing the smell the hard cutover deleted.
 fn scoring_evaluator(
-    scorer: impl Fn(ScoreContext<TextArtifact, i32>) -> Score + Send + Sync + 'static,
-) -> ScoringEvaluator<TextArtifact, i32> {
+    scorer: impl Fn(ScoreContext<TextArtifact, i32, leaven_eval::NoTarget, String>) -> Score
+    + Send
+    + Sync
+    + 'static,
+) -> ScoringEvaluator<TextArtifact, i32, leaven_eval::NoTarget, String> {
     let scorer = Arc::new(scorer);
     ScoringEvaluator::new(
         Arc::new(vec![input_case(0, 2)]),
@@ -724,9 +867,11 @@ fn scoring_evaluator_fingerprint_includes_runtime_and_case_identity() {
         Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
             async move { Ok(RunOutput::new((artifact.0 + *case.input()).to_string())) }.boxed()
         }),
-        Arc::new(|ctx: ScoreContext<TextArtifact, i32>| {
-            async move { Ok(Score::new(ctx.output.output.parse().unwrap(), "ok")) }.boxed()
-        }),
+        Arc::new(
+            |ctx: ScoreContext<TextArtifact, i32, leaven_eval::NoTarget, String>| {
+                async move { Ok(Score::new(ctx.output.output.parse().unwrap(), "ok")) }.boxed()
+            },
+        ),
         &identity("fingerprint-test"),
     );
     let changed_runner = ScoringEvaluator::new(
@@ -734,9 +879,11 @@ fn scoring_evaluator_fingerprint_includes_runtime_and_case_identity() {
         Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
             async move { Ok(RunOutput::new((artifact.0 + *case.input()).to_string())) }.boxed()
         }),
-        Arc::new(|ctx: ScoreContext<TextArtifact, i32>| {
-            async move { Ok(Score::new(ctx.output.output.parse().unwrap(), "ok")) }.boxed()
-        }),
+        Arc::new(
+            |ctx: ScoreContext<TextArtifact, i32, leaven_eval::NoTarget, String>| {
+                async move { Ok(Score::new(ctx.output.output.parse().unwrap(), "ok")) }.boxed()
+            },
+        ),
         &ScoringEvaluatorIdentity {
             runner: RuntimeFingerprint::new(Fingerprint::from_bytes([77; 32])),
             ..identity("fingerprint-test")
@@ -747,9 +894,11 @@ fn scoring_evaluator_fingerprint_includes_runtime_and_case_identity() {
         Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
             async move { Ok(RunOutput::new((artifact.0 + *case.input()).to_string())) }.boxed()
         }),
-        Arc::new(|ctx: ScoreContext<TextArtifact, i32>| {
-            async move { Ok(Score::new(ctx.output.output.parse().unwrap(), "ok")) }.boxed()
-        }),
+        Arc::new(
+            |ctx: ScoreContext<TextArtifact, i32, leaven_eval::NoTarget, String>| {
+                async move { Ok(Score::new(ctx.output.output.parse().unwrap(), "ok")) }.boxed()
+            },
+        ),
         &ScoringEvaluatorIdentity {
             dataset: Fingerprint::from_bytes([78; 32]),
             splits: Fingerprint::from_bytes([79; 32]),
@@ -761,15 +910,16 @@ fn scoring_evaluator_fingerprint_includes_runtime_and_case_identity() {
         Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
             async move { Ok(RunOutput::new((artifact.0 + *case.input()).to_string())) }.boxed()
         }),
-        Arc::new(|ctx: ScoreContext<TextArtifact, i32>| {
-            async move { Ok(Score::new(ctx.output.output.parse().unwrap(), "ok")) }.boxed()
-        }),
+        Arc::new(
+            |ctx: ScoreContext<TextArtifact, i32, leaven_eval::NoTarget, String>| {
+                async move { Ok(Score::new(ctx.output.output.parse().unwrap(), "ok")) }.boxed()
+            },
+        ),
         &ScoringEvaluatorIdentity {
             cache_policy: CachePolicy::Deterministic,
             ..identity("fingerprint-test")
         },
     );
-
     assert_ne!(
         Evaluator::<RunProblem<TextArtifact, i32>>::fingerprint(&base),
         Evaluator::<RunProblem<TextArtifact, i32>>::fingerprint(&changed_runner)

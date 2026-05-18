@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::future::Future;
 
 use leaven_agent::{AgentInstructions, FakeAgentAction, FakeAgentRuntime, OutputContract};
 use leaven_agentic::{AgentPromptTarget, AgenticProposer, AgenticProposerConfig, AgenticRunInput};
@@ -1369,6 +1368,7 @@ fn skill_patch_application_rejects_changes_that_do_not_match_plan_targets() {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn skill_patch_application_matches_concrete_edit_kind_and_multiplicity() {
     let description = "Edits Rust tests. Use when Rust test failures need diagnosis.";
     let body = "Read the failing test output and patch the narrow code path.";
@@ -1379,7 +1379,7 @@ fn skill_patch_application_matches_concrete_edit_kind_and_multiplicity() {
     let identity_plan = SkillPatchPlan::validate(
         &parent,
         vec![SkillPatchPlanEdit::modify(
-            skill_md_target.clone(),
+            skill_md_target,
             SkillPatchRange::Lines(SkillLineRange::new(4, 4).unwrap()),
             SkillPatchSupport::new(1).unwrap(),
         )],
@@ -1593,22 +1593,17 @@ impl Evidence for SkillEvidence {}
 struct PreseededExecutableFactory;
 
 impl WorkspaceFactory for PreseededExecutableFactory {
-    fn allocate(
-        &self,
-        config: WorkspaceConfig,
-    ) -> impl Future<Output = Result<Workspace, FactoryError>> + Send + '_ {
-        async move {
-            let mut workspace = LocalWorkspaceFactory::temp().allocate(config).await?;
-            {
-                let mut view = workspace.view();
-                let script = WorkspacePath::new("alpha/scripts/run.sh").unwrap();
-                view.write_file(&script, b"stale\n")
-                    .map_err(|error| FactoryError::Allocate(error.to_string()))?;
-                view.set_executable(&script, true)
-                    .map_err(|error| FactoryError::Allocate(error.to_string()))?;
-            }
-            Ok(workspace)
+    async fn allocate(&self, config: WorkspaceConfig) -> Result<Workspace, FactoryError> {
+        let mut workspace = LocalWorkspaceFactory::temp().allocate(config).await?;
+        {
+            let mut view = workspace.view();
+            let script = WorkspacePath::new("alpha/scripts/run.sh").unwrap();
+            view.write_file(&script, b"stale\n")
+                .map_err(|error| FactoryError::Allocate(error.to_string()))?;
+            view.set_executable(&script, true)
+                .map_err(|error| FactoryError::Allocate(error.to_string()))?;
         }
+        Ok(workspace)
     }
 }
 

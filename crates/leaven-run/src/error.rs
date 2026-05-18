@@ -110,3 +110,24 @@ impl From<ResumeCompatibilityError> for OptimizeError {
         Self::ResumeCompatibility(Box::new(source))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use leaven_eval::DatasetError;
+    use leaven_kernel::CaseId;
+
+    use super::OptimizeError;
+
+    #[test]
+    fn dataset_errors_convert_to_public_optimize_errors() {
+        let case = CaseId::new(7);
+        let error = OptimizeError::from(DatasetError::DuplicateCase(case));
+
+        match error {
+            OptimizeError::Dataset { source } => {
+                assert_eq!(source, DatasetError::DuplicateCase(case));
+            }
+            other => panic!("expected dataset error, got {other:?}"),
+        }
+    }
+}

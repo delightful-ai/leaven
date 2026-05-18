@@ -60,13 +60,14 @@ enum TopCommand {
     },
 }
 
+#[allow(clippy::enum_variant_names)]
 #[derive(Debug, Subcommand)]
 enum DoctorSubcommand {
     /// Render the agent-facing proposal-stage input for the GEPA skill-bank slice.
     ProposalRender(ProposalDoctorArgs),
-    /// Materialize the current SkillBank input into a temp workspace and report files.
+    /// Materialize the current `SkillBank` input into a temp workspace and report files.
     ProposalMaterialize(ProposalDoctorArgs),
-    /// Simulate one workspace edit, parse it, and apply it through RunContext.
+    /// Simulate one workspace edit, parse it, and apply it through `RunContext`.
     ProposalRoundtrip(ProposalDoctorArgs),
 }
 
@@ -78,7 +79,7 @@ struct ProposalDoctorArgs {
     /// Emit text output.
     #[arg(long)]
     text: bool,
-    /// Serialized SkillBankReflectionInput<String> debug/run state.
+    /// Serialized `SkillBankReflectionInput<String>` debug/run state.
     #[arg(long)]
     input_json: Option<PathBuf>,
 }
@@ -129,7 +130,7 @@ mod tests {
 
     #[test]
     fn doctor_summary_names_proposal_render() {
-        let output = run(["doctor"].into_iter().map(str::to_owned)).unwrap();
+        let output = run(std::iter::once("doctor").map(str::to_owned)).unwrap();
 
         assert!(output.contains("proposal-render"));
         assert!(output.contains("proposal-materialize"));

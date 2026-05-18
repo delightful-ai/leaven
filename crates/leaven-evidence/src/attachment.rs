@@ -1,6 +1,7 @@
 use leaven_kernel::TraceRef;
 use serde::{Deserialize, Serialize};
 
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Attachment {
     /// Namespaced attachment name, such as `session/main` or `skill_events`.
@@ -9,6 +10,9 @@ pub struct Attachment {
     pub media_type: Option<String>,
 }
 
+// `serde_json::Value` carries `f64` numbers (no `Eq`), so the enum is
+// `PartialEq` only. Same applies transitively to [`Attachment`].
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "value", rename_all = "snake_case")]
 pub enum AttachmentKind {

@@ -60,14 +60,28 @@ around engine graph mutation or a home for optimizer strategy state.
 - `Score` is builder evidence for the runner/scorer path, not the universal
   evidence model. Reusable evidence types belong in `leaven-evidence`.
 - `Score` is the ordinary user word; assessment/evidence/preference are the
-  durable internal truth. Do not make `.score(...)` a scalar-only dead end:
-  generated output, feedback, absent scores, failed evidence, and metric axes
-  must lower into typed evidence/report records instead of becoming zero or
-  string metadata.
-- Runner helpers are async and bounded-concurrent. `RunOutput` carries runner
-  output and cost so solver/program LM calls, subprocesses, and agent runtimes
-  can be charged through evaluation reports while generated outputs remain
-  first-class evidence.
+  durable internal truth. `Score` public struct literals are not a compatibility
+  promise in this unstable crate; use `Score::new(...)` and builder methods.
+  Do not make `.score(...)` a scalar-only dead end: generated output, feedback,
+  absent scores, failed evidence, and metric axes must lower into typed
+  evidence/report records instead of becoming zero or string metadata.
+- Runner helpers are async and bounded-concurrent. `RunOutput<Out = ()>`
+  carries runner output and cost so solver/program LM calls, subprocesses, and
+  agent runtimes can be charged through evaluation reports while generated
+  outputs remain first-class evidence. The default `Out = ()` matches
+  `docs/specs/case_visibility_and_target_isolation.md` §6 (`ScoreContext<..., O = ()>`):
+  the runner's output type is opaque to Leaven by default. Domain runners
+  declare their own typed `Out` (string answer, structured prediction, agent
+  transcript) via `RunOutput::typed(...)` or `RunOutput::new(...)` (the latter
+  is a `String`-only constructor that returns `RunOutput<String>`).
+- Output rendering is **always** scorer-local and explicit: every successful
+  score must call `Score::with_output(...)` or `Score::with_text_output(...)`.
+  There is no auto-render for `Out = String` — that was a back-compat shim and
+  was removed. A `Score` without `output` set fails the evaluator with
+  `MissingReportableOutput` (cost from the runner and scorer is preserved on
+  the error). Reports, evidence stores, and GEPA reflection consume the
+  scorer-supplied `OutputRecord`, not `Out` itself. Do not add `Out` to
+  `RunProblem`, `CaseAssessmentEvidence`, report payloads, or GEPA types.
   Scoring is also async and fallible: `.score(...)` receives owned
   `ScoreContext` values, returns `Result<Score, ScoreError>`, and may attach
   scorer cost. Treat scalar comparison as the current selection contract, not as

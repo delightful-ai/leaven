@@ -5,3 +5,5 @@ tmp/
 .orientation/
 .beads/issues.jsonl
 .leaven/
+__pycache__/
+*.py[cod]

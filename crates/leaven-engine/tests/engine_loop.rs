@@ -1809,6 +1809,7 @@ impl RunPersistence<TestProblem> for FailingPersistence {
 }
 
 #[derive(Clone)]
+#[allow(clippy::struct_excessive_bools)]
 struct FaultyStore {
     inner: RecordingStore,
     blob_puts: Arc<AtomicUsize>,

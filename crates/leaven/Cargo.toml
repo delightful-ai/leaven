@@ -59,4 +59,5 @@ lm-cache = ["dep:leaven-lm-cache"]
 [dev-dependencies]
 futures = { workspace = true }
 leaven-evidence = { workspace = true }
+serde = { workspace = true }
 leaven-store-inline = { workspace = true }

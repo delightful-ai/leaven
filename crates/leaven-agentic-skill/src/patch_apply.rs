@@ -150,6 +150,7 @@ fn concrete_patch_intents(
     intents
 }
 
+#[allow(clippy::too_many_lines)]
 fn collect_concrete_patch_intents(
     parent: &SkillBank,
     change: &SkillBankChange,
@@ -209,7 +210,9 @@ fn collect_concrete_patch_intents(
             }
         }
         SkillBankChange::ReplaceSkill { name, folder } => {
-            let before = parent.get(name).map(|folder| folder.entries());
+            let before = parent
+                .get(name)
+                .map(leaven_artifact_skill::SkillFolder::entries);
             let after = folder.entries();
             let paths = before
                 .into_iter()
