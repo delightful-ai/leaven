@@ -2266,6 +2266,13 @@ fn resume_trace_seed() -> PartMapArtifact {
     PartMapArtifact(BTreeMap::from([("answer".to_owned(), "draft".to_owned())]))
 }
 
+fn resume_reflection_seed() -> PartMapArtifact {
+    PartMapArtifact(BTreeMap::from([
+        ("answer".to_owned(), "draft".to_owned()),
+        ("search".to_owned(), "query".to_owned()),
+    ]))
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 struct PartMapArtifact(BTreeMap<String, String>);
 
@@ -2618,6 +2625,28 @@ fn resume_trace_gepa() -> Gepa<
         FixedSurfaceEdit::new("unused".to_owned()),
     )
     .reflective_dataset(NoReflectiveExamples)
+    .batch_sampler(EpochShuffled::new(1).with_seed(7))
+    .validation_policy(FullValidation)
+    .max_iterations(2)
+}
+
+fn resume_reflection_gepa() -> Gepa<
+    PartMapSurface,
+    ParetoFrontier,
+    FixedSurfaceEdit<String>,
+    PopulationBestFallback,
+    leaven_gepa::RoundRobinPart,
+    StrictImprovement,
+    EpochShuffled,
+    FullValidation,
+    OneReflectiveExample,
+> {
+    Gepa::new(
+        PartMapSurface,
+        ParetoFrontier::by_case().build(),
+        FixedSurfaceEdit::new("improved".to_owned()),
+    )
+    .reflective_dataset(OneReflectiveExample)
     .batch_sampler(EpochShuffled::new(1).with_seed(7))
     .validation_policy(FullValidation)
     .max_iterations(2)
