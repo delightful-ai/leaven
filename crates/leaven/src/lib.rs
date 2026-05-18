@@ -43,7 +43,7 @@ pub use leaven_surface as surface;
 pub use leaven_std as stdlib;
 
 #[cfg(feature = "gepa")]
-pub use leaven_gepa as gepa;
+pub mod gepa;
 
 #[cfg(feature = "workspace")]
 pub use leaven_workspace as workspace;

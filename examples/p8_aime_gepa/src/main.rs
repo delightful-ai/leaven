@@ -15,8 +15,9 @@ use leaven::engine::{
 };
 use leaven::eval::{Case, SplitRole};
 use leaven::gepa::{
-    Gepa, GepaCandidateIndex, GepaEventSummary, GepaProfile, GepaReport, GepaSkipReason,
-    ReflectionError, ReflectiveDatasetBuilder, ReflectiveExample, ReflectiveSideInfoValue,
+    Gepa, GepaCandidateIndex, GepaEventSummary, GepaOptimizedExt, GepaProfile, GepaReport,
+    GepaSkipReason, ReflectionError, ReflectiveDatasetBuilder, ReflectiveExample,
+    ReflectiveSideInfoValue,
 };
 use leaven::kernel::Metered;
 use leaven::kernel::{
@@ -966,7 +967,7 @@ async fn try_run_aime(
     )
     .await?;
     let optimizer_wall_time = optimizer_started_at.elapsed();
-    let gepa_report = optimized.optimizer_report::<GepaReport>().cloned();
+    let gepa_report = optimized.gepa_report().cloned();
     let role_reports = AimeRoleReports::from_config(
         &config,
         AimeRoleRuntimeFingerprints {

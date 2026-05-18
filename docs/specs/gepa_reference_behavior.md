@@ -2636,7 +2636,7 @@ to know `RunContext`, `EvaluationRequest`, `AssessmentId`, or
 | Evaluation cache API | GEPA-specific cache knob? | Ordinary users keep `.evaluation_cache_policy(...)`; GEPA per-case decomposition/backfill is internal. Reports expose per-case hit/miss/bypass. | Keep the ordinary API stable; do not expose a GEPA-specific cache knob unless report/resume semantics need a new explicit contract. |
 | Validation absence | What if no validation set is supplied? | Core/reference profile: preflight error. DSPy profile: explicit train-as-validation fallback with warning/report. Inference-time mode: explicit train=validation. | GEPA reference validation now refuses an empty validation set before evaluator/provider work; `leaven-run` remains generic and may still allow empty validation for non-GEPA optimizers. |
 | Inference-time search | How does user request train=validation? | Explicit mode/profile, for example `Gepa::inference_search()` or `.mode(GepaMode::InferenceSearch)`, never silent fallback. | No named mode. |
-| Detailed result | How does user get GEPA candidate/frontier tables? | Keep `Optimized<A>` small, but add a typed GEPA detail/report route. Choose one: typed `optimizer_report`, report sidecar path with typed loader, or `GepaOptimized<A>` from a GEPA-specific runner. | `Optimized<A>::optimizer_report::<GepaReport>()` exposes typed candidate/frontier/history/proposal-attempt state from the public `optimize(...).using(Gepa...)` path. Proposal attempts carry a stable `attempt_index`; P8 renders `reflection_request_index`, admitted `child_index`/validation score, plus a compact reflection request/response/proposed-text object and reconstructs accepted AIME candidate system prompts from seed/proposal data so live AIME failures can be debugged from the report artifact. Generic artifact/prompt text projection and generic sidecar persistence are still absent. |
+| Detailed result | How does user get GEPA candidate/frontier tables? | Keep `Optimized<A>` small, but add a typed GEPA detail/report route. | `leaven::gepa::GepaOptimizedExt::gepa_report()` is the Level 2 GEPA convenience route over the generic `Optimized<A>::optimizer_report::<GepaReport>()` payload. It exposes typed candidate/frontier/history/proposal-attempt state from the public `optimize(...).using(Gepa...)` path without moving GEPA state into `leaven-run`. Proposal attempts carry a stable `attempt_index`; P8 renders `reflection_request_index`, admitted `child_index`/validation score, plus a compact reflection request/response/proposed-text object and reconstructs accepted AIME candidate system prompts from seed/proposal data so live AIME failures can be debugged from the report artifact. Generic artifact/prompt text projection and generic sidecar persistence are still absent. |
 | Event/progress API | Generic run events or GEPA phase events? | Add typed `GepaEvent`/`GepaEventSummary` and surface it through callbacks/reports without requiring ordinary users to match engine internals. | P8 callback maps generic engine events only. |
 | Error API | Stringy optimizer errors or typed phase errors? | Add `GepaBuildError`, `GepaPhaseError`, `GepaSkipReason`, and reflection/proposal/cache variants; map to `OptimizerError` at engine boundary. | `ReflectionError` exists; many GEPA failures use generic optimizer/proposal errors. |
 | Checkpoint state | Public or private? | Private. Public report exposes stable candidate indices/frontier summaries; resume uses `OptimizeBuilder`/run store. | `GepaCheckpointState` is public because checkpoint trait type leaks. Needs classification. |
@@ -2650,6 +2650,7 @@ Ordinary users should be able to write:
 ```rust
 use leaven::prelude::*;
 use leaven::gepa::Gepa;
+use leaven::gepa::GepaOptimizedExt as _;
 
 let result = optimize(seed_prompt)
     .train(train_cases)
@@ -2667,7 +2668,7 @@ let result = optimize(seed_prompt)
     .await?;
 
 let best = result.best();
-let gepa = result.gepa_report(); // exact API still to decide
+let gepa = result.gepa_report();
 ```
 
 This shape intentionally keeps `RunContext`, `EvaluationRequest`,
@@ -2939,7 +2940,7 @@ improve the sampled train minibatch while tying or regressing full validation.
 
 Open result-routing options:
 
-1. `Optimized<A>::gepa_report() -> Option<&GepaReport>`.
+1. `leaven::gepa::GepaOptimizedExt::gepa_report() -> Option<&GepaReport>`.
 2. `Optimized<A>::optimizer_report<T>() -> Option<&T>`.
 3. `Optimized<A>::reports.optimizer: Option<OptimizerReport>` with an enum.
 4. `Gepa::run(...) -> GepaOptimized<A>` outside the generic `optimize(...)`

@@ -1,7 +1,7 @@
 # GEPA Parity Working Ledger
 
 Status: active.
-Updated: 2026-05-18T13:08:52Z.
+Updated: 2026-05-18T13:18:23Z.
 
 ## Authority
 
@@ -153,6 +153,11 @@ Current speed stance:
   validation outcomes versus each parent. This is report-only diagnostic state
   for spotting train-minibatch overfit; it must not influence parent selection,
   acceptance, admission, or final GEPA result choice.
+- Level 2 GEPA report access now has an umbrella convenience route:
+  `leaven::gepa::GepaOptimizedExt::gepa_report()`. The method is a facade over
+  generic `Optimized::optimizer_report::<GepaReport>()`, lives under
+  `leaven::gepa` instead of `leaven::prelude`, and keeps `leaven-run`
+  optimizer-agnostic.
 - The pinned upstream checkout's DSPy 3.2.1 `JSONAdapter` output for
   `ChainOfThought(MathSolverSignature)` includes a blank line after "Inputs
   will have the following structure:" and after "Outputs will be a JSON object
@@ -823,12 +828,45 @@ Cache/replay attempts after the report-schema fixes:
     `upstream-matched` without provider spend. The paid quality proof is still
     open because the cache lacks the required `gpt-5.1` reflection row;
   - still open and current: final-report replay proof. Solver/reflection LM
-    cache replay is safer now, but final train/validation/test report rows are
-    not claimed resumable from search checkpoints;
-  - intentional delta: `FastCertified` and future FastGEPA ideas are Leaven-plus
-    profiles, not reference parity. Spec the profile before adding lazy
-    certification, active sampling, async islands, evaluator pyramids, or trace
-    distillation to ordinary GEPA.
+    cache replay is proven for search checkpoints, but final-report-only rows
+    are not yet checkpoint-restored as report-visible graph evidence.
+
+2026-05-18T12:23:38Z:
+
+- Local upstream artifact audit anchored the GEPA CAIS AIME comparison target to
+  `/Users/darin/vendor/github.com/gepa-ai/gepa-cais26-artifact/acm_cais_artifact_evaluation/domains/aime_math/`.
+  The useful local files are `logs/best_prompt.txt`, `logs/gepa_state.bin`,
+  `logs/aime_plot.png`, and `logs/generated_best_outputs_valset/**`.
+  `README.md` and `OFFLINE_ARTIFACTS.md` both describe `logs/run.log` as the
+  source for the `46.67% -> 60.00%` test line and `57.78%` validation line, but
+  the file is not present in this local checkout. Treat those score lines as
+  artifact-provenance claims unless/until the missing log is recovered; use the
+  bundled checkpoint/best prompt/validation outputs for local qualitative
+  comparison.
+- Upstream `optimize_anything.py` AIME config confirms the strict comparison
+  knobs: solver `gpt-4.1-mini` at `temperature=1.0`, `max_tokens=32000`,
+  `max_metric_calls=500`, `parallel=True`, `max_workers=32`,
+  `cache_evaluation=True`, `frontier_type="instance"`, and reflection
+  `openai/gpt-5.1`. P8 `configured_gepa_aime_profile_matches_reference_knobs`
+  covers the Leaven-side runtime knobs except the deliberate reflection model
+  delta (`gpt-5.4-mini` by default, `LEAVEN_AIME_REFLECTION_MODEL=gpt-5.1` for
+  strict upstream-reflector comparison).
+- Upstream `InstructionProposalSignature.prompt_renderer` renders
+  optimize-anything side-info records as Markdown sections:
+  `# Example N`, `## key`, nested `###` mappings/lists, and plain trimmed
+  values. Leaven's GEPA reflection renderer and P8 AIME side-info projection
+  already match that structural format for the target-safe keys `score`,
+  `input`, `prompt`, `output`, `reasoning`, and `execution_feedback`.
+- The CAIS best prompt instructs the solver to reason thoroughly and isolate a
+  single final line. Leaven's current best prompt from the completed paid run is
+  stricter about returning only the final integer. That is an optimization
+  outcome/quality gap rather than a confirmed renderer mismatch; do not claim
+  model-experience parity from the current run because the search result still
+  trails the pinned target (`0.500` held-out test versus `0.600`).
+- Intentional delta still current: `FastCertified` and future FastGEPA ideas
+  are Leaven-plus profiles, not reference parity. Spec the profile before
+  adding lazy certification, active sampling, async islands, evaluator pyramids,
+  or trace distillation to ordinary GEPA.
 
 1. Diagnose why the current completed report improves over seed but still lands
    below the pinned GEPA CAIS target. Start from emitted prompts, candidate

@@ -451,6 +451,18 @@ fn extend_and_plumbing_entries_name_a_consumer() {
     }
 }
 
+#[cfg(feature = "gepa")]
+#[test]
+fn gepa_route_exposes_typed_report_extension_without_prelude_pollution() {
+    fn assert_gepa_ext<T>()
+    where
+        T: leaven::gepa::GepaOptimizedExt,
+    {
+    }
+
+    assert_gepa_ext::<leaven::prelude::Optimized<()>>();
+}
+
 #[test]
 fn lib_rs_routes_no_individual_symbol_at_the_crate_root() {
     let lib = fs::read_to_string(umbrella_src().join("lib.rs")).unwrap();
