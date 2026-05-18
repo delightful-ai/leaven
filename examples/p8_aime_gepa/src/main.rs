@@ -1260,6 +1260,7 @@ fn p8_lm_request_json(request: &AimeLmRequestRecord) -> serde_json::Value {
             "max_output_tokens": request.sampling.max_output_tokens,
             "reasoning_effort": request.sampling.reasoning_effort,
         },
+        "response": request.response.as_ref().map(p8_lm_response_json),
     })
 }
 
@@ -1267,6 +1268,18 @@ fn p8_lm_message_json(message: &AimeLmMessageRecord) -> serde_json::Value {
     serde_json::json!({
         "role": message.role,
         "content": message.content,
+    })
+}
+
+fn p8_lm_response_json(response: &AimeLmResponseRecord) -> serde_json::Value {
+    serde_json::json!({
+        "assistant": p8_lm_message_json(&response.assistant),
+        "provider_response_id": response.provider_response_id,
+        "continuation": {
+            "provider": response.continuation_provider,
+            "response_id": response.continuation_response_id,
+            "covered_messages": response.continuation_covered_messages,
+        },
     })
 }
 
@@ -1724,6 +1737,7 @@ struct AimeLmRequestRecord {
     messages: Vec<AimeLmMessageRecord>,
     output: String,
     sampling: AimeLmSamplingRecord,
+    response: Option<AimeLmResponseRecord>,
 }
 
 impl AimeLmRequestRecord {
@@ -1737,6 +1751,43 @@ impl AimeLmRequestRecord {
                 .collect(),
             output: format!("{:?}", request.output),
             sampling: AimeLmSamplingRecord::from_sampling(&request.sampling),
+            response: None,
+        }
+    }
+
+    fn from_exchange(request: &LmRequest, response: &LmResponse) -> Self {
+        let mut record = Self::from_request(request);
+        record.response = Some(AimeLmResponseRecord::from_response(response));
+        record
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct AimeLmResponseRecord {
+    assistant: AimeLmMessageRecord,
+    provider_response_id: Option<String>,
+    continuation_provider: Option<String>,
+    continuation_response_id: Option<String>,
+    continuation_covered_messages: Option<usize>,
+}
+
+impl AimeLmResponseRecord {
+    fn from_response(response: &LmResponse) -> Self {
+        Self {
+            assistant: AimeLmMessageRecord::from_message(&response.assistant),
+            provider_response_id: response.provider_response_id.clone(),
+            continuation_provider: response
+                .continuation
+                .as_ref()
+                .map(|continuation| continuation.provider.to_string()),
+            continuation_response_id: response
+                .continuation
+                .as_ref()
+                .map(|continuation| continuation.response_id.clone()),
+            continuation_covered_messages: response
+                .continuation
+                .as_ref()
+                .map(|continuation| continuation.covered_messages),
         }
     }
 }
@@ -1790,6 +1841,11 @@ impl AimeLmRoleMetrics {
     fn record_request(&mut self, request: &LmRequest) {
         self.requests
             .push(AimeLmRequestRecord::from_request(request));
+    }
+
+    fn record_exchange(&mut self, request: &LmRequest, response: &LmResponse) {
+        self.requests
+            .push(AimeLmRequestRecord::from_exchange(request, response));
     }
 
     fn record_success(&mut self, policy: LmCachePolicy, response: &LmResponse, cost: &Cost) {
@@ -1892,6 +1948,13 @@ impl AimeLmTelemetry {
             .record_request(request);
     }
 
+    fn record_exchange(&self, request: &LmRequest, response: &LmResponse) {
+        self.metrics
+            .lock()
+            .expect("AIME telemetry lock is valid")
+            .record_exchange(request, response);
+    }
+
     fn snapshot(&self) -> AimeLmRoleMetrics {
         self.metrics
             .lock()
@@ -1930,8 +1993,11 @@ impl<L: Lm> Lm for AimeInstrumentedLm<L> {
     }
 
     async fn complete(&self, request: LmRequest) -> Result<Metered<LmResponse>, LmError> {
-        self.telemetry.record_request(&request);
-        let result = self.inner.complete(request).await;
+        let result = self.inner.complete(request.clone()).await;
+        match &result {
+            Ok(metered) => self.telemetry.record_exchange(&request, &metered.value),
+            Err(_) => self.telemetry.record_request(&request),
+        }
         self.telemetry.record(&result);
         result
     }
@@ -5090,6 +5156,13 @@ Provide the new parameter value within ``` blocks."
                 .is_some_and(|content| {
                     content.contains("I am optimizing a parameter in my system.")
                         && content.contains("## execution_feedback")
+                })
+        );
+        assert!(
+            observed_reflection_requests[0]["response"]["assistant"]["content"]
+                .as_str()
+                .is_some_and(|content| {
+                    content.starts_with("```\n") && content.contains("modular arithmetic")
                 })
         );
         assert_eq!(report["lm_roles"][1]["metrics"]["cost"]["llm_calls"], 1);

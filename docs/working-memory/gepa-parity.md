@@ -175,6 +175,16 @@ Result-parity conclusion:
 - optimized validation and held-out test did not beat baseline;
 - do not cite this run as "as good as GEPA" or paper parity.
 
+Prompt-audit finding:
+
+- the completed report preserved solver/reflection request prompts, but only
+  recorded `"output": "Text"` for LM output mode; actual assistant text had to
+  be recovered from `.leaven/lm-cache.sqlite`;
+- post-run P8 code now records `observed_requests[].response.assistant.content`
+  plus provider response/continuation IDs in future reports, so reflection
+  proposals and solver transcripts are inspectable from the report artifact
+  without another provider call.
+
 ## Existing Prior Live Artifact
 
 Prior report worth comparing, but not sufficient as current proof:
