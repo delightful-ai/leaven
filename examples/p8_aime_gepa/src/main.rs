@@ -858,7 +858,10 @@ fn p8_aime_report_json(config: &AimeRunConfig, run: &AimeRunResult) -> serde_jso
         "lm_roles": run.role_reports.iter().map(p8_lm_role_report_json).collect::<Vec<_>>(),
         "live_provider_proof": p8_live_provider_proof_json(&run.role_reports),
         "provider_failures": p8_provider_failures_json(&run.role_reports),
-        "gepa_events": run.gepa_events.iter().map(p8_gepa_event_json).collect::<Vec<_>>(),
+        "gepa_events": p8_gepa_events_for_report(run)
+            .iter()
+            .map(p8_gepa_event_json)
+            .collect::<Vec<_>>(),
         "gepa_report": run.gepa_report.as_ref().map(p8_gepa_report_json),
         "cases": p8_case_report_json(run),
         "events": result.events.iter().map(|event| event.as_str()).collect::<Vec<_>>(),
@@ -948,6 +951,14 @@ fn p8_gepa_report_json(report: &GepaReport) -> serde_json::Value {
         }).collect::<Vec<_>>(),
         "events": report.events.iter().map(p8_gepa_event_json).collect::<Vec<_>>(),
     })
+}
+
+fn p8_gepa_events_for_report(run: &AimeRunResult) -> &[GepaEventSummary] {
+    run.gepa_report
+        .as_ref()
+        .map_or(run.gepa_events.as_slice(), |report| {
+            report.events.as_slice()
+        })
 }
 
 fn p8_gepa_event_json(event: &GepaEventSummary) -> serde_json::Value {
@@ -4947,6 +4958,34 @@ Provide the new parameter value within ``` blocks."
             lines
                 .iter()
                 .any(|line| line == &format!("p8_aime_json={}", path.display()))
+        );
+    }
+
+    #[test]
+    fn p8_aime_json_uses_checkpointed_gepa_report_events_after_resume() {
+        let config = AimeRunConfig::deterministic_smoke();
+        let mut run = block_on(run_aime(config.clone(), deterministic_dataset()));
+        let checkpointed_events = run
+            .gepa_report
+            .as_ref()
+            .expect("deterministic run emits a GEPA report")
+            .events
+            .len();
+        run.gepa_events.clear();
+
+        let report = p8_aime_report_json(&config, &run);
+
+        assert_eq!(
+            report["gepa_events"].as_array().unwrap().len(),
+            checkpointed_events
+        );
+        assert_eq!(report["gepa_events"], report["gepa_report"]["events"]);
+        assert!(
+            report["gepa_events"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|event| event["phase"] == "seed_validation_started")
         );
     }
 
