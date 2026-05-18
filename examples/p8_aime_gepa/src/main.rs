@@ -923,6 +923,7 @@ fn p8_gepa_report_json(
 ) -> serde_json::Value {
     let reflection_requests = roles.reflection.metrics.requests.as_slice();
     let candidate_prompts = p8_gepa_candidate_prompt_map(report, reflection_requests, seed_prompt);
+    let candidate_admissions = p8_gepa_candidate_admission_map(report);
     serde_json::json!({
         "best_index": report.best_index.map(GepaCandidateIndex::get),
         "best_candidate": report.best_candidate.map(|candidate| candidate.to_string()),
@@ -980,6 +981,14 @@ fn p8_gepa_report_json(
                 "part_label": attempt.part_label.as_deref(),
                 "reflective_example_count": attempt.reflective_example_count,
                 "child": attempt.child.map(|candidate| candidate.to_string()),
+                "child_index": attempt
+                    .child
+                    .and_then(|candidate| candidate_admissions.get(&candidate))
+                    .map(|admission| admission.index),
+                "child_validation_score": attempt
+                    .child
+                    .and_then(|candidate| candidate_admissions.get(&candidate))
+                    .and_then(|admission| admission.validation_score),
                 "child_assessments": attempt.child_assessments.iter().map(ToString::to_string).collect::<Vec<_>>(),
                 "child_cases": attempt.child_cases.iter().map(ToString::to_string).collect::<Vec<_>>(),
                 "child_score": attempt.child_score,
@@ -989,6 +998,30 @@ fn p8_gepa_report_json(
         }).collect::<Vec<_>>(),
         "events": report.events.iter().map(p8_gepa_event_json).collect::<Vec<_>>(),
     })
+}
+
+#[derive(Clone, Copy, Debug)]
+struct P8GepaCandidateAdmission {
+    index: u32,
+    validation_score: Option<f64>,
+}
+
+fn p8_gepa_candidate_admission_map(
+    report: &GepaReport,
+) -> BTreeMap<CandidateId, P8GepaCandidateAdmission> {
+    report
+        .candidates
+        .iter()
+        .map(|candidate| {
+            (
+                candidate.candidate,
+                P8GepaCandidateAdmission {
+                    index: candidate.index.get(),
+                    validation_score: candidate.validation_score,
+                },
+            )
+        })
+        .collect()
 }
 
 fn p8_gepa_candidate_prompt_map(
@@ -5751,6 +5784,8 @@ Provide the new parameter value within ``` blocks."
                 .is_some_and(|text| text.contains("modular arithmetic"))
         );
         assert_eq!(attempts[0]["parent_index"], 0);
+        assert_eq!(attempts[0]["child_index"], 1);
+        assert_eq!(attempts[0]["child_validation_score"], 1.0);
         assert!(
             attempts[0]["parent_cases"]
                 .as_array()

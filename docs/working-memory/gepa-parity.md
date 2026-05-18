@@ -210,6 +210,10 @@ Prompt-audit finding:
   accepted reflection proposals. This is intentionally P8-local: generic
   `GepaReport` keeps optimizer state and candidate ids, while the AIME report
   carries domain prompt text needed for live-quality audits.
+- post-run P8 proposal attempts now cross-link accepted children back to
+  `child_index` and `child_validation_score`, so an operator can inspect why
+  an accepted train-screening child did or did not become validation-best
+  without manually joining candidate ids.
 
 Comparison notes against the older improving artifact:
 
