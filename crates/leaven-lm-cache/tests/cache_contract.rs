@@ -447,10 +447,10 @@ async fn sqlite_cache_get_does_not_read_before_await() {
     let path = dir.path().join("lm-cache.sqlite");
     let cache = SqliteLmCache::open(path).unwrap();
     let key = cache_key();
-    let entry = cache_entry(key.clone(), "stored after future construction");
+    let entry = cache_entry(key, "stored after future construction");
 
     let read_cache = cache.clone();
-    let pending_read = read_cache.get(key.clone());
+    let pending_read = read_cache.get(key);
     cache.put(key, entry.clone()).await.unwrap();
 
     assert_eq!(pending_read.await.unwrap(), Some(entry));
