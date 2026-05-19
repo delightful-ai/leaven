@@ -1,6 +1,6 @@
 [package]
 name = "leaven-workspace-git"
-description = "Leaven crate skeleton for leaven-workspace-git."
+description = "Git checkout workspace backend for Leaven."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,5 +11,10 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
+futures = { workspace = true }
 leaven-kernel = { workspace = true }
 leaven-workspace = { workspace = true }
+
+[dev-dependencies]
+futures = { workspace = true }
+tempfile = { workspace = true }

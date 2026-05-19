@@ -2954,8 +2954,10 @@ dependencies = [
 name = "leaven-workspace-git"
 version = "0.0.0"
 dependencies = [
+ "futures",
  "leaven-kernel",
  "leaven-workspace",
+ "tempfile",
 ]
 
 [[package]]

@@ -310,9 +310,11 @@ Second-order blockers after git identity:
    `scripts/run_loop.py` imports `Agent` from the wrong package. The supported
    CLI imports `Agent` from `src.harness`.
 7. Leaven primitive blocker after provenance: `leaven-artifact-git` can now
-   represent program/frontier refs as pure artifact state, but Leaven still
-   lacks the bridge that captures/restores/deletes those refs from an actual
-   Git checkout during an EvoSkill run.
+   represent program/frontier refs as pure artifact state, and
+   `leaven-workspace-git` can clone and check out a local `program/*` branch.
+   Leaven still lacks the bridge that captures those checkout refs into
+   `GitArtifact`, restores a selected ref for evaluation, and deletes discarded
+   branch/tag refs during an EvoSkill run.
 8. Language-boundary blocker for implementation: after provenance, all
    Leaven-owned EvoSkill split/sampler/scorer/harness/frontier behavior must be
    implemented in Rust/Leaven primitives, not Python.
@@ -330,7 +332,7 @@ Stay no-spend until the provenance blockers are closed:
    only after the owning primitive surface is designed and tested.
 4. Locate the BrowseComp transfer sample/result source, or record the exact
    access blocker with source links.
-5. After the exact split/source path is chosen, connect the tested
-   `leaven-artifact-git` ref/lineage artifact vocabulary to the EvoSkill run
-   path through an owning workspace or harness bridge, without moving Git
-   command execution into the artifact crate.
+5. After the exact split/source path is chosen, add explicit capture/readback
+   between `leaven-workspace-git` checkouts and `leaven-artifact-git` ref
+   records, then wire restore/delete operations into the EvoSkill run path
+   without moving Git command execution into the artifact crate.

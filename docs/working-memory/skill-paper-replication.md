@@ -67,8 +67,9 @@ Current known gaps:
 
 - `crates/leaven-artifact-git` now models normalized paths, immutable object
   IDs, branch/tag refs, typed lineage, content/cache identity, and ref removal
-  for discarded candidates. EvoSkill still needs a run bridge that captures,
-  restores, and deletes those refs against an actual Git checkout.
+  for discarded candidates. `crates/leaven-workspace-git` can clone and check
+  out a local `program/*` branch. EvoSkill still needs a run bridge that
+  captures, restores, and deletes those refs against an actual Git checkout.
 - The P5 EvoSkill path is not OfficeQA or SealQA. It lacks the paper datasets,
   paper splits, full frontier loop, feedback-history schedule, held-out test
   reporting, skill-merge evaluation, paper scorers, and ablations.
@@ -118,9 +119,9 @@ Replication obligations:
 
 Leaven primitive blockers:
 
-- `leaven-artifact-git`: first pure artifact vocabulary for program/frontier
-  branch/tag identity and lineage is present; remaining blocker is actual
-  capture/restore/delete integration plus paper score metadata conventions;
+- Git program/frontier state: pure artifact vocabulary and local checkout
+  lifecycle are present; remaining blocker is actual capture/restore/delete
+  integration plus paper score metadata conventions;
 - `leaven-population`: explicit top-k frontier/admission plus paper-selectors
   with checkpointed selector state;
 - reusable stratified/category-aware split and without-replacement sampler;
@@ -153,8 +154,8 @@ Next attempt:
   source inspection shows direct upstream `scripts/run_loop.py` imports `Agent`
   from the wrong package in the local checkout. After those provenance blockers
   are resolved, the next Leaven blocker is wiring actual Git
-  capture/restore/delete behavior to the tested `leaven-artifact-git`
-  ref/lineage vocabulary.
+  capture/readback/restore/delete behavior between `leaven-workspace-git`
+  checkouts and the tested `leaven-artifact-git` ref/lineage vocabulary.
 
 ### Trace2Skill (`arx_2603.25158`)
 
@@ -371,9 +372,9 @@ Spend/data risks:
 
 Start with these generic primitives as failures expose them:
 
-1. `leaven-artifact-git`: pure program/frontier branch/tag identity and lineage
-   vocabulary exists; actual capture, restore, checkpoint, and discard cleanup
-   integration remains.
+1. Git program/frontier snapshots: pure branch/tag identity and lineage
+   vocabulary plus local checkout lifecycle exist; actual capture/readback,
+   restore, checkpoint, and discard cleanup integration remains.
 2. `leaven-population`: paper-faithful selector/admission policies, top-k
    frontier state, selector state, and checkpoint/resume.
 3. Skill registry/card layer: derived `SkillCard` plus utility, routing keys,
