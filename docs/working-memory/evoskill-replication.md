@@ -265,13 +265,15 @@ exact source provenance and paper split artifact are unresolved. Implementing
 `leaven-artifact-git` now would be useful, but it would not make a paper-faithful
 OfficeQA run possible until the split/category issue is handled.
 
-Once the split/source pin is resolved, the first Leaven primitive blocker remains
-git-backed program identity:
+Once the split/source pin is resolved, the next Leaven primitive blocker is the
+bridge from live Git checkouts into git-backed program identity:
 
-- `crates/leaven-artifact-git/AGENTS.md` says the crate is only a placeholder
-  and not proof of VCS artifact editing.
-- EvoSkill requires branch/tag lineage, score metadata, restorable snapshots,
-  frontier membership, and discard cleanup.
+- `crates/leaven-artifact-git` now has a first pure artifact vocabulary for
+  normalized paths, immutable object IDs, branch/tag refs, typed lineage,
+  content/cache identity, and ref removal for discarded candidates.
+- EvoSkill still requires a higher-layer bridge from real Git checkouts into
+  those artifact records, plus score metadata conventions, restorable
+  snapshots, frontier membership decisions, and discard cleanup execution.
 - P5 currently uses Leaven skill-bank/materializer/checkpoint pieces, but does
   not model EvoSkill's git program artifact as a reusable Leaven artifact.
 
@@ -307,8 +309,10 @@ Second-order blockers after git identity:
 6. Upstream script drift: static source inspection shows direct
    `scripts/run_loop.py` imports `Agent` from the wrong package. The supported
    CLI imports `Agent` from `src.harness`.
-7. Leaven primitive blocker after provenance: `leaven-artifact-git` is a
-   placeholder and cannot yet represent EvoSkill program/frontier snapshots.
+7. Leaven primitive blocker after provenance: `leaven-artifact-git` can now
+   represent program/frontier refs as pure artifact state, but Leaven still
+   lacks the bridge that captures/restores/deletes those refs from an actual
+   Git checkout during an EvoSkill run.
 8. Language-boundary blocker for implementation: after provenance, all
    Leaven-owned EvoSkill split/sampler/scorer/harness/frontier behavior must be
    implemented in Rust/Leaven primitives, not Python.
@@ -326,6 +330,7 @@ Stay no-spend until the provenance blockers are closed:
    only after the owning primitive surface is designed and tested.
 4. Locate the BrowseComp transfer sample/result source, or record the exact
    access blocker with source links.
-5. After the exact split/source path is chosen, implement the smallest
-   `leaven-artifact-git` behavior needed for program branch/tag lineage and
-   frontier membership, with fixture-backed tests.
+5. After the exact split/source path is chosen, connect the tested
+   `leaven-artifact-git` ref/lineage artifact vocabulary to the EvoSkill run
+   path through an owning workspace or harness bridge, without moving Git
+   command execution into the artifact crate.

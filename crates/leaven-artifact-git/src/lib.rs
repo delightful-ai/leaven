@@ -1,34 +1,19 @@
-//! leaven-artifact-git crate skeleton.
+//! Git-backed artifact vocabulary and git-specific edit surfaces.
 
-pub mod artifact {
-    pub struct GitArtifact;
-    pub enum GitArtifactIdentityMode {
-        Commit,
-        Tree,
-    }
-}
-pub mod change {
-    pub struct FsOp;
-    pub struct GitChange;
-}
-pub mod diff {
-    pub struct GitDiff;
-    pub struct GitDiffSummary;
-}
-pub mod error {
-    #[derive(Debug, thiserror::Error)]
-    pub enum GitArtifactError {
-        #[error("git artifact failed")]
-        Message,
-    }
-}
-pub mod surface {
-    pub struct GitAgentKitSurface;
-    pub struct GitPathSurface;
-    pub struct GitSkillFrontmatterSurface;
-}
+mod artifact;
+mod change;
+mod diff;
+mod error;
+mod path;
+mod reference;
+mod surface;
+
 pub use artifact::{GitArtifact, GitArtifactIdentityMode};
 pub use change::{FsOp, GitChange};
 pub use diff::{GitDiff, GitDiffSummary};
 pub use error::GitArtifactError;
+pub use path::GitPath;
+pub use reference::{
+    GitLineage, GitObjectId, GitRef, GitRefKey, GitRefKind, GitRefName, GitRefTarget,
+};
 pub use surface::{GitAgentKitSurface, GitPathSurface, GitSkillFrontmatterSurface};
