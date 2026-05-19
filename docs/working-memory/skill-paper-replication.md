@@ -1,0 +1,386 @@
+# Skill Paper Replication Ledger
+
+Status: active.
+Updated: 2026-05-19.
+
+## Authority
+
+Product authority remains in:
+
+- `docs/specs/initial_library.md`
+- `docs/specs/agentic_skill_optimization_primitives.md`
+- `docs/plans/2026-05-07-milestone-5-skill-paper-reproductions.md`
+- `tmp/skill_opt_sources/manifest.json`
+- current code/tests and emitted run artifacts
+
+This file is a continuation ledger. It records what Leaven must add to support
+paper-faithful replications of the five skill-optimization papers. Verify every
+referenced path before claiming a row is complete.
+
+## Replication Bar
+
+The target is 1:1 replication, not an inspired implementation. A paper example
+or product crate may contain the paper-specific configuration, prompts, dataset
+adapters, and result rendering. Generic behavior discovered while trying to
+replicate must move into Leaven primitives first, then the paper replica should
+retry against those primitives.
+
+Do not spend major provider, cloud, GPU, or benchmark-access budget without
+explicit approval. When a paper depends on private, gated, or very expensive
+data/compute, record the exact blocker and run only no-spend setup/provenance
+checks until the user approves a live run.
+
+The working loop for each paper:
+
+1. Build a replication dossier from local paper sources and any released code.
+2. Attempt the thinnest faithful paper run.
+3. When it fails because Leaven lacks a generic primitive, add the primitive in
+   the owning crate with tests.
+4. Retry the paper run with minimal example-side logic.
+5. Record exact deltas, spend, seeds, model/provider versions, and artifacts.
+
+## Current Leaven State
+
+Current useful substrate:
+
+- `leaven-artifact-skill` owns `SkillBank`, `SkillFolder`, `SkillBankChange`,
+  skill validation, metadata, and skill surfaces.
+- `leaven-agentic-skill` owns skill-bank materialization, workspace readback,
+  diffs, and proposal parsing for agent-authored skill changes.
+- `leaven-agentic` has proposer repair policy support.
+- `leaven-gepa-agentic-skill` bridges GEPA reflection to skill-bank proposal.
+- `examples/p5_evoskill_iteration` proves one live Codex EvoSkill-shaped
+  iteration over a tiny treasury-notation fixture.
+- `leaven-population` has `ParetoFrontier`, but paper-faithful selectors and
+  admission policies still need an audit before they are treated as reusable.
+
+Current known gaps:
+
+- `crates/leaven-artifact-git/src/lib.rs` is still a skeleton, while EvoSkill
+  requires reproducible git-backed program snapshots, branches/tags, lineage,
+  and deletion of discarded candidates.
+- The P5 EvoSkill path is not OfficeQA or SealQA. It lacks the paper datasets,
+  paper splits, full frontier loop, feedback-history schedule, held-out test
+  reporting, skill-merge evaluation, paper scorers, and ablations.
+- Trace2Skill, Memento-Skills, D2Skill, and SkillReducer have no replica crates
+  yet.
+- No per-paper dossier currently records exact prompts, seeds, model versions,
+  splits, metrics, released-code drift, and cost envelope.
+
+## Paper Rows
+
+### EvoSkill (`arx_2603.02766`)
+
+Source anchors:
+
+- paper claims OfficeQA +7.3 points, SealQA +12.1 points, BrowseComp transfer
+  +5.3 points: `tmp/skill_opt_sources/arx_2603.02766/full_source.md:9`.
+- main loop says fixed-capacity frontier, round-robin parent selection,
+  without-replacement training batches, failure threshold, proposer feedback
+  history, validation admission, and weakest-frontier eviction:
+  `tmp/skill_opt_sources/arx_2603.02766/full_source.md:56`,
+  `:58`, `:64`.
+- OfficeQA is 246 questions over about 89k Treasury Bulletin pages, with 17
+  validation examples, train sizes 12/24/36, 1.5 epochs, held-out test, and
+  skill-merge reporting: `tmp/skill_opt_sources/arx_2603.02766/full_source.md:84`,
+  `:90`.
+- SealQA uses seal-0, 111 questions, Claude Code Opus 4.5, 10 percent train,
+  held-out remainder, and 1.5 epochs: `tmp/skill_opt_sources/arx_2603.02766/full_source.md:143`.
+- scorer uses tolerances `{0.0, 0.01, 0.025, 0.05, 0.10}` and flags weighted
+  score below 0.8 as failure: `tmp/skill_opt_sources/arx_2603.02766/full_source.md:790`.
+- appendix describes git branches under `program/`, frontier tags under
+  `frontier/`, default frontier `K=3`, and branch deletion for discarded
+  children: `tmp/skill_opt_sources/arx_2603.02766/full_source.md:794`.
+
+Replication obligations:
+
+- replicate OfficeQA and SealQA dataset acquisition, stratification, train/val/test
+  splits, category-aware sampling, exact fuzzy scorer, held-out metrics, and
+  skill-merge condition;
+- replicate the paper's proposer/builder/autograder prompt surfaces and
+  Claude Code skill-folder protocol;
+- preserve frozen underlying model semantics and record model/provider version;
+- preserve frontier capacity, selector, admission, no-improvement stop,
+  feedback history, checkpoint/resume, and candidate lineage;
+- reproduce BrowseComp transfer from SealQA skill on the 128-example stratified
+  sample when data and provider spend are approved;
+- run ablations for skill-only, prompt-only, and paper-reported train splits.
+
+Leaven primitive blockers:
+
+- `leaven-artifact-git`: program snapshots with branch/tag identity, lineage,
+  commit metadata, restore, and discarded-candidate cleanup;
+- `leaven-population`: explicit top-k frontier/admission plus paper-selectors
+  with checkpointed selector state;
+- reusable stratified/category-aware split and without-replacement sampler;
+- paper-grade scorer/evaluator records with failure-threshold extraction;
+- evidence history that can feed proposer prompts without paper-side custom
+  plumbing.
+
+Notes:
+
+- The paper text itself has a selector drift: the method section says
+  round-robin parent selection, while the appendix describes selecting the
+  highest-scoring frontier program. The dossier must resolve this against
+  released code before any "1:1" claim.
+
+Next attempt:
+
+- Start with EvoSkill because Leaven already has P5 substrate and the source
+  bundle contains the richest local anchors. First create an EvoSkill dossier
+  and run a no-spend setup attempt for OfficeQA/SealQA data, scorer, splits,
+  and git-program frontier. Expect the first code primitive to be
+  `leaven-artifact-git`, followed by selector/admission state.
+
+### Trace2Skill (`arx_2603.25158`)
+
+Source anchors:
+
+- three stages are trajectory generation, parallel multi-agent patch proposal,
+  and conflict-free hierarchical consolidation:
+  `tmp/skill_opt_sources/arx_2603.25158/full_source.md:19`.
+- analysts are dispatched concurrently with no sequential dependency:
+  `tmp/skill_opt_sources/arx_2603.25158/full_source.md:99`.
+- consolidation identifies prevalent patterns and discards idiosyncratic
+  patches: `tmp/skill_opt_sources/arx_2603.25158/full_source.md:129`.
+- SpreadsheetBench-Verified split is 200 evolving / 200 held-out from 400, OOD
+  WikiTQ is converted to spreadsheet format, and results average seeds
+  41/42/43: `tmp/skill_opt_sources/arx_2603.25158/full_source.md:149`.
+- models are Qwen3.5-122B-A10B and Qwen3.5-35B-A3B via vLLM; Stage 1 uses one
+  trajectory per problem, Stage 2 uses 128 sub-agents, merge batch size 32, and
+  ReAct turn budget 100: `tmp/skill_opt_sources/arx_2603.25158/full_source.md:159`.
+- primary Avg equally weights in-distribution SpreadsheetBench Vrf/Soft/Hard
+  and OOD WikiTQ across both model scales:
+  `tmp/skill_opt_sources/arx_2603.25158/full_source.md:401`.
+- math uses DAPO-Math-Train-400, DAPO-Math-Test-100, and AIME 2026 avg@8 over
+  30 problems: `tmp/skill_opt_sources/arx_2603.25158/full_source.md:471`,
+  `:473`.
+- DocVQA uses official val 5,349 split first 2,700 evolving / 2,649 held-out,
+  reporting ANLS and accuracy: `tmp/skill_opt_sources/arx_2603.25158/full_source.md:479`.
+
+Replication obligations:
+
+- replicate SpreadsheetBench, WikiTQ conversion, DAPO-Math/AIME, DocVQA, seeds,
+  official metrics, Anthropic `xlsx` and `xlsx-basic` baselines, model scales,
+  vLLM config, and all ablations;
+- record every trajectory, success/error analyst patch, validation result,
+  merge tree, support count, discarded patch, and applied diff;
+- keep the final skill as one portable skill directory, not a retrieval bank.
+
+Leaven primitive blockers:
+
+- many-trace evidence corpus with success/failure labels and full trajectory
+  access;
+- parallel analyst dispatch that can checkpoint hundreds of independent
+  sub-agent calls;
+- patch proposal artifact with conflict detection, format validation, support
+  counts, and hierarchical merge tree;
+- deterministic skill-directory diff application and rollback;
+- result matrix/reporting for cross-model and OOD transfer.
+
+Spend/data risks:
+
+- faithful vLLM replication needs large Qwen3.5 MoE serving and likely GPU
+  spend. No live run until approved.
+
+### Memento-Skills (`arx_2603.18743`)
+
+Source anchors:
+
+- Read-Write loop is Observe -> Read -> Act -> Feedback -> Write:
+  `tmp/skill_opt_sources/arx_2603.18743/paperclip_content.lines:107`.
+- Write is skill-level reflective update with failure attribution and file-level
+  rewriting, not append-only memory:
+  `tmp/skill_opt_sources/arx_2603.18743/full_source.md:118`.
+- behavior-aligned router is trained via single-step offline RL because BM25
+  and semantic embeddings are insufficient:
+  `tmp/skill_opt_sources/arx_2603.18743/full_source.md:279`,
+  `:366`.
+- router data starts from about 8k local skills and about 3k sampled skills;
+  public catalog is GitHub stars >500 with deterministic dedupe:
+  `tmp/skill_opt_sources/arx_2603.18743/full_source.md:370`,
+  `:446`.
+- router evaluation uses Qwen3-Embedding-0.6B, 140 synthetic queries, and
+  Recall@1 0.32/0.54/0.60 for BM25/Qwen3/Memento-Qwen:
+  `tmp/skill_opt_sources/arx_2603.18743/full_source.md:456`,
+  `:460`.
+- GAIA uses 165 validation questions split 100 train / 65 test; HLE uses
+  788 train / 342 test across 8 subjects:
+  `tmp/skill_opt_sources/arx_2603.18743/full_source.md:518`,
+  `:522`.
+- all experiments use Gemini-3.1-Flash:
+  `tmp/skill_opt_sources/arx_2603.18743/full_source.md:526`.
+- GAIA allows up to three reflective retries and reports 66.0 test vs 52.3
+  ablation; HLE reports 38.7 test vs 17.9 baseline:
+  `tmp/skill_opt_sources/arx_2603.18743/full_source.md:532`,
+  `:550`.
+
+Replication obligations:
+
+- replicate skill catalog construction, router training data generation,
+  contrastive/offline-RL router training, router metrics, GAIA/HLE splits,
+  reflective retry schedule, static Read-Write ablation, and library growth;
+- persist read/write decisions, utility, target selection, rewritten files,
+  unit-test gates, retries, and rollback evidence.
+
+Leaven primitive blockers:
+
+- behavior-aligned skill router training/evaluation substrate;
+- skill registry with routing goals, utility table, trigger stats, and
+  skill-level failure attribution;
+- write-path that targets one skill, rewrites files, validates, retries, and
+  rolls back;
+- multi-round retry execution with per-round feedback and learned-library state;
+- GAIA/HLE harness adapters and exact split manifests.
+
+Spend/data risks:
+
+- HLE and GAIA access, Gemini-3.1-Flash availability, and router training
+  compute need approval before live replication.
+
+### D2Skill (`arx_2603.28716`)
+
+Source anchors:
+
+- dynamic dual-granularity skill bank has task and step skills and pairs
+  skill-injected with baseline rollouts:
+  `tmp/skill_opt_sources/arx_2603.28716/full_source.md:29`,
+  `:87`.
+- each task samples `N` parallel trajectories split into skill and baseline
+  groups of `N/2`: `tmp/skill_opt_sources/arx_2603.28716/full_source.md:106`.
+- performance gap updates task and step skill utilities with EMA:
+  `tmp/skill_opt_sources/arx_2603.28716/full_source.md:119`,
+  `:127`.
+- reflection triggers below threshold, sampling one failed trajectory and when
+  available one successful trajectory, producing at most one task and one step
+  skill per group: `tmp/skill_opt_sources/arx_2603.28716/full_source.md:185`.
+- retrieval uses task keys `g`, step keys `(g, o_j)`, similarity threshold,
+  normalized similarity plus utility/UCB ranking, and top-k injection:
+  `tmp/skill_opt_sources/arx_2603.28716/full_source.md:194`,
+  `:200`, `:202`, `:208`.
+- experiments are ALFWorld/WebShop with Qwen2.5-7B-Instruct and
+  Qwen3-4B-Instruct-2507; validation fixes the skill bank with no reflection:
+  `tmp/skill_opt_sources/arx_2603.28716/full_source.md:223`,
+  `:241`.
+- reported training cost is 8xH100: GRPO 20.8h, D2Skill 25.6h, SkillRL 49.2h:
+  `tmp/skill_opt_sources/arx_2603.28716/full_source.md:289`.
+
+Replication obligations:
+
+- replicate ALFWorld/WebShop environments, RL stack, model initializations,
+  teacher-SFT setup, skill/baseline paired rollout grouping, GRPO integration,
+  validation freeze, ablations, and cost curves;
+- preserve task/step skill separation, retrieval keys, utility, retrieval
+  counts, pruning, and reflection thresholds.
+
+Leaven primitive blockers:
+
+- dual-pool skill registry for task and step skills;
+- paired rollout evaluator that records baseline-vs-skill deltas;
+- utility/EMA/UCB retrieval and pruning state;
+- trajectory-level credit assignment tied to retrieved skills;
+- RL/environment adapter boundary that can record Leaven evidence without
+  turning Leaven into the RL framework.
+
+Spend/data risks:
+
+- full 1:1 replication is HPC-heavy and should sit behind explicit approval.
+  This paper should probably follow EvoSkill/Trace2Skill/Memento unless the
+  user wants to fund the RL run early.
+
+### SkillReducer (`arx_2603.29919`)
+
+Source anchors:
+
+- skill shape is description, body, references, scripts, with scripts out of
+  scope: `tmp/skill_opt_sources/arx_2603.29919/full_source.md:31`.
+- empirical corpus is 55,315 Wild skills, 100 SkillHub, and 620 Community:
+  `tmp/skill_opt_sources/arx_2603.29919/full_source.md:47`.
+- Stage 1 uses ddmin over semantic clauses with simulated routing oracle, four
+  TF-IDF distractors, one adversarial skill, and real Claude Code trigger
+  validation with selective restore:
+  `tmp/skill_opt_sources/arx_2603.29919/full_source.md:108`,
+  `:110`, `:112`, `:116`, `:118`.
+- missing/short descriptions are generated from body signals:
+  `tmp/skill_opt_sources/arx_2603.29919/full_source.md:132`.
+- Stage 2 classifies core/background/example/template/redundant content,
+  dedupes references, annotates references, runs Gate 1 faithfulness, Gate 2
+  task evaluation, and promotes failed items to core up to two iterations:
+  `tmp/skill_opt_sources/arx_2603.29919/full_source.md:149`,
+  `:161`, `:170`, `:194`.
+- evaluation uses 600 skills plus SkillsBench; models include DeepSeek-V3,
+  DeepSeek-R1, Claude Code CLI, Qwen3.5, and `cl100k_base`:
+  `tmp/skill_opt_sources/arx_2603.29919/full_source.md:204`;
+  `tmp/skill_opt_sources/arx_2603.29919/all_text_sources.md:678`,
+  `:680`.
+- results include 48 percent description compression, 39 percent body
+  compression, 86.0 percent pass rate, 536/536 routing preservation, and 87/87
+  SkillsBench pass:
+  `tmp/skill_opt_sources/arx_2603.29919/all_text_sources.md:720`,
+  `:768`, `:793`, `:813`, `:816`.
+
+Replication obligations:
+
+- replicate crawl/filter/dedupe, corpus samples, ddmin oracle, real-trigger
+  protocol, description generation, body taxonomy, reference module generation,
+  gates, feedback loop, baselines, statistical tests, cross-model transfer, and
+  SkillsBench evaluation;
+- separate compression and evaluation models to prevent leakage;
+- emit token accounting and per-skill before/after artifacts.
+
+Leaven primitive blockers:
+
+- structured description/body/reference surfaces over `SkillBank`;
+- route-equivalence oracle abstraction plus provider-specific real-trigger
+  event parser;
+- ddmin/minimization primitive over semantic units with restore policy;
+- skill token-cost model and tokenizer adapter;
+- task-generation/evaluation dossier with deterministic verifier support and
+  LLM judge separation.
+
+Spend/data risks:
+
+- public skill crawling and multi-model evaluation are moderate but still need
+  explicit spend/account approval for provider-backed runs.
+
+## Cross-Paper Primitive Backlog
+
+Start with these generic primitives as failures expose them:
+
+1. `leaven-artifact-git`: reproducible program/snapshot artifact with lineage,
+   branch/tag identity, restore, checkpoint, and discard cleanup.
+2. `leaven-population`: paper-faithful selector/admission policies, top-k
+   frontier state, selector state, and checkpoint/resume.
+3. Skill registry/card layer: derived `SkillCard` plus utility, routing keys,
+   trigger stats, retrieved-use evidence, and lifecycle state outside raw
+   `SkillBank`.
+4. Evidence/trace corpus: trajectories, success/failure labels, feedback
+   history, patch/proposal provenance, support counts, and cost records.
+5. Agentic batch orchestration: many independent analysts/proposers with
+   checkpointed fan-out/fan-in and resumable merge trees.
+6. Split/sampler/metric adapters: stratified splits, without-replacement
+   samplers, official metric wrappers, and held-out report manifests.
+7. Skill optimization surfaces: description/body/reference/core/progressive
+   disclosure views plus token-cost accounting.
+8. Route equivalence and trigger evidence: simulated route oracle plus real
+   provider/runtime trigger parser.
+9. Utility/retrieval/pruning substrate: embedding keys, similarity thresholds,
+   EMA utility, UCB bonus, top-k injection, and eviction.
+10. Paired rollout evidence: baseline-vs-skill groups, hindsight credit, and
+    per-retrieved-skill utility update inputs.
+
+## Current Priority
+
+The next coherent work slice is EvoSkill, not because it is simplest, but
+because it already has Leaven substrate and immediately pressures the most
+foundational missing primitive: git-backed program identity and frontier
+lineage. The first retry should stay no-spend:
+
+- create `examples/p5_evoskill_iteration` successor dossier for full
+  OfficeQA/SealQA replication;
+- verify data availability and exact split manifests;
+- reproduce scorer/sampler/frontier semantics with fixtures;
+- implement the first generic primitive only when the replica cannot proceed
+  without it;
+- keep paper-specific code thin enough that replacing the fixture with the
+  paper data does not rewrite Leaven behavior.

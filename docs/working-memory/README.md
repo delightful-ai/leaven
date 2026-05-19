@@ -10,3 +10,7 @@ Current ledgers:
 
 - `gepa-parity.md`: GEPA upstream parity-or-better goal, parity matrix state,
   P8/AIME live run handles, and next actions.
+- `skill-paper-replication.md`: active goal ledger for paper-faithful
+  replications of EvoSkill, Trace2Skill, Memento-Skills, D2Skill, and
+  SkillReducer, including source anchors, current Leaven blockers, and the
+  next primitive-building attempt loop.
