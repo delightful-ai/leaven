@@ -14,3 +14,6 @@ Current ledgers:
   replications of EvoSkill, Trace2Skill, Memento-Skills, D2Skill, and
   SkillReducer, including source anchors, current Leaven blockers, and the
   next primitive-building attempt loop.
+- `evoskill-replication.md`: EvoSkill-specific dossier with the first
+  no-spend OfficeQA/SealQA setup probe, source pin state, data availability,
+  split mismatch, and the current blocker before `leaven-artifact-git`.

@@ -1,0 +1,240 @@
+# EvoSkill Replication Dossier
+
+Status: active.
+Updated: 2026-05-19.
+
+## Authority
+
+This dossier is subordinate to:
+
+- `docs/working-memory/skill-paper-replication.md`
+- `docs/specs/agentic_skill_optimization_primitives.md`
+- `docs/plans/2026-05-07-milestone-5-skill-paper-reproductions.md`
+- `tmp/skill_opt_sources/arx_2603.02766/full_source.md`
+- current Leaven code/tests and emitted run artifacts
+
+It records the first paper-specific EvoSkill setup attempt. It is not proof of
+replication.
+
+## Replication Target
+
+The target is the paper-faithful EvoSkill result, not the current P5 fixture:
+
+- OfficeQA full benchmark: 246 questions over U.S. Treasury Bulletins, with
+  validation set 17, train sizes 12/24/36, 1.5 epochs, held-out test, fuzzy
+  OfficeQA scorer, and skill-merge reporting
+  (`tmp/skill_opt_sources/arx_2603.02766/full_source.md:84`, `:90`).
+- SealQA seal-0: 111 questions, Claude Code Opus 4.5, 10 percent train,
+  held-out remainder, 1.5 epochs, and SealQA LLM-as-judge grading
+  (`tmp/skill_opt_sources/arx_2603.02766/full_source.md:143`, `:760`).
+- BrowseComp transfer: the SealQA skill applied zero-shot to a 128-example
+  stratified sample (`tmp/skill_opt_sources/arx_2603.02766/full_source.md:151`).
+- Loop semantics: fixed-capacity frontier, parent selection, without-replacement
+  training batches, failure threshold, feedback history, validation admission,
+  weakest-frontier eviction, and final best-frontier selection
+  (`tmp/skill_opt_sources/arx_2603.02766/full_source.md:56`, `:58`, `:64`).
+- Git program semantics: program branches, frontier tags, default K=3, branch
+  deletion for discarded children, and restorable lineage
+  (`tmp/skill_opt_sources/arx_2603.02766/full_source.md:794`).
+
+The current `examples/p5_evoskill_iteration` path proves only a live one-iteration
+treasury-notation fixture. Its own plan says full OfficeQA/SealQA loaders,
+paper splits, full frontier loop, feedback history, OfficeQA harness, autograder,
+edit-path reproduction, and ablations remain missing
+(`docs/plans/2026-05-07-milestone-5-skill-paper-reproductions.md:125`).
+
+## No-Spend Probe
+
+Date: 2026-05-19.
+Provider/model spend: none.
+Cloud/GPU spend: none.
+Live agent execution: none.
+
+Commands and bounded checks used:
+
+- `git ls-remote https://github.com/sentient-agi/EvoSkill HEAD`
+- `git ls-remote https://github.com/databricks/officeqa HEAD`
+- `git -C tmp/repros/evoskill rev-parse HEAD`
+- `git -C tmp/repros/officeqa rev-parse HEAD`
+- CSV parsing with Ruby `CSV` for row counts and schema
+- `zipinfo`, `fd`, `wc`, `du`, and `rg` over local OfficeQA PDFs and
+  transformed corpus
+- static source inspection with `rg` and file reads for split/default/import
+  behavior
+
+Avoided probe:
+
+- `git status` over the large OfficeQA checkout is not an operator-safe smoke.
+  A chained status command hung long enough to interrupt the probe flow. Use
+  bounded `rev-parse`, `ls-remote`, row counts, and explicit file checks for
+  this data tree.
+
+## Source Pin State
+
+Local checkouts currently available under ignored `tmp/repros`:
+
+- EvoSkill local HEAD: `e881c715dcabb525b30981c4a8e344937e3f944b`.
+- EvoSkill remote HEAD on 2026-05-19 probe:
+  `8d503845c8d66a2fa458f06de3988d709774e88a`.
+- OfficeQA local HEAD: `78748e5d669d7f8796bb5ad26556a260d5bb7e03`.
+- OfficeQA remote HEAD on 2026-05-19 probe:
+  `49e893d97db5d5d32fb7fbb73d913e9e2829c6d9`.
+
+Implication: exact replication must pin the intended upstream source revisions
+before a result claim. The local checkouts are useful for setup probing, but
+they are stale relative to remote HEAD as of the probe. This dossier does not
+decide whether to replicate the paper release, local checkout, or latest
+upstream HEAD; that is an explicit provenance choice still open.
+
+## Local Data State
+
+OfficeQA:
+
+- `tmp/repros/officeqa/officeqa_full.csv` parses as 250 CSV records, of which
+  246 have nonempty `uid`; the four trailing blank records are at CSV record
+  indexes 248-251. Its columns are `uid`, `question`, `answer`, `source_docs`,
+  `source_files`, `difficulty`.
+- `tmp/repros/officeqa/officeqa_pro.csv` parses as 133 rows with the same
+  columns.
+- `officeqa_full.csv` difficulty distribution is 133 hard and 113 easy.
+- `officeqa_pro.csv` difficulty distribution is 133 hard.
+- `officeqa_full.csv` references 213 unique `source_files`; no row has missing
+  `source_files` among nonempty-`uid` rows.
+- local corpus files include 697 PDF files under `treasury_bulletin_pdfs`,
+  697 no-OCR PDFs under `treasury_bulletin_pdfs_no_ocr`, and a transformed text
+  ZIP with 697 `.txt` entries.
+- the full PDF corpus is about 3.9G, no-OCR PDFs about 20G, and transformed ZIP
+  about 92M.
+
+EvoSkill OfficeQA demo:
+
+- `tmp/repros/evoskill/examples/officeqa/data/officeqa_sample.csv` parses as
+  10 rows, with 6 easy and 4 hard questions.
+- its config points at that 10-row sample, uses `difficulty` as the category
+  column, `train_ratio = 0.4`, `val_ratio = 0.2`, `iterations = 3`,
+  `frontier_size = 2`, and `concurrency = 2`
+  (`tmp/repros/evoskill/examples/officeqa/.evoskill/config.toml`).
+- applying the documented split formula from
+  `tmp/repros/evoskill/src/api/data_utils.py` to this demo yields train total 3
+  and validation total 2: easy train 2, hard train 1. This count was derived
+  with Ruby from the source formula.
+
+SealQA/BrowseComp:
+
+- no local `seal-0.csv`, BrowseComp sample, or transfer split was found under
+  `tmp/repros/evoskill`, `tmp/repros/officeqa`, or the EvoSkill paper source
+  bundle during the bounded `fd` probe.
+
+## Split Probe
+
+The paper reports OfficeQA train sizes 12, 24, and 36 with a validation set of
+17. The current local OfficeQA CSV has only `difficulty` as a grouping column,
+not the LLM-clustered categories described in the paper.
+
+Using the upstream `src.api.data_utils.stratified_split` formula over
+`officeqa_full.csv`, treating `difficulty` as `category` and using
+`val_ratio = 17/246`, yields the following counts by Ruby calculation:
+
+- `train_ratio = 0.05`: train 11, validation 16, pools easy 5 / hard 6.
+- `train_ratio = 0.10`: train 24, validation 16, pools easy 11 / hard 13.
+- `train_ratio = 0.15`: train 35, validation 16, pools easy 16 / hard 19.
+- `train_ratio = 0.18`: train 43, validation 16, pools easy 20 / hard 23.
+
+This does not match the paper's 12/24/36 train and 17 validation counts. The
+likely missing artifact is the paper's LLM-derived category assignment and/or
+the exact split manifest. Do not silently substitute `difficulty` for the paper
+categories in a 1:1 replication.
+
+## Upstream Code Probe
+
+Relevant current-code facts from local EvoSkill checkout:
+
+- `src/loop/config.py` defaults `max_iterations = 5`, `frontier_size = 3`,
+  `no_improvement_limit = 5`, `concurrency = 4`,
+  `evolution_mode = "skill_only"`, `selection_strategy = "best"`,
+  `failure_sample_count = 3`, and cache enabled.
+- `scripts/run_loop.py` and `scripts/run_loop_sealqa.py` expose separate script
+  defaults around `max_iterations = 20`, `frontier_size = 3`, train ratio
+  `0.18`, and val ratio `0.12`.
+- `src/registry/manager.py` stores programs on `program/` branches and frontier
+  membership on `frontier/` tags, can delete discarded branches/tags, and reads
+  scores from `.claude/program.yaml`.
+- `src/registry/manager.py` supports `"best"`, `"random"`, and `"round_robin"`
+  parent selection. Default config is `"best"`, while the paper method text says
+  round-robin and the appendix says highest-scoring frontier program. This is a
+  replication-source drift, not a Leaven design choice.
+- `src/loop/runner.py` scores failures as weighted multi-tolerance score below
+  `0.8`, matching the paper appendix threshold.
+
+Direct `scripts/run_loop.py` is not currently aligned with the supported CLI
+entrypoint:
+
+- `tmp/repros/evoskill/scripts/run_loop.py:15` imports `Agent` from
+  `src.agent_profiles`.
+- `tmp/repros/evoskill/src/agent_profiles/__init__.py` does not export `Agent`.
+- `tmp/repros/evoskill/src/harness/__init__.py` exports `Agent`, and the
+  supported CLI path imports it from `src.harness`
+  (`tmp/repros/evoskill/src/cli/commands/run.py:307`).
+
+Implication: the replication dossier should treat `scripts/run_loop.py` as
+source evidence for default knobs and split behavior, not as the runnable
+upstream entrypoint until this source drift is resolved against a pinned commit.
+
+## Leaven Primitive Assessment
+
+Leaven is not yet at the first real code primitive for OfficeQA because the
+exact source provenance and paper split artifact are unresolved. Implementing
+`leaven-artifact-git` now would be useful, but it would not make a paper-faithful
+OfficeQA run possible until the split/category issue is handled.
+
+Once the split/source pin is resolved, the first Leaven primitive blocker remains
+git-backed program identity:
+
+- `crates/leaven-artifact-git/AGENTS.md` says the crate is only a placeholder
+  and not proof of VCS artifact editing.
+- EvoSkill requires branch/tag lineage, score metadata, restorable snapshots,
+  frontier membership, and discard cleanup.
+- P5 currently uses Leaven skill-bank/materializer/checkpoint pieces, but does
+  not model EvoSkill's git program artifact as a reusable Leaven artifact.
+
+Second-order blockers after git identity:
+
+- paper-faithful selector/admission state in `leaven-population`, including the
+  best-vs-round-robin source drift;
+- exact split/sampler manifests, including category-aware without-replacement
+  sampling and 1.5 epoch schedules;
+- OfficeQA scorer/evaluator records with thresholded failure extraction;
+- feedback history and proposal-outcome history as generic evidence, not
+  example-local strings;
+- SealQA judge and BrowseComp transfer harness, pending data availability.
+
+## Current Blockers
+
+1. Source pin blocker: local EvoSkill and OfficeQA checkouts are stale relative
+   to remote HEAD. Choose the paper-release source, local checkout, or current
+   upstream HEAD before comparing behavior.
+2. OfficeQA split blocker: the local CSV has `difficulty`, but not the paper's
+   LLM-clustered categories or exact split manifest. The paper counts cannot be
+   reproduced from `difficulty` using the upstream splitter.
+3. SealQA data blocker: no local `seal-0.csv` was found.
+4. BrowseComp transfer blocker: no local 128-example transfer sample was found.
+5. Upstream script drift: static source inspection shows direct
+   `scripts/run_loop.py` imports `Agent` from the wrong package. The supported
+   CLI imports `Agent` from `src.harness`.
+6. Leaven primitive blocker after provenance: `leaven-artifact-git` is a
+   placeholder and cannot yet represent EvoSkill program/frontier snapshots.
+
+## Next Action
+
+Stay no-spend until the provenance blockers are closed:
+
+1. Pin an EvoSkill/OfficeQA source revision for replication and decide whether
+   to refresh local checkouts or preserve paper-release snapshots.
+2. Locate or reconstruct the paper's OfficeQA category/split manifest. If the
+   manifest is unavailable, record an exact documented substitute before any
+   live run.
+3. Locate SealQA `seal-0.csv` and BrowseComp transfer sample, or record access
+   blockers with source links.
+4. After the exact split/source path is chosen, implement the smallest
+   `leaven-artifact-git` behavior needed for program branch/tag lineage and
+   frontier membership, with fixture-backed tests.

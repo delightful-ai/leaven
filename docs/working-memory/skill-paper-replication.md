@@ -132,6 +132,18 @@ Next attempt:
   and git-program frontier. Expect the first code primitive to be
   `leaven-artifact-git`, followed by selector/admission state.
 
+2026-05-19 no-spend probe:
+
+- `docs/working-memory/evoskill-replication.md` now records the first
+  OfficeQA/SealQA setup attempt. Current source/data blockers come before code:
+  local EvoSkill/OfficeQA checkouts are stale relative to remote HEAD, the
+  paper's OfficeQA category/split manifest is not present in the local CSV, no
+  local SealQA `seal-0.csv` or BrowseComp transfer sample was found, and static
+  source inspection shows direct upstream `scripts/run_loop.py` imports `Agent`
+  from the wrong package in the local checkout. After those provenance blockers
+  are resolved, `leaven-artifact-git` remains the first Leaven primitive blocker
+  for program/frontier snapshots.
+
 ### Trace2Skill (`arx_2603.25158`)
 
 Source anchors:
