@@ -60,8 +60,10 @@ Current useful substrate:
 - `leaven-gepa-agentic-skill` bridges GEPA reflection to skill-bank proposal.
 - `examples/p5_evoskill_iteration` proves one live Codex EvoSkill-shaped
   iteration over a tiny treasury-notation fixture.
-- `leaven-population` has `ParetoFrontier` and `TopKFrontier`, but paper-faithful
-  parent selector state still needs an audit before it is treated as reusable.
+- `leaven-population` has `ParetoFrontier`, `TopKFrontier`, and deterministic
+  `TopKParentSelector` state for best/round-robin parent selection; EvoSkill
+  still needs checkpointed run-loop integration and dossier resolution of the
+  paper/code selector drift before this proves replication.
 
 Current known gaps:
 
@@ -124,8 +126,9 @@ Leaven primitive blockers:
 - Git program/frontier state: pure artifact vocabulary plus local clone,
   capture, restore, and delete primitives are present; remaining blocker is
   EvoSkill run-loop integration plus paper score metadata conventions;
-- `leaven-population`: explicit top-k frontier/admission now exists;
-  paper-selectors with checkpointed selector state remain;
+- `leaven-population`: explicit top-k frontier/admission and checkpointable
+  best/round-robin parent selector state now exist; remaining blocker is
+  paper-run integration and selector-policy resolution;
 - reusable stratified/category-aware split and without-replacement sampler;
 - paper-grade scorer/evaluator records with failure-threshold extraction;
 - evidence history that can feed proposer prompts without paper-side custom
@@ -143,8 +146,9 @@ Next attempt:
 - Start with EvoSkill because Leaven already has P5 substrate and the source
   bundle contains the richest local anchors. First create an EvoSkill dossier
   and run a no-spend setup attempt for OfficeQA/SealQA data, scorer, splits,
-  and git-program frontier. Expect the first code primitive to be
-  `leaven-artifact-git`, followed by selector/admission state.
+  and git-program frontier. Git artifact/workspace primitives plus top-k
+  admission/selector state now exist; the next Leaven-side EvoSkill primitive
+  pressure is checkpointed paper-run integration around those pieces.
 
 2026-05-19 no-spend probe:
 
@@ -377,8 +381,9 @@ Start with these generic primitives as failures expose them:
 1. Git program/frontier snapshots: pure branch/tag identity and lineage
    vocabulary plus local clone/capture/restore/delete primitives exist;
    checkpointed EvoSkill run integration remains.
-2. `leaven-population`: top-k scalar frontier admission exists; paper-faithful
-   parent selector state and checkpoint/resume integration remain.
+2. `leaven-population`: top-k scalar frontier admission and deterministic
+   best/round-robin parent selector state exist; checkpoint/resume integration
+   into the EvoSkill run path remains.
 3. Skill registry/card layer: derived `SkillCard` plus utility, routing keys,
    trigger stats, retrieved-use evidence, and lifecycle state outside raw
    `SkillBank`.

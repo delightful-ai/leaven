@@ -155,6 +155,69 @@ impl TopKFrontier {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum TopKParentSelectionPolicy {
+    Best,
+    RoundRobin,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct TopKParentSelector {
+    policy: TopKParentSelectionPolicy,
+    cursor: usize,
+}
+
+impl TopKParentSelector {
+    #[must_use]
+    pub const fn best() -> Self {
+        Self {
+            policy: TopKParentSelectionPolicy::Best,
+            cursor: 0,
+        }
+    }
+
+    #[must_use]
+    pub const fn round_robin() -> Self {
+        Self {
+            policy: TopKParentSelectionPolicy::RoundRobin,
+            cursor: 0,
+        }
+    }
+
+    #[must_use]
+    pub const fn with_cursor(policy: TopKParentSelectionPolicy, cursor: usize) -> Self {
+        Self { policy, cursor }
+    }
+
+    #[must_use]
+    pub const fn policy(&self) -> TopKParentSelectionPolicy {
+        self.policy
+    }
+
+    #[must_use]
+    pub const fn cursor(&self) -> usize {
+        self.cursor
+    }
+
+    #[must_use]
+    pub fn select(&mut self, frontier: &TopKFrontier) -> Option<CandidateId> {
+        match self.policy {
+            TopKParentSelectionPolicy::Best => frontier.best(),
+            TopKParentSelectionPolicy::RoundRobin => self.select_round_robin(frontier.members()),
+        }
+    }
+
+    fn select_round_robin(&mut self, members: &[CandidateId]) -> Option<CandidateId> {
+        if members.is_empty() {
+            return None;
+        }
+
+        let index = self.cursor % members.len();
+        self.cursor = (index + 1) % members.len();
+        Some(members[index])
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 struct ScoredMember {
     candidate: CandidateId,

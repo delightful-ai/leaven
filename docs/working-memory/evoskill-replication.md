@@ -282,8 +282,8 @@ git-backed program identity into the EvoSkill run path:
 
 Second-order blockers after git identity:
 
-- parent selector state in `leaven-population` or the EvoSkill harness,
-  including the best-vs-round-robin source drift;
+- checkpointed EvoSkill run-loop integration for `TopKParentSelector`,
+  including resolving the best-vs-round-robin source drift in the dossier;
 - exact split/sampler manifests, including category-aware without-replacement
   sampling and 1.5 epoch schedules;
 - OfficeQA scorer/evaluator records with thresholded failure extraction;
@@ -318,7 +318,9 @@ Second-order blockers after git identity:
    EvoSkill run integration that turns those primitives into checkpointed
    program/frontier state with paper score metadata. `leaven-population`
    now provides `TopKFrontier` for fixed-capacity scalar validation admission
-   and weakest-member eviction; P5 uses it instead of single-best tracking.
+   and weakest-member eviction plus `TopKParentSelector` for checkpointable
+   best/round-robin parent selection; P5 uses the frontier instead of
+   single-best tracking, but full EvoSkill still needs selector/run-loop wiring.
 8. Language-boundary blocker for implementation: after provenance, all
    Leaven-owned EvoSkill split/sampler/scorer/harness/frontier behavior must be
    implemented in Rust/Leaven primitives, not Python.
@@ -337,6 +339,7 @@ Stay no-spend until the provenance blockers are closed:
 4. Locate the BrowseComp transfer sample/result source, or record the exact
    access blocker with source links.
 5. After the exact split/source path is chosen, wire the tested
-   `leaven-artifact-git` and `leaven-workspace-git` primitives into the
-   EvoSkill run path with checkpointed program/frontier state and paper score
-   metadata, without moving Git command execution into the artifact crate.
+   `leaven-artifact-git`, `leaven-workspace-git`, `TopKFrontier`, and
+   `TopKParentSelector` primitives into the EvoSkill run path with checkpointed
+   program/frontier/selector state and paper score metadata, without moving Git
+   command execution into the artifact crate.

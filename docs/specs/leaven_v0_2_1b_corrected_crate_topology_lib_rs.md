@@ -2282,7 +2282,7 @@ pub use niche::NicheDescriptor;
 pub use no_population::NoPopulation;
 pub use novelty::NoveltyPopulation;
 pub use pareto_frontier::{ParetoFrontier, ParetoFrontierBuilder};
-pub use top_k_frontier::TopKFrontier;
+pub use top_k_frontier::{TopKFrontier, TopKParentSelectionPolicy, TopKParentSelector};
 pub use tournament::{
     BradleyTerryFit, PlackettLuceFit, TournamentConfig, TournamentPopulation,
 };
@@ -2291,7 +2291,8 @@ pub mod prelude {
     pub use crate::{
         BeamPopulation, BradleyTerryFit, KeepBest, LenientParetoFrontier,
         MapElites, NicheDescriptor, NoPopulation, NoveltyPopulation,
-        ParetoFrontier, PlackettLuceFit, TopKFrontier, TournamentPopulation,
+        ParetoFrontier, PlackettLuceFit, TopKFrontier, TopKParentSelectionPolicy,
+        TopKParentSelector, TournamentPopulation,
     };
 }
 ```
