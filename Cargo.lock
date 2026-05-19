@@ -2497,6 +2497,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "leaven-cli"
+version = "0.0.0"
+dependencies = [
+ "leaven-agent",
+ "leaven-core",
+ "leaven-gepa",
+ "leaven-kernel",
+ "leaven-workspace",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "uuid",
+]
+
+[[package]]
 name = "leaven-core"
 version = "0.0.0"
 dependencies = [

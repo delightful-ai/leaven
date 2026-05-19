@@ -10,6 +10,7 @@ const EXPECTED_WORKSPACE_MEMBERS: &[&str] = &[
     "crates/leaven-agent-codex",
     "crates/leaven-agent-codex-app-server",
     "crates/leaven-agent-codex-cli",
+    "crates/leaven-cli",
     "crates/leaven-agent-opencode",
     "crates/leaven-agentic",
     "crates/leaven-agentic-skill",
@@ -63,6 +64,7 @@ const EXPECTED_WORKSPACE_MEMBERS: &[&str] = &[
     "examples/p6_optimizer_policy_self_opt",
     "examples/p7_self_optimization_kernel",
     "examples/p8_aime_gepa",
+    "crates/leaven-cli",
     "xtask",
 ];
 

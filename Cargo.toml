@@ -15,6 +15,7 @@ members = [
     "crates/leaven-agent-codex",
     "crates/leaven-agent-codex-app-server",
     "crates/leaven-agent-codex-cli",
+    "crates/leaven-cli",
     "crates/leaven-agent-opencode",
     "crates/leaven-agentic",
     "crates/leaven-agentic-skill",
@@ -145,6 +146,7 @@ leaven-agent-claude-code = { path = "crates/leaven-agent-claude-code", version =
 leaven-agent-codex = { path = "crates/leaven-agent-codex", version = "0.0.0" }
 leaven-agent-codex-app-server = { path = "crates/leaven-agent-codex-app-server", version = "0.0.0", default-features = false }
 leaven-agent-codex-cli = { path = "crates/leaven-agent-codex-cli", version = "0.0.0" }
+leaven-cli = { path = "crates/leaven-cli", version = "0.0.0" }
 leaven-agent-opencode = { path = "crates/leaven-agent-opencode", version = "0.0.0" }
 leaven-agentic = { path = "crates/leaven-agentic", version = "0.0.0" }
 leaven-agentic-skill = { path = "crates/leaven-agentic-skill", version = "0.0.0" }
