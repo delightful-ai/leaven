@@ -12,7 +12,9 @@ name = "leaven"
 path = "src/main.rs"
 
 [dependencies]
+futures = { workspace = true }
 leaven-agent = { workspace = true }
+leaven-agentic = { workspace = true }
 leaven-agentic-skill = { workspace = true }
 leaven-artifact-skill = { workspace = true }
 leaven-core = { workspace = true }
@@ -21,6 +23,7 @@ leaven-gepa = { workspace = true }
 leaven-gepa-agentic-skill = { workspace = true }
 leaven-kernel = { workspace = true }
 leaven-workspace = { workspace = true }
+leaven-workspace-local = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

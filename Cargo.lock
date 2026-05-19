@@ -2500,7 +2500,9 @@ dependencies = [
 name = "leaven-cli"
 version = "0.0.0"
 dependencies = [
+ "futures",
  "leaven-agent",
+ "leaven-agentic",
  "leaven-agentic-skill",
  "leaven-artifact-skill",
  "leaven-core",
@@ -2509,6 +2511,7 @@ dependencies = [
  "leaven-gepa-agentic-skill",
  "leaven-kernel",
  "leaven-workspace",
+ "leaven-workspace-local",
  "serde",
  "serde_json",
  "thiserror 2.0.18",

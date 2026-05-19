@@ -25,6 +25,19 @@ impl SkillBankGepaReflectionMaterializer {
     pub const fn layout(&self) -> &SkillWorkspaceLayout {
         &self.layout
     }
+
+    /// Materializes an input into an already allocated workspace view.
+    ///
+    /// This is the same file projection used by the `Materializer`
+    /// implementation, exposed for deterministic operator diagnostics that do
+    /// not have an engine `MaterializeContext`.
+    pub fn materialize_input<Part>(
+        &self,
+        input: &SkillBankGepaReflectionInput<Part>,
+        workspace: &mut WorkspaceView<'_>,
+    ) -> Result<Metered<MaterializationReport>, MaterializeError> {
+        materialize_bank(&input.artifact, &self.layout, workspace)
+    }
 }
 
 impl<P, Part> Materializer<P, SkillBankGepaReflectionInput<Part>>
@@ -39,7 +52,7 @@ where
         workspace: &mut WorkspaceView<'_>,
         _ctx: MaterializeContext<'_, P>,
     ) -> Result<Metered<MaterializationReport>, MaterializeError> {
-        materialize_bank(&input.artifact, &self.layout, workspace)
+        self.materialize_input(input, workspace)
     }
 }
 
