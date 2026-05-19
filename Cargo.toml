@@ -4,8 +4,8 @@ cargo-features = ["codegen-backend"]
 
 [workspace]
 resolver = "3"
-# Bare `cargo build`/`check`/`nextest` (no `--workspace`) skip the example
-# milestones; `just check`/`just test` still cover them via `--workspace`.
+# Bare `cargo build`/`check`/`nextest` and the default `just` gates skip the
+# example milestones. Run them explicitly through the `just milestone-*` recipes.
 default-members = ["crates/*"]
 members = [
     "crates/leaven",
@@ -191,6 +191,7 @@ leaven-workspace-local = { path = "crates/leaven-workspace-local", version = "0.
 
 # error handling
 thiserror = "2"
+clap = { version = "4", features = ["derive"] }
 
 # serialization
 serde = { version = "1", features = ["derive"] }

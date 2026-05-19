@@ -4,7 +4,7 @@ This subtree holds repository scripts with local side effects. Scripts are part 
 Current scripts:
 - `lint-line-count.py`: enforces production Rust source size limits.
 - `test-suite-sla.py`: runs nextest plus doctests and enforces the `<30s` suite SLA.
-- `coverage-gate.py`: runs coverage over workspace tests, milestone binaries, and `xtask`, then enforces line and branch floors over production/source behavior. It excludes test harness files and `#[cfg(test)] mod ...` blocks from the denominator after execution, excludes live P5 from workspace coverage, and runs the P5 package without `--live-codex`; it does not prove live Codex behavior.
+- `coverage-gate.py`: runs coverage over default workspace tests plus `xtask`, then enforces line and branch floors over production/source behavior. It excludes milestone packages from the default coverage lane and excludes test harness files and `#[cfg(test)] mod ...` blocks from the denominator after execution.
 - `p8-gepa-debug-sqlite.py`: exports an existing P8 `reports/p8-aime.json` file, and optionally an upstream GEPA `gepa_state.bin`, into local SQLite tables for optimizer debugging. It does not call providers, fetch datasets, or mutate source.
 
 ## Local Rules
@@ -13,8 +13,8 @@ Current scripts:
 - Return non-zero on failed subprocesses and failed policy checks; do not hide failures behind warnings.
 - Generated reports and temporary run directories belong under `target/` unless the caller explicitly provides another output path.
 - If a script changes a canonical check, update `Justfile` and `docs/testing/README.md` in the same change.
-- Coverage scripts may execute milestone binaries, but they must not classify product maturity. If a script starts reporting example proof status, it must preserve the product-proof / mechanics-smoke / proxy-demo distinction from `examples/AGENTS.md`.
-- Coverage denominator exclusions are for test harness code only. Keep production source, examples, scripts, and scaffold crates in the report once they have executable behavior.
+- Coverage scripts do not execute milestone binaries by default. If a script starts reporting example proof status, it must preserve the product-proof / mechanics-smoke / proxy-demo distinction from `examples/AGENTS.md`.
+- Coverage denominator exclusions are for test harness code and explicit non-default milestone packages only. Keep production source, scripts, and scaffold crates in the report once they have executable behavior.
 - Do not add implicit credentials, provider calls, dataset downloads, or destructive filesystem cleanup to canonical scripts. Make those opt-in flags with printed side effects.
 - Keep generated coverage summaries, lcov files, run stores, and temporary example outputs under `target/` by default; scripts should not dirty the repo root.
 

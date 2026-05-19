@@ -741,7 +741,7 @@ fn strip_optional_language(text: &str) -> &str {
     match text.find('\n') {
         Some(newline) => {
             let first_line = &text[..newline];
-            if !first_line.is_empty() && !first_line.contains(char::is_whitespace) {
+            if first_line.is_empty() || !first_line.contains(char::is_whitespace) {
                 &text[newline + 1..]
             } else {
                 text

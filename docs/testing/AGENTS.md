@@ -6,10 +6,10 @@ Tests in this repo are design constraints. They should kill plausible wrong impl
 ## Local Rules
 - Every new test should name exactly one claim and fit one shape: law, example, scenario, or regression.
 - Prefer lower-layer crate tests for algebra, errors, cache keys, path laws, and trait contracts. Use examples only when the claim is a public milestone workflow.
-- Milestone examples are workspace packages under `examples/p*/`. `cargo check --workspace --examples` is not a proof command for them.
+- Milestone examples are workspace packages under `examples/p*/`, but default `just test`, `just lint`, and `just coverage` exclude them. `cargo check --workspace --examples` is not a proof command for them.
 - `just milestone-p8` is a P8 public-builder proof for LM-backed GEPA reflection through provider-neutral `leaven-lm`. Do not cite it as proof of concrete provider transport, LM cache behavior, or live AIME improvement.
 - `just milestone-examples` currently includes the live-gated P5 recipe from the root `Justfile`; do not treat it as a cheap default smoke unless that recipe is made deterministic by default.
-- `scripts/coverage-gate.py` runs milestone packages under coverage, but that is execution coverage, not product proof. It excludes test harness files and `#[cfg(test)] mod ...` blocks from the enforced denominator after execution, runs P5 without the `--live-codex` gate, and runs P8 through the deterministic LM-backed path.
+- `scripts/coverage-gate.py` excludes milestone packages from default coverage. Run milestone recipes explicitly before using example behavior as evidence.
 - Coverage proves executed code stayed covered. It does not answer public maturity; classify examples as product-proof, mechanics-smoke, or proxy-demo before using them as release evidence.
 - Keep `just test` under the `<30s` SLA by reducing fixture/setup cost instead of adding a slow lane.
 - Coverage floors in the root `Justfile` are ratchets. Raise them when coverage improves; do not lower them to land weaker work.
@@ -23,6 +23,7 @@ Use the weakest applicable classification in release notes and closeouts. A run 
 
 ## Stale Proof Traps
 - `cargo check --workspace --examples` misses all milestone packages.
+- Default `just test`, `just lint`, and `just coverage` intentionally skip milestone packages.
 - `just milestone-examples` is not cheap while P5 is live-gated in the root `Justfile`.
 - `just coverage` does not tell whether a milestone is product-proof.
 - `cargo run -p p8_aime_gepa` does not prove live AIME, concrete provider transport, or LM cache behavior.

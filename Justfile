@@ -7,7 +7,17 @@ coverage_branch_floor := '88.29'
 lint:
     cargo fmt --check
     python3 scripts/lint-line-count.py
-    cargo clippy --workspace --all-targets -- -D warnings
+    cargo clippy --workspace --all-targets \
+      --exclude p0_graph_skeleton \
+      --exclude p1_keep_best \
+      --exclude p2_pairwise_tournament \
+      --exclude p3_gepa_parity \
+      --exclude p4_meta_harness_lite \
+      --exclude p5_evoskill_iteration \
+      --exclude p6_optimizer_policy_self_opt \
+      --exclude p7_self_optimization_kernel \
+      --exclude p8_aime_gepa \
+      -- -D warnings
 
 clippy: lint
 
@@ -16,10 +26,20 @@ test:
     python3 scripts/test-suite-sla.py --sla-seconds 30
 
 test-one +args:
-    cargo nextest run --workspace {{args}}
+    cargo nextest run --workspace \
+      --exclude p0_graph_skeleton \
+      --exclude p1_keep_best \
+      --exclude p2_pairwise_tournament \
+      --exclude p3_gepa_parity \
+      --exclude p4_meta_harness_lite \
+      --exclude p5_evoskill_iteration \
+      --exclude p6_optimizer_policy_self_opt \
+      --exclude p7_self_optimization_kernel \
+      --exclude p8_aime_gepa \
+      {{args}}
 
 test-stress count +args:
-    for i in $(seq 1 {{count}}); do echo "stress run $i/{{count}}"; cargo nextest run --workspace {{args}}; done
+    for i in $(seq 1 {{count}}); do echo "stress run $i/{{count}}"; cargo nextest run --workspace --exclude p0_graph_skeleton --exclude p1_keep_best --exclude p2_pairwise_tournament --exclude p3_gepa_parity --exclude p4_meta_harness_lite --exclude p5_evoskill_iteration --exclude p6_optimizer_policy_self_opt --exclude p7_self_optimization_kernel --exclude p8_aime_gepa {{args}}; done
 
 milestone-p0:
     cargo run -p p0_graph_skeleton

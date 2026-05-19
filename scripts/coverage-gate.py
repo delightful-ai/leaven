@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import re
-import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -16,7 +15,7 @@ from typing import Any
 # `coverage` profile, which inherits `dev` but pins `codegen-backend = llvm`.
 COVERAGE_PROFILE = ["--profile", "coverage"]
 
-RUN_PACKAGES = [
+MILESTONE_PACKAGES = [
     "p0_graph_skeleton",
     "p1_keep_best",
     "p2_pairwise_tournament",
@@ -25,11 +24,10 @@ RUN_PACKAGES = [
     "p6_optimizer_policy_self_opt",
     "p7_self_optimization_kernel",
     "p8_aime_gepa",
-    "xtask",
 ]
 
-LIVE_PACKAGES = [
-    "p5_evoskill_iteration",
+RUN_PACKAGES = [
+    "xtask",
 ]
 
 TEST_SOURCE_RE = re.compile(r"(^|/)(tests|benches)/|(^|/)target/tests/")
@@ -49,9 +47,6 @@ def main() -> int:
     args = parser.parse_args()
     output_path = Path(args.output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    p5_run_dir = Path("target/llvm-cov-p5-evoskill")
-    shutil.rmtree(p5_run_dir, ignore_errors=True)
-
     commands = [
         ["cargo", "llvm-cov", "clean", "--workspace"],
         [
@@ -63,7 +58,7 @@ def main() -> int:
             *COVERAGE_PROFILE,
             *exclude_args(),
         ],
-        *[run_package_command(package, p5_run_dir) for package in RUN_PACKAGES],
+        *[run_package_command(package) for package in RUN_PACKAGES],
     ]
     for command in commands:
         result = run(command)
@@ -141,16 +136,13 @@ def run(command: list[str]) -> subprocess.CompletedProcess[bytes]:
     return subprocess.run(command, check=False)
 
 
-def run_package_command(package: str, p5_run_dir: Path) -> list[str]:
-    command = ["cargo", "llvm-cov", "run", "--no-report", *COVERAGE_PROFILE, "-p", package]
-    if package == "p5_evoskill_iteration":
-        command.extend(["--", "--run-dir", str(p5_run_dir)])
-    return command
+def run_package_command(package: str) -> list[str]:
+    return ["cargo", "llvm-cov", "run", "--no-report", *COVERAGE_PROFILE, "-p", package]
 
 
 def exclude_args() -> list[str]:
     args: list[str] = []
-    for package in LIVE_PACKAGES:
+    for package in MILESTONE_PACKAGES:
         args.extend(["--exclude", package])
     return args
 

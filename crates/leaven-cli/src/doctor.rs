@@ -36,7 +36,6 @@ pub enum DoctorCommand {
         format: OutputFormat,
         input_json: Option<PathBuf>,
     },
-    Help,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -56,7 +55,6 @@ impl DoctorCommand {
             Self::ProposalRoundtrip { format, input_json } => {
                 proposal_roundtrip(format, input_json)
             }
-            Self::Help => Ok(crate::HELP.to_owned()),
         }
     }
 }

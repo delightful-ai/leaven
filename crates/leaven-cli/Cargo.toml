@@ -12,6 +12,7 @@ name = "leaven"
 path = "src/main.rs"
 
 [dependencies]
+clap = { workspace = true }
 futures = { workspace = true }
 leaven-agent = { workspace = true }
 leaven-agentic = { workspace = true }

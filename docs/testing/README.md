@@ -13,8 +13,10 @@ just check
 ```
 
 `just check` runs formatting, the production line-count lint, clippy with
-workspace targets, the nextest workspace suite, doctests, and the line/branch
-coverage summary. Use narrower recipes only while iterating:
+workspace library/tool targets, the nextest workspace suite, doctests, and the
+line/branch coverage summary. The default gate excludes milestone example
+packages; use the explicit milestone recipes when an example workflow is the
+claim under test. Use narrower recipes only while iterating:
 
 ```bash
 just lint
@@ -35,9 +37,10 @@ just milestone-examples
 ```
 
 The milestone examples are workspace packages under `examples/p*/`, not Cargo
-example targets. `cargo check --workspace --examples` is therefore not the
-proof command for them. Use the `just milestone-*` recipes, which run each
-example binary directly.
+example targets. They are intentionally excluded from default `just test`,
+`just lint`, and `just coverage` compilation. `cargo check --workspace
+--examples` is therefore not the proof command for them. Use the `just
+milestone-*` recipes, which run each example binary directly.
 
 Milestone execution is not automatically product proof. Classify examples as
 product-proof, mechanics-smoke, or proxy-demo before citing them as acceptance
@@ -69,11 +72,13 @@ just test must finish in <30s
 ```
 
 `just test` enforces this directly. The SLA covers the nextest workspace suite
-and workspace doctests for packages that contain Rust doctest fences. Empty
-doctest harnesses are skipped because they prove no examples while adding
-process-startup cost. If the suite crosses the line, do not add a second slow
-lane; reduce fixture cost, property-test case count, setup work, doctest harness
-fan-out, or assertion altitude until the default suite is back under the SLA.
+and workspace doctests for library/tool packages that contain Rust doctest
+fences. Milestone examples stay out of the default SLA and run through explicit
+`just milestone-*` recipes. Empty doctest harnesses are skipped because they
+prove no examples while adding process-startup cost. If the suite crosses the
+line, do not add a second slow lane; reduce fixture cost, property-test case
+count, setup work, doctest harness fan-out, or assertion altitude until the
+default suite is back under the SLA.
 
 Coverage is a ratchet. Raise `coverage_line_floor` and
 `coverage_branch_floor` in the root `Justfile` when coverage improves; do not

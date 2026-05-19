@@ -4,12 +4,22 @@ mod fixture;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
+use clap::{Args, Parser, Subcommand, error::ErrorKind};
 use doctor::{DoctorCommand, OutputFormat};
 
 fn main() -> ExitCode {
     match run(std::env::args().skip(1)) {
         Ok(output) => {
             print!("{output}");
+            ExitCode::SUCCESS
+        }
+        Err(CliError::Parse(error))
+            if matches!(
+                error.kind(),
+                ErrorKind::DisplayHelp | ErrorKind::DisplayVersion
+            ) =>
+        {
+            print!("{error}");
             ExitCode::SUCCESS
         }
         Err(error) => {
@@ -20,100 +30,94 @@ fn main() -> ExitCode {
 }
 
 fn run(args: impl IntoIterator<Item = String>) -> Result<String, CliError> {
-    let command = parse(args)?;
-    command.run().map_err(CliError::Doctor)
+    let cli = Cli::try_parse_from(std::iter::once("leaven".to_owned()).chain(args))
+        .map_err(CliError::Parse)?;
+    cli.into_doctor_command().run().map_err(CliError::Doctor)
 }
 
-fn parse(args: impl IntoIterator<Item = String>) -> Result<DoctorCommand, CliError> {
-    let mut args = args.into_iter();
-    match args.next().as_deref() {
-        None | Some("doctor") => parse_doctor(args),
-        Some("-h" | "--help" | "help") => Ok(DoctorCommand::Help),
-        Some(other) => Err(CliError::UnknownCommand(other.to_owned())),
+#[derive(Debug, Parser)]
+#[command(name = "leaven", about = "Leaven operator diagnostics.")]
+struct Cli {
+    #[command(subcommand)]
+    command: Option<TopCommand>,
+}
+
+impl Cli {
+    fn into_doctor_command(self) -> DoctorCommand {
+        match self.command {
+            None => DoctorCommand::Summary,
+            Some(TopCommand::Doctor { command }) => doctor_command(command),
+        }
     }
 }
 
-fn parse_doctor(mut args: impl Iterator<Item = String>) -> Result<DoctorCommand, CliError> {
-    match args.next().as_deref() {
-        None => Ok(DoctorCommand::Summary),
-        Some("proposal-render") => {
-            let mut format = OutputFormat::Text;
-            let mut input_json = None;
-            while let Some(arg) = args.next() {
-                match arg.as_str() {
-                    "--json" => format = OutputFormat::Json,
-                    "--text" => format = OutputFormat::Text,
-                    "--input-json" => {
-                        let Some(path) = args.next() else {
-                            return Err(CliError::MissingFlagValue("--input-json"));
-                        };
-                        input_json = Some(PathBuf::from(path));
-                    }
-                    other => return Err(CliError::UnknownFlag(other.to_owned())),
-                }
-            }
-            Ok(DoctorCommand::ProposalRender { format, input_json })
+#[derive(Debug, Subcommand)]
+enum TopCommand {
+    /// Run local Leaven diagnostics.
+    Doctor {
+        #[command(subcommand)]
+        command: Option<DoctorSubcommand>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum DoctorSubcommand {
+    /// Render the agent-facing proposal-stage input for the GEPA skill-bank slice.
+    ProposalRender(ProposalDoctorArgs),
+    /// Materialize the current SkillBank input into a temp workspace and report files.
+    ProposalMaterialize(ProposalDoctorArgs),
+    /// Simulate one workspace edit, parse it, and apply it through RunContext.
+    ProposalRoundtrip(ProposalDoctorArgs),
+}
+
+#[derive(Debug, Args)]
+struct ProposalDoctorArgs {
+    /// Emit JSON instead of text.
+    #[arg(long, conflicts_with = "text")]
+    json: bool,
+    /// Emit text output.
+    #[arg(long)]
+    text: bool,
+    /// Serialized SkillBankGepaReflectionInput<String> debug/run state.
+    #[arg(long)]
+    input_json: Option<PathBuf>,
+}
+
+impl ProposalDoctorArgs {
+    fn format(&self) -> OutputFormat {
+        if self.json {
+            OutputFormat::Json
+        } else {
+            OutputFormat::Text
         }
-        Some("proposal-materialize") => {
-            let (format, input_json) = parse_proposal_flags(args)?;
-            Ok(DoctorCommand::ProposalMaterialize { format, input_json })
-        }
-        Some("proposal-roundtrip") => {
-            let (format, input_json) = parse_proposal_flags(args)?;
-            Ok(DoctorCommand::ProposalRoundtrip { format, input_json })
-        }
-        Some("-h" | "--help" | "help") => Ok(DoctorCommand::Help),
-        Some(other) => Err(CliError::UnknownDoctor(other.to_owned())),
     }
 }
 
-fn parse_proposal_flags(
-    mut args: impl Iterator<Item = String>,
-) -> Result<(OutputFormat, Option<PathBuf>), CliError> {
-    let mut format = OutputFormat::Text;
-    let mut input_json = None;
-    while let Some(arg) = args.next() {
-        match arg.as_str() {
-            "--json" => format = OutputFormat::Json,
-            "--text" => format = OutputFormat::Text,
-            "--input-json" => {
-                let Some(path) = args.next() else {
-                    return Err(CliError::MissingFlagValue("--input-json"));
-                };
-                input_json = Some(PathBuf::from(path));
-            }
-            other => return Err(CliError::UnknownFlag(other.to_owned())),
-        }
+fn doctor_command(command: Option<DoctorSubcommand>) -> DoctorCommand {
+    match command {
+        None => DoctorCommand::Summary,
+        Some(DoctorSubcommand::ProposalRender(args)) => DoctorCommand::ProposalRender {
+            format: args.format(),
+            input_json: args.input_json,
+        },
+        Some(DoctorSubcommand::ProposalMaterialize(args)) => DoctorCommand::ProposalMaterialize {
+            format: args.format(),
+            input_json: args.input_json,
+        },
+        Some(DoctorSubcommand::ProposalRoundtrip(args)) => DoctorCommand::ProposalRoundtrip {
+            format: args.format(),
+            input_json: args.input_json,
+        },
     }
-    Ok((format, input_json))
 }
 
 #[derive(Debug, thiserror::Error)]
 enum CliError {
-    #[error("unknown command `{0}`\n\n{HELP}")]
-    UnknownCommand(String),
-    #[error("unknown doctor command `{0}`\n\n{HELP}")]
-    UnknownDoctor(String),
-    #[error("unknown flag `{0}`\n\n{HELP}")]
-    UnknownFlag(String),
-    #[error("{0} requires a path\n\n{HELP}")]
-    MissingFlagValue(&'static str),
+    #[error("{0}")]
+    Parse(#[from] clap::Error),
     #[error(transparent)]
     Doctor(#[from] doctor::DoctorError),
 }
-
-const HELP: &str = "\
-Usage:
-  leaven doctor
-  leaven doctor proposal-render [--text|--json] [--input-json PATH]
-  leaven doctor proposal-materialize [--text|--json] [--input-json PATH]
-  leaven doctor proposal-roundtrip [--text|--json] [--input-json PATH]
-
-Doctor commands:
-  proposal-render   Render the agent-facing proposal-stage input for the GEPA skill-bank slice.
-  proposal-materialize   Materialize the current SkillBank input into a temp workspace and report files.
-  proposal-roundtrip   Simulate one workspace edit, parse it, and apply it through RunContext.
-";
 
 #[cfg(test)]
 mod tests {
@@ -206,5 +210,16 @@ mod tests {
         assert_eq!(value["proof"], "simulated_agent_apply");
         assert_eq!(value["proposal_count"], 1);
         assert!(value["child"].as_str().unwrap().len() > 10);
+    }
+
+    #[test]
+    fn clap_rejects_conflicting_output_flags() {
+        let error = run(["doctor", "proposal-render", "--json", "--text"]
+            .into_iter()
+            .map(str::to_owned))
+        .unwrap_err()
+        .to_string();
+
+        assert!(error.contains("cannot be used with"));
     }
 }
