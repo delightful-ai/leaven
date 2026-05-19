@@ -91,7 +91,7 @@ Generic Leaven primitives exercised:
 - `SkillBankWorkspaceProposalParser` for workspace readback into typed changes
 - `RunGraph` and `RunContext` for candidate insertion, proposal recording, and
   proposal application
-- `KeepBest` population update over scalar evidence
+- `TopKFrontier` population update over scalar validation evidence
 - `FileEvidenceStore<EvoSkillEvidence>` for durable evaluation and agent-session
   evidence
 - `FileCheckpointStore` for resumable phase checkpoints

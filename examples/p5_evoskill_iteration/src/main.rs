@@ -43,7 +43,7 @@ use leaven_kernel::{
     AgentSessionId, Budget, CandidateId, CaseId, Cost, EvaluatorId, EvidenceRef, Fingerprint,
     MetadataBag, Metered, ProposerId, RunId, StageId,
 };
-use leaven_population::KeepBest;
+use leaven_population::TopKFrontier;
 use leaven_store::EvidenceStore;
 use leaven_store_file::{FileCheckpointStore, FileEvidenceStore, FileStore};
 use leaven_workspace::{Workspace, WorkspaceConfig, WorkspaceFactory, WorkspacePath};
@@ -164,6 +164,7 @@ impl RunStores {
 
 const EVOSKILL_OPTIMIZER_FINGERPRINT: Fingerprint = Fingerprint::from_bytes([31; 32]);
 const EVOSKILL_STATE_SCHEMA: Fingerprint = Fingerprint::from_bytes([32; 32]);
+const EVOSKILL_FRONTIER_SIZE: usize = 3;
 
 fn evoskill_state_write(state: &EvoSkillCheckpoint) -> Result<OptimizerStateWrite> {
     Ok(OptimizerStateWrite::json(
@@ -292,7 +293,7 @@ async fn run_iteration(
             EvaluationCache::default(),
         ),
     };
-    let mut population = KeepBest::new();
+    let mut population = evoskill_frontier();
     let workspace_factory = LocalWorkspaceFactory::new(stores.run_root.join("workspaces"));
     let executor = new_executor_stack(&cases, &workspace_factory)?;
 
@@ -410,7 +411,7 @@ struct BaselineRequest<'a> {
 async fn ensure_baseline(
     ctx: &mut RunContext<'_, EvoSkillProblem>,
     evaluator: &EvoSkillEvaluator,
-    population: &mut KeepBest,
+    population: &mut TopKFrontier,
     request: BaselineRequest<'_>,
 ) -> Result<ExistingBaseline> {
     if let Some(score) = request.resume_score {
@@ -424,7 +425,7 @@ async fn ensure_baseline(
         EvaluationPurpose::SeedBaseline,
     )
     .await?;
-    observe_keep_best(ctx, population, request.seed, &validation)?;
+    observe_frontier(ctx, population, request.seed, &validation)?;
     checkpoint_phase(
         ctx,
         &EvoSkillCheckpoint::BaselineComplete {
@@ -635,7 +636,7 @@ struct P5ResultSummary {
 async fn complete_iteration(
     ctx: &mut RunContext<'_, EvoSkillProblem>,
     evaluator: &EvoSkillEvaluator,
-    population: &mut KeepBest,
+    population: &mut TopKFrontier,
     stores: &RunStores,
     request: CompletionRequest,
 ) -> Result<()> {
@@ -647,7 +648,7 @@ async fn complete_iteration(
         EvaluationPurpose::Validation,
     )
     .await?;
-    observe_keep_best(ctx, population, request.child, &child_eval)?;
+    observe_frontier(ctx, population, request.child, &child_eval)?;
 
     let admitted = true;
     let best_score = request.baseline_score.max(child_eval.average_score);
@@ -1053,9 +1054,9 @@ async fn evaluate_one(
     })
 }
 
-fn observe_keep_best(
+fn observe_frontier(
     ctx: &mut RunContext<'_, EvoSkillProblem>,
-    population: &mut KeepBest,
+    population: &mut TopKFrontier,
     candidate: CandidateId,
     evaluation: &EvaluationOutcome,
 ) -> Result<()> {
@@ -1066,6 +1067,12 @@ fn observe_keep_best(
         events,
     });
     Ok(())
+}
+
+fn evoskill_frontier() -> TopKFrontier {
+    TopKFrontier::new(
+        NonZeroUsize::new(EVOSKILL_FRONTIER_SIZE).expect("EvoSkill frontier size is non-zero"),
+    )
 }
 
 #[derive(Clone)]

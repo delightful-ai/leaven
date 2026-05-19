@@ -60,8 +60,8 @@ Current useful substrate:
 - `leaven-gepa-agentic-skill` bridges GEPA reflection to skill-bank proposal.
 - `examples/p5_evoskill_iteration` proves one live Codex EvoSkill-shaped
   iteration over a tiny treasury-notation fixture.
-- `leaven-population` has `ParetoFrontier`, but paper-faithful selectors and
-  admission policies still need an audit before they are treated as reusable.
+- `leaven-population` has `ParetoFrontier` and `TopKFrontier`, but paper-faithful
+  parent selector state still needs an audit before it is treated as reusable.
 
 Current known gaps:
 
@@ -124,8 +124,8 @@ Leaven primitive blockers:
 - Git program/frontier state: pure artifact vocabulary plus local clone,
   capture, restore, and delete primitives are present; remaining blocker is
   EvoSkill run-loop integration plus paper score metadata conventions;
-- `leaven-population`: explicit top-k frontier/admission plus paper-selectors
-  with checkpointed selector state;
+- `leaven-population`: explicit top-k frontier/admission now exists;
+  paper-selectors with checkpointed selector state remain;
 - reusable stratified/category-aware split and without-replacement sampler;
 - paper-grade scorer/evaluator records with failure-threshold extraction;
 - evidence history that can feed proposer prompts without paper-side custom
@@ -377,8 +377,8 @@ Start with these generic primitives as failures expose them:
 1. Git program/frontier snapshots: pure branch/tag identity and lineage
    vocabulary plus local clone/capture/restore/delete primitives exist;
    checkpointed EvoSkill run integration remains.
-2. `leaven-population`: paper-faithful selector/admission policies, top-k
-   frontier state, selector state, and checkpoint/resume.
+2. `leaven-population`: top-k scalar frontier admission exists; paper-faithful
+   parent selector state and checkpoint/resume integration remain.
 3. Skill registry/card layer: derived `SkillCard` plus utility, routing keys,
    trigger stats, retrieved-use evidence, and lifecycle state outside raw
    `SkillBank`.

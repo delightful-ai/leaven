@@ -2271,6 +2271,7 @@ pub mod niche;
 pub mod no_population;
 pub mod novelty;
 pub mod pareto_frontier;
+pub mod top_k_frontier;
 pub mod tournament;
 
 pub use beam::BeamPopulation;
@@ -2281,6 +2282,7 @@ pub use niche::NicheDescriptor;
 pub use no_population::NoPopulation;
 pub use novelty::NoveltyPopulation;
 pub use pareto_frontier::{ParetoFrontier, ParetoFrontierBuilder};
+pub use top_k_frontier::TopKFrontier;
 pub use tournament::{
     BradleyTerryFit, PlackettLuceFit, TournamentConfig, TournamentPopulation,
 };
@@ -2289,7 +2291,7 @@ pub mod prelude {
     pub use crate::{
         BeamPopulation, BradleyTerryFit, KeepBest, LenientParetoFrontier,
         MapElites, NicheDescriptor, NoPopulation, NoveltyPopulation,
-        ParetoFrontier, PlackettLuceFit, TournamentPopulation,
+        ParetoFrontier, PlackettLuceFit, TopKFrontier, TournamentPopulation,
     };
 }
 ```

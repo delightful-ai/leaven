@@ -1,6 +1,6 @@
 [package]
 name = "leaven-population"
-description = "Leaven crate skeleton for leaven-population."
+description = "Reusable population and frontier implementations for Leaven."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

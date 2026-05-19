@@ -282,8 +282,8 @@ git-backed program identity into the EvoSkill run path:
 
 Second-order blockers after git identity:
 
-- paper-faithful selector/admission state in `leaven-population`, including the
-  best-vs-round-robin source drift;
+- parent selector state in `leaven-population` or the EvoSkill harness,
+  including the best-vs-round-robin source drift;
 - exact split/sampler manifests, including category-aware without-replacement
   sampling and 1.5 epoch schedules;
 - OfficeQA scorer/evaluator records with thresholded failure extraction;
@@ -316,7 +316,9 @@ Second-order blockers after git identity:
    represent program/frontier refs, and `leaven-workspace-git` can clone,
    capture, restore, and delete local branch/tag refs. Leaven still lacks the
    EvoSkill run integration that turns those primitives into checkpointed
-   program/frontier state with paper score metadata.
+   program/frontier state with paper score metadata. `leaven-population`
+   now provides `TopKFrontier` for fixed-capacity scalar validation admission
+   and weakest-member eviction; P5 uses it instead of single-best tracking.
 8. Language-boundary blocker for implementation: after provenance, all
    Leaven-owned EvoSkill split/sampler/scorer/harness/frontier behavior must be
    implemented in Rust/Leaven primitives, not Python.
