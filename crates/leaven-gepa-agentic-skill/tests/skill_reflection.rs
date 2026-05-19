@@ -6,7 +6,7 @@ use leaven_agentic_skill::SkillWorkspaceLayout;
 use leaven_artifact_skill::{
     SkillBank, SkillFile, SkillFilePartId, SkillFileSurface, SkillFolder, SkillName, SkillPath,
 };
-use leaven_core::{Evidence, OptimizationProblem};
+use leaven_core::{Evidence, InfoRef, OptimizationProblem};
 use leaven_engine::{BudgetLedger, RunContext, RunGraph};
 use leaven_gepa::{GepaReflector, ReflectRequest, ReflectiveExample};
 use leaven_gepa_agentic_skill::GepaSkillBankAgenticReflector;
@@ -59,6 +59,7 @@ fn skill_bank_gepa_reflector_materializes_agent_edit_and_applies_child() {
                 feedback: "Mention fixture drift and require explicit fixture edits.".to_owned(),
                 ..ReflectiveExample::default()
             }])
+            .with_source_refs([InfoRef::Candidate(parent)])
             .with_attempt_index(0);
         let mut ctx = RunContext::<SkillProblem>::new(&mut graph, &mut budget);
 
@@ -79,6 +80,14 @@ fn skill_bank_gepa_reflector_materializes_agent_edit_and_applies_child() {
             "Read the failing output, inspect the narrow Rust path, and keep fixture edits explicit."
         );
         assert_eq!(ctx.graph().parents(child), vec![parent]);
+        let proposal = ctx.graph().proposal_that_created(child).unwrap();
+        assert!(
+            proposal
+                .provenance()
+                .informed_by_refs()
+                .contains(&InfoRef::Candidate(parent)),
+            "GEPA parser wrapper must preserve reflection provenance"
+        );
     });
 }
 
