@@ -12,8 +12,10 @@ workspace = true
 
 [dependencies]
 futures = { workspace = true }
+leaven-artifact-git = { workspace = true }
 leaven-kernel = { workspace = true }
 leaven-workspace = { workspace = true }
+thiserror = { workspace = true }
 
 [dev-dependencies]
 futures = { workspace = true }

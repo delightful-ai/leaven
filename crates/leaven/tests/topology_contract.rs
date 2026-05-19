@@ -163,6 +163,7 @@ const EXPECTED_DEPENDENCIES: &[(&str, &[&str])] = &[
             "leaven-workspace",
             "leaven-workspace-docker",
             "leaven-workspace-e2b",
+            "leaven-workspace-git",
             "leaven-workspace-local",
         ],
     ),
@@ -442,7 +443,7 @@ const EXPECTED_DEPENDENCIES: &[(&str, &[&str])] = &[
     ),
     (
         "leaven-workspace-git",
-        &["leaven-kernel", "leaven-workspace"],
+        &["leaven-artifact-git", "leaven-kernel", "leaven-workspace"],
     ),
     (
         "leaven-workspace-k8s",

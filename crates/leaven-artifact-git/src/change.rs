@@ -40,7 +40,7 @@ impl GitChange {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
-pub enum FsOp {
+pub enum GitFsOp {
     Write { path: GitPath, bytes: Vec<u8> },
     Remove { path: GitPath },
 }

@@ -9,7 +9,7 @@ mod reference;
 mod surface;
 
 pub use artifact::{GitArtifact, GitArtifactIdentityMode};
-pub use change::{FsOp, GitChange};
+pub use change::{GitChange, GitFsOp};
 pub use diff::{GitDiff, GitDiffSummary};
 pub use error::GitArtifactError;
 pub use path::GitPath;

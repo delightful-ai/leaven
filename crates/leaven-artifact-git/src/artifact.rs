@@ -26,6 +26,14 @@ impl GitArtifact {
     }
 
     #[must_use]
+    pub fn from_parts(
+        files: BTreeMap<GitPath, Vec<u8>>,
+        refs: BTreeMap<GitRefKey, GitRef>,
+    ) -> Self {
+        Self { files, refs }
+    }
+
+    #[must_use]
     pub fn files(&self) -> &BTreeMap<GitPath, Vec<u8>> {
         &self.files
     }

@@ -33,6 +33,7 @@ leaven-store-sqlite = { workspace = true, optional = true }
 leaven-workspace = { workspace = true, optional = true }
 leaven-workspace-docker = { workspace = true, optional = true }
 leaven-workspace-e2b = { workspace = true, optional = true }
+leaven-workspace-git = { workspace = true, optional = true }
 leaven-workspace-local = { workspace = true, optional = true }
 
 [features]
@@ -48,6 +49,7 @@ skill = ["dep:leaven-artifact-skill", "leaven-std?/skill"]
 agentic-skill = ["agentic", "skill", "dep:leaven-agentic-skill"]
 store-sqlite = ["dep:leaven-store-sqlite"]
 workspace-local = ["workspace", "dep:leaven-workspace-local"]
+workspace-git = ["workspace", "git", "dep:leaven-workspace-git"]
 workspace-docker = ["workspace", "dep:leaven-workspace-docker"]
 workspace-e2b = ["workspace", "dep:leaven-workspace-e2b"]
 lm-openai = ["dep:leaven-lm-openai"]

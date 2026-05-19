@@ -2048,7 +2048,7 @@ pub use artifact::{
 };
 
 pub use change::{
-    FsOp, GitChange,
+    GitFsOp, GitChange,
 };
 
 pub use diff::{
@@ -3025,6 +3025,7 @@ jj = ["dep:leaven-artifact-jj", "leaven-std/jj"]
 store-sqlite = ["dep:leaven-store-sqlite"]
 
 workspace-local = ["workspace", "dep:leaven-workspace-local"]
+workspace-git = ["workspace", "git", "dep:leaven-workspace-git"]
 workspace-docker = ["workspace", "dep:leaven-workspace-docker"]
 workspace-e2b = ["workspace", "dep:leaven-workspace-e2b"]
 

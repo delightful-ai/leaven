@@ -2325,6 +2325,7 @@ dependencies = [
  "leaven-workspace",
  "leaven-workspace-docker",
  "leaven-workspace-e2b",
+ "leaven-workspace-git",
  "leaven-workspace-local",
 ]
 
@@ -2955,9 +2956,11 @@ name = "leaven-workspace-git"
 version = "0.0.0"
 dependencies = [
  "futures",
+ "leaven-artifact-git",
  "leaven-kernel",
  "leaven-workspace",
  "tempfile",
+ "thiserror 2.0.18",
 ]
 
 [[package]]

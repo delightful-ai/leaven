@@ -265,15 +265,18 @@ exact source provenance and paper split artifact are unresolved. Implementing
 `leaven-artifact-git` now would be useful, but it would not make a paper-faithful
 OfficeQA run possible until the split/category issue is handled.
 
-Once the split/source pin is resolved, the next Leaven primitive blocker is the
-bridge from live Git checkouts into git-backed program identity:
+Once the split/source pin is resolved, the next Leaven-side blocker is wiring
+git-backed program identity into the EvoSkill run path:
 
 - `crates/leaven-artifact-git` now has a first pure artifact vocabulary for
   normalized paths, immutable object IDs, branch/tag refs, typed lineage,
   content/cache identity, and ref removal for discarded candidates.
-- EvoSkill still requires a higher-layer bridge from real Git checkouts into
-  those artifact records, plus score metadata conventions, restorable
-  snapshots, frontier membership decisions, and discard cleanup execution.
+- `crates/leaven-workspace-git` can clone and check out a local `program/*`
+  branch, capture tracked files and branch/tag refs into `GitArtifact`, restore
+  a selected ref for evaluation, and delete discarded branch/tag refs.
+- EvoSkill still requires paper score metadata conventions, checkpointed
+  program/frontier state, frontier membership decisions, and integration with
+  the paper run loop.
 - P5 currently uses Leaven skill-bank/materializer/checkpoint pieces, but does
   not model EvoSkill's git program artifact as a reusable Leaven artifact.
 
@@ -309,12 +312,11 @@ Second-order blockers after git identity:
 6. Upstream script drift: static source inspection shows direct
    `scripts/run_loop.py` imports `Agent` from the wrong package. The supported
    CLI imports `Agent` from `src.harness`.
-7. Leaven primitive blocker after provenance: `leaven-artifact-git` can now
-   represent program/frontier refs as pure artifact state, and
-   `leaven-workspace-git` can clone and check out a local `program/*` branch.
-   Leaven still lacks the bridge that captures those checkout refs into
-   `GitArtifact`, restores a selected ref for evaluation, and deletes discarded
-   branch/tag refs during an EvoSkill run.
+7. Leaven primitive blocker after provenance: `leaven-artifact-git` can
+   represent program/frontier refs, and `leaven-workspace-git` can clone,
+   capture, restore, and delete local branch/tag refs. Leaven still lacks the
+   EvoSkill run integration that turns those primitives into checkpointed
+   program/frontier state with paper score metadata.
 8. Language-boundary blocker for implementation: after provenance, all
    Leaven-owned EvoSkill split/sampler/scorer/harness/frontier behavior must be
    implemented in Rust/Leaven primitives, not Python.
@@ -332,7 +334,7 @@ Stay no-spend until the provenance blockers are closed:
    only after the owning primitive surface is designed and tested.
 4. Locate the BrowseComp transfer sample/result source, or record the exact
    access blocker with source links.
-5. After the exact split/source path is chosen, add explicit capture/readback
-   between `leaven-workspace-git` checkouts and `leaven-artifact-git` ref
-   records, then wire restore/delete operations into the EvoSkill run path
-   without moving Git command execution into the artifact crate.
+5. After the exact split/source path is chosen, wire the tested
+   `leaven-artifact-git` and `leaven-workspace-git` primitives into the
+   EvoSkill run path with checkpointed program/frontier state and paper score
+   metadata, without moving Git command execution into the artifact crate.
