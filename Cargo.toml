@@ -29,6 +29,7 @@ members = [
     "crates/leaven-evidence",
     "crates/leaven-eval",
     "crates/leaven-gepa",
+    "crates/leaven-gepa-agentic-skill",
     "crates/leaven-kernel",
     "crates/leaven-lm",
     "crates/leaven-lm-anthropic",
@@ -158,6 +159,7 @@ leaven-cuda = { path = "crates/leaven-cuda", version = "0.0.0" }
 leaven-evidence = { path = "crates/leaven-evidence", version = "0.0.0" }
 leaven-eval = { path = "crates/leaven-eval", version = "0.0.0" }
 leaven-gepa = { path = "crates/leaven-gepa", version = "0.0.0" }
+leaven-gepa-agentic-skill = { path = "crates/leaven-gepa-agentic-skill", version = "0.0.0" }
 leaven-kernel = { path = "crates/leaven-kernel", version = "0.0.0" }
 leaven-lm = { path = "crates/leaven-lm", version = "0.0.0" }
 leaven-lm-anthropic = { path = "crates/leaven-lm-anthropic", version = "0.0.0" }

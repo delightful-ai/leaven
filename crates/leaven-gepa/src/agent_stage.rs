@@ -1,4 +1,9 @@
-//! GEPA reflection routing through optimizer-stage agent workspaces.
+//! Legacy GEPA reflection routing through optimizer-stage agent workspaces.
+//!
+//! This module is explicit scaffold. It proves the old `AgentBacked` slot,
+//! receipt, and provenance route, but it does not materialize the parent
+//! artifact for the agent. Skill-bank agentic reflection uses the materializing
+//! `GepaSkillBankAgenticReflector` path in `leaven-gepa-agentic-skill`.
 
 use leaven_core::OptimizationProblem;
 use leaven_kernel::StageRole;
@@ -14,6 +19,12 @@ use crate::reflection::ReflectRequest;
 pub type GepaStageProposer<Runtime, Parser> =
     AgentBacked<ProposerSlot<ReflectRequest>, Runtime, GepaReflectionBootstrap, Parser>;
 
+/// Builds the legacy `AgentBacked` GEPA stage scaffold.
+///
+/// This path is not the production skill-bank agentic reflection route because
+/// it writes request metadata and query summaries, not the parent artifact. Use
+/// `leaven_gepa_agentic_skill::GepaSkillBankAgenticReflector` for the
+/// materializing skill-bank proposal-stage path.
 #[must_use]
 pub fn gepa_stage_proposer<Factory, Runtime, Parser>(
     workspace_factory: Factory,

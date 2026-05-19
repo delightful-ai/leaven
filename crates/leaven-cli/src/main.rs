@@ -1,6 +1,7 @@
 mod doctor;
 mod fixture;
 
+use std::path::PathBuf;
 use std::process::ExitCode;
 
 use doctor::{DoctorCommand, OutputFormat};
@@ -37,14 +38,21 @@ fn parse_doctor(mut args: impl Iterator<Item = String>) -> Result<DoctorCommand,
         None => Ok(DoctorCommand::Summary),
         Some("proposal-render") => {
             let mut format = OutputFormat::Text;
+            let mut input_json = None;
             while let Some(arg) = args.next() {
                 match arg.as_str() {
                     "--json" => format = OutputFormat::Json,
                     "--text" => format = OutputFormat::Text,
+                    "--input-json" => {
+                        let Some(path) = args.next() else {
+                            return Err(CliError::MissingFlagValue("--input-json"));
+                        };
+                        input_json = Some(PathBuf::from(path));
+                    }
                     other => return Err(CliError::UnknownFlag(other.to_owned())),
                 }
             }
-            Ok(DoctorCommand::ProposalRender { format })
+            Ok(DoctorCommand::ProposalRender { format, input_json })
         }
         Some("-h" | "--help" | "help") => Ok(DoctorCommand::Help),
         Some(other) => Err(CliError::UnknownDoctor(other.to_owned())),
@@ -59,6 +67,8 @@ enum CliError {
     UnknownDoctor(String),
     #[error("unknown flag `{0}`\n\n{HELP}")]
     UnknownFlag(String),
+    #[error("{0} requires a path\n\n{HELP}")]
+    MissingFlagValue(&'static str),
     #[error(transparent)]
     Doctor(#[from] doctor::DoctorError),
 }
@@ -66,7 +76,7 @@ enum CliError {
 const HELP: &str = "\
 Usage:
   leaven doctor
-  leaven doctor proposal-render [--text|--json]
+  leaven doctor proposal-render [--text|--json] [--input-json PATH]
 
 Doctor commands:
   proposal-render   Render the agent-facing proposal-stage input for the GEPA skill-bank slice.
@@ -110,5 +120,27 @@ mod tests {
                 .unwrap()
                 .contains("## Feedback")
         );
+    }
+
+    #[test]
+    fn proposal_render_reads_input_json() {
+        let mut input = crate::fixture::fixture_reflection_input();
+        input.part_label = "custom/SKILL.md".to_owned();
+        let path =
+            std::env::temp_dir().join(format!("leaven-doctor-input-{}.json", uuid::Uuid::new_v4()));
+        std::fs::write(&path, serde_json::to_vec(&input).unwrap()).unwrap();
+
+        let output = run([
+            "doctor".to_owned(),
+            "proposal-render".to_owned(),
+            "--json".to_owned(),
+            "--input-json".to_owned(),
+            path.display().to_string(),
+        ])
+        .unwrap();
+        let _ = std::fs::remove_file(&path);
+        let value: serde_json::Value = serde_json::from_str(&output).unwrap();
+
+        assert_eq!(value["part"], "custom/SKILL.md");
     }
 }
