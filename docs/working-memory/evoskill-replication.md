@@ -99,6 +99,26 @@ they are stale relative to remote HEAD as of the probe. This dossier does not
 decide whether to replicate the paper release, local checkout, or latest
 upstream HEAD; that is an explicit provenance choice still open.
 
+Follow-up ref inventory from the same no-spend probe:
+
+- EvoSkill remote refs include heads `main`, `evoskill-appworld`,
+  `feature/multi-harness-support`, `feat/harbor-integration`, `fix/daytona`,
+  `fix/security-assessment-pen-2026-005`, and `new_logo`.
+- EvoSkill remote tags exist: `v0.1.0-alpha` at
+  `b5ba0bbf3365e7b3220cb19ea6a9b11ea510eb36`, `v1.0.0-alpha` at
+  `07ef670bddbc1f0f4bac08eb119e3d8d7985586f`, `v1.1.0` at
+  `5ae91616b36ebbe2ea7ee90e8a66393aa8d5e8e4`, and `v1.2.0` at current remote
+  `main` (`8d503845c8d66a2fa458f06de3988d709774e88a`).
+- The local EvoSkill checkout fetch config tracks only `refs/heads/main`, so
+  local `git tag --list` is empty even though the remote now has tags.
+- OfficeQA remote refs expose heads `main`, `officeqa_pro`, `krista_dev`, and
+  `revert-39-reward-direct-answer-guard`; no remote tags were listed by
+  `git ls-remote --heads --tags`.
+- OfficeQA's `officeqa_pro` branch head is
+  `b0b3f8be2a91df835fe40bd488e349f970b1fe40`, which is a separate candidate
+  source for the default benchmark but not enough to define the EvoSkill paper's
+  full OfficeQA split.
+
 ## Local Data State
 
 OfficeQA:
@@ -137,12 +157,50 @@ SealQA/BrowseComp:
 - no local `seal-0.csv`, BrowseComp sample, or transfer split was found under
   `tmp/repros/evoskill`, `tmp/repros/officeqa`, or the EvoSkill paper source
   bundle during the bounded `fd` probe.
+- `tmp/repros/evoskill/notebooks/test.ipynb` reads SealQA from
+  `hf://datasets/vtllms/sealqa/seal-0.parquet` and writes
+  `../.dataset/seal-0.csv`. That makes the likely upstream SealQA source more
+  specific, but the local CSV is absent.
+- No-spend Hugging Face metadata check found `vtllms/sealqa` public, ungated,
+  enabled, and at dataset commit `7cbbae5f8f6ce1178d540b32d56dd06c593716dd`.
+  The files listed include `seal-0.parquet`, `seal-hard.parquet`,
+  `longseal.parquet`, `README.md`, `LICENSE`, and `seal-0_leaderboard.png`.
+- `seal-0.parquet` was materialized under
+  `tmp/replication/evoskill/sealqa/seal-0.parquet` with 27,069 bytes and
+  SHA-256 `f9ffe13e542a2f05d05c448cd9575f9f5abfa5cd7442b16f5c6a021495ddfe8c`.
+  The HTTP metadata reports the same value as the linked file ETag and Xet hash
+  `e11b79d24df5cacff6008e29d7c33a43a3a55c2a0cff16593777d4db659172f8`.
+- No parquet reader CLI was available locally (`duckdb`, `parquet-tools`, and
+  `pqrs` were absent). A bounded `strings` metadata read shows pandas range
+  index `stop = 111` and columns `question`, `answer`, `urls`, `freshness`,
+  `question_types`, `effective_year`, `search_results`, `topic`, and `canary`.
+  Treat this as provenance evidence only; Leaven still needs a real input
+  materialization/checker before this becomes a replica dataset surface.
+- `tmp/repros/evoskill/notebooks/sealqa.ipynb` reads
+  `../results/browsecomp_eval_results_noskill.pkl` and scores the first 128
+  result objects with the SealQA scorer. The local pickle and a stratified
+  BrowseComp sample manifest are absent.
 
 ## Split Probe
 
 The paper reports OfficeQA train sizes 12, 24, and 36 with a validation set of
 17. The current local OfficeQA CSV has only `difficulty` as a grouping column,
 not the LLM-clustered categories described in the paper.
+
+The local EvoSkill notebooks point at the missing category provenance:
+
+- `tmp/repros/evoskill/notebooks/cluster_questions.ipynb` defines six question
+  categories: `Lookup/Extraction`, `Aggregation`, `Comparison/Change`,
+  `Transform/Normalize`, `Statistical Metrics`, and `Modeling/Forecasting`.
+  It classifies questions with `openrouter/google/gemini-3-flash-preview` and
+  writes `df.category` back to `../.dataset/new_runs_base/solved_dataset.csv`.
+- `tmp/repros/evoskill/notebooks/train_data.ipynb` expects a local
+  `~/officeqa/officeqa.csv`, reads `../results/full_run_new_evolved_final_two.pkl`,
+  copies `df.iloc[index].pseudo_labels` into the EvoSkill `category` field, and
+  writes `../ablation_run_incorrect.csv`.
+- Bounded `fd` over local sources found none of `.dataset`, `solved_dataset.csv`,
+  `full_run_new_evolved_final_two.pkl`, `ablation_run_incorrect.csv`, or
+  `deep_cc_runs`.
 
 Using the upstream `src.api.data_utils.stratified_split` formula over
 `officeqa_full.csv`, treating `difficulty` as `category` and using
@@ -159,6 +217,11 @@ the exact split manifest. Do not silently substitute `difficulty` for the paper
 categories in a 1:1 replication, and do not reuse the upstream Python splitter
 as Leaven-owned replica logic. A faithful Leaven retry needs either the exact
 manifest or a documented substitute implemented as a Rust/Leaven primitive.
+
+Current interpretation: the paper categories likely came from an author-local
+OfficeQA derivative with `pseudo_labels`/`category` values, not from the public
+OfficeQA CSV as checked out locally. Treat the category/split manifest as an
+external provenance blocker until located or explicitly substituted.
 
 ## Upstream Code Probe
 
@@ -231,14 +294,22 @@ Second-order blockers after git identity:
 2. OfficeQA split blocker: the local CSV has `difficulty`, but not the paper's
    LLM-clustered categories or exact split manifest. The paper counts cannot be
    reproduced from `difficulty` using the upstream splitter.
-3. SealQA data blocker: no local `seal-0.csv` was found.
-4. BrowseComp transfer blocker: no local 128-example transfer sample was found.
-5. Upstream script drift: static source inspection shows direct
+3. OfficeQA category artifact blocker: EvoSkill notebooks reference
+   `../.dataset/new_runs_base/solved_dataset.csv`, `pseudo_labels`, and
+   private/local result pickles, none of which are present locally.
+4. SealQA input blocker: the likely upstream `seal-0.parquet` is public,
+   ungated, pinned by dataset commit and SHA-256 under `tmp/replication`, and
+   its metadata indicates 111 rows. It is not yet accepted as Leaven replica
+   input because there is no Leaven-owned Parquet/manifest materializer or exact
+   train/validation split artifact.
+5. BrowseComp transfer blocker: no local 128-example transfer sample or result
+   pickle was found.
+6. Upstream script drift: static source inspection shows direct
    `scripts/run_loop.py` imports `Agent` from the wrong package. The supported
    CLI imports `Agent` from `src.harness`.
-6. Leaven primitive blocker after provenance: `leaven-artifact-git` is a
+7. Leaven primitive blocker after provenance: `leaven-artifact-git` is a
    placeholder and cannot yet represent EvoSkill program/frontier snapshots.
-7. Language-boundary blocker for implementation: after provenance, all
+8. Language-boundary blocker for implementation: after provenance, all
    Leaven-owned EvoSkill split/sampler/scorer/harness/frontier behavior must be
    implemented in Rust/Leaven primitives, not Python.
 
@@ -251,8 +322,10 @@ Stay no-spend until the provenance blockers are closed:
 2. Locate or reconstruct the paper's OfficeQA category/split manifest. If the
    manifest is unavailable, record an exact documented substitute before any
    live run.
-3. Locate SealQA `seal-0.csv` and BrowseComp transfer sample, or record access
-   blockers with source links.
-4. After the exact split/source path is chosen, implement the smallest
+3. Promote the pinned SealQA parquet into a Leaven input manifest/materializer
+   only after the owning primitive surface is designed and tested.
+4. Locate the BrowseComp transfer sample/result source, or record the exact
+   access blocker with source links.
+5. After the exact split/source path is chosen, implement the smallest
    `leaven-artifact-git` behavior needed for program branch/tag lineage and
    frontier membership, with fixture-backed tests.
