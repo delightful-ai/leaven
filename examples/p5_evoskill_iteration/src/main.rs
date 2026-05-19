@@ -43,7 +43,7 @@ use leaven_kernel::{
     AgentSessionId, Budget, CandidateId, CaseId, Cost, EvaluatorId, EvidenceRef, Fingerprint,
     MetadataBag, Metered, ProposerId, RunId, StageId,
 };
-use leaven_population::TopKFrontier;
+use leaven_population::{TopKFrontier, TopKParentSelector};
 use leaven_store::EvidenceStore;
 use leaven_store_file::{FileCheckpointStore, FileEvidenceStore, FileStore};
 use leaven_workspace::{Workspace, WorkspaceConfig, WorkspaceFactory, WorkspacePath};
@@ -293,7 +293,10 @@ async fn run_iteration(
             EvaluationCache::default(),
         ),
     };
-    let mut population = evoskill_frontier();
+    let mut population = resume.frontier.unwrap_or_else(evoskill_frontier);
+    let mut parent_selector = resume
+        .parent_selector
+        .unwrap_or_else(evoskill_parent_selector);
     let workspace_factory = LocalWorkspaceFactory::new(stores.run_root.join("workspaces"));
     let executor = new_executor_stack(&cases, &workspace_factory)?;
 
@@ -323,10 +326,20 @@ async fn run_iteration(
             cases: &cases,
             seed_bank: &seed_bank,
             seed,
+            parent_selector: &parent_selector,
             resume_score: resume.baseline_score,
         },
     )
     .await?;
+    let parent = match resume.parent {
+        Some(parent) => parent,
+        None => select_frontier_parent(&mut parent_selector, &population)?,
+    };
+    let parent_bank = ctx
+        .graph()
+        .artifact(parent)
+        .ok_or_else(|| msg("selected parent artifact missing"))?
+        .clone();
     let failures = ensure_failures(
         &mut ctx,
         &executor.evaluator,
@@ -334,8 +347,10 @@ async fn run_iteration(
             run_id,
             cases: &cases,
             seed_bank: &seed_bank,
-            seed,
+            parent,
             baseline_score: baseline.score,
+            frontier: &population,
+            parent_selector: &parent_selector,
             resume_failures: resume.failures,
         },
     )
@@ -355,7 +370,11 @@ async fn run_iteration(
             run_id,
             cases: &cases,
             seed_bank: &seed_bank,
+            parent,
+            parent_bank: &parent_bank,
             baseline_score: baseline.score,
+            frontier: &population,
+            parent_selector: &parent_selector,
             failures: &failures,
             resume_proposal: resume.proposal,
             resume_evidence: resume.proposer_evidence,
@@ -370,8 +389,10 @@ async fn run_iteration(
             run_id,
             cases: &cases,
             seed_bank: &seed_bank,
-            seed,
+            parent,
             baseline_score: baseline.score,
+            frontier: &population,
+            parent_selector: &parent_selector,
             failures: &failures,
             skill_proposal: &skill_proposal,
             proposer_evidence: &proposer_evidence,
@@ -385,6 +406,7 @@ async fn run_iteration(
         &mut ctx,
         &executor.evaluator,
         &mut population,
+        &parent_selector,
         &stores,
         CompletionRequest {
             run_id,
@@ -405,6 +427,7 @@ struct BaselineRequest<'a> {
     cases: &'a [EvoSkillCase],
     seed_bank: &'a SkillBank,
     seed: CandidateId,
+    parent_selector: &'a TopKParentSelector,
     resume_score: Option<f64>,
 }
 
@@ -433,6 +456,8 @@ async fn ensure_baseline(
             cases: request.cases.to_vec(),
             seed_bank: request.seed_bank.clone(),
             baseline_score: validation.average_score,
+            frontier: population.clone(),
+            parent_selector: request.parent_selector.clone(),
         },
     )?;
     Ok(ExistingBaseline {
@@ -444,8 +469,10 @@ struct FailureRequest<'a> {
     run_id: RunId,
     cases: &'a [EvoSkillCase],
     seed_bank: &'a SkillBank,
-    seed: CandidateId,
+    parent: CandidateId,
     baseline_score: f64,
+    frontier: &'a TopKFrontier,
+    parent_selector: &'a TopKParentSelector,
     resume_failures: Option<Vec<CaseExecution>>,
 }
 
@@ -460,7 +487,7 @@ async fn ensure_failures(
     let feedback = evaluate_one(
         ctx,
         evaluator,
-        request.seed,
+        request.parent,
         TRAIN,
         EvaluationPurpose::Feedback,
     )
@@ -478,6 +505,9 @@ async fn ensure_failures(
             cases: request.cases.to_vec(),
             seed_bank: request.seed_bank.clone(),
             baseline_score: request.baseline_score,
+            frontier: request.frontier.clone(),
+            parent_selector: request.parent_selector.clone(),
+            parent: request.parent,
             failures: failures.clone(),
         },
     )?;
@@ -488,7 +518,11 @@ struct ProposalRequest<'a> {
     run_id: RunId,
     cases: &'a [EvoSkillCase],
     seed_bank: &'a SkillBank,
+    parent: CandidateId,
+    parent_bank: &'a SkillBank,
     baseline_score: f64,
+    frontier: &'a TopKFrontier,
+    parent_selector: &'a TopKParentSelector,
     failures: &'a [CaseExecution],
     resume_proposal: Option<SkillProposal>,
     resume_evidence: Option<EvidenceRef>,
@@ -512,7 +546,7 @@ async fn ensure_proposal(
     let proposal = run_skill_proposer(
         workspace_factory,
         evidence_store,
-        request.seed_bank,
+        request.parent_bank,
         request.failures,
     )
     .await?;
@@ -523,6 +557,9 @@ async fn ensure_proposal(
             cases: request.cases.to_vec(),
             seed_bank: request.seed_bank.clone(),
             baseline_score: request.baseline_score,
+            frontier: request.frontier.clone(),
+            parent_selector: request.parent_selector.clone(),
+            parent: request.parent,
             failures: request.failures.to_vec(),
             proposal: proposal.value.clone(),
             proposer_evidence: proposal.evidence.clone(),
@@ -535,8 +572,10 @@ struct ChildRequest<'a> {
     run_id: RunId,
     cases: &'a [EvoSkillCase],
     seed_bank: &'a SkillBank,
-    seed: CandidateId,
+    parent: CandidateId,
     baseline_score: f64,
+    frontier: &'a TopKFrontier,
+    parent_selector: &'a TopKParentSelector,
     failures: &'a [CaseExecution],
     skill_proposal: &'a SkillProposal,
     proposer_evidence: &'a EvidenceRef,
@@ -562,7 +601,7 @@ async fn ensure_child(
         }
         let report = record_skill_change(
             ctx,
-            request.seed,
+            request.parent,
             change.clone(),
             Some(request.skill_proposal.clone()),
             Some(request.proposer_evidence.clone()),
@@ -574,7 +613,7 @@ async fn ensure_child(
         workspace_factory,
         evidence_store,
         ctx,
-        request.seed,
+        request.parent,
         request.skill_proposal,
         request.proposer_evidence,
     )
@@ -586,6 +625,9 @@ async fn ensure_child(
             cases: request.cases.to_vec(),
             seed_bank: request.seed_bank.clone(),
             baseline_score: request.baseline_score,
+            frontier: request.frontier.clone(),
+            parent_selector: request.parent_selector.clone(),
+            parent: request.parent,
             failures: request.failures.to_vec(),
             proposal: request.skill_proposal.clone(),
             proposer_evidence: request.proposer_evidence.clone(),
@@ -637,6 +679,7 @@ async fn complete_iteration(
     ctx: &mut RunContext<'_, EvoSkillProblem>,
     evaluator: &EvoSkillEvaluator,
     population: &mut TopKFrontier,
+    parent_selector: &TopKParentSelector,
     stores: &RunStores,
     request: CompletionRequest,
 ) -> Result<()> {
@@ -678,6 +721,8 @@ async fn complete_iteration(
             admitted,
             best_score,
             best_bank,
+            frontier: population.clone(),
+            parent_selector: parent_selector.clone(),
         },
     )?;
     let inspection = AgenticRunInspection::from_graph(&ctx.graph());
@@ -908,6 +953,9 @@ struct ResumeState {
     cases: Option<Vec<EvoSkillCase>>,
     seed_bank: Option<SkillBank>,
     baseline_score: Option<f64>,
+    frontier: Option<TopKFrontier>,
+    parent_selector: Option<TopKParentSelector>,
+    parent: Option<CandidateId>,
     failures: Option<Vec<CaseExecution>>,
     proposal: Option<SkillProposal>,
     proposer_evidence: Option<EvidenceRef>,
@@ -926,11 +974,15 @@ impl ResumeState {
                 cases,
                 seed_bank,
                 baseline_score,
+                frontier,
+                parent_selector,
             } => Self {
                 run_id: Some(run_id),
                 cases: Some(cases),
                 seed_bank: Some(seed_bank),
                 baseline_score: Some(baseline_score),
+                frontier: Some(frontier),
+                parent_selector: Some(parent_selector),
                 ..Self::default()
             },
             EvoSkillCheckpoint::FailuresCollected {
@@ -938,12 +990,18 @@ impl ResumeState {
                 cases,
                 seed_bank,
                 baseline_score,
+                frontier,
+                parent_selector,
+                parent,
                 failures,
             } => Self {
                 run_id: Some(run_id),
                 cases: Some(cases),
                 seed_bank: Some(seed_bank),
                 baseline_score: Some(baseline_score),
+                frontier: Some(frontier),
+                parent_selector: Some(parent_selector),
+                parent: Some(parent),
                 failures: Some(failures),
                 ..Self::default()
             },
@@ -952,6 +1010,9 @@ impl ResumeState {
                 cases,
                 seed_bank,
                 baseline_score,
+                frontier,
+                parent_selector,
+                parent,
                 failures,
                 proposal,
                 proposer_evidence,
@@ -960,6 +1021,9 @@ impl ResumeState {
                 cases: Some(cases),
                 seed_bank: Some(seed_bank),
                 baseline_score: Some(baseline_score),
+                frontier: Some(frontier),
+                parent_selector: Some(parent_selector),
+                parent: Some(parent),
                 failures: Some(failures),
                 proposal: Some(proposal),
                 proposer_evidence: Some(proposer_evidence),
@@ -970,6 +1034,9 @@ impl ResumeState {
                 cases,
                 seed_bank,
                 baseline_score,
+                frontier,
+                parent_selector,
+                parent,
                 failures,
                 proposal,
                 proposer_evidence,
@@ -980,6 +1047,9 @@ impl ResumeState {
                 cases: Some(cases),
                 seed_bank: Some(seed_bank),
                 baseline_score: Some(baseline_score),
+                frontier: Some(frontier),
+                parent_selector: Some(parent_selector),
+                parent: Some(parent),
                 failures: Some(failures),
                 proposal: Some(proposal),
                 proposer_evidence: Some(proposer_evidence),
@@ -1073,6 +1143,19 @@ fn evoskill_frontier() -> TopKFrontier {
     TopKFrontier::new(
         NonZeroUsize::new(EVOSKILL_FRONTIER_SIZE).expect("EvoSkill frontier size is non-zero"),
     )
+}
+
+fn evoskill_parent_selector() -> TopKParentSelector {
+    TopKParentSelector::best()
+}
+
+fn select_frontier_parent(
+    parent_selector: &mut TopKParentSelector,
+    population: &TopKFrontier,
+) -> Result<CandidateId> {
+    parent_selector
+        .select(population)
+        .ok_or_else(|| msg("EvoSkill frontier is empty; no parent can be selected"))
 }
 
 #[derive(Clone)]
@@ -1796,13 +1879,47 @@ async fn finish_workspace<T>(workspace: Workspace, stage_result: Result<T>) -> R
 
 #[cfg(test)]
 mod tests {
-    use super::skill_gated_score;
+    use leaven_evidence::ScalarEvidence;
+    use leaven_kernel::{AssessmentId, CandidateId, RunId};
+    use leaven_population::{TopKParentSelectionPolicy, TopKParentSelector};
+
+    use super::{EvoSkillCheckpoint, ResumeState, evoskill_frontier, skill_gated_score};
 
     #[test]
     fn skill_gated_score_rejects_model_prior_without_skill() {
         assert_float_eq(skill_gated_score(false, "99.5", "99.5"), 0.0);
         assert_float_eq(skill_gated_score(false, "99.5", "NOT_ATTEMPTED"), 0.0);
         assert_float_eq(skill_gated_score(true, "99.5", "99.5"), 1.0);
+    }
+
+    #[test]
+    fn resume_state_restores_frontier_parent_and_selector_cursor() {
+        let mut frontier = evoskill_frontier();
+        let parent = CandidateId::new();
+        frontier.observe(
+            parent,
+            AssessmentId::new(),
+            ScalarEvidence::new(0.7).unwrap(),
+        );
+        let parent_selector =
+            TopKParentSelector::with_cursor(TopKParentSelectionPolicy::RoundRobin, 1);
+
+        let resume = ResumeState::from_checkpoint(Some(EvoSkillCheckpoint::FailuresCollected {
+            run_id: RunId::default(),
+            cases: Vec::new(),
+            seed_bank: Default::default(),
+            baseline_score: 0.7,
+            frontier: frontier.clone(),
+            parent_selector: parent_selector.clone(),
+            parent,
+            failures: Vec::new(),
+        }))
+        .unwrap();
+
+        let restored_frontier = resume.frontier.unwrap();
+        assert_eq!(restored_frontier.members(), frontier.members());
+        assert_eq!(resume.parent_selector, Some(parent_selector));
+        assert_eq!(resume.parent, Some(parent));
     }
 
     fn assert_float_eq(left: f64, right: f64) {

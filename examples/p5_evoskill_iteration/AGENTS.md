@@ -11,7 +11,10 @@ P5 owns the example wiring for a Codex-backed agentic skill loop: source prompt 
 
 ## Local Rules
 - Keep `LEAVEN_CODEX_LIVE=1` plus `--live-codex` as the intentional live gate. Do not add a fake deterministic fallback that claims to prove the EvoSkill reproduction.
-- Preserve the phase checkpoint enum and resume checks when changing the loop; checkpoint state is part of the acceptance surface, not logging.
+- Preserve the phase checkpoint enum and resume checks when changing the loop;
+  checkpoint state is part of the acceptance surface, not logging. Frontier
+  membership, selected parent, and parent-selector cursor are private
+  optimizer state and must survive resume.
 - Keep train and validation partitions distinct. Baseline and child validation prove selection behavior; train failures drive proposal feedback.
 - Preserve the skill-bank mount contract in role instructions: active candidate skills live under `.agents/skills`, while the meta skills are mounted under `.claude/skills` for the live reproduction.
 - If a local test touches only pure helper behavior, name it as helper coverage. Do not present it as proof that the live EvoSkill path works.

@@ -62,8 +62,9 @@ Current useful substrate:
   iteration over a tiny treasury-notation fixture.
 - `leaven-population` has `ParetoFrontier`, `TopKFrontier`, and deterministic
   `TopKParentSelector` state for best/round-robin parent selection; EvoSkill
-  still needs checkpointed run-loop integration and dossier resolution of the
-  paper/code selector drift before this proves replication.
+  P5 now checkpoints frontier/parent/selector state, but full paper replication
+  still needs git-program run-loop integration and dossier resolution of the
+  paper/code selector drift.
 
 Current known gaps:
 
@@ -127,8 +128,9 @@ Leaven primitive blockers:
   capture, restore, and delete primitives are present; remaining blocker is
   EvoSkill run-loop integration plus paper score metadata conventions;
 - `leaven-population`: explicit top-k frontier/admission and checkpointable
-  best/round-robin parent selector state now exist; remaining blocker is
-  paper-run integration and selector-policy resolution;
+  best/round-robin parent selector state now exist; P5 carries that state in
+  private checkpoints, while full EvoSkill still needs git-program paper-run
+  integration and selector-policy resolution;
 - reusable stratified/category-aware split and without-replacement sampler;
 - paper-grade scorer/evaluator records with failure-threshold extraction;
 - evidence history that can feed proposer prompts without paper-side custom
@@ -382,8 +384,8 @@ Start with these generic primitives as failures expose them:
    vocabulary plus local clone/capture/restore/delete primitives exist;
    checkpointed EvoSkill run integration remains.
 2. `leaven-population`: top-k scalar frontier admission and deterministic
-   best/round-robin parent selector state exist; checkpoint/resume integration
-   into the EvoSkill run path remains.
+   best/round-robin parent selector state exist; P5 checkpoint/resume carries
+   that state, while full EvoSkill OfficeQA/SealQA run integration remains.
 3. Skill registry/card layer: derived `SkillCard` plus utility, routing keys,
    trigger stats, retrieved-use evidence, and lifecycle state outside raw
    `SkillBank`.

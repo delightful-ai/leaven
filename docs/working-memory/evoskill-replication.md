@@ -282,8 +282,10 @@ git-backed program identity into the EvoSkill run path:
 
 Second-order blockers after git identity:
 
-- checkpointed EvoSkill run-loop integration for `TopKParentSelector`,
-  including resolving the best-vs-round-robin source drift in the dossier;
+- full EvoSkill run-loop integration for `TopKParentSelector` over git-backed
+  program/frontier refs, including resolving the best-vs-round-robin source
+  drift in the dossier; P5 now carries frontier/parent/selector state in its
+  private checkpoint, but remains a one-iteration fixture;
 - exact split/sampler manifests, including category-aware without-replacement
   sampling and 1.5 epoch schedules;
 - OfficeQA scorer/evaluator records with thresholded failure extraction;
@@ -319,8 +321,9 @@ Second-order blockers after git identity:
    program/frontier state with paper score metadata. `leaven-population`
    now provides `TopKFrontier` for fixed-capacity scalar validation admission
    and weakest-member eviction plus `TopKParentSelector` for checkpointable
-   best/round-robin parent selection; P5 uses the frontier instead of
-   single-best tracking, but full EvoSkill still needs selector/run-loop wiring.
+   best/round-robin parent selection. P5 now persists frontier membership,
+   selected parent, and selector cursor through its private checkpoints, but
+   full EvoSkill still needs multi-iteration git-program integration.
 8. Language-boundary blocker for implementation: after provenance, all
    Leaven-owned EvoSkill split/sampler/scorer/harness/frontier behavior must be
    implemented in Rust/Leaven primitives, not Python.
@@ -340,6 +343,6 @@ Stay no-spend until the provenance blockers are closed:
    access blocker with source links.
 5. After the exact split/source path is chosen, wire the tested
    `leaven-artifact-git`, `leaven-workspace-git`, `TopKFrontier`, and
-   `TopKParentSelector` primitives into the EvoSkill run path with checkpointed
-   program/frontier/selector state and paper score metadata, without moving Git
-   command execution into the artifact crate.
+   `TopKParentSelector` primitives into the full EvoSkill OfficeQA/SealQA run
+   path with checkpointed program/frontier/selector state and paper score
+   metadata, without moving Git command execution into the artifact crate.
