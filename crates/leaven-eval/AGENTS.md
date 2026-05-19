@@ -6,6 +6,9 @@ It does not execute evaluations. Evaluator traits, registries, trust checks, cas
 ## Routing
 - `src/dataset.rs` owns durable case collections and membership fingerprints.
 - `src/split.rs` owns partition roles, overlap policy, known-case validation, split fingerprinting, and `CaseSetVersion` attachment.
+- `src/sampler.rs` owns deterministic lowered case sampling state over known
+  case IDs. It may retain cursor/RNG-like state for checkpointing, but it must
+  not call evaluators or inspect artifacts.
 - `src/use_policy.rs` owns which split roles may drive proposer feedback, selection, acceptance, population observation, report output, or final test.
 - `src/report.rs` owns report data shapes after evaluation has happened; it must not reach back into engine graph mutation.
 - Missing-but-owned surface from the eval audit belongs here when implemented:
@@ -25,6 +28,10 @@ It does not execute evaluations. Evaluator traits, registries, trust checks, cas
   `CaseSet`, trust policy, final evaluation requests, and reports locally. If a
   second product builder or GEPA path starts copying that stack, stop and move
   the reusable lowered vocabulary here first.
+- `CategoryRoundRobinSampler` is a deterministic category-keyed sampler for
+  EvoSkill-style train pools. It cycles category groups and per-category case
+  cursors without replacement until each pool wraps. It is not a stratified
+  split builder and does not certify category provenance.
 
 ## Decision Cards
 - when: adding stable task/case inputs or split semantics
@@ -33,6 +40,15 @@ It does not execute evaluations. Evaluator traits, registries, trust checks, cas
   avoid: encoding benchmark semantics as vector positions or magic partition strings in examples/GEPA
   verify: run `cargo nextest run -p leaven-eval --test split_contract` and the `leaven-run` builder test that consumes it
 
+- when: adding deterministic case samplers
+  do: keep inputs and outputs as `CaseId` plus lightweight grouping metadata,
+  preserve checkpointable sampler state, and reject ambiguous pools before
+  sampling
+  preserve: no evaluator execution, no graph mutation, and no hidden
+  dataset-provenance claims
+  avoid: moving optimizer-specific acceptance/frontier policy into this crate
+  verify: run `cargo nextest run -p leaven-eval --test category_sampler`
+
 - when: adding reports
   do: keep reports as post-evaluation data with graph IDs, evidence refs, split roles, and summary projections
   preserve: absent/failed evidence as distinct from numeric zero, and final-test-only markers as report semantics
@@ -40,6 +56,8 @@ It does not execute evaluations. Evaluator traits, registries, trust checks, cas
   verify: run `cargo nextest run -p leaven-eval -p leaven-run`
 
 ## Proof Anchors
-- `cargo nextest run -p leaven-eval` proves dataset IDs, split overlap policy, unknown-case refusal, split fingerprints, and train/validation/test use-policy boundaries.
+- `cargo nextest run -p leaven-eval` proves dataset IDs, split overlap policy,
+  unknown-case refusal, split fingerprints, deterministic sampler state, and
+  train/validation/test use-policy boundaries.
 - `cargo nextest run -p leaven-run` proves product builders can consume lowered eval vocabulary without making this crate own builder ergonomics.
 - `cargo nextest run -p leaven-engine --test case_set_resolution` proves execution-time case-set resolution stays in the engine layer.

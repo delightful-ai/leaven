@@ -1399,6 +1399,7 @@ pub mod error;
 pub mod plan;
 pub mod report;
 pub mod request;
+pub mod sampler;
 pub mod split;
 pub mod suite;
 pub mod use_policy;
@@ -1417,6 +1418,8 @@ pub use report::{
 
 pub use request::EvaluationRequestTemplate;
 
+pub use sampler::{CategoryRoundRobinSampler, CategorySample};
+
 pub use split::{DatasetSplits, SplitPolicy, SplitRole};
 
 pub use suite::EvaluationSuite;
@@ -1429,8 +1432,9 @@ pub mod prelude {
         DatasetSplits, DatasetSplitsError, EvaluationPlan, EvaluationPlanError,
         EvaluationPlanId, EvaluationReport, EvaluationRequestShape,
         EvaluationRequestTemplate, EvaluationSuite, EvaluationUse,
-        FinalTestPolicy, LmCase, ReportError, SplitPolicy, SplitReport,
-        SplitRole, SplitUse, SplitUsePolicy, SplitUseSummary,
+        FinalTestPolicy, LmCase, ReportError, CategoryRoundRobinSampler,
+        CategorySample, SplitPolicy, SplitReport, SplitRole, SplitUse,
+        SplitUsePolicy, SplitUseSummary,
     };
 }
 ```

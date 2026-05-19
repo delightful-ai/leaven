@@ -131,7 +131,9 @@ Leaven primitive blockers:
   best/round-robin parent selector state now exist; P5 carries that state in
   private checkpoints, while full EvoSkill still needs git-program paper-run
   integration and selector-policy resolution;
-- reusable stratified/category-aware split and without-replacement sampler;
+- `leaven-eval`: `CategoryRoundRobinSampler` now provides checkpointable
+  category-aware without-replacement train-pool sampling; reusable stratified
+  split construction and exact paper split manifests remain;
 - paper-grade scorer/evaluator records with failure-threshold extraction;
 - evidence history that can feed proposer prompts without paper-side custom
   plumbing.
@@ -393,8 +395,9 @@ Start with these generic primitives as failures expose them:
    history, patch/proposal provenance, support counts, and cost records.
 5. Agentic batch orchestration: many independent analysts/proposers with
    checkpointed fan-out/fan-in and resumable merge trees.
-6. Split/sampler/metric adapters: stratified splits, without-replacement
-   samplers, official metric wrappers, and held-out report manifests.
+6. Split/sampler/metric adapters: category-aware without-replacement sampler
+   state exists in `leaven-eval`; stratified split builders, official metric
+   wrappers, and held-out report manifests remain.
 7. Skill optimization surfaces: description/body/reference/core/progressive
    disclosure views plus token-cost accounting.
 8. Route equivalence and trigger evidence: simulated route oracle plus real

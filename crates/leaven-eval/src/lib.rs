@@ -7,14 +7,16 @@
 mod dataset;
 mod error;
 mod report;
+mod sampler;
 mod split;
 mod use_policy;
 
 pub use dataset::{Case, Dataset, DatasetBuilder, LmCase, NoTarget};
-pub use error::{DatasetError, DatasetSplitsError, SplitUsePolicyError};
+pub use error::{DatasetError, DatasetSplitsError, SamplerError, SplitUsePolicyError};
 pub use report::{
     CandidateEvaluationSummary, EvaluationReport, ReportScore, SplitReport, SplitUseSummary,
 };
+pub use sampler::{CategoryRoundRobinSampler, CategorySample};
 pub use split::{DatasetSplits, SplitPolicy, SplitRole};
 pub use use_policy::{EvaluationUse, FinalTestPolicy, SplitUse, SplitUsePolicy};
 
@@ -22,8 +24,9 @@ pub mod prelude {
     //! Common lowered-eval imports.
 
     pub use crate::{
-        CandidateEvaluationSummary, Case, Dataset, DatasetBuilder, DatasetSplits, EvaluationReport,
-        EvaluationUse, FinalTestPolicy, LmCase, NoTarget, ReportScore, SplitPolicy, SplitReport,
-        SplitRole, SplitUse, SplitUsePolicy, SplitUseSummary,
+        CandidateEvaluationSummary, Case, CategoryRoundRobinSampler, CategorySample, Dataset,
+        DatasetBuilder, DatasetSplits, EvaluationReport, EvaluationUse, FinalTestPolicy, LmCase,
+        NoTarget, ReportScore, SamplerError, SplitPolicy, SplitReport, SplitRole, SplitUse,
+        SplitUsePolicy, SplitUseSummary,
     };
 }

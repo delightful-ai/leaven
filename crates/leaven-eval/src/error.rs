@@ -1,6 +1,7 @@
 //! Lowered evaluation refusal types.
 
 use leaven_kernel::CaseId;
+use smol_str::SmolStr;
 use thiserror::Error;
 
 use crate::SplitRole;
@@ -43,4 +44,25 @@ pub enum SplitUsePolicyError {
     /// `EvaluatorOnly` cannot be combined with optimizer-facing uses.
     #[error("EvaluatorOnly cannot be combined with optimizer-facing uses")]
     ContradictoryEvaluatorOnly,
+}
+
+/// Evaluation sampler construction failed.
+#[derive(Clone, Debug, Error, Eq, PartialEq)]
+pub enum SamplerError {
+    /// The sampler has no category pools to draw from.
+    #[error("sampler has no categories")]
+    NoCategories,
+    /// One category has no cases.
+    #[error("category {0} has no cases")]
+    EmptyCategory(SmolStr),
+    /// One case appears in multiple category pools.
+    #[error("case {case} appears in both categories {left} and {right}")]
+    DuplicateCaseCategory {
+        /// Duplicated case id.
+        case: CaseId,
+        /// First category containing the case.
+        left: SmolStr,
+        /// Second category containing the case.
+        right: SmolStr,
+    },
 }

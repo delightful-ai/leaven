@@ -286,8 +286,8 @@ Second-order blockers after git identity:
   program/frontier refs, including resolving the best-vs-round-robin source
   drift in the dossier; P5 now carries frontier/parent/selector state in its
   private checkpoint, but remains a one-iteration fixture;
-- exact split/sampler manifests, including category-aware without-replacement
-  sampling and 1.5 epoch schedules;
+- exact split manifests and run integration for `CategoryRoundRobinSampler`,
+  including source category provenance and 1.5 epoch schedules;
 - OfficeQA scorer/evaluator records with thresholded failure extraction;
 - feedback history and proposal-outcome history as generic evidence, not
   example-local strings;
@@ -343,6 +343,7 @@ Stay no-spend until the provenance blockers are closed:
    access blocker with source links.
 5. After the exact split/source path is chosen, wire the tested
    `leaven-artifact-git`, `leaven-workspace-git`, `TopKFrontier`, and
-   `TopKParentSelector` primitives into the full EvoSkill OfficeQA/SealQA run
-   path with checkpointed program/frontier/selector state and paper score
-   metadata, without moving Git command execution into the artifact crate.
+   `TopKParentSelector` primitives plus `leaven-eval::CategoryRoundRobinSampler`
+   into the full EvoSkill OfficeQA/SealQA run path with checkpointed
+   program/frontier/selector/sampler state and paper score metadata, without
+   moving Git command execution into the artifact crate.
