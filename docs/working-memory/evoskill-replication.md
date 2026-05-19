@@ -56,11 +56,24 @@ Commands and bounded checks used:
 - `git ls-remote https://github.com/databricks/officeqa HEAD`
 - `git -C tmp/repros/evoskill rev-parse HEAD`
 - `git -C tmp/repros/officeqa rev-parse HEAD`
-- CSV parsing with Ruby `CSV` for row counts and schema
+- read-only scaffolding probes with Ruby `CSV` for row counts and schema
 - `zipinfo`, `fd`, `wc`, `du`, and `rg` over local OfficeQA PDFs and
   transformed corpus
 - static source inspection with `rg` and file reads for split/default/import
   behavior
+
+Replication logic boundary:
+
+- The probes above are scaffolding only. They are not accepted replica logic,
+  not Leaven primitive behavior, and not part of any runnable paper surface.
+- Python is forbidden for Leaven-owned EvoSkill replication logic, including
+  samplers, splitters, scorers, harnesses, artifact materialization,
+  population/frontier rules, evidence history, and report generation.
+- Released upstream Python may be inspected or invoked as an external reference
+  baseline after source pinning, but Leaven must not copy Python code into the
+  accepted replica path.
+- If structured parsing is needed during setup, keep it outside committed
+  replica logic and record it here as a probe with its language/tool boundary.
 
 Avoided probe:
 
@@ -143,7 +156,9 @@ Using the upstream `src.api.data_utils.stratified_split` formula over
 This does not match the paper's 12/24/36 train and 17 validation counts. The
 likely missing artifact is the paper's LLM-derived category assignment and/or
 the exact split manifest. Do not silently substitute `difficulty` for the paper
-categories in a 1:1 replication.
+categories in a 1:1 replication, and do not reuse the upstream Python splitter
+as Leaven-owned replica logic. A faithful Leaven retry needs either the exact
+manifest or a documented substitute implemented as a Rust/Leaven primitive.
 
 ## Upstream Code Probe
 
@@ -223,6 +238,9 @@ Second-order blockers after git identity:
    CLI imports `Agent` from `src.harness`.
 6. Leaven primitive blocker after provenance: `leaven-artifact-git` is a
    placeholder and cannot yet represent EvoSkill program/frontier snapshots.
+7. Language-boundary blocker for implementation: after provenance, all
+   Leaven-owned EvoSkill split/sampler/scorer/harness/frontier behavior must be
+   implemented in Rust/Leaven primitives, not Python.
 
 ## Next Action
 

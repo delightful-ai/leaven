@@ -30,6 +30,15 @@ explicit approval. When a paper depends on private, gated, or very expensive
 data/compute, record the exact blocker and run only no-spend setup/provenance
 checks until the user approves a live run.
 
+Language boundary: Python is allowed only for scaffolding, read-only
+provenance probes, and external upstream inspection when that is the released
+reference stack. It is not allowed for Leaven-owned paper replication logic,
+runnable replica paths, samplers, scorers, splitters, harnesses, artifact
+materialization, repair loops, population/frontier logic, retrieval/utility, or
+telemetry primitives. If a paper's upstream release is Python, treat it as
+reference evidence or an explicitly invoked external baseline; Leaven-side
+replica behavior must be Rust/Leaven primitives with thin paper configuration.
+
 The working loop for each paper:
 
 1. Build a replication dossier from local paper sources and any released code.
