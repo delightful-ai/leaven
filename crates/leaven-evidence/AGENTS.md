@@ -16,6 +16,12 @@ Evidence here is data a stage or evaluator can produce and another component can
   `CaseAssessmentEvidence` have local tests. `CaseAssessmentEvidence`
   preserves generated output, scalar score, and natural-language feedback; it
   is reusable evidence vocabulary, not the reflective mutation algorithm.
+- `AgentTrajectoryEvidence` is the reusable one-session trajectory envelope:
+  runtime session id, optional Leaven case id, upstream task id, typed
+  success/failure outcome, model id, model configuration fingerprint,
+  transcript/blob reference, command records, and parsed/blob-backed analyst
+  records. It is not a scheduler, ReAct runner, scorer, or Trace2Skill merge
+  policy.
 - Public placeholders today: `diff`, `json`, `listwise`, `mixed`,
   `score_vector`, and `string` are root-re-exported names without behavior laws.
   Do not cite them as standard evidence until they carry fields, constructors,
@@ -29,8 +35,8 @@ Evidence here is data a stage or evaluator can produce and another component can
   preference/population code assumes non-finite values were refused already.
 - Use `CasewiseEvidence` for sparse per-case data. Missing case IDs mean
   absence, not zero score.
-- Use `OutputRecord::BlobRef` for large stdout/stderr; `OutputRecord::Inline`
-  is bounded display evidence.
+- Use `OutputRecord::BlobRef` for large stdout/stderr, transcripts, and parsed
+  analyst payloads; `OutputRecord::Inline` is bounded display evidence.
 - Use `AttributableEvidence<K>` when evidence needs to point at surface parts,
   paths, agents, tools, modules, or user keys without making this crate know
   those key domains.

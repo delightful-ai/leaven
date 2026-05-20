@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use leaven_core::Evidence;
-use leaven_kernel::BlobRef;
+use leaven_kernel::{AgentSessionId, BlobRef, CaseId, Fingerprint};
 use serde::{Deserialize, Serialize};
 
 /// Command output carried inline or by external blob reference.
@@ -47,7 +47,7 @@ impl OutputRecord {
 }
 
 /// One command execution record.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct CommandRecord {
     command: String,
     exit_status: Option<i32>,
@@ -107,7 +107,7 @@ impl CommandRecord {
 }
 
 /// Evidence made of command execution records.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 pub struct CommandEvidence {
     records: Vec<CommandRecord>,
 }
@@ -128,21 +128,169 @@ impl CommandEvidence {
 
 impl Evidence for CommandEvidence {}
 
+/// Whether one agent trajectory solved its assigned task.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum AgentTrajectoryOutcome {
+    /// The trajectory produced an accepted answer/output.
+    Success,
+    /// The trajectory failed, with the runner/scorer supplied reason.
+    Failure {
+        /// Failure reason from the runner, scorer, or analyzer.
+        reason: String,
+    },
+}
+
+/// Kind of analysis record derived from an agent trajectory.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum AgentTrajectoryAnalysisKind {
+    /// Analysis of a failed trajectory.
+    Error,
+    /// Analysis of a successful trajectory.
+    Success,
+    /// Analysis that combines successful and failed trajectories.
+    Combined,
+    /// Domain-specific analysis kind.
+    Custom(String),
+}
+
+/// Parsed or blob-backed analyst record derived from one trajectory.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct AgentTrajectoryAnalysisRecord {
+    kind: AgentTrajectoryAnalysisKind,
+    source_file: String,
+    payload: OutputRecord,
+}
+
+impl AgentTrajectoryAnalysisRecord {
+    /// Build an analysis record from a source artifact and parsed payload.
+    #[must_use]
+    pub fn new(
+        kind: AgentTrajectoryAnalysisKind,
+        source_file: impl Into<String>,
+        payload: OutputRecord,
+    ) -> Self {
+        Self {
+            kind,
+            source_file: source_file.into(),
+            payload,
+        }
+    }
+
+    /// Whether this analysis came from a failed or successful trajectory.
+    #[must_use]
+    pub fn kind(&self) -> AgentTrajectoryAnalysisKind {
+        self.kind.clone()
+    }
+
+    /// Source report or parsed-record file.
+    #[must_use]
+    pub fn source_file(&self) -> &str {
+        &self.source_file
+    }
+
+    /// Parsed record payload, inline or blob-backed.
+    #[must_use]
+    pub const fn payload(&self) -> &OutputRecord {
+        &self.payload
+    }
+}
+
 /// Evidence for one agent/session trajectory.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct AgentTrajectoryEvidenceInput {
+    /// Agent runtime session id.
+    pub session_id: AgentSessionId,
+    /// Leaven case id, when the trajectory came from a lowered case set.
+    pub case_id: Option<CaseId>,
+    /// Upstream task id used by the benchmark/reproduction.
+    pub task_id: String,
+    /// Typed success/failure outcome for selection and analysis.
+    pub outcome: AgentTrajectoryOutcome,
+    /// Model identifier used by the trajectory runner.
+    pub model_id: String,
+    /// Fingerprint of behavior-affecting model/runtime configuration.
+    pub model_config_fingerprint: Fingerprint,
+    /// Transcript or transcript reference.
+    pub transcript: OutputRecord,
+    /// Commands run during the trajectory.
+    pub commands: CommandEvidence,
+}
+
+/// Evidence for one agent/session trajectory.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct AgentTrajectoryEvidence {
+    session_id: AgentSessionId,
+    case_id: Option<CaseId>,
+    task_id: String,
+    outcome: AgentTrajectoryOutcome,
+    model_id: String,
+    model_config_fingerprint: Fingerprint,
     transcript: OutputRecord,
     commands: CommandEvidence,
+    analysis_records: Vec<AgentTrajectoryAnalysisRecord>,
 }
 
 impl AgentTrajectoryEvidence {
-    /// Build trajectory evidence from transcript and commands.
+    /// Build trajectory evidence from task, runtime, transcript, and command records.
     #[must_use]
-    pub const fn new(transcript: OutputRecord, commands: CommandEvidence) -> Self {
+    pub fn new(input: AgentTrajectoryEvidenceInput) -> Self {
         Self {
-            transcript,
-            commands,
+            session_id: input.session_id,
+            case_id: input.case_id,
+            task_id: input.task_id,
+            outcome: input.outcome,
+            model_id: input.model_id,
+            model_config_fingerprint: input.model_config_fingerprint,
+            transcript: input.transcript,
+            commands: input.commands,
+            analysis_records: Vec::new(),
         }
+    }
+
+    /// Replaces the derived analysis records for this trajectory.
+    #[must_use]
+    pub fn with_analysis_records(
+        mut self,
+        records: impl IntoIterator<Item = AgentTrajectoryAnalysisRecord>,
+    ) -> Self {
+        self.analysis_records = records.into_iter().collect();
+        self
+    }
+
+    /// Agent runtime session id.
+    #[must_use]
+    pub const fn session_id(&self) -> AgentSessionId {
+        self.session_id
+    }
+
+    /// Leaven case id, when the trajectory came from a lowered case set.
+    #[must_use]
+    pub const fn case_id(&self) -> Option<CaseId> {
+        self.case_id
+    }
+
+    /// Upstream task id used by the benchmark/reproduction.
+    #[must_use]
+    pub fn task_id(&self) -> &str {
+        &self.task_id
+    }
+
+    /// Typed success/failure outcome for selection and analysis.
+    #[must_use]
+    pub const fn outcome(&self) -> &AgentTrajectoryOutcome {
+        &self.outcome
+    }
+
+    /// Model identifier used by the trajectory runner.
+    #[must_use]
+    pub fn model_id(&self) -> &str {
+        &self.model_id
+    }
+
+    /// Fingerprint of behavior-affecting model/runtime configuration.
+    #[must_use]
+    pub const fn model_config_fingerprint(&self) -> Fingerprint {
+        self.model_config_fingerprint
     }
 
     /// Transcript or transcript reference.
@@ -155,6 +303,12 @@ impl AgentTrajectoryEvidence {
     #[must_use]
     pub const fn commands(&self) -> &CommandEvidence {
         &self.commands
+    }
+
+    /// Parsed or blob-backed analyst records derived from this trajectory.
+    #[must_use]
+    pub fn analysis_records(&self) -> &[AgentTrajectoryAnalysisRecord] {
+        &self.analysis_records
     }
 }
 

@@ -241,6 +241,11 @@ Leaven primitive blockers:
   constructs the paper's `0..200` train/evolving and `200..400` held-out split.
   This is manifest-lowering provenance only, not spreadsheet execution or
   Trace2Skill evolution.
+- `leaven-evidence::AgentTrajectoryEvidence` now preserves one-session
+  trajectory provenance needed by Trace2Skill-style many-trace analysis:
+  session id, optional Leaven case id, upstream task id, success/failure label,
+  model id, model-config fingerprint, transcript/commands, and analyst records.
+  A checkpointed corpus over many such records is still missing.
 - many-trace evidence corpus with success/failure labels and full trajectory
   access;
 - parallel analyst dispatch that can checkpoint hundreds of independent

@@ -21,10 +21,12 @@ use leaven_core::{
 };
 use leaven_engine::{CaseSet, EvaluationContext, EvaluationError, OptimizerError, ProposalError};
 use leaven_evidence::{
-    AgentTrajectoryEvidence, CommandEvidence, CommandRecord, OutputRecord, ScalarEvidence,
+    AgentTrajectoryEvidence, AgentTrajectoryEvidenceInput, AgentTrajectoryOutcome, CommandEvidence,
+    CommandRecord, OutputRecord, ScalarEvidence,
 };
 use leaven_kernel::{
-    AssessmentId, BlobRef, CandidateId, EvaluatorId, EvidenceRef, Fingerprint, Metered, ProposerId,
+    AgentSessionId, AssessmentId, BlobRef, CandidateId, EvaluatorId, EvidenceRef, Fingerprint,
+    FingerprintBuilder, Metered, ProposerId,
 };
 use leaven_population::KeepBest;
 use leaven_store_inline::InlineEvidenceStore;
@@ -685,13 +687,28 @@ impl Evaluator<MetaHarnessProblem> for HarnessEvaluator {
                 OutputRecord::inline(""),
                 Duration::from_millis(1),
             )]);
-            let trajectory = AgentTrajectoryEvidence::new(
-                OutputRecord::blob(BlobRef {
+            let mut fingerprint_builder = FingerprintBuilder::new();
+            fingerprint_builder.update("p4-meta-harness-lite");
+            let model_config_fingerprint = fingerprint_builder.finish();
+            let trajectory = AgentTrajectoryEvidence::new(AgentTrajectoryEvidenceInput {
+                session_id: AgentSessionId::new(),
+                case_id: None,
+                task_id: candidate.to_string(),
+                outcome: if score >= 1.0 {
+                    AgentTrajectoryOutcome::Success
+                } else {
+                    AgentTrajectoryOutcome::Failure {
+                        reason: "local harness score below acceptance threshold".to_owned(),
+                    }
+                },
+                model_id: "p4-local-harness".to_owned(),
+                model_config_fingerprint,
+                transcript: OutputRecord::blob(BlobRef {
                     store: "p4-transcripts".to_owned(),
                     key: format!("candidate-{candidate}"),
                 }),
-                command.clone(),
-            );
+                commands: command.clone(),
+            });
             assessments.push(Assessment::Independent {
                 candidate,
                 target: AssessmentTarget::EvaluationSet(leaven_kernel::EvaluationSetId::new()),

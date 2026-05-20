@@ -133,6 +133,12 @@ The checked-out upstream release includes:
   new `references/*.md` files and `SKILL.md` links. It intentionally does not
   own Trace2Skill merge policy, prevalence thresholds, prompt wording, batch
   sizes, or result selection.
+- `leaven-evidence::AgentTrajectoryEvidence` now owns the reusable trajectory
+  evidence envelope needed before Trace2Skill Stage 1/analysis can be
+  faithfully replayed: runtime session id, optional Leaven case id, upstream
+  task id, success/failure outcome, model id, model configuration fingerprint,
+  transcript/command records, and parsed or blob-backed analyst records. It
+  does not execute the ReAct loop or own Trace2Skill scorer/merge policy.
 
 Verification:
 
@@ -149,14 +155,18 @@ Verification:
 - `cargo clippy -p trace2skill_spreadsheetbench --all-targets -- -D warnings`
   and `cargo test -p leaven --test topology_contract` passed on 2026-05-20
   after adding the manifest-lowering example as a workspace member.
+- `cargo nextest run -p leaven-evidence`, `cargo clippy -p leaven-evidence
+  --all-targets -- -D warnings`, and `cargo check -p p4_meta_harness_lite`
+  passed on 2026-05-20 for the hard-cut trajectory evidence envelope and the
+  adapted P4 fixture caller.
 
 ## Current Blockers
 
 Leaven-owned remaining primitives before faithful Trace2Skill replication:
 
-- checkpointed many-trajectory evidence corpus with success/failure labels,
-  full ReAct trace access, task ids, model/config fingerprints, and derived
-  analysis records;
+- checkpointed many-trajectory evidence corpus/storage that groups
+  `AgentTrajectoryEvidence` records across the 200 training/evolving tasks,
+  with durable full ReAct trace blobs and resumable analysis state;
 - checkpointed parallel analyst fan-out for hundreds of independent agent/LLM
   calls with durable per-call prompts, responses, parse failures, and retry
   state;
