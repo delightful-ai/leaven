@@ -48,11 +48,12 @@ Population code may consume evidence and emit `PopulationEvent`s. It must not mu
   transfer, and explicit removal. Use `SkillUtilityRanker` when a caller
   already has finite relevance scores and needs utility/UCB-aware deterministic
   top-k ranking. Use `SkillPairedRolloutUtilityInput` when a caller has
-  `PairedRolloutEvidence`, retrieved task skills, and trajectory-level step
-  credits and needs the D2Skill-style task gap applied through
-  `SkillUtilityState`. Retrieval embeddings, paper route keys, trajectory
-  extraction, injection formatting, and paper-specific thresholds remain
-  outside this module.
+  `PairedRolloutEvidence`, retrieved task skills, and either trajectory-level
+  step credits or runner-provided `SkillStepTrajectoryOutcome`s and needs the
+  D2Skill-style task gap and `Y_i - baseline_mean` step credit equation applied
+  through `SkillUtilityState`. Retrieval embeddings, paper route keys,
+  transcript parsing, injection formatting, and paper-specific thresholds
+  remain outside this module.
 - Use `ParetoFrontier::by_case().partition_filter(...)` for sparse casewise
   scalar frontiers. Missing case scores do not dominate present scores.
 - Return `PopulationEvent`s to the caller; only `RunContext`/engine records them
@@ -68,9 +69,10 @@ Population code may consume evidence and emit `PopulationEvent`s. It must not mu
 - `SkillUtilityRanker` does not decide what a query means. It combines
   caller-provided relevance with utility and exploration state only.
 - `SkillPairedRolloutUtilityInput` does not inspect transcripts or infer which
-  step skills fired. The paper/runner supplies retrieved task skills and
-  trajectory-level step credits; this crate only applies validated skill
-  identities, finite reward gaps, smoothing, and checkpointable utility stats.
+  step skills fired. The paper/runner supplies retrieved task skills and either
+  step trajectory outcomes or trajectory-level step credits; this crate only
+  applies validated skill identities, finite reward gaps, smoothing, and
+  checkpointable utility stats.
 - Public unit structs in this crate are under audit pressure. Implement or
   scaffold-gate them before letting `leaven-std` or examples present them as
   standard population implementations.
@@ -78,7 +80,7 @@ Population code may consume evidence and emit `PopulationEvent`s. It must not mu
 ## Proof Anchors
 - `cargo nextest run -p leaven-population` proves keep-best, top-k frontier,
   top-k parent selector, tournament, skill utility state, paired rollout skill
-  credit application, and Pareto/frontier population laws, including finite
-  fitted updates and partition filtering.
+  credit application, step-trajectory credit extraction, and Pareto/frontier
+  population laws, including finite fitted updates and partition filtering.
 - `cargo nextest run -p leaven-gepa --test gepa_smoke` proves GEPA consumes population state without moving GEPA selectors or gates into this crate.
 - `cargo nextest run -p leaven --test scalar_keep_best --test pairwise_tournament --test gepa_parity` proves mature population implementations participate in public end-to-end workflows through the umbrella surface. It is not proof for placeholder population names.
