@@ -182,6 +182,16 @@ uuid_id!(
 );
 
 uuid_id!(
+    /// Identifier for one candidate run inside a reflective case.
+    ///
+    /// Agentic and LM reflective datasets can carry multiple attempts for one
+    /// case. This ID names the run record independently from the dense case
+    /// index so transcripts, checks, and produced outputs can be cited without
+    /// overloading [`CaseId`].
+    CaseRunId
+);
+
+uuid_id!(
     /// Identifier for one allocated workspace instance.
     WorkspaceId
 );
@@ -382,6 +392,15 @@ macro_rules! name_id {
 }
 
 name_id!(
+    /// Stable identity for an agent role inside a reflective dataset.
+    ///
+    /// This is deliberately name-backed rather than UUID-backed: values such
+    /// as `worker`, `critic`, or `planner` must stay cache-stable across
+    /// equivalent projections.
+    AgentId
+);
+
+name_id!(
     /// Identifier for one provider-neutral agent runtime implementation.
     ///
     /// Runtime IDs name the execution substrate (`codex/app-server`,
@@ -572,5 +591,19 @@ pub struct EvidenceRef {
     /// Identifier of the evidence store backend.
     pub store: String,
     /// Backend-specific key locating the evidence payload.
+    pub key: String,
+}
+
+/// Pointer to a durable execution trace or transcript.
+///
+/// Reflection workspaces use `TraceRef` when a transcript is too large to
+/// inline. It is separate from [`EvidenceRef`] because traces are operational
+/// readback material first; callers can decide later whether to promote them
+/// into semantic evidence.
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+pub struct TraceRef {
+    /// Identifier of the trace store backend.
+    pub store: String,
+    /// Backend-specific key locating the trace payload.
     pub key: String,
 }
