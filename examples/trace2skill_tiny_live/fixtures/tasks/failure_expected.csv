@@ -1,0 +1,5 @@
+row_id,status,amount
+1,KEEP,10
+4,KEEP,40
+5,VOID,50
+

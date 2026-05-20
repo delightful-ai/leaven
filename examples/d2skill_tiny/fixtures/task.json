@@ -1,0 +1,16 @@
+{
+  "task_id": "minishop-return-teal-stripe",
+  "task_group": "minishop_returns",
+  "task_spec": "Handle a MiniShop return package using the local station policy.",
+  "observation": "A returned battery pack has a teal stripe on the seal and the buyer requests a routine refund. The visible station screen only shows standard return actions.",
+  "admissible_actions": [
+    "send_to_standard_returns_bin",
+    "issue_refund_immediately",
+    "quarantine_hazmat_bin",
+    "ask_buyer_for_more_photos"
+  ],
+  "earliest_failure_step": "choosing the return bin for a teal-stripe battery package",
+  "expected_action": "quarantine_hazmat_bin",
+  "hidden_policy_reason": "MiniShop station policy treats teal stripe battery seals as hazmat quarantine markers."
+}
+

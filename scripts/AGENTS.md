@@ -6,6 +6,7 @@ Current scripts:
 - `test-suite-sla.py`: runs nextest plus doctests and enforces the `<30s` suite SLA.
 - `coverage-gate.py`: runs coverage over default workspace tests plus `xtask`, then enforces line and branch floors over production/source behavior. It excludes milestone packages from the default coverage lane and excludes test harness files and `#[cfg(test)] mod ...` blocks from the denominator after execution.
 - `p8-gepa-debug-sqlite.py`: exports an existing P8 `reports/p8-aime.json` file, and optionally an upstream GEPA `gepa_state.bin`, into local SQLite tables for optimizer debugging. It does not call providers, fetch datasets, or mutate source.
+- `ensure_leaven_workspace.sh`: guard for paper-lane shell examples that must run from the main `/Users/darin/src/personal/leaven` jj workspace. It performs no network or provider work.
 
 ## Local Rules
 - Keep script defaults local and credential-free. Network, cloud, live model, or destructive behavior must be an explicit flag or environment opt-in.

@@ -65,6 +65,11 @@ Current useful substrate:
   `docs/specs/typed_signature_adapter_contract.md`.
 - `examples/p5_evoskill_iteration` proves one live Codex EvoSkill-shaped
   iteration over a tiny treasury-notation fixture.
+- `examples/memento_skills_read_write`, `examples/skillreducer_tiny`,
+  `examples/d2skill_tiny`, and `examples/trace2skill_tiny_live` are restored
+  outside-Cargo paper-specific live harnesses with no-spend preflight modes and
+  explicit live Codex opt-ins. They preserve tiny causal loop shapes and
+  generated artifacts, but they are not full paper replications.
 - `leaven-population` has `ParetoFrontier`, `TopKFrontier`, and deterministic
   `TopKParentSelector` state for best/round-robin parent selection; EvoSkill
   P5 now checkpoints frontier/parent/selector state, but full paper replication
@@ -83,11 +88,18 @@ Current known gaps:
 - The P5 EvoSkill path is not OfficeQA or SealQA. It lacks the paper datasets,
   paper splits, full frontier loop, feedback-history schedule, held-out test
   reporting, skill-merge evaluation, paper scorers, and ablations.
-- Trace2Skill now has a mechanics-smoke crate for SpreadsheetBench manifest
-  lowering only. Memento-Skills, D2Skill, and SkillReducer have no replica
-  crates yet.
-- No per-paper dossier currently records exact prompts, seeds, model versions,
-  splits, metrics, released-code drift, and cost envelope.
+- Trace2Skill now has mechanics-smoke coverage for SpreadsheetBench manifest
+  lowering, upstream run-artifact import, JSON patch lowering/application,
+  merge artifact replay, and saved-output directory loading. The tiny live
+  Trace2Skill shell harness is separate and still a proxy live loop, not
+  SpreadsheetBench/Qwen/vLLM parity.
+- Memento-Skills, D2Skill, and SkillReducer now have tiny shell harnesses and
+  READMEs recording source anchors and known deviations. They still lack
+  Leaven-owned generic primitives, exact datasets, benchmark splits, official
+  model/env profiles, ablation matrices, and paper metric reproduction.
+- No per-paper dossier currently records enough exact prompts, seeds, model
+  versions, splits, metrics, released-code drift, and cost envelope to claim
+  full paper replication.
 
 ## Paper Rows
 
@@ -301,6 +313,12 @@ Leaven primitive blockers:
   present. This is still no-spend loader proof; no live analyst or merge call
   has run, and the upstream saved directory does not preserve explicit
   accepted/discarded decision rationale.
+- `examples/trace2skill_tiny_live` now restores the tiny live
+  trajectory-to-skill harness into main Leaven. Its preflight writes a no-spend
+  proof contract, and its live mode runs Codex/GPT-5.4-mini over two CSV
+  editing trajectories, independent analysts, consolidation, guarded skill
+  update, and failed-task replay. This is a causal-loop proxy with documented
+  deviations, not SpreadsheetBench/WikiTQ/DAPO/DocVQA replication.
 - live trajectory generation that writes upstream-shaped results/logs/analysis
   artifacts for the 200 SpreadsheetBench training/evolving tasks;
 - live parallel analyst dispatch that executes hundreds of independent
@@ -361,6 +379,13 @@ Spend/data risks:
   directory replay, including deterministic map/merge filename ordering,
   `--merge-batch-size` reconstruction, `final_patch.json` merge selection, and
   `translated_final_patch.json` application.
+- Restored tiny live harness preflights passed in main Leaven on 2026-05-20:
+  `tmp/memento_skills_read_write/20260520T204154Z/preflight.json`,
+  `tmp/skillreducer_tiny/20260520T204154Z/preflight.json`,
+  `tmp/d2skill_tiny/20260520T204154Z/preflight.json`, and
+  `tmp/trace2skill_tiny_live/20260520T204154Z/preflight.json`. These are
+  no-spend proof contracts only; they do not execute Codex or prove paper
+  parity.
 
 ### Memento-Skills (`arx_2603.18743`)
 
@@ -404,6 +429,11 @@ Replication obligations:
 
 Leaven primitive blockers:
 
+- `examples/memento_skills_read_write` now restores the tiny live Read-Write
+  harness from the paper lane into main Leaven. Its preflight writes a
+  no-spend proof contract, and its live mode runs one Codex/GPT-5.4-mini case
+  through Observe, Read, Act, Feedback, Write, unit-test gate, and retry. This
+  is a causal-loop proxy with documented deviations, not GAIA/HLE replication.
 - behavior-aligned skill router training/evaluation substrate;
 - skill registry with routing goals, utility table, trigger stats, and
   skill-level failure attribution;
@@ -454,6 +484,12 @@ Replication obligations:
 
 Leaven primitive blockers:
 
+- `examples/d2skill_tiny` now restores the tiny live paired-rollout harness
+  into main Leaven. Its preflight writes a no-spend proof contract, and its
+  live mode runs one Codex/GPT-5.4-mini textual task through baseline vs
+  skill-injected rollouts, reflection into task/step skills, retrieval, utility
+  update, and pruning. This is a causal-loop proxy with documented deviations,
+  not ALFWorld/WebShop/GRPO replication.
 - dual-pool skill registry for task and step skills;
 - paired rollout evaluator that records baseline-vs-skill deltas;
 - utility/EMA/UCB retrieval and pruning state;
@@ -509,6 +545,13 @@ Replication obligations:
 
 Leaven primitive blockers:
 
+- `examples/skillreducer_tiny` now restores the tiny live debloating harness
+  into main Leaven. Its preflight writes a no-spend proof contract, and its
+  live mode runs one Codex/GPT-5.4-mini skill through compressed routing
+  description selection, real-trigger validation, body taxonomy, progressive
+  disclosure, faithfulness gate, Condition A/C evaluation, and feedback
+  promotion. This is a causal-loop proxy with documented deviations, not the
+  600-skill/SkillsBench paper evaluation.
 - structured description/body/reference surfaces over `SkillBank`;
 - route-equivalence oracle abstraction plus provider-specific real-trigger
   event parser;

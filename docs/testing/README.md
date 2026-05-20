@@ -249,6 +249,22 @@ Use the narrowest layer that proves the claim.
   numeric `merge_level_N`, `final_patch.json`, optional
   `translated_final_patch.json`) only; it is not proof that the model-backed
   analysts or merge scheduler ran.
+- `examples/memento_skills_read_write/scripts/run_tiny_live.sh --preflight`:
+  no-spend sanity check for the Memento-Skills tiny Read-Write harness. It
+  writes a proof contract under `tmp/memento_skills_read_write/` but does not
+  execute Codex, train the router, or prove GAIA/HLE parity.
+- `examples/skillreducer_tiny/scripts/run_tiny_live.sh --preflight`:
+  no-spend sanity check for the SkillReducer tiny debloating harness. It writes
+  a proof contract under `tmp/skillreducer_tiny/` but does not execute Codex,
+  search a full skill corpus, or prove SkillsBench parity.
+- `examples/d2skill_tiny/scripts/run_tiny_live.sh --preflight`: no-spend
+  sanity check for the D2Skill paired-rollout skill-bank harness. It writes a
+  proof contract under `tmp/d2skill_tiny/` but does not execute Codex, train
+  GRPO, or prove ALFWorld/WebShop parity.
+- `examples/trace2skill_tiny_live/scripts/run_tiny_live.sh --preflight`:
+  no-spend sanity check for the Trace2Skill tiny live trajectory-to-skill
+  harness. It writes a proof contract under `tmp/trace2skill_tiny_live/` but
+  does not execute Codex, run SpreadsheetBench, or prove Qwen/vLLM parity.
 
 ## Review Rules
 

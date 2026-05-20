@@ -188,6 +188,13 @@ The checked-out upstream release includes:
   `translated_final_patch.json` when present because upstream uses that artifact
   after translation. It is strict: fuzzy pre-translation patches still fail with
   the artifact path rather than being silently counted as applied.
+- `examples/trace2skill_tiny_live` now exists in main Leaven as an
+  outside-Cargo tiny live harness for the paper's causal loop: trajectory
+  generation with a frozen initial skill, independent error/success analysts,
+  consolidation, guarded skill update, and replay of the failed task. Its
+  preflight is no-spend and its live mode is an explicit Codex/GPT-5.4-mini
+  opt-in. This is a proxy live loop over two CSV tasks, not
+  SpreadsheetBench/Qwen/vLLM replication.
 - `leaven-evidence::AgentTrajectoryEvidence` now owns the reusable trajectory
   evidence envelope needed before Trace2Skill Stage 1/analysis can be
   faithfully replayed: runtime session id, optional Leaven case id, upstream
@@ -274,6 +281,10 @@ Verification:
   clippy -p trace2skill_spreadsheetbench --all-targets -- -D warnings`, and
   `cargo test -p leaven --test topology_contract` passed on 2026-05-20 for the
   saved-output loader slice.
+- `bash examples/trace2skill_tiny_live/scripts/run_tiny_live.sh --preflight`
+  passed on 2026-05-20 after restoring the tiny live harness into main Leaven
+  and switching its workspace guard away from the old `leaven-papers` checkout;
+  it wrote `tmp/trace2skill_tiny_live/20260520T204154Z/preflight.json`.
 
 ## Current Blockers
 
