@@ -74,11 +74,13 @@ Current useful substrate:
   `SkillUtilityState` for checkpointable skill utility/use bookkeeping:
   retrieval counts, trigger counts, finite EMA utility updates, explicit rename
   transfer, explicit removal, and `SkillUtilityRanker` for deterministic top-k
-  ranking over caller-provided relevance plus utility/UCB exploration, plus
-  `SkillUtilityPruner` for D2Skill-style capacity pruning plans over active
-  skill pools. EvoSkill P5 now checkpoints frontier/parent/selector state, but
-  full paper replication still needs git-program run-loop integration and
-  dossier resolution of the paper/code selector drift.
+  ranking over caller-provided relevance plus utility/UCB exploration,
+  `SkillTwoStageRetriever` for D2Skill-style pool-scoped similarity
+  threshold/top-m plus utility/UCB top-k retrieval, and `SkillUtilityPruner` for
+  D2Skill-style capacity pruning plans over active skill pools. EvoSkill P5 now
+  checkpoints frontier/parent/selector state, but full paper replication still
+  needs git-program run-loop integration and dossier resolution of the
+  paper/code selector drift.
 
 Current known gaps:
 
@@ -511,13 +513,16 @@ Leaven primitive blockers:
   task gaps and caller-supplied step credits onto validated skill utility
   updates, and can derive step credits from runner-provided
   `SkillStepTrajectoryOutcome`s using D2Skill's `Y_i - baseline_mean`
-  equation. `SkillUtilityPruner` now covers utility/UCB eviction scoring,
-  capacity planning, and protected-window exclusion over caller-supplied active
-  pools. Together with `SkillRouteRegistry`, it now covers validated pool/key
-  membership plus utility/pruning bookkeeping. It still does not cover
-  embedding similarity, route-key extraction, transcript/env extraction,
-  injection formatting, validation cadence, paper-provided
-  capacity/protected-window values, or skill-bank mutation;
+  equation. `SkillTwoStageRetriever` now covers pool-scoped similarity
+  threshold/top-m retrieval plus utility/UCB top-k selection over
+  caller-computed similarities. `SkillUtilityPruner` now covers utility/UCB
+  eviction scoring, capacity planning, and protected-window exclusion over
+  caller-supplied active pools. Together with `SkillRouteRegistry`, it now
+  covers validated pool/key membership plus utility/retrieval/pruning
+  bookkeeping. It still does not cover embedding model execution, route-key
+  extraction, transcript/env extraction, injection formatting, validation
+  cadence, paper-provided capacity/protected-window values, or skill-bank
+  mutation;
 - transcript/env extraction of retrieved step skills into trajectory outcomes;
 - RL/environment adapter boundary that can record Leaven evidence without
   turning Leaven into the RL framework.
@@ -621,15 +626,16 @@ Start with these generic primitives as failures expose them:
 9. Utility/retrieval/pruning substrate: `SkillUtilityState` now covers finite
    EMA utility plus retrieval/trigger counters, `SkillUtilityRanker` covers
    deterministic utility/UCB top-k ranking over caller-provided relevance
-   scores, and `SkillPairedRolloutUtilityInput` covers D2Skill-style
-   task-gap/step-credit application from paired rollout evidence, including
-   the step trajectory `Y_i - baseline_mean` credit equation over
-   `SkillStepTrajectoryOutcome`s. `SkillUtilityPruner` covers D2Skill-style
-   utility/UCB eviction scoring with capacity and protected-window planning.
-   `SkillRouteRegistry` covers explicit pool/key membership for routed skill
-   cards. Embedding keys, similarity thresholds, route-key extraction,
-   transcript/env extraction, injection formatting, paper cadence/threshold
-   values, and skill-bank mutation remain.
+   scores, `SkillTwoStageRetriever` covers D2Skill-style pool-scoped
+   similarity threshold/top-m plus utility/UCB top-k selection, and
+   `SkillPairedRolloutUtilityInput` covers D2Skill-style task-gap/step-credit
+   application from paired rollout evidence, including the step trajectory
+   `Y_i - baseline_mean` credit equation over `SkillStepTrajectoryOutcome`s.
+   `SkillUtilityPruner` covers D2Skill-style utility/UCB eviction scoring with
+   capacity and protected-window planning. `SkillRouteRegistry` covers explicit
+   pool/key membership for routed skill cards. Embedding model execution,
+   route-key extraction, transcript/env extraction, injection formatting, paper
+   cadence/threshold values, and skill-bank mutation remain.
 10. Paired rollout evidence: `PairedRolloutEvidence` now covers
     baseline-vs-treatment group rewards and finite treatment-minus-baseline
     deltas. Hindsight trajectory parsing and real ALFWorld/WebShop rollout
