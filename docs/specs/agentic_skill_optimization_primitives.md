@@ -1229,9 +1229,12 @@ paired rollout task gaps plus caller-supplied step credits. It is enough to
 stop examples from inventing their own utility tables, top-k score
 combination, and paired rollout utility update loops. It also covers the
 D2Skill `Y_i - baseline_mean` step credit equation when a runner supplies
-`SkillStepTrajectoryOutcome`s. Embeddings, route-key extraction, transcript/env
-extraction, injection formatting, router training, and paper thresholds remain
-for later retrieval/selector or paper-runner layers.
+`SkillStepTrajectoryOutcome`s, and D2Skill-style utility/UCB pruning plans when
+a caller supplies one active skill pool plus capacity/current-step/protected
+window values. Embeddings, route-key extraction, transcript/env extraction,
+skill-bank mutation, injection formatting, router training, and paper cadence
+or threshold selection remain for later retrieval/selector or paper-runner
+layers.
 
 Promote utility state into an artifact only when changing that utility state
 changes the candidate being evaluated. Examples:
@@ -1769,7 +1772,8 @@ Implementation status:
 
 - Skill-bank membership, paired rollout reward evidence, and utility state are
   clear. Step-skill utility credits can now be derived from runner-provided
-  skill trajectory outcomes.
+  skill trajectory outcomes, and utility-guided pruning can be planned from
+  stored utility/retrieval stats.
 - Coupling to RL training is outside the first Leaven reproduction path.
 - Need to decide whether dual-granularity skill banks are standard artifact
   shape or paper-specific registry state.

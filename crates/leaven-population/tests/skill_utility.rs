@@ -2,10 +2,11 @@ use leaven_artifact_skill::SkillName;
 use leaven_evidence::{PairedRolloutEvidence, RolloutGroupOutcome};
 use leaven_kernel::FiniteF64;
 use leaven_population::{
-    SkillPairedRolloutUtilityInput, SkillPairedRolloutUtilityInputError, SkillRetrievalCandidate,
-    SkillStepTrajectoryOutcome, SkillStepTrajectoryOutcomeError, SkillUseStats, SkillUtilityCredit,
-    SkillUtilityRank, SkillUtilityRanker, SkillUtilityRankingWeights, SkillUtilitySmoothing,
-    SkillUtilityState, SkillUtilityTransfer,
+    SkillPairedRolloutUtilityInput, SkillPairedRolloutUtilityInputError, SkillPruningCandidate,
+    SkillRetrievalCandidate, SkillStepTrajectoryOutcome, SkillStepTrajectoryOutcomeError,
+    SkillUseStats, SkillUtilityCredit, SkillUtilityPruner, SkillUtilityPruningConfig,
+    SkillUtilityPruningError, SkillUtilityRank, SkillUtilityRanker, SkillUtilityRankingWeights,
+    SkillUtilitySmoothing, SkillUtilityState, SkillUtilityTransfer,
 };
 
 fn skill(name: &str) -> SkillName {
@@ -359,4 +360,107 @@ fn step_trajectory_outcome_refuses_blank_identity() {
         SkillStepTrajectoryOutcome::new("  ", finite(1.0), Vec::new()).unwrap_err(),
         SkillStepTrajectoryOutcomeError::EmptyTrajectoryId,
     );
+}
+
+#[test]
+fn skill_utility_pruner_evicts_lowest_unprotected_eviction_scores() {
+    let mut state = SkillUtilityState::default();
+    let stale_low = skill("stale-low");
+    let stale_high = skill("stale-high");
+    let fresh_low = skill("fresh-low");
+
+    state.observe_delta(
+        stale_low.clone(),
+        finite(-0.4),
+        SkillUtilitySmoothing::one(),
+    );
+    state.observe_delta(
+        stale_high.clone(),
+        finite(0.7),
+        SkillUtilitySmoothing::one(),
+    );
+    state.observe_delta(
+        fresh_low.clone(),
+        finite(-1.0),
+        SkillUtilitySmoothing::one(),
+    );
+
+    let pruner =
+        SkillUtilityPruner::new(SkillUtilityPruningConfig::new(2, 100, 5, finite(0.0)).unwrap());
+    let plan = pruner
+        .plan(
+            &state,
+            [
+                SkillPruningCandidate::new(stale_low, 10),
+                SkillPruningCandidate::new(stale_high, 10),
+                SkillPruningCandidate::new(fresh_low, 99),
+            ],
+        )
+        .unwrap();
+
+    assert_eq!(
+        plan.evicted()
+            .iter()
+            .map(|rank| rank.skill().as_str())
+            .collect::<Vec<_>>(),
+        ["stale-low"]
+    );
+    assert_eq!(
+        plan.kept()
+            .iter()
+            .map(|rank| (rank.skill().as_str(), rank.is_protected()))
+            .collect::<Vec<_>>(),
+        [("fresh-low", true), ("stale-high", false)]
+    );
+    assert!(plan.capacity_satisfied());
+}
+
+#[test]
+fn skill_utility_pruner_uses_ucb_bonus_for_eviction_scores() {
+    let mut state = SkillUtilityState::default();
+    let saturated = skill("saturated");
+    let fresh = skill("fresh");
+    for _ in 0..8 {
+        state.record_retrieval(saturated.clone());
+    }
+
+    let pruner =
+        SkillUtilityPruner::new(SkillUtilityPruningConfig::new(1, 100, 0, finite(1.0)).unwrap());
+    let plan = pruner
+        .plan(
+            &state,
+            [
+                SkillPruningCandidate::new(saturated.clone(), 10),
+                SkillPruningCandidate::new(fresh.clone(), 10),
+            ],
+        )
+        .unwrap();
+
+    assert_eq!(plan.evicted()[0].skill(), &saturated);
+    assert_eq!(plan.kept()[0].skill(), &fresh);
+    assert!(plan.kept()[0].exploration_bonus() > plan.evicted()[0].exploration_bonus());
+}
+
+#[test]
+fn skill_utility_pruner_refuses_duplicate_candidates_and_bad_weight() {
+    let duplicate = skill("duplicate");
+    let pruner =
+        SkillUtilityPruner::new(SkillUtilityPruningConfig::new(1, 100, 0, finite(0.0)).unwrap());
+
+    assert_eq!(
+        pruner
+            .plan(
+                &SkillUtilityState::default(),
+                [
+                    SkillPruningCandidate::new(duplicate.clone(), 10),
+                    SkillPruningCandidate::new(duplicate.clone(), 10),
+                ],
+            )
+            .unwrap_err(),
+        SkillUtilityPruningError::DuplicateCandidate { skill: duplicate },
+    );
+    assert!(matches!(
+        SkillUtilityPruningConfig::new(1, 100, 0, finite(-0.01)),
+        Err(SkillUtilityPruningError::NegativeExplorationWeight { .. }),
+    ));
 }
