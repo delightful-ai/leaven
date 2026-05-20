@@ -17,6 +17,10 @@ optimizer rhythm.
   skill-bank proposals.
 - `SkillBankDiff` and change report types explain how a proposed skill bank
   differs from its parent.
+- `SkillPatchPlan` validates agent-authored file-level patch plans against a
+  parent skill bank: target files must exist before modification/deletion,
+  create-file edits must not overwrite existing files, support counts must be
+  positive, and same-file ranges must not overlap.
 
 ## Route Away
 - `SkillBank`, `SkillFolder`, Agent Skills validation, and skill surfaces belong
@@ -55,6 +59,16 @@ optimizer rhythm.
   preserve: this crate as reusable skill materializer/parser/report glue over `leaven-agentic`
   avoid: adding paper utility thresholds, router training, train/validation split policy, or provider prompts here
   verify: run this crate's tests plus the paper/example gate that owns the rhythm
+
+- when: validating agent-authored patch plans
+  do: keep checks mechanical and paper-neutral: existing-file guards, create
+  guards, support-count presence, and same-file line-range conflicts
+  preserve: merge, prevalence, deduplication, and analyst-role policy outside
+  this crate
+  avoid: encoding Trace2Skill batch sizes, utility thresholds, prompt wording,
+  or result-selection policy in the patch-plan types
+  verify: extend `skill_agentic.rs` around `SkillPatchPlan` tests and run
+  `cargo nextest run -p leaven-agentic-skill`
 
 ## Local Bait
 - `.agents/skills` is a workspace projection choice, not the artifact identity.

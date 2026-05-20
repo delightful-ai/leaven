@@ -4,7 +4,9 @@ use leaven_agent::{AgentInstructions, FakeAgentAction, FakeAgentRuntime, OutputC
 use leaven_agentic::{AgentPromptTarget, AgenticProposer, AgenticProposerConfig, AgenticRunInput};
 use leaven_agentic_skill::{
     SkillBankChangeReport, SkillBankDiff, SkillBankMaterializer, SkillBankProposalInput,
-    SkillBankWorkspaceProposalParser, SkillFileChangeKind, SkillWorkspaceLayout,
+    SkillBankWorkspaceProposalParser, SkillFileChangeKind, SkillLineRange, SkillPatchFileRef,
+    SkillPatchPlan, SkillPatchPlanEdit, SkillPatchPlanError, SkillPatchRange, SkillPatchSupport,
+    SkillWorkspaceLayout,
 };
 use leaven_artifact_skill::{
     SkillBank, SkillBankChange, SkillFile, SkillFilePermissions, SkillFolder, SkillName, SkillPath,
@@ -710,6 +712,134 @@ fn skill_bank_change_report_distinguishes_permissions_noops_and_replacement_delt
         file.path == SkillPath::new("references/checklist.md").unwrap()
             && file.kind == SkillFileChangeKind::Added
     }));
+}
+
+#[test]
+fn skill_patch_plan_accepts_disjoint_supported_file_edits() {
+    let parent = bank_with_alpha(
+        "Edits Rust tests. Use when Rust test failures need diagnosis.",
+        "Read the failing test output and patch the narrow code path.",
+        false,
+    );
+    let target = SkillPatchFileRef::new(
+        SkillName::new("alpha").unwrap(),
+        SkillPath::new("scripts/run.sh").unwrap(),
+    );
+
+    let plan = SkillPatchPlan::validate(
+        &parent,
+        vec![
+            SkillPatchPlanEdit::modify(
+                target.clone(),
+                SkillPatchRange::Lines(SkillLineRange::new(1, 1).unwrap()),
+                SkillPatchSupport::new(53).unwrap(),
+            ),
+            SkillPatchPlanEdit::modify(
+                target,
+                SkillPatchRange::Lines(SkillLineRange::new(3, 4).unwrap()),
+                SkillPatchSupport::new(138).unwrap(),
+            ),
+        ],
+    )
+    .unwrap();
+
+    assert_eq!(plan.edits().len(), 2);
+    assert_eq!(plan.edits()[0].support().count(), 53);
+    assert_eq!(plan.edits()[1].support().count(), 138);
+}
+
+#[test]
+fn skill_patch_plan_rejects_missing_file_targets_and_overlapping_ranges() {
+    let parent = bank_with_alpha(
+        "Edits Rust tests. Use when Rust test failures need diagnosis.",
+        "Read the failing test output and patch the narrow code path.",
+        false,
+    );
+    let missing_target = SkillPatchFileRef::new(
+        SkillName::new("alpha").unwrap(),
+        SkillPath::new("references/missing.md").unwrap(),
+    );
+
+    let missing = SkillPatchPlan::validate(
+        &parent,
+        vec![SkillPatchPlanEdit::modify(
+            missing_target.clone(),
+            SkillPatchRange::WholeFile,
+            SkillPatchSupport::new(1).unwrap(),
+        )],
+    )
+    .unwrap_err();
+    assert!(matches!(
+        missing,
+        SkillPatchPlanError::MissingFile {
+            edit_index: 0,
+            target
+        } if target == missing_target
+    ));
+
+    let target = SkillPatchFileRef::new(
+        SkillName::new("alpha").unwrap(),
+        SkillPath::new("scripts/run.sh").unwrap(),
+    );
+    let conflict = SkillPatchPlan::validate(
+        &parent,
+        vec![
+            SkillPatchPlanEdit::modify(
+                target.clone(),
+                SkillPatchRange::Lines(SkillLineRange::new(2, 5).unwrap()),
+                SkillPatchSupport::new(2).unwrap(),
+            ),
+            SkillPatchPlanEdit::modify(
+                target.clone(),
+                SkillPatchRange::Lines(SkillLineRange::new(5, 7).unwrap()),
+                SkillPatchSupport::new(3).unwrap(),
+            ),
+        ],
+    )
+    .unwrap_err();
+    assert!(matches!(
+        conflict,
+        SkillPatchPlanError::LineRangeConflict {
+            first_index: 0,
+            second_index: 1,
+            target: conflict_target,
+            ..
+        } if conflict_target == target
+    ));
+}
+
+#[test]
+fn skill_patch_plan_rejects_create_overwrite_and_zero_support() {
+    let parent = bank_with_alpha(
+        "Edits Rust tests. Use when Rust test failures need diagnosis.",
+        "Read the failing test output and patch the narrow code path.",
+        false,
+    );
+    let existing = SkillPatchFileRef::new(SkillName::new("alpha").unwrap(), SkillPath::skill_md());
+    let overwrite = SkillPatchPlan::validate(
+        &parent,
+        vec![SkillPatchPlanEdit::create_file(
+            existing.clone(),
+            SkillPatchSupport::new(1).unwrap(),
+        )],
+    )
+    .unwrap_err();
+    assert!(matches!(
+        overwrite,
+        SkillPatchPlanError::CreateOverwritesExisting {
+            edit_index: 0,
+            target
+        } if target == existing
+    ));
+
+    assert_eq!(
+        SkillPatchSupport::new(0).unwrap_err(),
+        SkillPatchPlanError::EmptySupport
+    );
+    assert_eq!(
+        SkillLineRange::new(0, 3).unwrap_err(),
+        SkillPatchPlanError::InvalidLineRange { start: 0, end: 3 }
+    );
 }
 
 struct SkillPromptRenderer;

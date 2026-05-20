@@ -1,7 +1,7 @@
 # Skill Paper Replication Ledger
 
 Status: active.
-Updated: 2026-05-19.
+Updated: 2026-05-20.
 
 ## Authority
 
@@ -221,12 +221,24 @@ Replication obligations:
 
 Leaven primitive blockers:
 
+- `docs/working-memory/trace2skill-replication.md` now carries the detailed
+  Trace2Skill dossier. Upstream code is locally available at
+  `tmp/repros/trace2skill-upstream` and remote `main` was checked at
+  `3d0b52a140f002a512930252b613c49048f7d5ac` on 2026-05-20.
+- `leaven-agentic-skill::SkillPatchPlan` now covers the first paper-neutral
+  patch-plan guardrail: existing-file checks, create-overwrite refusal,
+  positive support counts, and same-file range conflict detection. This is not
+  the hierarchical merge policy itself.
 - many-trace evidence corpus with success/failure labels and full trajectory
   access;
 - parallel analyst dispatch that can checkpoint hundreds of independent
   sub-agent calls;
 - patch proposal artifact with conflict detection, format validation, support
-  counts, and hierarchical merge tree;
+  counts, and hierarchical merge tree. The first paper-neutral guardrail slice
+  now exists as `SkillPatchPlan` in `leaven-agentic-skill`, covering file
+  existence, create-overwrite, positive-support, and same-file line-range
+  conflict validation; durable merge-tree provenance and reference create/link
+  validation remain;
 - deterministic skill-directory diff application and rollback;
 - result matrix/reporting for cross-model and OOD transfer.
 
@@ -234,6 +246,21 @@ Spend/data risks:
 
 - faithful vLLM replication needs large Qwen3.5 MoE serving and likely GPU
   spend. No live run until approved.
+
+2026-05-20 no-spend probe:
+
+- `docs/working-memory/trace2skill-replication.md` records the first
+  Trace2Skill setup probe. The official repo
+  `Qwen-Applications/Trace2Skill` is reachable at
+  `3d0b52a140f002a512930252b613c49048f7d5ac` and was shallow-cloned under
+  ignored `tmp/repros/trace2skill-upstream`. The release includes the
+  SpreadsheetBench-Verified 400-row dataset, released spreadsheet skills,
+  reproduction commands, Qwen generation configs, and the Python map-reduce
+  evolver for spreadsheet runs. It does not locally solve WikiTQ conversion,
+  DAPO/AIME, DocVQA, or Leaven-owned trajectory/merge-tree provenance.
+- First Leaven primitive from this probe: `SkillPatchPlan` in
+  `leaven-agentic-skill` validates the generic mechanical guardrails from
+  Trace2Skill Stage 3 without importing paper-specific merge policy.
 
 ### Memento-Skills (`arx_2603.18743`)
 
