@@ -5,8 +5,10 @@ use leaven_agentic::{AgentPromptTarget, AgenticProposer, AgenticProposerConfig, 
 use leaven_agentic_skill::{
     SkillBankChangeReport, SkillBankDiff, SkillBankMaterializer, SkillBankProposalInput,
     SkillBankWorkspaceProposalParser, SkillFileChangeKind, SkillLineRange, SkillPatchFileRef,
-    SkillPatchPlan, SkillPatchPlanEdit, SkillPatchPlanError, SkillPatchRange, SkillPatchSupport,
-    SkillReferencePath, SkillWorkspaceLayout,
+    SkillPatchMergeBatch, SkillPatchMergeInput, SkillPatchMergeLevel, SkillPatchMergeTree,
+    SkillPatchMergeTreeError, SkillPatchPlan, SkillPatchPlanEdit, SkillPatchPlanError,
+    SkillPatchPlanId, SkillPatchPlanRecord, SkillPatchRange, SkillPatchSupport, SkillReferencePath,
+    SkillWorkspaceLayout,
 };
 use leaven_artifact_skill::{
     SkillBank, SkillBankChange, SkillFile, SkillFilePermissions, SkillFolder, SkillName, SkillPath,
@@ -951,6 +953,153 @@ fn skill_patch_plan_rejects_unpaired_reference_links_and_creates() {
             edit_index: 0,
             target
         } if target == SkillPatchFileRef::new(alpha, SkillPath::new("scripts/run.sh").unwrap())
+    ));
+}
+
+#[test]
+fn skill_patch_merge_tree_preserves_hierarchical_consolidation_provenance() {
+    let parent = bank_with_alpha(
+        "Edits Rust tests. Use when Rust test failures need diagnosis.",
+        "Read the failing test output and patch the narrow code path.",
+        false,
+    );
+    let target = SkillPatchFileRef::new(SkillName::new("alpha").unwrap(), SkillPath::skill_md());
+    let error_plan = SkillPatchPlan::validate(
+        &parent,
+        vec![SkillPatchPlanEdit::modify(
+            target.clone(),
+            SkillPatchRange::Lines(SkillLineRange::new(4, 4).unwrap()),
+            SkillPatchSupport::new(53).unwrap(),
+        )],
+    )
+    .unwrap();
+    let idiosyncratic_plan = SkillPatchPlan::validate(
+        &parent,
+        vec![SkillPatchPlanEdit::modify(
+            target.clone(),
+            SkillPatchRange::Lines(SkillLineRange::new(6, 6).unwrap()),
+            SkillPatchSupport::new(1).unwrap(),
+        )],
+    )
+    .unwrap();
+    let merged_plan = SkillPatchPlan::validate(
+        &parent,
+        vec![SkillPatchPlanEdit::modify(
+            target,
+            SkillPatchRange::Lines(SkillLineRange::new(4, 4).unwrap()),
+            SkillPatchSupport::new(53).unwrap(),
+        )],
+    )
+    .unwrap();
+    let error_id = SkillPatchPlanId::new("map/error-13-1").unwrap();
+    let idiosyncratic_id = SkillPatchPlanId::new("map/error-59902").unwrap();
+    let merged_id = SkillPatchPlanId::new("merge/l0/b0").unwrap();
+
+    let tree = SkillPatchMergeTree::validate(
+        vec![
+            SkillPatchPlanRecord::new(error_id.clone(), error_plan),
+            SkillPatchPlanRecord::new(idiosyncratic_id.clone(), idiosyncratic_plan),
+        ],
+        vec![SkillPatchMergeLevel::new([SkillPatchMergeBatch::new(
+            merged_id.clone(),
+            vec![
+                SkillPatchMergeInput::accepted(error_id.clone()),
+                SkillPatchMergeInput::discarded(
+                    idiosyncratic_id.clone(),
+                    "single-task formatting preference",
+                ),
+            ],
+            merged_plan,
+        )])],
+        merged_id.clone(),
+    )
+    .unwrap();
+
+    let batch = &tree.levels()[0].batches()[0];
+    assert_eq!(tree.leaf_plans().len(), 2);
+    assert_eq!(tree.final_plan_id(), &merged_id);
+    assert_eq!(tree.final_plan().edits()[0].support().count(), 53);
+    assert_eq!(batch.accepted_input_ids(), vec![&error_id]);
+    assert_eq!(batch.discarded_input_ids(), vec![&idiosyncratic_id]);
+    assert_eq!(
+        tree.plan(&idiosyncratic_id).unwrap().edits()[0]
+            .support()
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn skill_patch_merge_tree_rejects_malformed_merge_graphs() {
+    let parent = bank_with_alpha(
+        "Edits Rust tests. Use when Rust test failures need diagnosis.",
+        "Read the failing test output and patch the narrow code path.",
+        false,
+    );
+    let target = SkillPatchFileRef::new(SkillName::new("alpha").unwrap(), SkillPath::skill_md());
+    let plan = SkillPatchPlan::validate(
+        &parent,
+        vec![SkillPatchPlanEdit::modify(
+            target,
+            SkillPatchRange::Lines(SkillLineRange::new(4, 4).unwrap()),
+            SkillPatchSupport::new(3).unwrap(),
+        )],
+    )
+    .unwrap();
+    let leaf_id = SkillPatchPlanId::new("map/error-13-1").unwrap();
+    let output_id = SkillPatchPlanId::new("merge/l0/b0").unwrap();
+
+    let duplicate_leaf = SkillPatchMergeTree::validate(
+        vec![
+            SkillPatchPlanRecord::new(leaf_id.clone(), plan.clone()),
+            SkillPatchPlanRecord::new(leaf_id.clone(), plan.clone()),
+        ],
+        Vec::new(),
+        leaf_id.clone(),
+    )
+    .unwrap_err();
+    assert!(matches!(
+        duplicate_leaf,
+        SkillPatchMergeTreeError::DuplicatePlanId { plan_id } if plan_id == leaf_id
+    ));
+
+    let unknown_input = SkillPatchMergeTree::validate(
+        vec![SkillPatchPlanRecord::new(leaf_id.clone(), plan.clone())],
+        vec![SkillPatchMergeLevel::new([SkillPatchMergeBatch::new(
+            output_id.clone(),
+            vec![SkillPatchMergeInput::accepted(
+                SkillPatchPlanId::new("map/missing").unwrap(),
+            )],
+            plan.clone(),
+        )])],
+        output_id.clone(),
+    )
+    .unwrap_err();
+    assert!(matches!(
+        unknown_input,
+        SkillPatchMergeTreeError::UnknownInputPlan {
+            level_index: 0,
+            batch_index: 0,
+            ..
+        }
+    ));
+
+    let all_discarded = SkillPatchMergeTree::validate(
+        vec![SkillPatchPlanRecord::new(leaf_id.clone(), plan.clone())],
+        vec![SkillPatchMergeLevel::new([SkillPatchMergeBatch::new(
+            output_id,
+            vec![SkillPatchMergeInput::discarded(leaf_id, "idiosyncratic")],
+            plan,
+        )])],
+        SkillPatchPlanId::new("merge/l0/b0").unwrap(),
+    )
+    .unwrap_err();
+    assert!(matches!(
+        all_discarded,
+        SkillPatchMergeTreeError::AcceptedInputRequired {
+            level_index: 0,
+            batch_index: 0
+        }
     ));
 }
 

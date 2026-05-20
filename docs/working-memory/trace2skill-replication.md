@@ -139,6 +139,12 @@ The checked-out upstream release includes:
   new `references/*.md` files and `SKILL.md` links. It intentionally does not
   own Trace2Skill merge policy, prevalence thresholds, prompt wording, batch
   sizes, or result selection.
+- `leaven-agentic-skill::SkillPatchMergeTree` now owns paper-neutral
+  hierarchical consolidation provenance over validated patch plans: leaf plan
+  ids, merge levels, accepted/discarded inputs, output plans, and selected final
+  plan identity. It refuses malformed merge graphs but deliberately leaves
+  prevalence thresholds, merge prompts, batch sizing, and final metric selection
+  to the paper runner.
 - `leaven-evidence::AgentTrajectoryEvidence` now owns the reusable trajectory
   evidence envelope needed before Trace2Skill Stage 1/analysis can be
   faithfully replayed: runtime session id, optional Leaven case id, upstream
@@ -174,6 +180,10 @@ Verification:
 - `cargo nextest run -p leaven-agentic-skill -p leaven-eval` passed 37 tests
   on 2026-05-20, including source-row lowering and `skill_patch_plan_*`
   contract tests.
+- `cargo nextest run -p leaven-agentic-skill` passed 22 tests on 2026-05-20,
+  including `skill_patch_merge_tree_*` provenance and malformed-graph tests.
+- `cargo clippy -p leaven-agentic-skill --all-targets -- -D warnings` passed
+  on 2026-05-20 after adding `SkillPatchMergeTree`.
 - `cargo test -p leaven --test topology_contract` passed 4 tests on
   2026-05-20.
 - `cargo clippy -p leaven-agentic-skill -p leaven-eval --all-targets -- -D
@@ -216,7 +226,8 @@ Leaven-owned remaining primitives before faithful Trace2Skill replication:
   Trace2Skill example can seed pending calls, but no scheduler/model client has
   executed those prompts;
 - live hierarchical merge execution over analyst patch outputs. Leaven now has
-  the durable merge-tree evidence value, but no Trace2Skill merge scheduler,
+  generic `AgentPatchMergeTreeEvidence` and skill-specific
+  `SkillPatchMergeTree` provenance values, but no Trace2Skill merge scheduler,
   patch parser, prevalence policy, or model-backed merge operator has run;
 - deterministic skill-directory patch application with rollback and validation
   integrated with `SkillBank` materialization/readback;

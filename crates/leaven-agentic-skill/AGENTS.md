@@ -22,6 +22,10 @@ optimizer rhythm.
   create-file edits must not overwrite existing files, support counts must be
   positive, same-file ranges must not overlap, and new `references/*.md` files
   must be atomically paired with `SKILL.md` links.
+- `SkillPatchMergeTree` records paper-neutral hierarchical consolidation
+  provenance for validated patch plans: leaf plan ids, merge levels, accepted
+  and discarded inputs, output plans, and final plan identity. It does not own
+  merge prompts, prevalence thresholds, batch sizes, or result selection.
 
 ## Route Away
 - `SkillBank`, `SkillFolder`, Agent Skills validation, and skill surfaces belong
@@ -65,11 +69,22 @@ optimizer rhythm.
   do: keep checks mechanical and paper-neutral: existing-file guards, create
   guards, support-count presence, same-file line-range conflicts, and
   `references/*.md` create/link pairing
-  preserve: merge, prevalence, deduplication, and analyst-role policy outside
-  this crate
+  preserve: prevalence, deduplication, merge prompting, and analyst-role policy
+  outside this crate
   avoid: encoding Trace2Skill batch sizes, utility thresholds, prompt wording,
   or result-selection policy in the patch-plan types
   verify: extend `skill_agentic.rs` around `SkillPatchPlan` tests and run
+  `cargo nextest run -p leaven-agentic-skill`
+
+- when: recording hierarchical patch consolidation
+  do: use `SkillPatchMergeTree` for graph provenance over already validated
+  `SkillPatchPlan`s
+  preserve: each merge level consuming only plans available before that level,
+  explicit accepted/discarded input decisions, unique plan ids, and a resolvable
+  final plan id
+  avoid: adding paper-specific worker counts, merge batch sizes, support
+  thresholds, prompt wording, or final-metric selection to this crate
+  verify: extend `skill_agentic.rs` around `SkillPatchMergeTree` tests and run
   `cargo nextest run -p leaven-agentic-skill`
 
 ## Local Bait

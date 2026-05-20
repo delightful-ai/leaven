@@ -264,6 +264,9 @@ Leaven primitive blockers:
   support counts, decisions, prompt/response payloads, parse-failure artifacts,
   output patches, and optional final diff. It is evidence data only, not the
   Trace2Skill merge scheduler, prevalence policy, patch parser, or applier.
+- `leaven-agentic-skill::SkillPatchMergeTree` now preserves hierarchical skill
+  patch consolidation provenance over validated `SkillPatchPlan`s: leaf ids,
+  merge levels, accepted/discarded inputs, output plans, and final plan identity.
 - live trajectory generation that writes upstream-shaped results/logs/analysis
   artifacts for the 200 SpreadsheetBench training/evolving tasks;
 - live parallel analyst dispatch that executes hundreds of independent
@@ -273,8 +276,9 @@ Leaven primitive blockers:
   now exists as `SkillPatchPlan` in `leaven-agentic-skill`, covering file
   existence, create-overwrite, positive-support, same-file line-range conflict
   validation, and atomic `references/*.md` create/link validation; durable
-  merge-tree provenance now exists as `AgentPatchMergeTreeEvidence`, while live
-  merge execution and patch parsing remain;
+  merge-tree provenance now exists as `AgentPatchMergeTreeEvidence` and
+  `SkillPatchMergeTree`, while live merge execution, patch parsing, and
+  skill-directory application remain;
 - deterministic skill-directory diff application and rollback;
 - result matrix/reporting for cross-model and OOD transfer.
 
@@ -304,6 +308,10 @@ Spend/data risks:
 - Its run-artifact test also verifies upstream-shaped run outputs can be
   lowered into the Leaven trajectory corpus with transcript and analysis blob
   refs.
+- `leaven-agentic-skill::SkillPatchMergeTree` now covers the durable
+  merge-provenance value needed by Trace2Skill Stage 2/3; it is still
+  paper-neutral and does not encode Trace2Skill worker counts, thresholds, or
+  prompts.
 
 ### Memento-Skills (`arx_2603.18743`)
 
