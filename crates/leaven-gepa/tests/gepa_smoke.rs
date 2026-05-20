@@ -24,8 +24,8 @@ use leaven_gepa::{
     CandidateSelector, CheckpointCandidateSelector, CheckpointGate, CheckpointPopulation,
     FullValidation, Gate, GateDecision, Gepa, GepaCandidateIndex, GepaPopulation, GepaProfile,
     GepaReflector, ImprovementOrEqual, NoRegression, PopulationBestFallback, ReflectRequest,
-    ReflectiveCaseInput, ReflectiveDatasetBuilder, ReflectiveExample, SelectBestCandidate,
-    StrictImprovement, SurfaceProposer,
+    ReflectiveCase, ReflectiveCaseInput, ReflectiveDatasetBuilder, ReflectiveValue,
+    SelectBestCandidate, StrictImprovement, SurfaceProposer,
     validation::{
         BatchSampler, CheckpointBatchSampler, CheckpointValidationPolicy, EpochShuffled,
         MinibatchThenValidation, ValidationPolicy,
@@ -38,6 +38,24 @@ use leaven_kernel::{
 use leaven_population::{KeepBest, ParetoFrontier, TournamentPopulation};
 use leaven_store_inline::InlineEvidenceStore;
 use leaven_surface::{EditSurface, Part, PartAddress, SurfaceError, SurfaceFingerprint};
+
+fn reflective_case(
+    case_id: Option<leaven_kernel::CaseId>,
+    input: &str,
+    output: Option<&str>,
+    score: Option<f64>,
+    feedback: &str,
+) -> ReflectiveCase {
+    let mut case = ReflectiveCase::from_example(
+        ReflectiveValue::Text(input.to_owned()),
+        None,
+        output.map(|value| ReflectiveValue::Text(value.to_owned())),
+        score,
+        feedback.to_owned(),
+    );
+    case.case_id = case_id;
+    case
+}
 use proptest::prelude::*;
 
 #[test]
@@ -77,15 +95,7 @@ fn fixed_reflector_rejects_missing_parent_before_recording_proposal() {
             parent: leaven_kernel::CandidateId::new(),
             part: "answer".to_owned(),
             part_label: "\"answer\"".to_owned(),
-            examples: vec![ReflectiveExample {
-                side_info: Vec::new(),
-                case: None,
-                input: "input".to_owned(),
-                output: None,
-                score: None,
-                feedback: "feedback".to_owned(),
-                source_refs: Vec::new(),
-            }],
+            examples: vec![reflective_case(None, "input", None, None, "feedback")],
             source_refs: Vec::new(),
             attempt_index: None,
         };
@@ -116,15 +126,7 @@ fn fixed_reflector_surfaces_apply_failures_after_recording_proposal() {
             parent,
             part: "answer".to_owned(),
             part_label: "\"answer\"".to_owned(),
-            examples: vec![ReflectiveExample {
-                side_info: Vec::new(),
-                case: None,
-                input: "input".to_owned(),
-                output: None,
-                score: None,
-                feedback: "feedback".to_owned(),
-                source_refs: Vec::new(),
-            }],
+            examples: vec![reflective_case(None, "input", None, None, "feedback")],
             source_refs: Vec::new(),
             attempt_index: None,
         };
@@ -914,10 +916,13 @@ fn gepa_reflective_dataset_default_projects_scalar_examples_with_case_input() {
         .unwrap();
 
         assert_eq!(examples.len(), 1);
-        assert_eq!(examples[0].input, "input alpha");
-        assert_eq!(examples[0].score, Some(0.5));
-        assert!(examples[0].output.is_none());
-        assert!(examples[0].feedback.is_empty());
+        assert_eq!(
+            examples[0].input,
+            ReflectiveValue::Text("input alpha".to_owned())
+        );
+        assert_eq!(examples[0].runs[0].score, Some(0.5));
+        assert!(examples[0].runs[0].produced.is_none());
+        assert!(examples[0].runs[0].feedback.is_empty());
         assert!(
             examples[0]
                 .source_refs
@@ -984,13 +989,31 @@ fn gepa_reflective_dataset_uses_target_safe_case_projection() {
             .await
             .unwrap();
 
-        assert_eq!(projected_examples, examples);
+        assert_eq!(projected_examples.len(), examples.len());
+        assert_eq!(projected_examples[0].case_id, examples[0].case_id);
+        assert_eq!(projected_examples[0].input, examples[0].input);
+        assert_eq!(projected_examples[0].source_refs, examples[0].source_refs);
+        assert_eq!(
+            projected_examples[0].runs[0].produced,
+            examples[0].runs[0].produced
+        );
+        assert_eq!(projected_examples[0].runs[0].score, examples[0].runs[0].score);
+        assert_eq!(
+            projected_examples[0].runs[0].feedback,
+            examples[0].runs[0].feedback
+        );
         assert_eq!(examples.len(), 1);
-        assert_eq!(examples[0].case, Some(leaven_kernel::CaseId::new(0)));
-        assert_eq!(examples[0].input, "visible problem statement");
-        assert_eq!(examples[0].output.as_deref(), Some("candidate output"));
-        assert_eq!(examples[0].score, Some(0.25));
-        assert_eq!(examples[0].feedback, "visible scorer feedback");
+        assert_eq!(examples[0].case_id, Some(leaven_kernel::CaseId::new(0)));
+        assert_eq!(
+            examples[0].input,
+            ReflectiveValue::Text("visible problem statement".to_owned())
+        );
+        assert_eq!(
+            examples[0].runs[0].produced,
+            Some(ReflectiveValue::Text("candidate output".to_owned()))
+        );
+        assert_eq!(examples[0].runs[0].score, Some(0.25));
+        assert_eq!(examples[0].runs[0].feedback, "visible scorer feedback");
         assert!(
             examples[0]
                 .source_refs
@@ -1053,7 +1076,7 @@ fn gepa_run_surfaces_reflective_dataset_build_failure() {
                                _parent: leaven_kernel::CandidateId,
                                _assessments: &[leaven_kernel::AssessmentId],
                                _part: &String| async move {
-            Result::<Vec<ReflectiveExample>, leaven_gepa::ReflectionError>::Err(
+            Result::<Vec<ReflectiveCase>, leaven_gepa::ReflectionError>::Err(
                 leaven_gepa::ReflectionError::builder("scripted dataset failure"),
             )
         };
@@ -1083,7 +1106,7 @@ fn gepa_reflective_dataset_closure_builder_can_refuse() {
                        _parent: leaven_kernel::CandidateId,
                        _assessments: &[leaven_kernel::AssessmentId],
                        _part: &String| async move {
-            Result::<Vec<ReflectiveExample>, leaven_gepa::ReflectionError>::Err(
+            Result::<Vec<ReflectiveCase>, leaven_gepa::ReflectionError>::Err(
                 leaven_gepa::ReflectionError::builder("custom dataset declined"),
             )
         };
@@ -3232,7 +3255,7 @@ where
         _parent: leaven_kernel::CandidateId,
         _parent_assessments: &[leaven_kernel::AssessmentId],
         _part: &S::PartId,
-    ) -> Result<Vec<ReflectiveExample>, leaven_gepa::ReflectionError> {
+    ) -> Result<Vec<ReflectiveCase>, leaven_gepa::ReflectionError> {
         Ok(Vec::new())
     }
 }
@@ -3251,16 +3274,14 @@ where
         _parent: leaven_kernel::CandidateId,
         _parent_assessments: &[leaven_kernel::AssessmentId],
         _part: &S::PartId,
-    ) -> Result<Vec<ReflectiveExample>, leaven_gepa::ReflectionError> {
-        Ok(vec![ReflectiveExample {
-            side_info: Vec::new(),
-            case: Some(leaven_kernel::CaseId::new(0)),
-            input: "input".to_owned(),
-            output: Some("output".to_owned()),
-            score: Some(0.0),
-            feedback: "feedback".to_owned(),
-            source_refs: Vec::new(),
-        }])
+    ) -> Result<Vec<ReflectiveCase>, leaven_gepa::ReflectionError> {
+        Ok(vec![reflective_case(
+            Some(leaven_kernel::CaseId::new(0)),
+            "input",
+            Some("output"),
+            Some(0.0),
+            "feedback",
+        )])
     }
 }
 
@@ -3280,17 +3301,15 @@ where
         _parent: leaven_kernel::CandidateId,
         _parent_assessments: &[leaven_kernel::AssessmentId],
         _part: &S::PartId,
-    ) -> Result<Vec<ReflectiveExample>, leaven_gepa::ReflectionError> {
+    ) -> Result<Vec<ReflectiveCase>, leaven_gepa::ReflectionError> {
         *self.calls.lock().expect("dataset calls lock") += 1;
-        Ok(vec![ReflectiveExample {
-            side_info: Vec::new(),
-            case: Some(leaven_kernel::CaseId::new(0)),
-            input: "input".to_owned(),
-            output: Some("output".to_owned()),
-            score: Some(1.0),
-            feedback: "feedback".to_owned(),
-            source_refs: Vec::new(),
-        }])
+        Ok(vec![reflective_case(
+            Some(leaven_kernel::CaseId::new(0)),
+            "input",
+            Some("output"),
+            Some(1.0),
+            "feedback",
+        )])
     }
 }
 

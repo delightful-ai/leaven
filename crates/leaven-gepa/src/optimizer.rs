@@ -946,7 +946,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             })?;
         let reflective_example_count = examples.len();
         let reflective_cases: Vec<CaseId> =
-            examples.iter().filter_map(|example| example.case).collect();
+            examples.iter().filter_map(|example| example.case_id).collect();
         self.record_event(GepaEventSummary::ReflectiveDatasetBuilt {
             records: reflective_example_count,
             cases: reflective_cases.clone(),

@@ -35,10 +35,12 @@ pub use population::{CheckpointPopulation, GepaPopulation};
 pub use proposer::MissingReflector;
 pub use proposer::{GepaReflector, LmBackedReflector, SurfaceProposer};
 pub use reflection::{
-    CaseInputProjectedDataset, DEFAULT_REFLECTION_PROMPT_TEMPLATE, DefaultReflectionRenderer,
-    GepaReflectiveDataset, LmBackedReflectorConfig, PlainTextEditParser, ReflectRequest,
-    ReflectionError, ReflectionOutputParser, ReflectionRenderInput, ReflectionRenderer,
-    ReflectiveCaseInput, ReflectiveDatasetBuilder, ReflectiveExample, ReflectiveSideInfoValue,
+    Attachment, AttachmentKind, CaseInputProjectedDataset, Check, Checks,
+    DEFAULT_REFLECTION_PROMPT_TEMPLATE, DefaultReflectionRenderer, GepaReflectiveDataset,
+    LmBackedReflectorConfig, PlainTextEditParser, ReflectRequest, ReflectionError,
+    ReflectionOutputParser, ReflectionRenderInput, ReflectionRenderer, ReflectiveCase,
+    ReflectiveCaseInput, ReflectiveDatasetBuilder, ReflectiveRun, ReflectiveSideInfoValue,
+    ReflectiveValue,
 };
 pub use report::{
     GepaReport, GepaReportCandidate, GepaReportFrontierCase, GepaReportHistoryEntry,
@@ -69,8 +71,9 @@ pub mod prelude {
         GepaReportValidationSubscore, GepaSkipReason, GepaStageProposer, ImprovementOrEqual,
         LmBackedReflector, LmBackedReflectorConfig, PartSelector, PlainTextEditParser,
         ReflectRequest, ReflectionError, ReflectionOutputParser, ReflectionRenderInput,
-        ReflectionRenderer, ReflectiveCaseInput, ReflectiveDatasetBuilder, ReflectiveExample,
-        ReflectiveSideInfoValue, RoundRobinPart, StrictImprovement, SurfaceProposer,
+        ReflectionRenderer, ReflectiveCase, ReflectiveCaseInput, ReflectiveDatasetBuilder,
+        ReflectiveRun, ReflectiveSideInfoValue, ReflectiveValue, RoundRobinPart, StrictImprovement,
+        SurfaceProposer,
         ValidationPolicy, gepa_stage_proposer,
     };
 }
