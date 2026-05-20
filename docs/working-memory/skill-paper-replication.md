@@ -277,9 +277,11 @@ Leaven primitive blockers:
   existence, create-overwrite, positive-support, same-file line-range conflict
   validation, and atomic `references/*.md` create/link validation; durable
   merge-tree provenance now exists as `AgentPatchMergeTreeEvidence` and
-  `SkillPatchMergeTree`, while live merge execution, patch parsing, and
-  skill-directory application remain;
-- deterministic skill-directory diff application and rollback;
+  `SkillPatchMergeTree`, while live merge execution and patch parsing remain;
+  `SkillPatchApplication` now covers atomic application/reporting/rollback once
+  a parsed plan and concrete `SkillBankChange` are available;
+- Trace2Skill patch parsing from Stage 2/3 JSON/diff artifacts into
+  `SkillPatchPlan` plus concrete `SkillBankChange` values;
 - result matrix/reporting for cross-model and OOD transfer.
 
 Spend/data risks:

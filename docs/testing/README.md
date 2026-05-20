@@ -187,6 +187,10 @@ Use the narrowest layer that proves the claim.
 - `crates/leaven/tests/topology_contract.rs`: guardrails for the full corrected
   v0.2.1b workspace member list, `src/lib.rs` skeleton presence,
   Leaven-to-Leaven dependency DAG, and cold-core leak boundaries.
+- `crates/leaven-agentic-skill/tests/skill_agentic.rs`: skill-bank
+  materialization/readback, workspace proposal parsing, patch-plan validation,
+  atomic patch application, change reporting, and rollback evidence for failed
+  atomic application.
 - `crates/leaven-evidence/tests/scalar.rs`,
   `crates/leaven-evidence/tests/command.rs`,
   `crates/leaven-evidence/tests/casewise.rs`,

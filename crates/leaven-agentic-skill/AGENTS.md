@@ -2,6 +2,8 @@
 This crate owns skill-specific helpers over the generic agentic adapter layer:
 skill-bank materialization, skill workspace layouts, skill-bank proposal input,
 workspace proposal parsing, diffs, and skill change reports.
+It also owns paper-neutral application of validated skill patch plans to
+`SkillBank` artifacts.
 
 It depends on `leaven-agentic` and `leaven-artifact-skill`; it does not own the
 generic agent runtime, generic case-suite substrate, provider protocols, or
@@ -26,6 +28,10 @@ optimizer rhythm.
   provenance for validated patch plans: leaf plan ids, merge levels, accepted
   and discarded inputs, output plans, and final plan identity. It does not own
   merge prompts, prevalence thresholds, batch sizes, or result selection.
+- `SkillPatchApplication` applies a validated patch plan as one atomic
+  `SkillBankChange`, reports the applied delta, and returns rollback evidence
+  with the parent bank, plan, attempted change, and error when application
+  fails. It does not parse paper JSON patches or decide merge/prevalence policy.
 
 ## Route Away
 - `SkillBank`, `SkillFolder`, Agent Skills validation, and skill surfaces belong
@@ -86,6 +92,16 @@ optimizer rhythm.
   thresholds, prompt wording, or final-metric selection to this crate
   verify: extend `skill_agentic.rs` around `SkillPatchMergeTree` tests and run
   `cargo nextest run -p leaven-agentic-skill`
+
+- when: applying validated patch plans
+  do: use `SkillPatchApplication` so application is atomic, reports the
+  resulting `SkillBank` delta, and returns rollback evidence on failure
+  preserve: parsing, merge scheduling, prevalence thresholds, and model prompts
+  outside this crate
+  avoid: applying partial edits directly to a `SkillBank` from paper/example
+  code when a validated patch plan is available
+  verify: extend `skill_agentic.rs` around `SkillPatchApplication` tests and
+  run `cargo nextest run -p leaven-agentic-skill`
 
 ## Local Bait
 - `.agents/skills` is a workspace projection choice, not the artifact identity.

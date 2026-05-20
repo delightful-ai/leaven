@@ -6,6 +6,7 @@ mod layout;
 mod materializer;
 mod merge_tree;
 mod parser;
+mod patch_apply;
 mod patch_plan;
 mod report;
 
@@ -18,6 +19,7 @@ pub use merge_tree::{
     SkillPatchMergeTree, SkillPatchMergeTreeError, SkillPatchPlanId, SkillPatchPlanRecord,
 };
 pub use parser::SkillBankWorkspaceProposalParser;
+pub use patch_apply::{SkillPatchApplication, SkillPatchApplicationError, SkillPatchRollback};
 pub use patch_plan::{
     SkillLineRange, SkillPatchEditKind, SkillPatchFileRef, SkillPatchPlan, SkillPatchPlanEdit,
     SkillPatchPlanError, SkillPatchRange, SkillPatchSupport, SkillReferencePath,

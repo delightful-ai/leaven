@@ -145,6 +145,12 @@ The checked-out upstream release includes:
   plan identity. It refuses malformed merge graphs but deliberately leaves
   prevalence thresholds, merge prompts, batch sizing, and final metric selection
   to the paper runner.
+- `leaven-agentic-skill::SkillPatchApplication` now owns paper-neutral
+  application of validated patch plans to `SkillBank` artifacts: it applies the
+  concrete `SkillBankChange` atomically, reports the resulting skill/file delta,
+  and returns rollback evidence carrying the parent bank, plan, attempted
+  change, and error when application fails. It does not parse Trace2Skill patch
+  JSON, schedule merges, or choose prevalence thresholds.
 - `leaven-evidence::AgentTrajectoryEvidence` now owns the reusable trajectory
   evidence envelope needed before Trace2Skill Stage 1/analysis can be
   faithfully replayed: runtime session id, optional Leaven case id, upstream
@@ -211,6 +217,10 @@ Verification:
   2026-05-20 for merge levels, accepted/discarded patch ids, parse-failure
   nodes, final diff refs, duplicate node refusal, unknown final node refusal,
   and positive support enforcement.
+- `cargo test -p leaven-agentic-skill --test skill_agentic
+  skill_patch_application` passed on 2026-05-20 for atomic application of a
+  validated patch plan, change reporting, and rollback evidence after failed
+  atomic changes.
 
 ## Current Blockers
 
@@ -229,8 +239,9 @@ Leaven-owned remaining primitives before faithful Trace2Skill replication:
   generic `AgentPatchMergeTreeEvidence` and skill-specific
   `SkillPatchMergeTree` provenance values, but no Trace2Skill merge scheduler,
   patch parser, prevalence policy, or model-backed merge operator has run;
-- deterministic skill-directory patch application with rollback and validation
-  integrated with `SkillBank` materialization/readback;
+- Trace2Skill patch parsing from Stage 2/3 JSON/diff artifacts into
+  `SkillPatchPlan` plus concrete `SkillBankChange` values. Generic atomic
+  application/reporting/rollback now exists once those values are parsed;
 - result matrix/reporting for model scale transfer, OOD WikiTQ, DocVQA,
   DAPO/AIME, ablations, and sequential/retrieval baselines.
 
@@ -245,9 +256,9 @@ External/spend blockers:
 
 ## Next Action
 
-Define deterministic skill-directory patch application and rollback integrated
-with `SkillBank` materialization/readback. The next Leaven-owned primitive is a
-validated apply surface that consumes a parsed patch plan or diff artifact,
-applies it to a skill directory atomically, records validation/rollback
-evidence, and leaves Trace2Skill prevalence and merge scheduling outside the
-generic applier.
+Define the Trace2Skill patch parser bridge from Stage 2/3 JSON/diff artifacts
+into `SkillPatchPlan` plus concrete `SkillBankChange` values. The next
+Leaven-owned primitive is durable parsed-patch provenance that connects
+merge-tree output patches to validated plan/application inputs without putting
+Trace2Skill prompt wording, prevalence thresholds, or merge scheduling into the
+generic skill adapter.

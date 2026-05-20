@@ -4,11 +4,11 @@ use leaven_agent::{AgentInstructions, FakeAgentAction, FakeAgentRuntime, OutputC
 use leaven_agentic::{AgentPromptTarget, AgenticProposer, AgenticProposerConfig, AgenticRunInput};
 use leaven_agentic_skill::{
     SkillBankChangeReport, SkillBankDiff, SkillBankMaterializer, SkillBankProposalInput,
-    SkillBankWorkspaceProposalParser, SkillFileChangeKind, SkillLineRange, SkillPatchFileRef,
-    SkillPatchMergeBatch, SkillPatchMergeInput, SkillPatchMergeLevel, SkillPatchMergeTree,
-    SkillPatchMergeTreeError, SkillPatchPlan, SkillPatchPlanEdit, SkillPatchPlanError,
-    SkillPatchPlanId, SkillPatchPlanRecord, SkillPatchRange, SkillPatchSupport, SkillReferencePath,
-    SkillWorkspaceLayout,
+    SkillBankWorkspaceProposalParser, SkillFileChangeKind, SkillLineRange, SkillPatchApplication,
+    SkillPatchApplicationError, SkillPatchFileRef, SkillPatchMergeBatch, SkillPatchMergeInput,
+    SkillPatchMergeLevel, SkillPatchMergeTree, SkillPatchMergeTreeError, SkillPatchPlan,
+    SkillPatchPlanEdit, SkillPatchPlanError, SkillPatchPlanId, SkillPatchPlanRecord,
+    SkillPatchRange, SkillPatchSupport, SkillReferencePath, SkillWorkspaceLayout,
 };
 use leaven_artifact_skill::{
     SkillBank, SkillBankChange, SkillFile, SkillFilePermissions, SkillFolder, SkillName, SkillPath,
@@ -1101,6 +1101,123 @@ fn skill_patch_merge_tree_rejects_malformed_merge_graphs() {
             batch_index: 0
         }
     ));
+}
+
+#[test]
+fn skill_patch_application_applies_validated_plan_atomically_and_reports_changes() {
+    let parent = bank_with_alpha(
+        "Edits Rust tests. Use when Rust test failures need diagnosis.",
+        "Read the failing test output and patch the narrow code path.",
+        false,
+    );
+    let alpha = SkillName::new("alpha").unwrap();
+    let reference =
+        SkillReferencePath::new(SkillPath::new("references/checklist.md").unwrap()).unwrap();
+    let plan = SkillPatchPlan::validate(
+        &parent,
+        vec![
+            SkillPatchPlanEdit::create_file(
+                SkillPatchFileRef::new(alpha.clone(), reference.path().clone()),
+                SkillPatchSupport::new(15).unwrap(),
+            ),
+            SkillPatchPlanEdit::modify(
+                SkillPatchFileRef::new(alpha.clone(), SkillPath::skill_md()),
+                SkillPatchRange::Lines(SkillLineRange::new(4, 4).unwrap()),
+                SkillPatchSupport::new(15).unwrap(),
+            )
+            .with_reference_links([reference.clone()]),
+        ],
+    )
+    .unwrap();
+
+    let application = SkillPatchApplication::apply(
+        &parent,
+        plan,
+        vec![
+            SkillBankChange::WriteFile {
+                skill: alpha.clone(),
+                path: reference.path().clone(),
+                file: SkillFile::text("Checklist.\n"),
+            },
+            SkillBankChange::WriteFile {
+                skill: alpha.clone(),
+                path: SkillPath::skill_md(),
+                file: SkillFile::text(skill_md(
+                    "alpha",
+                    "Edits Rust tests. Use when Rust test failures need diagnosis.",
+                    "Read the failing test output and patch the narrow code path.\n\nSee references/checklist.md.",
+                )),
+            },
+        ],
+    )
+    .unwrap();
+
+    assert_eq!(application.parent(), &parent);
+    assert_eq!(application.plan().edits().len(), 2);
+    assert!(
+        application
+            .child()
+            .get(&alpha)
+            .unwrap()
+            .file(reference.path())
+            .is_some()
+    );
+    assert!(matches!(application.change(), SkillBankChange::Atomic(changes) if changes.len() == 2));
+    assert!(application.report().files_changed.iter().any(|file| {
+        file.skill == alpha
+            && file.path == *reference.path()
+            && file.kind == SkillFileChangeKind::Added
+    }));
+}
+
+#[test]
+fn skill_patch_application_rolls_back_failed_atomic_changes() {
+    let parent = bank_with_alpha(
+        "Edits Rust tests. Use when Rust test failures need diagnosis.",
+        "Read the failing test output and patch the narrow code path.",
+        false,
+    );
+    let alpha = SkillName::new("alpha").unwrap();
+    let plan = SkillPatchPlan::validate(
+        &parent,
+        vec![SkillPatchPlanEdit::modify(
+            SkillPatchFileRef::new(alpha.clone(), SkillPath::new("scripts/run.sh").unwrap()),
+            SkillPatchRange::Lines(SkillLineRange::new(1, 1).unwrap()),
+            SkillPatchSupport::new(1).unwrap(),
+        )],
+    )
+    .unwrap();
+
+    let error = SkillPatchApplication::apply(
+        &parent,
+        plan,
+        vec![
+            SkillBankChange::WriteFile {
+                skill: alpha.clone(),
+                path: SkillPath::new("references/transient.md").unwrap(),
+                file: SkillFile::text("must not survive\n"),
+            },
+            SkillBankChange::RemoveFile {
+                skill: alpha.clone(),
+                path: SkillPath::new("missing.md").unwrap(),
+            },
+        ],
+    )
+    .unwrap_err();
+
+    let SkillPatchApplicationError::RolledBack(rollback) = error;
+    assert_eq!(rollback.parent(), &parent);
+    assert_eq!(rollback.plan().edits().len(), 1);
+    assert!(rollback.error().contains("missing.md"));
+    assert!(matches!(rollback.change(), SkillBankChange::Atomic(changes) if changes.len() == 2));
+    assert!(
+        parent
+            .get(&alpha)
+            .unwrap()
+            .file(&SkillPath::new("references/transient.md").unwrap())
+            .is_none(),
+        "failed atomic apply must leave the parent bank unchanged"
+    );
 }
 
 struct SkillPromptRenderer;
