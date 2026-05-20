@@ -1,11 +1,14 @@
 //! `Trace2Skill` JSON patch lowering into Leaven skill primitives.
 
-use std::{collections::BTreeMap, str};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    str,
+};
 
 use leaven_agentic_skill::{
     SkillParsedPatchDocument, SkillParsedPatchError, SkillParsedPatchOperation,
     SkillPatchApplication, SkillPatchApplicationError, SkillPatchFileRef, SkillPatchPlan,
-    SkillPatchRange, SkillPatchSupport,
+    SkillPatchRange, SkillPatchSupport, SkillReferencePath,
 };
 use leaven_artifact_skill::{SkillBank, SkillBankChange, SkillFile, SkillName, SkillPath};
 use serde::Deserialize;
@@ -44,8 +47,10 @@ pub struct Trace2SkillPatchLowering {
 pub fn lower_trace2skill_json_patch(
     input: Trace2SkillPatchLoweringInput<'_>,
 ) -> Result<Trace2SkillPatchLowering, Trace2SkillPatchError> {
-    let payload = extract_json_payload(input.payload)?;
-    let patch: UpstreamJsonPatch = serde_json::from_str(payload)?;
+    let patch: UpstreamJsonPatch = match serde_json::from_str(input.payload.trim()) {
+        Ok(patch) => patch,
+        Err(raw_error) => parse_fenced_json_patch(input.payload, raw_error)?,
+    };
     let support = SkillPatchSupport::new(input.support_count)
         .map_err(|error| Trace2SkillPatchError::ParsedPatch(SkillParsedPatchError::Plan(error)))?;
     let folder =
@@ -62,11 +67,29 @@ pub fn lower_trace2skill_json_patch(
         apply_upstream_edit(&mut updated, edit)?;
     }
 
+    let skill_md_after = updated
+        .get(&SkillPath::skill_md())
+        .map(|file| skill_file_text(file, &SkillPath::skill_md()))
+        .transpose()?;
+    let changed = changed_paths(original, &updated);
+    let touched_reference_paths = changed
+        .iter()
+        .filter_map(|(path, before, after)| {
+            (before != after)
+                .then(|| SkillReferencePath::new(path.clone()).ok())
+                .flatten()
+        })
+        .collect::<BTreeSet<_>>();
     let mut operations = Vec::new();
-    for (path, before, after) in changed_paths(original, &updated) {
+    let mut saw_skill_md_operation = false;
+    let mut saw_reference_file_operation = false;
+    for (path, before, after) in changed {
         let target = SkillPatchFileRef::new(input.skill.clone(), path.clone());
         match (before, after) {
             (None, Some(file)) => {
+                if path.as_str().starts_with("references/") {
+                    saw_reference_file_operation = true;
+                }
                 operations.push(SkillParsedPatchOperation::create_file(
                     target,
                     support,
@@ -77,9 +100,12 @@ pub fn lower_trace2skill_json_patch(
                 if path.is_skill_md() {
                     return Err(Trace2SkillPatchError::CannotDeleteSkillMd);
                 }
+                if path.as_str().starts_with("references/") {
+                    saw_reference_file_operation = true;
+                }
                 operations.push(SkillParsedPatchOperation::delete_file(target, support));
             }
-            (Some(_), Some(file)) => {
+            (Some(before_file), Some(file)) => {
                 let operation = SkillParsedPatchOperation::modify_file(
                     target,
                     SkillPatchRange::WholeFile,
@@ -87,7 +113,12 @@ pub fn lower_trace2skill_json_patch(
                     file.clone(),
                 );
                 let operation = if path.is_skill_md() {
-                    operation.with_reference_links_from_text(skill_file_text(file, &path)?)
+                    saw_skill_md_operation = true;
+                    operation.with_reference_links(skill_md_reference_links_for_edit(
+                        skill_file_text(before_file, &path)?,
+                        skill_file_text(file, &path)?,
+                        &touched_reference_paths,
+                    ))
                 } else {
                     operation
                 };
@@ -95,6 +126,24 @@ pub fn lower_trace2skill_json_patch(
             }
             (None, None) => {}
         }
+    }
+    if saw_reference_file_operation
+        && !saw_skill_md_operation
+        && let (Some(skill_md_before), Some(skill_md_after)) =
+            (original.get(&SkillPath::skill_md()), skill_md_after)
+    {
+        operations.push(
+            SkillParsedPatchOperation::modify_file(
+                SkillPatchFileRef::new(input.skill.clone(), SkillPath::skill_md()),
+                SkillPatchRange::WholeFile,
+                support,
+                SkillFile::with_permissions(
+                    skill_md_after.as_bytes().to_vec(),
+                    skill_md_before.permissions(),
+                ),
+            )
+            .with_reference_links_from_text(&skill_md_after),
+        );
     }
     let parsed = SkillParsedPatchDocument::new(operations).validate_against(input.parent)?;
     let (plan, changes) = parsed.into_parts();
@@ -120,26 +169,162 @@ pub fn apply_trace2skill_json_patch(
     )?)
 }
 
-fn extract_json_payload(payload: &str) -> Result<&str, Trace2SkillPatchError> {
-    let trimmed = payload.trim();
-    let Some(marker_start) = trimmed.find("```json") else {
-        return Ok(trimmed);
-    };
-    let after_marker = &trimmed[marker_start..];
-    let Some(first_newline) = after_marker.find('\n') else {
-        return Err(Trace2SkillPatchError::UnclosedJsonFence);
-    };
-    let body = &after_marker[first_newline + 1..];
-    let mut search_start = 0;
-    while let Some(relative) = body[search_start..].find("```") {
-        let start = search_start + relative;
-        let line = body[start..].lines().next().unwrap_or_default();
-        if line.trim() == "```" {
-            return Ok(body[..start].trim());
-        }
-        search_start = start + "```".len();
+fn parse_fenced_json_patch(
+    payload: &str,
+    raw_error: serde_json::Error,
+) -> Result<UpstreamJsonPatch, Trace2SkillPatchError> {
+    let candidates = extract_json_payloads(payload)?;
+    if candidates.is_empty() {
+        return Err(Trace2SkillPatchError::Json(raw_error));
     }
-    Err(Trace2SkillPatchError::UnclosedJsonFence)
+    let mut parsed = None;
+    let mut last_error = raw_error;
+    for candidate in candidates {
+        if !is_patch_like_json(candidate) {
+            continue;
+        }
+        match serde_json::from_str::<UpstreamJsonPatch>(candidate) {
+            Ok(patch) => {
+                if parsed.replace(patch).is_some() {
+                    return Err(Trace2SkillPatchError::AmbiguousJsonFence);
+                }
+            }
+            Err(error) => last_error = error,
+        }
+    }
+    parsed.ok_or(Trace2SkillPatchError::Json(last_error))
+}
+
+fn is_patch_like_json(candidate: &str) -> bool {
+    serde_json::from_str::<serde_json::Value>(candidate)
+        .ok()
+        .is_some_and(|value| {
+            value
+                .as_object()
+                .is_some_and(|object| object.contains_key("edits"))
+        })
+}
+
+fn extract_json_payloads(payload: &str) -> Result<Vec<&str>, Trace2SkillPatchError> {
+    let mut candidates = Vec::new();
+    let mut search_start = 0;
+    while let Some((open, delimiter_len)) = find_next_fence(payload, search_start) {
+        let delimiter = &payload[open..open + delimiter_len];
+        let tag_start = open + delimiter_len;
+        let line_end = payload[tag_start..]
+            .find('\n')
+            .map_or(payload.len(), |relative| tag_start + relative);
+        let tag_line = &payload[tag_start..line_end];
+        let leading = tag_line.len() - tag_line.trim_start().len();
+        let trimmed_tag_line = tag_line.trim_start();
+        let Some(after_tag) = strip_json_fence_tag(trimmed_tag_line) else {
+            let body_start = if line_end < payload.len() {
+                line_end + 1
+            } else {
+                line_end
+            };
+            search_start = find_closing_fence(payload, body_start, delimiter)
+                .map_or(payload.len(), |(_, after_close)| after_close);
+            continue;
+        };
+        let after_tag_start = tag_start + leading + trimmed_tag_line.len() - after_tag.len();
+        let inline_body = after_tag.trim_start();
+        let inline_body_start = after_tag_start + after_tag.len() - inline_body.len();
+        if let Some(relative_close) = inline_closing_fence(inline_body, delimiter) {
+            candidates.push(inline_body[..relative_close].trim());
+            search_start = inline_body_start + relative_close + delimiter_len;
+            continue;
+        }
+        let body_start = if line_end < payload.len() {
+            line_end + 1
+        } else {
+            line_end
+        };
+        let Some((body_end, after_close)) = find_closing_fence(payload, body_start, delimiter)
+        else {
+            return Err(Trace2SkillPatchError::UnclosedJsonFence);
+        };
+        candidates.push(payload[body_start..body_end].trim());
+        search_start = after_close;
+    }
+    Ok(candidates)
+}
+
+fn find_next_fence(payload: &str, start: usize) -> Option<(usize, usize)> {
+    let mut offset = start;
+    for line in payload[start..].split_inclusive('\n') {
+        let at_line_start = offset == 0 || payload.as_bytes().get(offset - 1) == Some(&b'\n');
+        if at_line_start {
+            if let Some((leading, _, delimiter_len)) =
+                markdown_fence_opener(line).or_else(|| inline_json_fence_opener(line))
+            {
+                return Some((offset + leading, delimiter_len));
+            }
+        }
+        offset += line.len();
+    }
+    None
+}
+
+fn inline_json_fence_opener(line: &str) -> Option<(usize, u8, usize)> {
+    let leading = leading_markdown_spaces(line);
+    if leading > 3 {
+        return None;
+    }
+    let trimmed = &line[leading..];
+    let marker = *trimmed.as_bytes().first()?;
+    if marker != b'`' && marker != b'~' {
+        return None;
+    }
+    let len = trimmed.bytes().take_while(|byte| *byte == marker).count();
+    if len < 3 {
+        return None;
+    }
+    let delimiter = &trimmed[..len];
+    let after_tag = strip_json_fence_tag(&trimmed[len..])?;
+    inline_closing_fence(after_tag.trim_start(), delimiter)?;
+    Some((leading, marker, len))
+}
+
+fn inline_closing_fence(line: &str, delimiter: &str) -> Option<usize> {
+    let trimmed = line.trim_end();
+    let marker = *delimiter.as_bytes().first()?;
+    let closing_len = trimmed
+        .bytes()
+        .rev()
+        .take_while(|byte| *byte == marker)
+        .count();
+    if closing_len < delimiter.len() {
+        return None;
+    }
+    Some(trimmed.len() - closing_len)
+}
+
+fn strip_json_fence_tag(line: &str) -> Option<&str> {
+    let tag = line.get(..4)?;
+    if !tag.eq_ignore_ascii_case("json") {
+        return None;
+    }
+    let rest = &line[4..];
+    if rest.is_empty() || rest.starts_with(char::is_whitespace) {
+        return Some(rest);
+    }
+    None
+}
+
+fn find_closing_fence(payload: &str, start: usize, delimiter: &str) -> Option<(usize, usize)> {
+    let mut offset = start;
+    let marker = *delimiter.as_bytes().first()?;
+    let opener_len = delimiter.len();
+    for line in payload[start..].split_inclusive('\n') {
+        if markdown_fence_closer(line, marker, opener_len).is_some() {
+            let body_end = offset;
+            let after_close = offset + line.len();
+            return Some((body_end, after_close));
+        }
+        offset += line.len();
+    }
+    None
 }
 
 fn changed_paths<'a>(
@@ -186,6 +371,12 @@ fn create_file(
     path: SkillPath,
     content: &str,
 ) -> Result<(), Trace2SkillPatchError> {
+    if content.trim().is_empty() {
+        return Err(Trace2SkillPatchError::EmptyPatchContent {
+            path: path.to_string(),
+            op: "create".to_owned(),
+        });
+    }
     if path.is_skill_md() {
         return Err(Trace2SkillPatchError::CannotCreateSkillMd);
     }
@@ -219,6 +410,13 @@ fn append_to_section(
     edit: &UpstreamJsonEdit,
 ) -> Result<(), Trace2SkillPatchError> {
     update_text_file(state, path, |content| {
+        require_non_empty_content(edit, path)?;
+        if edit.target_section.trim().is_empty() {
+            return Err(Trace2SkillPatchError::MissingTargetSection {
+                path: path.to_string(),
+                op: edit.op.clone(),
+            });
+        }
         let mut lines = split_lines(content);
         let (_, end) = section_bounds(&lines, &edit.target_section, path)?;
         let mut insert_at = end;
@@ -236,19 +434,24 @@ fn replace_in_section(
     edit: &UpstreamJsonEdit,
 ) -> Result<(), Trace2SkillPatchError> {
     update_text_file(state, path, |content| {
+        require_non_empty_content(edit, path)?;
         if edit.old_text.is_empty() {
             return Err(Trace2SkillPatchError::EmptyOldText {
                 path: path.to_string(),
             });
         }
-        if edit.target_section.is_empty() {
-            return replace_text(content, &edit.old_text, &edit.content, path);
+        if edit.target_section.trim().is_empty() {
+            return Err(Trace2SkillPatchError::MissingTargetSection {
+                path: path.to_string(),
+                op: edit.op.clone(),
+            });
         }
         let mut lines = split_lines(content);
         let (start, end) = section_bounds(&lines, &edit.target_section, path)?;
-        let section = lines[start..end].join("\n");
+        let body_start = start + 1;
+        let section = lines[body_start..end].join("\n");
         let replacement = replace_text(&section, &edit.old_text, &edit.content, path)?;
-        lines.splice(start..end, split_lines(&replacement));
+        lines.splice(body_start..end, split_lines(&replacement));
         Ok(lines.join("\n"))
     })
 }
@@ -259,18 +462,22 @@ fn insert_relative_to_text(
     edit: &UpstreamJsonEdit,
 ) -> Result<(), Trace2SkillPatchError> {
     update_text_file(state, path, |content| {
+        require_non_empty_content(edit, path)?;
         if edit.target_text.is_empty() {
             return Err(Trace2SkillPatchError::EmptyTargetText {
                 path: path.to_string(),
             });
         }
+        if edit.target_section.trim().is_empty() {
+            return Err(Trace2SkillPatchError::MissingTargetSection {
+                path: path.to_string(),
+                op: edit.op.clone(),
+            });
+        }
         let mut lines = split_lines(content);
-        let (offset, span) = if edit.target_section.is_empty() {
-            (0, lines.len())
-        } else {
-            let (start, end) = section_bounds(&lines, &edit.target_section, path)?;
-            (start, end - start)
-        };
+        let (start, end) = section_bounds(&lines, &edit.target_section, path)?;
+        let offset = start + 1;
+        let span = end - offset;
         let section = lines[offset..offset + span].join("\n");
         let replacement = match edit.op()? {
             UpstreamPatchOp::InsertAfter => replace_text(
@@ -298,18 +505,37 @@ fn add_section(
     edit: &UpstreamJsonEdit,
 ) -> Result<(), Trace2SkillPatchError> {
     update_text_file(state, path, |content| {
+        require_non_empty_content(edit, path)?;
         let mut lines = split_lines(content);
-        let insert_at = if edit.after_section.is_empty() {
+        if edit.target_section.trim().is_empty() {
+            return Err(Trace2SkillPatchError::EmptyTargetSection {
+                path: path.to_string(),
+                op: edit.op.clone(),
+            });
+        }
+        if heading_level(&edit.target_section) == 0 {
+            return Err(Trace2SkillPatchError::InvalidSectionHeading {
+                path: path.to_string(),
+                section: edit.target_section.clone(),
+            });
+        }
+        match section_bounds(&lines, &edit.target_section, path) {
+            Ok(_) | Err(Trace2SkillPatchError::AmbiguousSection { .. }) => {
+                return Err(Trace2SkillPatchError::DuplicateSection {
+                    path: path.to_string(),
+                    section: edit.target_section.trim().to_owned(),
+                });
+            }
+            Err(Trace2SkillPatchError::SectionNotFound { .. }) => {}
+            Err(error) => return Err(error),
+        }
+        let after_section = edit.after_section.trim();
+        let insert_at = if after_section.is_empty() {
             lines.len()
         } else {
-            section_bounds(&lines, &edit.after_section, path).map(|(_, end)| end)?
+            section_bounds(&lines, after_section, path).map(|(_, end)| end)?
         };
-        let header = if edit.target_section.is_empty() {
-            "## New Section"
-        } else {
-            &edit.target_section
-        };
-        let mut block = vec![String::new(), header.to_owned(), String::new()];
+        let mut block = vec![String::new(), edit.target_section.clone(), String::new()];
         block.extend(split_lines(&edit.content));
         lines.splice(insert_at..insert_at, block);
         Ok(lines.join("\n"))
@@ -322,6 +548,12 @@ fn delete_section(
     edit: &UpstreamJsonEdit,
 ) -> Result<(), Trace2SkillPatchError> {
     update_text_file(state, path, |content| {
+        if edit.target_section.trim().is_empty() {
+            return Err(Trace2SkillPatchError::MissingTargetSection {
+                path: path.to_string(),
+                op: edit.op.clone(),
+            });
+        }
         let mut lines = split_lines(content);
         let (mut start, end) = section_bounds(&lines, &edit.target_section, path)?;
         while start > 0 && lines[start - 1].trim().is_empty() {
@@ -346,6 +578,11 @@ fn skill_patch_path(raw: &str) -> Result<SkillPath, Trace2SkillPatchError> {
         });
     }
     if !path.is_skill_md() && !path.as_str().starts_with("references/") {
+        return Err(Trace2SkillPatchError::UnsupportedPatchPath {
+            path: path.to_string(),
+        });
+    }
+    if path.as_str().starts_with("references/") && !path.as_str().ends_with(".md") {
         return Err(Trace2SkillPatchError::UnsupportedPatchPath {
             path: path.to_string(),
         });
@@ -379,36 +616,159 @@ fn section_bounds(
     path: &SkillPath,
 ) -> Result<(usize, usize), Trace2SkillPatchError> {
     let target = section_header.trim();
-    let level = heading_level(target);
-    if level == 0 {
+    let Some((level, target_text)) = heading_key(target) else {
         return Err(Trace2SkillPatchError::SectionNotFound {
             path: path.to_string(),
             section: target.to_owned(),
         });
-    }
+    };
+    let mut found = None;
+    let mut active_fence = None;
     for (index, line) in lines.iter().enumerate() {
-        if line.trim() != target {
+        if update_markdown_fence(&mut active_fence, line) {
+            continue;
+        }
+        if active_fence.is_some() {
+            continue;
+        }
+        if heading_key(line).as_ref() != Some(&(level, target_text.clone())) {
             continue;
         }
         let end = lines[index + 1..]
             .iter()
-            .position(|candidate| {
+            .scan(None, |active_fence, candidate| {
+                if update_markdown_fence(active_fence, candidate) {
+                    return Some(false);
+                }
+                if active_fence.is_some() {
+                    return Some(false);
+                }
                 let candidate_level = heading_level(candidate);
-                candidate_level > 0 && candidate_level <= level
+                Some(candidate_level > 0 && candidate_level <= level)
             })
+            .position(|is_boundary| is_boundary)
             .map_or(lines.len(), |relative| index + 1 + relative);
-        return Ok((index, end));
+        if found.replace((index, end)).is_some() {
+            return Err(Trace2SkillPatchError::AmbiguousSection {
+                path: path.to_string(),
+                section: target.to_owned(),
+            });
+        }
     }
-    Err(Trace2SkillPatchError::SectionNotFound {
+    found.ok_or_else(|| Trace2SkillPatchError::SectionNotFound {
         path: path.to_string(),
         section: target.to_owned(),
     })
 }
 
+fn update_markdown_fence(active: &mut Option<(u8, usize)>, line: &str) -> bool {
+    match *active {
+        Some((active_marker, active_len)) => {
+            if markdown_fence_closer(line, active_marker, active_len).is_some() {
+                *active = None;
+                true
+            } else {
+                false
+            }
+        }
+        None => {
+            let Some((_, marker, len)) = markdown_fence_opener(line) else {
+                return false;
+            };
+            *active = Some((marker, len));
+            true
+        }
+    }
+}
+
+fn markdown_fence_opener(line: &str) -> Option<(usize, u8, usize)> {
+    let leading = leading_markdown_spaces(line);
+    if leading > 3 {
+        return None;
+    }
+    let trimmed = &line[leading..];
+    let marker = *trimmed.as_bytes().first()?;
+    if marker != b'`' && marker != b'~' {
+        return None;
+    }
+    let len = trimmed.bytes().take_while(|byte| *byte == marker).count();
+    if len < 3 {
+        return None;
+    }
+    let info = trim_markdown_line_end(&trimmed[len..]);
+    if marker == b'`' && info.as_bytes().contains(&b'`') {
+        return None;
+    }
+    Some((leading, marker, len))
+}
+
+fn markdown_fence_closer(line: &str, marker: u8, opener_len: usize) -> Option<(usize, usize)> {
+    let leading = leading_markdown_spaces(line);
+    if leading > 3 {
+        return None;
+    }
+    let trimmed = &line[leading..];
+    let closing_len = trimmed.bytes().take_while(|byte| *byte == marker).count();
+    if closing_len < opener_len {
+        return None;
+    }
+    trim_markdown_line_end(&trimmed[closing_len..])
+        .is_empty()
+        .then_some((leading, closing_len))
+}
+
+fn leading_markdown_spaces(line: &str) -> usize {
+    line.bytes().take_while(|byte| *byte == b' ').count()
+}
+
+fn trim_markdown_line_end(line: &str) -> &str {
+    line.trim_end_matches([' ', '\t', '\r', '\n'])
+}
+
 fn heading_level(line: &str) -> usize {
-    line.chars()
+    heading_key(line).map_or(0, |(level, _)| level)
+}
+
+fn heading_key(line: &str) -> Option<(usize, String)> {
+    let leading = leading_markdown_spaces(line);
+    if leading > 3 {
+        return None;
+    }
+    let trimmed = line[leading..].trim_end();
+    let level = trimmed
+        .chars()
         .take_while(|character| *character == '#')
-        .count()
+        .count();
+    if level == 0 || level > 6 {
+        return None;
+    }
+    let Some(next) = trimmed.chars().nth(level) else {
+        return None;
+    };
+    if !next.is_whitespace() {
+        return None;
+    }
+    let text = strip_closing_heading_hashes(trimmed[level..].trim())
+        .trim_end()
+        .to_owned();
+    Some((level, text))
+}
+
+fn strip_closing_heading_hashes(text: &str) -> &str {
+    let trimmed = text.trim_end();
+    let closing_start = trimmed.trim_end_matches('#').len();
+    if closing_start == trimmed.len() || closing_start == 0 {
+        return text;
+    }
+    if trimmed[..closing_start]
+        .chars()
+        .next_back()
+        .is_some_and(char::is_whitespace)
+    {
+        &trimmed[..closing_start]
+    } else {
+        text
+    }
 }
 
 fn replace_text(
@@ -417,13 +777,44 @@ fn replace_text(
     replacement: &str,
     path: &SkillPath,
 ) -> Result<String, Trace2SkillPatchError> {
-    if !content.contains(old_text) {
+    let count = overlapping_match_count(content, old_text);
+    if count == 0 {
         return Err(Trace2SkillPatchError::TextNotFound {
             path: path.to_string(),
             text: old_text.to_owned(),
         });
     }
+    if count > 1 {
+        return Err(Trace2SkillPatchError::AmbiguousText {
+            path: path.to_string(),
+            text: old_text.to_owned(),
+            matches: count,
+        });
+    }
     Ok(content.replacen(old_text, replacement, 1))
+}
+
+fn overlapping_match_count(content: &str, needle: &str) -> usize {
+    content
+        .char_indices()
+        .filter(|(index, _)| content[*index..].starts_with(needle))
+        .count()
+}
+
+fn skill_md_reference_links_for_edit(
+    before: &str,
+    after: &str,
+    touched_reference_paths: &BTreeSet<SkillReferencePath>,
+) -> Vec<SkillReferencePath> {
+    let before_links: BTreeSet<_> = SkillReferencePath::extract_from_text(before)
+        .into_iter()
+        .collect();
+    SkillReferencePath::extract_from_text(after)
+        .into_iter()
+        .filter(|reference| {
+            !before_links.contains(reference) || touched_reference_paths.contains(reference)
+        })
+        .collect()
 }
 
 fn split_lines(content: &str) -> Vec<String> {
@@ -436,13 +827,26 @@ fn prefixed_block(content: &str) -> Vec<String> {
     block
 }
 
+fn require_non_empty_content(
+    edit: &UpstreamJsonEdit,
+    path: &SkillPath,
+) -> Result<(), Trace2SkillPatchError> {
+    if edit.content.trim().is_empty() {
+        return Err(Trace2SkillPatchError::EmptyPatchContent {
+            path: path.to_string(),
+            op: edit.op.clone(),
+        });
+    }
+    Ok(())
+}
+
 fn skill_file_text<'a>(
     file: &'a SkillFile,
     path: &SkillPath,
 ) -> Result<&'a str, Trace2SkillPatchError> {
     str::from_utf8(file.bytes()).map_err(|_| Trace2SkillPatchError::NonUtf8PatchFile {
-            path: path.to_string(),
-        })
+        path: path.to_string(),
+    })
 }
 
 #[derive(Debug, Deserialize)]
@@ -505,6 +909,9 @@ pub enum Trace2SkillPatchError {
     /// Fenced JSON block was opened but not closed.
     #[error("Trace2Skill patch contains an unclosed fenced json block")]
     UnclosedJsonFence,
+    /// More than one fenced JSON block parsed as an upstream patch.
+    #[error("Trace2Skill patch contains multiple parseable fenced json blocks")]
+    AmbiguousJsonFence,
     /// JSON parsing failed.
     #[error("failed to parse Trace2Skill patch JSON: {0}")]
     Json(#[from] serde_json::Error),
@@ -575,6 +982,30 @@ pub enum Trace2SkillPatchError {
         /// Missing heading.
         section: String,
     },
+    /// A section-based operation found the heading more than once.
+    #[error("Trace2Skill patch found ambiguous section {section:?} in {path}")]
+    AmbiguousSection {
+        /// Target path.
+        path: String,
+        /// Ambiguous heading.
+        section: String,
+    },
+    /// Section creation target was not markdown heading syntax.
+    #[error("Trace2Skill patch section target {section:?} in {path} is not a markdown heading")]
+    InvalidSectionHeading {
+        /// Target path.
+        path: String,
+        /// Invalid heading.
+        section: String,
+    },
+    /// Section creation targets a heading that already exists.
+    #[error("Trace2Skill patch would create duplicate section {section:?} in {path}")]
+    DuplicateSection {
+        /// Target path.
+        path: String,
+        /// Duplicate heading.
+        section: String,
+    },
     /// Insert operation lacks a target string.
     #[error("Trace2Skill patch insert op for {path} has empty target_text")]
     EmptyTargetText {
@@ -587,6 +1018,30 @@ pub enum Trace2SkillPatchError {
         /// Target path.
         path: String,
     },
+    /// Patch operation omitted content that must be non-empty.
+    #[error("Trace2Skill patch {op} op for {path} has empty content")]
+    EmptyPatchContent {
+        /// Target path.
+        path: String,
+        /// Operation name.
+        op: String,
+    },
+    /// Section-scoped operation lacks a translated target section.
+    #[error("Trace2Skill patch {op} op for {path} has empty target_section")]
+    MissingTargetSection {
+        /// Target path.
+        path: String,
+        /// Operation name.
+        op: String,
+    },
+    /// Section creation lacks an explicit target heading.
+    #[error("Trace2Skill patch {op} op for {path} has empty target_section")]
+    EmptyTargetSection {
+        /// Target path.
+        path: String,
+        /// Operation name.
+        op: String,
+    },
     /// Exact target text was not found after translation.
     #[error("Trace2Skill patch could not find text {text:?} in {path}")]
     TextNotFound {
@@ -594,6 +1049,16 @@ pub enum Trace2SkillPatchError {
         path: String,
         /// Missing text.
         text: String,
+    },
+    /// Exact target text appears more than once.
+    #[error("Trace2Skill patch found {matches} matches for text {text:?} in {path}")]
+    AmbiguousText {
+        /// Target path.
+        path: String,
+        /// Ambiguous text.
+        text: String,
+        /// Number of matches.
+        matches: usize,
     },
     /// Parsed patch lowering or plan validation failed.
     #[error(transparent)]
