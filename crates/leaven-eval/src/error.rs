@@ -99,3 +99,68 @@ pub enum SamplerError {
         right: SmolStr,
     },
 }
+
+/// Ranked retrieval evaluation failed.
+#[derive(Clone, Debug, Error, Eq, PartialEq)]
+pub enum RankedRetrievalEvaluationError {
+    /// The retrieval universe has no candidate items.
+    #[error("retrieval candidate universe is empty")]
+    EmptyCandidateUniverse,
+    /// No queries were supplied.
+    #[error("ranked retrieval evaluation has no queries")]
+    EmptyQueries,
+    /// A query has no relevant items.
+    #[error("retrieval query {query_id} has no relevant items")]
+    EmptyRelevantItems {
+        /// Query id.
+        query_id: String,
+    },
+    /// A relevant item is outside the candidate universe.
+    #[error("retrieval query {query_id} references unknown relevant item {item}")]
+    UnknownRelevantItem {
+        /// Query id.
+        query_id: String,
+        /// Unknown item.
+        item: crate::RetrievalItemId,
+    },
+    /// A ranking is for an unknown query.
+    #[error("retrieval ranking references unknown query {query_id}")]
+    UnknownRankingQuery {
+        /// Query id.
+        query_id: String,
+    },
+    /// A query is declared more than once.
+    #[error("duplicate retrieval query {query_id}")]
+    DuplicateQuery {
+        /// Query id.
+        query_id: String,
+    },
+    /// A ranking is declared more than once.
+    #[error("duplicate retrieval ranking for query {query_id}")]
+    DuplicateRanking {
+        /// Query id.
+        query_id: String,
+    },
+    /// A required ranking is missing.
+    #[error("missing retrieval ranking for query {query_id}")]
+    MissingRanking {
+        /// Query id.
+        query_id: String,
+    },
+    /// A ranked item is outside the candidate universe.
+    #[error("retrieval ranking {query_id} references unknown ranked item {item}")]
+    UnknownRankedItem {
+        /// Query id.
+        query_id: String,
+        /// Unknown item.
+        item: crate::RetrievalItemId,
+    },
+    /// A ranking repeats the same item.
+    #[error("retrieval ranking {query_id} repeats item {item}")]
+    DuplicateRankedItem {
+        /// Query id.
+        query_id: String,
+        /// Duplicated item.
+        item: crate::RetrievalItemId,
+    },
+}

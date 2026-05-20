@@ -15,6 +15,9 @@ It does not execute evaluations. Evaluator traits, registries, trust checks, cas
   not call evaluators or inspect artifacts.
 - `src/use_policy.rs` owns which split roles may drive proposer feedback, selection, acceptance, population observation, report output, or final test.
 - `src/report.rs` owns report data shapes after evaluation has happened; it must not reach back into engine graph mutation.
+- `src/retrieval.rs` owns lowered ranked-retrieval evaluation data and
+  Recall@K-style metrics over opaque query/item IDs. It does not embed, train,
+  route, or interpret skill files.
 - Missing-but-owned surface from the eval audit belongs here when implemented:
   evaluation plans, request templates, suites, stable work-input traits, and
   graph/evidence-ref report vocabulary. Keep those as lowered data contracts,
@@ -49,6 +52,10 @@ It does not execute evaluations. Evaluator traits, registries, trust checks, cas
   upstreams that define splits as row slices, such as Trace2Skill's
   SpreadsheetBench `0:200` / `200:400` split. It does not parse dataset files,
   infer semantic splits, or execute benchmark runners.
+- `RankedRetrievalEvaluation` computes Recall@K over caller-supplied ranked
+  outputs and a declared candidate universe. It exists for router quality
+  reports such as Memento-Skills, but it does not know about `SkillName`,
+  embeddings, BM25, router weights, or execution success.
 
 ## Decision Cards
 - when: adding stable task/case inputs or split semantics
@@ -72,10 +79,18 @@ It does not execute evaluations. Evaluator traits, registries, trust checks, cas
   avoid: making `report.rs` call evaluators, inspect `RunGraph` internals, or flatten hidden payloads into ordinary reports
   verify: run `cargo nextest run -p leaven-eval -p leaven-run`
 
+- when: adding ranked retrieval metrics
+  do: keep the contract generic over opaque item/query ids, with explicit
+  candidate-universe validation and deterministic duplicate/missing refusal
+  preserve: this crate as evaluation data/metrics only
+  avoid: importing skill artifacts, embedding providers, fitted routers, or
+  paper-specific catalogs
+  verify: run `cargo nextest run -p leaven-eval --test retrieval_contract`
+
 ## Proof Anchors
 - `cargo nextest run -p leaven-eval` proves dataset IDs, split overlap policy,
   unknown-case refusal, exact stratified split construction, split
   fingerprints, deterministic sampler state, and train/validation/test
-  use-policy boundaries.
+  use-policy boundaries, plus ranked-retrieval Recall@K contracts.
 - `cargo nextest run -p leaven-run` proves product builders can consume lowered eval vocabulary without making this crate own builder ergonomics.
 - `cargo nextest run -p leaven-engine --test case_set_resolution` proves execution-time case-set resolution stays in the engine layer.
