@@ -14,11 +14,14 @@ Each `pN_*` directory is a workspace package with a runnable binary. Keep reusab
 - `p7_self_optimization_kernel`: product-proof for the promotion-gate milestone; `just milestone-p7` proves immutable public surfaces, hidden holdout refusal, promotion gates, final-test selection, and rollback metadata.
 - `p8_aime_gepa`: local `AGENTS.md`; `just milestone-p8` is a product-proof for the public builder path through LM-backed GEPA reflection over provider-neutral `leaven-lm`, with deterministic local model output. It is not proof of a live provider, LM cache behavior, or live AIME improvement.
 - `trace2skill_spreadsheetbench`: mechanics-smoke for Trace2Skill's official
-  SpreadsheetBench-Verified 400-row manifest lowering. `cargo test -p
-  trace2skill_spreadsheetbench --test manifest` proves the local upstream JSON
-  is parsed into `leaven-eval` cases and the paper's `0..200` train /
-  `200..400` held-out split, not trajectory generation, spreadsheet execution,
-  skill evolution, or metric reproduction.
+  SpreadsheetBench-Verified 400-row manifest and run-artifact lowering. `cargo
+  test -p trace2skill_spreadsheetbench --test manifest` proves the local
+  upstream JSON is parsed into `leaven-eval` cases and the paper's `0..200`
+  train / `200..400` held-out split. `cargo test -p
+  trace2skill_spreadsheetbench --test run_artifacts` proves upstream-shaped
+  `results.json`, logs, and analysis reports can be imported into
+  `AgentTrajectoryCorpusEvidence`. These do not prove trajectory generation,
+  spreadsheet execution, skill evolution, or metric reproduction.
 
 ## Proof Classification
 - `product-proof`: an example that exercises the real public contract at the intended user layer, with no proxy substitution for the behavior being claimed.

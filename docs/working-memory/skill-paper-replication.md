@@ -241,17 +241,21 @@ Leaven primitive blockers:
   constructs the paper's `0..200` train/evolving and `200..400` held-out split.
   This is manifest-lowering provenance only, not spreadsheet execution or
   Trace2Skill evolution.
+- `examples/trace2skill_spreadsheetbench` now also imports upstream-shaped
+  SpreadsheetBench `results.json`, chat logs, and optional analysis reports
+  into `AgentTrajectoryCorpusEvidence` for the paper's 200 training/evolving
+  tasks. This is artifact import/provenance only, not live Qwen/vLLM execution.
 - `leaven-evidence::AgentTrajectoryEvidence` now preserves one-session
   trajectory provenance needed by Trace2Skill-style many-trace analysis:
   session id, optional Leaven case id, upstream task id, success/failure label,
   model id, model-config fingerprint, transcript/commands, and analyst records.
 - `leaven-evidence::AgentTrajectoryCorpusEvidence` now preserves the
   checkpointable many-trajectory value over a caller-declared task manifest,
-  with completed/pending projection and unknown-task refusal. The paper runner
-  still needs to write this corpus while generating actual SpreadsheetBench
-  trajectories.
-- many-trace evidence corpus with success/failure labels and full trajectory
-  access;
+  with duplicate-manifest refusal, completed/pending projection, and
+  unknown-task refusal. The paper runner still needs to write this corpus while
+  generating actual SpreadsheetBench trajectories.
+- live trajectory generation that writes upstream-shaped results/logs/analysis
+  artifacts for the 200 SpreadsheetBench training/evolving tasks;
 - parallel analyst dispatch that can checkpoint hundreds of independent
   sub-agent calls;
 - patch proposal artifact with conflict detection, format validation, support
@@ -286,6 +290,9 @@ Spend/data risks:
   `examples/trace2skill_spreadsheetbench`; its manifest test verified 400 rows,
   first source id `13-1`, last source id `59902`, and the train/test row
   boundary.
+- Its run-artifact test also verifies upstream-shaped run outputs can be
+  lowered into the Leaven trajectory corpus with transcript and analysis blob
+  refs.
 
 ### Memento-Skills (`arx_2603.18743`)
 

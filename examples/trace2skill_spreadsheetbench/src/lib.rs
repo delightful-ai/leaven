@@ -1,8 +1,20 @@
 //! `Trace2Skill` `SpreadsheetBench` manifest lowering.
 
-use std::{fs, path::Path};
+use std::{
+    collections::BTreeMap,
+    fs,
+    path::{Path, PathBuf},
+};
 
 use leaven_eval::{Case, Dataset, DatasetSplits, RowOrderSplitBuilder, SplitRole};
+use leaven_evidence::{
+    AgentTrajectoryAnalysisKind, AgentTrajectoryAnalysisRecord, AgentTrajectoryCorpusEvidence,
+    AgentTrajectoryEvidence, AgentTrajectoryEvidenceInput, AgentTrajectoryOutcome, CommandEvidence,
+    OutputRecord,
+};
+use leaven_kernel::{
+    AgentSessionId, BlobRef, CaseId, Fingerprint, FingerprintBuilder, MetadataKey, MetadataValue,
+};
 use serde::Deserialize;
 
 const VERIFIED_400_VERSION: &str = "trace2skill-spreadsheetbench-verified-400-v1";
@@ -88,6 +100,161 @@ pub fn load_verified_400_manifest(
     Ok(Trace2SkillSpreadsheetBenchManifest { dataset, splits })
 }
 
+/// Upstream run artifacts used to build a Leaven trajectory corpus.
+#[derive(Clone, Copy)]
+pub struct Trace2SkillRunArtifactInput<'a> {
+    /// Upstream `results.json` path.
+    pub results_file: &'a Path,
+    /// Directory containing upstream chat-history logs.
+    pub log_dir: Option<&'a Path>,
+    /// Upstream log format, usually `markdown` or `jsonl`.
+    pub log_format: &'a str,
+    /// Directory containing upstream parsed/analysis reports.
+    pub analysis_dir: Option<&'a Path>,
+}
+
+/// Builds the 200-row training/evolving trajectory corpus from upstream artifacts.
+pub fn build_training_corpus_from_run_artifacts(
+    manifest: &Trace2SkillSpreadsheetBenchManifest,
+    input: Trace2SkillRunArtifactInput<'_>,
+) -> Result<AgentTrajectoryCorpusEvidence, Trace2SkillManifestError> {
+    let train_cases = manifest
+        .splits
+        .cases(&SplitRole::Train.partition_id())
+        .ok_or(Trace2SkillManifestError::MissingTrainingSplit)?;
+    let case_sources = source_id_by_case(manifest)?;
+    let case_by_source = case_sources
+        .iter()
+        .map(|(case, source_id)| (source_id.clone(), *case))
+        .collect::<BTreeMap<_, _>>();
+    let mut corpus = AgentTrajectoryCorpusEvidence::new(
+        train_cases
+            .iter()
+            .map(|case| {
+                case_sources
+                    .get(case)
+                    .cloned()
+                    .ok_or(Trace2SkillManifestError::MissingSourceId { case: *case })
+            })
+            .collect::<Result<Vec<_>, _>>()?,
+    )?;
+
+    let bytes = fs::read(input.results_file)?;
+    let run: UpstreamResultsFile = serde_json::from_slice(&bytes)?;
+    let fingerprint = model_config_fingerprint(&run, input.log_format);
+    for result in run.results {
+        let task_id = result.id.to_source_id();
+        let Some(case_id) = case_by_source.get(&task_id).copied() else {
+            continue;
+        };
+        if !train_cases.contains(&case_id) {
+            continue;
+        }
+        let trajectory = AgentTrajectoryEvidence::new(AgentTrajectoryEvidenceInput {
+            session_id: AgentSessionId::new(),
+            case_id: Some(case_id),
+            task_id: task_id.clone(),
+            outcome: result.outcome(),
+            model_id: run.model.clone(),
+            model_config_fingerprint: fingerprint,
+            transcript: artifact_record(
+                input.log_dir,
+                log_filename(&run.agent_name, &task_id, input.log_format),
+            )?,
+            commands: CommandEvidence::new(Vec::new()),
+        })
+        .with_analysis_records(analysis_records(input.analysis_dir, &task_id));
+        corpus.push(trajectory)?;
+    }
+
+    Ok(corpus)
+}
+
+fn source_id_by_case(
+    manifest: &Trace2SkillSpreadsheetBenchManifest,
+) -> Result<BTreeMap<CaseId, String>, Trace2SkillManifestError> {
+    let mut by_case = BTreeMap::new();
+    for (case_id, case) in manifest.dataset.cases() {
+        let source_id = case
+            .metadata
+            .get(&MetadataKey::from("source_id"))
+            .ok_or(Trace2SkillManifestError::MissingSourceId { case: *case_id })?;
+        let MetadataValue::String(source_id) = source_id else {
+            return Err(Trace2SkillManifestError::InvalidSourceId { case: *case_id });
+        };
+        by_case.insert(*case_id, source_id.clone());
+    }
+    Ok(by_case)
+}
+
+fn artifact_record(
+    root: Option<&Path>,
+    filename: String,
+) -> Result<OutputRecord, Trace2SkillManifestError> {
+    let Some(root) = root else {
+        return Ok(OutputRecord::inline(""));
+    };
+    let path = root.join(filename);
+    if !path.exists() {
+        return Err(Trace2SkillManifestError::MissingArtifact { path });
+    }
+    Ok(OutputRecord::blob(BlobRef {
+        store: "trace2skill-run-artifacts".to_owned(),
+        key: path.display().to_string(),
+    }))
+}
+
+fn analysis_records(root: Option<&Path>, task_id: &str) -> Vec<AgentTrajectoryAnalysisRecord> {
+    let Some(root) = root else {
+        return Vec::new();
+    };
+    let error_path = root.join(format!("error_analysis_{task_id}.md"));
+    if error_path.exists() {
+        return vec![AgentTrajectoryAnalysisRecord::new(
+            AgentTrajectoryAnalysisKind::Error,
+            error_path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("error_analysis.md"),
+            OutputRecord::blob(BlobRef {
+                store: "trace2skill-run-artifacts".to_owned(),
+                key: error_path.display().to_string(),
+            }),
+        )];
+    }
+    let success_path = root.join(format!("success_analysis_{task_id}.md"));
+    if success_path.exists() {
+        return vec![AgentTrajectoryAnalysisRecord::new(
+            AgentTrajectoryAnalysisKind::Success,
+            success_path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("success_analysis.md"),
+            OutputRecord::blob(BlobRef {
+                store: "trace2skill-run-artifacts".to_owned(),
+                key: success_path.display().to_string(),
+            }),
+        )];
+    }
+    Vec::new()
+}
+
+fn log_filename(agent_name: &str, task_id: &str, format: &str) -> String {
+    let extension = if format == "jsonl" { "jsonl" } else { "md" };
+    format!("{agent_name}_{task_id}.{extension}")
+}
+
+fn model_config_fingerprint(run: &UpstreamResultsFile, log_format: &str) -> Fingerprint {
+    let mut builder = FingerprintBuilder::new();
+    builder
+        .update("trace2skill-spreadsheetbench")
+        .update(&run.agent_name)
+        .update(&run.model)
+        .update(run.seed.map_or_else(String::new, |seed| seed.to_string()))
+        .update(log_format);
+    builder.finish()
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum Trace2SkillManifestError {
     /// Manifest file could not be read.
@@ -110,6 +277,30 @@ pub enum Trace2SkillManifestError {
     /// Leaven split construction failed.
     #[error(transparent)]
     Splits(#[from] leaven_eval::DatasetSplitsError),
+    /// Training split is absent from the lowered manifest.
+    #[error("Trace2Skill training split is missing")]
+    MissingTrainingSplit,
+    /// A lowered case lacks source-id metadata.
+    #[error("case {case} is missing Trace2Skill source_id metadata")]
+    MissingSourceId {
+        /// Case missing source id.
+        case: CaseId,
+    },
+    /// A lowered case has non-string source-id metadata.
+    #[error("case {case} has non-string Trace2Skill source_id metadata")]
+    InvalidSourceId {
+        /// Case with invalid source id.
+        case: CaseId,
+    },
+    /// A caller supplied an artifact directory but the expected file was absent.
+    #[error("Trace2Skill artifact is missing: {path}")]
+    MissingArtifact {
+        /// Expected artifact path.
+        path: PathBuf,
+    },
+    /// Trajectory corpus refused an upstream result.
+    #[error(transparent)]
+    Corpus(#[from] leaven_evidence::AgentTrajectoryCorpusError),
 }
 
 #[derive(Debug, Deserialize)]
@@ -137,4 +328,51 @@ impl SpreadsheetBenchSourceId {
             Self::Number(value) => value.to_string(),
         }
     }
+}
+
+#[derive(Debug, Deserialize)]
+struct UpstreamResultsFile {
+    agent_name: String,
+    model: String,
+    seed: Option<u64>,
+    results: Vec<UpstreamResult>,
+}
+
+#[derive(Debug, Deserialize)]
+struct UpstreamResult {
+    id: SpreadsheetBenchSourceId,
+    success: bool,
+    error: Option<String>,
+    #[serde(default)]
+    test_cases: Vec<UpstreamTestCaseResult>,
+}
+
+impl UpstreamResult {
+    fn outcome(&self) -> AgentTrajectoryOutcome {
+        if self.success {
+            AgentTrajectoryOutcome::Success
+        } else {
+            AgentTrajectoryOutcome::Failure {
+                reason: self.failure_reason(),
+            }
+        }
+    }
+
+    fn failure_reason(&self) -> String {
+        self.error
+            .as_ref()
+            .filter(|reason| !reason.is_empty())
+            .cloned()
+            .or_else(|| {
+                self.test_cases
+                    .iter()
+                    .find_map(|test_case| test_case.error.clone())
+            })
+            .unwrap_or_else(|| "upstream result marked unsuccessful".to_owned())
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct UpstreamTestCaseResult {
+    error: Option<String>,
 }

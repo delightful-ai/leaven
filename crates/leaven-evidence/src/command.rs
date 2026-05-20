@@ -323,17 +323,21 @@ pub struct AgentTrajectoryCorpusEvidence {
 
 impl AgentTrajectoryCorpusEvidence {
     /// Build an empty corpus for a caller-declared task manifest.
-    #[must_use]
-    pub fn new(task_ids: impl IntoIterator<Item = String>) -> Self {
+    pub fn new(
+        task_ids: impl IntoIterator<Item = String>,
+    ) -> Result<Self, AgentTrajectoryCorpusError> {
         let mut seen = BTreeSet::new();
-        let expected_task_ids = task_ids
-            .into_iter()
-            .filter(|task_id| seen.insert(task_id.clone()))
-            .collect();
-        Self {
+        let mut expected_task_ids = Vec::new();
+        for task_id in task_ids {
+            if !seen.insert(task_id.clone()) {
+                return Err(AgentTrajectoryCorpusError::DuplicateTask { task_id });
+            }
+            expected_task_ids.push(task_id);
+        }
+        Ok(Self {
             expected_task_ids,
             trajectories: Vec::new(),
-        }
+        })
     }
 
     /// Adds one trajectory for a known task.
@@ -407,9 +411,15 @@ impl AgentTrajectoryCorpusEvidence {
 
 impl Evidence for AgentTrajectoryCorpusEvidence {}
 
-/// Corpus construction refused an invalid trajectory.
+/// Corpus construction or insertion refused invalid input.
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum AgentTrajectoryCorpusError {
+    /// Task id appeared more than once in the caller-declared manifest.
+    #[error("trajectory corpus manifest has duplicate task id `{task_id}`")]
+    DuplicateTask {
+        /// Duplicate task id.
+        task_id: String,
+    },
     /// Trajectory task id was not declared in the corpus manifest.
     #[error("trajectory task id `{task_id}` is not in the corpus manifest")]
     UnknownTask {

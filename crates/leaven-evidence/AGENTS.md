@@ -43,8 +43,9 @@ Evidence here is data a stage or evaluator can produce and another component can
 - Use `OutputRecord::BlobRef` for large stdout/stderr, transcripts, and parsed
   analyst payloads; `OutputRecord::Inline` is bounded display evidence.
 - Use `AgentTrajectoryCorpusEvidence` when a paper or runner must resume over a
-  known task manifest. Unknown task ids are refused at insertion; repeated
-  trajectories for a task are allowed for multi-seed or retry protocols.
+  known task manifest. Duplicate manifest task ids are refused at construction,
+  unknown task ids are refused at insertion, and repeated trajectories for a
+  task are allowed for multi-seed or retry protocols.
 - Use `AttributableEvidence<K>` when evidence needs to point at surface parts,
   paths, agents, tools, modules, or user keys without making this crate know
   those key domains.

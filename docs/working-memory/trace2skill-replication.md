@@ -126,6 +126,12 @@ The checked-out upstream release includes:
   `200..400` held-out split through `RowOrderSplitBuilder`. This is a
   mechanics-smoke for manifest provenance, not spreadsheet execution or skill
   evolution.
+- The same example now imports upstream run artifacts into Leaven trajectory
+  evidence without launching model work: `results.json` rows from
+  `run_spreadsheetbench.py`, chat-history logs named
+  `<agent>_<instance_id>.md/jsonl`, and optional `error_analysis_*.md` /
+  `success_analysis_*.md` reports lower into
+  `AgentTrajectoryCorpusEvidence` for the 200 train/evolving tasks.
 - This slice adds `leaven-agentic-skill::SkillPatchPlan`, a paper-neutral
   mechanical guardrail for agent-authored skill patch plans. It validates
   existing-file modifications/deletions, create-file overwrite refusal,
@@ -142,9 +148,9 @@ The checked-out upstream release includes:
 - `leaven-evidence::AgentTrajectoryCorpusEvidence` now owns the checkpointable
   many-trajectory evidence value needed to resume over the 200 train/evolving
   task manifest: caller-declared task ids, appended trajectory records,
-  completed/pending task projection, unknown-task refusal, and support for
-  repeated trajectories per task for multi-seed/retry protocols. Store backends
-  remain generic and do not know this schema.
+  duplicate-manifest refusal, completed/pending task projection, unknown-task
+  refusal, and support for repeated trajectories per task for multi-seed/retry
+  protocols. Store backends remain generic and do not know this schema.
 
 Verification:
 
@@ -158,11 +164,14 @@ Verification:
 - `cargo test -p trace2skill_spreadsheetbench --test manifest` passed on
   2026-05-20 and verified the official local 400-row manifest lowers to 400
   cases with first id `13-1`, last id `59902`, and the paper split.
+- `cargo test -p trace2skill_spreadsheetbench --test run_artifacts` passed on
+  2026-05-20 and verified an upstream-shaped `results.json` plus log/analysis
+  files lower into the training/evolving `AgentTrajectoryCorpusEvidence`.
 - `cargo clippy -p trace2skill_spreadsheetbench --all-targets -- -D warnings`
   and `cargo test -p leaven --test topology_contract` passed on 2026-05-20
   after adding the manifest-lowering example as a workspace member.
 - `cargo nextest run -p leaven-evidence`, `cargo clippy -p leaven-evidence
-  --all-targets -- -D warnings`, and `cargo check -p p4_meta_harness_lite`
+  --all-targets -- -D warnings`, and `cargo run -p p4_meta_harness_lite`
   passed on 2026-05-20 for the hard-cut trajectory evidence envelope, the
   many-trajectory corpus value, and the adapted P4 fixture caller.
 
@@ -170,10 +179,11 @@ Verification:
 
 Leaven-owned remaining primitives before faithful Trace2Skill replication:
 
-- paper-runner integration that writes `AgentTrajectoryCorpusEvidence` through
-  existing stores/checkpoints while generating the 200 training/evolving
-  SpreadsheetBench trajectories, preserving durable full ReAct trace blobs and
-  resumable analysis state;
+- live paper-runner execution that writes the upstream `results.json`, logs,
+  and analysis reports for the 200 training/evolving SpreadsheetBench
+  trajectories. Leaven can now import those artifacts into
+  `AgentTrajectoryCorpusEvidence`; the missing part is generating them through
+  the Qwen/vLLM ReAct run or an approved documented substitute.
 - checkpointed parallel analyst fan-out for hundreds of independent agent/LLM
   calls with durable per-call prompts, responses, parse failures, and retry
   state;
@@ -196,8 +206,8 @@ External/spend blockers:
 
 ## Next Action
 
-Define the run artifact schema for Trace2Skill trace records and patch-plan
-records without launching model/GPU work. The next Leaven-owned primitive is a
-checkpointed many-trajectory evidence corpus that can preserve full ReAct
-traces, success/failure labels, task ids, model/config fingerprints, and parsed
-analysis records.
+Define the patch-plan and merge-tree artifact schema for Trace2Skill Stage 2/3
+without launching model/GPU work. The next Leaven-owned primitive is durable
+parallel analyst fan-out over the imported trajectory corpus, preserving per-call
+prompts, responses, parse failures, retry state, support counts, and merge-level
+provenance.

@@ -105,7 +105,8 @@ fn agent_trajectory_groups_transcript_and_commands() {
 
 #[test]
 fn agent_trajectory_corpus_tracks_completed_and_pending_task_manifest() {
-    let mut corpus = AgentTrajectoryCorpusEvidence::new(["13-1".to_owned(), "59902".to_owned()]);
+    let mut corpus =
+        AgentTrajectoryCorpusEvidence::new(["13-1".to_owned(), "59902".to_owned()]).unwrap();
     assert_eq!(corpus.expected_task_ids(), ["13-1", "59902"]);
     assert_eq!(corpus.completed_task_ids(), Vec::<&str>::new());
     assert_eq!(corpus.pending_task_ids(), vec!["13-1", "59902"]);
@@ -133,6 +134,21 @@ fn agent_trajectory_corpus_tracks_completed_and_pending_task_manifest() {
         corpus.push(unknown).unwrap_err(),
         AgentTrajectoryCorpusError::UnknownTask {
             task_id: "not-in-manifest".to_owned(),
+        }
+    );
+}
+
+#[test]
+fn agent_trajectory_corpus_refuses_duplicate_manifest_task_ids() {
+    assert_eq!(
+        AgentTrajectoryCorpusEvidence::new([
+            "13-1".to_owned(),
+            "59902".to_owned(),
+            "13-1".to_owned(),
+        ])
+        .unwrap_err(),
+        AgentTrajectoryCorpusError::DuplicateTask {
+            task_id: "13-1".to_owned(),
         }
     );
 }

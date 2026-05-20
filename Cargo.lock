@@ -5648,6 +5648,7 @@ version = "0.0.0"
 dependencies = [
  "leaven-core",
  "leaven-eval",
+ "leaven-evidence",
  "leaven-kernel",
  "serde",
  "serde_json",
