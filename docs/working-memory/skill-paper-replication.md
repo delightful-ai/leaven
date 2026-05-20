@@ -250,10 +250,10 @@ Leaven primitive blockers:
   into `AgentTrajectoryCorpusEvidence` for the paper's 200 training/evolving
   tasks. This is artifact import/provenance only, not live Qwen/vLLM execution.
 - `examples/trace2skill_spreadsheetbench` now lowers upstream-shaped fenced or
-  bare `PATCH_FORMAT=json` patches into `SkillPatchPlan` plus concrete
-  `SkillBankChange` values and applies them through `SkillPatchApplication`.
-  This is patch-bridge mechanics only, not evidence that live analyst or merge
-  calls ran.
+  bare `PATCH_FORMAT=json` patches into `SkillParsedPatchDocument` operations,
+  then into `SkillPatchPlan` plus concrete `SkillBankChange` values, and
+  applies them through `SkillPatchApplication`. This is patch-bridge mechanics
+  only, not evidence that live analyst or merge calls ran.
 - `leaven-evidence::AgentTrajectoryEvidence` now preserves one-session
   trajectory provenance needed by Trace2Skill-style many-trace analysis:
   session id, optional Leaven case id, upstream task id, success/failure label,
@@ -280,6 +280,14 @@ Leaven primitive blockers:
   skill patch operations into a validated `SkillPatchPlan` plus concrete
   `SkillBankChange` values. This keeps paper JSON/markdown/diff syntax in thin
   paper examples while centralizing skill-file guardrails and artifact changes.
+- `examples/trace2skill_spreadsheetbench` now replays saved/live upstream JSON
+  patch merge artifacts through `SkillPatchMergeTree` and
+  `SkillPatchApplication`: leaf and merge output JSON patches are lowered
+  against the frozen parent skill bank, the upstream accepted/discarded inputs
+  become merge-tree provenance, and the selected final patch emits an evolved
+  `SkillBank` plus change report. This is artifact replay only; the paper
+  runner still owns analyst execution, merge prompts, batch sizing, and
+  prevalence policy.
 - live trajectory generation that writes upstream-shaped results/logs/analysis
   artifacts for the 200 SpreadsheetBench training/evolving tasks;
 - live parallel analyst dispatch that executes hundreds of independent
@@ -296,9 +304,9 @@ Leaven primitive blockers:
   `SkillParsedPatchDocument` now covers the generic parsed-operation to
   plan/change lowering step; the Trace2Skill example now translates upstream
   JSON patches into those operations;
-- live or replayed Trace2Skill merge-run integration that feeds saved/live
-  Stage 2/3 JSON patches through the bridge and validates the evolved
-  `SkillBank`;
+- live Trace2Skill merge-run integration that executes the model-backed merge
+  scheduler and writes the saved/live Stage 2/3 JSON artifacts consumed by the
+  replay seam;
 - result matrix/reporting for cross-model and OOD transfer.
 
 Spend/data risks:

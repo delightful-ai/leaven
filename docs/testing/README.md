@@ -236,10 +236,16 @@ Use the narrowest layer that proves the claim.
   executed.
 - `examples/trace2skill_spreadsheetbench/tests/patch_bridge.rs`:
   mechanics-smoke for lowering upstream-shaped fenced JSON patches into
-  `SkillPatchPlan` plus concrete `SkillBankChange` values and applying them
-  through `SkillPatchApplication`. It proves patch parsing and application
-  wiring only; it is not proof that analyst calls, hierarchical merge
-  execution, prevalence policy, or metric reproduction ran.
+  `SkillParsedPatchDocument`, then into `SkillPatchPlan` plus concrete
+  `SkillBankChange` values and applying them through `SkillPatchApplication`.
+  It proves patch parsing and application wiring only; it is not proof that
+  analyst calls, hierarchical merge execution, prevalence policy, or metric
+  reproduction ran.
+- `examples/trace2skill_spreadsheetbench/tests/patch_replay.rs`:
+  mechanics-smoke for replaying saved/live upstream JSON patch merge artifacts
+  through `SkillPatchMergeTree` and `SkillPatchApplication`. It proves the
+  artifact replay seam and evolved `SkillBank` output only; it is not proof
+  that the model-backed analysts or merge scheduler ran.
 
 ## Review Rules
 

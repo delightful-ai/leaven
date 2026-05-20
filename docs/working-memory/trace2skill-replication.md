@@ -171,6 +171,13 @@ The checked-out upstream release includes:
   `insert_after`, `insert_before`, `add_section`, `delete_section`, `create`,
   `delete_file`) but requires translated exact text targets rather than silently
   claiming a skipped edit was applied.
+- `examples/trace2skill_spreadsheetbench` now replays saved/live Stage 2/3 JSON
+  patch merge artifacts through Leaven primitives: leaf and merge output patches
+  lower against the frozen parent skill bank, upstream accepted/discarded input
+  decisions populate `SkillPatchMergeTree`, and the selected final patch applies
+  atomically to emit an evolved `SkillBank` plus `SkillBankChangeReport`. This
+  is still no-spend artifact replay; it does not run the model-backed analyst
+  or merge scheduler.
 - `leaven-evidence::AgentTrajectoryEvidence` now owns the reusable trajectory
   evidence envelope needed before Trace2Skill Stage 1/analysis can be
   faithfully replayed: runtime session id, optional Leaven case id, upstream
@@ -245,6 +252,10 @@ Verification:
   2026-05-20 for upstream-shaped fenced JSON patch lowering, reference
   create/link pairing, exact-section refusal, and atomic application through
   `SkillPatchApplication`.
+- `cargo test -p trace2skill_spreadsheetbench --test patch_replay` passed on
+  2026-05-20 for saved/live JSON patch merge artifact replay through
+  `SkillPatchMergeTree`, selected final-patch application, evolved
+  `SkillBank`, and change-report emission.
 
 ## Current Blockers
 
@@ -261,12 +272,9 @@ Leaven-owned remaining primitives before faithful Trace2Skill replication:
   executed those prompts;
 - live hierarchical merge execution over analyst patch outputs. Leaven now has
   generic `AgentPatchMergeTreeEvidence` and skill-specific
-  `SkillPatchMergeTree` provenance values plus JSON patch lowering/application,
+  `SkillPatchMergeTree` provenance values plus JSON patch replay/application,
   but no Trace2Skill merge scheduler, prevalence policy, or model-backed merge
   operator has run;
-- live or replayed Trace2Skill merge-run integration that feeds Stage 2/3 JSON
-  patch artifacts through the new bridge, records the resulting
-  `SkillPatchMergeTree`, and validates the evolved `SkillBank`;
 - result matrix/reporting for model scale transfer, OOD WikiTQ, DocVQA,
   DAPO/AIME, ablations, and sequential/retrieval baselines.
 
@@ -281,8 +289,8 @@ External/spend blockers:
 
 ## Next Action
 
-Wire the Trace2Skill example's Stage 2/3 replay path so saved or live upstream
-JSON patch artifacts feed the patch bridge, populate `SkillPatchMergeTree`, and
-emit a validated evolved `SkillBank` plus application report. Keep model-backed
-analyst dispatch, merge scheduling, prevalence thresholds, and prompt wording in
-the paper runner/example layer.
+Wire the Trace2Skill example's saved artifact loader for real upstream
+`--save-intermediates` / cumulative patch outputs so an actual no-spend
+evolution directory can feed the replay seam. Keep model-backed analyst
+dispatch, merge scheduling, prevalence thresholds, and prompt wording in the
+paper runner/example layer.

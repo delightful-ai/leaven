@@ -437,8 +437,8 @@ fn skill_file_text<'a>(
     path: &SkillPath,
 ) -> Result<&'a str, Trace2SkillPatchError> {
     str::from_utf8(file.bytes()).map_err(|_| Trace2SkillPatchError::NonUtf8PatchFile {
-            path: path.to_string(),
-        })
+        path: path.to_string(),
+    })
 }
 
 #[derive(Debug, Deserialize)]

@@ -1,6 +1,7 @@
 //! `Trace2Skill` `SpreadsheetBench` manifest lowering.
 
 mod patch_bridge;
+mod patch_replay;
 
 use std::{
     collections::BTreeMap,
@@ -25,6 +26,11 @@ use serde::Deserialize;
 pub use patch_bridge::{
     Trace2SkillPatchError, Trace2SkillPatchLowering, Trace2SkillPatchLoweringInput,
     apply_trace2skill_json_patch, lower_trace2skill_json_patch,
+};
+pub use patch_replay::{
+    Trace2SkillJsonPatchArtifact, Trace2SkillJsonPatchMergeBatch, Trace2SkillJsonPatchMergeInput,
+    Trace2SkillJsonPatchMergeLevel, Trace2SkillJsonPatchReplay, Trace2SkillJsonPatchReplayInput,
+    Trace2SkillPatchReplayError, replay_trace2skill_json_patch_merge,
 };
 
 const VERIFIED_400_VERSION: &str = "trace2skill-spreadsheetbench-verified-400-v1";
