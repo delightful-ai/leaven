@@ -2736,6 +2736,7 @@ dependencies = [
 name = "leaven-population"
 version = "0.0.0"
 dependencies = [
+ "leaven-artifact-skill",
  "leaven-core",
  "leaven-engine",
  "leaven-evidence",
