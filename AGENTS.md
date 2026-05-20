@@ -1,6 +1,11 @@
 ## Boundary
 This is the repo-wide operating contract for Leaven. It gives horizon-level guidance for the Rust workspace; more specific `AGENTS.md` files add local deltas and must not silently contradict this file.
 
+## Workspace Isolation
+This checkout is the `leaven-papers` jj workspace. Paper-replication work in this checkout must not run commands from the sibling default workspace at `/Users/darin/src/personal/leaven`.
+
+Before running mutating commands, live provider loops, or long-running scripts for paper work, verify that `jj root` resolves to this checkout. Use `scripts/ensure_leaven_papers_workspace.sh` for shell entrypoints. Do not run even read-looking jj commands from `/Users/darin/src/personal/leaven`; jj may snapshot that working copy.
+
 Leaven is spec-first library work. The governing product truth starts in `docs/specs/initial_library.md`; narrower implementation slices may live beside it, such as `docs/specs/first_two_subsystems.md`.
 
 Product constraints and principles live in `docs/specs/guiding_principles.md`.
