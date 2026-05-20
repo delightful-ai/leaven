@@ -129,8 +129,9 @@ Leaven primitive blockers:
   EvoSkill run-loop integration plus paper score metadata conventions;
 - `leaven-population`: explicit top-k frontier/admission and checkpointable
   best/round-robin parent selector state now exist; P5 carries that state in
-  private checkpoints, while full EvoSkill still needs git-program paper-run
-  integration and selector-policy resolution;
+  private checkpoints and reports actual child admission/best-frontier truth,
+  while full EvoSkill still needs git-program paper-run integration and
+  selector-policy resolution;
 - `leaven-eval`: `CategoryRoundRobinSampler` now provides checkpointable
   category-aware without-replacement train-pool sampling; `StratifiedSplitBuilder`
   now provides exact disjoint train/validation/test or custom role membership

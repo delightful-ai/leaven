@@ -1,7 +1,7 @@
 # EvoSkill Replication Dossier
 
 Status: active.
-Updated: 2026-05-19.
+Updated: 2026-05-20.
 
 ## Authority
 
@@ -49,6 +49,11 @@ Date: 2026-05-19.
 Provider/model spend: none.
 Cloud/GPU spend: none.
 Live agent execution: none.
+
+Workspace sync note: on 2026-05-20, ignored `tmp/` was copied from the main
+Leaven workspace into `leaven-papers`; local checks confirmed
+`tmp/skill_opt_sources/arx_2603.02766/full_source.md`,
+`tmp/repros/officeqa/officeqa_full.csv`, and 46G source/destination sizes.
 
 Commands and bounded checks used:
 
@@ -324,8 +329,9 @@ Second-order blockers after git identity:
    now provides `TopKFrontier` for fixed-capacity scalar validation admission
    and weakest-member eviction plus `TopKParentSelector` for checkpointable
    best/round-robin parent selection. P5 now persists frontier membership,
-   selected parent, and selector cursor through its private checkpoints, but
-   full EvoSkill still needs multi-iteration git-program integration.
+   selected parent, selector cursor, and actual child admission/best-frontier
+   truth through its private checkpoints, but full EvoSkill still needs
+   multi-iteration git-program integration.
    `leaven-eval::StratifiedSplitBuilder` now constructs exact disjoint
    train/validation/test membership from caller-supplied strata and counts, so
    the remaining split blocker is the paper's source category/split manifest,
