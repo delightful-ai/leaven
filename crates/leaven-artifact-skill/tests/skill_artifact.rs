@@ -2,10 +2,11 @@ use std::collections::BTreeMap;
 use std::str::FromStr;
 
 use leaven_artifact_skill::{
-    ParsedSkillMd, SkillBank, SkillBankChange, SkillBankError, SkillBody, SkillDescription,
-    SkillFile, SkillFileEdit, SkillFilePartId, SkillFileSurface, SkillFolder, SkillFolderEdit,
-    SkillFolderSurface, SkillManifestEdit, SkillManifestPartId, SkillManifestSurface,
-    SkillMetadataValue, SkillName, SkillNameError, SkillParseError, SkillPath, SkillPathError,
+    ParsedSkillMd, SkillBank, SkillBankChange, SkillBankError, SkillBody, SkillCard,
+    SkillDescription, SkillFile, SkillFileEdit, SkillFilePartId, SkillFileSurface, SkillFolder,
+    SkillFolderEdit, SkillFolderSurface, SkillManifestEdit, SkillManifestPartId,
+    SkillManifestSurface, SkillMetadataValue, SkillName, SkillNameError, SkillParseError,
+    SkillPath, SkillPathError,
 };
 use leaven_core::{Artifact, ContentAddressed};
 use leaven_surface::EditSurface;
@@ -22,6 +23,12 @@ fn skill_md(name: &str, description: &str, body: &str) -> SkillFile {
     SkillFile::text(format!(
         "---\nname: {name}\ndescription: {description}\nlicense: MIT\nmetadata:\n  owner: tests\n---\n{body}\n"
     ))
+}
+
+fn folder_with_description(name: &str, description: &str, body: &str) -> SkillFolder {
+    let mut entries = BTreeMap::new();
+    entries.insert(SkillPath::skill_md(), skill_md(name, description, body));
+    SkillFolder::from_entries(skill_name(name), entries).unwrap()
 }
 
 fn folder(name: &str) -> SkillFolder {
@@ -43,6 +50,48 @@ fn folder(name: &str) -> SkillFolder {
 
 fn bank() -> SkillBank {
     SkillBank::from_folders([folder("test-skill")]).unwrap()
+}
+
+#[test]
+fn skill_cards_project_bank_manifests_in_stable_bank_order() {
+    let beta = folder_with_description(
+        "beta-skill",
+        "Use when testing beta routing.",
+        "Beta body must stay outside the routing card.",
+    );
+    let alpha = folder_with_description(
+        "alpha-skill",
+        "Use when testing alpha routing.",
+        "Alpha body must stay outside the routing card.",
+    );
+    let bank = SkillBank::from_folders([beta, alpha.clone()]).unwrap();
+
+    let cards = bank.cards();
+
+    assert_eq!(
+        cards
+            .iter()
+            .map(|card| card.name().as_str())
+            .collect::<Vec<_>>(),
+        ["alpha-skill", "beta-skill"]
+    );
+    assert_eq!(
+        cards[0].description().as_str(),
+        "Use when testing alpha routing."
+    );
+    assert_eq!(
+        cards[0].metadata().get("license"),
+        Some(&SkillMetadataValue::String("MIT".to_owned()))
+    );
+    assert!(matches!(
+        cards[0].metadata().get("metadata"),
+        Some(SkillMetadataValue::Mapping(values)) if values.contains_key("owner")
+    ));
+
+    let alpha_card = SkillCard::from_folder(&alpha);
+    assert_eq!(alpha_card.name(), alpha.name());
+    assert_eq!(alpha_card.description(), &alpha.manifest().description);
+    assert_eq!(alpha_card.metadata(), &alpha.manifest().metadata);
 }
 
 #[test]

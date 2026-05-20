@@ -53,7 +53,10 @@ The working loop for each paper:
 Current useful substrate:
 
 - `leaven-artifact-skill` owns `SkillBank`, `SkillFolder`, `SkillBankChange`,
-  skill validation, metadata, and skill surfaces.
+  `SkillCard`, skill validation, metadata, and skill surfaces. The current
+  card is the manifest-only routing catalog view over names, descriptions, and
+  generic metadata; learned utility/retrieval state remains outside
+  `SkillBank`.
 - `leaven-agentic-skill` owns skill-bank materialization, workspace readback,
   diffs, and proposal parsing for agent-authored skill changes.
 - `leaven-agentic` has proposer repair policy support.
@@ -575,9 +578,10 @@ Start with these generic primitives as failures expose them:
 2. `leaven-population`: top-k scalar frontier admission and deterministic
    best/round-robin parent selector state exist; P5 checkpoint/resume carries
    that state, while full EvoSkill OfficeQA/SealQA run integration remains.
-3. Skill registry/card layer: derived `SkillCard` plus utility, routing keys,
-   trigger stats, retrieved-use evidence, and lifecycle state outside raw
-   `SkillBank`.
+3. Skill registry/card layer: base derived `SkillCard` now exists in
+   `leaven-artifact-skill` as the manifest-only catalog view over validated
+   skill folders. Utility, routing keys, trigger stats, retrieved-use evidence,
+   and lifecycle state remain outside raw `SkillBank`.
 4. Evidence/trace corpus: trajectories, success/failure labels, feedback
    history, patch/proposal provenance, support counts, and cost records.
 5. Agentic batch orchestration: many independent analysts/proposers with
