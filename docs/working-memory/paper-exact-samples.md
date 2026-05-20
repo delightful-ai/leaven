@@ -10,6 +10,8 @@ tracked handoff surface.
 ```bash
 python3 scripts/materialize_paper_exact_samples.py
 python3 scripts/build_paper_exact_lanes.py
+python3 scripts/run_paper_exact_lanes.py --lane all --run-id latest-preflight
+LEAVEN_CODEX_LIVE=1 python3 scripts/run_paper_exact_lanes.py --lane all --live --run-id latest-live
 ```
 
 Primary generated manifests:
@@ -24,6 +26,24 @@ Rendered preflights:
 - `tmp/paper_exact_lanes/memento-skills/gated_access_preflight.md`
 - `tmp/paper_exact_lanes/d2skill/rendered_alfworld_prompt.md`
 - `tmp/paper_exact_lanes/skillreducer/rendered_reduction_prompt.md`
+
+Latest lane runner output:
+
+- `tmp/paper_exact_lane_runs/latest-preflight/manifest.json`
+- `tmp/paper_exact_lane_runs/latest-preflight/trace2skill/report.json`
+- `tmp/paper_exact_lane_runs/latest-preflight/d2skill/report.json`
+- `tmp/paper_exact_lane_runs/latest-preflight/evoskill/report.json`
+- `tmp/paper_exact_lane_runs/latest-preflight/skillreducer/report.json`
+- `tmp/paper_exact_lane_runs/latest-preflight/memento-skills/report.json`
+
+Latest live runner output:
+
+- `tmp/paper_exact_lane_runs/latest-live/manifest.json`
+- `tmp/paper_exact_lane_runs/latest-live/trace2skill/codex_last_message.txt`
+- `tmp/paper_exact_lane_runs/latest-live/d2skill/codex_last_message.txt`
+- `tmp/paper_exact_lane_runs/latest-live/evoskill/codex_last_message.txt`
+- `tmp/paper_exact_lane_runs/latest-live/skillreducer/codex_last_message.txt`
+- `tmp/paper_exact_lane_runs/latest-live/memento-skills/report.json`
 
 ## Samples
 
@@ -79,3 +99,21 @@ materialized substrate for that work:
 Next implementation pass should adapt the per-paper runners to consume these
 `tmp/paper_exact_lanes/*/lane.json` reports, starting with Trace2Skill and
 EvoSkill because their real samples and prompt surfaces are most concrete.
+
+`scripts/run_paper_exact_lanes.py` is now the first adapter layer. It consumes
+the materialized samples directly and writes per-paper prompt/report bundles.
+Current statuses:
+
+- Trace2Skill: `preflight_ready` using real SpreadsheetBench case `13-1`, exact
+  upstream system prompt, released skill, init workbook, and golden workbook.
+- D2Skill: `preflight_ready` using a real ALFWorld train trajectory and exact
+  D2Skill ALFWorld prompt template.
+- EvoSkill: `preflight_ready` using real OfficeQA `UID0001`, source text, and
+  upstream proposer/builder prompt sources.
+- SkillReducer: `preflight_ready_prompt_non_exact` because the data and skill
+  are real but the exact paper prompt text is not exposed locally.
+- Memento-Skills: `blocked_on_gated_data` for GAIA/HLE.
+
+The `latest-live` run executed Codex/gpt-5.4-mini for Trace2Skill, D2Skill,
+EvoSkill, and SkillReducer. Each live lane returned JSON in
+`codex_last_message.txt`. Memento-Skills did not run a surrogate live call.
