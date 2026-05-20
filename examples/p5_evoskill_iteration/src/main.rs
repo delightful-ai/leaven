@@ -54,7 +54,9 @@ use std::num::NonZeroUsize;
 
 use crate::checkpoint::EvoSkillCheckpoint;
 use crate::codex::{LiveCodexRuntime, live_codex_runtime, require_live_codex};
-use crate::data::{EvoSkillCase, Split, TRAIN, VALIDATION, case_set, load_cases};
+use crate::data::{
+    EvoSkillCase, Split, TRAIN, VALIDATION, case_set, load_cases, load_officeqa_case,
+};
 use crate::error::{ExampleError, Result, msg};
 use crate::evidence::{AgentRole, CaseExecution, EvoSkillEvidence};
 use crate::proposal::{EvoSkillProposalAnnotations, SkillProposal};
@@ -76,9 +78,15 @@ impl OptimizationProblem for EvoSkillProblem {
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = CliArgs::parse()?;
+    let initial_cases = load_case_source(&args.case_source)?;
+    if args.inspect_cases {
+        print_case_inspection(&initial_cases)?;
+        return Ok(());
+    }
     if args.live_codex {
         require_live_codex()?;
     }
+    validate_iteration_cases(&initial_cases)?;
 
     let stores = RunStores::open(args.run_dir.unwrap_or_else(default_run_dir))?;
     let restored_run = stores
@@ -89,7 +97,7 @@ async fn main() -> Result<()> {
     }
 
     let resume = stores.resume_state(restored_run.as_ref())?;
-    run_iteration(stores, resume, restored_run).await
+    run_iteration(stores, resume, restored_run, initial_cases).await
 }
 
 struct RunStores {
@@ -263,8 +271,9 @@ async fn run_iteration(
     stores: RunStores,
     resume: ResumeState,
     restored_run: Option<RestoredRunState<EvoSkillProblem>>,
+    initial_cases: Vec<EvoSkillCase>,
 ) -> Result<()> {
-    let cases = resume.cases.unwrap_or_else(load_fixture_cases);
+    let cases = resume.cases.unwrap_or(initial_cases);
     let run_id = resume
         .run_id
         .or_else(|| {
@@ -841,34 +850,192 @@ fn checkpoint_phase(
     Ok(ctx.checkpoint_with_optimizer_state(evoskill_state_write(state)?)?)
 }
 
-#[derive(Default)]
 struct CliArgs {
     live_codex: bool,
     run_dir: Option<PathBuf>,
+    inspect_cases: bool,
+    case_source: CaseSource,
+}
+
+impl Default for CliArgs {
+    fn default() -> Self {
+        Self {
+            live_codex: false,
+            run_dir: None,
+            inspect_cases: false,
+            case_source: CaseSource::Fixture,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+enum CaseSource {
+    #[default]
+    Fixture,
+    JsonCases(PathBuf),
+    OfficeQaSample {
+        case_path: PathBuf,
+        source_text_path: PathBuf,
+        split: Split,
+    },
 }
 
 impl CliArgs {
     fn parse() -> Result<Self> {
+        Self::parse_from(std::env::args())
+    }
+
+    fn parse_from<I, S>(args: I) -> Result<Self>
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
         let mut parsed = Self::default();
-        let mut args = std::env::args().skip(1);
+        let mut args = args.into_iter().map(Into::into);
+        let _program = args.next();
+        let mut json_cases = None;
+        let mut officeqa_case_path = None;
+        let mut officeqa_source_text_path = None;
+        let mut officeqa_split = Split::Validation;
         while let Some(arg) = args.next() {
             match arg.as_str() {
                 "--live-codex" => parsed.live_codex = true,
+                "--inspect-cases" => parsed.inspect_cases = true,
                 "--run-dir" => {
                     let Some(value) = args.next() else {
                         return Err(msg("--run-dir requires a path"));
                     };
                     parsed.run_dir = Some(PathBuf::from(value));
                 }
+                "--cases" => {
+                    let Some(value) = args.next() else {
+                        return Err(msg("--cases requires a path"));
+                    };
+                    json_cases = Some(PathBuf::from(value));
+                }
+                "--officeqa-case" => {
+                    let Some(value) = args.next() else {
+                        return Err(msg("--officeqa-case requires a path"));
+                    };
+                    officeqa_case_path = Some(PathBuf::from(value));
+                }
+                "--officeqa-source-text" => {
+                    let Some(value) = args.next() else {
+                        return Err(msg("--officeqa-source-text requires a path"));
+                    };
+                    officeqa_source_text_path = Some(PathBuf::from(value));
+                }
+                "--officeqa-split" => {
+                    let Some(value) = args.next() else {
+                        return Err(msg("--officeqa-split requires train or validation"));
+                    };
+                    officeqa_split = parse_split(&value)?;
+                }
                 other => return Err(msg(format!("unknown argument `{other}`"))),
             }
         }
+        let officeqa_requested =
+            officeqa_case_path.is_some() || officeqa_source_text_path.is_some();
+        if json_cases.is_some() && officeqa_requested {
+            return Err(msg(
+                "choose one case source: --cases or --officeqa-case/--officeqa-source-text",
+            ));
+        }
+        parsed.case_source = if let Some(path) = json_cases {
+            CaseSource::JsonCases(path)
+        } else if officeqa_requested {
+            let Some(case_path) = officeqa_case_path else {
+                return Err(msg("--officeqa-case is required for OfficeQA input"));
+            };
+            let Some(source_text_path) = officeqa_source_text_path else {
+                return Err(msg("--officeqa-source-text is required for OfficeQA input"));
+            };
+            CaseSource::OfficeQaSample {
+                case_path,
+                source_text_path,
+                split: officeqa_split,
+            }
+        } else {
+            CaseSource::Fixture
+        };
         Ok(parsed)
     }
 }
 
 fn default_run_dir() -> PathBuf {
     PathBuf::from("tmp/p5_evoskill_iteration/live-cli")
+}
+
+fn parse_split(value: &str) -> Result<Split> {
+    match value {
+        "train" => Ok(Split::Train),
+        "validation" => Ok(Split::Validation),
+        other => Err(msg(format!(
+            "unknown --officeqa-split `{other}`; expected train or validation"
+        ))),
+    }
+}
+
+fn load_case_source(case_source: &CaseSource) -> Result<Vec<EvoSkillCase>> {
+    match case_source {
+        CaseSource::Fixture => Ok(load_fixture_cases()),
+        CaseSource::JsonCases(path) => load_cases(path),
+        CaseSource::OfficeQaSample {
+            case_path,
+            source_text_path,
+            split,
+        } => Ok(vec![load_officeqa_case(
+            case_path,
+            source_text_path,
+            *split,
+        )?]),
+    }
+}
+
+fn validate_iteration_cases(cases: &[EvoSkillCase]) -> Result<()> {
+    let train_count = cases
+        .iter()
+        .filter(|case| case.split == Split::Train)
+        .count();
+    let validation_count = cases
+        .iter()
+        .filter(|case| case.split == Split::Validation)
+        .count();
+    if train_count == 0 || validation_count == 0 {
+        return Err(msg(format!(
+            "EvoSkill iteration requires at least one train case and one validation case; got train={train_count} validation={validation_count}"
+        )));
+    }
+    Ok(())
+}
+
+fn print_case_inspection(cases: &[EvoSkillCase]) -> Result<()> {
+    let train_count = cases
+        .iter()
+        .filter(|case| case.split == Split::Train)
+        .count();
+    let validation_count = cases
+        .iter()
+        .filter(|case| case.split == Split::Validation)
+        .count();
+    let report = serde_json::json!({
+        "case_count": cases.len(),
+        "train_count": train_count,
+        "validation_count": validation_count,
+        "cases": cases
+            .iter()
+            .map(|case| serde_json::json!({
+                "id": case.id,
+                "split": case.split,
+                "category": case.category,
+                "question": case.question,
+                "answer": case.answer,
+                "source_bytes": case.source.len(),
+            }))
+            .collect::<Vec<_>>(),
+    });
+    println!("{}", serde_json::to_string_pretty(&report)?);
+    Ok(())
 }
 
 fn load_fixture_cases() -> Vec<EvoSkillCase> {
@@ -987,6 +1154,10 @@ struct ResumeState {
 }
 
 impl ResumeState {
+    #[expect(
+        clippy::too_many_lines,
+        reason = "explicit checkpoint variant restoration keeps private resume state auditable in this live example"
+    )]
     fn from_checkpoint(checkpoint: Option<EvoSkillCheckpoint>) -> Result<Self> {
         let Some(checkpoint) = checkpoint else {
             return Ok(Self::default());
@@ -1976,6 +2147,7 @@ async fn finish_workspace<T>(workspace: Workspace, stage_result: Result<T>) -> R
 mod tests {
     use std::collections::BTreeMap;
     use std::num::NonZeroUsize;
+    use std::path::Path;
 
     use leaven_eval::CategoryRoundRobinSampler;
     use leaven_evidence::ScalarEvidence;
@@ -1983,10 +2155,38 @@ mod tests {
     use leaven_population::{TopKParentSelectionPolicy, TopKParentSelector};
 
     use super::{
-        EvaluationEvidence, EvaluationOutcome, EvoSkillCheckpoint, EvoSkillProblem, ResumeState,
-        evoskill_frontier, evoskill_train_sampler, observe_frontier, skill_gated_score,
+        CaseSource, CliArgs, EvaluationEvidence, EvaluationOutcome, EvoSkillCheckpoint,
+        EvoSkillProblem, ResumeState, evoskill_frontier, evoskill_train_sampler, observe_frontier,
+        skill_gated_score,
     };
     use crate::data::{EvoSkillCase, Split};
+
+    #[test]
+    fn cli_parse_accepts_officeqa_sample_inspection_source() {
+        let args = CliArgs::parse_from([
+            "p5",
+            "--officeqa-case",
+            "tmp/paper_exact_samples/evoskill/officeqa/officeqa_pro_first_case.json",
+            "--officeqa-source-text",
+            "tmp/paper_exact_samples/evoskill/officeqa/treasury_bulletin_1941_01.txt",
+            "--officeqa-split",
+            "validation",
+            "--inspect-cases",
+        ])
+        .unwrap();
+
+        assert!(args.inspect_cases);
+        assert!(!args.live_codex);
+        assert!(matches!(
+            args.case_source,
+            CaseSource::OfficeQaSample {
+                ref case_path,
+                ref source_text_path,
+                split: Split::Validation,
+            } if case_path == Path::new("tmp/paper_exact_samples/evoskill/officeqa/officeqa_pro_first_case.json")
+                && source_text_path == Path::new("tmp/paper_exact_samples/evoskill/officeqa/treasury_bulletin_1941_01.txt")
+        ));
+    }
 
     #[test]
     fn skill_gated_score_rejects_model_prior_without_skill() {
