@@ -9,6 +9,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use calamine::{open_workbook_auto, Reader};
 use leaven_eval::{
     Case, Dataset, DatasetSplitManifest, RowOrderSplitBuilder, SplitRole, SplitUsePolicy,
 };
@@ -118,6 +119,53 @@ pub struct Trace2SkillOneCaseInspection {
     pub released_skill: Trace2SkillFileArtifact,
     /// Deterministic output path a one-case run would write.
     pub output_workbook: PathBuf,
+}
+
+/// Files needed to compare one exact `SpreadsheetBench` output workbook.
+#[derive(Clone, Copy, Debug)]
+pub struct Trace2SkillOneCaseComparisonInput<'a> {
+    /// One-row `SpreadsheetBench` case JSON.
+    pub case_file: &'a Path,
+    /// Candidate workbook to score.
+    pub candidate_workbook: &'a Path,
+    /// Golden workbook to compare against.
+    pub golden_workbook: &'a Path,
+}
+
+/// One mismatched answer cell.
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize)]
+pub struct Trace2SkillCellMismatch {
+    /// A1-style cell address.
+    pub address: String,
+    /// Golden workbook cell value.
+    pub expected: String,
+    /// Candidate workbook cell value.
+    pub actual: String,
+}
+
+/// Exact answer-range comparison for one `SpreadsheetBench` workbook.
+#[derive(Clone, Debug, PartialEq, serde::Serialize)]
+pub struct Trace2SkillOneCaseAnswerReport {
+    /// Upstream `SpreadsheetBench` case id.
+    pub case_id: String,
+    /// Expected answer sheet.
+    pub answer_sheet: Option<String>,
+    /// Expected answer range.
+    pub answer_position: String,
+    /// Candidate workbook artifact.
+    pub candidate_workbook: Trace2SkillFileArtifact,
+    /// Golden workbook artifact.
+    pub golden_workbook: Trace2SkillFileArtifact,
+    /// Count of cells compared in the answer range.
+    pub total_cells: usize,
+    /// Count of exact cell-value matches.
+    pub matched_cells: usize,
+    /// Exact-match ratio over the answer range.
+    pub score: f64,
+    /// True when every answer-range cell matches exactly.
+    pub passed: bool,
+    /// Cells whose candidate value differed from the golden value.
+    pub mismatches: Vec<Trace2SkillCellMismatch>,
 }
 
 /// Loads the official 400-row `Trace2Skill` `SpreadsheetBench`-Verified manifest.
@@ -236,6 +284,85 @@ pub fn render_trace2skill_one_case_prompt(
         golden_workbook = inspection.golden_workbook.path.display(),
         answer_position = inspection.answer_position,
     ))
+}
+
+/// Compares one candidate workbook against the golden answer range.
+pub fn compare_trace2skill_one_case_answer(
+    input: Trace2SkillOneCaseComparisonInput<'_>,
+) -> Result<Trace2SkillOneCaseAnswerReport, Trace2SkillManifestError> {
+    let row = load_spreadsheet_row(input.case_file)?;
+    let case_id = row.id.to_source_id();
+    let Some(answer_sheet) = row.answer_sheet else {
+        return Err(Trace2SkillManifestError::MissingAnswerSheet { case_id });
+    };
+    let answer_range = parse_cell_range(&row.answer_position)?;
+    let candidate_workbook = file_artifact(input.candidate_workbook)?;
+    let golden_workbook = file_artifact(input.golden_workbook)?;
+    let mut candidate = open_workbook_auto(input.candidate_workbook).map_err(|source| {
+        Trace2SkillManifestError::Workbook {
+            path: input.candidate_workbook.to_path_buf(),
+            source,
+        }
+    })?;
+    let mut golden = open_workbook_auto(input.golden_workbook).map_err(|source| {
+        Trace2SkillManifestError::Workbook {
+            path: input.golden_workbook.to_path_buf(),
+            source,
+        }
+    })?;
+    let candidate_sheet = candidate.worksheet_range(&answer_sheet).map_err(|source| {
+        Trace2SkillManifestError::Workbook {
+            path: input.candidate_workbook.to_path_buf(),
+            source,
+        }
+    })?;
+    let golden_sheet = golden.worksheet_range(&answer_sheet).map_err(|source| {
+        Trace2SkillManifestError::Workbook {
+            path: input.golden_workbook.to_path_buf(),
+            source,
+        }
+    })?;
+
+    let mut total_cells = 0;
+    let mut matched_cells = 0;
+    let mut mismatches = Vec::new();
+    for row_index in answer_range.start.row..=answer_range.end.row {
+        for column_index in answer_range.start.column..=answer_range.end.column {
+            total_cells += 1;
+            let position = (row_index, column_index);
+            let expected = golden_sheet
+                .get_value(position)
+                .cloned()
+                .unwrap_or_default();
+            let actual = candidate_sheet
+                .get_value(position)
+                .cloned()
+                .unwrap_or_default();
+            if actual == expected {
+                matched_cells += 1;
+            } else {
+                mismatches.push(Trace2SkillCellMismatch {
+                    address: cell_address(position),
+                    expected: expected.to_string(),
+                    actual: actual.to_string(),
+                });
+            }
+        }
+    }
+    let score = exact_match_score(matched_cells, total_cells, &row.answer_position)?;
+
+    Ok(Trace2SkillOneCaseAnswerReport {
+        case_id,
+        answer_sheet: Some(answer_sheet),
+        answer_position: row.answer_position,
+        candidate_workbook,
+        golden_workbook,
+        total_cells,
+        matched_cells,
+        score,
+        passed: mismatches.is_empty(),
+        mismatches,
+    })
 }
 
 /// Upstream run artifacts used to build a Leaven trajectory corpus.
@@ -390,6 +517,111 @@ fn file_artifact(path: &Path) -> Result<Trace2SkillFileArtifact, Trace2SkillMani
     })
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct CellAddress {
+    row: u32,
+    column: u32,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct CellRange {
+    start: CellAddress,
+    end: CellAddress,
+}
+
+fn parse_cell_range(value: &str) -> Result<CellRange, Trace2SkillManifestError> {
+    let (start, end) = value.split_once(':').map_or((value, value), |range| range);
+    let start = parse_cell_address(start)?;
+    let end = parse_cell_address(end)?;
+    if end.row < start.row || end.column < start.column {
+        return Err(Trace2SkillManifestError::InvalidAnswerRange {
+            range: value.to_owned(),
+        });
+    }
+    Ok(CellRange { start, end })
+}
+
+fn parse_cell_address(value: &str) -> Result<CellAddress, Trace2SkillManifestError> {
+    let value = value.trim();
+    let split = value
+        .find(|character: char| character.is_ascii_digit())
+        .ok_or_else(|| Trace2SkillManifestError::InvalidAnswerRange {
+            range: value.to_owned(),
+        })?;
+    let (column, row) = value.split_at(split);
+    if column.is_empty()
+        || row.is_empty()
+        || !row.chars().all(|character| character.is_ascii_digit())
+    {
+        return Err(Trace2SkillManifestError::InvalidAnswerRange {
+            range: value.to_owned(),
+        });
+    }
+    let mut column_index = 0u32;
+    for character in column.chars() {
+        if !character.is_ascii_alphabetic() {
+            return Err(Trace2SkillManifestError::InvalidAnswerRange {
+                range: value.to_owned(),
+            });
+        }
+        column_index = column_index
+            .checked_mul(26)
+            .and_then(|index| {
+                index.checked_add(u32::from(character.to_ascii_uppercase()) - u32::from('A') + 1)
+            })
+            .ok_or_else(|| Trace2SkillManifestError::InvalidAnswerRange {
+                range: value.to_owned(),
+            })?;
+    }
+    let row_index = row
+        .parse::<u32>()
+        .ok()
+        .and_then(|row| row.checked_sub(1))
+        .ok_or_else(|| Trace2SkillManifestError::InvalidAnswerRange {
+            range: value.to_owned(),
+        })?;
+    Ok(CellAddress {
+        row: row_index,
+        column: column_index - 1,
+    })
+}
+
+fn exact_match_score(
+    matched_cells: usize,
+    total_cells: usize,
+    answer_position: &str,
+) -> Result<f64, Trace2SkillManifestError> {
+    let matched_cells = u32::try_from(matched_cells).map_err(|_| {
+        Trace2SkillManifestError::AnswerRangeTooLarge {
+            range: answer_position.to_owned(),
+        }
+    })?;
+    let total_cells =
+        u32::try_from(total_cells).map_err(|_| Trace2SkillManifestError::AnswerRangeTooLarge {
+            range: answer_position.to_owned(),
+        })?;
+    Ok(f64::from(matched_cells) / f64::from(total_cells))
+}
+
+fn cell_address(position: (u32, u32)) -> String {
+    let (row, column) = position;
+    format!("{}{}", column_name(column), row + 1)
+}
+
+fn column_name(mut column: u32) -> String {
+    let mut letters = Vec::new();
+    loop {
+        let offset = u8::try_from(column % 26).expect("column modulo 26 fits u8");
+        letters.push(char::from(b'A' + offset));
+        column /= 26;
+        if column == 0 {
+            break;
+        }
+        column -= 1;
+    }
+    letters.iter().rev().collect()
+}
+
 fn artifact_record(
     root: Option<&Path>,
     filename: String,
@@ -501,6 +733,32 @@ pub enum Trace2SkillManifestError {
     MissingArtifact {
         /// Expected artifact path.
         path: PathBuf,
+    },
+    /// A case did not name an answer sheet for workbook comparison.
+    #[error("Trace2Skill case {case_id} is missing answer_sheet")]
+    MissingAnswerSheet {
+        /// Upstream case id.
+        case_id: String,
+    },
+    /// A case has an answer range the scorer cannot interpret.
+    #[error("invalid Trace2Skill answer range: {range}")]
+    InvalidAnswerRange {
+        /// Invalid answer range.
+        range: String,
+    },
+    /// A workbook answer range is too large to score exactly as f64.
+    #[error("Trace2Skill answer range is too large to score exactly: {range}")]
+    AnswerRangeTooLarge {
+        /// Oversized answer range.
+        range: String,
+    },
+    /// Workbook could not be opened or read.
+    #[error("failed to read Trace2Skill workbook {path}: {source}")]
+    Workbook {
+        /// Workbook path.
+        path: PathBuf,
+        /// Underlying workbook reader error.
+        source: calamine::Error,
     },
     /// Trajectory corpus refused an upstream result.
     #[error(transparent)]

@@ -337,7 +337,13 @@ Leaven primitive blockers:
   `cli_skill_preloaded_full_system_v1.txt` system prompt, and the released
   `trace2skill-xlsx-35B-combined/SKILL.md`. This is an input preflight for a
   future one-sample live attempt; it does not execute a spreadsheet agent,
-  modify a workbook, run Qwen/vLLM, or score the answer.
+  modify a workbook, or run Qwen/vLLM.
+- `examples/trace2skill_spreadsheetbench` now also has a no-spend workbook
+  answer-range scorer for exact case `13-1`: `--compare-one-case-answer`
+  compares a caller-supplied workbook's `LISTS!A3:D32` cells against
+  `1_13-1_golden.xlsx`, reports matched/total cells, score, pass/fail, and
+  mismatch cells. It is a scoring seam for a future live output workbook, not
+  evidence that a spreadsheet agent has run.
 - `examples/trace2skill_tiny_live` now restores the tiny live
   trajectory-to-skill harness into main Leaven. Its preflight writes a no-spend
   proof contract, and its live mode runs Codex/GPT-5.4-mini over two CSV
@@ -408,6 +414,10 @@ Spend/data risks:
   SpreadsheetBench case `13-1` through `--inspect-one-case` and
   `--render-one-case-prompt`, using the synchronized `tmp/` sample, upstream
   system prompt, and released combined `xlsx` skill.
+- The Trace2Skill example now covers exact one-case workbook scoring for
+  `13-1` through `--compare-one-case-answer`: golden-vs-golden scores
+  `120/120`, while init-vs-golden scores `82/120` with 38 mismatches over
+  `LISTS!A3:D32`.
 - Restored tiny live harness preflights passed in main Leaven on 2026-05-20:
   `tmp/memento_skills_read_write/20260520T204154Z/preflight.json`,
   `tmp/skillreducer_tiny/20260520T204154Z/preflight.json`,

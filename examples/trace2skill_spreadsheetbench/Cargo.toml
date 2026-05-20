@@ -11,6 +11,7 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
+calamine = { workspace = true }
 leaven-agentic-skill = { workspace = true }
 leaven-artifact-skill = { workspace = true }
 leaven-core = { workspace = true }

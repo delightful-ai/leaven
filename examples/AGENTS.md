@@ -19,7 +19,7 @@ Each `pN_*` directory is a workspace package with a runnable binary. Keep reusab
 - `trace2skill_tiny_live`: local `AGENTS.md`; paper-specific Trace2Skill tiny live trajectory-to-skill proof. It is outside the Cargo workspace and writes live artifacts under `tmp/trace2skill_tiny_live/`.
 - `trace2skill_spreadsheetbench`: mechanics-smoke for Trace2Skill's official
   SpreadsheetBench-Verified 400-row manifest, run-artifact lowering, and exact
-  one-case no-spend prompt preflight. `cargo test -p
+  one-case no-spend prompt/scorer preflight. `cargo test -p
   trace2skill_spreadsheetbench --test manifest` proves the local upstream JSON
   is parsed into `leaven-eval` cases and the paper's `0..200` train /
   `200..400` held-out split. `cargo test -p
@@ -37,8 +37,12 @@ Each `pN_*` directory is a workspace package with a runnable binary. Keep reusab
   --inspect-one-case` proves the materialized case `13-1`, init/golden
   workbooks, upstream prompt, upstream system prompt, and released combined
   `xlsx` skill can be inspected/rendered without solving the spreadsheet.
-  These do not prove trajectory generation, spreadsheet execution,
-  model-backed analyst or merge calls, skill evolution, or metric reproduction.
+  `cargo test -p trace2skill_spreadsheetbench --test workbook_score` and
+  `cargo run -p trace2skill_spreadsheetbench -- --compare-one-case-answer
+  --output-workbook <workbook>` prove exact answer-range comparison for a
+  supplied workbook against the golden workbook. These do not prove trajectory
+  generation, spreadsheet agent execution, model-backed analyst or merge calls,
+  skill evolution, or paper metric reproduction.
 
 ## Proof Classification
 - `product-proof`: an example that exercises the real public contract at the intended user layer, with no proxy substitution for the behavior being claimed.
