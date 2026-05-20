@@ -5,7 +5,9 @@ use leaven_agent::{FakeAgentAction, FakeAgentRuntime};
 use leaven_agentic::{
     ArtifactReflector, ReadbackResult, ReflectionLayoutConfig, ReflectionWorkspace,
 };
-use leaven_kernel::{Budget, BudgetSnapshot};
+use leaven_core::{ExternalRef, InfoRef};
+use leaven_gepa::{ReflectiveCase, ReflectiveValue};
+use leaven_kernel::{Budget, BudgetSnapshot, Cost};
 use leaven_workspace::{WorkspacePath, WorkspaceView};
 use leaven_workspace_local::LocalWorkspaceFactory;
 
@@ -16,6 +18,15 @@ fn reflection_workspace_projects_runs_and_reads_back_current_tree() {
         let runtime = FakeAgentRuntime::new(vec![
             FakeAgentAction::ReadFile {
                 path: WorkspacePath::new("MANIFEST.json").unwrap(),
+            },
+            FakeAgentAction::ReadFile {
+                path: WorkspacePath::new("CLAUDE.md").unwrap(),
+            },
+            FakeAgentAction::ReadFile {
+                path: WorkspacePath::new("cases/case-000.json").unwrap(),
+            },
+            FakeAgentAction::ReadFile {
+                path: WorkspacePath::new("cross_case/source_refs.json").unwrap(),
             },
             FakeAgentAction::ReadFile {
                 path: WorkspacePath::new("target/current/seed.txt").unwrap(),
@@ -30,9 +41,28 @@ fn reflection_workspace_projects_runs_and_reads_back_current_tree() {
             limit: Budget::unlimited(),
             ..BudgetSnapshot::default()
         };
+        let case = ReflectiveCase::from_example(
+            ReflectiveValue::Text("input".to_owned()),
+            None,
+            None,
+            None,
+            "feedback",
+        );
+        let source_ref = InfoRef::External(ExternalRef {
+            kind: "trace".to_owned(),
+            id: "trace-1".to_owned(),
+        });
 
         let outcome = ReflectionWorkspace::new(ReflectionLayoutConfig::default())
-            .run(&reflector, &"seed", &[], &[], &factory, &runtime, &budget)
+            .run(
+                &reflector,
+                &"seed",
+                &[case],
+                &[source_ref],
+                &factory,
+                &runtime,
+                &budget,
+            )
             .await
             .unwrap();
 
@@ -46,6 +76,38 @@ fn reflection_workspace_projects_runs_and_reads_back_current_tree() {
                 .iter()
                 .any(|attachment| attachment.name == "session/main")
         );
+    });
+}
+
+#[test]
+fn reflection_workspace_reports_runtime_cost_and_declares_written_readonly_files() {
+    block_on(async {
+        let reflector = TextReflector;
+        let runtime = FakeAgentRuntime::new(vec![FakeAgentAction::WriteFile {
+            path: WorkspacePath::new("target/current/result.txt").unwrap(),
+            bytes: b"improved".to_vec(),
+        }])
+        .with_cost(Cost::llm_calls(3));
+        let factory = LocalWorkspaceFactory::temp();
+        let budget = BudgetSnapshot {
+            limit: Budget::unlimited(),
+            ..BudgetSnapshot::default()
+        };
+
+        let layout = ReflectionLayoutConfig::default();
+        assert!(
+            layout
+                .readonly_roots
+                .iter()
+                .any(|path| path.as_str() == "CLAUDE.md")
+        );
+
+        let outcome = ReflectionWorkspace::new(layout)
+            .run(&reflector, &"seed", &[], &[], &factory, &runtime, &budget)
+            .await
+            .unwrap();
+
+        assert_eq!(outcome.cost, Cost::llm_calls(3));
     });
 }
 

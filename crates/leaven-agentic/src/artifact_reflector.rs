@@ -124,6 +124,7 @@ impl ReflectionWorkspace {
                 )
                 .await
                 .map_err(ReflectionError::Runtime)?;
+            let session_cost = session.cost;
             let session = session.value;
 
             let readback = {
@@ -137,7 +138,7 @@ impl ReflectionWorkspace {
             Ok(ReflectionRunOutcome {
                 readback,
                 session_attachments: attachments,
-                cost: Cost::zero(),
+                cost: session_cost,
             })
         }
         .await;
@@ -179,6 +180,7 @@ impl Default for ReflectionLayoutConfig {
                 WorkspacePath::new("MANIFEST.json").expect("constant path is valid"),
                 WorkspacePath::new("TASK.md").expect("constant path is valid"),
                 WorkspacePath::new("AGENTS.md").expect("constant path is valid"),
+                WorkspacePath::new("CLAUDE.md").expect("constant path is valid"),
             ],
             inline_text_threshold: 512,
             full_trace_top_k: 5,
@@ -262,6 +264,17 @@ where
     view.write_file(
         &WorkspacePath::new("MANIFEST.json").expect("constant path is valid"),
         &manifest,
+    )?;
+    for (index, case) in cases.iter().enumerate() {
+        let path = WorkspacePath::new(format!("cases/case-{index:03}.json"))
+            .expect("constant path is valid");
+        let bytes = serde_json::to_vec_pretty(case).map_err(ReflectionError::Manifest)?;
+        view.write_file(&path, &bytes)?;
+    }
+    let source_refs = serde_json::to_vec_pretty(source_refs).map_err(ReflectionError::Manifest)?;
+    view.write_file(
+        &WorkspacePath::new("cross_case/source_refs.json").expect("constant path is valid"),
+        &source_refs,
     )?;
     view.write_file(
         &WorkspacePath::new("TASK.md").expect("constant path is valid"),
