@@ -249,6 +249,11 @@ Leaven primitive blockers:
   SpreadsheetBench `results.json`, chat logs, and optional analysis reports
   into `AgentTrajectoryCorpusEvidence` for the paper's 200 training/evolving
   tasks. This is artifact import/provenance only, not live Qwen/vLLM execution.
+- `examples/trace2skill_spreadsheetbench` now lowers upstream-shaped fenced or
+  bare `PATCH_FORMAT=json` patches into `SkillPatchPlan` plus concrete
+  `SkillBankChange` values and applies them through `SkillPatchApplication`.
+  This is patch-bridge mechanics only, not evidence that live analyst or merge
+  calls ran.
 - `leaven-evidence::AgentTrajectoryEvidence` now preserves one-session
   trajectory provenance needed by Trace2Skill-style many-trace analysis:
   session id, optional Leaven case id, upstream task id, success/failure label,
@@ -285,13 +290,15 @@ Leaven primitive blockers:
   existence, create-overwrite, positive-support, same-file line-range conflict
   validation, and atomic `references/*.md` create/link validation; durable
   merge-tree provenance now exists as `AgentPatchMergeTreeEvidence` and
-  `SkillPatchMergeTree`, while live merge execution and patch parsing remain;
+  `SkillPatchMergeTree`, while live merge execution remains;
   `SkillPatchApplication` now covers atomic application/reporting/rollback once
   a parsed plan and concrete `SkillBankChange` are available, and
   `SkillParsedPatchDocument` now covers the generic parsed-operation to
-  plan/change lowering step;
-- Trace2Skill patch syntax translation from Stage 2/3 JSON, semantic markdown,
-  or unified diff artifacts into `SkillParsedPatchDocument` operations;
+  plan/change lowering step; the Trace2Skill example now translates upstream
+  JSON patches into those operations;
+- live or replayed Trace2Skill merge-run integration that feeds saved/live
+  Stage 2/3 JSON patches through the bridge and validates the evolved
+  `SkillBank`;
 - result matrix/reporting for cross-model and OOD transfer.
 
 Spend/data risks:
@@ -324,6 +331,9 @@ Spend/data risks:
   merge-provenance value needed by Trace2Skill Stage 2/3; it is still
   paper-neutral and does not encode Trace2Skill worker counts, thresholds, or
   prompts.
+- The Trace2Skill example now covers upstream JSON patch lowering and atomic
+  application from fenced LLM-style responses, including reference create/link
+  pairing and exact-section refusal.
 
 ### Memento-Skills (`arx_2603.18743`)
 

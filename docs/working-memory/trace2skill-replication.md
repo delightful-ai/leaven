@@ -162,6 +162,15 @@ The checked-out upstream release includes:
   Stage 2/3 JSON, semantic markdown, or unified diff artifacts into those
   full-file write/delete operations in the paper example; the generic adapter
   now owns the mechanical validation/lowering boundary after translation.
+- `examples/trace2skill_spreadsheetbench` now owns the paper-specific bridge
+  from upstream `PATCH_FORMAT=json` artifacts into Leaven skill primitives:
+  fenced or bare JSON patches lower into `SkillParsedPatchDocument` operations,
+  then into a validated `SkillPatchPlan` plus concrete `SkillBankChange` values
+  before applying through `SkillPatchApplication`. The bridge preserves the
+  upstream operations (`append_to_section`, `replace_in_section`,
+  `insert_after`, `insert_before`, `add_section`, `delete_section`, `create`,
+  `delete_file`) but requires translated exact text targets rather than silently
+  claiming a skipped edit was applied.
 - `leaven-evidence::AgentTrajectoryEvidence` now owns the reusable trajectory
   evidence envelope needed before Trace2Skill Stage 1/analysis can be
   faithfully replayed: runtime session id, optional Leaven case id, upstream
@@ -232,6 +241,10 @@ Verification:
   skill_patch_application` passed on 2026-05-20 for atomic application of a
   validated patch plan, change reporting, and rollback evidence after failed
   atomic changes.
+- `cargo test -p trace2skill_spreadsheetbench --test patch_bridge` passed on
+  2026-05-20 for upstream-shaped fenced JSON patch lowering, reference
+  create/link pairing, exact-section refusal, and atomic application through
+  `SkillPatchApplication`.
 
 ## Current Blockers
 
@@ -248,12 +261,12 @@ Leaven-owned remaining primitives before faithful Trace2Skill replication:
   executed those prompts;
 - live hierarchical merge execution over analyst patch outputs. Leaven now has
   generic `AgentPatchMergeTreeEvidence` and skill-specific
-  `SkillPatchMergeTree` provenance values, but no Trace2Skill merge scheduler,
-  patch parser, prevalence policy, or model-backed merge operator has run;
-- Trace2Skill-specific patch parsing/translation from Stage 2/3 JSON,
-  semantic markdown, or unified diff artifacts into `SkillParsedPatchDocument`
-  operations. Generic plan validation, lowering to `SkillBankChange`, atomic
-  application/reporting, and rollback now exist after translation;
+  `SkillPatchMergeTree` provenance values plus JSON patch lowering/application,
+  but no Trace2Skill merge scheduler, prevalence policy, or model-backed merge
+  operator has run;
+- live or replayed Trace2Skill merge-run integration that feeds Stage 2/3 JSON
+  patch artifacts through the new bridge, records the resulting
+  `SkillPatchMergeTree`, and validates the evolved `SkillBank`;
 - result matrix/reporting for model scale transfer, OOD WikiTQ, DocVQA,
   DAPO/AIME, ablations, and sequential/retrieval baselines.
 
@@ -268,9 +281,8 @@ External/spend blockers:
 
 ## Next Action
 
-Define the Trace2Skill patch parser bridge from Stage 2/3 JSON/diff artifacts
-into `SkillPatchPlan` plus concrete `SkillBankChange` values. The next
-Leaven-owned primitive is durable parsed-patch provenance that connects
-merge-tree output patches to validated plan/application inputs without putting
-Trace2Skill prompt wording, prevalence thresholds, or merge scheduling into the
-generic skill adapter.
+Wire the Trace2Skill example's Stage 2/3 replay path so saved or live upstream
+JSON patch artifacts feed the patch bridge, populate `SkillPatchMergeTree`, and
+emit a validated evolved `SkillBank` plus application report. Keep model-backed
+analyst dispatch, merge scheduling, prevalence thresholds, and prompt wording in
+the paper runner/example layer.
