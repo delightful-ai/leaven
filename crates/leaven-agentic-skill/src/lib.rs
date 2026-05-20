@@ -15,7 +15,7 @@ pub use materializer::SkillBankMaterializer;
 pub use parser::SkillBankWorkspaceProposalParser;
 pub use patch_plan::{
     SkillLineRange, SkillPatchEditKind, SkillPatchFileRef, SkillPatchPlan, SkillPatchPlanEdit,
-    SkillPatchPlanError, SkillPatchRange, SkillPatchSupport,
+    SkillPatchPlanError, SkillPatchRange, SkillPatchSupport, SkillReferencePath,
 };
 pub use report::{
     SkillBankChangeReport, SkillDescriptionChange, SkillFileChange, SkillFileChangeKind,

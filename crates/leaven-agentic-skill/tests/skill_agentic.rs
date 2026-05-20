@@ -6,7 +6,7 @@ use leaven_agentic_skill::{
     SkillBankChangeReport, SkillBankDiff, SkillBankMaterializer, SkillBankProposalInput,
     SkillBankWorkspaceProposalParser, SkillFileChangeKind, SkillLineRange, SkillPatchFileRef,
     SkillPatchPlan, SkillPatchPlanEdit, SkillPatchPlanError, SkillPatchRange, SkillPatchSupport,
-    SkillWorkspaceLayout,
+    SkillReferencePath, SkillWorkspaceLayout,
 };
 use leaven_artifact_skill::{
     SkillBank, SkillBankChange, SkillFile, SkillFilePermissions, SkillFolder, SkillName, SkillPath,
@@ -840,6 +840,118 @@ fn skill_patch_plan_rejects_create_overwrite_and_zero_support() {
         SkillLineRange::new(0, 3).unwrap_err(),
         SkillPatchPlanError::InvalidLineRange { start: 0, end: 3 }
     );
+}
+
+#[test]
+fn skill_patch_plan_accepts_atomic_reference_create_and_skill_md_link() {
+    let parent = bank_with_alpha(
+        "Edits Rust tests. Use when Rust test failures need diagnosis.",
+        "Read the failing test output and patch the narrow code path.",
+        false,
+    );
+    let alpha = SkillName::new("alpha").unwrap();
+    let reference =
+        SkillReferencePath::new(SkillPath::new("references/checklist.md").unwrap()).unwrap();
+
+    let plan = SkillPatchPlan::validate(
+        &parent,
+        vec![
+            SkillPatchPlanEdit::create_file(
+                SkillPatchFileRef::new(alpha.clone(), reference.path().clone()),
+                SkillPatchSupport::new(15).unwrap(),
+            ),
+            SkillPatchPlanEdit::modify(
+                SkillPatchFileRef::new(alpha, SkillPath::skill_md()),
+                SkillPatchRange::Lines(SkillLineRange::new(4, 4).unwrap()),
+                SkillPatchSupport::new(15).unwrap(),
+            )
+            .with_reference_links([reference.clone()]),
+        ],
+    )
+    .unwrap();
+
+    assert_eq!(plan.edits().len(), 2);
+    assert_eq!(plan.edits()[1].reference_links(), &[reference]);
+}
+
+#[test]
+fn skill_patch_plan_extracts_reference_links_from_markdown_text() {
+    let links = SkillReferencePath::extract_from_text(
+        "Read [the checklist](references/checklist.md), \
+         then references/checklist.md again and ignore references/not-md.txt.",
+    );
+
+    assert_eq!(links.len(), 1);
+    assert_eq!(links[0].path().as_str(), "references/checklist.md");
+}
+
+#[test]
+fn skill_patch_plan_rejects_unpaired_reference_links_and_creates() {
+    let parent = bank_with_alpha(
+        "Edits Rust tests. Use when Rust test failures need diagnosis.",
+        "Read the failing test output and patch the narrow code path.",
+        false,
+    );
+    let alpha = SkillName::new("alpha").unwrap();
+    let reference =
+        SkillReferencePath::new(SkillPath::new("references/checklist.md").unwrap()).unwrap();
+
+    let missing_create = SkillPatchPlan::validate(
+        &parent,
+        vec![
+            SkillPatchPlanEdit::modify(
+                SkillPatchFileRef::new(alpha.clone(), SkillPath::skill_md()),
+                SkillPatchRange::Lines(SkillLineRange::new(4, 4).unwrap()),
+                SkillPatchSupport::new(1).unwrap(),
+            )
+            .with_reference_links([reference.clone()]),
+        ],
+    )
+    .unwrap_err();
+    assert!(matches!(
+        missing_create,
+        SkillPatchPlanError::MissingReferenceCreate {
+            edit_index: 0,
+            skill,
+            path
+        } if skill == alpha && path == reference
+    ));
+
+    let unlinked_create = SkillPatchPlan::validate(
+        &parent,
+        vec![SkillPatchPlanEdit::create_file(
+            SkillPatchFileRef::new(alpha.clone(), reference.path().clone()),
+            SkillPatchSupport::new(1).unwrap(),
+        )],
+    )
+    .unwrap_err();
+    assert!(matches!(
+        unlinked_create,
+        SkillPatchPlanError::UnlinkedReferenceCreate {
+            edit_index: 0,
+            target
+        } if target == SkillPatchFileRef::new(alpha.clone(), reference.path().clone())
+    ));
+
+    let outside_skill_md = SkillPatchPlan::validate(
+        &parent,
+        vec![
+            SkillPatchPlanEdit::modify(
+                SkillPatchFileRef::new(alpha.clone(), SkillPath::new("scripts/run.sh").unwrap()),
+                SkillPatchRange::Lines(SkillLineRange::new(1, 1).unwrap()),
+                SkillPatchSupport::new(1).unwrap(),
+            )
+            .with_reference_links([reference]),
+        ],
+    )
+    .unwrap_err();
+    assert!(matches!(
+        outside_skill_md,
+        SkillPatchPlanError::ReferenceLinkOutsideSkillMd {
+            edit_index: 0,
+            target
+        } if target == SkillPatchFileRef::new(alpha, SkillPath::new("scripts/run.sh").unwrap())
+    ));
 }
 
 struct SkillPromptRenderer;

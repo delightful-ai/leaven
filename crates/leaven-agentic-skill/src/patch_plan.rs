@@ -1,6 +1,6 @@
 //! Guardrails for agent-authored skill patch plans.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
 use std::fmt;
 
@@ -38,6 +38,75 @@ impl SkillPatchFileRef {
 impl fmt::Display for SkillPatchFileRef {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}/{}", self.skill, self.path)
+    }
+}
+
+/// A link to a reference file inside one skill folder.
+#[derive(
+    Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd, serde::Deserialize, serde::Serialize,
+)]
+#[serde(transparent)]
+pub struct SkillReferencePath(SkillPath);
+
+impl SkillReferencePath {
+    /// Builds a validated `references/*.md` path.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SkillPatchPlanError::InvalidReferencePath`] when the path is
+    /// not under `references/` or does not end in `.md`.
+    pub fn new(path: SkillPath) -> Result<Self, SkillPatchPlanError> {
+        if is_reference_path(&path) {
+            Ok(Self(path))
+        } else {
+            Err(SkillPatchPlanError::InvalidReferencePath { path })
+        }
+    }
+
+    /// Extracts distinct `references/*.md` links from markdown-ish text.
+    #[must_use]
+    pub fn extract_from_text(text: &str) -> Vec<Self> {
+        let mut links = Vec::new();
+        let mut seen = BTreeSet::new();
+        let mut offset = 0;
+        while let Some(relative_start) = text[offset..].find("references/") {
+            let start = offset + relative_start;
+            let tail = &text[start..];
+            let end = tail
+                .char_indices()
+                .find_map(|(index, ch)| {
+                    if ch.is_ascii_alphanumeric() || matches!(ch, '/' | '.' | '-' | '_') {
+                        None
+                    } else {
+                        Some(index)
+                    }
+                })
+                .unwrap_or(tail.len());
+            let candidate = &tail[..end];
+            offset = start + end;
+            let Ok(path) = SkillPath::new(candidate) else {
+                continue;
+            };
+            if !seen.insert(path.clone()) {
+                continue;
+            }
+            if let Ok(link) = Self::new(path) {
+                links.push(link);
+            }
+        }
+        links
+    }
+
+    /// Returns the skill-relative reference path.
+    #[must_use]
+    pub const fn path(&self) -> &SkillPath {
+        &self.0
+    }
+}
+
+impl fmt::Display for SkillReferencePath {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
     }
 }
 
@@ -164,6 +233,7 @@ pub struct SkillPatchPlanEdit {
     target: SkillPatchFileRef,
     kind: SkillPatchEditKind,
     support: SkillPatchSupport,
+    reference_links: Vec<SkillReferencePath>,
 }
 
 impl SkillPatchPlanEdit {
@@ -178,6 +248,7 @@ impl SkillPatchPlanEdit {
             target,
             kind: SkillPatchEditKind::Modify { range },
             support,
+            reference_links: Vec::new(),
         }
     }
 
@@ -188,6 +259,7 @@ impl SkillPatchPlanEdit {
             target,
             kind: SkillPatchEditKind::CreateFile,
             support,
+            reference_links: Vec::new(),
         }
     }
 
@@ -198,7 +270,24 @@ impl SkillPatchPlanEdit {
             target,
             kind: SkillPatchEditKind::DeleteFile,
             support,
+            reference_links: Vec::new(),
         }
+    }
+
+    /// Records `references/*.md` links inserted by this edit.
+    #[must_use]
+    pub fn with_reference_links(
+        mut self,
+        links: impl IntoIterator<Item = SkillReferencePath>,
+    ) -> Self {
+        self.reference_links = links.into_iter().collect();
+        self
+    }
+
+    /// Extracts and records `references/*.md` links from markdown-ish content.
+    #[must_use]
+    pub fn with_reference_links_from_text(self, text: &str) -> Self {
+        self.with_reference_links(SkillReferencePath::extract_from_text(text))
     }
 
     /// Returns the target file.
@@ -217,6 +306,12 @@ impl SkillPatchPlanEdit {
     #[must_use]
     pub const fn support(&self) -> SkillPatchSupport {
         self.support
+    }
+
+    /// Returns the reference links this edit inserts.
+    #[must_use]
+    pub fn reference_links(&self) -> &[SkillReferencePath] {
+        &self.reference_links
     }
 }
 
@@ -249,9 +344,19 @@ impl SkillPatchPlan {
 
         let mut touched: BTreeMap<SkillPatchFileRef, Vec<(usize, SkillPatchRange)>> =
             BTreeMap::new();
+        let mut created_references: BTreeMap<(SkillName, SkillReferencePath), usize> =
+            BTreeMap::new();
+        let mut linked_references: BTreeMap<(SkillName, SkillReferencePath), Vec<usize>> =
+            BTreeMap::new();
         for (index, edit) in edits.iter().enumerate() {
             if edit.support.count == 0 {
                 return Err(SkillPatchPlanError::EmptySupportAt { edit_index: index });
+            }
+            if !edit.reference_links.is_empty() && !edit.target.path().is_skill_md() {
+                return Err(SkillPatchPlanError::ReferenceLinkOutsideSkillMd {
+                    edit_index: index,
+                    target: edit.target.clone(),
+                });
             }
             let folder = parent.get(edit.target.skill()).ok_or_else(|| {
                 SkillPatchPlanError::MissingSkill {
@@ -278,6 +383,15 @@ impl SkillPatchPlan {
                     }
                 }
             }
+            if matches!(edit.kind, SkillPatchEditKind::CreateFile) {
+                if let Ok(reference) = SkillReferencePath::new(edit.target.path().clone()) {
+                    created_references.insert((edit.target.skill().clone(), reference), index);
+                }
+            }
+            for reference in &edit.reference_links {
+                let key = (edit.target.skill().clone(), reference.clone());
+                linked_references.entry(key).or_default().push(index);
+            }
 
             let range = edit.kind.conflict_range();
             if let Some(existing) = touched.get(edit.target()) {
@@ -297,6 +411,30 @@ impl SkillPatchPlan {
                 .entry(edit.target.clone())
                 .or_default()
                 .push((index, range));
+        }
+
+        for ((skill, reference), link_indexes) in &linked_references {
+            if parent
+                .get(skill)
+                .and_then(|folder| folder.file(reference.path()))
+                .is_none()
+                && !created_references.contains_key(&(skill.clone(), reference.clone()))
+            {
+                return Err(SkillPatchPlanError::MissingReferenceCreate {
+                    edit_index: link_indexes[0],
+                    skill: skill.clone(),
+                    path: reference.clone(),
+                });
+            }
+        }
+
+        for ((skill, reference), create_index) in &created_references {
+            if !linked_references.contains_key(&(skill.clone(), reference.clone())) {
+                return Err(SkillPatchPlanError::UnlinkedReferenceCreate {
+                    edit_index: *create_index,
+                    target: SkillPatchFileRef::new(skill.clone(), reference.path().clone()),
+                });
+            }
         }
 
         Ok(Self { edits })
@@ -328,6 +466,11 @@ pub enum SkillPatchPlanError {
         /// Requested end line.
         end: u32,
     },
+    /// Reference links must point at `references/*.md`.
+    InvalidReferencePath {
+        /// Invalid reference path.
+        path: SkillPath,
+    },
     /// The target skill does not exist in the parent bank.
     MissingSkill {
         /// Zero-based edit index.
@@ -347,6 +490,29 @@ pub enum SkillPatchPlanError {
         /// Zero-based edit index.
         edit_index: usize,
         /// Existing file target.
+        target: SkillPatchFileRef,
+    },
+    /// Reference links are only valid when inserted by `SKILL.md` edits.
+    ReferenceLinkOutsideSkillMd {
+        /// Zero-based edit index.
+        edit_index: usize,
+        /// File edit that declared reference links.
+        target: SkillPatchFileRef,
+    },
+    /// A `SKILL.md` edit links to a missing reference without creating it.
+    MissingReferenceCreate {
+        /// Zero-based edit index for the link edit.
+        edit_index: usize,
+        /// Skill containing the link.
+        skill: SkillName,
+        /// Missing reference path.
+        path: SkillReferencePath,
+    },
+    /// A `references/*.md` create edit is not linked from `SKILL.md`.
+    UnlinkedReferenceCreate {
+        /// Zero-based edit index for the create edit.
+        edit_index: usize,
+        /// Unlinked reference file.
         target: SkillPatchFileRef,
     },
     /// Two edits target overlapping regions of the same file.
@@ -376,6 +542,12 @@ impl fmt::Display for SkillPatchPlanError {
                 f,
                 "skill patch line range must be one-based and inclusive, got {start}..={end}"
             ),
+            Self::InvalidReferencePath { path } => {
+                write!(
+                    f,
+                    "skill reference path must match references/*.md, got {path}"
+                )
+            }
             Self::MissingSkill { edit_index, skill } => write!(
                 f,
                 "skill patch edit {edit_index} targets missing skill {skill}"
@@ -387,6 +559,22 @@ impl fmt::Display for SkillPatchPlanError {
             Self::CreateOverwritesExisting { edit_index, target } => write!(
                 f,
                 "skill patch edit {edit_index} would create existing file {target}"
+            ),
+            Self::ReferenceLinkOutsideSkillMd { edit_index, target } => write!(
+                f,
+                "skill patch edit {edit_index} declares reference links outside SKILL.md: {target}"
+            ),
+            Self::MissingReferenceCreate {
+                edit_index,
+                skill,
+                path,
+            } => write!(
+                f,
+                "skill patch edit {edit_index} links to missing reference {skill}/{path} without a matching create"
+            ),
+            Self::UnlinkedReferenceCreate { edit_index, target } => write!(
+                f,
+                "skill patch edit {edit_index} creates unlinked reference file {target}"
             ),
             Self::LineRangeConflict {
                 first_index,
@@ -403,3 +591,13 @@ impl fmt::Display for SkillPatchPlanError {
 }
 
 impl Error for SkillPatchPlanError {}
+
+fn is_reference_path(path: &SkillPath) -> bool {
+    let Some(reference_name) = path.as_str().strip_prefix("references/") else {
+        return false;
+    };
+    !reference_name.is_empty()
+        && reference_name
+            .rsplit_once('.')
+            .is_some_and(|(_, extension)| extension == "md")
+}

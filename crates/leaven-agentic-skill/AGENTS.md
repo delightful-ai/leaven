@@ -20,7 +20,8 @@ optimizer rhythm.
 - `SkillPatchPlan` validates agent-authored file-level patch plans against a
   parent skill bank: target files must exist before modification/deletion,
   create-file edits must not overwrite existing files, support counts must be
-  positive, and same-file ranges must not overlap.
+  positive, same-file ranges must not overlap, and new `references/*.md` files
+  must be atomically paired with `SKILL.md` links.
 
 ## Route Away
 - `SkillBank`, `SkillFolder`, Agent Skills validation, and skill surfaces belong
@@ -62,7 +63,8 @@ optimizer rhythm.
 
 - when: validating agent-authored patch plans
   do: keep checks mechanical and paper-neutral: existing-file guards, create
-  guards, support-count presence, and same-file line-range conflicts
+  guards, support-count presence, same-file line-range conflicts, and
+  `references/*.md` create/link pairing
   preserve: merge, prevalence, deduplication, and analyst-role policy outside
   this crate
   avoid: encoding Trace2Skill batch sizes, utility thresholds, prompt wording,
