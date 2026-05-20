@@ -259,6 +259,11 @@ Leaven primitive blockers:
   prompt/response payloads, parse/backend status, retry count, and support
   count. The Trace2Skill example can seed pending analyst calls from imported
   training trajectories, but no live analyst/model execution or merge has run.
+- `leaven-evidence::AgentPatchMergeTreeEvidence` now preserves checkpointable
+  Stage 3 merge provenance: merge levels, input/accepted/discarded patch ids,
+  support counts, decisions, prompt/response payloads, parse-failure artifacts,
+  output patches, and optional final diff. It is evidence data only, not the
+  Trace2Skill merge scheduler, prevalence policy, patch parser, or applier.
 - live trajectory generation that writes upstream-shaped results/logs/analysis
   artifacts for the 200 SpreadsheetBench training/evolving tasks;
 - live parallel analyst dispatch that executes hundreds of independent
@@ -268,7 +273,8 @@ Leaven primitive blockers:
   now exists as `SkillPatchPlan` in `leaven-agentic-skill`, covering file
   existence, create-overwrite, positive-support, same-file line-range conflict
   validation, and atomic `references/*.md` create/link validation; durable
-  merge-tree provenance remains;
+  merge-tree provenance now exists as `AgentPatchMergeTreeEvidence`, while live
+  merge execution and patch parsing remain;
 - deterministic skill-directory diff application and rollback;
 - result matrix/reporting for cross-model and OOD transfer.
 

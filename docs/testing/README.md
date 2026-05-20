@@ -193,9 +193,10 @@ Use the narrowest layer that proves the claim.
   `crates/leaven-evidence/tests/attribution.rs`,
   `crates/leaven-preference/tests/scalar.rs`,
   `crates/leaven-population/tests/keep_best.rs`, and
-  `crates/leaven-store-inline/tests/evidence.rs`: finite scalar and
-  attribution evidence, scalar preference, keep-best, and inline store behavior
-  now covered by the canonical coverage gate.
+  `crates/leaven-store-inline/tests/evidence.rs`: finite scalar,
+  command/trajectory, analyst fan-out, patch merge-tree, attribution evidence,
+  scalar preference, keep-best, and inline store behavior now covered by the
+  canonical coverage gate.
 - `crates/leaven-population/tests/pareto_frontier.rs` and
   `crates/leaven-gepa/tests/gepa_smoke.rs`: P3 casewise Pareto frontier laws,
   partition filtering, GEPA surface ownership, surface-edit lowering, candidate

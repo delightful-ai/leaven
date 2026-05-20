@@ -68,9 +68,11 @@ pub use casewise::{CaseOutcome, CasewiseEvidence};
 pub use command::{
     AgentAnalystCallError, AgentAnalystCallEvidence, AgentAnalystCallEvidenceInput,
     AgentAnalystCallStatus, AgentAnalystFanoutError, AgentAnalystFanoutEvidence, AgentAnalystRole,
-    AgentTrajectoryAnalysisKind, AgentTrajectoryAnalysisRecord, AgentTrajectoryCorpusError,
-    AgentTrajectoryCorpusEvidence, AgentTrajectoryEvidence, AgentTrajectoryEvidenceInput,
-    AgentTrajectoryOutcome, CommandEvidence, CommandRecord, OutputRecord,
+    AgentPatchMergeDecision, AgentPatchMergeNode, AgentPatchMergeNodeInput,
+    AgentPatchMergeTreeError, AgentPatchMergeTreeEvidence, AgentTrajectoryAnalysisKind,
+    AgentTrajectoryAnalysisRecord, AgentTrajectoryCorpusError, AgentTrajectoryCorpusEvidence,
+    AgentTrajectoryEvidence, AgentTrajectoryEvidenceInput, AgentTrajectoryOutcome, CommandEvidence,
+    CommandRecord, OutputRecord,
 };
 pub use diff::{DiffEvidence, RenderedDiff};
 pub use feedback::CaseAssessmentEvidence;
@@ -85,12 +87,13 @@ pub mod prelude {
     pub use crate::{
         AgentAnalystCallError, AgentAnalystCallEvidence, AgentAnalystCallEvidenceInput,
         AgentAnalystCallStatus, AgentAnalystFanoutError, AgentAnalystFanoutEvidence,
-        AgentAnalystRole, AgentTrajectoryAnalysisKind, AgentTrajectoryAnalysisRecord,
-        AgentTrajectoryCorpusError, AgentTrajectoryCorpusEvidence, AgentTrajectoryEvidence,
-        AgentTrajectoryEvidenceInput, AgentTrajectoryOutcome, AttributableEvidence,
-        CaseAssessmentEvidence, CaseOutcome, CasewiseEvidence, CommandEvidence, CommandRecord,
-        DiffEvidence, Direction, JsonEvidence, ListwiseRankingEvidence, MixedEvidence,
-        OutputRecord, PairwiseJudgmentEvidence, ScalarEvidence, ScalarEvidenceError,
-        ScoreVectorEvidence, StringEvidence,
+        AgentAnalystRole, AgentPatchMergeDecision, AgentPatchMergeNode, AgentPatchMergeNodeInput,
+        AgentPatchMergeTreeError, AgentPatchMergeTreeEvidence, AgentTrajectoryAnalysisKind,
+        AgentTrajectoryAnalysisRecord, AgentTrajectoryCorpusError, AgentTrajectoryCorpusEvidence,
+        AgentTrajectoryEvidence, AgentTrajectoryEvidenceInput, AgentTrajectoryOutcome,
+        AttributableEvidence, CaseAssessmentEvidence, CaseOutcome, CasewiseEvidence,
+        CommandEvidence, CommandRecord, DiffEvidence, Direction, JsonEvidence,
+        ListwiseRankingEvidence, MixedEvidence, OutputRecord, PairwiseJudgmentEvidence,
+        ScalarEvidence, ScalarEvidenceError, ScoreVectorEvidence, StringEvidence,
     };
 }

@@ -162,6 +162,12 @@ The checked-out upstream release includes:
   fan-out manifest from the imported training/evolving trajectory corpus. This
   is a no-spend checkpoint scaffold for later analyst execution, not evidence
   that the analysts or merge ran.
+- `leaven-evidence::AgentPatchMergeTreeEvidence` now owns the checkpointable
+  Stage 3 merge provenance value: merge levels, input/accepted/discarded patch
+  ids, support counts, merge decisions, prompt/response payloads, parse-failure
+  artifacts, per-node output patches, and optional final diff. It records what
+  a merge pipeline did; it does not schedule merges, decide prevalence, parse
+  patch JSON, or apply edits to a skill directory.
 
 Verification:
 
@@ -191,6 +197,10 @@ Verification:
 - `cargo test -p trace2skill_spreadsheetbench --test run_artifacts` passed on
   2026-05-20 after deriving a pending Stage 2 analyst fan-out manifest from the
   imported training/evolving corpus.
+- `cargo test -p leaven-evidence --test command patch_merge_tree` passed on
+  2026-05-20 for merge levels, accepted/discarded patch ids, parse-failure
+  nodes, final diff refs, duplicate node refusal, unknown final node refusal,
+  and positive support enforcement.
 
 ## Current Blockers
 
@@ -205,9 +215,9 @@ Leaven-owned remaining primitives before faithful Trace2Skill replication:
   agent/LLM calls. Leaven now has the durable fan-out evidence value and the
   Trace2Skill example can seed pending calls, but no scheduler/model client has
   executed those prompts;
-- hierarchical merge-tree artifact that records patch batches, merge levels,
-  accepted/discarded patches, support counts, prevalence decisions, and final
-  applied diff;
+- live hierarchical merge execution over analyst patch outputs. Leaven now has
+  the durable merge-tree evidence value, but no Trace2Skill merge scheduler,
+  patch parser, prevalence policy, or model-backed merge operator has run;
 - deterministic skill-directory patch application with rollback and validation
   integrated with `SkillBank` materialization/readback;
 - result matrix/reporting for model scale transfer, OOD WikiTQ, DocVQA,
@@ -224,8 +234,9 @@ External/spend blockers:
 
 ## Next Action
 
-Define the hierarchical merge-tree artifact schema for Trace2Skill Stage 3
-without launching model/GPU work. The next Leaven-owned primitive is merge-level
-provenance over analyst patch outputs: patch batches, merge levels,
-accepted/discarded patches, support/prevalence decisions, parse failures, and
-the final applied diff.
+Define deterministic skill-directory patch application and rollback integrated
+with `SkillBank` materialization/readback. The next Leaven-owned primitive is a
+validated apply surface that consumes a parsed patch plan or diff artifact,
+applies it to a skill directory atomically, records validation/rollback
+evidence, and leaves Trace2Skill prevalence and merge scheduling outside the
+generic applier.

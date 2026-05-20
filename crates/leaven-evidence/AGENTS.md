@@ -1,5 +1,5 @@
 ## Boundary
-This crate owns reusable evidence value shapes: scalar scores, pairwise judgments, casewise outcomes, command/trajectory records, analyst fan-out records, feedback, attribution, and placeholder shapes for diff/json/list/vector/string evidence.
+This crate owns reusable evidence value shapes: scalar scores, pairwise judgments, casewise outcomes, command/trajectory records, analyst fan-out records, patch merge-tree records, feedback, attribution, and placeholder shapes for diff/json/list/vector/string evidence.
 
 Evidence here is data a stage or evaluator can produce and another component can interpret. It is not a store, scorer, population, preference relation, graph event, or evaluator registry.
 
@@ -32,6 +32,11 @@ Evidence here is data a stage or evaluator can produce and another component can
   source task ids, prompt/response payloads, terminal parse/backend status,
   retry count, and support count. It is not a scheduler, thread pool, model
   client, patch parser, or hierarchical merge policy.
+- `AgentPatchMergeTreeEvidence` is the checkpointable merge provenance value
+  for agent-authored patches: merge levels, input/accepted/discarded patch ids,
+  support counts, merge decisions, prompt/response payloads, parse-failure
+  artifacts, per-node output patches, and optional final diff. It is not a
+  merge scheduler, prevalence policy, patch parser, or skill-directory applier.
 - Public placeholders today: `diff`, `json`, `listwise`, `mixed`,
   `score_vector`, and `string` are root-re-exported names without behavior laws.
   Do not cite them as standard evidence until they carry fields, constructors,
@@ -56,6 +61,10 @@ Evidence here is data a stage or evaluator can produce and another component can
   unknown call ids are refused at insertion, pending records remain pending
   until terminal status, and parse failures are durable terminal records rather
   than missing work.
+- Use `AgentPatchMergeTreeEvidence` when a paper or runner must preserve the
+  shape and result of hierarchical patch consolidation. Node ids are unique,
+  the final node id must exist, support is positive, and parse-failed nodes
+  remain queryable as evidence.
 - Use `AttributableEvidence<K>` when evidence needs to point at surface parts,
   paths, agents, tools, modules, or user keys without making this crate know
   those key domains.
@@ -69,8 +78,8 @@ Evidence here is data a stage or evaluator can produce and another component can
 
 ## Proof Anchors
 - `cargo nextest run -p leaven-evidence` proves scalar, pairwise, casewise,
-  command/trajectory, analyst fan-out, and attribution behavior. It does not
-  currently prove every root-re-exported evidence name.
+  command/trajectory, analyst fan-out, patch merge-tree, and attribution
+  behavior. It does not currently prove every root-re-exported evidence name.
 - `cargo nextest run -p leaven-preference --test scalar` proves scalar preference callers rely on `ScalarEvidence`'s finite-score contract.
 - `cargo nextest run -p leaven-population --test tournament` proves pairwise evidence feeds fitted population state outside this crate.
 - Before adding an evidence name to `leaven-std`, add a focused test in this

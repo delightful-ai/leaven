@@ -3,9 +3,11 @@ use std::time::Duration;
 use leaven_evidence::{
     AgentAnalystCallError, AgentAnalystCallEvidence, AgentAnalystCallEvidenceInput,
     AgentAnalystCallStatus, AgentAnalystFanoutError, AgentAnalystFanoutEvidence, AgentAnalystRole,
-    AgentTrajectoryAnalysisKind, AgentTrajectoryAnalysisRecord, AgentTrajectoryCorpusError,
-    AgentTrajectoryCorpusEvidence, AgentTrajectoryEvidence, AgentTrajectoryEvidenceInput,
-    AgentTrajectoryOutcome, CommandEvidence, CommandRecord, OutputRecord,
+    AgentPatchMergeDecision, AgentPatchMergeNode, AgentPatchMergeNodeInput,
+    AgentPatchMergeTreeError, AgentPatchMergeTreeEvidence, AgentTrajectoryAnalysisKind,
+    AgentTrajectoryAnalysisRecord, AgentTrajectoryCorpusError, AgentTrajectoryCorpusEvidence,
+    AgentTrajectoryEvidence, AgentTrajectoryEvidenceInput, AgentTrajectoryOutcome, CommandEvidence,
+    CommandRecord, OutputRecord,
 };
 use leaven_kernel::{AgentSessionId, BlobRef, CaseId, FingerprintBuilder};
 
@@ -250,6 +252,162 @@ fn analyst_fanout_refuses_ambiguous_or_unknown_call_identity() {
     );
 }
 
+#[test]
+fn patch_merge_tree_records_levels_decisions_parse_failures_and_final_diff() {
+    let leaf = AgentPatchMergeNode::new(AgentPatchMergeNodeInput {
+        node_id: "patch-error-13-1".to_owned(),
+        level: 0,
+        input_patch_ids: Vec::new(),
+        accepted_patch_ids: vec!["patch-error-13-1".to_owned()],
+        discarded_patch_ids: Vec::new(),
+        support_count: 3,
+        decision: AgentPatchMergeDecision::Accepted {
+            rationale: "structural edit safety recurs".to_owned(),
+        },
+        prompt: None,
+        response: Some(OutputRecord::blob(BlobRef {
+            store: "trace2skill-stage3".to_owned(),
+            key: "patches/error-13-1.json".to_owned(),
+        })),
+        parse_failure: None,
+        output_patch: Some(OutputRecord::blob(BlobRef {
+            store: "trace2skill-stage3".to_owned(),
+            key: "patches/error-13-1.json".to_owned(),
+        })),
+    })
+    .unwrap();
+    let failed = AgentPatchMergeNode::new(AgentPatchMergeNodeInput {
+        node_id: "merge-l1-bad-json".to_owned(),
+        level: 1,
+        input_patch_ids: vec!["patch-error-59902".to_owned()],
+        accepted_patch_ids: Vec::new(),
+        discarded_patch_ids: vec!["patch-error-59902".to_owned()],
+        support_count: 1,
+        decision: AgentPatchMergeDecision::ParseFailed {
+            reason: "merge response was not valid JSON".to_owned(),
+        },
+        prompt: Some(OutputRecord::inline("merge prompt")),
+        response: Some(OutputRecord::inline("{not json")),
+        parse_failure: Some(OutputRecord::blob(BlobRef {
+            store: "trace2skill-stage3".to_owned(),
+            key: "parse_failures/merge-l1-bad-json.txt".to_owned(),
+        })),
+        output_patch: None,
+    })
+    .unwrap();
+    let root = AgentPatchMergeNode::new(AgentPatchMergeNodeInput {
+        node_id: "merge-root".to_owned(),
+        level: 2,
+        input_patch_ids: vec![
+            "patch-error-13-1".to_owned(),
+            "merge-l1-bad-json".to_owned(),
+        ],
+        accepted_patch_ids: vec!["patch-error-13-1".to_owned()],
+        discarded_patch_ids: vec!["patch-error-59902".to_owned()],
+        support_count: 3,
+        decision: AgentPatchMergeDecision::Merged {
+            prevalence_note: "kept recurring structural-edit guidance".to_owned(),
+        },
+        prompt: Some(OutputRecord::inline("root merge prompt")),
+        response: Some(OutputRecord::inline("root patch")),
+        parse_failure: None,
+        output_patch: Some(OutputRecord::blob(BlobRef {
+            store: "trace2skill-stage3".to_owned(),
+            key: "merged/root.json".to_owned(),
+        })),
+    })
+    .unwrap();
+
+    let tree = AgentPatchMergeTreeEvidence::new(
+        vec![leaf, failed, root],
+        "merge-root",
+        Some(OutputRecord::blob(BlobRef {
+            store: "trace2skill-stage3".to_owned(),
+            key: "diffs/final.patch".to_owned(),
+        })),
+    )
+    .unwrap();
+
+    assert_eq!(tree.final_node().node_id(), "merge-root");
+    assert_eq!(tree.levels(), vec![0, 1, 2]);
+    assert_eq!(tree.nodes_at_level(1)[0].node_id(), "merge-l1-bad-json");
+    assert_eq!(tree.accepted_patch_ids(), vec!["patch-error-13-1"]);
+    assert_eq!(tree.discarded_patch_ids(), vec!["patch-error-59902"]);
+    assert_eq!(tree.parse_failed_nodes()[0].node_id(), "merge-l1-bad-json");
+    assert!(matches!(
+        tree.final_diff(),
+        Some(OutputRecord::BlobRef(reference)) if reference.key == "diffs/final.patch"
+    ));
+}
+
+#[test]
+fn patch_merge_tree_refuses_ambiguous_or_nonterminal_roots() {
+    let duplicate = AgentPatchMergeTreeEvidence::new(
+        vec![
+            merge_node(
+                "merge-a",
+                0,
+                AgentPatchMergeDecision::Accepted {
+                    rationale: "a".into(),
+                },
+            ),
+            merge_node(
+                "merge-a",
+                1,
+                AgentPatchMergeDecision::Merged {
+                    prevalence_note: "b".into(),
+                },
+            ),
+        ],
+        "merge-a",
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(
+        duplicate,
+        AgentPatchMergeTreeError::DuplicateNode {
+            node_id: "merge-a".to_owned(),
+        }
+    );
+
+    let unknown_final = AgentPatchMergeTreeEvidence::new(
+        vec![merge_node(
+            "merge-a",
+            0,
+            AgentPatchMergeDecision::Accepted {
+                rationale: "a".into(),
+            },
+        )],
+        "missing",
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(
+        unknown_final,
+        AgentPatchMergeTreeError::UnknownFinalNode {
+            node_id: "missing".to_owned(),
+        }
+    );
+
+    let empty_support = AgentPatchMergeNode::new(AgentPatchMergeNodeInput {
+        node_id: "merge-empty-support".to_owned(),
+        level: 0,
+        input_patch_ids: Vec::new(),
+        accepted_patch_ids: vec!["patch".to_owned()],
+        discarded_patch_ids: Vec::new(),
+        support_count: 0,
+        decision: AgentPatchMergeDecision::Accepted {
+            rationale: "invalid".to_owned(),
+        },
+        prompt: None,
+        response: None,
+        parse_failure: None,
+        output_patch: None,
+    })
+    .unwrap_err();
+    assert_eq!(empty_support, AgentPatchMergeTreeError::EmptySupport);
+}
+
 fn spreadsheet_trajectory(task_id: &str, case_id: CaseId) -> AgentTrajectoryEvidence {
     let mut fingerprint_builder = FingerprintBuilder::new();
     fingerprint_builder.update("model=qwen3.5");
@@ -277,4 +435,21 @@ fn spreadsheet_trajectory(task_id: &str, case_id: CaseId) -> AgentTrajectoryEvid
             key: format!("{task_id}.json"),
         }),
     )])
+}
+
+fn merge_node(node_id: &str, level: u32, decision: AgentPatchMergeDecision) -> AgentPatchMergeNode {
+    AgentPatchMergeNode::new(AgentPatchMergeNodeInput {
+        node_id: node_id.to_owned(),
+        level,
+        input_patch_ids: Vec::new(),
+        accepted_patch_ids: vec![format!("{node_id}-accepted")],
+        discarded_patch_ids: Vec::new(),
+        support_count: 1,
+        decision,
+        prompt: None,
+        response: None,
+        parse_failure: None,
+        output_patch: None,
+    })
+    .unwrap()
 }
