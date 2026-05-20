@@ -39,6 +39,9 @@ The top of the stack is:
   converged agentic stage proposer, and the path to git/jj repo optimization.
   It evolves `agentic_stage_materialization.md` layer B and records the
   current-state gaps verified on 2026-05-16.
+- `typed_signature_adapter_contract.md`: implementation spec for the generic
+  agentic reflection contract: `ArtifactReflector`, `ReflectionWorkspace`,
+  reflective case/run schema, attachments, and the SkillBank migration slice.
 - `milestone_examples_behavioral_contract.md`: executable behavior contract for milestone examples.
 - `docs/testing/README.md`: proof model and coverage/SLA contract.
 

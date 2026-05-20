@@ -67,24 +67,86 @@ remains scorer-visible target data.
 The effective product shape is:
 
 ```rust
-pub struct ReflectiveExample {
-    /// Ordered upstream-style side-info fields. When non-empty, these are the
-    /// model-facing reflection record.
-    pub side_info: Vec<(String, String)>,
-    pub case: Option<CaseId>,
-    pub input: String,
-    pub output: Option<String>,
-    pub score: Option<f64>,
-    pub feedback: String,
+pub struct ReflectiveCase {
+    pub case_id: Option<CaseId>,
+    pub input: ReflectiveValue,
+    pub expected: Option<ReflectiveValue>,
+    pub runs: Vec<ReflectiveRun>,
     pub source_refs: Vec<InfoRef>,
 }
+
+impl ReflectiveCase {
+    /// Flat constructor for single-attempt single-agent cases.
+    pub fn from_example(
+        input: ReflectiveValue,
+        expected: Option<ReflectiveValue>,
+        produced: Option<ReflectiveValue>,
+        score: Option<f64>,
+        feedback: impl Into<String>,
+    ) -> Self { /* one case with one run */ }
+}
+
+pub struct ReflectiveRun {
+    pub run_id: CaseRunId,
+    pub agent_id: Option<AgentId>,
+    pub attempt_index: Option<usize>,
+    pub produced: Option<ReflectiveValue>,
+    pub score: Option<f64>,
+    pub max_score: Option<f64>,
+    pub passed: Option<bool>,
+    pub feedback: String,
+    pub checks: Option<Checks>,
+    /// LM-paradigm flat field rendering (paper-parity). Used by
+    /// DefaultReflectionRenderer. Empty for agent-paradigm cases.
+    pub side_info: Vec<(String, ReflectiveSideInfoValue)>,
+    /// Agent-paradigm typed evidence. Empty for LM-only cases.
+    pub attachments: Vec<Attachment>,
+    pub source_refs: Vec<InfoRef>,
+}
+
+pub enum ReflectiveValue {
+    Text(String),
+    Json(serde_json::Value),
+    File(TraceRef),
+    Mapping(Vec<(String, ReflectiveValue)>),
+}
+
+pub struct Checks { pub passes: Vec<Check>, pub fails: Vec<Check> }
+pub struct Check { pub id: String, pub requirement: String, pub reason: Option<String> }
+
+// Attachment and AttachmentKind live in leaven-evidence, not leaven-gepa. The
+// GEPA crate re-exports `leaven_evidence::Attachment` as
+// `leaven_gepa::Attachment` for ergonomics.
+pub use leaven_evidence::{Attachment, AttachmentKind};
 ```
 
-This type remains GEPA-level and benchmark-neutral. Domain-specific data must be
-lowered through an explicit reflective dataset builder. Flat fields cover simple
-case reflection; `side_info` covers upstream parity surfaces where field names
-and ordering are part of the model-facing behavior, such as optimize-anything
-AIME records:
+This type set remains GEPA-level and benchmark-neutral. Domain-specific data
+must be lowered through an explicit reflective dataset builder.
+
+The case/run split is structural: one `ReflectiveCase` carries one case's input
++ expected; each `ReflectiveRun` inside it carries one attempt's evidence. The
+default `GepaReflectiveDataset` emits one case with exactly one run
+(single-agent, single-attempt, matches today's semantics). Multi-agent and
+multi-attempt dataset builders are accommodated by the schema without further
+changes; see `docs/specs/typed_signature_adapter_contract.md` §3.
+
+`ReflectiveValue` replaces the old flat `input: String` /
+`output: Option<String>`. It permits text, structured JSON, file refs, or
+ordered mappings; the choice belongs to the dataset builder.
+
+`Attachment` carries typed agent-paradigm evidence (transcripts, structured
+JSON, text, file refs) per `docs/specs/typed_signature_adapter_contract.md` §3.
+Each `AttachmentKind` has a fixed materialization rule when the workspace
+runner lowers it to disk. Artifact-specific concepts, such as skill-use events
+for a SkillBank, live in `Attachment::Json` with whatever shape the artifact's
+evidence projection produces; they are not a new variant.
+
+`side_info: Vec<(String, ReflectiveSideInfoValue)>` is the LM-paradigm
+flat-field carrier for paper-parity rendering. When non-empty, the LM
+reflector emits those fields verbatim. For agent-paradigm cases, `side_info` is
+empty and evidence flows through `attachments`.
+
+LM-paradigm side_info ordering for optimize-anything AIME records:
 
 ```text
 score
@@ -94,10 +156,6 @@ output
 reasoning
 execution_feedback
 ```
-
-When `side_info` is present, the renderer emits those ordered fields directly
-instead of wrapping Rust `OutputRecord` debug strings or inventing generic
-headings.
 
 P8 AIME should use an AIME-specific reflective dataset builder or a generic
 target-safe case projection that renders `AimeInput.problem`, never
@@ -111,14 +169,19 @@ not teach that arbitrary `P::Case: Display` is product-safe.
 Allowed default states:
 
 1. `GepaReflectiveDataset` requires a target-safe case-input projection trait
-   rather than `Display` for the whole `P::Case`; or
+   rather than `Display` for the whole `P::Case`; the projection produces a
+   `ReflectiveValue::Text` or richer value for the `input` field of
+   `ReflectiveCase`.
 2. `GepaReflectiveDataset` remains a lower-level scaffold and P8 installs a
    named safe builder; or
 3. Durable benchmark/product runs refuse when the selected reflective builder
    cannot prove target-safe input projection.
 
-The hard rule is that ordinary P8 must not depend on `Display` for a mixed
+The hard rule: ordinary P8 must not depend on `Display` for a mixed
 input/target/metadata case envelope.
+
+The default emits exactly one `ReflectiveRun` per `ReflectiveCase`.
+Multi-agent / multi-attempt datasets are produced by opt-in builders.
 
 ## 5. Evidence Boundary
 
@@ -169,7 +232,7 @@ fingerprints. It is not the P8 default.
 
 Reflection may carry source refs for audit. For AIME, the preferred projection is:
 
-- `case_id` in `ReflectiveExample.case`;
+- `case_id` in `ReflectiveCase.case_id`;
 - `InfoRef::Assessment(parent_assessment)` and candidate refs in
   `source_refs`;
 - report-visible `source_id` stays in report metadata, not in the reflection
@@ -202,7 +265,12 @@ Reflection behavior affects resume and cache correctness. Fingerprints must cove
 - evidence projection identity;
 - reflection prompt template;
 - output parser;
-- LM role/provider/model/sampling/output configuration.
+- LM role/provider/model/sampling/output configuration;
+- attachment-kind list per case;
+- `ReflectionWorkspace` layout protocol version, the `kind` field of the
+  workspace manifest (`reflection_workspace.v1` at v1);
+- `ArtifactReflector` identity, the `signature_id` field of the workspace
+  manifest from `ArtifactReflector::reflection_id()`.
 
 Changing any of those should refuse incompatible resume or use a distinct cache
 namespace/key.
@@ -224,8 +292,16 @@ P8 AIME reflection must:
 ## 11. Implementation Routing
 
 - `leaven-gepa` owns `ReflectiveDatasetBuilder`, `ReflectRequest`,
-  `ReflectiveExample`, renderer/parser traits, reflection provenance, and
-  strategy fingerprint hooks.
+  `ReflectiveCase`, `ReflectiveRun`, `ReflectiveValue`, `Checks`,
+  renderer/parser traits, reflection provenance, and strategy fingerprint
+  hooks. `ReflectiveSideInfoValue` is retained for LM-paradigm paper-parity
+  rendering.
+- `leaven-evidence` owns `Attachment` + `AttachmentKind`, the typed
+  cross-cutting evidence vocabulary. `leaven-gepa` re-exports
+  `leaven_evidence::Attachment` as `leaven_gepa::Attachment`.
+- `leaven-agentic` owns `ArtifactReflector`, `ReflectionWorkspace`,
+  `ReflectionLayoutConfig`, `ReadbackResult`, `ReflectionError`, and
+  `ReflectionRunOutcome`; see `docs/specs/typed_signature_adapter_contract.md`.
 - `leaven-run` owns target-safe ordinary case/evidence lowering for the product
   builder surface.
 - `examples/p8_aime_gepa` owns AIME-specific reflective dataset projection if no
@@ -241,7 +317,12 @@ the contract.
 
 Required tests:
 
-- LM-backed and agent-backed reflectors still receive byte-identical examples;
+- LM-backed and agent-backed reflectors see byte-identical reflective dataset
+  content (`Vec<ReflectiveCase>`); their rendered task bodies differ by
+  paradigm. LM uses the upstream paper template; agent uses the
+  `ReflectionWorkspace` materialization. The
+  `lm_and_agent_reflectors_receive_byte_identical_examples` regression asserts
+  dataset-content equality, not full rendered-output equality.
 - P8/AIME reflective examples include problem input, output, score, and feedback;
 - P8/AIME reflective examples do not include answer, raw solution, or full
   metadata unless emitted by scorer feedback policy;

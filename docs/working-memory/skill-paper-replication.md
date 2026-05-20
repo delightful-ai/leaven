@@ -58,6 +58,11 @@ Current useful substrate:
   diffs, and proposal parsing for agent-authored skill changes.
 - `leaven-agentic` has proposer repair policy support.
 - `leaven-gepa-agentic-skill` bridges GEPA reflection to skill-bank proposal.
+- 2026-05-20: `leaven-gepa-agentic-skill` is being migrated from bespoke
+  `renderer.rs` / `materializer.rs` / `parser.rs` to a
+  `SkillBankReflector: ArtifactReflector` impl, running through the generic
+  `ReflectionWorkspace` in `leaven-agentic`. Governing spec:
+  `docs/specs/typed_signature_adapter_contract.md`.
 - `examples/p5_evoskill_iteration` proves one live Codex EvoSkill-shaped
   iteration over a tiny treasury-notation fixture.
 - `leaven-population` has `ParetoFrontier`, `TopKFrontier`, and deterministic
