@@ -671,9 +671,13 @@ reading full skill bodies or files. Utility scores, trigger counts, learned
 retrieval keys, and use stats are not part of the standard `SkillBank` card;
 they require run/evidence state or a deliberate registry artifact overlay.
 
-Open question: whether Leaven should ship a separate `SkillRegistryArtifact`
-for systems like D2Skill that maintain utility, retrieval keys, and eviction
-state as optimized memory rather than derived bookkeeping.
+`SkillRouteRegistry` is the first deliberate overlay: callers provide
+validated route specs for skills already present in a `SkillBank`, and the
+registry projects `SkillCard`s with route-pool and route-key membership in
+stable skill-name order. It covers D2Skill's task-vs-step pool/key shape
+without making keys raw `SkillBank` facts. It does not own embeddings,
+similarity thresholds, utility scores, retrieval counters, eviction state, or
+materialization.
 
 ---
 
@@ -1211,7 +1215,8 @@ combination, and paired rollout utility update loops. It also covers the
 D2Skill `Y_i - baseline_mean` step credit equation when a runner supplies
 `SkillStepTrajectoryOutcome`s, and D2Skill-style utility/UCB pruning plans when
 a caller supplies one active skill pool plus capacity/current-step/protected
-window values. Embeddings, route-key extraction, transcript/env extraction,
+window values. `SkillRouteRegistry` covers explicit pool/key membership over a
+validated bank. Embeddings, route-key extraction, transcript/env extraction,
 skill-bank mutation, injection formatting, router training, and paper cadence
 or threshold selection remain for later retrieval/selector or paper-runner
 layers.
@@ -1750,13 +1755,16 @@ Paper-specific pieces:
 
 Implementation status:
 
-- Skill-bank membership, paired rollout reward evidence, and utility state are
-  clear. Step-skill utility credits can now be derived from runner-provided
-  skill trajectory outcomes, and utility-guided pruning can be planned from
-  stored utility/retrieval stats.
+- Skill-bank membership, explicit route-pool/key overlays, paired rollout
+  reward evidence, and utility state are clear. `SkillRouteRegistry` now covers
+  task-vs-step pool membership and retrieval keys over a validated bank.
+  Step-skill utility credits can now be derived from runner-provided skill
+  trajectory outcomes, and utility-guided pruning can be planned from stored
+  utility/retrieval stats.
 - Coupling to RL training is outside the first Leaven reproduction path.
-- Need to decide whether dual-granularity skill banks are standard artifact
-  shape or paper-specific registry state.
+- The remaining dual-granularity gap is not registry shape; it is D2Skill's
+  real key construction from tasks/observations, embedding similarity
+  thresholding, injection formatting, and RL/environment coupling.
 
 ### 14.5 SkillReducer
 

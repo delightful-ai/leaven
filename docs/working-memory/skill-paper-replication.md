@@ -53,10 +53,11 @@ The working loop for each paper:
 Current useful substrate:
 
 - `leaven-artifact-skill` owns `SkillBank`, `SkillFolder`, `SkillBankChange`,
-  `SkillCard`, skill validation, metadata, and skill surfaces. The current
-  card is the manifest-only routing catalog view over names, descriptions, and
-  generic metadata; learned utility/retrieval state remains outside
-  `SkillBank`.
+  `SkillCard`, `SkillRouteRegistry`, skill validation, metadata, and skill
+  surfaces. The current card is the manifest-only routing catalog view over
+  names, descriptions, and generic metadata. The route registry is an explicit
+  pool/key overlay over a validated bank; learned utility/retrieval counters
+  remain outside `SkillBank`.
 - `leaven-agentic-skill` owns skill-bank materialization, workspace readback,
   diffs, and proposal parsing for agent-authored skill changes.
 - `leaven-agentic` has proposer repair policy support.
@@ -496,7 +497,10 @@ Leaven primitive blockers:
   skill-injected rollouts, reflection into task/step skills, retrieval, utility
   update, and pruning. This is a causal-loop proxy with documented deviations,
   not ALFWorld/WebShop/GRPO replication.
-- dual-pool skill registry for task and step skills;
+- dual-pool skill registry for task and step skills; `SkillRouteRegistry` now
+  covers explicit pool/key membership over a validated `SkillBank`, while real
+  D2Skill key construction from task IDs and observations remains paper-runner
+  work;
 - paired rollout evaluator that records baseline-vs-skill deltas;
   `PairedRolloutEvidence` now records non-empty baseline/treatment group
   rewards and exposes treatment-minus-baseline as a finite task-level signal.
@@ -509,9 +513,11 @@ Leaven primitive blockers:
   `SkillStepTrajectoryOutcome`s using D2Skill's `Y_i - baseline_mean`
   equation. `SkillUtilityPruner` now covers utility/UCB eviction scoring,
   capacity planning, and protected-window exclusion over caller-supplied active
-  pools. It still does not cover similarity keys, route-key extraction,
-  transcript/env extraction, injection formatting, validation cadence,
-  paper-provided capacity/protected-window values, or skill-bank mutation;
+  pools. Together with `SkillRouteRegistry`, it now covers validated pool/key
+  membership plus utility/pruning bookkeeping. It still does not cover
+  embedding similarity, route-key extraction, transcript/env extraction,
+  injection formatting, validation cadence, paper-provided
+  capacity/protected-window values, or skill-bank mutation;
 - transcript/env extraction of retrieved step skills into trajectory outcomes;
 - RL/environment adapter boundary that can record Leaven evidence without
   turning Leaven into the RL framework.
@@ -596,8 +602,10 @@ Start with these generic primitives as failures expose them:
    that state, while full EvoSkill OfficeQA/SealQA run integration remains.
 3. Skill registry/card layer: base derived `SkillCard` now exists in
    `leaven-artifact-skill` as the manifest-only catalog view over validated
-   skill folders. Utility, routing keys, trigger stats, retrieved-use evidence,
-   and lifecycle state remain outside raw `SkillBank`.
+   skill folders. `SkillRouteRegistry` now exists as an explicit route
+   pool/key overlay over a validated `SkillBank`. Utility, trigger stats,
+   retrieved-use evidence, similarity scores, and lifecycle state remain
+   outside raw `SkillBank` and the route registry.
 4. Evidence/trace corpus: trajectories, success/failure labels, feedback
    history, patch/proposal provenance, support counts, and cost records.
 5. Agentic batch orchestration: many independent analysts/proposers with
@@ -618,9 +626,10 @@ Start with these generic primitives as failures expose them:
    the step trajectory `Y_i - baseline_mean` credit equation over
    `SkillStepTrajectoryOutcome`s. `SkillUtilityPruner` covers D2Skill-style
    utility/UCB eviction scoring with capacity and protected-window planning.
-   Embedding keys, similarity thresholds, route-key extraction, transcript/env
-   extraction, injection formatting, paper cadence/threshold values, and
-   skill-bank mutation remain.
+   `SkillRouteRegistry` covers explicit pool/key membership for routed skill
+   cards. Embedding keys, similarity thresholds, route-key extraction,
+   transcript/env extraction, injection formatting, paper cadence/threshold
+   values, and skill-bank mutation remain.
 10. Paired rollout evidence: `PairedRolloutEvidence` now covers
     baseline-vs-treatment group rewards and finite treatment-minus-baseline
     deltas. Hindsight trajectory parsing and real ALFWorld/WebShop rollout

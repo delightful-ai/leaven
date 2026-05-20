@@ -6,7 +6,8 @@ use leaven_artifact_skill::{
     SkillDescription, SkillFile, SkillFileEdit, SkillFilePartId, SkillFileSurface, SkillFolder,
     SkillFolderEdit, SkillFolderSurface, SkillManifestEdit, SkillManifestPartId,
     SkillManifestSurface, SkillMetadataValue, SkillName, SkillNameError, SkillParseError,
-    SkillPath, SkillPathError,
+    SkillPath, SkillPathError, SkillRouteKey, SkillRoutePool, SkillRouteRegistry,
+    SkillRouteRegistryError, SkillRouteSpec,
 };
 use leaven_core::{Artifact, ContentAddressed};
 use leaven_surface::EditSurface;
@@ -92,6 +93,118 @@ fn skill_cards_project_bank_manifests_in_stable_bank_order() {
     assert_eq!(alpha_card.name(), alpha.name());
     assert_eq!(alpha_card.description(), &alpha.manifest().description);
     assert_eq!(alpha_card.metadata(), &alpha.manifest().metadata);
+}
+
+#[test]
+fn skill_route_registry_projects_validated_bank_cards_by_pool_and_key() {
+    let task = folder_with_description(
+        "task-returns",
+        "Use when deciding MiniShop return policy.",
+        "Prefer the standard returns bin.",
+    );
+    let step = folder_with_description(
+        "step-stripes",
+        "Use when observing decorative package stripes.",
+        "Ignore decorative stripe colors.",
+    );
+    let bank = SkillBank::from_folders([step.clone(), task.clone()]).unwrap();
+
+    let registry = SkillRouteRegistry::from_specs(
+        &bank,
+        [
+            SkillRouteSpec::new(
+                task.name().clone(),
+                SkillRoutePool::new("task").unwrap(),
+                SkillRouteKey::new("minishop_returns").unwrap(),
+            ),
+            SkillRouteSpec::new(
+                step.name().clone(),
+                SkillRoutePool::new("step").unwrap(),
+                SkillRouteKey::new("minishop_returns teal stripe").unwrap(),
+            ),
+        ],
+    )
+    .unwrap();
+
+    assert_eq!(
+        registry
+            .entries()
+            .iter()
+            .map(|entry| {
+                (
+                    entry.skill().as_str(),
+                    entry.pool().as_str(),
+                    entry.route_key().as_str(),
+                )
+            })
+            .collect::<Vec<_>>(),
+        [
+            ("step-stripes", "step", "minishop_returns teal stripe"),
+            ("task-returns", "task", "minishop_returns"),
+        ]
+    );
+    assert_eq!(
+        registry
+            .by_pool(&SkillRoutePool::new("task").unwrap())
+            .iter()
+            .map(|entry| entry.card().description().as_str())
+            .collect::<Vec<_>>(),
+        ["Use when deciding MiniShop return policy."]
+    );
+    assert_eq!(
+        registry
+            .get(task.name())
+            .expect("task route entry")
+            .card()
+            .metadata()
+            .get("license"),
+        Some(&SkillMetadataValue::String("MIT".to_owned()))
+    );
+}
+
+#[test]
+fn skill_route_registry_refuses_unknown_or_duplicate_skill_specs() {
+    let bank = SkillBank::from_folders([folder("known-skill")]).unwrap();
+    let known = skill_name("known-skill");
+    let unknown = skill_name("missing-skill");
+
+    assert_eq!(
+        SkillRouteRegistry::from_specs(
+            &bank,
+            [SkillRouteSpec::new(
+                unknown.clone(),
+                SkillRoutePool::new("task").unwrap(),
+                SkillRouteKey::new("missing").unwrap(),
+            )],
+        )
+        .unwrap_err(),
+        SkillRouteRegistryError::UnknownSkill { skill: unknown },
+    );
+    assert_eq!(
+        SkillRouteRegistry::from_specs(
+            &bank,
+            [
+                SkillRouteSpec::new(
+                    known.clone(),
+                    SkillRoutePool::new("task").unwrap(),
+                    SkillRouteKey::new("one").unwrap(),
+                ),
+                SkillRouteSpec::new(
+                    known.clone(),
+                    SkillRoutePool::new("step").unwrap(),
+                    SkillRouteKey::new("two").unwrap(),
+                ),
+            ],
+        )
+        .unwrap_err(),
+        SkillRouteRegistryError::DuplicateSkill { skill: known },
+    );
+}
+
+#[test]
+fn skill_route_pool_and_key_refuse_blank_values() {
+    assert!(SkillRoutePool::new("  ").is_err());
+    assert!(SkillRouteKey::new("\n").is_err());
 }
 
 #[test]
