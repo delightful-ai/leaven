@@ -3,9 +3,11 @@ use std::path::Path;
 
 use leaven_eval::SplitRole;
 use leaven_evidence::{
-    AgentAnalystRole, AgentTrajectoryAnalysisKind, AgentTrajectoryOutcome, OutputRecord,
+    AgentAnalystRole, AgentTrajectoryAnalysisKind, AgentTrajectoryCorpusEvidence,
+    AgentTrajectoryEvidence, AgentTrajectoryEvidenceInput, AgentTrajectoryOutcome,
+    CommandEvidence, OutputRecord,
 };
-use leaven_kernel::CaseId;
+use leaven_kernel::{AgentSessionId, CaseId, Fingerprint};
 use trace2skill_spreadsheetbench::{
     Trace2SkillRunArtifactInput, build_stage2_analyst_fanout_from_training_corpus,
     build_training_corpus_from_run_artifacts, load_verified_400_manifest,
@@ -105,13 +107,42 @@ fn builds_training_corpus_from_upstream_results_and_logs_without_model_work() {
     assert_eq!(train[0], CaseId::from_index(0));
 
     let fanout = build_stage2_analyst_fanout_from_training_corpus(&corpus).unwrap();
-    assert_eq!(fanout.expected_call_ids(), ["error-13-1"]);
-    let call = fanout.by_call("error-13-1").unwrap();
+    assert_eq!(fanout.expected_call_ids(), ["error-13-1-1"]);
+    let call = fanout.by_call("error-13-1-1").unwrap();
     assert_eq!(call.role(), AgentAnalystRole::Error);
     assert_eq!(call.source_task_ids(), ["13-1"]);
     assert_eq!(call.support_count(), 1);
     assert_eq!(call.retry_count(), 0);
-    assert_eq!(fanout.pending_call_ids(), vec!["error-13-1"]);
+    assert_eq!(fanout.pending_call_ids(), vec!["error-13-1-1"]);
+}
+
+#[test]
+fn stage2_analyst_call_ids_disambiguate_duplicate_task_trajectories() {
+    let mut corpus = AgentTrajectoryCorpusEvidence::new(["13-1".to_owned()]).unwrap();
+    corpus.push(trajectory("13-1")).unwrap();
+    corpus.push(trajectory("13-1")).unwrap();
+
+    let fanout = build_stage2_analyst_fanout_from_training_corpus(&corpus).unwrap();
+
+    assert_eq!(
+        fanout.expected_call_ids(),
+        ["error-13-1-1", "error-13-1-2"]
+    );
+}
+
+fn trajectory(task_id: &str) -> AgentTrajectoryEvidence {
+    AgentTrajectoryEvidence::new(AgentTrajectoryEvidenceInput {
+        session_id: AgentSessionId::new(),
+        case_id: None,
+        task_id: task_id.to_owned(),
+        outcome: AgentTrajectoryOutcome::Failure {
+            reason: "answer mismatch".to_owned(),
+        },
+        model_id: "test-model".to_owned(),
+        model_config_fingerprint: Fingerprint::from_bytes([0x13; 32]),
+        transcript: OutputRecord::inline("transcript"),
+        commands: CommandEvidence::new(Vec::new()),
+    })
 }
 
 fn unique_temp_dir(label: &str) -> std::path::PathBuf {

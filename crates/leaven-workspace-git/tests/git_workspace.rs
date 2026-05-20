@@ -99,6 +99,27 @@ fn git_checkout_captures_restores_and_deletes_program_refs() {
     });
 }
 
+#[test]
+fn git_checkout_restores_tag_when_branch_has_same_short_name() {
+    block_on(async {
+        let source = fixture_repo();
+        let factory = GitWorkspaceFactory::local(source.path());
+        let workspace = factory.allocate(WorkspaceConfig::default()).await.unwrap();
+        let mount = workspace
+            .local_mount()
+            .expect("git workspace has local mount")
+            .to_path_buf();
+
+        run_git(&mount, ["checkout", "main"]);
+        run_git(&mount, ["tag", "program/base"]);
+
+        GitCheckout::restore_ref(&mount, &tag_key("program/base")).unwrap();
+        assert_eq!(fs::read_to_string(mount.join("program.txt")).unwrap(), "base\n");
+
+        workspace.cleanup().await.unwrap();
+    });
+}
+
 fn fixture_repo() -> tempfile::TempDir {
     let source = tempfile::tempdir().unwrap();
     run_git(source.path(), ["init", "--initial-branch=main"]);

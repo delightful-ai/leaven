@@ -22,6 +22,7 @@ pub struct CategoryRoundRobinSampler {
     samples_per_category: NonZeroUsize,
     category_cursor: usize,
     case_cursors: BTreeMap<SmolStr, usize>,
+    sampled_cases: BTreeSet<CaseId>,
 }
 
 impl CategoryRoundRobinSampler {
@@ -63,6 +64,7 @@ impl CategoryRoundRobinSampler {
             samples_per_category,
             category_cursor: 0,
             case_cursors,
+            sampled_cases: BTreeSet::new(),
         })
     }
 
@@ -110,12 +112,13 @@ impl CategoryRoundRobinSampler {
                 category: category.clone(),
                 case: pool[case_index],
             });
+            self.sampled_cases.insert(pool[case_index]);
             *cursor += 1;
         }
     }
 
     #[must_use]
     pub fn sampled_cases(&self) -> BTreeSet<CaseId> {
-        self.pools.values().flatten().copied().collect()
+        self.sampled_cases.clone()
     }
 }

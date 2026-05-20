@@ -17,11 +17,11 @@ impl GitCheckout {
     }
 
     pub fn restore_ref(root: &Path, key: &GitRefKey) -> Result<(), GitWorkspaceGitError> {
-        let _ = run_git(
-            root,
-            "git checkout",
-            ["checkout", "--quiet", key.name().as_str()],
-        )?;
+        let target = match key.kind() {
+            GitRefKind::Branch => format!("refs/heads/{}", key.name()),
+            GitRefKind::Tag => format!("refs/tags/{}", key.name()),
+        };
+        let _ = run_git(root, "git checkout", ["checkout", "--quiet", &target])?;
         Ok(())
     }
 

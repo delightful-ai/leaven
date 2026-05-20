@@ -188,15 +188,16 @@ pub fn build_stage2_analyst_fanout_from_training_corpus(
     let call_ids = corpus
         .trajectories()
         .iter()
-        .map(analyst_call_id)
+        .enumerate()
+        .map(|(index, trajectory)| analyst_call_id(trajectory, index))
         .collect::<Vec<_>>();
     let mut fanout = AgentAnalystFanoutEvidence::new(call_ids)?;
-    for trajectory in corpus.trajectories() {
+    for (index, trajectory) in corpus.trajectories().iter().enumerate() {
         let role = analyst_role(trajectory.outcome());
         let task_id = trajectory.task_id().to_owned();
         fanout.push(AgentAnalystCallEvidence::new(
             AgentAnalystCallEvidenceInput {
-                call_id: analyst_call_id(trajectory),
+                call_id: analyst_call_id(trajectory, index),
                 role,
                 source_task_ids: vec![task_id.clone()],
                 prompt: OutputRecord::inline(format!(
@@ -212,12 +213,12 @@ pub fn build_stage2_analyst_fanout_from_training_corpus(
     Ok(fanout)
 }
 
-fn analyst_call_id(trajectory: &AgentTrajectoryEvidence) -> String {
+fn analyst_call_id(trajectory: &AgentTrajectoryEvidence, index: usize) -> String {
     let prefix = match trajectory.outcome() {
         AgentTrajectoryOutcome::Success => "success",
         AgentTrajectoryOutcome::Failure { .. } => "error",
     };
-    format!("{prefix}-{}", trajectory.task_id())
+    format!("{prefix}-{}-{}", trajectory.task_id(), index + 1)
 }
 
 fn analyst_role(outcome: &AgentTrajectoryOutcome) -> AgentAnalystRole {
