@@ -65,6 +65,7 @@ const EXPECTED_WORKSPACE_MEMBERS: &[&str] = &[
     "examples/p6_optimizer_policy_self_opt",
     "examples/p7_self_optimization_kernel",
     "examples/p8_aime_gepa",
+    "examples/trace2skill_spreadsheetbench",
     "crates/leaven-cli",
     "xtask",
 ];
@@ -134,6 +135,7 @@ const EXPECTED_BINARIES: &[&str] = &[
     "examples/p6_optimizer_policy_self_opt",
     "examples/p7_self_optimization_kernel",
     "examples/p8_aime_gepa",
+    "examples/trace2skill_spreadsheetbench",
     "xtask",
 ];
 

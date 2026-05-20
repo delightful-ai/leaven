@@ -215,6 +215,12 @@ Use the narrowest layer that proves the claim.
   substrate coverage for scoped writes/reads, unattached command refusal,
   backend local-mount semantics, factory allocation, unique local roots, and
   cleanup removal plus already-removed cleanup tolerance.
+- `examples/trace2skill_spreadsheetbench/tests/manifest.rs`: mechanics-smoke
+  for the Trace2Skill SpreadsheetBench-Verified 400-row release. It proves
+  local upstream JSON rows lower into `leaven-eval` cases with source-row
+  metadata and the paper's `0..200` train / `200..400` held-out split. It is
+  not proof of spreadsheet execution, trajectory generation, skill evolution,
+  or metric reproduction.
 
 ## Review Rules
 

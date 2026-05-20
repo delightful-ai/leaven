@@ -118,6 +118,14 @@ The checked-out upstream release includes:
   `CaseId::from_index(row)`, while upstream ids such as `13-1` and `59902` are
   preserved in metadata as `source_id`, with `source_row_index` also recorded.
   SpreadsheetBench JSON parsing remains paper-specific loader work.
+- `examples/trace2skill_spreadsheetbench` now owns the first no-spend
+  paper-specific loader pass: it parses the official local
+  SpreadsheetBench-Verified 400-row `dataset.json`, lowers rows into
+  `leaven-eval::Case<SpreadsheetBenchTask, SpreadsheetBenchAnswerSpec>` with
+  source-row metadata, and builds the paper's `0..200` train/evolving and
+  `200..400` held-out split through `RowOrderSplitBuilder`. This is a
+  mechanics-smoke for manifest provenance, not spreadsheet execution or skill
+  evolution.
 - This slice adds `leaven-agentic-skill::SkillPatchPlan`, a paper-neutral
   mechanical guardrail for agent-authored skill patch plans. It validates
   existing-file modifications/deletions, create-file overwrite refusal,
@@ -135,6 +143,12 @@ Verification:
   2026-05-20.
 - `cargo clippy -p leaven-agentic-skill -p leaven-eval --all-targets -- -D
   warnings` passed on 2026-05-20.
+- `cargo test -p trace2skill_spreadsheetbench --test manifest` passed on
+  2026-05-20 and verified the official local 400-row manifest lowers to 400
+  cases with first id `13-1`, last id `59902`, and the paper split.
+- `cargo clippy -p trace2skill_spreadsheetbench --all-targets -- -D warnings`
+  and `cargo test -p leaven --test topology_contract` passed on 2026-05-20
+  after adding the manifest-lowering example as a workspace member.
 
 ## Current Blockers
 
@@ -165,7 +179,8 @@ External/spend blockers:
 
 ## Next Action
 
-Use the upstream SpreadsheetBench release for a no-spend loader pass: parse the
-400-row JSON into Leaven cases with `Case::from_source_row`, build the
-`RowOrderSplitBuilder` splits, and define the run artifact schema for trace
-records and patch-plan records without launching model/GPU work.
+Define the run artifact schema for Trace2Skill trace records and patch-plan
+records without launching model/GPU work. The next Leaven-owned primitive is a
+checkpointed many-trajectory evidence corpus that can preserve full ReAct
+traces, success/failure labels, task ids, model/config fingerprints, and parsed
+analysis records.

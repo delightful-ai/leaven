@@ -70,6 +70,7 @@ members = [
     "examples/p6_optimizer_policy_self_opt",
     "examples/p7_self_optimization_kernel",
     "examples/p8_aime_gepa",
+    "examples/trace2skill_spreadsheetbench",
     "xtask",
 ]
 
