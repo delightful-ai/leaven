@@ -18,10 +18,11 @@ Each `pN_*` directory is a workspace package with a runnable binary. Keep reusab
 - `d2skill_tiny`: local `AGENTS.md`; paper-specific D2Skill tiny live paired-rollout skill-bank proof. It is outside the Cargo workspace and writes live artifacts under `tmp/d2skill_tiny/`.
 - `trace2skill_tiny_live`: local `AGENTS.md`; paper-specific Trace2Skill tiny live trajectory-to-skill proof. It is outside the Cargo workspace and writes live artifacts under `tmp/trace2skill_tiny_live/`.
 - `trace2skill_spreadsheetbench`: mechanics-smoke for Trace2Skill's official
-  SpreadsheetBench-Verified 400-row manifest and run-artifact lowering. `cargo
-  test -p trace2skill_spreadsheetbench --test manifest` proves the local
-  upstream JSON is parsed into `leaven-eval` cases and the paper's `0..200`
-  train / `200..400` held-out split. `cargo test -p
+  SpreadsheetBench-Verified 400-row manifest, run-artifact lowering, and exact
+  one-case no-spend prompt preflight. `cargo test -p
+  trace2skill_spreadsheetbench --test manifest` proves the local upstream JSON
+  is parsed into `leaven-eval` cases and the paper's `0..200` train /
+  `200..400` held-out split. `cargo test -p
   trace2skill_spreadsheetbench --test run_artifacts` proves upstream-shaped
   `results.json`, logs, and analysis reports can be imported into
   `AgentTrajectoryCorpusEvidence`. `cargo test -p
@@ -31,9 +32,13 @@ Each `pN_*` directory is a workspace package with a runnable binary. Keep reusab
   test -p trace2skill_spreadsheetbench --test patch_replay` proves saved/live
   JSON patch merge artifacts and upstream-shaped `--save-intermediates`
   directories can replay through `SkillPatchMergeTree` and
-  `SkillPatchApplication`. These do not prove trajectory generation,
-  spreadsheet execution, model-backed analyst or merge calls, skill evolution,
-  or metric reproduction.
+  `SkillPatchApplication`. `cargo test -p trace2skill_spreadsheetbench --test
+  one_case --test cli` plus `cargo run -p trace2skill_spreadsheetbench --
+  --inspect-one-case` proves the materialized case `13-1`, init/golden
+  workbooks, upstream prompt, upstream system prompt, and released combined
+  `xlsx` skill can be inspected/rendered without solving the spreadsheet.
+  These do not prove trajectory generation, spreadsheet execution,
+  model-backed analyst or merge calls, skill evolution, or metric reproduction.
 
 ## Proof Classification
 - `product-proof`: an example that exercises the real public contract at the intended user layer, with no proxy substitution for the behavior being claimed.

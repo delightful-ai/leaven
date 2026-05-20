@@ -325,6 +325,14 @@ Leaven primitive blockers:
   present. This is still no-spend loader proof; no live analyst or merge call
   has run, and the upstream saved directory does not preserve explicit
   accepted/discarded decision rationale.
+- `examples/trace2skill_spreadsheetbench` now has a one-case no-spend
+  inspection/rendering surface for exact SpreadsheetBench case `13-1`: it reads
+  `tmp/paper_exact_samples/trace2skill/spreadsheetbench_verified/dataset_first_case.json`,
+  the materialized init/golden workbooks and `prompt.txt`, the upstream
+  `cli_skill_preloaded_full_system_v1.txt` system prompt, and the released
+  `trace2skill-xlsx-35B-combined/SKILL.md`. This is an input preflight for a
+  future one-sample live attempt; it does not execute a spreadsheet agent,
+  modify a workbook, run Qwen/vLLM, or score the answer.
 - `examples/trace2skill_tiny_live` now restores the tiny live
   trajectory-to-skill harness into main Leaven. Its preflight writes a no-spend
   proof contract, and its live mode runs Codex/GPT-5.4-mini over two CSV
@@ -391,6 +399,10 @@ Spend/data risks:
   directory replay, including deterministic map/merge filename ordering,
   `--merge-batch-size` reconstruction, `final_patch.json` merge selection, and
   `translated_final_patch.json` application.
+- The Trace2Skill example now covers exact one-case input preflight for
+  SpreadsheetBench case `13-1` through `--inspect-one-case` and
+  `--render-one-case-prompt`, using the synchronized `tmp/` sample, upstream
+  system prompt, and released combined `xlsx` skill.
 - Restored tiny live harness preflights passed in main Leaven on 2026-05-20:
   `tmp/memento_skills_read_write/20260520T204154Z/preflight.json`,
   `tmp/skillreducer_tiny/20260520T204154Z/preflight.json`,
