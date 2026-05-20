@@ -287,7 +287,9 @@ Second-order blockers after git identity:
   drift in the dossier; P5 now carries frontier/parent/selector state in its
   private checkpoint, but remains a one-iteration fixture;
 - exact split manifests and run integration for `CategoryRoundRobinSampler`,
-  including source category provenance and 1.5 epoch schedules;
+  including source category provenance and 1.5 epoch schedules; P5 now restores
+  sampler state in private checkpoints and evaluates feedback on sampled
+  explicit case IDs instead of the whole train partition;
 - OfficeQA scorer/evaluator records with thresholded failure extraction;
 - feedback history and proposal-outcome history as generic evidence, not
   example-local strings;
@@ -346,4 +348,6 @@ Stay no-spend until the provenance blockers are closed:
    `TopKParentSelector` primitives plus `leaven-eval::CategoryRoundRobinSampler`
    into the full EvoSkill OfficeQA/SealQA run path with checkpointed
    program/frontier/selector/sampler state and paper score metadata, without
-   moving Git command execution into the artifact crate.
+   moving Git command execution into the artifact crate. P5 has the
+   selector/sampler checkpoint shape; it still needs full git-program paper-run
+   integration and source-pinned split manifests.

@@ -3511,6 +3511,7 @@ dependencies = [
  "leaven-artifact-skill",
  "leaven-core",
  "leaven-engine",
+ "leaven-eval",
  "leaven-evidence",
  "leaven-kernel",
  "leaven-population",

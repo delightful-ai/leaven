@@ -1,4 +1,5 @@
 use leaven_artifact_skill::{SkillBank, SkillBankChange};
+use leaven_eval::CategoryRoundRobinSampler;
 use leaven_kernel::{EvidenceRef, RunId};
 use leaven_population::{TopKFrontier, TopKParentSelector};
 
@@ -16,6 +17,7 @@ pub enum EvoSkillCheckpoint {
         baseline_score: f64,
         frontier: TopKFrontier,
         parent_selector: TopKParentSelector,
+        train_sampler: CategoryRoundRobinSampler,
     },
     FailuresCollected {
         run_id: RunId,
@@ -24,6 +26,7 @@ pub enum EvoSkillCheckpoint {
         baseline_score: f64,
         frontier: TopKFrontier,
         parent_selector: TopKParentSelector,
+        train_sampler: CategoryRoundRobinSampler,
         parent: leaven_kernel::CandidateId,
         failures: Vec<CaseExecution>,
     },
@@ -34,6 +37,7 @@ pub enum EvoSkillCheckpoint {
         baseline_score: f64,
         frontier: TopKFrontier,
         parent_selector: TopKParentSelector,
+        train_sampler: CategoryRoundRobinSampler,
         parent: leaven_kernel::CandidateId,
         failures: Vec<CaseExecution>,
         proposal: SkillProposal,
@@ -46,6 +50,7 @@ pub enum EvoSkillCheckpoint {
         baseline_score: f64,
         frontier: TopKFrontier,
         parent_selector: TopKParentSelector,
+        train_sampler: CategoryRoundRobinSampler,
         parent: leaven_kernel::CandidateId,
         failures: Vec<CaseExecution>,
         proposal: SkillProposal,
@@ -62,5 +67,6 @@ pub enum EvoSkillCheckpoint {
         best_bank: SkillBank,
         frontier: TopKFrontier,
         parent_selector: TopKParentSelector,
+        train_sampler: CategoryRoundRobinSampler,
     },
 }
