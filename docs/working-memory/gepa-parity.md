@@ -46,6 +46,10 @@ Important currently proven rows include:
 - per-case evaluation cache reuse and zero-cost hit accounting;
 - skip-perfect/no-reflective-examples before LM work;
 - upstream-style generic and AIME reflection prompt/parser snapshots;
+- agentic skill-bank reflection is routed to the
+  `ArtifactReflector` / `ReflectionWorkspace` pattern; AIME LM-backed
+  reflection paper-parity is explicitly out of scope for that migration and
+  remains byte-locked via `DefaultReflectionRenderer`;
 - target-safe reflective dataset projection and hidden-target isolation;
 - GEPA-specific phase events and P8 JSON event projection;
 - materialized AIME cache proof: `target/leaven-aime-cache/aime.json`,
