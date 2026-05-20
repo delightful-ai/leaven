@@ -13,6 +13,10 @@ Each `pN_*` directory is a workspace package with a runnable binary. Keep reusab
 - `p6_optimizer_policy_self_opt`: product-proof for trust-policy self-optimization; `just milestone-p6` proves optimizer-policy self-optimization over hidden validation/test partitions and hidden-test refusal.
 - `p7_self_optimization_kernel`: product-proof for the promotion-gate milestone; `just milestone-p7` proves immutable public surfaces, hidden holdout refusal, promotion gates, final-test selection, and rollback metadata.
 - `p8_aime_gepa`: local `AGENTS.md`; `just milestone-p8` is a product-proof for the public builder path through LM-backed GEPA reflection over provider-neutral `leaven-lm`, with deterministic local model output. It is not proof of a live provider, LM cache behavior, or live AIME improvement.
+- `memento_skills_read_write`: local `AGENTS.md`; paper-specific Memento-Skills tiny live Read-Write proof. It is outside the Cargo workspace and writes live artifacts under `tmp/memento_skills_read_write/`.
+- `skillreducer_tiny`: local `AGENTS.md`; paper-specific SkillReducer tiny live debloating proof. It is outside the Cargo workspace and writes live artifacts under `tmp/skillreducer_tiny/`.
+- `d2skill_tiny`: local `AGENTS.md`; paper-specific D2Skill tiny live paired-rollout skill-bank proof. It is outside the Cargo workspace and writes live artifacts under `tmp/d2skill_tiny/`.
+- `trace2skill_tiny_live`: local `AGENTS.md`; paper-specific Trace2Skill tiny live trajectory-to-skill proof. It is outside the Cargo workspace and writes live artifacts under `tmp/trace2skill_tiny_live/`.
 - `trace2skill_spreadsheetbench`: mechanics-smoke for Trace2Skill's official
   SpreadsheetBench-Verified 400-row manifest and run-artifact lowering. `cargo
   test -p trace2skill_spreadsheetbench --test manifest` proves the local

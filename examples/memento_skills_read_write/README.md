@@ -33,7 +33,7 @@ The live command runs one valid train case:
 6. Validate the rewritten skill with a tiny gate.
 7. Retry the task with the updated skill.
 
-## Known Deviations
+## Known deviations and deferred work
 
 - Codex/GPT-5.4-mini replaces Gemini-3.1-Flash.
 - The router is a Codex description-only selector over one skill, not the
