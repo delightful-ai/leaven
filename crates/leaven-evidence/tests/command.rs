@@ -1,9 +1,9 @@
 use std::time::Duration;
 
 use leaven_evidence::{
-    AgentTrajectoryAnalysisKind, AgentTrajectoryAnalysisRecord, AgentTrajectoryEvidence,
-    AgentTrajectoryEvidenceInput, AgentTrajectoryOutcome, CommandEvidence, CommandRecord,
-    OutputRecord,
+    AgentTrajectoryAnalysisKind, AgentTrajectoryAnalysisRecord, AgentTrajectoryCorpusError,
+    AgentTrajectoryCorpusEvidence, AgentTrajectoryEvidence, AgentTrajectoryEvidenceInput,
+    AgentTrajectoryOutcome, CommandEvidence, CommandRecord, OutputRecord,
 };
 use leaven_kernel::{AgentSessionId, BlobRef, CaseId, FingerprintBuilder};
 
@@ -101,4 +101,67 @@ fn agent_trajectory_groups_transcript_and_commands() {
         trajectory.analysis_records()[0].payload(),
         &OutputRecord::inline("{\"items\":[{\"lesson\":\"check formula range\"}]}")
     );
+}
+
+#[test]
+fn agent_trajectory_corpus_tracks_completed_and_pending_task_manifest() {
+    let mut corpus = AgentTrajectoryCorpusEvidence::new(["13-1".to_owned(), "59902".to_owned()]);
+    assert_eq!(corpus.expected_task_ids(), ["13-1", "59902"]);
+    assert_eq!(corpus.completed_task_ids(), Vec::<&str>::new());
+    assert_eq!(corpus.pending_task_ids(), vec!["13-1", "59902"]);
+
+    let trajectory = spreadsheet_trajectory("13-1", CaseId::from_index(0));
+    corpus.push(trajectory.clone()).unwrap();
+
+    assert_eq!(corpus.trajectories().len(), 1);
+    assert_eq!(corpus.completed_task_ids(), vec!["13-1"]);
+    assert_eq!(corpus.pending_task_ids(), vec!["59902"]);
+    assert_eq!(corpus.by_task("13-1"), vec![&trajectory]);
+    assert!(corpus.by_task("59902").is_empty());
+    assert_eq!(
+        corpus.by_task("13-1")[0].analysis_records()[0].kind(),
+        AgentTrajectoryAnalysisKind::Error
+    );
+
+    let duplicate_seed = spreadsheet_trajectory("13-1", CaseId::from_index(0));
+    corpus.push(duplicate_seed).unwrap();
+    assert_eq!(corpus.by_task("13-1").len(), 2);
+    assert_eq!(corpus.completed_task_ids(), vec!["13-1"]);
+
+    let unknown = spreadsheet_trajectory("not-in-manifest", CaseId::from_index(99));
+    assert_eq!(
+        corpus.push(unknown).unwrap_err(),
+        AgentTrajectoryCorpusError::UnknownTask {
+            task_id: "not-in-manifest".to_owned(),
+        }
+    );
+}
+
+fn spreadsheet_trajectory(task_id: &str, case_id: CaseId) -> AgentTrajectoryEvidence {
+    let mut fingerprint_builder = FingerprintBuilder::new();
+    fingerprint_builder.update("model=qwen3.5");
+    let model_config_fingerprint = fingerprint_builder.finish();
+    AgentTrajectoryEvidence::new(AgentTrajectoryEvidenceInput {
+        session_id: AgentSessionId::new(),
+        case_id: Some(case_id),
+        task_id: task_id.to_owned(),
+        outcome: AgentTrajectoryOutcome::Failure {
+            reason: "spreadsheet answer mismatch".to_owned(),
+        },
+        model_id: "Qwen3.5-122B-A10B".to_owned(),
+        model_config_fingerprint,
+        transcript: OutputRecord::blob(BlobRef {
+            store: "trace-blobs".to_owned(),
+            key: format!("{task_id}.log"),
+        }),
+        commands: CommandEvidence::new(Vec::new()),
+    })
+    .with_analysis_records(vec![AgentTrajectoryAnalysisRecord::new(
+        AgentTrajectoryAnalysisKind::Error,
+        format!("error_analysis_{task_id}.md"),
+        OutputRecord::blob(BlobRef {
+            store: "analysis-blobs".to_owned(),
+            key: format!("{task_id}.json"),
+        }),
+    )])
 }

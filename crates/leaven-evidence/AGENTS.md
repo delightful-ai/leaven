@@ -22,6 +22,11 @@ Evidence here is data a stage or evaluator can produce and another component can
   transcript/blob reference, command records, and parsed/blob-backed analyst
   records. It is not a scheduler, ReAct runner, scorer, or Trace2Skill merge
   policy.
+- `AgentTrajectoryCorpusEvidence` is the checkpointable many-trajectory value:
+  a caller-declared task manifest plus appended `AgentTrajectoryEvidence`
+  records with completed/pending task projection. Persist it through generic
+  `EvidenceStore` or caller-owned checkpoints; do not make store backends know
+  this schema.
 - Public placeholders today: `diff`, `json`, `listwise`, `mixed`,
   `score_vector`, and `string` are root-re-exported names without behavior laws.
   Do not cite them as standard evidence until they carry fields, constructors,
@@ -37,6 +42,9 @@ Evidence here is data a stage or evaluator can produce and another component can
   absence, not zero score.
 - Use `OutputRecord::BlobRef` for large stdout/stderr, transcripts, and parsed
   analyst payloads; `OutputRecord::Inline` is bounded display evidence.
+- Use `AgentTrajectoryCorpusEvidence` when a paper or runner must resume over a
+  known task manifest. Unknown task ids are refused at insertion; repeated
+  trajectories for a task are allowed for multi-seed or retry protocols.
 - Use `AttributableEvidence<K>` when evidence needs to point at surface parts,
   paths, agents, tools, modules, or user keys without making this crate know
   those key domains.

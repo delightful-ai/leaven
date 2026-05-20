@@ -66,9 +66,9 @@ pub mod string {
 pub use attribution::{AttributableEvidence, Attribution, AttributionKey};
 pub use casewise::{CaseOutcome, CasewiseEvidence};
 pub use command::{
-    AgentTrajectoryAnalysisKind, AgentTrajectoryAnalysisRecord, AgentTrajectoryEvidence,
-    AgentTrajectoryEvidenceInput, AgentTrajectoryOutcome, CommandEvidence, CommandRecord,
-    OutputRecord,
+    AgentTrajectoryAnalysisKind, AgentTrajectoryAnalysisRecord, AgentTrajectoryCorpusError,
+    AgentTrajectoryCorpusEvidence, AgentTrajectoryEvidence, AgentTrajectoryEvidenceInput,
+    AgentTrajectoryOutcome, CommandEvidence, CommandRecord, OutputRecord,
 };
 pub use diff::{DiffEvidence, RenderedDiff};
 pub use feedback::CaseAssessmentEvidence;
@@ -81,11 +81,11 @@ pub use score_vector::{Direction, RawScoreValue, ScoreAxis, ScorePoint, ScoreVec
 pub use string::StringEvidence;
 pub mod prelude {
     pub use crate::{
-        AgentTrajectoryAnalysisKind, AgentTrajectoryAnalysisRecord, AgentTrajectoryEvidence,
-        AgentTrajectoryEvidenceInput, AgentTrajectoryOutcome, AttributableEvidence,
-        CaseAssessmentEvidence, CaseOutcome, CasewiseEvidence, CommandEvidence, CommandRecord,
-        DiffEvidence, Direction, JsonEvidence, ListwiseRankingEvidence, MixedEvidence,
-        OutputRecord, PairwiseJudgmentEvidence, ScalarEvidence, ScalarEvidenceError,
-        ScoreVectorEvidence, StringEvidence,
+        AgentTrajectoryAnalysisKind, AgentTrajectoryAnalysisRecord, AgentTrajectoryCorpusError,
+        AgentTrajectoryCorpusEvidence, AgentTrajectoryEvidence, AgentTrajectoryEvidenceInput,
+        AgentTrajectoryOutcome, AttributableEvidence, CaseAssessmentEvidence, CaseOutcome,
+        CasewiseEvidence, CommandEvidence, CommandRecord, DiffEvidence, Direction, JsonEvidence,
+        ListwiseRankingEvidence, MixedEvidence, OutputRecord, PairwiseJudgmentEvidence,
+        ScalarEvidence, ScalarEvidenceError, ScoreVectorEvidence, StringEvidence,
     };
 }

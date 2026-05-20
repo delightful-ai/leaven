@@ -245,7 +245,11 @@ Leaven primitive blockers:
   trajectory provenance needed by Trace2Skill-style many-trace analysis:
   session id, optional Leaven case id, upstream task id, success/failure label,
   model id, model-config fingerprint, transcript/commands, and analyst records.
-  A checkpointed corpus over many such records is still missing.
+- `leaven-evidence::AgentTrajectoryCorpusEvidence` now preserves the
+  checkpointable many-trajectory value over a caller-declared task manifest,
+  with completed/pending projection and unknown-task refusal. The paper runner
+  still needs to write this corpus while generating actual SpreadsheetBench
+  trajectories.
 - many-trace evidence corpus with success/failure labels and full trajectory
   access;
 - parallel analyst dispatch that can checkpoint hundreds of independent

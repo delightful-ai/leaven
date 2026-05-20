@@ -139,6 +139,12 @@ The checked-out upstream release includes:
   task id, success/failure outcome, model id, model configuration fingerprint,
   transcript/command records, and parsed or blob-backed analyst records. It
   does not execute the ReAct loop or own Trace2Skill scorer/merge policy.
+- `leaven-evidence::AgentTrajectoryCorpusEvidence` now owns the checkpointable
+  many-trajectory evidence value needed to resume over the 200 train/evolving
+  task manifest: caller-declared task ids, appended trajectory records,
+  completed/pending task projection, unknown-task refusal, and support for
+  repeated trajectories per task for multi-seed/retry protocols. Store backends
+  remain generic and do not know this schema.
 
 Verification:
 
@@ -157,16 +163,17 @@ Verification:
   after adding the manifest-lowering example as a workspace member.
 - `cargo nextest run -p leaven-evidence`, `cargo clippy -p leaven-evidence
   --all-targets -- -D warnings`, and `cargo check -p p4_meta_harness_lite`
-  passed on 2026-05-20 for the hard-cut trajectory evidence envelope and the
-  adapted P4 fixture caller.
+  passed on 2026-05-20 for the hard-cut trajectory evidence envelope, the
+  many-trajectory corpus value, and the adapted P4 fixture caller.
 
 ## Current Blockers
 
 Leaven-owned remaining primitives before faithful Trace2Skill replication:
 
-- checkpointed many-trajectory evidence corpus/storage that groups
-  `AgentTrajectoryEvidence` records across the 200 training/evolving tasks,
-  with durable full ReAct trace blobs and resumable analysis state;
+- paper-runner integration that writes `AgentTrajectoryCorpusEvidence` through
+  existing stores/checkpoints while generating the 200 training/evolving
+  SpreadsheetBench trajectories, preserving durable full ReAct trace blobs and
+  resumable analysis state;
 - checkpointed parallel analyst fan-out for hundreds of independent agent/LLM
   calls with durable per-call prompts, responses, parse failures, and retry
   state;

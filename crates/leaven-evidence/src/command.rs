@@ -1,6 +1,6 @@
 //! Command and agent trajectory evidence.
 
-use std::time::Duration;
+use std::{collections::BTreeSet, time::Duration};
 
 use leaven_core::Evidence;
 use leaven_kernel::{AgentSessionId, BlobRef, CaseId, Fingerprint};
@@ -313,3 +313,107 @@ impl AgentTrajectoryEvidence {
 }
 
 impl Evidence for AgentTrajectoryEvidence {}
+
+/// Checkpointable corpus of agent trajectories over a known task manifest.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct AgentTrajectoryCorpusEvidence {
+    expected_task_ids: Vec<String>,
+    trajectories: Vec<AgentTrajectoryEvidence>,
+}
+
+impl AgentTrajectoryCorpusEvidence {
+    /// Build an empty corpus for a caller-declared task manifest.
+    #[must_use]
+    pub fn new(task_ids: impl IntoIterator<Item = String>) -> Self {
+        let mut seen = BTreeSet::new();
+        let expected_task_ids = task_ids
+            .into_iter()
+            .filter(|task_id| seen.insert(task_id.clone()))
+            .collect();
+        Self {
+            expected_task_ids,
+            trajectories: Vec::new(),
+        }
+    }
+
+    /// Adds one trajectory for a known task.
+    pub fn push(
+        &mut self,
+        trajectory: AgentTrajectoryEvidence,
+    ) -> Result<(), AgentTrajectoryCorpusError> {
+        if !self
+            .expected_task_ids
+            .iter()
+            .any(|task_id| task_id == trajectory.task_id())
+        {
+            return Err(AgentTrajectoryCorpusError::UnknownTask {
+                task_id: trajectory.task_id().to_owned(),
+            });
+        }
+        self.trajectories.push(trajectory);
+        Ok(())
+    }
+
+    /// Caller-declared task ids in manifest order.
+    #[must_use]
+    pub fn expected_task_ids(&self) -> &[String] {
+        &self.expected_task_ids
+    }
+
+    /// Stored trajectories in append/checkpoint order.
+    #[must_use]
+    pub fn trajectories(&self) -> &[AgentTrajectoryEvidence] {
+        &self.trajectories
+    }
+
+    /// Trajectories for one task id in append order.
+    #[must_use]
+    pub fn by_task(&self, task_id: &str) -> Vec<&AgentTrajectoryEvidence> {
+        self.trajectories
+            .iter()
+            .filter(|trajectory| trajectory.task_id() == task_id)
+            .collect()
+    }
+
+    /// Task ids with at least one stored trajectory, in manifest order.
+    #[must_use]
+    pub fn completed_task_ids(&self) -> Vec<&str> {
+        self.expected_task_ids
+            .iter()
+            .filter_map(|task_id| {
+                self.trajectories
+                    .iter()
+                    .any(|trajectory| trajectory.task_id() == task_id)
+                    .then_some(task_id.as_str())
+            })
+            .collect()
+    }
+
+    /// Task ids with no stored trajectories yet, in manifest order.
+    #[must_use]
+    pub fn pending_task_ids(&self) -> Vec<&str> {
+        self.expected_task_ids
+            .iter()
+            .filter_map(|task_id| {
+                (!self
+                    .trajectories
+                    .iter()
+                    .any(|trajectory| trajectory.task_id() == task_id))
+                .then_some(task_id.as_str())
+            })
+            .collect()
+    }
+}
+
+impl Evidence for AgentTrajectoryCorpusEvidence {}
+
+/// Corpus construction refused an invalid trajectory.
+#[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
+pub enum AgentTrajectoryCorpusError {
+    /// Trajectory task id was not declared in the corpus manifest.
+    #[error("trajectory task id `{task_id}` is not in the corpus manifest")]
+    UnknownTask {
+        /// Unknown task id.
+        task_id: String,
+    },
+}
