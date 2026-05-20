@@ -156,6 +156,12 @@ The checked-out upstream release includes:
   and returns rollback evidence carrying the parent bank, plan, attempted
   change, and error when application fails. It does not parse Trace2Skill patch
   JSON, schedule merges, or choose prevalence thresholds.
+- `leaven-agentic-skill::SkillParsedPatchDocument` now owns the paper-neutral
+  bridge from already-parsed patch operations to a validated `SkillPatchPlan`
+  plus concrete `SkillBankChange` values. Trace2Skill still must translate its
+  Stage 2/3 JSON, semantic markdown, or unified diff artifacts into those
+  full-file write/delete operations in the paper example; the generic adapter
+  now owns the mechanical validation/lowering boundary after translation.
 - `leaven-evidence::AgentTrajectoryEvidence` now owns the reusable trajectory
   evidence envelope needed before Trace2Skill Stage 1/analysis can be
   faithfully replayed: runtime session id, optional Leaven case id, upstream
@@ -244,9 +250,10 @@ Leaven-owned remaining primitives before faithful Trace2Skill replication:
   generic `AgentPatchMergeTreeEvidence` and skill-specific
   `SkillPatchMergeTree` provenance values, but no Trace2Skill merge scheduler,
   patch parser, prevalence policy, or model-backed merge operator has run;
-- Trace2Skill patch parsing from Stage 2/3 JSON/diff artifacts into
-  `SkillPatchPlan` plus concrete `SkillBankChange` values. Generic atomic
-  application/reporting/rollback now exists once those values are parsed;
+- Trace2Skill-specific patch parsing/translation from Stage 2/3 JSON,
+  semantic markdown, or unified diff artifacts into `SkillParsedPatchDocument`
+  operations. Generic plan validation, lowering to `SkillBankChange`, atomic
+  application/reporting, and rollback now exist after translation;
 - result matrix/reporting for model scale transfer, OOD WikiTQ, DocVQA,
   DAPO/AIME, ablations, and sequential/retrieval baselines.
 

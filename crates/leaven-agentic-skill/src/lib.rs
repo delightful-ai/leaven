@@ -5,6 +5,7 @@ mod input;
 mod layout;
 mod materializer;
 mod merge_tree;
+mod parsed_patch;
 mod parser;
 mod patch_apply;
 mod patch_plan;
@@ -17,6 +18,9 @@ pub use materializer::SkillBankMaterializer;
 pub use merge_tree::{
     SkillPatchMergeBatch, SkillPatchMergeDecision, SkillPatchMergeInput, SkillPatchMergeLevel,
     SkillPatchMergeTree, SkillPatchMergeTreeError, SkillPatchPlanId, SkillPatchPlanRecord,
+};
+pub use parsed_patch::{
+    SkillParsedPatch, SkillParsedPatchDocument, SkillParsedPatchError, SkillParsedPatchOperation,
 };
 pub use parser::SkillBankWorkspaceProposalParser;
 pub use patch_apply::{SkillPatchApplication, SkillPatchApplicationError, SkillPatchRollback};

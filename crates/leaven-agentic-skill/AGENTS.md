@@ -32,6 +32,10 @@ optimizer rhythm.
   `SkillBankChange`, reports the applied delta, and returns rollback evidence
   with the parent bank, plan, attempted change, and error when application
   fails. It does not parse paper JSON patches or decide merge/prevalence policy.
+- `SkillParsedPatchDocument` lowers already-parsed skill patch operations into
+  a validated `SkillPatchPlan` plus concrete `SkillBankChange` values. It is
+  the paper-neutral bridge after a paper/example has translated JSON, markdown,
+  or diff artifacts into full file writes/deletes.
 
 ## Route Away
 - `SkillBank`, `SkillFolder`, Agent Skills validation, and skill surfaces belong
@@ -102,6 +106,16 @@ optimizer rhythm.
   code when a validated patch plan is available
   verify: extend `skill_agentic.rs` around `SkillPatchApplication` tests and
   run `cargo nextest run -p leaven-agentic-skill`
+
+- when: lowering parsed patch artifacts
+  do: use `SkillParsedPatchDocument` after the paper/example has translated
+  provider JSON, semantic markdown, or diffs into skill-file operations
+  preserve: paper-specific patch syntax, prompt wording, prevalence policy, and
+  merge scheduling outside this crate
+  avoid: making this crate parse Trace2Skill JSON keys, infer insertion
+  locations from prose, or inspect model transcripts
+  verify: extend `skill_agentic.rs` around parsed patch document tests and run
+  `cargo nextest run -p leaven-agentic-skill`
 
 ## Local Bait
 - `.agents/skills` is a workspace projection choice, not the artifact identity.

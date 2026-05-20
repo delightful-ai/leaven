@@ -4,11 +4,13 @@ use leaven_agent::{AgentInstructions, FakeAgentAction, FakeAgentRuntime, OutputC
 use leaven_agentic::{AgentPromptTarget, AgenticProposer, AgenticProposerConfig, AgenticRunInput};
 use leaven_agentic_skill::{
     SkillBankChangeReport, SkillBankDiff, SkillBankMaterializer, SkillBankProposalInput,
-    SkillBankWorkspaceProposalParser, SkillFileChangeKind, SkillLineRange, SkillPatchApplication,
-    SkillPatchApplicationError, SkillPatchFileRef, SkillPatchMergeBatch, SkillPatchMergeInput,
-    SkillPatchMergeLevel, SkillPatchMergeTree, SkillPatchMergeTreeError, SkillPatchPlan,
-    SkillPatchPlanEdit, SkillPatchPlanError, SkillPatchPlanId, SkillPatchPlanRecord,
-    SkillPatchRange, SkillPatchSupport, SkillReferencePath, SkillWorkspaceLayout,
+    SkillBankWorkspaceProposalParser, SkillFileChangeKind, SkillLineRange,
+    SkillParsedPatchDocument, SkillParsedPatchError, SkillParsedPatchOperation,
+    SkillPatchApplication, SkillPatchApplicationError, SkillPatchFileRef, SkillPatchMergeBatch,
+    SkillPatchMergeInput, SkillPatchMergeLevel, SkillPatchMergeTree, SkillPatchMergeTreeError,
+    SkillPatchPlan, SkillPatchPlanEdit, SkillPatchPlanError, SkillPatchPlanId,
+    SkillPatchPlanRecord, SkillPatchRange, SkillPatchSupport, SkillReferencePath,
+    SkillWorkspaceLayout,
 };
 use leaven_artifact_skill::{
     SkillBank, SkillBankChange, SkillFile, SkillFilePermissions, SkillFolder, SkillName, SkillPath,
@@ -1218,6 +1220,83 @@ fn skill_patch_application_rolls_back_failed_atomic_changes() {
             .is_none(),
         "failed atomic apply must leave the parent bank unchanged"
     );
+}
+
+#[test]
+fn parsed_patch_document_lowers_to_validated_plan_and_skill_bank_changes() {
+    let parent = bank_with_alpha(
+        "Edits Rust tests. Use when Rust test failures need diagnosis.",
+        "Read the failing test output and patch the narrow code path.",
+        false,
+    );
+    let alpha = SkillName::new("alpha").unwrap();
+    let reference_path = SkillPath::new("references/checklist.md").unwrap();
+    let replacement_skill_md = skill_md(
+        "alpha",
+        "Edits Rust tests. Use when Rust test failures need diagnosis.",
+        "Read the failing test output and patch the narrow code path.\n\nSee references/checklist.md.",
+    );
+
+    let parsed = SkillParsedPatchDocument::new(vec![
+        SkillParsedPatchOperation::create_file(
+            SkillPatchFileRef::new(alpha.clone(), reference_path.clone()),
+            SkillPatchSupport::new(15).unwrap(),
+            SkillFile::text("Checklist.\n"),
+        ),
+        SkillParsedPatchOperation::modify_file(
+            SkillPatchFileRef::new(alpha.clone(), SkillPath::skill_md()),
+            SkillPatchRange::Lines(SkillLineRange::new(4, 4).unwrap()),
+            SkillPatchSupport::new(15).unwrap(),
+            SkillFile::text(replacement_skill_md),
+        )
+        .with_reference_links_from_text("See [the checklist](references/checklist.md)."),
+    ])
+    .validate_against(&parent)
+    .unwrap();
+
+    assert_eq!(parsed.plan().edits().len(), 2);
+    assert_eq!(parsed.changes().len(), 2);
+
+    let application =
+        SkillPatchApplication::apply(&parent, parsed.plan().clone(), parsed.changes().to_vec())
+            .unwrap();
+    assert!(
+        application
+            .child()
+            .get(&alpha)
+            .unwrap()
+            .file(&reference_path)
+            .is_some()
+    );
+}
+
+#[test]
+fn parsed_patch_document_preserves_plan_validation_failures() {
+    let parent = bank_with_alpha(
+        "Edits Rust tests. Use when Rust test failures need diagnosis.",
+        "Read the failing test output and patch the narrow code path.",
+        false,
+    );
+    let alpha = SkillName::new("alpha").unwrap();
+    let missing_target =
+        SkillPatchFileRef::new(alpha, SkillPath::new("references/missing.md").unwrap());
+
+    let error = SkillParsedPatchDocument::new(vec![SkillParsedPatchOperation::modify_file(
+        missing_target.clone(),
+        SkillPatchRange::WholeFile,
+        SkillPatchSupport::new(1).unwrap(),
+        SkillFile::text("replacement\n"),
+    )])
+    .validate_against(&parent)
+    .unwrap_err();
+
+    assert!(matches!(
+        error,
+        SkillParsedPatchError::Plan(SkillPatchPlanError::MissingFile {
+            edit_index: 0,
+            target
+        }) if target == missing_target
+    ));
 }
 
 struct SkillPromptRenderer;

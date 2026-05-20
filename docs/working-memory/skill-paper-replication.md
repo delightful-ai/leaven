@@ -271,6 +271,10 @@ Leaven primitive blockers:
 - `leaven-agentic-skill::SkillPatchMergeTree` now preserves hierarchical skill
   patch consolidation provenance over validated `SkillPatchPlan`s: leaf ids,
   merge levels, accepted/discarded inputs, output plans, and final plan identity.
+- `leaven-agentic-skill::SkillParsedPatchDocument` now lowers already-parsed
+  skill patch operations into a validated `SkillPatchPlan` plus concrete
+  `SkillBankChange` values. This keeps paper JSON/markdown/diff syntax in thin
+  paper examples while centralizing skill-file guardrails and artifact changes.
 - live trajectory generation that writes upstream-shaped results/logs/analysis
   artifacts for the 200 SpreadsheetBench training/evolving tasks;
 - live parallel analyst dispatch that executes hundreds of independent
@@ -283,9 +287,11 @@ Leaven primitive blockers:
   merge-tree provenance now exists as `AgentPatchMergeTreeEvidence` and
   `SkillPatchMergeTree`, while live merge execution and patch parsing remain;
   `SkillPatchApplication` now covers atomic application/reporting/rollback once
-  a parsed plan and concrete `SkillBankChange` are available;
-- Trace2Skill patch parsing from Stage 2/3 JSON/diff artifacts into
-  `SkillPatchPlan` plus concrete `SkillBankChange` values;
+  a parsed plan and concrete `SkillBankChange` are available, and
+  `SkillParsedPatchDocument` now covers the generic parsed-operation to
+  plan/change lowering step;
+- Trace2Skill patch syntax translation from Stage 2/3 JSON, semantic markdown,
+  or unified diff artifacts into `SkillParsedPatchDocument` operations;
 - result matrix/reporting for cross-model and OOD transfer.
 
 Spend/data risks:
