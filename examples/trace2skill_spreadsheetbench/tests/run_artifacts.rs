@@ -2,11 +2,13 @@ use std::fs;
 use std::path::Path;
 
 use leaven_eval::SplitRole;
-use leaven_evidence::{AgentTrajectoryAnalysisKind, AgentTrajectoryOutcome, OutputRecord};
+use leaven_evidence::{
+    AgentAnalystRole, AgentTrajectoryAnalysisKind, AgentTrajectoryOutcome, OutputRecord,
+};
 use leaven_kernel::CaseId;
 use trace2skill_spreadsheetbench::{
-    Trace2SkillRunArtifactInput, build_training_corpus_from_run_artifacts,
-    load_verified_400_manifest,
+    Trace2SkillRunArtifactInput, build_stage2_analyst_fanout_from_training_corpus,
+    build_training_corpus_from_run_artifacts, load_verified_400_manifest,
 };
 
 #[test]
@@ -101,6 +103,15 @@ fn builds_training_corpus_from_upstream_results_and_logs_without_model_work() {
         matches!(trajectory.analysis_records()[0].payload(), OutputRecord::BlobRef(reference) if reference.key.ends_with("error_analysis_13-1.md"))
     );
     assert_eq!(train[0], CaseId::from_index(0));
+
+    let fanout = build_stage2_analyst_fanout_from_training_corpus(&corpus).unwrap();
+    assert_eq!(fanout.expected_call_ids(), ["error-13-1"]);
+    let call = fanout.by_call("error-13-1").unwrap();
+    assert_eq!(call.role(), AgentAnalystRole::Error);
+    assert_eq!(call.source_task_ids(), ["13-1"]);
+    assert_eq!(call.support_count(), 1);
+    assert_eq!(call.retry_count(), 0);
+    assert_eq!(fanout.pending_call_ids(), vec!["error-13-1"]);
 }
 
 fn unique_temp_dir(label: &str) -> std::path::PathBuf {

@@ -8,9 +8,10 @@ use std::{
 
 use leaven_eval::{Case, Dataset, DatasetSplits, RowOrderSplitBuilder, SplitRole};
 use leaven_evidence::{
-    AgentTrajectoryAnalysisKind, AgentTrajectoryAnalysisRecord, AgentTrajectoryCorpusEvidence,
-    AgentTrajectoryEvidence, AgentTrajectoryEvidenceInput, AgentTrajectoryOutcome, CommandEvidence,
-    OutputRecord,
+    AgentAnalystCallEvidence, AgentAnalystCallEvidenceInput, AgentAnalystCallStatus,
+    AgentAnalystFanoutEvidence, AgentAnalystRole, AgentTrajectoryAnalysisKind,
+    AgentTrajectoryAnalysisRecord, AgentTrajectoryCorpusEvidence, AgentTrajectoryEvidence,
+    AgentTrajectoryEvidenceInput, AgentTrajectoryOutcome, CommandEvidence, OutputRecord,
 };
 use leaven_kernel::{
     AgentSessionId, BlobRef, CaseId, Fingerprint, FingerprintBuilder, MetadataKey, MetadataValue,
@@ -170,6 +171,52 @@ pub fn build_training_corpus_from_run_artifacts(
     Ok(corpus)
 }
 
+/// Builds the Stage 2 analyst-call manifest from imported training trajectories.
+pub fn build_stage2_analyst_fanout_from_training_corpus(
+    corpus: &AgentTrajectoryCorpusEvidence,
+) -> Result<AgentAnalystFanoutEvidence, Trace2SkillManifestError> {
+    let call_ids = corpus
+        .trajectories()
+        .iter()
+        .map(analyst_call_id)
+        .collect::<Vec<_>>();
+    let mut fanout = AgentAnalystFanoutEvidence::new(call_ids)?;
+    for trajectory in corpus.trajectories() {
+        let role = analyst_role(trajectory.outcome());
+        let task_id = trajectory.task_id().to_owned();
+        fanout.push(AgentAnalystCallEvidence::new(
+            AgentAnalystCallEvidenceInput {
+                call_id: analyst_call_id(trajectory),
+                role,
+                source_task_ids: vec![task_id.clone()],
+                prompt: OutputRecord::inline(format!(
+                    "Trace2Skill Stage 2 analyst prompt scaffold for task {task_id}"
+                )),
+                response: None,
+                status: AgentAnalystCallStatus::Pending,
+                retry_count: 0,
+                support_count: 1,
+            },
+        )?)?;
+    }
+    Ok(fanout)
+}
+
+fn analyst_call_id(trajectory: &AgentTrajectoryEvidence) -> String {
+    let prefix = match trajectory.outcome() {
+        AgentTrajectoryOutcome::Success => "success",
+        AgentTrajectoryOutcome::Failure { .. } => "error",
+    };
+    format!("{prefix}-{}", trajectory.task_id())
+}
+
+fn analyst_role(outcome: &AgentTrajectoryOutcome) -> AgentAnalystRole {
+    match outcome {
+        AgentTrajectoryOutcome::Success => AgentAnalystRole::Success,
+        AgentTrajectoryOutcome::Failure { .. } => AgentAnalystRole::Error,
+    }
+}
+
 fn source_id_by_case(
     manifest: &Trace2SkillSpreadsheetBenchManifest,
 ) -> Result<BTreeMap<CaseId, String>, Trace2SkillManifestError> {
@@ -301,6 +348,12 @@ pub enum Trace2SkillManifestError {
     /// Trajectory corpus refused an upstream result.
     #[error(transparent)]
     Corpus(#[from] leaven_evidence::AgentTrajectoryCorpusError),
+    /// Analyst call evidence refused invalid input.
+    #[error(transparent)]
+    AnalystCall(#[from] leaven_evidence::AgentAnalystCallError),
+    /// Analyst fan-out evidence refused invalid input.
+    #[error(transparent)]
+    AnalystFanout(#[from] leaven_evidence::AgentAnalystFanoutError),
 }
 
 #[derive(Debug, Deserialize)]

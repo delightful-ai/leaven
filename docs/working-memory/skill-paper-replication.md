@@ -254,10 +254,15 @@ Leaven primitive blockers:
   with duplicate-manifest refusal, completed/pending projection, and
   unknown-task refusal. The paper runner still needs to write this corpus while
   generating actual SpreadsheetBench trajectories.
+- `leaven-evidence::AgentAnalystFanoutEvidence` now preserves checkpointable
+  Stage 2 analyst-call state: call manifest, analyst role, source task ids,
+  prompt/response payloads, parse/backend status, retry count, and support
+  count. The Trace2Skill example can seed pending analyst calls from imported
+  training trajectories, but no live analyst/model execution or merge has run.
 - live trajectory generation that writes upstream-shaped results/logs/analysis
   artifacts for the 200 SpreadsheetBench training/evolving tasks;
-- parallel analyst dispatch that can checkpoint hundreds of independent
-  sub-agent calls;
+- live parallel analyst dispatch that executes hundreds of independent
+  sub-agent calls against the pending fan-out manifest;
 - patch proposal artifact with conflict detection, format validation, support
   counts, and hierarchical merge tree. The first paper-neutral guardrail slice
   now exists as `SkillPatchPlan` in `leaven-agentic-skill`, covering file

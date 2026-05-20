@@ -151,6 +151,17 @@ The checked-out upstream release includes:
   duplicate-manifest refusal, completed/pending task projection, unknown-task
   refusal, and support for repeated trajectories per task for multi-seed/retry
   protocols. Store backends remain generic and do not know this schema.
+- `leaven-evidence::AgentAnalystFanoutEvidence` now owns the checkpointable
+  many-call evidence value needed for Trace2Skill Stage 2 dispatch bookkeeping:
+  caller-declared call ids, per-call analyst role, source task ids,
+  prompt/response payloads, terminal parse/backend status, retry count, support
+  count, duplicate-manifest refusal, unknown-call refusal, and terminal/pending
+  projection. It does not schedule threads, call models, parse patches, or own
+  Trace2Skill's hierarchical merge policy.
+- `examples/trace2skill_spreadsheetbench` can derive a pending Stage 2 analyst
+  fan-out manifest from the imported training/evolving trajectory corpus. This
+  is a no-spend checkpoint scaffold for later analyst execution, not evidence
+  that the analysts or merge ran.
 
 Verification:
 
@@ -174,6 +185,12 @@ Verification:
   --all-targets -- -D warnings`, and `cargo run -p p4_meta_harness_lite`
   passed on 2026-05-20 for the hard-cut trajectory evidence envelope, the
   many-trajectory corpus value, and the adapted P4 fixture caller.
+- `cargo test -p leaven-evidence --test command analyst_fanout` passed on
+  2026-05-20 for durable analyst fan-out call state, parse-failure terminal
+  records, support counts, and duplicate/unknown call refusal.
+- `cargo test -p trace2skill_spreadsheetbench --test run_artifacts` passed on
+  2026-05-20 after deriving a pending Stage 2 analyst fan-out manifest from the
+  imported training/evolving corpus.
 
 ## Current Blockers
 
@@ -184,9 +201,10 @@ Leaven-owned remaining primitives before faithful Trace2Skill replication:
   trajectories. Leaven can now import those artifacts into
   `AgentTrajectoryCorpusEvidence`; the missing part is generating them through
   the Qwen/vLLM ReAct run or an approved documented substitute.
-- checkpointed parallel analyst fan-out for hundreds of independent agent/LLM
-  calls with durable per-call prompts, responses, parse failures, and retry
-  state;
+- live checkpointed parallel analyst execution for hundreds of independent
+  agent/LLM calls. Leaven now has the durable fan-out evidence value and the
+  Trace2Skill example can seed pending calls, but no scheduler/model client has
+  executed those prompts;
 - hierarchical merge-tree artifact that records patch batches, merge levels,
   accepted/discarded patches, support counts, prevalence decisions, and final
   applied diff;
@@ -206,8 +224,8 @@ External/spend blockers:
 
 ## Next Action
 
-Define the patch-plan and merge-tree artifact schema for Trace2Skill Stage 2/3
-without launching model/GPU work. The next Leaven-owned primitive is durable
-parallel analyst fan-out over the imported trajectory corpus, preserving per-call
-prompts, responses, parse failures, retry state, support counts, and merge-level
-provenance.
+Define the hierarchical merge-tree artifact schema for Trace2Skill Stage 3
+without launching model/GPU work. The next Leaven-owned primitive is merge-level
+provenance over analyst patch outputs: patch batches, merge levels,
+accepted/discarded patches, support/prevalence decisions, parse failures, and
+the final applied diff.

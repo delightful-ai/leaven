@@ -1,6 +1,8 @@
 use std::time::Duration;
 
 use leaven_evidence::{
+    AgentAnalystCallError, AgentAnalystCallEvidence, AgentAnalystCallEvidenceInput,
+    AgentAnalystCallStatus, AgentAnalystFanoutError, AgentAnalystFanoutEvidence, AgentAnalystRole,
     AgentTrajectoryAnalysisKind, AgentTrajectoryAnalysisRecord, AgentTrajectoryCorpusError,
     AgentTrajectoryCorpusEvidence, AgentTrajectoryEvidence, AgentTrajectoryEvidenceInput,
     AgentTrajectoryOutcome, CommandEvidence, CommandRecord, OutputRecord,
@@ -149,6 +151,101 @@ fn agent_trajectory_corpus_refuses_duplicate_manifest_task_ids() {
         .unwrap_err(),
         AgentTrajectoryCorpusError::DuplicateTask {
             task_id: "13-1".to_owned(),
+        }
+    );
+}
+
+#[test]
+fn analyst_fanout_tracks_durable_call_state_and_pending_manifest() {
+    let mut fanout =
+        AgentAnalystFanoutEvidence::new(["error-13-1".to_owned(), "success-59902".to_owned()])
+            .unwrap();
+    let call = AgentAnalystCallEvidence::new(AgentAnalystCallEvidenceInput {
+        call_id: "error-13-1".to_owned(),
+        role: AgentAnalystRole::Error,
+        source_task_ids: vec!["13-1".to_owned()],
+        prompt: OutputRecord::blob(BlobRef {
+            store: "trace2skill-stage2".to_owned(),
+            key: "prompts/error-13-1.md".to_owned(),
+        }),
+        response: Some(OutputRecord::blob(BlobRef {
+            store: "trace2skill-stage2".to_owned(),
+            key: "responses/error-13-1.md".to_owned(),
+        })),
+        status: AgentAnalystCallStatus::ParseFailed {
+            reason: "patch JSON did not validate".to_owned(),
+            artifact: Some(OutputRecord::blob(BlobRef {
+                store: "trace2skill-stage2".to_owned(),
+                key: "parse_failures/error-13-1.json".to_owned(),
+            })),
+        },
+        retry_count: 2,
+        support_count: 3,
+    })
+    .unwrap();
+
+    fanout.push(call).unwrap();
+
+    assert_eq!(
+        fanout.completed_call_ids(),
+        vec!["error-13-1"],
+        "parse failures are durable completed calls, not missing work"
+    );
+    assert_eq!(fanout.pending_call_ids(), vec!["success-59902"]);
+    let stored = fanout.by_call("error-13-1").unwrap();
+    assert_eq!(stored.role(), AgentAnalystRole::Error);
+    assert_eq!(stored.source_task_ids(), ["13-1"]);
+    assert_eq!(stored.retry_count(), 2);
+    assert_eq!(stored.support_count(), 3);
+    assert!(matches!(
+        stored.status(),
+        AgentAnalystCallStatus::ParseFailed { .. }
+    ));
+}
+
+#[test]
+fn analyst_fanout_refuses_ambiguous_or_unknown_call_identity() {
+    assert_eq!(
+        AgentAnalystFanoutEvidence::new(["error-13-1".to_owned(), "error-13-1".to_owned(),])
+            .unwrap_err(),
+        AgentAnalystFanoutError::DuplicateCallManifest {
+            call_id: "error-13-1".to_owned(),
+        }
+    );
+
+    let empty_support = AgentAnalystCallEvidence::new(AgentAnalystCallEvidenceInput {
+        call_id: "error-13-1".to_owned(),
+        role: AgentAnalystRole::Error,
+        source_task_ids: vec!["13-1".to_owned()],
+        prompt: OutputRecord::inline("prompt"),
+        response: None,
+        status: AgentAnalystCallStatus::Pending,
+        retry_count: 0,
+        support_count: 0,
+    })
+    .unwrap_err();
+    assert_eq!(empty_support, AgentAnalystCallError::EmptySupport);
+
+    let mut fanout = AgentAnalystFanoutEvidence::new(["error-13-1".to_owned()]).unwrap();
+    let unknown = fanout
+        .push(
+            AgentAnalystCallEvidence::new(AgentAnalystCallEvidenceInput {
+                call_id: "error-59902".to_owned(),
+                role: AgentAnalystRole::Error,
+                source_task_ids: vec!["59902".to_owned()],
+                prompt: OutputRecord::inline("prompt"),
+                response: Some(OutputRecord::inline("response")),
+                status: AgentAnalystCallStatus::Succeeded,
+                retry_count: 0,
+                support_count: 1,
+            })
+            .unwrap(),
+        )
+        .unwrap_err();
+    assert_eq!(
+        unknown,
+        AgentAnalystFanoutError::UnknownCall {
+            call_id: "error-59902".to_owned(),
         }
     );
 }
