@@ -391,7 +391,7 @@ async fn run_iteration(
         },
     )
     .await?;
-    let (child, child_bank, change) = ensure_child(
+    let (child, _child_bank, change) = ensure_child(
         &workspace_factory,
         &stores.evidence_store,
         &mut ctx,
@@ -426,7 +426,6 @@ async fn run_iteration(
             seed,
             baseline_score: baseline.score,
             child,
-            child_bank,
             skill_proposal,
             change,
         },
@@ -668,7 +667,6 @@ struct CompletionRequest {
     seed: CandidateId,
     baseline_score: f64,
     child: CandidateId,
-    child_bank: SkillBank,
     skill_proposal: SkillProposal,
     change: SkillBankChange,
 }
@@ -716,20 +714,18 @@ async fn complete_iteration(
         EvaluationPurpose::Validation,
     )
     .await?;
-    observe_frontier(ctx, population, request.child, &child_eval)?;
+    let frontier = observe_frontier(ctx, population, request.child, &child_eval)?;
 
-    let admitted = true;
-    let best_score = request.baseline_score.max(child_eval.average_score);
-    let best_candidate = if child_eval.average_score >= request.baseline_score {
-        request.child
-    } else {
-        request.seed
-    };
-    let best_bank = if child_eval.average_score >= request.baseline_score {
-        request.child_bank.clone()
-    } else {
-        request.seed_bank.clone()
-    };
+    let admitted = frontier.candidate_admitted;
+    let best_candidate = frontier.best_candidate.unwrap_or(request.seed);
+    let best_score = frontier
+        .best_score
+        .unwrap_or_else(|| request.baseline_score.max(child_eval.average_score));
+    let best_bank = ctx
+        .graph()
+        .artifact(best_candidate)
+        .ok_or_else(|| msg("best frontier artifact missing"))?
+        .clone();
     let skill_change_report =
         SkillBankChangeReport::from_change(&request.seed_bank, &request.change)?;
     ctx.emit(RunEvent::OptimizationEnded {
@@ -1193,19 +1189,30 @@ async fn evaluate_set(
     })
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct FrontierObservation {
+    candidate_admitted: bool,
+    best_candidate: Option<CandidateId>,
+    best_score: Option<f64>,
+}
+
 fn observe_frontier(
     ctx: &mut RunContext<'_, EvoSkillProblem>,
     population: &mut TopKFrontier,
     candidate: CandidateId,
     evaluation: &EvaluationOutcome,
-) -> Result<()> {
+) -> Result<FrontierObservation> {
     let score = ScalarEvidence::new(evaluation.average_score)?;
     let events = population.observe(candidate, evaluation.assessment, score);
     ctx.emit(RunEvent::PopulationUpdated {
         population_id: population.id(),
         events,
     });
-    Ok(())
+    Ok(FrontierObservation {
+        candidate_admitted: population.contains(candidate),
+        best_candidate: population.best(),
+        best_score: population.best_score(),
+    })
 }
 
 fn evoskill_frontier() -> TopKFrontier {
@@ -1976,8 +1983,8 @@ mod tests {
     use leaven_population::{TopKParentSelectionPolicy, TopKParentSelector};
 
     use super::{
-        EvoSkillCheckpoint, ResumeState, evoskill_frontier, evoskill_train_sampler,
-        skill_gated_score,
+        EvaluationEvidence, EvaluationOutcome, EvoSkillCheckpoint, EvoSkillProblem, ResumeState,
+        evoskill_frontier, evoskill_train_sampler, observe_frontier, skill_gated_score,
     };
     use crate::data::{EvoSkillCase, Split};
 
@@ -2102,6 +2109,26 @@ mod tests {
         assert_eq!(resume.train_sampler, Some(train_sampler));
     }
 
+    #[test]
+    fn frontier_observation_reports_rejected_child_and_actual_best() {
+        let mut graph = leaven_engine::RunGraph::<EvoSkillProblem>::new(RunId::default());
+        let mut budget = leaven_engine::BudgetLedger::new(leaven_kernel::Budget::unlimited());
+        let mut ctx = leaven_engine::RunContext::<EvoSkillProblem>::new(&mut graph, &mut budget);
+        let mut frontier = leaven_population::TopKFrontier::new(NonZeroUsize::new(1).unwrap());
+        let strong = CandidateId::new();
+        let weak = CandidateId::new();
+
+        let strong_observation =
+            observe_frontier(&mut ctx, &mut frontier, strong, &evaluation_outcome(0.9)).unwrap();
+        let weak_observation =
+            observe_frontier(&mut ctx, &mut frontier, weak, &evaluation_outcome(0.1)).unwrap();
+
+        assert!(strong_observation.candidate_admitted);
+        assert!(!weak_observation.candidate_admitted);
+        assert_eq!(weak_observation.best_candidate, Some(strong));
+        assert_eq!(weak_observation.best_score, Some(0.9));
+    }
+
     fn evo_case(id: &str, split: Split, category: &str) -> EvoSkillCase {
         EvoSkillCase {
             id: id.to_owned(),
@@ -2115,5 +2142,14 @@ mod tests {
 
     fn assert_float_eq(left: f64, right: f64) {
         assert!((left - right).abs() < f64::EPSILON);
+    }
+
+    fn evaluation_outcome(score: f64) -> EvaluationOutcome {
+        EvaluationOutcome {
+            assessment: AssessmentId::new(),
+            average_score: score,
+            cost: leaven_kernel::Cost::zero(),
+            evidence: EvaluationEvidence { cases: Vec::new() },
+        }
     }
 }
