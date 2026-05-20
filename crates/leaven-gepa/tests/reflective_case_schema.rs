@@ -85,6 +85,22 @@ fn flat_example_constructor_builds_one_run_case() {
     );
     assert_eq!(case.runs[0].score, Some(0.5));
     assert_eq!(case.runs[0].feedback, "feedback");
+    let same = ReflectiveCase::from_example(
+        ReflectiveValue::Text("input".to_owned()),
+        None,
+        Some(ReflectiveValue::Text("output".to_owned())),
+        Some(0.5),
+        "feedback",
+    );
+    let different_score = ReflectiveCase::from_example(
+        ReflectiveValue::Text("input".to_owned()),
+        None,
+        Some(ReflectiveValue::Text("output".to_owned())),
+        None,
+        "feedback",
+    );
+    assert_eq!(case.runs[0].run_id, same.runs[0].run_id);
+    assert_ne!(case.runs[0].run_id, different_score.runs[0].run_id);
 }
 
 #[test]

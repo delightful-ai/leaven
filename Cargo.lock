@@ -2420,8 +2420,6 @@ dependencies = [
  "leaven-agent",
  "leaven-core",
  "leaven-engine",
- "leaven-evidence",
- "leaven-gepa",
  "leaven-kernel",
  "leaven-render",
  "leaven-store",
@@ -2626,6 +2624,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.18",
+ "uuid",
 ]
 
 [[package]]

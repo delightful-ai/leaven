@@ -14,6 +14,7 @@ use leaven_kernel::{AgentId, AssessmentId, CandidateId, CaseId, CaseRunId, Metad
 use leaven_lm::{LmRequest, Messages};
 use leaven_surface::EditSurface;
 use thiserror::Error;
+use uuid::Uuid;
 
 /// GEPA's default instruction-improvement prompt template.
 ///
@@ -68,19 +69,27 @@ impl ReflectiveCase {
         score: Option<f64>,
         feedback: impl Into<String>,
     ) -> Self {
+        let feedback = feedback.into();
+        let run_id = deterministic_example_run_id(
+            &input,
+            expected.as_ref(),
+            produced.as_ref(),
+            score,
+            &feedback,
+        );
         Self {
             case_id: None,
             input,
             expected,
             runs: vec![ReflectiveRun {
-                run_id: CaseRunId::new(),
+                run_id,
                 agent_id: None,
                 attempt_index: Some(0),
                 produced,
                 score,
                 max_score: None,
                 passed: None,
-                feedback: feedback.into(),
+                feedback,
                 checks: None,
                 side_info: Vec::new(),
                 attachments: Vec::new(),
@@ -88,6 +97,113 @@ impl ReflectiveCase {
             }],
             source_refs: Vec::new(),
         }
+    }
+}
+
+fn deterministic_example_run_id(
+    input: &ReflectiveValue,
+    expected: Option<&ReflectiveValue>,
+    produced: Option<&ReflectiveValue>,
+    score: Option<f64>,
+    feedback: &str,
+) -> CaseRunId {
+    deterministic_run_id_from_parts(DeterministicRunIdParts {
+        input,
+        expected,
+        agent_id: None,
+        attempt_index: Some(0),
+        produced,
+        score,
+        max_score: None,
+        passed: None,
+        feedback,
+        checks: None,
+        side_info: &[],
+        attachments: &[],
+        source_refs: &[],
+    })
+}
+
+struct DeterministicRunIdParts<'a> {
+    input: &'a ReflectiveValue,
+    expected: Option<&'a ReflectiveValue>,
+    agent_id: Option<&'a AgentId>,
+    attempt_index: Option<usize>,
+    produced: Option<&'a ReflectiveValue>,
+    score: Option<f64>,
+    max_score: Option<f64>,
+    passed: Option<bool>,
+    feedback: &'a str,
+    checks: Option<&'a Checks>,
+    side_info: &'a [(String, ReflectiveSideInfoValue)],
+    attachments: &'a [Attachment],
+    source_refs: &'a [InfoRef],
+}
+
+fn deterministic_run_id(
+    input: &ReflectiveValue,
+    expected: Option<&ReflectiveValue>,
+    run: &ReflectiveRun,
+) -> CaseRunId {
+    deterministic_run_id_from_parts(DeterministicRunIdParts {
+        input,
+        expected,
+        agent_id: run.agent_id.as_ref(),
+        attempt_index: run.attempt_index,
+        produced: run.produced.as_ref(),
+        score: run.score,
+        max_score: run.max_score,
+        passed: run.passed,
+        feedback: &run.feedback,
+        checks: run.checks.as_ref(),
+        side_info: &run.side_info,
+        attachments: &run.attachments,
+        source_refs: &run.source_refs,
+    })
+}
+
+fn deterministic_run_id_from_parts(parts: DeterministicRunIdParts<'_>) -> CaseRunId {
+    let mut hash = 0x6c62_272e_07bb_0142_62b8_2175_6295_c58d_u128;
+    feed_hash(&mut hash, b"leaven.gepa.reflective_run.v2");
+    feed_json(&mut hash, parts.input);
+    feed_json(&mut hash, &parts.expected);
+    feed_json(&mut hash, &parts.agent_id);
+    feed_json(&mut hash, &parts.attempt_index);
+    feed_json(&mut hash, &parts.produced);
+    feed_optional_f64(&mut hash, b"score", parts.score);
+    feed_optional_f64(&mut hash, b"max_score", parts.max_score);
+    feed_json(&mut hash, &parts.passed);
+    feed_hash(&mut hash, b"feedback");
+    feed_hash(&mut hash, parts.feedback.as_bytes());
+    feed_json(&mut hash, &parts.checks);
+    feed_json(&mut hash, &parts.side_info);
+    feed_json(&mut hash, &parts.attachments);
+    feed_json(&mut hash, &parts.source_refs);
+    CaseRunId::from_uuid(Uuid::from_u128(hash))
+}
+
+fn feed_json<T: serde::Serialize>(hash: &mut u128, value: &T) {
+    if let Ok(bytes) = serde_json::to_vec(value) {
+        feed_hash(hash, &bytes);
+    }
+    feed_hash(hash, b"\0");
+}
+
+fn feed_optional_f64(hash: &mut u128, label: &[u8], value: Option<f64>) {
+    feed_hash(hash, label);
+    match value {
+        Some(value) => {
+            feed_hash(hash, b":some");
+            feed_hash(hash, &value.to_bits().to_le_bytes());
+        }
+        None => feed_hash(hash, b":none"),
+    }
+}
+
+fn feed_hash(hash: &mut u128, bytes: &[u8]) {
+    for byte in bytes {
+        *hash ^= u128::from(*byte);
+        *hash = hash.wrapping_mul(0x0000_0000_0100_0000_0000_0000_0000_013b_u128);
     }
 }
 
@@ -466,10 +582,17 @@ where
             .and_then(|case_id| ctx.case(case_id))
         {
             reflective_case.input = ReflectiveValue::Text(project_case_input(case));
+            refresh_default_run_id(&mut reflective_case);
         }
         cases.push(reflective_case);
     }
     Ok(cases)
+}
+
+fn refresh_default_run_id(case: &mut ReflectiveCase) {
+    for run in &mut case.runs {
+        run.run_id = deterministic_run_id(&case.input, case.expected.as_ref(), run);
+    }
 }
 
 impl ReflectionProjection for ScalarEvidence {
@@ -710,16 +833,45 @@ fn render_reflective_cases(cases: &[ReflectiveCase]) -> String {
     cases
         .iter()
         .enumerate()
-        .flat_map(|(case_index, case)| case.runs.iter().map(move |run| (case_index, case, run)))
-        .enumerate()
-        .map(|(index, (_case_index, case, run))| {
+        .map(|(index, case)| {
             let mut rendered = String::new();
             let _ = writeln!(rendered, "# Example {}", index + 1);
-            render_reflective_case_sections(&mut rendered, case, run);
+            if case.runs.is_empty() {
+                render_reflective_case_without_runs(&mut rendered, case);
+            } else if case.runs.len() == 1 {
+                render_reflective_case_sections(&mut rendered, case, &case.runs[0]);
+            } else {
+                render_reflective_case_context(&mut rendered, case);
+                for (run_index, run) in case.runs.iter().enumerate() {
+                    let _ = writeln!(rendered, "## Run {}", run_index + 1);
+                    render_reflective_run_sections(&mut rendered, run);
+                }
+            }
             rendered
         })
         .collect::<Vec<_>>()
         .join("\n\n")
+}
+
+fn render_reflective_case_without_runs(rendered: &mut String, case: &ReflectiveCase) {
+    render_reflective_case_context(rendered, case);
+    if !case.source_refs.is_empty() {
+        let _ = writeln!(rendered, "## Source refs\n{:?}", case.source_refs);
+    }
+}
+
+fn render_reflective_case_context(rendered: &mut String, case: &ReflectiveCase) {
+    if let Some(case_id) = case.case_id {
+        let _ = writeln!(rendered, "## Case\n{case_id}");
+    }
+    if let Some(input) = render_reflective_value(&case.input) {
+        let _ = writeln!(rendered, "## Input\n{}", input.trim());
+    }
+    if let Some(expected) = &case.expected {
+        if let Some(expected) = render_reflective_value(expected) {
+            let _ = writeln!(rendered, "## Expected\n{}", expected.trim());
+        }
+    }
 }
 
 fn render_reflective_case_sections(
@@ -739,6 +891,22 @@ fn render_reflective_case_sections(
     }
     if let Some(input) = render_reflective_value(&case.input) {
         let _ = writeln!(rendered, "## Input\n{}", input.trim());
+    }
+    if let Some(expected) = &case.expected {
+        if let Some(expected) = render_reflective_value(expected) {
+            let _ = writeln!(rendered, "## Expected\n{}", expected.trim());
+        }
+    }
+    render_reflective_run_sections(rendered, run);
+}
+
+fn render_reflective_run_sections(rendered: &mut String, run: &ReflectiveRun) {
+    if !run.side_info.is_empty() {
+        for (name, value) in &run.side_info {
+            let _ = writeln!(rendered, "### {}", name.trim());
+            render_side_info_value(rendered, value, 4);
+        }
+        return;
     }
     if let Some(score) = run.score {
         let _ = writeln!(rendered, "## Score\n{score}");
@@ -865,12 +1033,12 @@ fn strip_optional_language(text: &str) -> &str {
 #[cfg(test)]
 mod tests {
     use leaven_evidence::OutputRecord;
-    use leaven_kernel::BlobRef;
+    use leaven_kernel::{AgentId, BlobRef};
 
     use super::{
-        ReflectiveCase, ReflectiveCaseInput, ReflectiveSideInfoValue, ReflectiveValue,
-        extract_replacement_text, output_record_text, render_prompt_template,
-        render_reflective_cases, strip_optional_language,
+        ReflectiveCase, ReflectiveCaseInput, ReflectiveRun, ReflectiveSideInfoValue,
+        ReflectiveValue, extract_replacement_text, output_record_text, refresh_default_run_id,
+        render_prompt_template, render_reflective_cases, strip_optional_language,
     };
 
     fn example_case(
@@ -910,6 +1078,69 @@ mod tests {
         assert_eq!(String::from("owned").reflective_input(), "owned");
         let borrowed: &str = "explicit-ref";
         assert_eq!(borrowed.reflective_input(), "explicit-ref");
+    }
+
+    #[test]
+    fn projected_case_input_refreshes_default_run_id() {
+        let produced = Some(ReflectiveValue::Text("answer".to_owned()));
+        let mut projected = ReflectiveCase::from_example(
+            ReflectiveValue::default(),
+            None,
+            produced.clone(),
+            Some(0.5),
+            "feedback",
+        );
+        let placeholder_run_id = projected.runs[0].run_id;
+        projected.input = ReflectiveValue::Text("actual input".to_owned());
+        refresh_default_run_id(&mut projected);
+
+        let direct = ReflectiveCase::from_example(
+            ReflectiveValue::Text("actual input".to_owned()),
+            None,
+            produced,
+            Some(0.5),
+            "feedback",
+        );
+
+        assert_ne!(placeholder_run_id, projected.runs[0].run_id);
+        assert_eq!(direct.runs[0].run_id, projected.runs[0].run_id);
+    }
+
+    #[test]
+    fn projected_case_input_refreshes_all_run_ids_with_attempt_metadata() {
+        let mut projected = ReflectiveCase::from_example(
+            ReflectiveValue::default(),
+            None,
+            Some(ReflectiveValue::Text("answer".to_owned())),
+            Some(0.5),
+            "feedback",
+        );
+        projected.runs.push(ReflectiveRun {
+            run_id: projected.runs[0].run_id,
+            agent_id: Some(AgentId::from("worker")),
+            attempt_index: Some(1),
+            produced: Some(ReflectiveValue::Text("answer".to_owned())),
+            score: Some(0.5),
+            max_score: Some(1.0),
+            passed: Some(false),
+            feedback: "feedback".to_owned(),
+            checks: None,
+            side_info: Vec::new(),
+            attachments: Vec::new(),
+            source_refs: Vec::new(),
+        });
+        let placeholder_ids = projected
+            .runs
+            .iter()
+            .map(|run| run.run_id)
+            .collect::<Vec<_>>();
+
+        projected.input = ReflectiveValue::Text("actual input".to_owned());
+        refresh_default_run_id(&mut projected);
+
+        assert_ne!(placeholder_ids[0], projected.runs[0].run_id);
+        assert_ne!(placeholder_ids[1], projected.runs[1].run_id);
+        assert_ne!(projected.runs[0].run_id, projected.runs[1].run_id);
     }
 
     #[test]
@@ -959,6 +1190,24 @@ mod tests {
         assert!(!sparse_example.contains("## Score"));
         assert!(!sparse_example.contains("## Output"));
         assert!(!sparse_example.contains("## Feedback"));
+    }
+
+    #[test]
+    fn reflective_examples_render_case_input_once_for_multiple_runs() {
+        let mut case = example_case(None, "shared input", Some("first output"), Some(0.0), "bad");
+        let mut second_run = case.runs[0].clone();
+        second_run.attempt_index = Some(1);
+        second_run.produced = Some(ReflectiveValue::Text("second output".to_owned()));
+        second_run.feedback = "better".to_owned();
+        case.runs.push(second_run);
+
+        let rendered = render_reflective_cases(&[case]);
+
+        assert_eq!(rendered.matches("## Input").count(), 1);
+        assert!(rendered.contains("## Run 1"));
+        assert!(rendered.contains("## Run 2"));
+        assert!(rendered.contains("first output"));
+        assert!(rendered.contains("second output"));
     }
 
     #[test]

@@ -15,7 +15,7 @@ mod repairing_proposer;
 
 pub use artifact_reflector::{
     ArtifactReflector, ReadbackDiagnostic, ReadbackResult, ReflectionError, ReflectionLayoutConfig,
-    ReflectionRunOutcome, ReflectionWorkspace,
+    ReflectionRunOutcome, ReflectionSessionAttachment, ReflectionWorkspace,
 };
 pub use case::{
     AgentCase, AgentWorkload, CaseFiles, CaseInput, CaseMessage, CasePartitionId, CasePartitions,
@@ -66,8 +66,8 @@ pub mod prelude {
         PreflightSeverity, PresenterDryRun, ProposalParser, ProposalRepairAttemptOutcome,
         ProposalRepairAttemptRecord, ProposalRepairFeedback, ProposalRepairInspection,
         ProposalRepairPolicy, ProposalRepairPromptBuilder, ReadbackDiagnostic, ReadbackResult,
-        ReflectionError, ReflectionLayoutConfig, ReflectionRunOutcome, ReflectionWorkspace,
-        RepairingAgenticProposer, RepairingAgenticProposerConfig, ScoredAgentCaseRun, ScorerDryRun,
-        SetupScript, ToolApprovalPolicy, WorkspaceRequirement,
+        ReflectionError, ReflectionLayoutConfig, ReflectionRunOutcome, ReflectionSessionAttachment,
+        ReflectionWorkspace, RepairingAgenticProposer, RepairingAgenticProposerConfig,
+        ScoredAgentCaseRun, ScorerDryRun, SetupScript, ToolApprovalPolicy, WorkspaceRequirement,
     };
 }

@@ -20,8 +20,6 @@ leaven-workspace = { workspace = true }
 leaven-engine = { workspace = true }
 leaven-agent = { workspace = true }
 leaven-render = { workspace = true }
-leaven-evidence = { workspace = true }
-leaven-gepa = { workspace = true }
 futures = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true }

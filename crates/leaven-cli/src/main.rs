@@ -254,7 +254,10 @@ mod tests {
         let _ = std::fs::remove_file(&path);
         let value: serde_json::Value = serde_json::from_str(&output).unwrap();
 
-        assert_eq!(value["edited_path"], ".agents/skills/custom/SKILL.md");
+        assert_eq!(
+            value["edited_path"],
+            "target/current/.agents/skills/custom/SKILL.md"
+        );
     }
 
     #[test]

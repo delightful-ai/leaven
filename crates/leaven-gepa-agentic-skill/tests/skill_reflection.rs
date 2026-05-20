@@ -97,6 +97,156 @@ fn skill_bank_gepa_reflector_materializes_agent_edit_and_applies_child() {
     });
 }
 
+#[test]
+fn skill_bank_gepa_reflector_reads_back_root_skill_layout() {
+    futures::executor::block_on(async {
+        let seed = bank_with_alpha(
+            "Debugs Rust tests. Use when Rust tests fail.",
+            "Read the failing output and patch the narrow Rust test path.",
+        );
+        let mut graph = RunGraph::<SkillProblem>::new(RunId::new());
+        let mut budget = BudgetLedger::default();
+        let parent = {
+            let mut ctx = RunContext::<SkillProblem>::new(&mut graph, &mut budget);
+            ctx.insert_seed(seed, 0).unwrap()
+        };
+        let mut reflector = GepaSkillBankAgenticReflector::new(
+            AgenticProposerConfig::new(ProposerId::from("gepa/skill-agentic")),
+            LocalWorkspaceFactory::temp(),
+            FakeAgentRuntime::new(vec![FakeAgentAction::WriteFile {
+                path: WorkspacePath::new("target/current/alpha/SKILL.md").unwrap(),
+                bytes: skill_md(
+                    "alpha",
+                    "Debugs Rust tests with root layout. Use when Rust tests fail.",
+                    "Patch the narrow Rust test path.",
+                )
+                .into_bytes(),
+            }]),
+            SkillWorkspaceLayout::root(),
+        );
+        let part = SkillFilePartId {
+            skill: SkillName::new("alpha").unwrap(),
+            path: SkillPath::skill_md(),
+        };
+        let request = ReflectRequest::for_part(parent, part, "alpha/SKILL.md");
+        let mut ctx = RunContext::<SkillProblem>::new(&mut graph, &mut budget);
+
+        let child = reflector
+            .reflect_candidate(&mut ctx, &SkillFileSurface, request)
+            .await
+            .unwrap()
+            .unwrap();
+
+        let child_bank = ctx.graph().artifact(child).unwrap();
+        assert_eq!(
+            child_bank
+                .get(&SkillName::new("alpha").unwrap())
+                .unwrap()
+                .manifest()
+                .description
+                .as_str(),
+            "Debugs Rust tests with root layout. Use when Rust tests fail."
+        );
+    });
+}
+
+#[test]
+fn skill_bank_gepa_reflector_treats_invalid_readback_as_no_candidate() {
+    futures::executor::block_on(async {
+        let seed = bank_with_alpha(
+            "Debugs Rust tests. Use when Rust tests fail.",
+            "Read the failing output and patch the narrow Rust test path.",
+        );
+        let mut graph = RunGraph::<SkillProblem>::new(RunId::new());
+        let mut budget = BudgetLedger::default();
+        let parent = {
+            let mut ctx = RunContext::<SkillProblem>::new(&mut graph, &mut budget);
+            ctx.insert_seed(seed, 0).unwrap()
+        };
+        let layout = SkillWorkspaceLayout::new(".agents/skills").unwrap();
+        let mut reflector = GepaSkillBankAgenticReflector::new(
+            AgenticProposerConfig::new(ProposerId::from("gepa/skill-agentic")),
+            LocalWorkspaceFactory::temp(),
+            FakeAgentRuntime::new(vec![FakeAgentAction::WriteFile {
+                path: WorkspacePath::new("target/current/.agents/skills/beta/SKILL.md").unwrap(),
+                bytes: skill_md(
+                    "beta",
+                    "Unrelated skill. Use when touching beta.",
+                    "This edit is outside selected alpha.",
+                )
+                .into_bytes(),
+            }]),
+            layout,
+        );
+        let part = SkillFilePartId {
+            skill: SkillName::new("alpha").unwrap(),
+            path: SkillPath::skill_md(),
+        };
+        let request = ReflectRequest::for_part(parent, part, "alpha/SKILL.md");
+        let mut ctx = RunContext::<SkillProblem>::new(&mut graph, &mut budget);
+
+        let child = reflector
+            .reflect_candidate(&mut ctx, &SkillFileSurface, request)
+            .await
+            .unwrap();
+
+        assert_eq!(child, None);
+        assert!(
+            reflector
+                .last_invalid_readback_diagnostics()
+                .iter()
+                .any(|diagnostic| diagnostic
+                    .message
+                    .contains("outside selected part alpha/SKILL.md"))
+        );
+    });
+}
+
+#[test]
+fn skill_bank_gepa_reflector_treats_malformed_workspace_as_invalid_readback() {
+    futures::executor::block_on(async {
+        let seed = bank_with_alpha(
+            "Debugs Rust tests. Use when Rust tests fail.",
+            "Read the failing output and patch the narrow Rust test path.",
+        );
+        let mut graph = RunGraph::<SkillProblem>::new(RunId::new());
+        let mut budget = BudgetLedger::default();
+        let parent = {
+            let mut ctx = RunContext::<SkillProblem>::new(&mut graph, &mut budget);
+            ctx.insert_seed(seed, 0).unwrap()
+        };
+        let layout = SkillWorkspaceLayout::new(".agents/skills").unwrap();
+        let mut reflector = GepaSkillBankAgenticReflector::new(
+            AgenticProposerConfig::new(ProposerId::from("gepa/skill-agentic")),
+            LocalWorkspaceFactory::temp(),
+            FakeAgentRuntime::new(vec![FakeAgentAction::WriteFile {
+                path: WorkspacePath::new("target/current/.agents/skills/orphan").unwrap(),
+                bytes: b"not a skill file".to_vec(),
+            }]),
+            layout,
+        );
+        let part = SkillFilePartId {
+            skill: SkillName::new("alpha").unwrap(),
+            path: SkillPath::skill_md(),
+        };
+        let request = ReflectRequest::for_part(parent, part, "alpha/SKILL.md");
+        let mut ctx = RunContext::<SkillProblem>::new(&mut graph, &mut budget);
+
+        let child = reflector
+            .reflect_candidate(&mut ctx, &SkillFileSurface, request)
+            .await
+            .unwrap();
+
+        assert_eq!(child, None);
+        assert!(
+            reflector
+                .last_invalid_readback_diagnostics()
+                .iter()
+                .any(|diagnostic| diagnostic.message.contains("readable skill bank"))
+        );
+    });
+}
+
 #[derive(Clone, Debug)]
 struct SkillProblem;
 

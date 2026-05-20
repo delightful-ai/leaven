@@ -61,7 +61,20 @@ where
         view: &WorkspaceView<'_>,
         _session: &leaven_agent::AgentSession,
     ) -> Result<ReadbackResult<Self::Change>, Self::Error> {
-        let child = read_skill_bank(view, &self.layout)?;
+        let child = match read_skill_bank(view, &self.layout) {
+            Ok(child) => child,
+            Err(error @ SkillBankReflectionError::Workspace(_)) => return Err(error),
+            Err(error) => {
+                return Ok(ReadbackResult::Invalid {
+                    diagnostics: vec![ReadbackDiagnostic {
+                        path: None,
+                        message: format!(
+                            "workspace did not contain a readable skill bank: {error}"
+                        ),
+                    }],
+                });
+            }
+        };
         if let Err(error) = child.validate() {
             return Ok(ReadbackResult::Invalid {
                 diagnostics: vec![ReadbackDiagnostic {
@@ -217,7 +230,9 @@ fn change_touches_only_skill(change: &SkillBankChange, selected_skill: &str) -> 
         SkillBankChange::ReplaceSkill { name, .. } | SkillBankChange::RemoveSkill { name } => {
             name.as_str() == selected_skill
         }
-        SkillBankChange::RenameSkill { from, .. } => from.as_str() == selected_skill,
+        SkillBankChange::RenameSkill { from, to } => {
+            from.as_str() == selected_skill && to.as_str() == selected_skill
+        }
         SkillBankChange::WriteFile { skill, .. }
         | SkillBankChange::RemoveFile { skill, .. }
         | SkillBankChange::RenameFile { skill, .. }
@@ -239,8 +254,10 @@ fn change_touches_only_file(
         | SkillBankChange::SetExecutable { skill, path, .. } => {
             skill.as_str() == selected_skill && path.as_str() == selected_path
         }
-        SkillBankChange::RenameFile { skill, from, .. } => {
-            skill.as_str() == selected_skill && from.as_str() == selected_path
+        SkillBankChange::RenameFile { skill, from, to } => {
+            skill.as_str() == selected_skill
+                && from.as_str() == selected_path
+                && to.as_str() == selected_path
         }
         SkillBankChange::Atomic(changes) => changes
             .iter()
@@ -249,5 +266,44 @@ fn change_touches_only_file(
         | SkillBankChange::ReplaceSkill { .. }
         | SkillBankChange::RemoveSkill { .. }
         | SkillBankChange::RenameSkill { .. } => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn selected_part_scope_rejects_renames_that_create_out_of_scope_targets() {
+        let selected = SkillName::new("alpha").unwrap();
+        let other = SkillName::new("beta").unwrap();
+        let selected_path = SkillPath::skill_md();
+        let other_path = SkillPath::new("references/other.md").unwrap();
+
+        assert!(!change_touches_only_skill(
+            &SkillBankChange::RenameSkill {
+                from: selected.clone(),
+                to: other.clone(),
+            },
+            selected.as_str(),
+        ));
+        assert!(!change_touches_only_file(
+            &SkillBankChange::RenameFile {
+                skill: selected.clone(),
+                from: selected_path.clone(),
+                to: other_path,
+            },
+            selected.as_str(),
+            selected_path.as_str(),
+        ));
+        assert!(change_touches_only_file(
+            &SkillBankChange::WriteFile {
+                skill: selected.clone(),
+                path: selected_path.clone(),
+                file: SkillFile::text("---\nname: alpha\ndescription: ok\n---\nBody.\n"),
+            },
+            selected.as_str(),
+            selected_path.as_str(),
+        ));
     }
 }
