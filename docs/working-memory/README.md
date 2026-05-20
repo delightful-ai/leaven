@@ -17,3 +17,6 @@ Current ledgers:
 - `evoskill-replication.md`: EvoSkill-specific dossier with the first
   no-spend OfficeQA/SealQA setup probe, source pin state, data availability,
   split mismatch, and the current blocker before `leaven-artifact-git`.
+- `paper-exact-samples.md`: one-sample materialization ledger for the
+  paper-exact lanes, including generated manifest paths, per-paper sample
+  status, and gated GAIA/HLE access notes.

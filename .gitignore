@@ -2,6 +2,8 @@
 /vendor
 .env
 tmp/
+__pycache__/
+*.pyc
 .orientation/
 .beads/issues.jsonl
 .leaven/
