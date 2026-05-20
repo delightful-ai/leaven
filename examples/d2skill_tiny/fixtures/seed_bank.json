@@ -1,0 +1,25 @@
+{
+  "task_skills": [
+    {
+      "id": "task-standard-returns",
+      "granularity": "task",
+      "key": "minishop_returns",
+      "utility": -0.2,
+      "retrieval_count": 0,
+      "created_iteration": -1,
+      "body": "For MiniShop returns, prefer the standard returns bin unless the prompt explicitly says the item is hazardous."
+    }
+  ],
+  "step_skills": [
+    {
+      "id": "step-decorative-stripes",
+      "granularity": "step",
+      "key": "minishop_returns teal stripe",
+      "utility": -0.2,
+      "retrieval_count": 0,
+      "created_iteration": -1,
+      "body": "Colored package stripes are usually decorative; do not change the return flow just because a stripe is visible."
+    }
+  ]
+}
+

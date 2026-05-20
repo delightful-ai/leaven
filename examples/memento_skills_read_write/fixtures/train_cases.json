@@ -1,0 +1,9 @@
+[
+  {
+    "id": "house-checksum-alpha",
+    "routing_goal": "Use the house checksum protocol to encode batch alpha.",
+    "task": "Use the house checksum protocol to encode batch alpha: values 14, 19, and 27. Return only the final checksum string.",
+    "expected": "CHECK-180",
+    "feedback": "The selected skill caused the failure: the house checksum protocol multiplier is 3, not 2. Preserve the sum-then-format workflow and rewrite the skill so future executions return CHECK-180 for values 14, 19, and 27."
+  }
+]

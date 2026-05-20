@@ -1,0 +1,17 @@
+{
+  "failure": {
+    "task_id": "csv-range-delete-void",
+    "input": "inputs/failure_input.csv",
+    "output": "outputs/failure_output.csv",
+    "expected": "expected/failure_expected.csv",
+    "instruction": "In failure_input.csv, delete rows with status VOID only when row_id is in the target range 2 through 4 inclusive. Preserve matching rows outside that target range. Write outputs/failure_output.csv."
+  },
+  "success": {
+    "task_id": "csv-global-delete-void",
+    "input": "inputs/success_input.csv",
+    "output": "outputs/success_output.csv",
+    "expected": "expected/success_expected.csv",
+    "instruction": "In success_input.csv, delete every row with status VOID across the whole file. Write outputs/success_output.csv."
+  }
+}
+
