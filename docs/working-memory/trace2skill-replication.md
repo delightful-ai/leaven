@@ -113,19 +113,28 @@ The checked-out upstream release includes:
   upstream case IDs, assign `Train` to `0..200` and `Test` to `200..400`, and
   get a disjoint `DatasetSplits` with the paper/source row-order semantics
   preserved. This does not parse SpreadsheetBench JSON or run the benchmark.
+- `leaven-eval::Case::from_source_row` now owns the generic source-row case
+  lowering needed for the 400-row release: Leaven case IDs are row-stable
+  `CaseId::from_index(row)`, while upstream ids such as `13-1` and `59902` are
+  preserved in metadata as `source_id`, with `source_row_index` also recorded.
+  SpreadsheetBench JSON parsing remains paper-specific loader work.
 - This slice adds `leaven-agentic-skill::SkillPatchPlan`, a paper-neutral
   mechanical guardrail for agent-authored skill patch plans. It validates
   existing-file modifications/deletions, create-file overwrite refusal,
-  positive support counts, and same-file range conflicts. It intentionally does
-  not own Trace2Skill merge policy, prevalence thresholds, prompt wording,
-  batch sizes, or result selection.
+  positive support counts, same-file range conflicts, and atomic pairing between
+  new `references/*.md` files and `SKILL.md` links. It intentionally does not
+  own Trace2Skill merge policy, prevalence thresholds, prompt wording, batch
+  sizes, or result selection.
 
 Verification:
 
-- `cargo nextest run -p leaven-agentic-skill` passed 17 tests on 2026-05-20,
-  including `skill_patch_plan_*` contract tests.
+- `cargo nextest run -p leaven-agentic-skill -p leaven-eval` passed 37 tests
+  on 2026-05-20, including source-row lowering and `skill_patch_plan_*`
+  contract tests.
 - `cargo test -p leaven --test topology_contract` passed 4 tests on
   2026-05-20.
+- `cargo clippy -p leaven-agentic-skill -p leaven-eval --all-targets -- -D
+  warnings` passed on 2026-05-20.
 
 ## Current Blockers
 
@@ -156,7 +165,7 @@ External/spend blockers:
 
 ## Next Action
 
-Use the upstream SpreadsheetBench release for a no-spend lowering pass:
-materialize the 400-row dataset as Leaven cases with upstream IDs and metadata,
-then define the run artifact schema for trace records and patch-plan records
-without launching model/GPU work.
+Use the upstream SpreadsheetBench release for a no-spend loader pass: parse the
+400-row JSON into Leaven cases with `Case::from_source_row`, build the
+`RowOrderSplitBuilder` splits, and define the run artifact schema for trace
+records and patch-plan records without launching model/GPU work.

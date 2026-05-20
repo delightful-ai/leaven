@@ -232,6 +232,9 @@ Leaven primitive blockers:
 - `leaven-eval::RowOrderSplitBuilder` now covers source/paper manifests that
   define split membership by ordered row ranges, including Trace2Skill's
   SpreadsheetBench `0:200` evolving/training and `200:400` held-out split.
+- `leaven-eval::Case::from_source_row` now covers row-stable case IDs plus
+  upstream `source_id` / `source_row_index` metadata for source manifests such
+  as Trace2Skill's mixed string/numeric SpreadsheetBench row IDs.
 - many-trace evidence corpus with success/failure labels and full trajectory
   access;
 - parallel analyst dispatch that can checkpoint hundreds of independent
@@ -239,9 +242,9 @@ Leaven primitive blockers:
 - patch proposal artifact with conflict detection, format validation, support
   counts, and hierarchical merge tree. The first paper-neutral guardrail slice
   now exists as `SkillPatchPlan` in `leaven-agentic-skill`, covering file
-  existence, create-overwrite, positive-support, and same-file line-range
-  conflict validation; durable merge-tree provenance and reference create/link
-  validation remain;
+  existence, create-overwrite, positive-support, same-file line-range conflict
+  validation, and atomic `references/*.md` create/link validation; durable
+  merge-tree provenance remains;
 - deterministic skill-directory diff application and rollback;
 - result matrix/reporting for cross-model and OOD transfer.
 
