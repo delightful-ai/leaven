@@ -56,6 +56,7 @@ use crate::checkpoint::EvoSkillCheckpoint;
 use crate::codex::{LiveCodexRuntime, live_codex_runtime, require_live_codex};
 use crate::data::{
     EvoSkillCase, Split, TRAIN, VALIDATION, case_set, load_cases, load_officeqa_case,
+    load_sealqa_case,
 };
 use crate::error::{ExampleError, Result, msg};
 use crate::evidence::{AgentRole, CaseExecution, EvoSkillEvidence};
@@ -878,6 +879,10 @@ enum CaseSource {
         source_text_path: PathBuf,
         split: Split,
     },
+    SealQaSample {
+        case_path: PathBuf,
+        split: Split,
+    },
 }
 
 impl CliArgs {
@@ -897,6 +902,10 @@ impl CliArgs {
         let mut officeqa_case_path = None;
         let mut officeqa_source_text_path = None;
         let mut officeqa_split = Split::Validation;
+        let mut officeqa_split_seen = false;
+        let mut sealqa_case_path = None;
+        let mut sealqa_split = Split::Validation;
+        let mut sealqa_split_seen = false;
         while let Some(arg) = args.next() {
             match arg.as_str() {
                 "--live-codex" => parsed.live_codex = true,
@@ -930,15 +939,34 @@ impl CliArgs {
                         return Err(msg("--officeqa-split requires train or validation"));
                     };
                     officeqa_split = parse_split(&value)?;
+                    officeqa_split_seen = true;
+                }
+                "--sealqa-case" => {
+                    let Some(value) = args.next() else {
+                        return Err(msg("--sealqa-case requires a path"));
+                    };
+                    sealqa_case_path = Some(PathBuf::from(value));
+                }
+                "--sealqa-split" => {
+                    let Some(value) = args.next() else {
+                        return Err(msg("--sealqa-split requires train or validation"));
+                    };
+                    sealqa_split = parse_split(&value)?;
+                    sealqa_split_seen = true;
                 }
                 other => return Err(msg(format!("unknown argument `{other}`"))),
             }
         }
-        let officeqa_requested =
-            officeqa_case_path.is_some() || officeqa_source_text_path.is_some();
-        if json_cases.is_some() && officeqa_requested {
+        let officeqa_requested = officeqa_case_path.is_some()
+            || officeqa_source_text_path.is_some()
+            || officeqa_split_seen;
+        let sealqa_requested = sealqa_case_path.is_some() || sealqa_split_seen;
+        let source_count = usize::from(json_cases.is_some())
+            + usize::from(officeqa_requested)
+            + usize::from(sealqa_requested);
+        if source_count > 1 {
             return Err(msg(
-                "choose one case source: --cases or --officeqa-case/--officeqa-source-text",
+                "choose one case source: --cases, --officeqa-case/--officeqa-source-text, or --sealqa-case",
             ));
         }
         parsed.case_source = if let Some(path) = json_cases {
@@ -954,6 +982,14 @@ impl CliArgs {
                 case_path,
                 source_text_path,
                 split: officeqa_split,
+            }
+        } else if sealqa_requested {
+            let Some(case_path) = sealqa_case_path else {
+                return Err(msg("--sealqa-case is required for SealQA input"));
+            };
+            CaseSource::SealQaSample {
+                case_path,
+                split: sealqa_split,
             }
         } else {
             CaseSource::Fixture
@@ -989,6 +1025,9 @@ fn load_case_source(case_source: &CaseSource) -> Result<Vec<EvoSkillCase>> {
             source_text_path,
             *split,
         )?]),
+        CaseSource::SealQaSample { case_path, split } => {
+            Ok(vec![load_sealqa_case(case_path, *split)?])
+        }
     }
 }
 
@@ -2185,6 +2224,29 @@ mod tests {
                 split: Split::Validation,
             } if case_path == Path::new("tmp/paper_exact_samples/evoskill/officeqa/officeqa_pro_first_case.json")
                 && source_text_path == Path::new("tmp/paper_exact_samples/evoskill/officeqa/treasury_bulletin_1941_01.txt")
+        ));
+    }
+
+    #[test]
+    fn cli_parse_accepts_sealqa_sample_inspection_source() {
+        let args = CliArgs::parse_from([
+            "p5",
+            "--sealqa-case",
+            "tmp/paper_exact_samples/evoskill/sealqa/seal_0_first_case.json",
+            "--sealqa-split",
+            "train",
+            "--inspect-cases",
+        ])
+        .unwrap();
+
+        assert!(args.inspect_cases);
+        assert!(!args.live_codex);
+        assert!(matches!(
+            args.case_source,
+            CaseSource::SealQaSample {
+                ref case_path,
+                split: Split::Train,
+            } if case_path == Path::new("tmp/paper_exact_samples/evoskill/sealqa/seal_0_first_case.json")
         ));
     }
 

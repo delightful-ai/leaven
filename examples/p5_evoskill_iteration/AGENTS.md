@@ -25,9 +25,9 @@ P5 owns the example wiring for a Codex-backed agentic skill loop: source prompt 
   `SkillProposal`; the builder mutates `.agents/skills` and the parser reads
   the workspace back into `SkillBankChange`.
 - Use `--inspect-cases` for no-spend provenance checks over paper sample
-  inputs. The current OfficeQA exact sample path can load one real validation
-  row with `--officeqa-case` and `--officeqa-source-text`, but live iteration
-  still requires at least one train case and one validation case.
+  inputs. The current OfficeQA and SealQA exact sample paths can each load one
+  real validation row, but live iteration still requires at least one train case
+  and one validation case.
 
 ## Bait
 - `cargo test -p p5_evoskill_iteration` only exercises helper-level deterministic assertions. It does not prove Codex execution, workspaces, checkpoints, proposal repair, or live evidence persistence.
