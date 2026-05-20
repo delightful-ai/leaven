@@ -11,6 +11,8 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
+leaven-agentic-skill = { workspace = true }
+leaven-artifact-skill = { workspace = true }
 leaven-core = { workspace = true }
 leaven-eval = { workspace = true }
 leaven-evidence = { workspace = true }

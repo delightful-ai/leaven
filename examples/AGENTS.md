@@ -20,8 +20,12 @@ Each `pN_*` directory is a workspace package with a runnable binary. Keep reusab
   train / `200..400` held-out split. `cargo test -p
   trace2skill_spreadsheetbench --test run_artifacts` proves upstream-shaped
   `results.json`, logs, and analysis reports can be imported into
-  `AgentTrajectoryCorpusEvidence`. These do not prove trajectory generation,
-  spreadsheet execution, skill evolution, or metric reproduction.
+  `AgentTrajectoryCorpusEvidence`. `cargo test -p
+  trace2skill_spreadsheetbench --test patch_bridge` proves upstream-shaped
+  fenced JSON patches lower into `SkillPatchPlan` plus concrete
+  `SkillBankChange` values and apply through `SkillPatchApplication`. These do
+  not prove trajectory generation, spreadsheet execution, model-backed analyst
+  or merge calls, skill evolution, or metric reproduction.
 
 ## Proof Classification
 - `product-proof`: an example that exercises the real public contract at the intended user layer, with no proxy substitution for the behavior being claimed.

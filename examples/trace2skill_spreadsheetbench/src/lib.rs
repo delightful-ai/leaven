@@ -1,5 +1,7 @@
 //! `Trace2Skill` `SpreadsheetBench` manifest lowering.
 
+mod patch_bridge;
+
 use std::{
     collections::BTreeMap,
     fs,
@@ -19,6 +21,11 @@ use leaven_kernel::{
     AgentSessionId, BlobRef, CaseId, Fingerprint, FingerprintBuilder, MetadataKey, MetadataValue,
 };
 use serde::Deserialize;
+
+pub use patch_bridge::{
+    Trace2SkillPatchError, Trace2SkillPatchLowering, Trace2SkillPatchLoweringInput,
+    apply_trace2skill_json_patch, lower_trace2skill_json_patch,
+};
 
 const VERIFIED_400_VERSION: &str = "trace2skill-spreadsheetbench-verified-400-v1";
 const VERIFIED_400_ROWS: usize = 400;
