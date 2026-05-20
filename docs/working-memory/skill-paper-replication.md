@@ -293,6 +293,14 @@ Leaven primitive blockers:
   `SkillBank` plus change report. This is artifact replay only; the paper
   runner still owns analyst execution, merge prompts, batch sizing, and
   prevalence policy.
+- `examples/trace2skill_spreadsheetbench` now also loads the actual upstream
+  `--save-intermediates` JSON directory shape: `map_patches`, numeric
+  `merge_level_N` directories, `final_patch.json`, and optional
+  `translated_final_patch.json`. It reconstructs merge batches from filename
+  order plus `--merge-batch-size` and applies the translated final patch when
+  present. This is still no-spend loader proof; no live analyst or merge call
+  has run, and the upstream saved directory does not preserve explicit
+  accepted/discarded decision rationale.
 - live trajectory generation that writes upstream-shaped results/logs/analysis
   artifacts for the 200 SpreadsheetBench training/evolving tasks;
 - live parallel analyst dispatch that executes hundreds of independent
@@ -310,8 +318,10 @@ Leaven primitive blockers:
   plan/change lowering step; the Trace2Skill example now translates upstream
   JSON patches into those operations;
 - live Trace2Skill merge-run integration that executes the model-backed merge
-  scheduler and writes the saved/live Stage 2/3 JSON artifacts consumed by the
-  replay seam;
+  scheduler and writes or imports real saved/live Stage 2/3 JSON artifacts
+  consumed by the replay seam, ideally with translated exact map/merge patches
+  and explicit merge decisions rather than only the default upstream saved
+  directory shape;
 - result matrix/reporting for cross-model and OOD transfer.
 
 Spend/data risks:
@@ -347,6 +357,10 @@ Spend/data risks:
 - The Trace2Skill example now covers upstream JSON patch lowering and atomic
   application from fenced LLM-style responses, including reference create/link
   pairing and exact-section refusal.
+- The Trace2Skill example now covers upstream-shaped saved-intermediate
+  directory replay, including deterministic map/merge filename ordering,
+  `--merge-batch-size` reconstruction, `final_patch.json` merge selection, and
+  `translated_final_patch.json` application.
 
 ### Memento-Skills (`arx_2603.18743`)
 

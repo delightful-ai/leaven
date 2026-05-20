@@ -178,6 +178,16 @@ The checked-out upstream release includes:
   atomically to emit an evolved `SkillBank` plus `SkillBankChangeReport`. This
   is still no-spend artifact replay; it does not run the model-backed analyst
   or merge scheduler.
+- `examples/trace2skill_spreadsheetbench` now also loads upstream
+  `--save-intermediates` JSON output directories directly: `map_patches`,
+  numeric `merge_level_N` directories, `final_patch.json`, and optional
+  `translated_final_patch.json`. The loader reconstructs deterministic merge
+  batches from saved filename order plus `--merge-batch-size`, records all
+  reconstructed inputs as accepted because upstream saved directories do not
+  preserve explicit accepted/discarded rationale, and applies
+  `translated_final_patch.json` when present because upstream uses that artifact
+  after translation. It is strict: fuzzy pre-translation patches still fail with
+  the artifact path rather than being silently counted as applied.
 - `leaven-evidence::AgentTrajectoryEvidence` now owns the reusable trajectory
   evidence envelope needed before Trace2Skill Stage 1/analysis can be
   faithfully replayed: runtime session id, optional Leaven case id, upstream
@@ -256,6 +266,14 @@ Verification:
   2026-05-20 for saved/live JSON patch merge artifact replay through
   `SkillPatchMergeTree`, selected final-patch application, evolved
   `SkillBank`, and change-report emission.
+- `cargo test -p trace2skill_spreadsheetbench --test patch_replay` passed on
+  2026-05-20 after adding the saved `--save-intermediates` directory loader,
+  including preference for `translated_final_patch.json` as the applied patch
+  when present.
+- `cargo fmt --check`, `cargo test -p trace2skill_spreadsheetbench`, `cargo
+  clippy -p trace2skill_spreadsheetbench --all-targets -- -D warnings`, and
+  `cargo test -p leaven --test topology_contract` passed on 2026-05-20 for the
+  saved-output loader slice.
 
 ## Current Blockers
 
@@ -272,9 +290,13 @@ Leaven-owned remaining primitives before faithful Trace2Skill replication:
   executed those prompts;
 - live hierarchical merge execution over analyst patch outputs. Leaven now has
   generic `AgentPatchMergeTreeEvidence` and skill-specific
-  `SkillPatchMergeTree` provenance values plus JSON patch replay/application,
-  but no Trace2Skill merge scheduler, prevalence policy, or model-backed merge
-  operator has run;
+  `SkillPatchMergeTree` provenance values plus JSON patch replay/application
+  and a strict saved-output loader, but no Trace2Skill merge scheduler,
+  prevalence policy, or model-backed merge operator has run;
+- real upstream saved evolution output has not been generated or imported
+  locally yet. The loader is tested against upstream-shaped fixtures; the next
+  proof needs either a no-spend/small upstream output directory or live-run
+  capture of translated exact map/merge patches plus explicit merge decisions;
 - result matrix/reporting for model scale transfer, OOD WikiTQ, DocVQA,
   DAPO/AIME, ablations, and sequential/retrieval baselines.
 
@@ -289,8 +311,8 @@ External/spend blockers:
 
 ## Next Action
 
-Wire the Trace2Skill example's saved artifact loader for real upstream
-`--save-intermediates` / cumulative patch outputs so an actual no-spend
-evolution directory can feed the replay seam. Keep model-backed analyst
-dispatch, merge scheduling, prevalence thresholds, and prompt wording in the
-paper runner/example layer.
+Generate or import an actual no-spend/small upstream `--save-intermediates`
+directory and feed it through the saved-output loader. If running upstream live,
+also capture translated exact map/merge patches plus accepted/discarded merge
+decisions, because the default saved directory shape loses that decision
+provenance.

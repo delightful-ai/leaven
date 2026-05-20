@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, fs, path::Path};
 
 use leaven_agentic_skill::SkillFileChangeKind;
 use leaven_artifact_skill::{SkillBank, SkillFile, SkillFolder, SkillName, SkillPath};
@@ -6,7 +6,8 @@ use serde_json::json;
 use trace2skill_spreadsheetbench::{
     Trace2SkillJsonPatchArtifact, Trace2SkillJsonPatchMergeBatch, Trace2SkillJsonPatchMergeInput,
     Trace2SkillJsonPatchMergeLevel, Trace2SkillJsonPatchReplayInput,
-    replay_trace2skill_json_patch_merge,
+    Trace2SkillSavedJsonPatchReplayInput, replay_trace2skill_json_patch_merge,
+    replay_trace2skill_saved_json_patch_outputs,
 };
 
 #[test]
@@ -74,6 +75,7 @@ fn replays_json_patch_merge_tree_and_applies_selected_final_patch() {
     assert_eq!(replay.merge_tree.leaf_plans().len(), 2);
     assert_eq!(replay.merge_tree.levels().len(), 1);
     assert_eq!(replay.merge_tree.final_plan_id().as_str(), "merge/l0/b0");
+    assert_eq!(replay.applied_plan_id.as_str(), "merge/l0/b0");
     assert_eq!(replay.merge_tree.final_plan().edits().len(), 2);
     let batch = &replay.merge_tree.levels()[0].batches()[0];
     assert_eq!(batch.accepted_input_ids()[0].as_str(), "map/error-13-1");
@@ -104,7 +106,72 @@ fn replays_json_patch_merge_tree_and_applies_selected_final_patch() {
     );
 }
 
+#[test]
+fn loads_upstream_saved_intermediates_and_prefers_translated_final_patch() {
+    let (parent, skill) = spreadsheet_skill_bank();
+    let tempdir = tempfile::tempdir().unwrap();
+    let root = tempdir.path();
+    fs::create_dir_all(root.join("map_patches")).unwrap();
+    fs::create_dir_all(root.join("merge_level_1")).unwrap();
+    write_patch(
+        &root.join("map_patches/patch_0001.json"),
+        &json_patch("Map row safety", row_safety_edits_with_body("map safety")),
+    );
+    write_patch(
+        &root.join("map_patches/patch_0002.json"),
+        &json_patch("Map format preference", format_preference_edits()),
+    );
+    write_patch(
+        &root.join("merge_level_1/merged_0001.json"),
+        &json_patch(
+            "Merged row safety",
+            row_safety_edits_with_body("merged safety"),
+        ),
+    );
+    write_patch(
+        &root.join("final_patch.json"),
+        &json_patch(
+            "Final pre-translation row safety",
+            row_safety_edits_with_body("pre translation"),
+        ),
+    );
+    write_patch(
+        &root.join("translated_final_patch.json"),
+        &json_patch(
+            "Translated exact row safety",
+            row_safety_edits_with_body("translated exact"),
+        ),
+    );
+
+    let replay =
+        replay_trace2skill_saved_json_patch_outputs(Trace2SkillSavedJsonPatchReplayInput {
+            parent: &parent,
+            skill: &skill,
+            intermediates_dir: root,
+            merge_batch_size: 2,
+        })
+        .unwrap();
+
+    assert_eq!(replay.merge_tree.leaf_plans().len(), 2);
+    assert_eq!(replay.merge_tree.levels().len(), 2);
+    assert_eq!(
+        replay.merge_tree.final_plan_id().as_str(),
+        "final/final_patch"
+    );
+    assert_eq!(
+        replay.applied_plan_id.as_str(),
+        "final/translated_final_patch"
+    );
+    assert_eq!(replay.final_reasoning, "Translated exact row safety");
+    let child = replay.application.child().get(&skill).unwrap();
+    assert!(skill_file_text(child, "references/row-safety.md").contains("translated exact"));
+}
+
 fn row_safety_edits() -> serde_json::Value {
+    row_safety_edits_with_body("Delete rows from bottom to top and stay inside the explicit range.")
+}
+
+fn row_safety_edits_with_body(body: &str) -> serde_json::Value {
     json!([
         {
             "file": "SKILL.md",
@@ -115,9 +182,30 @@ fn row_safety_edits() -> serde_json::Value {
         {
             "file": "references/row-safety.md",
             "op": "create",
-            "content": "# Row Safety\n\nDelete rows from bottom to top and stay inside the explicit range.\n"
+            "content": format!("# Row Safety\n\n{body}\n")
         }
     ])
+}
+
+fn format_preference_edits() -> serde_json::Value {
+    json!([
+        {
+            "file": "SKILL.md",
+            "op": "add_section",
+            "after_section": "## Important Requirements",
+            "target_section": "## Formatting Preference",
+            "content": "- Preserve analyst formatting preferences."
+        }
+    ])
+}
+
+fn json_patch(reasoning: &str, edits: impl Into<serde_json::Value>) -> serde_json::Value {
+    let edits = edits.into();
+    json!({
+        "reasoning": reasoning,
+        "edits": edits,
+        "changelog_entries": [reasoning]
+    })
 }
 
 fn spreadsheet_skill_bank() -> (SkillBank, SkillName) {
@@ -142,6 +230,10 @@ fn spreadsheet_skill_bank() -> (SkillBank, SkillName) {
 
 fn fenced_json_patch(value: &serde_json::Value) -> String {
     format!("Trace2Skill response:\n```json\n{value}\n```\n")
+}
+
+fn write_patch(path: &Path, value: &serde_json::Value) {
+    fs::write(path, serde_json::to_vec_pretty(value).unwrap()).unwrap();
 }
 
 fn skill_file_text(folder: &SkillFolder, path: &str) -> String {
