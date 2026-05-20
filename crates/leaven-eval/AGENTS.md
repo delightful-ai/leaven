@@ -4,7 +4,8 @@ This crate owns lowered evaluation data: datasets, cases, split membership, spli
 It does not execute evaluations. Evaluator traits, registries, trust checks, case-set resolution, graph records, and runtime scheduling belong in `leaven-engine`; product builders that lower user train/validation/test inputs belong in `leaven-run`.
 
 ## Routing
-- `src/dataset.rs` owns durable case collections and membership fingerprints.
+- `src/dataset.rs` owns durable case collections, source-row case metadata
+  lowering, and membership fingerprints.
 - `src/split.rs` owns partition roles, overlap policy, known-case validation,
   exact stratified split construction over caller-supplied strata, split
   construction over caller-supplied row-order ranges, split fingerprinting, and
@@ -22,6 +23,10 @@ It does not execute evaluations. Evaluator traits, registries, trust checks, cas
 ## Local Bait
 - `SplitRole::Test` can be report/final-test data, but it is not optimizer training data unless an explicit `FinalTestPolicy` exception says so. Keep this boundary visible when adding benchmark behavior.
 - `Dataset` fingerprints currently track membership/order, not full input payload content. Do not cite them as content hashes unless the implementation is changed and tested.
+- `Case::from_source_row` preserves upstream ordered-manifest identity as
+  operational metadata (`source_row_index`, `source_id`) while keeping the
+  Leaven `CaseId` numeric and row-stable. It does not parse dataset files or
+  turn source metadata into optimizer-visible semantic features.
 - Engine tests may construct `EvaluationSet` and `CaseSet` directly; do not move that execution machinery here.
 - `SplitUsePolicy::gepa_train_val_test` states intent; current engine trust
   enforcement is not yet a complete lowering of that policy. Do not claim split

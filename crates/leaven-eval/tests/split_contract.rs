@@ -67,6 +67,42 @@ fn dataset_from_case_envelopes_preserves_ids_and_metadata() {
 }
 
 #[test]
+fn source_row_cases_preserve_row_index_and_upstream_id_metadata() {
+    let case = Case::from_source_row(399, "59902", "spreadsheet prompt", Some("answer"));
+    assert_eq!(case.id, CaseId::from_index(399));
+    assert_eq!(case.input, "spreadsheet prompt");
+    assert_eq!(case.target, Some("answer"));
+
+    let row_index = case
+        .metadata
+        .get(&MetadataKey::from("source_row_index"))
+        .expect("row index metadata is present");
+    let MetadataValue::U64(row_index) = row_index else {
+        panic!("row index should be stored as u64 metadata");
+    };
+    assert_eq!(*row_index, 399);
+
+    let source_id = case
+        .metadata
+        .get(&MetadataKey::from("source_id"))
+        .expect("source id metadata is present");
+    let MetadataValue::String(source_id) = source_id else {
+        panic!("source id should be stored as string metadata");
+    };
+    assert_eq!(source_id, "59902");
+
+    let dataset = Dataset::from_cases(vec![
+        Case::from_source_row(0, "13-1", "first", None::<&str>),
+        Case::from_source_row(1, "17-35", "second", None::<&str>),
+    ])
+    .unwrap();
+    assert_eq!(
+        dataset.cases().keys().copied().collect::<Vec<_>>(),
+        vec![CaseId::from_index(0), CaseId::from_index(1)]
+    );
+}
+
+#[test]
 fn split_roles_map_to_conventional_partition_ids() {
     assert_eq!(SplitRole::Train.partition_id(), PartitionId::from("TRAIN"));
     assert_eq!(
