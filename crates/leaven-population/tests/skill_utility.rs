@@ -1,9 +1,17 @@
+use std::collections::BTreeMap;
+
 use leaven_artifact_skill::SkillName;
+use leaven_artifact_skill::{
+    SkillBank, SkillFile, SkillFolder, SkillPath, SkillRouteKey, SkillRoutePool,
+    SkillRouteRegistry, SkillRouteSpec,
+};
 use leaven_evidence::{PairedRolloutEvidence, RolloutGroupOutcome};
 use leaven_kernel::FiniteF64;
 use leaven_population::{
     SkillPairedRolloutUtilityInput, SkillPairedRolloutUtilityInputError, SkillPruningCandidate,
-    SkillRetrievalCandidate, SkillStepTrajectoryOutcome, SkillStepTrajectoryOutcomeError,
+    SkillRetrievalCandidate, SkillSimilarityCandidate, SkillSimilarityCandidateError,
+    SkillStepTrajectoryOutcome, SkillStepTrajectoryOutcomeError, SkillTwoStageRetrievalConfig,
+    SkillTwoStageRetrievalConfigError, SkillTwoStageRetrievalError, SkillTwoStageRetriever,
     SkillUseStats, SkillUtilityCredit, SkillUtilityPruner, SkillUtilityPruningConfig,
     SkillUtilityPruningError, SkillUtilityRank, SkillUtilityRanker, SkillUtilityRankingWeights,
     SkillUtilitySmoothing, SkillUtilityState, SkillUtilityTransfer,
@@ -15,6 +23,58 @@ fn skill(name: &str) -> SkillName {
 
 fn finite(value: f64) -> FiniteF64 {
     FiniteF64::new(value).unwrap()
+}
+
+fn skill_folder(name: &str) -> SkillFolder {
+    let mut entries = BTreeMap::new();
+    entries.insert(
+        SkillPath::skill_md(),
+        SkillFile::text(format!(
+            "---\nname: {name}\ndescription: Use when testing routed skill retrieval.\n---\nUse this skill.\n"
+        )),
+    );
+    SkillFolder::from_entries(skill(name), entries).unwrap()
+}
+
+fn d2skill_route_registry() -> SkillRouteRegistry {
+    let task_returns = skill("task-returns");
+    let step_stripes = skill("step-stripes");
+    let step_warranty = skill("step-warranty");
+    let step_unrelated = skill("step-unrelated");
+    let bank = SkillBank::from_folders([
+        skill_folder(task_returns.as_str()),
+        skill_folder(step_stripes.as_str()),
+        skill_folder(step_warranty.as_str()),
+        skill_folder(step_unrelated.as_str()),
+    ])
+    .unwrap();
+
+    SkillRouteRegistry::from_specs(
+        &bank,
+        [
+            SkillRouteSpec::new(
+                task_returns,
+                SkillRoutePool::new("task").unwrap(),
+                SkillRouteKey::new("minishop_returns").unwrap(),
+            ),
+            SkillRouteSpec::new(
+                step_stripes,
+                SkillRoutePool::new("step").unwrap(),
+                SkillRouteKey::new("minishop_returns teal stripe").unwrap(),
+            ),
+            SkillRouteSpec::new(
+                step_warranty,
+                SkillRoutePool::new("step").unwrap(),
+                SkillRouteKey::new("minishop_returns warranty").unwrap(),
+            ),
+            SkillRouteSpec::new(
+                step_unrelated,
+                SkillRoutePool::new("step").unwrap(),
+                SkillRouteKey::new("shipping invoice").unwrap(),
+            ),
+        ],
+    )
+    .unwrap()
 }
 
 #[test]
@@ -209,6 +269,124 @@ fn skill_utility_ranker_uses_stable_skill_name_tiebreaks_and_rejects_bad_weights
         SkillUtilityRankingWeights::new(finite(0.0), finite(0.0), finite(-1.0)),
         Err(leaven_population::SkillUtilityRankingWeightsError::NegativeExplorationWeight { .. })
     ));
+}
+
+#[test]
+fn two_stage_retriever_filters_route_pool_by_similarity_then_applies_utility_top_k() {
+    let registry = d2skill_route_registry();
+    let step_pool = SkillRoutePool::new("step").unwrap();
+    let mut state = SkillUtilityState::default();
+    let step_stripes = skill("step-stripes");
+    let step_warranty = skill("step-warranty");
+    let step_unrelated = skill("step-unrelated");
+    let task_returns = skill("task-returns");
+
+    state.observe_delta(
+        step_warranty.clone(),
+        finite(0.7),
+        SkillUtilitySmoothing::one(),
+    );
+    state.observe_delta(
+        step_stripes.clone(),
+        finite(0.0),
+        SkillUtilitySmoothing::one(),
+    );
+    state.record_retrieval(step_warranty.clone());
+    state.record_retrieval(step_warranty.clone());
+
+    let retriever = SkillTwoStageRetriever::new(
+        SkillTwoStageRetrievalConfig::new(
+            step_pool.clone(),
+            finite(0.5),
+            2.try_into().unwrap(),
+            1.try_into().unwrap(),
+            SkillUtilityRankingWeights::new(finite(1.0), finite(1.0), finite(0.0)).unwrap(),
+        )
+        .unwrap(),
+    );
+
+    let plan = retriever
+        .retrieve(
+            &registry,
+            &state,
+            [
+                SkillSimilarityCandidate::new(step_stripes.clone(), finite(0.95), finite(0.95))
+                    .unwrap(),
+                SkillSimilarityCandidate::new(step_warranty.clone(), finite(0.8), finite(0.8))
+                    .unwrap(),
+                SkillSimilarityCandidate::new(step_unrelated, finite(0.4), finite(0.4)).unwrap(),
+                SkillSimilarityCandidate::new(task_returns, finite(1.0), finite(1.0)).unwrap(),
+            ],
+        )
+        .unwrap();
+
+    assert_eq!(plan.pool(), &step_pool);
+    assert_eq!(
+        plan.first_stage()
+            .iter()
+            .map(|rank| (rank.skill().as_str(), rank.similarity(), rank.relevance()))
+            .collect::<Vec<_>>(),
+        [
+            ("step-stripes", finite(0.95), finite(0.95)),
+            ("step-warranty", finite(0.8), finite(0.8)),
+        ]
+    );
+    assert_eq!(
+        plan.selected()
+            .iter()
+            .map(|rank| (rank.skill().as_str(), rank.score()))
+            .collect::<Vec<_>>(),
+        [("step-warranty", finite(1.5))]
+    );
+
+    plan.record_selected_retrievals(&mut state);
+    assert_eq!(state.stats(&step_warranty).retrievals, 3);
+    assert_eq!(state.stats(&step_stripes).retrievals, 0);
+}
+
+#[test]
+fn two_stage_retriever_refuses_incomplete_or_invalid_similarity_inputs() {
+    let registry = d2skill_route_registry();
+    let config = SkillTwoStageRetrievalConfig::new(
+        SkillRoutePool::new("step").unwrap(),
+        finite(0.0),
+        2.try_into().unwrap(),
+        1.try_into().unwrap(),
+        SkillUtilityRankingWeights::default(),
+    )
+    .unwrap();
+    let retriever = SkillTwoStageRetriever::new(config);
+
+    assert_eq!(
+        SkillTwoStageRetrievalConfig::new(
+            SkillRoutePool::new("step").unwrap(),
+            finite(0.0),
+            1.try_into().unwrap(),
+            2.try_into().unwrap(),
+            SkillUtilityRankingWeights::default(),
+        )
+        .unwrap_err(),
+        SkillTwoStageRetrievalConfigError::TopKExceedsTopM { top_m: 1, top_k: 2 },
+    );
+    assert_eq!(
+        SkillSimilarityCandidate::new(skill("bad"), finite(0.4), finite(1.2)).unwrap_err(),
+        SkillSimilarityCandidateError::RelevanceOutOfRange { value: finite(1.2) },
+    );
+    assert_eq!(
+        retriever
+            .retrieve(
+                &registry,
+                &SkillUtilityState::default(),
+                [
+                    SkillSimilarityCandidate::new(skill("step-stripes"), finite(0.8), finite(0.8),)
+                        .unwrap()
+                ],
+            )
+            .unwrap_err(),
+        SkillTwoStageRetrievalError::MissingSimilarity {
+            skill: skill("step-unrelated"),
+        },
+    );
 }
 
 #[test]

@@ -13,11 +13,12 @@ Population code may consume evidence and emit `PopulationEvent`s. It must not mu
   This module may know `leaven-artifact-skill::SkillName` because utility is
   keyed by validated skill identity, but it must not parse skill files,
   materialize workspaces, or decide paper-specific retrieval policy. It may
-  rank caller-supplied relevance scores with utility and exploration state and
-  map paired rollout reward gaps onto skill utility credits. It may also plan
-  utility-guided pruning for a caller-supplied active skill pool, but
-  embeddings, route-key extraction, trajectory parsing, artifact mutation, and
-  router training stay outside it.
+  rank caller-supplied relevance scores with utility and exploration state,
+  plan D2Skill-style two-stage retrieval over caller-supplied route registries
+  and similarity scores, and map paired rollout reward gaps onto skill utility
+  credits. It may also plan utility-guided pruning for a caller-supplied active
+  skill pool, but embeddings, route-key extraction, trajectory parsing,
+  artifact mutation, and router training stay outside it.
 - Put reusable population configuration in this crate when it can serve more than one optimizer. Put optimizer-specific strategy state in the optimizer crate.
 
 ## Current Public-Maturity Split
@@ -48,16 +49,19 @@ Population code may consume evidence and emit `PopulationEvent`s. It must not mu
   retrieval counts, trigger counts, EMA utility updates, explicit rename
   transfer, and explicit removal. Use `SkillUtilityRanker` when a caller
   already has finite relevance scores and needs utility/UCB-aware deterministic
-  top-k ranking. Use `SkillPairedRolloutUtilityInput` when a caller has
-  `PairedRolloutEvidence`, retrieved task skills, and either trajectory-level
-  step credits or runner-provided `SkillStepTrajectoryOutcome`s and needs the
-  D2Skill-style task gap and `Y_i - baseline_mean` step credit equation applied
-  through `SkillUtilityState`. Use `SkillUtilityPruner` when a caller has one
-  active skill pool, paper-provided capacity/current-step/protected-window
-  values, and needs D2Skill-style eviction scores over stored utility and
-  retrieval stats. Retrieval embeddings, paper route keys, transcript parsing,
-  skill-bank artifact mutation, injection formatting, and paper-specific
-  cadence/threshold selection remain outside this module.
+  top-k ranking. Use `SkillTwoStageRetriever` when a caller has a
+  `SkillRouteRegistry`, active route pool, caller-computed similarity scores,
+  and D2Skill-style top-m/top-k retrieval configuration. Use
+  `SkillPairedRolloutUtilityInput` when a caller has `PairedRolloutEvidence`,
+  retrieved task skills, and either trajectory-level step credits or
+  runner-provided `SkillStepTrajectoryOutcome`s and needs the D2Skill-style
+  task gap and `Y_i - baseline_mean` step credit equation applied through
+  `SkillUtilityState`. Use `SkillUtilityPruner` when a caller has one active
+  skill pool, paper-provided capacity/current-step/protected-window values, and
+  needs D2Skill-style eviction scores over stored utility and retrieval stats.
+  Retrieval embeddings, paper route keys, transcript parsing, skill-bank
+  artifact mutation, injection formatting, and paper-specific cadence/threshold
+  selection remain outside this module.
 - Use `ParetoFrontier::by_case().partition_filter(...)` for sparse casewise
   scalar frontiers. Missing case scores do not dominate present scores.
 - Return `PopulationEvent`s to the caller; only `RunContext`/engine records them
@@ -72,6 +76,10 @@ Population code may consume evidence and emit `PopulationEvent`s. It must not mu
   registry, that registry needs artifact/cache identity outside this state.
 - `SkillUtilityRanker` does not decide what a query means. It combines
   caller-provided relevance with utility and exploration state only.
+- `SkillTwoStageRetriever` does not embed route keys or normalize similarity.
+  It consumes a route registry plus caller-supplied finite similarities, applies
+  threshold/top-m/top-k mechanics, and records selected retrievals only when the
+  caller asks it to mutate `SkillUtilityState`.
 - `SkillPairedRolloutUtilityInput` does not inspect transcripts or infer which
   step skills fired. The paper/runner supplies retrieved task skills and either
   step trajectory outcomes or trajectory-level step credits; this crate only
@@ -87,8 +95,8 @@ Population code may consume evidence and emit `PopulationEvent`s. It must not mu
 ## Proof Anchors
 - `cargo nextest run -p leaven-population` proves keep-best, top-k frontier,
   top-k parent selector, tournament, skill utility state, paired rollout skill
-  credit application, step-trajectory credit extraction, utility-guided skill
-  pruning plans, and Pareto/frontier population laws, including finite fitted
-  updates and partition filtering.
+  credit application, step-trajectory credit extraction, two-stage routed skill
+  retrieval, utility-guided skill pruning plans, and Pareto/frontier population
+  laws, including finite fitted updates and partition filtering.
 - `cargo nextest run -p leaven-gepa --test gepa_smoke` proves GEPA consumes population state without moving GEPA selectors or gates into this crate.
 - `cargo nextest run -p leaven --test scalar_keep_best --test pairwise_tournament --test gepa_parity` proves mature population implementations participate in public end-to-end workflows through the umbrella surface. It is not proof for placeholder population names.
