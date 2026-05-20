@@ -171,6 +171,19 @@ Next attempt:
   artifact/workspace primitives into the EvoSkill run loop with checkpointed
   program/frontier state.
 
+2026-05-20 source-bundle recheck:
+
+- The synchronized `tmp/skill_opt_sources/arx_2603.02766` bundle now provides
+  current paper/source anchors for the EvoSkill dossier. The category/split
+  blocker remains: local OfficeQA has only `difficulty`, while the paper source
+  requires LLM-clustered single categories and exact disjoint
+  train/validation/test membership. Bounded source probes found references to
+  `solved_dataset.csv`, `pseudo_labels`, author-local result pickles,
+  `seal-0.csv`, and BrowseComp pickle/sample artifacts, but not the artifacts
+  themselves. The dossier also records a paper-source comparison wrinkle:
+  OfficeQA skill-merge exact match is 67.9 in prose and 68.1 in the checked-in
+  table.
+
 ### Trace2Skill (`arx_2603.25158`)
 
 Source anchors:

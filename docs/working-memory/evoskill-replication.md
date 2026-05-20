@@ -228,6 +228,62 @@ OfficeQA derivative with `pseudo_labels`/`category` values, not from the public
 OfficeQA CSV as checked out locally. Treat the category/split manifest as an
 external provenance blocker until located or explicitly substituted.
 
+## Source Bundle Recheck
+
+Date: 2026-05-20.
+Provider/model spend: none.
+Cloud/GPU spend: none.
+Live agent execution: none.
+
+After ignored `tmp/` source synchronization, the Leaven-papers workspace now
+contains the EvoSkill source bundle and local upstream checkouts:
+
+- `tmp/skill_opt_sources/arx_2603.02766/full_source.md`
+- `tmp/skill_opt_sources/arx_2603.02766/src/sections/*.tex`
+- `tmp/skill_opt_sources/arx_2603.02766/src/tables/officeqa_results.tex`
+- `tmp/repros/evoskill`
+- `tmp/repros/officeqa`
+
+Fresh bounded probes confirm the paper-level split facts still come from the
+text, not from a recoverable manifest in the source tree:
+
+- `full_source.md:70` says the dataset is first clustered into single-category
+  examples by an LLM and then partitioned into disjoint train, validation, and
+  held-out test sets.
+- `full_source.md:90` says OfficeQA uses validation set size 17 and train
+  sizes 12, 24, and 36, with held-out test reporting.
+- `full_source.md:143` says SealQA uses seal-0, 111 questions, Opus 4.5,
+  a 10 percent training split, held-out remainder, and 1.5 epochs.
+- `full_source.md:151` says BrowseComp transfer uses a 128-example stratified
+  sample.
+- `src/sections/methodology.tex:155` is the LaTeX source for the same
+  LLM-clustered, disjoint train/validation/test partition claim.
+- `tmp/repros/evoskill/notebooks/cluster_questions.ipynb` reads and rewrites
+  `../.dataset/new_runs_base/solved_dataset.csv`.
+- `tmp/repros/evoskill/notebooks/train_data.ipynb` reads
+  `../results/full_run_new_evolved_final_two.pkl`, copies
+  `df.iloc[index].pseudo_labels` into `category`, and writes
+  `../ablation_run_incorrect.csv`.
+- A bounded `fd`/`rg` pass found references to those paths but did not find the
+  actual `.dataset/new_runs_base/solved_dataset.csv`, `pseudo_labels` source
+  artifact, `full_run_new_evolved_final_two.pkl`, `ablation_run_incorrect.csv`,
+  `deep_cc_runs`, local `seal-0.csv`, or BrowseComp result/sample pickle.
+
+The source bundle also exposes a paper-source consistency issue that a faithful
+replication dossier must carry forward:
+
+- `full_source.md:119` says the skill-merge configuration achieves 67.9
+  percent exact match.
+- `src/tables/officeqa_results.tex` and `full_source.md:99-111` list
+  `merge-unique` at 68.1 for the `0.00%` tolerance column.
+
+Current implication: Leaven now has the generic exact split primitive, but
+EvoSkill still cannot claim a 1:1 OfficeQA split because the paper's category
+assignment and split manifest are not present in the synchronized source tree.
+The next accepted path is either to obtain that manifest from upstream/authors
+or to record a documented substitute as a deviation before running a live
+replica.
+
 ## Upstream Code Probe
 
 Relevant current-code facts from local EvoSkill checkout:
@@ -318,10 +374,14 @@ Second-order blockers after git identity:
    train/validation split artifact.
 5. BrowseComp transfer blocker: no local 128-example transfer sample or result
    pickle was found.
-6. Upstream script drift: static source inspection shows direct
+6. OfficeQA reported-result blocker: the prose says skill-merge exact match is
+   67.9 percent, while the checked-in OfficeQA table lists 68.1 percent for
+   `merge-unique` at 0 percent tolerance. A replication dossier must choose
+   which source to compare against or report both.
+7. Upstream script drift: static source inspection shows direct
    `scripts/run_loop.py` imports `Agent` from the wrong package. The supported
    CLI imports `Agent` from `src.harness`.
-7. Leaven primitive blocker after provenance: `leaven-artifact-git` can
+8. Leaven primitive blocker after provenance: `leaven-artifact-git` can
    represent program/frontier refs, and `leaven-workspace-git` can clone,
    capture, restore, and delete local branch/tag refs. Leaven still lacks the
    EvoSkill run integration that turns those primitives into checkpointed
@@ -336,7 +396,7 @@ Second-order blockers after git identity:
    train/validation/test membership from caller-supplied strata and counts, so
    the remaining split blocker is the paper's source category/split manifest,
    not Leaven's generic split construction primitive.
-8. Language-boundary blocker for implementation: after provenance, all
+9. Language-boundary blocker for implementation: after provenance, all
    Leaven-owned EvoSkill split/sampler/scorer/harness/frontier behavior must be
    implemented in Rust/Leaven primitives, not Python.
 
@@ -353,7 +413,9 @@ Stay no-spend until the provenance blockers are closed:
    only after the owning primitive surface is designed and tested.
 4. Locate the BrowseComp transfer sample/result source, or record the exact
    access blocker with source links.
-5. After the exact split/source path is chosen, wire the tested
+5. Resolve the OfficeQA reported-result comparison target: prose 67.9 percent
+   exact-match skill-merge or table 68.1 percent `merge-unique` exact match.
+6. After the exact split/source path is chosen, wire the tested
    `leaven-artifact-git`, `leaven-workspace-git`, `TopKFrontier`,
    `TopKParentSelector`, `leaven-eval::StratifiedSplitBuilder`, and
    `leaven-eval::CategoryRoundRobinSampler` primitives into the full EvoSkill
