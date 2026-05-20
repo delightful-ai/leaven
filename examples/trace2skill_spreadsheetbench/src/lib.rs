@@ -30,7 +30,8 @@ pub use patch_bridge::{
 pub use patch_replay::{
     Trace2SkillJsonPatchArtifact, Trace2SkillJsonPatchMergeBatch, Trace2SkillJsonPatchMergeInput,
     Trace2SkillJsonPatchMergeLevel, Trace2SkillJsonPatchReplay, Trace2SkillJsonPatchReplayInput,
-    Trace2SkillPatchReplayError, replay_trace2skill_json_patch_merge,
+    Trace2SkillPatchReplayError, Trace2SkillSavedJsonPatchReplayInput,
+    replay_trace2skill_json_patch_merge, replay_trace2skill_saved_json_patch_outputs,
 };
 
 const VERIFIED_400_VERSION: &str = "trace2skill-spreadsheetbench-verified-400-v1";

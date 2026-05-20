@@ -244,8 +244,11 @@ Use the narrowest layer that proves the claim.
 - `examples/trace2skill_spreadsheetbench/tests/patch_replay.rs`:
   mechanics-smoke for replaying saved/live upstream JSON patch merge artifacts
   through `SkillPatchMergeTree` and `SkillPatchApplication`. It proves the
-  artifact replay seam and evolved `SkillBank` output only; it is not proof
-  that the model-backed analysts or merge scheduler ran.
+  artifact replay seam, evolved `SkillBank` output, and strict loader for
+  upstream-shaped `--save-intermediates` JSON directories (`map_patches`,
+  numeric `merge_level_N`, `final_patch.json`, optional
+  `translated_final_patch.json`) only; it is not proof that the model-backed
+  analysts or merge scheduler ran.
 
 ## Review Rules
 
