@@ -4,6 +4,7 @@ mod case;
 mod case_evaluator;
 mod case_record;
 mod error;
+mod artifact_reflector;
 mod evaluator;
 mod inspection;
 mod parser;
@@ -26,6 +27,10 @@ pub use case_record::{
     FailedAgentCaseRun, FiniteRatio, ScoredAgentCaseRun, ToolApprovalPolicy,
 };
 pub use error::{AgenticAdapterError, AgenticParseError, AgenticRepairError};
+pub use artifact_reflector::{
+    ArtifactReflector, ReadbackDiagnostic, ReadbackResult, ReflectionError,
+    ReflectionLayoutConfig, ReflectionRunOutcome, ReflectionWorkspace,
+};
 pub use evaluator::{AgenticEvaluator, AgenticEvaluatorConfig};
 pub use inspection::{
     AgenticCostInspection, AgenticInspectionWarning, AgenticRunInspection, ProposalRepairInspection,
@@ -54,13 +59,15 @@ pub mod prelude {
         AgentRunPreflightReport, AgentWorkload, AgenticAdapterError, AgenticCostInspection,
         AgenticEvaluator, AgenticEvaluatorConfig, AgenticInspectionWarning, AgenticParseError,
         AgenticProposer, AgenticProposerConfig, AgenticRepairError, AgenticRunInput,
-        AgenticRunInspection, CASE_RUN_RECORD_METADATA_KEY, CaseCheckpointPolicy, CaseFiles,
-        CaseInput, CaseMessage, CasePartitionId, CasePartitions, CaseSuite, CaseTarget,
-        EvaluationInputBuilder, EvidenceParser, FailOnError, FailedAgentCaseRun, FiniteRatio,
-        PROPOSAL_REPAIR_ATTEMPTS_METADATA_KEY, PreflightFinding, PreflightSeverity,
-        PresenterDryRun, ProposalParser, ProposalRepairAttemptOutcome, ProposalRepairAttemptRecord,
-        ProposalRepairFeedback, ProposalRepairInspection, ProposalRepairPolicy,
-        ProposalRepairPromptBuilder, RepairingAgenticProposer, RepairingAgenticProposerConfig,
-        ScoredAgentCaseRun, ScorerDryRun, SetupScript, ToolApprovalPolicy, WorkspaceRequirement,
+        AgenticRunInspection, ArtifactReflector, CASE_RUN_RECORD_METADATA_KEY,
+        CaseCheckpointPolicy, CaseFiles, CaseInput, CaseMessage, CasePartitionId, CasePartitions,
+        CaseSuite, CaseTarget, EvaluationInputBuilder, EvidenceParser, FailOnError,
+        FailedAgentCaseRun, FiniteRatio, PROPOSAL_REPAIR_ATTEMPTS_METADATA_KEY, PreflightFinding,
+        PreflightSeverity, PresenterDryRun, ProposalParser, ProposalRepairAttemptOutcome,
+        ProposalRepairAttemptRecord, ProposalRepairFeedback, ProposalRepairInspection,
+        ProposalRepairPolicy, ProposalRepairPromptBuilder, ReadbackDiagnostic, ReadbackResult,
+        ReflectionError, ReflectionLayoutConfig, ReflectionRunOutcome, ReflectionWorkspace,
+        RepairingAgenticProposer, RepairingAgenticProposerConfig, ScoredAgentCaseRun,
+        ScorerDryRun, SetupScript, ToolApprovalPolicy, WorkspaceRequirement,
     };
 }
