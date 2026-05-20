@@ -36,6 +36,27 @@ pub enum DatasetSplitsError {
         /// Empty split role.
         role: SplitRole,
     },
+    /// A split constructor was asked to build the same role more than once.
+    #[error("duplicate split role: {0:?}")]
+    DuplicateSplitRole(SplitRole),
+    /// A stratified split requested more cases than the strata contain.
+    #[error("stratified split requested {requested} cases but only {available} are available")]
+    InsufficientStratifiedCases {
+        /// Total requested split cases.
+        requested: usize,
+        /// Total available source cases.
+        available: usize,
+    },
+    /// One case appears in multiple strata.
+    #[error("case {case} appears in both strata {left} and {right}")]
+    DuplicateStratifiedCase {
+        /// Duplicated case id.
+        case: CaseId,
+        /// First stratum containing the case.
+        left: SmolStr,
+        /// Second stratum containing the case.
+        right: SmolStr,
+    },
 }
 
 /// Split-use policy construction failed.

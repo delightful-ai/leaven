@@ -4,6 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use leaven_core::{CaseSetVersion, PartitionId};
 use leaven_kernel::{CaseId, Fingerprint, FingerprintBuilder};
+use smol_str::SmolStr;
 
 use crate::DatasetSplitsError;
 
@@ -148,4 +149,157 @@ impl DatasetSplits {
     pub const fn policy(&self) -> &SplitPolicy {
         &self.policy
     }
+}
+
+/// Deterministic exact-count split construction over caller-declared strata.
+#[derive(Clone, Debug)]
+pub struct StratifiedSplitBuilder {
+    strata: BTreeMap<SmolStr, Vec<CaseId>>,
+    role_counts: Vec<(SplitRole, usize)>,
+}
+
+impl StratifiedSplitBuilder {
+    /// Builds a split builder from trusted category/stratum pools.
+    pub fn new(strata: BTreeMap<SmolStr, Vec<CaseId>>) -> Result<Self, DatasetSplitsError> {
+        let mut seen = BTreeMap::<CaseId, SmolStr>::new();
+        for (stratum, ids) in &strata {
+            for id in ids {
+                if let Some(left) = seen.insert(*id, stratum.clone()) {
+                    return Err(DatasetSplitsError::DuplicateStratifiedCase {
+                        case: *id,
+                        left,
+                        right: stratum.clone(),
+                    });
+                }
+            }
+        }
+        Ok(Self {
+            strata,
+            role_counts: Vec::new(),
+        })
+    }
+
+    /// Requests an exact number of cases for one split role.
+    #[must_use]
+    pub fn role_count(mut self, role: SplitRole, count: usize) -> Self {
+        self.role_counts.push((role, count));
+        self
+    }
+
+    /// Builds disjoint split membership with deterministic proportional
+    /// allocation across strata.
+    pub fn build(self, version: CaseSetVersion) -> Result<DatasetSplits, DatasetSplitsError> {
+        let requested = self
+            .role_counts
+            .iter()
+            .map(|(_, count)| *count)
+            .sum::<usize>();
+        let available = self.strata.values().map(Vec::len).sum::<usize>();
+        if requested > available {
+            return Err(DatasetSplitsError::InsufficientStratifiedCases {
+                requested,
+                available,
+            });
+        }
+
+        let known_cases = self
+            .strata
+            .values()
+            .flat_map(|ids| ids.iter().copied())
+            .collect::<BTreeSet<_>>();
+        let mut offsets = self
+            .strata
+            .keys()
+            .map(|stratum| (stratum.clone(), 0_usize))
+            .collect::<BTreeMap<_, _>>();
+        let mut roles = BTreeMap::new();
+        let mut cases = BTreeMap::new();
+
+        for (role, count) in &self.role_counts {
+            let partition = role.partition_id();
+            if roles.contains_key(&partition) {
+                return Err(DatasetSplitsError::DuplicateSplitRole(role.clone()));
+            }
+            let selected = self.take_stratified(*count, &mut offsets);
+            roles.insert(partition.clone(), role.clone());
+            cases.insert(partition, selected);
+        }
+
+        DatasetSplits::new(
+            version,
+            roles,
+            cases,
+            &known_cases,
+            SplitPolicy::DisjointRequired,
+        )
+    }
+
+    fn take_stratified(&self, count: usize, offsets: &mut BTreeMap<SmolStr, usize>) -> Vec<CaseId> {
+        let remaining = self
+            .strata
+            .iter()
+            .map(|(stratum, ids)| {
+                let offset = offsets.get(stratum).copied().unwrap_or_default();
+                (stratum.clone(), ids.len() - offset)
+            })
+            .collect::<BTreeMap<_, _>>();
+        let allocation = allocate_proportional(count, &remaining);
+        let mut selected = Vec::with_capacity(count);
+        for (stratum, take) in allocation {
+            let offset = offsets
+                .get_mut(&stratum)
+                .expect("allocation stratum exists in offsets");
+            let ids = self
+                .strata
+                .get(&stratum)
+                .expect("allocation stratum exists in strata");
+            selected.extend(ids[*offset..*offset + take].iter().copied());
+            *offset += take;
+        }
+        selected
+    }
+}
+
+fn allocate_proportional(
+    count: usize,
+    remaining: &BTreeMap<SmolStr, usize>,
+) -> BTreeMap<SmolStr, usize> {
+    let total = remaining.values().sum::<usize>();
+    let mut allocated = BTreeMap::new();
+    if count == 0 || total == 0 {
+        return allocated;
+    }
+
+    let mut assigned = 0_usize;
+    let mut remainders = Vec::new();
+    for (stratum, available) in remaining {
+        let numerator = count * *available;
+        let whole = numerator / total;
+        assigned += whole;
+        allocated.insert(stratum.clone(), whole);
+        remainders.push((numerator % total, stratum.clone()));
+    }
+
+    remainders.sort_by(|(left_remainder, left), (right_remainder, right)| {
+        right_remainder
+            .cmp(left_remainder)
+            .then_with(|| left.cmp(right))
+    });
+    let mut to_assign = count - assigned;
+    for (_, stratum) in remainders {
+        if to_assign == 0 {
+            break;
+        }
+        let available = remaining
+            .get(&stratum)
+            .expect("remainder stratum exists in remaining");
+        let current = allocated
+            .get_mut(&stratum)
+            .expect("remainder stratum exists in allocation");
+        if *current < *available {
+            *current += 1;
+            to_assign -= 1;
+        }
+    }
+    allocated
 }

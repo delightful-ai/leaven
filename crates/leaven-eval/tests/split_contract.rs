@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use leaven_core::{CaseSetVersion, PartitionId};
 use leaven_eval::{
     Case, Dataset, DatasetError, DatasetSplits, DatasetSplitsError, EvaluationUse, FinalTestPolicy,
-    SplitPolicy, SplitRole, SplitUse, SplitUsePolicy, SplitUsePolicyError,
+    SplitPolicy, SplitRole, SplitUse, SplitUsePolicy, SplitUsePolicyError, StratifiedSplitBuilder,
 };
 use leaven_kernel::{CaseId, MetadataBag, MetadataKey, MetadataValue};
 
@@ -205,6 +205,118 @@ fn split_fingerprint_tracks_roles_and_membership() {
     );
     assert_eq!(left.version(), &CaseSetVersion("v1".to_owned()));
     assert_eq!(left.policy(), &SplitPolicy::DisjointRequired);
+}
+
+#[test]
+fn exact_stratified_split_builder_allocates_requested_counts_by_category() {
+    let splits = StratifiedSplitBuilder::new(BTreeMap::from([
+        (
+            "easy".into(),
+            vec![
+                CaseId::from_index(0),
+                CaseId::from_index(1),
+                CaseId::from_index(2),
+                CaseId::from_index(3),
+                CaseId::from_index(4),
+            ],
+        ),
+        (
+            "hard".into(),
+            vec![
+                CaseId::from_index(10),
+                CaseId::from_index(11),
+                CaseId::from_index(12),
+                CaseId::from_index(13),
+                CaseId::from_index(14),
+                CaseId::from_index(15),
+                CaseId::from_index(16),
+            ],
+        ),
+    ]))
+    .unwrap()
+    .role_count(SplitRole::Train, 5)
+    .role_count(SplitRole::Validation, 3)
+    .role_count(SplitRole::Test, 2)
+    .build(CaseSetVersion("officeqa-categories-v1".to_owned()))
+    .unwrap();
+
+    assert_eq!(
+        splits.cases(&SplitRole::Train.partition_id()),
+        Some(
+            [
+                CaseId::from_index(0),
+                CaseId::from_index(1),
+                CaseId::from_index(10),
+                CaseId::from_index(11),
+                CaseId::from_index(12),
+            ]
+            .as_slice()
+        )
+    );
+    assert_eq!(
+        splits.cases(&SplitRole::Validation.partition_id()),
+        Some(
+            [
+                CaseId::from_index(2),
+                CaseId::from_index(13),
+                CaseId::from_index(14),
+            ]
+            .as_slice()
+        )
+    );
+    assert_eq!(
+        splits.cases(&SplitRole::Test.partition_id()),
+        Some([CaseId::from_index(3), CaseId::from_index(15)].as_slice())
+    );
+    assert_eq!(splits.policy(), &SplitPolicy::DisjointRequired);
+}
+
+#[test]
+fn exact_stratified_split_builder_refuses_ambiguous_or_oversized_manifests() {
+    let duplicate = StratifiedSplitBuilder::new(BTreeMap::from([
+        ("easy".into(), vec![CaseId::from_index(0)]),
+        ("hard".into(), vec![CaseId::from_index(0)]),
+    ]))
+    .unwrap_err();
+    assert_eq!(
+        duplicate,
+        DatasetSplitsError::DuplicateStratifiedCase {
+            case: CaseId::from_index(0),
+            left: "easy".into(),
+            right: "hard".into(),
+        }
+    );
+
+    let oversized = StratifiedSplitBuilder::new(BTreeMap::from([(
+        "easy".into(),
+        vec![CaseId::from_index(0), CaseId::from_index(1)],
+    )]))
+    .unwrap()
+    .role_count(SplitRole::Train, 2)
+    .role_count(SplitRole::Validation, 1)
+    .build(CaseSetVersion("too-large".to_owned()))
+    .unwrap_err();
+    assert_eq!(
+        oversized,
+        DatasetSplitsError::InsufficientStratifiedCases {
+            requested: 3,
+            available: 2,
+        }
+    );
+
+    let duplicate_role = StratifiedSplitBuilder::new(BTreeMap::from([(
+        "easy".into(),
+        vec![CaseId::from_index(0), CaseId::from_index(1)],
+    )]))
+    .unwrap()
+    .role_count(SplitRole::Train, 1)
+    .role_count(SplitRole::Train, 1)
+    .build(CaseSetVersion("duplicate-role".to_owned()))
+    .unwrap_err();
+    assert_eq!(
+        duplicate_role,
+        DatasetSplitsError::DuplicateSplitRole(SplitRole::Train)
+    );
 }
 
 #[test]

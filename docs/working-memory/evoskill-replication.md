@@ -326,6 +326,10 @@ Second-order blockers after git identity:
    best/round-robin parent selection. P5 now persists frontier membership,
    selected parent, and selector cursor through its private checkpoints, but
    full EvoSkill still needs multi-iteration git-program integration.
+   `leaven-eval::StratifiedSplitBuilder` now constructs exact disjoint
+   train/validation/test membership from caller-supplied strata and counts, so
+   the remaining split blocker is the paper's source category/split manifest,
+   not Leaven's generic split construction primitive.
 8. Language-boundary blocker for implementation: after provenance, all
    Leaven-owned EvoSkill split/sampler/scorer/harness/frontier behavior must be
    implemented in Rust/Leaven primitives, not Python.
@@ -344,10 +348,11 @@ Stay no-spend until the provenance blockers are closed:
 4. Locate the BrowseComp transfer sample/result source, or record the exact
    access blocker with source links.
 5. After the exact split/source path is chosen, wire the tested
-   `leaven-artifact-git`, `leaven-workspace-git`, `TopKFrontier`, and
-   `TopKParentSelector` primitives plus `leaven-eval::CategoryRoundRobinSampler`
-   into the full EvoSkill OfficeQA/SealQA run path with checkpointed
-   program/frontier/selector/sampler state and paper score metadata, without
-   moving Git command execution into the artifact crate. P5 has the
-   selector/sampler checkpoint shape; it still needs full git-program paper-run
-   integration and source-pinned split manifests.
+   `leaven-artifact-git`, `leaven-workspace-git`, `TopKFrontier`,
+   `TopKParentSelector`, `leaven-eval::StratifiedSplitBuilder`, and
+   `leaven-eval::CategoryRoundRobinSampler` primitives into the full EvoSkill
+   OfficeQA/SealQA run path with checkpointed program/frontier/selector/sampler
+   state and paper score metadata, without moving Git command execution into
+   the artifact crate. P5 has the selector/sampler checkpoint shape; it still
+   needs full git-program paper-run integration and source-pinned split
+   manifests.
