@@ -68,7 +68,10 @@ Current useful substrate:
   `ReflectionWorkspace` in `leaven-agentic`. Governing spec:
   `docs/specs/typed_signature_adapter_contract.md`.
 - `examples/p5_evoskill_iteration` proves one live Codex EvoSkill-shaped
-  iteration over a tiny treasury-notation fixture.
+  iteration over a tiny treasury-notation fixture. It can now run a no-spend
+  `--inspect-cases` pass over the materialized OfficeQA `UID0001` sample and
+  source text, but that is provenance input only; the sample is validation-only
+  and does not form a runnable OfficeQA split.
 - `examples/memento_skills_read_write`, `examples/skillreducer_tiny`,
   `examples/d2skill_tiny`, and `examples/trace2skill_tiny_live` are restored
   outside-Cargo paper-specific live harnesses with no-spend preflight modes and
@@ -96,7 +99,8 @@ Current known gaps:
   into `GitArtifact`, restore a selected ref, and delete branch/tag refs.
   EvoSkill still needs run-loop integration for checkpointed program/frontier
   state and paper score metadata.
-- The P5 EvoSkill path is not OfficeQA or SealQA. It lacks the paper datasets,
+- The P5 EvoSkill path is not OfficeQA or SealQA. It can inspect one real
+  OfficeQA sample without live spend, but still lacks the paper datasets,
   paper splits, full frontier loop, feedback-history schedule, held-out test
   reporting, skill-merge evaluation, paper scorers, and ablations.
 - Trace2Skill now has mechanics-smoke coverage for SpreadsheetBench manifest

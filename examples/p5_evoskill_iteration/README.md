@@ -54,11 +54,14 @@ Known deviations:
 - One train/validation slice replaces 1.5 epochs over benchmark splits.
 - Full OfficeQA/SealQA/BrowseComp datasets, skill-merge runs, held-out test
   tables, and cross-task transfer remain deferred.
+- The CLI can inspect one real OfficeQA sample without provider spend, but that
+  sample is validation-only provenance input. It is not a runnable OfficeQA
+  train/validation split.
 
 Commands:
 
 ```bash
 LEAVEN_CODEX_LIVE=1 cargo run -p p5_evoskill_iteration -- --live-codex
 LEAVEN_CODEX_LIVE=1 cargo run -p p5_evoskill_iteration -- --live-codex --run-dir tmp/p5_evoskill_iteration/live-cli-YYYYMMDDTHHMMSSZ
+cargo run -p p5_evoskill_iteration -- --officeqa-case tmp/paper_exact_samples/evoskill/officeqa/officeqa_pro_first_case.json --officeqa-source-text tmp/paper_exact_samples/evoskill/officeqa/treasury_bulletin_1941_01.txt --officeqa-split validation --inspect-cases
 ```
-
