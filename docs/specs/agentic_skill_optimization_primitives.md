@@ -655,21 +655,21 @@ those keys become semantic.
 
 ### 5.4 Retrieval/index surface
 
-`SkillCard` is a derived index:
+`SkillCard` starts as a manifest-derived catalog entry:
 
 ```rust
 pub struct SkillCard {
-    pub name: SkillName,
-    pub description: SkillDescription,
-    pub tags: Vec<String>,
-    pub retrieval_keys: Vec<String>,
-    pub stats: SkillUseStats,
+    name: SkillName,
+    description: SkillDescription,
+    metadata: SkillMetadata,
 }
 ```
 
-The card is not canonical artifact state unless the user explicitly makes a
-registry artifact. The standard `SkillBank` derives it from `SKILL.md` plus
-run/evidence stats.
+The base card is recomputable from `SkillBank` alone and is useful for router
+catalogs that should see names, descriptions, and generic frontmatter without
+reading full skill bodies or files. Utility scores, trigger counts, learned
+retrieval keys, and use stats are not part of the standard `SkillBank` card;
+they require run/evidence state or a deliberate registry artifact overlay.
 
 Open question: whether Leaven should ship a separate `SkillRegistryArtifact`
 for systems like D2Skill that maintain utility, retrieval keys, and eviction
@@ -1450,7 +1450,8 @@ Essential type invariants:
 - `SkillFile.permissions.executable` is preserved as artifact state, not as an
   executable-file semantic promise.
 - `SkillBank` has no duplicate skill names.
-- `SkillCard` is recomputable from `SkillBank` plus evidence/registry stats.
+- `SkillCard` is recomputable from `SkillBank`; utility/retrieval overlays are
+  recomputable from cards plus evidence or registry stats.
 - `CacheIdentity` is derived from normalized content, never from `CandidateId`.
 - skill-use telemetry is optional and provider-derived; absence of telemetry is
   unknown, not false.

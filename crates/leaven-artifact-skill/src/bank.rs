@@ -5,7 +5,9 @@ use std::collections::BTreeMap;
 use leaven_core::{Artifact, ArtifactIdentity, CacheIdentity, ContentAddressed};
 use leaven_kernel::ContentId;
 
-use crate::{SkillBankChange, SkillBankError, SkillFile, SkillFolder, SkillName, SkillPath};
+use crate::{
+    SkillBankChange, SkillBankError, SkillCard, SkillFile, SkillFolder, SkillName, SkillPath,
+};
 
 /// A validated set of Agent Skills.
 #[derive(Clone, Debug, Default, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
@@ -39,6 +41,11 @@ impl SkillBank {
     /// Returns all folders keyed by skill name.
     pub fn folders(&self) -> &BTreeMap<SkillName, SkillFolder> {
         &self.folders
+    }
+
+    /// Returns routing catalog cards for every skill in stable bank order.
+    pub fn cards(&self) -> Vec<SkillCard> {
+        self.folders.values().map(SkillCard::from_folder).collect()
     }
 
     /// Returns one skill folder.

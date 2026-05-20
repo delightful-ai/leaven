@@ -1,6 +1,7 @@
 //! Agent Skills artifact support.
 
 mod bank;
+mod card;
 mod change;
 mod error;
 mod file;
@@ -11,6 +12,7 @@ mod path;
 mod surface;
 
 pub use bank::SkillBank;
+pub use card::SkillCard;
 pub use change::SkillBankChange;
 pub use error::{
     SkillBankError, SkillDescriptionError, SkillNameError, SkillParseError, SkillPathError,
