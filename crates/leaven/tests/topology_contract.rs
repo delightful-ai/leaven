@@ -277,7 +277,10 @@ const EXPECTED_DEPENDENCIES: &[(&str, &[&str])] = &[
             "leaven-workspace",
         ],
     ),
-    ("leaven-evidence", &["leaven-core", "leaven-kernel"]),
+    (
+        "leaven-evidence",
+        &["leaven-artifact-skill", "leaven-core", "leaven-kernel"],
+    ),
     ("leaven-eval", &["leaven-core", "leaven-kernel"]),
     (
         "leaven-gepa",

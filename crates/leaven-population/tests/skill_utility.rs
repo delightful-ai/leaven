@@ -5,7 +5,10 @@ use leaven_artifact_skill::{
     SkillBank, SkillFile, SkillFolder, SkillPath, SkillRouteKey, SkillRoutePool,
     SkillRouteRegistry, SkillRouteSpec,
 };
-use leaven_evidence::{PairedRolloutEvidence, RolloutGroupOutcome};
+use leaven_evidence::{
+    PairedRolloutEvidence, RolloutGroupOutcome, SkillTrajectoryUseEvidence, SkillUseConfidence,
+    SkillUseEvent, SkillUseKind, SkillUseSource,
+};
 use leaven_kernel::FiniteF64;
 use leaven_population::{
     SkillPairedRolloutUtilityInput, SkillPairedRolloutUtilityInputError, SkillPruningCandidate,
@@ -530,6 +533,72 @@ fn paired_rollout_utility_input_extracts_step_credits_from_skill_trajectories() 
     assert_eq!(state.utility(&step_open), finite(0.75));
     assert_eq!(state.utility(&step_pick), finite(0.75));
     assert_eq!(state.utility(&step_fail), finite(-0.25));
+}
+
+#[test]
+fn paired_rollout_utility_input_extracts_step_credits_from_skill_use_evidence() {
+    let task_alpha = skill("task-alpha");
+    let step_success = skill("step-success");
+    let step_fail = skill("step-fail");
+    let rollout = PairedRolloutEvidence::new(
+        "alfworld-put-cool-mug",
+        RolloutGroupOutcome::new(2.try_into().unwrap(), finite(0.5)),
+        RolloutGroupOutcome::new(2.try_into().unwrap(), finite(0.75)),
+    )
+    .unwrap();
+    let success_trajectory = SkillTrajectoryUseEvidence::new(
+        "alfworld-put-cool-mug",
+        "skill-traj-0",
+        finite(1.0),
+        vec![
+            SkillUseEvent::new(
+                step_success.clone(),
+                SkillUseKind::Retrieved,
+                SkillUseSource::Router,
+                SkillUseConfidence::Observed,
+            )
+            .with_step_index(1),
+            SkillUseEvent::new(
+                step_success,
+                SkillUseKind::Triggered,
+                SkillUseSource::RuntimeTelemetry,
+                SkillUseConfidence::Inferred,
+            )
+            .with_step_index(1),
+        ],
+    )
+    .unwrap();
+    let failed_trajectory = SkillTrajectoryUseEvidence::new(
+        "alfworld-put-cool-mug",
+        "skill-traj-1",
+        finite(0.0),
+        vec![
+            SkillUseEvent::new(
+                step_fail,
+                SkillUseKind::Retrieved,
+                SkillUseSource::Router,
+                SkillUseConfidence::Observed,
+            )
+            .with_step_index(2),
+        ],
+    )
+    .unwrap();
+
+    let input = SkillPairedRolloutUtilityInput::from_skill_use_trajectories(
+        rollout,
+        vec![task_alpha],
+        &[success_trajectory, failed_trajectory],
+    )
+    .unwrap();
+
+    assert_eq!(
+        input
+            .step_skill_credits()
+            .iter()
+            .map(|credit| (credit.skill().as_str(), credit.credit()))
+            .collect::<Vec<_>>(),
+        [("step-success", finite(0.5)), ("step-fail", finite(-0.5))]
+    );
 }
 
 #[test]

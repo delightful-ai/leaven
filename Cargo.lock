@@ -2594,6 +2594,7 @@ dependencies = [
 name = "leaven-evidence"
 version = "0.0.0"
 dependencies = [
+ "leaven-artifact-skill",
  "leaven-core",
  "leaven-kernel",
  "ordered-float",

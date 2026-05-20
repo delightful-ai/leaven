@@ -52,6 +52,7 @@ pub mod mixed {
 pub mod pairwise;
 pub mod rollout;
 pub mod scalar;
+pub mod skill_use;
 pub mod score_vector {
     pub enum Direction {
         Higher,
@@ -86,6 +87,10 @@ pub use pairwise::{PairwiseJudgment, PairwiseJudgmentEvidence};
 pub use rollout::{PairedRolloutEvidence, PairedRolloutEvidenceError, RolloutGroupOutcome};
 pub use scalar::{ScalarEvidence, ScalarEvidenceError};
 pub use score_vector::{Direction, RawScoreValue, ScoreAxis, ScorePoint, ScoreVectorEvidence};
+pub use skill_use::{
+    SkillTrajectoryUseEvidence, SkillTrajectoryUseEvidenceError, SkillUseConfidence, SkillUseEvent,
+    SkillUseEvidence, SkillUseKind, SkillUseSource,
+};
 pub use string::StringEvidence;
 pub mod prelude {
     pub use crate::{
@@ -99,6 +104,8 @@ pub mod prelude {
         CasewiseEvidence, CommandEvidence, CommandRecord, DiffEvidence, Direction, JsonEvidence,
         ListwiseRankingEvidence, MixedEvidence, OutputRecord, PairedRolloutEvidence,
         PairwiseJudgmentEvidence, RolloutGroupOutcome, ScalarEvidence, ScalarEvidenceError,
-        ScoreVectorEvidence, StringEvidence,
+        ScoreVectorEvidence, SkillTrajectoryUseEvidence, SkillTrajectoryUseEvidenceError,
+        SkillUseConfidence, SkillUseEvent, SkillUseEvidence, SkillUseKind, SkillUseSource,
+        StringEvidence,
     };
 }

@@ -1,5 +1,5 @@
 ## Boundary
-This crate owns reusable evidence value shapes: scalar scores, pairwise judgments, paired rollout rewards, casewise outcomes, command/trajectory records, analyst fan-out records, patch merge-tree records, feedback, attribution, and placeholder shapes for diff/json/list/vector/string evidence.
+This crate owns reusable evidence value shapes: scalar scores, pairwise judgments, paired rollout rewards, casewise outcomes, command/trajectory records, skill-use telemetry, analyst fan-out records, patch merge-tree records, feedback, attribution, and placeholder shapes for diff/json/list/vector/string evidence.
 
 Evidence here is data a stage or evaluator can produce and another component can interpret. It is not a store, scorer, population, preference relation, graph event, or evaluator registry.
 
@@ -9,6 +9,9 @@ Evidence here is data a stage or evaluator can produce and another component can
 - Put baseline-versus-treatment rollout group rewards in `src/rollout.rs`;
   skill-credit assignment and utility state updates belong in
   `leaven-population`.
+- Put skill-use telemetry events and trajectory-level skill-use evidence in
+  `src/skill_use.rs`; transcript parsers, route-key extraction, and utility
+  updates belong outside this crate.
 - Put per-case evidence containers in `src/casewise.rs`; dataset split policy belongs in `leaven-eval`, and engine case-set resolution belongs in `leaven-engine`.
 - Put caller-keyed attribution in `AttributableEvidence`; do not make attribution keys surface-only, path-only, or GEPA-only.
 - Store references and persistence capabilities belong in `leaven-store-*`, not in evidence values.
@@ -26,6 +29,11 @@ Evidence here is data a stage or evaluator can produce and another component can
   transcript/blob reference, command records, and parsed/blob-backed analyst
   records. It is not a scheduler, ReAct runner, scorer, or Trace2Skill merge
   policy.
+- `SkillTrajectoryUseEvidence` is the reusable one-trajectory skill telemetry
+  envelope: upstream task id, trajectory id, finite reward, and ordered
+  `SkillUseEvent` records with skill identity, kind, source, confidence, step
+  index, and optional supporting output. It is not a router, transcript parser,
+  utility updater, or D2Skill pool classifier.
 - `AgentTrajectoryCorpusEvidence` is the checkpointable many-trajectory value:
   a caller-declared task manifest plus appended `AgentTrajectoryEvidence`
   records with completed/pending task projection. Persist it through generic
@@ -58,6 +66,10 @@ Evidence here is data a stage or evaluator can produce and another component can
   treatment group for the same upstream task. It records non-empty group sizes,
   finite mean rewards, and the treatment-minus-baseline gap; it does not know
   what changed in the treatment or how credit should update population state.
+- Use `SkillTrajectoryUseEvidence` when a runner, parser, or scorer can preserve
+  which validated skills were retrieved, injected, or triggered during one
+  rewarded trajectory. Unknown telemetry stays absent; do not turn absence into
+  a false "not used" event.
 - Use `OutputRecord::BlobRef` for large stdout/stderr, transcripts, and parsed
   analyst payloads; `OutputRecord::Inline` is bounded display evidence.
 - Use `AgentTrajectoryCorpusEvidence` when a paper or runner must resume over a
@@ -86,8 +98,9 @@ Evidence here is data a stage or evaluator can produce and another component can
 
 ## Proof Anchors
 - `cargo nextest run -p leaven-evidence` proves scalar, pairwise, paired
-  rollout, casewise, command/trajectory, analyst fan-out, patch merge-tree, and attribution
-  behavior. It does not currently prove every root-re-exported evidence name.
+  rollout, casewise, command/trajectory, skill-use telemetry, analyst fan-out,
+  patch merge-tree, and attribution behavior. It does not currently prove every
+  root-re-exported evidence name.
 - `cargo nextest run -p leaven-preference --test scalar` proves scalar preference callers rely on `ScalarEvidence`'s finite-score contract.
 - `cargo nextest run -p leaven-population --test tournament` proves pairwise evidence feeds fitted population state outside this crate.
 - Before adding an evidence name to `leaven-std`, add a focused test in this
