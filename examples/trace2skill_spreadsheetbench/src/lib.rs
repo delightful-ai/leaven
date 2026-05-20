@@ -24,14 +24,14 @@ use leaven_kernel::{
 use serde::Deserialize;
 
 pub use patch_bridge::{
-    Trace2SkillPatchError, Trace2SkillPatchLowering, Trace2SkillPatchLoweringInput,
-    apply_trace2skill_json_patch, lower_trace2skill_json_patch,
+    apply_trace2skill_json_patch, lower_trace2skill_json_patch, Trace2SkillPatchError,
+    Trace2SkillPatchLowering, Trace2SkillPatchLoweringInput,
 };
 pub use patch_replay::{
+    replay_trace2skill_json_patch_merge, replay_trace2skill_saved_json_patch_outputs,
     Trace2SkillJsonPatchArtifact, Trace2SkillJsonPatchMergeBatch, Trace2SkillJsonPatchMergeInput,
     Trace2SkillJsonPatchMergeLevel, Trace2SkillJsonPatchReplay, Trace2SkillJsonPatchReplayInput,
     Trace2SkillPatchReplayError, Trace2SkillSavedJsonPatchReplayInput,
-    replay_trace2skill_json_patch_merge, replay_trace2skill_saved_json_patch_outputs,
 };
 
 const VERIFIED_400_VERSION: &str = "trace2skill-spreadsheetbench-verified-400-v1";
@@ -67,6 +67,57 @@ pub struct SpreadsheetBenchAnswerSpec {
     pub answer_position: String,
     /// Optional sheet for the expected output range.
     pub answer_sheet: Option<String>,
+}
+
+/// Files needed to render or inspect one exact `SpreadsheetBench` case.
+#[derive(Clone, Copy, Debug)]
+pub struct Trace2SkillOneCaseInput<'a> {
+    /// One-row `SpreadsheetBench` case JSON.
+    pub case_file: &'a Path,
+    /// Directory containing prompt and workbooks for this one case.
+    pub spreadsheet_dir: &'a Path,
+    /// Upstream spreadsheet-agent system prompt.
+    pub system_prompt_file: &'a Path,
+    /// Released upstream spreadsheet skill.
+    pub released_skill_file: &'a Path,
+}
+
+/// Metadata for one file consumed by a one-case preflight.
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize)]
+pub struct Trace2SkillFileArtifact {
+    /// File path as provided to the preflight.
+    pub path: PathBuf,
+    /// File size in bytes.
+    pub bytes: u64,
+}
+
+/// No-spend inspection of one materialized exact `SpreadsheetBench` case.
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize)]
+pub struct Trace2SkillOneCaseInspection {
+    /// Upstream `SpreadsheetBench` case id.
+    pub case_id: String,
+    /// Natural-language spreadsheet instruction.
+    pub instruction: String,
+    /// Upstream instruction taxonomy.
+    pub instruction_type: String,
+    /// Optional source range.
+    pub data_position: Option<String>,
+    /// Expected answer sheet.
+    pub answer_sheet: Option<String>,
+    /// Expected answer range.
+    pub answer_position: String,
+    /// Input workbook artifact.
+    pub init_workbook: Trace2SkillFileArtifact,
+    /// Golden workbook artifact.
+    pub golden_workbook: Trace2SkillFileArtifact,
+    /// Upstream prompt text artifact for this case.
+    pub prompt: Trace2SkillFileArtifact,
+    /// Upstream system prompt artifact.
+    pub system_prompt: Trace2SkillFileArtifact,
+    /// Released upstream skill artifact.
+    pub released_skill: Trace2SkillFileArtifact,
+    /// Deterministic output path a one-case run would write.
+    pub output_workbook: PathBuf,
 }
 
 /// Loads the official 400-row `Trace2Skill` `SpreadsheetBench`-Verified manifest.
@@ -123,6 +174,68 @@ pub fn load_verified_400_manifest(
         dataset,
         split_manifest,
     })
+}
+
+/// Inspects one exact `SpreadsheetBench` case without executing a spreadsheet solver.
+pub fn inspect_trace2skill_one_case(
+    input: Trace2SkillOneCaseInput<'_>,
+) -> Result<Trace2SkillOneCaseInspection, Trace2SkillManifestError> {
+    let row = load_spreadsheet_row(input.case_file)?;
+    let case_id = row.id.to_source_id();
+    Ok(Trace2SkillOneCaseInspection {
+        instruction: row.instruction,
+        instruction_type: row.instruction_type,
+        data_position: row.data_position,
+        answer_sheet: row.answer_sheet,
+        answer_position: row.answer_position,
+        init_workbook: file_artifact(
+            &input.spreadsheet_dir.join(format!("1_{case_id}_init.xlsx")),
+        )?,
+        golden_workbook: file_artifact(
+            &input
+                .spreadsheet_dir
+                .join(format!("1_{case_id}_golden.xlsx")),
+        )?,
+        prompt: file_artifact(&input.spreadsheet_dir.join("prompt.txt"))?,
+        system_prompt: file_artifact(input.system_prompt_file)?,
+        released_skill: file_artifact(input.released_skill_file)?,
+        output_workbook: input.spreadsheet_dir.join(format!("{case_id}_output.xlsx")),
+        case_id,
+    })
+}
+
+/// Renders the one-case `Trace2Skill` spreadsheet prompt without executing it.
+pub fn render_trace2skill_one_case_prompt(
+    input: Trace2SkillOneCaseInput<'_>,
+) -> Result<String, Trace2SkillManifestError> {
+    let inspection = inspect_trace2skill_one_case(input)?;
+    let system_prompt = fs::read_to_string(input.system_prompt_file)?;
+    let released_skill = fs::read_to_string(input.released_skill_file)?;
+    let upstream_prompt = fs::read_to_string(input.spreadsheet_dir.join("prompt.txt"))?;
+    let answer_sheet = inspection.answer_sheet.as_deref().unwrap_or("");
+    let data_position = inspection.data_position.as_deref().unwrap_or("");
+    Ok(format!(
+        "# Trace2Skill SpreadsheetBench Case {case_id}\n\n\
+         ## System Prompt\n{system_prompt}\n\n\
+         ## Released Skill\n{released_skill}\n\n\
+         ## Dataset Instruction\n{instruction}\n\n\
+         ## Upstream prompt.txt\n{upstream_prompt}\n\n\
+         ## Files\n\
+         - working_directory: {working_directory}\n\
+         - spreadsheet_path: {init_workbook}\n\
+         - output_path: {output_workbook}\n\
+         - golden: {golden_workbook}\n\
+         - answer_sheet: {answer_sheet}\n\
+         - answer_position: {answer_position}\n\
+         - data_position: {data_position}\n",
+        case_id = inspection.case_id,
+        instruction = inspection.instruction,
+        working_directory = input.spreadsheet_dir.display(),
+        init_workbook = inspection.init_workbook.path.display(),
+        output_workbook = inspection.output_workbook.display(),
+        golden_workbook = inspection.golden_workbook.path.display(),
+        answer_position = inspection.answer_position,
+    ))
 }
 
 /// Upstream run artifacts used to build a Leaven trajectory corpus.
@@ -258,6 +371,23 @@ fn source_id_by_case(
         by_case.insert(*case_id, source_id.clone());
     }
     Ok(by_case)
+}
+
+fn load_spreadsheet_row(path: &Path) -> Result<SpreadsheetBenchRow, Trace2SkillManifestError> {
+    let bytes = fs::read(path)?;
+    Ok(serde_json::from_slice(&bytes)?)
+}
+
+fn file_artifact(path: &Path) -> Result<Trace2SkillFileArtifact, Trace2SkillManifestError> {
+    if !path.is_file() {
+        return Err(Trace2SkillManifestError::MissingArtifact {
+            path: path.to_path_buf(),
+        });
+    }
+    Ok(Trace2SkillFileArtifact {
+        path: path.to_path_buf(),
+        bytes: fs::metadata(path)?.len(),
+    })
 }
 
 fn artifact_record(

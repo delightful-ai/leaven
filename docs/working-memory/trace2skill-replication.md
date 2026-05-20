@@ -188,6 +188,21 @@ The checked-out upstream release includes:
   `translated_final_patch.json` when present because upstream uses that artifact
   after translation. It is strict: fuzzy pre-translation patches still fail with
   the artifact path rather than being silently counted as applied.
+- `examples/trace2skill_spreadsheetbench` now owns a one-case no-spend
+  inspection/rendering preflight for the materialized SpreadsheetBench-Verified
+  case `13-1`. The library reports the exact case metadata, init workbook,
+  golden workbook, prompt, upstream system prompt, released combined `xlsx`
+  skill, and deterministic output path; the binary exposes this as
+  `--inspect-one-case` JSON and `--render-one-case-prompt` markdown. Defaults
+  target the synchronized main-Leaven `tmp/` artifacts:
+  `tmp/paper_exact_samples/trace2skill/spreadsheetbench_verified/dataset_first_case.json`,
+  `tmp/paper_exact_samples/trace2skill/spreadsheetbench_verified/13-1`,
+  `tmp/repros/trace2skill-upstream/spreadsheet_agent/system_prompt/cli_skill_preloaded_full_system_v1.txt`,
+  and
+  `tmp/repros/trace2skill-upstream/released_skills/trace2skill-xlsx-35B-combined/SKILL.md`.
+  This creates a repo-owned input surface for the next one-sample live attempt;
+  it does not solve the workbook, invoke a model, score an answer, or generate
+  Trace2Skill trajectories.
 - `examples/trace2skill_tiny_live` now exists in main Leaven as an
   outside-Cargo tiny live harness for the paper's causal loop: trajectory
   generation with a frozen initial skill, independent error/success analysts,
@@ -281,6 +296,32 @@ Verification:
   clippy -p trace2skill_spreadsheetbench --all-targets -- -D warnings`, and
   `cargo test -p leaven --test topology_contract` passed on 2026-05-20 for the
   saved-output loader slice.
+- `cargo test -p trace2skill_spreadsheetbench --test one_case` passed on
+  2026-05-20 for exact one-case artifact inspection and prompt rendering.
+- `cargo test -p trace2skill_spreadsheetbench --test cli` passed on
+  2026-05-20 for the binary `--inspect-one-case` JSON and
+  `--render-one-case-prompt` markdown paths over test fixtures.
+- `rustfmt --check --config skip_children=true
+  examples/trace2skill_spreadsheetbench/src/main.rs
+  examples/trace2skill_spreadsheetbench/src/lib.rs
+  examples/trace2skill_spreadsheetbench/tests/one_case.rs
+  examples/trace2skill_spreadsheetbench/tests/cli.rs` passed on 2026-05-20.
+- `cargo test -p trace2skill_spreadsheetbench` passed on 2026-05-20 after the
+  one-case preflight slice, including manifest, run-artifact, patch bridge,
+  patch replay, one-case, and CLI tests.
+- `cargo clippy -p trace2skill_spreadsheetbench --all-targets -- -D warnings`
+  passed on 2026-05-20 after the one-case preflight slice.
+- `cargo nextest run -p trace2skill_spreadsheetbench` passed on 2026-05-20
+  with 12/12 tests.
+- `cargo run -p trace2skill_spreadsheetbench -- --inspect-one-case` passed on
+  2026-05-20 against the synchronized main-Leaven `tmp/` sample and reported
+  case `13-1`, init workbook `12876` bytes, golden workbook `14698` bytes,
+  prompt `647` bytes, system prompt `4971` bytes, released skill `22255`
+  bytes, and an output path ending in
+  `tmp/paper_exact_samples/trace2skill/spreadsheetbench_verified/13-1/13-1_output.xlsx`.
+- `cargo run -p trace2skill_spreadsheetbench -- --render-one-case-prompt`
+  passed on 2026-05-20 against the same artifacts and rendered the exact
+  one-case prompt markdown without modifying the workbook.
 - `bash examples/trace2skill_tiny_live/scripts/run_tiny_live.sh --preflight`
   passed on 2026-05-20 after restoring the tiny live harness into main Leaven
   and switching its workspace guard away from the old `leaven-papers` checkout;
@@ -308,6 +349,10 @@ Leaven-owned remaining primitives before faithful Trace2Skill replication:
   locally yet. The loader is tested against upstream-shaped fixtures; the next
   proof needs either a no-spend/small upstream output directory or live-run
   capture of translated exact map/merge patches plus explicit merge decisions;
+- the exact case `13-1` now has a repo-owned no-spend prompt/input surface, but
+  no live spreadsheet agent has modified `13-1_output.xlsx`, no workbook-level
+  scorer has compared against `1_13-1_golden.xlsx`, and no generated trajectory
+  has been fed into the Stage 2 analyst fan-out;
 - result matrix/reporting for model scale transfer, OOD WikiTQ, DocVQA,
   DAPO/AIME, ablations, and sequential/retrieval baselines.
 
@@ -322,8 +367,10 @@ External/spend blockers:
 
 ## Next Action
 
-Generate or import an actual no-spend/small upstream `--save-intermediates`
-directory and feed it through the saved-output loader. If running upstream live,
-also capture translated exact map/merge patches plus accepted/discarded merge
-decisions, because the default saved directory shape loses that decision
-provenance.
+Use the one-case prompt surface to run the smallest approved live spreadsheet
+attempt for case `13-1`, writing `13-1_output.xlsx`, durable stdout/stderr/logs,
+and an answer comparison against `1_13-1_golden.xlsx`. After that, generate or
+import an actual no-spend/small upstream `--save-intermediates` directory and
+feed it through the saved-output loader. If running upstream live, also capture
+translated exact map/merge patches plus accepted/discarded merge decisions,
+because the default saved directory shape loses that decision provenance.
