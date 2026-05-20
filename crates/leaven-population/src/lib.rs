@@ -8,6 +8,7 @@ mod novelty;
 mod pareto;
 mod pareto_frontier;
 mod plackett_luce;
+mod skill_utility;
 mod top_k_frontier;
 mod tournament;
 mod tournament_config;
@@ -20,6 +21,10 @@ pub use novelty::NoveltyPopulation;
 pub use pareto::LenientParetoFrontier;
 pub use pareto_frontier::{ParetoFrontier, ParetoFrontierBuilder, PartitionFilter};
 pub use plackett_luce::PlackettLuceFit;
+pub use skill_utility::{
+    SkillUseStats, SkillUtilitySmoothing, SkillUtilitySmoothingError, SkillUtilityState,
+    SkillUtilityTransfer, SkillUtilityUpdate,
+};
 pub use top_k_frontier::{TopKFrontier, TopKParentSelectionPolicy, TopKParentSelector};
 pub use tournament::{BradleyTerryFit, TournamentPopulation};
 pub use tournament_config::TournamentConfig;
@@ -28,7 +33,8 @@ pub mod prelude {
     pub use crate::{
         BeamPopulation, BradleyTerryFit, KeepBest, LenientParetoFrontier, MapElites,
         NicheDescriptor, NoPopulation, NoveltyPopulation, ParetoFrontier, ParetoFrontierBuilder,
-        PartitionFilter, PlackettLuceFit, TopKFrontier, TopKParentSelectionPolicy,
-        TopKParentSelector, TournamentPopulation,
+        PartitionFilter, PlackettLuceFit, SkillUseStats, SkillUtilitySmoothing,
+        SkillUtilitySmoothingError, SkillUtilityState, SkillUtilityTransfer, SkillUtilityUpdate,
+        TopKFrontier, TopKParentSelectionPolicy, TopKParentSelector, TournamentPopulation,
     };
 }

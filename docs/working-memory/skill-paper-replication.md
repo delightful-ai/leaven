@@ -74,10 +74,13 @@ Current useful substrate:
   explicit live Codex opt-ins. They preserve tiny causal loop shapes and
   generated artifacts, but they are not full paper replications.
 - `leaven-population` has `ParetoFrontier`, `TopKFrontier`, and deterministic
-  `TopKParentSelector` state for best/round-robin parent selection; EvoSkill
-  P5 now checkpoints frontier/parent/selector state, but full paper replication
-  still needs git-program run-loop integration and dossier resolution of the
-  paper/code selector drift.
+  `TopKParentSelector` state for best/round-robin parent selection, plus
+  `SkillUtilityState` for checkpointable skill utility/use bookkeeping:
+  retrieval counts, trigger counts, finite EMA utility updates, explicit rename
+  transfer, and explicit removal. EvoSkill P5 now checkpoints
+  frontier/parent/selector state, but full paper replication still needs
+  git-program run-loop integration and dossier resolution of the paper/code
+  selector drift.
 
 Current known gaps:
 
@@ -439,7 +442,10 @@ Leaven primitive blockers:
   is a causal-loop proxy with documented deviations, not GAIA/HLE replication.
 - behavior-aligned skill router training/evaluation substrate;
 - skill registry with routing goals, utility table, trigger stats, and
-  skill-level failure attribution;
+  skill-level failure attribution; `SkillUtilityState` now covers the base
+  utility table and trigger/retrieval counters, but not router training,
+  target selection, failure attribution, or candidate-visible registry
+  materialization;
 - write-path that targets one skill, rewrites files, validates, retries, and
   rolls back;
 - multi-round retry execution with per-round feedback and learned-library state;
@@ -495,7 +501,9 @@ Leaven primitive blockers:
   not ALFWorld/WebShop/GRPO replication.
 - dual-pool skill registry for task and step skills;
 - paired rollout evaluator that records baseline-vs-skill deltas;
-- utility/EMA/UCB retrieval and pruning state;
+- utility/EMA/UCB retrieval and pruning state; `SkillUtilityState` now covers
+  EMA utility plus retrieval/trigger counters, but not similarity keys, UCB
+  ranking, top-k injection, or pruning thresholds;
 - trajectory-level credit assignment tied to retrieved skills;
 - RL/environment adapter boundary that can record Leaven evidence without
   turning Leaven into the RL framework.
@@ -594,8 +602,9 @@ Start with these generic primitives as failures expose them:
    disclosure views plus token-cost accounting.
 8. Route equivalence and trigger evidence: simulated route oracle plus real
    provider/runtime trigger parser.
-9. Utility/retrieval/pruning substrate: embedding keys, similarity thresholds,
-   EMA utility, UCB bonus, top-k injection, and eviction.
+9. Utility/retrieval/pruning substrate: `SkillUtilityState` now covers finite
+   EMA utility plus retrieval/trigger counters. Embedding keys, similarity
+   thresholds, UCB bonus, top-k injection, and eviction remain.
 10. Paired rollout evidence: baseline-vs-skill groups, hindsight credit, and
     per-retrieved-skill utility update inputs.
 

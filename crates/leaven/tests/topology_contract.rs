@@ -330,6 +330,7 @@ const EXPECTED_DEPENDENCIES: &[(&str, &[&str])] = &[
     (
         "leaven-population",
         &[
+            "leaven-artifact-skill",
             "leaven-core",
             "leaven-engine",
             "leaven-evidence",

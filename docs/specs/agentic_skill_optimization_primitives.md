@@ -1216,10 +1216,16 @@ Start with population-owned utility state:
 
 ```rust
 pub struct SkillUtilityState {
-    pub utilities: BTreeMap<SkillName, SkillUtility>,
-    pub observations: BTreeMap<SkillName, SkillUtilityStats>,
+    utilities: BTreeMap<SkillName, FiniteF64>,
+    stats: BTreeMap<SkillName, SkillUseStats>,
 }
 ```
+
+The first implemented state is intentionally small: finite signed EMA utility,
+retrieval count, trigger count, utility-update count, explicit rename transfer,
+and explicit removal. It is enough to stop examples from inventing their own
+utility tables while still leaving embeddings, UCB bonuses, top-k injection,
+and paper thresholds to later retrieval/selector layers.
 
 Promote utility state into an artifact only when changing that utility state
 changes the candidate being evaluated. Examples:
