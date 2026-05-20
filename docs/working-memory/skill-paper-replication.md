@@ -229,6 +229,9 @@ Leaven primitive blockers:
   patch-plan guardrail: existing-file checks, create-overwrite refusal,
   positive support counts, and same-file range conflict detection. This is not
   the hierarchical merge policy itself.
+- `leaven-eval::RowOrderSplitBuilder` now covers source/paper manifests that
+  define split membership by ordered row ranges, including Trace2Skill's
+  SpreadsheetBench `0:200` evolving/training and `200:400` held-out split.
 - many-trace evidence corpus with success/failure labels and full trajectory
   access;
 - parallel analyst dispatch that can checkpoint hundreds of independent

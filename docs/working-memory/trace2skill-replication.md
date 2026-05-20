@@ -108,6 +108,11 @@ The checked-out upstream release includes:
   construction from caller-supplied strata and role counts. That covers lowered
   representation for Trace2Skill's `0:200` evolving/training and `200:400`
   held-out split once the upstream row-order manifest is lowered.
+- `leaven-eval::RowOrderSplitBuilder` now owns the row-order split lowering
+  needed for Trace2Skill's SpreadsheetBench release: pass the ordered 400
+  upstream case IDs, assign `Train` to `0..200` and `Test` to `200..400`, and
+  get a disjoint `DatasetSplits` with the paper/source row-order semantics
+  preserved. This does not parse SpreadsheetBench JSON or run the benchmark.
 - This slice adds `leaven-agentic-skill::SkillPatchPlan`, a paper-neutral
   mechanical guardrail for agent-authored skill patch plans. It validates
   existing-file modifications/deletions, create-file overwrite refusal,
@@ -152,6 +157,6 @@ External/spend blockers:
 ## Next Action
 
 Use the upstream SpreadsheetBench release for a no-spend lowering pass:
-materialize the 400-row dataset as Leaven cases, build exact row-order
-evolving/held-out splits, and define the run artifact schema for trace records
-and patch-plan records without launching model/GPU work.
+materialize the 400-row dataset as Leaven cases with upstream IDs and metadata,
+then define the run artifact schema for trace records and patch-plan records
+without launching model/GPU work.

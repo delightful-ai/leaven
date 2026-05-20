@@ -7,7 +7,8 @@ It does not execute evaluations. Evaluator traits, registries, trust checks, cas
 - `src/dataset.rs` owns durable case collections and membership fingerprints.
 - `src/split.rs` owns partition roles, overlap policy, known-case validation,
   exact stratified split construction over caller-supplied strata, split
-  fingerprinting, and `CaseSetVersion` attachment.
+  construction over caller-supplied row-order ranges, split fingerprinting, and
+  `CaseSetVersion` attachment.
 - `src/sampler.rs` owns deterministic lowered case sampling state over known
   case IDs. It may retain cursor/RNG-like state for checkpointing, but it must
   not call evaluators or inspect artifacts.
@@ -38,6 +39,11 @@ It does not execute evaluations. Evaluator traits, registries, trust checks, cas
   role membership from caller-declared strata and exact counts. It does not
   discover strata, certify paper category provenance, choose benchmark counts,
   or make `SplitRole::Test` optimizer-visible.
+- `RowOrderSplitBuilder` constructs disjoint split membership from a
+  caller-declared ordered case manifest and half-open row ranges. It exists for
+  upstreams that define splits as row slices, such as Trace2Skill's
+  SpreadsheetBench `0:200` / `200:400` split. It does not parse dataset files,
+  infer semantic splits, or execute benchmark runners.
 
 ## Decision Cards
 - when: adding stable task/case inputs or split semantics

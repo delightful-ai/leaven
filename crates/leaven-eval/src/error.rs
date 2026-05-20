@@ -39,6 +39,18 @@ pub enum DatasetSplitsError {
     /// A split constructor was asked to build the same role more than once.
     #[error("duplicate split role: {0:?}")]
     DuplicateSplitRole(SplitRole),
+    /// A row-order split range is outside the ordered case manifest.
+    #[error("row-order split range {start}..{end} for {role:?} exceeds manifest length {len}")]
+    InvalidRowRange {
+        /// Split role being constructed.
+        role: SplitRole,
+        /// Inclusive start index.
+        start: usize,
+        /// Exclusive end index.
+        end: usize,
+        /// Ordered manifest length.
+        len: usize,
+    },
     /// A stratified split requested more cases than the strata contain.
     #[error("stratified split requested {requested} cases but only {available} are available")]
     InsufficientStratifiedCases {

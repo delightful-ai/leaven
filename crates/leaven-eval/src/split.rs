@@ -1,6 +1,7 @@
 //! Dataset split roles and membership.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::ops::Range;
 
 use leaven_core::{CaseSetVersion, PartitionId};
 use leaven_kernel::{CaseId, Fingerprint, FingerprintBuilder};
@@ -156,6 +157,63 @@ impl DatasetSplits {
 pub struct StratifiedSplitBuilder {
     strata: BTreeMap<SmolStr, Vec<CaseId>>,
     role_counts: Vec<(SplitRole, usize)>,
+}
+
+/// Deterministic split construction over an upstream row-order manifest.
+#[derive(Clone, Debug)]
+pub struct RowOrderSplitBuilder {
+    ordered_cases: Vec<CaseId>,
+    role_ranges: Vec<(SplitRole, Range<usize>)>,
+}
+
+impl RowOrderSplitBuilder {
+    /// Builds a split builder from a trusted ordered case manifest.
+    #[must_use]
+    pub fn new(ordered_cases: Vec<CaseId>) -> Self {
+        Self {
+            ordered_cases,
+            role_ranges: Vec::new(),
+        }
+    }
+
+    /// Assigns a half-open row range to one split role.
+    #[must_use]
+    pub fn role_range(mut self, role: SplitRole, range: Range<usize>) -> Self {
+        self.role_ranges.push((role, range));
+        self
+    }
+
+    /// Builds disjoint split membership from the row ranges.
+    pub fn build(self, version: CaseSetVersion) -> Result<DatasetSplits, DatasetSplitsError> {
+        let known_cases = self.ordered_cases.iter().copied().collect::<BTreeSet<_>>();
+        let mut roles = BTreeMap::new();
+        let mut cases = BTreeMap::new();
+        for (role, range) in self.role_ranges {
+            if range.start > range.end || range.end > self.ordered_cases.len() {
+                return Err(DatasetSplitsError::InvalidRowRange {
+                    role,
+                    start: range.start,
+                    end: range.end,
+                    len: self.ordered_cases.len(),
+                });
+            }
+            let partition = role.partition_id();
+            if roles.contains_key(&partition) {
+                return Err(DatasetSplitsError::DuplicateSplitRole(role));
+            }
+            let ids = self.ordered_cases[range].to_vec();
+            roles.insert(partition.clone(), role);
+            cases.insert(partition, ids);
+        }
+
+        DatasetSplits::new(
+            version,
+            roles,
+            cases,
+            &known_cases,
+            SplitPolicy::DisjointRequired,
+        )
+    }
 }
 
 impl StratifiedSplitBuilder {
