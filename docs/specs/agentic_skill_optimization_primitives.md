@@ -1007,17 +1007,14 @@ Standard evidence should be able to preserve:
 - attribution records
 - cost
 
-Proposed standard shape for agent-skill evaluations:
+Implemented narrow capability today:
 
 ```rust
-pub struct AgentSkillEvidence {
-    pub outcome: CaseOutcome,
-    pub scores: ScoreVector,
-    pub transcript: TraceRef,
-    pub scorer_output: ScorerOutput,
+pub struct SkillTrajectoryUseEvidence {
+    pub task_id: String,
+    pub trajectory_id: String,
+    pub reward: FiniteF64,
     pub skill_events: Vec<SkillUseEvent>,
-    pub failures: Vec<FailureRecord>,
-    pub attributions: AttributionSet,
 }
 
 pub struct SkillUseEvent {
@@ -1025,32 +1022,38 @@ pub struct SkillUseEvent {
     pub kind: SkillUseKind,
     pub source: SkillUseSource,
     pub confidence: SkillUseConfidence,
-    pub evidence: Option<TraceRef>,
+    pub step_index: Option<u64>,
+    pub evidence: Option<OutputRecord>,
 }
 
 pub enum SkillUseKind {
-    Available,
     Retrieved,
-    Loaded,
-    ReferencedFile { path: SkillPath },
-    RanScript { path: SkillPath },
-    CitedOrParaphrased,
+    Injected,
+    Triggered,
 }
 
 pub enum SkillUseSource {
+    Router,
     RuntimeTelemetry,
     TranscriptParser,
-    EvaluatorInstrumentation,
-    PaperSpecificInference,
+    Scorer,
+    Manual,
+    Custom(String),
 }
 
 pub enum SkillUseConfidence {
     Observed,
     Inferred,
+    Unknown,
 }
 ```
 
-Expected attribution impls:
+This deliberately stops short of a full `AgentSkillEvidence` enum. Outcome
+vectors, scorer payloads, active-skill context, cost, file-read telemetry, and
+attribution records remain caller evidence or future capability traits until a
+paper forces the generic shape.
+
+Future attribution impls when the fuller shape lands:
 
 ```rust
 impl AttributableEvidence<CaseId> for AgentSkillEvidence
@@ -1209,20 +1212,21 @@ The first implemented state is intentionally small: finite signed EMA utility,
 retrieval count, trigger count, utility-update count, explicit rename transfer,
 explicit removal, deterministic ranking over caller-provided relevance scores
 with utility plus UCB-style exploration, and D2Skill-style application of
-paired rollout task gaps plus caller-supplied step credits. It is enough to
-stop examples from inventing their own utility tables, top-k score
+paired rollout task gaps plus caller-supplied step credits or generic
+`SkillTrajectoryUseEvidence`. It is enough to stop examples from inventing
+their own utility tables, top-k score
 combination, and paired rollout utility update loops. It also covers D2Skill's
 two-stage retrieval mechanics when a runner supplies a `SkillRouteRegistry`,
 active route pool, route-key similarities, normalized relevance scores,
 similarity threshold, top-m, top-k, and ranking weights. It covers the D2Skill
 `Y_i - baseline_mean` step credit equation when a runner supplies
-`SkillStepTrajectoryOutcome`s, and D2Skill-style utility/UCB pruning plans when
-a caller supplies one active skill pool plus capacity/current-step/protected
-window values. `SkillRouteRegistry` covers explicit pool/key membership over a
-validated bank. Embeddings, route-key extraction, transcript/env extraction,
-skill-bank mutation, injection formatting, router training, and paper cadence
-or threshold selection remain for later retrieval/selector or paper-runner
-layers.
+`SkillStepTrajectoryOutcome`s or `SkillTrajectoryUseEvidence`, and D2Skill-style
+utility/UCB pruning plans when a caller supplies one active skill pool plus
+capacity/current-step/protected window values. `SkillRouteRegistry` covers
+explicit pool/key membership over a validated bank. Embeddings, route-key
+extraction, transcript/env extraction, skill-bank mutation, injection
+formatting, router training, and paper cadence or threshold selection remain
+for later retrieval/selector or paper-runner layers.
 
 Promote utility state into an artifact only when changing that utility state
 changes the candidate being evaluated. Examples:
@@ -1764,12 +1768,14 @@ Implementation status:
   `SkillTwoStageRetriever` now covers D2Skill's pool-scoped similarity
   threshold/top-m plus utility/UCB top-k retrieval mechanics over
   caller-computed similarities. Step-skill utility credits can now be derived
-  from runner-provided skill trajectory outcomes, and utility-guided pruning can
-  be planned from stored utility/retrieval stats.
+  from runner-provided skill trajectory outcomes or generic
+  `SkillTrajectoryUseEvidence`, and utility-guided pruning can be planned from
+  stored utility/retrieval stats.
 - Coupling to RL training is outside the first Leaven reproduction path.
 - The remaining dual-granularity gap is not registry or retrieval mechanics; it
   is D2Skill's real key construction from tasks/observations, embedding model
-  execution, injection formatting, and RL/environment coupling.
+  execution, transcript/env event extraction, injection formatting, and
+  RL/environment coupling.
 
 ### 14.5 SkillReducer
 

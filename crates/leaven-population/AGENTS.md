@@ -17,8 +17,9 @@ Population code may consume evidence and emit `PopulationEvent`s. It must not mu
   plan D2Skill-style two-stage retrieval over caller-supplied route registries
   and similarity scores, and map paired rollout reward gaps onto skill utility
   credits. It may also plan utility-guided pruning for a caller-supplied active
-  skill pool, but embeddings, route-key extraction, trajectory parsing,
-  artifact mutation, and router training stay outside it.
+  skill pool, and it may consume generic `SkillTrajectoryUseEvidence` once a
+  runner/parser has already emitted it. Embeddings, route-key extraction,
+  trajectory parsing, artifact mutation, and router training stay outside it.
 - Put reusable population configuration in this crate when it can serve more than one optimizer. Put optimizer-specific strategy state in the optimizer crate.
 
 ## Current Public-Maturity Split
@@ -54,8 +55,9 @@ Population code may consume evidence and emit `PopulationEvent`s. It must not mu
   and D2Skill-style top-m/top-k retrieval configuration. Use
   `SkillPairedRolloutUtilityInput` when a caller has `PairedRolloutEvidence`,
   retrieved task skills, and either trajectory-level step credits or
-  runner-provided `SkillStepTrajectoryOutcome`s and needs the D2Skill-style
-  task gap and `Y_i - baseline_mean` step credit equation applied through
+  runner-provided `SkillStepTrajectoryOutcome`s / `SkillTrajectoryUseEvidence`
+  and needs the D2Skill-style task gap and `Y_i - baseline_mean` step credit
+  equation applied through
   `SkillUtilityState`. Use `SkillUtilityPruner` when a caller has one active
   skill pool, paper-provided capacity/current-step/protected-window values, and
   needs D2Skill-style eviction scores over stored utility and retrieval stats.
@@ -82,9 +84,9 @@ Population code may consume evidence and emit `PopulationEvent`s. It must not mu
   caller asks it to mutate `SkillUtilityState`.
 - `SkillPairedRolloutUtilityInput` does not inspect transcripts or infer which
   step skills fired. The paper/runner supplies retrieved task skills and either
-  step trajectory outcomes or trajectory-level step credits; this crate only
-  applies validated skill identities, finite reward gaps, smoothing, and
-  checkpointable utility stats.
+  step trajectory outcomes, generic skill-use trajectory evidence, or
+  trajectory-level step credits; this crate only applies validated skill
+  identities, finite reward gaps, smoothing, and checkpointable utility stats.
 - `SkillUtilityPruner` plans removals but does not remove files, mutate a
   `SkillBank`, or decide which task/step pool is active. The caller supplies one
   pool at a time and applies the returned plan at the artifact/optimizer layer.
@@ -95,8 +97,9 @@ Population code may consume evidence and emit `PopulationEvent`s. It must not mu
 ## Proof Anchors
 - `cargo nextest run -p leaven-population` proves keep-best, top-k frontier,
   top-k parent selector, tournament, skill utility state, paired rollout skill
-  credit application, step-trajectory credit extraction, two-stage routed skill
-  retrieval, utility-guided skill pruning plans, and Pareto/frontier population
-  laws, including finite fitted updates and partition filtering.
+  credit application, step-trajectory and skill-use-evidence credit extraction,
+  two-stage routed skill retrieval, utility-guided skill pruning plans, and
+  Pareto/frontier population laws, including finite fitted updates and partition
+  filtering.
 - `cargo nextest run -p leaven-gepa --test gepa_smoke` proves GEPA consumes population state without moving GEPA selectors or gates into this crate.
 - `cargo nextest run -p leaven --test scalar_keep_best --test pairwise_tournament --test gepa_parity` proves mature population implementations participate in public end-to-end workflows through the umbrella surface. It is not proof for placeholder population names.

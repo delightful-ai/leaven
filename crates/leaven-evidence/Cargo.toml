@@ -11,6 +11,7 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
+leaven-artifact-skill = { workspace = true }
 leaven-kernel = { workspace = true }
 leaven-core = { workspace = true }
 ordered-float = { workspace = true }

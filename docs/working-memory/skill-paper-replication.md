@@ -512,18 +512,22 @@ Leaven primitive blockers:
   relevance scores. `SkillPairedRolloutUtilityInput` now maps paired rollout
   task gaps and caller-supplied step credits onto validated skill utility
   updates, and can derive step credits from runner-provided
-  `SkillStepTrajectoryOutcome`s using D2Skill's `Y_i - baseline_mean`
-  equation. `SkillTwoStageRetriever` now covers pool-scoped similarity
+  `SkillStepTrajectoryOutcome`s or generic `SkillTrajectoryUseEvidence` using
+  D2Skill's `Y_i - baseline_mean` equation. `SkillTwoStageRetriever` now covers
+  pool-scoped similarity
   threshold/top-m retrieval plus utility/UCB top-k selection over
   caller-computed similarities. `SkillUtilityPruner` now covers utility/UCB
   eviction scoring, capacity planning, and protected-window exclusion over
   caller-supplied active pools. Together with `SkillRouteRegistry`, it now
   covers validated pool/key membership plus utility/retrieval/pruning
   bookkeeping. It still does not cover embedding model execution, route-key
-  extraction, transcript/env extraction, injection formatting, validation
+  extraction, transcript/env event extraction, injection formatting, validation
   cadence, paper-provided capacity/protected-window values, or skill-bank
   mutation;
-- transcript/env extraction of retrieved step skills into trajectory outcomes;
+- `SkillTrajectoryUseEvidence` now records retrieved/injected/triggered skill
+  events for one rewarded trajectory, and `SkillPairedRolloutUtilityInput` can
+  consume it for step credits. The actual ALFWorld/WebShop transcript/env parser
+  that emits those events remains paper-runner work;
 - RL/environment adapter boundary that can record Leaven evidence without
   turning Leaven into the RL framework.
 
@@ -630,12 +634,13 @@ Start with these generic primitives as failures expose them:
    similarity threshold/top-m plus utility/UCB top-k selection, and
    `SkillPairedRolloutUtilityInput` covers D2Skill-style task-gap/step-credit
    application from paired rollout evidence, including the step trajectory
-   `Y_i - baseline_mean` credit equation over `SkillStepTrajectoryOutcome`s.
+   `Y_i - baseline_mean` credit equation over `SkillStepTrajectoryOutcome`s or
+   `SkillTrajectoryUseEvidence`.
    `SkillUtilityPruner` covers D2Skill-style utility/UCB eviction scoring with
    capacity and protected-window planning. `SkillRouteRegistry` covers explicit
    pool/key membership for routed skill cards. Embedding model execution,
-   route-key extraction, transcript/env extraction, injection formatting, paper
-   cadence/threshold values, and skill-bank mutation remain.
+   route-key extraction, transcript/env event extraction, injection formatting,
+   paper cadence/threshold values, and skill-bank mutation remain.
 10. Paired rollout evidence: `PairedRolloutEvidence` now covers
     baseline-vs-treatment group rewards and finite treatment-minus-baseline
     deltas. Hindsight trajectory parsing and real ALFWorld/WebShop rollout

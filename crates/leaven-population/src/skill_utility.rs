@@ -4,7 +4,7 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 
 use leaven_artifact_skill::{SkillName, SkillRoutePool, SkillRouteRegistry};
-use leaven_evidence::PairedRolloutEvidence;
+use leaven_evidence::{PairedRolloutEvidence, SkillTrajectoryUseEvidence};
 use leaven_kernel::FiniteF64;
 use serde::{Deserialize, Serialize};
 
@@ -237,6 +237,16 @@ impl SkillStepTrajectoryOutcome {
     pub fn retrieved_step_skills(&self) -> &[SkillName] {
         &self.retrieved_step_skills
     }
+
+    /// Build a step-skill trajectory outcome from generic skill-use evidence.
+    #[must_use]
+    pub fn from_skill_use_evidence(evidence: &SkillTrajectoryUseEvidence) -> Self {
+        Self {
+            trajectory_id: evidence.trajectory_id().to_owned(),
+            reward: evidence.reward(),
+            retrieved_step_skills: evidence.retrieved_skills().into_iter().cloned().collect(),
+        }
+    }
 }
 
 /// Refusal reasons for step-trajectory outcome construction.
@@ -322,6 +332,27 @@ impl SkillPairedRolloutUtilityInput {
             .collect();
 
         Self::new(paired_rollout, task_skills, step_skill_credits)
+    }
+
+    /// Build utility-update input from generic skill-use trajectory evidence.
+    ///
+    /// Retrieved skills in each trajectory receive the `D2Skill`
+    /// trajectory-level credit `trajectory_reward - baseline_group_mean`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SkillPairedRolloutUtilityInputError`] when a task skill is
+    /// repeated.
+    pub fn from_skill_use_trajectories(
+        paired_rollout: PairedRolloutEvidence,
+        task_skills: Vec<SkillName>,
+        step_trajectories: &[SkillTrajectoryUseEvidence],
+    ) -> Result<Self, SkillPairedRolloutUtilityInputError> {
+        let outcomes = step_trajectories
+            .iter()
+            .map(SkillStepTrajectoryOutcome::from_skill_use_evidence)
+            .collect();
+        Self::from_step_trajectories(paired_rollout, task_skills, outcomes)
     }
 
     /// Paired rollout evidence supplying the task-level reward gap.
