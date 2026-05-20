@@ -36,7 +36,10 @@ fn reflection_workspace_projects_runs_and_reads_back_current_tree() {
             .await
             .unwrap();
 
-        assert_eq!(outcome.readback, ReadbackResult::Valid("improved".to_owned()));
+        assert_eq!(
+            outcome.readback,
+            ReadbackResult::Valid("improved".to_owned())
+        );
         assert!(
             outcome
                 .session_attachments

@@ -4,8 +4,8 @@ use std::marker::PhantomData;
 use leaven_agentic::{ArtifactReflector, ReadbackDiagnostic, ReadbackResult};
 use leaven_agentic_skill::{SkillBankDiff, SkillWorkspaceLayout};
 use leaven_artifact_skill::{
-    SkillBank, SkillBankChange, SkillBankError, SkillFile, SkillFilePermissions, SkillFolder,
-    SkillName, SkillPath,
+    SkillBank, SkillBankChange, SkillBankError, SkillFile, SkillFilePartId, SkillFilePermissions,
+    SkillFolder, SkillName, SkillPath,
 };
 use leaven_workspace::{WorkspaceError, WorkspacePath, WorkspacePathError, WorkspaceView};
 use thiserror::Error;
@@ -36,7 +36,7 @@ impl<Part> SkillBankReflector<Part> {
 
 impl<Part> ArtifactReflector for SkillBankReflector<Part>
 where
-    Part: Send + Sync,
+    Part: SkillPartScope + Send + Sync,
 {
     type Input = SkillBankReflectionInput<Part>;
     type Change = SkillBankChange;
@@ -73,6 +73,20 @@ where
         let Some(change) = SkillBankDiff::diff(&input.artifact, &child) else {
             return Ok(ReadbackResult::Empty);
         };
+        if !input
+            .part
+            .change_matches_selected_part(&change, &input.part_label)
+        {
+            return Ok(ReadbackResult::Invalid {
+                diagnostics: vec![ReadbackDiagnostic {
+                    path: None,
+                    message: format!(
+                        "skill-bank diff changed files outside selected part {}",
+                        input.part_label
+                    ),
+                }],
+            });
+        }
         if let Err(error) = input.artifact.apply_skill_change(&change) {
             return Ok(ReadbackResult::Invalid {
                 diagnostics: vec![ReadbackDiagnostic {
@@ -118,7 +132,13 @@ fn read_skill_bank(
     view: &WorkspaceView<'_>,
     layout: &SkillWorkspaceLayout,
 ) -> Result<SkillBank, SkillBankReflectionError> {
-    let root = view.subdir(layout.skills_root.clone())?;
+    let root_view;
+    let root = if layout.skills_root.as_str().is_empty() {
+        view
+    } else {
+        root_view = view.subdir(layout.skills_root.clone())?;
+        &root_view
+    };
     let paths = root.list_files(&WorkspacePath::root())?;
     let mut grouped: BTreeMap<SkillName, BTreeMap<SkillPath, SkillFile>> = BTreeMap::new();
 
@@ -165,4 +185,69 @@ fn skill_path_from_workspace(
         skill_name,
         SkillPath::new(skill_path.to_owned()).map_err(SkillBankReflectionError::SkillPath)?,
     ))
+}
+
+pub trait SkillPartScope {
+    fn change_matches_selected_part(&self, change: &SkillBankChange, part_label: &str) -> bool;
+}
+
+impl SkillPartScope for String {
+    fn change_matches_selected_part(&self, change: &SkillBankChange, part_label: &str) -> bool {
+        let label = if self.is_empty() {
+            part_label
+        } else {
+            self.as_str()
+        };
+        let Some((selected_skill, selected_path)) = label.split_once('/') else {
+            return change_touches_only_skill(change, label);
+        };
+        change_touches_only_file(change, selected_skill, selected_path)
+    }
+}
+
+impl SkillPartScope for SkillFilePartId {
+    fn change_matches_selected_part(&self, change: &SkillBankChange, _part_label: &str) -> bool {
+        change_touches_only_file(change, self.skill.as_str(), self.path.as_str())
+    }
+}
+
+fn change_touches_only_skill(change: &SkillBankChange, selected_skill: &str) -> bool {
+    match change {
+        SkillBankChange::CreateSkill { folder } => folder.name().as_str() == selected_skill,
+        SkillBankChange::ReplaceSkill { name, .. } | SkillBankChange::RemoveSkill { name } => {
+            name.as_str() == selected_skill
+        }
+        SkillBankChange::RenameSkill { from, .. } => from.as_str() == selected_skill,
+        SkillBankChange::WriteFile { skill, .. }
+        | SkillBankChange::RemoveFile { skill, .. }
+        | SkillBankChange::RenameFile { skill, .. }
+        | SkillBankChange::SetExecutable { skill, .. } => skill.as_str() == selected_skill,
+        SkillBankChange::Atomic(changes) => changes
+            .iter()
+            .all(|change| change_touches_only_skill(change, selected_skill)),
+    }
+}
+
+fn change_touches_only_file(
+    change: &SkillBankChange,
+    selected_skill: &str,
+    selected_path: &str,
+) -> bool {
+    match change {
+        SkillBankChange::WriteFile { skill, path, .. }
+        | SkillBankChange::RemoveFile { skill, path }
+        | SkillBankChange::SetExecutable { skill, path, .. } => {
+            skill.as_str() == selected_skill && path.as_str() == selected_path
+        }
+        SkillBankChange::RenameFile { skill, from, .. } => {
+            skill.as_str() == selected_skill && from.as_str() == selected_path
+        }
+        SkillBankChange::Atomic(changes) => changes
+            .iter()
+            .all(|change| change_touches_only_file(change, selected_skill, selected_path)),
+        SkillBankChange::CreateSkill { .. }
+        | SkillBankChange::ReplaceSkill { .. }
+        | SkillBankChange::RemoveSkill { .. }
+        | SkillBankChange::RenameSkill { .. } => false,
+    }
 }

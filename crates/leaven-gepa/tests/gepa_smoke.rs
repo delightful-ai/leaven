@@ -997,7 +997,10 @@ fn gepa_reflective_dataset_uses_target_safe_case_projection() {
             projected_examples[0].runs[0].produced,
             examples[0].runs[0].produced
         );
-        assert_eq!(projected_examples[0].runs[0].score, examples[0].runs[0].score);
+        assert_eq!(
+            projected_examples[0].runs[0].score,
+            examples[0].runs[0].score
+        );
         assert_eq!(
             projected_examples[0].runs[0].feedback,
             examples[0].runs[0].feedback

@@ -73,7 +73,6 @@ pub mod prelude {
         ReflectRequest, ReflectionError, ReflectionOutputParser, ReflectionRenderInput,
         ReflectionRenderer, ReflectiveCase, ReflectiveCaseInput, ReflectiveDatasetBuilder,
         ReflectiveRun, ReflectiveSideInfoValue, ReflectiveValue, RoundRobinPart, StrictImprovement,
-        SurfaceProposer,
-        ValidationPolicy, gepa_stage_proposer,
+        SurfaceProposer, ValidationPolicy, gepa_stage_proposer,
     };
 }

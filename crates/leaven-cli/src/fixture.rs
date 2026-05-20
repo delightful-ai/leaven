@@ -3,30 +3,32 @@ use std::collections::BTreeMap;
 use leaven_agentic_skill::SkillWorkspaceLayout;
 use leaven_artifact_skill::{SkillBank, SkillFile, SkillFolder, SkillName, SkillPath};
 use leaven_core::{ExternalRef, InfoRef};
-use leaven_gepa::{ReflectRequest, ReflectiveExample};
-use leaven_gepa_agentic_skill::SkillBankGepaReflectionInput;
+use leaven_gepa::{ReflectRequest, ReflectiveCase, ReflectiveValue};
+use leaven_gepa_agentic_skill::SkillBankReflectionInput;
 use leaven_kernel::CandidateId;
 
-pub fn fixture_reflection_input() -> SkillBankGepaReflectionInput<String> {
+pub fn fixture_reflection_input() -> SkillBankReflectionInput<String> {
     let request = ReflectRequest::new(fixed_parent(), "rust-test-debugging/SKILL.md")
-        .with_examples([ReflectiveExample {
-            input: "cargo nextest run -p leaven-gepa --test agent_stage_routing failed after the proposal stage emitted no workspace diff.".to_owned(),
-            output: Some(
+        .with_examples([{
+            let mut case = ReflectiveCase::from_example(
+                ReflectiveValue::Text("cargo nextest run -p leaven-gepa --test agent_stage_routing failed after the proposal stage emitted no workspace diff.".to_owned()),
+                None,
+                Some(ReflectiveValue::Text(
                 "The agent suggested changing a prompt but never inspected the materialized skill."
                     .to_owned(),
-            ),
-            score: Some(0.25),
-            feedback: "The reflector must inspect the current skill body and explain concrete workspace edits, not propose from metadata alone."
-                .to_owned(),
-            source_refs: vec![InfoRef::Candidate(fixed_parent())],
-            ..ReflectiveExample::default()
+            )),
+                Some(0.25),
+                "The reflector must inspect the current skill body and explain concrete workspace edits, not propose from metadata alone.",
+            );
+            case.source_refs.push(InfoRef::Candidate(fixed_parent()));
+            case
         }])
         .with_source_refs([InfoRef::External(ExternalRef {
             kind: "doctor".to_owned(),
             id: "gepa-skill-bank-proposal-render".to_owned(),
         })])
         .with_attempt_index(0);
-    SkillBankGepaReflectionInput::from_request(fixture_skill_bank(), request)
+    SkillBankReflectionInput::from_request(fixture_skill_bank(), request)
 }
 
 pub fn fixture_workspace_layout()

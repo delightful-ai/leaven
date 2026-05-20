@@ -78,7 +78,7 @@ struct ProposalDoctorArgs {
     /// Emit text output.
     #[arg(long)]
     text: bool,
-    /// Serialized SkillBankGepaReflectionInput<String> debug/run state.
+    /// Serialized SkillBankReflectionInput<String> debug/run state.
     #[arg(long)]
     input_json: Option<PathBuf>,
 }
@@ -142,8 +142,8 @@ mod tests {
         let output = run(["doctor", "proposal-render"].into_iter().map(str::to_owned)).unwrap();
 
         assert!(output.contains("Stage: gepa.reflect.proposal"));
-        assert!(output.contains(".agents/skills/rust-test-debugging/SKILL.md"));
-        assert!(output.contains("## Feedback"));
+        assert!(output.contains("target/current"));
+        assert!(output.contains("ReflectionWorkspace"));
         assert!(output.contains("No agent session is executed"));
     }
 
@@ -161,7 +161,7 @@ mod tests {
             value["agent_request"]["instructions"]["task"]
                 .as_str()
                 .unwrap()
-                .contains("## Feedback")
+                .contains("target/current")
         );
     }
 
@@ -198,7 +198,7 @@ mod tests {
         assert_eq!(value["stage"], "gepa.reflect.materialize");
         assert_eq!(
             value["files"][0]["path"],
-            ".agents/skills/rust-test-debugging/SKILL.md"
+            "target/current/.agents/skills/rust-test-debugging/SKILL.md"
         );
     }
 

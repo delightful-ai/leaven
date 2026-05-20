@@ -81,10 +81,13 @@ impl ReflectionWorkspace {
         Factory: WorkspaceFactory,
         Runtime: AgentRuntime,
     {
-        let mut workspace = factory
-            .allocate(WorkspaceConfig::default())
-            .await
-            .map_err(|error| ReflectionError::Workspace(WorkspaceError::Cleanup(error.to_string())))?;
+        let mut workspace =
+            factory
+                .allocate(WorkspaceConfig::default())
+                .await
+                .map_err(|error| {
+                    ReflectionError::Workspace(WorkspaceError::Cleanup(error.to_string()))
+                })?;
         let stage_result = async {
             let mut view = workspace.view();
             write_workspace_contract::<R::Error>(
@@ -275,9 +278,7 @@ where
     Ok(())
 }
 
-fn session_attachments<E>(
-    session: &AgentSession,
-) -> Result<Vec<Attachment>, ReflectionError<E>>
+fn session_attachments<E>(session: &AgentSession) -> Result<Vec<Attachment>, ReflectionError<E>>
 where
     E: std::error::Error + Send + Sync + 'static,
 {

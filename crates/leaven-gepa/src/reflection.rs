@@ -265,16 +265,13 @@ impl<Part> ReflectRequest<Part> {
         self.source_refs
             .iter()
             .cloned()
-            .chain(
-                self.examples
-                    .iter()
-                    .flat_map(|case| {
-                        case.source_refs
-                            .iter()
-                            .cloned()
-                            .chain(case.runs.iter().flat_map(|run| run.source_refs.iter().cloned()))
-                    }),
-            )
+            .chain(self.examples.iter().flat_map(|case| {
+                case.source_refs.iter().cloned().chain(
+                    case.runs
+                        .iter()
+                        .flat_map(|run| run.source_refs.iter().cloned()),
+                )
+            }))
             .collect()
     }
 }
@@ -464,7 +461,10 @@ where
         reflective_case
             .source_refs
             .push(InfoRef::Assessment(*parent_assessment));
-        if let Some(case) = reflective_case.case_id.and_then(|case_id| ctx.case(case_id)) {
+        if let Some(case) = reflective_case
+            .case_id
+            .and_then(|case_id| ctx.case(case_id))
+        {
             reflective_case.input = ReflectiveValue::Text(project_case_input(case));
         }
         cases.push(reflective_case);
@@ -710,9 +710,7 @@ fn render_reflective_cases(cases: &[ReflectiveCase]) -> String {
     cases
         .iter()
         .enumerate()
-        .flat_map(|(case_index, case)| {
-            case.runs.iter().map(move |run| (case_index, case, run))
-        })
+        .flat_map(|(case_index, case)| case.runs.iter().map(move |run| (case_index, case, run)))
         .enumerate()
         .map(|(index, (_case_index, case, run))| {
             let mut rendered = String::new();
@@ -759,7 +757,9 @@ fn render_reflective_value(value: &ReflectiveValue) -> Option<String> {
         ReflectiveValue::Text(text) if text.is_empty() => None,
         ReflectiveValue::Text(text) => Some(text.clone()),
         ReflectiveValue::Json(value) => Some(value.to_string()),
-        ReflectiveValue::File(reference) => Some(format!("trace:{}:{}", reference.store, reference.key)),
+        ReflectiveValue::File(reference) => {
+            Some(format!("trace:{}:{}", reference.store, reference.key))
+        }
         ReflectiveValue::Mapping(fields) if fields.is_empty() => None,
         ReflectiveValue::Mapping(fields) => Some(
             fields
@@ -891,9 +891,7 @@ mod tests {
         case
     }
 
-    fn side_info_case(
-        side_info: Vec<(String, ReflectiveSideInfoValue)>,
-    ) -> ReflectiveCase {
+    fn side_info_case(side_info: Vec<(String, ReflectiveSideInfoValue)>) -> ReflectiveCase {
         let mut case = ReflectiveCase::from_example(
             ReflectiveValue::default(),
             None,
@@ -966,16 +964,16 @@ mod tests {
     #[test]
     fn reflective_examples_can_render_upstream_side_info_records() {
         let rendered = render_reflective_cases(&[side_info_case(vec![
-                ("score".to_owned(), "0".into()),
-                ("input".to_owned(), "What is 19 + 23?".into()),
-                ("prompt".to_owned(), "Solve carefully.".into()),
-                ("output".to_owned(), "44".into()),
-                ("reasoning".to_owned(), "I added incorrectly.".into()),
-                (
-                    "execution_feedback".to_owned(),
-                    "Your answer is incorrect. The correct answer is '42'.".into(),
-                ),
-            ])]);
+            ("score".to_owned(), "0".into()),
+            ("input".to_owned(), "What is 19 + 23?".into()),
+            ("prompt".to_owned(), "Solve carefully.".into()),
+            ("output".to_owned(), "44".into()),
+            ("reasoning".to_owned(), "I added incorrectly.".into()),
+            (
+                "execution_feedback".to_owned(),
+                "Your answer is incorrect. The correct answer is '42'.".into(),
+            ),
+        ])]);
 
         assert_eq!(
             rendered,
@@ -988,18 +986,18 @@ mod tests {
     #[test]
     fn reflective_examples_render_nested_side_info_like_upstream_gepa() {
         let rendered = render_reflective_cases(&[side_info_case(vec![(
-                "scores".to_owned(),
-                ReflectiveSideInfoValue::mapping([
-                    ("exact".to_owned(), "0.0".into()),
-                    (
-                        "attempts".to_owned(),
-                        ReflectiveSideInfoValue::list([
-                            ReflectiveSideInfoValue::mapping([("answer".to_owned(), "44".into())]),
-                            ReflectiveSideInfoValue::mapping([("answer".to_owned(), "42".into())]),
-                        ]),
-                    ),
-                ]),
-            )])]);
+            "scores".to_owned(),
+            ReflectiveSideInfoValue::mapping([
+                ("exact".to_owned(), "0.0".into()),
+                (
+                    "attempts".to_owned(),
+                    ReflectiveSideInfoValue::list([
+                        ReflectiveSideInfoValue::mapping([("answer".to_owned(), "44".into())]),
+                        ReflectiveSideInfoValue::mapping([("answer".to_owned(), "42".into())]),
+                    ]),
+                ),
+            ]),
+        )])]);
 
         assert_eq!(
             rendered,

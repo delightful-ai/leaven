@@ -1,10 +1,10 @@
 //! Agentic stage adapters.
 
+mod artifact_reflector;
 mod case;
 mod case_evaluator;
 mod case_record;
 mod error;
-mod artifact_reflector;
 mod evaluator;
 mod inspection;
 mod parser;
@@ -13,6 +13,10 @@ mod proposer;
 mod repair;
 mod repairing_proposer;
 
+pub use artifact_reflector::{
+    ArtifactReflector, ReadbackDiagnostic, ReadbackResult, ReflectionError, ReflectionLayoutConfig,
+    ReflectionRunOutcome, ReflectionWorkspace,
+};
 pub use case::{
     AgentCase, AgentWorkload, CaseFiles, CaseInput, CaseMessage, CasePartitionId, CasePartitions,
     CaseSuite, CaseTarget, SetupScript, WorkspaceRequirement,
@@ -27,10 +31,6 @@ pub use case_record::{
     FailedAgentCaseRun, FiniteRatio, ScoredAgentCaseRun, ToolApprovalPolicy,
 };
 pub use error::{AgenticAdapterError, AgenticParseError, AgenticRepairError};
-pub use artifact_reflector::{
-    ArtifactReflector, ReadbackDiagnostic, ReadbackResult, ReflectionError,
-    ReflectionLayoutConfig, ReflectionRunOutcome, ReflectionWorkspace,
-};
 pub use evaluator::{AgenticEvaluator, AgenticEvaluatorConfig};
 pub use inspection::{
     AgenticCostInspection, AgenticInspectionWarning, AgenticRunInspection, ProposalRepairInspection,
@@ -67,7 +67,7 @@ pub mod prelude {
         ProposalRepairAttemptRecord, ProposalRepairFeedback, ProposalRepairInspection,
         ProposalRepairPolicy, ProposalRepairPromptBuilder, ReadbackDiagnostic, ReadbackResult,
         ReflectionError, ReflectionLayoutConfig, ReflectionRunOutcome, ReflectionWorkspace,
-        RepairingAgenticProposer, RepairingAgenticProposerConfig, ScoredAgentCaseRun,
-        ScorerDryRun, SetupScript, ToolApprovalPolicy, WorkspaceRequirement,
+        RepairingAgenticProposer, RepairingAgenticProposerConfig, ScoredAgentCaseRun, ScorerDryRun,
+        SetupScript, ToolApprovalPolicy, WorkspaceRequirement,
     };
 }

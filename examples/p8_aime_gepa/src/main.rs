@@ -5217,7 +5217,8 @@ impl ReflectiveDatasetBuilder<RunProblem<AimePrompt, AimeInput, AimeTarget>, Aim
             );
             reflective_case.case_id = Some(case);
             reflective_case.runs[0].attempt_index = None;
-            reflective_case.runs[0].side_info = aime_reflection_side_info_example(AimeReflectionSideInfo {
+            reflective_case.runs[0].side_info =
+                aime_reflection_side_info_example(AimeReflectionSideInfo {
                     score: evidence.score().score(),
                     input: input.clone(),
                     prompt: parent_prompt.system.clone(),
@@ -5225,7 +5226,9 @@ impl ReflectiveDatasetBuilder<RunProblem<AimePrompt, AimeInput, AimeTarget>, Aim
                     reasoning: reasoning.clone(),
                     execution_feedback: feedback.clone(),
                 });
-            reflective_case.source_refs.push(InfoRef::Assessment(*parent_assessment));
+            reflective_case
+                .source_refs
+                .push(InfoRef::Assessment(*parent_assessment));
             examples.push(reflective_case);
         }
         Ok(examples)
@@ -5719,8 +5722,8 @@ fn canonical_aime_reflection_request_with_sampling(
     };
     let artifact = AimePrompt::new("<curr_param>");
     let surface = AimePromptSurface;
-    let request = ReflectRequest::for_part(CandidateId::new(), "system", "system").with_examples([
-        {
+    let request =
+        ReflectRequest::for_part(CandidateId::new(), "system", "system").with_examples([{
             let mut case = ReflectiveCase::from_example(
                 ReflectiveValue::default(),
                 None,
@@ -5737,8 +5740,7 @@ fn canonical_aime_reflection_request_with_sampling(
                 execution_feedback: "<execution_feedback>".to_owned(),
             });
             case
-        },
-    ]);
+        }]);
     DefaultReflectionRenderer
         .render(ReflectionRenderInput::<
             RunProblem<AimePrompt, AimeInput, AimeTarget>,
@@ -6751,15 +6753,16 @@ Provide the new parameter value within ``` blocks.";
                     None,
                     String::new(),
                 );
-                case.runs[0].side_info = aime_reflection_side_info_example(AimeReflectionSideInfo {
-                    score: 0.0,
-                    input: "What is 19 + 23?".to_owned(),
-                    prompt: "Solve carefully.".to_owned(),
-                    output: "44".to_owned(),
-                    reasoning: "I added incorrectly.".to_owned(),
-                    execution_feedback: "Your answer is incorrect. The correct answer is '42'."
-                        .to_owned(),
-                });
+                case.runs[0].side_info =
+                    aime_reflection_side_info_example(AimeReflectionSideInfo {
+                        score: 0.0,
+                        input: "What is 19 + 23?".to_owned(),
+                        prompt: "Solve carefully.".to_owned(),
+                        output: "44".to_owned(),
+                        reasoning: "I added incorrectly.".to_owned(),
+                        execution_feedback: "Your answer is incorrect. The correct answer is '42'."
+                            .to_owned(),
+                    });
                 case
             }]);
 

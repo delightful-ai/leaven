@@ -35,10 +35,11 @@ impl<Part> SkillBankReflectionInput<Part> {
             .iter()
             .cloned()
             .chain(self.examples.iter().flat_map(|case| {
-                case.source_refs
-                    .iter()
-                    .cloned()
-                    .chain(case.runs.iter().flat_map(|run| run.source_refs.iter().cloned()))
+                case.source_refs.iter().cloned().chain(
+                    case.runs
+                        .iter()
+                        .flat_map(|run| run.source_refs.iter().cloned()),
+                )
             }))
             .collect()
     }

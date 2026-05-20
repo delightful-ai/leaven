@@ -2,13 +2,11 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 
 use leaven_agent::AgentRuntime;
-use leaven_agentic::{
-    AgenticProposerConfig, ReadbackResult, ReflectionWorkspace,
-};
+use leaven_agentic::{AgenticProposerConfig, ReadbackResult, ReflectionWorkspace};
 use leaven_agentic_skill::SkillWorkspaceLayout;
 use leaven_artifact_skill::SkillBank;
 use leaven_core::{OptimizationProblem, Proposal, ProposalBatch, ProposalBatchSemantics};
-use leaven_engine::{OptimizerError, Proposer, ProposalContext, ProposalError, RunContext};
+use leaven_engine::{OptimizerError, ProposalContext, ProposalError, Proposer, RunContext};
 use leaven_gepa::{GepaReflector, ReflectRequest};
 use leaven_kernel::{CandidateId, Cost, MetadataBag, Metered, ProposerId};
 use leaven_surface::EditSurface;

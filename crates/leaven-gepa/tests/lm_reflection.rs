@@ -309,9 +309,14 @@ fn default_renderer_and_plain_text_parser_cover_empty_feedback_and_bad_part() {
         .join("\n");
     assert!(rendered_text.contains("(no reflective examples were selected)"));
 
-    let no_output_request = ReflectRequest::for_part(parent, "text", "text").with_examples([
-        reflective_case(Some(CaseId::new(9)), "the input", None, Some(1.0), "already correct"),
-    ]);
+    let no_output_request =
+        ReflectRequest::for_part(parent, "text", "text").with_examples([reflective_case(
+            Some(CaseId::new(9)),
+            "the input",
+            None,
+            Some(1.0),
+            "already correct",
+        )]);
     let no_output_rendered = DefaultReflectionRenderer
         .render(ReflectionRenderInput::<TestProblem, WholeTextSurface> {
             request: &no_output_request,
@@ -398,15 +403,14 @@ fn default_renderer_uses_gepa_prompt_template_and_config_override() {
     let parent = CandidateId::new();
     let artifact = TestArtifact("old instruction".to_owned());
     let surface = WholeTextSurface;
-    let request = ReflectRequest::for_part(parent, "text", "text").with_examples([
-        reflective_case(
+    let request =
+        ReflectRequest::for_part(parent, "text", "text").with_examples([reflective_case(
             Some(CaseId::new(1)),
             "an example input",
             Some("42"),
             Some(0.0),
             "needs a modular arithmetic strategy",
-        ),
-    ]);
+        )]);
 
     let default_rendered = DefaultReflectionRenderer
         .render(ReflectionRenderInput::<TestProblem, WholeTextSurface> {
