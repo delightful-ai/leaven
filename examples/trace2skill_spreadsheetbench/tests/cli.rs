@@ -66,6 +66,34 @@ fn cli_renders_one_case_prompt() {
     assert!(prompt.contains("13-1_output.xlsx"));
 }
 
+#[test]
+fn cli_compares_one_case_answer_as_json() {
+    let fixture = ExactCaseFixture::new();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_trace2skill_spreadsheetbench"))
+        .arg("--compare-one-case-answer")
+        .arg("--case")
+        .arg(&fixture.case_file)
+        .arg("--output-workbook")
+        .arg(&fixture.golden_workbook)
+        .arg("--golden-workbook")
+        .arg(&fixture.golden_workbook)
+        .output()
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(json["case_id"], "13-1");
+    assert_eq!(json["total_cells"], 120);
+    assert_eq!(json["matched_cells"], 120);
+    assert_eq!(json["score"], 1.0);
+    assert_eq!(json["passed"], true);
+}
+
 struct Fixture {
     _temp: tempfile::TempDir,
     case_file: std::path::PathBuf,
@@ -111,6 +139,25 @@ impl Fixture {
             spreadsheet_dir,
             system_prompt,
             released_skill,
+        }
+    }
+}
+
+struct ExactCaseFixture {
+    case_file: std::path::PathBuf,
+    golden_workbook: std::path::PathBuf,
+}
+
+impl ExactCaseFixture {
+    fn new() -> Self {
+        let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let spreadsheet_dir =
+            repo.join("tmp/paper_exact_samples/trace2skill/spreadsheetbench_verified/13-1");
+        Self {
+            case_file: repo.join(
+                "tmp/paper_exact_samples/trace2skill/spreadsheetbench_verified/dataset_first_case.json",
+            ),
+            golden_workbook: spreadsheet_dir.join("1_13-1_golden.xlsx"),
         }
     }
 }

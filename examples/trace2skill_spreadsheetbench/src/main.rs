@@ -4,7 +4,8 @@ use std::{
 };
 
 use trace2skill_spreadsheetbench::{
-    inspect_trace2skill_one_case, render_trace2skill_one_case_prompt, Trace2SkillOneCaseInput,
+    compare_trace2skill_one_case_answer, inspect_trace2skill_one_case,
+    render_trace2skill_one_case_prompt, Trace2SkillOneCaseComparisonInput, Trace2SkillOneCaseInput,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -26,6 +27,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Mode::RenderOneCasePrompt => {
             println!("{}", render_trace2skill_one_case_prompt(input)?);
         }
+        Mode::CompareOneCaseAnswer => {
+            let report = compare_trace2skill_one_case_answer(Trace2SkillOneCaseComparisonInput {
+                case_file: &args.case_file,
+                candidate_workbook: &args.output_workbook,
+                golden_workbook: &args.golden_workbook,
+            })?;
+            println!("{}", serde_json::to_string_pretty(&report)?);
+        }
     }
 
     Ok(())
@@ -38,6 +47,8 @@ struct CliArgs {
     spreadsheet_dir: PathBuf,
     system_prompt_file: PathBuf,
     released_skill_file: PathBuf,
+    output_workbook: PathBuf,
+    golden_workbook: PathBuf,
 }
 
 impl CliArgs {
@@ -56,6 +67,8 @@ impl CliArgs {
         let mut spreadsheet_dir = defaults.spreadsheet_dir;
         let mut system_prompt_file = defaults.system_prompt_file;
         let mut released_skill_file = defaults.released_skill_file;
+        let mut output_workbook = defaults.output_workbook;
+        let mut golden_workbook = defaults.golden_workbook;
         let mut args = args.into_iter().map(Into::into);
         let _program = args.next();
 
@@ -63,6 +76,7 @@ impl CliArgs {
             match arg.as_str() {
                 "--inspect-one-case" => set_mode(&mut mode, Mode::InspectOneCase)?,
                 "--render-one-case-prompt" => set_mode(&mut mode, Mode::RenderOneCasePrompt)?,
+                "--compare-one-case-answer" => set_mode(&mut mode, Mode::CompareOneCaseAnswer)?,
                 "--case" => case_file = next_path(&mut args, "--case")?,
                 "--spreadsheet-dir" => {
                     spreadsheet_dir = next_path(&mut args, "--spreadsheet-dir")?;
@@ -72,6 +86,12 @@ impl CliArgs {
                 }
                 "--released-skill" => {
                     released_skill_file = next_path(&mut args, "--released-skill")?;
+                }
+                "--output-workbook" => {
+                    output_workbook = next_path(&mut args, "--output-workbook")?;
+                }
+                "--golden-workbook" => {
+                    golden_workbook = next_path(&mut args, "--golden-workbook")?;
                 }
                 "--help" | "-h" => return Err(invalid_input(USAGE)),
                 other => {
@@ -88,6 +108,8 @@ impl CliArgs {
             spreadsheet_dir,
             system_prompt_file,
             released_skill_file,
+            output_workbook,
+            golden_workbook,
         })
     }
 }
@@ -96,6 +118,7 @@ impl CliArgs {
 enum Mode {
     InspectOneCase,
     RenderOneCasePrompt,
+    CompareOneCaseAnswer,
 }
 
 struct Defaults {
@@ -103,17 +126,22 @@ struct Defaults {
     spreadsheet_dir: PathBuf,
     system_prompt_file: PathBuf,
     released_skill_file: PathBuf,
+    output_workbook: PathBuf,
+    golden_workbook: PathBuf,
 }
 
 impl Defaults {
     fn new() -> Self {
         let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let spreadsheet_dir =
+            repo_root.join("tmp/paper_exact_samples/trace2skill/spreadsheetbench_verified/13-1");
         Self {
             case_file: repo_root.join(
                 "tmp/paper_exact_samples/trace2skill/spreadsheetbench_verified/dataset_first_case.json",
             ),
-            spreadsheet_dir: repo_root
-                .join("tmp/paper_exact_samples/trace2skill/spreadsheetbench_verified/13-1"),
+            output_workbook: spreadsheet_dir.join("13-1_output.xlsx"),
+            golden_workbook: spreadsheet_dir.join("1_13-1_golden.xlsx"),
+            spreadsheet_dir,
             system_prompt_file: repo_root.join(
                 "tmp/repros/trace2skill-upstream/spreadsheet_agent/system_prompt/cli_skill_preloaded_full_system_v1.txt",
             ),
@@ -144,5 +172,6 @@ fn invalid_input(message: impl Into<String>) -> io::Error {
 }
 
 const USAGE: &str = "usage: trace2skill_spreadsheetbench \
-    (--inspect-one-case | --render-one-case-prompt) \
-    [--case PATH] [--spreadsheet-dir PATH] [--system-prompt PATH] [--released-skill PATH]";
+    (--inspect-one-case | --render-one-case-prompt | --compare-one-case-answer) \
+    [--case PATH] [--spreadsheet-dir PATH] [--system-prompt PATH] [--released-skill PATH] \
+    [--output-workbook PATH] [--golden-workbook PATH]";

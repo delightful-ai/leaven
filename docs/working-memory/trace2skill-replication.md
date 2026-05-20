@@ -192,17 +192,20 @@ The checked-out upstream release includes:
   inspection/rendering preflight for the materialized SpreadsheetBench-Verified
   case `13-1`. The library reports the exact case metadata, init workbook,
   golden workbook, prompt, upstream system prompt, released combined `xlsx`
-  skill, and deterministic output path; the binary exposes this as
-  `--inspect-one-case` JSON and `--render-one-case-prompt` markdown. Defaults
-  target the synchronized main-Leaven `tmp/` artifacts:
+  skill, deterministic output path, and exact answer-range comparison for a
+  supplied candidate workbook; the binary exposes this as `--inspect-one-case`
+  JSON, `--render-one-case-prompt` markdown, and `--compare-one-case-answer`
+  JSON. Defaults target the synchronized main-Leaven `tmp/` artifacts:
   `tmp/paper_exact_samples/trace2skill/spreadsheetbench_verified/dataset_first_case.json`,
   `tmp/paper_exact_samples/trace2skill/spreadsheetbench_verified/13-1`,
   `tmp/repros/trace2skill-upstream/spreadsheet_agent/system_prompt/cli_skill_preloaded_full_system_v1.txt`,
   and
   `tmp/repros/trace2skill-upstream/released_skills/trace2skill-xlsx-35B-combined/SKILL.md`.
-  This creates a repo-owned input surface for the next one-sample live attempt;
-  it does not solve the workbook, invoke a model, score an answer, or generate
-  Trace2Skill trajectories.
+  The scorer compares `LISTS!A3:D32` against `1_13-1_golden.xlsx` and reports
+  matched/total cells, score, pass/fail, and mismatch cells. This creates a
+  repo-owned input/scoring surface for the next one-sample live attempt; it
+  does not solve the workbook, invoke a model, or generate Trace2Skill
+  trajectories.
 - `examples/trace2skill_tiny_live` now exists in main Leaven as an
   outside-Cargo tiny live harness for the paper's causal loop: trajectory
   generation with a frozen initial skill, independent error/success analysts,
@@ -322,6 +325,35 @@ Verification:
 - `cargo run -p trace2skill_spreadsheetbench -- --render-one-case-prompt`
   passed on 2026-05-20 against the same artifacts and rendered the exact
   one-case prompt markdown without modifying the workbook.
+- `cargo test -p trace2skill_spreadsheetbench --test workbook_score` passed on
+  2026-05-20 for exact answer-range scoring: golden-vs-golden passes
+  `120/120`, and init-vs-golden fails with mismatches in the answer range.
+- `rustfmt --check --config skip_children=true
+  examples/trace2skill_spreadsheetbench/src/lib.rs
+  examples/trace2skill_spreadsheetbench/src/main.rs
+  examples/trace2skill_spreadsheetbench/tests/cli.rs
+  examples/trace2skill_spreadsheetbench/tests/workbook_score.rs` passed on
+  2026-05-20 after the workbook scorer slice.
+- `cargo test -p trace2skill_spreadsheetbench` passed on 2026-05-20 after the
+  workbook scorer slice, including the new `workbook_score` test.
+- `cargo clippy -p trace2skill_spreadsheetbench --all-targets -- -D warnings`
+  passed on 2026-05-20 after the workbook scorer slice.
+- `cargo nextest run -p trace2skill_spreadsheetbench` passed on 2026-05-20
+  with 15/15 tests after the workbook scorer slice.
+- `cargo test -p leaven --test topology_contract` passed 4/4 tests on
+  2026-05-20 after adding the example-only `calamine` workbook reader
+  dependency.
+- `cargo run -p trace2skill_spreadsheetbench -- --compare-one-case-answer
+  --output-workbook
+  tmp/paper_exact_samples/trace2skill/spreadsheetbench_verified/13-1/1_13-1_golden.xlsx`
+  passed on 2026-05-20 and reported `passed=true`, score `1.0`, `120/120`
+  matched cells, and zero mismatches.
+- `cargo run -p trace2skill_spreadsheetbench -- --compare-one-case-answer
+  --output-workbook
+  tmp/paper_exact_samples/trace2skill/spreadsheetbench_verified/13-1/1_13-1_init.xlsx`
+  passed on 2026-05-20 and reported `passed=false`, score
+  `0.6833333333333333`, `82/120` matched cells, 38 mismatches, with the first
+  mismatch at `B15`.
 - `bash examples/trace2skill_tiny_live/scripts/run_tiny_live.sh --preflight`
   passed on 2026-05-20 after restoring the tiny live harness into main Leaven
   and switching its workspace guard away from the old `leaven-papers` checkout;
@@ -349,10 +381,10 @@ Leaven-owned remaining primitives before faithful Trace2Skill replication:
   locally yet. The loader is tested against upstream-shaped fixtures; the next
   proof needs either a no-spend/small upstream output directory or live-run
   capture of translated exact map/merge patches plus explicit merge decisions;
-- the exact case `13-1` now has a repo-owned no-spend prompt/input surface, but
-  no live spreadsheet agent has modified `13-1_output.xlsx`, no workbook-level
-  scorer has compared against `1_13-1_golden.xlsx`, and no generated trajectory
-  has been fed into the Stage 2 analyst fan-out;
+- the exact case `13-1` now has repo-owned no-spend prompt/input and workbook
+  scoring surfaces, but no live spreadsheet agent has modified
+  `13-1_output.xlsx`, no generated output workbook has been scored, and no
+  generated trajectory has been fed into the Stage 2 analyst fan-out;
 - result matrix/reporting for model scale transfer, OOD WikiTQ, DocVQA,
   DAPO/AIME, ablations, and sequential/retrieval baselines.
 
@@ -369,8 +401,9 @@ External/spend blockers:
 
 Use the one-case prompt surface to run the smallest approved live spreadsheet
 attempt for case `13-1`, writing `13-1_output.xlsx`, durable stdout/stderr/logs,
-and an answer comparison against `1_13-1_golden.xlsx`. After that, generate or
-import an actual no-spend/small upstream `--save-intermediates` directory and
-feed it through the saved-output loader. If running upstream live, also capture
-translated exact map/merge patches plus accepted/discarded merge decisions,
-because the default saved directory shape loses that decision provenance.
+and a `--compare-one-case-answer` report against `1_13-1_golden.xlsx`. After
+that, generate or import an actual no-spend/small upstream `--save-intermediates`
+directory and feed it through the saved-output loader. If running upstream live,
+also capture translated exact map/merge patches plus accepted/discarded merge
+decisions, because the default saved directory shape loses that decision
+provenance.
