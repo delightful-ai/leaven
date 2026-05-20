@@ -1,9 +1,10 @@
 //! Skill utility state for optimizer-owned retrieval bookkeeping.
 
 use std::cmp::Ordering;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use leaven_artifact_skill::SkillName;
+use leaven_evidence::PairedRolloutEvidence;
 use leaven_kernel::FiniteF64;
 use serde::{Deserialize, Serialize};
 
@@ -159,6 +160,178 @@ impl SkillUtilityUpdate {
         self.stats_after
     }
 }
+
+/// One finite utility credit assigned to a validated skill identity.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SkillUtilityCredit {
+    skill: SkillName,
+    credit: FiniteF64,
+}
+
+impl SkillUtilityCredit {
+    /// Build a utility credit for one skill.
+    #[must_use]
+    pub const fn new(skill: SkillName, credit: FiniteF64) -> Self {
+        Self { skill, credit }
+    }
+
+    /// Credited skill.
+    #[must_use]
+    pub const fn skill(&self) -> &SkillName {
+        &self.skill
+    }
+
+    /// Signed utility credit.
+    #[must_use]
+    pub const fn credit(&self) -> FiniteF64 {
+        self.credit
+    }
+}
+
+/// D2Skill-style utility input derived from paired rollout evidence.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SkillPairedRolloutUtilityInput {
+    paired_rollout: PairedRolloutEvidence,
+    task_skills: Vec<SkillName>,
+    step_skill_credits: Vec<SkillUtilityCredit>,
+}
+
+impl SkillPairedRolloutUtilityInput {
+    /// Build utility-update input from a paired rollout and retrieved skills.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SkillPairedRolloutUtilityInputError`] when a task skill is
+    /// repeated, which would make the group-level task delta ambiguous.
+    pub fn new(
+        paired_rollout: PairedRolloutEvidence,
+        task_skills: Vec<SkillName>,
+        step_skill_credits: Vec<SkillUtilityCredit>,
+    ) -> Result<Self, SkillPairedRolloutUtilityInputError> {
+        let mut seen = BTreeSet::new();
+        for skill in &task_skills {
+            if !seen.insert(skill.clone()) {
+                return Err(SkillPairedRolloutUtilityInputError::DuplicateTaskSkill {
+                    skill: skill.clone(),
+                });
+            }
+        }
+
+        Ok(Self {
+            paired_rollout,
+            task_skills,
+            step_skill_credits,
+        })
+    }
+
+    /// Paired rollout evidence supplying the task-level reward gap.
+    #[must_use]
+    pub const fn paired_rollout(&self) -> &PairedRolloutEvidence {
+        &self.paired_rollout
+    }
+
+    /// Treatment-minus-baseline task-level utility signal.
+    #[must_use]
+    pub fn task_delta(&self) -> FiniteF64 {
+        self.paired_rollout.treatment_minus_baseline()
+    }
+
+    /// Retrieved task skills with the shared task-level utility signal.
+    #[must_use]
+    pub fn task_skill_credits(&self) -> Vec<SkillUtilityCredit> {
+        let task_delta = self.task_delta();
+        self.task_skills
+            .iter()
+            .cloned()
+            .map(|skill| SkillUtilityCredit::new(skill, task_delta))
+            .collect()
+    }
+
+    /// Step-skill utility credits supplied by trajectory-level credit assignment.
+    #[must_use]
+    pub fn step_skill_credits(&self) -> &[SkillUtilityCredit] {
+        &self.step_skill_credits
+    }
+
+    /// Task and step utility credits in application order.
+    #[must_use]
+    pub fn all_utility_credits(&self) -> Vec<SkillUtilityCredit> {
+        let mut credits = self.task_skill_credits();
+        credits.extend(self.step_skill_credits.iter().cloned());
+        credits
+    }
+
+    /// Apply task and step utility credits to optimizer-owned utility state.
+    pub fn apply_to_state(
+        &self,
+        state: &mut SkillUtilityState,
+        task_smoothing: SkillUtilitySmoothing,
+        step_smoothing: SkillUtilitySmoothing,
+    ) -> SkillPairedRolloutUtilityUpdates {
+        let task_updates = self
+            .task_skill_credits()
+            .into_iter()
+            .map(|credit| state.observe_delta(credit.skill, credit.credit, task_smoothing))
+            .collect();
+        let step_updates = self
+            .step_skill_credits
+            .iter()
+            .cloned()
+            .map(|credit| state.observe_delta(credit.skill, credit.credit, step_smoothing))
+            .collect();
+
+        SkillPairedRolloutUtilityUpdates {
+            task_updates,
+            step_updates,
+        }
+    }
+}
+
+/// Utility updates produced by applying paired rollout skill credits.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SkillPairedRolloutUtilityUpdates {
+    task_updates: Vec<SkillUtilityUpdate>,
+    step_updates: Vec<SkillUtilityUpdate>,
+}
+
+impl SkillPairedRolloutUtilityUpdates {
+    /// Updates applied to retrieved task skills.
+    #[must_use]
+    pub fn task_updates(&self) -> &[SkillUtilityUpdate] {
+        &self.task_updates
+    }
+
+    /// Updates applied to retrieved step skills.
+    #[must_use]
+    pub fn step_updates(&self) -> &[SkillUtilityUpdate] {
+        &self.step_updates
+    }
+}
+
+/// Refusal reasons for paired rollout utility inputs.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum SkillPairedRolloutUtilityInputError {
+    /// A task skill appeared more than once.
+    DuplicateTaskSkill {
+        /// Repeated skill identity.
+        skill: SkillName,
+    },
+}
+
+impl std::fmt::Display for SkillPairedRolloutUtilityInputError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::DuplicateTaskSkill { skill } => {
+                write!(
+                    f,
+                    "paired rollout task skill `{skill}` was credited more than once"
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for SkillPairedRolloutUtilityInputError {}
 
 /// Outcome of transferring utility state across a skill rename.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]

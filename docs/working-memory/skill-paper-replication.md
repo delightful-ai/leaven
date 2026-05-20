@@ -497,12 +497,16 @@ Leaven primitive blockers:
   not ALFWorld/WebShop/GRPO replication.
 - dual-pool skill registry for task and step skills;
 - paired rollout evaluator that records baseline-vs-skill deltas;
+  `PairedRolloutEvidence` now records non-empty baseline/treatment group
+  rewards and exposes treatment-minus-baseline as a finite task-level signal.
 - utility/EMA/UCB retrieval and pruning state; `SkillUtilityState` now covers
   EMA utility plus retrieval/trigger counters, and `SkillUtilityRanker` now
   covers utility/UCB-aware deterministic top-k ranking over caller-provided
-  relevance scores. It still does not cover similarity keys, route-key
-  extraction, injection formatting, or pruning thresholds;
-- trajectory-level credit assignment tied to retrieved skills;
+  relevance scores. `SkillPairedRolloutUtilityInput` now maps paired rollout
+  task gaps and caller-supplied step credits onto validated skill utility
+  updates. It still does not cover similarity keys, route-key extraction,
+  trajectory extraction, injection formatting, or pruning thresholds;
+- trajectory-level credit extraction tied to retrieved step skills;
 - RL/environment adapter boundary that can record Leaven evidence without
   turning Leaven into the RL framework.
 
@@ -601,12 +605,16 @@ Start with these generic primitives as failures expose them:
 8. Route equivalence and trigger evidence: simulated route oracle plus real
    provider/runtime trigger parser.
 9. Utility/retrieval/pruning substrate: `SkillUtilityState` now covers finite
-   EMA utility plus retrieval/trigger counters, and `SkillUtilityRanker` covers
+   EMA utility plus retrieval/trigger counters, `SkillUtilityRanker` covers
    deterministic utility/UCB top-k ranking over caller-provided relevance
-   scores. Embedding keys, similarity thresholds, route-key extraction,
+   scores, and `SkillPairedRolloutUtilityInput` covers D2Skill-style
+   task-gap/step-credit application from paired rollout evidence. Embedding
+   keys, similarity thresholds, route-key extraction, trajectory extraction,
    injection formatting, paper thresholds, and eviction remain.
-10. Paired rollout evidence: baseline-vs-skill groups, hindsight credit, and
-    per-retrieved-skill utility update inputs.
+10. Paired rollout evidence: `PairedRolloutEvidence` now covers
+    baseline-vs-treatment group rewards and finite treatment-minus-baseline
+    deltas. Hindsight trajectory parsing and real ALFWorld/WebShop rollout
+    capture remain.
 
 ## Current Priority
 

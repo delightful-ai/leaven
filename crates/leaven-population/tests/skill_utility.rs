@@ -1,7 +1,9 @@
 use leaven_artifact_skill::SkillName;
+use leaven_evidence::{PairedRolloutEvidence, RolloutGroupOutcome};
 use leaven_kernel::FiniteF64;
 use leaven_population::{
-    SkillRetrievalCandidate, SkillUseStats, SkillUtilityRank, SkillUtilityRanker,
+    SkillPairedRolloutUtilityInput, SkillPairedRolloutUtilityInputError, SkillRetrievalCandidate,
+    SkillUseStats, SkillUtilityCredit, SkillUtilityRank, SkillUtilityRanker,
     SkillUtilityRankingWeights, SkillUtilitySmoothing, SkillUtilityState, SkillUtilityTransfer,
 };
 
@@ -205,4 +207,93 @@ fn skill_utility_ranker_uses_stable_skill_name_tiebreaks_and_rejects_bad_weights
         SkillUtilityRankingWeights::new(finite(0.0), finite(0.0), finite(-1.0)),
         Err(leaven_population::SkillUtilityRankingWeightsError::NegativeExplorationWeight { .. })
     ));
+}
+
+#[test]
+fn paired_rollout_utility_input_applies_task_gap_and_step_credits() {
+    let task_alpha = skill("task-alpha");
+    let task_beta = skill("task-beta");
+    let step_success = skill("step-success");
+    let step_failure = skill("step-failure");
+    let rollout = PairedRolloutEvidence::new(
+        "alfworld-put-cool-mug",
+        RolloutGroupOutcome::new(2.try_into().unwrap(), finite(0.25)),
+        RolloutGroupOutcome::new(2.try_into().unwrap(), finite(0.75)),
+    )
+    .unwrap();
+    let input = SkillPairedRolloutUtilityInput::new(
+        rollout,
+        vec![task_alpha.clone(), task_beta.clone()],
+        vec![
+            SkillUtilityCredit::new(step_success.clone(), finite(0.75)),
+            SkillUtilityCredit::new(step_failure.clone(), finite(-0.25)),
+        ],
+    )
+    .unwrap();
+
+    assert_eq!(input.task_delta(), finite(0.5));
+    assert_eq!(
+        input
+            .task_skill_credits()
+            .iter()
+            .map(|credit| (credit.skill().as_str(), credit.credit()))
+            .collect::<Vec<_>>(),
+        [("task-alpha", finite(0.5)), ("task-beta", finite(0.5))]
+    );
+    assert_eq!(
+        input
+            .all_utility_credits()
+            .iter()
+            .map(|credit| (credit.skill().as_str(), credit.credit()))
+            .collect::<Vec<_>>(),
+        [
+            ("task-alpha", finite(0.5)),
+            ("task-beta", finite(0.5)),
+            ("step-success", finite(0.75)),
+            ("step-failure", finite(-0.25)),
+        ]
+    );
+
+    let mut state = SkillUtilityState::default();
+    let updates = input.apply_to_state(
+        &mut state,
+        SkillUtilitySmoothing::one(),
+        SkillUtilitySmoothing::one(),
+    );
+
+    assert_eq!(updates.task_updates().len(), 2);
+    assert_eq!(updates.step_updates().len(), 2);
+    assert_eq!(state.utility(&task_alpha), finite(0.5));
+    assert_eq!(state.utility(&task_beta), finite(0.5));
+    assert_eq!(state.utility(&step_success), finite(0.75));
+    assert_eq!(state.utility(&step_failure), finite(-0.25));
+    assert_eq!(
+        state.stats(&task_alpha),
+        SkillUseStats {
+            retrievals: 0,
+            triggers: 0,
+            utility_updates: 1,
+        }
+    );
+}
+
+#[test]
+fn paired_rollout_utility_input_refuses_duplicate_task_skill_credit() {
+    let duplicate = skill("task-alpha");
+    let rollout = PairedRolloutEvidence::new(
+        "alfworld-put-cool-mug",
+        RolloutGroupOutcome::new(2.try_into().unwrap(), finite(0.25)),
+        RolloutGroupOutcome::new(2.try_into().unwrap(), finite(0.75)),
+    )
+    .unwrap();
+
+    assert_eq!(
+        SkillPairedRolloutUtilityInput::new(
+            rollout,
+            vec![duplicate.clone(), duplicate.clone()],
+            Vec::new(),
+        )
+        .unwrap_err(),
+        SkillPairedRolloutUtilityInputError::DuplicateTaskSkill { skill: duplicate },
+    );
 }

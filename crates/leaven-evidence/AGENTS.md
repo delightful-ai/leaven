@@ -1,21 +1,25 @@
 ## Boundary
-This crate owns reusable evidence value shapes: scalar scores, pairwise judgments, casewise outcomes, command/trajectory records, analyst fan-out records, patch merge-tree records, feedback, attribution, and placeholder shapes for diff/json/list/vector/string evidence.
+This crate owns reusable evidence value shapes: scalar scores, pairwise judgments, paired rollout rewards, casewise outcomes, command/trajectory records, analyst fan-out records, patch merge-tree records, feedback, attribution, and placeholder shapes for diff/json/list/vector/string evidence.
 
 Evidence here is data a stage or evaluator can produce and another component can interpret. It is not a store, scorer, population, preference relation, graph event, or evaluator registry.
 
 ## Routing
 - Put finite single-objective scores in `src/scalar.rs`; non-finite refusal belongs at construction so preference and population code never decides what `NaN` means.
 - Put pairwise outcomes in `src/pairwise.rs`; fitted ability state and tournament updates belong in `leaven-population`.
+- Put baseline-versus-treatment rollout group rewards in `src/rollout.rs`;
+  skill-credit assignment and utility state updates belong in
+  `leaven-population`.
 - Put per-case evidence containers in `src/casewise.rs`; dataset split policy belongs in `leaven-eval`, and engine case-set resolution belongs in `leaven-engine`.
 - Put caller-keyed attribution in `AttributableEvidence`; do not make attribution keys surface-only, path-only, or GEPA-only.
 - Store references and persistence capabilities belong in `leaven-store-*`, not in evidence values.
 
 ## Current Public-Maturity Split
-- Behavior-bearing today: scalar scores, pairwise judgments, casewise sparse
-  containers, command/agent trajectory records, attribution traits, and
-  `CaseAssessmentEvidence` have local tests. `CaseAssessmentEvidence`
-  preserves generated output, scalar score, and natural-language feedback; it
-  is reusable evidence vocabulary, not the reflective mutation algorithm.
+- Behavior-bearing today: scalar scores, pairwise judgments, paired rollout
+  rewards, casewise sparse containers, command/agent trajectory records,
+  attribution traits, and `CaseAssessmentEvidence` have local tests.
+  `CaseAssessmentEvidence` preserves generated output, scalar score, and
+  natural-language feedback; it is reusable evidence vocabulary, not the
+  reflective mutation algorithm.
 - `AgentTrajectoryEvidence` is the reusable one-session trajectory envelope:
   runtime session id, optional Leaven case id, upstream task id, typed
   success/failure outcome, model id, model configuration fingerprint,
@@ -50,6 +54,10 @@ Evidence here is data a stage or evaluator can produce and another component can
   preference/population code assumes non-finite values were refused already.
 - Use `CasewiseEvidence` for sparse per-case data. Missing case IDs mean
   absence, not zero score.
+- Use `PairedRolloutEvidence` when a paper compares a baseline group against a
+  treatment group for the same upstream task. It records non-empty group sizes,
+  finite mean rewards, and the treatment-minus-baseline gap; it does not know
+  what changed in the treatment or how credit should update population state.
 - Use `OutputRecord::BlobRef` for large stdout/stderr, transcripts, and parsed
   analyst payloads; `OutputRecord::Inline` is bounded display evidence.
 - Use `AgentTrajectoryCorpusEvidence` when a paper or runner must resume over a
@@ -77,8 +85,8 @@ Evidence here is data a stage or evaluator can produce and another component can
   are placeholders.
 
 ## Proof Anchors
-- `cargo nextest run -p leaven-evidence` proves scalar, pairwise, casewise,
-  command/trajectory, analyst fan-out, patch merge-tree, and attribution
+- `cargo nextest run -p leaven-evidence` proves scalar, pairwise, paired
+  rollout, casewise, command/trajectory, analyst fan-out, patch merge-tree, and attribution
   behavior. It does not currently prove every root-re-exported evidence name.
 - `cargo nextest run -p leaven-preference --test scalar` proves scalar preference callers rely on `ScalarEvidence`'s finite-score contract.
 - `cargo nextest run -p leaven-population --test tournament` proves pairwise evidence feeds fitted population state outside this crate.
