@@ -1203,9 +1203,11 @@ pub struct SkillUtilityState {
 
 The first implemented state is intentionally small: finite signed EMA utility,
 retrieval count, trigger count, utility-update count, explicit rename transfer,
-and explicit removal. It is enough to stop examples from inventing their own
-utility tables while still leaving embeddings, UCB bonuses, top-k injection,
-and paper thresholds to later retrieval/selector layers.
+explicit removal, and deterministic ranking over caller-provided relevance
+scores with utility plus UCB-style exploration. It is enough to stop examples
+from inventing their own utility tables and top-k score combination while still
+leaving embeddings, route-key extraction, injection formatting, router
+training, and paper thresholds to later retrieval/selector layers.
 
 Promote utility state into an artifact only when changing that utility state
 changes the candidate being evaluated. Examples:

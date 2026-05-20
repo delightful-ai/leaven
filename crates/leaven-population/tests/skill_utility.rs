@@ -1,7 +1,8 @@
 use leaven_artifact_skill::SkillName;
 use leaven_kernel::FiniteF64;
 use leaven_population::{
-    SkillUseStats, SkillUtilitySmoothing, SkillUtilityState, SkillUtilityTransfer,
+    SkillRetrievalCandidate, SkillUseStats, SkillUtilityRank, SkillUtilityRanker,
+    SkillUtilityRankingWeights, SkillUtilitySmoothing, SkillUtilityState, SkillUtilityTransfer,
 };
 
 fn skill(name: &str) -> SkillName {
@@ -109,5 +110,99 @@ fn skill_utility_smoothing_rejects_nonfinite_and_out_of_range_weights() {
     assert!(matches!(
         SkillUtilitySmoothing::new(f64::NAN),
         Err(leaven_population::SkillUtilitySmoothingError::NonFinite { .. })
+    ));
+}
+
+#[test]
+fn skill_utility_ranker_combines_relevance_and_utility_for_top_k_selection() {
+    let mut state = SkillUtilityState::default();
+    let alpha = skill("alpha");
+    let beta = skill("beta");
+    let gamma = skill("gamma");
+
+    state.observe_delta(alpha.clone(), finite(0.2), SkillUtilitySmoothing::one());
+    state.observe_delta(beta.clone(), finite(0.8), SkillUtilitySmoothing::one());
+
+    let ranker = SkillUtilityRanker::new(
+        SkillUtilityRankingWeights::new(finite(1.0), finite(1.0), finite(0.0)).unwrap(),
+    );
+    let ranked = ranker.top_k(
+        &state,
+        [
+            SkillRetrievalCandidate::new(alpha.clone(), finite(0.9)),
+            SkillRetrievalCandidate::new(beta.clone(), finite(0.6)),
+            SkillRetrievalCandidate::new(gamma, finite(0.6)),
+        ],
+        2.try_into().unwrap(),
+    );
+
+    assert_eq!(
+        ranked
+            .iter()
+            .map(SkillUtilityRank::skill)
+            .collect::<Vec<_>>(),
+        [&beta, &alpha]
+    );
+    assert_eq!(ranked[0].score(), finite(1.4));
+    assert_eq!(ranked[0].utility(), finite(0.8));
+    assert_eq!(ranked[0].relevance(), finite(0.6));
+}
+
+#[test]
+fn skill_utility_ranker_adds_ucb_exploration_for_less_retrieved_skills() {
+    let mut state = SkillUtilityState::default();
+    let saturated = skill("saturated");
+    let fresh = skill("fresh");
+    for _ in 0..8 {
+        state.record_retrieval(saturated.clone());
+    }
+
+    let ranker = SkillUtilityRanker::new(
+        SkillUtilityRankingWeights::new(finite(0.0), finite(0.0), finite(1.0)).unwrap(),
+    );
+    let ranked = ranker.rank(
+        &state,
+        [
+            SkillRetrievalCandidate::new(saturated.clone(), finite(0.5)),
+            SkillRetrievalCandidate::new(fresh.clone(), finite(0.5)),
+        ],
+    );
+
+    assert_eq!(
+        ranked
+            .iter()
+            .map(SkillUtilityRank::skill)
+            .collect::<Vec<_>>(),
+        [&fresh, &saturated]
+    );
+    assert!(ranked[0].exploration_bonus() > ranked[1].exploration_bonus());
+}
+
+#[test]
+fn skill_utility_ranker_uses_stable_skill_name_tiebreaks_and_rejects_bad_weights() {
+    let state = SkillUtilityState::default();
+    let ranker = SkillUtilityRanker::default();
+    let ranked = ranker.rank(
+        &state,
+        [
+            SkillRetrievalCandidate::new(skill("beta"), finite(1.0)),
+            SkillRetrievalCandidate::new(skill("alpha"), finite(1.0)),
+        ],
+    );
+
+    assert_eq!(
+        ranked
+            .iter()
+            .map(|rank| rank.skill().as_str())
+            .collect::<Vec<_>>(),
+        ["alpha", "beta"]
+    );
+    assert!(matches!(
+        SkillUtilityRankingWeights::new(finite(-1.0), finite(0.0), finite(0.0)),
+        Err(leaven_population::SkillUtilityRankingWeightsError::NegativeRelevanceWeight { .. })
+    ));
+    assert!(matches!(
+        SkillUtilityRankingWeights::new(finite(0.0), finite(0.0), finite(-1.0)),
+        Err(leaven_population::SkillUtilityRankingWeightsError::NegativeExplorationWeight { .. })
     ));
 }
