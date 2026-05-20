@@ -60,6 +60,28 @@ pub enum SkillPathError {
     Nul,
 }
 
+/// Invalid skill route pool label.
+#[derive(Debug, Clone, Eq, PartialEq, thiserror::Error)]
+pub enum SkillRoutePoolError {
+    /// Route pool labels must not be empty.
+    #[error("skill route pool is empty")]
+    Empty,
+    /// NUL bytes are never valid in route pool labels.
+    #[error("skill route pool contains NUL")]
+    Nul,
+}
+
+/// Invalid skill route key.
+#[derive(Debug, Clone, Eq, PartialEq, thiserror::Error)]
+pub enum SkillRouteKeyError {
+    /// Route keys must not be empty.
+    #[error("skill route key is empty")]
+    Empty,
+    /// NUL bytes are never valid in route keys.
+    #[error("skill route key contains NUL")]
+    Nul,
+}
+
 /// Failure while parsing `SKILL.md`.
 #[derive(Debug, thiserror::Error)]
 pub enum SkillParseError {
@@ -167,4 +189,21 @@ pub enum SkillBankError {
     /// `SKILL.md` could not be rendered after a canonicalizing edit.
     #[error("failed to render SKILL.md")]
     RenderSkillMd(#[source] serde_yml::Error),
+}
+
+/// Skill route registry invariant failure.
+#[derive(Debug, Clone, Eq, PartialEq, thiserror::Error)]
+pub enum SkillRouteRegistryError {
+    /// A route spec referenced a skill that is not present in the source bank.
+    #[error("route spec references unknown skill {skill}")]
+    UnknownSkill {
+        /// Missing skill.
+        skill: crate::SkillName,
+    },
+    /// A route registry has more than one spec for the same skill.
+    #[error("duplicate route spec for skill {skill}")]
+    DuplicateSkill {
+        /// Duplicate skill.
+        skill: crate::SkillName,
+    },
 }
