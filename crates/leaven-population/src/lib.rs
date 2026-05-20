@@ -22,8 +22,9 @@ pub use pareto::LenientParetoFrontier;
 pub use pareto_frontier::{ParetoFrontier, ParetoFrontierBuilder, PartitionFilter};
 pub use plackett_luce::PlackettLuceFit;
 pub use skill_utility::{
-    SkillUseStats, SkillUtilitySmoothing, SkillUtilitySmoothingError, SkillUtilityState,
-    SkillUtilityTransfer, SkillUtilityUpdate,
+    SkillRetrievalCandidate, SkillUseStats, SkillUtilityRank, SkillUtilityRanker,
+    SkillUtilityRankingWeights, SkillUtilityRankingWeightsError, SkillUtilitySmoothing,
+    SkillUtilitySmoothingError, SkillUtilityState, SkillUtilityTransfer, SkillUtilityUpdate,
 };
 pub use top_k_frontier::{TopKFrontier, TopKParentSelectionPolicy, TopKParentSelector};
 pub use tournament::{BradleyTerryFit, TournamentPopulation};
@@ -33,8 +34,10 @@ pub mod prelude {
     pub use crate::{
         BeamPopulation, BradleyTerryFit, KeepBest, LenientParetoFrontier, MapElites,
         NicheDescriptor, NoPopulation, NoveltyPopulation, ParetoFrontier, ParetoFrontierBuilder,
-        PartitionFilter, PlackettLuceFit, SkillUseStats, SkillUtilitySmoothing,
-        SkillUtilitySmoothingError, SkillUtilityState, SkillUtilityTransfer, SkillUtilityUpdate,
-        TopKFrontier, TopKParentSelectionPolicy, TopKParentSelector, TournamentPopulation,
+        PartitionFilter, PlackettLuceFit, SkillRetrievalCandidate, SkillUseStats, SkillUtilityRank,
+        SkillUtilityRanker, SkillUtilityRankingWeights, SkillUtilityRankingWeightsError,
+        SkillUtilitySmoothing, SkillUtilitySmoothingError, SkillUtilityState, SkillUtilityTransfer,
+        SkillUtilityUpdate, TopKFrontier, TopKParentSelectionPolicy, TopKParentSelector,
+        TournamentPopulation,
     };
 }

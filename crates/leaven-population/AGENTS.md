@@ -12,7 +12,9 @@ Population code may consume evidence and emit `PopulationEvent`s. It must not mu
 - Put optimizer-owned skill utility/use bookkeeping in `src/skill_utility.rs`.
   This module may know `leaven-artifact-skill::SkillName` because utility is
   keyed by validated skill identity, but it must not parse skill files,
-  materialize workspaces, or decide paper-specific retrieval policy.
+  materialize workspaces, or decide paper-specific retrieval policy. It may
+  rank caller-supplied relevance scores with utility and exploration state, but
+  embeddings, route-key extraction, and router training stay outside it.
 - Put reusable population configuration in this crate when it can serve more than one optimizer. Put optimizer-specific strategy state in the optimizer crate.
 
 ## Current Public-Maturity Split
@@ -41,8 +43,10 @@ Population code may consume evidence and emit `PopulationEvent`s. It must not mu
   retains ability state and starts unseen candidates at zero.
 - Use `SkillUtilityState` for checkpointable skill utility bookkeeping:
   retrieval counts, trigger counts, EMA utility updates, explicit rename
-  transfer, and explicit removal. Retrieval embeddings, UCB ranking, top-k
-  injection, and paper-specific thresholds remain outside this module.
+  transfer, and explicit removal. Use `SkillUtilityRanker` when a caller
+  already has finite relevance scores and needs utility/UCB-aware deterministic
+  top-k ranking. Retrieval embeddings, paper route keys, injection formatting,
+  and paper-specific thresholds remain outside this module.
 - Use `ParetoFrontier::by_case().partition_filter(...)` for sparse casewise
   scalar frontiers. Missing case scores do not dominate present scores.
 - Return `PopulationEvent`s to the caller; only `RunContext`/engine records them
@@ -55,6 +59,8 @@ Population code may consume evidence and emit `PopulationEvent`s. It must not mu
 - `SkillUtilityState` is optimizer/population state, not `SkillBank` artifact
   truth. If a future paper materializes utility into a candidate-visible
   registry, that registry needs artifact/cache identity outside this state.
+- `SkillUtilityRanker` does not decide what a query means. It combines
+  caller-provided relevance with utility and exploration state only.
 - Public unit structs in this crate are under audit pressure. Implement or
   scaffold-gate them before letting `leaven-std` or examples present them as
   standard population implementations.

@@ -77,10 +77,11 @@ Current useful substrate:
   `TopKParentSelector` state for best/round-robin parent selection, plus
   `SkillUtilityState` for checkpointable skill utility/use bookkeeping:
   retrieval counts, trigger counts, finite EMA utility updates, explicit rename
-  transfer, and explicit removal. EvoSkill P5 now checkpoints
-  frontier/parent/selector state, but full paper replication still needs
-  git-program run-loop integration and dossier resolution of the paper/code
-  selector drift.
+  transfer, explicit removal, and `SkillUtilityRanker` for deterministic top-k
+  ranking over caller-provided relevance plus utility/UCB exploration. EvoSkill
+  P5 now checkpoints frontier/parent/selector state, but full paper replication
+  still needs git-program run-loop integration and dossier resolution of the
+  paper/code selector drift.
 
 Current known gaps:
 
@@ -502,8 +503,10 @@ Leaven primitive blockers:
 - dual-pool skill registry for task and step skills;
 - paired rollout evaluator that records baseline-vs-skill deltas;
 - utility/EMA/UCB retrieval and pruning state; `SkillUtilityState` now covers
-  EMA utility plus retrieval/trigger counters, but not similarity keys, UCB
-  ranking, top-k injection, or pruning thresholds;
+  EMA utility plus retrieval/trigger counters, and `SkillUtilityRanker` now
+  covers utility/UCB-aware deterministic top-k ranking over caller-provided
+  relevance scores. It still does not cover similarity keys, route-key
+  extraction, injection formatting, or pruning thresholds;
 - trajectory-level credit assignment tied to retrieved skills;
 - RL/environment adapter boundary that can record Leaven evidence without
   turning Leaven into the RL framework.
@@ -603,8 +606,10 @@ Start with these generic primitives as failures expose them:
 8. Route equivalence and trigger evidence: simulated route oracle plus real
    provider/runtime trigger parser.
 9. Utility/retrieval/pruning substrate: `SkillUtilityState` now covers finite
-   EMA utility plus retrieval/trigger counters. Embedding keys, similarity
-   thresholds, UCB bonus, top-k injection, and eviction remain.
+   EMA utility plus retrieval/trigger counters, and `SkillUtilityRanker` covers
+   deterministic utility/UCB top-k ranking over caller-provided relevance
+   scores. Embedding keys, similarity thresholds, route-key extraction,
+   injection formatting, paper thresholds, and eviction remain.
 10. Paired rollout evidence: baseline-vs-skill groups, hindsight credit, and
     per-retrieved-skill utility update inputs.
 
