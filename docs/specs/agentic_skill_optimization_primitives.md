@@ -1223,11 +1223,13 @@ pub struct SkillUtilityState {
 
 The first implemented state is intentionally small: finite signed EMA utility,
 retrieval count, trigger count, utility-update count, explicit rename transfer,
-explicit removal, and deterministic ranking over caller-provided relevance
-scores with utility plus UCB-style exploration. It is enough to stop examples
-from inventing their own utility tables and top-k score combination while still
-leaving embeddings, route-key extraction, injection formatting, router
-training, and paper thresholds to later retrieval/selector layers.
+explicit removal, deterministic ranking over caller-provided relevance scores
+with utility plus UCB-style exploration, and D2Skill-style application of
+paired rollout task gaps plus caller-supplied step credits. It is enough to
+stop examples from inventing their own utility tables, top-k score
+combination, and paired rollout utility update loops while still leaving
+embeddings, route-key extraction, trajectory extraction, injection formatting,
+router training, and paper thresholds to later retrieval/selector layers.
 
 Promote utility state into an artifact only when changing that utility state
 changes the candidate being evaluated. Examples:
@@ -1749,7 +1751,7 @@ Generic primitives used:
 
 - skill bank entries with retrieval keys
 - task-skill and step-skill granularity
-- utility updates
+- utility updates from paired rollout reward gaps
 - utility-aware retrieval
 - capacity-bounded pruning
 - protected window for new skills
@@ -1757,13 +1759,14 @@ Generic primitives used:
 Paper-specific pieces:
 
 - RL policy training
-- paired baseline/skill rollouts
-- hindsight utility equations
+- actual paired baseline/skill rollout execution
+- hindsight trajectory parsing
 - ALFWorld/WebShop environments
 
 Implementation status:
 
-- Skill-bank membership and utility state are clear.
+- Skill-bank membership, paired rollout reward evidence, and utility state are
+  clear.
 - Coupling to RL training is outside the first Leaven reproduction path.
 - Need to decide whether dual-granularity skill banks are standard artifact
   shape or paper-specific registry state.

@@ -50,6 +50,7 @@ pub mod mixed {
     pub struct MixedEvidence;
 }
 pub mod pairwise;
+pub mod rollout;
 pub mod scalar;
 pub mod score_vector {
     pub enum Direction {
@@ -82,6 +83,7 @@ pub use json::JsonEvidence;
 pub use listwise::{ListwiseRankingEvidence, RankingItem};
 pub use mixed::MixedEvidence;
 pub use pairwise::{PairwiseJudgment, PairwiseJudgmentEvidence};
+pub use rollout::{PairedRolloutEvidence, PairedRolloutEvidenceError, RolloutGroupOutcome};
 pub use scalar::{ScalarEvidence, ScalarEvidenceError};
 pub use score_vector::{Direction, RawScoreValue, ScoreAxis, ScorePoint, ScoreVectorEvidence};
 pub use string::StringEvidence;
@@ -95,7 +97,8 @@ pub mod prelude {
         AgentTrajectoryEvidence, AgentTrajectoryEvidenceInput, AgentTrajectoryOutcome, Attachment,
         AttachmentKind, AttributableEvidence, CaseAssessmentEvidence, CaseOutcome,
         CasewiseEvidence, CommandEvidence, CommandRecord, DiffEvidence, Direction, JsonEvidence,
-        ListwiseRankingEvidence, MixedEvidence, OutputRecord, PairwiseJudgmentEvidence,
-        ScalarEvidence, ScalarEvidenceError, ScoreVectorEvidence, StringEvidence,
+        ListwiseRankingEvidence, MixedEvidence, OutputRecord, PairedRolloutEvidence,
+        PairwiseJudgmentEvidence, RolloutGroupOutcome, ScalarEvidence, ScalarEvidenceError,
+        ScoreVectorEvidence, StringEvidence,
     };
 }
