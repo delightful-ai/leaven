@@ -14,9 +14,10 @@ Population code may consume evidence and emit `PopulationEvent`s. It must not mu
   keyed by validated skill identity, but it must not parse skill files,
   materialize workspaces, or decide paper-specific retrieval policy. It may
   rank caller-supplied relevance scores with utility and exploration state and
-  map paired rollout reward gaps onto skill utility credits, but embeddings,
-  route-key extraction, trajectory parsing, and router training stay outside
-  it.
+  map paired rollout reward gaps onto skill utility credits. It may also plan
+  utility-guided pruning for a caller-supplied active skill pool, but
+  embeddings, route-key extraction, trajectory parsing, artifact mutation, and
+  router training stay outside it.
 - Put reusable population configuration in this crate when it can serve more than one optimizer. Put optimizer-specific strategy state in the optimizer crate.
 
 ## Current Public-Maturity Split
@@ -51,9 +52,12 @@ Population code may consume evidence and emit `PopulationEvent`s. It must not mu
   `PairedRolloutEvidence`, retrieved task skills, and either trajectory-level
   step credits or runner-provided `SkillStepTrajectoryOutcome`s and needs the
   D2Skill-style task gap and `Y_i - baseline_mean` step credit equation applied
-  through `SkillUtilityState`. Retrieval embeddings, paper route keys,
-  transcript parsing, injection formatting, and paper-specific thresholds
-  remain outside this module.
+  through `SkillUtilityState`. Use `SkillUtilityPruner` when a caller has one
+  active skill pool, paper-provided capacity/current-step/protected-window
+  values, and needs D2Skill-style eviction scores over stored utility and
+  retrieval stats. Retrieval embeddings, paper route keys, transcript parsing,
+  skill-bank artifact mutation, injection formatting, and paper-specific
+  cadence/threshold selection remain outside this module.
 - Use `ParetoFrontier::by_case().partition_filter(...)` for sparse casewise
   scalar frontiers. Missing case scores do not dominate present scores.
 - Return `PopulationEvent`s to the caller; only `RunContext`/engine records them
@@ -73,6 +77,9 @@ Population code may consume evidence and emit `PopulationEvent`s. It must not mu
   step trajectory outcomes or trajectory-level step credits; this crate only
   applies validated skill identities, finite reward gaps, smoothing, and
   checkpointable utility stats.
+- `SkillUtilityPruner` plans removals but does not remove files, mutate a
+  `SkillBank`, or decide which task/step pool is active. The caller supplies one
+  pool at a time and applies the returned plan at the artifact/optimizer layer.
 - Public unit structs in this crate are under audit pressure. Implement or
   scaffold-gate them before letting `leaven-std` or examples present them as
   standard population implementations.
@@ -80,7 +87,8 @@ Population code may consume evidence and emit `PopulationEvent`s. It must not mu
 ## Proof Anchors
 - `cargo nextest run -p leaven-population` proves keep-best, top-k frontier,
   top-k parent selector, tournament, skill utility state, paired rollout skill
-  credit application, step-trajectory credit extraction, and Pareto/frontier
-  population laws, including finite fitted updates and partition filtering.
+  credit application, step-trajectory credit extraction, utility-guided skill
+  pruning plans, and Pareto/frontier population laws, including finite fitted
+  updates and partition filtering.
 - `cargo nextest run -p leaven-gepa --test gepa_smoke` proves GEPA consumes population state without moving GEPA selectors or gates into this crate.
 - `cargo nextest run -p leaven --test scalar_keep_best --test pairwise_tournament --test gepa_parity` proves mature population implementations participate in public end-to-end workflows through the umbrella surface. It is not proof for placeholder population names.
