@@ -3,8 +3,9 @@ use leaven_evidence::{PairedRolloutEvidence, RolloutGroupOutcome};
 use leaven_kernel::FiniteF64;
 use leaven_population::{
     SkillPairedRolloutUtilityInput, SkillPairedRolloutUtilityInputError, SkillRetrievalCandidate,
-    SkillUseStats, SkillUtilityCredit, SkillUtilityRank, SkillUtilityRanker,
-    SkillUtilityRankingWeights, SkillUtilitySmoothing, SkillUtilityState, SkillUtilityTransfer,
+    SkillStepTrajectoryOutcome, SkillStepTrajectoryOutcomeError, SkillUseStats, SkillUtilityCredit,
+    SkillUtilityRank, SkillUtilityRanker, SkillUtilityRankingWeights, SkillUtilitySmoothing,
+    SkillUtilityState, SkillUtilityTransfer,
 };
 
 fn skill(name: &str) -> SkillName {
@@ -295,5 +296,67 @@ fn paired_rollout_utility_input_refuses_duplicate_task_skill_credit() {
         )
         .unwrap_err(),
         SkillPairedRolloutUtilityInputError::DuplicateTaskSkill { skill: duplicate },
+    );
+}
+
+#[test]
+fn paired_rollout_utility_input_extracts_step_credits_from_skill_trajectories() {
+    let task_alpha = skill("task-alpha");
+    let step_open = skill("step-open");
+    let step_pick = skill("step-pick");
+    let step_fail = skill("step-fail");
+    let rollout = PairedRolloutEvidence::new(
+        "alfworld-put-cool-mug",
+        RolloutGroupOutcome::new(2.try_into().unwrap(), finite(0.25)),
+        RolloutGroupOutcome::new(2.try_into().unwrap(), finite(0.75)),
+    )
+    .unwrap();
+    let input = SkillPairedRolloutUtilityInput::from_step_trajectories(
+        rollout,
+        vec![task_alpha.clone()],
+        vec![
+            SkillStepTrajectoryOutcome::new(
+                "skill-traj-0",
+                finite(1.0),
+                vec![step_open.clone(), step_pick.clone()],
+            )
+            .unwrap(),
+            SkillStepTrajectoryOutcome::new("skill-traj-1", finite(0.0), vec![step_fail.clone()])
+                .unwrap(),
+        ],
+    )
+    .unwrap();
+
+    assert_eq!(
+        input
+            .step_skill_credits()
+            .iter()
+            .map(|credit| (credit.skill().as_str(), credit.credit()))
+            .collect::<Vec<_>>(),
+        [
+            ("step-open", finite(0.75)),
+            ("step-pick", finite(0.75)),
+            ("step-fail", finite(-0.25)),
+        ]
+    );
+
+    let mut state = SkillUtilityState::default();
+    input.apply_to_state(
+        &mut state,
+        SkillUtilitySmoothing::one(),
+        SkillUtilitySmoothing::one(),
+    );
+
+    assert_eq!(state.utility(&task_alpha), finite(0.5));
+    assert_eq!(state.utility(&step_open), finite(0.75));
+    assert_eq!(state.utility(&step_pick), finite(0.75));
+    assert_eq!(state.utility(&step_fail), finite(-0.25));
+}
+
+#[test]
+fn step_trajectory_outcome_refuses_blank_identity() {
+    assert_eq!(
+        SkillStepTrajectoryOutcome::new("  ", finite(1.0), Vec::new()).unwrap_err(),
+        SkillStepTrajectoryOutcomeError::EmptyTrajectoryId,
     );
 }

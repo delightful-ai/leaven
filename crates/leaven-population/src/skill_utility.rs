@@ -188,6 +188,76 @@ impl SkillUtilityCredit {
     }
 }
 
+/// One skill-injected trajectory's reward and retrieved step skills.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SkillStepTrajectoryOutcome {
+    trajectory_id: String,
+    reward: FiniteF64,
+    retrieved_step_skills: Vec<SkillName>,
+}
+
+impl SkillStepTrajectoryOutcome {
+    /// Build a step-skill trajectory outcome.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SkillStepTrajectoryOutcomeError`] when the trajectory
+    /// identity is blank after trimming.
+    pub fn new(
+        trajectory_id: impl Into<String>,
+        reward: FiniteF64,
+        retrieved_step_skills: Vec<SkillName>,
+    ) -> Result<Self, SkillStepTrajectoryOutcomeError> {
+        let trajectory_id = trajectory_id.into();
+        if trajectory_id.trim().is_empty() {
+            return Err(SkillStepTrajectoryOutcomeError::EmptyTrajectoryId);
+        }
+
+        Ok(Self {
+            trajectory_id,
+            reward,
+            retrieved_step_skills,
+        })
+    }
+
+    /// Runner-provided trajectory identity.
+    #[must_use]
+    pub fn trajectory_id(&self) -> &str {
+        &self.trajectory_id
+    }
+
+    /// Terminal reward or success indicator for this skill-injected trajectory.
+    #[must_use]
+    pub const fn reward(&self) -> FiniteF64 {
+        self.reward
+    }
+
+    /// Step skills retrieved by this trajectory, in runner observation order.
+    #[must_use]
+    pub fn retrieved_step_skills(&self) -> &[SkillName] {
+        &self.retrieved_step_skills
+    }
+}
+
+/// Refusal reasons for step-trajectory outcome construction.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SkillStepTrajectoryOutcomeError {
+    /// The trajectory identity was blank.
+    EmptyTrajectoryId,
+}
+
+impl std::fmt::Display for SkillStepTrajectoryOutcomeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::EmptyTrajectoryId => {
+                f.write_str("skill step trajectory outcome requires a non-empty trajectory id")
+            }
+        }
+    }
+}
+
+impl std::error::Error for SkillStepTrajectoryOutcomeError {}
+
 /// D2Skill-style utility input derived from paired rollout evidence.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SkillPairedRolloutUtilityInput {
@@ -222,6 +292,36 @@ impl SkillPairedRolloutUtilityInput {
             task_skills,
             step_skill_credits,
         })
+    }
+
+    /// Build utility-update input from skill-injected trajectory outcomes.
+    ///
+    /// Each retrieved step skill receives the `D2Skill` trajectory-level credit
+    /// `trajectory_reward - baseline_group_mean`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SkillPairedRolloutUtilityInputError`] when a task skill is
+    /// repeated.
+    pub fn from_step_trajectories(
+        paired_rollout: PairedRolloutEvidence,
+        task_skills: Vec<SkillName>,
+        step_trajectories: Vec<SkillStepTrajectoryOutcome>,
+    ) -> Result<Self, SkillPairedRolloutUtilityInputError> {
+        let baseline_mean = paired_rollout.baseline().mean_reward();
+        let step_skill_credits = step_trajectories
+            .into_iter()
+            .flat_map(|trajectory| {
+                let credit = FiniteF64::new(trajectory.reward.as_f64() - baseline_mean.as_f64())
+                    .expect("difference between finite rewards remains finite");
+                trajectory
+                    .retrieved_step_skills
+                    .into_iter()
+                    .map(move |skill| SkillUtilityCredit::new(skill, credit))
+            })
+            .collect();
+
+        Self::new(paired_rollout, task_skills, step_skill_credits)
     }
 
     /// Paired rollout evidence supplying the task-level reward gap.

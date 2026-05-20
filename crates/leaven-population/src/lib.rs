@@ -23,10 +23,11 @@ pub use pareto_frontier::{ParetoFrontier, ParetoFrontierBuilder, PartitionFilter
 pub use plackett_luce::PlackettLuceFit;
 pub use skill_utility::{
     SkillPairedRolloutUtilityInput, SkillPairedRolloutUtilityInputError,
-    SkillPairedRolloutUtilityUpdates, SkillRetrievalCandidate, SkillUseStats, SkillUtilityCredit,
-    SkillUtilityRank, SkillUtilityRanker, SkillUtilityRankingWeights,
-    SkillUtilityRankingWeightsError, SkillUtilitySmoothing, SkillUtilitySmoothingError,
-    SkillUtilityState, SkillUtilityTransfer, SkillUtilityUpdate,
+    SkillPairedRolloutUtilityUpdates, SkillRetrievalCandidate, SkillStepTrajectoryOutcome,
+    SkillStepTrajectoryOutcomeError, SkillUseStats, SkillUtilityCredit, SkillUtilityRank,
+    SkillUtilityRanker, SkillUtilityRankingWeights, SkillUtilityRankingWeightsError,
+    SkillUtilitySmoothing, SkillUtilitySmoothingError, SkillUtilityState, SkillUtilityTransfer,
+    SkillUtilityUpdate,
 };
 pub use top_k_frontier::{TopKFrontier, TopKParentSelectionPolicy, TopKParentSelector};
 pub use tournament::{BradleyTerryFit, TournamentPopulation};
@@ -38,10 +39,10 @@ pub mod prelude {
         NicheDescriptor, NoPopulation, NoveltyPopulation, ParetoFrontier, ParetoFrontierBuilder,
         PartitionFilter, PlackettLuceFit, SkillPairedRolloutUtilityInput,
         SkillPairedRolloutUtilityInputError, SkillPairedRolloutUtilityUpdates,
-        SkillRetrievalCandidate, SkillUseStats, SkillUtilityCredit, SkillUtilityRank,
-        SkillUtilityRanker, SkillUtilityRankingWeights, SkillUtilityRankingWeightsError,
-        SkillUtilitySmoothing, SkillUtilitySmoothingError, SkillUtilityState, SkillUtilityTransfer,
-        SkillUtilityUpdate, TopKFrontier, TopKParentSelectionPolicy, TopKParentSelector,
-        TournamentPopulation,
+        SkillRetrievalCandidate, SkillStepTrajectoryOutcome, SkillStepTrajectoryOutcomeError,
+        SkillUseStats, SkillUtilityCredit, SkillUtilityRank, SkillUtilityRanker,
+        SkillUtilityRankingWeights, SkillUtilityRankingWeightsError, SkillUtilitySmoothing,
+        SkillUtilitySmoothingError, SkillUtilityState, SkillUtilityTransfer, SkillUtilityUpdate,
+        TopKFrontier, TopKParentSelectionPolicy, TopKParentSelector, TournamentPopulation,
     };
 }

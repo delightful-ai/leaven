@@ -509,9 +509,11 @@ Leaven primitive blockers:
   covers utility/UCB-aware deterministic top-k ranking over caller-provided
   relevance scores. `SkillPairedRolloutUtilityInput` now maps paired rollout
   task gaps and caller-supplied step credits onto validated skill utility
-  updates. It still does not cover similarity keys, route-key extraction,
-  trajectory extraction, injection formatting, or pruning thresholds;
-- trajectory-level credit extraction tied to retrieved step skills;
+  updates, and can derive step credits from runner-provided
+  `SkillStepTrajectoryOutcome`s using D2Skill's `Y_i - baseline_mean`
+  equation. It still does not cover similarity keys, route-key extraction,
+  transcript/env extraction, injection formatting, or pruning thresholds;
+- transcript/env extraction of retrieved step skills into trajectory outcomes;
 - RL/environment adapter boundary that can record Leaven evidence without
   turning Leaven into the RL framework.
 
@@ -613,9 +615,11 @@ Start with these generic primitives as failures expose them:
    EMA utility plus retrieval/trigger counters, `SkillUtilityRanker` covers
    deterministic utility/UCB top-k ranking over caller-provided relevance
    scores, and `SkillPairedRolloutUtilityInput` covers D2Skill-style
-   task-gap/step-credit application from paired rollout evidence. Embedding
-   keys, similarity thresholds, route-key extraction, trajectory extraction,
-   injection formatting, paper thresholds, and eviction remain.
+   task-gap/step-credit application from paired rollout evidence, including
+   the step trajectory `Y_i - baseline_mean` credit equation over
+   `SkillStepTrajectoryOutcome`s. Embedding keys, similarity thresholds,
+   route-key extraction, transcript/env extraction, injection formatting,
+   paper thresholds, and eviction remain.
 10. Paired rollout evidence: `PairedRolloutEvidence` now covers
     baseline-vs-treatment group rewards and finite treatment-minus-baseline
     deltas. Hindsight trajectory parsing and real ALFWorld/WebShop rollout
