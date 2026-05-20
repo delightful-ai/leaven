@@ -1,21 +1,16 @@
 //! GEPA agentic reflection adapter for skill-bank artifacts.
 
 mod input;
-mod materializer;
-mod parser;
 mod reflector;
-mod renderer;
+mod skill_reflector;
 
-pub use input::SkillBankGepaReflectionInput;
-pub use materializer::SkillBankGepaReflectionMaterializer;
-pub use parser::SkillBankGepaReflectionParser;
+pub use input::SkillBankReflectionInput;
 pub use reflector::GepaSkillBankAgenticReflector;
-pub use renderer::GepaSkillBankReflectionRenderer;
+pub use skill_reflector::{SkillBankReflectionError, SkillBankReflector};
 
 pub mod prelude {
     pub use crate::{
-        GepaSkillBankAgenticReflector, GepaSkillBankReflectionRenderer,
-        SkillBankGepaReflectionInput, SkillBankGepaReflectionMaterializer,
-        SkillBankGepaReflectionParser,
+        GepaSkillBankAgenticReflector, SkillBankReflectionError, SkillBankReflectionInput,
+        SkillBankReflector,
     };
 }

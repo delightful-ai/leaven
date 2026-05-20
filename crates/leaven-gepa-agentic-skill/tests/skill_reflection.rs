@@ -8,7 +8,7 @@ use leaven_artifact_skill::{
 };
 use leaven_core::{Evidence, InfoRef, OptimizationProblem};
 use leaven_engine::{BudgetLedger, RunContext, RunGraph};
-use leaven_gepa::{GepaReflector, ReflectRequest, ReflectiveExample};
+use leaven_gepa::{GepaReflector, ReflectRequest, ReflectiveCase, ReflectiveValue};
 use leaven_gepa_agentic_skill::GepaSkillBankAgenticReflector;
 use leaven_kernel::{ProposerId, RunId};
 use leaven_workspace::WorkspacePath;
@@ -33,10 +33,12 @@ fn skill_bank_gepa_reflector_materializes_agent_edit_and_applies_child() {
             LocalWorkspaceFactory::temp(),
             FakeAgentRuntime::new(vec![
                 FakeAgentAction::ReadFile {
-                    path: WorkspacePath::new(".agents/skills/alpha/SKILL.md").unwrap(),
+                    path: WorkspacePath::new("target/current/.agents/skills/alpha/SKILL.md")
+                        .unwrap(),
                 },
                 FakeAgentAction::WriteFile {
-                    path: WorkspacePath::new(".agents/skills/alpha/SKILL.md").unwrap(),
+                    path: WorkspacePath::new("target/current/.agents/skills/alpha/SKILL.md")
+                        .unwrap(),
                     bytes: skill_md(
                         "alpha",
                         "Debugs Rust tests and fixtures. Use when Rust tests fail or fixture drift appears.",
@@ -52,13 +54,17 @@ fn skill_bank_gepa_reflector_materializes_agent_edit_and_applies_child() {
             path: SkillPath::skill_md(),
         };
         let request = ReflectRequest::for_part(parent, part, "alpha/SKILL.md")
-            .with_examples([ReflectiveExample {
-                input: "cargo nextest run -p leaven-gepa-agentic-skill failed".to_owned(),
-                output: Some("The prior skill ignored fixture drift.".to_owned()),
-                score: Some(0.25),
-                feedback: "Mention fixture drift and require explicit fixture edits.".to_owned(),
-                ..ReflectiveExample::default()
-            }])
+            .with_examples([ReflectiveCase::from_example(
+                ReflectiveValue::Text(
+                    "cargo nextest run -p leaven-gepa-agentic-skill failed".to_owned(),
+                ),
+                None,
+                Some(ReflectiveValue::Text(
+                    "The prior skill ignored fixture drift.".to_owned(),
+                )),
+                Some(0.25),
+                "Mention fixture drift and require explicit fixture edits.",
+            )])
             .with_source_refs([InfoRef::Candidate(parent)])
             .with_attempt_index(0);
         let mut ctx = RunContext::<SkillProblem>::new(&mut graph, &mut budget);

@@ -61,12 +61,12 @@ It composes core, surface, engine, evidence, population, render, and LM vocabula
   `GepaReflectionEvidence`, and `WorstEvidencePart` were inert, misleading, or
   superseded public names and have been removed. `WorstEvidencePart` was a
   `PartSelector` placeholder struct with no trait impl; reintroduce trace-aware
-  part selection only as a behavior-bearing, tested selector. `SelectedFeedback` collapsed into
-  `ReflectRequest` (`examples` plus `source_refs`); the per-case reflection row
-  is `ReflectiveExample`; per-case scoring is row-local through
-  `GepaCaseEvidence`, and the dataset selection/projection seam is
-  `ReflectiveDatasetBuilder` with the `GepaReflectiveDataset` default. Do not
-  reintroduce the removed names.
+  part selection only as a behavior-bearing, tested selector. `SelectedFeedback`
+  collapsed into `ReflectRequest` (`examples` plus `source_refs`); the
+  reflective dataset unit is `ReflectiveCase` with one or more `ReflectiveRun`
+  records; per-case scoring is row-local through `GepaCaseEvidence`, and the
+  dataset selection/projection seam is `ReflectiveDatasetBuilder` with the
+  `GepaReflectiveDataset` default. Do not reintroduce the removed names.
 
 ## Proof Anchors
 - `cargo nextest run -p leaven-gepa` proves local GEPA surface ownership, edit lowering, selectors, gates, checkpoint/restore, validation, and proposer read-scope behavior.

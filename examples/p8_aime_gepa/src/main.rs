@@ -16,8 +16,8 @@ use leaven::engine::{
 use leaven::eval::{Case, SplitRole};
 use leaven::gepa::{
     Gepa, GepaCandidateIndex, GepaEventSummary, GepaOptimizedExt, GepaProfile, GepaProposalAttempt,
-    GepaReport, GepaSkipReason, ReflectionError, ReflectiveDatasetBuilder, ReflectiveExample,
-    ReflectiveSideInfoValue,
+    GepaReport, GepaSkipReason, ReflectionError, ReflectiveCase, ReflectiveDatasetBuilder,
+    ReflectiveSideInfoValue, ReflectiveValue,
 };
 use leaven::kernel::Metered;
 use leaven::kernel::{
@@ -5173,7 +5173,7 @@ impl ReflectiveDatasetBuilder<RunProblem<AimePrompt, AimeInput, AimeTarget>, Aim
         parent: CandidateId,
         parent_assessments: &[AssessmentId],
         _part: &&'static str,
-    ) -> Result<Vec<ReflectiveExample>, ReflectionError> {
+    ) -> Result<Vec<ReflectiveCase>, ReflectionError> {
         let mut examples = Vec::with_capacity(parent_assessments.len());
         let parent_prompt = ctx.graph().artifact(parent).ok_or_else(|| {
             ReflectionError::builder(format!(
@@ -5208,22 +5208,25 @@ impl ReflectiveDatasetBuilder<RunProblem<AimePrompt, AimeInput, AimeTarget>, Aim
             let reasoning = trace.map_or_else(String::new, |trace| trace.reasoning);
             let input = self.inputs_by_case.get(&case).cloned().unwrap_or_default();
             let feedback = evidence.feedback().to_owned();
-            examples.push(ReflectiveExample {
-                side_info: aime_reflection_side_info_example(AimeReflectionSideInfo {
+            let mut reflective_case = ReflectiveCase::from_example(
+                ReflectiveValue::Text(input.clone()),
+                None,
+                Some(ReflectiveValue::Text(output.clone())),
+                Some(evidence.score().score()),
+                feedback.clone(),
+            );
+            reflective_case.case_id = Some(case);
+            reflective_case.runs[0].attempt_index = None;
+            reflective_case.runs[0].side_info = aime_reflection_side_info_example(AimeReflectionSideInfo {
                     score: evidence.score().score(),
                     input: input.clone(),
                     prompt: parent_prompt.system.clone(),
                     output: output.clone(),
                     reasoning: reasoning.clone(),
                     execution_feedback: feedback.clone(),
-                }),
-                case: Some(case),
-                input,
-                output: Some(output),
-                score: Some(evidence.score().score()),
-                feedback,
-                source_refs: vec![InfoRef::Assessment(*parent_assessment)],
-            });
+                });
+            reflective_case.source_refs.push(InfoRef::Assessment(*parent_assessment));
+            examples.push(reflective_case);
         }
         Ok(examples)
     }
@@ -5717,16 +5720,23 @@ fn canonical_aime_reflection_request_with_sampling(
     let artifact = AimePrompt::new("<curr_param>");
     let surface = AimePromptSurface;
     let request = ReflectRequest::for_part(CandidateId::new(), "system", "system").with_examples([
-        ReflectiveExample {
-            side_info: aime_reflection_side_info_example(AimeReflectionSideInfo {
+        {
+            let mut case = ReflectiveCase::from_example(
+                ReflectiveValue::default(),
+                None,
+                None,
+                None,
+                String::new(),
+            );
+            case.runs[0].side_info = aime_reflection_side_info_example(AimeReflectionSideInfo {
                 score: 0.0,
                 input: "<input>".to_owned(),
                 prompt: "<prompt>".to_owned(),
                 output: "<output>".to_owned(),
                 reasoning: "<reasoning>".to_owned(),
                 execution_feedback: "<execution_feedback>".to_owned(),
-            }),
-            ..ReflectiveExample::default()
+            });
+            case
         },
     ]);
     DefaultReflectionRenderer
@@ -6733,8 +6743,15 @@ Provide the new parameter value within ``` blocks.";
         let artifact = AimePrompt::new("Solve carefully.");
         let surface = AimePromptSurface;
         let request = ReflectRequest::for_part(CandidateId::new(), "system", "system")
-            .with_examples([ReflectiveExample {
-                side_info: aime_reflection_side_info_example(AimeReflectionSideInfo {
+            .with_examples([{
+                let mut case = ReflectiveCase::from_example(
+                    ReflectiveValue::default(),
+                    None,
+                    None,
+                    None,
+                    String::new(),
+                );
+                case.runs[0].side_info = aime_reflection_side_info_example(AimeReflectionSideInfo {
                     score: 0.0,
                     input: "What is 19 + 23?".to_owned(),
                     prompt: "Solve carefully.".to_owned(),
@@ -6742,8 +6759,8 @@ Provide the new parameter value within ``` blocks.";
                     reasoning: "I added incorrectly.".to_owned(),
                     execution_feedback: "Your answer is incorrect. The correct answer is '42'."
                         .to_owned(),
-                }),
-                ..ReflectiveExample::default()
+                });
+                case
             }]);
 
         let lm_request = DefaultReflectionRenderer
