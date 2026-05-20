@@ -21,9 +21,11 @@ MILESTONE_PACKAGES = [
     "p2_pairwise_tournament",
     "p3_gepa_parity",
     "p4_meta_harness_lite",
+    "p5_evoskill_iteration",
     "p6_optimizer_policy_self_opt",
     "p7_self_optimization_kernel",
     "p8_aime_gepa",
+    "trace2skill_spreadsheetbench",
 ]
 
 RUN_PACKAGES = [

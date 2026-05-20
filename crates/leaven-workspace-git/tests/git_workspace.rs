@@ -1,5 +1,6 @@
 use std::fs;
 use std::process::Command as ProcessCommand;
+use std::time::Duration;
 
 use futures::executor::block_on;
 use leaven_artifact_git::{GitRefKey, GitRefKind, GitRefName};
@@ -45,6 +46,79 @@ fn git_workspace_factory_clones_and_checks_out_program_branch() {
 }
 
 #[test]
+fn git_workspace_checkout_failure_removes_allocated_clone() {
+    block_on(async {
+        let source = fixture_repo();
+        let workspace_root = tempfile::tempdir().unwrap();
+        let factory = GitWorkspaceFactory::local(source.path())
+            .with_checkout("missing/ref")
+            .with_workspace_root(workspace_root.path());
+
+        let error = match factory.allocate(WorkspaceConfig::default()).await {
+            Ok(_) => panic!("checkout unexpectedly succeeded"),
+            Err(error) => error,
+        };
+
+        assert!(error.to_string().contains("git checkout"));
+        assert_eq!(fs::read_dir(workspace_root.path()).unwrap().count(), 0);
+    });
+}
+
+#[test]
+fn git_workspace_timeout_drains_child_output() {
+    block_on(async {
+        let source = fixture_repo();
+        let factory = GitWorkspaceFactory::local(source.path());
+        let mut workspace = factory.allocate(WorkspaceConfig::default()).await.unwrap();
+        let mut slot = workspace.slot(WorkspacePath::root()).unwrap();
+        let mut command = Command::new("sh");
+        command.args = vec![
+            "-c".to_owned(),
+            "i=0; while [ $i -lt 20000 ]; do printf xxxxxxxxxx; i=$((i + 1)); done; printf done >&2"
+                .to_owned(),
+        ];
+        command.limits.timeout = Some(Duration::from_secs(5));
+
+        let output = slot.run_command(command).unwrap();
+
+        assert_eq!(output.status.code, Some(0));
+        assert_eq!(output.stdout.bytes.len(), 200_000);
+        assert_eq!(output.stderr.bytes, b"done");
+        drop(slot);
+        workspace.cleanup().await.unwrap();
+    });
+}
+
+#[cfg(unix)]
+#[test]
+fn git_workspace_lists_symlinks_without_following_them() {
+    block_on(async {
+        let source = fixture_repo();
+        let outside = tempfile::tempdir().unwrap();
+        fs::write(outside.path().join("outside.txt"), "outside\n").unwrap();
+        let factory = GitWorkspaceFactory::local(source.path());
+        let mut workspace = factory.allocate(WorkspaceConfig::default()).await.unwrap();
+        let mount = workspace
+            .local_mount()
+            .expect("git workspace has local mount")
+            .to_path_buf();
+        std::os::unix::fs::symlink(outside.path(), mount.join("linked-dir")).unwrap();
+        std::os::unix::fs::symlink("missing-target", mount.join("dangling-link")).unwrap();
+
+        let files = workspace
+            .slot(WorkspacePath::root())
+            .unwrap()
+            .list_files(&WorkspacePath::root())
+            .unwrap();
+
+        assert!(files.contains(&WorkspacePath::new("linked-dir").unwrap()));
+        assert!(files.contains(&WorkspacePath::new("dangling-link").unwrap()));
+        assert!(!files.contains(&WorkspacePath::new("linked-dir/outside.txt").unwrap()));
+        workspace.cleanup().await.unwrap();
+    });
+}
+
+#[test]
 fn git_checkout_captures_restores_and_deletes_program_refs() {
     block_on(async {
         let source = fixture_repo();
@@ -56,6 +130,11 @@ fn git_checkout_captures_restores_and_deletes_program_refs() {
             .to_path_buf();
 
         GitCheckout::restore_ref(&mount, &branch_key("program/base")).unwrap();
+        assert_eq!(
+            checked_out_ref(&mount),
+            "program/base",
+            "branch restore should attach HEAD to the branch"
+        );
         fs::write(mount.join("program.txt"), "child program\n").unwrap();
         run_git(&mount, ["checkout", "-b", "program/child"]);
         run_git(&mount, ["add", "program.txt"]);
@@ -114,7 +193,56 @@ fn git_checkout_restores_tag_when_branch_has_same_short_name() {
         run_git(&mount, ["tag", "program/base"]);
 
         GitCheckout::restore_ref(&mount, &tag_key("program/base")).unwrap();
-        assert_eq!(fs::read_to_string(mount.join("program.txt")).unwrap(), "base\n");
+        assert_eq!(
+            fs::read_to_string(mount.join("program.txt")).unwrap(),
+            "base\n"
+        );
+
+        workspace.cleanup().await.unwrap();
+    });
+}
+
+#[test]
+fn git_checkout_captures_untracked_files_deletions_and_symlinks() {
+    block_on(async {
+        let source = fixture_repo();
+        let factory = GitWorkspaceFactory::local(source.path());
+        let workspace = factory.allocate(WorkspaceConfig::default()).await.unwrap();
+        let mount = workspace
+            .local_mount()
+            .expect("git workspace has local mount")
+            .to_path_buf();
+
+        fs::remove_file(mount.join("program.txt")).unwrap();
+        fs::write(mount.join("scratch.txt"), "untracked\n").unwrap();
+        #[cfg(unix)]
+        std::os::unix::fs::symlink("scratch.txt", mount.join("scratch-link")).unwrap();
+
+        let artifact = GitCheckout::capture(&mount).unwrap();
+
+        assert!(
+            artifact
+                .files()
+                .get(&leaven_artifact_git::GitPath::new("program.txt").unwrap())
+                .is_none(),
+            "deleted tracked files should be absent from the captured artifact"
+        );
+        assert_eq!(
+            artifact
+                .files()
+                .get(&leaven_artifact_git::GitPath::new("scratch.txt").unwrap())
+                .map(Vec::as_slice),
+            Some(b"untracked\n".as_slice())
+        );
+        #[cfg(unix)]
+        assert_eq!(
+            artifact
+                .files()
+                .get(&leaven_artifact_git::GitPath::new("scratch-link").unwrap())
+                .map(Vec::as_slice),
+            Some(b"scratch.txt".as_slice()),
+            "symlinks should capture the link payload, not the target file bytes"
+        );
 
         workspace.cleanup().await.unwrap();
     });
@@ -132,6 +260,16 @@ fn fixture_repo() -> tempfile::TempDir {
     run_git_with_identity(source.path(), ["commit", "-m", "program base"]);
     run_git(source.path(), ["tag", "frontier/base"]);
     source
+}
+
+fn checked_out_ref(cwd: &std::path::Path) -> String {
+    let output = ProcessCommand::new("git")
+        .args(["rev-parse", "--abbrev-ref", "HEAD"])
+        .current_dir(cwd)
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    String::from_utf8(output.stdout).unwrap().trim().to_owned()
 }
 
 fn branch_key(name: &str) -> GitRefKey {

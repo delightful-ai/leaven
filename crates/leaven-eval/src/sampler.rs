@@ -92,7 +92,8 @@ impl CategoryRoundRobinSampler {
             let category = self.categories[category_index].clone();
             self.take_category_samples(&category, &mut batch);
         }
-        self.category_cursor += selected_category_count;
+        self.category_cursor =
+            (self.category_cursor + selected_category_count) % self.categories.len();
         batch
     }
 

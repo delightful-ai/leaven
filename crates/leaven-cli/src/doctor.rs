@@ -439,6 +439,8 @@ pub enum DoctorError {
     Optimizer(String),
     #[error("reflection input skill bank is empty")]
     EmptySkillBank,
+    #[error("reflection input part is not a materialized skill SKILL.md path: {0}")]
+    InvalidReflectionPart(String),
     #[error("failed to read reflection input `{}`", path.display())]
     ReadInput {
         path: PathBuf,
@@ -500,12 +502,7 @@ fn simulated_skill_edit(
     input: &SkillBankGepaReflectionInput<String>,
     layout: &SkillWorkspaceLayout,
 ) -> Result<(SkillName, WorkspacePath, Vec<u8>), DoctorError> {
-    let (name, folder) = input
-        .artifact
-        .folders()
-        .iter()
-        .next()
-        .ok_or(DoctorError::EmptySkillBank)?;
+    let (name, folder) = selected_skill_folder(input, layout)?;
     let write_path = workspace_path(layout, name.as_str(), "SKILL.md")?;
     let description = format!(
         "{} Doctor simulated GEPA reflection edit.",
@@ -526,6 +523,35 @@ fn simulated_skill_edit(
         )
         .into_bytes(),
     ))
+}
+
+fn selected_skill_folder<'a>(
+    input: &'a SkillBankGepaReflectionInput<String>,
+    layout: &SkillWorkspaceLayout,
+) -> Result<(SkillName, &'a leaven_artifact_skill::SkillFolder), DoctorError> {
+    if input.artifact.is_empty() {
+        return Err(DoctorError::EmptySkillBank);
+    }
+    let part = input
+        .part
+        .strip_prefix(layout.skills_root.as_str())
+        .and_then(|stripped| stripped.strip_prefix('/'))
+        .unwrap_or(&input.part);
+    let (skill, path) = part
+        .split_once('/')
+        .ok_or_else(|| DoctorError::InvalidReflectionPart(input.part.clone()))?;
+    let path =
+        SkillPath::new(path).map_err(|_| DoctorError::InvalidReflectionPart(input.part.clone()))?;
+    if !path.is_skill_md() {
+        return Err(DoctorError::InvalidReflectionPart(input.part.clone()));
+    }
+    let skill = SkillName::new(skill)
+        .map_err(|_| DoctorError::InvalidReflectionPart(input.part.clone()))?;
+    let folder = input
+        .artifact
+        .get(&skill)
+        .ok_or_else(|| DoctorError::InvalidReflectionPart(input.part.clone()))?;
+    Ok((skill, folder))
 }
 
 fn output_root(layout: &SkillWorkspaceLayout) -> WorkspacePath {

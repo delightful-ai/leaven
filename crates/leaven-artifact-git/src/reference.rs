@@ -109,9 +109,8 @@ impl GitRefKey {
     }
 
     pub(crate) fn feed_fingerprint(&self, builder: &mut FingerprintBuilder) {
-        builder
-            .update([self.kind.fingerprint_byte()])
-            .update(self.name.as_str().as_bytes());
+        builder.update([self.kind.fingerprint_byte()]);
+        feed_fingerprint_field(builder, self.name.as_str().as_bytes());
     }
 }
 
@@ -134,7 +133,8 @@ impl GitRefTarget {
                 builder.update(b"object").update(id.as_str().as_bytes());
             }
             Self::Symbolic(name) => {
-                builder.update(b"symbolic").update(name.as_str().as_bytes());
+                builder.update(b"symbolic");
+                feed_fingerprint_field(builder, name.as_str().as_bytes());
             }
         }
     }
@@ -255,12 +255,17 @@ impl GitRef {
             }
         }
         for (key, value) in &self.metadata {
-            builder
-                .update(b"metadata")
-                .update(key.as_bytes())
-                .update(value.as_bytes());
+            builder.update(b"metadata");
+            feed_fingerprint_field(builder, key.as_bytes());
+            feed_fingerprint_field(builder, value.as_bytes());
         }
     }
+}
+
+fn feed_fingerprint_field(builder: &mut FingerprintBuilder, bytes: &[u8]) {
+    builder
+        .update((bytes.len() as u64).to_le_bytes())
+        .update(bytes);
 }
 
 fn validate_ref_name(name: &str) -> Result<(), GitArtifactError> {
@@ -276,6 +281,15 @@ fn validate_ref_name(name: &str) -> Result<(), GitArtifactError> {
     if name.contains("..") {
         return invalid_ref(name, "ref name contains dot-dot");
     }
+    if name == "@" {
+        return invalid_ref(name, "ref name cannot be @");
+    }
+    if name.contains("@{") {
+        return invalid_ref(name, "ref name contains @{");
+    }
+    if name.ends_with('.') {
+        return invalid_ref(name, "ref name cannot end with dot");
+    }
     if ends_with_lock_suffix(name) {
         return invalid_ref(name, "ref name cannot end with .lock");
     }
@@ -288,7 +302,11 @@ fn validate_ref_name(name: &str) -> Result<(), GitArtifactError> {
         }
     }
     for component in name.split('/') {
-        if component == "." || ends_with_lock_suffix(component) {
+        if component == "."
+            || component.starts_with('.')
+            || component.ends_with('.')
+            || ends_with_lock_suffix(component)
+        {
             return invalid_ref(name, "ref name contains forbidden component");
         }
     }

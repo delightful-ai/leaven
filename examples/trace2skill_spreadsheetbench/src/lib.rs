@@ -161,11 +161,12 @@ pub fn build_training_corpus_from_run_artifacts(
         if !train_cases.contains(&case_id) {
             continue;
         }
+        let outcome = result.outcome();
         let trajectory = AgentTrajectoryEvidence::new(AgentTrajectoryEvidenceInput {
             session_id: AgentSessionId::new(),
             case_id: Some(case_id),
             task_id: task_id.clone(),
-            outcome: result.outcome(),
+            outcome: outcome.clone(),
             model_id: run.model.clone(),
             model_config_fingerprint: fingerprint,
             transcript: artifact_record(
@@ -174,7 +175,7 @@ pub fn build_training_corpus_from_run_artifacts(
             )?,
             commands: CommandEvidence::new(Vec::new()),
         })
-        .with_analysis_records(analysis_records(input.analysis_dir, &task_id));
+        .with_analysis_records(analysis_records(input.analysis_dir, &task_id, &outcome));
         corpus.push(trajectory)?;
     }
 
@@ -262,39 +263,40 @@ fn artifact_record(
     }))
 }
 
-fn analysis_records(root: Option<&Path>, task_id: &str) -> Vec<AgentTrajectoryAnalysisRecord> {
+fn analysis_records(
+    root: Option<&Path>,
+    task_id: &str,
+    outcome: &AgentTrajectoryOutcome,
+) -> Vec<AgentTrajectoryAnalysisRecord> {
     let Some(root) = root else {
         return Vec::new();
     };
-    let error_path = root.join(format!("error_analysis_{task_id}.md"));
-    if error_path.exists() {
-        return vec![AgentTrajectoryAnalysisRecord::new(
-            AgentTrajectoryAnalysisKind::Error,
-            error_path
-                .file_name()
-                .and_then(|name| name.to_str())
-                .unwrap_or("error_analysis.md"),
-            OutputRecord::blob(BlobRef {
-                store: "trace2skill-run-artifacts".to_owned(),
-                key: error_path.display().to_string(),
-            }),
-        )];
-    }
-    let success_path = root.join(format!("success_analysis_{task_id}.md"));
-    if success_path.exists() {
-        return vec![AgentTrajectoryAnalysisRecord::new(
+    let (kind, filename, fallback) = match outcome {
+        AgentTrajectoryOutcome::Success => (
             AgentTrajectoryAnalysisKind::Success,
-            success_path
-                .file_name()
-                .and_then(|name| name.to_str())
-                .unwrap_or("success_analysis.md"),
-            OutputRecord::blob(BlobRef {
-                store: "trace2skill-run-artifacts".to_owned(),
-                key: success_path.display().to_string(),
-            }),
-        )];
+            format!("success_analysis_{task_id}.md"),
+            "success_analysis.md",
+        ),
+        AgentTrajectoryOutcome::Failure { .. } => (
+            AgentTrajectoryAnalysisKind::Error,
+            format!("error_analysis_{task_id}.md"),
+            "error_analysis.md",
+        ),
+    };
+    let path = root.join(filename);
+    if !path.exists() {
+        return Vec::new();
     }
-    Vec::new()
+    vec![AgentTrajectoryAnalysisRecord::new(
+        kind,
+        path.file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or(fallback),
+        OutputRecord::blob(BlobRef {
+            store: "trace2skill-run-artifacts".to_owned(),
+            key: path.display().to_string(),
+        }),
+    )]
 }
 
 fn log_filename(agent_name: &str, task_id: &str, format: &str) -> String {

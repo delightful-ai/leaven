@@ -60,6 +60,7 @@ impl GitArtifact {
         for (path, bytes) in &self.files {
             builder
                 .update(b"file")
+                .update((path.as_str().len() as u64).to_le_bytes())
                 .update(path.as_str().as_bytes())
                 .update((bytes.len() as u64).to_le_bytes())
                 .update(bytes);

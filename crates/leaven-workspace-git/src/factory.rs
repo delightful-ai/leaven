@@ -1,4 +1,4 @@
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::{Duration, Instant};
@@ -48,7 +48,10 @@ impl WorkspaceFactory for GitWorkspaceFactory {
         let root = self.root.join(format!("leaven-git-{}", RunId::new()));
         run_git_clone(&self.source, &root)?;
         if let Some(checkout) = &self.checkout {
-            run_git_checkout(&root, checkout)?;
+            if let Err(error) = run_git_checkout(&root, checkout) {
+                let _ = std::fs::remove_dir_all(&root);
+                return Err(error);
+            }
         }
         Ok(Workspace::new(
             root.clone(),
@@ -220,21 +223,26 @@ fn wait_for_output(
             .wait_with_output()
             .map_err(|err| WorkspaceError::Command(err.to_string()));
     };
+    let stdout = spawn_output_drain(child.stdout.take());
+    let stderr = spawn_output_drain(child.stderr.take());
 
     loop {
-        if child
+        if let Some(status) = child
             .try_wait()
             .map_err(|err| WorkspaceError::Command(err.to_string()))?
-            .is_some()
         {
-            return child
-                .wait_with_output()
-                .map_err(|err| WorkspaceError::Command(err.to_string()));
+            return Ok(std::process::Output {
+                status,
+                stdout: join_output_drain(stdout)?,
+                stderr: join_output_drain(stderr)?,
+            });
         }
 
         if start.elapsed() >= timeout {
             let _ = child.kill();
             let _ = child.wait();
+            let _ = stdout.join();
+            let _ = stderr.join();
             return Err(WorkspaceError::CommandTimedOut {
                 program: program.to_owned(),
                 timeout,
@@ -245,15 +253,43 @@ fn wait_for_output(
     }
 }
 
+fn spawn_output_drain<R>(
+    reader: Option<R>,
+) -> std::thread::JoinHandle<Result<Vec<u8>, std::io::Error>>
+where
+    R: Read + Send + 'static,
+{
+    std::thread::spawn(move || {
+        let mut bytes = Vec::new();
+        if let Some(mut reader) = reader {
+            reader.read_to_end(&mut bytes)?;
+        }
+        Ok(bytes)
+    })
+}
+
+fn join_output_drain(
+    handle: std::thread::JoinHandle<Result<Vec<u8>, std::io::Error>>,
+) -> Result<Vec<u8>, WorkspaceError> {
+    handle
+        .join()
+        .map_err(|_| WorkspaceError::Command("output drain thread panicked".to_owned()))?
+        .map_err(|err| WorkspaceError::Command(err.to_string()))
+}
+
 fn collect_files(
     host_path: &Path,
     workspace_path: WorkspacePath,
     files: &mut Vec<WorkspacePath>,
 ) -> Result<(), WorkspaceError> {
     let metadata =
-        std::fs::metadata(host_path).map_err(|err| WorkspaceError::Io(err.to_string()))?;
-    if metadata.is_file() {
+        std::fs::symlink_metadata(host_path).map_err(|err| WorkspaceError::Io(err.to_string()))?;
+    let file_type = metadata.file_type();
+    if file_type.is_file() || file_type.is_symlink() {
         files.push(workspace_path);
+        return Ok(());
+    }
+    if !file_type.is_dir() {
         return Ok(());
     }
     for entry in std::fs::read_dir(host_path).map_err(|err| WorkspaceError::Io(err.to_string()))? {

@@ -115,7 +115,63 @@ fn git_artifact_rejects_non_normal_git_inputs() {
     assert!(GitPath::new("../escape").is_err());
     assert!(GitRefName::new("program//child").is_err());
     assert!(GitRefName::new("frontier/bad lock.lock").is_err());
+    assert!(GitRefName::new("program/@{bad").is_err());
+    assert!(GitRefName::new("program/.hidden").is_err());
+    assert!(GitRefName::new("program/trailing.").is_err());
+    assert!(GitRefName::new("@").is_err());
     assert!(GitObjectId::new("not-a-commit").is_err());
+}
+
+#[test]
+fn git_ref_fingerprints_separate_adjacent_fields() {
+    let target = GitRefTarget::Object(oid("1111111111111111111111111111111111111111"));
+    let first = GitRef::new(GitRefKind::Branch, ref_name("program/a"), target.clone())
+        .with_metadata("ab", "c");
+    let second =
+        GitRef::new(GitRefKind::Branch, ref_name("program/a"), target).with_metadata("a", "bc");
+
+    let first_artifact = GitArtifact::empty()
+        .apply_change(&GitChange::UpsertRef(first))
+        .unwrap();
+    let second_artifact = GitArtifact::empty()
+        .apply_change(&GitChange::UpsertRef(second))
+        .unwrap();
+
+    assert_ne!(first_artifact.identity(), second_artifact.identity());
+}
+
+#[test]
+fn git_ref_fingerprints_separate_symbolic_targets_from_lineage_tags() {
+    let target = GitRefTarget::Symbolic(ref_name("refs/heads/program/alineage"));
+    let parent = GitRef::new(
+        GitRefKind::Branch,
+        ref_name("program/base"),
+        GitRefTarget::Object(oid("1111111111111111111111111111111111111111")),
+    );
+    let with_longer_target = GitRef::new(GitRefKind::Branch, ref_name("program/a"), target);
+    let with_lineage = GitRef::new(
+        GitRefKind::Branch,
+        ref_name("program/a"),
+        GitRefTarget::Symbolic(ref_name("refs/heads/program/a")),
+    )
+    .with_lineage(GitLineage::child(parent.key(), 1));
+
+    let first_artifact = GitArtifact::empty()
+        .apply_change(&GitChange::UpsertRef(with_longer_target))
+        .unwrap();
+    let second_artifact = GitArtifact::empty()
+        .apply_change(&GitChange::UpsertRef(with_lineage))
+        .unwrap();
+
+    assert_ne!(first_artifact.identity(), second_artifact.identity());
+}
+
+#[test]
+fn git_file_fingerprints_separate_path_and_payload_fields() {
+    let first = GitArtifact::new(BTreeMap::from([(git_path("program/ab"), b"c".to_vec())]));
+    let second = GitArtifact::new(BTreeMap::from([(git_path("program/a"), b"bc".to_vec())]));
+
+    assert_ne!(first.identity(), second.identity());
 }
 
 fn git_path(path: &str) -> GitPath {

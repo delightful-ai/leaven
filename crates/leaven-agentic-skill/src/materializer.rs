@@ -50,9 +50,7 @@ where
                 let workspace_path =
                     workspace_path(&self.layout, skill_name.as_str(), path.as_str())?;
                 workspace.write_file(&workspace_path, file.bytes())?;
-                if file.permissions().executable {
-                    workspace.set_executable(&workspace_path, true)?;
-                }
+                workspace.set_executable(&workspace_path, file.permissions().executable)?;
                 files_written += 1;
                 bytes_written += u64::try_from(file.bytes().len())
                     .expect("usize fits into u64 on supported Leaven targets");

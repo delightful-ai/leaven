@@ -1,11 +1,11 @@
 use std::fs;
-use std::path::Path;
+use std::path::PathBuf;
 
 use leaven_eval::SplitRole;
 use leaven_evidence::{
     AgentAnalystRole, AgentTrajectoryAnalysisKind, AgentTrajectoryCorpusEvidence,
-    AgentTrajectoryEvidence, AgentTrajectoryEvidenceInput, AgentTrajectoryOutcome,
-    CommandEvidence, OutputRecord,
+    AgentTrajectoryEvidence, AgentTrajectoryEvidenceInput, AgentTrajectoryOutcome, CommandEvidence,
+    OutputRecord,
 };
 use leaven_kernel::{AgentSessionId, CaseId, Fingerprint};
 use trace2skill_spreadsheetbench::{
@@ -59,9 +59,7 @@ fn builds_training_corpus_from_upstream_results_and_logs_without_model_work() {
     )
     .unwrap();
 
-    let manifest_path = Path::new(env!("CARGO_MANIFEST_DIR")).join(
-        "../../tmp/repros/trace2skill-upstream/data/spreadsheetbench_verified/spreadsheetbench_verified_400/dataset.json",
-    );
+    let manifest_path = fixture_manifest_path(&root);
     let manifest = load_verified_400_manifest(&manifest_path).unwrap();
     let corpus = build_training_corpus_from_run_artifacts(
         &manifest,
@@ -124,10 +122,7 @@ fn stage2_analyst_call_ids_disambiguate_duplicate_task_trajectories() {
 
     let fanout = build_stage2_analyst_fanout_from_training_corpus(&corpus).unwrap();
 
-    assert_eq!(
-        fanout.expected_call_ids(),
-        ["error-13-1-1", "error-13-1-2"]
-    );
+    assert_eq!(fanout.expected_call_ids(), ["error-13-1-1", "error-13-1-2"]);
 }
 
 fn trajectory(task_id: &str) -> AgentTrajectoryEvidence {
@@ -156,4 +151,29 @@ fn unique_temp_dir(label: &str) -> std::path::PathBuf {
     ));
     fs::create_dir_all(&root).unwrap();
     root
+}
+
+fn fixture_manifest_path(root: &PathBuf) -> PathBuf {
+    let path = root.join("dataset.json");
+    let rows = (0..400)
+        .map(|index| {
+            let id = match index {
+                0 => "13-1".to_owned(),
+                199 => "52575".to_owned(),
+                399 => "59902".to_owned(),
+                _ => format!("row-{index}"),
+            };
+            serde_json::json!({
+                "id": id,
+                "instruction": format!("task {index}"),
+                "spreadsheet_path": format!("spreadsheet/{index}"),
+                "instruction_type": "synthetic",
+                "answer_position": "A1:A1",
+                "answer_sheet": null,
+                "data_position": null,
+            })
+        })
+        .collect::<Vec<_>>();
+    fs::write(&path, serde_json::to_vec(&rows).unwrap()).unwrap();
+    path
 }

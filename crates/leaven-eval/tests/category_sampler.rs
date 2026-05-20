@@ -39,11 +39,16 @@ fn category_round_robin_sampler_cycles_categories_and_cases_without_replacement(
     );
     assert_eq!(
         sampler.sampled_cases(),
-        [CaseId::from_index(0), CaseId::from_index(1), CaseId::from_index(10), CaseId::from_index(11)]
-            .into_iter()
-            .collect()
+        [
+            CaseId::from_index(0),
+            CaseId::from_index(1),
+            CaseId::from_index(10),
+            CaseId::from_index(11)
+        ]
+        .into_iter()
+        .collect()
     );
-    assert_eq!(sampler.category_cursor(), 2);
+    assert_eq!(sampler.category_cursor(), 0);
 
     let second = sampler.next_batch();
     assert_eq!(
@@ -55,7 +60,7 @@ fn category_round_robin_sampler_cycles_categories_and_cases_without_replacement(
             CaseId::from_index(11),
         ]
     );
-    assert_eq!(sampler.category_cursor(), 4);
+    assert_eq!(sampler.category_cursor(), 0);
 }
 
 #[test]

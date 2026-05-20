@@ -121,6 +121,10 @@ enum CliError {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
+    use leaven_artifact_skill::{SkillBank, SkillFile, SkillFolder, SkillName, SkillPath};
+
     use super::run;
 
     #[test]
@@ -210,6 +214,47 @@ mod tests {
         assert_eq!(value["proof"], "simulated_agent_apply");
         assert_eq!(value["proposal_count"], 1);
         assert!(value["child"].as_str().unwrap().len() > 10);
+    }
+
+    #[test]
+    fn proposal_roundtrip_edits_requested_skill_part() {
+        let mut input = crate::fixture::fixture_reflection_input();
+        let requested = SkillName::new("custom").unwrap();
+        let original = input
+            .artifact
+            .get(&SkillName::new("rust-test-debugging").unwrap())
+            .unwrap()
+            .clone();
+        let mut custom_entries = BTreeMap::new();
+        custom_entries.insert(
+            SkillPath::skill_md(),
+            SkillFile::text(
+                "---\nname: custom\ndescription: Custom skill. Use when custom testing.\n---\nCustom body.\n",
+            ),
+        );
+        input.artifact = SkillBank::from_folders([
+            original,
+            SkillFolder::from_entries(requested, custom_entries).unwrap(),
+        ])
+        .unwrap();
+        input.part = "custom/SKILL.md".to_owned();
+        input.part_label = "custom/SKILL.md".to_owned();
+        let path =
+            std::env::temp_dir().join(format!("leaven-doctor-input-{}.json", uuid::Uuid::new_v4()));
+        std::fs::write(&path, serde_json::to_vec(&input).unwrap()).unwrap();
+
+        let output = run([
+            "doctor".to_owned(),
+            "proposal-roundtrip".to_owned(),
+            "--json".to_owned(),
+            "--input-json".to_owned(),
+            path.display().to_string(),
+        ])
+        .unwrap();
+        let _ = std::fs::remove_file(&path);
+        let value: serde_json::Value = serde_json::from_str(&output).unwrap();
+
+        assert_eq!(value["edited_path"], ".agents/skills/custom/SKILL.md");
     }
 
     #[test]

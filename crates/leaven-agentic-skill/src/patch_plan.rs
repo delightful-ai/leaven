@@ -71,18 +71,22 @@ impl SkillReferencePath {
         let mut offset = 0;
         while let Some(relative_start) = text[offset..].find("references/") {
             let start = offset + relative_start;
+            if has_reference_prefix_boundary(text, start).is_none() {
+                offset = start + "references/".len();
+                continue;
+            }
             let tail = &text[start..];
             let end = tail
                 .char_indices()
                 .find_map(|(index, ch)| {
-                    if ch.is_ascii_alphanumeric() || matches!(ch, '/' | '.' | '-' | '_') {
+                    if is_reference_link_char(ch) {
                         None
                     } else {
                         Some(index)
                     }
                 })
                 .unwrap_or(tail.len());
-            let candidate = &tail[..end];
+            let candidate = tail[..end].trim_end_matches('.');
             offset = start + end;
             let Ok(path) = SkillPath::new(candidate) else {
                 continue;
@@ -110,8 +114,23 @@ impl fmt::Display for SkillReferencePath {
     }
 }
 
+fn is_reference_link_char(ch: char) -> bool {
+    ch.is_ascii_alphanumeric() || matches!(ch, '/' | '.' | '-' | '_')
+}
+
+fn has_reference_prefix_boundary(text: &str, start: usize) -> Option<()> {
+    if text[..start].ends_with("./") {
+        let before_dot = text[..start - 2].chars().next_back();
+        return (!before_dot.is_some_and(is_reference_link_char)).then_some(());
+    }
+    let previous = text[..start].chars().next_back();
+    (!previous.is_some_and(is_reference_link_char)).then_some(())
+}
+
 /// One-based inclusive line range inside a skill file.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, serde::Deserialize, serde::Serialize)]
+#[derive(
+    Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd, serde::Deserialize, serde::Serialize,
+)]
 pub struct SkillLineRange {
     start: u32,
     end: u32,
@@ -155,7 +174,9 @@ impl fmt::Display for SkillLineRange {
 }
 
 /// File region touched by a patch edit.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, serde::Deserialize, serde::Serialize)]
+#[derive(
+    Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd, serde::Deserialize, serde::Serialize,
+)]
 pub enum SkillPatchRange {
     /// The edit is file-wide or the precise changed lines are not known.
     WholeFile,
@@ -208,7 +229,9 @@ impl SkillPatchSupport {
 }
 
 /// Operation an agent patch wants to perform against a skill file.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, serde::Deserialize, serde::Serialize)]
+#[derive(
+    Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd, serde::Deserialize, serde::Serialize,
+)]
 pub enum SkillPatchEditKind {
     /// Modify an existing file.
     Modify { range: SkillPatchRange },
@@ -346,6 +369,8 @@ impl SkillPatchPlan {
             BTreeMap::new();
         let mut created_references: BTreeMap<(SkillName, SkillReferencePath), usize> =
             BTreeMap::new();
+        let mut deleted_references: BTreeMap<(SkillName, SkillReferencePath), usize> =
+            BTreeMap::new();
         let mut linked_references: BTreeMap<(SkillName, SkillReferencePath), Vec<usize>> =
             BTreeMap::new();
         for (index, edit) in edits.iter().enumerate() {
@@ -388,6 +413,11 @@ impl SkillPatchPlan {
                     created_references.insert((edit.target.skill().clone(), reference), index);
                 }
             }
+            if matches!(edit.kind, SkillPatchEditKind::DeleteFile) {
+                if let Ok(reference) = SkillReferencePath::new(edit.target.path().clone()) {
+                    deleted_references.insert((edit.target.skill().clone(), reference), index);
+                }
+            }
             for reference in &edit.reference_links {
                 let key = (edit.target.skill().clone(), reference.clone());
                 linked_references.entry(key).or_default().push(index);
@@ -414,6 +444,15 @@ impl SkillPatchPlan {
         }
 
         for ((skill, reference), link_indexes) in &linked_references {
+            if let Some(delete_index) = deleted_references.get(&(skill.clone(), reference.clone()))
+            {
+                return Err(SkillPatchPlanError::LinkedReferenceDeleted {
+                    link_edit_index: link_indexes[0],
+                    delete_edit_index: *delete_index,
+                    skill: skill.clone(),
+                    path: reference.clone(),
+                });
+            }
             if parent
                 .get(skill)
                 .and_then(|folder| folder.file(reference.path()))
@@ -515,6 +554,17 @@ pub enum SkillPatchPlanError {
         /// Unlinked reference file.
         target: SkillPatchFileRef,
     },
+    /// A `SKILL.md` edit links to a reference deleted by the same plan.
+    LinkedReferenceDeleted {
+        /// Zero-based edit index for the link edit.
+        link_edit_index: usize,
+        /// Zero-based edit index for the delete edit.
+        delete_edit_index: usize,
+        /// Skill containing the link and deleted reference.
+        skill: SkillName,
+        /// Deleted reference path.
+        path: SkillReferencePath,
+    },
     /// Two edits target overlapping regions of the same file.
     LineRangeConflict {
         /// Earlier zero-based edit index.
@@ -576,6 +626,15 @@ impl fmt::Display for SkillPatchPlanError {
                 f,
                 "skill patch edit {edit_index} creates unlinked reference file {target}"
             ),
+            Self::LinkedReferenceDeleted {
+                link_edit_index,
+                delete_edit_index,
+                skill,
+                path,
+            } => write!(
+                f,
+                "skill patch edit {link_edit_index} links to {skill}/{path}, but edit {delete_edit_index} deletes it"
+            ),
             Self::LineRangeConflict {
                 first_index,
                 second_index,
@@ -599,5 +658,5 @@ fn is_reference_path(path: &SkillPath) -> bool {
     !reference_name.is_empty()
         && reference_name
             .rsplit_once('.')
-            .is_some_and(|(_, extension)| extension == "md")
+            .is_some_and(|(stem, extension)| !stem.is_empty() && extension == "md")
 }
