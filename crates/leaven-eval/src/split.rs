@@ -7,7 +7,7 @@ use leaven_core::{CaseSetVersion, PartitionId};
 use leaven_kernel::{CaseId, Fingerprint, FingerprintBuilder};
 use smol_str::SmolStr;
 
-use crate::DatasetSplitsError;
+use crate::{DatasetSplitsError, SplitUsePolicy};
 
 /// Conventional meaning assigned to one partition.
 #[derive(
@@ -66,6 +66,60 @@ pub struct DatasetSplits {
     cases: BTreeMap<PartitionId, Vec<CaseId>>,
     policy: SplitPolicy,
     fingerprint: Fingerprint,
+}
+
+/// Paper-declared split manifest with required roles and split-use policy.
+#[derive(Clone, Debug)]
+pub struct DatasetSplitManifest {
+    splits: DatasetSplits,
+    required_roles: BTreeSet<SplitRole>,
+    use_policy: SplitUsePolicy,
+}
+
+impl DatasetSplitManifest {
+    /// Builds a manifest and refuses any required role that is absent or empty.
+    pub fn new(
+        splits: DatasetSplits,
+        required_roles: impl IntoIterator<Item = SplitRole>,
+        use_policy: SplitUsePolicy,
+    ) -> Result<Self, DatasetSplitsError> {
+        let required_roles = required_roles.into_iter().collect::<BTreeSet<_>>();
+        for role in &required_roles {
+            match splits.cases(&role.partition_id()) {
+                Some(cases) if !cases.is_empty() => {}
+                _ => return Err(DatasetSplitsError::EmptyRequiredSplit { role: role.clone() }),
+            }
+        }
+        Ok(Self {
+            splits,
+            required_roles,
+            use_policy,
+        })
+    }
+
+    /// Split membership by role.
+    #[must_use]
+    pub fn cases_for_role(&self, role: &SplitRole) -> Option<&[CaseId]> {
+        self.splits.cases(&role.partition_id())
+    }
+
+    /// Underlying split membership.
+    #[must_use]
+    pub const fn splits(&self) -> &DatasetSplits {
+        &self.splits
+    }
+
+    /// Declared nonempty roles required by the paper or benchmark.
+    #[must_use]
+    pub const fn required_roles(&self) -> &BTreeSet<SplitRole> {
+        &self.required_roles
+    }
+
+    /// Split-use policy attached to this manifest.
+    #[must_use]
+    pub const fn use_policy(&self) -> &SplitUsePolicy {
+        &self.use_policy
+    }
 }
 
 impl DatasetSplits {

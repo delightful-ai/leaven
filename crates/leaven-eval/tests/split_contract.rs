@@ -2,9 +2,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use leaven_core::{CaseSetVersion, PartitionId};
 use leaven_eval::{
-    Case, Dataset, DatasetError, DatasetSplits, DatasetSplitsError, EvaluationUse, FinalTestPolicy,
-    RowOrderSplitBuilder, SplitPolicy, SplitRole, SplitUse, SplitUsePolicy, SplitUsePolicyError,
-    StratifiedSplitBuilder,
+    Case, Dataset, DatasetError, DatasetSplitManifest, DatasetSplits, DatasetSplitsError,
+    EvaluationUse, FinalTestPolicy, RowOrderSplitBuilder, SplitPolicy, SplitRole, SplitUse,
+    SplitUsePolicy, SplitUsePolicyError, StratifiedSplitBuilder,
 };
 use leaven_kernel::{CaseId, MetadataBag, MetadataKey, MetadataValue};
 
@@ -411,6 +411,69 @@ fn row_order_split_builder_refuses_invalid_ranges_and_duplicate_roles() {
             end: 2,
             len: 1,
         }
+    );
+}
+
+#[test]
+fn dataset_split_manifest_requires_declared_nonempty_roles() {
+    let ordered_cases = (0..4).map(CaseId::from_index).collect::<Vec<_>>();
+    let splits = RowOrderSplitBuilder::new(ordered_cases)
+        .role_range(SplitRole::Train, 0..2)
+        .build(CaseSetVersion("trace2skill-spreadsheetbench-v1".to_owned()))
+        .unwrap();
+
+    let error = DatasetSplitManifest::new(
+        splits,
+        [SplitRole::Train, SplitRole::Test],
+        SplitUsePolicy::gepa_train_val_test(),
+    )
+    .unwrap_err();
+
+    assert_eq!(
+        error,
+        DatasetSplitsError::EmptyRequiredSplit {
+            role: SplitRole::Test,
+        }
+    );
+}
+
+#[test]
+fn dataset_split_manifest_exposes_role_based_membership_and_policy() {
+    let ordered_cases = (0..4).map(CaseId::from_index).collect::<Vec<_>>();
+    let splits = RowOrderSplitBuilder::new(ordered_cases)
+        .role_range(SplitRole::Train, 0..2)
+        .role_range(SplitRole::Test, 2..4)
+        .build(CaseSetVersion("trace2skill-spreadsheetbench-v1".to_owned()))
+        .unwrap();
+
+    let manifest = DatasetSplitManifest::new(
+        splits,
+        [SplitRole::Train, SplitRole::Test],
+        SplitUsePolicy::gepa_train_val_test(),
+    )
+    .unwrap();
+
+    assert_eq!(
+        manifest
+            .cases_for_role(&SplitRole::Train)
+            .expect("train split exists"),
+        &[CaseId::from_index(0), CaseId::from_index(1)]
+    );
+    assert_eq!(
+        manifest
+            .cases_for_role(&SplitRole::Test)
+            .expect("test split exists"),
+        &[CaseId::from_index(2), CaseId::from_index(3)]
+    );
+    assert!(
+        manifest
+            .use_policy()
+            .use_for(&SplitRole::Test.partition_id())
+            .allows(&EvaluationUse::FinalTest)
+    );
+    assert_eq!(
+        manifest.required_roles(),
+        &BTreeSet::from([SplitRole::Train, SplitRole::Test])
     );
 }
 

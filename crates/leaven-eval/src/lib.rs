@@ -18,7 +18,8 @@ pub use report::{
 };
 pub use sampler::{CategoryRoundRobinSampler, CategorySample};
 pub use split::{
-    DatasetSplits, RowOrderSplitBuilder, SplitPolicy, SplitRole, StratifiedSplitBuilder,
+    DatasetSplitManifest, DatasetSplits, RowOrderSplitBuilder, SplitPolicy, SplitRole,
+    StratifiedSplitBuilder,
 };
 pub use use_policy::{EvaluationUse, FinalTestPolicy, SplitUse, SplitUsePolicy};
 
@@ -27,8 +28,9 @@ pub mod prelude {
 
     pub use crate::{
         CandidateEvaluationSummary, Case, CategoryRoundRobinSampler, CategorySample, Dataset,
-        DatasetBuilder, DatasetSplits, EvaluationReport, EvaluationUse, FinalTestPolicy, LmCase,
-        NoTarget, ReportScore, RowOrderSplitBuilder, SamplerError, SplitPolicy, SplitReport,
-        SplitRole, SplitUse, SplitUsePolicy, SplitUseSummary, StratifiedSplitBuilder,
+        DatasetBuilder, DatasetSplitManifest, DatasetSplits, EvaluationReport, EvaluationUse,
+        FinalTestPolicy, LmCase, NoTarget, ReportScore, RowOrderSplitBuilder, SamplerError,
+        SplitPolicy, SplitReport, SplitRole, SplitUse, SplitUsePolicy, SplitUseSummary,
+        StratifiedSplitBuilder,
     };
 }

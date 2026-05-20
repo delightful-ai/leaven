@@ -73,8 +73,8 @@ fn builds_training_corpus_from_upstream_results_and_logs_without_model_work() {
     .unwrap();
 
     let train = manifest
-        .splits
-        .cases(&SplitRole::Train.partition_id())
+        .split_manifest
+        .cases_for_role(&SplitRole::Train)
         .unwrap();
     assert_eq!(corpus.expected_task_ids().len(), 200);
     assert_eq!(corpus.expected_task_ids()[0], "13-1");

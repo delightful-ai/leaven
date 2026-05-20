@@ -233,14 +233,18 @@ Leaven primitive blockers:
 - `leaven-eval::RowOrderSplitBuilder` now covers source/paper manifests that
   define split membership by ordered row ranges, including Trace2Skill's
   SpreadsheetBench `0:200` evolving/training and `200:400` held-out split.
+- `leaven-eval::DatasetSplitManifest` now covers paper-required split roles
+  and split-use policy attachment. Paper examples should require their actual
+  nonempty train/validation/test/search/probe roles here and avoid re-encoding
+  those roles as example-local strings.
 - `leaven-eval::Case::from_source_row` now covers row-stable case IDs plus
   upstream `source_id` / `source_row_index` metadata for source manifests such
   as Trace2Skill's mixed string/numeric SpreadsheetBench row IDs.
 - `examples/trace2skill_spreadsheetbench` now parses the official local
   SpreadsheetBench-Verified 400-row `dataset.json` into Leaven eval cases and
-  constructs the paper's `0..200` train/evolving and `200..400` held-out split.
-  This is manifest-lowering provenance only, not spreadsheet execution or
-  Trace2Skill evolution.
+  constructs a required-role split manifest for the paper's `0..200`
+  train/evolving and `200..400` held-out test split. This is manifest-lowering
+  provenance only, not spreadsheet execution or Trace2Skill evolution.
 - `examples/trace2skill_spreadsheetbench` now also imports upstream-shaped
   SpreadsheetBench `results.json`, chat logs, and optional analysis reports
   into `AgentTrajectoryCorpusEvidence` for the paper's 200 training/evolving

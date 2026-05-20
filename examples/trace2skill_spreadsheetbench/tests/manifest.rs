@@ -58,12 +58,12 @@ fn lowers_upstream_verified_400_manifest_to_cases_and_paper_splits() {
     );
 
     let train = manifest
-        .splits
-        .cases(&SplitRole::Train.partition_id())
+        .split_manifest
+        .cases_for_role(&SplitRole::Train)
         .expect("train split exists");
     let test = manifest
-        .splits
-        .cases(&SplitRole::Test.partition_id())
+        .split_manifest
+        .cases_for_role(&SplitRole::Test)
         .expect("test split exists");
 
     assert_eq!(train.len(), 200);
@@ -72,4 +72,16 @@ fn lowers_upstream_verified_400_manifest_to_cases_and_paper_splits() {
     assert_eq!(train.last(), Some(&CaseId::from_index(199)));
     assert_eq!(test.first(), Some(&CaseId::from_index(200)));
     assert_eq!(test.last(), Some(&CaseId::from_index(399)));
+    assert!(
+        manifest
+            .split_manifest
+            .required_roles()
+            .contains(&SplitRole::Train)
+    );
+    assert!(
+        manifest
+            .split_manifest
+            .required_roles()
+            .contains(&SplitRole::Test)
+    );
 }

@@ -113,6 +113,11 @@ The checked-out upstream release includes:
   upstream case IDs, assign `Train` to `0..200` and `Test` to `200..400`, and
   get a disjoint `DatasetSplits` with the paper/source row-order semantics
   preserved. This does not parse SpreadsheetBench JSON or run the benchmark.
+- `leaven-eval::DatasetSplitManifest` now owns the required-role contract for
+  paper splits: replicas can require nonempty `Train`, `Validation`, `Test`,
+  or custom roles and attach the split-use policy without hard-coded partition
+  strings in paper crates. This is split metadata only; it does not execute or
+  enforce engine trust policy.
 - `leaven-eval::Case::from_source_row` now owns the generic source-row case
   lowering needed for the 400-row release: Leaven case IDs are row-stable
   `CaseId::from_index(row)`, while upstream ids such as `13-1` and `59902` are
@@ -122,8 +127,8 @@ The checked-out upstream release includes:
   paper-specific loader pass: it parses the official local
   SpreadsheetBench-Verified 400-row `dataset.json`, lowers rows into
   `leaven-eval::Case<SpreadsheetBenchTask, SpreadsheetBenchAnswerSpec>` with
-  source-row metadata, and builds the paper's `0..200` train/evolving and
-  `200..400` held-out split through `RowOrderSplitBuilder`. This is a
+  source-row metadata, and builds a `DatasetSplitManifest` requiring the
+  paper's `0..200` train/evolving and `200..400` held-out test split. This is a
   mechanics-smoke for manifest provenance, not spreadsheet execution or skill
   evolution.
 - The same example now imports upstream run artifacts into Leaven trajectory

@@ -6,7 +6,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use leaven_eval::{Case, Dataset, DatasetSplits, RowOrderSplitBuilder, SplitRole};
+use leaven_eval::{
+    Case, Dataset, DatasetSplitManifest, RowOrderSplitBuilder, SplitRole, SplitUsePolicy,
+};
 use leaven_evidence::{
     AgentAnalystCallEvidence, AgentAnalystCallEvidenceInput, AgentAnalystCallStatus,
     AgentAnalystFanoutEvidence, AgentAnalystRole, AgentTrajectoryAnalysisKind,
@@ -27,8 +29,8 @@ const VERIFIED_400_EVOLVING_ROWS: usize = 200;
 pub struct Trace2SkillSpreadsheetBenchManifest {
     /// `SpreadsheetBench` rows as Leaven evaluation cases.
     pub dataset: Dataset<Case<SpreadsheetBenchTask, SpreadsheetBenchAnswerSpec>>,
-    /// Paper split: first 200 rows train/evolving, last 200 rows held-out test.
-    pub splits: DatasetSplits,
+    /// Paper split manifest: first 200 rows train/evolving, last 200 rows held-out test.
+    pub split_manifest: DatasetSplitManifest,
 }
 
 /// `SpreadsheetBench` task input fields used to run the upstream agent.
@@ -97,8 +99,16 @@ pub fn load_verified_400_manifest(
             VERIFIED_400_EVOLVING_ROWS..VERIFIED_400_ROWS,
         )
         .build(leaven_core::CaseSetVersion(VERIFIED_400_VERSION.to_owned()))?;
+    let split_manifest = DatasetSplitManifest::new(
+        splits,
+        [SplitRole::Train, SplitRole::Test],
+        SplitUsePolicy::gepa_train_val_test(),
+    )?;
 
-    Ok(Trace2SkillSpreadsheetBenchManifest { dataset, splits })
+    Ok(Trace2SkillSpreadsheetBenchManifest {
+        dataset,
+        split_manifest,
+    })
 }
 
 /// Upstream run artifacts used to build a Leaven trajectory corpus.
@@ -120,8 +130,8 @@ pub fn build_training_corpus_from_run_artifacts(
     input: Trace2SkillRunArtifactInput<'_>,
 ) -> Result<AgentTrajectoryCorpusEvidence, Trace2SkillManifestError> {
     let train_cases = manifest
-        .splits
-        .cases(&SplitRole::Train.partition_id())
+        .split_manifest
+        .cases_for_role(&SplitRole::Train)
         .ok_or(Trace2SkillManifestError::MissingTrainingSplit)?;
     let case_sources = source_id_by_case(manifest)?;
     let case_by_source = case_sources
