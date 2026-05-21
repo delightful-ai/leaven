@@ -331,6 +331,8 @@ pub fn prepare_trace2skill_one_case_analyst_fanout(
             )
         },
     );
+    let extra_lines =
+        stage2_analyst_extra_lines(input.run_dir, &trajectory_path, &manifest, score_report);
     fs::write(
         &prompt_path,
         stage2_prompt::render_stage2_analyst_prompt(stage2_prompt::Stage2AnalystPromptInput {
@@ -339,36 +341,7 @@ pub fn prepare_trace2skill_one_case_analyst_fanout(
             outcome: trajectory.outcome(),
             upstream_prompt_dir: input.upstream_prompt_dir,
             prompt_source_paths: &prompt_source_paths,
-            extra_lines: &[
-                stage2_prompt::Stage2PromptLine {
-                    label: "trajectory_file",
-                    value: trajectory_path.display().to_string(),
-                },
-                stage2_prompt::Stage2PromptLine {
-                    label: "score_report_file",
-                    value: input
-                        .run_dir
-                        .join("score_report.json")
-                        .display()
-                        .to_string(),
-                },
-                stage2_prompt::Stage2PromptLine {
-                    label: "score",
-                    value: score_report,
-                },
-                stage2_prompt::Stage2PromptLine {
-                    label: "source_skill",
-                    value: manifest
-                        .source_artifacts
-                        .released_skill_file
-                        .display()
-                        .to_string(),
-                },
-                stage2_prompt::Stage2PromptLine {
-                    label: "source_case",
-                    value: manifest.source_artifacts.case_file.display().to_string(),
-                },
-            ],
+            extra_lines: &extra_lines,
             final_instruction: "The analyst must consume `trajectory.json` and its referenced transcript/analysis payloads, then produce a Trace2Skill JSON patch response for the released skill. This artifact deliberately stops before model execution, parsing, or merge.",
         })?,
     )?;
@@ -409,6 +382,40 @@ pub fn prepare_trace2skill_one_case_analyst_fanout(
         expected_call_ids,
         pending_call_ids,
     })
+}
+
+fn stage2_analyst_extra_lines(
+    run_dir: &Path,
+    trajectory_path: &Path,
+    manifest: &Trace2SkillOneCaseRunManifest,
+    score_report: String,
+) -> Vec<stage2_prompt::Stage2PromptLine> {
+    vec![
+        stage2_prompt::Stage2PromptLine {
+            label: "trajectory_file",
+            value: trajectory_path.display().to_string(),
+        },
+        stage2_prompt::Stage2PromptLine {
+            label: "score_report_file",
+            value: run_dir.join("score_report.json").display().to_string(),
+        },
+        stage2_prompt::Stage2PromptLine {
+            label: "score",
+            value: score_report,
+        },
+        stage2_prompt::Stage2PromptLine {
+            label: "source_skill",
+            value: manifest
+                .source_artifacts
+                .released_skill_file
+                .display()
+                .to_string(),
+        },
+        stage2_prompt::Stage2PromptLine {
+            label: "source_case",
+            value: manifest.source_artifacts.case_file.display().to_string(),
+        },
+    ]
 }
 
 fn render_run_agent_prompt(
