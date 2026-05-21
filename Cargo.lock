@@ -2374,6 +2374,7 @@ dependencies = [
  "leaven-workspace",
  "leaven-workspace-docker",
  "leaven-workspace-e2b",
+ "leaven-workspace-firkin",
  "leaven-workspace-git",
  "leaven-workspace-local",
 ]
@@ -3016,6 +3017,16 @@ version = "0.0.0"
 dependencies = [
  "leaven-kernel",
  "leaven-workspace",
+]
+
+[[package]]
+name = "leaven-workspace-firkin"
+version = "0.0.0"
+dependencies = [
+ "futures",
+ "leaven-kernel",
+ "leaven-workspace",
+ "thiserror 2.0.18",
 ]
 
 [[package]]

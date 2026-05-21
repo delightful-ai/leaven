@@ -51,6 +51,9 @@ pub use leaven_workspace as workspace;
 #[cfg(feature = "workspace-git")]
 pub use leaven_workspace_git as workspace_git;
 
+#[cfg(feature = "workspace-firkin")]
+pub use leaven_workspace_firkin as workspace_firkin;
+
 #[cfg(feature = "agentic")]
 pub use leaven_agentic as agentic;
 

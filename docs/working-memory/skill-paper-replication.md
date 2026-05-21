@@ -69,6 +69,13 @@ Current useful substrate:
   imported back into the durable store, explicit `output/proposal.patch` and
   `output/proposal.bundle` artifacts can be imported before checkout fallback,
   and the result is a typed `GitProgramChange` for later graph admission.
+- `leaven-workspace-firkin` now owns a fake-runtime-tested Firkin product-pod
+  workspace adapter contract: allocation carries product-pod/container/root/image
+  context, command/file operations are routed through the guest workspace root,
+  command output byte limits are forwarded and enforced, cleanup removes the
+  container, and unsupported executable-bit operations fail explicitly. The
+  `firkin-facade` feature is reserved but intentionally has no external
+  Apple/VZ path dependency until a live adapter proves runtime behavior.
 - `leaven-agentic` has proposer repair policy support.
 - `leaven-gepa-agentic-skill` bridges GEPA reflection to skill-bank proposal.
 - `examples/p5_evoskill_iteration` proves one live Codex EvoSkill-shaped

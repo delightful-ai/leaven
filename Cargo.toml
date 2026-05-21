@@ -58,6 +58,7 @@ members = [
     "crates/leaven-workspace-docker",
     "crates/leaven-workspace-e2b",
     "crates/leaven-workspace-firecracker",
+    "crates/leaven-workspace-firkin",
     "crates/leaven-workspace-git",
     "crates/leaven-workspace-k8s",
     "crates/leaven-workspace-local",
@@ -188,6 +189,7 @@ leaven-trace = { path = "crates/leaven-trace", version = "0.0.0" }
 leaven-workspace-docker = { path = "crates/leaven-workspace-docker", version = "0.0.0" }
 leaven-workspace-e2b = { path = "crates/leaven-workspace-e2b", version = "0.0.0" }
 leaven-workspace-firecracker = { path = "crates/leaven-workspace-firecracker", version = "0.0.0" }
+leaven-workspace-firkin = { path = "crates/leaven-workspace-firkin", version = "0.0.0" }
 leaven-workspace-git = { path = "crates/leaven-workspace-git", version = "0.0.0" }
 leaven-workspace-k8s = { path = "crates/leaven-workspace-k8s", version = "0.0.0" }
 leaven-workspace-local = { path = "crates/leaven-workspace-local", version = "0.0.0" }

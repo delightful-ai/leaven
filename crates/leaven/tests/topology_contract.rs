@@ -54,6 +54,7 @@ const EXPECTED_WORKSPACE_MEMBERS: &[&str] = &[
     "crates/leaven-workspace-docker",
     "crates/leaven-workspace-e2b",
     "crates/leaven-workspace-firecracker",
+    "crates/leaven-workspace-firkin",
     "crates/leaven-workspace-git",
     "crates/leaven-workspace-k8s",
     "crates/leaven-workspace-local",
@@ -122,6 +123,7 @@ const EXPECTED_CRATES: &[&str] = &[
     "leaven-workspace-docker",
     "leaven-workspace-e2b",
     "leaven-workspace-firecracker",
+    "leaven-workspace-firkin",
     "leaven-workspace-git",
     "leaven-workspace-k8s",
     "leaven-workspace-local",
@@ -168,6 +170,7 @@ const EXPECTED_DEPENDENCIES: &[(&str, &[&str])] = &[
             "leaven-workspace",
             "leaven-workspace-docker",
             "leaven-workspace-e2b",
+            "leaven-workspace-firkin",
             "leaven-workspace-git",
             "leaven-workspace-local",
         ],
@@ -459,6 +462,10 @@ const EXPECTED_DEPENDENCIES: &[(&str, &[&str])] = &[
     ),
     (
         "leaven-workspace-firecracker",
+        &["leaven-kernel", "leaven-workspace"],
+    ),
+    (
+        "leaven-workspace-firkin",
         &["leaven-kernel", "leaven-workspace"],
     ),
     (
