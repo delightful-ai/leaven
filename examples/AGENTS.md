@@ -35,8 +35,10 @@ Each `pN_*` directory is a workspace package with a runnable binary. Keep reusab
   test -p trace2skill_spreadsheetbench --test patch_replay` proves saved/live
   JSON patch merge artifacts and upstream-shaped `--save-intermediates`
   directories can replay through `SkillPatchMergeTree` and
-  `SkillPatchApplication`. `cargo test -p trace2skill_spreadsheetbench --test
-  one_case --test cli` plus `cargo run -p trace2skill_spreadsheetbench --
+  `SkillPatchApplication`, and proves saved parsed MAP patches can update
+  pending `AgentAnalystFanoutEvidence` calls by upstream `batch_index` without
+  claiming unsaved analyst failures as completed. `cargo test -p
+  trace2skill_spreadsheetbench --test one_case --test cli` plus `cargo run -p trace2skill_spreadsheetbench --
   --inspect-one-case` proves the materialized case `13-1`, init/golden
   workbooks, upstream prompt, upstream system prompt, and released combined
   `xlsx` skill can be inspected/rendered without solving the spreadsheet.

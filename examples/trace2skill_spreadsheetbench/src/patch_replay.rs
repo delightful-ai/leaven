@@ -1,7 +1,7 @@
 //! Replay saved `Trace2Skill` JSON patch merge artifacts.
 
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fs, io,
     path::{Path, PathBuf},
 };
@@ -11,10 +11,15 @@ use leaven_agentic_skill::{
     SkillPatchMergeTree, SkillPatchMergeTreeError, SkillPatchPlanId, SkillPatchPlanRecord,
 };
 use leaven_artifact_skill::{SkillBank, SkillName};
+use leaven_evidence::{
+    AgentAnalystCallEvidence, AgentAnalystCallEvidenceInput, AgentAnalystCallStatus,
+    AgentAnalystFanoutEvidence, OutputRecord,
+};
+use leaven_kernel::BlobRef;
 
 use crate::{
-    Trace2SkillPatchError, Trace2SkillPatchLowering, Trace2SkillPatchLoweringInput,
-    lower_trace2skill_json_patch,
+    lower_trace2skill_json_patch, Trace2SkillPatchError, Trace2SkillPatchLowering,
+    Trace2SkillPatchLoweringInput,
 };
 
 /// Inputs for replaying saved or live upstream JSON patch merge artifacts.
@@ -44,6 +49,20 @@ pub struct Trace2SkillSavedJsonPatchReplayInput<'a> {
     pub intermediates_dir: &'a Path,
     /// Upstream `--merge-batch-size` used for the run.
     pub merge_batch_size: usize,
+}
+
+/// Inputs for importing upstream saved MAP patches into a pending fan-out.
+#[derive(Clone, Copy, Debug)]
+pub struct Trace2SkillSavedMapPatchFanoutInput<'a> {
+    /// Parent skill bank the saved patches were authored against.
+    pub parent: &'a SkillBank,
+    /// Skill folder targeted by the upstream runner.
+    pub skill: &'a SkillName,
+    /// Pending analyst fan-out produced before model execution.
+    pub fanout: &'a AgentAnalystFanoutEvidence,
+    /// Directory passed as upstream `--intermediates-dir`, or the default
+    /// `<skill>_parallel_output` directory.
+    pub intermediates_dir: &'a Path,
 }
 
 /// One upstream JSON patch artifact with its merge-tree id.
@@ -210,6 +229,92 @@ pub fn replay_trace2skill_saved_json_patch_outputs(
     finish_saved_json_patch_replay(input, state)
 }
 
+/// Imports saved upstream MAP-stage patches into pending analyst-call evidence.
+///
+/// The upstream JSON pipeline saves parsed MAP responses under
+/// `map_patches/patch_*.json` and records the originating one-based
+/// `batch_index` in each patch. With the paper's `--batch-size 1` setup, that
+/// batch index is the durable bridge back to the caller-declared fan-out order.
+/// Missing patch files leave their calls pending because upstream only saves
+/// successfully parsed MAP patches.
+pub fn import_trace2skill_saved_map_patches_into_fanout(
+    input: Trace2SkillSavedMapPatchFanoutInput<'_>,
+) -> Result<AgentAnalystFanoutEvidence, Trace2SkillPatchReplayError> {
+    if !input.intermediates_dir.is_dir() {
+        return Err(Trace2SkillPatchReplayError::MissingIntermediatesDir {
+            path: input.intermediates_dir.to_path_buf(),
+        });
+    }
+
+    let map_dir = input.intermediates_dir.join("map_patches");
+    let files = patch_files(&map_dir, "patch_")?;
+    if files.is_empty() {
+        return Err(Trace2SkillPatchReplayError::MissingMapPatches { path: map_dir });
+    }
+
+    let mut imported = input.fanout.clone();
+    let mut seen_batches = BTreeSet::new();
+    for file in files {
+        let payload =
+            fs::read_to_string(&file.path).map_err(|source| Trace2SkillPatchReplayError::Io {
+                path: file.path.clone(),
+                source,
+            })?;
+        let batch_index = map_patch_batch_index(&file.path, &payload)?;
+        if !seen_batches.insert(batch_index) {
+            return Err(Trace2SkillPatchReplayError::DuplicateMapPatchBatchIndex {
+                batch_index,
+                path: file.path,
+            });
+        }
+        let call_index = batch_index - 1;
+        let call_id = input
+            .fanout
+            .expected_call_ids()
+            .get(call_index)
+            .ok_or_else(|| Trace2SkillPatchReplayError::InvalidMapPatchBatchIndex {
+                batch_index,
+                expected_calls: input.fanout.expected_call_ids().len(),
+                path: file.path.clone(),
+            })?;
+        let pending_call = input.fanout.by_call(call_id).ok_or_else(|| {
+            Trace2SkillPatchReplayError::MissingAnalystCallForMapPatch {
+                call_id: call_id.clone(),
+                path: file.path.clone(),
+            }
+        })?;
+
+        lower_trace2skill_json_patch(Trace2SkillPatchLoweringInput {
+            parent: input.parent,
+            skill: input.skill,
+            payload: &payload,
+            support_count: pending_call.support_count(),
+        })
+        .map_err(|source| Trace2SkillPatchReplayError::PatchFile {
+            path: file.path.clone(),
+            source,
+        })?;
+
+        imported.push(AgentAnalystCallEvidence::new(
+            AgentAnalystCallEvidenceInput {
+                call_id: call_id.clone(),
+                role: pending_call.role(),
+                source_task_ids: pending_call.source_task_ids().to_vec(),
+                prompt: pending_call.prompt().clone(),
+                response: Some(OutputRecord::blob(BlobRef {
+                    store: "trace2skill-stage2".to_owned(),
+                    key: file.path.display().to_string(),
+                })),
+                status: AgentAnalystCallStatus::Succeeded,
+                retry_count: pending_call.retry_count(),
+                support_count: pending_call.support_count(),
+            },
+        )?)?;
+    }
+
+    Ok(imported)
+}
+
 fn load_saved_map_patches(
     input: Trace2SkillSavedJsonPatchReplayInput<'_>,
 ) -> Result<SavedJsonPatchReplayState, Trace2SkillPatchReplayError> {
@@ -230,6 +335,35 @@ fn load_saved_map_patches(
         });
     }
     Ok(state)
+}
+
+fn map_patch_batch_index(path: &Path, payload: &str) -> Result<usize, Trace2SkillPatchReplayError> {
+    let value: serde_json::Value = serde_json::from_str(payload).map_err(|source| {
+        Trace2SkillPatchReplayError::PatchMetadata {
+            path: path.to_path_buf(),
+            source,
+        }
+    })?;
+    let batch_index = value
+        .get("batch_index")
+        .and_then(serde_json::Value::as_u64)
+        .ok_or_else(|| Trace2SkillPatchReplayError::MissingMapPatchBatchIndex {
+            path: path.to_path_buf(),
+        })?;
+    if batch_index == 0 {
+        return Err(
+            Trace2SkillPatchReplayError::InvalidMapPatchBatchIndexValue {
+                batch_index,
+                path: path.to_path_buf(),
+            },
+        );
+    }
+    usize::try_from(batch_index).map_err(|_| {
+        Trace2SkillPatchReplayError::InvalidMapPatchBatchIndexValue {
+            batch_index,
+            path: path.to_path_buf(),
+        }
+    })
 }
 
 fn load_saved_merge_levels(
@@ -576,6 +710,62 @@ pub enum Trace2SkillPatchReplayError {
         /// Duplicate plan id.
         plan_id: String,
     },
+    /// A saved map patch's metadata JSON could not be parsed.
+    #[error("Trace2Skill map patch {path} has invalid metadata: {source}")]
+    PatchMetadata {
+        /// Saved map patch path.
+        path: PathBuf,
+        /// Metadata parse failure.
+        source: serde_json::Error,
+    },
+    /// A saved map patch did not carry upstream `batch_index` metadata.
+    #[error("Trace2Skill map patch {path} is missing batch_index")]
+    MissingMapPatchBatchIndex {
+        /// Saved map patch path.
+        path: PathBuf,
+    },
+    /// A saved map patch's `batch_index` was not a positive platform-sized integer.
+    #[error("Trace2Skill map patch {path} has invalid batch_index {batch_index}")]
+    InvalidMapPatchBatchIndexValue {
+        /// Saved map patch path.
+        path: PathBuf,
+        /// Raw one-based upstream batch index.
+        batch_index: u64,
+    },
+    /// A saved map patch's `batch_index` does not map to a declared fan-out call.
+    #[error(
+        "Trace2Skill map patch {path} has batch_index {batch_index}, but fan-out has {expected_calls} calls"
+    )]
+    InvalidMapPatchBatchIndex {
+        /// Saved map patch path.
+        path: PathBuf,
+        /// One-based upstream batch index.
+        batch_index: usize,
+        /// Caller-declared fan-out call count.
+        expected_calls: usize,
+    },
+    /// Two saved map patches claimed the same upstream batch.
+    #[error("Trace2Skill map patch {path} repeats batch_index {batch_index}")]
+    DuplicateMapPatchBatchIndex {
+        /// One-based upstream batch index.
+        batch_index: usize,
+        /// Saved map patch path.
+        path: PathBuf,
+    },
+    /// A saved map patch mapped to a call id that has no prompt/source metadata.
+    #[error("Trace2Skill map patch {path} mapped to missing analyst call {call_id}")]
+    MissingAnalystCallForMapPatch {
+        /// Expected call id.
+        call_id: String,
+        /// Saved map patch path.
+        path: PathBuf,
+    },
+    /// Analyst-call evidence construction refused imported data.
+    #[error(transparent)]
+    AnalystCall(#[from] leaven_evidence::AgentAnalystCallError),
+    /// Analyst fan-out evidence refused imported data.
+    #[error(transparent)]
+    AnalystFanout(#[from] leaven_evidence::AgentAnalystFanoutError),
     /// The validated final id did not have corresponding lowered patch changes.
     #[error("Trace2Skill replay final plan {final_plan_id} has no lowered changes")]
     UnknownFinalLowering {

@@ -318,6 +318,12 @@ Leaven primitive blockers:
   `SkillBank` plus change report. This is artifact replay only; the paper
   runner still owns analyst execution, merge prompts, batch sizing, and
   prevalence policy.
+- `examples/trace2skill_spreadsheetbench` now imports saved upstream
+  `map_patches/patch_*.json` into pending Stage 2
+  `AgentAnalystFanoutEvidence` by upstream `batch_index`, validating each saved
+  patch against the parent skill bank and preserving prompt/source metadata.
+  Calls without saved parsed patches remain pending; this does not execute or
+  recover failed analyst model calls.
 - `examples/trace2skill_spreadsheetbench` now also loads the actual upstream
   `--save-intermediates` JSON directory shape: `map_patches`, numeric
   `merge_level_N` directories, `final_patch.json`, and optional
@@ -459,6 +465,10 @@ Spend/data risks:
   `stage2_corpus_fanout_embeds_upstream_prompt_sources`, proving success/error
   imported trajectories include upstream MAP prompt-template files rather than
   the previous placeholder scaffold.
+- The Trace2Skill example now covers saved MAP-patch fan-out import through
+  `imports_saved_map_patches_into_analyst_fanout_by_batch_index`, proving
+  upstream `batch_index` maps parsed `map_patches/patch_*.json` back into
+  pending fan-out calls as succeeded response blobs.
 - Restored tiny live harness preflights passed in main Leaven on 2026-05-20:
   `tmp/memento_skills_read_write/20260520T204154Z/preflight.json`,
   `tmp/skillreducer_tiny/20260520T204154Z/preflight.json`,

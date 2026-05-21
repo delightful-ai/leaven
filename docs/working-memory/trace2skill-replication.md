@@ -264,6 +264,12 @@ The checked-out upstream release includes:
   checkout, and records the upstream success/error MAP prompt builders. This is
   prompt-source-backed pending fan-out only; it does not execute an analyst
   model call, parse a patch response, or run merge.
+- `examples/trace2skill_spreadsheetbench` can import saved upstream JSON
+  `map_patches/patch_*.json` into a pending `AgentAnalystFanoutEvidence` by the
+  upstream one-based `batch_index`, after validating the saved patch against
+  the parent skill bank. Imported patch calls become `Succeeded` with response
+  blob refs; fan-out calls without saved patches stay pending because upstream
+  only persists parsed MAP outputs.
 - `leaven-evidence::AgentPatchMergeTreeEvidence` now owns the checkpointable
   Stage 3 merge provenance value: merge levels, input/accepted/discarded patch
   ids, support counts, merge decisions, prompt/response payloads, parse-failure
@@ -497,6 +503,27 @@ Verification:
   verified the prompt still names `SuccessParallelSkillEvolver`, `trajectory.json`,
   `score_report.json`, `parallel_evolving_agent/map_output_format.txt`, and no
   analyst execution.
+- `CARGO_INCREMENTAL=0 cargo test -p trace2skill_spreadsheetbench --test
+  patch_replay imports_saved_map_patches_into_analyst_fanout_by_batch_index`
+  first failed on 2026-05-20 with missing
+  `Trace2SkillSavedMapPatchFanoutInput` and
+  `import_trace2skill_saved_map_patches_into_fanout`, then passed after adding
+  saved MAP-patch fan-out import keyed by upstream `batch_index`.
+- `CARGO_INCREMENTAL=0 cargo test -p trace2skill_spreadsheetbench` passed on
+  2026-05-20 with 23/23 tests after the saved MAP-patch fan-out import slice.
+- `rustfmt --check --config skip_children=true
+  examples/trace2skill_spreadsheetbench/src/lib.rs
+  examples/trace2skill_spreadsheetbench/src/patch_replay.rs
+  examples/trace2skill_spreadsheetbench/tests/patch_replay.rs` passed on
+  2026-05-20 after formatting the saved MAP-patch fan-out import slice.
+- `CARGO_INCREMENTAL=0 cargo clippy -p trace2skill_spreadsheetbench
+  --all-targets -- -D warnings` passed on 2026-05-20 after the saved
+  MAP-patch fan-out import slice.
+- `CARGO_INCREMENTAL=0 cargo nextest run -p trace2skill_spreadsheetbench`
+  passed on 2026-05-20 with 23/23 tests after the saved MAP-patch fan-out
+  import slice.
+- `CARGO_INCREMENTAL=0 cargo test -p leaven --test topology_contract` passed
+  4/4 tests on 2026-05-20 after the saved MAP-patch fan-out import slice.
 
 ## Current Blockers
 
@@ -509,17 +536,19 @@ Leaven-owned remaining primitives before faithful Trace2Skill replication:
   the Qwen/vLLM ReAct run or an approved documented substitute.
 - live checkpointed parallel analyst execution for hundreds of independent
   agent/LLM calls. Leaven now has the durable fan-out evidence value and the
-  Trace2Skill example can seed source-template-backed pending calls, but no
-  scheduler/model client has executed those prompts;
+  Trace2Skill example can seed source-template-backed pending calls and import
+  saved parsed MAP patches back into those calls, but no scheduler/model client
+  has executed those prompts;
 - live hierarchical merge execution over analyst patch outputs. Leaven now has
   generic `AgentPatchMergeTreeEvidence` and skill-specific
   `SkillPatchMergeTree` provenance values plus JSON patch replay/application
   and a strict saved-output loader, but no Trace2Skill merge scheduler,
   prevalence policy, or model-backed merge operator has run;
 - real upstream saved evolution output has not been generated or imported
-  locally yet. The loader is tested against upstream-shaped fixtures; the next
-  proof needs either a no-spend/small upstream output directory or live-run
-  capture of translated exact map/merge patches plus explicit merge decisions;
+  locally yet. The loader is tested against upstream-shaped fixtures and can
+  now update fan-out evidence from saved MAP patches, but the next proof needs
+  either a no-spend/small upstream output directory or live-run capture of
+  translated exact map/merge patches plus explicit merge decisions;
 - the exact case `13-1` now has repo-owned no-spend prompt/input and workbook
   scoring surfaces plus a durable prepared run directory and post-run scoring /
   trajectory evidence contract. The no-spend golden-copy self-check trajectory
