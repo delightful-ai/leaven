@@ -1,6 +1,6 @@
 # Live Firkin Git Workspace Proof Plan
 
-Status: active implementation plan
+Status: implemented and verified
 Date: 2026-05-21
 
 This plan extends the Firkin Git workspace implementation without changing its
@@ -75,3 +75,28 @@ Expected live pass signal:
 Residual risk: the live gate depends on local Apple/VZ availability, signing
 entitlements, and an OCI image that contains `git`, `sh`, `cat`, `find`,
 `mkdir`, `rm`, `test`, and `sleep`.
+
+## Outcome
+
+Implemented on 2026-05-21.
+
+The signed live gate passed with:
+
+```bash
+LEAVEN_FIRKIN_LIVE_TEMPLATE_IMAGE=docker.io/alpine/git:latest \
+  CARGO_TARGET_DIR=/tmp/leaven-firkin-target \
+  CARGO_BUILD_JOBS=1 \
+  scripts/run-signed-live-firkin-git-workspace-test.sh
+```
+
+The live implementation found and fixed three backend-real issues that the
+host-backed contract test could not expose:
+
+- Git materialization could not use a host bare-repo path inside a real pod, so
+  checkout now fetches from a workspace-visible bundle.
+- Mounting the same pod `emptyDir` at each workspace root aliased all
+  workspaces; the adapter now mounts at the stable pod root and uses distinct
+  subdirectories.
+- Apple/VZ product-pod add/wait/remove calls have readiness and cleanup
+  semantics that need bounded calls, fresh-name retry after ambiguous add
+  failures, and tolerance for wait-consuming helper containers.

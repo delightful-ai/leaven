@@ -34,6 +34,7 @@ fn factory_allocates_container_in_product_pod_and_attaches_context() {
             [RuntimeEvent::Allocate {
                 pod: "pod-run-1".to_owned(),
                 root: root.to_owned(),
+                volume_mount_root: "/workspace".to_owned(),
                 image: "ghcr.io/leaven/agent:latest".to_owned(),
             }]
         );
@@ -265,6 +266,7 @@ impl FirkinWorkspaceRuntime for FakeFirkinRuntime {
         state.events.push(RuntimeEvent::Allocate {
             pod: request.product_pod_id().as_str().to_owned(),
             root: request.workspace_root().as_str().to_owned(),
+            volume_mount_root: request.volume_mount_root().as_str().to_owned(),
             image: request.image().as_str().to_owned(),
         });
         FirkinContainerId::new(format!("container-{}", state.next_container))
@@ -367,6 +369,7 @@ enum RuntimeEvent {
     Allocate {
         pod: String,
         root: String,
+        volume_mount_root: String,
         image: String,
     },
     Write {

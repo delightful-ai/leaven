@@ -87,18 +87,7 @@ fn runtime_adapter_uses_product_pod_containers_for_workspace_commands() {
         panic!("unexpected adapter events: {events:#?}");
     };
 
-    assert_eq!(anchor_pod, "run-pod");
-    assert_eq!(anchor.template_id, "agent-template");
-    assert_eq!(
-        anchor.empty_dir_mounts,
-        [PodVolumeMountRequest {
-            name: "workspace-volume".to_owned(),
-            path: "/workspace".to_owned(),
-            read_only: false,
-        }]
-    );
-    assert_eq!(anchor.command, ["sh", "-lc", "sleep infinity"]);
-    assert!(!anchor.capture_output);
+    assert_workspace_anchor(anchor_pod, anchor);
 
     assert_eq!(command_pod, "run-pod");
     assert_eq!(command.template_id, "agent-template");
@@ -124,6 +113,29 @@ fn runtime_adapter_uses_product_pod_containers_for_workspace_commands() {
     assert_eq!(command_remove, &command.name);
     assert_eq!(anchor_remove_pod, "run-pod");
     assert_eq!(anchor_remove, &anchor.name);
+}
+
+fn assert_workspace_anchor(pod_id: &str, anchor: &PodContainerCreateRequest) {
+    assert_eq!(pod_id, "run-pod");
+    assert_eq!(anchor.template_id, "agent-template");
+    assert_eq!(
+        anchor.empty_dir_mounts,
+        [PodVolumeMountRequest {
+            name: "workspace-volume".to_owned(),
+            path: "/workspace".to_owned(),
+            read_only: false,
+        }]
+    );
+    assert_eq!(
+        anchor.command,
+        [
+            "sh",
+            "-lc",
+            "mkdir -p -- \"$LEAVEN_WORKSPACE_ROOT\" && sleep 2147483647"
+        ]
+    );
+    assert_eq!(anchor.env_vars["LEAVEN_WORKSPACE_ROOT"], "/workspace");
+    assert!(!anchor.capture_output);
 }
 
 #[test]

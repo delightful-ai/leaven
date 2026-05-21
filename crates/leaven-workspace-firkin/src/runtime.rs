@@ -45,21 +45,29 @@ pub trait FirkinWorkspaceRuntime: Send + Sync + 'static {
 pub struct FirkinWorkspaceAllocation {
     product_pod_id: FirkinProductPodId,
     workspace_root: FirkinGuestPath,
+    volume_mount_root: FirkinGuestPath,
     image: FirkinImageRef,
 }
 
 impl FirkinWorkspaceAllocation {
     #[must_use]
-    pub const fn new(
+    pub fn new(
         product_pod_id: FirkinProductPodId,
         workspace_root: FirkinGuestPath,
         image: FirkinImageRef,
     ) -> Self {
         Self {
             product_pod_id,
+            volume_mount_root: workspace_root.clone(),
             workspace_root,
             image,
         }
+    }
+
+    #[must_use]
+    pub fn with_volume_mount_root(mut self, volume_mount_root: FirkinGuestPath) -> Self {
+        self.volume_mount_root = volume_mount_root;
+        self
     }
 
     #[must_use]
@@ -70,6 +78,11 @@ impl FirkinWorkspaceAllocation {
     #[must_use]
     pub const fn workspace_root(&self) -> &FirkinGuestPath {
         &self.workspace_root
+    }
+
+    #[must_use]
+    pub const fn volume_mount_root(&self) -> &FirkinGuestPath {
+        &self.volume_mount_root
     }
 
     #[must_use]

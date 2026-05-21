@@ -19,17 +19,19 @@ firkin-facade = [
     "dep:firkin-types",
     "dep:tokio",
 ]
+firkin-apple-vz-live = ["firkin-facade", "dep:firkin-single-node"]
 
 [dependencies]
 async-trait = { workspace = true, optional = true }
 firkin-e2b-contract = { path = "../../../../../vendor/github.com/apple/containerization/crates/e2b-contract", optional = true }
 firkin-e2b-wire = { path = "../../../../../vendor/github.com/apple/containerization/crates/e2b-wire", optional = true }
+firkin-single-node = { path = "../../../../../vendor/github.com/apple/containerization/crates/single-node", optional = true }
 firkin-types = { path = "../../../../../vendor/github.com/apple/containerization/crates/types", optional = true }
 futures = { workspace = true }
 leaven-kernel = { workspace = true }
 leaven-workspace = { workspace = true }
 thiserror = { workspace = true }
-tokio = { workspace = true, optional = true, features = ["rt"] }
+tokio = { workspace = true, optional = true, features = ["rt", "rt-multi-thread"] }
 
 [dev-dependencies]
 leaven-agentic-git = { workspace = true }

@@ -5,13 +5,18 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use firkin_e2b_contract::{BackendError, RuntimeAdapter};
-use firkin_e2b_wire::{PodContainerCreateRequest, PodContainerOutput, PodVolumeMountRequest};
+use firkin_e2b_wire::{
+    PodContainerCreateRequest, PodContainerInfo, PodContainerOutput, PodVolumeMountRequest,
+};
 use leaven_workspace::{CapturedOutput, ExitStatus, WorkspacePath};
 
 use crate::{
     FirkinCommandRequest, FirkinCommandResult, FirkinContainerId, FirkinGuestPath, FirkinImageRef,
     FirkinProductPodId, FirkinRuntimeError, FirkinWorkspaceAllocation, FirkinWorkspaceRuntime,
 };
+
+const FIRKIN_ADAPTER_CALL_TIMEOUT: Duration = Duration::from_secs(30);
+const ADD_CONTAINER_ATTEMPTS: usize = 4;
 
 #[derive(Clone)]
 pub struct FirkinRuntimeAdapterRuntime<A> {
@@ -63,12 +68,48 @@ where
         &self,
         future: impl std::future::Future<Output = Result<T, BackendError>>,
     ) -> Result<T, FirkinRuntimeError> {
-        self.runtime
-            .block_on(future)
-            .map_err(|source| FirkinRuntimeError::Runtime {
+        match self.runtime.block_on(async move {
+            tokio::time::timeout(FIRKIN_ADAPTER_CALL_TIMEOUT, future).await
+        }) {
+            Ok(Ok(value)) => Ok(value),
+            Ok(Err(source)) => Err(FirkinRuntimeError::Runtime {
                 operation: "call Firkin product pod adapter",
                 reason: source.to_string(),
-            })
+            }),
+            Err(_elapsed) => Err(FirkinRuntimeError::Runtime {
+                operation: "call Firkin product pod adapter",
+                reason: format!(
+                    "adapter call timed out after {}s",
+                    FIRKIN_ADAPTER_CALL_TIMEOUT.as_secs()
+                ),
+            }),
+        }
+    }
+
+    fn add_pod_container(
+        &self,
+        pod_id: &str,
+        mut request: PodContainerCreateRequest,
+    ) -> Result<PodContainerInfo, FirkinRuntimeError> {
+        let base_name = request.name.clone();
+        let mut last_retryable = None;
+        for attempt in 0..ADD_CONTAINER_ATTEMPTS {
+            if attempt > 0 {
+                request.name = format!("{base_name}-retry-{attempt}");
+            }
+            match self.block_on(self.adapter.add_pod_container(pod_id, request.clone())) {
+                Ok(info) => return Ok(info),
+                Err(error)
+                    if retryable_add_container_error(&error)
+                        && attempt + 1 < ADD_CONTAINER_ATTEMPTS =>
+                {
+                    last_retryable = Some(error);
+                    std::thread::sleep(Duration::from_millis(500));
+                }
+                Err(error) => return Err(error),
+            }
+        }
+        Err(last_retryable.expect("retry loop must record retryable add-container error"))
     }
 
     fn workspace_for(
@@ -89,7 +130,7 @@ where
     fn mount_for(&self, workspace: &ProductPodWorkspace) -> PodVolumeMountRequest {
         PodVolumeMountRequest {
             name: self.workspace_volume.clone(),
-            path: workspace.root.as_str().to_owned(),
+            path: workspace.mount_root.as_str().to_owned(),
             read_only: false,
         }
     }
@@ -119,21 +160,19 @@ where
         env_vars: BTreeMap<String, String>,
     ) -> Result<PodContainerOutput, FirkinRuntimeError> {
         let name = self.next_name("leaven-helper");
-        let request = self.container_request(name.clone(), workspace, command, env_vars, true);
-        self.block_on(
-            self.adapter
-                .add_pod_container(workspace.pod.as_str(), request),
-        )?;
+        let request = self.container_request(name, workspace, command, env_vars, true);
+        let info = self.add_pod_container(workspace.pod.as_str(), request)?;
         let output = self.block_on(
             self.adapter
-                .wait_pod_container(workspace.pod.as_str(), &name),
+                .wait_pod_container(workspace.pod.as_str(), &info.name),
         );
         let remove = self.block_on(
             self.adapter
-                .remove_pod_container(workspace.pod.as_str(), &name),
+                .remove_pod_container(workspace.pod.as_str(), &info.name),
         );
         match (output, remove) {
             (Ok(output), Ok(())) => Ok(output),
+            (Ok(output), Err(error)) if remove_container_not_tracked(&error) => Ok(output),
             (Err(error), Ok(())) | (Ok(_), Err(error)) => Err(error),
             (Err(error), Err(_cleanup)) => Err(error),
         }
@@ -169,28 +208,31 @@ where
         let workspace = ProductPodWorkspace {
             pod: request.product_pod_id().clone(),
             root: request.workspace_root().clone(),
+            mount_root: request.volume_mount_root().clone(),
             image: request.image().clone(),
         };
+        let mut env = BTreeMap::new();
+        env.insert(
+            "LEAVEN_WORKSPACE_ROOT".to_owned(),
+            workspace.root.as_str().to_owned(),
+        );
         let container = self.container_request(
-            name.clone(),
+            name,
             &workspace,
             vec![
                 "sh".to_owned(),
                 "-lc".to_owned(),
-                "sleep infinity".to_owned(),
+                "mkdir -p -- \"$LEAVEN_WORKSPACE_ROOT\" && sleep 2147483647".to_owned(),
             ],
-            BTreeMap::new(),
+            env,
             false,
         );
-        self.block_on(
-            self.adapter
-                .add_pod_container(workspace.pod.as_str(), container),
-        )?;
+        let info = self.add_pod_container(workspace.pod.as_str(), container)?;
         self.workspaces
             .lock()
             .map_err(lock_error)?
-            .insert(name.clone(), workspace);
-        FirkinContainerId::new(name)
+            .insert(info.name.clone(), workspace);
+        FirkinContainerId::new(info.name)
     }
 
     fn write_file(
@@ -322,6 +364,7 @@ where
 struct ProductPodWorkspace {
     pod: FirkinProductPodId,
     root: FirkinGuestPath,
+    mount_root: FirkinGuestPath,
     image: FirkinImageRef,
 }
 
@@ -358,4 +401,15 @@ fn lock_error<T>(_error: std::sync::PoisonError<T>) -> FirkinRuntimeError {
         operation: "lock Firkin adapter state",
         reason: "lock poisoned".to_owned(),
     }
+}
+
+fn retryable_add_container_error(error: &FirkinRuntimeError) -> bool {
+    let message = error.to_string();
+    message.contains("Service was not ready")
+        || message.contains("transport error")
+        || message.contains("timed out")
+}
+
+fn remove_container_not_tracked(error: &FirkinRuntimeError) -> bool {
+    error.to_string().contains("is not tracked by pod")
 }

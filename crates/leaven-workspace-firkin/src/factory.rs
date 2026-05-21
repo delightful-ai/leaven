@@ -55,7 +55,8 @@ where
             self.product_pod_id.clone(),
             workspace_root.clone(),
             self.image.clone(),
-        );
+        )
+        .with_volume_mount_root(self.workspace_root.clone());
         let container_id = self
             .runtime
             .allocate_container(allocation)

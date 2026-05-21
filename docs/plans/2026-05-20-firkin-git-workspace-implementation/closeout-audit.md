@@ -24,21 +24,17 @@ The implementation has the intended local and contract shape:
   identity code, including allowed-ref projection, hidden-object exclusion, no
   alternates, fsck-before-import, and scratch/trusted ref separation tests.
 - `leaven-agentic-git` materializes and reads back Git program artifacts over
-  `WorkspaceView`, including no-local-mount backends, dirty worktrees, committed
-  changes, output bundles, output patches, no-op reads, and atomic multi-repo
-  readback.
+  `WorkspaceView`, including no-local-mount backends, workspace-visible bundle
+  checkout, dirty worktrees, committed changes, output bundles, output patches,
+  no-op reads, and atomic multi-repo readback.
 - `leaven-workspace-firkin` implements Leaven's existing `WorkspaceFactory` and
   `WorkspaceBackend` contracts with typed Firkin context and an optional
   `leaven::workspace_firkin` facade route.
 - A Firkin product-pod e2e contract test proves two isolated no-local-mount
   workspaces in one product pod can run the Git materializer/readback/import
   path through the Firkin backend abstraction.
-
-The implementation does not yet prove the signed/live Apple/VZ product-pod run
-from Leaven. Firkin has product-pod APIs and a generic signed live runtime
-script, but this repository does not yet contain an exact signed Leaven harness
-that creates a live product pod and runs the Git e2e against it. That item is
-therefore blocked/unproven, not claimed as complete live proof.
+- An ignored signed live Apple/VZ test now proves the same Git workspace path
+  against a real Firkin product pod using `docker.io/alpine/git:latest`.
 
 ## Acceptance Items
 
@@ -120,6 +116,7 @@ Implementation evidence:
 Behavioral proof:
 
 - `materializer_checks_out_multiple_repos_at_artifact_revisions`
+- `materializer_does_not_expose_host_store_paths_to_workspace_commands`
 - `readback_reports_no_change_for_clean_materialized_program`
 - `readback_imports_committed_workspace_child_before_returning_change`
 - `readback_imports_output_bundle_proposal_before_checkout_state`
@@ -131,9 +128,11 @@ Behavioral proof:
 
 Notes:
 
-- The no-local-mount tests are the important backend-seam proof. Readback no
-  longer assumes a host path and instead uses the `WorkspaceView` file/command
-  surface.
+- The no-local-mount tests are the important backend-seam proof. Materialization
+  no longer configures host-path Git remotes; it creates a host-side bundle for
+  the requested durable commit, writes the bundle through `WorkspaceView`, and
+  fetches from a workspace-visible path. Readback uses the reverse direction by
+  exporting workspace bundle bytes and importing them into the durable store.
 - Agents are not required to commit. Readback can preserve committed child
   state, import output proposals, or freeze dirty worktree state.
 
@@ -197,9 +196,8 @@ Firkin checkout evidence:
 - `/Users/darin/vendor/github.com/apple/containerization/crates/single-node/src/apple_vz.rs`
   implements product-pod add/remove/wait methods for the Apple/VZ single-node
   adapter.
-- `/Users/darin/vendor/github.com/apple/containerization/scripts/run-signed-live-runtime-test.sh`
-  signs and runs ignored Firkin live runtime tests, but it is generic Firkin
-  runtime machinery rather than a Leaven-specific Git workspace harness.
+- `scripts/run-signed-live-firkin-git-workspace-test.sh` signs and runs the
+  Leaven-specific ignored Apple/VZ product-pod Git e2e.
 
 Behavioral proof:
 
@@ -218,11 +216,19 @@ Notes:
   the current Firkin adapter surface and prevents silent partial support.
 - The facade adapter rejects stdin and user overrides because Firkin product-pod
   container requests do not currently support those command options.
+- The facade adapter mounts the shared pod volume at the stable pod root and
+  uses per-workspace subdirectories below it. Mounting the same `emptyDir`
+  directly at each workspace root aliases every workspace to the volume root and
+  breaks isolation.
+- Product-pod add-container calls are bounded and retried with fresh generated
+  names after readiness/transport ambiguity. Helper container cleanup tolerates
+  the Apple/VZ behavior where `wait_pod_container` consumes the completed
+  helper before a separate remove call.
 - `leaven-workspace-firkin` does not depend on `leaven-artifact-git`.
 
 ### `firkin_git_e2e`
 
-Status: contract e2e satisfied; signed/live Apple/VZ proof blocked/unproven.
+Status: satisfied, including signed/live Apple/VZ proof.
 
 Requirement: a live or signed Firkin proof creates one product pod, allocates
 two isolated workspaces, materializes projected Git state, runs at least one
@@ -232,10 +238,13 @@ containers/trusted refs.
 Implementation evidence:
 
 - `crates/leaven-workspace-firkin/tests/firkin_git_e2e.rs`
+- `crates/leaven-workspace-firkin/tests/firkin_live_git_e2e.rs`
+- `scripts/run-signed-live-firkin-git-workspace-test.sh`
 
 Behavioral proof:
 
 - `firkin_product_pod_materializes_and_reads_back_isolated_git_workspaces`
+- `live_apple_vz_product_pod_materializes_and_reads_back_git_workspaces`
 
 What the e2e proves:
 
@@ -250,14 +259,20 @@ What the e2e proves:
   the same product pod.
 - Cleanup removes both workspace containers.
 
-Live proof blocker:
+Signed live proof:
 
-- Leaven does not yet include an ignored/signed live test that wires a live
-  Apple/VZ `RuntimeAdapter` into `FirkinRuntimeAdapterRuntime`, starts a real
-  product pod, and runs this Git e2e path.
-- Firkin provides the lower-level product-pod APIs and a generic signed live
-  test runner, so this is a missing Leaven harness rather than a missing
-  conceptual substrate.
+```bash
+LEAVEN_FIRKIN_LIVE_TEMPLATE_IMAGE=docker.io/alpine/git:latest \
+  CARGO_TARGET_DIR=/tmp/leaven-firkin-target \
+  CARGO_BUILD_JOBS=1 \
+  scripts/run-signed-live-firkin-git-workspace-test.sh
+```
+
+Result on 2026-05-21: passed, 1 ignored live test selected and run, 27.79s test
+runtime after signing. The test created a real Apple/VZ product pod, allocated
+two no-local-mount Leaven workspaces inside it, materialized both from
+workspace-visible Git bundles, mutated and imported workspace A, verified
+workspace B still saw parent content, and stopped the product pod.
 
 ### `repo_standards_hold`
 
@@ -281,6 +296,9 @@ cargo test -p leaven-workspace --test workspace_view -- --nocapture
 cargo test -p leaven --test topology_contract -- --nocapture
 cargo check -p leaven --features workspace-firkin
 CARGO_TARGET_DIR=/tmp/leaven-firkin-target CARGO_BUILD_JOBS=1 cargo test -p leaven-workspace-firkin --features firkin-facade --test firkin_runtime_adapter -- --nocapture
+CARGO_TARGET_DIR=/tmp/leaven-firkin-target CARGO_BUILD_JOBS=1 cargo test -p leaven-workspace-firkin --features firkin-facade --test firkin_git_e2e -- --nocapture
+CARGO_TARGET_DIR=/tmp/leaven-firkin-target CARGO_BUILD_JOBS=1 cargo test -p leaven-workspace-firkin --features firkin-apple-vz-live --test firkin_live_git_e2e --no-run
+LEAVEN_FIRKIN_LIVE_TEMPLATE_IMAGE=docker.io/alpine/git:latest CARGO_TARGET_DIR=/tmp/leaven-firkin-target CARGO_BUILD_JOBS=1 scripts/run-signed-live-firkin-git-workspace-test.sh
 CARGO_TARGET_DIR=/tmp/leaven-firkin-target CARGO_BUILD_JOBS=1 cargo clippy -p leaven-workspace-firkin --features firkin-facade --all-targets -- -D warnings
 just check
 ```
@@ -309,17 +327,7 @@ Known verification caveat:
 
 ## Residual Work
 
-The remaining implementation-grade follow-up is an ignored signed live Leaven
-test harness:
-
-1. Build or obtain a prepared/live Firkin product-pod runtime image suitable
-   for running `git` and the Leaven workspace helper commands.
-2. Start a real Apple/VZ Firkin product pod.
-3. Construct `FirkinRuntimeAdapterRuntime` from the live runtime adapter.
-4. Reuse the existing Git fixture/materializer/readback e2e against the live
-   workspace factory.
-5. Run it through Firkin's signed live test runner and record the command in
-   this plan directory.
-
-Until that harness exists and passes, Leaven has contract/e2e proof for the
-backend shape, not live Apple/VZ proof.
+No implementation-grade live-proof blocker remains for this slice. Future work
+can make image selection/operator setup nicer, but the Leaven repository now
+contains the optional feature, ignored live test, signed runner, and passing
+Apple/VZ proof command.
