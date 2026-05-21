@@ -96,8 +96,55 @@ fn git_commit_import_writes_child_revision_to_durable_store_after_validation() {
     run_git(durable.path(), ["fsck", "--strict"]);
 }
 
+#[test]
+fn git_commit_import_does_not_promote_source_scratch_or_trusted_refs() {
+    let source = fixture_repo();
+    let durable = tempfile::tempdir().unwrap();
+    run_git(durable.path(), ["init", "--bare"]);
+
+    let parent = git_object(source.path(), "refs/heads/program/base");
+    let child = git_object(source.path(), "refs/heads/program/peer");
+    run_git(
+        source.path(),
+        ["update-ref", "refs/frontier/forged", child.as_str()],
+    );
+    run_git(
+        source.path(),
+        ["update-ref", "refs/leaven/scratch/proposer", child.as_str()],
+    );
+
+    let imported = GitCommitImporter::import_commit(GitCommitImportRequest {
+        source: source.path().to_path_buf(),
+        durable_store: durable.path().to_path_buf(),
+        commit: child.clone(),
+        expected_parent: parent,
+    })
+    .unwrap();
+
+    assert_eq!(imported.revision(), &GitRevision::Commit(child.clone()));
+    assert_eq!(
+        git_output(
+            durable.path(),
+            ["rev-parse", &format!("refs/leaven/imported/{child}")],
+        )
+        .trim(),
+        child.as_str()
+    );
+    assert_git_fails(
+        durable.path(),
+        ["show-ref", "--verify", "refs/frontier/forged"],
+    );
+    assert_git_fails(
+        durable.path(),
+        ["show-ref", "--verify", "refs/leaven/scratch/proposer"],
+    );
+}
+
 fn fixture_repo() -> tempfile::TempDir {
-    let source = tempfile::tempdir().unwrap();
+    let source = tempfile::Builder::new()
+        .prefix("leaven projection source ")
+        .tempdir()
+        .unwrap();
     run_git(source.path(), ["init", "--initial-branch=main"]);
     run_git(source.path(), ["config", "user.name", "Leaven Test"]);
     run_git(
