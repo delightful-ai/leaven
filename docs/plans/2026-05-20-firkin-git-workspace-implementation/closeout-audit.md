@@ -261,8 +261,7 @@ Live proof blocker:
 
 ### `repo_standards_hold`
 
-Status: satisfied for focused gates; final `just check` remains the closeout
-gate after this audit is committed.
+Status: satisfied.
 
 Focused verification already run successfully during this stack:
 
@@ -283,7 +282,20 @@ cargo test -p leaven --test topology_contract -- --nocapture
 cargo check -p leaven --features workspace-firkin
 CARGO_TARGET_DIR=/tmp/leaven-firkin-target CARGO_BUILD_JOBS=1 cargo test -p leaven-workspace-firkin --features firkin-facade --test firkin_runtime_adapter -- --nocapture
 CARGO_TARGET_DIR=/tmp/leaven-firkin-target CARGO_BUILD_JOBS=1 cargo clippy -p leaven-workspace-firkin --features firkin-facade --all-targets -- -D warnings
+just check
 ```
+
+Final `just check` evidence:
+
+- `cargo fmt --check` passed.
+- `python3 scripts/lint-line-count.py` passed with existing oversized-module
+  warnings only.
+- Workspace clippy passed with milestone/example exclusions.
+- `python3 scripts/test-suite-sla.py --sla-seconds 30` passed: 813 tests, 0
+  failed, 1 ignored doctest, 21.28s under the 30s SLA.
+- `python3 scripts/coverage-gate.py` passed on the default coverage lane:
+  89.02% line coverage over a floor of 89.01%, and 87.32% branch coverage over
+  a floor of 87.31%.
 
 Known verification caveat:
 
