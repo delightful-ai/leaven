@@ -5,7 +5,7 @@ It does not execute evaluations. Evaluator traits, registries, trust checks, cas
 
 ## Routing
 - `src/dataset.rs` owns durable case collections, source-row case metadata
-  lowering, and membership fingerprints.
+  lowering, ordered source-row manifests, and membership fingerprints.
 - `src/split.rs` owns partition roles, overlap policy, known-case validation,
   exact stratified split construction over caller-supplied strata, split
   construction over caller-supplied row-order ranges, exact caller-declared
@@ -27,6 +27,10 @@ It does not execute evaluations. Evaluator traits, registries, trust checks, cas
   operational metadata (`source_row_index`, `source_id`) while keeping the
   Leaven `CaseId` numeric and row-stable. It does not parse dataset files or
   turn source metadata into optimizer-visible semantic features.
+- `SourceRowManifest` preserves caller-supplied upstream row order and unique
+  source IDs, fingerprints that row identity, and lowers rows into stable
+  `Case::from_source_row` datasets. It does not parse Parquet/CSV/JSON files,
+  hash row payload content, discover splits, or certify benchmark provenance.
 - Engine tests may construct `EvaluationSet` and `CaseSet` directly; do not move that execution machinery here.
 - `SplitUsePolicy::gepa_train_val_test` states intent; current engine trust
   enforcement is not yet a complete lowering of that policy. Do not claim split

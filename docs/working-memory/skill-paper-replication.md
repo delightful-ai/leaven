@@ -185,10 +185,12 @@ Leaven primitive blockers:
   category-aware without-replacement train-pool sampling; `StratifiedSplitBuilder`
   now provides exact disjoint train/validation/test or custom role membership
   over caller-supplied strata; `ExplicitSplitBuilder` now preserves
-  paper-supplied exact role membership over a known case universe. Exact
-  EvoSkill OfficeQA source manifests remain absent; P5 now threads sampler state
-  through its private checkpoint and samples explicit feedback case IDs from
-  train pools;
+  paper-supplied exact role membership over a known case universe;
+  `SourceRowManifest` now fingerprints caller-supplied ordered source-row ids
+  and lowers them into row-stable Leaven cases for row-order or explicit split
+  construction. Exact EvoSkill OfficeQA source manifests remain absent; P5 now
+  threads sampler state through its private checkpoint and samples explicit
+  feedback case IDs from train pools;
 - paper-grade scorer/evaluator records with failure-threshold extraction;
 - evidence history that can feed proposer prompts without paper-side custom
   plumbing.

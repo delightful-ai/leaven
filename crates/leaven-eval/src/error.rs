@@ -12,6 +12,9 @@ pub enum DatasetError {
     /// A caller tried to insert the same case id twice.
     #[error("duplicate case id: {0}")]
     DuplicateCase(CaseId),
+    /// A source-row manifest contains the same upstream row id twice.
+    #[error("duplicate source row id: {0}")]
+    DuplicateSourceRowId(String),
 }
 
 /// Dataset split construction failed.
