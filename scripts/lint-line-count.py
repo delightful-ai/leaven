@@ -70,7 +70,10 @@ def rust_files(root: Path):
 
 
 def is_test_path(path: Path, root: Path) -> bool:
-    relative = path.resolve().relative_to(root)
+    try:
+        relative = path.resolve().relative_to(root)
+    except ValueError:
+        return True
     parts = relative.parts
     return (
         "tests" in parts
