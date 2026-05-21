@@ -8,8 +8,8 @@ It does not execute evaluations. Evaluator traits, registries, trust checks, cas
   lowering, and membership fingerprints.
 - `src/split.rs` owns partition roles, overlap policy, known-case validation,
   exact stratified split construction over caller-supplied strata, split
-  construction over caller-supplied row-order ranges, split fingerprinting, and
-  `CaseSetVersion` attachment.
+  construction over caller-supplied row-order ranges, exact caller-declared
+  split manifests, split fingerprinting, and `CaseSetVersion` attachment.
 - `src/sampler.rs` owns deterministic lowered case sampling state over known
   case IDs. It may retain cursor/RNG-like state for checkpointing, but it must
   not call evaluators or inspect artifacts.
@@ -49,6 +49,10 @@ It does not execute evaluations. Evaluator traits, registries, trust checks, cas
   upstreams that define splits as row slices, such as Trace2Skill's
   SpreadsheetBench `0:200` / `200:400` split. It does not parse dataset files,
   infer semantic splits, or execute benchmark runners.
+- `ExplicitSplitBuilder` constructs disjoint split membership from exact
+  caller-declared role membership over a known case universe. It exists for
+  papers that publish or require explicit case-id manifests. It does not locate
+  missing manifests, infer categories, or certify that a substitute is faithful.
 
 ## Decision Cards
 - when: adding stable task/case inputs or split semantics
@@ -75,7 +79,7 @@ It does not execute evaluations. Evaluator traits, registries, trust checks, cas
 ## Proof Anchors
 - `cargo nextest run -p leaven-eval` proves dataset IDs, split overlap policy,
   unknown-case refusal, exact stratified split construction, split
-  fingerprints, deterministic sampler state, and train/validation/test
-  use-policy boundaries.
+  fingerprints, explicit paper-manifest lowering, deterministic sampler state,
+  and train/validation/test use-policy boundaries.
 - `cargo nextest run -p leaven-run` proves product builders can consume lowered eval vocabulary without making this crate own builder ergonomics.
 - `cargo nextest run -p leaven-engine --test case_set_resolution` proves execution-time case-set resolution stays in the engine layer.

@@ -76,6 +76,13 @@ pub struct DatasetSplitManifest {
     use_policy: SplitUsePolicy,
 }
 
+/// Deterministic split construction from caller-declared exact membership.
+#[derive(Clone, Debug)]
+pub struct ExplicitSplitBuilder {
+    known_cases: BTreeSet<CaseId>,
+    role_cases: Vec<(SplitRole, Vec<CaseId>)>,
+}
+
 impl DatasetSplitManifest {
     /// Builds a manifest and refuses any required role that is absent or empty.
     pub fn new(
@@ -119,6 +126,45 @@ impl DatasetSplitManifest {
     #[must_use]
     pub const fn use_policy(&self) -> &SplitUsePolicy {
         &self.use_policy
+    }
+}
+
+impl ExplicitSplitBuilder {
+    /// Builds a split builder from the trusted full case universe.
+    pub fn new(known_cases: impl IntoIterator<Item = CaseId>) -> Self {
+        Self {
+            known_cases: known_cases.into_iter().collect(),
+            role_cases: Vec::new(),
+        }
+    }
+
+    /// Assigns exact caller-declared membership to one split role.
+    #[must_use]
+    pub fn role_cases(mut self, role: SplitRole, cases: Vec<CaseId>) -> Self {
+        self.role_cases.push((role, cases));
+        self
+    }
+
+    /// Builds disjoint split membership from exact caller-declared role cases.
+    pub fn build(self, version: CaseSetVersion) -> Result<DatasetSplits, DatasetSplitsError> {
+        let mut roles = BTreeMap::new();
+        let mut cases = BTreeMap::new();
+        for (role, ids) in self.role_cases {
+            let partition = role.partition_id();
+            if roles.contains_key(&partition) {
+                return Err(DatasetSplitsError::DuplicateSplitRole(role));
+            }
+            roles.insert(partition.clone(), role);
+            cases.insert(partition, ids);
+        }
+
+        DatasetSplits::new(
+            version,
+            roles,
+            cases,
+            &self.known_cases,
+            SplitPolicy::DisjointRequired,
+        )
     }
 }
 

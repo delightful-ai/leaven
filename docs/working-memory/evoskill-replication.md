@@ -277,7 +277,8 @@ replication dossier must carry forward:
 - `src/tables/officeqa_results.tex` and `full_source.md:99-111` list
   `merge-unique` at 68.1 for the `0.00%` tolerance column.
 
-Current implication: Leaven now has the generic exact split primitive, but
+Current implication: Leaven now has generic exact split primitives for
+caller-supplied strata, row-order slices, and explicit role membership, but
 EvoSkill still cannot claim a 1:1 OfficeQA split because the paper's category
 assignment and split manifest are not present in the synchronized source tree.
 The next accepted path is either to obtain that manifest from upstream/authors
@@ -472,9 +473,11 @@ or split manifest.
    truth through its private checkpoints, but full EvoSkill still needs
    multi-iteration git-program integration.
    `leaven-eval::StratifiedSplitBuilder` now constructs exact disjoint
-   train/validation/test membership from caller-supplied strata and counts, so
-   the remaining split blocker is the paper's source category/split manifest,
-   not Leaven's generic split construction primitive.
+   train/validation/test membership from caller-supplied strata and counts, and
+   `leaven-eval::ExplicitSplitBuilder` now preserves paper-supplied exact role
+   membership over a known case universe, so the remaining split blocker is the
+   paper's source category/split manifest, not Leaven's generic split
+   construction primitive.
    P5 can inspect the materialized OfficeQA `UID0001` sample/source pair and
    SealQA sample without spend, but both remain validation-only samples rather
    than runnable splits.
