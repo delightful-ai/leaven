@@ -13,7 +13,8 @@ use leaven_agentic_skill::{
 use leaven_artifact_skill::{SkillBank, SkillName};
 use leaven_evidence::{
     AgentAnalystCallEvidence, AgentAnalystCallEvidenceInput, AgentAnalystCallStatus,
-    AgentAnalystFanoutEvidence, OutputRecord,
+    AgentAnalystFanoutEvidence, AgentPatchMergeDecision, AgentPatchMergeNode,
+    AgentPatchMergeNodeInput, AgentPatchMergeTreeEvidence, OutputRecord,
 };
 use leaven_kernel::BlobRef;
 
@@ -40,6 +41,20 @@ pub struct Trace2SkillJsonPatchReplayInput<'a> {
 /// Inputs for replaying an upstream `--save-intermediates` output directory.
 #[derive(Clone, Copy, Debug)]
 pub struct Trace2SkillSavedJsonPatchReplayInput<'a> {
+    /// Parent skill bank all upstream patches were authored against.
+    pub parent: &'a SkillBank,
+    /// Skill folder targeted by the upstream runner.
+    pub skill: &'a SkillName,
+    /// Directory passed as upstream `--intermediates-dir`, or the default
+    /// `<skill>_parallel_output` directory.
+    pub intermediates_dir: &'a Path,
+    /// Upstream `--merge-batch-size` used for the run.
+    pub merge_batch_size: usize,
+}
+
+/// Inputs for importing an upstream `--save-intermediates` directory as merge evidence.
+#[derive(Clone, Copy, Debug)]
+pub struct Trace2SkillSavedJsonPatchMergeEvidenceInput<'a> {
     /// Parent skill bank all upstream patches were authored against.
     pub parent: &'a SkillBank,
     /// Skill folder targeted by the upstream runner.
