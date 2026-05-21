@@ -775,9 +775,11 @@ fn folder_surface_exposes_parts_and_translates_all_folder_edits() {
         )
         .unwrap();
     assert!(matches!(rename, SkillBankChange::RenameSkill { .. }));
-    assert!(surface
-        .change_part(&bank, skill_name("missing-skill"), SkillFolderEdit::Remove)
-        .is_err());
+    assert!(
+        surface
+            .change_part(&bank, skill_name("missing-skill"), SkillFolderEdit::Remove)
+            .is_err()
+    );
 }
 
 #[test]
@@ -786,9 +788,11 @@ fn file_surface_exposes_files_and_translates_all_file_edits() {
     let surface = SkillFileSurface;
     let parts = surface.parts(&bank).unwrap();
     assert_eq!(parts.len(), 2);
-    assert!(parts
-        .iter()
-        .any(|part| part.address == "test-skill/SKILL.md"));
+    assert!(
+        parts
+            .iter()
+            .any(|part| part.address == "test-skill/SKILL.md")
+    );
     assert_ne!(surface.fingerprint(), SkillManifestSurface.fingerprint());
 
     let id = SkillFilePartId {
@@ -820,16 +824,18 @@ fn file_surface_exposes_files_and_translates_all_file_edits() {
             ..
         }
     ));
-    assert!(surface
-        .change_part(
-            &bank,
-            SkillFilePartId {
-                skill: skill_name("test-skill"),
-                path: skill_path("missing.py"),
-            },
-            SkillFileEdit::Remove,
-        )
-        .is_err());
+    assert!(
+        surface
+            .change_part(
+                &bank,
+                SkillFilePartId {
+                    skill: skill_name("test-skill"),
+                    path: skill_path("missing.py"),
+                },
+                SkillFileEdit::Remove,
+            )
+            .is_err()
+    );
 }
 
 #[test]

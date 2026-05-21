@@ -8,12 +8,12 @@ use leaven_evidence::{
 };
 use serde_json::json;
 use trace2skill_spreadsheetbench::{
-    import_trace2skill_saved_json_patch_merge_evidence,
+    Trace2SkillJsonPatchArtifact, Trace2SkillJsonPatchMergeBatch, Trace2SkillJsonPatchMergeInput,
+    Trace2SkillJsonPatchMergeLevel, Trace2SkillJsonPatchReplayInput,
+    Trace2SkillSavedJsonPatchMergeEvidenceInput, Trace2SkillSavedJsonPatchReplayInput,
+    Trace2SkillSavedMapPatchFanoutInput, import_trace2skill_saved_json_patch_merge_evidence,
     import_trace2skill_saved_map_patches_into_fanout, replay_trace2skill_json_patch_merge,
-    replay_trace2skill_saved_json_patch_outputs, Trace2SkillJsonPatchArtifact,
-    Trace2SkillJsonPatchMergeBatch, Trace2SkillJsonPatchMergeInput, Trace2SkillJsonPatchMergeLevel,
-    Trace2SkillJsonPatchReplayInput, Trace2SkillSavedJsonPatchMergeEvidenceInput,
-    Trace2SkillSavedJsonPatchReplayInput, Trace2SkillSavedMapPatchFanoutInput,
+    replay_trace2skill_saved_json_patch_outputs,
 };
 
 #[test]
@@ -98,16 +98,18 @@ fn replays_json_patch_merge_tree_and_applies_selected_final_patch() {
     let child = replay.application.child().get(&skill).unwrap();
     assert!(skill_file_text(child, "SKILL.md").contains("references/row-safety.md"));
     assert!(skill_file_text(child, "references/row-safety.md").contains("Delete rows"));
-    assert!(replay
-        .application
-        .report()
-        .files_changed
-        .iter()
-        .any(|file| {
-            file.skill == skill
-                && file.path == SkillPath::new("references/row-safety.md").unwrap()
-                && file.kind == SkillFileChangeKind::Added
-        }));
+    assert!(
+        replay
+            .application
+            .report()
+            .files_changed
+            .iter()
+            .any(|file| {
+                file.skill == skill
+                    && file.path == SkillPath::new("references/row-safety.md").unwrap()
+                    && file.kind == SkillFileChangeKind::Added
+            })
+    );
 }
 
 #[test]

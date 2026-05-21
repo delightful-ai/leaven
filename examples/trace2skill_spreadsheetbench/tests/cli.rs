@@ -26,14 +26,18 @@ fn cli_inspects_one_case_as_json() {
     assert_eq!(json["case_id"], "13-1");
     assert_eq!(json["answer_sheet"], "LISTS");
     assert_eq!(json["answer_position"], "A3:D32");
-    assert!(json["init_workbook"]["path"]
-        .as_str()
-        .unwrap()
-        .ends_with("1_13-1_init.xlsx"));
-    assert!(json["output_workbook"]
-        .as_str()
-        .unwrap()
-        .ends_with("13-1_output.xlsx"));
+    assert!(
+        json["init_workbook"]["path"]
+            .as_str()
+            .unwrap()
+            .ends_with("1_13-1_init.xlsx")
+    );
+    assert!(
+        json["output_workbook"]
+            .as_str()
+            .unwrap()
+            .ends_with("13-1_output.xlsx")
+    );
 }
 
 #[test]
@@ -122,14 +126,18 @@ fn cli_prepares_one_case_run_dir_as_json() {
     let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(json["case_id"], "13-1");
     assert_eq!(json["status"], "blocked_missing_live_spreadsheet_agent");
-    assert!(json["prompt_file"]["path"]
-        .as_str()
-        .unwrap()
-        .ends_with("agent_prompt.md"));
-    assert!(json["manifest_file"]["path"]
-        .as_str()
-        .unwrap()
-        .ends_with("manifest.json"));
+    assert!(
+        json["prompt_file"]["path"]
+            .as_str()
+            .unwrap()
+            .ends_with("agent_prompt.md")
+    );
+    assert!(
+        json["manifest_file"]["path"]
+            .as_str()
+            .unwrap()
+            .ends_with("manifest.json")
+    );
     assert!(run_dir.join("agent_prompt.md").is_file());
     assert!(run_dir.join("manifest.json").is_file());
     assert!(run_dir.join("1_13-1_init.xlsx").is_file());
@@ -188,14 +196,18 @@ fn cli_scores_prepared_one_case_run_dir_as_json() {
     assert_eq!(json["case_id"], "13-1");
     assert_eq!(json["status"], "scored_candidate_workbook");
     assert_eq!(json["score_report"]["score"], 1.0);
-    assert!(json["score_file"]["path"]
-        .as_str()
-        .unwrap()
-        .ends_with("score_report.json"));
-    assert!(json["trajectory_file"]["path"]
-        .as_str()
-        .unwrap()
-        .ends_with("trajectory.json"));
+    assert!(
+        json["score_file"]["path"]
+            .as_str()
+            .unwrap()
+            .ends_with("score_report.json")
+    );
+    assert!(
+        json["trajectory_file"]["path"]
+            .as_str()
+            .unwrap()
+            .ends_with("trajectory.json")
+    );
 }
 
 #[test]
@@ -266,14 +278,18 @@ fn cli_prepares_one_case_stage2_analyst_fanout_as_json() {
     assert_eq!(json["case_id"], "13-1");
     assert_eq!(json["expected_call_ids"][0], "success-13-1-1");
     assert_eq!(json["pending_call_ids"][0], "success-13-1-1");
-    assert!(json["prompt_file"]["path"]
-        .as_str()
-        .unwrap()
-        .ends_with("stage2_analyst_prompt.md"));
-    assert!(json["fanout_file"]["path"]
-        .as_str()
-        .unwrap()
-        .ends_with("stage2_fanout.json"));
+    assert!(
+        json["prompt_file"]["path"]
+            .as_str()
+            .unwrap()
+            .ends_with("stage2_analyst_prompt.md")
+    );
+    assert!(
+        json["fanout_file"]["path"]
+            .as_str()
+            .unwrap()
+            .ends_with("stage2_fanout.json")
+    );
     assert!(run_dir.join("stage2_analyst_prompt.md").is_file());
     assert!(run_dir.join("stage2_fanout.json").is_file());
 }

@@ -9,8 +9,9 @@ use leaven_evidence::{
 };
 use leaven_kernel::{AgentSessionId, CaseId, Fingerprint};
 use trace2skill_spreadsheetbench::{
+    Trace2SkillRunArtifactInput, Trace2SkillStage2AnalystFanoutInput,
     build_stage2_analyst_fanout_from_training_corpus, build_training_corpus_from_run_artifacts,
-    load_verified_400_manifest, Trace2SkillRunArtifactInput, Trace2SkillStage2AnalystFanoutInput,
+    load_verified_400_manifest,
 };
 
 #[test]

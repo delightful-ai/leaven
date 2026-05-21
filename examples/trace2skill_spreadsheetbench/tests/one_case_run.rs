@@ -1,9 +1,10 @@
 use std::fs;
 
 use trace2skill_spreadsheetbench::{
+    Trace2SkillOneCaseAnalystFanoutInput, Trace2SkillOneCaseInput, Trace2SkillOneCaseRunInput,
+    Trace2SkillOneCaseRunScoringInput, Trace2SkillOneCaseRunStatus,
     prepare_trace2skill_one_case_analyst_fanout, prepare_trace2skill_one_case_run,
-    score_trace2skill_one_case_run, Trace2SkillOneCaseAnalystFanoutInput, Trace2SkillOneCaseInput,
-    Trace2SkillOneCaseRunInput, Trace2SkillOneCaseRunScoringInput, Trace2SkillOneCaseRunStatus,
+    score_trace2skill_one_case_run,
 };
 
 #[test]
@@ -71,10 +72,12 @@ fn prepares_run_dir_with_prompt_manifest_and_staged_workbooks() {
         "live_spreadsheet_agent_execution"
     );
     assert!(manifest["score_report"].is_null());
-    assert!(manifest["source_artifacts"]["case_file"]
-        .as_str()
-        .unwrap()
-        .ends_with("dataset_first_case.json"));
+    assert!(
+        manifest["source_artifacts"]["case_file"]
+            .as_str()
+            .unwrap()
+            .ends_with("dataset_first_case.json")
+    );
 }
 
 #[test]
@@ -130,10 +133,12 @@ fn scores_prepared_run_dir_and_writes_trajectory_evidence() {
     assert_eq!(trajectory["task_id"], "13-1");
     assert_eq!(trajectory["model_id"], "fixture-spreadsheet-agent");
     assert_eq!(trajectory["outcome"], "Success");
-    assert!(trajectory["analysis_records"][0]["source_file"]
-        .as_str()
-        .unwrap()
-        .ends_with("score_report.json"));
+    assert!(
+        trajectory["analysis_records"][0]["source_file"]
+            .as_str()
+            .unwrap()
+            .ends_with("score_report.json")
+    );
 }
 
 #[test]
@@ -178,14 +183,17 @@ fn prepares_stage2_analyst_fanout_from_scored_run_and_upstream_prompt_sources() 
     assert_eq!(report.case_id, "13-1");
     assert_eq!(report.expected_call_ids, ["success-13-1-1"]);
     assert_eq!(report.pending_call_ids, ["success-13-1-1"]);
-    assert!(report
-        .prompt_file
-        .path
-        .ends_with("stage2_analyst_prompt.md"));
+    assert!(
+        report
+            .prompt_file
+            .path
+            .ends_with("stage2_analyst_prompt.md")
+    );
     assert!(report.fanout_file.path.ends_with("stage2_fanout.json"));
-    assert!(report.source_prompt_files.iter().any(|file| file
-        .path
-        .ends_with("parallel_evolving_agent/map_output_format.txt")));
+    assert!(report.source_prompt_files.iter().any(|file| {
+        file.path
+            .ends_with("parallel_evolving_agent/map_output_format.txt")
+    }));
 
     let prompt = fs::read_to_string(run_dir.join("stage2_analyst_prompt.md")).unwrap();
     assert!(prompt.contains("SuccessParallelSkillEvolver._build_map_system_prompt"));
@@ -201,10 +209,12 @@ fn prepares_stage2_analyst_fanout_from_scored_run_and_upstream_prompt_sources() 
     assert_eq!(fanout["calls"][0]["call_id"], "success-13-1-1");
     assert_eq!(fanout["calls"][0]["role"], "Success");
     assert_eq!(fanout["calls"][0]["status"], "Pending");
-    assert!(fanout["calls"][0]["prompt"]["BlobRef"]["key"]
-        .as_str()
-        .unwrap()
-        .ends_with("stage2_analyst_prompt.md"));
+    assert!(
+        fanout["calls"][0]["prompt"]["BlobRef"]["key"]
+            .as_str()
+            .unwrap()
+            .ends_with("stage2_analyst_prompt.md")
+    );
 }
 
 struct Fixture {

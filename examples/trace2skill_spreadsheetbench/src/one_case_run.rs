@@ -12,10 +12,10 @@ use leaven_evidence::{
 use leaven_kernel::{AgentSessionId, BlobRef, FingerprintBuilder};
 
 use crate::{
+    Trace2SkillFileArtifact, Trace2SkillManifestError, Trace2SkillOneCaseAnswerReport,
+    Trace2SkillOneCaseComparisonInput, Trace2SkillOneCaseInput, Trace2SkillOneCaseInspection,
     compare_trace2skill_one_case_answer, file_artifact, inspect_trace2skill_one_case,
-    stage2_prompt, Trace2SkillFileArtifact, Trace2SkillManifestError,
-    Trace2SkillOneCaseAnswerReport, Trace2SkillOneCaseComparisonInput, Trace2SkillOneCaseInput,
-    Trace2SkillOneCaseInspection,
+    stage2_prompt,
 };
 
 /// Files needed to prepare a durable one-case `Trace2Skill` run directory.
@@ -346,7 +346,11 @@ pub fn prepare_trace2skill_one_case_analyst_fanout(
                 },
                 stage2_prompt::Stage2PromptLine {
                     label: "score_report_file",
-                    value: input.run_dir.join("score_report.json").display().to_string(),
+                    value: input
+                        .run_dir
+                        .join("score_report.json")
+                        .display()
+                        .to_string(),
                 },
                 stage2_prompt::Stage2PromptLine {
                     label: "score",
@@ -354,7 +358,11 @@ pub fn prepare_trace2skill_one_case_analyst_fanout(
                 },
                 stage2_prompt::Stage2PromptLine {
                     label: "source_skill",
-                    value: manifest.source_artifacts.released_skill_file.display().to_string(),
+                    value: manifest
+                        .source_artifacts
+                        .released_skill_file
+                        .display()
+                        .to_string(),
                 },
                 stage2_prompt::Stage2PromptLine {
                     label: "source_case",

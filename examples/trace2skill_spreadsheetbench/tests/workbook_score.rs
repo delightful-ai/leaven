@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use trace2skill_spreadsheetbench::{
-    compare_trace2skill_one_case_answer, Trace2SkillOneCaseComparisonInput,
+    Trace2SkillOneCaseComparisonInput, compare_trace2skill_one_case_answer,
 };
 
 #[test]

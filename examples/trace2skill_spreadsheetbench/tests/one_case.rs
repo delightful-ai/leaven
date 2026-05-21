@@ -1,7 +1,7 @@
 use std::fs;
 
 use trace2skill_spreadsheetbench::{
-    inspect_trace2skill_one_case, render_trace2skill_one_case_prompt, Trace2SkillOneCaseInput,
+    Trace2SkillOneCaseInput, inspect_trace2skill_one_case, render_trace2skill_one_case_prompt,
 };
 
 #[test]

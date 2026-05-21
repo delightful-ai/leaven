@@ -19,8 +19,8 @@ use leaven_evidence::{
 use leaven_kernel::BlobRef;
 
 use crate::{
-    lower_trace2skill_json_patch, Trace2SkillPatchError, Trace2SkillPatchLowering,
-    Trace2SkillPatchLoweringInput,
+    Trace2SkillPatchError, Trace2SkillPatchLowering, Trace2SkillPatchLoweringInput,
+    lower_trace2skill_json_patch,
 };
 
 /// Inputs for replaying saved or live upstream JSON patch merge artifacts.
