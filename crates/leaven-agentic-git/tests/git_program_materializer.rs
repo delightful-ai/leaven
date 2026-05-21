@@ -1,9 +1,13 @@
 use std::collections::BTreeMap;
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command as ProcessCommand;
+use std::process::Stdio;
+use std::time::Instant;
 
 use futures::executor::block_on;
+use futures::future::{BoxFuture, FutureExt};
 use leaven_agentic_git::{GitProgramMaterializer, GitProgramReadback, GitProgramStores};
 use leaven_artifact_git::{
     GitArtifactIdentityMode, GitObjectId, GitPath, GitProgramArtifact, GitProgramChange,
@@ -12,7 +16,10 @@ use leaven_artifact_git::{
 use leaven_core::{Evidence, OptimizationProblem};
 use leaven_engine::{BudgetLedger, Materializer, RunContext, RunGraph};
 use leaven_kernel::{Budget, RunId};
-use leaven_workspace::{WorkspaceConfig, WorkspaceFactory, WorkspacePath};
+use leaven_workspace::{
+    CapturedOutput, Command as WorkspaceCommand, CommandStdin, ExitStatus, FactoryError, Workspace,
+    WorkspaceBackend, WorkspaceConfig, WorkspaceError, WorkspaceFactory, WorkspacePath,
+};
 use leaven_workspace_local::LocalWorkspaceFactory;
 
 #[test]
@@ -152,9 +159,7 @@ fn readback_imports_output_bundle_proposal_before_checkout_state() {
         );
         let child = workspace_git_output(&mut view, "repos/program", ["rev-parse", "HEAD"]);
         let child = git_object(child.trim());
-        let output_dir = view.local_mount().unwrap().join("output");
-        fs::create_dir_all(&output_dir).unwrap();
-        let bundle = output_dir.join("proposal.bundle");
+        workspace_command(&mut view, None, "mkdir", ["-p", "output"]);
         let child_range = format!("{}..HEAD", fixture.program_parent.object_id().as_str());
         workspace_git(
             &mut view,
@@ -162,7 +167,7 @@ fn readback_imports_output_bundle_proposal_before_checkout_state() {
             [
                 "bundle",
                 "create",
-                bundle.to_str().unwrap(),
+                "../../output/proposal.bundle",
                 child_range.as_str(),
             ],
         );
@@ -212,9 +217,8 @@ fn readback_imports_output_patch_proposal_as_child_commit() {
         )
         .unwrap();
         let patch = workspace_git_output(&mut view, "repos/program", ["diff", "--binary"]);
-        let output_dir = view.local_mount().unwrap().join("output");
-        fs::create_dir_all(&output_dir).unwrap();
-        fs::write(output_dir.join("proposal.patch"), patch).unwrap();
+        view.write_file(&workspace_path("output/proposal.patch"), patch.as_bytes())
+            .unwrap();
         workspace_git(
             &mut view,
             "repos/program",
@@ -245,6 +249,52 @@ fn readback_imports_output_patch_proposal_as_child_commit() {
                 ["show", &format!("{child}:program.txt")],
             ),
             "patched child\n"
+        );
+
+        drop(view);
+        workspace.cleanup().await.unwrap();
+    });
+}
+
+#[test]
+fn readback_imports_output_patch_without_local_mount() {
+    block_on(async {
+        let fixture = GitFixture::new();
+        let artifact = fixture.program_artifact();
+        let mut workspace = materialized_workspace_without_local_mount(&fixture, &artifact).await;
+        assert!(workspace.local_mount().is_none());
+        let mut view = workspace.view();
+        view.write_file(
+            &workspace_path("repos/program/program.txt"),
+            b"patched child without mount\n",
+        )
+        .unwrap();
+        let patch = workspace_git_output(&mut view, "repos/program", ["diff", "--binary"]);
+        view.write_file(&workspace_path("output/proposal.patch"), patch.as_bytes())
+            .unwrap();
+        workspace_git(
+            &mut view,
+            "repos/program",
+            ["checkout", "--", "program.txt"],
+        );
+
+        let change = GitProgramReadback::new(fixture.stores())
+            .read_back_change(&artifact, &mut view)
+            .unwrap()
+            .expect("output patch should produce a change without local_mount");
+
+        let GitProgramChange::AdvanceRepo { child, .. } = change else {
+            panic!("single output patch should return AdvanceRepo");
+        };
+        let GitRevision::Commit(child) = child else {
+            panic!("patch readback should create a commit");
+        };
+        assert_eq!(
+            git_output(
+                &fixture.program_store,
+                ["show", &format!("{child}:program.txt")],
+            ),
+            "patched child without mount\n"
         );
 
         drop(view);
@@ -286,6 +336,44 @@ fn readback_freezes_dirty_worktree_as_imported_child_commit() {
         assert_eq!(
             git_output(&fixture.program_store, ["cat-file", "-t", child.as_str()]).trim(),
             "commit"
+        );
+
+        drop(view);
+        workspace.cleanup().await.unwrap();
+    });
+}
+
+#[test]
+fn readback_freezes_dirty_worktree_without_local_mount() {
+    block_on(async {
+        let fixture = GitFixture::new();
+        let artifact = fixture.parent_artifact();
+        let mut workspace = materialized_workspace_without_local_mount(&fixture, &artifact).await;
+        assert!(workspace.local_mount().is_none());
+        let mut view = workspace.view();
+        view.write_file(
+            &workspace_path("repos/program/program.txt"),
+            b"dirty child without mount\n",
+        )
+        .unwrap();
+
+        let change = GitProgramReadback::new(fixture.stores())
+            .read_back_change(&artifact, &mut view)
+            .unwrap()
+            .expect("dirty worktree should produce a change without local_mount");
+
+        let GitProgramChange::AdvanceRepo { child, .. } = change else {
+            panic!("single dirty repo should return AdvanceRepo");
+        };
+        let GitRevision::Commit(child) = child else {
+            panic!("dirty worktree readback should freeze a commit");
+        };
+        assert_eq!(
+            git_output(
+                &fixture.program_store,
+                ["show", &format!("{child}:program.txt")],
+            ),
+            "dirty child without mount\n"
         );
 
         drop(view);
@@ -455,6 +543,26 @@ async fn materialized_workspace(
     workspace
 }
 
+async fn materialized_workspace_without_local_mount(
+    fixture: &GitFixture,
+    artifact: &GitProgramArtifact,
+) -> leaven_workspace::Workspace {
+    let root = tempfile::tempdir().unwrap().keep();
+    let mut workspace = NoLocalMountWorkspaceFactory::new(&root)
+        .allocate(WorkspaceConfig::default())
+        .await
+        .unwrap();
+    let mut view = workspace.view();
+    let (mut graph, mut budget) = graph_and_budget();
+    let ctx = RunContext::<GitProblem>::new(&mut graph, &mut budget);
+    GitProgramMaterializer::new(fixture.stores())
+        .materialize_into(artifact, &mut view, ctx.materialize_context())
+        .await
+        .unwrap();
+    drop(view);
+    workspace
+}
+
 fn create_repo(root: &Path, file: &str, body: &str) {
     fs::create_dir_all(root).unwrap();
     run_git(root, ["init", "--initial-branch=main"]);
@@ -510,6 +618,23 @@ fn workspace_git_command<const N: usize>(
     command.cwd = Some(workspace_path(cwd));
     command.args = args.into_iter().map(str::to_owned).collect();
     view.run_command(command).unwrap()
+}
+
+fn workspace_command<const N: usize>(
+    view: &mut leaven_workspace::WorkspaceView<'_>,
+    cwd: Option<&str>,
+    program: &str,
+    args: [&str; N],
+) {
+    let mut command = WorkspaceCommand::new(program);
+    command.cwd = cwd.map(workspace_path);
+    command.args = args.into_iter().map(str::to_owned).collect();
+    let output = view.run_command(command).unwrap();
+    assert!(
+        output.status.code == Some(0),
+        "{program} failed: {}",
+        String::from_utf8_lossy(&output.stderr.bytes)
+    );
 }
 
 fn run_git<const N: usize>(cwd: &Path, args: [&str; N]) {
@@ -593,4 +718,150 @@ fn workspace_path(path: &str) -> WorkspacePath {
 
 fn git_object(hex: &str) -> GitObjectId {
     GitObjectId::new(hex).unwrap()
+}
+
+#[derive(Clone, Debug)]
+struct NoLocalMountWorkspaceFactory {
+    root: PathBuf,
+}
+
+impl NoLocalMountWorkspaceFactory {
+    fn new(root: impl Into<PathBuf>) -> Self {
+        Self { root: root.into() }
+    }
+}
+
+impl WorkspaceFactory for NoLocalMountWorkspaceFactory {
+    async fn allocate(&self, _config: WorkspaceConfig) -> Result<Workspace, FactoryError> {
+        fs::create_dir_all(&self.root)
+            .map_err(|error| FactoryError::Allocate(error.to_string()))?;
+        Ok(Workspace::new(
+            self.root.clone(),
+            Box::new(NoLocalMountBackend {
+                root: self.root.clone(),
+            }),
+        ))
+    }
+}
+
+struct NoLocalMountBackend {
+    root: PathBuf,
+}
+
+impl WorkspaceBackend for NoLocalMountBackend {
+    fn write_file(&mut self, path: &WorkspacePath, bytes: &[u8]) -> Result<(), WorkspaceError> {
+        let path = self.host_path(path);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).map_err(|error| WorkspaceError::Io(error.to_string()))?;
+        }
+        fs::write(path, bytes).map_err(|error| WorkspaceError::Io(error.to_string()))
+    }
+
+    fn read_file(&mut self, path: &WorkspacePath) -> Result<Vec<u8>, WorkspaceError> {
+        fs::read(self.host_path(path)).map_err(|error| WorkspaceError::Io(error.to_string()))
+    }
+
+    fn list_files(&mut self, path: &WorkspacePath) -> Result<Vec<WorkspacePath>, WorkspaceError> {
+        let root = self.host_path(path);
+        let mut files = Vec::new();
+        collect_no_mount_files(&root, path.clone(), &mut files)?;
+        files.sort();
+        Ok(files)
+    }
+
+    fn run_command(
+        &mut self,
+        command: WorkspaceCommand,
+    ) -> Result<leaven_workspace::CommandOutput, WorkspaceError> {
+        if command.user.is_some() {
+            return Err(WorkspaceError::UnsupportedOperation {
+                operation: "run_command.user",
+            });
+        }
+        let cwd = command
+            .cwd
+            .as_ref()
+            .map_or_else(|| self.root.clone(), |path| self.host_path(path));
+        let start = Instant::now();
+        let mut process = ProcessCommand::new(&command.program);
+        process
+            .args(&command.args)
+            .current_dir(cwd)
+            .envs(&command.env)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        match &command.stdin {
+            CommandStdin::Empty => {
+                process.stdin(Stdio::null());
+            }
+            CommandStdin::Bytes(_) => {
+                process.stdin(Stdio::piped());
+            }
+        }
+        let mut child = process
+            .spawn()
+            .map_err(|error| WorkspaceError::Command(error.to_string()))?;
+        if let CommandStdin::Bytes(bytes) = &command.stdin
+            && let Some(mut stdin) = child.stdin.take()
+        {
+            stdin
+                .write_all(bytes)
+                .map_err(|error| WorkspaceError::Command(error.to_string()))?;
+        }
+        let output = child
+            .wait_with_output()
+            .map_err(|error| WorkspaceError::Command(error.to_string()))?;
+        Ok(leaven_workspace::CommandOutput {
+            status: ExitStatus {
+                code: output.status.code(),
+            },
+            stdout: CapturedOutput::new(output.stdout, command.limits.max_stdout_bytes),
+            stderr: CapturedOutput::new(output.stderr, command.limits.max_stderr_bytes),
+            duration: start.elapsed(),
+        })
+    }
+
+    fn cleanup(self: Box<Self>) -> BoxFuture<'static, Result<(), WorkspaceError>> {
+        async move {
+            if self.root.exists() {
+                fs::remove_dir_all(&self.root)
+                    .map_err(|error| WorkspaceError::Cleanup(error.to_string()))?;
+            }
+            Ok(())
+        }
+        .boxed()
+    }
+}
+
+impl NoLocalMountBackend {
+    fn host_path(&self, path: &WorkspacePath) -> PathBuf {
+        self.root.join(path.to_host_relative())
+    }
+}
+
+fn collect_no_mount_files(
+    host_path: &Path,
+    workspace_path: WorkspacePath,
+    files: &mut Vec<WorkspacePath>,
+) -> Result<(), WorkspaceError> {
+    let metadata =
+        fs::metadata(host_path).map_err(|error| WorkspaceError::Io(error.to_string()))?;
+    if metadata.is_file() {
+        files.push(workspace_path);
+        return Ok(());
+    }
+    for entry in fs::read_dir(host_path).map_err(|error| WorkspaceError::Io(error.to_string()))? {
+        let entry = entry.map_err(|error| WorkspaceError::Io(error.to_string()))?;
+        let name = entry
+            .file_name()
+            .into_string()
+            .map_err(|_| WorkspaceError::Io("workspace path is not UTF-8".to_owned()))?;
+        let child_path = if workspace_path.as_str().is_empty() {
+            WorkspacePath::new(name)?
+        } else {
+            workspace_path.join(name)?
+        };
+        collect_no_mount_files(&entry.path(), child_path, files)?;
+    }
+    Ok(())
 }

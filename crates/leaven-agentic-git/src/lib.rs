@@ -12,8 +12,10 @@ use leaven_artifact_git::{
 use leaven_core::OptimizationProblem;
 use leaven_engine::{MaterializationReport, MaterializeContext, MaterializeError, Materializer};
 use leaven_kernel::{Cost, Metered, RunId};
-use leaven_workspace::{Command, CommandOutput, WorkspacePath, WorkspacePathError, WorkspaceView};
-use leaven_workspace_git::{GitCommitImportRequest, GitCommitImporter, GitWorkspaceGitError};
+use leaven_workspace::{
+    Command, CommandOutput, CommandStdin, WorkspacePath, WorkspacePathError, WorkspaceView,
+};
+use leaven_workspace_git::GitWorkspaceGitError;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GitProgramStores {
@@ -234,20 +236,18 @@ impl GitProgramReadback {
         workspace: &mut WorkspaceView<'_>,
     ) -> Result<Option<GitRevision>, GitAgenticGitError> {
         if let Some(bundle) = output_proposal_path(workspace, repo, repo_count, "bundle")? {
-            return self.import_bundle(repo, &bundle, parent).map(Some);
+            let bytes = workspace.read_file(&bundle)?;
+            return self.import_bundle_bytes(repo, &bytes, parent).map(Some);
         }
         if let Some(patch) = output_proposal_path(workspace, repo, repo_count, "patch")? {
+            let patch = workspace.read_file(&patch)?;
             run_git(
                 workspace,
                 Some(checkout),
                 ["reset", "--hard", parent.as_str()],
             )?;
             run_git(workspace, Some(checkout), ["clean", "-fd"])?;
-            run_git(
-                workspace,
-                Some(checkout),
-                ["apply", patch.to_string_lossy().as_ref()],
-            )?;
+            run_git_with_stdin(workspace, Some(checkout), ["apply", "--binary", "-"], patch)?;
             freeze_worktree(workspace, checkout)?;
             let child = current_head(workspace, checkout)?;
             return self
@@ -263,16 +263,10 @@ impl GitProgramReadback {
         checkout: &WorkspacePath,
         child: &GitObjectId,
         parent: &GitObjectId,
-        workspace: &WorkspaceView<'_>,
+        workspace: &mut WorkspaceView<'_>,
     ) -> Result<GitRevision, GitAgenticGitError> {
-        let source = checkout_host_path(workspace, checkout)?;
-        let imported = GitCommitImporter::import_commit(GitCommitImportRequest {
-            source,
-            durable_store: self.stores.store_for(repo)?.to_path_buf(),
-            commit: child.clone(),
-            expected_parent: parent.clone(),
-        })?;
-        Ok(imported.revision().clone())
+        let bundle = export_commit_bundle(workspace, checkout, parent, child)?;
+        self.import_bundle_bytes(repo, &bundle, parent)
     }
 
     fn import_bundle(
@@ -345,6 +339,28 @@ impl GitProgramReadback {
         cleanup.remove();
         Ok(GitRevision::Commit(child))
     }
+
+    fn import_bundle_bytes(
+        &self,
+        repo: &RepoKey,
+        bundle: &[u8],
+        parent: &GitObjectId,
+    ) -> Result<GitRevision, GitAgenticGitError> {
+        let temp = std::env::temp_dir().join(format!("leaven-git-proposal-{}", RunId::new()));
+        fs::create_dir_all(&temp).map_err(|source| GitWorkspaceGitError::CommandIo {
+            program: "create temp bundle directory",
+            source,
+        })?;
+        let cleanup = BundleImportCleanup { path: temp.clone() };
+        let bundle_path = temp.join("proposal.bundle");
+        fs::write(&bundle_path, bundle).map_err(|source| GitWorkspaceGitError::CommandIo {
+            program: "write temp bundle",
+            source,
+        })?;
+        let imported = self.import_bundle(repo, &bundle_path, parent)?;
+        cleanup.remove();
+        Ok(imported)
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -355,8 +371,6 @@ pub enum GitAgenticGitError {
     MissingStore { repo: RepoKey },
     #[error("missing git program layout for repo `{repo}`")]
     MissingLayout { repo: RepoKey },
-    #[error("workspace does not expose a local mount required for git readback import")]
-    MissingLocalMount,
     #[error("tree materialization is not implemented for repo `{repo}`")]
     UnsupportedTreeMaterialization { repo: RepoKey },
     #[error("tree readback is not implemented for repo `{repo}`")]
@@ -416,14 +430,53 @@ fn run_git_output<const N: usize>(
     }))
 }
 
+fn run_git_vec(
+    workspace: &mut WorkspaceView<'_>,
+    cwd: Option<&WorkspacePath>,
+    args: Vec<String>,
+) -> Result<(), GitAgenticGitError> {
+    let output = run_git_command_vec(workspace, cwd, args, CommandStdin::Empty)?;
+    ensure_success(&output, "git")
+}
+
+fn run_git_with_stdin<const N: usize>(
+    workspace: &mut WorkspaceView<'_>,
+    cwd: Option<&WorkspacePath>,
+    args: [&str; N],
+    stdin: Vec<u8>,
+) -> Result<(), GitAgenticGitError> {
+    let output = run_git_command_vec(
+        workspace,
+        cwd,
+        args.into_iter().map(str::to_owned).collect(),
+        CommandStdin::Bytes(stdin),
+    )?;
+    ensure_success(&output, "git")
+}
+
 fn run_git_command<const N: usize>(
     workspace: &mut WorkspaceView<'_>,
     cwd: Option<&WorkspacePath>,
     args: [&str; N],
 ) -> Result<CommandOutput, GitAgenticGitError> {
+    run_git_command_vec(
+        workspace,
+        cwd,
+        args.into_iter().map(str::to_owned).collect(),
+        CommandStdin::Empty,
+    )
+}
+
+fn run_git_command_vec(
+    workspace: &mut WorkspaceView<'_>,
+    cwd: Option<&WorkspacePath>,
+    args: Vec<String>,
+    stdin: CommandStdin,
+) -> Result<CommandOutput, GitAgenticGitError> {
     let mut command = Command::new("git");
     command.cwd = cwd.cloned();
-    command.args = args.into_iter().map(str::to_owned).collect();
+    command.args = args;
+    command.stdin = stdin;
     Ok(workspace.run_command(command)?)
 }
 
@@ -494,41 +547,69 @@ fn checked_out_bytes(
     Ok(total)
 }
 
-fn checkout_host_path(
-    workspace: &WorkspaceView<'_>,
+fn export_commit_bundle(
+    workspace: &mut WorkspaceView<'_>,
     checkout: &WorkspacePath,
-) -> Result<PathBuf, GitAgenticGitError> {
-    let mount = workspace
-        .local_mount()
-        .ok_or(GitAgenticGitError::MissingLocalMount)?;
-    Ok(mount
-        .join(workspace.root().to_host_relative())
-        .join(checkout.to_host_relative()))
+    parent: &GitObjectId,
+    _child: &GitObjectId,
+) -> Result<Vec<u8>, GitAgenticGitError> {
+    let filename = format!(".git/leaven-readback-{}.bundle", RunId::new());
+    let excluded_parent = format!("^{parent}");
+    run_git_vec(
+        workspace,
+        Some(checkout),
+        vec![
+            "bundle".to_owned(),
+            "create".to_owned(),
+            filename.clone(),
+            "HEAD".to_owned(),
+            excluded_parent,
+        ],
+    )?;
+    let bundle = workspace.read_file(&checkout.join(&filename)?)?;
+    remove_workspace_file(workspace, checkout, &filename)?;
+    Ok(bundle)
 }
 
 fn output_proposal_path(
-    workspace: &WorkspaceView<'_>,
+    workspace: &mut WorkspaceView<'_>,
     repo: &RepoKey,
     repo_count: usize,
     extension: &str,
-) -> Result<Option<PathBuf>, GitAgenticGitError> {
-    let mount = workspace
-        .local_mount()
-        .ok_or(GitAgenticGitError::MissingLocalMount)?;
-    let output = mount
-        .join(workspace.root().to_host_relative())
-        .join("output");
-    let repo_specific = output.join(format!("{}.{}", repo.as_str(), extension));
-    if repo_specific.exists() {
+) -> Result<Option<WorkspacePath>, GitAgenticGitError> {
+    let output = WorkspacePath::new("output")?;
+    let repo_specific = output.join(format!("{}.{}", repo.as_str(), extension))?;
+    if workspace_file_exists(workspace, &repo_specific)? {
         return Ok(Some(repo_specific));
     }
     if repo_count == 1 {
-        let generic = output.join(format!("proposal.{extension}"));
-        if generic.exists() {
+        let generic = output.join(format!("proposal.{extension}"))?;
+        if workspace_file_exists(workspace, &generic)? {
             return Ok(Some(generic));
         }
     }
     Ok(None)
+}
+
+fn workspace_file_exists(
+    workspace: &mut WorkspaceView<'_>,
+    path: &WorkspacePath,
+) -> Result<bool, GitAgenticGitError> {
+    let mut command = Command::new("test");
+    command.args = vec!["-f".to_owned(), path.as_str().to_owned()];
+    let output = workspace.run_command(command)?;
+    Ok(output.status.code == Some(0))
+}
+
+fn remove_workspace_file(
+    workspace: &mut WorkspaceView<'_>,
+    cwd: &WorkspacePath,
+    path: &str,
+) -> Result<(), GitAgenticGitError> {
+    let mut command = Command::new("rm");
+    command.cwd = Some(cwd.clone());
+    command.args = vec!["-f".to_owned(), path.to_owned()];
+    ensure_success(&workspace.run_command(command)?, "rm")
 }
 
 fn bundle_head(bundle: &Path) -> Result<GitObjectId, GitAgenticGitError> {
