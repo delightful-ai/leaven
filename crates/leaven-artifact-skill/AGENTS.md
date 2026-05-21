@@ -1,5 +1,5 @@
 ## Boundary
-This crate owns the Agent Skills artifact family: `SkillBank`, `SkillFolder`, `SkillFile`, `SkillCard`, `SkillRouteRegistry`, validated skill names/paths, `SKILL.md` parsing, metadata, change records, and explicit folder/manifest/file surfaces.
+This crate owns the Agent Skills artifact family: `SkillBank`, `SkillFolder`, `SkillFile`, `SkillCard`, `SkillRouteRegistry`, validated skill names/paths, `SKILL.md` parsing, metadata, change records, and explicit folder/manifest/body/file/reference surfaces.
 
 It models skills as artifacts and edit surfaces. It does not run agents, materialize workspaces, call provider CLIs, parse agent sessions, or decide optimizer policy.
 
@@ -29,8 +29,10 @@ It models skills as artifacts and edit surfaces. It does not run agents, materia
 - Use `SkillBankChange` for functional artifact mutation. Apply changes in
   order and leave the original bank untouched if a later change invalidates the
   result.
-- Use `SkillFolderSurface`, `SkillManifestSurface`, and `SkillFileSurface`
-  depending on whether an optimizer is editing folders, frontmatter, or files.
+- Use `SkillFolderSurface`, `SkillManifestSurface`, `SkillBodySurface`,
+  `SkillFileSurface`, and `SkillReferenceSurface` depending on whether an
+  optimizer is editing folders, frontmatter, the always-loaded body, arbitrary
+  files, or direct `references/*.md` progressive-disclosure modules.
 
 ## Local Bait
 - A `SkillBankChange::WriteFile` is artifact mutation, not filesystem execution. Workspace side effects belong behind workspace/agentic adapters.
@@ -38,12 +40,16 @@ It models skills as artifacts and edit surfaces. It does not run agents, materia
   can deliberately own route pool/key membership as an overlay over a bank.
   Utility tables, trigger counts, router weights, similarity scores, and
   lifecycle state are still not `SkillBank` or route-registry facts.
-- `SkillManifestSurface` preserves the existing body and file permissions while replacing frontmatter. Keep that distinction when adding narrower surfaces.
+- `SkillManifestSurface` preserves the existing body and file permissions while replacing frontmatter. `SkillBodySurface` preserves frontmatter and file permissions while replacing the body. Keep that distinction when adding narrower surfaces.
+- `SkillReferenceSurface` is deliberately narrower than `SkillFileSurface`: it
+  accepts only direct `references/*.md` modules. Scripts, nested reference
+  trees, assets, and non-markdown files stay behind the file surface or a more
+  specific future surface.
 - YAML metadata is a generic bag after required fields are validated; do not turn provider/runtime-specific frontmatter into core skill artifact law here.
 - Rename is a semantic skill operation here: folder name and `SKILL.md` name
   move together. Do not copy generic path-surface rename behavior into this
   artifact family.
 
 ## Proof Anchors
-- `cargo nextest run -p leaven-artifact-skill --test skill_artifact` proves skill name/path validation, `SKILL.md` parsing, manifest-derived skill cards, route registry pool/key overlays, folder/bank invariants, rollback, rename semantics, content identity including permissions, and all three skill surfaces.
+- `cargo nextest run -p leaven-artifact-skill --test skill_artifact` proves skill name/path validation, `SKILL.md` parsing, manifest-derived skill cards, route registry pool/key overlays, folder/bank invariants, rollback, rename semantics, content identity including permissions, and all five skill surfaces.
 - `cargo test -p leaven --test topology_contract` proves this crate stays an artifact/surface crate and Codex app-server protocol types remain leaf-only.

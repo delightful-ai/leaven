@@ -28,6 +28,7 @@ pub use route::{
     SkillRouteEntry, SkillRouteKey, SkillRoutePool, SkillRouteRegistry, SkillRouteSpec,
 };
 pub use surface::{
-    SkillFileEdit, SkillFilePartId, SkillFileSurface, SkillFolderEdit, SkillFolderSurface,
-    SkillManifestEdit, SkillManifestPartId, SkillManifestSurface,
+    SkillBodyEdit, SkillBodyPartId, SkillBodySurface, SkillFileEdit, SkillFilePartId,
+    SkillFileSurface, SkillFolderEdit, SkillFolderSurface, SkillManifestEdit, SkillManifestPartId,
+    SkillManifestSurface, SkillReferenceEdit, SkillReferencePartId, SkillReferenceSurface,
 };

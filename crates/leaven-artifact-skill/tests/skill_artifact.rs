@@ -2,11 +2,12 @@ use std::collections::BTreeMap;
 use std::str::FromStr;
 
 use leaven_artifact_skill::{
-    ParsedSkillMd, SkillBank, SkillBankChange, SkillBankError, SkillBody, SkillCard,
-    SkillDescription, SkillFile, SkillFileEdit, SkillFilePartId, SkillFileSurface, SkillFolder,
-    SkillFolderEdit, SkillFolderSurface, SkillManifestEdit, SkillManifestPartId,
-    SkillManifestSurface, SkillMetadataValue, SkillName, SkillNameError, SkillParseError,
-    SkillPath, SkillPathError, SkillRouteKey, SkillRoutePool, SkillRouteRegistry,
+    ParsedSkillMd, SkillBank, SkillBankChange, SkillBankError, SkillBody, SkillBodyEdit,
+    SkillBodyPartId, SkillBodySurface, SkillCard, SkillDescription, SkillFile, SkillFileEdit,
+    SkillFilePartId, SkillFileSurface, SkillFolder, SkillFolderEdit, SkillFolderSurface,
+    SkillManifestEdit, SkillManifestPartId, SkillManifestSurface, SkillMetadataValue, SkillName,
+    SkillNameError, SkillParseError, SkillPath, SkillPathError, SkillReferenceEdit,
+    SkillReferencePartId, SkillReferenceSurface, SkillRouteKey, SkillRoutePool, SkillRouteRegistry,
     SkillRouteRegistryError, SkillRouteSpec,
 };
 use leaven_core::{Artifact, ContentAddressed};
@@ -774,11 +775,9 @@ fn folder_surface_exposes_parts_and_translates_all_folder_edits() {
         )
         .unwrap();
     assert!(matches!(rename, SkillBankChange::RenameSkill { .. }));
-    assert!(
-        surface
-            .change_part(&bank, skill_name("missing-skill"), SkillFolderEdit::Remove)
-            .is_err()
-    );
+    assert!(surface
+        .change_part(&bank, skill_name("missing-skill"), SkillFolderEdit::Remove)
+        .is_err());
 }
 
 #[test]
@@ -787,11 +786,9 @@ fn file_surface_exposes_files_and_translates_all_file_edits() {
     let surface = SkillFileSurface;
     let parts = surface.parts(&bank).unwrap();
     assert_eq!(parts.len(), 2);
-    assert!(
-        parts
-            .iter()
-            .any(|part| part.address == "test-skill/SKILL.md")
-    );
+    assert!(parts
+        .iter()
+        .any(|part| part.address == "test-skill/SKILL.md"));
     assert_ne!(surface.fingerprint(), SkillManifestSurface.fingerprint());
 
     let id = SkillFilePartId {
@@ -823,18 +820,16 @@ fn file_surface_exposes_files_and_translates_all_file_edits() {
             ..
         }
     ));
-    assert!(
-        surface
-            .change_part(
-                &bank,
-                SkillFilePartId {
-                    skill: skill_name("test-skill"),
-                    path: skill_path("missing.py"),
-                },
-                SkillFileEdit::Remove,
-            )
-            .is_err()
-    );
+    assert!(surface
+        .change_part(
+            &bank,
+            SkillFilePartId {
+                skill: skill_name("test-skill"),
+                path: skill_path("missing.py"),
+            },
+            SkillFileEdit::Remove,
+        )
+        .is_err());
 }
 
 #[test]
@@ -871,4 +866,176 @@ fn manifest_surface_exposes_frontmatter_parts_and_preserves_body() {
         folder.manifest().metadata.get("routing"),
         Some(&SkillMetadataValue::String("tests".to_owned()))
     );
+}
+
+#[test]
+fn body_surface_exposes_skill_md_body_and_preserves_frontmatter() {
+    let bank = bank()
+        .apply_change(&SkillBankChange::SetExecutable {
+            skill: skill_name("test-skill"),
+            path: SkillPath::skill_md(),
+            executable: true,
+        })
+        .unwrap();
+    let surface = SkillBodySurface;
+    let parts = surface.parts(&bank).unwrap();
+    assert_eq!(parts.len(), 1);
+    assert_eq!(parts[0].address, "test-skill/SKILL.md#body");
+    assert_eq!(parts[0].view.as_str(), "Do the testing work.\n");
+    assert_ne!(surface.fingerprint(), SkillManifestSurface.fingerprint());
+
+    let changed = bank
+        .apply_change(
+            &surface
+                .change_part(
+                    &bank,
+                    SkillBodyPartId {
+                        skill: skill_name("test-skill"),
+                    },
+                    SkillBodyEdit::Replace(
+                        SkillBody::new("Only the core operating rules remain.\n").unwrap(),
+                    ),
+                )
+                .unwrap(),
+        )
+        .unwrap();
+    let folder = changed.get(&skill_name("test-skill")).unwrap();
+    assert_eq!(
+        folder.manifest().description.as_str(),
+        "Use when testing skill folders."
+    );
+    assert_eq!(
+        folder.manifest().metadata.get("license"),
+        Some(&SkillMetadataValue::String("MIT".to_owned()))
+    );
+    assert_eq!(
+        folder.body().as_str(),
+        "Only the core operating rules remain.\n"
+    );
+    assert!(
+        folder
+            .file(&SkillPath::skill_md())
+            .unwrap()
+            .permissions()
+            .executable
+    );
+}
+
+#[test]
+fn reference_surface_exposes_only_reference_markdown_modules() {
+    let bank = reference_bank();
+    let surface = SkillReferenceSurface;
+    let parts = surface.parts(&bank).unwrap();
+    assert_eq!(
+        parts
+            .iter()
+            .map(|part| part.address.as_str())
+            .collect::<Vec<_>>(),
+        [
+            "test-skill/references/background.md",
+            "test-skill/references/examples.md"
+        ]
+    );
+    assert_ne!(surface.fingerprint(), SkillFileSurface.fingerprint());
+
+    let examples = SkillReferencePartId {
+        skill: skill_name("test-skill"),
+        path: skill_path("references/examples.md"),
+    };
+    let changed = bank
+        .apply_change(
+            &surface
+                .change_part(
+                    &bank,
+                    examples,
+                    SkillReferenceEdit::Replace(SkillFile::text("Short examples.\n")),
+                )
+                .unwrap(),
+        )
+        .unwrap();
+    assert_eq!(
+        changed
+            .get(&skill_name("test-skill"))
+            .unwrap()
+            .file(&skill_path("references/examples.md"))
+            .unwrap()
+            .bytes(),
+        b"Short examples.\n"
+    );
+}
+
+#[test]
+fn reference_surface_rejects_non_reference_paths_and_renames() {
+    let bank = reference_bank();
+    let surface = SkillReferenceSurface;
+    let examples = SkillReferencePartId {
+        skill: skill_name("test-skill"),
+        path: skill_path("references/examples.md"),
+    };
+    assert!(matches!(
+        surface
+            .change_part(
+                &bank,
+                examples,
+                SkillReferenceEdit::Rename(skill_path("scripts/examples.md")),
+            )
+            .unwrap_err(),
+        leaven_surface::SurfaceError::Message(_)
+    ));
+    assert!(matches!(
+        surface
+            .change_part(
+                &bank,
+                SkillReferencePartId {
+                    skill: skill_name("test-skill"),
+                    path: skill_path("scripts/run.py"),
+                },
+                SkillReferenceEdit::Remove,
+            )
+            .unwrap_err(),
+        leaven_surface::SurfaceError::UnknownPart
+    ));
+    assert!(matches!(
+        surface
+            .change_part(
+                &bank,
+                SkillReferencePartId {
+                    skill: skill_name("test-skill"),
+                    path: skill_path("references/not-md.txt"),
+                },
+                SkillReferenceEdit::SetExecutable(true),
+            )
+            .unwrap_err(),
+        leaven_surface::SurfaceError::UnknownPart
+    ));
+}
+
+fn reference_bank() -> SkillBank {
+    let mut entries = BTreeMap::new();
+    entries.insert(
+        SkillPath::skill_md(),
+        skill_md(
+            "test-skill",
+            "Use when testing reference modules.",
+            "Read references only when needed.",
+        ),
+    );
+    entries.insert(
+        skill_path("references/examples.md"),
+        SkillFile::text("Long examples.\n"),
+    );
+    entries.insert(
+        skill_path("references/background.md"),
+        SkillFile::text("Background material.\n"),
+    );
+    entries.insert(
+        skill_path("references/not-md.txt"),
+        SkillFile::text("Not a markdown reference module.\n"),
+    );
+    entries.insert(
+        skill_path("scripts/run.py"),
+        SkillFile::text("print('helper')\n"),
+    );
+    SkillBank::from_folders([SkillFolder::from_entries(skill_name("test-skill"), entries).unwrap()])
+        .unwrap()
 }
