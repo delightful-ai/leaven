@@ -12,9 +12,7 @@ use leaven_artifact_git::{
 use leaven_core::OptimizationProblem;
 use leaven_engine::{MaterializationReport, MaterializeContext, MaterializeError, Materializer};
 use leaven_kernel::{Cost, Metered, RunId};
-use leaven_workspace::{
-    Command, CommandOutput, CommandStdin, WorkspacePath, WorkspacePathError, WorkspaceView,
-};
+use leaven_workspace::{Command, CommandOutput, WorkspacePath, WorkspacePathError, WorkspaceView};
 use leaven_workspace_git::GitWorkspaceGitError;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -247,7 +245,7 @@ impl GitProgramReadback {
                 ["reset", "--hard", parent.as_str()],
             )?;
             run_git(workspace, Some(checkout), ["clean", "-fd"])?;
-            run_git_with_stdin(workspace, Some(checkout), ["apply", "--binary", "-"], patch)?;
+            apply_patch_bytes(workspace, checkout, &patch)?;
             freeze_worktree(workspace, checkout)?;
             let child = current_head(workspace, checkout)?;
             return self
@@ -435,22 +433,7 @@ fn run_git_vec(
     cwd: Option<&WorkspacePath>,
     args: Vec<String>,
 ) -> Result<(), GitAgenticGitError> {
-    let output = run_git_command_vec(workspace, cwd, args, CommandStdin::Empty)?;
-    ensure_success(&output, "git")
-}
-
-fn run_git_with_stdin<const N: usize>(
-    workspace: &mut WorkspaceView<'_>,
-    cwd: Option<&WorkspacePath>,
-    args: [&str; N],
-    stdin: Vec<u8>,
-) -> Result<(), GitAgenticGitError> {
-    let output = run_git_command_vec(
-        workspace,
-        cwd,
-        args.into_iter().map(str::to_owned).collect(),
-        CommandStdin::Bytes(stdin),
-    )?;
+    let output = run_git_command_vec(workspace, cwd, args)?;
     ensure_success(&output, "git")
 }
 
@@ -463,7 +446,6 @@ fn run_git_command<const N: usize>(
         workspace,
         cwd,
         args.into_iter().map(str::to_owned).collect(),
-        CommandStdin::Empty,
     )
 }
 
@@ -471,12 +453,10 @@ fn run_git_command_vec(
     workspace: &mut WorkspaceView<'_>,
     cwd: Option<&WorkspacePath>,
     args: Vec<String>,
-    stdin: CommandStdin,
 ) -> Result<CommandOutput, GitAgenticGitError> {
     let mut command = Command::new("git");
     command.cwd = cwd.cloned();
     command.args = args;
-    command.stdin = stdin;
     Ok(workspace.run_command(command)?)
 }
 
@@ -545,6 +525,21 @@ fn checked_out_bytes(
             .expect("usize fits into u64 on supported Leaven targets");
     }
     Ok(total)
+}
+
+fn apply_patch_bytes(
+    workspace: &mut WorkspaceView<'_>,
+    checkout: &WorkspacePath,
+    patch: &[u8],
+) -> Result<(), GitAgenticGitError> {
+    let filename = format!(".git/leaven-output-{}.patch", RunId::new());
+    workspace.write_file(&checkout.join(&filename)?, patch)?;
+    run_git_vec(
+        workspace,
+        Some(checkout),
+        vec!["apply".to_owned(), "--binary".to_owned(), filename.clone()],
+    )?;
+    remove_workspace_file(workspace, checkout, &filename)
 }
 
 fn export_commit_bundle(
