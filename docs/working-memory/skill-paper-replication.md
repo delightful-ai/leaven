@@ -54,10 +54,10 @@ Current useful substrate:
 
 - `leaven-artifact-skill` owns `SkillBank`, `SkillFolder`, `SkillBankChange`,
   `SkillCard`, `SkillRouteRegistry`, skill validation, metadata, and skill
-  surfaces. The current card is the manifest-only routing catalog view over
-  names, descriptions, and generic metadata. The route registry is an explicit
-  pool/key overlay over a validated bank; learned utility/retrieval counters
-  remain outside `SkillBank`.
+  manifest/body/file/reference surfaces. The current card is the manifest-only
+  routing catalog view over names, descriptions, and generic metadata. The
+  route registry is an explicit pool/key overlay over a validated bank; learned
+  utility/retrieval counters remain outside `SkillBank`.
 - `leaven-agentic-skill` owns skill-bank materialization, workspace readback,
   diffs, and proposal parsing for agent-authored skill changes.
 - `leaven-agentic` has proposer repair policy support.
@@ -719,7 +719,11 @@ Leaven primitive blockers:
   disclosure, faithfulness gate, Condition A/C evaluation, and feedback
   promotion. This is a causal-loop proxy with documented deviations, not the
   600-skill/SkillsBench paper evaluation.
-- structured description/body/reference surfaces over `SkillBank`;
+- structured description/body/reference surfaces over `SkillBank` now have the
+  first Leaven-owned artifact projections: manifest description/frontmatter,
+  `SKILL.md` body, and direct `references/*.md` modules. Remaining SkillReducer
+  surface blockers are core/background/example/template classification views,
+  progressive-disclosure routing metadata, and token-cost annotations;
 - route-equivalence oracle abstraction plus provider-specific real-trigger
   event parser;
 - ddmin/minimization primitive over semantic units with restore policy;
@@ -757,8 +761,10 @@ Start with these generic primitives as failures expose them:
    manifest lowering exist in `leaven-eval`; P5 threads sampler state through
    checkpoints. Official metric wrappers, held-out report manifests, and the
    missing paper source manifests for EvoSkill remain.
-7. Skill optimization surfaces: description/body/reference/core/progressive
-   disclosure views plus token-cost accounting.
+7. Skill optimization surfaces: manifest description/frontmatter, `SKILL.md`
+   body, and direct `references/*.md` module surfaces exist in
+   `leaven-artifact-skill`; core/background/example/template item views,
+   progressive-disclosure routing metadata, and token-cost accounting remain.
 8. Route equivalence and trigger evidence: simulated route oracle plus real
    provider/runtime trigger parser.
 9. Utility/retrieval/pruning substrate: `SkillUtilityState` now covers finite
