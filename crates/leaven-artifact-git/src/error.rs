@@ -14,8 +14,8 @@ pub enum GitArtifactError {
     MissingRef { key: GitRefKey },
     #[error("invalid repo key `{key}`: {reason}")]
     InvalidRepoKey { key: String, reason: &'static str },
-    #[error("git repo set artifact must contain at least one repo")]
-    EmptyRepoSet,
+    #[error("git program artifact must contain at least one repo")]
+    EmptyProgram,
     #[error("repo artifact key `{repo}` does not match map key `{expected}`")]
     RepoKeyMismatch { expected: RepoKey, repo: RepoKey },
     #[error("missing layout entry for repo `{repo}`")]

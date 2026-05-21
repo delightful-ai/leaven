@@ -1,29 +1,29 @@
 use std::collections::BTreeMap;
 
 use leaven_artifact_git::{
-    GitArtifactError, GitArtifactIdentityMode, GitPath, GitRepoArtifact, GitRepoChange,
-    GitRepoSetArtifact, GitRepoSetChange, GitRepoSetLayout, GitRevision, RepoKey, RepoRef,
+    GitArtifactError, GitArtifactIdentityMode, GitPath, GitProgramArtifact, GitProgramChange,
+    GitProgramLayout, GitRepoArtifact, GitRepoChange, GitRevision, RepoKey, RepoRef,
 };
 use leaven_core::{Artifact, ArtifactIdentity, CacheIdentity};
 
 #[test]
-fn git_repo_set_artifact_supports_single_and_multi_repo_identity() {
+fn git_program_artifact_supports_single_and_multi_repo_identity() {
     let program = repo_key("program");
     let bench = repo_key("bench");
 
-    let single = GitRepoSetArtifact::new(
+    let single = GitProgramArtifact::new(
         BTreeMap::from([(
             program.clone(),
             repo_artifact(program.clone(), commit("11")),
         )]),
-        GitRepoSetLayout::new(BTreeMap::from([(
+        GitProgramLayout::new(BTreeMap::from([(
             program.clone(),
             git_path("repos/program"),
         )]))
         .unwrap(),
     )
     .unwrap();
-    let multi = GitRepoSetArtifact::new(
+    let multi = GitProgramArtifact::new(
         BTreeMap::from([
             (
                 program.clone(),
@@ -31,19 +31,19 @@ fn git_repo_set_artifact_supports_single_and_multi_repo_identity() {
             ),
             (bench.clone(), repo_artifact(bench.clone(), tree("22"))),
         ]),
-        GitRepoSetLayout::new(BTreeMap::from([
+        GitProgramLayout::new(BTreeMap::from([
             (program.clone(), git_path("repos/program")),
             (bench, git_path("repos/bench")),
         ]))
         .unwrap(),
     )
     .unwrap();
-    let same_program_different_layout = GitRepoSetArtifact::new(
+    let same_program_different_layout = GitProgramArtifact::new(
         BTreeMap::from([(
             program.clone(),
             repo_artifact(program.clone(), commit("11")),
         )]),
-        GitRepoSetLayout::new(BTreeMap::from([(program, git_path("src/program"))])).unwrap(),
+        GitProgramLayout::new(BTreeMap::from([(program, git_path("src/program"))])).unwrap(),
     )
     .unwrap();
 
@@ -64,16 +64,16 @@ fn git_repo_set_artifact_supports_single_and_multi_repo_identity() {
 }
 
 #[test]
-fn git_repo_set_change_advances_one_repo_without_touching_others() {
+fn git_program_change_advances_one_repo_without_touching_others() {
     let program = repo_key("program");
     let bench = repo_key("bench");
-    let parent = repo_set_artifact(&[
+    let parent = program_artifact(&[
         (&program, commit("11"), "repos/program"),
         (&bench, tree("22"), "repos/bench"),
     ]);
 
     let child = parent
-        .apply_change(&GitRepoSetChange::AdvanceRepo {
+        .apply_change(&GitProgramChange::AdvanceRepo {
             repo: program.clone(),
             expected_parent: commit("11"),
             child: commit("33"),
@@ -85,16 +85,16 @@ fn git_repo_set_change_advances_one_repo_without_touching_others() {
 }
 
 #[test]
-fn git_repo_set_change_advances_multiple_repos_atomically() {
+fn git_program_change_advances_multiple_repos_atomically() {
     let program = repo_key("program");
     let bench = repo_key("bench");
-    let parent = repo_set_artifact(&[
+    let parent = program_artifact(&[
         (&program, commit("11"), "repos/program"),
         (&bench, tree("22"), "repos/bench"),
     ]);
 
     let child = parent
-        .apply_change(&GitRepoSetChange::AdvanceRepos {
+        .apply_change(&GitProgramChange::AdvanceRepos {
             repo_changes: BTreeMap::from([
                 (
                     program.clone(),
@@ -113,7 +113,7 @@ fn git_repo_set_change_advances_multiple_repos_atomically() {
             ]),
         })
         .unwrap();
-    let rejected = parent.apply_change(&GitRepoSetChange::AdvanceRepos {
+    let rejected = parent.apply_change(&GitProgramChange::AdvanceRepos {
         repo_changes: BTreeMap::from([
             (
                 program.clone(),
@@ -143,23 +143,23 @@ fn git_repo_set_change_advances_multiple_repos_atomically() {
 }
 
 #[test]
-fn git_repo_set_artifact_rejects_invalid_repo_keys_and_layout() {
+fn git_program_artifact_rejects_invalid_repo_keys_and_layout() {
     assert!(RepoKey::new("").is_err());
     assert!(RepoKey::new("../escape").is_err());
     assert!(RepoKey::new("with/slash").is_err());
 
     let program = repo_key("program");
     let bench = repo_key("bench");
-    let missing_layout = GitRepoSetArtifact::new(
+    let missing_layout = GitProgramArtifact::new(
         BTreeMap::from([(
             program.clone(),
             repo_artifact(program.clone(), commit("11")),
         )]),
-        GitRepoSetLayout::new(BTreeMap::new()).unwrap(),
+        GitProgramLayout::new(BTreeMap::new()).unwrap(),
     );
-    let unknown_layout = GitRepoSetArtifact::new(
+    let unknown_layout = GitProgramArtifact::new(
         BTreeMap::from([(program.clone(), repo_artifact(program, commit("11")))]),
-        GitRepoSetLayout::new(BTreeMap::from([(bench, git_path("repos/bench"))])).unwrap(),
+        GitProgramLayout::new(BTreeMap::from([(bench, git_path("repos/bench"))])).unwrap(),
     );
 
     assert!(matches!(
@@ -174,7 +174,7 @@ fn git_repo_set_artifact_rejects_invalid_repo_keys_and_layout() {
     ));
 }
 
-fn repo_set_artifact(specs: &[(&RepoKey, GitRevision, &str)]) -> GitRepoSetArtifact {
+fn program_artifact(specs: &[(&RepoKey, GitRevision, &str)]) -> GitProgramArtifact {
     let mut repos = BTreeMap::new();
     let mut layout = BTreeMap::new();
     for (key, revision, path) in specs {
@@ -185,7 +185,7 @@ fn repo_set_artifact(specs: &[(&RepoKey, GitRevision, &str)]) -> GitRepoSetArtif
         layout.insert((*key).clone(), git_path(path));
     }
 
-    GitRepoSetArtifact::new(repos, GitRepoSetLayout::new(layout).unwrap()).unwrap()
+    GitProgramArtifact::new(repos, GitProgramLayout::new(layout).unwrap()).unwrap()
 }
 
 fn repo_artifact(key: RepoKey, revision: GitRevision) -> GitRepoArtifact {
