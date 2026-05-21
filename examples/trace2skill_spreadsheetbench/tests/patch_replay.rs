@@ -4,15 +4,16 @@ use leaven_agentic_skill::SkillFileChangeKind;
 use leaven_artifact_skill::{SkillBank, SkillFile, SkillFolder, SkillName, SkillPath};
 use leaven_evidence::{
     AgentAnalystCallEvidence, AgentAnalystCallEvidenceInput, AgentAnalystCallStatus,
-    AgentAnalystFanoutEvidence, AgentAnalystRole, OutputRecord,
+    AgentAnalystFanoutEvidence, AgentAnalystRole, AgentPatchMergeDecision, OutputRecord,
 };
 use serde_json::json;
 use trace2skill_spreadsheetbench::{
+    import_trace2skill_saved_json_patch_merge_evidence,
     import_trace2skill_saved_map_patches_into_fanout, replay_trace2skill_json_patch_merge,
     replay_trace2skill_saved_json_patch_outputs, Trace2SkillJsonPatchArtifact,
     Trace2SkillJsonPatchMergeBatch, Trace2SkillJsonPatchMergeInput, Trace2SkillJsonPatchMergeLevel,
-    Trace2SkillJsonPatchReplayInput, Trace2SkillSavedJsonPatchReplayInput,
-    Trace2SkillSavedMapPatchFanoutInput,
+    Trace2SkillJsonPatchReplayInput, Trace2SkillSavedJsonPatchMergeEvidenceInput,
+    Trace2SkillSavedJsonPatchReplayInput, Trace2SkillSavedMapPatchFanoutInput,
 };
 
 #[test]
@@ -327,6 +328,103 @@ fn imports_saved_map_parse_failures_without_completing_unsaved_calls() {
         imported.by_call("error-59902-3").unwrap().status(),
         AgentAnalystCallStatus::Pending
     ));
+}
+
+#[test]
+fn imports_saved_json_patch_merge_outputs_as_merge_tree_evidence() {
+    let (parent, skill) = spreadsheet_skill_bank();
+    let tempdir = tempfile::tempdir().unwrap();
+    let root = tempdir.path();
+    fs::create_dir_all(root.join("map_patches")).unwrap();
+    fs::create_dir_all(root.join("merge_level_1")).unwrap();
+    write_patch(
+        &root.join("map_patches/patch_0001.json"),
+        &json_patch("Map row safety", row_safety_edits_with_body("map safety")),
+    );
+    write_patch(
+        &root.join("map_patches/patch_0002.json"),
+        &json_patch("Map format preference", format_preference_edits()),
+    );
+    write_patch(
+        &root.join("merge_level_1/merged_0001.json"),
+        &json_patch(
+            "Merged row safety",
+            row_safety_edits_with_body("merged safety"),
+        ),
+    );
+    write_patch(
+        &root.join("final_patch.json"),
+        &json_patch(
+            "Final pre-translation row safety",
+            row_safety_edits_with_body("pre translation"),
+        ),
+    );
+    write_patch(
+        &root.join("translated_final_patch.json"),
+        &json_patch(
+            "Translated exact row safety",
+            row_safety_edits_with_body("translated exact"),
+        ),
+    );
+    fs::write(root.join("applied_diffs.patch"), "diff --git a/SKILL.md b/SKILL.md\n").unwrap();
+
+    let evidence = import_trace2skill_saved_json_patch_merge_evidence(
+        Trace2SkillSavedJsonPatchMergeEvidenceInput {
+            parent: &parent,
+            skill: &skill,
+            intermediates_dir: root,
+            merge_batch_size: 2,
+        },
+    )
+    .unwrap();
+
+    assert_eq!(evidence.final_node_id(), "final/translated_final_patch");
+    assert_eq!(evidence.levels(), vec![0, 1, 2, 3]);
+    assert_eq!(
+        evidence
+            .nodes()
+            .iter()
+            .map(|node| node.node_id())
+            .collect::<Vec<_>>(),
+        vec![
+            "map/patch_0001",
+            "map/patch_0002",
+            "merge_level_1/merged_0001",
+            "final/final_patch",
+            "final/translated_final_patch",
+        ]
+    );
+    let merge = evidence
+        .nodes()
+        .iter()
+        .find(|node| node.node_id() == "merge_level_1/merged_0001")
+        .unwrap();
+    assert_eq!(
+        merge.input_patch_ids(),
+        ["map/patch_0001".to_owned(), "map/patch_0002".to_owned()]
+    );
+    assert_eq!(
+        merge.accepted_patch_ids(),
+        ["map/patch_0001".to_owned(), "map/patch_0002".to_owned()]
+    );
+    assert!(merge.discarded_patch_ids().is_empty());
+    assert!(matches!(
+        merge.decision(),
+        AgentPatchMergeDecision::Merged { prevalence_note }
+            if prevalence_note.contains("reconstructed accepted inputs")
+    ));
+    assert!(
+        matches!(merge.output_patch(), Some(OutputRecord::BlobRef(reference)) if reference.key.ends_with("merge_level_1/merged_0001.json"))
+    );
+    assert!(
+        matches!(evidence.final_node().output_patch(), Some(OutputRecord::BlobRef(reference)) if reference.key.ends_with("translated_final_patch.json"))
+    );
+    assert!(
+        matches!(evidence.final_diff(), Some(OutputRecord::BlobRef(reference)) if reference.key.ends_with("applied_diffs.patch"))
+    );
+    assert!(evidence.parse_failed_nodes().is_empty());
+    assert_eq!(evidence.support_by_level().get(&0), Some(&2));
+    assert_eq!(evidence.support_by_level().get(&3), Some(&2));
 }
 
 fn row_safety_edits() -> serde_json::Value {
