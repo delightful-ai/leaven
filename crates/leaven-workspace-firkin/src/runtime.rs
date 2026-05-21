@@ -1,7 +1,9 @@
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-use leaven_workspace::{CapturedOutput, CommandUser, ExitStatus, WorkspacePath};
+use leaven_workspace::{
+    CapturedOutput, CommandUser, ExitStatus, WorkspacePath, WorkspacePathError,
+};
 
 use crate::{FirkinContainerId, FirkinGuestPath, FirkinImageRef, FirkinProductPodId};
 
@@ -111,4 +113,7 @@ pub enum FirkinRuntimeError {
         operation: &'static str,
         reason: String,
     },
+
+    #[error(transparent)]
+    WorkspacePath(#[from] WorkspacePathError),
 }

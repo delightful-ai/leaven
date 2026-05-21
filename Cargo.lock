@@ -1375,10 +1375,56 @@ dependencies = [
 ]
 
 [[package]]
+name = "filetime"
+version = "0.2.29"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5c287a33c7f0a620c38e641e7f60827713987b3c0f26e8ddc9462cc69cf75759"
+dependencies = [
+ "cfg-if",
+ "libc",
+]
+
+[[package]]
 name = "find-msvc-tools"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5baebc0774151f905a1a2cc41989300b1e6fbb29aff0ceffa1064fdd3088d582"
+
+[[package]]
+name = "firkin-e2b-contract"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "firkin-e2b-wire",
+ "firkin-types",
+ "serde",
+ "tar",
+ "thiserror 2.0.18",
+ "time",
+ "tokio",
+]
+
+[[package]]
+name = "firkin-e2b-wire"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "firkin-types",
+ "serde",
+ "serde_json",
+ "tar",
+ "time",
+]
+
+[[package]]
+name = "firkin-types"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "thiserror 2.0.18",
+ "uuid",
+]
 
 [[package]]
 name = "fixed_decimal"
@@ -3026,10 +3072,15 @@ dependencies = [
 name = "leaven-workspace-firkin"
 version = "0.0.0"
 dependencies = [
+ "async-trait",
+ "firkin-e2b-contract",
+ "firkin-e2b-wire",
+ "firkin-types",
  "futures",
  "leaven-kernel",
  "leaven-workspace",
  "thiserror 2.0.18",
+ "tokio",
 ]
 
 [[package]]
@@ -5379,6 +5430,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7b2093cf4c8eb1e67749a6762251bc9cd836b6fc171623bd0a9d324d37af2417"
 
 [[package]]
+name = "tar"
+version = "0.4.46"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3f6221d9a6003c78398e3b239969f352578258df48c8eb051caadae0015bc840"
+dependencies = [
+ "filetime",
+ "libc",
+ "xattr",
+]
+
+[[package]]
 name = "target-triple"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6515,6 +6577,16 @@ dependencies = [
  "rusticata-macros",
  "thiserror 2.0.18",
  "time",
+]
+
+[[package]]
+name = "xattr"
+version = "1.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "32e45ad4206f6d2479085147f02bc2ef834ac85886624a23575ae137c8aa8156"
+dependencies = [
+ "libc",
+ "rustix",
 ]
 
 [[package]]
