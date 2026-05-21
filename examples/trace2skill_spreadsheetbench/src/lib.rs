@@ -26,7 +26,9 @@ use leaven_kernel::{
 use serde::Deserialize;
 
 pub use one_case_run::{
-    prepare_trace2skill_one_case_run, score_trace2skill_one_case_run, Trace2SkillOneCaseRunInput,
+    prepare_trace2skill_one_case_analyst_fanout, prepare_trace2skill_one_case_run,
+    score_trace2skill_one_case_run, Trace2SkillOneCaseAnalystFanoutInput,
+    Trace2SkillOneCaseAnalystFanoutReport, Trace2SkillOneCaseRunInput,
     Trace2SkillOneCaseRunManifest, Trace2SkillOneCaseRunReport, Trace2SkillOneCaseRunScoreReport,
     Trace2SkillOneCaseRunScoringInput, Trace2SkillOneCaseRunSourceArtifacts,
     Trace2SkillOneCaseRunStatus,
@@ -776,6 +778,16 @@ pub enum Trace2SkillManifestError {
     /// Analyst fan-out evidence refused invalid input.
     #[error(transparent)]
     AnalystFanout(#[from] leaven_evidence::AgentAnalystFanoutError),
+    /// Prepared run metadata and scored trajectory point at different upstream cases.
+    #[error(
+        "Trace2Skill run manifest case {manifest_case_id} does not match trajectory task {trajectory_task_id}"
+    )]
+    RunTaskMismatch {
+        /// Case id recorded in `manifest.json`.
+        manifest_case_id: String,
+        /// Task id recorded in `trajectory.json`.
+        trajectory_task_id: String,
+    },
 }
 
 #[derive(Debug, Deserialize)]

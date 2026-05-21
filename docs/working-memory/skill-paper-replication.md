@@ -356,6 +356,12 @@ Leaven primitive blockers:
   and emits `trajectory.json` as `AgentTrajectoryEvidence`. It is post-run
   scorer/evidence plumbing; the live spreadsheet agent remains the missing
   primitive.
+- `examples/trace2skill_spreadsheetbench` now derives a source-anchored pending
+  one-case Stage 2 analyst fan-out from a scored `trajectory.json`:
+  `--prepare-one-case-analyst-fanout` writes `stage2_analyst_prompt.md` and
+  `stage2_fanout.json`, embedding upstream `skill_evolver/prompts` template
+  files and naming the upstream MAP prompt builders. It is fan-out staging only;
+  no analyst model call, patch parsing, or merge has run.
 - `examples/trace2skill_tiny_live` now restores the tiny live
   trajectory-to-skill harness into main Leaven. Its preflight writes a no-spend
   proof contract, and its live mode runs Codex/GPT-5.4-mini over two CSV
@@ -440,6 +446,12 @@ Spend/data risks:
   that wrote `score_report.json`, `trajectory.json`, and an updated manifest.
   The transcript explicitly records that this self-check is not a live
   spreadsheet-agent run.
+- The Trace2Skill example now covers one-case pending Stage 2 fan-out staging
+  through `--prepare-one-case-analyst-fanout` over that scored self-check run,
+  writing `stage2_analyst_prompt.md`, `stage2_fanout.json`, and
+  `stage2_fanout_report.json` with expected/pending call id `success-13-1-1`.
+  The prompt records upstream prompt-template sources and explicitly says no
+  analyst model call executed.
 - Restored tiny live harness preflights passed in main Leaven on 2026-05-20:
   `tmp/memento_skills_read_write/20260520T204154Z/preflight.json`,
   `tmp/skillreducer_tiny/20260520T204154Z/preflight.json`,

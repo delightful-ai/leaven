@@ -58,6 +58,15 @@ Each `pN_*` directory is a workspace package with a runnable binary. Keep reusab
   and emit `trajectory.json` as `AgentTrajectoryEvidence`. This remains
   scorer/evidence plumbing until the output workbook and transcript come from a
   real approved spreadsheet-agent run.
+  `cargo test -p trace2skill_spreadsheetbench --test one_case_run --test cli`
+  plus `cargo run -p trace2skill_spreadsheetbench --
+  --prepare-one-case-analyst-fanout --run-dir <tmp-run-dir>
+  [--upstream-prompt-dir <dir>]` proves a scored one-case trajectory can be
+  staged into a pending Stage 2 analyst fan-out with
+  `stage2_analyst_prompt.md` and `stage2_fanout.json`, preserving upstream
+  `skill_evolver/prompts` template material. This still does not execute an
+  analyst model call, parse the response, run hierarchical merge, or claim
+  live/paper proof.
 
 ## Proof Classification
 - `product-proof`: an example that exercises the real public contract at the intended user layer, with no proxy substitution for the behavior being claimed.

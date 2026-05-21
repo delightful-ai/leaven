@@ -198,6 +198,86 @@ fn cli_scores_prepared_one_case_run_dir_as_json() {
         .ends_with("trajectory.json"));
 }
 
+#[test]
+fn cli_prepares_one_case_stage2_analyst_fanout_as_json() {
+    let fixture = ExactCaseFixture::new();
+    let temp = tempfile::tempdir().unwrap();
+    let run_dir = temp.path().join("run");
+
+    let prepare = Command::new(env!("CARGO_BIN_EXE_trace2skill_spreadsheetbench"))
+        .arg("--prepare-one-case-run")
+        .arg("--case")
+        .arg(&fixture.case_file)
+        .arg("--spreadsheet-dir")
+        .arg(&fixture.spreadsheet_dir)
+        .arg("--system-prompt")
+        .arg(&fixture.system_prompt)
+        .arg("--released-skill")
+        .arg(&fixture.released_skill)
+        .arg("--run-dir")
+        .arg(&run_dir)
+        .output()
+        .unwrap();
+    assert!(
+        prepare.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&prepare.stderr)
+    );
+    fs::copy(
+        run_dir.join("1_13-1_golden.xlsx"),
+        run_dir.join("13-1_output.xlsx"),
+    )
+    .unwrap();
+    let transcript_file = run_dir.join("agent_transcript.md");
+    fs::write(&transcript_file, "ACTION: TASK_COMPLETE\n").unwrap();
+    let score = Command::new(env!("CARGO_BIN_EXE_trace2skill_spreadsheetbench"))
+        .arg("--score-one-case-run")
+        .arg("--run-dir")
+        .arg(&run_dir)
+        .arg("--model-id")
+        .arg("fixture-spreadsheet-agent")
+        .arg("--transcript-file")
+        .arg(&transcript_file)
+        .output()
+        .unwrap();
+    assert!(
+        score.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&score.stderr)
+    );
+    let prompt_dir = temp.path().join("upstream-prompts");
+    write_prompt_templates(&prompt_dir);
+
+    let output = Command::new(env!("CARGO_BIN_EXE_trace2skill_spreadsheetbench"))
+        .arg("--prepare-one-case-analyst-fanout")
+        .arg("--run-dir")
+        .arg(&run_dir)
+        .arg("--upstream-prompt-dir")
+        .arg(&prompt_dir)
+        .output()
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(json["case_id"], "13-1");
+    assert_eq!(json["expected_call_ids"][0], "success-13-1-1");
+    assert_eq!(json["pending_call_ids"][0], "success-13-1-1");
+    assert!(json["prompt_file"]["path"]
+        .as_str()
+        .unwrap()
+        .ends_with("stage2_analyst_prompt.md"));
+    assert!(json["fanout_file"]["path"]
+        .as_str()
+        .unwrap()
+        .ends_with("stage2_fanout.json"));
+    assert!(run_dir.join("stage2_analyst_prompt.md").is_file());
+    assert!(run_dir.join("stage2_fanout.json").is_file());
+}
+
 struct Fixture {
     temp: tempfile::TempDir,
     case_file: std::path::PathBuf,
@@ -275,5 +355,79 @@ impl ExactCaseFixture {
                 .join("tmp/paper_exact_samples/trace2skill/spreadsheetbench_verified/13-1")
                 .join("1_13-1_golden.xlsx"),
         }
+    }
+}
+
+fn write_prompt_templates(root: &std::path::Path) {
+    let files = [
+        (
+            "skill_evolving_agent/system_prompt_base.txt",
+            "UPSTREAM SYSTEM PROMPT BASE",
+        ),
+        (
+            "parallel_evolving_agent/map_output_format.txt",
+            "UPSTREAM MAP OUTPUT FORMAT",
+        ),
+        (
+            "success_evolving_agent/success_record_section.txt",
+            "UPSTREAM SUCCESS RECORD SECTION",
+        ),
+        (
+            "success_evolving_agent/success_modification_strategies_section.txt",
+            "UPSTREAM SUCCESS MODIFICATION STRATEGIES",
+        ),
+        (
+            "success_evolving_agent/success_intro_replacement.txt",
+            "UPSTREAM SUCCESS INTRO",
+        ),
+        (
+            "success_evolving_agent/success_input_replacement.txt",
+            "UPSTREAM SUCCESS INPUT",
+        ),
+        (
+            "success_evolving_agent/success_goal_replacement.txt",
+            "UPSTREAM SUCCESS GOAL",
+        ),
+        (
+            "success_evolving_agent/success_first_constraint_replacement.txt",
+            "UPSTREAM SUCCESS FIRST CONSTRAINT",
+        ),
+        (
+            "success_evolving_agent/success_traceability_constraint.txt",
+            "UPSTREAM SUCCESS TRACEABILITY",
+        ),
+        (
+            "success_evolving_agent/success_output_reasoning_replacement.txt",
+            "UPSTREAM SUCCESS OUTPUT REASONING",
+        ),
+        (
+            "success_evolving_agent/success_analysis_records_header.txt",
+            "UPSTREAM SUCCESS ANALYSIS HEADER {batch_idx}/{total_batches}",
+        ),
+        (
+            "success_evolving_agent/current_skill_folder_header.txt",
+            "UPSTREAM SUCCESS CURRENT SKILL HEADER",
+        ),
+        (
+            "success_evolving_agent/skill_folder_size_status_header.txt",
+            "UPSTREAM SUCCESS SIZE HEADER",
+        ),
+        (
+            "success_evolving_agent/skill_md_status_line.txt",
+            "UPSTREAM SUCCESS SKILL LINE {skill_lines}/{max_skill_lines}",
+        ),
+        (
+            "success_evolving_agent/reference_files_status_line.txt",
+            "UPSTREAM SUCCESS REF LINE {ref_count}/{max_references}",
+        ),
+        (
+            "success_evolving_agent/size_warning.txt",
+            "UPSTREAM SIZE WARNING",
+        ),
+    ];
+    for (relative, content) in files {
+        let path = root.join(relative);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, content).unwrap();
     }
 }
