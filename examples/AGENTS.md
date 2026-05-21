@@ -25,7 +25,10 @@ Each `pN_*` directory is a workspace package with a runnable binary. Keep reusab
   `200..400` held-out split. `cargo test -p
   trace2skill_spreadsheetbench --test run_artifacts` proves upstream-shaped
   `results.json`, logs, and analysis reports can be imported into
-  `AgentTrajectoryCorpusEvidence`. `cargo test -p
+  `AgentTrajectoryCorpusEvidence`, and that pending Stage 2 analyst fan-out
+  prompts for imported success/error trajectories embed upstream
+  `skill_evolver/prompts` template material instead of a generic scaffold.
+  `cargo test -p
   trace2skill_spreadsheetbench --test patch_bridge` proves upstream-shaped
   fenced JSON patches lower into `SkillPatchPlan` plus concrete
   `SkillBankChange` values and apply through `SkillPatchApplication`. `cargo

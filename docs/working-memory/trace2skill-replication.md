@@ -251,9 +251,12 @@ The checked-out upstream release includes:
   projection. It does not schedule threads, call models, parse patches, or own
   Trace2Skill's hierarchical merge policy.
 - `examples/trace2skill_spreadsheetbench` can derive a pending Stage 2 analyst
-  fan-out manifest from the imported training/evolving trajectory corpus. This
-  is a no-spend checkpoint scaffold for later analyst execution, not evidence
-  that the analysts or merge ran.
+  fan-out manifest from the imported training/evolving trajectory corpus. The
+  corpus builder now requires the upstream `skill_evolver/prompts` directory
+  and embeds the same success/error MAP prompt-template material used by the
+  paper instead of the previous generic scaffold. This is a no-spend checkpoint
+  scaffold for later analyst execution, not evidence that the analysts or merge
+  ran.
 - `examples/trace2skill_spreadsheetbench` can now also derive a pending
   one-case Stage 2 analyst fan-out from a scored `trajectory.json`: it writes
   `stage2_analyst_prompt.md` and `stage2_fanout.json`, embeds upstream
@@ -468,6 +471,32 @@ Verification:
   `stage2_analyst_prompt.md`; `rg` verified the prompt names
   `SuccessParallelSkillEvolver._build_map_system_prompt`, `trajectory.json`,
   `score_report.json`, and the fact that no analyst model call executed.
+- `CARGO_INCREMENTAL=0 cargo test -p trace2skill_spreadsheetbench --test
+  run_artifacts stage2_corpus_fanout_embeds_upstream_prompt_sources` first
+  failed on 2026-05-20 with missing
+  `Trace2SkillStage2AnalystFanoutInput`, then passed after replacing the
+  corpus fan-out placeholder prompt with upstream-template-backed prompt
+  rendering.
+- `CARGO_INCREMENTAL=0 cargo test -p trace2skill_spreadsheetbench` passed on
+  2026-05-20 with 22/22 tests after the source-anchored corpus Stage 2 prompt
+  slice.
+- `CARGO_INCREMENTAL=0 cargo clippy -p trace2skill_spreadsheetbench
+  --all-targets -- -D warnings` passed on 2026-05-20 after the source-anchored
+  corpus Stage 2 prompt slice.
+- `CARGO_INCREMENTAL=0 cargo nextest run -p trace2skill_spreadsheetbench`
+  passed on 2026-05-20 with 22/22 tests after the source-anchored corpus Stage
+  2 prompt slice.
+- `CARGO_INCREMENTAL=0 cargo test -p leaven --test topology_contract` passed
+  4/4 tests on 2026-05-20 after the source-anchored corpus Stage 2 prompt
+  slice.
+- `CARGO_INCREMENTAL=0 cargo run -p trace2skill_spreadsheetbench --
+  --prepare-one-case-analyst-fanout --run-dir
+  tmp/paper_exact_lane_runs/trace2skill/one_case_score_selfcheck_20260521T005103Z`
+  passed again on 2026-05-20 after sharing the prompt renderer. `jq` verified
+  `success-13-1-1` remained expected and pending with status `Pending`; `rg`
+  verified the prompt still names `SuccessParallelSkillEvolver`, `trajectory.json`,
+  `score_report.json`, `parallel_evolving_agent/map_output_format.txt`, and no
+  analyst execution.
 
 ## Current Blockers
 
@@ -480,8 +509,8 @@ Leaven-owned remaining primitives before faithful Trace2Skill replication:
   the Qwen/vLLM ReAct run or an approved documented substitute.
 - live checkpointed parallel analyst execution for hundreds of independent
   agent/LLM calls. Leaven now has the durable fan-out evidence value and the
-  Trace2Skill example can seed pending calls, but no scheduler/model client has
-  executed those prompts;
+  Trace2Skill example can seed source-template-backed pending calls, but no
+  scheduler/model client has executed those prompts;
 - live hierarchical merge execution over analyst patch outputs. Leaven now has
   generic `AgentPatchMergeTreeEvidence` and skill-specific
   `SkillPatchMergeTree` provenance values plus JSON patch replay/application

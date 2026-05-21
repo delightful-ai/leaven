@@ -3,6 +3,7 @@
 mod one_case_run;
 mod patch_bridge;
 mod patch_replay;
+mod stage2_prompt;
 
 use std::{
     collections::BTreeMap,
@@ -16,9 +17,9 @@ use leaven_eval::{
 };
 use leaven_evidence::{
     AgentAnalystCallEvidence, AgentAnalystCallEvidenceInput, AgentAnalystCallStatus,
-    AgentAnalystFanoutEvidence, AgentAnalystRole, AgentTrajectoryAnalysisKind,
-    AgentTrajectoryAnalysisRecord, AgentTrajectoryCorpusEvidence, AgentTrajectoryEvidence,
-    AgentTrajectoryEvidenceInput, AgentTrajectoryOutcome, CommandEvidence, OutputRecord,
+    AgentAnalystFanoutEvidence, AgentTrajectoryAnalysisKind, AgentTrajectoryAnalysisRecord,
+    AgentTrajectoryCorpusEvidence, AgentTrajectoryEvidence, AgentTrajectoryEvidenceInput,
+    AgentTrajectoryOutcome, CommandEvidence, OutputRecord,
 };
 use leaven_kernel::{
     AgentSessionId, BlobRef, CaseId, Fingerprint, FingerprintBuilder, MetadataKey, MetadataValue,
@@ -387,6 +388,15 @@ pub struct Trace2SkillRunArtifactInput<'a> {
     pub analysis_dir: Option<&'a Path>,
 }
 
+/// Inputs used to build a pending Stage 2 analyst fan-out for imported trajectories.
+#[derive(Clone, Copy)]
+pub struct Trace2SkillStage2AnalystFanoutInput<'a> {
+    /// Imported `Trace2Skill` training/evolving trajectory corpus.
+    pub corpus: &'a AgentTrajectoryCorpusEvidence,
+    /// Upstream `skill_evolver/prompts` directory.
+    pub upstream_prompt_dir: &'a Path,
+}
+
 /// Builds the 200-row training/evolving trajectory corpus from upstream artifacts.
 pub fn build_training_corpus_from_run_artifacts(
     manifest: &Trace2SkillSpreadsheetBenchManifest,
@@ -446,26 +456,58 @@ pub fn build_training_corpus_from_run_artifacts(
 
 /// Builds the Stage 2 analyst-call manifest from imported training trajectories.
 pub fn build_stage2_analyst_fanout_from_training_corpus(
-    corpus: &AgentTrajectoryCorpusEvidence,
+    input: Trace2SkillStage2AnalystFanoutInput<'_>,
 ) -> Result<AgentAnalystFanoutEvidence, Trace2SkillManifestError> {
-    let call_ids = corpus
+    let call_ids = input
+        .corpus
         .trajectories()
         .iter()
         .enumerate()
         .map(|(index, trajectory)| analyst_call_id(trajectory, index))
         .collect::<Vec<_>>();
     let mut fanout = AgentAnalystFanoutEvidence::new(call_ids)?;
-    for (index, trajectory) in corpus.trajectories().iter().enumerate() {
-        let role = analyst_role(trajectory.outcome());
+    for (index, trajectory) in input.corpus.trajectories().iter().enumerate() {
+        let role = stage2_prompt::stage2_analyst_role(trajectory.outcome());
         let task_id = trajectory.task_id().to_owned();
+        let call_id = analyst_call_id(trajectory, index);
+        let prompt_source_paths = stage2_prompt::stage2_prompt_source_paths(
+            input.upstream_prompt_dir,
+            trajectory.outcome(),
+        );
+        let prompt = stage2_prompt::render_stage2_analyst_prompt(
+            stage2_prompt::Stage2AnalystPromptInput {
+                call_id: &call_id,
+                task_id: &task_id,
+                outcome: trajectory.outcome(),
+                upstream_prompt_dir: input.upstream_prompt_dir,
+                prompt_source_paths: &prompt_source_paths,
+                extra_lines: &[
+                    stage2_prompt::Stage2PromptLine {
+                        label: "model_id",
+                        value: trajectory.model_id().to_owned(),
+                    },
+                    stage2_prompt::Stage2PromptLine {
+                        label: "outcome",
+                        value: format!("{:?}", trajectory.outcome()),
+                    },
+                    stage2_prompt::Stage2PromptLine {
+                        label: "transcript",
+                        value: format!("{:?}", trajectory.transcript()),
+                    },
+                    stage2_prompt::Stage2PromptLine {
+                        label: "analysis_record_count",
+                        value: trajectory.analysis_records().len().to_string(),
+                    },
+                ],
+                final_instruction: "The analyst must consume the recorded trajectory evidence and referenced transcript/analysis payloads, then produce a Trace2Skill JSON patch response for the released skill. This artifact deliberately stops before model execution, parsing, or merge.",
+            },
+        )?;
         fanout.push(AgentAnalystCallEvidence::new(
             AgentAnalystCallEvidenceInput {
-                call_id: analyst_call_id(trajectory, index),
+                call_id,
                 role,
                 source_task_ids: vec![task_id.clone()],
-                prompt: OutputRecord::inline(format!(
-                    "Trace2Skill Stage 2 analyst prompt scaffold for task {task_id}"
-                )),
+                prompt: OutputRecord::inline(prompt),
                 response: None,
                 status: AgentAnalystCallStatus::Pending,
                 retry_count: 0,
@@ -482,13 +524,6 @@ fn analyst_call_id(trajectory: &AgentTrajectoryEvidence, index: usize) -> String
         AgentTrajectoryOutcome::Failure { .. } => "error",
     };
     format!("{prefix}-{}-{}", trajectory.task_id(), index + 1)
-}
-
-fn analyst_role(outcome: &AgentTrajectoryOutcome) -> AgentAnalystRole {
-    match outcome {
-        AgentTrajectoryOutcome::Success => AgentAnalystRole::Success,
-        AgentTrajectoryOutcome::Failure { .. } => AgentAnalystRole::Error,
-    }
 }
 
 fn source_id_by_case(
