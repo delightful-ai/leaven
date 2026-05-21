@@ -39,7 +39,11 @@ Each `pN_*` directory is a workspace package with a runnable binary. Keep reusab
   pending `AgentAnalystFanoutEvidence` calls by upstream `batch_index`. Saved
   upstream MAP parse-failure markdown artifacts can also mark the matching call
   `ParseFailed`; calls with neither saved parsed patches nor saved failure
-  artifacts stay pending. `cargo test -p
+  artifacts stay pending. The same test imports saved JSON merge outputs into
+  `AgentPatchMergeTreeEvidence`, including `translated_final_patch.json` as the
+  final node and `applied_diffs.patch` as final diff evidence. Default upstream
+  saved JSON reconstructs accepted inputs from batch order but does not preserve
+  discarded-input rationale. `cargo test -p
   trace2skill_spreadsheetbench --test one_case --test cli` plus `cargo run -p trace2skill_spreadsheetbench --
   --inspect-one-case` proves the materialized case `13-1`, init/golden
   workbooks, upstream prompt, upstream system prompt, and released combined

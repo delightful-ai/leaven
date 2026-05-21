@@ -247,6 +247,37 @@ pub fn replay_trace2skill_saved_json_patch_outputs(
     finish_saved_json_patch_replay(input, state)
 }
 
+/// Imports an upstream `--save-intermediates` directory as merge-tree evidence.
+///
+/// Upstream saved JSON directories preserve parseable patch outputs and their
+/// deterministic batch order, but they do not preserve per-input discard
+/// rationales. This importer records every reconstructed saved input as
+/// accepted evidence and says so in the merge decision note.
+pub fn import_trace2skill_saved_json_patch_merge_evidence(
+    input: Trace2SkillSavedJsonPatchMergeEvidenceInput<'_>,
+) -> Result<AgentPatchMergeTreeEvidence, Trace2SkillPatchReplayError> {
+    if input.merge_batch_size == 0 {
+        return Err(Trace2SkillPatchReplayError::InvalidMergeBatchSize);
+    }
+    if !input.intermediates_dir.is_dir() {
+        return Err(Trace2SkillPatchReplayError::MissingIntermediatesDir {
+            path: input.intermediates_dir.to_path_buf(),
+        });
+    }
+
+    let mut nodes = Vec::new();
+    let mut current = load_saved_map_patch_evidence(input, &mut nodes)?;
+    let mut final_level = 1;
+    for merge_dir in merge_level_dirs(input.intermediates_dir)? {
+        final_level = next_evidence_level(merge_dir.level, &merge_dir.path)?;
+        current = load_saved_merge_level_evidence(input, &mut nodes, &current, &merge_dir)?;
+    }
+
+    let final_node_id = push_saved_final_patch_evidence(input, &mut nodes, &current, final_level)?;
+    let final_diff = saved_blob_if_present(&input.intermediates_dir.join("applied_diffs.patch"));
+    AgentPatchMergeTreeEvidence::new(nodes, final_node_id, final_diff).map_err(Into::into)
+}
+
 /// Imports saved upstream MAP-stage outputs into pending analyst-call evidence.
 ///
 /// The upstream JSON pipeline saves parsed MAP responses under
@@ -288,6 +319,152 @@ pub fn import_trace2skill_saved_map_patches_into_fanout(
     }
 
     Ok(imported)
+}
+
+fn load_saved_map_patch_evidence(
+    input: Trace2SkillSavedJsonPatchMergeEvidenceInput<'_>,
+    nodes: &mut Vec<AgentPatchMergeNode>,
+) -> Result<Vec<LoadedPlan>, Trace2SkillPatchReplayError> {
+    let map_dir = input.intermediates_dir.join("map_patches");
+    let files = patch_files(&map_dir, "patch_")?;
+    if files.is_empty() {
+        return Err(Trace2SkillPatchReplayError::MissingMapPatches { path: map_dir });
+    }
+
+    let mut current = Vec::new();
+    for file in files {
+        let id = SkillPatchPlanId::new(format!("map/{}", file.stem))?;
+        let node_id = id.as_str().to_owned();
+        let support_count = 1;
+        lower_patch_file(input.parent, input.skill, &file.path, support_count)?;
+        nodes.push(AgentPatchMergeNode::new(AgentPatchMergeNodeInput {
+            node_id: node_id.clone(),
+            level: 0,
+            input_patch_ids: Vec::new(),
+            accepted_patch_ids: vec![node_id],
+            discarded_patch_ids: Vec::new(),
+            support_count,
+            decision: AgentPatchMergeDecision::Accepted {
+                rationale: "upstream Trace2Skill saved parsed MAP patch".to_owned(),
+            },
+            prompt: None,
+            response: None,
+            parse_failure: None,
+            output_patch: Some(saved_blob(&file.path)),
+        })?);
+        current.push(LoadedPlan { id, support_count });
+    }
+
+    Ok(current)
+}
+
+fn load_saved_merge_level_evidence(
+    input: Trace2SkillSavedJsonPatchMergeEvidenceInput<'_>,
+    nodes: &mut Vec<AgentPatchMergeNode>,
+    current: &[LoadedPlan],
+    merge_dir: &MergeLevelDir,
+) -> Result<Vec<LoadedPlan>, Trace2SkillPatchReplayError> {
+    let chunks = chunk_loaded_plans(current, input.merge_batch_size);
+    let outputs = patch_files(&merge_dir.path, "merged_")?;
+    if outputs.len() != chunks.len() {
+        return Err(Trace2SkillPatchReplayError::MergeOutputCountMismatch {
+            level: merge_dir.level,
+            expected: chunks.len(),
+            actual: outputs.len(),
+            path: merge_dir.path.clone(),
+        });
+    }
+
+    let level = evidence_level(merge_dir.level, &merge_dir.path)?;
+    let mut next = Vec::new();
+    for (output, inputs) in outputs.iter().zip(chunks.iter()) {
+        let id = SkillPatchPlanId::new(format!("merge_level_{}/{}", merge_dir.level, output.stem))?;
+        let node_id = id.as_str().to_owned();
+        let support_count = inputs.iter().map(|input| input.support_count).sum();
+        let input_ids = loaded_plan_ids(inputs);
+        lower_patch_file(input.parent, input.skill, &output.path, support_count)?;
+        nodes.push(AgentPatchMergeNode::new(AgentPatchMergeNodeInput {
+            node_id: node_id.clone(),
+            level,
+            input_patch_ids: input_ids.clone(),
+            accepted_patch_ids: input_ids,
+            discarded_patch_ids: Vec::new(),
+            support_count,
+            decision: AgentPatchMergeDecision::Merged {
+                prevalence_note: format!(
+                    "reconstructed accepted inputs from upstream merge_level_{} saved JSON; default saved directories do not preserve discarded rationale",
+                    merge_dir.level
+                ),
+            },
+            prompt: None,
+            response: None,
+            parse_failure: None,
+            output_patch: Some(saved_blob(&output.path)),
+        })?);
+        next.push(LoadedPlan { id, support_count });
+    }
+
+    Ok(next)
+}
+
+fn push_saved_final_patch_evidence(
+    input: Trace2SkillSavedJsonPatchMergeEvidenceInput<'_>,
+    nodes: &mut Vec<AgentPatchMergeNode>,
+    current: &[LoadedPlan],
+    final_level: usize,
+) -> Result<String, Trace2SkillPatchReplayError> {
+    let final_patch = input.intermediates_dir.join("final_patch.json");
+    if !final_patch.is_file() {
+        return Err(Trace2SkillPatchReplayError::MissingFinalPatch { path: final_patch });
+    }
+
+    let support_count = current.iter().map(|plan| plan.support_count).sum();
+    let final_id = SkillPatchPlanId::new("final/final_patch")?;
+    let final_node_id = final_id.as_str().to_owned();
+    let input_ids = loaded_plan_ids(current);
+    lower_patch_file(input.parent, input.skill, &final_patch, support_count)?;
+    nodes.push(AgentPatchMergeNode::new(AgentPatchMergeNodeInput {
+        node_id: final_node_id.clone(),
+        level: evidence_level(final_level, &final_patch)?,
+        input_patch_ids: input_ids.clone(),
+        accepted_patch_ids: input_ids,
+        discarded_patch_ids: Vec::new(),
+        support_count,
+        decision: AgentPatchMergeDecision::Merged {
+            prevalence_note: "reconstructed final patch from upstream saved JSON".to_owned(),
+        },
+        prompt: None,
+        response: None,
+        parse_failure: None,
+        output_patch: Some(saved_blob(&final_patch)),
+    })?);
+
+    let translated_patch = input.intermediates_dir.join("translated_final_patch.json");
+    if translated_patch.is_file() {
+        lower_patch_file(input.parent, input.skill, &translated_patch, support_count)?;
+        let translated_node_id = "final/translated_final_patch".to_owned();
+        nodes.push(AgentPatchMergeNode::new(AgentPatchMergeNodeInput {
+            node_id: translated_node_id.clone(),
+            level: evidence_level(
+                next_evidence_level(final_level, &translated_patch)?,
+                &translated_patch,
+            )?,
+            input_patch_ids: vec![final_node_id.clone()],
+            accepted_patch_ids: vec![final_node_id],
+            discarded_patch_ids: Vec::new(),
+            support_count,
+            decision: AgentPatchMergeDecision::Merged {
+                prevalence_note: "translated final patch used by upstream apply phase".to_owned(),
+            },
+            prompt: None,
+            response: None,
+            parse_failure: None,
+            output_patch: Some(saved_blob(&translated_patch)),
+        })?);
+        return Ok(translated_node_id);
+    }
+
+    Ok(final_node_id)
 }
 
 fn import_saved_map_patch(
@@ -849,6 +1026,40 @@ fn chunk_loaded_plans(plans: &[LoadedPlan], chunk_size: usize) -> Vec<Vec<Loaded
         .collect()
 }
 
+fn loaded_plan_ids(plans: &[LoadedPlan]) -> Vec<String> {
+    plans
+        .iter()
+        .map(|plan| plan.id.as_str().to_owned())
+        .collect()
+}
+
+fn evidence_level(level: usize, path: &Path) -> Result<u32, Trace2SkillPatchReplayError> {
+    u32::try_from(level).map_err(|_| Trace2SkillPatchReplayError::InvalidMergeLevelValue {
+        level,
+        path: path.to_path_buf(),
+    })
+}
+
+fn next_evidence_level(level: usize, path: &Path) -> Result<usize, Trace2SkillPatchReplayError> {
+    level
+        .checked_add(1)
+        .ok_or_else(|| Trace2SkillPatchReplayError::InvalidMergeLevelValue {
+            level,
+            path: path.to_path_buf(),
+        })
+}
+
+fn saved_blob(path: &Path) -> OutputRecord {
+    OutputRecord::blob(BlobRef {
+        store: "trace2skill-saved-intermediates".to_owned(),
+        key: path.display().to_string(),
+    })
+}
+
+fn saved_blob_if_present(path: &Path) -> Option<OutputRecord> {
+    path.is_file().then(|| saved_blob(path))
+}
+
 /// Error while replaying upstream `Trace2Skill` patch merge artifacts.
 #[derive(Debug, thiserror::Error)]
 pub enum Trace2SkillPatchReplayError {
@@ -874,6 +1085,9 @@ pub enum Trace2SkillPatchReplayError {
     /// Merge-tree provenance was malformed.
     #[error(transparent)]
     MergeTree(#[from] SkillPatchMergeTreeError),
+    /// Merge-tree evidence was malformed.
+    #[error(transparent)]
+    MergeEvidence(#[from] leaven_evidence::AgentPatchMergeTreeError),
     /// Upstream merge batch size must be nonzero.
     #[error("Trace2Skill replay merge_batch_size must be nonzero")]
     InvalidMergeBatchSize,
@@ -913,6 +1127,14 @@ pub enum Trace2SkillPatchReplayError {
         /// Actual saved output count.
         actual: usize,
         /// Merge level directory.
+        path: PathBuf,
+    },
+    /// A saved merge level could not fit in the evidence level field.
+    #[error("Trace2Skill replay merge level {level} at {path} does not fit evidence levels")]
+    InvalidMergeLevelValue {
+        /// Saved merge level.
+        level: usize,
+        /// Artifact path associated with the level.
         path: PathBuf,
     },
     /// The same plan id appeared in more than one lowered patch artifact.

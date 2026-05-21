@@ -366,7 +366,11 @@ fn imports_saved_json_patch_merge_outputs_as_merge_tree_evidence() {
             row_safety_edits_with_body("translated exact"),
         ),
     );
-    fs::write(root.join("applied_diffs.patch"), "diff --git a/SKILL.md b/SKILL.md\n").unwrap();
+    fs::write(
+        root.join("applied_diffs.patch"),
+        "diff --git a/SKILL.md b/SKILL.md\n",
+    )
+    .unwrap();
 
     let evidence = import_trace2skill_saved_json_patch_merge_evidence(
         Trace2SkillSavedJsonPatchMergeEvidenceInput {
@@ -384,7 +388,7 @@ fn imports_saved_json_patch_merge_outputs_as_merge_tree_evidence() {
         evidence
             .nodes()
             .iter()
-            .map(|node| node.node_id())
+            .map(leaven_evidence::AgentPatchMergeNode::node_id)
             .collect::<Vec<_>>(),
         vec![
             "map/patch_0001",
