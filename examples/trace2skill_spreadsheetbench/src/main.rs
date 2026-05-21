@@ -5,7 +5,8 @@ use std::{
 
 use trace2skill_spreadsheetbench::{
     compare_trace2skill_one_case_answer, inspect_trace2skill_one_case,
-    render_trace2skill_one_case_prompt, Trace2SkillOneCaseComparisonInput, Trace2SkillOneCaseInput,
+    prepare_trace2skill_one_case_run, render_trace2skill_one_case_prompt,
+    Trace2SkillOneCaseComparisonInput, Trace2SkillOneCaseInput, Trace2SkillOneCaseRunInput,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -35,6 +36,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             })?;
             println!("{}", serde_json::to_string_pretty(&report)?);
         }
+        Mode::PrepareOneCaseRun => {
+            let run_dir = args
+                .run_dir
+                .as_deref()
+                .ok_or_else(|| invalid_input(format!("--run-dir is required\n\n{USAGE}")))?;
+            let output_workbook = args
+                .output_workbook_was_set
+                .then_some(args.output_workbook.as_path());
+            let report = prepare_trace2skill_one_case_run(Trace2SkillOneCaseRunInput {
+                case: input,
+                run_dir,
+                output_workbook,
+            })?;
+            println!("{}", serde_json::to_string_pretty(&report)?);
+        }
     }
 
     Ok(())
@@ -48,7 +64,9 @@ struct CliArgs {
     system_prompt_file: PathBuf,
     released_skill_file: PathBuf,
     output_workbook: PathBuf,
+    output_workbook_was_set: bool,
     golden_workbook: PathBuf,
+    run_dir: Option<PathBuf>,
 }
 
 impl CliArgs {
@@ -68,7 +86,9 @@ impl CliArgs {
         let mut system_prompt_file = defaults.system_prompt_file;
         let mut released_skill_file = defaults.released_skill_file;
         let mut output_workbook = defaults.output_workbook;
+        let mut output_workbook_was_set = false;
         let mut golden_workbook = defaults.golden_workbook;
+        let mut run_dir = None;
         let mut args = args.into_iter().map(Into::into);
         let _program = args.next();
 
@@ -77,6 +97,7 @@ impl CliArgs {
                 "--inspect-one-case" => set_mode(&mut mode, Mode::InspectOneCase)?,
                 "--render-one-case-prompt" => set_mode(&mut mode, Mode::RenderOneCasePrompt)?,
                 "--compare-one-case-answer" => set_mode(&mut mode, Mode::CompareOneCaseAnswer)?,
+                "--prepare-one-case-run" => set_mode(&mut mode, Mode::PrepareOneCaseRun)?,
                 "--case" => case_file = next_path(&mut args, "--case")?,
                 "--spreadsheet-dir" => {
                     spreadsheet_dir = next_path(&mut args, "--spreadsheet-dir")?;
@@ -89,9 +110,13 @@ impl CliArgs {
                 }
                 "--output-workbook" => {
                     output_workbook = next_path(&mut args, "--output-workbook")?;
+                    output_workbook_was_set = true;
                 }
                 "--golden-workbook" => {
                     golden_workbook = next_path(&mut args, "--golden-workbook")?;
+                }
+                "--run-dir" => {
+                    run_dir = Some(next_path(&mut args, "--run-dir")?);
                 }
                 "--help" | "-h" => return Err(invalid_input(USAGE)),
                 other => {
@@ -109,7 +134,9 @@ impl CliArgs {
             system_prompt_file,
             released_skill_file,
             output_workbook,
+            output_workbook_was_set,
             golden_workbook,
+            run_dir,
         })
     }
 }
@@ -119,6 +146,7 @@ enum Mode {
     InspectOneCase,
     RenderOneCasePrompt,
     CompareOneCaseAnswer,
+    PrepareOneCaseRun,
 }
 
 struct Defaults {
@@ -172,6 +200,6 @@ fn invalid_input(message: impl Into<String>) -> io::Error {
 }
 
 const USAGE: &str = "usage: trace2skill_spreadsheetbench \
-    (--inspect-one-case | --render-one-case-prompt | --compare-one-case-answer) \
+    (--inspect-one-case | --render-one-case-prompt | --compare-one-case-answer | --prepare-one-case-run) \
     [--case PATH] [--spreadsheet-dir PATH] [--system-prompt PATH] [--released-skill PATH] \
-    [--output-workbook PATH] [--golden-workbook PATH]";
+    [--output-workbook PATH] [--golden-workbook PATH] [--run-dir PATH]";

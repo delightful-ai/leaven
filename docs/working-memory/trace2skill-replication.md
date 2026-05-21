@@ -206,6 +206,15 @@ The checked-out upstream release includes:
   repo-owned input/scoring surface for the next one-sample live attempt; it
   does not solve the workbook, invoke a model, or generate Trace2Skill
   trajectories.
+- `examples/trace2skill_spreadsheetbench` now prepares a durable no-spend
+  one-case run directory for exact case `13-1`: `--prepare-one-case-run
+  --run-dir <tmp-run-dir>` writes `agent_prompt.md`, `manifest.json`, staged
+  `1_13-1_init.xlsx` and `1_13-1_golden.xlsx`, a deterministic
+  `13-1_output.xlsx` target, and explicit status
+  `blocked_missing_live_spreadsheet_agent` / missing primitive
+  `live_spreadsheet_agent_execution`. The agent prompt points only at the
+  run-local input/output paths; the golden workbook is held in the manifest for
+  scorer use and is not injected into the live-agent prompt.
 - `examples/trace2skill_tiny_live` now exists in main Leaven as an
   outside-Cargo tiny live harness for the paper's causal loop: trajectory
   generation with a frozen initial skill, independent error/success analysts,
@@ -358,6 +367,34 @@ Verification:
   passed on 2026-05-20 after restoring the tiny live harness into main Leaven
   and switching its workspace guard away from the old `leaven-papers` checkout;
   it wrote `tmp/trace2skill_tiny_live/20260520T204154Z/preflight.json`.
+- `rustfmt --check --config skip_children=true
+  examples/trace2skill_spreadsheetbench/src/lib.rs
+  examples/trace2skill_spreadsheetbench/src/main.rs
+  examples/trace2skill_spreadsheetbench/src/one_case_run.rs
+  examples/trace2skill_spreadsheetbench/tests/one_case_run.rs
+  examples/trace2skill_spreadsheetbench/tests/cli.rs` passed on 2026-05-20
+  after the one-case run-directory slice.
+- `cargo test -p trace2skill_spreadsheetbench` passed on 2026-05-20 with
+  17/17 tests after the one-case run-directory slice.
+- `cargo clippy -p trace2skill_spreadsheetbench --all-targets -- -D warnings`
+  passed on 2026-05-20 after renaming the temp-dir fixture fields used by the
+  new run-directory tests.
+- `cargo nextest run -p trace2skill_spreadsheetbench` passed on 2026-05-20
+  with 17/17 tests after the one-case run-directory slice.
+- `cargo test -p leaven --test topology_contract` passed 4/4 tests on
+  2026-05-20 after adding the example-local run-preparation module.
+- `cargo run -p trace2skill_spreadsheetbench -- --prepare-one-case-run
+  --run-dir
+  tmp/paper_exact_lane_runs/trace2skill/one_case_prepare_20260521T003128Z`
+  passed on 2026-05-20 and wrote `agent_prompt.md` (`29083` bytes),
+  `manifest.json` (`1479` bytes), staged init workbook (`12876` bytes), staged
+  golden workbook (`14698` bytes), and output target
+  `13-1_output.xlsx`; `manifest.json` reported
+  `blocked_missing_live_spreadsheet_agent`, missing primitive
+  `live_spreadsheet_agent_execution`, and `score_report=null`.
+  `rg` over the generated `agent_prompt.md` found the run-local
+  `working_directory`, `spreadsheet_path`, `output_path`, and
+  `instruction_type` lines and no golden-workbook path.
 
 ## Current Blockers
 
@@ -382,9 +419,10 @@ Leaven-owned remaining primitives before faithful Trace2Skill replication:
   proof needs either a no-spend/small upstream output directory or live-run
   capture of translated exact map/merge patches plus explicit merge decisions;
 - the exact case `13-1` now has repo-owned no-spend prompt/input and workbook
-  scoring surfaces, but no live spreadsheet agent has modified
-  `13-1_output.xlsx`, no generated output workbook has been scored, and no
-  generated trajectory has been fed into the Stage 2 analyst fan-out;
+  scoring surfaces plus a durable prepared run directory contract, but no live
+  spreadsheet agent has modified `13-1_output.xlsx`, no generated output
+  workbook has been scored, and no generated trajectory has been fed into the
+  Stage 2 analyst fan-out;
 - result matrix/reporting for model scale transfer, OOD WikiTQ, DocVQA,
   DAPO/AIME, ablations, and sequential/retrieval baselines.
 
@@ -399,11 +437,11 @@ External/spend blockers:
 
 ## Next Action
 
-Use the one-case prompt surface to run the smallest approved live spreadsheet
-attempt for case `13-1`, writing `13-1_output.xlsx`, durable stdout/stderr/logs,
-and a `--compare-one-case-answer` report against `1_13-1_golden.xlsx`. After
-that, generate or import an actual no-spend/small upstream `--save-intermediates`
-directory and feed it through the saved-output loader. If running upstream live,
-also capture translated exact map/merge patches plus accepted/discarded merge
-decisions, because the default saved directory shape loses that decision
-provenance.
+Use the prepared one-case run directory to run the smallest approved live
+spreadsheet attempt for case `13-1`, writing `13-1_output.xlsx`, durable
+stdout/stderr/logs, and a `--compare-one-case-answer` report against the staged
+`1_13-1_golden.xlsx`. After that, generate or import an actual no-spend/small
+upstream `--save-intermediates` directory and feed it through the saved-output
+loader. If running upstream live, also capture translated exact map/merge
+patches plus accepted/discarded merge decisions, because the default saved
+directory shape loses that decision provenance.
