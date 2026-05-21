@@ -63,6 +63,11 @@ Current useful substrate:
   tokenizer implementations and paper cost curves outside the artifact crate.
 - `leaven-agentic-skill` owns skill-bank materialization, workspace readback,
   diffs, and proposal parsing for agent-authored skill changes.
+- `leaven-agentic-git` owns Git-program materialization/readback for
+  `GitProgramArtifact`: durable bare-store commits are checked out into
+  disposable workspaces, dirty or committed workspace children are frozen and
+  imported back into the durable store, and the result is a typed
+  `GitProgramChange` for later graph admission.
 - `leaven-agentic` has proposer repair policy support.
 - `leaven-gepa-agentic-skill` bridges GEPA reflection to skill-bank proposal.
 - 2026-05-20: `leaven-gepa-agentic-skill` is being migrated from bespoke
@@ -98,11 +103,13 @@ Current known gaps:
 
 - `crates/leaven-artifact-git` now models normalized paths, immutable object
   IDs, branch/tag refs, typed lineage, content/cache identity, and ref removal
-  for discarded candidates. `crates/leaven-workspace-git` can clone and check
-  out a local `program/*` branch, capture tracked files and branch/tag refs
-  into `GitArtifact`, restore a selected ref, and delete branch/tag refs.
-  EvoSkill still needs run-loop integration for checkpointed program/frontier
-  state and paper score metadata.
+  for discarded candidates. `crates/leaven-workspace-git` can clone, project,
+  check out, fsck, import child commits, capture tracked files and branch/tag
+  refs, restore a selected ref, and delete branch/tag refs.
+  `crates/leaven-agentic-git` can materialize multi-repo `GitProgramArtifact`
+  values into proposer workspaces and read back imported child commits as typed
+  artifact changes. EvoSkill still needs run-loop integration for checkpointed
+  program/frontier state, paper score metadata, and graph admission.
 - The P5 EvoSkill path is not OfficeQA or SealQA. It can inspect one real
   OfficeQA sample and one real SealQA sample without live spend, but still lacks
   the paper datasets, paper splits, full frontier loop, feedback-history
