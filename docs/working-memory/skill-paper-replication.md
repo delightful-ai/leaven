@@ -326,9 +326,12 @@ Leaven primitive blockers:
 - `examples/trace2skill_spreadsheetbench` now imports saved upstream
   `map_patches/patch_*.json` into pending Stage 2
   `AgentAnalystFanoutEvidence` by upstream `batch_index`, validating each saved
-  patch against the parent skill bank and preserving prompt/source metadata.
-  Calls without saved parsed patches remain pending; this does not execute or
-  recover failed analyst model calls.
+  patch against the parent skill bank and preserving prompt/source metadata. It
+  also imports upstream MAP parse-failure markdown from
+  `parse_failures_parallel/map/*_batch_000N_*_parse_failed.md` into terminal
+  `ParseFailed` call records with artifact refs. Calls without saved parsed
+  patches or saved parse failures remain pending; this does not execute
+  analyst model calls.
 - `examples/trace2skill_spreadsheetbench` now also loads the actual upstream
   `--save-intermediates` JSON directory shape: `map_patches`, numeric
   `merge_level_N` directories, `final_patch.json`, and optional
@@ -385,6 +388,10 @@ Leaven primitive blockers:
   artifacts for the 200 SpreadsheetBench training/evolving tasks;
 - live parallel analyst dispatch that executes hundreds of independent
   sub-agent calls against the pending fan-out manifest;
+- live or no-spend captured upstream MAP output directories that contain real
+  parsed patches and parse-failure artifacts. The example can now import both
+  into fan-out evidence, but the current proof is fixture-backed and does not
+  show a real Trace2Skill analyst run completed locally;
 - patch proposal artifact with conflict detection, format validation, support
   counts, and hierarchical merge tree. The first paper-neutral guardrail slice
   now exists as `SkillPatchPlan` in `leaven-agentic-skill`, covering file

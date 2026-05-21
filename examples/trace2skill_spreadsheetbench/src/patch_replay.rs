@@ -63,6 +63,9 @@ pub struct Trace2SkillSavedMapPatchFanoutInput<'a> {
     /// Directory passed as upstream `--intermediates-dir`, or the default
     /// `<skill>_parallel_output` directory.
     pub intermediates_dir: &'a Path,
+    /// Directory passed as upstream `--parse-failure-dir`, when saved
+    /// parse-failure artifacts are available.
+    pub parse_failure_dir: Option<&'a Path>,
 }
 
 /// One upstream JSON patch artifact with its merge-tree id.
@@ -229,14 +232,16 @@ pub fn replay_trace2skill_saved_json_patch_outputs(
     finish_saved_json_patch_replay(input, state)
 }
 
-/// Imports saved upstream MAP-stage patches into pending analyst-call evidence.
+/// Imports saved upstream MAP-stage outputs into pending analyst-call evidence.
 ///
 /// The upstream JSON pipeline saves parsed MAP responses under
 /// `map_patches/patch_*.json` and records the originating one-based
 /// `batch_index` in each patch. With the paper's `--batch-size 1` setup, that
 /// batch index is the durable bridge back to the caller-declared fan-out order.
-/// Missing patch files leave their calls pending because upstream only saves
-/// successfully parsed MAP patches.
+/// Upstream also saves parse-failed MAP prompt/response artifacts under
+/// `{parse_failure_dir}/map/*_batch_000N_*_parse_failed.md`. Those saved
+/// failures become terminal `ParseFailed` calls. Calls with neither saved
+/// parsed patches nor saved parse-failure artifacts stay pending.
 pub fn import_trace2skill_saved_map_patches_into_fanout(
     input: Trace2SkillSavedMapPatchFanoutInput<'_>,
 ) -> Result<AgentAnalystFanoutEvidence, Trace2SkillPatchReplayError> {
@@ -248,71 +253,154 @@ pub fn import_trace2skill_saved_map_patches_into_fanout(
 
     let map_dir = input.intermediates_dir.join("map_patches");
     let files = patch_files(&map_dir, "patch_")?;
-    if files.is_empty() {
+    let parse_failures = input
+        .parse_failure_dir
+        .map(|dir| parse_failure_files(&dir.join("map")))
+        .transpose()?
+        .unwrap_or_default();
+    if files.is_empty() && parse_failures.is_empty() {
         return Err(Trace2SkillPatchReplayError::MissingMapPatches { path: map_dir });
     }
 
     let mut imported = input.fanout.clone();
     let mut seen_batches = BTreeSet::new();
     for file in files {
-        let payload =
-            fs::read_to_string(&file.path).map_err(|source| Trace2SkillPatchReplayError::Io {
-                path: file.path.clone(),
-                source,
-            })?;
-        let batch_index = map_patch_batch_index(&file.path, &payload)?;
-        if !seen_batches.insert(batch_index) {
-            return Err(Trace2SkillPatchReplayError::DuplicateMapPatchBatchIndex {
-                batch_index,
-                path: file.path,
-            });
-        }
-        let call_index = batch_index - 1;
-        let call_id = input
-            .fanout
-            .expected_call_ids()
-            .get(call_index)
-            .ok_or_else(|| Trace2SkillPatchReplayError::InvalidMapPatchBatchIndex {
-                batch_index,
-                expected_calls: input.fanout.expected_call_ids().len(),
-                path: file.path.clone(),
-            })?;
-        let pending_call = input.fanout.by_call(call_id).ok_or_else(|| {
-            Trace2SkillPatchReplayError::MissingAnalystCallForMapPatch {
-                call_id: call_id.clone(),
-                path: file.path.clone(),
-            }
-        })?;
+        import_saved_map_patch(input, &mut imported, &mut seen_batches, file)?;
+    }
 
-        lower_trace2skill_json_patch(Trace2SkillPatchLoweringInput {
-            parent: input.parent,
-            skill: input.skill,
-            payload: &payload,
-            support_count: pending_call.support_count(),
-        })
-        .map_err(|source| Trace2SkillPatchReplayError::PatchFile {
-            path: file.path.clone(),
-            source,
-        })?;
-
-        imported.push(AgentAnalystCallEvidence::new(
-            AgentAnalystCallEvidenceInput {
-                call_id: call_id.clone(),
-                role: pending_call.role(),
-                source_task_ids: pending_call.source_task_ids().to_vec(),
-                prompt: pending_call.prompt().clone(),
-                response: Some(OutputRecord::blob(BlobRef {
-                    store: "trace2skill-stage2".to_owned(),
-                    key: file.path.display().to_string(),
-                })),
-                status: AgentAnalystCallStatus::Succeeded,
-                retry_count: pending_call.retry_count(),
-                support_count: pending_call.support_count(),
-            },
-        )?)?;
+    for file in parse_failures {
+        import_saved_map_parse_failure(input, &mut imported, &mut seen_batches, file)?;
     }
 
     Ok(imported)
+}
+
+fn import_saved_map_patch(
+    input: Trace2SkillSavedMapPatchFanoutInput<'_>,
+    imported: &mut AgentAnalystFanoutEvidence,
+    seen_batches: &mut BTreeSet<usize>,
+    file: PatchFile,
+) -> Result<(), Trace2SkillPatchReplayError> {
+    let payload =
+        fs::read_to_string(&file.path).map_err(|source| Trace2SkillPatchReplayError::Io {
+            path: file.path.clone(),
+            source,
+        })?;
+    let batch_index = map_patch_batch_index(&file.path, &payload)?;
+    if !seen_batches.insert(batch_index) {
+        return Err(Trace2SkillPatchReplayError::DuplicateMapPatchBatchIndex {
+            batch_index,
+            path: file.path,
+        });
+    }
+    let call_index = batch_index - 1;
+    let call_id = input
+        .fanout
+        .expected_call_ids()
+        .get(call_index)
+        .ok_or_else(|| Trace2SkillPatchReplayError::InvalidMapPatchBatchIndex {
+            batch_index,
+            expected_calls: input.fanout.expected_call_ids().len(),
+            path: file.path.clone(),
+        })?;
+    let pending_call = input.fanout.by_call(call_id).ok_or_else(|| {
+        Trace2SkillPatchReplayError::MissingAnalystCallForMapPatch {
+            call_id: call_id.clone(),
+            path: file.path.clone(),
+        }
+    })?;
+
+    lower_trace2skill_json_patch(Trace2SkillPatchLoweringInput {
+        parent: input.parent,
+        skill: input.skill,
+        payload: &payload,
+        support_count: pending_call.support_count(),
+    })
+    .map_err(|source| Trace2SkillPatchReplayError::PatchFile {
+        path: file.path.clone(),
+        source,
+    })?;
+
+    imported.push(AgentAnalystCallEvidence::new(
+        AgentAnalystCallEvidenceInput {
+            call_id: call_id.clone(),
+            role: pending_call.role(),
+            source_task_ids: pending_call.source_task_ids().to_vec(),
+            prompt: pending_call.prompt().clone(),
+            response: Some(OutputRecord::blob(BlobRef {
+                store: "trace2skill-stage2".to_owned(),
+                key: file.path.display().to_string(),
+            })),
+            status: AgentAnalystCallStatus::Succeeded,
+            retry_count: pending_call.retry_count(),
+            support_count: pending_call.support_count(),
+        },
+    )?)?;
+    Ok(())
+}
+
+fn import_saved_map_parse_failure(
+    input: Trace2SkillSavedMapPatchFanoutInput<'_>,
+    imported: &mut AgentAnalystFanoutEvidence,
+    seen_batches: &mut BTreeSet<usize>,
+    file: ParseFailureFile,
+) -> Result<(), Trace2SkillPatchReplayError> {
+    let payload =
+        fs::read_to_string(&file.path).map_err(|source| Trace2SkillPatchReplayError::Io {
+            path: file.path.clone(),
+            source,
+        })?;
+    let metadata = parse_failure_metadata(&file.path, &payload)?;
+    if !seen_batches.insert(metadata.batch_index) {
+        return Err(
+            Trace2SkillPatchReplayError::DuplicateMapParseFailureBatchIndex {
+                batch_index: metadata.batch_index,
+                path: file.path,
+            },
+        );
+    }
+    let call_index = metadata.batch_index - 1;
+    let call_id = input
+        .fanout
+        .expected_call_ids()
+        .get(call_index)
+        .ok_or_else(
+            || Trace2SkillPatchReplayError::InvalidMapParseFailureBatchIndex {
+                batch_index: metadata.batch_index,
+                expected_calls: input.fanout.expected_call_ids().len(),
+                path: file.path.clone(),
+            },
+        )?;
+    let pending_call = input.fanout.by_call(call_id).ok_or_else(|| {
+        Trace2SkillPatchReplayError::MissingAnalystCallForMapParseFailure {
+            call_id: call_id.clone(),
+            path: file.path.clone(),
+        }
+    })?;
+    let artifact = OutputRecord::blob(BlobRef {
+        store: "trace2skill-stage2".to_owned(),
+        key: file.path.display().to_string(),
+    });
+
+    imported.push(AgentAnalystCallEvidence::new(
+        AgentAnalystCallEvidenceInput {
+            call_id: call_id.clone(),
+            role: pending_call.role(),
+            source_task_ids: pending_call.source_task_ids().to_vec(),
+            prompt: pending_call.prompt().clone(),
+            response: Some(artifact.clone()),
+            status: AgentAnalystCallStatus::ParseFailed {
+                reason: format!(
+                    "upstream Trace2Skill {} {} failed {} parsing",
+                    metadata.phase, metadata.label, metadata.expected_format
+                ),
+                artifact: Some(artifact),
+            },
+            retry_count: pending_call.retry_count(),
+            support_count: pending_call.support_count(),
+        },
+    )?)?;
+    Ok(())
 }
 
 fn load_saved_map_patches(
@@ -565,6 +653,19 @@ struct PatchFile {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+struct ParseFailureFile {
+    path: PathBuf,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct ParseFailureMetadata {
+    phase: String,
+    label: String,
+    expected_format: String,
+    batch_index: usize,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 struct MergeLevelDir {
     level: usize,
     path: PathBuf,
@@ -600,6 +701,101 @@ fn patch_files(dir: &Path, prefix: &str) -> Result<Vec<PatchFile>, Trace2SkillPa
     }
     files.sort_by(|left, right| left.stem.cmp(&right.stem));
     Ok(files)
+}
+
+fn parse_failure_files(dir: &Path) -> Result<Vec<ParseFailureFile>, Trace2SkillPatchReplayError> {
+    if !dir.is_dir() {
+        return Ok(Vec::new());
+    }
+    let mut files = Vec::new();
+    for entry in fs::read_dir(dir).map_err(|source| Trace2SkillPatchReplayError::Io {
+        path: dir.to_path_buf(),
+        source,
+    })? {
+        let entry = entry.map_err(|source| Trace2SkillPatchReplayError::Io {
+            path: dir.to_path_buf(),
+            source,
+        })?;
+        let path = entry.path();
+        if path.extension().and_then(|extension| extension.to_str()) != Some("md") {
+            continue;
+        }
+        let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+            return Err(Trace2SkillPatchReplayError::NonUnicodePath { path });
+        };
+        if !name.ends_with("_parse_failed.md") {
+            continue;
+        }
+        files.push(ParseFailureFile { path });
+    }
+    files.sort_by(|left, right| left.path.cmp(&right.path));
+    Ok(files)
+}
+
+fn parse_failure_metadata(
+    path: &Path,
+    payload: &str,
+) -> Result<ParseFailureMetadata, Trace2SkillPatchReplayError> {
+    let phase = parse_failure_field(path, payload, "PHASE")?;
+    let label = parse_failure_field(path, payload, "LABEL")?;
+    let expected_format = parse_failure_field(path, payload, "EXPECTED FORMAT")?;
+    let batch_index = parse_failure_batch_index(path, &label)?;
+    Ok(ParseFailureMetadata {
+        phase,
+        label,
+        expected_format,
+        batch_index,
+    })
+}
+
+fn parse_failure_field(
+    path: &Path,
+    payload: &str,
+    field: &'static str,
+) -> Result<String, Trace2SkillPatchReplayError> {
+    let prefix = format!("{field}:");
+    payload
+        .lines()
+        .find_map(|line| line.strip_prefix(&prefix).map(str::trim))
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned)
+        .ok_or_else(
+            || Trace2SkillPatchReplayError::MissingMapParseFailureField {
+                path: path.to_path_buf(),
+                field,
+            },
+        )
+}
+
+fn parse_failure_batch_index(
+    path: &Path,
+    label: &str,
+) -> Result<usize, Trace2SkillPatchReplayError> {
+    let Some(raw) = label.strip_prefix("batch_") else {
+        return Err(
+            Trace2SkillPatchReplayError::InvalidMapParseFailureBatchLabel {
+                path: path.to_path_buf(),
+                label: label.to_owned(),
+            },
+        );
+    };
+    let Ok(batch_index) = raw.parse::<usize>() else {
+        return Err(
+            Trace2SkillPatchReplayError::InvalidMapParseFailureBatchLabel {
+                path: path.to_path_buf(),
+                label: label.to_owned(),
+            },
+        );
+    };
+    if batch_index == 0 {
+        return Err(
+            Trace2SkillPatchReplayError::InvalidMapParseFailureBatchLabel {
+                path: path.to_path_buf(),
+                label: label.to_owned(),
+            },
+        );
+    }
+    Ok(batch_index)
 }
 
 fn merge_level_dirs(root: &Path) -> Result<Vec<MergeLevelDir>, Trace2SkillPatchReplayError> {
@@ -758,6 +954,50 @@ pub enum Trace2SkillPatchReplayError {
         /// Expected call id.
         call_id: String,
         /// Saved map patch path.
+        path: PathBuf,
+    },
+    /// A saved MAP parse-failure artifact is missing an upstream metadata line.
+    #[error("Trace2Skill MAP parse failure {path} is missing {field}")]
+    MissingMapParseFailureField {
+        /// Saved parse-failure path.
+        path: PathBuf,
+        /// Missing upstream metadata field.
+        field: &'static str,
+    },
+    /// A saved MAP parse-failure artifact did not carry a `batch_000N` label.
+    #[error("Trace2Skill MAP parse failure {path} has invalid batch label {label}")]
+    InvalidMapParseFailureBatchLabel {
+        /// Saved parse-failure path.
+        path: PathBuf,
+        /// Raw upstream label.
+        label: String,
+    },
+    /// A saved MAP parse failure's batch does not map to a declared fan-out call.
+    #[error(
+        "Trace2Skill MAP parse failure {path} has batch_index {batch_index}, but fan-out has {expected_calls} calls"
+    )]
+    InvalidMapParseFailureBatchIndex {
+        /// One-based upstream batch index.
+        batch_index: usize,
+        /// Caller-declared fan-out call count.
+        expected_calls: usize,
+        /// Saved parse-failure path.
+        path: PathBuf,
+    },
+    /// Two saved MAP outputs claimed the same upstream batch.
+    #[error("Trace2Skill MAP parse failure {path} repeats batch_index {batch_index}")]
+    DuplicateMapParseFailureBatchIndex {
+        /// One-based upstream batch index.
+        batch_index: usize,
+        /// Saved parse-failure path.
+        path: PathBuf,
+    },
+    /// A saved MAP parse failure mapped to a call id that has no prompt/source metadata.
+    #[error("Trace2Skill MAP parse failure {path} mapped to missing analyst call {call_id}")]
+    MissingAnalystCallForMapParseFailure {
+        /// Expected call id.
+        call_id: String,
+        /// Saved parse-failure path.
         path: PathBuf,
     },
     /// Analyst-call evidence construction refused imported data.

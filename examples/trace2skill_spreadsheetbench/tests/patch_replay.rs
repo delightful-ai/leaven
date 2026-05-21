@@ -210,6 +210,7 @@ fn imports_saved_map_patches_into_analyst_fanout_by_batch_index() {
             skill: &skill,
             fanout: &fanout,
             intermediates_dir: root,
+            parse_failure_dir: None,
         })
         .unwrap();
 
@@ -234,6 +235,98 @@ fn imports_saved_map_patches_into_analyst_fanout_by_batch_index() {
     assert!(
         matches!(success.response(), Some(OutputRecord::BlobRef(reference)) if reference.key.ends_with("map_patches/patch_0001.json"))
     );
+}
+
+#[test]
+fn imports_saved_map_parse_failures_without_completing_unsaved_calls() {
+    let (parent, skill) = spreadsheet_skill_bank();
+    let mut fanout = AgentAnalystFanoutEvidence::new([
+        "error-13-1-1".to_owned(),
+        "success-14-1-2".to_owned(),
+        "error-59902-3".to_owned(),
+    ])
+    .unwrap();
+    fanout
+        .push(pending_call(
+            "error-13-1-1",
+            AgentAnalystRole::Error,
+            "13-1",
+            "error prompt",
+        ))
+        .unwrap();
+    fanout
+        .push(pending_call(
+            "success-14-1-2",
+            AgentAnalystRole::Success,
+            "14-1",
+            "success prompt",
+        ))
+        .unwrap();
+    fanout
+        .push(pending_call(
+            "error-59902-3",
+            AgentAnalystRole::Error,
+            "59902",
+            "unsaved prompt",
+        ))
+        .unwrap();
+
+    let tempdir = tempfile::tempdir().unwrap();
+    let root = tempdir.path();
+    fs::create_dir_all(root.join("map_patches")).unwrap();
+    write_patch(
+        &root.join("map_patches/patch_0001.json"),
+        &json_patch_with_batch("Success analyst patch", format_preference_edits(), 2),
+    );
+    let parse_failure_dir = root.join("parse_failures_parallel");
+    let parse_failure_path =
+        parse_failure_dir.join("map/20260520_010203_000000_batch_0001_json_parse_failed.md");
+    write_parse_failure(&parse_failure_path, "map", "batch_0001", "json-fence");
+
+    let imported =
+        import_trace2skill_saved_map_patches_into_fanout(Trace2SkillSavedMapPatchFanoutInput {
+            parent: &parent,
+            skill: &skill,
+            fanout: &fanout,
+            intermediates_dir: root,
+            parse_failure_dir: Some(&parse_failure_dir),
+        })
+        .unwrap();
+
+    assert_eq!(
+        imported.completed_call_ids(),
+        vec!["error-13-1-1", "success-14-1-2"]
+    );
+    assert_eq!(imported.pending_call_ids(), vec!["error-59902-3"]);
+    let failed = imported.by_call("error-13-1-1").unwrap();
+    assert_eq!(failed.role(), AgentAnalystRole::Error);
+    assert_eq!(failed.source_task_ids(), ["13-1"]);
+    assert!(matches!(failed.prompt(), OutputRecord::Inline { text, .. } if text == "error prompt"));
+    assert!(
+        matches!(failed.response(), Some(OutputRecord::BlobRef(reference)) if reference.key.ends_with("parse_failures_parallel/map/20260520_010203_000000_batch_0001_json_parse_failed.md"))
+    );
+    assert!(
+        matches!(
+            failed.status(),
+            AgentAnalystCallStatus::ParseFailed { reason, artifact: Some(OutputRecord::BlobRef(reference)) }
+                if reason == "upstream Trace2Skill map batch_0001 failed json-fence parsing"
+                    && reference.key.ends_with("parse_failures_parallel/map/20260520_010203_000000_batch_0001_json_parse_failed.md")
+        ),
+        "saved upstream parse-failure markdown should make the batch terminal"
+    );
+
+    let success = imported.by_call("success-14-1-2").unwrap();
+    assert!(matches!(
+        success.status(),
+        AgentAnalystCallStatus::Succeeded
+    ));
+    assert!(
+        matches!(success.response(), Some(OutputRecord::BlobRef(reference)) if reference.key.ends_with("map_patches/patch_0001.json"))
+    );
+    assert!(matches!(
+        imported.by_call("error-59902-3").unwrap().status(),
+        AgentAnalystCallStatus::Pending
+    ));
 }
 
 fn row_safety_edits() -> serde_json::Value {
@@ -332,6 +425,30 @@ fn fenced_json_patch(value: &serde_json::Value) -> String {
 
 fn write_patch(path: &Path, value: &serde_json::Value) {
     fs::write(path, serde_json::to_vec_pretty(value).unwrap()).unwrap();
+}
+
+fn write_parse_failure(path: &Path, phase: &str, label: &str, expected_format: &str) {
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(
+        path,
+        format!(
+            "===== PARSE FAILURE START =====\n\
+             PHASE: {phase}\n\
+             LABEL: {label}\n\
+             EXPECTED FORMAT: {expected_format}\n\
+             \n\
+             ===== USER MESSAGE 1 START =====\n\
+             analyst prompt\n\
+             ===== USER MESSAGE 1 END =====\n\
+             \n\
+             ===== FINAL RAW LLM RESPONSE START =====\n\
+             no fenced patch here\n\
+             ===== FINAL RAW LLM RESPONSE END =====\n\
+             \n\
+             ===== PARSE FAILURE END =====\n"
+        ),
+    )
+    .unwrap();
 }
 
 fn skill_file_text(folder: &SkillFolder, path: &str) -> String {
