@@ -135,6 +135,69 @@ fn cli_prepares_one_case_run_dir_as_json() {
     assert!(run_dir.join("1_13-1_init.xlsx").is_file());
 }
 
+#[test]
+fn cli_scores_prepared_one_case_run_dir_as_json() {
+    let fixture = ExactCaseFixture::new();
+    let temp = tempfile::tempdir().unwrap();
+    let run_dir = temp.path().join("run");
+
+    let prepare = Command::new(env!("CARGO_BIN_EXE_trace2skill_spreadsheetbench"))
+        .arg("--prepare-one-case-run")
+        .arg("--case")
+        .arg(&fixture.case_file)
+        .arg("--spreadsheet-dir")
+        .arg(&fixture.spreadsheet_dir)
+        .arg("--system-prompt")
+        .arg(&fixture.system_prompt)
+        .arg("--released-skill")
+        .arg(&fixture.released_skill)
+        .arg("--run-dir")
+        .arg(&run_dir)
+        .output()
+        .unwrap();
+    assert!(
+        prepare.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&prepare.stderr)
+    );
+    fs::copy(
+        run_dir.join("1_13-1_golden.xlsx"),
+        run_dir.join("13-1_output.xlsx"),
+    )
+    .unwrap();
+    let transcript_file = run_dir.join("agent_transcript.md");
+    fs::write(&transcript_file, "ACTION: TASK_COMPLETE\n").unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_trace2skill_spreadsheetbench"))
+        .arg("--score-one-case-run")
+        .arg("--run-dir")
+        .arg(&run_dir)
+        .arg("--model-id")
+        .arg("fixture-spreadsheet-agent")
+        .arg("--transcript-file")
+        .arg(&transcript_file)
+        .output()
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(json["case_id"], "13-1");
+    assert_eq!(json["status"], "scored_candidate_workbook");
+    assert_eq!(json["score_report"]["score"], 1.0);
+    assert!(json["score_file"]["path"]
+        .as_str()
+        .unwrap()
+        .ends_with("score_report.json"));
+    assert!(json["trajectory_file"]["path"]
+        .as_str()
+        .unwrap()
+        .ends_with("trajectory.json"));
+}
+
 struct Fixture {
     temp: tempfile::TempDir,
     case_file: std::path::PathBuf,
@@ -186,6 +249,9 @@ impl Fixture {
 
 struct ExactCaseFixture {
     case_file: std::path::PathBuf,
+    spreadsheet_dir: std::path::PathBuf,
+    system_prompt: std::path::PathBuf,
+    released_skill: std::path::PathBuf,
     golden_workbook: std::path::PathBuf,
 }
 
@@ -198,7 +264,16 @@ impl ExactCaseFixture {
             case_file: repo.join(
                 "tmp/paper_exact_samples/trace2skill/spreadsheetbench_verified/dataset_first_case.json",
             ),
-            golden_workbook: spreadsheet_dir.join("1_13-1_golden.xlsx"),
+            spreadsheet_dir,
+            system_prompt: repo.join(
+                "tmp/repros/trace2skill-upstream/spreadsheet_agent/system_prompt/cli_skill_preloaded_full_system_v1.txt",
+            ),
+            released_skill: repo.join(
+                "tmp/repros/trace2skill-upstream/released_skills/trace2skill-xlsx-35B-combined/SKILL.md",
+            ),
+            golden_workbook: repo
+                .join("tmp/paper_exact_samples/trace2skill/spreadsheetbench_verified/13-1")
+                .join("1_13-1_golden.xlsx"),
         }
     }
 }
