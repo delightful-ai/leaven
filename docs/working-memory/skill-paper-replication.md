@@ -300,8 +300,9 @@ Leaven primitive blockers:
 - `leaven-evidence::AgentAnalystFanoutEvidence` now preserves checkpointable
   Stage 2 analyst-call state: call manifest, analyst role, source task ids,
   prompt/response payloads, parse/backend status, retry count, and support
-  count. The Trace2Skill example can seed pending analyst calls from imported
-  training trajectories, but no live analyst/model execution or merge has run.
+  count. The Trace2Skill example can seed source-template-backed pending
+  analyst calls from imported training trajectories, but no live analyst/model
+  execution or merge has run.
 - `leaven-evidence::AgentPatchMergeTreeEvidence` now preserves checkpointable
   Stage 3 merge provenance: merge levels, input/accepted/discarded patch ids,
   support counts, decisions, prompt/response payloads, parse-failure artifacts,
@@ -362,6 +363,12 @@ Leaven primitive blockers:
   `stage2_fanout.json`, embedding upstream `skill_evolver/prompts` template
   files and naming the upstream MAP prompt builders. It is fan-out staging only;
   no analyst model call, patch parsing, or merge has run.
+- `examples/trace2skill_spreadsheetbench` now also uses that upstream
+  `skill_evolver/prompts` material for corpus-wide pending Stage 2 fan-out from
+  imported training trajectories instead of the earlier generic placeholder
+  prompt scaffold. This keeps the 200-row path aligned with the paper's MAP
+  prompt sources, but still stops before analyst execution, response parsing,
+  or merge.
 - `examples/trace2skill_tiny_live` now restores the tiny live
   trajectory-to-skill harness into main Leaven. Its preflight writes a no-spend
   proof contract, and its live mode runs Codex/GPT-5.4-mini over two CSV
@@ -452,6 +459,11 @@ Spend/data risks:
   `stage2_fanout_report.json` with expected/pending call id `success-13-1-1`.
   The prompt records upstream prompt-template sources and explicitly says no
   analyst model call executed.
+- The Trace2Skill example now covers source-anchored corpus pending Stage 2
+  fan-out prompts through
+  `stage2_corpus_fanout_embeds_upstream_prompt_sources`, proving success/error
+  imported trajectories include upstream MAP prompt-template files rather than
+  the previous placeholder scaffold.
 - Restored tiny live harness preflights passed in main Leaven on 2026-05-20:
   `tmp/memento_skills_read_write/20260520T204154Z/preflight.json`,
   `tmp/skillreducer_tiny/20260520T204154Z/preflight.json`,
