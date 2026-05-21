@@ -114,7 +114,10 @@ fn git_checkout_restores_tag_when_branch_has_same_short_name() {
         run_git(&mount, ["tag", "program/base"]);
 
         GitCheckout::restore_ref(&mount, &tag_key("program/base")).unwrap();
-        assert_eq!(fs::read_to_string(mount.join("program.txt")).unwrap(), "base\n");
+        assert_eq!(
+            fs::read_to_string(mount.join("program.txt")).unwrap(),
+            "base\n"
+        );
 
         workspace.cleanup().await.unwrap();
     });
