@@ -2,9 +2,9 @@ use std::error::Error;
 use std::fmt;
 
 use leaven_kernel::{
-    BlobRef, CandidateId, CaseId, ContentId, ErrorKind, ErrorRecord, EvaluatorId, Fingerprint,
-    FingerprintBuilder, IntoErrorRecord, MetadataBag, MetadataKey, MetadataValue, ProposerId,
-    RendererId, Retryability, RunId, StageId, StopperId,
+    AgentId, BlobRef, CandidateId, CaseId, CaseRunId, ContentId, ErrorKind, ErrorRecord,
+    EvaluatorId, Fingerprint, FingerprintBuilder, IntoErrorRecord, MetadataBag, MetadataKey,
+    MetadataValue, ProposerId, RendererId, Retryability, RunId, StageId, StopperId, TraceRef,
 };
 use uuid::Uuid;
 
@@ -76,21 +76,32 @@ fn durable_error_records_capture_sources_and_identity_conversion() {
 fn typed_ids_preserve_their_distinct_display_and_raw_forms() {
     let uuid = Uuid::nil();
     let run = RunId::from_uuid(uuid);
+    let case_run = CaseRunId::from_uuid(uuid);
     let generated = CandidateId::new();
     let defaulted = CandidateId::default();
     let content = ContentId::from_bytes([9; ContentId::BYTES]);
     let zero = ContentId::zero();
     let case = CaseId::from_index(7);
+    let agent = AgentId::from("worker");
+    let trace = TraceRef {
+        store: "trace-store".to_owned(),
+        key: "session/abc".to_owned(),
+    };
     let proposer = ProposerId::new(String::from("gepa/reflect"));
     let evaluator = EvaluatorId::PRIMARY;
 
     assert_eq!(run.as_uuid(), uuid);
+    assert_eq!(case_run.as_uuid(), uuid);
     assert_ne!(generated, defaulted);
     assert_eq!(content.as_bytes(), &[9; ContentId::BYTES]);
     assert_eq!(zero.as_bytes(), &[0; ContentId::BYTES]);
     assert_eq!(format!("{content}"), "cid:0909090909090909");
     assert_eq!(format!("{}", CaseId::new(3)), "case:3");
     assert_eq!(format!("{case}"), "case:7");
+    assert_eq!(agent.as_str(), "worker");
+    assert_eq!(format!("{agent}"), "worker");
+    assert_eq!(trace.store, "trace-store");
+    assert_eq!(trace.key, "session/abc");
     assert_eq!(proposer.as_str(), "gepa/reflect");
     assert_eq!(format!("{proposer}"), "gepa/reflect");
     assert_eq!(evaluator.as_str(), "primary");

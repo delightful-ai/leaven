@@ -13,8 +13,8 @@ use leaven_evidence::ScalarEvidence;
 use leaven_gepa::test_support::FixedSurfaceEdit;
 use leaven_gepa::{
     Gepa, GepaReflectionBootstrap, GepaReflector, LmBackedReflector, PlainTextEditParser,
-    ReflectRequest, ReflectionError, ReflectionRenderInput, ReflectionRenderer,
-    ReflectiveDatasetBuilder, ReflectiveExample, gepa_stage_proposer,
+    ReflectRequest, ReflectionError, ReflectionRenderInput, ReflectionRenderer, ReflectiveCase,
+    ReflectiveDatasetBuilder, ReflectiveValue, gepa_stage_proposer,
 };
 use leaven_kernel::{
     AssessmentId, Budget, BudgetSnapshot, CandidateId, ContentId, Cost, EvaluatorId, Fingerprint,
@@ -28,6 +28,24 @@ use leaven_stage::{
 use leaven_store_inline::InlineEvidenceStore;
 use leaven_surface::{EditSurface, Part, PartAddress, SurfaceError, SurfaceFingerprint};
 use leaven_workspace::{WorkspacePath, WorkspaceView};
+
+fn reflective_case(
+    case_id: Option<leaven_kernel::CaseId>,
+    input: &str,
+    output: Option<&str>,
+    score: Option<f64>,
+    feedback: &str,
+) -> ReflectiveCase {
+    let mut case = ReflectiveCase::from_example(
+        ReflectiveValue::Text(input.to_owned()),
+        None,
+        output.map(|value| ReflectiveValue::Text(value.to_owned())),
+        score,
+        feedback.to_owned(),
+    );
+    case.case_id = case_id;
+    case
+}
 use leaven_workspace_local::LocalWorkspaceFactory;
 
 #[test]
@@ -121,16 +139,14 @@ impl OptimizationProblem for TestProblem {
 #[derive(Clone, Copy, Debug)]
 struct ScriptedDataset;
 
-fn scripted_examples() -> Vec<ReflectiveExample> {
-    vec![ReflectiveExample {
-        side_info: Vec::new(),
-        case: Some(leaven_kernel::CaseId::new(0)),
-        input: "scripted reflection input".to_owned(),
-        output: Some("scripted output".to_owned()),
-        score: Some(0.5),
-        feedback: "scripted feedback".to_owned(),
-        source_refs: Vec::new(),
-    }]
+fn scripted_examples() -> Vec<ReflectiveCase> {
+    vec![reflective_case(
+        Some(leaven_kernel::CaseId::new(0)),
+        "scripted reflection input",
+        Some("scripted output"),
+        Some(0.5),
+        "scripted feedback",
+    )]
 }
 
 impl ReflectiveDatasetBuilder<TestProblem, WholeTextSurface> for ScriptedDataset {
@@ -140,7 +156,7 @@ impl ReflectiveDatasetBuilder<TestProblem, WholeTextSurface> for ScriptedDataset
         _parent: CandidateId,
         _parent_assessments: &[AssessmentId],
         _part: &&'static str,
-    ) -> Result<Vec<ReflectiveExample>, ReflectionError> {
+    ) -> Result<Vec<ReflectiveCase>, ReflectionError> {
         Ok(scripted_examples())
     }
 }
@@ -409,24 +425,20 @@ fn lm_and_agent_reflectors_receive_byte_identical_examples() {
 
     block_on(async {
         let examples = vec![
-            ReflectiveExample {
-                side_info: Vec::new(),
-                case: Some(leaven_kernel::CaseId::new(0)),
-                input: "find the remainder when 2^10 is divided by 7".to_owned(),
-                output: Some("3".to_owned()),
-                score: Some(0.0),
-                feedback: "incorrect; expected 2".to_owned(),
-                source_refs: Vec::new(),
-            },
-            ReflectiveExample {
-                side_info: Vec::new(),
-                case: Some(leaven_kernel::CaseId::new(1)),
-                input: "what is 19 + 23".to_owned(),
-                output: Some("42".to_owned()),
-                score: Some(1.0),
-                feedback: "correct".to_owned(),
-                source_refs: Vec::new(),
-            },
+            reflective_case(
+                Some(leaven_kernel::CaseId::new(0)),
+                "find the remainder when 2^10 is divided by 7",
+                Some("3"),
+                Some(0.0),
+                "incorrect; expected 2",
+            ),
+            reflective_case(
+                Some(leaven_kernel::CaseId::new(1)),
+                "what is 19 + 23",
+                Some("42"),
+                Some(1.0),
+                "correct",
+            ),
         ];
         let canonical = serde_json::to_vec(&examples).unwrap();
 

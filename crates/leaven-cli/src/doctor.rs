@@ -4,15 +4,14 @@ use futures::executor::block_on;
 use leaven_agent::{
     AgentContextRef, AgentRunRequest, FakeAgentAction, FakeAgentRuntime, OutputContract,
 };
-use leaven_agentic::AgenticProposerConfig;
+use leaven_agentic::{AgenticProposerConfig, ArtifactReflector};
 use leaven_agentic_skill::SkillWorkspaceLayout;
 use leaven_artifact_skill::{SkillFilePartId, SkillFileSurface, SkillName, SkillPath};
 use leaven_core::{Evidence, InfoRef, OptimizationProblem};
 use leaven_engine::{BudgetLedger, RunContext, RunGraph};
 use leaven_gepa::{GepaReflector, ReflectRequest};
 use leaven_gepa_agentic_skill::{
-    GepaSkillBankAgenticReflector, GepaSkillBankReflectionRenderer, SkillBankGepaReflectionInput,
-    SkillBankGepaReflectionMaterializer,
+    GepaSkillBankAgenticReflector, SkillBankReflectionInput, SkillBankReflector,
 };
 use leaven_kernel::{ProposerId, RunId};
 use leaven_workspace::{WorkspaceConfig, WorkspaceFactory, WorkspacePath};
@@ -77,21 +76,31 @@ fn proposal_render(
     format: OutputFormat,
     input_json: Option<PathBuf>,
 ) -> Result<String, DoctorError> {
-    let layout = fixture_workspace_layout()?;
     let input = match input_json {
         Some(path) => read_reflection_input(&path)?,
         None => fixture_reflection_input(),
     };
-    let renderer = GepaSkillBankReflectionRenderer::new(layout.clone());
-    let instructions = renderer.render_input(&input)?;
+    let instructions =
+        leaven_agent::AgentInstructions::task("Read TASK.md and edit target/current in place.");
     let output_contract = OutputContract::WorkspaceDiff {
-        roots: vec![output_root(&layout)],
+        roots: vec![WorkspacePath::new("target/current").expect("constant path is valid")],
     };
-    let workspace_files = instructions.context.clone();
+    let workspace_files = vec![
+        AgentContextRef {
+            label: "manifest".to_owned(),
+            path: WorkspacePath::new("MANIFEST.json").expect("constant path is valid"),
+            media_type: Some("application/json".to_owned()),
+        },
+        AgentContextRef {
+            label: "task".to_owned(),
+            path: WorkspacePath::new("TASK.md").expect("constant path is valid"),
+            media_type: Some("text/markdown".to_owned()),
+        },
+    ];
     let run_request = AgentRunRequest::new(instructions, output_contract);
     let report = ProposalRenderDoctor {
         stage: "gepa.reflect.proposal",
-        route: "GepaSkillBankAgenticReflector -> AgenticProposer<SkillBankGepaReflectionMaterializer, GepaSkillBankReflectionRenderer, SkillBankGepaReflectionParser>",
+        route: "GepaSkillBankAgenticReflector -> ReflectionWorkspace<SkillBankReflector>",
         proof: "render_only",
         parent: input.parent.to_string(),
         part: input.part_label.clone(),
@@ -123,7 +132,7 @@ fn proposal_materialize(
 }
 
 async fn materialize_report(
-    input: SkillBankGepaReflectionInput<String>,
+    input: SkillBankReflectionInput<String>,
     layout: SkillWorkspaceLayout,
 ) -> Result<ProposalMaterializeDoctor, DoctorError> {
     let mut workspace = LocalWorkspaceFactory::temp()
@@ -131,19 +140,32 @@ async fn materialize_report(
         .await
         .map_err(|source| DoctorError::WorkspaceAllocate(source.to_string()))?;
     let result = {
-        let mut view = workspace.view();
-        let materialized = SkillBankGepaReflectionMaterializer::new(layout.clone())
-            .materialize_input(&input, &mut view)?;
-        let files = read_workspace_files(&view, &output_root(&layout))?;
+        let view = workspace.view();
+        let mut current = view
+            .subdir(WorkspacePath::new("target/current").expect("constant path is valid"))
+            .map_err(|source| DoctorError::Workspace(source.to_string()))?;
+        SkillBankReflector::<String>::new(layout.clone())
+            .project(&input, &mut current)
+            .await
+            .map_err(|source| DoctorError::Workspace(source.to_string()))?;
+        let files = read_workspace_files(
+            &view,
+            &WorkspacePath::new("target/current").expect("constant path is valid"),
+        )?;
         let local_mount = view.local_mount().map(|path| path.display().to_string());
+        let files_written = files.len();
+        let bytes_written = files
+            .iter()
+            .map(|file| u64::try_from(file.bytes).expect("usize fits u64"))
+            .sum();
         ProposalMaterializeDoctor {
             stage: "gepa.reflect.materialize",
             proof: "materialize_only",
             parent: input.parent.to_string(),
             part: input.part_label,
             local_mount,
-            files_written: materialized.value.files_written,
-            bytes_written: materialized.value.bytes_written,
+            files_written,
+            bytes_written,
             files,
             gaps: vec![
                 "No agent session is executed.",
@@ -170,7 +192,7 @@ fn proposal_roundtrip(
 }
 
 async fn roundtrip_report(
-    input: SkillBankGepaReflectionInput<String>,
+    input: SkillBankReflectionInput<String>,
     layout: SkillWorkspaceLayout,
 ) -> Result<ProposalRoundtripDoctor, DoctorError> {
     let (skill, write_path, bytes) = simulated_skill_edit(&input, &layout)?;
@@ -244,7 +266,7 @@ async fn roundtrip_report(
 
 fn read_reflection_input(
     path: &std::path::Path,
-) -> Result<SkillBankGepaReflectionInput<String>, DoctorError> {
+) -> Result<SkillBankReflectionInput<String>, DoctorError> {
     let bytes = std::fs::read(path).map_err(|source| DoctorError::ReadInput {
         path: path.to_path_buf(),
         source,
@@ -257,7 +279,7 @@ fn read_reflection_input(
 
 fn load_input(
     input_json: Option<PathBuf>,
-) -> Result<SkillBankGepaReflectionInput<String>, DoctorError> {
+) -> Result<SkillBankReflectionInput<String>, DoctorError> {
     match input_json {
         Some(path) => read_reflection_input(&path),
         None => Ok(fixture_reflection_input()),
@@ -447,7 +469,7 @@ pub enum DoctorError {
         #[source]
         source: std::io::Error,
     },
-    #[error("failed to parse reflection input `{}` as SkillBankGepaReflectionInput JSON", path.display())]
+    #[error("failed to parse reflection input `{}` as SkillBankReflectionInput JSON", path.display())]
     ParseInput {
         path: PathBuf,
         #[source]
@@ -499,11 +521,12 @@ fn preview(bytes: &[u8]) -> String {
 }
 
 fn simulated_skill_edit(
-    input: &SkillBankGepaReflectionInput<String>,
+    input: &SkillBankReflectionInput<String>,
     layout: &SkillWorkspaceLayout,
 ) -> Result<(SkillName, WorkspacePath, Vec<u8>), DoctorError> {
     let (name, folder) = selected_skill_folder(input, layout)?;
-    let write_path = workspace_path(layout, name.as_str(), "SKILL.md")?;
+    let write_path = WorkspacePath::new("target/current")?
+        .join(workspace_path(layout, name.as_str(), "SKILL.md")?.as_str())?;
     let description = format!(
         "{} Doctor simulated GEPA reflection edit.",
         folder.manifest().description.as_str().trim_end_matches('.')
@@ -526,7 +549,7 @@ fn simulated_skill_edit(
 }
 
 fn selected_skill_folder<'a>(
-    input: &'a SkillBankGepaReflectionInput<String>,
+    input: &'a SkillBankReflectionInput<String>,
     layout: &SkillWorkspaceLayout,
 ) -> Result<(SkillName, &'a leaven_artifact_skill::SkillFolder), DoctorError> {
     if input.artifact.is_empty() {
@@ -552,14 +575,6 @@ fn selected_skill_folder<'a>(
         .get(&skill)
         .ok_or_else(|| DoctorError::InvalidReflectionPart(input.part.clone()))?;
     Ok((skill, folder))
-}
-
-fn output_root(layout: &SkillWorkspaceLayout) -> WorkspacePath {
-    if layout.skills_root.as_str().is_empty() {
-        WorkspacePath::root()
-    } else {
-        layout.skills_root.clone()
-    }
 }
 
 fn workspace_path(

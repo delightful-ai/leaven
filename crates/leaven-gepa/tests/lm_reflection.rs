@@ -15,7 +15,7 @@ use leaven_gepa::{
     DEFAULT_REFLECTION_PROMPT_TEMPLATE, DefaultReflectionRenderer, FullValidation, Gepa,
     GepaReflectiveDataset, GepaReflector, LmBackedReflector, LmBackedReflectorConfig,
     MinibatchThenValidation, PlainTextEditParser, ReflectRequest, ReflectionOutputParser,
-    ReflectionRenderInput, ReflectionRenderer, ReflectiveExample,
+    ReflectionRenderInput, ReflectionRenderer, ReflectiveCase, ReflectiveValue,
 };
 use leaven_kernel::{
     AssessmentId, Budget, CandidateId, CaseId, ContentId, Cost, EvaluatorId, Fingerprint,
@@ -25,6 +25,24 @@ use leaven_lm::{Lm, LmError, LmId, LmRequest, LmResponse, Message, Role, TokenUs
 use leaven_population::ParetoFrontier;
 use leaven_store_inline::InlineEvidenceStore;
 use leaven_surface::{EditSurface, Part, PartAddress, SurfaceError, SurfaceFingerprint};
+
+fn reflective_case(
+    case_id: Option<CaseId>,
+    input: &str,
+    output: Option<&str>,
+    score: Option<f64>,
+    feedback: &str,
+) -> ReflectiveCase {
+    let mut case = ReflectiveCase::from_example(
+        ReflectiveValue::Text(input.to_owned()),
+        None,
+        output.map(|value| ReflectiveValue::Text(value.to_owned())),
+        score,
+        feedback.to_owned(),
+    );
+    case.case_id = case_id;
+    case
+}
 
 #[test]
 fn lm_backed_reflector_renders_feedback_records_and_applies_candidate() {
@@ -248,14 +266,16 @@ fn reflect_request_informed_by_unions_request_and_example_source_refs() {
             InfoRef::Candidate(candidate),
             InfoRef::Assessment(assessment),
         ])
-        .with_examples([ReflectiveExample {
-            side_info: Vec::new(),
-            case: Some(CaseId::new(7)),
-            input: "find the remainder".to_owned(),
-            output: Some("31".to_owned()),
-            score: Some(0.25),
-            feedback: "needs modular arithmetic".to_owned(),
-            source_refs: vec![example_source.clone()],
+        .with_examples([{
+            let mut case = reflective_case(
+                Some(CaseId::new(7)),
+                "find the remainder",
+                Some("31"),
+                Some(0.25),
+                "needs modular arithmetic",
+            );
+            case.source_refs.push(example_source.clone());
+            case
         }]);
 
     let refs = request.informed_by();
@@ -290,15 +310,13 @@ fn default_renderer_and_plain_text_parser_cover_empty_feedback_and_bad_part() {
     assert!(rendered_text.contains("(no reflective examples were selected)"));
 
     let no_output_request =
-        ReflectRequest::for_part(parent, "text", "text").with_examples([ReflectiveExample {
-            side_info: Vec::new(),
-            case: Some(CaseId::new(9)),
-            input: "the input".to_owned(),
-            score: Some(1.0),
-            output: None,
-            feedback: "already correct".to_owned(),
-            source_refs: Vec::new(),
-        }]);
+        ReflectRequest::for_part(parent, "text", "text").with_examples([reflective_case(
+            Some(CaseId::new(9)),
+            "the input",
+            None,
+            Some(1.0),
+            "already correct",
+        )]);
     let no_output_rendered = DefaultReflectionRenderer
         .render(ReflectionRenderInput::<TestProblem, WholeTextSurface> {
             request: &no_output_request,
@@ -386,15 +404,13 @@ fn default_renderer_uses_gepa_prompt_template_and_config_override() {
     let artifact = TestArtifact("old instruction".to_owned());
     let surface = WholeTextSurface;
     let request =
-        ReflectRequest::for_part(parent, "text", "text").with_examples([ReflectiveExample {
-            side_info: Vec::new(),
-            case: Some(CaseId::new(1)),
-            input: "an example input".to_owned(),
-            score: Some(0.0),
-            output: Some("42".to_owned()),
-            feedback: "needs a modular arithmetic strategy".to_owned(),
-            source_refs: Vec::new(),
-        }]);
+        ReflectRequest::for_part(parent, "text", "text").with_examples([reflective_case(
+            Some(CaseId::new(1)),
+            "an example input",
+            Some("42"),
+            Some(0.0),
+            "needs a modular arithmetic strategy",
+        )]);
 
     let default_rendered = DefaultReflectionRenderer
         .render(ReflectionRenderInput::<TestProblem, WholeTextSurface> {

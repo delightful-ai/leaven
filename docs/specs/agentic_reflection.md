@@ -38,6 +38,10 @@ v0.0.2-alpha.
 The vision in §1 and the architecture in §3 stand. They are the target. They
 are just not the current sprint.
 
+The typed `ArtifactReflector` / `ReflectionWorkspace` vocabulary used by
+Phase 1 is owned by `docs/specs/typed_signature_adapter_contract.md`. This
+spec retains the Phase 1-N narrative; the implementation contract lives there.
+
 ## 1. Vision
 
 A GEPA reflection step can run a real agent inside a workspace that holds the
@@ -168,21 +172,36 @@ durable receipts        each attempt records a StageAttemptReceipt for resume
 `AgentBacked` and `AgenticProposer` converge into this single path. Neither
 half-path survives as a parallel product surface (§7 governs the interim).
 
-### 3.2 Reflection input
+### 3.2 Reflection as a typed `ArtifactReflector`
 
-The reflector is handed a value, not just graph ids:
+The reflector is handed a typed value, not just graph ids. The shape is
+expressed as an `ArtifactReflector` impl (see
+`docs/specs/typed_signature_adapter_contract.md` §2):
 
-```text
-GepaReflectionInput {
-    artifact:  P::Artifact            // materialized into the workspace
-    examples:  Vec<ReflectiveExample> // presented in the directive / as files
-    part:      S::PartId              // the part under edit
-    refs:      Vec<InfoRef>           // lowered into the proposal's informed_by
+```rust
+pub trait ArtifactReflector: Send + Sync {
+    type Input: Send + Sync;
+    type Change: Send + Sync;
+    type Error: std::error::Error + Send + Sync + 'static;
+
+    fn reflection_id(&self) -> &'static str;
+    fn project<'a>(&'a self, input: &'a Self::Input, view: &'a mut WorkspaceView<'_>)
+        -> impl Future<Output = Result<(), Self::Error>> + Send + 'a;
+    fn read_back<'a>(&'a self, input: &'a Self::Input, view: &'a WorkspaceView<'_>, session: &'a AgentSession)
+        -> impl Future<Output = Result<ReadbackResult<Self::Change>, Self::Error>> + Send + 'a;
 }
 ```
 
+Per-artifact crates own `Input` / `Change` types and the impl. The generic
+`ReflectionWorkspace` runner (also in
+`docs/specs/typed_signature_adapter_contract.md` §2) owns the workspace
+transaction: write `TASK.md` / `MANIFEST.json` / `AGENTS.md`, call `project`,
+lay out `cases/`/`cross_case/` per layout config, run the agent session via
+`AgentRuntime`, call `read_back`, harvest session attachments, clean up.
+
 The optimizer loop is graph-connected; resolving `parent -> artifact` and
-packing this value is the same move it already makes to build the examples.
+packing the typed `Input` is the same move it already makes to build the
+reflective dataset.
 
 ### 3.3 Materialization is the artifact's decision
 
@@ -197,6 +216,13 @@ the projection and the inverse read-back (`read_back_change`). Leaven currently
 has two materialization traits — `leaven_engine::Materializer<P, T>` and
 `leaven_stage::MaterializableArtifact`. Convergence must pick one seam; this
 spec does not yet mandate which (§8).
+
+The `ReflectionWorkspace` runner composes over the artifact's `project` and
+`read_back` methods. The artifact crate continues to own how its content lands
+on disk under `target/current/` and how the diff reads back into a typed
+`Change`. The runner owns the rest: `MANIFEST.json` writing,
+`cases/`/`cross_case/` layout, transcript capture, workspace cleanup, and
+progressive trace disclosure.
 
 ### 3.4 Trust boundary
 
@@ -218,18 +244,30 @@ Phases are ordered. Earlier phases do not depend on later ones.
 
 Route GEPA agent reflection through a materializing agentic proposer.
 
-- Add `GepaReflectionInput` (§3.2).
-- Add `impl GepaReflector<P, S>` for the agentic-backed reflector; bridge
-  `ReflectRequest` -> the agentic run input.
-- Add a `Renderer` producing `AgentInstructions` for the GEPA reflection
-  directive. `DefaultReflectionRenderer` is the wrong trait (it yields an
-  `LmRequest`) and is not reused.
-- Compose a `Materializer` over `SkillBankMaterializer`; reuse
-  `SkillBankWorkspaceProposalParser` for read-back.
-- The resulting proposal is `ProposalEffect::Change` with `informed_by` from
-  `GepaReflectionInput::refs`.
-- Tests: a real end-to-end agentic reflection test over a skill bank.
-- `gepa_stage_proposer` / `AgentBacked` remain in place as **marked
+- Add `ArtifactReflector` trait + `ReflectionWorkspace` runner +
+  `ReadbackResult` + `ReflectionLayoutConfig` + `ReflectionError` to
+  `leaven-agentic` (see `docs/specs/typed_signature_adapter_contract.md` §2
+  for the public surface).
+- Implement `SkillBankReflector: ArtifactReflector` in
+  `leaven-gepa-agentic-skill`. `project` materializes the skill bank under
+  `target/current/<skill-name>/<path>`. `read_back` diffs the tree, validates
+  the resulting `SkillBank`, returns a typed `SkillBankChange` inside
+  `ReadbackResult::Valid` or `ReadbackResult::Invalid` with diagnostics when
+  the agent's edits break the contract.
+- Promote `ReflectiveExample` to `ReflectiveCase { runs: Vec<ReflectiveRun> }`
+  + `ReflectiveValue` + `Checks` in `leaven-gepa::reflection` (see
+  `gepa_reflection_evidence_visibility.md` §3). Add `Attachment` +
+  `AttachmentKind` to `leaven-evidence` per
+  `docs/specs/typed_signature_adapter_contract.md` §3.2; `leaven-gepa`
+  re-exports as `leaven_gepa::Attachment` for ergonomics.
+- Collapse `leaven-gepa-agentic-skill`'s bespoke `renderer.rs` /
+  `materializer.rs` / `parser.rs` into the single `ArtifactReflector` impl.
+- The resulting proposal is `ProposalEffect::Change` with `informed_by`
+  computed by Leaven, not by the agent, from the reflect-request's
+  `source_refs` plus per-case / per-run refs carried in the reflective dataset.
+- Tests: an end-to-end agentic reflection test over a skill bank, plus the
+  `leaven doctor proposal-roundtrip --json` byte-stable gate.
+- The earlier `gepa_stage_proposer` / `AgentBacked` path remains as **marked
   scaffolding** (§7).
 
 Outcome: agentic GEPA reflection works for skill-bank artifacts.

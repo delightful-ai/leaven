@@ -31,6 +31,7 @@ pub mod attribution {
     pub trait AttributionKey: Eq + std::hash::Hash + Clone + Send + Sync + 'static {}
     impl<T> AttributionKey for T where T: Eq + std::hash::Hash + Clone + Send + Sync + 'static {}
 }
+pub mod attachment;
 pub mod casewise;
 pub mod command;
 pub mod diff {
@@ -63,6 +64,7 @@ pub mod score_vector {
 pub mod string {
     pub struct StringEvidence;
 }
+pub use attachment::{Attachment, AttachmentKind};
 pub use attribution::{AttributableEvidence, Attribution, AttributionKey};
 pub use casewise::{CaseOutcome, CasewiseEvidence};
 pub use command::{
@@ -90,9 +92,9 @@ pub mod prelude {
         AgentAnalystRole, AgentPatchMergeDecision, AgentPatchMergeNode, AgentPatchMergeNodeInput,
         AgentPatchMergeTreeError, AgentPatchMergeTreeEvidence, AgentTrajectoryAnalysisKind,
         AgentTrajectoryAnalysisRecord, AgentTrajectoryCorpusError, AgentTrajectoryCorpusEvidence,
-        AgentTrajectoryEvidence, AgentTrajectoryEvidenceInput, AgentTrajectoryOutcome,
-        AttributableEvidence, CaseAssessmentEvidence, CaseOutcome, CasewiseEvidence,
-        CommandEvidence, CommandRecord, DiffEvidence, Direction, JsonEvidence,
+        AgentTrajectoryEvidence, AgentTrajectoryEvidenceInput, AgentTrajectoryOutcome, Attachment,
+        AttachmentKind, AttributableEvidence, CaseAssessmentEvidence, CaseOutcome,
+        CasewiseEvidence, CommandEvidence, CommandRecord, DiffEvidence, Direction, JsonEvidence,
         ListwiseRankingEvidence, MixedEvidence, OutputRecord, PairwiseJudgmentEvidence,
         ScalarEvidence, ScalarEvidenceError, ScoreVectorEvidence, StringEvidence,
     };

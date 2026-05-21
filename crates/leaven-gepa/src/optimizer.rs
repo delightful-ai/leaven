@@ -945,8 +945,10 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
                 OptimizerError::with_source("GEPA reflective-dataset build failed", source)
             })?;
         let reflective_example_count = examples.len();
-        let reflective_cases: Vec<CaseId> =
-            examples.iter().filter_map(|example| example.case).collect();
+        let reflective_cases: Vec<CaseId> = examples
+            .iter()
+            .filter_map(|example| example.case_id)
+            .collect();
         self.record_event(GepaEventSummary::ReflectiveDatasetBuilt {
             records: reflective_example_count,
             cases: reflective_cases.clone(),

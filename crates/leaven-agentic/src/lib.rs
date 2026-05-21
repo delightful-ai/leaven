@@ -1,5 +1,6 @@
 //! Agentic stage adapters.
 
+mod artifact_reflector;
 mod case;
 mod case_evaluator;
 mod case_record;
@@ -12,6 +13,10 @@ mod proposer;
 mod repair;
 mod repairing_proposer;
 
+pub use artifact_reflector::{
+    ArtifactReflector, ReadbackDiagnostic, ReadbackResult, ReflectionError, ReflectionLayoutConfig,
+    ReflectionRunOutcome, ReflectionSessionAttachment, ReflectionWorkspace,
+};
 pub use case::{
     AgentCase, AgentWorkload, CaseFiles, CaseInput, CaseMessage, CasePartitionId, CasePartitions,
     CaseSuite, CaseTarget, SetupScript, WorkspaceRequirement,
@@ -54,13 +59,15 @@ pub mod prelude {
         AgentRunPreflightReport, AgentWorkload, AgenticAdapterError, AgenticCostInspection,
         AgenticEvaluator, AgenticEvaluatorConfig, AgenticInspectionWarning, AgenticParseError,
         AgenticProposer, AgenticProposerConfig, AgenticRepairError, AgenticRunInput,
-        AgenticRunInspection, CASE_RUN_RECORD_METADATA_KEY, CaseCheckpointPolicy, CaseFiles,
-        CaseInput, CaseMessage, CasePartitionId, CasePartitions, CaseSuite, CaseTarget,
-        EvaluationInputBuilder, EvidenceParser, FailOnError, FailedAgentCaseRun, FiniteRatio,
-        PROPOSAL_REPAIR_ATTEMPTS_METADATA_KEY, PreflightFinding, PreflightSeverity,
-        PresenterDryRun, ProposalParser, ProposalRepairAttemptOutcome, ProposalRepairAttemptRecord,
-        ProposalRepairFeedback, ProposalRepairInspection, ProposalRepairPolicy,
-        ProposalRepairPromptBuilder, RepairingAgenticProposer, RepairingAgenticProposerConfig,
+        AgenticRunInspection, ArtifactReflector, CASE_RUN_RECORD_METADATA_KEY,
+        CaseCheckpointPolicy, CaseFiles, CaseInput, CaseMessage, CasePartitionId, CasePartitions,
+        CaseSuite, CaseTarget, EvaluationInputBuilder, EvidenceParser, FailOnError,
+        FailedAgentCaseRun, FiniteRatio, PROPOSAL_REPAIR_ATTEMPTS_METADATA_KEY, PreflightFinding,
+        PreflightSeverity, PresenterDryRun, ProposalParser, ProposalRepairAttemptOutcome,
+        ProposalRepairAttemptRecord, ProposalRepairFeedback, ProposalRepairInspection,
+        ProposalRepairPolicy, ProposalRepairPromptBuilder, ReadbackDiagnostic, ReadbackResult,
+        ReflectionError, ReflectionLayoutConfig, ReflectionRunOutcome, ReflectionSessionAttachment,
+        ReflectionWorkspace, RepairingAgenticProposer, RepairingAgenticProposerConfig,
         ScoredAgentCaseRun, ScorerDryRun, SetupScript, ToolApprovalPolicy, WorkspaceRequirement,
     };
 }

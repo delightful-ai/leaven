@@ -50,11 +50,11 @@ pub use error::{ErrorKind, ErrorRecord, IntoErrorRecord, Retryability};
 pub use fingerprint::{Fingerprint, FingerprintBuilder};
 pub use finite::{FiniteF64, FiniteF64Error};
 pub use ids::{
-    AgentRuntimeId, AgentSessionId, ApplyAttemptId, AssessmentId, BlobRef, CandidateId, CaseId,
-    CheckpointId, ContentId, EvaluationRequestId, EvaluationSetId, EvaluatorId, EvidenceRef,
-    IterationId, PopulationId, ProposalBatchId, ProposalId, ProposerId, RenderId, RendererId,
-    ResolvedEvaluationSetId, RunId, StageAttemptReceiptId, StageCallId, StageId, StageQueryId,
-    StopperId, WorkspaceEntryId, WorkspaceId,
+    AgentId, AgentRuntimeId, AgentSessionId, ApplyAttemptId, AssessmentId, BlobRef, CandidateId,
+    CaseId, CaseRunId, CheckpointId, ContentId, EvaluationRequestId, EvaluationSetId, EvaluatorId,
+    EvidenceRef, IterationId, PopulationId, ProposalBatchId, ProposalId, ProposerId, RenderId,
+    RendererId, ResolvedEvaluationSetId, RunId, StageAttemptReceiptId, StageCallId, StageId,
+    StageQueryId, StopperId, TraceRef, WorkspaceEntryId, WorkspaceId,
 };
 pub use metadata::{MetadataBag, MetadataKey, MetadataValue};
 pub use stage::{

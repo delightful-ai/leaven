@@ -934,6 +934,17 @@ Both modes feed the same proposer-owned validity loop in §4. The proposer shoul
 not return a batch until the parsed proposal has passed local validation
 against the graph snapshot visible to that proposer.
 
+For agentic GEPA reflection, the SkillBank consumer is a
+`SkillBankReflector: ArtifactReflector` (see
+`docs/specs/typed_signature_adapter_contract.md` §4). Its `project`
+materializes the SkillBank into `target/current/<skill-name>/<path>`; its
+`read_back` diffs the tree, validates the resulting bank, and returns a typed
+`SkillBankChange`, or `ReadbackResult::Invalid` with diagnostics when the agent
+broke the contract. The thin `GepaSkillBankAgenticReflector`, which implements
+`GepaReflector`, wraps the `ReflectionWorkspace::run` call; the bespoke
+`renderer.rs` / `materializer.rs` / `parser.rs` triplet in
+`leaven-gepa-agentic-skill` is superseded.
+
 Parser laws for workspace readback:
 
 - **No graph mutation.** A parser returns `ProposalBatch`; only `RunContext`
@@ -1082,6 +1093,15 @@ Telemetry laws:
   derived from a larger transcript
 - generic retrieval and utility policies may consume `SkillUseEvidence`, but
   paper-specific inference stays in the evaluator or reproduction crate
+
+For agentic reflection, `AgentSkillEvidence.transcript: TraceRef` flows into a
+typed `Attachment::Transcript(TraceRef)` on the corresponding `ReflectiveRun`
+(see `docs/specs/typed_signature_adapter_contract.md` §3 and
+`gepa_reflection_evidence_visibility.md` §3). `skill_events:
+Vec<SkillUseEvent>` flows into `Attachment::Json` named `skill_events`; there
+is no dedicated `ToolCalls` variant. Artifact-specific evidence stays out of
+the generic `ReflectiveRun` shape; it arrives as an attachment contributed by
+the SkillBank evidence projection.
 
 ---
 
