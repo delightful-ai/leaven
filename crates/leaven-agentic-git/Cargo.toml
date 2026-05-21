@@ -1,0 +1,25 @@
+[package]
+name = "leaven-agentic-git"
+description = "Agentic Git program materialization and readback adapters for Leaven."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+leaven-artifact-git = { workspace = true }
+leaven-core = { workspace = true }
+leaven-engine = { workspace = true }
+leaven-kernel = { workspace = true }
+leaven-workspace = { workspace = true }
+leaven-workspace-git = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+futures = { workspace = true }
+leaven-workspace-local = { workspace = true }
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

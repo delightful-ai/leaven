@@ -2350,6 +2350,7 @@ version = "0.0.0"
 dependencies = [
  "futures",
  "leaven-agentic",
+ "leaven-agentic-git",
  "leaven-agentic-skill",
  "leaven-artifact-git",
  "leaven-artifact-jj",
@@ -2478,6 +2479,22 @@ dependencies = [
  "leaven-workspace-local",
  "serde",
  "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "leaven-agentic-git"
+version = "0.0.0"
+dependencies = [
+ "futures",
+ "leaven-artifact-git",
+ "leaven-core",
+ "leaven-engine",
+ "leaven-kernel",
+ "leaven-workspace",
+ "leaven-workspace-git",
+ "leaven-workspace-local",
+ "tempfile",
  "thiserror 2.0.18",
 ]
 
