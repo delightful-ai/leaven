@@ -57,7 +57,10 @@ Current useful substrate:
   manifest/body/file/reference surfaces. The current card is the manifest-only
   routing catalog view over names, descriptions, and generic metadata. The
   route registry is an explicit pool/key overlay over a validated bank; learned
-  utility/retrieval counters remain outside `SkillBank`.
+  utility/retrieval counters remain outside `SkillBank`. `SkillTokenProfile`
+  now records tokenizer-identified token counts for manifest descriptions,
+  `SKILL.md` bodies, and direct `references/*.md` modules, while leaving exact
+  tokenizer implementations and paper cost curves outside the artifact crate.
 - `leaven-agentic-skill` owns skill-bank materialization, workspace readback,
   diffs, and proposal parsing for agent-authored skill changes.
 - `leaven-agentic` has proposer repair policy support.
@@ -723,11 +726,20 @@ Leaven primitive blockers:
   first Leaven-owned artifact projections: manifest description/frontmatter,
   `SKILL.md` body, and direct `references/*.md` modules. Remaining SkillReducer
   surface blockers are core/background/example/template classification views,
-  progressive-disclosure routing metadata, and token-cost annotations;
+  progressive-disclosure routing metadata, and paper-specific token-cost
+  annotations;
+- tokenizer-agnostic skill token profiling now exists in
+  `leaven-artifact-skill`: descriptions and `SKILL.md` bodies are counted as
+  always-loaded context, direct `references/*.md` modules are counted as
+  progressive-disclosure context, scripts and non-markdown files are excluded,
+  non-UTF-8 markdown references are refused, and before/after comparisons
+  require matching tokenizer ids. Remaining SkillReducer token blockers are an
+  exact `cl100k_base` tokenizer adapter, paper cost curves, route-trigger
+  probabilities, and report/dossier integration;
 - route-equivalence oracle abstraction plus provider-specific real-trigger
   event parser;
 - ddmin/minimization primitive over semantic units with restore policy;
-- skill token-cost model and tokenizer adapter;
+- exact SkillReducer tokenizer adapter plus token-cost model over paper runs;
 - task-generation/evaluation dossier with deterministic verifier support and
   LLM judge separation.
 
@@ -763,8 +775,11 @@ Start with these generic primitives as failures expose them:
    missing paper source manifests for EvoSkill remain.
 7. Skill optimization surfaces: manifest description/frontmatter, `SKILL.md`
    body, and direct `references/*.md` module surfaces exist in
-   `leaven-artifact-skill`; core/background/example/template item views,
-   progressive-disclosure routing metadata, and token-cost accounting remain.
+   `leaven-artifact-skill`; tokenizer-agnostic token profiles now account for
+   description/body/direct-reference context under a caller-provided tokenizer.
+   Core/background/example/template item views, progressive-disclosure routing
+   metadata, exact tokenizer adapters, paper cost curves, and run-level token
+   reporting remain.
 8. Route equivalence and trigger evidence: simulated route oracle plus real
    provider/runtime trigger parser.
 9. Utility/retrieval/pruning substrate: `SkillUtilityState` now covers finite
