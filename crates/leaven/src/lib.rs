@@ -54,6 +54,9 @@ pub use leaven_workspace_git as workspace_git;
 #[cfg(feature = "agentic")]
 pub use leaven_agentic as agentic;
 
+#[cfg(feature = "agentic-git")]
+pub use leaven_agentic_git as agentic_git;
+
 #[cfg(feature = "skill")]
 pub use leaven_artifact_skill as skill;
 
