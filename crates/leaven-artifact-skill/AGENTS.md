@@ -1,5 +1,5 @@
 ## Boundary
-This crate owns the Agent Skills artifact family: `SkillBank`, `SkillFolder`, `SkillFile`, `SkillCard`, `SkillRouteRegistry`, validated skill names/paths, `SKILL.md` parsing, metadata, change records, and explicit folder/manifest/body/file/reference surfaces.
+This crate owns the Agent Skills artifact family: `SkillBank`, `SkillFolder`, `SkillFile`, `SkillCard`, `SkillRouteRegistry`, validated skill names/paths, `SKILL.md` parsing, metadata, change records, explicit folder/manifest/body/file/reference surfaces, and skill-structure token profiles.
 
 It models skills as artifacts and edit surfaces. It does not run agents, materialize workspaces, call provider CLIs, parse agent sessions, or decide optimizer policy.
 
@@ -11,6 +11,9 @@ It models skills as artifacts and edit surfaces. It does not run agents, materia
   `src/route.rs`.
 - Put bank-level change vocabulary in `src/change.rs` and `src/bank.rs`.
 - Put edit-surface projections in `src/surface.rs`; agentic workspace materializers and proposal parsers belong in `leaven-agentic-skill`.
+- Put tokenizer-agnostic skill context accounting in `src/token.rs`. Tokenizer
+  implementations, provider cost schedules, route-trigger probabilities, and
+  paper-specific cost curves stay outside this crate.
 - Put Codex-specific protocol or CLI details in `leaven-agent-codex-*`, not here.
 
 ## Local Helper Stack
@@ -33,6 +36,10 @@ It models skills as artifacts and edit surfaces. It does not run agents, materia
   `SkillFileSurface`, and `SkillReferenceSurface` depending on whether an
   optimizer is editing folders, frontmatter, the always-loaded body, arbitrary
   files, or direct `references/*.md` progressive-disclosure modules.
+- Use `SkillTokenProfile` when callers need stable description/body/direct
+  reference token accounting over a validated `SkillBank`. The caller supplies a
+  `SkillTokenizer`; this crate records the tokenizer id and refuses before/after
+  comparisons across different tokenizer ids.
 
 ## Local Bait
 - A `SkillBankChange::WriteFile` is artifact mutation, not filesystem execution. Workspace side effects belong behind workspace/agentic adapters.
@@ -46,10 +53,14 @@ It models skills as artifacts and edit surfaces. It does not run agents, materia
   trees, assets, and non-markdown files stay behind the file surface or a more
   specific future surface.
 - YAML metadata is a generic bag after required fields are validated; do not turn provider/runtime-specific frontmatter into core skill artifact law here.
+- `SkillTokenProfile` counts structure; it does not guess exact tokenizer
+  behavior. Exact `cl100k_base`, Claude Code routing budgets, provider pricing,
+  and SkillReducer paper cost curves belong in tokenizer/evaluation adapters.
 - Rename is a semantic skill operation here: folder name and `SKILL.md` name
   move together. Do not copy generic path-surface rename behavior into this
   artifact family.
 
 ## Proof Anchors
 - `cargo nextest run -p leaven-artifact-skill --test skill_artifact` proves skill name/path validation, `SKILL.md` parsing, manifest-derived skill cards, route registry pool/key overlays, folder/bank invariants, rollback, rename semantics, content identity including permissions, and all five skill surfaces.
+- `cargo nextest run -p leaven-artifact-skill --test skill_token_profile` proves tokenizer-agnostic description/body/direct-reference token accounting, non-UTF-8 reference refusal, before/after deltas, and tokenizer-id mismatch refusal.
 - `cargo test -p leaven --test topology_contract` proves this crate stays an artifact/surface crate and Codex app-server protocol types remain leaf-only.
