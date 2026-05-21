@@ -66,8 +66,9 @@ Current useful substrate:
 - `leaven-agentic-git` owns Git-program materialization/readback for
   `GitProgramArtifact`: durable bare-store commits are checked out into
   disposable workspaces, dirty or committed workspace children are frozen and
-  imported back into the durable store, and the result is a typed
-  `GitProgramChange` for later graph admission.
+  imported back into the durable store, explicit `output/proposal.patch` and
+  `output/proposal.bundle` artifacts can be imported before checkout fallback,
+  and the result is a typed `GitProgramChange` for later graph admission.
 - `leaven-agentic` has proposer repair policy support.
 - `leaven-gepa-agentic-skill` bridges GEPA reflection to skill-bank proposal.
 - 2026-05-20: `leaven-gepa-agentic-skill` is being migrated from bespoke
@@ -107,9 +108,10 @@ Current known gaps:
   check out, fsck, import child commits, capture tracked files and branch/tag
   refs, restore a selected ref, and delete branch/tag refs.
   `crates/leaven-agentic-git` can materialize multi-repo `GitProgramArtifact`
-  values into proposer workspaces and read back imported child commits as typed
-  artifact changes. EvoSkill still needs run-loop integration for checkpointed
-  program/frontier state, paper score metadata, and graph admission.
+  values into proposer workspaces and read back imported child commits or
+  explicit output patch/bundle proposals as typed artifact changes. EvoSkill
+  still needs run-loop integration for checkpointed program/frontier state,
+  paper score metadata, and graph admission.
 - The P5 EvoSkill path is not OfficeQA or SealQA. It can inspect one real
   OfficeQA sample and one real SealQA sample without live spend, but still lacks
   the paper datasets, paper splits, full frontier loop, feedback-history
