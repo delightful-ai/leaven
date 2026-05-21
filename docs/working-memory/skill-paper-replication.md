@@ -221,6 +221,30 @@ Next attempt:
   OfficeQA skill-merge exact match is 67.9 in prose and 68.1 in the checked-in
   table.
 
+2026-05-21 full `tmp/` workspace recheck:
+
+- After syncing the full main `tmp/` tree into
+  `/Users/darin/src/personal/leaven-trace2skill-ws`, the active paper workspace
+  has the full local EvoSkill/OfficeQA substrate (`tmp/repros/evoskill` 670M,
+  `tmp/repros/officeqa` 46G, `tmp/replication/evoskill` 28K). Re-running the
+  bounded missing-artifact search still did not find EvoSkill's
+  `solved_dataset.csv`, `full_run_new_evolved_final_two.pkl`,
+  `ablation_run_incorrect.csv`, local `seal-0.csv`, `deep_cc_runs`, or
+  BrowseComp sample/result pickle.
+- Fetching source refs without checkout showed EvoSkill `origin/main` now at
+  `8d503845c8d66a2fa458f06de3988d709774e88a`, while the local checkout remains
+  `e881c715dcabb525b30981c4a8e344937e3f944b`. Current EvoSkill `origin/main`
+  and tag `v1.2.0` still expose only sample/demo OfficeQA data, not the missing
+  paper category/split artifacts.
+- OfficeQA is sharper than before: the configured remote is
+  `https://github.com/databricks/officeqa.git`, remote `main` now points at
+  `49e893d97db5d5d32fb7fbb73d913e9e2829c6d9`, and the local CSV-bearing commit
+  `78748e5d669d7f8796bb5ad26556a260d5bb7e03` is not contained in the fetched
+  remote branches after the upstream force update. The local CSVs are still
+  useful evidence, but using them for replication now requires an explicit
+  source-pin/archive decision and still does not provide EvoSkill's paper
+  `category` / `pseudo_labels` split manifest.
+
 ### Trace2Skill (`arx_2603.25158`)
 
 Source anchors:
