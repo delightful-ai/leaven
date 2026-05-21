@@ -281,6 +281,15 @@ The checked-out upstream release includes:
   artifacts, per-node output patches, and optional final diff. It records what
   a merge pipeline did; it does not schedule merges, decide prevalence, parse
   patch JSON, or apply edits to a skill directory.
+- `examples/trace2skill_spreadsheetbench` can now import saved upstream
+  Stage 3 JSON merge outputs into `AgentPatchMergeTreeEvidence`: saved
+  `map_patches`, `merge_level_N/merged_*.json`, `final_patch.json`, optional
+  `translated_final_patch.json`, and optional `applied_diffs.patch` become
+  checkpointed merge nodes and final diff refs after each JSON patch validates
+  against the parent skill bank. Because the default upstream saved directory
+  lacks explicit accepted/discarded decisions, this import reconstructs accepted
+  inputs from deterministic batch order and records that limitation instead of
+  inventing discard rationale.
 
 Verification:
 
@@ -551,6 +560,28 @@ Verification:
   import slice.
 - `CARGO_INCREMENTAL=0 cargo test -p leaven --test topology_contract` passed
   4/4 tests on 2026-05-20 after the saved MAP parse-failure import slice.
+- `CARGO_INCREMENTAL=0 cargo test -p trace2skill_spreadsheetbench --test
+  patch_replay imports_saved_json_patch_merge_outputs_as_merge_tree_evidence`
+  first failed on 2026-05-20 with missing
+  `import_trace2skill_saved_json_patch_merge_evidence`, then passed after
+  importing saved Stage 3 JSON merge outputs into
+  `AgentPatchMergeTreeEvidence`.
+- `rustfmt --check --config skip_children=true
+  examples/trace2skill_spreadsheetbench/src/lib.rs
+  examples/trace2skill_spreadsheetbench/src/patch_replay.rs
+  examples/trace2skill_spreadsheetbench/tests/patch_replay.rs` passed on
+  2026-05-20 after the saved merge-evidence import slice.
+- `CARGO_INCREMENTAL=0 cargo test -p trace2skill_spreadsheetbench` passed on
+  2026-05-20 with 25/25 tests after copying only the required ignored
+  Trace2Skill fixture paths into the dedicated workspace `tmp/`.
+- `CARGO_INCREMENTAL=0 cargo clippy -p trace2skill_spreadsheetbench
+  --all-targets -- -D warnings` passed on 2026-05-20 after narrowing helper
+  borrows and removing a redundant closure in the saved merge-evidence test.
+- `CARGO_INCREMENTAL=0 cargo nextest run -p trace2skill_spreadsheetbench`
+  passed on 2026-05-20 with 25/25 tests after the saved merge-evidence import
+  slice.
+- `CARGO_INCREMENTAL=0 cargo test -p leaven --test topology_contract` passed
+  4/4 tests on 2026-05-20 after the saved merge-evidence import slice.
 
 ## Current Blockers
 
@@ -569,13 +600,14 @@ Leaven-owned remaining primitives before faithful Trace2Skill replication:
 - live hierarchical merge execution over analyst patch outputs. Leaven now has
   generic `AgentPatchMergeTreeEvidence` and skill-specific
   `SkillPatchMergeTree` provenance values plus JSON patch replay/application
-  and a strict saved-output loader, but no Trace2Skill merge scheduler,
+  and a strict saved-output loader/importer, but no Trace2Skill merge scheduler,
   prevalence policy, or model-backed merge operator has run;
 - real upstream saved evolution output has not been generated or imported
   locally yet. The loader is tested against upstream-shaped fixtures and can
-  now update fan-out evidence from saved MAP patches, but the next proof needs
-  either a no-spend/small upstream output directory or live-run capture of
-  translated exact map/merge patches plus explicit merge decisions;
+  now update fan-out evidence from saved MAP patches and import saved merge
+  outputs into merge-tree evidence, but the next proof needs either a
+  no-spend/small upstream output directory or live-run capture of translated
+  exact map/merge patches plus explicit merge decisions;
 - the exact case `13-1` now has repo-owned no-spend prompt/input and workbook
   scoring surfaces plus a durable prepared run directory and post-run scoring /
   trajectory evidence contract. The no-spend golden-copy self-check trajectory

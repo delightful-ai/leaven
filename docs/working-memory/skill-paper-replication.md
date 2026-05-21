@@ -340,6 +340,11 @@ Leaven primitive blockers:
   present. This is still no-spend loader proof; no live analyst or merge call
   has run, and the upstream saved directory does not preserve explicit
   accepted/discarded decision rationale.
+- `examples/trace2skill_spreadsheetbench` can import that same saved Stage 3
+  JSON directory shape into `AgentPatchMergeTreeEvidence`, preserving map,
+  merge, final, and translated-final nodes plus optional `applied_diffs.patch`
+  after validating each saved JSON patch. It reconstructs accepted inputs from
+  deterministic batch order and records the lost discarded-rationale limitation.
 - `examples/trace2skill_spreadsheetbench` now has a one-case no-spend
   inspection/rendering surface for exact SpreadsheetBench case `13-1`: it reads
   `tmp/paper_exact_samples/trace2skill/spreadsheetbench_verified/dataset_first_case.json`,
@@ -408,7 +413,9 @@ Leaven primitive blockers:
   scheduler and writes or imports real saved/live Stage 2/3 JSON artifacts
   consumed by the replay seam, ideally with translated exact map/merge patches
   and explicit merge decisions rather than only the default upstream saved
-  directory shape;
+  directory shape. The saved-directory evidence importer now exists, but it can
+  only reconstruct accepted inputs from output order when the upstream run did
+  not save discard rationale;
 - result matrix/reporting for cross-model and OOD transfer.
 
 Spend/data risks:
@@ -481,6 +488,10 @@ Spend/data risks:
   `imports_saved_map_patches_into_analyst_fanout_by_batch_index`, proving
   upstream `batch_index` maps parsed `map_patches/patch_*.json` back into
   pending fan-out calls as succeeded response blobs.
+- The Trace2Skill example now covers saved Stage 3 merge-output import through
+  `imports_saved_json_patch_merge_outputs_as_merge_tree_evidence`, proving
+  upstream saved JSON patch outputs become `AgentPatchMergeTreeEvidence` nodes
+  with final translated-patch and applied-diff artifact refs.
 - Restored tiny live harness preflights passed in main Leaven on 2026-05-20:
   `tmp/memento_skills_read_write/20260520T204154Z/preflight.json`,
   `tmp/skillreducer_tiny/20260520T204154Z/preflight.json`,
