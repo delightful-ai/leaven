@@ -3,8 +3,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use leaven_core::{CaseSetVersion, PartitionId};
 use leaven_eval::{
     Case, Dataset, DatasetError, DatasetSplitManifest, DatasetSplits, DatasetSplitsError,
-    EvaluationUse, FinalTestPolicy, RowOrderSplitBuilder, SplitPolicy, SplitRole, SplitUse,
-    SplitUsePolicy, SplitUsePolicyError, StratifiedSplitBuilder,
+    EvaluationUse, ExplicitSplitBuilder, FinalTestPolicy, RowOrderSplitBuilder, SplitPolicy,
+    SplitRole, SplitUse, SplitUsePolicy, SplitUsePolicyError, StratifiedSplitBuilder,
 };
 use leaven_kernel::{CaseId, MetadataBag, MetadataKey, MetadataValue};
 
@@ -39,7 +39,7 @@ fn dataset_from_case_envelopes_preserves_ids_and_metadata() {
     let mut metadata = MetadataBag::new();
     metadata.insert("source_id", MetadataValue::String("aime/2024/1".to_owned()));
     let dataset = Dataset::from_cases(vec![
-        Case::targeted(CaseId::new(42), "problem", "answer").with_metadata(metadata),
+        Case::targeted(CaseId::new(42), "problem", "answer").with_metadata(metadata)
     ])
     .unwrap();
 
@@ -415,6 +415,73 @@ fn row_order_split_builder_refuses_invalid_ranges_and_duplicate_roles() {
 }
 
 #[test]
+fn explicit_split_builder_preserves_paper_declared_membership() {
+    let known_cases = (0..6).map(CaseId::from_index).collect::<BTreeSet<_>>();
+    let splits = ExplicitSplitBuilder::new(known_cases)
+        .role_cases(
+            SplitRole::Train,
+            vec![
+                CaseId::from_index(0),
+                CaseId::from_index(3),
+                CaseId::from_index(5),
+            ],
+        )
+        .role_cases(SplitRole::Validation, vec![CaseId::from_index(1)])
+        .role_cases(
+            SplitRole::Test,
+            vec![CaseId::from_index(2), CaseId::from_index(4)],
+        )
+        .build(CaseSetVersion(
+            "evoskill-officeqa-paper-manifest-v1".to_owned(),
+        ))
+        .unwrap();
+
+    assert_eq!(
+        splits.cases(&SplitRole::Train.partition_id()),
+        Some(
+            [
+                CaseId::from_index(0),
+                CaseId::from_index(3),
+                CaseId::from_index(5),
+            ]
+            .as_slice()
+        )
+    );
+    assert_eq!(
+        splits.cases(&SplitRole::Validation.partition_id()),
+        Some([CaseId::from_index(1)].as_slice())
+    );
+    assert_eq!(
+        splits.cases(&SplitRole::Test.partition_id()),
+        Some([CaseId::from_index(2), CaseId::from_index(4)].as_slice())
+    );
+    assert_eq!(splits.policy(), &SplitPolicy::DisjointRequired);
+}
+
+#[test]
+fn explicit_split_builder_refuses_duplicate_roles_and_unknown_cases() {
+    let known_cases = BTreeSet::from([CaseId::from_index(0), CaseId::from_index(1)]);
+    let duplicate_role = ExplicitSplitBuilder::new(known_cases.clone())
+        .role_cases(SplitRole::Train, vec![CaseId::from_index(0)])
+        .role_cases(SplitRole::Train, vec![CaseId::from_index(1)])
+        .build(CaseSetVersion("duplicate-role".to_owned()))
+        .unwrap_err();
+    assert_eq!(
+        duplicate_role,
+        DatasetSplitsError::DuplicateSplitRole(SplitRole::Train)
+    );
+
+    let unknown_case = ExplicitSplitBuilder::new(known_cases)
+        .role_cases(SplitRole::Train, vec![CaseId::from_index(99)])
+        .build(CaseSetVersion("unknown-case".to_owned()))
+        .unwrap_err();
+    assert_eq!(
+        unknown_case,
+        DatasetSplitsError::UnknownCase(CaseId::from_index(99))
+    );
+}
+
+#[test]
 fn dataset_split_manifest_requires_declared_nonempty_roles() {
     let ordered_cases = (0..4).map(CaseId::from_index).collect::<Vec<_>>();
     let splits = RowOrderSplitBuilder::new(ordered_cases)
@@ -465,12 +532,10 @@ fn dataset_split_manifest_exposes_role_based_membership_and_policy() {
             .expect("test split exists"),
         &[CaseId::from_index(2), CaseId::from_index(3)]
     );
-    assert!(
-        manifest
-            .use_policy()
-            .use_for(&SplitRole::Test.partition_id())
-            .allows(&EvaluationUse::FinalTest)
-    );
+    assert!(manifest
+        .use_policy()
+        .use_for(&SplitRole::Test.partition_id())
+        .allows(&EvaluationUse::FinalTest));
     assert_eq!(
         manifest.required_roles(),
         &BTreeSet::from([SplitRole::Train, SplitRole::Test])
