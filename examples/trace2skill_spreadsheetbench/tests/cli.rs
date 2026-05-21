@@ -94,8 +94,49 @@ fn cli_compares_one_case_answer_as_json() {
     assert_eq!(json["passed"], true);
 }
 
+#[test]
+fn cli_prepares_one_case_run_dir_as_json() {
+    let fixture = Fixture::new();
+    let run_dir = fixture.temp.path().join("run");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_trace2skill_spreadsheetbench"))
+        .arg("--prepare-one-case-run")
+        .arg("--case")
+        .arg(&fixture.case_file)
+        .arg("--spreadsheet-dir")
+        .arg(&fixture.spreadsheet_dir)
+        .arg("--system-prompt")
+        .arg(&fixture.system_prompt)
+        .arg("--released-skill")
+        .arg(&fixture.released_skill)
+        .arg("--run-dir")
+        .arg(&run_dir)
+        .output()
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(json["case_id"], "13-1");
+    assert_eq!(json["status"], "blocked_missing_live_spreadsheet_agent");
+    assert!(json["prompt_file"]["path"]
+        .as_str()
+        .unwrap()
+        .ends_with("agent_prompt.md"));
+    assert!(json["manifest_file"]["path"]
+        .as_str()
+        .unwrap()
+        .ends_with("manifest.json"));
+    assert!(run_dir.join("agent_prompt.md").is_file());
+    assert!(run_dir.join("manifest.json").is_file());
+    assert!(run_dir.join("1_13-1_init.xlsx").is_file());
+}
+
 struct Fixture {
-    _temp: tempfile::TempDir,
+    temp: tempfile::TempDir,
     case_file: std::path::PathBuf,
     spreadsheet_dir: std::path::PathBuf,
     system_prompt: std::path::PathBuf,
@@ -134,7 +175,7 @@ impl Fixture {
         fs::write(&released_skill, "# xlsx\nUse workbook tooling.").unwrap();
 
         Self {
-            _temp: temp,
+            temp,
             case_file,
             spreadsheet_dir,
             system_prompt,

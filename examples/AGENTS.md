@@ -43,6 +43,13 @@ Each `pN_*` directory is a workspace package with a runnable binary. Keep reusab
   supplied workbook against the golden workbook. These do not prove trajectory
   generation, spreadsheet agent execution, model-backed analyst or merge calls,
   skill evolution, or paper metric reproduction.
+  `cargo test -p trace2skill_spreadsheetbench --test one_case_run --test cli`
+  plus `cargo run -p trace2skill_spreadsheetbench --
+  --prepare-one-case-run --run-dir <tmp-run-dir>` proves the exact case can be
+  staged into a durable no-spend run directory with an agent prompt, copied
+  init/golden workbooks, deterministic output path, and manifest naming
+  `live_spreadsheet_agent_execution` as the first missing primitive. This still
+  does not execute the spreadsheet agent or claim live/paper proof.
 
 ## Proof Classification
 - `product-proof`: an example that exercises the real public contract at the intended user layer, with no proxy substitution for the behavior being claimed.

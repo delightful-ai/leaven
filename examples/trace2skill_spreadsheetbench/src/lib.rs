@@ -1,5 +1,6 @@
 //! `Trace2Skill` `SpreadsheetBench` manifest lowering.
 
+mod one_case_run;
 mod patch_bridge;
 mod patch_replay;
 
@@ -24,6 +25,10 @@ use leaven_kernel::{
 };
 use serde::Deserialize;
 
+pub use one_case_run::{
+    prepare_trace2skill_one_case_run, Trace2SkillOneCaseRunInput, Trace2SkillOneCaseRunManifest,
+    Trace2SkillOneCaseRunReport, Trace2SkillOneCaseRunSourceArtifacts, Trace2SkillOneCaseRunStatus,
+};
 pub use patch_bridge::{
     apply_trace2skill_json_patch, lower_trace2skill_json_patch, Trace2SkillPatchError,
     Trace2SkillPatchLowering, Trace2SkillPatchLoweringInput,
