@@ -1,6 +1,8 @@
 //! Agentic Git program materialization and readback adapters.
 
 use std::collections::BTreeMap;
+use std::ffi::OsString;
+use std::fs;
 use std::path::{Path, PathBuf};
 
 use leaven_artifact_git::{
@@ -9,7 +11,7 @@ use leaven_artifact_git::{
 };
 use leaven_core::OptimizationProblem;
 use leaven_engine::{MaterializationReport, MaterializeContext, MaterializeError, Materializer};
-use leaven_kernel::{Cost, Metered};
+use leaven_kernel::{Cost, Metered, RunId};
 use leaven_workspace::{Command, CommandOutput, WorkspacePath, WorkspacePathError, WorkspaceView};
 use leaven_workspace_git::{GitCommitImportRequest, GitCommitImporter, GitWorkspaceGitError};
 
@@ -146,6 +148,7 @@ impl GitProgramReadback {
         workspace: &mut WorkspaceView<'_>,
     ) -> Result<Option<GitProgramChange>, GitAgenticGitError> {
         let mut changes = BTreeMap::new();
+        let repo_count = parent.repos().len();
         for (repo, repo_artifact) in parent.repos() {
             let checkout = workspace_path(
                 parent
@@ -159,6 +162,19 @@ impl GitProgramReadback {
                     return Err(GitAgenticGitError::UnsupportedTreeReadback { repo: repo.clone() });
                 }
             };
+
+            if let Some(imported) =
+                self.import_output_proposal(repo, repo_count, &checkout, parent_commit, workspace)?
+            {
+                changes.insert(
+                    repo.clone(),
+                    GitRepoChange::AdvanceTo {
+                        expected_parent: repo_artifact.revision().clone(),
+                        child: imported,
+                    },
+                );
+                continue;
+            }
 
             if !repo_dirty(workspace, &checkout)? {
                 let head = current_head(workspace, &checkout)?;
@@ -209,6 +225,38 @@ impl GitProgramReadback {
         }))
     }
 
+    fn import_output_proposal(
+        &self,
+        repo: &RepoKey,
+        repo_count: usize,
+        checkout: &WorkspacePath,
+        parent: &GitObjectId,
+        workspace: &mut WorkspaceView<'_>,
+    ) -> Result<Option<GitRevision>, GitAgenticGitError> {
+        if let Some(bundle) = output_proposal_path(workspace, repo, repo_count, "bundle")? {
+            return self.import_bundle(repo, &bundle, parent).map(Some);
+        }
+        if let Some(patch) = output_proposal_path(workspace, repo, repo_count, "patch")? {
+            run_git(
+                workspace,
+                Some(checkout),
+                ["reset", "--hard", parent.as_str()],
+            )?;
+            run_git(workspace, Some(checkout), ["clean", "-fd"])?;
+            run_git(
+                workspace,
+                Some(checkout),
+                ["apply", patch.to_string_lossy().as_ref()],
+            )?;
+            freeze_worktree(workspace, checkout)?;
+            let child = current_head(workspace, checkout)?;
+            return self
+                .import_child(repo, checkout, &child, parent, workspace)
+                .map(Some);
+        }
+        Ok(None)
+    }
+
     fn import_child(
         &self,
         repo: &RepoKey,
@@ -226,6 +274,77 @@ impl GitProgramReadback {
         })?;
         Ok(imported.revision().clone())
     }
+
+    fn import_bundle(
+        &self,
+        repo: &RepoKey,
+        bundle: &Path,
+        parent: &GitObjectId,
+    ) -> Result<GitRevision, GitAgenticGitError> {
+        let child = bundle_head(bundle)?;
+        let durable = self.stores.store_for(repo)?;
+        let temp = std::env::temp_dir().join(format!("leaven-git-bundle-{}", RunId::new()));
+        host_git(
+            None,
+            "git init --bare",
+            vec![
+                OsString::from("init"),
+                OsString::from("--bare"),
+                temp.as_os_str().to_os_string(),
+            ],
+        )?;
+        let cleanup = BundleImportCleanup { path: temp.clone() };
+        host_git(
+            Some(&temp),
+            "git fetch bundle parent",
+            vec![
+                OsString::from("fetch"),
+                durable.as_os_str().to_os_string(),
+                OsString::from(format!("+{parent}:refs/leaven/parents/{parent}")),
+            ],
+        )?;
+        host_git(
+            Some(&temp),
+            "git bundle verify",
+            vec![
+                OsString::from("bundle"),
+                OsString::from("verify"),
+                bundle.as_os_str().to_os_string(),
+            ],
+        )?;
+        host_git(
+            Some(&temp),
+            "git fetch bundle",
+            vec![
+                OsString::from("fetch"),
+                bundle.as_os_str().to_os_string(),
+                OsString::from(format!("+{child}:refs/leaven/proposals/{child}")),
+            ],
+        )?;
+        host_git(
+            Some(&temp),
+            "git fsck",
+            vec![OsString::from("fsck"), OsString::from("--strict")],
+        )?;
+        ensure_expected_parent(&temp, &child, parent)?;
+
+        host_git(
+            Some(durable),
+            "git fetch bundle proposal",
+            vec![
+                OsString::from("fetch"),
+                temp.as_os_str().to_os_string(),
+                OsString::from(format!("+{child}:refs/leaven/imported/{child}")),
+            ],
+        )?;
+        host_git(
+            Some(durable),
+            "git fsck",
+            vec![OsString::from("fsck"), OsString::from("--strict")],
+        )?;
+        cleanup.remove();
+        Ok(GitRevision::Commit(child))
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -242,6 +361,8 @@ pub enum GitAgenticGitError {
     UnsupportedTreeMaterialization { repo: RepoKey },
     #[error("tree readback is not implemented for repo `{repo}`")]
     UnsupportedTreeReadback { repo: RepoKey },
+    #[error("git bundle `{path}` does not contain a head")]
+    EmptyBundle { path: String },
     #[error(transparent)]
     Workspace(#[from] leaven_workspace::WorkspaceError),
     #[error(transparent)]
@@ -383,4 +504,120 @@ fn checkout_host_path(
     Ok(mount
         .join(workspace.root().to_host_relative())
         .join(checkout.to_host_relative()))
+}
+
+fn output_proposal_path(
+    workspace: &WorkspaceView<'_>,
+    repo: &RepoKey,
+    repo_count: usize,
+    extension: &str,
+) -> Result<Option<PathBuf>, GitAgenticGitError> {
+    let mount = workspace
+        .local_mount()
+        .ok_or(GitAgenticGitError::MissingLocalMount)?;
+    let output = mount
+        .join(workspace.root().to_host_relative())
+        .join("output");
+    let repo_specific = output.join(format!("{}.{}", repo.as_str(), extension));
+    if repo_specific.exists() {
+        return Ok(Some(repo_specific));
+    }
+    if repo_count == 1 {
+        let generic = output.join(format!("proposal.{extension}"));
+        if generic.exists() {
+            return Ok(Some(generic));
+        }
+    }
+    Ok(None)
+}
+
+fn bundle_head(bundle: &Path) -> Result<GitObjectId, GitAgenticGitError> {
+    let output = host_git(
+        None,
+        "git bundle list-heads",
+        vec![
+            OsString::from("bundle"),
+            OsString::from("list-heads"),
+            bundle.as_os_str().to_os_string(),
+        ],
+    )?;
+    let text = String::from_utf8(output)?;
+    let head = text
+        .split_whitespace()
+        .next()
+        .ok_or_else(|| GitAgenticGitError::EmptyBundle {
+            path: bundle.display().to_string(),
+        })?;
+    Ok(GitObjectId::new(head)?)
+}
+
+fn ensure_expected_parent(
+    repo: &Path,
+    child: &GitObjectId,
+    parent: &GitObjectId,
+) -> Result<(), GitAgenticGitError> {
+    let output = host_git(
+        Some(repo),
+        "git rev-list parent check",
+        vec![
+            OsString::from("rev-list"),
+            OsString::from("--parents"),
+            OsString::from("-n"),
+            OsString::from("1"),
+            OsString::from(child.as_str()),
+        ],
+    )?;
+    let text = String::from_utf8(output)?;
+    if text
+        .split_whitespace()
+        .skip(1)
+        .any(|p| p == parent.as_str())
+    {
+        return Ok(());
+    }
+    Err(GitAgenticGitError::Git(
+        GitWorkspaceGitError::UnexpectedParent {
+            commit: child.clone(),
+            expected_parent: parent.clone(),
+        },
+    ))
+}
+
+fn host_git(
+    cwd: Option<&Path>,
+    program: &'static str,
+    args: Vec<OsString>,
+) -> Result<Vec<u8>, GitAgenticGitError> {
+    let mut command = std::process::Command::new("git");
+    command.args(args);
+    if let Some(cwd) = cwd {
+        command.current_dir(cwd);
+    }
+    let output = command
+        .output()
+        .map_err(|source| GitWorkspaceGitError::CommandIo { program, source })?;
+    if output.status.success() {
+        return Ok(output.stdout);
+    }
+    Err(GitAgenticGitError::Git(GitWorkspaceGitError::Command {
+        program,
+        status: output.status.code(),
+        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+    }))
+}
+
+struct BundleImportCleanup {
+    path: PathBuf,
+}
+
+impl BundleImportCleanup {
+    fn remove(self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+impl Drop for BundleImportCleanup {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
 }

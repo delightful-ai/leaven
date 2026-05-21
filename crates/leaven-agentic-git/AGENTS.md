@@ -2,8 +2,9 @@
 This crate owns shape-specific agentic adapters for `GitProgramArtifact`.
 
 It materializes durable Git program artifacts into disposable workspaces and
-reads workspace Git mutations back into typed artifact changes. It may know
-`leaven-engine`, `leaven-artifact-git`, `leaven-workspace`, and
+reads workspace Git mutations or explicit `output/proposal.patch` /
+`output/proposal.bundle` artifacts back into typed artifact changes. It may
+know `leaven-engine`, `leaven-artifact-git`, `leaven-workspace`, and
 `leaven-workspace-git`.
 
 It must not own Git artifact identity, generic workspace backend contracts,
@@ -18,7 +19,11 @@ provider-specific agent protocol details.
   materialization request explicitly carries it.
 - Do not mount durable bare stores into proposer workspaces as a visibility
   boundary. Materialize disposable checkouts.
+- Output proposals are import formats, not admission decisions. This crate may
+  turn a patch or bundle into an imported child commit; graph advancement and
+  score comparison still belong above it.
 
 ## Verification
-- `cargo test -p leaven-agentic-git` proves Git program materialization and
-  readback behavior over `leaven-workspace-local`.
+- `cargo test -p leaven-agentic-git` proves Git program materialization,
+  checkout readback, and output patch/bundle proposal readback behavior over
+  `leaven-workspace-local`.

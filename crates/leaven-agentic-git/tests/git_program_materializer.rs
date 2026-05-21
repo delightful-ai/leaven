@@ -132,6 +132,127 @@ fn readback_imports_committed_workspace_child_before_returning_change() {
 }
 
 #[test]
+fn readback_imports_output_bundle_proposal_before_checkout_state() {
+    block_on(async {
+        let fixture = GitFixture::new();
+        let artifact = fixture.program_artifact();
+        let mut workspace = materialized_workspace(&fixture, &artifact).await;
+        let mut view = workspace.view();
+        configure_workspace_git(&mut view, "repos/program");
+        view.write_file(
+            &workspace_path("repos/program/program.txt"),
+            b"bundled child\n",
+        )
+        .unwrap();
+        workspace_git(&mut view, "repos/program", ["add", "program.txt"]);
+        workspace_git(
+            &mut view,
+            "repos/program",
+            ["commit", "-m", "bundled child"],
+        );
+        let child = workspace_git_output(&mut view, "repos/program", ["rev-parse", "HEAD"]);
+        let child = git_object(child.trim());
+        let output_dir = view.local_mount().unwrap().join("output");
+        fs::create_dir_all(&output_dir).unwrap();
+        let bundle = output_dir.join("proposal.bundle");
+        let child_range = format!("{}..HEAD", fixture.program_parent.object_id().as_str());
+        workspace_git(
+            &mut view,
+            "repos/program",
+            [
+                "bundle",
+                "create",
+                bundle.to_str().unwrap(),
+                child_range.as_str(),
+            ],
+        );
+        workspace_git(
+            &mut view,
+            "repos/program",
+            [
+                "reset",
+                "--hard",
+                fixture.program_parent.object_id().as_str(),
+            ],
+        );
+
+        let change = GitProgramReadback::new(fixture.stores())
+            .read_back_change(&artifact, &mut view)
+            .unwrap()
+            .expect("output bundle should produce a change");
+
+        assert_eq!(
+            change,
+            GitProgramChange::AdvanceRepo {
+                repo: repo_key("program"),
+                expected_parent: fixture.program_parent.clone(),
+                child: GitRevision::Commit(child.clone()),
+            }
+        );
+        assert_eq!(
+            git_output(&fixture.program_store, ["cat-file", "-t", child.as_str()]).trim(),
+            "commit"
+        );
+
+        drop(view);
+        workspace.cleanup().await.unwrap();
+    });
+}
+
+#[test]
+fn readback_imports_output_patch_proposal_as_child_commit() {
+    block_on(async {
+        let fixture = GitFixture::new();
+        let artifact = fixture.program_artifact();
+        let mut workspace = materialized_workspace(&fixture, &artifact).await;
+        let mut view = workspace.view();
+        view.write_file(
+            &workspace_path("repos/program/program.txt"),
+            b"patched child\n",
+        )
+        .unwrap();
+        let patch = workspace_git_output(&mut view, "repos/program", ["diff", "--binary"]);
+        let output_dir = view.local_mount().unwrap().join("output");
+        fs::create_dir_all(&output_dir).unwrap();
+        fs::write(output_dir.join("proposal.patch"), patch).unwrap();
+        workspace_git(
+            &mut view,
+            "repos/program",
+            ["checkout", "--", "program.txt"],
+        );
+
+        let change = GitProgramReadback::new(fixture.stores())
+            .read_back_change(&artifact, &mut view)
+            .unwrap()
+            .expect("output patch should produce a change");
+
+        let GitProgramChange::AdvanceRepo {
+            repo,
+            expected_parent,
+            child,
+        } = change
+        else {
+            panic!("single output patch should return AdvanceRepo");
+        };
+        assert_eq!(repo, repo_key("program"));
+        assert_eq!(expected_parent, fixture.program_parent);
+        let GitRevision::Commit(child) = child else {
+            panic!("patch readback should create a commit");
+        };
+        assert_eq!(
+            git_output(
+                &fixture.program_store,
+                ["show", &format!("{child}:program.txt")],
+            ),
+            "patched child\n"
+        );
+
+        drop(view);
+        workspace.cleanup().await.unwrap();
+    });
+}
+
+#[test]
 fn readback_freezes_dirty_worktree_as_imported_child_commit() {
     block_on(async {
         let fixture = GitFixture::new();
@@ -272,15 +393,7 @@ impl GitFixture {
     fn parent_artifact(&self) -> GitProgramArtifact {
         GitProgramArtifact::new(
             BTreeMap::from([
-                (
-                    repo_key("program"),
-                    GitRepoArtifact::new(
-                        RepoRef::global(repo_key("program")),
-                        self.program_parent.clone(),
-                        None,
-                        GitArtifactIdentityMode::Commit,
-                    ),
-                ),
+                (repo_key("program"), self.program_repo_artifact()),
                 (
                     repo_key("bench"),
                     GitRepoArtifact::new(
@@ -298,6 +411,27 @@ impl GitFixture {
             .unwrap(),
         )
         .unwrap()
+    }
+
+    fn program_artifact(&self) -> GitProgramArtifact {
+        GitProgramArtifact::new(
+            BTreeMap::from([(repo_key("program"), self.program_repo_artifact())]),
+            GitProgramLayout::new(BTreeMap::from([(
+                repo_key("program"),
+                git_path("repos/program"),
+            )]))
+            .unwrap(),
+        )
+        .unwrap()
+    }
+
+    fn program_repo_artifact(&self) -> GitRepoArtifact {
+        GitRepoArtifact::new(
+            RepoRef::global(repo_key("program")),
+            self.program_parent.clone(),
+            None,
+            GitArtifactIdentityMode::Commit,
+        )
     }
 }
 
@@ -341,6 +475,15 @@ fn workspace_git<const N: usize>(
         output.status.code == Some(0),
         "git failed: {}",
         String::from_utf8_lossy(&output.stderr.bytes)
+    );
+}
+
+fn configure_workspace_git(view: &mut leaven_workspace::WorkspaceView<'_>, cwd: &str) {
+    workspace_git(view, cwd, ["config", "user.name", "Leaven Test"]);
+    workspace_git(
+        view,
+        cwd,
+        ["config", "user.email", "leaven@example.invalid"],
     );
 }
 
