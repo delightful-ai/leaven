@@ -26,8 +26,10 @@ use leaven_kernel::{
 use serde::Deserialize;
 
 pub use one_case_run::{
-    prepare_trace2skill_one_case_run, Trace2SkillOneCaseRunInput, Trace2SkillOneCaseRunManifest,
-    Trace2SkillOneCaseRunReport, Trace2SkillOneCaseRunSourceArtifacts, Trace2SkillOneCaseRunStatus,
+    prepare_trace2skill_one_case_run, score_trace2skill_one_case_run, Trace2SkillOneCaseRunInput,
+    Trace2SkillOneCaseRunManifest, Trace2SkillOneCaseRunReport, Trace2SkillOneCaseRunScoreReport,
+    Trace2SkillOneCaseRunScoringInput, Trace2SkillOneCaseRunSourceArtifacts,
+    Trace2SkillOneCaseRunStatus,
 };
 pub use patch_bridge::{
     apply_trace2skill_json_patch, lower_trace2skill_json_patch, Trace2SkillPatchError,
@@ -89,7 +91,7 @@ pub struct Trace2SkillOneCaseInput<'a> {
 }
 
 /// Metadata for one file consumed by a one-case preflight.
-#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Trace2SkillFileArtifact {
     /// File path as provided to the preflight.
     pub path: PathBuf,
@@ -138,7 +140,7 @@ pub struct Trace2SkillOneCaseComparisonInput<'a> {
 }
 
 /// One mismatched answer cell.
-#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Trace2SkillCellMismatch {
     /// A1-style cell address.
     pub address: String,
@@ -149,7 +151,7 @@ pub struct Trace2SkillCellMismatch {
 }
 
 /// Exact answer-range comparison for one `SpreadsheetBench` workbook.
-#[derive(Clone, Debug, PartialEq, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Trace2SkillOneCaseAnswerReport {
     /// Upstream `SpreadsheetBench` case id.
     pub case_id: String,

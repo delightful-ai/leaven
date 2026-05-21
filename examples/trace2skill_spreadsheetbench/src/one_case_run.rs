@@ -3,6 +3,12 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use leaven_evidence::{
+    AgentTrajectoryAnalysisKind, AgentTrajectoryAnalysisRecord, AgentTrajectoryEvidence,
+    AgentTrajectoryEvidenceInput, AgentTrajectoryOutcome, CommandEvidence, OutputRecord,
+};
+use leaven_kernel::{AgentSessionId, BlobRef, FingerprintBuilder};
+
 use crate::{
     compare_trace2skill_one_case_answer, file_artifact, inspect_trace2skill_one_case,
     Trace2SkillFileArtifact, Trace2SkillManifestError, Trace2SkillOneCaseAnswerReport,
@@ -21,7 +27,7 @@ pub struct Trace2SkillOneCaseRunInput<'a> {
 }
 
 /// No-spend run preparation status.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Trace2SkillOneCaseRunStatus {
     /// The run directory is staged, but Leaven has not executed a live spreadsheet agent.
@@ -31,7 +37,7 @@ pub enum Trace2SkillOneCaseRunStatus {
 }
 
 /// Source artifacts used to prepare a one-case run directory.
-#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Trace2SkillOneCaseRunSourceArtifacts {
     /// One-row `SpreadsheetBench` case JSON.
     pub case_file: PathBuf,
@@ -44,7 +50,7 @@ pub struct Trace2SkillOneCaseRunSourceArtifacts {
 }
 
 /// Manifest written into a prepared one-case run directory.
-#[derive(Clone, Debug, PartialEq, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Trace2SkillOneCaseRunManifest {
     /// Upstream `SpreadsheetBench` case id.
     pub case_id: String,
@@ -93,6 +99,40 @@ pub struct Trace2SkillOneCaseRunReport {
     pub source_artifacts: Trace2SkillOneCaseRunSourceArtifacts,
     /// Score report when a candidate output workbook already exists.
     pub score_report: Option<Trace2SkillOneCaseAnswerReport>,
+}
+
+/// Files needed to score a prepared one-case run directory.
+#[derive(Clone, Copy, Debug)]
+pub struct Trace2SkillOneCaseRunScoringInput<'a> {
+    /// Prepared run directory containing `manifest.json` and output workbook.
+    pub run_dir: &'a Path,
+    /// Model or solver identity used to produce the output workbook.
+    pub model_id: &'a str,
+    /// Transcript/log artifact from the live or external spreadsheet-agent run.
+    pub transcript_file: &'a Path,
+}
+
+/// Report returned after scoring a prepared one-case run directory.
+#[derive(Clone, Debug, PartialEq, serde::Serialize)]
+pub struct Trace2SkillOneCaseRunScoreReport {
+    /// Upstream `SpreadsheetBench` case id.
+    pub case_id: String,
+    /// Updated run status.
+    pub status: Trace2SkillOneCaseRunStatus,
+    /// Durable run directory.
+    pub run_dir: PathBuf,
+    /// Scored output workbook.
+    pub output_workbook: Trace2SkillFileArtifact,
+    /// Transcript/log artifact used for trajectory evidence.
+    pub transcript_file: Trace2SkillFileArtifact,
+    /// Score report artifact written into `run_dir`.
+    pub score_file: Trace2SkillFileArtifact,
+    /// Trajectory evidence artifact written into `run_dir`.
+    pub trajectory_file: Trace2SkillFileArtifact,
+    /// Updated JSON manifest.
+    pub manifest_file: Trace2SkillFileArtifact,
+    /// Exact workbook score report.
+    pub score_report: Trace2SkillOneCaseAnswerReport,
 }
 
 /// Prepares a durable one-case run directory without executing a spreadsheet agent.
@@ -186,6 +226,45 @@ pub fn prepare_trace2skill_one_case_run(
     })
 }
 
+/// Scores a prepared one-case run directory after an output workbook exists.
+pub fn score_trace2skill_one_case_run(
+    input: Trace2SkillOneCaseRunScoringInput<'_>,
+) -> Result<Trace2SkillOneCaseRunScoreReport, Trace2SkillManifestError> {
+    let manifest_path = input.run_dir.join("manifest.json");
+    let mut manifest: Trace2SkillOneCaseRunManifest =
+        serde_json::from_slice(&fs::read(&manifest_path)?)?;
+    let output_workbook = file_artifact(&manifest.output_workbook)?;
+    let transcript_file = file_artifact(input.transcript_file)?;
+    let score_report = compare_trace2skill_one_case_answer(Trace2SkillOneCaseComparisonInput {
+        case_file: &manifest.source_artifacts.case_file,
+        candidate_workbook: &manifest.output_workbook,
+        golden_workbook: &manifest.golden_workbook,
+    })?;
+
+    let score_path = input.run_dir.join("score_report.json");
+    fs::write(&score_path, serde_json::to_vec_pretty(&score_report)?)?;
+    let trajectory = build_scored_trajectory(input, &manifest, &score_report, &score_path);
+    let trajectory_path = input.run_dir.join("trajectory.json");
+    fs::write(&trajectory_path, serde_json::to_vec_pretty(&trajectory)?)?;
+
+    manifest.status = Trace2SkillOneCaseRunStatus::ScoredCandidateWorkbook;
+    manifest.missing_primitive = None;
+    manifest.score_report = Some(score_report.clone());
+    fs::write(&manifest_path, serde_json::to_vec_pretty(&manifest)?)?;
+
+    Ok(Trace2SkillOneCaseRunScoreReport {
+        case_id: manifest.case_id,
+        status: Trace2SkillOneCaseRunStatus::ScoredCandidateWorkbook,
+        run_dir: input.run_dir.to_path_buf(),
+        output_workbook,
+        transcript_file,
+        score_file: file_artifact(&score_path)?,
+        trajectory_file: file_artifact(&trajectory_path)?,
+        manifest_file: file_artifact(&manifest_path)?,
+        score_report,
+    })
+}
+
 fn render_run_agent_prompt(
     input: Trace2SkillOneCaseInput<'_>,
     inspection: &Trace2SkillOneCaseInspection,
@@ -220,4 +299,53 @@ fn render_run_agent_prompt(
         instruction_type = inspection.instruction_type,
         answer_position = inspection.answer_position,
     ))
+}
+
+fn build_scored_trajectory(
+    input: Trace2SkillOneCaseRunScoringInput<'_>,
+    manifest: &Trace2SkillOneCaseRunManifest,
+    score_report: &Trace2SkillOneCaseAnswerReport,
+    score_path: &Path,
+) -> AgentTrajectoryEvidence {
+    let outcome = if score_report.passed {
+        AgentTrajectoryOutcome::Success
+    } else {
+        AgentTrajectoryOutcome::Failure {
+            reason: format!(
+                "Trace2Skill exact workbook score {} ({}/{})",
+                score_report.score, score_report.matched_cells, score_report.total_cells
+            ),
+        }
+    };
+    let mut fingerprint = FingerprintBuilder::new();
+    fingerprint
+        .update("trace2skill-one-case-run")
+        .update(input.model_id)
+        .update(&manifest.case_id)
+        .update(manifest.output_workbook.display().to_string());
+    let fingerprint = fingerprint.finish();
+    AgentTrajectoryEvidence::new(AgentTrajectoryEvidenceInput {
+        session_id: AgentSessionId::new(),
+        case_id: None,
+        task_id: manifest.case_id.clone(),
+        outcome,
+        model_id: input.model_id.to_owned(),
+        model_config_fingerprint: fingerprint,
+        transcript: OutputRecord::blob(BlobRef {
+            store: "trace2skill-one-case-run".to_owned(),
+            key: input.transcript_file.display().to_string(),
+        }),
+        commands: CommandEvidence::new(Vec::new()),
+    })
+    .with_analysis_records([AgentTrajectoryAnalysisRecord::new(
+        AgentTrajectoryAnalysisKind::Custom("trace2skill_one_case_score".to_owned()),
+        score_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("score_report.json"),
+        OutputRecord::blob(BlobRef {
+            store: "trace2skill-one-case-run".to_owned(),
+            key: score_path.display().to_string(),
+        }),
+    )])
 }

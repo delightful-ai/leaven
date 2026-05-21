@@ -1,8 +1,8 @@
 use std::fs;
 
 use trace2skill_spreadsheetbench::{
-    prepare_trace2skill_one_case_run, Trace2SkillOneCaseInput, Trace2SkillOneCaseRunInput,
-    Trace2SkillOneCaseRunStatus,
+    prepare_trace2skill_one_case_run, score_trace2skill_one_case_run, Trace2SkillOneCaseInput,
+    Trace2SkillOneCaseRunInput, Trace2SkillOneCaseRunScoringInput, Trace2SkillOneCaseRunStatus,
 };
 
 #[test]
@@ -76,12 +76,98 @@ fn prepares_run_dir_with_prompt_manifest_and_staged_workbooks() {
         .ends_with("dataset_first_case.json"));
 }
 
+#[test]
+fn scores_prepared_run_dir_and_writes_trajectory_evidence() {
+    let fixture = ExactCaseFixture::new();
+    let temp = tempfile::tempdir().unwrap();
+    let run_dir = temp.path().join("run");
+    prepare_trace2skill_one_case_run(Trace2SkillOneCaseRunInput {
+        case: Trace2SkillOneCaseInput {
+            case_file: &fixture.case_file,
+            spreadsheet_dir: &fixture.spreadsheet_dir,
+            system_prompt_file: &fixture.system_prompt,
+            released_skill_file: &fixture.released_skill,
+        },
+        run_dir: &run_dir,
+        output_workbook: None,
+    })
+    .unwrap();
+    fs::copy(
+        run_dir.join("1_13-1_golden.xlsx"),
+        run_dir.join("13-1_output.xlsx"),
+    )
+    .unwrap();
+    let transcript_file = run_dir.join("agent_transcript.md");
+    fs::write(&transcript_file, "ACTION: TASK_COMPLETE\n").unwrap();
+
+    let report = score_trace2skill_one_case_run(Trace2SkillOneCaseRunScoringInput {
+        run_dir: &run_dir,
+        model_id: "fixture-spreadsheet-agent",
+        transcript_file: &transcript_file,
+    })
+    .unwrap();
+
+    assert_eq!(report.case_id, "13-1");
+    assert_eq!(
+        report.status,
+        Trace2SkillOneCaseRunStatus::ScoredCandidateWorkbook
+    );
+    assert!((report.score_report.score - 1.0).abs() < f64::EPSILON);
+    assert!(report.score_report.passed);
+    assert_eq!(report.score_report.matched_cells, 120);
+    assert!(report.score_file.path.ends_with("score_report.json"));
+    assert!(report.trajectory_file.path.ends_with("trajectory.json"));
+
+    let manifest: serde_json::Value =
+        serde_json::from_slice(&fs::read(run_dir.join("manifest.json")).unwrap()).unwrap();
+    assert_eq!(manifest["status"], "scored_candidate_workbook");
+    assert!(manifest["missing_primitive"].is_null());
+    assert_eq!(manifest["score_report"]["score"], 1.0);
+
+    let trajectory: serde_json::Value =
+        serde_json::from_slice(&fs::read(run_dir.join("trajectory.json")).unwrap()).unwrap();
+    assert_eq!(trajectory["task_id"], "13-1");
+    assert_eq!(trajectory["model_id"], "fixture-spreadsheet-agent");
+    assert_eq!(trajectory["outcome"], "Success");
+    assert!(trajectory["analysis_records"][0]["source_file"]
+        .as_str()
+        .unwrap()
+        .ends_with("score_report.json"));
+}
+
 struct Fixture {
     temp: tempfile::TempDir,
     case_file: std::path::PathBuf,
     spreadsheet_dir: std::path::PathBuf,
     system_prompt: std::path::PathBuf,
     released_skill: std::path::PathBuf,
+}
+
+struct ExactCaseFixture {
+    case_file: std::path::PathBuf,
+    spreadsheet_dir: std::path::PathBuf,
+    system_prompt: std::path::PathBuf,
+    released_skill: std::path::PathBuf,
+}
+
+impl ExactCaseFixture {
+    fn new() -> Self {
+        let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        Self {
+            case_file: repo.join(
+                "tmp/paper_exact_samples/trace2skill/spreadsheetbench_verified/dataset_first_case.json",
+            ),
+            spreadsheet_dir: repo.join(
+                "tmp/paper_exact_samples/trace2skill/spreadsheetbench_verified/13-1",
+            ),
+            system_prompt: repo.join(
+                "tmp/repros/trace2skill-upstream/spreadsheet_agent/system_prompt/cli_skill_preloaded_full_system_v1.txt",
+            ),
+            released_skill: repo.join(
+                "tmp/repros/trace2skill-upstream/released_skills/trace2skill-xlsx-35B-combined/SKILL.md",
+            ),
+        }
+    }
 }
 
 impl Fixture {

@@ -50,6 +50,14 @@ Each `pN_*` directory is a workspace package with a runnable binary. Keep reusab
   init/golden workbooks, deterministic output path, and manifest naming
   `live_spreadsheet_agent_execution` as the first missing primitive. This still
   does not execute the spreadsheet agent or claim live/paper proof.
+  `cargo test -p trace2skill_spreadsheetbench --test one_case_run --test cli`
+  plus `cargo run -p trace2skill_spreadsheetbench --
+  --score-one-case-run --run-dir <tmp-run-dir> --model-id <id>
+  --transcript-file <path>` proves a prepared run directory can resume after an
+  output workbook exists, write `score_report.json`, update `manifest.json`,
+  and emit `trajectory.json` as `AgentTrajectoryEvidence`. This remains
+  scorer/evidence plumbing until the output workbook and transcript come from a
+  real approved spreadsheet-agent run.
 
 ## Proof Classification
 - `product-proof`: an example that exercises the real public contract at the intended user layer, with no proxy substitution for the behavior being claimed.

@@ -215,6 +215,15 @@ The checked-out upstream release includes:
   `live_spreadsheet_agent_execution`. The agent prompt points only at the
   run-local input/output paths; the golden workbook is held in the manifest for
   scorer use and is not injected into the live-agent prompt.
+- `examples/trace2skill_spreadsheetbench` can now resume a prepared one-case
+  run directory after an output workbook and transcript exist:
+  `--score-one-case-run --run-dir <tmp-run-dir> --model-id <id>
+  --transcript-file <path>` scores `13-1_output.xlsx` against the staged
+  golden workbook, writes `score_report.json`, updates `manifest.json`, and
+  writes `trajectory.json` as `leaven_evidence::AgentTrajectoryEvidence`
+  carrying the supplied model id, transcript blob ref, success/failure outcome,
+  and a score-report analysis record. This is still a post-run scorer/evidence
+  seam; it does not run the spreadsheet agent.
 - `examples/trace2skill_tiny_live` now exists in main Leaven as an
   outside-Cargo tiny live harness for the paper's causal loop: trajectory
   generation with a frozen initial skill, independent error/success analysts,
@@ -373,16 +382,23 @@ Verification:
   examples/trace2skill_spreadsheetbench/src/one_case_run.rs
   examples/trace2skill_spreadsheetbench/tests/one_case_run.rs
   examples/trace2skill_spreadsheetbench/tests/cli.rs` passed on 2026-05-20
-  after the one-case run-directory slice.
-- `cargo test -p trace2skill_spreadsheetbench` passed on 2026-05-20 with
-  17/17 tests after the one-case run-directory slice.
-- `cargo clippy -p trace2skill_spreadsheetbench --all-targets -- -D warnings`
-  passed on 2026-05-20 after renaming the temp-dir fixture fields used by the
-  new run-directory tests.
-- `cargo nextest run -p trace2skill_spreadsheetbench` passed on 2026-05-20
-  with 17/17 tests after the one-case run-directory slice.
-- `cargo test -p leaven --test topology_contract` passed 4/4 tests on
-  2026-05-20 after adding the example-local run-preparation module.
+  after the one-case scoring/resume slice.
+- A plain `cargo test -p trace2skill_spreadsheetbench` hit a rustc ICE in
+  Cranelift incremental analysis of the existing `workbook_score` test on
+  2026-05-20 (`tried to mark a red node as green`,
+  `rustc-ice-2026-05-21T00_40_20-94638.txt`). The generated ICE report was
+  removed from the repo diff; rerunning with `CARGO_INCREMENTAL=0` passed the
+  full package test suite.
+- `CARGO_INCREMENTAL=0 cargo test -p trace2skill_spreadsheetbench` passed on
+  2026-05-20 with 19/19 tests after the one-case scoring/resume slice.
+- `CARGO_INCREMENTAL=0 cargo clippy -p trace2skill_spreadsheetbench
+  --all-targets -- -D warnings` passed on 2026-05-20 after replacing a direct
+  `f64` equality assertion in the new run-score test.
+- `CARGO_INCREMENTAL=0 cargo nextest run -p trace2skill_spreadsheetbench`
+  passed on 2026-05-20 with 19/19 tests after the one-case scoring/resume
+  slice.
+- `CARGO_INCREMENTAL=0 cargo test -p leaven --test topology_contract` passed
+  4/4 tests on 2026-05-20 after adding the example-local scoring/resume API.
 - `cargo run -p trace2skill_spreadsheetbench -- --prepare-one-case-run
   --run-dir
   tmp/paper_exact_lane_runs/trace2skill/one_case_prepare_20260521T003128Z`
@@ -395,6 +411,22 @@ Verification:
   `rg` over the generated `agent_prompt.md` found the run-local
   `working_directory`, `spreadsheet_path`, `output_path`, and
   `instruction_type` lines and no golden-workbook path.
+- `CARGO_INCREMENTAL=0 cargo run -p trace2skill_spreadsheetbench --
+  --prepare-one-case-run --run-dir
+  tmp/paper_exact_lane_runs/trace2skill/one_case_score_selfcheck_20260521T005103Z`
+  passed on 2026-05-20 and staged a fresh exact run directory. For a no-spend
+  scorer/evidence self-check only, `1_13-1_golden.xlsx` was copied into the
+  output slot and `agent_transcript.md` explicitly says this is not a live
+  spreadsheet-agent run. Then `CARGO_INCREMENTAL=0 cargo run -p
+  trace2skill_spreadsheetbench -- --score-one-case-run --run-dir
+  tmp/paper_exact_lane_runs/trace2skill/one_case_score_selfcheck_20260521T005103Z
+  --model-id selfcheck-golden-copy --transcript-file
+  tmp/paper_exact_lane_runs/trace2skill/one_case_score_selfcheck_20260521T005103Z/agent_transcript.md`
+  passed and wrote `score_report.json` (`504` bytes), `trajectory.json`
+  (`1086` bytes), and an updated `manifest.json` (`2010` bytes). `jq` verified
+  manifest status `scored_candidate_workbook`, score `1.0`, `120/120`, and
+  trajectory fields `task_id=13-1`, `model_id=selfcheck-golden-copy`,
+  `outcome=Success`, and `analysis_source=score_report.json`.
 
 ## Current Blockers
 
@@ -419,10 +451,10 @@ Leaven-owned remaining primitives before faithful Trace2Skill replication:
   proof needs either a no-spend/small upstream output directory or live-run
   capture of translated exact map/merge patches plus explicit merge decisions;
 - the exact case `13-1` now has repo-owned no-spend prompt/input and workbook
-  scoring surfaces plus a durable prepared run directory contract, but no live
-  spreadsheet agent has modified `13-1_output.xlsx`, no generated output
-  workbook has been scored, and no generated trajectory has been fed into the
-  Stage 2 analyst fan-out;
+  scoring surfaces plus a durable prepared run directory and post-run scoring /
+  trajectory evidence contract, but no live spreadsheet agent has modified
+  `13-1_output.xlsx`, no live-generated output workbook has been scored, and no
+  generated trajectory has been fed into the Stage 2 analyst fan-out;
 - result matrix/reporting for model scale transfer, OOD WikiTQ, DocVQA,
   DAPO/AIME, ablations, and sequential/retrieval baselines.
 
@@ -439,9 +471,11 @@ External/spend blockers:
 
 Use the prepared one-case run directory to run the smallest approved live
 spreadsheet attempt for case `13-1`, writing `13-1_output.xlsx`, durable
-stdout/stderr/logs, and a `--compare-one-case-answer` report against the staged
-`1_13-1_golden.xlsx`. After that, generate or import an actual no-spend/small
-upstream `--save-intermediates` directory and feed it through the saved-output
-loader. If running upstream live, also capture translated exact map/merge
-patches plus accepted/discarded merge decisions, because the default saved
-directory shape loses that decision provenance.
+stdout/stderr/logs, and then run `--score-one-case-run` with the live model id
+and transcript path so `score_report.json`, `manifest.json`, and
+`trajectory.json` become durable Stage 1 evidence. After that, feed the scored
+trajectory into the Stage 2 analyst fan-out and generate or import an actual
+no-spend/small upstream `--save-intermediates` directory through the
+saved-output loader. If running upstream live, also capture translated exact
+map/merge patches plus accepted/discarded merge decisions, because the default
+saved directory shape loses that decision provenance.

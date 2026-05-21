@@ -345,6 +345,12 @@ Leaven primitive blockers:
   with run-local input/output paths, writes `manifest.json`, and names
   `live_spreadsheet_agent_execution` as the first missing primitive. This is a
   live-attempt contract, not a solver or trajectory-generation proof.
+- `examples/trace2skill_spreadsheetbench` now scores a prepared one-case run
+  directory after a candidate output workbook and transcript exist:
+  `--score-one-case-run` writes `score_report.json`, updates `manifest.json`,
+  and emits `trajectory.json` as `AgentTrajectoryEvidence`. It is post-run
+  scorer/evidence plumbing; the live spreadsheet agent remains the missing
+  primitive.
 - `examples/trace2skill_tiny_live` now restores the tiny live
   trajectory-to-skill harness into main Leaven. Its preflight writes a no-spend
   proof contract, and its live mode runs Codex/GPT-5.4-mini over two CSV
@@ -423,6 +429,12 @@ Spend/data risks:
   through `--prepare-one-case-run`, with durable files under
   `tmp/paper_exact_lane_runs/trace2skill/one_case_prepare_20260521T003128Z`
   and manifest status `blocked_missing_live_spreadsheet_agent`.
+- The Trace2Skill example now covers prepared-run score/resume wiring through
+  `--score-one-case-run`, with a no-spend golden-copy self-check under
+  `tmp/paper_exact_lane_runs/trace2skill/one_case_score_selfcheck_20260521T005103Z`
+  that wrote `score_report.json`, `trajectory.json`, and an updated manifest.
+  The transcript explicitly records that this self-check is not a live
+  spreadsheet-agent run.
 - Restored tiny live harness preflights passed in main Leaven on 2026-05-20:
   `tmp/memento_skills_read_write/20260520T204154Z/preflight.json`,
   `tmp/skillreducer_tiny/20260520T204154Z/preflight.json`,
