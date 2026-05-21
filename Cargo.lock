@@ -5646,6 +5646,8 @@ checksum = "8df9b6e13f2d32c91b9bd719c00d1958837bc7dec474d94952798cc8e69eeec3"
 name = "trace2skill_spreadsheetbench"
 version = "0.0.0"
 dependencies = [
+ "leaven-agentic-skill",
+ "leaven-artifact-skill",
  "leaven-core",
  "leaven-eval",
  "leaven-evidence",
