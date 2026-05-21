@@ -1,7 +1,7 @@
 mod support;
 
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     sync::{
         Arc, Mutex,
         atomic::{AtomicUsize, Ordering},
@@ -1814,10 +1814,15 @@ struct FaultyStore {
     inner: RecordingStore,
     blob_puts: Arc<AtomicUsize>,
     fail_blob_put_on: Option<usize>,
-    fail_checkpoint_put: bool,
-    fail_checkpoint_get: bool,
-    fail_latest: bool,
-    fail_mark_latest: bool,
+    failures: BTreeSet<FaultyStoreFailure>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
+enum FaultyStoreFailure {
+    CheckpointPut,
+    CheckpointGet,
+    Latest,
+    MarkLatest,
 }
 
 impl FaultyStore {
@@ -1826,10 +1831,7 @@ impl FaultyStore {
             inner: RecordingStore::new(name),
             blob_puts: Arc::new(AtomicUsize::new(0)),
             fail_blob_put_on: None,
-            fail_checkpoint_put: false,
-            fail_checkpoint_get: false,
-            fail_latest: false,
-            fail_mark_latest: false,
+            failures: BTreeSet::new(),
         }
     }
 
@@ -1839,22 +1841,22 @@ impl FaultyStore {
     }
 
     fn fail_checkpoint_put(mut self) -> Self {
-        self.fail_checkpoint_put = true;
+        self.failures.insert(FaultyStoreFailure::CheckpointPut);
         self
     }
 
     fn fail_checkpoint_get(mut self) -> Self {
-        self.fail_checkpoint_get = true;
+        self.failures.insert(FaultyStoreFailure::CheckpointGet);
         self
     }
 
     fn fail_latest(mut self) -> Self {
-        self.fail_latest = true;
+        self.failures.insert(FaultyStoreFailure::Latest);
         self
     }
 
     fn fail_mark_latest(mut self) -> Self {
-        self.fail_mark_latest = true;
+        self.failures.insert(FaultyStoreFailure::MarkLatest);
         self
     }
 
@@ -1884,28 +1886,28 @@ impl BlobStore for FaultyStore {
 
 impl CheckpointStore for FaultyStore {
     fn put(&self, checkpoint: CheckpointBytes) -> Result<leaven_kernel::CheckpointId, StoreError> {
-        if self.fail_checkpoint_put {
+        if self.failures.contains(&FaultyStoreFailure::CheckpointPut) {
             return Err(self.store_error("put_checkpoint"));
         }
         CheckpointStore::put(&self.inner, checkpoint)
     }
 
     fn get(&self, id: leaven_kernel::CheckpointId) -> Result<CheckpointBytes, StoreError> {
-        if self.fail_checkpoint_get {
+        if self.failures.contains(&FaultyStoreFailure::CheckpointGet) {
             return Err(self.store_error("get_checkpoint"));
         }
         CheckpointStore::get(&self.inner, id)
     }
 
     fn latest(&self) -> Result<Option<leaven_kernel::CheckpointId>, StoreError> {
-        if self.fail_latest {
+        if self.failures.contains(&FaultyStoreFailure::Latest) {
             return Err(self.store_error("latest_checkpoint"));
         }
         CheckpointStore::latest(&self.inner)
     }
 
     fn mark_latest(&self, id: leaven_kernel::CheckpointId) -> Result<(), StoreError> {
-        if self.fail_mark_latest {
+        if self.failures.contains(&FaultyStoreFailure::MarkLatest) {
             return Err(self.store_error("mark_latest_checkpoint"));
         }
         CheckpointStore::mark_latest(&self.inner, id)
