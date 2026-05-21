@@ -26,13 +26,14 @@ fn factory_allocates_container_in_product_pod_and_attaches_context() {
             .unwrap();
         assert_eq!(context.product_pod_id().as_str(), "pod-run-1");
         assert_eq!(context.container_id().as_str(), "container-1");
-        assert_eq!(context.workspace_root().as_str(), "/workspace");
+        let root = context.workspace_root().as_str();
+        assert!(root.starts_with("/workspace/workspaces/"));
         assert_eq!(context.image().as_str(), "ghcr.io/leaven/agent:latest");
         assert_eq!(
             runtime.events(),
             [RuntimeEvent::Allocate {
                 pod: "pod-run-1".to_owned(),
-                root: "/workspace".to_owned(),
+                root: root.to_owned(),
                 image: "ghcr.io/leaven/agent:latest".to_owned(),
             }]
         );
@@ -53,6 +54,10 @@ fn backend_routes_file_and_command_operations_to_workspace_root() {
         let runtime = Arc::new(FakeFirkinRuntime::default());
         let factory = factory(runtime.clone());
         let mut workspace = factory.allocate(WorkspaceConfig::default()).await.unwrap();
+        let context = workspace
+            .factory_context::<FirkinWorkspaceContext>()
+            .unwrap();
+        let root = context.workspace_root().as_str().to_owned();
         let mut view = workspace.view();
         let source = workspace_path("src/main.rs");
 
@@ -76,22 +81,22 @@ fn backend_routes_file_and_command_operations_to_workspace_root() {
         assert_eq!(output.stderr.bytes, b"warn\n");
         assert!(runtime.events().contains(&RuntimeEvent::Write {
             container: "container-1".to_owned(),
-            path: "/workspace/src/main.rs".to_owned(),
+            path: format!("{root}/src/main.rs"),
             bytes: b"fn main() {}\n".to_vec(),
         }));
         assert!(runtime.events().contains(&RuntimeEvent::Read {
             container: "container-1".to_owned(),
-            path: "/workspace/src/main.rs".to_owned(),
+            path: format!("{root}/src/main.rs"),
         }));
         assert!(runtime.events().contains(&RuntimeEvent::List {
             container: "container-1".to_owned(),
-            path: "/workspace/src".to_owned(),
+            path: format!("{root}/src"),
         }));
         assert!(runtime.events().contains(&RuntimeEvent::Run {
             container: "container-1".to_owned(),
             program: "sh".to_owned(),
             args: vec!["-lc".to_owned(), "printf ok".to_owned()],
-            cwd: "/workspace/src".to_owned(),
+            cwd: format!("{root}/src"),
             stdin: b"input".to_vec(),
             timeout: Some(Duration::from_secs(2)),
             max_stdout_bytes: Some(16),
@@ -112,6 +117,10 @@ fn backend_preserves_command_output_byte_limits() {
         ));
         let factory = factory(runtime.clone());
         let mut workspace = factory.allocate(WorkspaceConfig::default()).await.unwrap();
+        let context = workspace
+            .factory_context::<FirkinWorkspaceContext>()
+            .unwrap();
+        let root = context.workspace_root().as_str().to_owned();
         let mut view = workspace.view();
 
         let mut command = Command::new("emit");
@@ -130,7 +139,7 @@ fn backend_preserves_command_output_byte_limits() {
             container: "container-1".to_owned(),
             program: "emit".to_owned(),
             args: Vec::new(),
-            cwd: "/workspace".to_owned(),
+            cwd: root,
             stdin: Vec::new(),
             timeout: None,
             max_stdout_bytes: Some(6),

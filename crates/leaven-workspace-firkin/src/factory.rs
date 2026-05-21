@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use futures::future::{BoxFuture, FutureExt};
+use leaven_kernel::RunId;
 use leaven_workspace::{
     CapturedOutput, Command, CommandOutput, CommandStdin, FactoryError, Workspace,
     WorkspaceBackend, WorkspaceConfig, WorkspaceError, WorkspaceFactory, WorkspaceFactoryContext,
@@ -46,9 +47,13 @@ where
     R: FirkinWorkspaceRuntime,
 {
     async fn allocate(&self, _config: WorkspaceConfig) -> Result<Workspace, FactoryError> {
+        let workspace_root = self.workspace_root.join_workspace_path(
+            &WorkspacePath::new(format!("workspaces/{}", RunId::new()))
+                .map_err(|error| FactoryError::Allocate(error.to_string()))?,
+        );
         let allocation = FirkinWorkspaceAllocation::new(
             self.product_pod_id.clone(),
-            self.workspace_root.clone(),
+            workspace_root.clone(),
             self.image.clone(),
         );
         let container_id = self
@@ -58,7 +63,7 @@ where
         let context = FirkinWorkspaceContext::new(
             self.product_pod_id.clone(),
             container_id.clone(),
-            self.workspace_root.clone(),
+            workspace_root.clone(),
             self.image.clone(),
         );
         let mut builder = WorkspaceFactoryContext::builder();
@@ -70,7 +75,7 @@ where
             Box::new(FirkinWorkspaceBackend {
                 runtime: self.runtime.clone(),
                 container_id,
-                workspace_root: self.workspace_root.clone(),
+                workspace_root,
             }),
             builder.build(),
         ))

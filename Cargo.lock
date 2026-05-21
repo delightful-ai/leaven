@@ -3077,8 +3077,11 @@ dependencies = [
  "firkin-e2b-wire",
  "firkin-types",
  "futures",
+ "leaven-agentic-git",
+ "leaven-artifact-git",
  "leaven-kernel",
  "leaven-workspace",
+ "tempfile",
  "thiserror 2.0.18",
  "tokio",
 ]
