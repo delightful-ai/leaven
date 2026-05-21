@@ -3,8 +3,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use leaven_core::{CaseSetVersion, PartitionId};
 use leaven_eval::{
     Case, Dataset, DatasetError, DatasetSplitManifest, DatasetSplits, DatasetSplitsError,
-    EvaluationUse, ExplicitSplitBuilder, FinalTestPolicy, RowOrderSplitBuilder, SplitPolicy,
-    SplitRole, SplitUse, SplitUsePolicy, SplitUsePolicyError, StratifiedSplitBuilder,
+    EvaluationUse, ExplicitSplitBuilder, FinalTestPolicy, RowOrderSplitBuilder, SourceRow,
+    SourceRowManifest, SplitPolicy, SplitRole, SplitUse, SplitUsePolicy, SplitUsePolicyError,
+    StratifiedSplitBuilder,
 };
 use leaven_kernel::{CaseId, MetadataBag, MetadataKey, MetadataValue};
 
@@ -39,7 +40,7 @@ fn dataset_from_case_envelopes_preserves_ids_and_metadata() {
     let mut metadata = MetadataBag::new();
     metadata.insert("source_id", MetadataValue::String("aime/2024/1".to_owned()));
     let dataset = Dataset::from_cases(vec![
-        Case::targeted(CaseId::new(42), "problem", "answer").with_metadata(metadata)
+        Case::targeted(CaseId::new(42), "problem", "answer").with_metadata(metadata),
     ])
     .unwrap();
 
@@ -99,6 +100,70 @@ fn source_row_cases_preserve_row_index_and_upstream_id_metadata() {
     assert_eq!(
         dataset.cases().keys().copied().collect::<Vec<_>>(),
         vec![CaseId::from_index(0), CaseId::from_index(1)]
+    );
+}
+
+#[test]
+fn source_row_manifest_lowers_ordered_rows_to_dataset_and_split_inputs() {
+    let manifest = SourceRowManifest::new(vec![
+        SourceRow::targeted("sealqa:0", "question zero", "answer zero"),
+        SourceRow::targeted("sealqa:1", "question one", "answer one"),
+        SourceRow::targeted("sealqa:2", "question two", "answer two"),
+    ])
+    .unwrap();
+
+    assert_eq!(manifest.len(), 3);
+    assert!(!manifest.is_empty());
+    assert_eq!(
+        manifest.ordered_case_ids(),
+        vec![
+            CaseId::from_index(0),
+            CaseId::from_index(1),
+            CaseId::from_index(2),
+        ]
+    );
+    assert_ne!(
+        manifest.fingerprint(),
+        SourceRowManifest::new(vec![
+            SourceRow::targeted("sealqa:0", "question zero", "answer zero"),
+            SourceRow::targeted("sealqa:2", "question two", "answer two"),
+            SourceRow::targeted("sealqa:1", "question one", "answer one"),
+        ])
+        .unwrap()
+        .fingerprint()
+    );
+
+    let ordered_case_ids = manifest.ordered_case_ids();
+    let dataset = manifest.into_dataset().unwrap();
+    assert_eq!(
+        dataset.cases().keys().copied().collect::<Vec<_>>(),
+        ordered_case_ids
+    );
+
+    let case = dataset.cases().get(&CaseId::from_index(1)).unwrap();
+    assert_eq!(case.input, "question one");
+    assert_eq!(case.target, Some("answer one"));
+    let source_id = case
+        .metadata
+        .get(&MetadataKey::from("source_id"))
+        .expect("source id metadata is present");
+    let MetadataValue::String(source_id) = source_id else {
+        panic!("source id should be stored as string metadata");
+    };
+    assert_eq!(source_id, "sealqa:1");
+}
+
+#[test]
+fn source_row_manifest_refuses_duplicate_source_ids() {
+    let error = SourceRowManifest::new(vec![
+        SourceRow::input_only("sealqa:duplicate", "first"),
+        SourceRow::input_only("sealqa:duplicate", "second"),
+    ])
+    .unwrap_err();
+
+    assert_eq!(
+        error,
+        DatasetError::DuplicateSourceRowId("sealqa:duplicate".to_owned())
     );
 }
 
@@ -532,10 +597,12 @@ fn dataset_split_manifest_exposes_role_based_membership_and_policy() {
             .expect("test split exists"),
         &[CaseId::from_index(2), CaseId::from_index(3)]
     );
-    assert!(manifest
-        .use_policy()
-        .use_for(&SplitRole::Test.partition_id())
-        .allows(&EvaluationUse::FinalTest));
+    assert!(
+        manifest
+            .use_policy()
+            .use_for(&SplitRole::Test.partition_id())
+            .allows(&EvaluationUse::FinalTest)
+    );
     assert_eq!(
         manifest.required_roles(),
         &BTreeSet::from([SplitRole::Train, SplitRole::Test])

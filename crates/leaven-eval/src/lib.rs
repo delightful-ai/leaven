@@ -11,7 +11,7 @@ mod sampler;
 mod split;
 mod use_policy;
 
-pub use dataset::{Case, Dataset, DatasetBuilder, LmCase, NoTarget};
+pub use dataset::{Case, Dataset, DatasetBuilder, LmCase, NoTarget, SourceRow, SourceRowManifest};
 pub use error::{DatasetError, DatasetSplitsError, SamplerError, SplitUsePolicyError};
 pub use report::{
     CandidateEvaluationSummary, EvaluationReport, ReportScore, SplitReport, SplitUseSummary,
@@ -30,7 +30,7 @@ pub mod prelude {
         CandidateEvaluationSummary, Case, CategoryRoundRobinSampler, CategorySample, Dataset,
         DatasetBuilder, DatasetSplitManifest, DatasetSplits, EvaluationReport, EvaluationUse,
         ExplicitSplitBuilder, FinalTestPolicy, LmCase, NoTarget, ReportScore, RowOrderSplitBuilder,
-        SamplerError, SplitPolicy, SplitReport, SplitRole, SplitUse, SplitUsePolicy,
-        SplitUseSummary, StratifiedSplitBuilder,
+        SamplerError, SourceRow, SourceRowManifest, SplitPolicy, SplitReport, SplitRole, SplitUse,
+        SplitUsePolicy, SplitUseSummary, StratifiedSplitBuilder,
     };
 }

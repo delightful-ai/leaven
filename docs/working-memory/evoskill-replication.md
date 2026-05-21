@@ -496,9 +496,11 @@ or split manifest.
    private/local result pickles, none of which are present locally.
 4. SealQA input blocker: the likely upstream `seal-0.parquet` is public,
    ungated, pinned by dataset commit and SHA-256 under `tmp/replication`, and
-   its metadata indicates 111 rows. It is not yet accepted as Leaven replica
-   input because there is no Leaven-owned Parquet/manifest materializer or exact
-   train/validation split artifact.
+   its metadata indicates 111 rows. `leaven-eval::SourceRowManifest` can now
+   accept a caller-supplied ordered row universe and lower it into row-stable
+   Leaven cases, but SealQA is not yet accepted as a Leaven replica input
+   because there is still no Leaven-owned Parquet row reader for `seal-0` and no
+   exact train/validation split artifact.
 5. BrowseComp transfer blocker: no local 128-example transfer sample or result
    pickle was found.
 6. OfficeQA reported-result blocker: the prose says skill-merge exact match is
@@ -525,9 +527,11 @@ or split manifest.
    `leaven-eval::StratifiedSplitBuilder` now constructs exact disjoint
    train/validation/test membership from caller-supplied strata and counts, and
    `leaven-eval::ExplicitSplitBuilder` now preserves paper-supplied exact role
-   membership over a known case universe, so the remaining split blocker is the
-   paper's source category/split manifest, not Leaven's generic split
-   construction primitive.
+   membership over a known case universe. `leaven-eval::SourceRowManifest` now
+   preserves ordered upstream row identities and lowers them into row-stable
+   cases, so the remaining split blocker is the paper's source category/split
+   manifest and SealQA Parquet row extraction, not Leaven's generic row-order or
+   split construction primitive.
    P5 can inspect the materialized OfficeQA `UID0001` sample/source pair and
    SealQA sample without spend, but both remain validation-only samples rather
    than runnable splits.
