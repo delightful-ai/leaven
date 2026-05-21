@@ -39,10 +39,11 @@ pub use patch_bridge::{
     Trace2SkillPatchLowering, Trace2SkillPatchLoweringInput,
 };
 pub use patch_replay::{
-    replay_trace2skill_json_patch_merge, replay_trace2skill_saved_json_patch_outputs,
-    Trace2SkillJsonPatchArtifact, Trace2SkillJsonPatchMergeBatch, Trace2SkillJsonPatchMergeInput,
-    Trace2SkillJsonPatchMergeLevel, Trace2SkillJsonPatchReplay, Trace2SkillJsonPatchReplayInput,
-    Trace2SkillPatchReplayError, Trace2SkillSavedJsonPatchReplayInput,
+    import_trace2skill_saved_map_patches_into_fanout, replay_trace2skill_json_patch_merge,
+    replay_trace2skill_saved_json_patch_outputs, Trace2SkillJsonPatchArtifact,
+    Trace2SkillJsonPatchMergeBatch, Trace2SkillJsonPatchMergeInput, Trace2SkillJsonPatchMergeLevel,
+    Trace2SkillJsonPatchReplay, Trace2SkillJsonPatchReplayInput, Trace2SkillPatchReplayError,
+    Trace2SkillSavedJsonPatchReplayInput, Trace2SkillSavedMapPatchFanoutInput,
 };
 
 const VERIFIED_400_VERSION: &str = "trace2skill-spreadsheetbench-verified-400-v1";

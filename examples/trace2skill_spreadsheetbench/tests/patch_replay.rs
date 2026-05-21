@@ -2,12 +2,17 @@ use std::{collections::BTreeMap, fs, path::Path};
 
 use leaven_agentic_skill::SkillFileChangeKind;
 use leaven_artifact_skill::{SkillBank, SkillFile, SkillFolder, SkillName, SkillPath};
+use leaven_evidence::{
+    AgentAnalystCallEvidence, AgentAnalystCallEvidenceInput, AgentAnalystCallStatus,
+    AgentAnalystFanoutEvidence, AgentAnalystRole, OutputRecord,
+};
 use serde_json::json;
 use trace2skill_spreadsheetbench::{
-    Trace2SkillJsonPatchArtifact, Trace2SkillJsonPatchMergeBatch, Trace2SkillJsonPatchMergeInput,
-    Trace2SkillJsonPatchMergeLevel, Trace2SkillJsonPatchReplayInput,
-    Trace2SkillSavedJsonPatchReplayInput, replay_trace2skill_json_patch_merge,
-    replay_trace2skill_saved_json_patch_outputs,
+    import_trace2skill_saved_map_patches_into_fanout, replay_trace2skill_json_patch_merge,
+    replay_trace2skill_saved_json_patch_outputs, Trace2SkillJsonPatchArtifact,
+    Trace2SkillJsonPatchMergeBatch, Trace2SkillJsonPatchMergeInput, Trace2SkillJsonPatchMergeLevel,
+    Trace2SkillJsonPatchReplayInput, Trace2SkillSavedJsonPatchReplayInput,
+    Trace2SkillSavedMapPatchFanoutInput,
 };
 
 #[test]
@@ -92,18 +97,16 @@ fn replays_json_patch_merge_tree_and_applies_selected_final_patch() {
     let child = replay.application.child().get(&skill).unwrap();
     assert!(skill_file_text(child, "SKILL.md").contains("references/row-safety.md"));
     assert!(skill_file_text(child, "references/row-safety.md").contains("Delete rows"));
-    assert!(
-        replay
-            .application
-            .report()
-            .files_changed
-            .iter()
-            .any(|file| {
-                file.skill == skill
-                    && file.path == SkillPath::new("references/row-safety.md").unwrap()
-                    && file.kind == SkillFileChangeKind::Added
-            })
-    );
+    assert!(replay
+        .application
+        .report()
+        .files_changed
+        .iter()
+        .any(|file| {
+            file.skill == skill
+                && file.path == SkillPath::new("references/row-safety.md").unwrap()
+                && file.kind == SkillFileChangeKind::Added
+        }));
 }
 
 #[test]
@@ -167,6 +170,72 @@ fn loads_upstream_saved_intermediates_and_prefers_translated_final_patch() {
     assert!(skill_file_text(child, "references/row-safety.md").contains("translated exact"));
 }
 
+#[test]
+fn imports_saved_map_patches_into_analyst_fanout_by_batch_index() {
+    let (parent, skill) = spreadsheet_skill_bank();
+    let mut fanout =
+        AgentAnalystFanoutEvidence::new(["error-13-1-1".to_owned(), "success-14-1-2".to_owned()])
+            .unwrap();
+    fanout
+        .push(pending_call(
+            "error-13-1-1",
+            AgentAnalystRole::Error,
+            "13-1",
+            "error prompt",
+        ))
+        .unwrap();
+    fanout
+        .push(pending_call(
+            "success-14-1-2",
+            AgentAnalystRole::Success,
+            "14-1",
+            "success prompt",
+        ))
+        .unwrap();
+    let tempdir = tempfile::tempdir().unwrap();
+    let root = tempdir.path();
+    fs::create_dir_all(root.join("map_patches")).unwrap();
+    write_patch(
+        &root.join("map_patches/patch_0001.json"),
+        &json_patch_with_batch("Success analyst patch", format_preference_edits(), 2),
+    );
+    write_patch(
+        &root.join("map_patches/patch_0002.json"),
+        &json_patch_with_batch("Error analyst patch", row_safety_edits(), 1),
+    );
+
+    let imported =
+        import_trace2skill_saved_map_patches_into_fanout(Trace2SkillSavedMapPatchFanoutInput {
+            parent: &parent,
+            skill: &skill,
+            fanout: &fanout,
+            intermediates_dir: root,
+        })
+        .unwrap();
+
+    assert_eq!(
+        imported.completed_call_ids(),
+        vec!["error-13-1-1", "success-14-1-2"]
+    );
+    assert!(imported.pending_call_ids().is_empty());
+    let error = imported.by_call("error-13-1-1").unwrap();
+    assert_eq!(error.role(), AgentAnalystRole::Error);
+    assert_eq!(error.source_task_ids(), ["13-1"]);
+    assert!(matches!(error.prompt(), OutputRecord::Inline { text, .. } if text == "error prompt"));
+    assert!(matches!(error.status(), AgentAnalystCallStatus::Succeeded));
+    assert!(
+        matches!(error.response(), Some(OutputRecord::BlobRef(reference)) if reference.key.ends_with("map_patches/patch_0002.json"))
+    );
+    let success = imported.by_call("success-14-1-2").unwrap();
+    assert!(matches!(
+        success.status(),
+        AgentAnalystCallStatus::Succeeded
+    ));
+    assert!(
+        matches!(success.response(), Some(OutputRecord::BlobRef(reference)) if reference.key.ends_with("map_patches/patch_0001.json"))
+    );
+}
+
 fn row_safety_edits() -> serde_json::Value {
     row_safety_edits_with_body("Delete rows from bottom to top and stay inside the explicit range.")
 }
@@ -206,6 +275,35 @@ fn json_patch(reasoning: &str, edits: impl Into<serde_json::Value>) -> serde_jso
         "edits": edits,
         "changelog_entries": [reasoning]
     })
+}
+
+fn json_patch_with_batch(
+    reasoning: &str,
+    edits: impl Into<serde_json::Value>,
+    batch_index: u32,
+) -> serde_json::Value {
+    let mut patch = json_patch(reasoning, edits);
+    patch["batch_index"] = json!(batch_index);
+    patch
+}
+
+fn pending_call(
+    call_id: &str,
+    role: AgentAnalystRole,
+    source_task_id: &str,
+    prompt: &str,
+) -> AgentAnalystCallEvidence {
+    AgentAnalystCallEvidence::new(AgentAnalystCallEvidenceInput {
+        call_id: call_id.to_owned(),
+        role,
+        source_task_ids: vec![source_task_id.to_owned()],
+        prompt: OutputRecord::inline(prompt),
+        response: None,
+        status: AgentAnalystCallStatus::Pending,
+        retry_count: 0,
+        support_count: 1,
+    })
+    .unwrap()
 }
 
 fn spreadsheet_skill_bank() -> (SkillBank, SkillName) {
