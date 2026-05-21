@@ -4,6 +4,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command as ProcessCommand;
 use std::process::Stdio;
+use std::sync::Arc;
 use std::time::Instant;
 
 use futures::executor::block_on;
@@ -59,6 +60,43 @@ fn materializer_checks_out_multiple_repos_at_artifact_revisions() {
                 .unwrap()
                 .join(workspace_path("repos/program").to_host_relative()),
             ["show-ref", "--verify", "refs/heads/hidden/eval"],
+        );
+
+        drop(view);
+        workspace.cleanup().await.unwrap();
+    });
+}
+
+#[test]
+fn materializer_does_not_expose_host_store_paths_to_workspace_commands() {
+    block_on(async {
+        let fixture = GitFixture::new();
+        let artifact = fixture.program_artifact();
+        let materializer = GitProgramMaterializer::new(fixture.stores());
+        let workspace_root = tempfile::tempdir().unwrap().keep();
+        let mut workspace = NoLocalMountWorkspaceFactory::new(workspace_root)
+            .rejecting_command_fragments(vec![fixture.program_store.display().to_string()])
+            .allocate(WorkspaceConfig::default())
+            .await
+            .unwrap();
+        assert!(workspace.local_mount().is_none());
+        let mut view = workspace.view();
+        let (mut graph, mut budget) = graph_and_budget();
+        let ctx = RunContext::<GitProblem>::new(&mut graph, &mut budget);
+
+        materializer
+            .materialize_into(&artifact, &mut view, ctx.materialize_context())
+            .await
+            .unwrap();
+
+        let config = String::from_utf8(
+            view.read_file(&workspace_path("repos/program/.git/config"))
+                .unwrap(),
+        )
+        .unwrap();
+        assert!(
+            !config.contains(&fixture.program_store.display().to_string()),
+            "workspace git config leaked host durable store path: {config}"
         );
 
         drop(view);
@@ -723,11 +761,20 @@ fn git_object(hex: &str) -> GitObjectId {
 #[derive(Clone, Debug)]
 struct NoLocalMountWorkspaceFactory {
     root: PathBuf,
+    rejected_command_fragments: Arc<Vec<String>>,
 }
 
 impl NoLocalMountWorkspaceFactory {
     fn new(root: impl Into<PathBuf>) -> Self {
-        Self { root: root.into() }
+        Self {
+            root: root.into(),
+            rejected_command_fragments: Arc::new(Vec::new()),
+        }
+    }
+
+    fn rejecting_command_fragments(mut self, fragments: Vec<String>) -> Self {
+        self.rejected_command_fragments = Arc::new(fragments);
+        self
     }
 }
 
@@ -739,6 +786,7 @@ impl WorkspaceFactory for NoLocalMountWorkspaceFactory {
             self.root.clone(),
             Box::new(NoLocalMountBackend {
                 root: self.root.clone(),
+                rejected_command_fragments: self.rejected_command_fragments.clone(),
             }),
         ))
     }
@@ -746,6 +794,7 @@ impl WorkspaceFactory for NoLocalMountWorkspaceFactory {
 
 struct NoLocalMountBackend {
     root: PathBuf,
+    rejected_command_fragments: Arc<Vec<String>>,
 }
 
 impl WorkspaceBackend for NoLocalMountBackend {
@@ -773,6 +822,13 @@ impl WorkspaceBackend for NoLocalMountBackend {
         &mut self,
         command: WorkspaceCommand,
     ) -> Result<leaven_workspace::CommandOutput, WorkspaceError> {
+        if let Some(fragment) =
+            command_forbidden_fragment(&command, &self.rejected_command_fragments)
+        {
+            return Err(WorkspaceError::Command(format!(
+                "workspace command exposed forbidden host path fragment `{fragment}`"
+            )));
+        }
         if command.user.is_some() {
             return Err(WorkspaceError::UnsupportedOperation {
                 operation: "run_command.user",
@@ -837,6 +893,35 @@ impl NoLocalMountBackend {
     fn host_path(&self, path: &WorkspacePath) -> PathBuf {
         self.root.join(path.to_host_relative())
     }
+}
+
+fn command_forbidden_fragment<'a>(
+    command: &WorkspaceCommand,
+    fragments: &'a [String],
+) -> Option<&'a str> {
+    if fragments.is_empty() {
+        return None;
+    }
+    let cwd = command.cwd.as_ref().map(WorkspacePath::as_str);
+    fragments
+        .iter()
+        .find(|fragment| {
+            string_contains_fragment(&command.program, fragment)
+                || command
+                    .args
+                    .iter()
+                    .any(|arg| string_contains_fragment(arg, fragment))
+                || command.env.iter().any(|(key, value)| {
+                    string_contains_fragment(key, fragment)
+                        || string_contains_fragment(value, fragment)
+                })
+                || cwd.is_some_and(|cwd| string_contains_fragment(cwd, fragment))
+        })
+        .map(String::as_str)
+}
+
+fn string_contains_fragment(value: &str, fragment: &str) -> bool {
+    !fragment.is_empty() && value.contains(fragment)
 }
 
 fn collect_no_mount_files(

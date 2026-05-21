@@ -61,43 +61,38 @@ impl GitProgramMaterializer {
                 .ok_or_else(|| GitAgenticGitError::MissingLayout { repo: repo.clone() })?;
             let checkout = workspace_path(layout)?;
             ensure_parent_dir(workspace, &checkout)?;
-
-            run_git(workspace, None, ["init", checkout.as_str()])?;
-            run_git(
-                workspace,
-                Some(&checkout),
-                [
-                    "remote",
-                    "add",
-                    "origin",
-                    self.stores.store_for(repo)?.to_string_lossy().as_ref(),
-                ],
-            )?;
-            run_git(
-                workspace,
-                Some(&checkout),
-                [
-                    "fetch",
-                    "--no-tags",
-                    "--no-write-fetch-head",
-                    "origin",
-                    repo_artifact.revision().object_id().as_str(),
-                ],
-            )?;
-            match repo_artifact.revision() {
-                GitRevision::Commit(commit) => {
-                    run_git(
-                        workspace,
-                        Some(&checkout),
-                        ["checkout", "--detach", commit.as_str()],
-                    )?;
-                }
+            let commit = match repo_artifact.revision() {
+                GitRevision::Commit(commit) => commit,
                 GitRevision::Tree(_) => {
                     return Err(GitAgenticGitError::UnsupportedTreeMaterialization {
                         repo: repo.clone(),
                     });
                 }
-            }
+            };
+            let bundle = materialization_bundle(self.stores.store_for(repo)?, commit)?;
+            let bundle_name = format!(".git/leaven-materialize-{}.bundle", RunId::new());
+
+            run_git(workspace, None, ["init", checkout.as_str()])?;
+            workspace.write_file(&checkout.join(&bundle_name)?, &bundle)?;
+            let materialized_ref = format!("refs/leaven/materialized/{commit}");
+            let fetch_refspec = format!("+{commit}:{materialized_ref}");
+            run_git_vec(
+                workspace,
+                Some(&checkout),
+                vec![
+                    "fetch".to_owned(),
+                    "--no-tags".to_owned(),
+                    "--no-write-fetch-head".to_owned(),
+                    bundle_name.clone(),
+                    fetch_refspec,
+                ],
+            )?;
+            remove_workspace_file(workspace, &checkout, &bundle_name)?;
+            run_git(
+                workspace,
+                Some(&checkout),
+                ["checkout", "--detach", commit.as_str()],
+            )?;
 
             let tracked = run_git_output(workspace, Some(&checkout), ["ls-files", "-z"])?;
             files_written += tracked
@@ -605,6 +600,56 @@ fn remove_workspace_file(
     command.cwd = Some(cwd.clone());
     command.args = vec!["-f".to_owned(), path.to_owned()];
     ensure_success(&workspace.run_command(command)?, "rm")
+}
+
+fn materialization_bundle(
+    durable: &Path,
+    commit: &GitObjectId,
+) -> Result<Vec<u8>, GitAgenticGitError> {
+    let temp = std::env::temp_dir().join(format!("leaven-git-materialize-{}", RunId::new()));
+    fs::create_dir_all(&temp).map_err(|source| GitWorkspaceGitError::CommandIo {
+        program: "create materialization bundle directory",
+        source,
+    })?;
+    let cleanup = BundleImportCleanup { path: temp.clone() };
+    let bundle_path = temp.join("materialization.bundle");
+    let temp_ref = format!("refs/leaven/materialize/{}", RunId::new());
+    host_git(
+        Some(durable),
+        "git update-ref materialization",
+        vec![
+            OsString::from("update-ref"),
+            OsString::from(&temp_ref),
+            OsString::from(commit.as_str()),
+        ],
+    )?;
+    let bundle_result = host_git(
+        Some(durable),
+        "git bundle create materialization",
+        vec![
+            OsString::from("bundle"),
+            OsString::from("create"),
+            bundle_path.as_os_str().to_os_string(),
+            OsString::from(&temp_ref),
+        ],
+    );
+    let delete_result = host_git(
+        Some(durable),
+        "git delete materialization ref",
+        vec![
+            OsString::from("update-ref"),
+            OsString::from("-d"),
+            OsString::from(&temp_ref),
+        ],
+    )?;
+    let _ = delete_result;
+    bundle_result?;
+    let bundle = fs::read(&bundle_path).map_err(|source| GitWorkspaceGitError::CommandIo {
+        program: "read materialization bundle",
+        source,
+    })?;
+    cleanup.remove();
+    Ok(bundle)
 }
 
 fn bundle_head(bundle: &Path) -> Result<GitObjectId, GitAgenticGitError> {
