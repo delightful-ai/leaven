@@ -188,9 +188,11 @@ Leaven primitive blockers:
   paper-supplied exact role membership over a known case universe;
   `SourceRowManifest` now fingerprints caller-supplied ordered source-row ids
   and lowers them into row-stable Leaven cases for row-order or explicit split
-  construction. Exact EvoSkill OfficeQA source manifests remain absent; P5 now
-  threads sampler state through its private checkpoint and samples explicit
-  feedback case IDs from train pools;
+  construction. `leaven-eval-parquet` now reads Parquet rows into those
+  manifests with typed string/list column helpers and file-byte fingerprints.
+  Exact EvoSkill OfficeQA source manifests remain absent; P5 now threads sampler
+  state through its private checkpoint and samples explicit feedback case IDs
+  from train pools;
 - paper-grade scorer/evaluator records with failure-threshold extraction;
 - evidence history that can feed proposer prompts without paper-side custom
   plumbing.
@@ -260,6 +262,11 @@ Next attempt:
   useful evidence, but using them for replication now requires an explicit
   source-pin/archive decision and still does not provide EvoSkill's paper
   `category` / `pseudo_labels` split manifest.
+- `leaven-eval-parquet` now closes the generic SealQA physical-input primitive:
+  it can read Parquet rows into `SourceRowManifest` with a file-byte fingerprint
+  and typed string/list extraction. SealQA still needs a source-pinned
+  train/held-out split manifest and LLM-as-judge scorer before it is a runnable
+  paper-faithful replica input.
 
 ### Trace2Skill (`arx_2603.25158`)
 
