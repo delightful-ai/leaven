@@ -60,15 +60,17 @@ enum TopCommand {
     },
 }
 
-#[allow(clippy::enum_variant_names)]
 #[derive(Debug, Subcommand)]
 enum DoctorSubcommand {
     /// Render the agent-facing proposal-stage input for the GEPA skill-bank slice.
-    ProposalRender(ProposalDoctorArgs),
+    #[command(name = "proposal-render")]
+    Render(ProposalDoctorArgs),
     /// Materialize the current `SkillBank` input into a temp workspace and report files.
-    ProposalMaterialize(ProposalDoctorArgs),
+    #[command(name = "proposal-materialize")]
+    Materialize(ProposalDoctorArgs),
     /// Simulate one workspace edit, parse it, and apply it through `RunContext`.
-    ProposalRoundtrip(ProposalDoctorArgs),
+    #[command(name = "proposal-roundtrip")]
+    Roundtrip(ProposalDoctorArgs),
 }
 
 #[derive(Debug, Args)]
@@ -97,15 +99,15 @@ impl ProposalDoctorArgs {
 fn doctor_command(command: Option<DoctorSubcommand>) -> DoctorCommand {
     match command {
         None => DoctorCommand::Summary,
-        Some(DoctorSubcommand::ProposalRender(args)) => DoctorCommand::ProposalRender {
+        Some(DoctorSubcommand::Render(args)) => DoctorCommand::ProposalRender {
             format: args.format(),
             input_json: args.input_json,
         },
-        Some(DoctorSubcommand::ProposalMaterialize(args)) => DoctorCommand::ProposalMaterialize {
+        Some(DoctorSubcommand::Materialize(args)) => DoctorCommand::ProposalMaterialize {
             format: args.format(),
             input_json: args.input_json,
         },
-        Some(DoctorSubcommand::ProposalRoundtrip(args)) => DoctorCommand::ProposalRoundtrip {
+        Some(DoctorSubcommand::Roundtrip(args)) => DoctorCommand::ProposalRoundtrip {
             format: args.format(),
             input_json: args.input_json,
         },
