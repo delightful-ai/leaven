@@ -381,8 +381,8 @@ git-backed program identity into the EvoSkill run path:
   a selected ref for evaluation, and delete discarded branch/tag refs.
 - `crates/leaven-agentic-git` now materializes `GitProgramArtifact` values
   from durable bare stores into disposable proposer workspaces and reads dirty
-  or committed workspace Git children back as imported `GitProgramChange`
-  values.
+  or committed workspace Git children plus explicit output patch/bundle
+  proposals back as imported `GitProgramChange` values.
 - EvoSkill still requires paper score metadata conventions, checkpointed
   program/frontier state, frontier membership decisions, graph admission through
   `RunContext`, and integration with the paper run loop.
@@ -511,10 +511,11 @@ or split manifest.
 8. Leaven primitive blocker after provenance: `leaven-artifact-git` can
    represent program/frontier refs, `leaven-workspace-git` can clone, project,
    fsck, import, capture, restore, and delete local branch/tag refs, and
-   `leaven-agentic-git` can materialize/read back git-program workspaces as
-   typed artifact changes. Leaven still lacks the EvoSkill run integration that
-   turns those primitives into checkpointed program/frontier state with paper
-   score metadata and graph admission. `leaven-population`
+   `leaven-agentic-git` can materialize/read back git-program workspaces and
+   explicit output patch/bundle proposals as typed artifact changes. Leaven
+   still lacks the EvoSkill run integration that turns those primitives into
+   checkpointed program/frontier state with paper score metadata and graph
+   admission. `leaven-population`
    now provides `TopKFrontier` for fixed-capacity scalar validation admission
    and weakest-member eviction plus `TopKParentSelector` for checkpointable
    best/round-robin parent selection. P5 now persists frontier membership,
