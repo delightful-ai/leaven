@@ -497,13 +497,14 @@ or split manifest.
 3. OfficeQA category artifact blocker: EvoSkill notebooks reference
    `../.dataset/new_runs_base/solved_dataset.csv`, `pseudo_labels`, and
    private/local result pickles, none of which are present locally.
-4. SealQA input blocker: the likely upstream `seal-0.parquet` is public,
+4. SealQA split/judge blocker: the likely upstream `seal-0.parquet` is public,
    ungated, pinned by dataset commit and SHA-256 under `tmp/replication`, and
    its metadata indicates 111 rows. `leaven-eval::SourceRowManifest` can now
    accept a caller-supplied ordered row universe and lower it into row-stable
-   Leaven cases, but SealQA is not yet accepted as a Leaven replica input
-   because there is still no Leaven-owned Parquet row reader for `seal-0` and no
-   exact train/validation split artifact.
+   Leaven cases, and `leaven-eval-parquet` can now read physical Parquet rows
+   into that manifest with file-byte fingerprinting. SealQA is not yet accepted
+   as a runnable paper replica because there is still no exact 10 percent
+   train/held-out split artifact and no LLM-as-judge scorer harness.
 5. BrowseComp transfer blocker: no local 128-example transfer sample or result
    pickle was found.
 6. OfficeQA reported-result blocker: the prose says skill-merge exact match is
@@ -534,9 +535,10 @@ or split manifest.
    `leaven-eval::ExplicitSplitBuilder` now preserves paper-supplied exact role
    membership over a known case universe. `leaven-eval::SourceRowManifest` now
    preserves ordered upstream row identities and lowers them into row-stable
-   cases, so the remaining split blocker is the paper's source category/split
-   manifest and SealQA Parquet row extraction, not Leaven's generic row-order or
-   split construction primitive.
+   cases. `leaven-eval-parquet` now extracts physical Parquet rows into that
+   manifest, so the remaining split blocker is the paper's source category/split
+   manifest and SealQA train/held-out split, not Leaven's generic row-order,
+   Parquet, or split construction primitive.
    P5 can inspect the materialized OfficeQA `UID0001` sample/source pair and
    SealQA sample without spend, but both remain validation-only samples rather
    than runnable splits.
@@ -553,8 +555,9 @@ Stay no-spend until the provenance blockers are closed:
 2. Locate or reconstruct the paper's OfficeQA category/split manifest. If the
    manifest is unavailable, record an exact documented substitute before any
    live run.
-3. Promote the pinned SealQA parquet into a Leaven input manifest/materializer
-   only after the owning primitive surface is designed and tested.
+3. Promote the pinned SealQA parquet through `leaven-eval-parquet` into a
+   paper-specific Leaven input manifest, then attach the exact 10 percent
+   train/held-out split when the split source is located or documented.
 4. Locate the BrowseComp transfer sample/result source, or record the exact
    access blocker with source links.
 5. Resolve the OfficeQA reported-result comparison target: prose 67.9 percent

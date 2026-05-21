@@ -25,6 +25,7 @@ members = [
     "crates/leaven-engine",
     "crates/leaven-evidence",
     "crates/leaven-eval",
+    "crates/leaven-eval-parquet",
     "crates/leaven-gepa",
     "crates/leaven-gepa-agentic-git",
     "crates/leaven-gepa-agentic-skill",
@@ -152,6 +153,7 @@ leaven-artifacts = { path = "crates/leaven-artifacts", version = "0.0.0" }
 leaven-cuda = { path = "crates/leaven-cuda", version = "0.0.0" }
 leaven-evidence = { path = "crates/leaven-evidence", version = "0.0.0" }
 leaven-eval = { path = "crates/leaven-eval", version = "0.0.0" }
+leaven-eval-parquet = { path = "crates/leaven-eval-parquet", version = "0.0.0" }
 leaven-gepa = { path = "crates/leaven-gepa", version = "0.0.0" }
 leaven-gepa-agentic-git = { path = "crates/leaven-gepa-agentic-git", version = "0.0.0" }
 leaven-gepa-agentic-skill = { path = "crates/leaven-gepa-agentic-skill", version = "0.0.0" }
@@ -196,6 +198,9 @@ serde_yml = "0.0.12"
 csv = "1"
 rusqlite = { version = "0.39.0", features = ["bundled"] }
 calamine = "0.35.0"
+arrow-array = "58.3.0"
+arrow-schema = "58.3.0"
+parquet = { version = "58.3.0", default-features = false, features = ["arrow", "zstd", "snap"] }
 
 # ids and time
 uuid = { version = "1", features = ["serde", "v4"] }

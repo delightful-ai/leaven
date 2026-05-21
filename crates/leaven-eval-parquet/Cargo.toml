@@ -1,0 +1,22 @@
+[package]
+name = "leaven-eval-parquet"
+description = "Parquet source-row adapters for Leaven evaluation datasets."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+arrow-array = { workspace = true }
+arrow-schema = { workspace = true }
+leaven-eval = { workspace = true }
+leaven-kernel = { workspace = true }
+parquet = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
