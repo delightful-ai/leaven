@@ -36,6 +36,8 @@ pub enum ExampleError {
     SkillPath(#[from] leaven_artifact_skill::SkillPathError),
     #[error(transparent)]
     Scalar(#[from] leaven_evidence::ScalarEvidenceError),
+    #[error(transparent)]
+    Sampler(#[from] leaven_eval::SamplerError),
 }
 
 pub type Result<T> = std::result::Result<T, ExampleError>;

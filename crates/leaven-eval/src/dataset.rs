@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use leaven_kernel::{CaseId, Fingerprint, FingerprintBuilder, MetadataBag};
+use leaven_kernel::{CaseId, Fingerprint, FingerprintBuilder, MetadataBag, MetadataValue};
 
 use crate::DatasetError;
 
@@ -39,6 +39,23 @@ impl<I, T> Case<I, T> {
     #[must_use]
     pub fn targeted(id: CaseId, input: I, target: T) -> Self {
         Self::new(id, input, Some(target))
+    }
+
+    /// Builds a case from an upstream ordered source-row manifest.
+    #[must_use]
+    pub fn from_source_row(
+        row_index: usize,
+        source_id: impl Into<String>,
+        input: I,
+        target: Option<T>,
+    ) -> Self {
+        let mut metadata = MetadataBag::new();
+        metadata.insert(
+            "source_row_index",
+            MetadataValue::U64(u64::try_from(row_index).expect("usize row index fits in u64")),
+        );
+        metadata.insert("source_id", MetadataValue::String(source_id.into()));
+        Self::new(CaseId::from_index(row_index), input, target).with_metadata(metadata)
     }
 
     /// Replaces the operational metadata bag.

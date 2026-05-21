@@ -48,6 +48,9 @@ pub mod gepa;
 #[cfg(feature = "workspace")]
 pub use leaven_workspace as workspace;
 
+#[cfg(feature = "workspace-git")]
+pub use leaven_workspace_git as workspace_git;
+
 #[cfg(feature = "agentic")]
 pub use leaven_agentic as agentic;
 

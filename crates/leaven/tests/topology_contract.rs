@@ -10,6 +10,7 @@ const EXPECTED_WORKSPACE_MEMBERS: &[&str] = &[
     "crates/leaven-agent-codex",
     "crates/leaven-agent-codex-app-server",
     "crates/leaven-agent-codex-cli",
+    "crates/leaven-cli",
     "crates/leaven-agent-opencode",
     "crates/leaven-agentic",
     "crates/leaven-agentic-skill",
@@ -24,6 +25,7 @@ const EXPECTED_WORKSPACE_MEMBERS: &[&str] = &[
     "crates/leaven-eval",
     "crates/leaven-evidence",
     "crates/leaven-gepa",
+    "crates/leaven-gepa-agentic-skill",
     "crates/leaven-kernel",
     "crates/leaven-lm",
     "crates/leaven-lm-anthropic",
@@ -63,6 +65,8 @@ const EXPECTED_WORKSPACE_MEMBERS: &[&str] = &[
     "examples/p6_optimizer_policy_self_opt",
     "examples/p7_self_optimization_kernel",
     "examples/p8_aime_gepa",
+    "examples/trace2skill_spreadsheetbench",
+    "crates/leaven-cli",
     "xtask",
 ];
 
@@ -88,6 +92,7 @@ const EXPECTED_CRATES: &[&str] = &[
     "leaven-eval",
     "leaven-evidence",
     "leaven-gepa",
+    "leaven-gepa-agentic-skill",
     "leaven-kernel",
     "leaven-lm",
     "leaven-lm-anthropic",
@@ -130,6 +135,7 @@ const EXPECTED_BINARIES: &[&str] = &[
     "examples/p6_optimizer_policy_self_opt",
     "examples/p7_self_optimization_kernel",
     "examples/p8_aime_gepa",
+    "examples/trace2skill_spreadsheetbench",
     "xtask",
 ];
 
@@ -159,6 +165,7 @@ const EXPECTED_DEPENDENCIES: &[(&str, &[&str])] = &[
             "leaven-workspace",
             "leaven-workspace-docker",
             "leaven-workspace-e2b",
+            "leaven-workspace-git",
             "leaven-workspace-local",
         ],
     ),
@@ -284,6 +291,21 @@ const EXPECTED_DEPENDENCIES: &[(&str, &[&str])] = &[
             "leaven-preference",
             "leaven-render",
             "leaven-stage",
+            "leaven-surface",
+            "leaven-workspace",
+        ],
+    ),
+    (
+        "leaven-gepa-agentic-skill",
+        &[
+            "leaven-agent",
+            "leaven-agentic",
+            "leaven-agentic-skill",
+            "leaven-artifact-skill",
+            "leaven-core",
+            "leaven-engine",
+            "leaven-gepa",
+            "leaven-kernel",
             "leaven-surface",
             "leaven-workspace",
         ],
@@ -423,7 +445,7 @@ const EXPECTED_DEPENDENCIES: &[(&str, &[&str])] = &[
     ),
     (
         "leaven-workspace-git",
-        &["leaven-kernel", "leaven-workspace"],
+        &["leaven-artifact-git", "leaven-kernel", "leaven-workspace"],
     ),
     (
         "leaven-workspace-k8s",

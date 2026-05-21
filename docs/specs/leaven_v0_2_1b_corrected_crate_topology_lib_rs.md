@@ -1399,6 +1399,7 @@ pub mod error;
 pub mod plan;
 pub mod report;
 pub mod request;
+pub mod sampler;
 pub mod split;
 pub mod suite;
 pub mod use_policy;
@@ -1417,6 +1418,8 @@ pub use report::{
 
 pub use request::EvaluationRequestTemplate;
 
+pub use sampler::{CategoryRoundRobinSampler, CategorySample};
+
 pub use split::{DatasetSplits, SplitPolicy, SplitRole};
 
 pub use suite::EvaluationSuite;
@@ -1429,8 +1432,9 @@ pub mod prelude {
         DatasetSplits, DatasetSplitsError, EvaluationPlan, EvaluationPlanError,
         EvaluationPlanId, EvaluationReport, EvaluationRequestShape,
         EvaluationRequestTemplate, EvaluationSuite, EvaluationUse,
-        FinalTestPolicy, LmCase, ReportError, SplitPolicy, SplitReport,
-        SplitRole, SplitUse, SplitUsePolicy, SplitUseSummary,
+        FinalTestPolicy, LmCase, ReportError, CategoryRoundRobinSampler,
+        CategorySample, SplitPolicy, SplitReport, SplitRole, SplitUse,
+        SplitUsePolicy, SplitUseSummary,
     };
 }
 ```
@@ -2048,7 +2052,7 @@ pub use artifact::{
 };
 
 pub use change::{
-    FsOp, GitChange,
+    GitFsOp, GitChange,
 };
 
 pub use diff::{
@@ -2271,6 +2275,7 @@ pub mod niche;
 pub mod no_population;
 pub mod novelty;
 pub mod pareto_frontier;
+pub mod top_k_frontier;
 pub mod tournament;
 
 pub use beam::BeamPopulation;
@@ -2281,6 +2286,7 @@ pub use niche::NicheDescriptor;
 pub use no_population::NoPopulation;
 pub use novelty::NoveltyPopulation;
 pub use pareto_frontier::{ParetoFrontier, ParetoFrontierBuilder};
+pub use top_k_frontier::{TopKFrontier, TopKParentSelectionPolicy, TopKParentSelector};
 pub use tournament::{
     BradleyTerryFit, PlackettLuceFit, TournamentConfig, TournamentPopulation,
 };
@@ -2289,7 +2295,8 @@ pub mod prelude {
     pub use crate::{
         BeamPopulation, BradleyTerryFit, KeepBest, LenientParetoFrontier,
         MapElites, NicheDescriptor, NoPopulation, NoveltyPopulation,
-        ParetoFrontier, PlackettLuceFit, TournamentPopulation,
+        ParetoFrontier, PlackettLuceFit, TopKFrontier, TopKParentSelectionPolicy,
+        TopKParentSelector, TournamentPopulation,
     };
 }
 ```
@@ -3025,6 +3032,7 @@ jj = ["dep:leaven-artifact-jj", "leaven-std/jj"]
 store-sqlite = ["dep:leaven-store-sqlite"]
 
 workspace-local = ["workspace", "dep:leaven-workspace-local"]
+workspace-git = ["workspace", "git", "dep:leaven-workspace-git"]
 workspace-docker = ["workspace", "dep:leaven-workspace-docker"]
 workspace-e2b = ["workspace", "dep:leaven-workspace-e2b"]
 

@@ -20,6 +20,7 @@ leaven-agentic-skill = { workspace = true }
 leaven-artifact-skill = { workspace = true }
 leaven-core = { workspace = true }
 leaven-engine = { workspace = true }
+leaven-eval = { workspace = true }
 leaven-evidence = { workspace = true }
 leaven-kernel = { workspace = true }
 leaven-population = { workspace = true }

@@ -1095,6 +1095,42 @@ Cache/replay attempts after the report-schema fixes:
   `26/45`) and still trails held-out test (`0.500` versus `0.600`). Treat this
   as a narrowed quality gap, not a plumbing failure.
 
+2026-05-18T19:28:00Z:
+
+- Strict-run versus CAIS no-spend state comparison loaded the local CAIS
+  checkpoint from
+  `/Users/darin/vendor/github.com/gepa-ai/gepa-cais26-artifact/acm_cais_artifact_evaluation/domains/aime_math/logs/gepa_state.bin`
+  with upstream `GEPAState.load()`. CAIS has `10` candidates, `621` optimizer
+  evals, and validation scores `[0.4667, 0.4889, 0.5111, 0.4444, 0.4889,
+  0.4000, 0.5778, 0.4889, 0.5556, 0.5556]`; its winning candidate is index
+  `6`, parent `[4]`, prompt length `1627`, discovered at `363` metric calls.
+- Leaven strict run has `9` candidates and reaches validation `25/45` at
+  candidate `5`, parent `[4]`, prompt length `6185`, discovered at `372`
+  metric calls. CAIS reaches `26/45` at a nearly identical search-cost point,
+  but the winning score vectors are not dominance-equivalent: comparing
+  CAIS-best candidate `6` to Leaven-best candidate `5`, `19` validation cases
+  are correct for both, `13` are wrong for both, `6` are Leaven-only correct,
+  and `7` are CAIS-only correct.
+- The same seed prompt is stochastic under the live solver. CAIS checkpoint
+  seed validation is `21/45`, while the strict Leaven seed validation is
+  `20/45`, with `15` per-case baseline disagreements on the same materialized
+  validation source IDs. This makes the remaining one-case validation gap
+  plausibly a trajectory/runtime-sampling gap, not evidence of a prompt
+  renderer or scorer plumbing bug.
+- Prompt comparison is consistent with that: CAIS best prompt is a compact
+  `1636`-byte general rigor prompt; Leaven best prompt is a `6185`-byte
+  domain-expanded prompt with algebra/geometry/combinatorics-specific rules.
+  The local CAIS checkpoint does not persist reflection assistant text, so the
+  direct comparison surface is candidate/score trajectory plus best-prompt
+  content, not upstream reflection-response diffs.
+- Added `scripts/p8-gepa-debug-sqlite.py` as the no-provider debug substrate
+  for this kind of post-run investigation. It exports a P8 `reports/p8-aime.json`
+  and optional upstream `gepa_state.bin` into SQLite tables for runs,
+  candidates, validation scores, proposal attempts, case deltas, upstream
+  candidates, upstream trace, and best-candidate validation comparison. Verified
+  artifact for this comparison:
+  `target/gepa-debug/p8-aime-strict-vs-cais.sqlite`.
+
 1. Continue no-spend quality diagnosis only where it can produce new evidence:
    use emitted Leaven prompts, candidate lineage, reflection outputs, child
    admission history, minibatch cases, parser outcomes, and the CAIS checkpoint

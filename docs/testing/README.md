@@ -13,8 +13,10 @@ just check
 ```
 
 `just check` runs formatting, the production line-count lint, clippy with
-workspace targets, the nextest workspace suite, doctests, and the line/branch
-coverage summary. Use narrower recipes only while iterating:
+workspace library/tool targets, the nextest workspace suite, doctests, and the
+line/branch coverage summary. The default gate excludes milestone example
+packages; use the explicit milestone recipes when an example workflow is the
+claim under test. Use narrower recipes only while iterating:
 
 ```bash
 just lint
@@ -35,9 +37,10 @@ just milestone-examples
 ```
 
 The milestone examples are workspace packages under `examples/p*/`, not Cargo
-example targets. `cargo check --workspace --examples` is therefore not the
-proof command for them. Use the `just milestone-*` recipes, which run each
-example binary directly.
+example targets. They are intentionally excluded from default `just test`,
+`just lint`, and `just coverage` compilation. `cargo check --workspace
+--examples` is therefore not the proof command for them. Use the `just
+milestone-*` recipes, which run each example binary directly.
 
 Milestone execution is not automatically product proof. Classify examples as
 product-proof, mechanics-smoke, or proxy-demo before citing them as acceptance
@@ -69,11 +72,13 @@ just test must finish in <30s
 ```
 
 `just test` enforces this directly. The SLA covers the nextest workspace suite
-and workspace doctests for packages that contain Rust doctest fences. Empty
-doctest harnesses are skipped because they prove no examples while adding
-process-startup cost. If the suite crosses the line, do not add a second slow
-lane; reduce fixture cost, property-test case count, setup work, doctest harness
-fan-out, or assertion altitude until the default suite is back under the SLA.
+and workspace doctests for library/tool packages that contain Rust doctest
+fences. Milestone examples stay out of the default SLA and run through explicit
+`just milestone-*` recipes. Empty doctest harnesses are skipped because they
+prove no examples while adding process-startup cost. If the suite crosses the
+line, do not add a second slow lane; reduce fixture cost, property-test case
+count, setup work, doctest harness fan-out, or assertion altitude until the
+default suite is back under the SLA.
 
 Coverage is a ratchet. Raise `coverage_line_floor` and
 `coverage_branch_floor` in the root `Justfile` when coverage improves; do not
@@ -182,15 +187,20 @@ Use the narrowest layer that proves the claim.
 - `crates/leaven/tests/topology_contract.rs`: guardrails for the full corrected
   v0.2.1b workspace member list, `src/lib.rs` skeleton presence,
   Leaven-to-Leaven dependency DAG, and cold-core leak boundaries.
+- `crates/leaven-agentic-skill/tests/skill_agentic.rs`: skill-bank
+  materialization/readback, workspace proposal parsing, patch-plan validation,
+  atomic patch application, change reporting, and rollback evidence for failed
+  atomic application.
 - `crates/leaven-evidence/tests/scalar.rs`,
   `crates/leaven-evidence/tests/command.rs`,
   `crates/leaven-evidence/tests/casewise.rs`,
   `crates/leaven-evidence/tests/attribution.rs`,
   `crates/leaven-preference/tests/scalar.rs`,
   `crates/leaven-population/tests/keep_best.rs`, and
-  `crates/leaven-store-inline/tests/evidence.rs`: finite scalar and
-  attribution evidence, scalar preference, keep-best, and inline store behavior
-  now covered by the canonical coverage gate.
+  `crates/leaven-store-inline/tests/evidence.rs`: finite scalar,
+  command/trajectory, analyst fan-out, patch merge-tree, attribution evidence,
+  scalar preference, keep-best, and inline store behavior now covered by the
+  canonical coverage gate.
 - `crates/leaven-population/tests/pareto_frontier.rs` and
   `crates/leaven-gepa/tests/gepa_smoke.rs`: P3 casewise Pareto frontier laws,
   partition filtering, GEPA surface ownership, surface-edit lowering, candidate
@@ -210,6 +220,20 @@ Use the narrowest layer that proves the claim.
   substrate coverage for scoped writes/reads, unattached command refusal,
   backend local-mount semantics, factory allocation, unique local roots, and
   cleanup removal plus already-removed cleanup tolerance.
+- `examples/trace2skill_spreadsheetbench/tests/manifest.rs`: mechanics-smoke
+  for the Trace2Skill SpreadsheetBench-Verified 400-row release. It proves
+  local upstream JSON rows lower into `leaven-eval` cases with source-row
+  metadata and the paper's `0..200` train / `200..400` held-out split. It is
+  not proof of spreadsheet execution, trajectory generation, skill evolution,
+  or metric reproduction.
+- `examples/trace2skill_spreadsheetbench/tests/run_artifacts.rs`:
+  mechanics-smoke for importing upstream-shaped Trace2Skill run artifacts into
+  Leaven evidence. It proves `results.json`, chat logs, and optional analysis
+  reports lower into `AgentTrajectoryCorpusEvidence` for the training/evolving
+  split, and that those imported trajectories can seed a pending Stage 2
+  `AgentAnalystFanoutEvidence` manifest. It is not proof that those artifacts
+  were generated by a live Qwen/vLLM SpreadsheetBench run or that analyst calls
+  executed.
 
 ## Review Rules
 

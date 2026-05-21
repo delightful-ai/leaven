@@ -38,12 +38,13 @@ use leaven_engine::{
     MaterializeError, Materializer, OptimizerStateWrite, RenderContext, RenderError, Renderer,
     RestoredRunState, RunContext, RunEvent, RunGraph, StoreRunPersistence,
 };
+use leaven_eval::CategoryRoundRobinSampler;
 use leaven_evidence::ScalarEvidence;
 use leaven_kernel::{
     AgentSessionId, Budget, CandidateId, CaseId, Cost, EvaluatorId, EvidenceRef, Fingerprint,
     MetadataBag, Metered, ProposerId, RunId, StageId,
 };
-use leaven_population::KeepBest;
+use leaven_population::{TopKFrontier, TopKParentSelector};
 use leaven_store::EvidenceStore;
 use leaven_store_file::{FileCheckpointStore, FileEvidenceStore, FileStore};
 use leaven_workspace::{Workspace, WorkspaceConfig, WorkspaceFactory, WorkspacePath};
@@ -164,6 +165,9 @@ impl RunStores {
 
 const EVOSKILL_OPTIMIZER_FINGERPRINT: Fingerprint = Fingerprint::from_bytes([31; 32]);
 const EVOSKILL_STATE_SCHEMA: Fingerprint = Fingerprint::from_bytes([32; 32]);
+const EVOSKILL_FRONTIER_SIZE: usize = 3;
+const EVOSKILL_TRAIN_CATEGORIES_PER_BATCH: usize = 3;
+const EVOSKILL_TRAIN_SAMPLES_PER_CATEGORY: usize = 1;
 
 fn evoskill_state_write(state: &EvoSkillCheckpoint) -> Result<OptimizerStateWrite> {
     Ok(OptimizerStateWrite::json(
@@ -292,7 +296,14 @@ async fn run_iteration(
             EvaluationCache::default(),
         ),
     };
-    let mut population = KeepBest::new();
+    let mut population = resume.frontier.unwrap_or_else(evoskill_frontier);
+    let mut parent_selector = resume
+        .parent_selector
+        .unwrap_or_else(evoskill_parent_selector);
+    let mut train_sampler = match resume.train_sampler {
+        Some(train_sampler) => train_sampler,
+        None => evoskill_train_sampler(&cases)?,
+    };
     let workspace_factory = LocalWorkspaceFactory::new(stores.run_root.join("workspaces"));
     let executor = new_executor_stack(&cases, &workspace_factory)?;
 
@@ -322,10 +333,21 @@ async fn run_iteration(
             cases: &cases,
             seed_bank: &seed_bank,
             seed,
+            parent_selector: &parent_selector,
+            train_sampler: &train_sampler,
             resume_score: resume.baseline_score,
         },
     )
     .await?;
+    let parent = match resume.parent {
+        Some(parent) => parent,
+        None => select_frontier_parent(&mut parent_selector, &population)?,
+    };
+    let parent_bank = ctx
+        .graph()
+        .artifact(parent)
+        .ok_or_else(|| msg("selected parent artifact missing"))?
+        .clone();
     let failures = ensure_failures(
         &mut ctx,
         &executor.evaluator,
@@ -333,8 +355,11 @@ async fn run_iteration(
             run_id,
             cases: &cases,
             seed_bank: &seed_bank,
-            seed,
+            parent,
             baseline_score: baseline.score,
+            frontier: &population,
+            parent_selector: &parent_selector,
+            train_sampler: &mut train_sampler,
             resume_failures: resume.failures,
         },
     )
@@ -354,14 +379,19 @@ async fn run_iteration(
             run_id,
             cases: &cases,
             seed_bank: &seed_bank,
+            parent,
+            parent_bank: &parent_bank,
             baseline_score: baseline.score,
+            frontier: &population,
+            parent_selector: &parent_selector,
+            train_sampler: &train_sampler,
             failures: &failures,
             resume_proposal: resume.proposal,
             resume_evidence: resume.proposer_evidence,
         },
     )
     .await?;
-    let (child, child_bank, change) = ensure_child(
+    let (child, _child_bank, change) = ensure_child(
         &workspace_factory,
         &stores.evidence_store,
         &mut ctx,
@@ -369,8 +399,11 @@ async fn run_iteration(
             run_id,
             cases: &cases,
             seed_bank: &seed_bank,
-            seed,
+            parent,
             baseline_score: baseline.score,
+            frontier: &population,
+            parent_selector: &parent_selector,
+            train_sampler: &train_sampler,
             failures: &failures,
             skill_proposal: &skill_proposal,
             proposer_evidence: &proposer_evidence,
@@ -384,6 +417,8 @@ async fn run_iteration(
         &mut ctx,
         &executor.evaluator,
         &mut population,
+        &parent_selector,
+        &train_sampler,
         &stores,
         CompletionRequest {
             run_id,
@@ -391,7 +426,6 @@ async fn run_iteration(
             seed,
             baseline_score: baseline.score,
             child,
-            child_bank,
             skill_proposal,
             change,
         },
@@ -404,13 +438,15 @@ struct BaselineRequest<'a> {
     cases: &'a [EvoSkillCase],
     seed_bank: &'a SkillBank,
     seed: CandidateId,
+    parent_selector: &'a TopKParentSelector,
+    train_sampler: &'a CategoryRoundRobinSampler,
     resume_score: Option<f64>,
 }
 
 async fn ensure_baseline(
     ctx: &mut RunContext<'_, EvoSkillProblem>,
     evaluator: &EvoSkillEvaluator,
-    population: &mut KeepBest,
+    population: &mut TopKFrontier,
     request: BaselineRequest<'_>,
 ) -> Result<ExistingBaseline> {
     if let Some(score) = request.resume_score {
@@ -424,7 +460,7 @@ async fn ensure_baseline(
         EvaluationPurpose::SeedBaseline,
     )
     .await?;
-    observe_keep_best(ctx, population, request.seed, &validation)?;
+    observe_frontier(ctx, population, request.seed, &validation)?;
     checkpoint_phase(
         ctx,
         &EvoSkillCheckpoint::BaselineComplete {
@@ -432,6 +468,9 @@ async fn ensure_baseline(
             cases: request.cases.to_vec(),
             seed_bank: request.seed_bank.clone(),
             baseline_score: validation.average_score,
+            frontier: population.clone(),
+            parent_selector: request.parent_selector.clone(),
+            train_sampler: request.train_sampler.clone(),
         },
     )?;
     Ok(ExistingBaseline {
@@ -443,8 +482,11 @@ struct FailureRequest<'a> {
     run_id: RunId,
     cases: &'a [EvoSkillCase],
     seed_bank: &'a SkillBank,
-    seed: CandidateId,
+    parent: CandidateId,
     baseline_score: f64,
+    frontier: &'a TopKFrontier,
+    parent_selector: &'a TopKParentSelector,
+    train_sampler: &'a mut CategoryRoundRobinSampler,
     resume_failures: Option<Vec<CaseExecution>>,
 }
 
@@ -456,11 +498,15 @@ async fn ensure_failures(
     if let Some(failures) = request.resume_failures {
         return Ok(failures);
     }
-    let feedback = evaluate_one(
+    let feedback_batch = request.train_sampler.next_batch();
+    let feedback = evaluate_cases(
         ctx,
         evaluator,
-        request.seed,
-        TRAIN,
+        request.parent,
+        feedback_batch
+            .iter()
+            .map(|sample| sample.case)
+            .collect::<Vec<_>>(),
         EvaluationPurpose::Feedback,
     )
     .await?;
@@ -477,6 +523,10 @@ async fn ensure_failures(
             cases: request.cases.to_vec(),
             seed_bank: request.seed_bank.clone(),
             baseline_score: request.baseline_score,
+            frontier: request.frontier.clone(),
+            parent_selector: request.parent_selector.clone(),
+            train_sampler: request.train_sampler.clone(),
+            parent: request.parent,
             failures: failures.clone(),
         },
     )?;
@@ -487,7 +537,12 @@ struct ProposalRequest<'a> {
     run_id: RunId,
     cases: &'a [EvoSkillCase],
     seed_bank: &'a SkillBank,
+    parent: CandidateId,
+    parent_bank: &'a SkillBank,
     baseline_score: f64,
+    frontier: &'a TopKFrontier,
+    parent_selector: &'a TopKParentSelector,
+    train_sampler: &'a CategoryRoundRobinSampler,
     failures: &'a [CaseExecution],
     resume_proposal: Option<SkillProposal>,
     resume_evidence: Option<EvidenceRef>,
@@ -511,7 +566,7 @@ async fn ensure_proposal(
     let proposal = run_skill_proposer(
         workspace_factory,
         evidence_store,
-        request.seed_bank,
+        request.parent_bank,
         request.failures,
     )
     .await?;
@@ -522,6 +577,10 @@ async fn ensure_proposal(
             cases: request.cases.to_vec(),
             seed_bank: request.seed_bank.clone(),
             baseline_score: request.baseline_score,
+            frontier: request.frontier.clone(),
+            parent_selector: request.parent_selector.clone(),
+            train_sampler: request.train_sampler.clone(),
+            parent: request.parent,
             failures: request.failures.to_vec(),
             proposal: proposal.value.clone(),
             proposer_evidence: proposal.evidence.clone(),
@@ -534,8 +593,11 @@ struct ChildRequest<'a> {
     run_id: RunId,
     cases: &'a [EvoSkillCase],
     seed_bank: &'a SkillBank,
-    seed: CandidateId,
+    parent: CandidateId,
     baseline_score: f64,
+    frontier: &'a TopKFrontier,
+    parent_selector: &'a TopKParentSelector,
+    train_sampler: &'a CategoryRoundRobinSampler,
     failures: &'a [CaseExecution],
     skill_proposal: &'a SkillProposal,
     proposer_evidence: &'a EvidenceRef,
@@ -561,7 +623,7 @@ async fn ensure_child(
         }
         let report = record_skill_change(
             ctx,
-            request.seed,
+            request.parent,
             change.clone(),
             Some(request.skill_proposal.clone()),
             Some(request.proposer_evidence.clone()),
@@ -573,7 +635,7 @@ async fn ensure_child(
         workspace_factory,
         evidence_store,
         ctx,
-        request.seed,
+        request.parent,
         request.skill_proposal,
         request.proposer_evidence,
     )
@@ -585,6 +647,10 @@ async fn ensure_child(
             cases: request.cases.to_vec(),
             seed_bank: request.seed_bank.clone(),
             baseline_score: request.baseline_score,
+            frontier: request.frontier.clone(),
+            parent_selector: request.parent_selector.clone(),
+            train_sampler: request.train_sampler.clone(),
+            parent: request.parent,
             failures: request.failures.to_vec(),
             proposal: request.skill_proposal.clone(),
             proposer_evidence: request.proposer_evidence.clone(),
@@ -601,7 +667,6 @@ struct CompletionRequest {
     seed: CandidateId,
     baseline_score: f64,
     child: CandidateId,
-    child_bank: SkillBank,
     skill_proposal: SkillProposal,
     change: SkillBankChange,
 }
@@ -635,7 +700,9 @@ struct P5ResultSummary {
 async fn complete_iteration(
     ctx: &mut RunContext<'_, EvoSkillProblem>,
     evaluator: &EvoSkillEvaluator,
-    population: &mut KeepBest,
+    population: &mut TopKFrontier,
+    parent_selector: &TopKParentSelector,
+    train_sampler: &CategoryRoundRobinSampler,
     stores: &RunStores,
     request: CompletionRequest,
 ) -> Result<()> {
@@ -647,20 +714,18 @@ async fn complete_iteration(
         EvaluationPurpose::Validation,
     )
     .await?;
-    observe_keep_best(ctx, population, request.child, &child_eval)?;
+    let frontier = observe_frontier(ctx, population, request.child, &child_eval)?;
 
-    let admitted = true;
-    let best_score = request.baseline_score.max(child_eval.average_score);
-    let best_candidate = if child_eval.average_score >= request.baseline_score {
-        request.child
-    } else {
-        request.seed
-    };
-    let best_bank = if child_eval.average_score >= request.baseline_score {
-        request.child_bank.clone()
-    } else {
-        request.seed_bank.clone()
-    };
+    let admitted = frontier.candidate_admitted;
+    let best_candidate = frontier.best_candidate.unwrap_or(request.seed);
+    let best_score = frontier
+        .best_score
+        .unwrap_or_else(|| request.baseline_score.max(child_eval.average_score));
+    let best_bank = ctx
+        .graph()
+        .artifact(best_candidate)
+        .ok_or_else(|| msg("best frontier artifact missing"))?
+        .clone();
     let skill_change_report =
         SkillBankChangeReport::from_change(&request.seed_bank, &request.change)?;
     ctx.emit(RunEvent::OptimizationEnded {
@@ -677,6 +742,9 @@ async fn complete_iteration(
             admitted,
             best_score,
             best_bank,
+            frontier: population.clone(),
+            parent_selector: parent_selector.clone(),
+            train_sampler: train_sampler.clone(),
         },
     )?;
     let inspection = AgenticRunInspection::from_graph(&ctx.graph());
@@ -907,6 +975,10 @@ struct ResumeState {
     cases: Option<Vec<EvoSkillCase>>,
     seed_bank: Option<SkillBank>,
     baseline_score: Option<f64>,
+    frontier: Option<TopKFrontier>,
+    parent_selector: Option<TopKParentSelector>,
+    train_sampler: Option<CategoryRoundRobinSampler>,
+    parent: Option<CandidateId>,
     failures: Option<Vec<CaseExecution>>,
     proposal: Option<SkillProposal>,
     proposer_evidence: Option<EvidenceRef>,
@@ -925,11 +997,17 @@ impl ResumeState {
                 cases,
                 seed_bank,
                 baseline_score,
+                frontier,
+                parent_selector,
+                train_sampler,
             } => Self {
                 run_id: Some(run_id),
                 cases: Some(cases),
                 seed_bank: Some(seed_bank),
                 baseline_score: Some(baseline_score),
+                frontier: Some(frontier),
+                parent_selector: Some(parent_selector),
+                train_sampler: Some(train_sampler),
                 ..Self::default()
             },
             EvoSkillCheckpoint::FailuresCollected {
@@ -937,12 +1015,20 @@ impl ResumeState {
                 cases,
                 seed_bank,
                 baseline_score,
+                frontier,
+                parent_selector,
+                train_sampler,
+                parent,
                 failures,
             } => Self {
                 run_id: Some(run_id),
                 cases: Some(cases),
                 seed_bank: Some(seed_bank),
                 baseline_score: Some(baseline_score),
+                frontier: Some(frontier),
+                parent_selector: Some(parent_selector),
+                train_sampler: Some(train_sampler),
+                parent: Some(parent),
                 failures: Some(failures),
                 ..Self::default()
             },
@@ -951,6 +1037,10 @@ impl ResumeState {
                 cases,
                 seed_bank,
                 baseline_score,
+                frontier,
+                parent_selector,
+                train_sampler,
+                parent,
                 failures,
                 proposal,
                 proposer_evidence,
@@ -959,6 +1049,10 @@ impl ResumeState {
                 cases: Some(cases),
                 seed_bank: Some(seed_bank),
                 baseline_score: Some(baseline_score),
+                frontier: Some(frontier),
+                parent_selector: Some(parent_selector),
+                train_sampler: Some(train_sampler),
+                parent: Some(parent),
                 failures: Some(failures),
                 proposal: Some(proposal),
                 proposer_evidence: Some(proposer_evidence),
@@ -969,6 +1063,10 @@ impl ResumeState {
                 cases,
                 seed_bank,
                 baseline_score,
+                frontier,
+                parent_selector,
+                train_sampler,
+                parent,
                 failures,
                 proposal,
                 proposer_evidence,
@@ -979,6 +1077,10 @@ impl ResumeState {
                 cases: Some(cases),
                 seed_bank: Some(seed_bank),
                 baseline_score: Some(baseline_score),
+                frontier: Some(frontier),
+                parent_selector: Some(parent_selector),
+                train_sampler: Some(train_sampler),
+                parent: Some(parent),
                 failures: Some(failures),
                 proposal: Some(proposal),
                 proposer_evidence: Some(proposer_evidence),
@@ -1016,12 +1118,46 @@ async fn evaluate_one(
     partition: &'static str,
     purpose: EvaluationPurpose,
 ) -> Result<EvaluationOutcome> {
+    evaluate_set(
+        ctx,
+        evaluator,
+        candidate,
+        EvaluationSet::Partition(leaven_core::PartitionId::from(partition)),
+        purpose,
+    )
+    .await
+}
+
+async fn evaluate_cases(
+    ctx: &mut RunContext<'_, EvoSkillProblem>,
+    evaluator: &EvoSkillEvaluator,
+    candidate: CandidateId,
+    cases: Vec<CaseId>,
+    purpose: EvaluationPurpose,
+) -> Result<EvaluationOutcome> {
+    evaluate_set(
+        ctx,
+        evaluator,
+        candidate,
+        EvaluationSet::Cases(cases),
+        purpose,
+    )
+    .await
+}
+
+async fn evaluate_set(
+    ctx: &mut RunContext<'_, EvoSkillProblem>,
+    evaluator: &EvoSkillEvaluator,
+    candidate: CandidateId,
+    set: EvaluationSet,
+    purpose: EvaluationPurpose,
+) -> Result<EvaluationOutcome> {
     let report = ctx
         .evaluate_with(
             evaluator,
             EvaluationRequest::Independent {
                 candidates: vec![candidate],
-                set: EvaluationSet::Partition(leaven_core::PartitionId::from(partition)),
+                set,
                 granularity: AssessmentGranularity::PerCase,
                 purpose,
             },
@@ -1053,19 +1189,68 @@ async fn evaluate_one(
     })
 }
 
-fn observe_keep_best(
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct FrontierObservation {
+    candidate_admitted: bool,
+    best_candidate: Option<CandidateId>,
+    best_score: Option<f64>,
+}
+
+fn observe_frontier(
     ctx: &mut RunContext<'_, EvoSkillProblem>,
-    population: &mut KeepBest,
+    population: &mut TopKFrontier,
     candidate: CandidateId,
     evaluation: &EvaluationOutcome,
-) -> Result<()> {
+) -> Result<FrontierObservation> {
     let score = ScalarEvidence::new(evaluation.average_score)?;
     let events = population.observe(candidate, evaluation.assessment, score);
     ctx.emit(RunEvent::PopulationUpdated {
         population_id: population.id(),
         events,
     });
-    Ok(())
+    Ok(FrontierObservation {
+        candidate_admitted: population.contains(candidate),
+        best_candidate: population.best(),
+        best_score: population.best_score(),
+    })
+}
+
+fn evoskill_frontier() -> TopKFrontier {
+    TopKFrontier::new(
+        NonZeroUsize::new(EVOSKILL_FRONTIER_SIZE).expect("EvoSkill frontier size is non-zero"),
+    )
+}
+
+fn evoskill_parent_selector() -> TopKParentSelector {
+    TopKParentSelector::best()
+}
+
+fn evoskill_train_sampler(cases: &[EvoSkillCase]) -> Result<CategoryRoundRobinSampler> {
+    let mut pools = BTreeMap::new();
+    for (index, case) in cases.iter().enumerate() {
+        if case.split == Split::Train {
+            pools
+                .entry(case.category.clone().into())
+                .or_insert_with(Vec::new)
+                .push(CaseId::from_index(index));
+        }
+    }
+    Ok(CategoryRoundRobinSampler::new(
+        pools,
+        NonZeroUsize::new(EVOSKILL_TRAIN_CATEGORIES_PER_BATCH)
+            .expect("EvoSkill train categories per batch is non-zero"),
+        NonZeroUsize::new(EVOSKILL_TRAIN_SAMPLES_PER_CATEGORY)
+            .expect("EvoSkill train samples per category is non-zero"),
+    )?)
+}
+
+fn select_frontier_parent(
+    parent_selector: &mut TopKParentSelector,
+    population: &TopKFrontier,
+) -> Result<CandidateId> {
+    parent_selector
+        .select(population)
+        .ok_or_else(|| msg("EvoSkill frontier is empty; no parent can be selected"))
 }
 
 #[derive(Clone)]
@@ -1789,7 +1974,19 @@ async fn finish_workspace<T>(workspace: Workspace, stage_result: Result<T>) -> R
 
 #[cfg(test)]
 mod tests {
-    use super::skill_gated_score;
+    use std::collections::BTreeMap;
+    use std::num::NonZeroUsize;
+
+    use leaven_eval::CategoryRoundRobinSampler;
+    use leaven_evidence::ScalarEvidence;
+    use leaven_kernel::{AssessmentId, CandidateId, RunId};
+    use leaven_population::{TopKParentSelectionPolicy, TopKParentSelector};
+
+    use super::{
+        EvaluationEvidence, EvaluationOutcome, EvoSkillCheckpoint, EvoSkillProblem, ResumeState,
+        evoskill_frontier, evoskill_train_sampler, observe_frontier, skill_gated_score,
+    };
+    use crate::data::{EvoSkillCase, Split};
 
     #[test]
     fn skill_gated_score_rejects_model_prior_without_skill() {
@@ -1798,7 +1995,161 @@ mod tests {
         assert_float_eq(skill_gated_score(true, "99.5", "99.5"), 1.0);
     }
 
+    #[test]
+    fn resume_state_restores_frontier_parent_and_selector_cursor() {
+        let mut frontier = evoskill_frontier();
+        let parent = CandidateId::new();
+        frontier.observe(
+            parent,
+            AssessmentId::new(),
+            ScalarEvidence::new(0.7).unwrap(),
+        );
+        let parent_selector =
+            TopKParentSelector::with_cursor(TopKParentSelectionPolicy::RoundRobin, 1);
+
+        let resume = ResumeState::from_checkpoint(Some(EvoSkillCheckpoint::FailuresCollected {
+            run_id: RunId::default(),
+            cases: Vec::new(),
+            seed_bank: Default::default(),
+            baseline_score: 0.7,
+            frontier: frontier.clone(),
+            parent_selector: parent_selector.clone(),
+            train_sampler: CategoryRoundRobinSampler::new(
+                BTreeMap::from([("train".into(), vec![leaven_kernel::CaseId::from_index(0)])]),
+                NonZeroUsize::new(1).unwrap(),
+                NonZeroUsize::new(1).unwrap(),
+            )
+            .unwrap(),
+            parent,
+            failures: Vec::new(),
+        }))
+        .unwrap();
+
+        let restored_frontier = resume.frontier.unwrap();
+        assert_eq!(restored_frontier.members(), frontier.members());
+        assert_eq!(resume.parent_selector, Some(parent_selector));
+        assert_eq!(resume.parent, Some(parent));
+    }
+
+    #[test]
+    fn evoskill_train_sampler_groups_train_cases_by_category_and_ignores_validation() {
+        let cases = vec![
+            evo_case("train-alpha-0", Split::Train, "alpha"),
+            evo_case("train-beta-0", Split::Train, "beta"),
+            evo_case("validation-alpha", Split::Validation, "alpha"),
+            evo_case("train-alpha-1", Split::Train, "alpha"),
+        ];
+
+        let mut sampler = evoskill_train_sampler(&cases).unwrap();
+        let first = sampler.next_batch();
+        assert_eq!(
+            first
+                .iter()
+                .map(|sample| (sample.category.as_str(), sample.case))
+                .collect::<Vec<_>>(),
+            vec![
+                ("alpha", leaven_kernel::CaseId::from_index(0)),
+                ("beta", leaven_kernel::CaseId::from_index(1)),
+            ]
+        );
+
+        let second = sampler.next_batch();
+        assert_eq!(
+            second
+                .iter()
+                .map(|sample| (sample.category.as_str(), sample.case))
+                .collect::<Vec<_>>(),
+            vec![
+                ("alpha", leaven_kernel::CaseId::from_index(3)),
+                ("beta", leaven_kernel::CaseId::from_index(1)),
+            ]
+        );
+    }
+
+    #[test]
+    fn resume_state_restores_advanced_train_sampler_cursor() {
+        let mut train_sampler = CategoryRoundRobinSampler::new(
+            BTreeMap::from([
+                (
+                    "alpha".into(),
+                    vec![
+                        leaven_kernel::CaseId::from_index(0),
+                        leaven_kernel::CaseId::from_index(1),
+                    ],
+                ),
+                ("beta".into(), vec![leaven_kernel::CaseId::from_index(2)]),
+            ]),
+            NonZeroUsize::new(2).unwrap(),
+            NonZeroUsize::new(1).unwrap(),
+        )
+        .unwrap();
+        let _ = train_sampler.next_batch();
+        let mut frontier = evoskill_frontier();
+        let parent = CandidateId::new();
+        frontier.observe(
+            parent,
+            AssessmentId::new(),
+            ScalarEvidence::new(0.7).unwrap(),
+        );
+        let parent_selector = TopKParentSelector::best();
+
+        let resume = ResumeState::from_checkpoint(Some(EvoSkillCheckpoint::FailuresCollected {
+            run_id: RunId::default(),
+            cases: Vec::new(),
+            seed_bank: Default::default(),
+            baseline_score: 0.7,
+            frontier,
+            parent_selector,
+            train_sampler: train_sampler.clone(),
+            parent,
+            failures: Vec::new(),
+        }))
+        .unwrap();
+
+        assert_eq!(resume.train_sampler, Some(train_sampler));
+    }
+
+    #[test]
+    fn frontier_observation_reports_rejected_child_and_actual_best() {
+        let mut graph = leaven_engine::RunGraph::<EvoSkillProblem>::new(RunId::default());
+        let mut budget = leaven_engine::BudgetLedger::new(leaven_kernel::Budget::unlimited());
+        let mut ctx = leaven_engine::RunContext::<EvoSkillProblem>::new(&mut graph, &mut budget);
+        let mut frontier = leaven_population::TopKFrontier::new(NonZeroUsize::new(1).unwrap());
+        let strong = CandidateId::new();
+        let weak = CandidateId::new();
+
+        let strong_observation =
+            observe_frontier(&mut ctx, &mut frontier, strong, &evaluation_outcome(0.9)).unwrap();
+        let weak_observation =
+            observe_frontier(&mut ctx, &mut frontier, weak, &evaluation_outcome(0.1)).unwrap();
+
+        assert!(strong_observation.candidate_admitted);
+        assert!(!weak_observation.candidate_admitted);
+        assert_eq!(weak_observation.best_candidate, Some(strong));
+        assert_eq!(weak_observation.best_score, Some(0.9));
+    }
+
+    fn evo_case(id: &str, split: Split, category: &str) -> EvoSkillCase {
+        EvoSkillCase {
+            id: id.to_owned(),
+            split,
+            category: category.to_owned(),
+            question: "question".to_owned(),
+            answer: "answer".to_owned(),
+            source: "source".to_owned(),
+        }
+    }
+
     fn assert_float_eq(left: f64, right: f64) {
         assert!((left - right).abs() < f64::EPSILON);
+    }
+
+    fn evaluation_outcome(score: f64) -> EvaluationOutcome {
+        EvaluationOutcome {
+            assessment: AssessmentId::new(),
+            average_score: score,
+            cost: leaven_kernel::Cost::zero(),
+            evidence: EvaluationEvidence { cases: Vec::new() },
+        }
     }
 }

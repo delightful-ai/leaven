@@ -2325,6 +2325,7 @@ dependencies = [
  "leaven-workspace",
  "leaven-workspace-docker",
  "leaven-workspace-e2b",
+ "leaven-workspace-git",
  "leaven-workspace-local",
 ]
 
@@ -2455,6 +2456,7 @@ dependencies = [
  "leaven-core",
  "leaven-kernel",
  "leaven-surface",
+ "serde",
  "thiserror 2.0.18",
 ]
 
@@ -2494,6 +2496,29 @@ dependencies = [
  "leaven-core",
  "leaven-kernel",
  "leaven-surface",
+]
+
+[[package]]
+name = "leaven-cli"
+version = "0.0.0"
+dependencies = [
+ "clap",
+ "futures",
+ "leaven-agent",
+ "leaven-agentic",
+ "leaven-agentic-skill",
+ "leaven-artifact-skill",
+ "leaven-core",
+ "leaven-engine",
+ "leaven-gepa",
+ "leaven-gepa-agentic-skill",
+ "leaven-kernel",
+ "leaven-workspace",
+ "leaven-workspace-local",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "uuid",
 ]
 
 [[package]]
@@ -2597,6 +2622,26 @@ dependencies = [
  "proptest",
  "serde",
  "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "leaven-gepa-agentic-skill"
+version = "0.0.0"
+dependencies = [
+ "futures",
+ "leaven-agent",
+ "leaven-agentic",
+ "leaven-agentic-skill",
+ "leaven-artifact-skill",
+ "leaven-core",
+ "leaven-engine",
+ "leaven-gepa",
+ "leaven-kernel",
+ "leaven-surface",
+ "leaven-workspace",
+ "leaven-workspace-local",
+ "serde",
  "thiserror 2.0.18",
 ]
 
@@ -2910,8 +2955,12 @@ dependencies = [
 name = "leaven-workspace-git"
 version = "0.0.0"
 dependencies = [
+ "futures",
+ "leaven-artifact-git",
  "leaven-kernel",
  "leaven-workspace",
+ "tempfile",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -3462,6 +3511,7 @@ dependencies = [
  "leaven-artifact-skill",
  "leaven-core",
  "leaven-engine",
+ "leaven-eval",
  "leaven-evidence",
  "leaven-kernel",
  "leaven-population",
@@ -5591,6 +5641,19 @@ name = "tower-service"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8df9b6e13f2d32c91b9bd719c00d1958837bc7dec474d94952798cc8e69eeec3"
+
+[[package]]
+name = "trace2skill_spreadsheetbench"
+version = "0.0.0"
+dependencies = [
+ "leaven-core",
+ "leaven-eval",
+ "leaven-evidence",
+ "leaven-kernel",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
 
 [[package]]
 name = "tracing"

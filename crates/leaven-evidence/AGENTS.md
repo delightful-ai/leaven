@@ -1,5 +1,5 @@
 ## Boundary
-This crate owns reusable evidence value shapes: scalar scores, pairwise judgments, casewise outcomes, command/trajectory records, feedback, attribution, and placeholder shapes for diff/json/list/vector/string evidence.
+This crate owns reusable evidence value shapes: scalar scores, pairwise judgments, casewise outcomes, command/trajectory records, analyst fan-out records, patch merge-tree records, feedback, attribution, and placeholder shapes for diff/json/list/vector/string evidence.
 
 Evidence here is data a stage or evaluator can produce and another component can interpret. It is not a store, scorer, population, preference relation, graph event, or evaluator registry.
 
@@ -16,6 +16,27 @@ Evidence here is data a stage or evaluator can produce and another component can
   `CaseAssessmentEvidence` have local tests. `CaseAssessmentEvidence`
   preserves generated output, scalar score, and natural-language feedback; it
   is reusable evidence vocabulary, not the reflective mutation algorithm.
+- `AgentTrajectoryEvidence` is the reusable one-session trajectory envelope:
+  runtime session id, optional Leaven case id, upstream task id, typed
+  success/failure outcome, model id, model configuration fingerprint,
+  transcript/blob reference, command records, and parsed/blob-backed analyst
+  records. It is not a scheduler, ReAct runner, scorer, or Trace2Skill merge
+  policy.
+- `AgentTrajectoryCorpusEvidence` is the checkpointable many-trajectory value:
+  a caller-declared task manifest plus appended `AgentTrajectoryEvidence`
+  records with completed/pending task projection. Persist it through generic
+  `EvidenceStore` or caller-owned checkpoints; do not make store backends know
+  this schema.
+- `AgentAnalystFanoutEvidence` is the checkpointable many-call value for
+  independent analyst/sub-agent calls: caller-declared call ids, per-call role,
+  source task ids, prompt/response payloads, terminal parse/backend status,
+  retry count, and support count. It is not a scheduler, thread pool, model
+  client, patch parser, or hierarchical merge policy.
+- `AgentPatchMergeTreeEvidence` is the checkpointable merge provenance value
+  for agent-authored patches: merge levels, input/accepted/discarded patch ids,
+  support counts, merge decisions, prompt/response payloads, parse-failure
+  artifacts, per-node output patches, and optional final diff. It is not a
+  merge scheduler, prevalence policy, patch parser, or skill-directory applier.
 - Public placeholders today: `diff`, `json`, `listwise`, `mixed`,
   `score_vector`, and `string` are root-re-exported names without behavior laws.
   Do not cite them as standard evidence until they carry fields, constructors,
@@ -29,8 +50,21 @@ Evidence here is data a stage or evaluator can produce and another component can
   preference/population code assumes non-finite values were refused already.
 - Use `CasewiseEvidence` for sparse per-case data. Missing case IDs mean
   absence, not zero score.
-- Use `OutputRecord::BlobRef` for large stdout/stderr; `OutputRecord::Inline`
-  is bounded display evidence.
+- Use `OutputRecord::BlobRef` for large stdout/stderr, transcripts, and parsed
+  analyst payloads; `OutputRecord::Inline` is bounded display evidence.
+- Use `AgentTrajectoryCorpusEvidence` when a paper or runner must resume over a
+  known task manifest. Duplicate manifest task ids are refused at construction,
+  unknown task ids are refused at insertion, and repeated trajectories for a
+  task are allowed for multi-seed or retry protocols.
+- Use `AgentAnalystFanoutEvidence` when a paper or runner must resume over a
+  known analyst-call manifest. Duplicate call ids are refused at construction,
+  unknown call ids are refused at insertion, pending records remain pending
+  until terminal status, and parse failures are durable terminal records rather
+  than missing work.
+- Use `AgentPatchMergeTreeEvidence` when a paper or runner must preserve the
+  shape and result of hierarchical patch consolidation. Node ids are unique,
+  the final node id must exist, support is positive, and parse-failed nodes
+  remain queryable as evidence.
 - Use `AttributableEvidence<K>` when evidence needs to point at surface parts,
   paths, agents, tools, modules, or user keys without making this crate know
   those key domains.
@@ -44,8 +78,8 @@ Evidence here is data a stage or evaluator can produce and another component can
 
 ## Proof Anchors
 - `cargo nextest run -p leaven-evidence` proves scalar, pairwise, casewise,
-  command/trajectory, and attribution behavior. It does not currently prove
-  every root-re-exported evidence name.
+  command/trajectory, analyst fan-out, patch merge-tree, and attribution
+  behavior. It does not currently prove every root-re-exported evidence name.
 - `cargo nextest run -p leaven-preference --test scalar` proves scalar preference callers rely on `ScalarEvidence`'s finite-score contract.
 - `cargo nextest run -p leaven-population --test tournament` proves pairwise evidence feeds fitted population state outside this crate.
 - Before adding an evidence name to `leaven-std`, add a focused test in this

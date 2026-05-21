@@ -2,6 +2,8 @@
 This crate owns skill-specific helpers over the generic agentic adapter layer:
 skill-bank materialization, skill workspace layouts, skill-bank proposal input,
 workspace proposal parsing, diffs, and skill change reports.
+It also owns paper-neutral application of validated skill patch plans to
+`SkillBank` artifacts.
 
 It depends on `leaven-agentic` and `leaven-artifact-skill`; it does not own the
 generic agent runtime, generic case-suite substrate, provider protocols, or
@@ -17,6 +19,23 @@ optimizer rhythm.
   skill-bank proposals.
 - `SkillBankDiff` and change report types explain how a proposed skill bank
   differs from its parent.
+- `SkillPatchPlan` validates agent-authored file-level patch plans against a
+  parent skill bank: target files must exist before modification/deletion,
+  create-file edits must not overwrite existing files, support counts must be
+  positive, same-file ranges must not overlap, and new `references/*.md` files
+  must be atomically paired with `SKILL.md` links.
+- `SkillPatchMergeTree` records paper-neutral hierarchical consolidation
+  provenance for validated patch plans: leaf plan ids, merge levels, accepted
+  and discarded inputs, output plans, and final plan identity. It does not own
+  merge prompts, prevalence thresholds, batch sizes, or result selection.
+- `SkillPatchApplication` applies a validated patch plan as one atomic
+  `SkillBankChange`, reports the applied delta, and returns rollback evidence
+  with the parent bank, plan, attempted change, and error when application
+  fails. It does not parse paper JSON patches or decide merge/prevalence policy.
+- `SkillParsedPatchDocument` lowers already-parsed skill patch operations into
+  a validated `SkillPatchPlan` plus concrete `SkillBankChange` values. It is
+  the paper-neutral bridge after a paper/example has translated JSON, markdown,
+  or diff artifacts into full file writes/deletes.
 
 ## Route Away
 - `SkillBank`, `SkillFolder`, Agent Skills validation, and skill surfaces belong
@@ -55,6 +74,48 @@ optimizer rhythm.
   preserve: this crate as reusable skill materializer/parser/report glue over `leaven-agentic`
   avoid: adding paper utility thresholds, router training, train/validation split policy, or provider prompts here
   verify: run this crate's tests plus the paper/example gate that owns the rhythm
+
+- when: validating agent-authored patch plans
+  do: keep checks mechanical and paper-neutral: existing-file guards, create
+  guards, support-count presence, same-file line-range conflicts, and
+  `references/*.md` create/link pairing
+  preserve: prevalence, deduplication, merge prompting, and analyst-role policy
+  outside this crate
+  avoid: encoding Trace2Skill batch sizes, utility thresholds, prompt wording,
+  or result-selection policy in the patch-plan types
+  verify: extend `skill_agentic.rs` around `SkillPatchPlan` tests and run
+  `cargo nextest run -p leaven-agentic-skill`
+
+- when: recording hierarchical patch consolidation
+  do: use `SkillPatchMergeTree` for graph provenance over already validated
+  `SkillPatchPlan`s
+  preserve: each merge level consuming only plans available before that level,
+  explicit accepted/discarded input decisions, unique plan ids, and a resolvable
+  final plan id
+  avoid: adding paper-specific worker counts, merge batch sizes, support
+  thresholds, prompt wording, or final-metric selection to this crate
+  verify: extend `skill_agentic.rs` around `SkillPatchMergeTree` tests and run
+  `cargo nextest run -p leaven-agentic-skill`
+
+- when: applying validated patch plans
+  do: use `SkillPatchApplication` so application is atomic, reports the
+  resulting `SkillBank` delta, and returns rollback evidence on failure
+  preserve: parsing, merge scheduling, prevalence thresholds, and model prompts
+  outside this crate
+  avoid: applying partial edits directly to a `SkillBank` from paper/example
+  code when a validated patch plan is available
+  verify: extend `skill_agentic.rs` around `SkillPatchApplication` tests and
+  run `cargo nextest run -p leaven-agentic-skill`
+
+- when: lowering parsed patch artifacts
+  do: use `SkillParsedPatchDocument` after the paper/example has translated
+  provider JSON, semantic markdown, or diffs into skill-file operations
+  preserve: paper-specific patch syntax, prompt wording, prevalence policy, and
+  merge scheduling outside this crate
+  avoid: making this crate parse Trace2Skill JSON keys, infer insertion
+  locations from prose, or inspect model transcripts
+  verify: extend `skill_agentic.rs` around parsed patch document tests and run
+  `cargo nextest run -p leaven-agentic-skill`
 
 ## Local Bait
 - `.agents/skills` is a workspace projection choice, not the artifact identity.

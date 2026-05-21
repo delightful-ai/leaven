@@ -2,8 +2,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use leaven_core::{CaseSetVersion, PartitionId};
 use leaven_eval::{
-    Case, Dataset, DatasetError, DatasetSplits, DatasetSplitsError, EvaluationUse, FinalTestPolicy,
-    SplitPolicy, SplitRole, SplitUse, SplitUsePolicy, SplitUsePolicyError,
+    Case, Dataset, DatasetError, DatasetSplitManifest, DatasetSplits, DatasetSplitsError,
+    EvaluationUse, FinalTestPolicy, RowOrderSplitBuilder, SplitPolicy, SplitRole, SplitUse,
+    SplitUsePolicy, SplitUsePolicyError, StratifiedSplitBuilder,
 };
 use leaven_kernel::{CaseId, MetadataBag, MetadataKey, MetadataValue};
 
@@ -63,6 +64,42 @@ fn dataset_from_case_envelopes_preserves_ids_and_metadata() {
     ])
     .unwrap_err();
     assert_eq!(duplicate, DatasetError::DuplicateCase(CaseId::new(42)));
+}
+
+#[test]
+fn source_row_cases_preserve_row_index_and_upstream_id_metadata() {
+    let case = Case::from_source_row(399, "59902", "spreadsheet prompt", Some("answer"));
+    assert_eq!(case.id, CaseId::from_index(399));
+    assert_eq!(case.input, "spreadsheet prompt");
+    assert_eq!(case.target, Some("answer"));
+
+    let row_index = case
+        .metadata
+        .get(&MetadataKey::from("source_row_index"))
+        .expect("row index metadata is present");
+    let MetadataValue::U64(row_index) = row_index else {
+        panic!("row index should be stored as u64 metadata");
+    };
+    assert_eq!(*row_index, 399);
+
+    let source_id = case
+        .metadata
+        .get(&MetadataKey::from("source_id"))
+        .expect("source id metadata is present");
+    let MetadataValue::String(source_id) = source_id else {
+        panic!("source id should be stored as string metadata");
+    };
+    assert_eq!(source_id, "59902");
+
+    let dataset = Dataset::from_cases(vec![
+        Case::from_source_row(0, "13-1", "first", None::<&str>),
+        Case::from_source_row(1, "17-35", "second", None::<&str>),
+    ])
+    .unwrap();
+    assert_eq!(
+        dataset.cases().keys().copied().collect::<Vec<_>>(),
+        vec![CaseId::from_index(0), CaseId::from_index(1)]
+    );
 }
 
 #[test]
@@ -205,6 +242,239 @@ fn split_fingerprint_tracks_roles_and_membership() {
     );
     assert_eq!(left.version(), &CaseSetVersion("v1".to_owned()));
     assert_eq!(left.policy(), &SplitPolicy::DisjointRequired);
+}
+
+#[test]
+fn exact_stratified_split_builder_allocates_requested_counts_by_category() {
+    let splits = StratifiedSplitBuilder::new(BTreeMap::from([
+        (
+            "easy".into(),
+            vec![
+                CaseId::from_index(0),
+                CaseId::from_index(1),
+                CaseId::from_index(2),
+                CaseId::from_index(3),
+                CaseId::from_index(4),
+            ],
+        ),
+        (
+            "hard".into(),
+            vec![
+                CaseId::from_index(10),
+                CaseId::from_index(11),
+                CaseId::from_index(12),
+                CaseId::from_index(13),
+                CaseId::from_index(14),
+                CaseId::from_index(15),
+                CaseId::from_index(16),
+            ],
+        ),
+    ]))
+    .unwrap()
+    .role_count(SplitRole::Train, 5)
+    .role_count(SplitRole::Validation, 3)
+    .role_count(SplitRole::Test, 2)
+    .build(CaseSetVersion("officeqa-categories-v1".to_owned()))
+    .unwrap();
+
+    assert_eq!(
+        splits.cases(&SplitRole::Train.partition_id()),
+        Some(
+            [
+                CaseId::from_index(0),
+                CaseId::from_index(1),
+                CaseId::from_index(10),
+                CaseId::from_index(11),
+                CaseId::from_index(12),
+            ]
+            .as_slice()
+        )
+    );
+    assert_eq!(
+        splits.cases(&SplitRole::Validation.partition_id()),
+        Some(
+            [
+                CaseId::from_index(2),
+                CaseId::from_index(13),
+                CaseId::from_index(14),
+            ]
+            .as_slice()
+        )
+    );
+    assert_eq!(
+        splits.cases(&SplitRole::Test.partition_id()),
+        Some([CaseId::from_index(3), CaseId::from_index(15)].as_slice())
+    );
+    assert_eq!(splits.policy(), &SplitPolicy::DisjointRequired);
+}
+
+#[test]
+fn exact_stratified_split_builder_refuses_ambiguous_or_oversized_manifests() {
+    let duplicate = StratifiedSplitBuilder::new(BTreeMap::from([
+        ("easy".into(), vec![CaseId::from_index(0)]),
+        ("hard".into(), vec![CaseId::from_index(0)]),
+    ]))
+    .unwrap_err();
+    assert_eq!(
+        duplicate,
+        DatasetSplitsError::DuplicateStratifiedCase {
+            case: CaseId::from_index(0),
+            left: "easy".into(),
+            right: "hard".into(),
+        }
+    );
+
+    let oversized = StratifiedSplitBuilder::new(BTreeMap::from([(
+        "easy".into(),
+        vec![CaseId::from_index(0), CaseId::from_index(1)],
+    )]))
+    .unwrap()
+    .role_count(SplitRole::Train, 2)
+    .role_count(SplitRole::Validation, 1)
+    .build(CaseSetVersion("too-large".to_owned()))
+    .unwrap_err();
+    assert_eq!(
+        oversized,
+        DatasetSplitsError::InsufficientStratifiedCases {
+            requested: 3,
+            available: 2,
+        }
+    );
+
+    let duplicate_role = StratifiedSplitBuilder::new(BTreeMap::from([(
+        "easy".into(),
+        vec![CaseId::from_index(0), CaseId::from_index(1)],
+    )]))
+    .unwrap()
+    .role_count(SplitRole::Train, 1)
+    .role_count(SplitRole::Train, 1)
+    .build(CaseSetVersion("duplicate-role".to_owned()))
+    .unwrap_err();
+    assert_eq!(
+        duplicate_role,
+        DatasetSplitsError::DuplicateSplitRole(SplitRole::Train)
+    );
+}
+
+#[test]
+fn row_order_split_builder_preserves_upstream_slice_ranges() {
+    let ordered_cases = (0..400).map(CaseId::from_index).collect::<Vec<_>>();
+    let splits = RowOrderSplitBuilder::new(ordered_cases)
+        .role_range(SplitRole::Train, 0..200)
+        .role_range(SplitRole::Test, 200..400)
+        .build(CaseSetVersion(
+            "trace2skill-spreadsheetbench-verified-400-v1".to_owned(),
+        ))
+        .unwrap();
+
+    let train = splits
+        .cases(&SplitRole::Train.partition_id())
+        .expect("train slice exists");
+    let test = splits
+        .cases(&SplitRole::Test.partition_id())
+        .expect("test slice exists");
+
+    assert_eq!(train.len(), 200);
+    assert_eq!(test.len(), 200);
+    assert_eq!(train.first(), Some(&CaseId::from_index(0)));
+    assert_eq!(train.last(), Some(&CaseId::from_index(199)));
+    assert_eq!(test.first(), Some(&CaseId::from_index(200)));
+    assert_eq!(test.last(), Some(&CaseId::from_index(399)));
+    assert_eq!(splits.policy(), &SplitPolicy::DisjointRequired);
+}
+
+#[test]
+fn row_order_split_builder_refuses_invalid_ranges_and_duplicate_roles() {
+    let duplicate_role = RowOrderSplitBuilder::new(vec![
+        CaseId::from_index(0),
+        CaseId::from_index(1),
+        CaseId::from_index(2),
+    ])
+    .role_range(SplitRole::Train, 0..1)
+    .role_range(SplitRole::Train, 1..2)
+    .build(CaseSetVersion("duplicate-role".to_owned()))
+    .unwrap_err();
+    assert_eq!(
+        duplicate_role,
+        DatasetSplitsError::DuplicateSplitRole(SplitRole::Train)
+    );
+
+    let invalid_range = RowOrderSplitBuilder::new(vec![CaseId::from_index(0)])
+        .role_range(SplitRole::Test, 0..2)
+        .build(CaseSetVersion("invalid-range".to_owned()))
+        .unwrap_err();
+    assert_eq!(
+        invalid_range,
+        DatasetSplitsError::InvalidRowRange {
+            role: SplitRole::Test,
+            start: 0,
+            end: 2,
+            len: 1,
+        }
+    );
+}
+
+#[test]
+fn dataset_split_manifest_requires_declared_nonempty_roles() {
+    let ordered_cases = (0..4).map(CaseId::from_index).collect::<Vec<_>>();
+    let splits = RowOrderSplitBuilder::new(ordered_cases)
+        .role_range(SplitRole::Train, 0..2)
+        .build(CaseSetVersion("trace2skill-spreadsheetbench-v1".to_owned()))
+        .unwrap();
+
+    let error = DatasetSplitManifest::new(
+        splits,
+        [SplitRole::Train, SplitRole::Test],
+        SplitUsePolicy::gepa_train_val_test(),
+    )
+    .unwrap_err();
+
+    assert_eq!(
+        error,
+        DatasetSplitsError::EmptyRequiredSplit {
+            role: SplitRole::Test,
+        }
+    );
+}
+
+#[test]
+fn dataset_split_manifest_exposes_role_based_membership_and_policy() {
+    let ordered_cases = (0..4).map(CaseId::from_index).collect::<Vec<_>>();
+    let splits = RowOrderSplitBuilder::new(ordered_cases)
+        .role_range(SplitRole::Train, 0..2)
+        .role_range(SplitRole::Test, 2..4)
+        .build(CaseSetVersion("trace2skill-spreadsheetbench-v1".to_owned()))
+        .unwrap();
+
+    let manifest = DatasetSplitManifest::new(
+        splits,
+        [SplitRole::Train, SplitRole::Test],
+        SplitUsePolicy::gepa_train_val_test(),
+    )
+    .unwrap();
+
+    assert_eq!(
+        manifest
+            .cases_for_role(&SplitRole::Train)
+            .expect("train split exists"),
+        &[CaseId::from_index(0), CaseId::from_index(1)]
+    );
+    assert_eq!(
+        manifest
+            .cases_for_role(&SplitRole::Test)
+            .expect("test split exists"),
+        &[CaseId::from_index(2), CaseId::from_index(3)]
+    );
+    assert!(
+        manifest
+            .use_policy()
+            .use_for(&SplitRole::Test.partition_id())
+            .allows(&EvaluationUse::FinalTest)
+    );
+    assert_eq!(
+        manifest.required_roles(),
+        &BTreeSet::from([SplitRole::Train, SplitRole::Test])
+    );
 }
 
 #[test]

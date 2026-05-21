@@ -1,5 +1,7 @@
 use leaven_artifact_skill::{SkillBank, SkillBankChange};
+use leaven_eval::CategoryRoundRobinSampler;
 use leaven_kernel::{EvidenceRef, RunId};
+use leaven_population::{TopKFrontier, TopKParentSelector};
 
 use crate::data::EvoSkillCase;
 use crate::evidence::CaseExecution;
@@ -13,12 +15,19 @@ pub enum EvoSkillCheckpoint {
         cases: Vec<EvoSkillCase>,
         seed_bank: SkillBank,
         baseline_score: f64,
+        frontier: TopKFrontier,
+        parent_selector: TopKParentSelector,
+        train_sampler: CategoryRoundRobinSampler,
     },
     FailuresCollected {
         run_id: RunId,
         cases: Vec<EvoSkillCase>,
         seed_bank: SkillBank,
         baseline_score: f64,
+        frontier: TopKFrontier,
+        parent_selector: TopKParentSelector,
+        train_sampler: CategoryRoundRobinSampler,
+        parent: leaven_kernel::CandidateId,
         failures: Vec<CaseExecution>,
     },
     ProposalComplete {
@@ -26,6 +35,10 @@ pub enum EvoSkillCheckpoint {
         cases: Vec<EvoSkillCase>,
         seed_bank: SkillBank,
         baseline_score: f64,
+        frontier: TopKFrontier,
+        parent_selector: TopKParentSelector,
+        train_sampler: CategoryRoundRobinSampler,
+        parent: leaven_kernel::CandidateId,
         failures: Vec<CaseExecution>,
         proposal: SkillProposal,
         proposer_evidence: EvidenceRef,
@@ -35,6 +48,10 @@ pub enum EvoSkillCheckpoint {
         cases: Vec<EvoSkillCase>,
         seed_bank: SkillBank,
         baseline_score: f64,
+        frontier: TopKFrontier,
+        parent_selector: TopKParentSelector,
+        train_sampler: CategoryRoundRobinSampler,
+        parent: leaven_kernel::CandidateId,
         failures: Vec<CaseExecution>,
         proposal: SkillProposal,
         proposer_evidence: EvidenceRef,
@@ -48,5 +65,8 @@ pub enum EvoSkillCheckpoint {
         admitted: bool,
         best_score: f64,
         best_bank: SkillBank,
+        frontier: TopKFrontier,
+        parent_selector: TopKParentSelector,
+        train_sampler: CategoryRoundRobinSampler,
     },
 }

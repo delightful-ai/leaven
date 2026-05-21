@@ -4,8 +4,8 @@ cargo-features = ["codegen-backend"]
 
 [workspace]
 resolver = "3"
-# Bare `cargo build`/`check`/`nextest` (no `--workspace`) skip the example
-# milestones; `just check`/`just test` still cover them via `--workspace`.
+# Bare `cargo build`/`check`/`nextest` and the default `just` gates skip the
+# example milestones. Run them explicitly through the `just milestone-*` recipes.
 default-members = ["crates/*"]
 members = [
     "crates/leaven",
@@ -15,6 +15,7 @@ members = [
     "crates/leaven-agent-codex",
     "crates/leaven-agent-codex-app-server",
     "crates/leaven-agent-codex-cli",
+    "crates/leaven-cli",
     "crates/leaven-agent-opencode",
     "crates/leaven-agentic",
     "crates/leaven-agentic-skill",
@@ -28,6 +29,7 @@ members = [
     "crates/leaven-evidence",
     "crates/leaven-eval",
     "crates/leaven-gepa",
+    "crates/leaven-gepa-agentic-skill",
     "crates/leaven-kernel",
     "crates/leaven-lm",
     "crates/leaven-lm-anthropic",
@@ -68,6 +70,7 @@ members = [
     "examples/p6_optimizer_policy_self_opt",
     "examples/p7_self_optimization_kernel",
     "examples/p8_aime_gepa",
+    "examples/trace2skill_spreadsheetbench",
     "xtask",
 ]
 
@@ -145,6 +148,7 @@ leaven-agent-claude-code = { path = "crates/leaven-agent-claude-code", version =
 leaven-agent-codex = { path = "crates/leaven-agent-codex", version = "0.0.0" }
 leaven-agent-codex-app-server = { path = "crates/leaven-agent-codex-app-server", version = "0.0.0", default-features = false }
 leaven-agent-codex-cli = { path = "crates/leaven-agent-codex-cli", version = "0.0.0" }
+leaven-cli = { path = "crates/leaven-cli", version = "0.0.0" }
 leaven-agent-opencode = { path = "crates/leaven-agent-opencode", version = "0.0.0" }
 leaven-agentic = { path = "crates/leaven-agentic", version = "0.0.0" }
 leaven-agentic-skill = { path = "crates/leaven-agentic-skill", version = "0.0.0" }
@@ -156,6 +160,7 @@ leaven-cuda = { path = "crates/leaven-cuda", version = "0.0.0" }
 leaven-evidence = { path = "crates/leaven-evidence", version = "0.0.0" }
 leaven-eval = { path = "crates/leaven-eval", version = "0.0.0" }
 leaven-gepa = { path = "crates/leaven-gepa", version = "0.0.0" }
+leaven-gepa-agentic-skill = { path = "crates/leaven-gepa-agentic-skill", version = "0.0.0" }
 leaven-kernel = { path = "crates/leaven-kernel", version = "0.0.0" }
 leaven-lm = { path = "crates/leaven-lm", version = "0.0.0" }
 leaven-lm-anthropic = { path = "crates/leaven-lm-anthropic", version = "0.0.0" }
@@ -187,6 +192,7 @@ leaven-workspace-local = { path = "crates/leaven-workspace-local", version = "0.
 
 # error handling
 thiserror = "2"
+clap = { version = "4", features = ["derive"] }
 
 # serialization
 serde = { version = "1", features = ["derive"] }

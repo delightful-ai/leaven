@@ -11,7 +11,29 @@ import subprocess
 import time
 
 
-NEXTTEST_COMMAND = ("nextest workspace suite", ["cargo", "nextest", "run", "--workspace"])
+MILESTONE_PACKAGES = [
+    "p0_graph_skeleton",
+    "p1_keep_best",
+    "p2_pairwise_tournament",
+    "p3_gepa_parity",
+    "p4_meta_harness_lite",
+    "p5_evoskill_iteration",
+    "p6_optimizer_policy_self_opt",
+    "p7_self_optimization_kernel",
+    "p8_aime_gepa",
+    "trace2skill_spreadsheetbench",
+]
+
+NEXTTEST_COMMAND = (
+    "nextest workspace suite",
+    [
+        "cargo",
+        "nextest",
+        "run",
+        "--workspace",
+        *[arg for package in MILESTONE_PACKAGES for arg in ("--exclude", package)],
+    ],
+)
 
 NON_RUST_FENCE_LANGUAGES = {
     "console",
@@ -78,6 +100,8 @@ def workspace_doctest_commands(workspace_root: Path) -> list[tuple[str, list[str
     members = set(payload["workspace_members"])
     names: list[str] = []
     for package in payload["packages"]:
+        if package["name"] in MILESTONE_PACKAGES:
+            continue
         if package["id"] not in members:
             continue
         has_library_target = any("lib" in target["kind"] for target in package["targets"])
