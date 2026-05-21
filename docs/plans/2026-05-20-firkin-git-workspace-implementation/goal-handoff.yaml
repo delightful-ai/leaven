@@ -1,0 +1,180 @@
+artifact_kind: leaven_goal_handoff
+status: ready_for_goal_draft
+date: 2026-05-20
+recovery_note: >
+  Restored from jj history on 2026-05-21 after this plan/spec bundle was
+  missing from the active checkout. Treat this as a detailed handoff
+  denominator and intent record, not as automatically normative over newer code
+  decisions, the active goal text, or subsequent user direction. Reconcile
+  differences explicitly before claiming completion.
+
+original_intent: >
+  Implement the Firkin-backed Git workspace design end to end in Leaven so
+  repo-shaped optimization can use durable Git artifacts, projected Git
+  visibility, workspace materialization/readback, and Firkin product pods as a
+  real sandbox backend. The result should preserve the "artifact is the
+  codebase, workspace is the disposable projection" model and avoid duplicate
+  public APIs.
+
+designed_surface:
+  artifact:
+    - GitProgramArtifact in leaven-artifact-git owns one-or-many repo state.
+    - GitProgramChange owns per-repo and multi-repo changes.
+    - Current GitArtifact remains explicitly fixture/snapshot shaped until a
+      later hard rename is justified.
+  materialization:
+    - Git materialization/readback runs over leaven_workspace::WorkspaceView.
+    - Stage-owned materializer path uses leaven_engine::Materializer first.
+    - leaven_stage::MaterializableArtifact is not duplicated.
+  workspace:
+    - leaven_workspace::Workspace remains the owning lease.
+    - Firkin placement is exposed through WorkspaceFactoryContext.
+    - leaven-workspace-firkin owns the concrete backend.
+    - The implementation references the local Firkin checkout at
+      /Users/darin/vendor/github.com/apple/containerization for live behavior
+      and API matching.
+    - Leaven's Firkin route is optional: add leaven-workspace-firkin as a
+      workspace crate and expose it through an optional leaven facade feature
+      such as workspace-firkin, not through default features or leaven::prelude.
+  git_ops:
+    - Git projection/import/fsck/durable-store mechanics live outside
+      leaven-artifact-git.
+    - Git ops may start as a focused private module, but extraction to
+      leaven-git-ops is acceptable once shared laws are needed.
+  user_visible_result:
+    - local backend proves artifact/materializer/readback behavior.
+    - Firkin backend proves one product pod can host multiple isolated
+      workspaces that share only allowed projected archive state.
+
+governing_docs:
+  product:
+    - docs/specs/initial_library.md
+    - docs/specs/guiding_principles.md
+  implementation:
+    - docs/specs/firkin_git_workspace_backend.md
+    - docs/specs/firkin_git_workspace_api_shape.md
+    - docs/specs/agentic_stage_materialization.md
+    - docs/specs/agentic_skill_optimization_primitives.md
+  local_contracts:
+    - crates/leaven-artifact-git/AGENTS.md
+    - crates/leaven-workspace/AGENTS.md
+    - crates/leaven-agentic/AGENTS.md
+    - docs/plans/AGENTS.md
+  external_checkouts:
+    - /Users/darin/vendor/github.com/apple/containerization
+
+intent_preservation: >
+  Preserved only if Leaven has a real typed Git artifact path, real Git
+  projection/import/readback behavior over WorkspaceView, and a concrete Firkin
+  workspace backend that can run the same materialization path inside product
+  pods. Not preserved by docs alone, local-only git clones, examples that bypass
+  Leaven artifact/readback law, or a Firkin backend that cannot prove file,
+  command, cleanup, and isolation behavior.
+
+misleading_proxy_proofs:
+  - a new spec or API skeleton compiles but no artifact laws or readback tests exist
+  - a single-repo demo passes while multi-repo is a separate wrapper or mode
+  - leaven-workspace-git local clone behavior is treated as the product Git path
+  - a full bare repo is mounted read-only and called visibility isolation
+  - Firkin can start a container but not implement WorkspaceBackend file/command/cleanup semantics
+  - proposal commits exist only in pod-local mirrors and not the durable repo store
+  - WorkspaceLease, CodebaseArtifact, or a third MaterializationReport appears as a public duplicate law surface
+  - topology_contract passes but facade/prelude routes expose scaffold as ordinary product API
+  - hidden evaluator data, reward caches, or trusted refs are visible to proposer workspaces
+
+acceptance_path:
+  - id: git_program_artifact_laws
+    status: pending
+    requirement: >
+      leaven-artifact-git exposes a validated GitProgramArtifact/GitProgramChange
+      shape with native one-or-many repos, immutable commit/tree identity,
+      cache identity law, private fields, constructors/accessors, and no
+      workspace/pod/candidate identity leakage.
+    evidence: []
+  - id: git_projection_import_laws
+    status: pending
+    requirement: >
+      Git projection/import tests prove allowed refs only, hidden-only commits
+      absent, no alternates, no hardlink/local clone leakage, git fsck before
+      import, scratch/trusted ref separation, and durable store import before
+      artifact recording.
+    evidence: []
+  - id: workspace_materializer_readback
+    status: pending
+    requirement: >
+      A Git materializer/readback path over WorkspaceView checks out all repos
+      from GitProgramArtifact.layout, handles committed changes, dirty
+      worktrees, output bundles/patches, no-op reads, and returns typed
+      GitProgramChange values applied through Artifact::apply_change.
+    evidence: []
+  - id: no_duplicate_public_apis
+    status: pending
+    requirement: >
+      Public APIs reuse Artifact, Workspace, WorkspaceView,
+      WorkspaceFactoryContext, leaven_engine::Materializer, and
+      leaven_stage::MaterializableArtifact. Facade/prelude routing keeps
+      scaffold out of ordinary public imports. Firkin support is exposed only
+      through an optional feature/alias path once the backend crate compiles and
+      has proof.
+    evidence: []
+  - id: firkin_workspace_backend
+    status: pending
+    requirement: >
+      leaven-workspace-firkin implements WorkspaceFactory/WorkspaceBackend with
+      product-pod allocation, per-workspace containers, typed Firkin context,
+      file read/write/list, command execution, executable-bit behavior or typed
+      refusal, cleanup, and no Git artifact dependency. Its Firkin assumptions
+      are checked against /Users/darin/vendor/github.com/apple/containerization.
+    evidence: []
+  - id: firkin_git_e2e
+    status: pending
+    requirement: >
+      A live or signed Firkin proof creates one product pod, allocates two
+      isolated workspaces, materializes projected Git state, runs at least one
+      mutation/readback/import, proves allowed archive sharing only, and cleans
+      up containers/trusted refs.
+    evidence: []
+  - id: repo_standards_hold
+    status: pending
+    requirement: >
+      Crate topology, docs/spec index, crate-local AGENTS guidance, tests, and
+      final verification reflect the implemented surfaces and maturity labels.
+    evidence: []
+
+proof_denominator:
+  required_tests:
+    - leaven-artifact-git artifact law tests for GitProgramArtifact and GitProgramChange
+    - Git projection/import tests using local bare repos
+    - Git materializer/readback tests over leaven-workspace-local
+    - no-duplicate public API and topology/facade tests
+    - leaven-workspace-firkin backend tests, with live Firkin proof when available
+  required_commands:
+    - cargo test -p leaven --test topology_contract
+    - cargo test -p leaven-artifact-git
+    - cargo test -p leaven-workspace --test workspace_view
+    - cargo test -p leaven-workspace-firkin
+    - just check
+  feature_requirements:
+    - leaven-workspace-firkin is optional and not part of default members unless
+      the repo's workspace conventions require default-members for all crates.
+    - crates/leaven exposes Firkin, if at all, via an optional feature such as
+      workspace-firkin and a namespaced alias, not through leaven::prelude.
+  live_requirement: >
+    If the local Firkin runtime can run signed live tests, execute a bounded
+    Firkin product-pod proof. If live Firkin is unavailable, complete all local
+    and contract tests and mark the live backend proof blocked rather than
+    proven.
+
+explicit_non_goals:
+  - making Firkin become EvoSkill or optimizer policy
+  - implementing full paper-faithful EvoSkill replication
+  - making jj first-class in this slice
+  - supporting pod snapshot restore as a first completion requirement
+  - exposing Firkin or Git scaffold through leaven::prelude
+  - introducing generic codebase or container abstractions before a second user forces them
+
+decision: >
+  Ready to draft a /goal against this handoff and the two Firkin/Git specs.
+  Before activating, confirm that the denominator is product Git artifact plus
+  materializer/readback plus Firkin backend proof, not docs, local-only clone
+  behavior, or skeleton public APIs.
