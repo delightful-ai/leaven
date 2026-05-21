@@ -307,11 +307,11 @@ impl GitRepoArtifact {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct GitRepoSetLayout {
+pub struct GitProgramLayout {
     entries: BTreeMap<RepoKey, GitPath>,
 }
 
-impl GitRepoSetLayout {
+impl GitProgramLayout {
     pub fn new(entries: BTreeMap<RepoKey, GitPath>) -> Result<Self, GitArtifactError> {
         Ok(Self { entries })
     }
@@ -336,15 +336,15 @@ impl GitRepoSetLayout {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct GitRepoSetArtifact {
+pub struct GitProgramArtifact {
     repos: BTreeMap<RepoKey, GitRepoArtifact>,
-    layout: GitRepoSetLayout,
+    layout: GitProgramLayout,
 }
 
-impl GitRepoSetArtifact {
+impl GitProgramArtifact {
     pub fn new(
         repos: BTreeMap<RepoKey, GitRepoArtifact>,
-        layout: GitRepoSetLayout,
+        layout: GitProgramLayout,
     ) -> Result<Self, GitArtifactError> {
         let artifact = Self { repos, layout };
         artifact.validate()?;
@@ -362,13 +362,13 @@ impl GitRepoSetArtifact {
     }
 
     #[must_use]
-    pub const fn layout(&self) -> &GitRepoSetLayout {
+    pub const fn layout(&self) -> &GitProgramLayout {
         &self.layout
     }
 
     fn content_id(&self) -> ContentId {
         let mut builder = FingerprintBuilder::new();
-        builder.update(b"leaven.artifact-git.repo-set.v1");
+        builder.update(b"leaven.artifact-git.program.v1");
         for (repo, artifact) in &self.repos {
             builder.update(b"repo");
             repo.feed_fingerprint(&mut builder);
@@ -406,8 +406,8 @@ impl GitRepoSetArtifact {
     }
 }
 
-impl Artifact for GitRepoSetArtifact {
-    type Change = GitRepoSetChange;
+impl Artifact for GitProgramArtifact {
+    type Change = GitProgramChange;
     type ApplyError = GitArtifactError;
 
     fn identity(&self) -> ArtifactIdentity {
@@ -420,7 +420,7 @@ impl Artifact for GitRepoSetArtifact {
 
     fn validate(&self) -> Result<(), Self::ApplyError> {
         if self.repos.is_empty() {
-            return Err(GitArtifactError::EmptyRepoSet);
+            return Err(GitArtifactError::EmptyProgram);
         }
         for (key, repo) in &self.repos {
             if repo.repo().key() != key {
@@ -444,7 +444,7 @@ impl Artifact for GitRepoSetArtifact {
     fn apply_change(&self, change: &Self::Change) -> Result<Self, Self::ApplyError> {
         let mut next = self.clone();
         match change {
-            GitRepoSetChange::AdvanceRepo {
+            GitProgramChange::AdvanceRepo {
                 repo,
                 expected_parent,
                 child,
@@ -455,7 +455,7 @@ impl Artifact for GitRepoSetArtifact {
                     child: child.clone(),
                 },
             )?,
-            GitRepoSetChange::AdvanceRepos { repo_changes } => {
+            GitProgramChange::AdvanceRepos { repo_changes } => {
                 for (repo, change) in repo_changes {
                     next.apply_repo_change(repo, change)?;
                 }
@@ -475,7 +475,7 @@ pub enum GitRepoChange {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
-pub enum GitRepoSetChange {
+pub enum GitProgramChange {
     AdvanceRepo {
         repo: RepoKey,
         expected_parent: GitRevision,
