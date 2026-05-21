@@ -268,8 +268,13 @@ The checked-out upstream release includes:
   `map_patches/patch_*.json` into a pending `AgentAnalystFanoutEvidence` by the
   upstream one-based `batch_index`, after validating the saved patch against
   the parent skill bank. Imported patch calls become `Succeeded` with response
-  blob refs; fan-out calls without saved patches stay pending because upstream
-  only persists parsed MAP outputs.
+  blob refs. It can also import upstream
+  `--parse-failure-dir` MAP markdown artifacts shaped as
+  `parse_failures_parallel/map/*_batch_000N_*_parse_failed.md`; those saved
+  diagnostics become terminal `ParseFailed` calls with prompt/response artifact
+  refs. Fan-out calls with neither saved patches nor saved parse-failure
+  artifacts stay pending, so unsaved analyst failures are not silently counted
+  as completed.
 - `leaven-evidence::AgentPatchMergeTreeEvidence` now owns the checkpointable
   Stage 3 merge provenance value: merge levels, input/accepted/discarded patch
   ids, support counts, merge decisions, prompt/response payloads, parse-failure
@@ -524,6 +529,28 @@ Verification:
   import slice.
 - `CARGO_INCREMENTAL=0 cargo test -p leaven --test topology_contract` passed
   4/4 tests on 2026-05-20 after the saved MAP-patch fan-out import slice.
+- `CARGO_INCREMENTAL=0 cargo test -p trace2skill_spreadsheetbench --test
+  patch_replay imports_saved_map_parse_failures_without_completing_unsaved_calls`
+  first failed on 2026-05-20 with missing `parse_failure_dir` on
+  `Trace2SkillSavedMapPatchFanoutInput`, then passed after importing upstream
+  MAP parse-failure markdown artifacts into terminal `ParseFailed`
+  `AgentAnalystCallEvidence` records while leaving unsaved calls pending.
+- `rustfmt --check --config skip_children=true
+  examples/trace2skill_spreadsheetbench/src/patch_replay.rs
+  examples/trace2skill_spreadsheetbench/tests/patch_replay.rs` passed on
+  2026-05-20 after splitting the saved MAP output importer into private helper
+  functions.
+- `CARGO_INCREMENTAL=0 cargo test -p trace2skill_spreadsheetbench` passed on
+  2026-05-20 with 24/24 tests after the saved MAP parse-failure import slice.
+- `CARGO_INCREMENTAL=0 cargo clippy -p trace2skill_spreadsheetbench
+  --all-targets -- -D warnings` first failed on 2026-05-20 with
+  `clippy::too_many_lines` on the public saved MAP importer, then passed after
+  extracting parsed-patch and parse-failure import helpers.
+- `CARGO_INCREMENTAL=0 cargo nextest run -p trace2skill_spreadsheetbench`
+  passed on 2026-05-20 with 24/24 tests after the saved MAP parse-failure
+  import slice.
+- `CARGO_INCREMENTAL=0 cargo test -p leaven --test topology_contract` passed
+  4/4 tests on 2026-05-20 after the saved MAP parse-failure import slice.
 
 ## Current Blockers
 
@@ -537,8 +564,8 @@ Leaven-owned remaining primitives before faithful Trace2Skill replication:
 - live checkpointed parallel analyst execution for hundreds of independent
   agent/LLM calls. Leaven now has the durable fan-out evidence value and the
   Trace2Skill example can seed source-template-backed pending calls and import
-  saved parsed MAP patches back into those calls, but no scheduler/model client
-  has executed those prompts;
+  saved parsed MAP patches or saved MAP parse-failure artifacts back into those
+  calls, but no scheduler/model client has executed those prompts;
 - live hierarchical merge execution over analyst patch outputs. Leaven now has
   generic `AgentPatchMergeTreeEvidence` and skill-specific
   `SkillPatchMergeTree` provenance values plus JSON patch replay/application
