@@ -5,9 +5,10 @@ use std::{
 
 use trace2skill_spreadsheetbench::{
     compare_trace2skill_one_case_answer, inspect_trace2skill_one_case,
-    prepare_trace2skill_one_case_run, render_trace2skill_one_case_prompt,
-    score_trace2skill_one_case_run, Trace2SkillOneCaseComparisonInput, Trace2SkillOneCaseInput,
-    Trace2SkillOneCaseRunInput, Trace2SkillOneCaseRunScoringInput,
+    prepare_trace2skill_one_case_analyst_fanout, prepare_trace2skill_one_case_run,
+    render_trace2skill_one_case_prompt, score_trace2skill_one_case_run,
+    Trace2SkillOneCaseAnalystFanoutInput, Trace2SkillOneCaseComparisonInput,
+    Trace2SkillOneCaseInput, Trace2SkillOneCaseRunInput, Trace2SkillOneCaseRunScoringInput,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -71,6 +72,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             })?;
             println!("{}", serde_json::to_string_pretty(&report)?);
         }
+        Mode::PrepareOneCaseAnalystFanout => {
+            let run_dir = args
+                .run_dir
+                .as_deref()
+                .ok_or_else(|| invalid_input(format!("--run-dir is required\n\n{USAGE}")))?;
+            let report = prepare_trace2skill_one_case_analyst_fanout(
+                Trace2SkillOneCaseAnalystFanoutInput {
+                    run_dir,
+                    upstream_prompt_dir: &args.upstream_prompt_dir,
+                },
+            )?;
+            println!("{}", serde_json::to_string_pretty(&report)?);
+        }
     }
 
     Ok(())
@@ -89,6 +103,7 @@ struct CliArgs {
     run_dir: Option<PathBuf>,
     model_id: Option<String>,
     transcript_file: Option<PathBuf>,
+    upstream_prompt_dir: PathBuf,
 }
 
 impl CliArgs {
@@ -113,6 +128,7 @@ impl CliArgs {
         let mut run_dir = None;
         let mut model_id = None;
         let mut transcript_file = None;
+        let mut upstream_prompt_dir = defaults.upstream_prompt_dir;
         let mut args = args.into_iter().map(Into::into);
         let _program = args.next();
 
@@ -123,6 +139,9 @@ impl CliArgs {
                 "--compare-one-case-answer" => set_mode(&mut mode, Mode::CompareOneCaseAnswer)?,
                 "--prepare-one-case-run" => set_mode(&mut mode, Mode::PrepareOneCaseRun)?,
                 "--score-one-case-run" => set_mode(&mut mode, Mode::ScoreOneCaseRun)?,
+                "--prepare-one-case-analyst-fanout" => {
+                    set_mode(&mut mode, Mode::PrepareOneCaseAnalystFanout)?;
+                }
                 "--case" => case_file = next_path(&mut args, "--case")?,
                 "--spreadsheet-dir" => {
                     spreadsheet_dir = next_path(&mut args, "--spreadsheet-dir")?;
@@ -149,6 +168,9 @@ impl CliArgs {
                 "--transcript-file" => {
                     transcript_file = Some(next_path(&mut args, "--transcript-file")?);
                 }
+                "--upstream-prompt-dir" => {
+                    upstream_prompt_dir = next_path(&mut args, "--upstream-prompt-dir")?;
+                }
                 "--help" | "-h" => return Err(invalid_input(USAGE)),
                 other => {
                     return Err(invalid_input(format!(
@@ -170,6 +192,7 @@ impl CliArgs {
             run_dir,
             model_id,
             transcript_file,
+            upstream_prompt_dir,
         })
     }
 }
@@ -181,6 +204,7 @@ enum Mode {
     CompareOneCaseAnswer,
     PrepareOneCaseRun,
     ScoreOneCaseRun,
+    PrepareOneCaseAnalystFanout,
 }
 
 struct Defaults {
@@ -190,6 +214,7 @@ struct Defaults {
     released_skill_file: PathBuf,
     output_workbook: PathBuf,
     golden_workbook: PathBuf,
+    upstream_prompt_dir: PathBuf,
 }
 
 impl Defaults {
@@ -210,6 +235,8 @@ impl Defaults {
             released_skill_file: repo_root.join(
                 "tmp/repros/trace2skill-upstream/released_skills/trace2skill-xlsx-35B-combined/SKILL.md",
             ),
+            upstream_prompt_dir: repo_root
+                .join("tmp/repros/trace2skill-upstream/skill_evolver/prompts"),
         }
     }
 }
@@ -239,7 +266,7 @@ fn invalid_input(message: impl Into<String>) -> io::Error {
 }
 
 const USAGE: &str = "usage: trace2skill_spreadsheetbench \
-    (--inspect-one-case | --render-one-case-prompt | --compare-one-case-answer | --prepare-one-case-run | --score-one-case-run) \
+    (--inspect-one-case | --render-one-case-prompt | --compare-one-case-answer | --prepare-one-case-run | --score-one-case-run | --prepare-one-case-analyst-fanout) \
     [--case PATH] [--spreadsheet-dir PATH] [--system-prompt PATH] [--released-skill PATH] \
     [--output-workbook PATH] [--golden-workbook PATH] [--run-dir PATH] \
-    [--model-id ID] [--transcript-file PATH]";
+    [--model-id ID] [--transcript-file PATH] [--upstream-prompt-dir PATH]";

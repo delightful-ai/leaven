@@ -1,11 +1,14 @@
 use std::{
+    fmt::Write as _,
     fs,
     path::{Path, PathBuf},
 };
 
 use leaven_evidence::{
-    AgentTrajectoryAnalysisKind, AgentTrajectoryAnalysisRecord, AgentTrajectoryEvidence,
-    AgentTrajectoryEvidenceInput, AgentTrajectoryOutcome, CommandEvidence, OutputRecord,
+    AgentAnalystCallEvidence, AgentAnalystCallEvidenceInput, AgentAnalystCallStatus,
+    AgentAnalystFanoutEvidence, AgentAnalystRole, AgentTrajectoryAnalysisKind,
+    AgentTrajectoryAnalysisRecord, AgentTrajectoryEvidence, AgentTrajectoryEvidenceInput,
+    AgentTrajectoryOutcome, CommandEvidence, OutputRecord,
 };
 use leaven_kernel::{AgentSessionId, BlobRef, FingerprintBuilder};
 
@@ -133,6 +136,36 @@ pub struct Trace2SkillOneCaseRunScoreReport {
     pub manifest_file: Trace2SkillFileArtifact,
     /// Exact workbook score report.
     pub score_report: Trace2SkillOneCaseAnswerReport,
+}
+
+/// Files needed to derive a pending Stage 2 analyst fan-out from a scored run.
+#[derive(Clone, Copy, Debug)]
+pub struct Trace2SkillOneCaseAnalystFanoutInput<'a> {
+    /// Prepared and scored run directory containing `trajectory.json`.
+    pub run_dir: &'a Path,
+    /// Upstream `skill_evolver/prompts` directory.
+    pub upstream_prompt_dir: &'a Path,
+}
+
+/// Report returned after writing a one-case Stage 2 analyst fan-out.
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize)]
+pub struct Trace2SkillOneCaseAnalystFanoutReport {
+    /// Upstream `SpreadsheetBench` case id.
+    pub case_id: String,
+    /// Durable run directory.
+    pub run_dir: PathBuf,
+    /// Scored trajectory artifact consumed by the fan-out.
+    pub trajectory_file: Trace2SkillFileArtifact,
+    /// Prompt artifact written for the pending analyst call.
+    pub prompt_file: Trace2SkillFileArtifact,
+    /// Fan-out evidence artifact written into `run_dir`.
+    pub fanout_file: Trace2SkillFileArtifact,
+    /// Upstream prompt template files embedded into the prompt artifact.
+    pub source_prompt_files: Vec<Trace2SkillFileArtifact>,
+    /// Caller-declared call manifest.
+    pub expected_call_ids: Vec<String>,
+    /// Pending call ids after materialization.
+    pub pending_call_ids: Vec<String>,
 }
 
 /// Prepares a durable one-case run directory without executing a spreadsheet agent.
@@ -265,6 +298,79 @@ pub fn score_trace2skill_one_case_run(
     })
 }
 
+/// Writes a pending Stage 2 analyst fan-out for a scored one-case run.
+pub fn prepare_trace2skill_one_case_analyst_fanout(
+    input: Trace2SkillOneCaseAnalystFanoutInput<'_>,
+) -> Result<Trace2SkillOneCaseAnalystFanoutReport, Trace2SkillManifestError> {
+    let manifest_path = input.run_dir.join("manifest.json");
+    let manifest: Trace2SkillOneCaseRunManifest =
+        serde_json::from_slice(&fs::read(&manifest_path)?)?;
+    let trajectory_path = input.run_dir.join("trajectory.json");
+    let trajectory: AgentTrajectoryEvidence = serde_json::from_slice(&fs::read(&trajectory_path)?)?;
+    if manifest.case_id != trajectory.task_id() {
+        return Err(Trace2SkillManifestError::RunTaskMismatch {
+            manifest_case_id: manifest.case_id,
+            trajectory_task_id: trajectory.task_id().to_owned(),
+        });
+    }
+
+    let prompt_source_paths =
+        stage2_prompt_source_paths(input.upstream_prompt_dir, trajectory.outcome());
+    let source_prompt_files = prompt_source_paths
+        .iter()
+        .map(|path| file_artifact(path))
+        .collect::<Result<Vec<_>, _>>()?;
+    let prompt_path = input.run_dir.join("stage2_analyst_prompt.md");
+    fs::write(
+        &prompt_path,
+        render_stage2_analyst_prompt(
+            input,
+            &manifest,
+            &trajectory,
+            &trajectory_path,
+            &prompt_source_paths,
+        )?,
+    )?;
+
+    let call_id = one_case_analyst_call_id(&trajectory);
+    let mut fanout = AgentAnalystFanoutEvidence::new([call_id.clone()])?;
+    fanout.push(AgentAnalystCallEvidence::new(
+        AgentAnalystCallEvidenceInput {
+            call_id,
+            role: stage2_analyst_role(trajectory.outcome()),
+            source_task_ids: vec![trajectory.task_id().to_owned()],
+            prompt: OutputRecord::blob(BlobRef {
+                store: "trace2skill-one-case-run".to_owned(),
+                key: prompt_path.display().to_string(),
+            }),
+            response: None,
+            status: AgentAnalystCallStatus::Pending,
+            retry_count: 0,
+            support_count: 1,
+        },
+    )?)?;
+
+    let expected_call_ids = fanout.expected_call_ids().to_vec();
+    let pending_call_ids = fanout
+        .pending_call_ids()
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
+    let fanout_path = input.run_dir.join("stage2_fanout.json");
+    fs::write(&fanout_path, serde_json::to_vec_pretty(&fanout)?)?;
+
+    Ok(Trace2SkillOneCaseAnalystFanoutReport {
+        case_id: manifest.case_id,
+        run_dir: input.run_dir.to_path_buf(),
+        trajectory_file: file_artifact(&trajectory_path)?,
+        prompt_file: file_artifact(&prompt_path)?,
+        fanout_file: file_artifact(&fanout_path)?,
+        source_prompt_files,
+        expected_call_ids,
+        pending_call_ids,
+    })
+}
+
 fn render_run_agent_prompt(
     input: Trace2SkillOneCaseInput<'_>,
     inspection: &Trace2SkillOneCaseInspection,
@@ -299,6 +405,140 @@ fn render_run_agent_prompt(
         instruction_type = inspection.instruction_type,
         answer_position = inspection.answer_position,
     ))
+}
+
+fn stage2_prompt_source_paths(
+    upstream_prompt_dir: &Path,
+    outcome: &AgentTrajectoryOutcome,
+) -> Vec<PathBuf> {
+    let mut relative_paths = vec![
+        "skill_evolving_agent/system_prompt_base.txt",
+        "parallel_evolving_agent/map_output_format.txt",
+    ];
+    match outcome {
+        AgentTrajectoryOutcome::Success => {
+            relative_paths.extend([
+                "success_evolving_agent/success_record_section.txt",
+                "success_evolving_agent/success_modification_strategies_section.txt",
+                "success_evolving_agent/success_intro_replacement.txt",
+                "success_evolving_agent/success_input_replacement.txt",
+                "success_evolving_agent/success_goal_replacement.txt",
+                "success_evolving_agent/success_first_constraint_replacement.txt",
+                "success_evolving_agent/success_traceability_constraint.txt",
+                "success_evolving_agent/success_output_reasoning_replacement.txt",
+                "success_evolving_agent/success_analysis_records_header.txt",
+                "success_evolving_agent/current_skill_folder_header.txt",
+                "success_evolving_agent/skill_folder_size_status_header.txt",
+                "success_evolving_agent/skill_md_status_line.txt",
+                "success_evolving_agent/reference_files_status_line.txt",
+                "success_evolving_agent/size_warning.txt",
+            ]);
+        }
+        AgentTrajectoryOutcome::Failure { .. } => {
+            relative_paths.extend([
+                "skill_evolving_agent/modification_strategies_section.txt",
+                "skill_evolving_agent/error_record_section_skill.txt",
+                "skill_evolving_agent/error_analysis_records_header.txt",
+                "skill_evolving_agent/current_skill_folder_header.txt",
+                "skill_evolving_agent/skill_folder_size_status_header.txt",
+                "skill_evolving_agent/skill_md_status_line.txt",
+                "skill_evolving_agent/reference_files_status_line.txt",
+                "skill_evolving_agent/size_warning.txt",
+            ]);
+        }
+    }
+    relative_paths
+        .into_iter()
+        .map(|relative| upstream_prompt_dir.join(relative))
+        .collect()
+}
+
+fn render_stage2_analyst_prompt(
+    input: Trace2SkillOneCaseAnalystFanoutInput<'_>,
+    manifest: &Trace2SkillOneCaseRunManifest,
+    trajectory: &AgentTrajectoryEvidence,
+    trajectory_path: &Path,
+    prompt_source_paths: &[PathBuf],
+) -> Result<String, Trace2SkillManifestError> {
+    let (builder, user_message_builder) = match trajectory.outcome() {
+        AgentTrajectoryOutcome::Success => (
+            "skill_evolver.parallel_success_evolving_agent.SuccessParallelSkillEvolver._build_map_system_prompt",
+            "skill_evolver.success_evolving_agent.build_success_user_message",
+        ),
+        AgentTrajectoryOutcome::Failure { .. } => (
+            "skill_evolver.parallel_evolving_agent.ParallelSkillEvolver._build_map_system_prompt",
+            "skill_evolver.skill_evolving_agent.SkillEvolver.build_user_message",
+        ),
+    };
+    let score_report = manifest.score_report.as_ref().map_or_else(
+        || "none".to_owned(),
+        |score| {
+            format!(
+                "{} ({}/{})",
+                score.score, score.matched_cells, score.total_cells
+            )
+        },
+    );
+    let mut prompt = format!(
+        "# Trace2Skill Stage 2 MAP Analyst Prompt Source\n\n\
+         This pending fan-out has not executed an analyst model call. It records the upstream \
+         prompt-template material and the scored one-case artifacts needed for the later live \
+         Trace2Skill Stage 2 MAP call.\n\n\
+         ## Call\n\
+         - call_id: {call_id}\n\
+         - task_id: {task_id}\n\
+         - role: {role:?}\n\
+         - upstream_system_builder: {builder}\n\
+         - upstream_user_message_builder: {user_message_builder}\n\
+         - upstream_prompt_dir: {prompt_dir}\n\
+         - trajectory_file: {trajectory_file}\n\
+         - score_report_file: {score_report_file}\n\
+         - score: {score_report}\n\
+         - source_skill: {source_skill}\n\
+         - source_case: {source_case}\n\n\
+         ## Source Templates\n",
+        call_id = one_case_analyst_call_id(trajectory),
+        task_id = trajectory.task_id(),
+        role = stage2_analyst_role(trajectory.outcome()),
+        prompt_dir = input.upstream_prompt_dir.display(),
+        trajectory_file = trajectory_path.display(),
+        score_report_file = input.run_dir.join("score_report.json").display(),
+        source_skill = manifest.source_artifacts.released_skill_file.display(),
+        source_case = manifest.source_artifacts.case_file.display(),
+    );
+    for path in prompt_source_paths {
+        let relative = path.strip_prefix(input.upstream_prompt_dir).unwrap_or(path);
+        let contents = fs::read_to_string(path)?;
+        write!(
+            &mut prompt,
+            "\n### {}\n\n```text\n{}\n```\n",
+            relative.display(),
+            contents
+        )
+        .expect("writing to a String cannot fail");
+    }
+    prompt.push_str(
+        "\n## Leaven Inputs\n\n\
+         The analyst must consume `trajectory.json` and its referenced transcript/analysis \
+         payloads, then produce a Trace2Skill JSON patch response for the released skill. \
+         This artifact deliberately stops before model execution, parsing, or merge.\n",
+    );
+    Ok(prompt)
+}
+
+fn one_case_analyst_call_id(trajectory: &AgentTrajectoryEvidence) -> String {
+    let prefix = match trajectory.outcome() {
+        AgentTrajectoryOutcome::Success => "success",
+        AgentTrajectoryOutcome::Failure { .. } => "error",
+    };
+    format!("{prefix}-{}-1", trajectory.task_id())
+}
+
+fn stage2_analyst_role(outcome: &AgentTrajectoryOutcome) -> AgentAnalystRole {
+    match outcome {
+        AgentTrajectoryOutcome::Success => AgentAnalystRole::Success,
+        AgentTrajectoryOutcome::Failure { .. } => AgentAnalystRole::Error,
+    }
 }
 
 fn build_scored_trajectory(
