@@ -5,6 +5,11 @@ use std::process::Command;
 
 use sha2::{Digest, Sha256};
 
+pub const DEFAULT_TOLERANCES: [f64; 5] = [0.0, 0.01, 0.025, 0.05, 0.10];
+pub const DEFAULT_FAILURE_THRESHOLD: f64 = 0.8;
+const YEAR_START: f64 = 1900.0;
+const YEAR_END: f64 = 2100.0;
+
 #[derive(Clone, Debug)]
 pub struct ManifestBuildInput {
     root: PathBuf,
@@ -133,6 +138,30 @@ pub struct ReplicationBlocker {
     pub description: String,
 }
 
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct EvoSkillScoreReport {
+    pub weighted_score: f64,
+    pub is_failure: bool,
+    pub tolerance_scores: Vec<ToleranceScore>,
+}
+
+impl EvoSkillScoreReport {
+    #[must_use]
+    pub fn tolerances(&self) -> Vec<f64> {
+        self.tolerance_scores
+            .iter()
+            .map(|score| score.tolerance)
+            .collect()
+    }
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct ToleranceScore {
+    pub tolerance: f64,
+    pub weight: f64,
+    pub score: f64,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum ManifestError {
     #[error("failed to read `{path}`: {source}")]
@@ -164,6 +193,218 @@ pub fn build_evoskill_replica_manifest(
         blockers: blockers(),
         proxy_rejections: proxy_rejections(),
     })
+}
+
+#[must_use]
+pub fn score_evoskill_answer(ground_truth: &str, prediction: &str) -> EvoSkillScoreReport {
+    let tolerance_scores = DEFAULT_TOLERANCES
+        .into_iter()
+        .map(|tolerance| {
+            let weight = tolerance_weight(tolerance);
+            ToleranceScore {
+                tolerance,
+                weight,
+                score: score_at_tolerance(ground_truth, prediction, tolerance),
+            }
+        })
+        .collect::<Vec<_>>();
+    let weight_total = tolerance_scores
+        .iter()
+        .map(|score| score.weight)
+        .sum::<f64>();
+    let weighted_score = tolerance_scores
+        .iter()
+        .map(|score| score.weight * score.score)
+        .sum::<f64>()
+        / weight_total;
+    EvoSkillScoreReport {
+        weighted_score,
+        is_failure: weighted_score < DEFAULT_FAILURE_THRESHOLD,
+        tolerance_scores,
+    }
+}
+
+fn score_at_tolerance(ground_truth: &str, prediction: &str, tolerance: f64) -> f64 {
+    if prediction.trim().is_empty() {
+        return 0.0;
+    }
+    let ground_numbers = number_mentions(ground_truth);
+    let prediction_numbers = number_mentions(prediction);
+    if !ground_numbers.is_empty() {
+        if prediction_numbers.is_empty() {
+            return 0.0;
+        }
+        let prediction_numbers = filter_prediction_years(ground_truth, prediction_numbers);
+        let normalized_prediction = normalized_text(prediction);
+        let text_ok = required_text_tokens(ground_truth)
+            .iter()
+            .all(|token| normalized_prediction.contains(token));
+        let numbers_ok = ground_numbers.iter().all(|ground| {
+            prediction_numbers.iter().any(|prediction| {
+                numeric_match(ground.base_value, prediction.base_value, tolerance)
+            })
+        });
+        return f64::from(numbers_ok && text_ok);
+    }
+    let truth = normalized_text(ground_truth);
+    let predicted = normalized_text(prediction);
+    f64::from(!truth.is_empty() && predicted.contains(&truth))
+}
+
+fn tolerance_weight(tolerance: f64) -> f64 {
+    1.0 / (1.0 + 20.0 * tolerance)
+}
+
+#[derive(Clone, Debug)]
+struct NumberMention {
+    base_value: f64,
+}
+
+fn number_mentions(text: &str) -> Vec<NumberMention> {
+    let mut mentions = Vec::new();
+    let mut start = None;
+    for (index, ch) in text.char_indices() {
+        if ch.is_ascii_digit() || ch == '-' || ch == '.' || ch == ',' {
+            start.get_or_insert(index);
+        } else if let Some(token_start) = start.take() {
+            push_number_mention(text, token_start, index, &mut mentions);
+        }
+    }
+    if let Some(token_start) = start {
+        push_number_mention(text, token_start, text.len(), &mut mentions);
+    }
+    mentions
+}
+
+fn push_number_mention(text: &str, start: usize, end: usize, mentions: &mut Vec<NumberMention>) {
+    let raw = &text[start..end];
+    let normalized = raw.replace(',', "");
+    if normalized.is_empty() || normalized == "-" || normalized == "." {
+        return;
+    }
+    if let Ok(value) = normalized.parse::<f64>() {
+        mentions.push(NumberMention {
+            base_value: value * unit_multiplier(context_window(text, start, end)).unwrap_or(1.0),
+        });
+    }
+}
+
+fn context_window(text: &str, start: usize, end: usize) -> &str {
+    let context_start = text[..start]
+        .char_indices()
+        .rev()
+        .nth(19)
+        .map_or(0, |(index, _)| index);
+    let context_end = text[end..]
+        .char_indices()
+        .nth(20)
+        .map_or(text.len(), |(index, _)| end + index);
+    &text[context_start..context_end]
+}
+
+fn unit_multiplier(context: &str) -> Option<f64> {
+    let context = context.to_ascii_lowercase();
+    if context.contains("trillion") {
+        Some(1_000_000_000_000.0)
+    } else if context.contains("billion") {
+        Some(1_000_000_000.0)
+    } else if context.contains("million") {
+        Some(1_000_000.0)
+    } else {
+        None
+    }
+}
+
+fn filter_prediction_years(
+    ground_truth: &str,
+    prediction_numbers: Vec<NumberMention>,
+) -> Vec<NumberMention> {
+    if ground_truth_allows_years(ground_truth) {
+        return prediction_numbers;
+    }
+    prediction_numbers
+        .into_iter()
+        .filter(|number| !is_year_like(number.base_value))
+        .collect()
+}
+
+fn ground_truth_allows_years(ground_truth: &str) -> bool {
+    number_mentions(ground_truth)
+        .iter()
+        .any(|number| is_year_like(number.base_value))
+        || !required_text_tokens(ground_truth).is_empty()
+}
+
+fn is_year_like(value: f64) -> bool {
+    value.fract() == 0.0 && (YEAR_START..=YEAR_END).contains(&value)
+}
+
+fn numeric_match(ground_truth: f64, prediction: f64, tolerance: f64) -> bool {
+    if ground_truth == 0.0 {
+        prediction == 0.0
+    } else {
+        ((ground_truth - prediction).abs() / ground_truth.abs()) <= tolerance
+    }
+}
+
+fn required_text_tokens(text: &str) -> Vec<String> {
+    normalized_text_without_numbers(text)
+        .split_whitespace()
+        .filter(|token| !is_ignored_text_token(token))
+        .map(str::to_owned)
+        .collect()
+}
+
+fn normalized_text(text: &str) -> String {
+    strip_parentheticals(text)
+        .trim()
+        .to_ascii_lowercase()
+        .replace(['"', '\'', ',', '.'], " ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn normalized_text_without_numbers(text: &str) -> String {
+    let stripped = strip_number_runs(text);
+    normalized_text(&stripped)
+}
+
+fn strip_number_runs(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for ch in text.chars() {
+        if ch.is_ascii_digit() || ch == '-' || ch == '.' || ch == ',' {
+            out.push(' ');
+        } else {
+            out.push(ch);
+        }
+    }
+    out
+}
+
+fn strip_parentheticals(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut depth = 0_u32;
+    for ch in text.chars() {
+        match ch {
+            '(' => depth = depth.saturating_add(1),
+            ')' => depth = depth.saturating_sub(1),
+            _ if depth == 0 => out.push(ch),
+            _ => {}
+        }
+    }
+    out
+}
+
+fn is_unit_word(token: &str) -> bool {
+    matches!(
+        token,
+        "million" | "millions" | "billion" | "billions" | "trillion" | "trillions"
+    )
+}
+
+fn is_ignored_text_token(token: &str) -> bool {
+    is_unit_word(token) || matches!(token, "and" | "or" | "the" | "a" | "an" | "of")
 }
 
 fn source_revisions(root: &Path) -> Vec<SourceRevision> {
@@ -254,8 +495,9 @@ fn scorer_manifest() -> ScorerManifest {
         id: "evoskill-multi-tolerance-v1".to_owned(),
         tolerances: vec![0.0, 0.01, 0.025, 0.05, 0.10],
         failure_threshold: 0.8,
-        implementation_status: "paper denominator recorded; Rust paper scorer not proven yet"
-            .to_owned(),
+        implementation_status:
+            "Rust scorer law-tested for multi-tolerance weighting, units, years, text, and lists"
+                .to_owned(),
     }
 }
 

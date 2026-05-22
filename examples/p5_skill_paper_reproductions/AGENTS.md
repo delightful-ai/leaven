@@ -24,5 +24,11 @@ belong in their owning crates.
 - `cargo test -p p5_skill_paper_reproductions --test evoskill_manifest`
   proves the EvoSkill replica manifest preserves the paper-close denominator
   and rejects proxy completion claims.
+- `cargo test -p p5_skill_paper_reproductions --test evoskill_scorer`
+  proves the paper-specific Rust scorer laws for weighted multi-tolerance
+  scoring, failure-threshold classification, unit normalization, incidental
+  year filtering, hybrid text+number answers, multi-number answers, and
+  normalized text containment. It does not prove OfficeQA/SealQA split
+  materialization or live agent performance.
 - `just evoskill-paper-manifest` writes the current no-spend local manifest to
   `target/evoskill-paper-close/replica-manifest.json`.

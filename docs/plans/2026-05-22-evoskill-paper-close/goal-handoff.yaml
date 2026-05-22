@@ -71,11 +71,14 @@ acceptance_path:
       train/validation/test split fingerprints.
     evidence: []
   - id: paper_scorer
-    status: pending
+    status: in_progress
     requirement: >
       EvoSkill tolerances, weighted score, failure threshold, feedback rows, and
       failure extraction are implemented in Rust and tested without Python glue.
-    evidence: []
+    evidence:
+      - examples/p5_skill_paper_reproductions/src/evoskill.rs
+      - examples/p5_skill_paper_reproductions/tests/evoskill_scorer.rs
+      - "`cargo test -p p5_skill_paper_reproductions --test evoskill_scorer`"
   - id: full_loop_mechanics
     status: pending
     requirement: >
