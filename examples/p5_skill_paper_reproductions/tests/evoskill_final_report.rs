@@ -419,9 +419,8 @@ fn final_report_imports_matching_score_result_sidecar_without_filling_other_slot
 #[test]
 fn final_report_refuses_score_result_sidecar_that_claims_source_or_split_blockers() {
     let root = tempfile::tempdir().unwrap();
-    write_denominator_ready_sources(root.path());
+    write_officeqa_full_csv(root.path(), 246);
     let input = ManifestBuildInput::new(root.path());
-    write_evoskill_local_source_pin_manifest(&input).unwrap();
     let initial_report = build_evoskill_final_report(&input).unwrap();
     let scored_slot = score_slot(
         &initial_report,
@@ -456,9 +455,8 @@ fn final_report_refuses_score_result_sidecar_that_claims_source_or_split_blocker
 #[test]
 fn final_report_refuses_score_result_sidecar_with_stale_slot_fingerprint() {
     let root = tempfile::tempdir().unwrap();
-    write_denominator_ready_sources(root.path());
+    write_officeqa_full_csv(root.path(), 246);
     let input = ManifestBuildInput::new(root.path());
-    write_evoskill_local_source_pin_manifest(&input).unwrap();
     write_evoskill_paper_close_split_policy_manifest(&input).unwrap();
     let initial_report = build_evoskill_final_report(&input).unwrap();
     let scored_slot = score_slot(
@@ -493,9 +491,8 @@ fn final_report_refuses_score_result_sidecar_with_stale_slot_fingerprint() {
 #[test]
 fn final_report_refuses_score_result_sidecar_with_tampered_evidence_artifact() {
     let root = tempfile::tempdir().unwrap();
-    write_denominator_ready_sources(root.path());
+    write_officeqa_full_csv(root.path(), 246);
     let input = ManifestBuildInput::new(root.path());
-    write_evoskill_local_source_pin_manifest(&input).unwrap();
     write_evoskill_paper_close_split_policy_manifest(&input).unwrap();
     let initial_report = build_evoskill_final_report(&input).unwrap();
     let scored_slot = score_slot(
@@ -528,9 +525,8 @@ fn final_report_refuses_score_result_sidecar_with_tampered_evidence_artifact() {
 #[test]
 fn final_report_refuses_score_result_sidecar_when_officeqa_artifact_predictions_do_not_score() {
     let root = tempfile::tempdir().unwrap();
-    write_denominator_ready_sources(root.path());
+    write_officeqa_full_csv(root.path(), 246);
     let input = ManifestBuildInput::new(root.path());
-    write_evoskill_local_source_pin_manifest(&input).unwrap();
     write_evoskill_paper_close_split_policy_manifest(&input).unwrap();
     let initial_report = build_evoskill_final_report(&input).unwrap();
     let scored_slot = score_slot(
@@ -565,9 +561,8 @@ fn final_report_refuses_score_result_sidecar_when_officeqa_artifact_predictions_
 #[test]
 fn final_report_imports_browsecomp_score_sidecar_after_recomputing_accuracy() {
     let root = tempfile::tempdir().unwrap();
-    write_denominator_ready_sources(root.path());
+    write_browsecomp_transfer_sample(root.path(), 128);
     let input = ManifestBuildInput::new(root.path());
-    write_evoskill_local_source_pin_manifest(&input).unwrap();
     write_evoskill_paper_close_split_policy_manifest(&input).unwrap();
     let initial_report = build_evoskill_final_report(&input).unwrap();
     let scored_slot = score_slot(
@@ -606,9 +601,8 @@ fn final_report_imports_browsecomp_score_sidecar_after_recomputing_accuracy() {
 #[test]
 fn final_report_imports_sealqa_judge_score_sidecar_with_approval_evidence() {
     let root = tempfile::tempdir().unwrap();
-    write_denominator_ready_sources(root.path());
+    write_sealqa_judge_request_sources(root.path());
     let input = ManifestBuildInput::new(root.path());
-    write_evoskill_local_source_pin_manifest(&input).unwrap();
     write_evoskill_paper_close_split_policy_manifest(&input).unwrap();
     let initial_report = build_evoskill_final_report(&input).unwrap();
     let scored_slot = score_slot(
@@ -767,9 +761,8 @@ fn final_report_promotes_scorer_gate_only_after_all_sealqa_judge_slots_reported(
 #[test]
 fn final_report_refuses_browsecomp_sidecar_when_predictions_do_not_match_answers() {
     let root = tempfile::tempdir().unwrap();
-    write_denominator_ready_sources(root.path());
+    write_browsecomp_transfer_sample(root.path(), 128);
     let input = ManifestBuildInput::new(root.path());
-    write_evoskill_local_source_pin_manifest(&input).unwrap();
     write_evoskill_paper_close_split_policy_manifest(&input).unwrap();
     let initial_report = build_evoskill_final_report(&input).unwrap();
     let scored_slot = score_slot(
@@ -1661,9 +1654,8 @@ fn cli_refuses_officeqa_score_result_sidecar_for_blocked_split_slot() {
 #[test]
 fn cli_writes_sealqa_judge_score_result_sidecar_from_approved_rows() {
     let root = tempfile::tempdir().unwrap();
-    write_denominator_ready_sources(root.path());
+    write_sealqa_judge_request_sources(root.path());
     let input = ManifestBuildInput::new(root.path());
-    write_evoskill_local_source_pin_manifest(&input).unwrap();
     write_evoskill_paper_close_split_policy_manifest(&input).unwrap();
     let initial_report = build_evoskill_final_report(&input).unwrap();
     let slot = score_slot(
@@ -1745,11 +1737,136 @@ fn cli_writes_sealqa_judge_score_result_sidecar_from_approved_rows() {
 }
 
 #[test]
+fn cli_writes_sealqa_judge_request_batch_from_prediction_rows_without_scores() {
+    let root = tempfile::tempdir().unwrap();
+    write_sealqa_judge_request_sources(root.path());
+    let input = ManifestBuildInput::new(root.path());
+    write_evoskill_paper_close_split_policy_manifest(&input).unwrap();
+    let initial_report = build_evoskill_final_report(&input).unwrap();
+    let slot = score_slot(
+        &initial_report,
+        "sealqa",
+        "sealqa_row_order_train_11_heldout_100",
+        "train",
+        "baseline",
+    );
+    assert_eq!(slot.status, FinalScoreStatus::Blocked);
+    assert_eq!(slot.blocker_ids, ["sealqa_judge_scored_run".to_owned()]);
+    let rows_path = root
+        .path()
+        .join("tmp/replication/evoskill/predictions/sealqa-train-baseline.jsonl");
+    write_sealqa_prediction_rows(root.path(), &initial_report, slot, &rows_path);
+
+    let manifest_path = root.path().join("out/replica-manifest.json");
+    let report_path = root.path().join("out/final-report.json");
+    let output = Command::new(env!("CARGO_BIN_EXE_p5_skill_paper_reproductions"))
+        .arg("--root")
+        .arg(root.path())
+        .arg("--out")
+        .arg(&manifest_path)
+        .arg("--final-report-out")
+        .arg(&report_path)
+        .arg("--write-sealqa-judge-request-batch")
+        .arg("tmp/replication/evoskill/predictions/sealqa-train-baseline.jsonl")
+        .output()
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_sealqa_judge_request_batch(
+        root.path(),
+        &initial_report,
+        slot,
+        &root
+            .path()
+            .join("tmp/replication/evoskill/sealqa_judge_request_manifest.json"),
+    );
+
+    let report: EvoSkillFinalReport =
+        serde_json::from_slice(&fs::read(report_path).unwrap()).unwrap();
+    let still_blocked = score_slot(
+        &report,
+        "sealqa",
+        "sealqa_row_order_train_11_heldout_100",
+        "train",
+        "baseline",
+    );
+    assert_eq!(still_blocked.status, FinalScoreStatus::Blocked);
+    assert_eq!(report.score_result_manifest, None);
+}
+
+fn assert_sealqa_judge_request_batch(
+    root: &std::path::Path,
+    initial_report: &EvoSkillFinalReport,
+    slot: &FinalScoreSlot,
+    request_manifest_path: &std::path::Path,
+) {
+    let request_manifest: serde_json::Value =
+        serde_json::from_slice(&fs::read(request_manifest_path).unwrap()).unwrap();
+    assert_eq!(request_manifest["schema_version"], 1);
+    assert_eq!(
+        request_manifest["manifest_fingerprint"],
+        initial_report.manifest_fingerprint.fingerprint
+    );
+    assert_eq!(
+        request_manifest["scorer_fingerprint"],
+        initial_report.scorer_fingerprint.fingerprint
+    );
+    assert_eq!(request_manifest["entries"].as_array().unwrap().len(), 1);
+    let entry = &request_manifest["entries"][0];
+    assert_eq!(entry["dataset_id"], "sealqa");
+    assert_eq!(entry["split_role"], "train");
+    assert_eq!(entry["candidate_role"], "baseline");
+    assert_eq!(entry["expected_rows"], slot.expected_rows.unwrap());
+    assert_eq!(entry["request_rows"], slot.expected_rows.unwrap());
+    assert_eq!(
+        entry["judge_template_fingerprint"],
+        judge_template_fingerprint_for_dataset(initial_report, "sealqa")
+    );
+
+    let artifact_path = root.join(
+        entry["request_artifact"]["relative_path"]
+            .as_str()
+            .expect("request manifest carries relative artifact path"),
+    );
+    let request_rows = fs::read_to_string(artifact_path).unwrap();
+    let request_rows = request_rows
+        .lines()
+        .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        request_rows.len(),
+        usize::try_from(slot.expected_rows.unwrap()).unwrap()
+    );
+    let first = &request_rows[0];
+    assert_eq!(first["source_id"], "sealqa:000");
+    assert_eq!(
+        first["prediction"],
+        score_artifact_prediction_for_source_id(slot, "sealqa:000")
+    );
+    assert_eq!(
+        first["request"]["template_fingerprint"],
+        judge_template_fingerprint_for_dataset(initial_report, "sealqa")
+    );
+    assert!(
+        first["request"]["user"]
+            .as_str()
+            .unwrap()
+            .contains("reference")
+    );
+    assert!(first.get("score").is_none());
+    assert!(first.get("judge_template_fingerprint").is_none());
+}
+
+#[test]
 fn cli_refuses_sealqa_judge_score_result_sidecar_without_approval_id() {
     let root = tempfile::tempdir().unwrap();
-    write_denominator_ready_sources(root.path());
+    write_sealqa_judge_request_sources(root.path());
     let input = ManifestBuildInput::new(root.path());
-    write_evoskill_local_source_pin_manifest(&input).unwrap();
     write_evoskill_paper_close_split_policy_manifest(&input).unwrap();
     let initial_report = build_evoskill_final_report(&input).unwrap();
     let slot = score_slot(
@@ -1806,6 +1923,11 @@ fn write_denominator_ready_sources(root: &std::path::Path) {
         &root.join("tmp/repros/officeqa"),
         "https://github.com/databricks/officeqa.git",
     );
+}
+
+fn write_sealqa_judge_request_sources(root: &std::path::Path) {
+    write_sealqa_parquet(root, 111);
+    write_sealqa_judge_source(root);
 }
 
 fn write_officeqa_prediction_rows(
@@ -1872,6 +1994,36 @@ fn write_sealqa_judge_rows(
     let relative_path = path
         .strip_prefix(root)
         .expect("test judged-row path lives below root");
+    let path = root.join(relative_path);
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(path, jsonl).unwrap();
+}
+
+fn write_sealqa_prediction_rows(
+    root: &std::path::Path,
+    report: &EvoSkillFinalReport,
+    slot: &FinalScoreSlot,
+    path: &std::path::Path,
+) {
+    let mut jsonl = String::new();
+    for source_id in score_slot_source_ids(report, slot) {
+        writeln!(
+            jsonl,
+            "{}",
+            serde_json::json!({
+                "dataset_id": &slot.dataset_id,
+                "split_id": &slot.split_id,
+                "split_role": &slot.split_role,
+                "candidate_role": &slot.candidate_role,
+                "source_id": source_id,
+                "prediction": score_artifact_prediction_for_source_id(slot, &source_id)
+            })
+        )
+        .unwrap();
+    }
+    let relative_path = path
+        .strip_prefix(root)
+        .expect("test prediction path lives below root");
     let path = root.join(relative_path);
     fs::create_dir_all(path.parent().unwrap()).unwrap();
     fs::write(path, jsonl).unwrap();
