@@ -54,12 +54,15 @@ misleading_proxy_proofs:
 
 acceptance_path:
   - id: replica_manifest
-    status: pending
+    status: in_progress
     requirement: >
       Durable manifest names source revisions, corpus fingerprints, model/provider
       pins, scorer version, split mode, frontier config, epoch schedule, and
       paper-close/exactness classification.
-    evidence: []
+    evidence:
+      - examples/p5_skill_paper_reproductions/src/evoskill.rs
+      - examples/p5_skill_paper_reproductions/tests/evoskill_manifest.rs
+      - target/evoskill-paper-close/replica-manifest.json after running `just evoskill-paper-manifest`
   - id: source_and_split_materialization
     status: pending
     requirement: >

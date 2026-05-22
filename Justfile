@@ -17,6 +17,7 @@ lint:
       --exclude p3_gepa_parity \
       --exclude p4_meta_harness_lite \
       --exclude p5_evoskill_iteration \
+      --exclude p5_skill_paper_reproductions \
       --exclude p6_optimizer_policy_self_opt \
       --exclude p7_self_optimization_kernel \
       --exclude p8_aime_gepa \
@@ -37,6 +38,7 @@ test-one +args:
       --exclude p3_gepa_parity \
       --exclude p4_meta_harness_lite \
       --exclude p5_evoskill_iteration \
+      --exclude p5_skill_paper_reproductions \
       --exclude p6_optimizer_policy_self_opt \
       --exclude p7_self_optimization_kernel \
       --exclude p8_aime_gepa \
@@ -44,10 +46,13 @@ test-one +args:
       {{args}}
 
 test-stress count +args:
-    for i in $(seq 1 {{count}}); do echo "stress run $i/{{count}}"; cargo nextest run --workspace --exclude p0_graph_skeleton --exclude p1_keep_best --exclude p2_pairwise_tournament --exclude p3_gepa_parity --exclude p4_meta_harness_lite --exclude p5_evoskill_iteration --exclude p6_optimizer_policy_self_opt --exclude p7_self_optimization_kernel --exclude p8_aime_gepa --exclude trace2skill_spreadsheetbench {{args}}; done
+    for i in $(seq 1 {{count}}); do echo "stress run $i/{{count}}"; cargo nextest run --workspace --exclude p0_graph_skeleton --exclude p1_keep_best --exclude p2_pairwise_tournament --exclude p3_gepa_parity --exclude p4_meta_harness_lite --exclude p5_evoskill_iteration --exclude p5_skill_paper_reproductions --exclude p6_optimizer_policy_self_opt --exclude p7_self_optimization_kernel --exclude p8_aime_gepa --exclude trace2skill_spreadsheetbench {{args}}; done
 
 bench-git-trust +args:
     cargo run -p xtask -- git-trust-bench {{args}}
+
+evoskill-paper-manifest *args:
+    cargo run -p p5_skill_paper_reproductions -- --out target/evoskill-paper-close/replica-manifest.json {{args}}
 
 milestone-p0:
     cargo run -p p0_graph_skeleton
