@@ -128,9 +128,11 @@ belong in their owning crates.
   approval-blocked rather than continuing to cite absent source denominators.
   Optional `tmp/replication/evoskill/score_result_manifest.json` input can fill
   reported scores only after manifest/scorer/slot fingerprints, expected row
-  counts, scored row counts, resolved slot blockers, a nonempty score evidence
-  id, and a readable strict JSONL evidence artifact with matching SHA-256 and
-  byte count match the current report. Schema-v5 entries must declare
+  counts, scored row counts, score-resolvable blockers, a nonempty score
+  evidence id, and a readable strict JSONL evidence artifact with matching
+  SHA-256 and byte count match the current report. Source and split provenance
+  blockers cannot be resolved by score sidecars; they must be resolved by their
+  owning source/split manifests before score import. Schema-v5 entries must declare
   `score_evidence_kind`: `rust_scorer_replay` for OfficeQA scorer replay,
   `exact_answer_replay` for conservative BrowseComp answer checks, or
   `external_judge_run` for approved judge outputs. External judge entries must
@@ -145,9 +147,10 @@ belong in their owning crates.
   materialized scorer-only targets; this is not the official simple-evals
   BrowseComp judge path. Stale result files, tampered evidence artifacts,
   fabricated aggregate rows, OfficeQA predictions whose scores do not match the
-  scorer, BrowseComp row scores that fail the exact-answer check, or external
-  judge rows without matching template fingerprints fail the report build
-  instead of becoming score evidence. Report-level errors, ablations, and the
+  scorer, BrowseComp row scores that fail the exact-answer check, source/split
+  blocker-resolution claims, or external judge rows without matching template
+  fingerprints fail the report build instead of becoming score evidence.
+  Report-level errors, ablations, and the
   `paper_scorer` gate are derived after score sidecar import: partial SealQA
   judge imports leave `sealqa_judge_scored_run` blocked, while complete approved
   external judge evidence for every SealQA score slot can clear that blocker

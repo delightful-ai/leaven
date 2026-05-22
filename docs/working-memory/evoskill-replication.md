@@ -234,7 +234,11 @@ requires strict rows keyed by dataset/split role/candidate/source id, refuses
 blocked score slots, recomputes row scores with the EvoSkill scorer, writes
 score evidence JSONL without ground-truth/reference fields, and writes the
 strict score result manifest consumed by the final report. This does not run an
-agent and does not make substitute split membership paper-exact.
+agent and does not make substitute split membership paper-exact. The generic
+score sidecar importer also refuses source/split blocker-resolution claims, so
+hand-authored score rows cannot clear missing OfficeQA category/exact split
+artifacts or SealQA split membership; only approved SealQA external-judge
+evidence can resolve the `sealqa_judge_scored_run` blocker.
 
 ## Source Bundle Recheck
 
