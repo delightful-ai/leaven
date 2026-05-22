@@ -273,7 +273,7 @@ fn final_report_imports_matching_score_result_sidecar_without_filling_other_slot
 
     let report = build_evoskill_final_report(&input).unwrap();
 
-    assert_eq!(report.schema_version, 16);
+    assert_eq!(report.schema_version, 17);
     let result_manifest = report
         .score_result_manifest
         .as_ref()
@@ -282,7 +282,7 @@ fn final_report_imports_matching_score_result_sidecar_without_filling_other_slot
         result_manifest.relative_path,
         "tmp/replication/evoskill/score_result_manifest.json"
     );
-    assert_eq!(result_manifest.schema_version, 4);
+    assert_eq!(result_manifest.schema_version, 5);
     assert_eq!(result_manifest.entries, 1);
     assert_eq!(
         result_manifest.cost.metric_calls,
@@ -524,13 +524,17 @@ fn final_report_imports_sealqa_judge_score_sidecar_with_approval_evidence() {
         scored_slot.blocker_ids,
         ["sealqa_judge_scored_run".to_owned()]
     );
-    write_score_result_manifest_with_evidence_kind(
+    write_score_result_manifest_with_judge_template_fingerprint(
         root.path(),
         &initial_report,
         &scored_slot,
         1.0,
         ScoreEvidenceKind::ExternalJudgeRun,
         Some("unit-test-approved-sealqa-judge-run"),
+        Some(judge_template_fingerprint_for_dataset(
+            &initial_report,
+            "sealqa",
+        )),
     );
 
     let report = build_evoskill_final_report(&input).unwrap();
@@ -584,6 +588,84 @@ fn final_report_refuses_sealqa_judge_sidecar_without_approval_evidence() {
         ManifestError::ScoreResultManifest { message, .. } => {
             assert!(message.contains("external judge"));
             assert!(message.contains("approval"));
+            assert!(
+                message.contains("sealqa|sealqa_row_order_train_11_heldout_100|train|baseline")
+            );
+        }
+        other => panic!("expected score result manifest error, got {other:?}"),
+    }
+}
+
+#[test]
+fn final_report_refuses_sealqa_judge_sidecar_without_template_fingerprint() {
+    let root = tempfile::tempdir().unwrap();
+    write_denominator_ready_sources(root.path());
+    let input = ManifestBuildInput::new(root.path());
+    write_evoskill_local_source_pin_manifest(&input).unwrap();
+    write_evoskill_paper_close_split_policy_manifest(&input).unwrap();
+    let initial_report = build_evoskill_final_report(&input).unwrap();
+    let scored_slot = score_slot(
+        &initial_report,
+        "sealqa",
+        "sealqa_row_order_train_11_heldout_100",
+        "train",
+        "baseline",
+    )
+    .clone();
+    write_score_result_manifest_with_evidence_kind(
+        root.path(),
+        &initial_report,
+        &scored_slot,
+        1.0,
+        ScoreEvidenceKind::ExternalJudgeRun,
+        Some("unit-test-approved-sealqa-judge-run"),
+    );
+
+    let error = build_evoskill_final_report(&input).unwrap_err();
+
+    match error {
+        ManifestError::ScoreResultManifest { message, .. } => {
+            assert!(message.contains("judge template fingerprint"));
+            assert!(
+                message.contains("sealqa|sealqa_row_order_train_11_heldout_100|train|baseline")
+            );
+        }
+        other => panic!("expected score result manifest error, got {other:?}"),
+    }
+}
+
+#[test]
+fn final_report_refuses_sealqa_judge_sidecar_with_stale_template_fingerprint() {
+    let root = tempfile::tempdir().unwrap();
+    write_denominator_ready_sources(root.path());
+    let input = ManifestBuildInput::new(root.path());
+    write_evoskill_local_source_pin_manifest(&input).unwrap();
+    write_evoskill_paper_close_split_policy_manifest(&input).unwrap();
+    let initial_report = build_evoskill_final_report(&input).unwrap();
+    let scored_slot = score_slot(
+        &initial_report,
+        "sealqa",
+        "sealqa_row_order_train_11_heldout_100",
+        "train",
+        "baseline",
+    )
+    .clone();
+    write_score_result_manifest_with_judge_template_fingerprint(
+        root.path(),
+        &initial_report,
+        &scored_slot,
+        1.0,
+        ScoreEvidenceKind::ExternalJudgeRun,
+        Some("unit-test-approved-sealqa-judge-run"),
+        Some("stale-template-fingerprint"),
+    );
+
+    let error = build_evoskill_final_report(&input).unwrap_err();
+
+    match error {
+        ManifestError::ScoreResultManifest { message, .. } => {
+            assert!(message.contains("judge template fingerprint"));
+            assert!(message.contains("stale-template-fingerprint"));
             assert!(
                 message.contains("sealqa|sealqa_row_order_train_11_heldout_100|train|baseline")
             );
@@ -774,7 +856,7 @@ fn assert_reported_target(
 
 fn assert_report_header(report: &EvoSkillFinalReport) {
     assert_eq!(report.exactness, ExactnessClass::BlockedBeforePaperClose);
-    assert_eq!(report.schema_version, 16);
+    assert_eq!(report.schema_version, 17);
     assert_eq!(report.score_result_manifest, None);
     assert_eq!(report.cost.llm_calls, 0);
     assert_eq!(report.cost.metric_calls, 0);
@@ -1442,7 +1524,7 @@ fn write_score_result_manifest_with_split_fingerprint(
         split_fingerprint,
         score,
         None,
-        (
+        ScoreResultEvidenceOptions::new(
             default_score_evidence_kind(slot),
             default_score_evidence_approval_id(slot),
         ),
@@ -1466,7 +1548,30 @@ fn write_score_result_manifest_with_evidence_kind(
             .expect("materialized score slot carries split fingerprint"),
         score,
         None,
-        (evidence_kind, approval_id),
+        ScoreResultEvidenceOptions::new(evidence_kind, approval_id),
+    );
+}
+
+fn write_score_result_manifest_with_judge_template_fingerprint(
+    root: &std::path::Path,
+    report: &EvoSkillFinalReport,
+    slot: &FinalScoreSlot,
+    score: f64,
+    evidence_kind: ScoreEvidenceKind,
+    approval_id: Option<&str>,
+    judge_template_fingerprint: Option<&str>,
+) {
+    write_score_result_manifest_with_options(
+        root,
+        report,
+        slot,
+        slot.split_fingerprint
+            .as_deref()
+            .expect("materialized score slot carries split fingerprint"),
+        score,
+        None,
+        ScoreResultEvidenceOptions::new(evidence_kind, approval_id)
+            .with_judge_template_fingerprint(judge_template_fingerprint),
     );
 }
 
@@ -1486,11 +1591,36 @@ fn write_score_result_manifest_with_prediction_override(
             .expect("materialized score slot carries split fingerprint"),
         score,
         Some(prediction),
-        (
+        ScoreResultEvidenceOptions::new(
             default_score_evidence_kind(slot),
             default_score_evidence_approval_id(slot),
         ),
     );
+}
+
+#[derive(Clone, Copy)]
+struct ScoreResultEvidenceOptions<'a> {
+    kind: ScoreEvidenceKind,
+    approval_id: Option<&'a str>,
+    judge_template_fingerprint: Option<&'a str>,
+}
+
+impl<'a> ScoreResultEvidenceOptions<'a> {
+    fn new(kind: ScoreEvidenceKind, approval_id: Option<&'a str>) -> Self {
+        Self {
+            kind,
+            approval_id,
+            judge_template_fingerprint: None,
+        }
+    }
+
+    fn with_judge_template_fingerprint(
+        mut self,
+        judge_template_fingerprint: Option<&'a str>,
+    ) -> Self {
+        self.judge_template_fingerprint = judge_template_fingerprint;
+        self
+    }
 }
 
 fn write_score_result_manifest_with_options(
@@ -1500,9 +1630,8 @@ fn write_score_result_manifest_with_options(
     split_fingerprint: &str,
     score: f64,
     prediction_override: Option<&str>,
-    evidence: (ScoreEvidenceKind, Option<&str>),
+    evidence: ScoreResultEvidenceOptions<'_>,
 ) {
-    let (evidence_kind, approval_id) = evidence;
     let path = root.join("tmp/replication/evoskill/score_result_manifest.json");
     fs::create_dir_all(path.parent().unwrap()).unwrap();
     let expected_rows = slot.expected_rows.unwrap();
@@ -1515,26 +1644,30 @@ fn write_score_result_manifest_with_options(
         let prediction = prediction_override
             .map(str::to_owned)
             .unwrap_or_else(|| score_artifact_prediction_for_source_id(slot, &source_id));
-        writeln!(
-            evidence_body,
-            "{}",
-            serde_json::json!({
-                "source_id": source_id,
-                "prediction": prediction,
-                "score": score
-            })
-        )
-        .unwrap();
+        let mut row = serde_json::json!({
+            "source_id": source_id,
+            "prediction": prediction,
+            "score": score
+        });
+        if let Some(fingerprint) = evidence.judge_template_fingerprint {
+            row.as_object_mut()
+                .expect("score evidence row is a JSON object")
+                .insert(
+                    "judge_template_fingerprint".to_owned(),
+                    serde_json::json!(fingerprint),
+                );
+        }
+        writeln!(evidence_body, "{row}").unwrap();
     }
     fs::write(&evidence_path, evidence_body.as_bytes()).unwrap();
     let evidence_sha256 = sha256_bytes(evidence_body.as_bytes());
-    let llm_calls = if evidence_kind == ScoreEvidenceKind::ExternalJudgeRun {
+    let llm_calls = if evidence.kind == ScoreEvidenceKind::ExternalJudgeRun {
         expected_rows
     } else {
         0
     };
     let manifest = serde_json::json!({
-        "schema_version": 4,
+        "schema_version": 5,
         "manifest_fingerprint": &report.manifest_fingerprint.fingerprint,
         "scorer_fingerprint": &report.scorer_fingerprint.fingerprint,
         "cost": {
@@ -1554,8 +1687,8 @@ fn write_score_result_manifest_with_options(
             "scored_rows": expected_rows,
             "score": score,
             "resolved_blocker_ids": &slot.blocker_ids,
-            "score_evidence_kind": evidence_kind,
-            "score_evidence_approval_id": approval_id,
+            "score_evidence_kind": evidence.kind,
+            "score_evidence_approval_id": evidence.approval_id,
             "evidence_id": "unit-test-scored-output-import",
             "evidence_artifact": {
                 "relative_path": evidence_relative_path,
@@ -1581,6 +1714,21 @@ fn default_score_evidence_approval_id(slot: &FinalScoreSlot) -> Option<&'static 
         "sealqa" => Some("unit-test-approved-sealqa-judge-run"),
         _ => None,
     }
+}
+
+fn judge_template_fingerprint_for_dataset<'a>(
+    report: &'a EvoSkillFinalReport,
+    dataset_id: &str,
+) -> &'a str {
+    report
+        .manifest
+        .scorer
+        .judge_templates
+        .iter()
+        .find(|template| template.dataset_id == dataset_id)
+        .expect("test report carries judge template for dataset")
+        .fingerprint
+        .as_str()
 }
 
 fn score_slot_source_ids(report: &EvoSkillFinalReport, slot: &FinalScoreSlot) -> Vec<String> {

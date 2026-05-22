@@ -7,3 +7,5 @@ tmp/
 .orientation/
 .beads/issues.jsonl
 .leaven/
+__pycache__/
+*.pyc

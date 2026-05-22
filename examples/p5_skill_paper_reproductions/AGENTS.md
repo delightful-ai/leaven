@@ -97,7 +97,7 @@ belong in their owning crates.
   proves the current no-spend final report truth surface writes manifest and
   report artifacts, carries baseline/optimized train/validation/held-out score
   slots, exposes zero spend by default, blockers, ablation statuses, and
-  exactness gaps. It proves final report schema v16.
+  exactness gaps. It proves final report schema v17.
   Materialized score slots carry split exactness, split fingerprint, and
   role-level source-id fingerprint directly. Unreported slots carry a null
   `score_evidence_id`, null `score_evidence_kind`, null
@@ -124,12 +124,13 @@ belong in their owning crates.
   reported scores only after manifest/scorer/slot fingerprints, expected row
   counts, scored row counts, resolved slot blockers, a nonempty score evidence
   id, and a readable strict JSONL evidence artifact with matching SHA-256 and
-  byte count match the current report. Schema-v4 entries must declare
+  byte count match the current report. Schema-v5 entries must declare
   `score_evidence_kind`: `rust_scorer_replay` for OfficeQA scorer replay,
   `exact_answer_replay` for conservative BrowseComp answer checks, or
   `external_judge_run` for approved judge outputs. External judge entries must
-  carry a nonempty `score_evidence_approval_id` and enough reported LLM calls for
-  the judged rows. Evidence rows must exactly
+  carry a nonempty `score_evidence_approval_id`, row-level
+  `judge_template_fingerprint` values matching the pinned scorer template, and
+  enough reported LLM calls for the judged rows. Evidence rows must exactly
   cover the slot role source ids, cannot duplicate or omit rows, must carry
   finite scores in `[0, 1]`, and must aggregate back to the reported score.
   OfficeQA score rows are recomputed with the Rust paper scorer from the
@@ -138,8 +139,9 @@ belong in their owning crates.
   materialized scorer-only targets; this is not the official simple-evals
   BrowseComp judge path. Stale result files, tampered evidence artifacts,
   fabricated aggregate rows, OfficeQA predictions whose scores do not match the
-  scorer, or BrowseComp row scores that fail the exact-answer check fail the
-  report build instead of becoming score evidence.
+  scorer, BrowseComp row scores that fail the exact-answer check, or external
+  judge rows without matching template fingerprints fail the report build
+  instead of becoming score evidence.
   It does not prove live provider behavior, validation-score values, or
   paper-close.
 - `just evoskill-paper-manifest` writes the current no-spend local manifest to

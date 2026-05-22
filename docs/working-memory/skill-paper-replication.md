@@ -935,7 +935,7 @@ lineage. The first retry should stay no-spend:
 
 ## EvoSkill Paper-Close Guardrails
 
-The P5 EvoSkill final report schema v16 carries a no-spend loop `run_manifest`
+The P5 EvoSkill final report schema v17 carries a no-spend loop `run_manifest`
 that ties the mechanics loop to manifest/scorer/source/split fingerprints,
 frontier policy, schedule, checkpoint boundary, Git identity mode, the full
 OfficeQA validation role/fingerprint used before frontier admission, and the
@@ -973,7 +973,7 @@ leaving stale absent-source notes attached after the sidecar materializes.
 
 2026-05-22 update: P5 can now ingest an optional strict
 `tmp/replication/evoskill/score_result_manifest.json` sidecar. It is score
-evidence plumbing only: schema-v4 entries must match the current manifest
+evidence plumbing only: schema-v5 entries must match the current manifest
 fingerprint, scorer fingerprint, slot key, split fingerprint, role source-id
 fingerprint, and row count before a score is reported. The checked evidence
 artifact is now strict JSONL: each row carries `source_id`, `prediction`, and
@@ -983,7 +983,9 @@ replays the OfficeQA Rust scorer against materialized scorer-only targets before
 importing OfficeQA scores, and rechecks BrowseComp transfer rows with a
 conservative exact-normalized answer scorer against materialized scorer-only
 targets. The BrowseComp check rejects fabricated row scores when exact answers
-are present, but it is not the official simple-evals judge path. Stale result
+are present, but it is not the official simple-evals judge path. External judge
+rows must carry the pinned judge-template fingerprint, so approval metadata
+cannot bind scores to an unspecified prompt. Stale result
 files, duplicate entries, unresolved slot blockers, non-slot blocker claims,
 tampered evidence artifacts, fabricated aggregates, OfficeQA predictions whose
 row scores do not match the scorer, and BrowseComp row scores that fail the
@@ -995,12 +997,14 @@ approval as paper scores. This still does not execute the live provider, SealQA
 judge, official BrowseComp judge, transferred BrowseComp skill, or any missing
 paper score path.
 
-2026-05-22 update: score result sidecars are now schema-v4. Each entry must
+2026-05-22 update: score result sidecars are now schema-v5. Each entry must
 declare `score_evidence_kind`, and the final score slot preserves it. OfficeQA
 requires `rust_scorer_replay`; BrowseComp can use the current conservative
 `exact_answer_replay` or a future approved `external_judge_run`; SealQA requires
 `external_judge_run`. External judge entries require a nonempty
-`score_evidence_approval_id` and reported LLM calls covering judged rows. This
-does not run a judge or approve spend; it prevents opaque row scores from
-masquerading as deterministic replay evidence and gives approved judge outputs a
+`score_evidence_approval_id`, reported LLM calls covering judged rows, and
+row-level `judge_template_fingerprint` values matching the pinned scorer
+template for that dataset. This does not run a judge or approve spend; it
+prevents opaque row scores from masquerading as deterministic replay evidence or
+as outputs from a different judge prompt, and gives approved judge outputs a
 typed import lane.
