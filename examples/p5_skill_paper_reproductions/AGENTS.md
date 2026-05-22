@@ -62,9 +62,10 @@ belong in their owning crates.
   report artifacts, carries baseline/optimized train/validation/held-out score
   slots, exposes zero spend, blockers, ablation statuses, and exactness gaps.
   Materialized score slots carry split exactness, split fingerprint, and
-  role-level source-id fingerprint directly. Blocked metrics stay missing
-  rather than fake zeros. It does not prove live provider behavior,
-  validation-set scores, or paper-close.
+  role-level source-id fingerprint directly. The report also carries a
+  `live_run_gate` that blocks live execution until explicit provider spend and
+  credential approval. Blocked metrics stay missing rather than fake zeros. It
+  does not prove live provider behavior, validation-set scores, or paper-close.
 - `just evoskill-paper-manifest` writes the current no-spend local manifest to
   `target/evoskill-paper-close/replica-manifest.json`.
 - `just evoskill-paper-final-report` writes both the manifest and current

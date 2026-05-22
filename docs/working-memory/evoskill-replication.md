@@ -715,7 +715,7 @@ Date: 2026-05-22.
 Provider/model spend: none.
 Cloud/GPU spend: none.
 
-The P5 final report now declares schema v3 score slots. Each
+That slice introduced schema v3 score slots. Each
 baseline/optimized train/validation/held-out score slot carries the split
 exactness label, split fingerprint, and role-level source-id fingerprint
 directly when the split is materialized. Missing-artifact placeholder slots keep
@@ -727,3 +727,21 @@ source-id membership the slot referred to. The report still does not invent
 OfficeQA or SealQA scores: blocked score values remain `null`, SealQA slots
 retain the `sealqa_judge_scored_run` blocker, and live/provider scores still
 require explicit approval plus real run evidence.
+
+## No-Spend Live Run Approval Gate
+
+Date: 2026-05-22.
+Provider/model spend: none.
+Cloud/GPU spend: none.
+
+The P5 final report now declares schema v4 with an explicit `live_run_gate`.
+The gate records `blocked_no_spend_approval`, the candidate runtime role/model,
+`credential_probe_status: not_probed_no_spend_default`,
+`spend_approval_status: not_approved`, and the `live_run_spend_approval`
+blocker. The manifest blocker list now also includes this approval blocker.
+
+This closes the ambiguous empty `live_small_run` handoff slot. It does not run
+a provider, inspect secrets, execute the SealQA judge, or produce live
+OfficeQA/SealQA scores. A future live run still needs explicit spend/credential
+approval and must reuse the same report surface rather than replacing missing
+metrics with zeros.

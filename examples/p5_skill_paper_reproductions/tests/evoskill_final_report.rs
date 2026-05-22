@@ -8,8 +8,8 @@ use arrow_array::{ArrayRef, RecordBatch, StringArray};
 use arrow_schema::{DataType, Field, Schema};
 use p5_skill_paper_reproductions::evoskill::{
     DatasetMaterializationReport, EvoSkillFinalReport, ExactnessClass, FinalScoreSlot,
-    FinalScoreStatus, ManifestBuildInput, MaterializationExactness, SplitMaterializationReport,
-    build_evoskill_final_report,
+    FinalScoreStatus, LiveRunGateStatus, ManifestBuildInput, MaterializationExactness,
+    SplitMaterializationReport, build_evoskill_final_report,
 };
 use parquet::arrow::ArrowWriter;
 
@@ -22,6 +22,7 @@ fn final_report_exposes_score_slots_costs_errors_and_gaps_without_fake_metrics()
     let report = build_evoskill_final_report(&ManifestBuildInput::new(root.path())).unwrap();
 
     assert_report_header(&report);
+    assert_live_run_gate_blocks_unapproved_spend(&report);
     let officeqa = officeqa_materialization(&report);
     let sealqa = sealqa_materialization(&report);
     assert_officeqa_train_12_score_slots(&report, officeqa);
@@ -36,7 +37,7 @@ fn final_report_exposes_score_slots_costs_errors_and_gaps_without_fake_metrics()
 
 fn assert_report_header(report: &EvoSkillFinalReport) {
     assert_eq!(report.exactness, ExactnessClass::BlockedBeforePaperClose);
-    assert_eq!(report.schema_version, 3);
+    assert_eq!(report.schema_version, 4);
     assert_eq!(report.cost.llm_calls, 0);
     assert_eq!(report.cost.metric_calls, 0);
     assert_eq!(report.cost.prompt_tokens, 0);
@@ -68,6 +69,33 @@ fn assert_report_header(report: &EvoSkillFinalReport) {
         report.manifest.schema_version
     );
     assert_eq!(report.manifest_fingerprint.fingerprint.len(), 64);
+}
+
+fn assert_live_run_gate_blocks_unapproved_spend(report: &EvoSkillFinalReport) {
+    assert_eq!(
+        report.live_run_gate.status,
+        LiveRunGateStatus::BlockedNoSpendApproval
+    );
+    assert_eq!(report.live_run_gate.runtime_role, "paper_agent_runtime");
+    assert_eq!(
+        report.live_run_gate.candidate_model.as_deref(),
+        Some("Codex gpt-5.4-mini low for approved small live runs")
+    );
+    assert_eq!(
+        report.live_run_gate.credential_probe_status,
+        "not_probed_no_spend_default"
+    );
+    assert_eq!(report.live_run_gate.spend_approval_status, "not_approved");
+    assert_eq!(
+        report.live_run_gate.blocker_ids,
+        ["live_run_spend_approval".to_owned()]
+    );
+    assert!(
+        report
+            .errors
+            .iter()
+            .any(|error| error.blocker_id == "live_run_spend_approval")
+    );
 }
 
 fn officeqa_materialization(report: &EvoSkillFinalReport) -> &DatasetMaterializationReport {
@@ -228,6 +256,7 @@ fn cli_writes_manifest_and_final_report_artifacts() {
     assert!(manifest_path.exists());
     let report = fs::read_to_string(report_path).unwrap();
     assert!(report.contains("\"score_slots\""));
+    assert!(report.contains("\"live_run_gate\""));
     assert!(report.contains("\"role_source_id_fingerprint\""));
     assert!(report.contains("\"blocked_before_paper_close\""));
 }
