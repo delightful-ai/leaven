@@ -142,6 +142,14 @@ explicit_non_goals:
   - do not spend provider credits or touch destructive source/dataset state without approval
 
 verification_notes:
+  - at: "2026-05-22T21:34:18Z"
+    command: "just evoskill-paper-runner-inputs && just evoskill-paper-live-run-request"
+    status: passed_no_spend_packet_materialization
+    evidence:
+      - "runner_input_manifest.json schema 1 has manifest fingerprint cf04f0959295dd0246a4fc7a72ad5d6509a52e8b1ee7d695a187d922aaa8ac60, SHA-256 48b4d2d3439960434812ea1f4af71e6533e37b5a8634b5588be3eab8e0503860, 16006 bytes, 22 entries, and 1698 total runner rows: 1476 OfficeQA rows and 222 SealQA rows across baseline and optimized candidate roles"
+      - "runner-input JSONL key-path audit found only source_id and input fields; answer, reference, target, score, prediction, label, and gold key paths were absent"
+      - "live_run_request_manifest.json schema 1 has SHA-256 0cc8a75a9665c4f03c7886f6e355fe591bbf9898d9788f93888d7dc21ae3d2d8, 16876 bytes, max_generation_calls 1698, provider_calls_allowed false, judge_calls_allowed false, credential_probe_status not_probed_no_spend_default, spend_approval_status not_approved, and blocker live_run_spend_approval"
+    caveat: "This proves answer-free runner input and bounded approval-packet materialization only; it does not run a provider, approve spend, call a judge, import predictions, import judged rows, or prove paper-close results."
   - at: "2026-05-22T21:50:00Z"
     command: "ulimit -n 8192 && CARGO_BUILD_JOBS=8 just check"
     status: passed
