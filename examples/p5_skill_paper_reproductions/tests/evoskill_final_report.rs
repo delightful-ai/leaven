@@ -1863,6 +1863,166 @@ fn assert_sealqa_judge_request_batch(
 }
 
 #[test]
+fn cli_writes_runner_input_batch_without_targets_predictions_or_scores() {
+    let root = tempfile::tempdir().unwrap();
+    write_runner_input_sources(root.path());
+    let input = ManifestBuildInput::new(root.path());
+    write_evoskill_paper_close_split_policy_manifest(&input).unwrap();
+    let initial_report = build_evoskill_final_report(&input).unwrap();
+    let officeqa_slot = score_slot(
+        &initial_report,
+        "officeqa",
+        "officeqa_difficulty_train_12_val_17",
+        "train",
+        "baseline",
+    );
+    let sealqa_slot = score_slot(
+        &initial_report,
+        "sealqa",
+        "sealqa_runner_declared_three_row",
+        "train",
+        "baseline",
+    );
+
+    let manifest_path = root.path().join("out/replica-manifest.json");
+    let report_path = root.path().join("out/final-report.json");
+    let output = Command::new(env!("CARGO_BIN_EXE_p5_skill_paper_reproductions"))
+        .arg("--root")
+        .arg(root.path())
+        .arg("--out")
+        .arg(&manifest_path)
+        .arg("--final-report-out")
+        .arg(&report_path)
+        .arg("--write-runner-input-batch")
+        .output()
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let runner_manifest_path = root
+        .path()
+        .join("tmp/replication/evoskill/runner_input_manifest.json");
+    let runner_manifest: serde_json::Value =
+        serde_json::from_slice(&fs::read(&runner_manifest_path).unwrap()).unwrap();
+    assert_eq!(runner_manifest["schema_version"], 1);
+    assert_eq!(
+        runner_manifest["manifest_fingerprint"],
+        initial_report.manifest_fingerprint.fingerprint
+    );
+    assert_eq!(
+        runner_manifest["scorer_fingerprint"],
+        initial_report.scorer_fingerprint.fingerprint
+    );
+
+    assert_runner_input_entry(
+        root.path(),
+        &runner_manifest,
+        &initial_report,
+        officeqa_slot,
+        &score_slot_source_ids(&initial_report, officeqa_slot)[0],
+        &format!(
+            "Question {}?",
+            score_slot_source_ids(&initial_report, officeqa_slot)[0]
+                .strip_prefix("UID")
+                .unwrap()
+                .parse::<usize>()
+                .unwrap()
+        ),
+    );
+    assert_runner_input_entry(
+        root.path(),
+        &runner_manifest,
+        &initial_report,
+        sealqa_slot,
+        &score_slot_source_ids(&initial_report, sealqa_slot)[0],
+        &format!(
+            "Seal question {}?",
+            score_slot_source_ids(&initial_report, sealqa_slot)[0]
+                .strip_prefix("sealqa:")
+                .unwrap()
+                .parse::<usize>()
+                .unwrap()
+        ),
+    );
+
+    let manifest_body = fs::read_to_string(runner_manifest_path).unwrap();
+    assert!(!manifest_body.contains("browsecomp_transfer"));
+    assert!(!manifest_body.contains("ground_truth"));
+    assert!(!manifest_body.contains("reference"));
+    assert!(!manifest_body.contains("prediction"));
+    assert!(!manifest_body.contains("Answer "));
+    assert!(!manifest_body.contains("Seal answer"));
+}
+
+fn assert_runner_input_entry(
+    root: &std::path::Path,
+    runner_manifest: &serde_json::Value,
+    initial_report: &EvoSkillFinalReport,
+    slot: &FinalScoreSlot,
+    expected_first_source_id: &str,
+    expected_first_question: &str,
+) {
+    let entries = runner_manifest["entries"].as_array().unwrap();
+    let entry = entries
+        .iter()
+        .find(|entry| {
+            entry["dataset_id"] == slot.dataset_id
+                && entry["split_id"] == slot.split_id
+                && entry["split_role"] == slot.split_role
+                && entry["candidate_role"] == slot.candidate_role
+        })
+        .unwrap_or_else(|| {
+            panic!(
+                "missing runner input entry for {}|{}|{}|{}",
+                slot.dataset_id, slot.split_id, slot.split_role, slot.candidate_role
+            )
+        });
+    assert_eq!(entry["expected_rows"], slot.expected_rows.unwrap());
+    assert_eq!(entry["input_rows"], slot.expected_rows.unwrap());
+    assert_eq!(
+        entry["split_fingerprint"].as_str(),
+        Some(slot.split_fingerprint.as_ref().unwrap().as_str())
+    );
+    assert_eq!(
+        entry["role_source_id_fingerprint"].as_str(),
+        Some(slot.role_source_id_fingerprint.as_ref().unwrap().as_str())
+    );
+
+    let artifact_path = root.join(
+        entry["input_artifact"]["relative_path"]
+            .as_str()
+            .expect("runner manifest carries relative artifact path"),
+    );
+    let artifact_body = fs::read_to_string(artifact_path).unwrap();
+    assert!(!artifact_body.contains("ground_truth"));
+    assert!(!artifact_body.contains("reference"));
+    assert!(!artifact_body.contains("target"));
+    assert!(!artifact_body.contains("prediction"));
+    assert!(!artifact_body.contains("score"));
+    assert!(!artifact_body.contains("Answer "));
+    assert!(!artifact_body.contains("Seal answer"));
+
+    let input_rows = artifact_body
+        .lines()
+        .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        input_rows.len(),
+        usize::try_from(slot.expected_rows.unwrap()).unwrap()
+    );
+    assert_eq!(
+        input_rows[0]["source_id"],
+        score_slot_source_ids(initial_report, slot)[0]
+    );
+    assert_eq!(input_rows[0]["source_id"], expected_first_source_id);
+    assert_eq!(input_rows[0]["input"]["question"], expected_first_question);
+}
+
+#[test]
 fn cli_refuses_sealqa_judge_score_result_sidecar_without_approval_id() {
     let root = tempfile::tempdir().unwrap();
     write_sealqa_judge_request_sources(root.path());
@@ -1928,6 +2088,42 @@ fn write_denominator_ready_sources(root: &std::path::Path) {
 fn write_sealqa_judge_request_sources(root: &std::path::Path) {
     write_sealqa_parquet(root, 111);
     write_sealqa_judge_source(root);
+}
+
+fn write_runner_input_sources(root: &std::path::Path) {
+    write_officeqa_full_csv(root, 30);
+    write_sealqa_parquet(root, 3);
+    write_sealqa_judge_source(root);
+    write_exact_split_manifest(
+        &root.join("tmp/replication/evoskill/sealqa/paper_split_manifest.json"),
+        "sealqa",
+        "sealqa_runner_declared_three_row",
+        &["sealqa:000".to_owned()],
+        &[],
+        &["sealqa:001".to_owned(), "sealqa:002".to_owned()],
+    );
+}
+
+fn write_exact_split_manifest(
+    path: &std::path::Path,
+    dataset_id: &str,
+    split_id: &str,
+    train: &[String],
+    validation: &[String],
+    held_out_test: &[String],
+) {
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let manifest = serde_json::json!({
+        "schema_version": 1,
+        "dataset_id": dataset_id,
+        "split_id": split_id,
+        "roles": {
+            "train": train,
+            "validation": validation,
+            "held_out_test": held_out_test
+        }
+    });
+    fs::write(path, serde_json::to_vec_pretty(&manifest).unwrap()).unwrap();
 }
 
 fn write_officeqa_prediction_rows(

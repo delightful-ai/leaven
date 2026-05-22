@@ -99,6 +99,15 @@ regenerates the final report through the normal importer. This scores supplied
 prediction artifacts only; it does not run an agent or resolve missing split
 proof.
 
+`just evoskill-paper-runner-inputs` is the Rust no-spend materialization path
+for answer-free OfficeQA/SealQA runner inputs. It writes
+`runner_input_manifest.json` plus per-slot JSONL artifacts for the current
+unreported OfficeQA/SealQA slots whose source and split membership are
+materialized. The artifacts carry source ids and inputs only; they deliberately
+omit targets, references, predictions, scores, and BrowseComp transfer rows.
+This prepares bounded run inputs only; it does not run an agent, score outputs,
+call a judge, or prove live/paper-close results.
+
 `just evoskill-paper-sealqa-judge-requests <predictions.jsonl>` is the Rust
 no-spend request-materialization path for future approved SealQA judge runs.
 Each input row is strict JSONL with `dataset_id`, `split_id`, `split_role`,

@@ -199,6 +199,12 @@ belong in their owning crates.
   score evidence JSONL from strict prediction rows, then rewrites the manifest
   and final report. It scores only already-unblocked materialized OfficeQA
   slots.
+- `just evoskill-paper-runner-inputs` writes
+  `tmp/replication/evoskill/runner_input_manifest.json` plus answer-free
+  OfficeQA/SealQA runner input JSONL for current unreported materialized
+  slots, then rewrites the manifest and final report. It provides source ids
+  and inputs only; it must not include targets, references, predictions,
+  scores, or BrowseComp transfer rows, and it is not live-run proof.
 - `just evoskill-paper-sealqa-judge-requests <predictions.jsonl>` writes
   `tmp/replication/evoskill/sealqa_judge_request_manifest.json` plus pinned
   judge-only request JSONL from strict SealQA prediction rows, then rewrites the
