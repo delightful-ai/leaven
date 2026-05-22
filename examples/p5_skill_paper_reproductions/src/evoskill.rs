@@ -78,6 +78,7 @@ pub struct EvoSkillReplicaManifest {
     pub frontier: FrontierManifest,
     pub schedule: ScheduleManifest,
     pub model_pins: Vec<ModelPin>,
+    pub paper_result_targets: Vec<PaperResultTarget>,
     pub blockers: Vec<ReplicationBlocker>,
     pub proxy_rejections: Vec<String>,
 }
@@ -318,6 +319,26 @@ pub struct ModelPin {
     pub paper_model: String,
     pub leaven_candidate_model: Option<String>,
     pub status: String,
+}
+
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct PaperResultTarget {
+    pub id: String,
+    pub dataset_id: String,
+    pub candidate_role: String,
+    pub metric: String,
+    pub tolerance: f64,
+    pub value_percent: f64,
+    pub source: String,
+    pub status: PaperResultTargetStatus,
+    pub ambiguity_group: Option<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PaperResultTargetStatus {
+    Reported,
+    AmbiguousCandidate,
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -639,7 +660,7 @@ pub fn build_evoskill_replica_manifest(
     let source_universe = source_universe(&datasets, &source_materializations);
 
     Ok(EvoSkillReplicaManifest {
-        schema_version: 6,
+        schema_version: 7,
         paper: PaperTarget {
             id: "evoskill".to_owned(),
             arxiv_id: "2603.02766".to_owned(),
@@ -655,6 +676,7 @@ pub fn build_evoskill_replica_manifest(
         frontier: frontier_manifest(),
         schedule: schedule_manifest(),
         model_pins: model_pins(),
+        paper_result_targets: paper_result_targets(),
         blockers: blockers(),
         proxy_rejections: proxy_rejections(),
     })
@@ -1408,10 +1430,9 @@ fn final_report_ablations(manifest: &EvoSkillReplicaManifest) -> Vec<AblationSta
             status: "blocked".to_owned(),
             blocker_ids: vec![
                 "officeqa_exact_split_membership".to_owned(),
-                "officeqa_reported_result_target".to_owned(),
+                "live_run_spend_approval".to_owned(),
             ],
-            note: "OfficeQA skill-merge reporting target is unresolved before paper-close"
-                .to_owned(),
+            note: "OfficeQA skill-merge comparison targets are reported as two paper-source candidates; the run still needs exact split/source denominator and live scoring".to_owned(),
         },
         AblationStatusReport {
             id: "browsecomp_transfer".to_owned(),
@@ -2180,7 +2201,6 @@ fn dataset_requirements() -> Vec<DatasetRequirement> {
             blocker_ids: vec![
                 "officeqa_category_split_manifest".to_owned(),
                 "officeqa_exact_split_membership".to_owned(),
-                "officeqa_reported_result_target".to_owned(),
             ],
         },
         DatasetRequirement {
@@ -2296,6 +2316,56 @@ fn model_pins() -> Vec<ModelPin> {
     ]
 }
 
+fn paper_result_targets() -> Vec<PaperResultTarget> {
+    vec![
+        paper_result_target(
+            "officeqa_baseline_exact_match_table",
+            "baseline",
+            60.6,
+            "full_source.md table 1 / src/tables/officeqa_results.tex",
+            PaperResultTargetStatus::Reported,
+            None,
+        ),
+        paper_result_target(
+            "officeqa_skill_merge_exact_match_prose",
+            "skill_merge",
+            67.9,
+            "full_source.md figure caption and results prose",
+            PaperResultTargetStatus::AmbiguousCandidate,
+            Some("officeqa_skill_merge_exact_match"),
+        ),
+        paper_result_target(
+            "officeqa_skill_merge_exact_match_table",
+            "skill_merge",
+            68.1,
+            "full_source.md table 1 / src/tables/officeqa_results.tex",
+            PaperResultTargetStatus::AmbiguousCandidate,
+            Some("officeqa_skill_merge_exact_match"),
+        ),
+    ]
+}
+
+fn paper_result_target(
+    id: &str,
+    candidate_role: &str,
+    value_percent: f64,
+    source: &str,
+    status: PaperResultTargetStatus,
+    ambiguity_group: Option<&str>,
+) -> PaperResultTarget {
+    PaperResultTarget {
+        id: id.to_owned(),
+        dataset_id: "officeqa".to_owned(),
+        candidate_role: candidate_role.to_owned(),
+        metric: "exact_match_0_percent_tolerance".to_owned(),
+        tolerance: 0.0,
+        value_percent,
+        source: source.to_owned(),
+        status,
+        ambiguity_group: ambiguity_group.map(ToOwned::to_owned),
+    }
+}
+
 fn blockers() -> Vec<ReplicationBlocker> {
     vec![
         blocker(
@@ -2325,10 +2395,6 @@ fn blockers() -> Vec<ReplicationBlocker> {
         blocker(
             "browsecomp_transfer_sample",
             "BrowseComp 128-example transfer sample/result source is not present locally",
-        ),
-        blocker(
-            "officeqa_reported_result_target",
-            "OfficeQA prose and table report disagree between 67.9 and 68.1 percent",
         ),
     ]
 }

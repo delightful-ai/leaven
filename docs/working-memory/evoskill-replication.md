@@ -507,14 +507,10 @@ or split manifest.
    train/held-out split artifact and no LLM-as-judge scorer harness.
 5. BrowseComp transfer blocker: no local 128-example transfer sample or result
    pickle was found.
-6. OfficeQA reported-result blocker: the prose says skill-merge exact match is
-   67.9 percent, while the checked-in OfficeQA table lists 68.1 percent for
-   `merge-unique` at 0 percent tolerance. A replication dossier must choose
-   which source to compare against or report both.
-7. Upstream script drift: static source inspection shows direct
+6. Upstream script drift: static source inspection shows direct
    `scripts/run_loop.py` imports `Agent` from the wrong package. The supported
    CLI imports `Agent` from `src.harness`.
-8. Leaven primitive blocker after provenance: `leaven-artifact-git` can
+7. Leaven primitive blocker after provenance: `leaven-artifact-git` can
    represent program/frontier refs, `leaven-workspace-git` can clone, project,
    fsck, import, capture, restore, and delete local branch/tag refs, and
    `leaven-agentic-git` can materialize/read back git-program workspaces and
@@ -542,7 +538,7 @@ or split manifest.
    P5 can inspect the materialized OfficeQA `UID0001` sample/source pair and
    SealQA sample without spend, but both remain validation-only samples rather
    than runnable splits.
-9. Language-boundary blocker for implementation: after provenance, all
+8. Language-boundary blocker for implementation: after provenance, all
    Leaven-owned EvoSkill split/sampler/scorer/harness/frontier behavior must be
    implemented in Rust/Leaven primitives, not Python.
 
@@ -560,9 +556,7 @@ Stay no-spend until the provenance blockers are closed:
    pinned parquet and records a row-order substitute only.
 4. Locate the BrowseComp transfer sample/result source, or record the exact
    access blocker with source links.
-5. Resolve the OfficeQA reported-result comparison target: prose 67.9 percent
-   exact-match skill-merge or table 68.1 percent `merge-unique` exact match.
-6. After the exact split/source path is chosen, wire the tested
+5. After the exact split/source path is chosen, wire the tested
    `leaven-artifact-git`, `leaven-workspace-git`, `TopKFrontier`,
    `TopKParentSelector`, `leaven-eval::StratifiedSplitBuilder`, and
    `leaven-eval::CategoryRoundRobinSampler` primitives into the full EvoSkill
@@ -694,7 +688,7 @@ Date: 2026-05-22.
 Provider/model spend: none.
 Cloud/GPU spend: none.
 
-The P5 replica manifest now declares schema v6 split materializations with
+That slice introduced schema v6 split materializations with
 role-level source-id membership manifests. Each materialized substitute split
 records the role name (`train`, `validation`, or `held_out_test`), row count,
 ordered source ids, and a source-id fingerprint in addition to the existing
@@ -764,3 +758,20 @@ repo health, but the final report now names why each one does not prove
 OfficeQA/SealQA paper-close replication. Paper-close still requires the exact
 source/split policy, live judge/provider approval where needed, and reported
 train/validation/test scores with the existing exactness classification.
+
+## No-Spend OfficeQA Paper Targets
+
+Date: 2026-05-22.
+Provider/model spend: none.
+Cloud/GPU spend: none.
+
+The P5 replica manifest now declares schema v7 with typed
+`paper_result_targets`. It records the OfficeQA baseline table exact-match
+target at 60.6 percent and records both skill-merge exact-match candidates:
+67.9 percent from the paper prose/figure caption and 68.1 percent from the
+checked-in table.
+
+This closes the previous generic `officeqa_reported_result_target` blocker by
+reporting both paper-source candidates instead of choosing one silently.
+Nothing here produces a Leaven score or resolves OfficeQA split/source
+membership; it only makes future comparison targets explicit and auditable.

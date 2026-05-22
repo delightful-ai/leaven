@@ -9,7 +9,8 @@ use arrow_schema::{DataType, Field, Schema};
 use p5_skill_paper_reproductions::evoskill::{
     DatasetMaterializationReport, EvoSkillFinalReport, ExactnessClass, FinalScoreSlot,
     FinalScoreStatus, LiveRunGateStatus, ManifestBuildInput, MaterializationExactness,
-    ProxyRejectionStatus, SplitMaterializationReport, build_evoskill_final_report,
+    PaperResultTargetStatus, ProxyRejectionStatus, SplitMaterializationReport,
+    build_evoskill_final_report,
 };
 use parquet::arrow::ArrowWriter;
 
@@ -23,6 +24,7 @@ fn final_report_exposes_score_slots_costs_errors_and_gaps_without_fake_metrics()
 
     assert_report_header(&report);
     assert_live_run_gate_blocks_unapproved_spend(&report);
+    assert_officeqa_paper_targets_report_ambiguity_without_blocking(&report);
     assert_proxy_rejection_gates(&report);
     let officeqa = officeqa_materialization(&report);
     let sealqa = sealqa_materialization(&report);
@@ -34,6 +36,27 @@ fn final_report_exposes_score_slots_costs_errors_and_gaps_without_fake_metrics()
             .iter()
             .any(|ablation| ablation.id == "skill_merge" && ablation.status == "blocked")
     );
+}
+
+fn assert_officeqa_paper_targets_report_ambiguity_without_blocking(report: &EvoSkillFinalReport) {
+    assert_eq!(report.manifest.paper_result_targets.len(), 3);
+    assert!(
+        report
+            .errors
+            .iter()
+            .all(|error| error.blocker_id != "officeqa_reported_result_target")
+    );
+    let ambiguous_targets = report
+        .manifest
+        .paper_result_targets
+        .iter()
+        .filter(|target| target.status == PaperResultTargetStatus::AmbiguousCandidate)
+        .collect::<Vec<_>>();
+    assert_eq!(ambiguous_targets.len(), 2);
+    assert!(ambiguous_targets.iter().all(|target| {
+        target.candidate_role == "skill_merge"
+            && target.ambiguity_group.as_deref() == Some("officeqa_skill_merge_exact_match")
+    }));
 }
 
 fn assert_report_header(report: &EvoSkillFinalReport) {
@@ -303,6 +326,7 @@ fn cli_writes_manifest_and_final_report_artifacts() {
     assert!(report.contains("\"score_slots\""));
     assert!(report.contains("\"live_run_gate\""));
     assert!(report.contains("\"proxy_rejection_gates\""));
+    assert!(report.contains("\"paper_result_targets\""));
     assert!(report.contains("\"role_source_id_fingerprint\""));
     assert!(report.contains("\"blocked_before_paper_close\""));
 }
