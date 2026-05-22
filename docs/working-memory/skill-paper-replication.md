@@ -290,6 +290,12 @@ Next attempt:
   checked-in table. This reports the ambiguity instead of leaving it as an
   `officeqa_reported_result_target` blocker; it does not create Leaven scores
   or resolve source/split membership.
+- P5 now also carries typed headline targets for the other EvoSkill reported
+  results: SealQA baseline 26.6 percent and optimized 38.7 percent
+  LLM-judge accuracy, plus BrowseComp baseline 43.5 percent and SealQA-skill
+  transfer 48.8 percent accuracy. These are comparison targets only; they do
+  not score SealQA, locate the exact SealQA split, or locate the BrowseComp
+  128-example transfer sample.
 - P5 schema v8 added typed `source_blockers`, so unresolved source policy,
   missing OfficeQA category/exact split artifacts, missing SealQA exact split
   membership, and absent BrowseComp transfer source are represented as

@@ -109,7 +109,7 @@ fn assert_source_blockers_are_report_visible(report: &EvoSkillFinalReport) {
 }
 
 fn assert_officeqa_paper_targets_report_ambiguity_without_blocking(report: &EvoSkillFinalReport) {
-    assert_eq!(report.manifest.paper_result_targets.len(), 3);
+    assert_eq!(report.manifest.paper_result_targets.len(), 7);
     assert!(
         report
             .errors
@@ -127,6 +127,61 @@ fn assert_officeqa_paper_targets_report_ambiguity_without_blocking(report: &EvoS
         target.candidate_role == "skill_merge"
             && target.ambiguity_group.as_deref() == Some("officeqa_skill_merge_exact_match")
     }));
+
+    assert_reported_target(
+        report,
+        "sealqa_baseline_accuracy",
+        "sealqa",
+        "baseline",
+        "llm_judge_accuracy",
+        26.6,
+    );
+    assert_reported_target(
+        report,
+        "sealqa_optimized_accuracy",
+        "sealqa",
+        "optimized",
+        "llm_judge_accuracy",
+        38.7,
+    );
+    assert_reported_target(
+        report,
+        "browsecomp_baseline_accuracy",
+        "browsecomp_transfer",
+        "baseline",
+        "accuracy",
+        43.5,
+    );
+    assert_reported_target(
+        report,
+        "browsecomp_sealqa_skill_transfer_accuracy",
+        "browsecomp_transfer",
+        "sealqa_skill_transfer",
+        "accuracy",
+        48.8,
+    );
+}
+
+fn assert_reported_target(
+    report: &EvoSkillFinalReport,
+    id: &str,
+    dataset_id: &str,
+    candidate_role: &str,
+    metric: &str,
+    value_percent: f64,
+) {
+    let target = report
+        .manifest
+        .paper_result_targets
+        .iter()
+        .find(|target| target.id == id)
+        .unwrap_or_else(|| panic!("missing paper result target {id}"));
+    assert_eq!(target.status, PaperResultTargetStatus::Reported);
+    assert_eq!(target.dataset_id, dataset_id);
+    assert_eq!(target.candidate_role, candidate_role);
+    assert_eq!(target.metric, metric);
+    assert!((target.value_percent - value_percent).abs() < f64::EPSILON);
+    assert_eq!(target.ambiguity_group, None);
 }
 
 fn assert_report_header(report: &EvoSkillFinalReport) {

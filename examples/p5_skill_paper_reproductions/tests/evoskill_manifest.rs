@@ -76,20 +76,23 @@ fn evoskill_manifest_records_paper_close_denominator_without_claiming_proof() {
             .iter()
             .all(|blocker| blocker.id != "officeqa_reported_result_target")
     );
-    assert_paper_result_targets_report_the_officeqa_ambiguity(&manifest);
+    assert_paper_result_targets_cover_all_paper_headlines(&manifest);
     assert_source_blockers_report_missing_paper_artifacts(&manifest);
 }
 
-fn assert_paper_result_targets_report_the_officeqa_ambiguity(
+fn assert_paper_result_targets_cover_all_paper_headlines(
     manifest: &p5_skill_paper_reproductions::evoskill::EvoSkillReplicaManifest,
 ) {
+    assert_eq!(manifest.paper_result_targets.len(), 7);
     let baseline = manifest
         .paper_result_targets
         .iter()
         .find(|target| target.id == "officeqa_baseline_exact_match_table")
         .expect("baseline OfficeQA exact-match target is recorded");
     assert_eq!(baseline.status, PaperResultTargetStatus::Reported);
+    assert_eq!(baseline.dataset_id, "officeqa");
     assert_eq!(baseline.candidate_role, "baseline");
+    assert_eq!(baseline.metric, "exact_match_0_percent_tolerance");
     assert!((baseline.value_percent - 60.6).abs() < f64::EPSILON);
 
     let skill_merge_targets = manifest
@@ -108,6 +111,60 @@ fn assert_paper_result_targets_report_the_officeqa_ambiguity(
         .collect::<Vec<_>>();
     values.sort_by(f64::total_cmp);
     assert_eq!(values, [67.9, 68.1]);
+
+    assert_reported_target(
+        manifest,
+        "sealqa_baseline_accuracy",
+        "sealqa",
+        "baseline",
+        "llm_judge_accuracy",
+        26.6,
+    );
+    assert_reported_target(
+        manifest,
+        "sealqa_optimized_accuracy",
+        "sealqa",
+        "optimized",
+        "llm_judge_accuracy",
+        38.7,
+    );
+    assert_reported_target(
+        manifest,
+        "browsecomp_baseline_accuracy",
+        "browsecomp_transfer",
+        "baseline",
+        "accuracy",
+        43.5,
+    );
+    assert_reported_target(
+        manifest,
+        "browsecomp_sealqa_skill_transfer_accuracy",
+        "browsecomp_transfer",
+        "sealqa_skill_transfer",
+        "accuracy",
+        48.8,
+    );
+}
+
+fn assert_reported_target(
+    manifest: &p5_skill_paper_reproductions::evoskill::EvoSkillReplicaManifest,
+    id: &str,
+    dataset_id: &str,
+    candidate_role: &str,
+    metric: &str,
+    value_percent: f64,
+) {
+    let target = manifest
+        .paper_result_targets
+        .iter()
+        .find(|target| target.id == id)
+        .unwrap_or_else(|| panic!("missing paper result target {id}"));
+    assert_eq!(target.status, PaperResultTargetStatus::Reported);
+    assert_eq!(target.dataset_id, dataset_id);
+    assert_eq!(target.candidate_role, candidate_role);
+    assert_eq!(target.metric, metric);
+    assert!((target.value_percent - value_percent).abs() < f64::EPSILON);
+    assert_eq!(target.ambiguity_group, None);
 }
 
 fn assert_source_blockers_report_missing_paper_artifacts(
