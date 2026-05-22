@@ -25,14 +25,31 @@ fn evoskill_manifest_records_paper_close_denominator_without_claiming_proof() {
         "EvoSkill paper fixture",
     )
     .unwrap();
+    write_sealqa_judge_source(root.path());
 
     let manifest = build_evoskill_replica_manifest(&ManifestBuildInput::new(root.path())).unwrap();
 
-    assert_eq!(manifest.schema_version, 9);
+    assert_eq!(manifest.schema_version, 10);
     assert_eq!(manifest.paper.arxiv_id, "2603.02766");
     assert_eq!(manifest.exactness, ExactnessClass::BlockedBeforePaperClose);
     assert_eq!(manifest.scorer.tolerances, [0.0, 0.01, 0.025, 0.05, 0.10]);
     assert!((manifest.scorer.failure_threshold - 0.8).abs() < f64::EPSILON);
+    let sealqa_judge = manifest
+        .scorer
+        .judge_templates
+        .iter()
+        .find(|template| template.id == "sealqa-auto-grader-placeholder-v1")
+        .expect("SealQA judge template is recorded");
+    assert!(sealqa_judge.source_artifact_exists);
+    assert!(sealqa_judge.source_artifact_bytes.unwrap() > 20);
+    assert_eq!(
+        sealqa_judge
+            .source_artifact_sha256
+            .as_deref()
+            .unwrap()
+            .len(),
+        64
+    );
     assert_eq!(manifest.frontier.capacity, 3);
     assert_eq!(manifest.frontier.parent_selection, "round-robin");
     assert!(
@@ -344,6 +361,18 @@ fn write_officeqa_full_csv(root: &std::path::Path, rows: usize) {
         .unwrap();
     }
     fs::write(path, csv).unwrap();
+}
+
+fn write_sealqa_judge_source(root: &std::path::Path) {
+    let path = root.join(
+        "tmp/skill_opt_sources/arx_2603.02766/src/appendix/agent-prompts/auto_grader_placeholder.md",
+    );
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(
+        path,
+        "# Auto-Grader Prompt (Placeholder)\n\nPinned test source.\n",
+    )
+    .unwrap();
 }
 
 fn init_git_source(path: &std::path::Path, remote_url: &str) {

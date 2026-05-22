@@ -314,6 +314,9 @@ pub struct JudgeTemplateManifest {
     pub id: String,
     pub dataset_id: String,
     pub source_artifact_id: String,
+    pub source_artifact_exists: bool,
+    pub source_artifact_bytes: Option<u64>,
+    pub source_artifact_sha256: Option<String>,
     pub runtime_status: String,
     pub fingerprint: String,
 }
@@ -704,9 +707,10 @@ pub fn build_evoskill_replica_manifest(
     let datasets = dataset_requirements();
     let source_materializations = source_materializations(input)?;
     let source_universe = source_universe(&datasets, &source_materializations);
+    let scorer = scorer_manifest(&artifacts);
 
     Ok(EvoSkillReplicaManifest {
-        schema_version: 9,
+        schema_version: 10,
         paper: PaperTarget {
             id: "evoskill".to_owned(),
             arxiv_id: "2603.02766".to_owned(),
@@ -719,7 +723,7 @@ pub fn build_evoskill_replica_manifest(
         datasets,
         source_universe,
         source_materializations,
-        scorer: scorer_manifest(),
+        scorer,
         frontier: frontier_manifest(),
         schedule: schedule_manifest(),
         model_pins: model_pins(),
@@ -1284,6 +1288,15 @@ fn scorer_fingerprint_report(scorer: &ScorerManifest) -> ScorerFingerprintReport
         hasher.update(b"\0");
         hasher.update(template.source_artifact_id.as_bytes());
         hasher.update(b"\0");
+        hasher.update([u8::from(template.source_artifact_exists)]);
+        if let Some(bytes) = template.source_artifact_bytes {
+            hasher.update(bytes.to_le_bytes());
+        }
+        hasher.update(b"\0");
+        if let Some(sha256) = &template.source_artifact_sha256 {
+            hasher.update(sha256.as_bytes());
+        }
+        hasher.update(b"\0");
         hasher.update(template.runtime_status.as_bytes());
         hasher.update(b"\0");
         hasher.update(template.fingerprint.as_bytes());
@@ -1471,7 +1484,7 @@ fn final_report_paper_close_gates(
             "replica_manifest",
             PaperCloseGateStatus::Proven,
             Vec::new(),
-            "schema v9 manifest declares source universe, local source identity, fingerprints, paper targets, source blockers with checked local candidate evidence, model pins, scorer, frontier, and schedule",
+            "schema v10 manifest declares source universe, local source identity, fingerprints, paper targets, source blockers with checked local candidate evidence, source-backed judge template pins, model pins, scorer, frontier, and schedule",
         ),
         paper_close_gate(
             "source_and_split_materialization",
@@ -1486,7 +1499,7 @@ fn final_report_paper_close_gates(
                 "sealqa_judge_scored_run".to_owned(),
                 "live_run_spend_approval".to_owned(),
             ],
-            "OfficeQA scorer laws and SealQA judge template are proven; live SealQA judge scoring still needs approval",
+            "OfficeQA scorer laws and the source-backed SealQA judge template/request surface are proven; live SealQA judge scoring still needs approval",
         ),
         paper_close_gate(
             "full_loop_mechanics",
@@ -2476,38 +2489,44 @@ fn dataset_requirements() -> Vec<DatasetRequirement> {
     ]
 }
 
-fn scorer_manifest() -> ScorerManifest {
+fn scorer_manifest(artifacts: &[SourceArtifact]) -> ScorerManifest {
+    let judge_source = artifacts
+        .iter()
+        .find(|artifact| artifact.id == SEALQA_JUDGE_SOURCE_ARTIFACT_ID)
+        .expect("source_artifacts always includes the SealQA judge source artifact");
     ScorerManifest {
         id: "evoskill-multi-tolerance-v1".to_owned(),
         tolerances: vec![0.0, 0.01, 0.025, 0.05, 0.10],
         failure_threshold: 0.8,
         implementation_status: "Rust OfficeQA scorer law-tested for multi-tolerance weighting, units, years, text, lists, failure feedback rows, and failure extraction; SealQA judge template is pinned but not run".to_owned(),
-        judge_templates: vec![sealqa_judge_template_manifest()],
+        judge_templates: vec![sealqa_judge_template_manifest(judge_source)],
     }
 }
 
-#[must_use]
-pub fn sealqa_judge_template_manifest() -> JudgeTemplateManifest {
+fn sealqa_judge_template_manifest(source_artifact: &SourceArtifact) -> JudgeTemplateManifest {
     JudgeTemplateManifest {
         id: SEALQA_JUDGE_TEMPLATE_ID.to_owned(),
         dataset_id: "sealqa".to_owned(),
         source_artifact_id: SEALQA_JUDGE_SOURCE_ARTIFACT_ID.to_owned(),
+        source_artifact_exists: source_artifact.exists,
+        source_artifact_bytes: source_artifact.bytes,
+        source_artifact_sha256: source_artifact.sha256.clone(),
         runtime_status: SEALQA_JUDGE_RUNTIME_STATUS.to_owned(),
-        fingerprint: sealqa_judge_template_fingerprint(),
+        fingerprint: sealqa_judge_template_fingerprint(source_artifact.sha256.as_deref()),
     }
 }
 
 #[must_use]
 pub fn build_sealqa_judge_request(
+    template: &JudgeTemplateManifest,
     question: &str,
     prediction: &str,
     reference: &str,
     tolerance: f64,
 ) -> SealQaJudgeRequest {
-    let manifest = sealqa_judge_template_manifest();
     SealQaJudgeRequest {
-        template_id: manifest.id,
-        template_fingerprint: manifest.fingerprint,
+        template_id: template.id.clone(),
+        template_fingerprint: template.fingerprint.clone(),
         system: SEALQA_JUDGE_SYSTEM_PROMPT.to_owned(),
         user: format!(
             "## Inputs\n- `question`: `{question}`\n- `prediction`: `{prediction}`\n- `reference`: `{reference}`\n- `tolerance`: `{tolerance}`"
@@ -2516,11 +2535,15 @@ pub fn build_sealqa_judge_request(
     }
 }
 
-fn sealqa_judge_template_fingerprint() -> String {
+fn sealqa_judge_template_fingerprint(source_artifact_sha256: Option<&str>) -> String {
     let mut hasher = Sha256::new();
     hasher.update(SEALQA_JUDGE_TEMPLATE_ID.as_bytes());
     hasher.update(b"\0");
     hasher.update(SEALQA_JUDGE_SOURCE_ARTIFACT_ID.as_bytes());
+    hasher.update(b"\0");
+    if let Some(source_artifact_sha256) = source_artifact_sha256 {
+        hasher.update(source_artifact_sha256.as_bytes());
+    }
     hasher.update(b"\0");
     hasher.update(SEALQA_JUDGE_SYSTEM_PROMPT.as_bytes());
     hasher.update(b"\0");

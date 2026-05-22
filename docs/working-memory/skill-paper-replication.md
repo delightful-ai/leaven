@@ -299,6 +299,10 @@ Next attempt:
   checked local path evidence: existence, file/dir shape, byte count, and
   SHA-256 for files. This makes missing exact source artifacts auditable in the
   manifest without treating substitute inputs as paper-close proof.
+- P5 schema v10 adds source-backed SealQA judge pinning: the scorer manifest's
+  judge template carries the checked paper-source artifact existence, byte
+  count, and SHA-256, and the request builder consumes the pinned template
+  manifest. This is prompt/request evidence only, not a judge-scored run.
 - P5 final report schema v6 adds typed `paper_close_gates`, separating proven
   no-spend manifest/report/mechanics/proxy-closeout surfaces from
   source-blocked source/split work and approval-blocked live/judge execution.
