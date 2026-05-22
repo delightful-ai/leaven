@@ -97,10 +97,9 @@ fn assert_source_blockers_are_report_visible(report: &EvoSkillFinalReport) {
     assert!(report.manifest.source_blockers.iter().any(|blocker| {
         blocker.blocker_id == "officeqa_category_split_manifest"
             && blocker.status == SourceBlockerStatus::MissingLocalArtifact
-            && blocker
-                .local_path_candidates
-                .iter()
-                .any(|path| path.ends_with("solved_dataset.csv"))
+            && blocker.local_path_candidates.iter().any(|candidate| {
+                candidate.relative_path.ends_with("solved_dataset.csv") && !candidate.exists
+            })
     }));
     assert!(report.manifest.source_blockers.iter().any(|blocker| {
         blocker.blocker_id == "sealqa_split_manifest"

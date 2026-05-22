@@ -160,8 +160,18 @@ pub struct SourceBlockerReport {
     pub dataset_id: String,
     pub status: SourceBlockerStatus,
     pub required_for: Vec<String>,
-    pub local_path_candidates: Vec<String>,
+    pub local_path_candidates: Vec<SourceBlockerCandidate>,
     pub note: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct SourceBlockerCandidate {
+    pub relative_path: String,
+    pub exists: bool,
+    pub is_file: bool,
+    pub is_dir: bool,
+    pub bytes: Option<u64>,
+    pub sha256: Option<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -696,7 +706,7 @@ pub fn build_evoskill_replica_manifest(
     let source_universe = source_universe(&datasets, &source_materializations);
 
     Ok(EvoSkillReplicaManifest {
-        schema_version: 8,
+        schema_version: 9,
         paper: PaperTarget {
             id: "evoskill".to_owned(),
             arxiv_id: "2603.02766".to_owned(),
@@ -705,7 +715,7 @@ pub fn build_evoskill_replica_manifest(
         exactness: ExactnessClass::BlockedBeforePaperClose,
         source_revisions,
         artifacts,
-        source_blockers: source_blockers(),
+        source_blockers: source_blockers(&input.root)?,
         datasets,
         source_universe,
         source_materializations,
@@ -1461,7 +1471,7 @@ fn final_report_paper_close_gates(
             "replica_manifest",
             PaperCloseGateStatus::Proven,
             Vec::new(),
-            "schema v8 manifest declares source universe, local source identity, fingerprints, paper targets, source blockers, model pins, scorer, frontier, and schedule",
+            "schema v9 manifest declares source universe, local source identity, fingerprints, paper targets, source blockers with checked local candidate evidence, model pins, scorer, frontier, and schedule",
         ),
         paper_close_gate(
             "source_and_split_materialization",
@@ -2310,9 +2320,10 @@ fn source_artifacts(root: &Path) -> Result<Vec<SourceArtifact>, ManifestError> {
     ])
 }
 
-fn source_blockers() -> Vec<SourceBlockerReport> {
-    vec![
+fn source_blockers(root: &Path) -> Result<Vec<SourceBlockerReport>, ManifestError> {
+    Ok(vec![
         source_blocker(
+            root,
             "source_pin",
             "all",
             SourceBlockerStatus::UnresolvedSourcePolicy,
@@ -2323,8 +2334,9 @@ fn source_blockers() -> Vec<SourceBlockerReport> {
                 "tmp/repros/officeqa",
             ],
             "paper-release, local-checkout, or remote-current source policy is not chosen",
-        ),
+        )?,
         source_blocker(
+            root,
             "officeqa_category_split_manifest",
             "officeqa",
             SourceBlockerStatus::MissingLocalArtifact,
@@ -2335,8 +2347,9 @@ fn source_blockers() -> Vec<SourceBlockerReport> {
                 "tmp/repros/evoskill/ablation_run_incorrect.csv",
             ],
             "paper references LLM-derived categories/pseudo-labels, but the local source tree only exposes difficulty labels",
-        ),
+        )?,
         source_blocker(
+            root,
             "officeqa_exact_split_membership",
             "officeqa",
             SourceBlockerStatus::MissingExactSplitManifest,
@@ -2346,16 +2359,18 @@ fn source_blockers() -> Vec<SourceBlockerReport> {
                 "tmp/repros/evoskill/ablation_run_incorrect.csv",
             ],
             "difficulty-stratified substitute splits are auditable, but paper exact membership is absent",
-        ),
+        )?,
         source_blocker(
+            root,
             "sealqa_split_manifest",
             "sealqa",
             SourceBlockerStatus::MissingExactSplitManifest,
             &["sealqa_scored_train_held_out_report"],
             &["tmp/replication/evoskill/sealqa/seal-0.parquet"],
             "seal-0 rows are materialized from Parquet, but the exact 10 percent train versus held-out row ids are not present",
-        ),
+        )?,
         source_blocker(
+            root,
             "browsecomp_transfer_sample",
             "browsecomp_transfer",
             SourceBlockerStatus::MissingLocalArtifact,
@@ -2365,29 +2380,65 @@ fn source_blockers() -> Vec<SourceBlockerReport> {
                 "tmp/repros/evoskill/results/deep_cc_runs",
             ],
             "paper reports a 128-example stratified transfer sample, but no local sample or result source is present",
-        ),
-    ]
+        )?,
+    ])
 }
 
 fn source_blocker(
+    root: &Path,
     blocker_id: &str,
     dataset_id: &str,
     status: SourceBlockerStatus,
     required_for: &[&str],
     local_path_candidates: &[&str],
     note: &str,
-) -> SourceBlockerReport {
-    SourceBlockerReport {
+) -> Result<SourceBlockerReport, ManifestError> {
+    Ok(SourceBlockerReport {
         blocker_id: blocker_id.to_owned(),
         dataset_id: dataset_id.to_owned(),
         status,
         required_for: required_for.iter().map(ToString::to_string).collect(),
         local_path_candidates: local_path_candidates
             .iter()
-            .map(ToString::to_string)
-            .collect(),
+            .map(|relative_path| source_blocker_candidate(root, relative_path))
+            .collect::<Result<Vec<_>, _>>()?,
         note: note.to_owned(),
+    })
+}
+
+fn source_blocker_candidate(
+    root: &Path,
+    relative_path: &str,
+) -> Result<SourceBlockerCandidate, ManifestError> {
+    let path = root.join(relative_path);
+    if !path.exists() {
+        return Ok(SourceBlockerCandidate {
+            relative_path: relative_path.to_owned(),
+            exists: false,
+            is_file: false,
+            is_dir: false,
+            bytes: None,
+            sha256: None,
+        });
     }
+
+    let metadata = path.metadata().map_err(|source| ManifestError::Read {
+        path: path.clone(),
+        source,
+    })?;
+    let is_file = metadata.is_file();
+    Ok(SourceBlockerCandidate {
+        relative_path: relative_path.to_owned(),
+        exists: true,
+        is_file,
+        is_dir: metadata.is_dir(),
+        bytes: is_file.then_some(metadata.len()),
+        sha256: if is_file {
+            Some(sha256_file(&path)?)
+        } else {
+            None
+        },
+    })
 }
 
 fn dataset_requirements() -> Vec<DatasetRequirement> {

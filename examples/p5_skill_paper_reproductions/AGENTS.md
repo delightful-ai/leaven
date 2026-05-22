@@ -23,7 +23,7 @@ belong in their owning crates.
 ## Proof
 - `cargo test -p p5_skill_paper_reproductions --test evoskill_manifest`
   proves the EvoSkill replica manifest preserves the paper-close denominator
-  and rejects proxy completion claims. It also proves the schema v8
+  and rejects proxy completion claims. It also proves the schema v9
   `source_universe` links datasets to source artifact ids, available source
   revision ids, materialized row counts, source-row fingerprints, split ids,
   split exactness labels, source revision status fields, and blockers without
@@ -33,7 +33,8 @@ belong in their owning crates.
   `paper_result_targets` rather than a generic blocker. It also carries typed
   `source_blockers` for unresolved source policy, missing OfficeQA category and
   exact split artifacts, missing SealQA exact split membership, and absent
-  BrowseComp transfer source.
+  BrowseComp transfer source, with checked local candidate-path evidence
+  instead of bare path strings.
 - `cargo test -p p5_skill_paper_reproductions --test evoskill_scorer`
   proves the paper-specific Rust scorer laws for weighted multi-tolerance
   scoring, failure-threshold classification, unit normalization, incidental
