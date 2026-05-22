@@ -194,6 +194,12 @@ belong in their owning crates.
   chooses a deterministic public BrowseComp substitute transfer denominator
   only; it is not the paper author's exact 128-example sample and it does not
   run the transferred SealQA skill.
+- `just evoskill-paper-no-spend-packet [csv]` chains the current local source
+  pin, accepted substitute split policy, BrowseComp public substitute, runner
+  input, and live-run request steps. This is the one-command local approval
+  packet path only; it does not probe credentials, approve spend, call a
+  provider, call a judge, import predictions, import judged rows, or prove
+  paper-close results.
 - `just evoskill-paper-score-officeqa <predictions.jsonl>` writes
   `tmp/replication/evoskill/score_result_manifest.json` plus checked OfficeQA
   score evidence JSONL from strict prediction rows, then rewrites the manifest

@@ -63,6 +63,13 @@ evoskill-paper-accept-substitute-splits *args:
 evoskill-paper-browsecomp-public-sample csv_path *args:
     cargo run -p p5_skill_paper_reproductions -- --out target/evoskill-paper-close/replica-manifest.json --write-browsecomp-public-transfer-sample {{csv_path}} {{args}}
 
+evoskill-paper-no-spend-packet csv_path='tmp/replication/evoskill/browsecomp/public_browsecomp_test_set.csv' *args:
+    just evoskill-paper-pin-local-sources {{args}}
+    just evoskill-paper-accept-substitute-splits {{args}}
+    just evoskill-paper-browsecomp-public-sample {{csv_path}} {{args}}
+    just evoskill-paper-runner-inputs {{args}}
+    just evoskill-paper-live-run-request {{args}}
+
 evoskill-paper-score-officeqa predictions_path *args:
     cargo run -p p5_skill_paper_reproductions -- --out target/evoskill-paper-close/replica-manifest.json --final-report-out target/evoskill-paper-close/final-report.json --write-officeqa-score-result {{predictions_path}} {{args}}
 
