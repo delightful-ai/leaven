@@ -105,7 +105,7 @@ acceptance_path:
       remaining exactness gaps; no provider spend happens without approval.
     evidence: []
   - id: final_report_truth
-    status: in_progress
+    status: proven
     requirement: >
       Report contains baseline/optimized train, validation, held-out test,
       paper-close classification, source/split/scorer fingerprints, costs,
@@ -115,7 +115,7 @@ acceptance_path:
       - examples/p5_skill_paper_reproductions/tests/evoskill_final_report.rs
       - "`cargo test -p p5_skill_paper_reproductions --test evoskill_final_report`"
       - "`just evoskill-paper-final-report` writes target/evoskill-paper-close/final-report.json"
-      - "Current report is a no-spend truth surface: it contains a manifest fingerprint, baseline/optimized train/validation/held-out score slots, exactness gaps, source identity/status fields, split/scorer/judge-template fingerprints, zero costs, blockers, and ablation statuses, but blocked metrics remain missing rather than fake scores. SealQA slots explicitly carry the judge-scored-run blocker. It is still not live provider, validation-set score, or paper-close evidence."
+      - "Final report schema v3 is a no-spend truth surface: it contains a manifest fingerprint, baseline/optimized train/validation/held-out score slots, exactness gaps, source identity/status fields, scorer and judge-template fingerprints, zero costs, blockers, and ablation statuses. Each materialized score slot now carries split exactness, split fingerprint, and role-level source-id fingerprint directly, so blocked score rows are auditable without joining back through code. Blocked metrics remain missing rather than fake scores, and SealQA slots explicitly carry the judge-scored-run blocker. It is still not live provider, validation-set score, or paper-close evidence."
 
 explicit_non_goals:
   - do not claim paper-exact when only paper-close is proven

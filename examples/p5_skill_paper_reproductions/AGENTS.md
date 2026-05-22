@@ -60,9 +60,11 @@ belong in their owning crates.
 - `cargo test -p p5_skill_paper_reproductions --test evoskill_final_report`
   proves the current no-spend final report truth surface writes manifest and
   report artifacts, carries baseline/optimized train/validation/held-out score
-  slots, exposes zero spend, blockers, ablation statuses, and exactness gaps,
-  and leaves blocked metrics as missing scores rather than fake zeros. It does
-  not prove live provider behavior, validation-set scores, or paper-close.
+  slots, exposes zero spend, blockers, ablation statuses, and exactness gaps.
+  Materialized score slots carry split exactness, split fingerprint, and
+  role-level source-id fingerprint directly. Blocked metrics stay missing
+  rather than fake zeros. It does not prove live provider behavior,
+  validation-set scores, or paper-close.
 - `just evoskill-paper-manifest` writes the current no-spend local manifest to
   `target/evoskill-paper-close/replica-manifest.json`.
 - `just evoskill-paper-final-report` writes both the manifest and current
