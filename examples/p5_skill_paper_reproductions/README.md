@@ -57,9 +57,13 @@ topic-stratified 128-row substitute sidecar, and keeps BrowseComp slots
 unscored. It is not paper-exact sample membership.
 
 The optional ignored `tmp/replication/evoskill/score_result_manifest.json`
-sidecar is the only no-spend import path for external scores. Entries must
-match the current manifest fingerprint, scorer fingerprint, slot key, split
-fingerprint, role source-id fingerprint, row counts, resolved blockers, and a
-nonempty `evidence_id`; reported score slots preserve that id as
-`score_evidence_id`. It is score evidence plumbing, not permission to treat
-fixtures, stale runs, or missing provider approval as paper scores.
+sidecar is the only no-spend import path for external scores. Schema-v2 entries
+must match the current manifest fingerprint, scorer fingerprint, slot key, split
+fingerprint, role source-id fingerprint, row counts, resolved blockers, a
+nonempty `evidence_id`, and a readable evidence artifact with matching SHA-256
+and byte count; reported score slots preserve the id as `score_evidence_id` and
+the checked artifact as `score_evidence_artifact`. It is score evidence
+plumbing, not permission to treat fixtures, stale runs, tampered evidence files,
+or missing provider approval as paper scores. The current importer binds the
+reported score to a checked artifact file; it does not yet parse row-level score
+outputs or recompute the aggregate from that artifact.

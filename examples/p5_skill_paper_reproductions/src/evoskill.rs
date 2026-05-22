@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File};
 use std::io::Read;
 use std::num::NonZeroUsize;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
@@ -500,6 +500,13 @@ pub struct ScoreResultManifestReport {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ScoreEvidenceArtifact {
+    pub relative_path: String,
+    pub sha256: String,
+    pub bytes: u64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FinalScoreStatus {
     Reported,
@@ -520,6 +527,7 @@ pub struct FinalScoreSlot {
     pub expected_rows: Option<u64>,
     pub score: Option<f64>,
     pub score_evidence_id: Option<String>,
+    pub score_evidence_artifact: Option<ScoreEvidenceArtifact>,
     pub status: FinalScoreStatus,
     pub blocker_ids: Vec<String>,
 }
@@ -731,6 +739,7 @@ struct ScoreResultManifestEntry {
     score: f64,
     resolved_blocker_ids: Vec<String>,
     evidence_id: String,
+    evidence_artifact: ScoreEvidenceArtifact,
 }
 
 struct ValidatedScoreResultManifest {
@@ -1083,7 +1092,7 @@ pub fn build_evoskill_final_report(
     let proxy_rejection_gates = proxy_rejection_gates();
 
     Ok(EvoSkillFinalReport {
-        schema_version: 13,
+        schema_version: 14,
         exactness,
         manifest,
         loop_report,
@@ -3072,21 +3081,28 @@ fn read_score_result_manifest(
             source,
         }
     })?;
-    validate_score_result_manifest(&path, manifest, manifest_fingerprint, scorer_fingerprint)
-        .map(Some)
+    validate_score_result_manifest(
+        root,
+        &path,
+        manifest,
+        manifest_fingerprint,
+        scorer_fingerprint,
+    )
+    .map(Some)
 }
 
 fn validate_score_result_manifest(
+    root: &Path,
     path: &Path,
     manifest: ScoreResultManifestFile,
     manifest_fingerprint: &ManifestFingerprintReport,
     scorer_fingerprint: &ScorerFingerprintReport,
 ) -> Result<ValidatedScoreResultManifest, ManifestError> {
-    if manifest.schema_version != 1 {
+    if manifest.schema_version != 2 {
         return Err(score_result_manifest_error(
             path,
             format!(
-                "expected schema_version 1, found {}",
+                "expected schema_version 2, found {}",
                 manifest.schema_version
             ),
         ));
@@ -3117,7 +3133,7 @@ fn validate_score_result_manifest(
     }
     let mut keys = BTreeSet::new();
     for entry in &manifest.entries {
-        validate_score_result_entry_shape(path, entry)?;
+        validate_score_result_entry_shape(root, path, entry)?;
         let key = score_result_entry_key(entry);
         if !keys.insert(key.clone()) {
             return Err(score_result_manifest_error(
@@ -3141,6 +3157,7 @@ fn validate_score_result_manifest(
 }
 
 fn validate_score_result_entry_shape(
+    root: &Path,
     path: &Path,
     entry: &ScoreResultManifestEntry,
 ) -> Result<(), ManifestError> {
@@ -3177,7 +3194,98 @@ fn validate_score_result_entry_shape(
             ),
         ));
     }
+    validate_score_evidence_artifact(root, path, entry)?;
     Ok(())
+}
+
+fn validate_score_evidence_artifact(
+    root: &Path,
+    sidecar_path: &Path,
+    entry: &ScoreResultManifestEntry,
+) -> Result<(), ManifestError> {
+    let key = score_result_entry_key(entry);
+    let artifact = &entry.evidence_artifact;
+    if artifact.relative_path.trim().is_empty() {
+        return Err(score_result_manifest_error(
+            sidecar_path,
+            format!("score result `{key}` evidence artifact path must not be empty"),
+        ));
+    }
+    let relative_path = Path::new(&artifact.relative_path);
+    if !is_safe_relative_path(relative_path) {
+        return Err(score_result_manifest_error(
+            sidecar_path,
+            format!(
+                "score result `{key}` evidence artifact path `{}` must be a safe relative path",
+                artifact.relative_path
+            ),
+        ));
+    }
+    if !is_sha256_hex(&artifact.sha256) {
+        return Err(score_result_manifest_error(
+            sidecar_path,
+            format!("score result `{key}` evidence artifact sha256 must be 64 hex characters"),
+        ));
+    }
+    if artifact.bytes == 0 {
+        return Err(score_result_manifest_error(
+            sidecar_path,
+            format!("score result `{key}` evidence artifact must not be empty"),
+        ));
+    }
+
+    let artifact_path = root.join(relative_path);
+    let metadata = fs::metadata(&artifact_path).map_err(|source| {
+        score_result_manifest_error(
+            sidecar_path,
+            format!(
+                "score result `{key}` evidence artifact `{}` is not readable: {source}",
+                artifact.relative_path
+            ),
+        )
+    })?;
+    if !metadata.is_file() {
+        return Err(score_result_manifest_error(
+            sidecar_path,
+            format!(
+                "score result `{key}` evidence artifact `{}` is not a file",
+                artifact.relative_path
+            ),
+        ));
+    }
+    if metadata.len() != artifact.bytes {
+        return Err(score_result_manifest_error(
+            sidecar_path,
+            format!(
+                "score result `{key}` evidence artifact `{}` has {} bytes, expected {}",
+                artifact.relative_path,
+                metadata.len(),
+                artifact.bytes
+            ),
+        ));
+    }
+    let actual_sha256 = sha256_file(&artifact_path)?;
+    if actual_sha256 != artifact.sha256 {
+        return Err(score_result_manifest_error(
+            sidecar_path,
+            format!(
+                "score result `{key}` evidence artifact `{}` sha256 mismatch",
+                artifact.relative_path
+            ),
+        ));
+    }
+    Ok(())
+}
+
+fn is_safe_relative_path(path: &Path) -> bool {
+    !path.is_absolute()
+        && path
+            .components()
+            .all(|component| matches!(component, Component::Normal(_)))
+}
+
+fn is_sha256_hex(value: &str) -> bool {
+    value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
 fn apply_score_result_manifest(
@@ -3208,6 +3316,7 @@ fn apply_score_result_manifest(
         let slot = &mut slots[slot_index];
         slot.score = Some(entry.score);
         slot.score_evidence_id = Some(entry.evidence_id.clone());
+        slot.score_evidence_artifact = Some(entry.evidence_artifact.clone());
         slot.status = FinalScoreStatus::Reported;
         slot.blocker_ids.clear();
     }
@@ -3470,6 +3579,7 @@ fn score_slots_for_role(
             expected_rows,
             score: None,
             score_evidence_id: None,
+            score_evidence_artifact: None,
             status: if blocker_ids.is_empty() {
                 FinalScoreStatus::NotRun
             } else {

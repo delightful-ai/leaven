@@ -1078,9 +1078,9 @@ Date: 2026-05-22.
 Provider/model spend: none.
 Cloud/GPU spend: none.
 
-The P5 final report now declares schema v13 with optional
+The P5 final report now declares schema v14 with optional
 `tmp/replication/evoskill/score_result_manifest.json` ingestion. The sidecar is
-strict score evidence plumbing, not a live run: it must name schema version 1,
+strict score evidence plumbing, not a live run: it must name schema version 2,
 the current manifest fingerprint, the current scorer fingerprint, total cost,
 and one or more score entries keyed by dataset id, split id, split role, and
 candidate role.
@@ -1090,13 +1090,17 @@ role-level source-id fingerprint, expected row count, and scored row count. A
 reported score must be finite and within `[0, 1]`. If the slot is blocked, the
 entry must explicitly resolve every slot blocker and may not claim non-slot
 blockers; otherwise the report build fails. Duplicate entries, empty evidence
-ids, stale manifest/scorer fingerprints, stale split fingerprints, and partial
-row coverage are rejected before any score is surfaced.
+ids, stale manifest/scorer fingerprints, stale split fingerprints, partial row
+coverage, and missing or tampered score evidence artifacts are rejected before
+any score is surfaced.
 
 Imported scores now preserve the sidecar entry `evidence_id` on the reported
-score slot as `score_evidence_id`; unreported and blocked score slots keep that
-field null. This makes score provenance report-visible instead of only
-validated during import.
+score slot as `score_evidence_id` and the checked artifact path/hash/byte count
+as `score_evidence_artifact`; unreported and blocked score slots keep both
+fields null. This makes score provenance report-visible instead of only
+validated during import. It binds reported scores to an artifact file, but it
+does not yet parse row-level score artifacts or recompute aggregate metrics from
+them.
 
 This gives future approved live or judge runs a refusal-capable Rust path for
 entering the final report. It still does not approve spend, run the provider,
