@@ -27,6 +27,7 @@ just evoskill-paper-sealqa-judge-requests tmp/replication/evoskill/predictions/s
 just evoskill-paper-score-officeqa tmp/replication/evoskill/predictions/officeqa.jsonl
 just evoskill-paper-score-sealqa tmp/replication/evoskill/judge/sealqa.jsonl approved-run-id
 just evoskill-paper-final-report
+just evoskill-paper-closeout-audit
 ```
 
 The generated manifest belongs under `target/evoskill-paper-close/` and is
@@ -166,6 +167,13 @@ OfficeQA scorer replay and approved SealQA judge outputs accumulate in one
 report. A batch that targets an already-reported slot is refused before new
 evidence artifacts are written; replacement requires rebuilding the sidecar
 explicitly.
+
+`just evoskill-paper-closeout-audit` regenerates the manifest and final report,
+then fails unless every `paper_close_gates` entry is `proven`. On the current
+no-spend packet it is expected to fail with `paper_scorer=approval_blocked` and
+`live_small_run=approval_blocked`; that failure is the intended guard against
+treating packet preparation, repo health, fake runtime, or unjudged outputs as
+paper-close results.
 
 The final report also carries first-class `exactness_gaps`. When local source
 pins, accepted substitute splits, and the BrowseComp substitute denominator make

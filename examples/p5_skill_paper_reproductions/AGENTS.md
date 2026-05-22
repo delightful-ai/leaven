@@ -238,3 +238,7 @@ belong in their owning crates.
   explicitly; do not rely on later writer invocations to overwrite evidence.
 - `just evoskill-paper-final-report` writes both the manifest and current
   no-spend final report truth surface under `target/evoskill-paper-close/`.
+- `just evoskill-paper-closeout-audit` writes the same manifest/report and
+  then fails unless every paper-close gate is proven. The current no-spend
+  packet should fail this audit while `paper_scorer` and `live_small_run` are
+  approval-blocked; do not bypass this failure as a flaky check.

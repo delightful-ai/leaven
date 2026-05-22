@@ -91,6 +91,9 @@ evoskill-paper-live-run-request *args:
 evoskill-paper-final-report *args:
     cargo run -p p5_skill_paper_reproductions -- --out target/evoskill-paper-close/replica-manifest.json --final-report-out target/evoskill-paper-close/final-report.json {{args}}
 
+evoskill-paper-closeout-audit *args:
+    cargo run -p p5_skill_paper_reproductions -- --out target/evoskill-paper-close/replica-manifest.json --final-report-out target/evoskill-paper-close/final-report.json --audit-paper-close {{args}}
+
 milestone-p0:
     cargo run -p p0_graph_skeleton
 
