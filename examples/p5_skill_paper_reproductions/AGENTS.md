@@ -210,6 +210,12 @@ belong in their owning crates.
   row. It validates the runner input manifest and exact source-id coverage,
   then scores OfficeQA outputs and prepares SealQA judge requests. It does not
   run the agent, call a judge, approve spend, or prove paper-close.
+- `just evoskill-paper-live-run-request` writes
+  `tmp/replication/evoskill/live_run_request_manifest.json` from the current
+  runner input manifest. It is an approval packet with runtime/model, blocker,
+  input artifact, and requested-call evidence only; it must not probe
+  credentials, permit provider calls, call a judge, approve spend, or prove
+  live execution.
 - `just evoskill-paper-sealqa-judge-requests <predictions.jsonl>` writes
   `tmp/replication/evoskill/sealqa_judge_request_manifest.json` plus pinned
   judge-only request JSONL from strict SealQA prediction rows, then rewrites the

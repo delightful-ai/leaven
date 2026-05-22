@@ -2008,6 +2008,107 @@ fn cli_imports_runner_outputs_only_when_bound_to_runner_input_manifest() {
     assert_runner_output_import_rejects_bad_binding(root.path(), &manifest_path);
 }
 
+#[test]
+fn cli_writes_live_run_request_bound_to_runner_input_manifest_without_spend() {
+    let root = tempfile::tempdir().unwrap();
+    write_runner_input_sources(root.path());
+    let input = ManifestBuildInput::new(root.path());
+    write_evoskill_paper_close_split_policy_manifest(&input).unwrap();
+    let initial_report = build_evoskill_final_report(&input).unwrap();
+    let manifest_path = root.path().join("out/replica-manifest.json");
+    let report_path = root.path().join("out/final-report.json");
+    let runner_manifest =
+        write_runner_input_manifest_with_cli(root.path(), &manifest_path, &report_path);
+
+    let output = Command::new(env!("CARGO_BIN_EXE_p5_skill_paper_reproductions"))
+        .arg("--root")
+        .arg(root.path())
+        .arg("--out")
+        .arg(&manifest_path)
+        .arg("--final-report-out")
+        .arg(&report_path)
+        .arg("--write-live-run-request")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let request_path = root
+        .path()
+        .join("tmp/replication/evoskill/live_run_request_manifest.json");
+    let request: serde_json::Value =
+        serde_json::from_slice(&fs::read(&request_path).unwrap()).unwrap();
+    assert_eq!(request["schema_version"], 1);
+    assert_eq!(
+        request["manifest_fingerprint"],
+        initial_report.manifest_fingerprint.fingerprint
+    );
+    assert_eq!(
+        request["scorer_fingerprint"],
+        initial_report.scorer_fingerprint.fingerprint
+    );
+    assert_eq!(request["runtime_role"], "paper_agent_runtime");
+    assert_eq!(
+        request["candidate_model"],
+        initial_report
+            .live_run_gate
+            .candidate_model
+            .as_deref()
+            .unwrap()
+    );
+    assert_eq!(request["spend_approval_status"], "not_approved");
+    assert_eq!(request["provider_calls_allowed"], false);
+    assert_eq!(request["judge_calls_allowed"], false);
+    assert_eq!(
+        request["runner_input_manifest"]["sha256"],
+        sha256_file(
+            &root
+                .path()
+                .join("tmp/replication/evoskill/runner_input_manifest.json")
+        )
+    );
+    assert_eq!(
+        request["entries"].as_array().unwrap().len(),
+        runner_manifest["entries"].as_array().unwrap().len()
+    );
+    assert!(
+        request["entries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|entry| entry["dataset_id"] == "officeqa"
+                && entry["requested_generation_calls"] == entry["input_rows"])
+    );
+    assert!(
+        request["entries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|entry| entry["dataset_id"] == "sealqa"
+                && entry["requested_generation_calls"] == entry["input_rows"])
+    );
+
+    let request_body = fs::read_to_string(request_path).unwrap();
+    assert!(!request_body.contains("Answer "));
+    assert!(!request_body.contains("Seal answer"));
+    assert!(!request_body.contains("ground_truth"));
+    assert!(!request_body.contains("reference"));
+    assert!(!request_body.contains("prediction"));
+    assert!(!request_body.contains("score_evidence"));
+
+    let report: EvoSkillFinalReport =
+        serde_json::from_slice(&fs::read(&report_path).unwrap()).unwrap();
+    assert_eq!(
+        report.live_run_gate.status,
+        LiveRunGateStatus::BlockedNoSpendApproval
+    );
+    assert_eq!(report.live_run_gate.spend_approval_status, "not_approved");
+}
+
 fn write_runner_input_manifest_with_cli(
     root: &std::path::Path,
     manifest_path: &std::path::Path,
@@ -2829,6 +2930,10 @@ fn sha256_bytes(bytes: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(bytes);
     hex::encode(hasher.finalize())
+}
+
+fn sha256_file(path: &std::path::Path) -> String {
+    sha256_bytes(&fs::read(path).unwrap())
 }
 
 fn write_officeqa_full_csv(root: &std::path::Path, rows: usize) {

@@ -1198,6 +1198,16 @@ input-output stitching as a proxy gap; it still does not run the live agent,
 execute or approve the judge, import judged SealQA scores, or prove
 paper-close results.
 
+Bounded live runs now have a strict no-spend approval packet path.
+`just evoskill-paper-live-run-request` reads the current
+`runner_input_manifest.json`, validates artifact integrity and row counts, and
+writes `live_run_request_manifest.json` with manifest/scorer fingerprints,
+runtime/model pins, `live_run_spend_approval` blockers, input artifact hashes,
+and requested generation-call counts. Provider and judge calls remain
+explicitly disallowed in the packet. This makes the approval boundary concrete,
+but it still does not probe credentials, spend, run the live agent, judge
+SealQA, or prove paper-close results.
+
 ## Final Report Exactness Gaps
 
 Date: 2026-05-22.

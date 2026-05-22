@@ -1092,3 +1092,14 @@ scores OfficeQA outputs with the Rust scorer, and materializes SealQA judge
 requests for future approved judging. This closes the hand-stitched
 input-to-output sidecar gap only; it still does not run an agent, call or
 approve a judge, import judged SealQA scores, or prove paper-close results.
+
+2026-05-22 update: bounded live runs now have a no-spend approval packet path.
+`just evoskill-paper-live-run-request` requires the current
+`runner_input_manifest.json`, validates its input artifacts, and writes
+`tmp/replication/evoskill/live_run_request_manifest.json` with
+manifest/scorer fingerprints, runtime role, candidate model, live-run blocker
+ids, runner input manifest hash, per-slot input artifact hashes, and requested
+generation-call counts. It deliberately keeps `provider_calls_allowed` and
+`judge_calls_allowed` false and leaves the final report live gate blocked; it
+does not probe credentials, approve spend, run the agent, execute the judge, or
+prove paper-close results.
