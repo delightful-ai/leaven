@@ -1,6 +1,8 @@
+use std::fs;
+
 use p5_skill_paper_reproductions::evoskill::{
-    DEFAULT_FAILURE_THRESHOLD, DEFAULT_TOLERANCES, build_sealqa_judge_request,
-    score_evoskill_answer, sealqa_judge_template_manifest,
+    DEFAULT_FAILURE_THRESHOLD, DEFAULT_TOLERANCES, ManifestBuildInput,
+    build_evoskill_replica_manifest, build_sealqa_judge_request, score_evoskill_answer,
 };
 
 fn assert_score(actual: f64, expected: f64) {
@@ -60,22 +62,37 @@ fn textual_answers_use_normalized_substring_containment() {
 
 #[test]
 fn sealqa_judge_request_preserves_paper_template_without_running_a_judge() {
-    let manifest = sealqa_judge_template_manifest();
-    assert_eq!(manifest.id, "sealqa-auto-grader-placeholder-v1");
-    assert_eq!(manifest.dataset_id, "sealqa");
-    assert_eq!(manifest.source_artifact_id, "paper_auto_grader_placeholder");
-    assert_eq!(manifest.fingerprint.len(), 64);
-    assert_eq!(manifest.runtime_status, "template_pinned_no_spend");
+    let root = tempfile::tempdir().unwrap();
+    write_sealqa_judge_source(root.path());
+    let replica_manifest =
+        build_evoskill_replica_manifest(&ManifestBuildInput::new(root.path())).unwrap();
+    let template = replica_manifest
+        .scorer
+        .judge_templates
+        .iter()
+        .find(|template| template.id == "sealqa-auto-grader-placeholder-v1")
+        .expect("SealQA judge template is pinned in the manifest");
+    assert_eq!(template.dataset_id, "sealqa");
+    assert_eq!(template.source_artifact_id, "paper_auto_grader_placeholder");
+    assert!(template.source_artifact_exists);
+    assert!(template.source_artifact_bytes.unwrap() > 20);
+    assert_eq!(
+        template.source_artifact_sha256.as_deref().unwrap().len(),
+        64
+    );
+    assert_eq!(template.fingerprint.len(), 64);
+    assert_eq!(template.runtime_status, "template_pinned_no_spend");
 
     let request = build_sealqa_judge_request(
+        template,
         "Who holds the album of the year Grammy record?",
         "Serban Ghenea",
         "Serban Ghenea",
         0.01,
     );
 
-    assert_eq!(request.template_id, manifest.id);
-    assert_eq!(request.template_fingerprint, manifest.fingerprint);
+    assert_eq!(request.template_id, template.id);
+    assert_eq!(request.template_fingerprint, template.fingerprint);
     assert!(request.system.contains("Auto-Grader"));
     assert!(request.user.contains("question"));
     assert!(request.user.contains("Who holds the album"));
@@ -86,4 +103,16 @@ fn sealqa_judge_request_preserves_paper_template_without_running_a_judge() {
     assert!(request.output_contract.contains("\"score\""));
     assert!(request.output_contract.contains("\"passed\""));
     assert!(request.output_contract.contains("\"error_breakdown\""));
+}
+
+fn write_sealqa_judge_source(root: &std::path::Path) {
+    let path = root.join(
+        "tmp/skill_opt_sources/arx_2603.02766/src/appendix/agent-prompts/auto_grader_placeholder.md",
+    );
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(
+        path,
+        "# Auto-Grader Prompt (Placeholder)\n\nPinned scorer test source.\n",
+    )
+    .unwrap();
 }

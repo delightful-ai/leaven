@@ -19,6 +19,7 @@ fn final_report_exposes_score_slots_costs_errors_and_gaps_without_fake_metrics()
     let root = tempfile::tempdir().unwrap();
     write_officeqa_full_csv(root.path(), 246);
     write_sealqa_parquet(root.path(), 111);
+    write_sealqa_judge_source(root.path());
 
     let report = build_evoskill_final_report(&ManifestBuildInput::new(root.path())).unwrap();
 
@@ -156,6 +157,16 @@ fn assert_report_header(report: &EvoSkillFinalReport) {
         .find(|template| template.id == "sealqa-auto-grader-placeholder-v1")
         .expect("SealQA judge template is fingerprinted in the scorer manifest");
     assert_eq!(sealqa_judge.runtime_status, "template_pinned_no_spend");
+    assert!(sealqa_judge.source_artifact_exists);
+    assert!(sealqa_judge.source_artifact_bytes.unwrap() > 20);
+    assert_eq!(
+        sealqa_judge
+            .source_artifact_sha256
+            .as_deref()
+            .unwrap()
+            .len(),
+        64
+    );
     assert_eq!(sealqa_judge.fingerprint.len(), 64);
     assert_eq!(
         report.manifest_fingerprint.schema_version,
@@ -420,6 +431,18 @@ fn write_officeqa_full_csv(root: &std::path::Path, rows: usize) {
         .unwrap();
     }
     fs::write(path, csv).unwrap();
+}
+
+fn write_sealqa_judge_source(root: &std::path::Path) {
+    let path = root.join(
+        "tmp/skill_opt_sources/arx_2603.02766/src/appendix/agent-prompts/auto_grader_placeholder.md",
+    );
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(
+        path,
+        "# Auto-Grader Prompt (Placeholder)\n\nPinned test source.\n",
+    )
+    .unwrap();
 }
 
 fn write_sealqa_parquet(root: &std::path::Path, rows: usize) {

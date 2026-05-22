@@ -23,7 +23,7 @@ belong in their owning crates.
 ## Proof
 - `cargo test -p p5_skill_paper_reproductions --test evoskill_manifest`
   proves the EvoSkill replica manifest preserves the paper-close denominator
-  and rejects proxy completion claims. It also proves the schema v9
+  and rejects proxy completion claims. It also proves the schema v10
   `source_universe` links datasets to source artifact ids, available source
   revision ids, materialized row counts, source-row fingerprints, split ids,
   split exactness labels, source revision status fields, and blockers without
@@ -34,14 +34,16 @@ belong in their owning crates.
   `source_blockers` for unresolved source policy, missing OfficeQA category and
   exact split artifacts, missing SealQA exact split membership, and absent
   BrowseComp transfer source, with checked local candidate-path evidence
-  instead of bare path strings.
+  instead of bare path strings. The SealQA judge template pin also carries the
+  checked paper-source artifact existence, size, and hash.
 - `cargo test -p p5_skill_paper_reproductions --test evoskill_scorer`
   proves the paper-specific Rust scorer laws for weighted multi-tolerance
   scoring, failure-threshold classification, unit normalization, incidental
   year filtering, hybrid text+number answers, multi-number answers, and
   normalized text containment. It also proves the SealQA paper auto-grader
-  placeholder is pinned as a no-spend judge request template with a stable
-  fingerprint. It does not prove OfficeQA/SealQA split materialization, live
+  placeholder is pinned as a no-spend judge request template with source-backed
+  manifest evidence and a stable fingerprint. It does not prove
+  OfficeQA/SealQA split materialization, live
   judge execution, or live agent performance.
 - `cargo test -p p5_skill_paper_reproductions --test evoskill_feedback`
   proves scorer-visible attempts turn into ordered failure-only feedback rows

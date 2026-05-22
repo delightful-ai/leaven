@@ -811,6 +811,24 @@ blocked denominator stronger: the manifest can show that exact OfficeQA split
 candidate paths are absent while the SealQA Parquet candidate exists and is
 fingerprinted, without converting that Parquet input into exact split evidence.
 
+## No-Spend Source-Backed SealQA Judge Pin
+
+Date: 2026-05-22.
+Provider/model spend: none.
+Cloud/GPU spend: none.
+
+The P5 replica manifest now declares schema v10. The SealQA judge template pin
+inside the scorer manifest carries checked paper-source artifact evidence:
+existence, byte count, and SHA-256 for
+`tmp/skill_opt_sources/arx_2603.02766/src/appendix/agent-prompts/auto_grader_placeholder.md`.
+The judge request builder now takes the pinned template manifest, so request
+fingerprints come from the report-visible pin instead of reconstructing a
+parallel template.
+
+This is still not a SealQA judge-scored run. It only proves the no-spend prompt
+and request surface are tied to the paper source artifact before any approved
+LLM-as-judge execution happens.
+
 ## No-Spend Paper-Close Gate Summary
 
 Date: 2026-05-22.
