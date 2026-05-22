@@ -1,0 +1,19 @@
+{
+  "ignore_dirs": [
+    "target",
+    "node_modules",
+    "__pycache__",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".mypy_cache",
+    "dist",
+    "build",
+    ".venv",
+    "venv",
+    ".tox",
+    ".next",
+    ".turbo",
+    "Pods",
+    "DerivedData"
+  ]
+}
