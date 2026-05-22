@@ -935,7 +935,7 @@ lineage. The first retry should stay no-spend:
 
 ## EvoSkill Paper-Close Guardrails
 
-The P5 EvoSkill final report schema v14 carries a no-spend loop `run_manifest`
+The P5 EvoSkill final report schema v15 carries a no-spend loop `run_manifest`
 that ties the mechanics loop to manifest/scorer/source/split fingerprints,
 frontier policy, schedule, checkpoint boundary, Git identity mode, the full
 OfficeQA validation role/fingerprint used before frontier admission, and the
@@ -971,14 +971,19 @@ leaving stale absent-source notes attached after the sidecar materializes.
 
 2026-05-22 update: P5 can now ingest an optional strict
 `tmp/replication/evoskill/score_result_manifest.json` sidecar. It is score
-evidence plumbing only: entries must match the current manifest fingerprint,
-scorer fingerprint, slot key, split fingerprint, role source-id fingerprint, and
-row count before a score is reported. Schema-v2 entries also bind a readable
-score evidence artifact by relative path, byte count, and SHA-256. Stale result
-files, duplicate entries, unresolved slot blockers, non-slot blocker claims, and
-tampered evidence artifacts fail the report build. Reported scores preserve the
-sidecar `evidence_id` and checked artifact in the score slot, so future approved
-runs leave an auditable score-evidence handle in the final report without
-treating fixture values, stale outputs, tampered files, or missing approval as
-scores. This is still file-binding evidence only; the importer does not yet
-parse row-level score artifacts or recompute aggregate metrics from them.
+evidence plumbing only: schema-v3 entries must match the current manifest
+fingerprint, scorer fingerprint, slot key, split fingerprint, role source-id
+fingerprint, and row count before a score is reported. The checked evidence
+artifact is now strict JSONL: each row carries `source_id`, `prediction`, and
+`score`; the importer verifies exact role membership, rejects duplicate or
+missing rows, requires finite `[0, 1]` row scores, recomputes the aggregate, and
+replays the OfficeQA Rust scorer against materialized scorer-only targets before
+importing OfficeQA scores. Stale result files, duplicate entries, unresolved
+slot blockers, non-slot blocker claims, tampered evidence artifacts, fabricated
+aggregates, and OfficeQA predictions whose row scores do not match the scorer
+fail the report build. Reported scores preserve the sidecar `evidence_id` and
+checked artifact in the score slot, so future approved runs leave an auditable
+score-evidence handle in the final report without treating fixture values,
+stale outputs, tampered files, or missing approval as scores. This still does
+not execute the live provider, SealQA judge, transferred BrowseComp skill, or
+any missing paper score path.

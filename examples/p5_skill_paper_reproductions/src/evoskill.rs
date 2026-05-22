@@ -742,6 +742,14 @@ struct ScoreResultManifestEntry {
     evidence_artifact: ScoreEvidenceArtifact,
 }
 
+#[derive(Clone, Debug, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ScoreEvidenceRow {
+    source_id: String,
+    prediction: String,
+    score: f64,
+}
+
 struct ValidatedScoreResultManifest {
     report: ScoreResultManifestReport,
     entries: Vec<ScoreResultManifestEntry>,
@@ -1078,7 +1086,12 @@ pub fn build_evoskill_final_report(
     let score_result_manifest =
         read_score_result_manifest(&input.root, &manifest_fingerprint, &scorer_fingerprint)?;
     let cost = if let Some(score_result_manifest) = &score_result_manifest {
-        apply_score_result_manifest(&mut score_slots, score_result_manifest)?;
+        apply_score_result_manifest(
+            &input.root,
+            &sources,
+            &mut score_slots,
+            score_result_manifest,
+        )?;
         score_result_manifest.report.cost.clone()
     } else {
         FinalReportCost::default()
@@ -1092,7 +1105,7 @@ pub fn build_evoskill_final_report(
     let proxy_rejection_gates = proxy_rejection_gates();
 
     Ok(EvoSkillFinalReport {
-        schema_version: 14,
+        schema_version: 15,
         exactness,
         manifest,
         loop_report,
@@ -3098,11 +3111,11 @@ fn validate_score_result_manifest(
     manifest_fingerprint: &ManifestFingerprintReport,
     scorer_fingerprint: &ScorerFingerprintReport,
 ) -> Result<ValidatedScoreResultManifest, ManifestError> {
-    if manifest.schema_version != 2 {
+    if manifest.schema_version != 3 {
         return Err(score_result_manifest_error(
             path,
             format!(
-                "expected schema_version 2, found {}",
+                "expected schema_version 3, found {}",
                 manifest.schema_version
             ),
         ));
@@ -3289,16 +3302,18 @@ fn is_sha256_hex(value: &str) -> bool {
 }
 
 fn apply_score_result_manifest(
+    root: &Path,
+    sources: &EvoSkillSourceMaterializations,
     slots: &mut [FinalScoreSlot],
     manifest: &ValidatedScoreResultManifest,
 ) -> Result<(), ManifestError> {
-    let path = Path::new(SCORE_RESULT_MANIFEST_PATH);
+    let path = root.join(SCORE_RESULT_MANIFEST_PATH);
     let mut slot_indexes = BTreeMap::new();
     for (index, slot) in slots.iter().enumerate() {
         let key = final_score_slot_key(slot);
         if slot_indexes.insert(key.clone(), index).is_some() {
             return Err(score_result_manifest_error(
-                path,
+                &path,
                 format!("final report has duplicate score slot `{key}`"),
             ));
         }
@@ -3308,11 +3323,12 @@ fn apply_score_result_manifest(
         let key = score_result_entry_key(entry);
         let slot_index = *slot_indexes.get(&key).ok_or_else(|| {
             score_result_manifest_error(
-                path,
+                &path,
                 format!("score result entry `{key}` has no matching slot"),
             )
         })?;
-        validate_score_result_matches_slot(path, entry, &slots[slot_index])?;
+        validate_score_result_matches_slot(&path, entry, &slots[slot_index])?;
+        validate_score_evidence_rows(root, sources, &path, entry, &slots[slot_index])?;
         let slot = &mut slots[slot_index];
         slot.score = Some(entry.score);
         slot.score_evidence_id = Some(entry.evidence_id.clone());
@@ -3321,6 +3337,274 @@ fn apply_score_result_manifest(
         slot.blocker_ids.clear();
     }
     Ok(())
+}
+
+fn validate_score_evidence_rows(
+    root: &Path,
+    sources: &EvoSkillSourceMaterializations,
+    sidecar_path: &Path,
+    entry: &ScoreResultManifestEntry,
+    slot: &FinalScoreSlot,
+) -> Result<(), ManifestError> {
+    let key = score_result_entry_key(entry);
+    let rows = read_score_evidence_rows(root, sidecar_path, entry)?;
+    let actual_rows = u64::try_from(rows.len()).expect("score evidence row count fits in u64");
+    if actual_rows != entry.scored_rows {
+        return Err(score_result_manifest_error(
+            sidecar_path,
+            format!(
+                "score result `{key}` evidence artifact has {actual_rows} rows, expected {}",
+                entry.scored_rows
+            ),
+        ));
+    }
+
+    let expected_source_ids = score_result_role_source_ids(sources, sidecar_path, entry, slot)?;
+    let expected_source_ids = expected_source_ids.into_iter().collect::<BTreeSet<_>>();
+    if expected_source_ids.len() != rows.len() {
+        return Err(score_result_manifest_error(
+            sidecar_path,
+            format!(
+                "score result `{key}` role materialization has {} unique source ids, evidence has {} rows",
+                expected_source_ids.len(),
+                rows.len()
+            ),
+        ));
+    }
+
+    let mut seen_source_ids = BTreeSet::new();
+    for row in &rows {
+        if row.source_id.trim().is_empty() {
+            return Err(score_result_manifest_error(
+                sidecar_path,
+                format!("score result `{key}` evidence row has empty source_id"),
+            ));
+        }
+        if !(0.0..=1.0).contains(&row.score) || !row.score.is_finite() {
+            return Err(score_result_manifest_error(
+                sidecar_path,
+                format!(
+                    "score result `{key}` evidence row `{}` has non-finite or out-of-range score {}",
+                    row.source_id, row.score
+                ),
+            ));
+        }
+        if !seen_source_ids.insert(row.source_id.clone()) {
+            return Err(score_result_manifest_error(
+                sidecar_path,
+                format!(
+                    "score result `{key}` evidence artifact repeats source id `{}`",
+                    row.source_id
+                ),
+            ));
+        }
+        if !expected_source_ids.contains(&row.source_id) {
+            return Err(score_result_manifest_error(
+                sidecar_path,
+                format!(
+                    "score result `{key}` evidence row references source id `{}` outside the current slot role",
+                    row.source_id
+                ),
+            ));
+        }
+    }
+
+    if let Some(missing_source_id) = expected_source_ids.difference(&seen_source_ids).next() {
+        return Err(score_result_manifest_error(
+            sidecar_path,
+            format!(
+                "score result `{key}` evidence artifact is missing source id `{missing_source_id}`"
+            ),
+        ));
+    }
+
+    if entry.dataset_id == "officeqa" {
+        validate_officeqa_score_evidence_rows(sources, sidecar_path, entry, &rows)?;
+    }
+
+    let aggregate_row_count = u32::try_from(rows.len()).map_err(|_| {
+        score_result_manifest_error(
+            sidecar_path,
+            format!("score result `{key}` evidence artifact has too many rows to aggregate"),
+        )
+    })?;
+    let aggregate = rows.iter().map(|row| row.score).sum::<f64>() / f64::from(aggregate_row_count);
+    if !score_values_match(aggregate, entry.score) {
+        return Err(score_result_manifest_error(
+            sidecar_path,
+            format!(
+                "score result `{key}` evidence aggregate {aggregate} does not match manifest score {}",
+                entry.score
+            ),
+        ));
+    }
+
+    Ok(())
+}
+
+fn read_score_evidence_rows(
+    root: &Path,
+    sidecar_path: &Path,
+    entry: &ScoreResultManifestEntry,
+) -> Result<Vec<ScoreEvidenceRow>, ManifestError> {
+    let key = score_result_entry_key(entry);
+    let artifact_path = root.join(&entry.evidence_artifact.relative_path);
+    let body = fs::read_to_string(&artifact_path).map_err(|source| {
+        score_result_manifest_error(
+            sidecar_path,
+            format!(
+                "score result `{key}` evidence artifact `{}` is not readable UTF-8 JSONL: {source}",
+                entry.evidence_artifact.relative_path
+            ),
+        )
+    })?;
+
+    let mut rows = Vec::new();
+    for (line_index, line) in body.lines().enumerate() {
+        if line.trim().is_empty() {
+            return Err(score_result_manifest_error(
+                sidecar_path,
+                format!(
+                    "score result `{key}` evidence artifact `{}` has blank line {}",
+                    entry.evidence_artifact.relative_path,
+                    line_index + 1
+                ),
+            ));
+        }
+        let row = serde_json::from_str::<ScoreEvidenceRow>(line).map_err(|source| {
+            score_result_manifest_error(
+                sidecar_path,
+                format!(
+                    "score result `{key}` evidence artifact `{}` line {} is not a strict score row: {source}",
+                    entry.evidence_artifact.relative_path,
+                    line_index + 1
+                ),
+            )
+        })?;
+        rows.push(row);
+    }
+    Ok(rows)
+}
+
+fn score_result_role_source_ids(
+    sources: &EvoSkillSourceMaterializations,
+    sidecar_path: &Path,
+    entry: &ScoreResultManifestEntry,
+    slot: &FinalScoreSlot,
+) -> Result<Vec<String>, ManifestError> {
+    let key = score_result_entry_key(entry);
+    let report = score_result_source_report(sources, &entry.dataset_id).ok_or_else(|| {
+        score_result_manifest_error(
+            sidecar_path,
+            format!("score result `{key}` has no materialized source report"),
+        )
+    })?;
+    let split = report
+        .split_materializations
+        .iter()
+        .find(|split| split.id == entry.split_id)
+        .ok_or_else(|| {
+            score_result_manifest_error(
+                sidecar_path,
+                format!("score result `{key}` has no materialized split"),
+            )
+        })?;
+    if split.split_fingerprint != slot.split_fingerprint {
+        return Err(score_result_manifest_error(
+            sidecar_path,
+            format!("score result `{key}` source split fingerprint changed during validation"),
+        ));
+    }
+    let role = split
+        .role_manifests
+        .iter()
+        .find(|role| role.role == entry.split_role)
+        .ok_or_else(|| {
+            score_result_manifest_error(
+                sidecar_path,
+                format!("score result `{key}` has no materialized split role"),
+            )
+        })?;
+    if Some(&role.source_id_fingerprint) != slot.role_source_id_fingerprint.as_ref() {
+        return Err(score_result_manifest_error(
+            sidecar_path,
+            format!("score result `{key}` source role fingerprint changed during validation"),
+        ));
+    }
+    Ok(role.source_ids.clone())
+}
+
+fn score_result_source_report<'a>(
+    sources: &'a EvoSkillSourceMaterializations,
+    dataset_id: &str,
+) -> Option<&'a DatasetMaterializationReport> {
+    match dataset_id {
+        "officeqa" => sources
+            .officeqa
+            .as_ref()
+            .map(|materialization| &materialization.report),
+        "sealqa" => sources
+            .sealqa
+            .as_ref()
+            .map(|materialization| &materialization.report),
+        "browsecomp_transfer" => sources
+            .browsecomp_transfer
+            .as_ref()
+            .map(|materialization| &materialization.report),
+        _ => None,
+    }
+}
+
+fn validate_officeqa_score_evidence_rows(
+    sources: &EvoSkillSourceMaterializations,
+    sidecar_path: &Path,
+    entry: &ScoreResultManifestEntry,
+    rows: &[ScoreEvidenceRow],
+) -> Result<(), ManifestError> {
+    let key = score_result_entry_key(entry);
+    let officeqa = sources.officeqa.as_ref().ok_or_else(|| {
+        score_result_manifest_error(
+            sidecar_path,
+            format!("score result `{key}` has no OfficeQA source materialization"),
+        )
+    })?;
+    let targets = officeqa
+        .rows
+        .rows()
+        .iter()
+        .map(|row| {
+            (
+                row.source_id().to_owned(),
+                row.target().expect("OfficeQA rows are targeted").clone(),
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
+    for row in rows {
+        let target = targets.get(&row.source_id).ok_or_else(|| {
+            score_result_manifest_error(
+                sidecar_path,
+                format!(
+                    "score result `{key}` OfficeQA row `{}` has no scorer target",
+                    row.source_id
+                ),
+            )
+        })?;
+        let recomputed = score_evoskill_answer(target, &row.prediction).weighted_score;
+        if !score_values_match(recomputed, row.score) {
+            return Err(score_result_manifest_error(
+                sidecar_path,
+                format!(
+                    "score result `{key}` row `{}` score {} does not match OfficeQA scorer {recomputed}",
+                    row.source_id, row.score
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn score_values_match(left: f64, right: f64) -> bool {
+    (left - right).abs() <= 1e-12
 }
 
 fn validate_score_result_matches_slot(
