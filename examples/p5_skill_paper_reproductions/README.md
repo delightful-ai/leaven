@@ -11,6 +11,7 @@ Commands:
 
 ```bash
 cargo test -p p5_skill_paper_reproductions --test evoskill_manifest
+cargo test -p p5_skill_paper_reproductions --test evoskill_materialization
 cargo test -p p5_skill_paper_reproductions --test evoskill_scorer
 just evoskill-paper-manifest
 ```

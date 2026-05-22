@@ -30,5 +30,11 @@ belong in their owning crates.
   year filtering, hybrid text+number answers, multi-number answers, and
   normalized text containment. It does not prove OfficeQA/SealQA split
   materialization or live agent performance.
+- `cargo test -p p5_skill_paper_reproductions --test evoskill_materialization`
+  proves the OfficeQA CSV lowers through `leaven-eval::SourceRowManifest` into
+  row-stable Leaven cases, records deterministic difficulty-stratified
+  train/validation/test substitute split fingerprints, and keeps missing paper
+  category/exact split artifacts as blockers. It does not prove SealQA row
+  extraction, exact OfficeQA paper membership, or live scores.
 - `just evoskill-paper-manifest` writes the current no-spend local manifest to
   `target/evoskill-paper-close/replica-manifest.json`.

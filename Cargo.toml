@@ -193,6 +193,7 @@ clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["raw_value"] }
 serde_yml = "0.0.12"
+csv = "1"
 rusqlite = { version = "0.39.0", features = ["bundled"] }
 calamine = "0.35.0"
 

@@ -568,3 +568,25 @@ Stay no-spend until the provenance blockers are closed:
    the artifact crate. P5 has the selector/sampler checkpoint shape; it still
    needs full git-program paper-run integration and source-pinned split
    manifests.
+
+## Leaven OfficeQA Materialization Slice
+
+Date: 2026-05-22.
+Provider/model spend: none.
+Cloud/GPU spend: none.
+
+The no-spend replica harness now has a Rust OfficeQA materialization path in
+`examples/p5_skill_paper_reproductions/src/evoskill.rs`. It parses
+`tmp/repros/officeqa/officeqa_full.csv`, skips blank `uid` rows, lowers the
+ordered row universe through `leaven-eval::SourceRowManifest`, and proves the
+lowering can become row-stable Leaven cases. The runner-facing `OfficeQaInput`
+does not carry `answer`; answers are retained only as scorer/evaluator targets.
+
+The harness also records deterministic OfficeQA train/validation/test
+fingerprints for train sizes 12/24/36 with validation size 17 by using
+`leaven-eval::StratifiedSplitBuilder` over the local CSV's `difficulty` column.
+These are explicitly labeled `paper_close_substitute`, not paper-exact, because
+the paper's LLM-derived category/pseudo-label artifact and exact split
+membership remain absent. SealQA remains blocked as a Leaven input surface until
+there is a Rust/no-spend row reader for the pinned `seal-0.parquet` plus an exact
+or declared paper-close split manifest.

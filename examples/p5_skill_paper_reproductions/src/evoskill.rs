@@ -1,14 +1,21 @@
+use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use leaven_core::CaseSetVersion;
+use leaven_eval::{SourceRow, SourceRowManifest, SplitRole, StratifiedSplitBuilder};
+use leaven_kernel::{CaseId, Fingerprint};
 use sha2::{Digest, Sha256};
+use smol_str::SmolStr;
 
 pub const DEFAULT_TOLERANCES: [f64; 5] = [0.0, 0.01, 0.025, 0.05, 0.10];
 pub const DEFAULT_FAILURE_THRESHOLD: f64 = 0.8;
 const YEAR_START: f64 = 1900.0;
 const YEAR_END: f64 = 2100.0;
+const OFFICEQA_VALIDATION_ROWS: usize = 17;
+const OFFICEQA_TRAIN_SIZES: [usize; 3] = [12, 24, 36];
 
 #[derive(Clone, Debug)]
 pub struct ManifestBuildInput {
@@ -30,6 +37,7 @@ pub struct EvoSkillReplicaManifest {
     pub source_revisions: Vec<SourceRevision>,
     pub artifacts: Vec<SourceArtifact>,
     pub datasets: Vec<DatasetRequirement>,
+    pub source_materializations: Vec<DatasetMaterializationReport>,
     pub scorer: ScorerManifest,
     pub frontier: FrontierManifest,
     pub schedule: ScheduleManifest,
@@ -101,6 +109,69 @@ pub enum SplitManifestStatus {
     BlockedMissingSplitManifest,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SourceMaterializationStatus {
+    MissingArtifact,
+    Materialized,
+    BlockedMissingRowReader,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MaterializationExactness {
+    PaperExact,
+    PaperCloseSubstitute,
+    Blocked,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct StratumMaterializationReport {
+    pub name: String,
+    pub rows: u64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct SplitMaterializationReport {
+    pub id: String,
+    pub method: String,
+    pub exactness: MaterializationExactness,
+    pub train_rows: u64,
+    pub validation_rows: Option<u64>,
+    pub test_rows: Option<u64>,
+    pub split_fingerprint: Option<String>,
+    pub blocker_ids: Vec<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct DatasetMaterializationReport {
+    pub dataset_id: String,
+    pub source_artifact_id: String,
+    pub source_status: SourceMaterializationStatus,
+    pub source_rows: Option<u64>,
+    pub case_rows: Option<u64>,
+    pub source_row_fingerprint: Option<String>,
+    pub source_artifact_sha256: Option<String>,
+    pub target_policy: String,
+    pub strata: Vec<StratumMaterializationReport>,
+    pub split_materializations: Vec<SplitMaterializationReport>,
+    pub blocker_ids: Vec<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct OfficeQaInput {
+    pub question: String,
+    pub source_docs: String,
+    pub source_files: String,
+    pub difficulty: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct OfficeQaSourceMaterialization {
+    pub rows: SourceRowManifest<OfficeQaInput, String>,
+    pub report: DatasetMaterializationReport,
+}
+
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct ScorerManifest {
     pub id: String,
@@ -170,13 +241,29 @@ pub enum ManifestError {
         #[source]
         source: std::io::Error,
     },
+    #[error("failed to parse CSV `{path}`: {source}")]
+    Csv {
+        path: PathBuf,
+        #[source]
+        source: csv::Error,
+    },
+    #[error("failed to build Leaven source rows: {source}")]
+    Dataset {
+        #[source]
+        source: leaven_eval::DatasetError,
+    },
+    #[error("failed to build Leaven split materialization: {source}")]
+    Split {
+        #[source]
+        source: leaven_eval::DatasetSplitsError,
+    },
 }
 
 pub fn build_evoskill_replica_manifest(
     input: &ManifestBuildInput,
 ) -> Result<EvoSkillReplicaManifest, ManifestError> {
     Ok(EvoSkillReplicaManifest {
-        schema_version: 1,
+        schema_version: 2,
         paper: PaperTarget {
             id: "evoskill".to_owned(),
             arxiv_id: "2603.02766".to_owned(),
@@ -186,6 +273,7 @@ pub fn build_evoskill_replica_manifest(
         source_revisions: source_revisions(&input.root),
         artifacts: source_artifacts(&input.root)?,
         datasets: dataset_requirements(),
+        source_materializations: source_materializations(input)?,
         scorer: scorer_manifest(),
         frontier: frontier_manifest(),
         schedule: schedule_manifest(),
@@ -193,6 +281,236 @@ pub fn build_evoskill_replica_manifest(
         blockers: blockers(),
         proxy_rejections: proxy_rejections(),
     })
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct OfficeQaCsvRecord {
+    uid: String,
+    question: String,
+    answer: String,
+    source_docs: String,
+    source_files: String,
+    difficulty: String,
+}
+
+pub fn materialize_officeqa_source(
+    input: &ManifestBuildInput,
+) -> Result<Option<OfficeQaSourceMaterialization>, ManifestError> {
+    let path = input.root.join("tmp/repros/officeqa/officeqa_full.csv");
+    if !path.exists() {
+        return Ok(None);
+    }
+
+    let mut reader = csv::ReaderBuilder::new()
+        .trim(csv::Trim::All)
+        .from_path(&path)
+        .map_err(|source| ManifestError::Csv {
+            path: path.clone(),
+            source,
+        })?;
+    let mut rows = Vec::new();
+    for record in reader.deserialize::<OfficeQaCsvRecord>() {
+        let record = record.map_err(|source| ManifestError::Csv {
+            path: path.clone(),
+            source,
+        })?;
+        if record.uid.trim().is_empty() {
+            continue;
+        }
+        rows.push(SourceRow::targeted(
+            record.uid,
+            OfficeQaInput {
+                question: record.question,
+                source_docs: record.source_docs,
+                source_files: record.source_files,
+                difficulty: record.difficulty,
+            },
+            record.answer,
+        ));
+    }
+
+    let rows = SourceRowManifest::new(rows).map_err(|source| ManifestError::Dataset { source })?;
+    let dataset = rows
+        .clone()
+        .into_dataset()
+        .map_err(|source| ManifestError::Dataset { source })?;
+    let strata = officeqa_difficulty_strata(&rows);
+    let split_materializations = officeqa_difficulty_split_reports(rows.len(), &strata)?;
+    let report = DatasetMaterializationReport {
+        dataset_id: "officeqa".to_owned(),
+        source_artifact_id: "officeqa_full_csv".to_owned(),
+        source_status: SourceMaterializationStatus::Materialized,
+        source_rows: Some(u64::try_from(rows.len()).expect("row count fits in u64")),
+        case_rows: Some(u64::try_from(dataset.cases().len()).expect("case count fits in u64")),
+        source_row_fingerprint: Some(fingerprint_hex(rows.fingerprint())),
+        source_artifact_sha256: Some(sha256_file(&path)?),
+        target_policy: "answers are scorer targets only; runner inputs exclude answers".to_owned(),
+        strata: strata_reports(&strata),
+        split_materializations,
+        blocker_ids: vec![
+            "officeqa_category_split_manifest".to_owned(),
+            "officeqa_exact_split_membership".to_owned(),
+        ],
+    };
+    Ok(Some(OfficeQaSourceMaterialization { rows, report }))
+}
+
+fn source_materializations(
+    input: &ManifestBuildInput,
+) -> Result<Vec<DatasetMaterializationReport>, ManifestError> {
+    let officeqa = materialize_officeqa_source(input)?.map_or_else(
+        || {
+            missing_materialization_report(
+                "officeqa",
+                "officeqa_full_csv",
+                "officeqa_full_csv_missing",
+            )
+        },
+        |materialization| materialization.report,
+    );
+    Ok(vec![officeqa, sealqa_materialization_report(&input.root)?])
+}
+
+fn officeqa_difficulty_strata(
+    rows: &SourceRowManifest<OfficeQaInput, String>,
+) -> BTreeMap<SmolStr, Vec<CaseId>> {
+    let mut strata = BTreeMap::<SmolStr, Vec<CaseId>>::new();
+    for (row_index, row) in rows.rows().iter().enumerate() {
+        strata
+            .entry(SmolStr::new(row.input().difficulty.as_str()))
+            .or_default()
+            .push(CaseId::from_index(row_index));
+    }
+    strata
+}
+
+fn officeqa_difficulty_split_reports(
+    source_rows: usize,
+    strata: &BTreeMap<SmolStr, Vec<CaseId>>,
+) -> Result<Vec<SplitMaterializationReport>, ManifestError> {
+    let mut reports = Vec::new();
+    for train_rows in OFFICEQA_TRAIN_SIZES {
+        reports.push(officeqa_difficulty_split_report(
+            source_rows,
+            strata,
+            train_rows,
+        )?);
+    }
+    Ok(reports)
+}
+
+fn officeqa_difficulty_split_report(
+    source_rows: usize,
+    strata: &BTreeMap<SmolStr, Vec<CaseId>>,
+    train_rows: usize,
+) -> Result<SplitMaterializationReport, ManifestError> {
+    let id = format!("officeqa_difficulty_train_{train_rows}_val_{OFFICEQA_VALIDATION_ROWS}");
+    if source_rows <= train_rows + OFFICEQA_VALIDATION_ROWS {
+        return Ok(SplitMaterializationReport {
+            id,
+            method: "difficulty_stratified_exact_count".to_owned(),
+            exactness: MaterializationExactness::Blocked,
+            train_rows: u64::try_from(train_rows).expect("train count fits in u64"),
+            validation_rows: Some(
+                u64::try_from(OFFICEQA_VALIDATION_ROWS).expect("validation count fits in u64"),
+            ),
+            test_rows: None,
+            split_fingerprint: None,
+            blocker_ids: vec!["officeqa_insufficient_rows".to_owned()],
+        });
+    }
+
+    let test_rows = source_rows - train_rows - OFFICEQA_VALIDATION_ROWS;
+    let splits = StratifiedSplitBuilder::new(strata.clone())
+        .map_err(|source| ManifestError::Split { source })?
+        .role_count(SplitRole::Train, train_rows)
+        .role_count(SplitRole::Validation, OFFICEQA_VALIDATION_ROWS)
+        .role_count(SplitRole::Test, test_rows)
+        .build(CaseSetVersion(format!(
+            "officeqa-difficulty-substitute-v1-rows-{source_rows}-train-{train_rows}-val-{OFFICEQA_VALIDATION_ROWS}"
+        )))
+        .map_err(|source| ManifestError::Split { source })?;
+
+    Ok(SplitMaterializationReport {
+        id,
+        method: "difficulty_stratified_exact_count".to_owned(),
+        exactness: MaterializationExactness::PaperCloseSubstitute,
+        train_rows: split_len(&splits, &SplitRole::Train),
+        validation_rows: Some(split_len(&splits, &SplitRole::Validation)),
+        test_rows: Some(split_len(&splits, &SplitRole::Test)),
+        split_fingerprint: Some(fingerprint_hex(splits.fingerprint())),
+        blocker_ids: vec![
+            "officeqa_category_split_manifest".to_owned(),
+            "officeqa_exact_split_membership".to_owned(),
+        ],
+    })
+}
+
+fn split_len(splits: &leaven_eval::DatasetSplits, role: &SplitRole) -> u64 {
+    splits.cases(&role.partition_id()).map_or(0, |cases| {
+        u64::try_from(cases.len()).expect("split count fits in u64")
+    })
+}
+
+fn strata_reports(strata: &BTreeMap<SmolStr, Vec<CaseId>>) -> Vec<StratumMaterializationReport> {
+    strata
+        .iter()
+        .map(|(name, rows)| StratumMaterializationReport {
+            name: name.to_string(),
+            rows: u64::try_from(rows.len()).expect("stratum row count fits in u64"),
+        })
+        .collect()
+}
+
+fn sealqa_materialization_report(
+    root: &Path,
+) -> Result<DatasetMaterializationReport, ManifestError> {
+    let path = root.join("tmp/replication/evoskill/sealqa/seal-0.parquet");
+    let source_artifact_sha256 = if path.exists() {
+        Some(sha256_file(&path)?)
+    } else {
+        None
+    };
+    Ok(DatasetMaterializationReport {
+        dataset_id: "sealqa".to_owned(),
+        source_artifact_id: "sealqa_parquet".to_owned(),
+        source_status: if path.exists() {
+            SourceMaterializationStatus::BlockedMissingRowReader
+        } else {
+            SourceMaterializationStatus::MissingArtifact
+        },
+        source_rows: None,
+        case_rows: None,
+        source_row_fingerprint: None,
+        source_artifact_sha256,
+        target_policy: "blocked: no Leaven-owned seal-0 parquet row reader yet".to_owned(),
+        strata: Vec::new(),
+        split_materializations: Vec::new(),
+        blocker_ids: vec![
+            "sealqa_parquet_row_reader".to_owned(),
+            "sealqa_split_manifest".to_owned(),
+        ],
+    })
+}
+
+fn missing_materialization_report(
+    dataset_id: &str,
+    source_artifact_id: &str,
+    blocker_id: &str,
+) -> DatasetMaterializationReport {
+    DatasetMaterializationReport {
+        dataset_id: dataset_id.to_owned(),
+        source_artifact_id: source_artifact_id.to_owned(),
+        source_status: SourceMaterializationStatus::MissingArtifact,
+        source_rows: None,
+        case_rows: None,
+        source_row_fingerprint: None,
+        source_artifact_sha256: None,
+        target_policy: "blocked: source artifact is not present".to_owned(),
+        strata: Vec::new(),
+        split_materializations: Vec::new(),
+        blocker_ids: vec![blocker_id.to_owned()],
+    }
 }
 
 #[must_use]
@@ -466,6 +784,7 @@ fn dataset_requirements() -> Vec<DatasetRequirement> {
             split_status: SplitManifestStatus::BlockedMissingCategoryManifest,
             blocker_ids: vec![
                 "officeqa_category_split_manifest".to_owned(),
+                "officeqa_exact_split_membership".to_owned(),
                 "officeqa_reported_result_target".to_owned(),
             ],
         },
@@ -476,7 +795,10 @@ fn dataset_requirements() -> Vec<DatasetRequirement> {
             validation_rows: None,
             held_out: "paper uses 10 percent train and held-out remainder".to_owned(),
             split_status: SplitManifestStatus::BlockedMissingSplitManifest,
-            blocker_ids: vec!["sealqa_split_manifest".to_owned()],
+            blocker_ids: vec![
+                "sealqa_parquet_row_reader".to_owned(),
+                "sealqa_split_manifest".to_owned(),
+            ],
         },
         DatasetRequirement {
             id: "browsecomp_transfer".to_owned(),
@@ -548,6 +870,14 @@ fn blockers() -> Vec<ReplicationBlocker> {
         blocker(
             "officeqa_category_split_manifest",
             "OfficeQA paper category/pseudo-label split artifact is not present locally",
+        ),
+        blocker(
+            "officeqa_exact_split_membership",
+            "OfficeQA can be difficulty-stratified as a documented substitute, but exact paper split membership is absent",
+        ),
+        blocker(
+            "sealqa_parquet_row_reader",
+            "SealQA parquet is pinned locally, but Leaven does not yet have a no-spend Rust row reader for seal-0",
         ),
         blocker(
             "sealqa_split_manifest",
@@ -653,6 +983,10 @@ fn sha256_file(path: &Path) -> Result<String, ManifestError> {
         hasher.update(&buf[..read]);
     }
     Ok(hex::encode(hasher.finalize()))
+}
+
+fn fingerprint_hex(fingerprint: Fingerprint) -> String {
+    hex::encode(fingerprint.0)
 }
 
 fn blocker(id: &str, description: &str) -> ReplicationBlocker {
