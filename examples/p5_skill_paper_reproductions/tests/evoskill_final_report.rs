@@ -131,18 +131,35 @@ fn assert_officeqa_paper_targets_report_ambiguity_without_blocking(report: &EvoS
 
 fn assert_report_header(report: &EvoSkillFinalReport) {
     assert_eq!(report.exactness, ExactnessClass::BlockedBeforePaperClose);
-    assert_eq!(report.schema_version, 6);
+    assert_eq!(report.schema_version, 7);
     assert_eq!(report.cost.llm_calls, 0);
     assert_eq!(report.cost.metric_calls, 0);
     assert_eq!(report.cost.prompt_tokens, 0);
     assert_eq!(report.cost.completion_tokens, 0);
+    let loop_report = report
+        .loop_report
+        .as_ref()
+        .expect("OfficeQA mechanics loop should run when the CSV is present");
+    assert!(loop_report.proxy_rejection.contains("mechanics only"));
+    assert_eq!(
+        loop_report.run_manifest.manifest_fingerprint,
+        report.manifest_fingerprint.fingerprint
+    );
+    assert_eq!(
+        loop_report.run_manifest.scorer_fingerprint,
+        report.scorer_fingerprint.fingerprint
+    );
     assert!(
-        report
-            .loop_report
-            .as_ref()
-            .expect("OfficeQA mechanics loop should run when the CSV is present")
-            .proxy_rejection
-            .contains("mechanics only")
+        loop_report
+            .run_manifest
+            .child_score_source
+            .contains("not paper scorer output")
+    );
+    assert!(
+        loop_report
+            .run_manifest
+            .proof_limit
+            .contains("not live provider")
     );
 
     assert_eq!(

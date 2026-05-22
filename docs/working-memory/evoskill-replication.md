@@ -844,3 +844,21 @@ This is not a paper-close claim. It is a closeout guard: future readers can see
 which acceptance lanes have evidence, which lanes are blocked by missing paper
 source artifacts, and which lanes require explicit provider/judge spend before
 any score can be reported.
+
+## No-Spend Loop Run Manifest
+
+Date: 2026-05-22.
+Provider/model spend: none.
+Cloud/GPU spend: none.
+
+The P5 final report now declares schema v7. The no-spend mechanics loop carries
+a typed `run_manifest` that binds the loop to the replica manifest fingerprint,
+scorer fingerprint, OfficeQA source-row fingerprint, train split fingerprint,
+train role source-id fingerprint, schedule, frontier policy, checkpoint
+iteration, Git identity mode, fake runtime, and fixed child-score source.
+
+This prevents the useful mechanics loop from becoming a fake proof. The loop is
+still only substitute OfficeQA train-sampler, agentic Git readback, frontier,
+feedback, and checkpoint/resume evidence. It explicitly does not prove live
+provider behavior, validation-set behavior, SealQA judge scoring, or paper-score
+results.

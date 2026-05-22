@@ -557,6 +557,7 @@ pub struct EvoSkillFailureFeedbackRow {
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct EvoSkillReplicaLoopReport {
     pub exactness: MaterializationExactness,
+    pub run_manifest: EvoSkillReplicaLoopRunManifest,
     pub frontier_capacity: u64,
     pub iterations: Vec<EvoSkillReplicaIterationReport>,
     pub feedback_history_rows: u64,
@@ -564,6 +565,36 @@ pub struct EvoSkillReplicaLoopReport {
     pub final_best_score: Option<f64>,
     pub checkpoint_resume: EvoSkillReplicaCheckpointResumeReport,
     pub proxy_rejection: String,
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct EvoSkillReplicaLoopRunManifest {
+    pub manifest_schema_version: u32,
+    pub manifest_fingerprint: String,
+    pub scorer_id: String,
+    pub scorer_fingerprint: String,
+    pub source_dataset_id: String,
+    pub source_artifact_id: String,
+    pub source_row_fingerprint: String,
+    pub train_split_id: String,
+    pub train_split_exactness: MaterializationExactness,
+    pub train_split_fingerprint: String,
+    pub train_role_source_id_fingerprint: String,
+    pub train_rows: u64,
+    pub sampler_policy: String,
+    pub frontier_capacity: u64,
+    pub parent_selection: String,
+    pub admission_policy: String,
+    pub eviction_policy: String,
+    pub planned_iterations: u64,
+    pub checkpoint_resume_after_iteration: u64,
+    pub schedule_epochs: f64,
+    pub schedule_train_batch_policy: String,
+    pub schedule_feedback_history: String,
+    pub git_identity_mode: String,
+    pub runtime: String,
+    pub child_score_source: String,
+    pub proof_limit: String,
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -737,13 +768,18 @@ pub fn build_evoskill_final_report(
     input: &ManifestBuildInput,
 ) -> Result<EvoSkillFinalReport, ManifestError> {
     let manifest = build_evoskill_replica_manifest(input)?;
+    let manifest_fingerprint = manifest_fingerprint_report(&manifest)?;
+    let scorer_fingerprint = scorer_fingerprint_report(&manifest.scorer);
     let loop_report = if has_materialized_officeqa(&manifest) {
-        Some(run_evoskill_replica_mechanics(input)?)
+        Some(run_evoskill_replica_mechanics_with_manifest(
+            input,
+            &manifest,
+            &manifest_fingerprint,
+            &scorer_fingerprint,
+        )?)
     } else {
         None
     };
-    let manifest_fingerprint = manifest_fingerprint_report(&manifest)?;
-    let scorer_fingerprint = scorer_fingerprint_report(&manifest.scorer);
     let score_slots = final_score_slots(&manifest);
     let live_run_gate = final_report_live_run_gate(&manifest);
     let paper_close_gates =
@@ -754,7 +790,7 @@ pub fn build_evoskill_final_report(
     let proxy_rejection_gates = proxy_rejection_gates();
 
     Ok(EvoSkillFinalReport {
-        schema_version: 6,
+        schema_version: 7,
         exactness,
         manifest,
         loop_report,
@@ -1214,10 +1250,33 @@ fn sealqa_row_order_split_report(
 pub fn run_evoskill_replica_mechanics(
     input: &ManifestBuildInput,
 ) -> Result<EvoSkillReplicaLoopReport, ManifestError> {
+    let manifest = build_evoskill_replica_manifest(input)?;
+    let manifest_fingerprint = manifest_fingerprint_report(&manifest)?;
+    let scorer_fingerprint = scorer_fingerprint_report(&manifest.scorer);
+    run_evoskill_replica_mechanics_with_manifest(
+        input,
+        &manifest,
+        &manifest_fingerprint,
+        &scorer_fingerprint,
+    )
+}
+
+fn run_evoskill_replica_mechanics_with_manifest(
+    input: &ManifestBuildInput,
+    manifest: &EvoSkillReplicaManifest,
+    manifest_fingerprint: &ManifestFingerprintReport,
+    scorer_fingerprint: &ScorerFingerprintReport,
+) -> Result<EvoSkillReplicaLoopReport, ManifestError> {
     let officeqa =
         materialize_officeqa_source(input)?.ok_or_else(|| ManifestError::LoopBlocked {
             reason: "OfficeQA full CSV is required for the no-spend replica loop".to_owned(),
         })?;
+    let run_manifest = evoskill_replica_loop_run_manifest(
+        manifest,
+        manifest_fingerprint,
+        scorer_fingerprint,
+        &officeqa,
+    )?;
     let git = create_agentic_git_harness()?;
     let mut state = initial_replica_loop_state(&officeqa, &git)?;
     let mut iterations = Vec::new();
@@ -1234,6 +1293,7 @@ pub fn run_evoskill_replica_mechanics(
 
     Ok(EvoSkillReplicaLoopReport {
         exactness: MaterializationExactness::PaperCloseSubstitute,
+        run_manifest,
         frontier_capacity: u64::try_from(EVOSKILL_REPLICA_FRONTIER_SIZE)
             .expect("frontier capacity fits in u64"),
         iterations,
@@ -1244,6 +1304,89 @@ pub fn run_evoskill_replica_mechanics(
         checkpoint_resume: checkpoint_resume.expect("configured loop writes one checkpoint"),
         proxy_rejection: "no-spend agentic Git readback loop proves mechanics only; live OfficeQA/SealQA paper scores remain unproven".to_owned(),
     })
+}
+
+fn evoskill_replica_loop_run_manifest(
+    manifest: &EvoSkillReplicaManifest,
+    manifest_fingerprint: &ManifestFingerprintReport,
+    scorer_fingerprint: &ScorerFingerprintReport,
+    officeqa: &OfficeQaSourceMaterialization,
+) -> Result<EvoSkillReplicaLoopRunManifest, ManifestError> {
+    let train_split = officeqa_loop_train_split(&officeqa.report)?;
+    let train_role = split_role_report(train_split, "train")?;
+    let source_row_fingerprint =
+        officeqa
+            .report
+            .source_row_fingerprint
+            .clone()
+            .ok_or_else(|| ManifestError::LoopBlocked {
+                reason: "OfficeQA loop run manifest requires a source row fingerprint".to_owned(),
+            })?;
+    let train_split_fingerprint =
+        train_split
+            .split_fingerprint
+            .clone()
+            .ok_or_else(|| ManifestError::LoopBlocked {
+                reason: "OfficeQA loop run manifest requires a train split fingerprint".to_owned(),
+            })?;
+
+    Ok(EvoSkillReplicaLoopRunManifest {
+        manifest_schema_version: manifest.schema_version,
+        manifest_fingerprint: manifest_fingerprint.fingerprint.clone(),
+        scorer_id: scorer_fingerprint.scorer_id.clone(),
+        scorer_fingerprint: scorer_fingerprint.fingerprint.clone(),
+        source_dataset_id: officeqa.report.dataset_id.clone(),
+        source_artifact_id: officeqa.report.source_artifact_id.clone(),
+        source_row_fingerprint,
+        train_split_id: train_split.id.clone(),
+        train_split_exactness: train_split.exactness.clone(),
+        train_split_fingerprint,
+        train_role_source_id_fingerprint: train_role.source_id_fingerprint.clone(),
+        train_rows: train_split.train_rows,
+        sampler_policy: "OfficeQA difficulty-stratified substitute train sampler; two categories x one sample per category per iteration".to_owned(),
+        frontier_capacity: manifest.frontier.capacity,
+        parent_selection: manifest.frontier.parent_selection.clone(),
+        admission_policy: manifest.frontier.admission.clone(),
+        eviction_policy: manifest.frontier.eviction.clone(),
+        planned_iterations: u64::try_from(REPLICA_CHILD_SCORES.len())
+            .expect("replica iteration count fits in u64"),
+        checkpoint_resume_after_iteration: EVOSKILL_REPLICA_RESUME_AFTER_ITERATION,
+        schedule_epochs: manifest.schedule.epochs,
+        schedule_train_batch_policy: manifest.schedule.train_batch_policy.clone(),
+        schedule_feedback_history: manifest.schedule.feedback_history.clone(),
+        git_identity_mode: "commit".to_owned(),
+        runtime: "fake_no_spend_agentic_git_workspace".to_owned(),
+        child_score_source: "fixed no-spend scalar sequence for frontier mechanics; not paper scorer output".to_owned(),
+        proof_limit: "mechanics evidence only; not live provider, validation-set, SealQA judge, or paper-score evidence".to_owned(),
+    })
+}
+
+fn officeqa_loop_train_split(
+    report: &DatasetMaterializationReport,
+) -> Result<&SplitMaterializationReport, ManifestError> {
+    let expected_id = format!(
+        "officeqa_difficulty_train_{EVOSKILL_REPLICA_TRAIN_ROWS}_val_{OFFICEQA_VALIDATION_ROWS}"
+    );
+    report
+        .split_materializations
+        .iter()
+        .find(|split| split.id == expected_id)
+        .ok_or_else(|| ManifestError::LoopBlocked {
+            reason: format!("OfficeQA loop train split `{expected_id}` is missing"),
+        })
+}
+
+fn split_role_report<'a>(
+    split: &'a SplitMaterializationReport,
+    role: &str,
+) -> Result<&'a SplitRoleMaterializationReport, ManifestError> {
+    split
+        .role_manifests
+        .iter()
+        .find(|manifest| manifest.role == role)
+        .ok_or_else(|| ManifestError::LoopBlocked {
+            reason: format!("split `{}` is missing role `{role}`", split.id),
+        })
 }
 
 fn has_materialized_officeqa(manifest: &EvoSkillReplicaManifest) -> bool {
