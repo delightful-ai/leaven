@@ -37,6 +37,16 @@ const OFFICEQA_VALIDATION_ROWS: usize = 17;
 const OFFICEQA_TRAIN_SIZES: [usize; 3] = [12, 24, 36];
 const SEALQA_ROWS: usize = 111;
 const SEALQA_TRAIN_ROWS: usize = 11;
+const SEALQA_JUDGE_TEMPLATE_ID: &str = "sealqa-auto-grader-placeholder-v1";
+const SEALQA_JUDGE_SOURCE_ARTIFACT_ID: &str = "paper_auto_grader_placeholder";
+const SEALQA_JUDGE_RUNTIME_STATUS: &str = "template_pinned_no_spend";
+const SEALQA_JUDGE_SYSTEM_PROMPT: &str = "You are the **Auto-Grader** agent. Evaluate a model output against a reference answer and scoring rubric.";
+const SEALQA_JUDGE_OUTPUT_CONTRACT: &str = r#"Return a JSON object with:
+- "score": <FLOAT_0_TO_1>
+- "passed": <TRUE_FALSE>
+- "reason": <SHORT_EXPLANATION>
+- "error_breakdown": [{"type": <TYPE>, "value": <VALUE>}, ...]"#;
+const SEALQA_JUDGE_NOTES: &str = "Prefer deterministic checks when possible. If numeric, compute relative error using the paper placeholder formula.";
 const EVOSKILL_REPLICA_FRONTIER_SIZE: usize = 3;
 const EVOSKILL_REPLICA_TRAIN_ROWS: usize = 12;
 const EVOSKILL_REPLICA_RESUME_AFTER_ITERATION: u64 = 2;
@@ -230,6 +240,25 @@ pub struct ScorerManifest {
     pub tolerances: Vec<f64>,
     pub failure_threshold: f64,
     pub implementation_status: String,
+    pub judge_templates: Vec<JudgeTemplateManifest>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct JudgeTemplateManifest {
+    pub id: String,
+    pub dataset_id: String,
+    pub source_artifact_id: String,
+    pub runtime_status: String,
+    pub fingerprint: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct SealQaJudgeRequest {
+    pub template_id: String,
+    pub template_fingerprint: String,
+    pub system: String,
+    pub user: String,
+    pub output_contract: String,
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -533,7 +562,7 @@ pub fn build_evoskill_replica_manifest(
     let source_universe = source_universe(&datasets, &source_materializations);
 
     Ok(EvoSkillReplicaManifest {
-        schema_version: 3,
+        schema_version: 4,
         paper: PaperTarget {
             id: "evoskill".to_owned(),
             arxiv_id: "2603.02766".to_owned(),
@@ -1024,6 +1053,18 @@ fn scorer_fingerprint_report(scorer: &ScorerManifest) -> ScorerFingerprintReport
     hasher.update(scorer.failure_threshold.to_be_bytes());
     hasher.update(b"\0");
     hasher.update(scorer.implementation_status.as_bytes());
+    for template in &scorer.judge_templates {
+        hasher.update(b"\0judge-template\0");
+        hasher.update(template.id.as_bytes());
+        hasher.update(b"\0");
+        hasher.update(template.dataset_id.as_bytes());
+        hasher.update(b"\0");
+        hasher.update(template.source_artifact_id.as_bytes());
+        hasher.update(b"\0");
+        hasher.update(template.runtime_status.as_bytes());
+        hasher.update(b"\0");
+        hasher.update(template.fingerprint.as_bytes());
+    }
     ScorerFingerprintReport {
         scorer_id: scorer.id.clone(),
         fingerprint: hex::encode(hasher.finalize()),
@@ -1048,6 +1089,7 @@ fn split_score_slots(
     materialization: &DatasetMaterializationReport,
     split: &SplitMaterializationReport,
 ) -> Vec<FinalScoreSlot> {
+    let blocker_ids = scoring_blocker_ids(&materialization.dataset_id, &split.blocker_ids);
     let roles = [
         ("train", Some(split.train_rows)),
         ("validation", split.validation_rows),
@@ -1062,7 +1104,7 @@ fn split_score_slots(
                     &split.id,
                     role,
                     Some(rows),
-                    &split.blocker_ids,
+                    &blocker_ids,
                 )
             })
         })
@@ -1070,10 +1112,20 @@ fn split_score_slots(
         .collect()
 }
 
+fn scoring_blocker_ids(dataset_id: &str, split_blocker_ids: &[String]) -> Vec<String> {
+    let mut blocker_ids = split_blocker_ids.to_vec();
+    if dataset_id == "sealqa" {
+        extend_unique(&mut blocker_ids, &["sealqa_judge_scored_run".to_owned()]);
+    }
+    blocker_ids
+}
+
 fn dataset_placeholder_score_slots(
     manifest: &EvoSkillReplicaManifest,
     materialization: &DatasetMaterializationReport,
 ) -> Vec<FinalScoreSlot> {
+    let blocker_ids =
+        scoring_blocker_ids(&materialization.dataset_id, &materialization.blocker_ids);
     let dataset = manifest
         .datasets
         .iter()
@@ -1100,7 +1152,7 @@ fn dataset_placeholder_score_slots(
                 &split_id,
                 role,
                 expected_rows,
-                &materialization.blocker_ids,
+                &blocker_ids,
             )
         })
         .collect()
@@ -1874,6 +1926,12 @@ fn source_artifacts(root: &Path) -> Result<Vec<SourceArtifact>, ManifestError> {
         )?,
         source_artifact(
             root,
+            SEALQA_JUDGE_SOURCE_ARTIFACT_ID,
+            "SealQA auto-grader prompt placeholder from paper appendix",
+            "tmp/skill_opt_sources/arx_2603.02766/src/appendix/agent-prompts/auto_grader_placeholder.md",
+        )?,
+        source_artifact(
+            root,
             "officeqa_full_csv",
             "OfficeQA full CSV",
             "tmp/repros/officeqa/officeqa_full.csv",
@@ -1952,8 +2010,53 @@ fn scorer_manifest() -> ScorerManifest {
         id: "evoskill-multi-tolerance-v1".to_owned(),
         tolerances: vec![0.0, 0.01, 0.025, 0.05, 0.10],
         failure_threshold: 0.8,
-        implementation_status: "Rust scorer law-tested for multi-tolerance weighting, units, years, text, lists, failure feedback rows, and failure extraction".to_owned(),
+        implementation_status: "Rust OfficeQA scorer law-tested for multi-tolerance weighting, units, years, text, lists, failure feedback rows, and failure extraction; SealQA judge template is pinned but not run".to_owned(),
+        judge_templates: vec![sealqa_judge_template_manifest()],
     }
+}
+
+#[must_use]
+pub fn sealqa_judge_template_manifest() -> JudgeTemplateManifest {
+    JudgeTemplateManifest {
+        id: SEALQA_JUDGE_TEMPLATE_ID.to_owned(),
+        dataset_id: "sealqa".to_owned(),
+        source_artifact_id: SEALQA_JUDGE_SOURCE_ARTIFACT_ID.to_owned(),
+        runtime_status: SEALQA_JUDGE_RUNTIME_STATUS.to_owned(),
+        fingerprint: sealqa_judge_template_fingerprint(),
+    }
+}
+
+#[must_use]
+pub fn build_sealqa_judge_request(
+    question: &str,
+    prediction: &str,
+    reference: &str,
+    tolerance: f64,
+) -> SealQaJudgeRequest {
+    let manifest = sealqa_judge_template_manifest();
+    SealQaJudgeRequest {
+        template_id: manifest.id,
+        template_fingerprint: manifest.fingerprint,
+        system: SEALQA_JUDGE_SYSTEM_PROMPT.to_owned(),
+        user: format!(
+            "## Inputs\n- `question`: `{question}`\n- `prediction`: `{prediction}`\n- `reference`: `{reference}`\n- `tolerance`: `{tolerance}`"
+        ),
+        output_contract: SEALQA_JUDGE_OUTPUT_CONTRACT.to_owned(),
+    }
+}
+
+fn sealqa_judge_template_fingerprint() -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(SEALQA_JUDGE_TEMPLATE_ID.as_bytes());
+    hasher.update(b"\0");
+    hasher.update(SEALQA_JUDGE_SOURCE_ARTIFACT_ID.as_bytes());
+    hasher.update(b"\0");
+    hasher.update(SEALQA_JUDGE_SYSTEM_PROMPT.as_bytes());
+    hasher.update(b"\0");
+    hasher.update(SEALQA_JUDGE_OUTPUT_CONTRACT.as_bytes());
+    hasher.update(b"\0");
+    hasher.update(SEALQA_JUDGE_NOTES.as_bytes());
+    hex::encode(hasher.finalize())
 }
 
 fn frontier_manifest() -> FrontierManifest {
@@ -2011,6 +2114,10 @@ fn blockers() -> Vec<ReplicationBlocker> {
         blocker(
             "sealqa_split_manifest",
             "SealQA seal-0 parquet can be materialized, but Leaven still lacks exact train/held-out split membership",
+        ),
+        blocker(
+            "sealqa_judge_scored_run",
+            "SealQA auto-grader template is pinned, but no approved live LLM-as-judge scored run has executed",
         ),
         blocker(
             "browsecomp_transfer_sample",

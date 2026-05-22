@@ -86,6 +86,7 @@ acceptance_path:
       - examples/p5_skill_paper_reproductions/tests/evoskill_feedback.rs
       - "`cargo test -p p5_skill_paper_reproductions --test evoskill_scorer`"
       - "`cargo test -p p5_skill_paper_reproductions --test evoskill_feedback`"
+      - "SealQA's paper auto-grader placeholder is now pinned as a fingerprinted no-spend judge template/request surface in the scorer manifest. This proves prompt/request materialization only; an approved live LLM-as-judge scored run remains blocked as sealqa_judge_scored_run."
   - id: full_loop_mechanics
     status: proven
     requirement: >
@@ -114,7 +115,7 @@ acceptance_path:
       - examples/p5_skill_paper_reproductions/tests/evoskill_final_report.rs
       - "`cargo test -p p5_skill_paper_reproductions --test evoskill_final_report`"
       - "`just evoskill-paper-final-report` writes target/evoskill-paper-close/final-report.json"
-      - "Current report is a no-spend truth surface: it contains a manifest fingerprint, baseline/optimized train/validation/held-out score slots, exactness gaps, source/split/scorer fingerprints, zero costs, blockers, and ablation statuses, but blocked metrics remain missing rather than fake scores. It is still not live provider, validation-set score, or paper-close evidence."
+      - "Current report is a no-spend truth surface: it contains a manifest fingerprint, baseline/optimized train/validation/held-out score slots, exactness gaps, source/split/scorer/judge-template fingerprints, zero costs, blockers, and ablation statuses, but blocked metrics remain missing rather than fake scores. SealQA slots explicitly carry the judge-scored-run blocker. It is still not live provider, validation-set score, or paper-close evidence."
 
 explicit_non_goals:
   - do not claim paper-exact when only paper-close is proven

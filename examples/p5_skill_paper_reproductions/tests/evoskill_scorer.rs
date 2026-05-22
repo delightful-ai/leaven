@@ -1,5 +1,6 @@
 use p5_skill_paper_reproductions::evoskill::{
-    DEFAULT_FAILURE_THRESHOLD, DEFAULT_TOLERANCES, score_evoskill_answer,
+    DEFAULT_FAILURE_THRESHOLD, DEFAULT_TOLERANCES, build_sealqa_judge_request,
+    score_evoskill_answer, sealqa_judge_template_manifest,
 };
 
 fn assert_score(actual: f64, expected: f64) {
@@ -55,4 +56,34 @@ fn textual_answers_use_normalized_substring_containment() {
     let report = score_evoskill_answer("\"Serban Ghenea\"", "The answer is serban ghenea.");
     assert_score(report.weighted_score, 1.0);
     assert!(!report.is_failure);
+}
+
+#[test]
+fn sealqa_judge_request_preserves_paper_template_without_running_a_judge() {
+    let manifest = sealqa_judge_template_manifest();
+    assert_eq!(manifest.id, "sealqa-auto-grader-placeholder-v1");
+    assert_eq!(manifest.dataset_id, "sealqa");
+    assert_eq!(manifest.source_artifact_id, "paper_auto_grader_placeholder");
+    assert_eq!(manifest.fingerprint.len(), 64);
+    assert_eq!(manifest.runtime_status, "template_pinned_no_spend");
+
+    let request = build_sealqa_judge_request(
+        "Who holds the album of the year Grammy record?",
+        "Serban Ghenea",
+        "Serban Ghenea",
+        0.01,
+    );
+
+    assert_eq!(request.template_id, manifest.id);
+    assert_eq!(request.template_fingerprint, manifest.fingerprint);
+    assert!(request.system.contains("Auto-Grader"));
+    assert!(request.user.contains("question"));
+    assert!(request.user.contains("Who holds the album"));
+    assert!(request.user.contains("prediction"));
+    assert!(request.user.contains("Serban Ghenea"));
+    assert!(request.user.contains("reference"));
+    assert!(request.user.contains("tolerance"));
+    assert!(request.output_contract.contains("\"score\""));
+    assert!(request.output_contract.contains("\"passed\""));
+    assert!(request.output_contract.contains("\"error_breakdown\""));
 }
