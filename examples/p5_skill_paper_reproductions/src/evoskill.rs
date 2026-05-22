@@ -366,11 +366,20 @@ pub struct FinalScoreSlot {
     pub dataset_id: String,
     pub split_id: String,
     pub split_role: String,
+    pub split_exactness: MaterializationExactness,
+    pub split_fingerprint: Option<String>,
+    pub role_source_id_fingerprint: Option<String>,
     pub candidate_role: String,
     pub expected_rows: Option<u64>,
     pub score: Option<f64>,
     pub status: FinalScoreStatus,
     pub blocker_ids: Vec<String>,
+}
+
+struct FinalScoreSlotAudit {
+    split_exactness: MaterializationExactness,
+    split_fingerprint: Option<String>,
+    role_source_id_fingerprint: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -637,7 +646,7 @@ pub fn build_evoskill_final_report(
     let proxy_rejections = manifest.proxy_rejections.clone();
 
     Ok(EvoSkillFinalReport {
-        schema_version: 2,
+        schema_version: 3,
         exactness,
         manifest,
         loop_report,
@@ -1207,10 +1216,12 @@ fn split_score_slots(
         .into_iter()
         .filter_map(|(role, expected_rows)| {
             expected_rows.map(|rows| {
+                let audit = score_slot_audit_for_split_role(split, role);
                 score_slots_for_role(
                     &materialization.dataset_id,
                     &split.id,
                     role,
+                    &audit,
                     Some(rows),
                     &blocker_ids,
                 )
@@ -1255,10 +1266,12 @@ fn dataset_placeholder_score_slots(
     roles
         .into_iter()
         .flat_map(|(role, expected_rows)| {
+            let audit = blocked_score_slot_audit();
             score_slots_for_role(
                 &materialization.dataset_id,
                 &split_id,
                 role,
+                &audit,
                 expected_rows,
                 &blocker_ids,
             )
@@ -1277,6 +1290,7 @@ fn score_slots_for_role(
     dataset_id: &str,
     split_id: &str,
     split_role: &str,
+    audit: &FinalScoreSlotAudit,
     expected_rows: Option<u64>,
     blocker_ids: &[String],
 ) -> Vec<FinalScoreSlot> {
@@ -1286,6 +1300,9 @@ fn score_slots_for_role(
             dataset_id: dataset_id.to_owned(),
             split_id: split_id.to_owned(),
             split_role: split_role.to_owned(),
+            split_exactness: audit.split_exactness.clone(),
+            split_fingerprint: audit.split_fingerprint.clone(),
+            role_source_id_fingerprint: audit.role_source_id_fingerprint.clone(),
             candidate_role: candidate_role.to_owned(),
             expected_rows,
             score: None,
@@ -1297,6 +1314,29 @@ fn score_slots_for_role(
             blocker_ids: blocker_ids.to_vec(),
         })
         .collect()
+}
+
+fn score_slot_audit_for_split_role(
+    split: &SplitMaterializationReport,
+    role: &str,
+) -> FinalScoreSlotAudit {
+    FinalScoreSlotAudit {
+        split_exactness: split.exactness.clone(),
+        split_fingerprint: split.split_fingerprint.clone(),
+        role_source_id_fingerprint: split
+            .role_manifests
+            .iter()
+            .find(|manifest| manifest.role == role)
+            .map(|manifest| manifest.source_id_fingerprint.clone()),
+    }
+}
+
+fn blocked_score_slot_audit() -> FinalScoreSlotAudit {
+    FinalScoreSlotAudit {
+        split_exactness: MaterializationExactness::Blocked,
+        split_fingerprint: None,
+        role_source_id_fingerprint: None,
+    }
 }
 
 fn final_report_errors(manifest: &EvoSkillReplicaManifest) -> Vec<FinalReportError> {
