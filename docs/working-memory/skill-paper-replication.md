@@ -1081,3 +1081,14 @@ references, predictions, scores, and BrowseComp transfer rows are deliberately
 absent. This closes the hand-authored-run-input gap before live execution, but
 it does not run an agent, score outputs, call a judge, approve spend, or prove
 paper-close results.
+
+2026-05-22 update: runner outputs now have a no-spend Rust import bridge back
+to the generated runner inputs. `just evoskill-paper-runner-outputs
+<outputs.jsonl>` consumes strict runner prediction rows with dataset/split
+role/candidate/source id, prediction, and the `input_artifact_sha256` from the
+current `runner_input_manifest.json`. The importer validates the runner input
+manifest fingerprints, checks artifact hash and exact source-id membership,
+scores OfficeQA outputs with the Rust scorer, and materializes SealQA judge
+requests for future approved judging. This closes the hand-stitched
+input-to-output sidecar gap only; it still does not run an agent, call or
+approve a judge, import judged SealQA scores, or prove paper-close results.

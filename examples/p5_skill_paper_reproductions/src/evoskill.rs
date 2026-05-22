@@ -870,6 +870,18 @@ struct SealQaJudgePredictionRow {
     prediction: String,
 }
 
+#[derive(Clone, Debug, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RunnerOutputPredictionRow {
+    dataset_id: String,
+    split_id: String,
+    split_role: String,
+    candidate_role: String,
+    input_artifact_sha256: String,
+    source_id: String,
+    prediction: String,
+}
+
 #[derive(Clone, Debug, serde::Serialize)]
 struct SealQaJudgeRequestArtifactRow {
     source_id: String,
@@ -877,7 +889,8 @@ struct SealQaJudgeRequestArtifactRow {
     request: SealQaJudgeRequest,
 }
 
-#[derive(Clone, Debug, serde::Serialize)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 struct RunnerInputArtifactRow {
     source_id: String,
     input: serde_json::Value,
@@ -1009,12 +1022,27 @@ pub enum ManifestError {
     },
     #[error("invalid runner input batch `{path}`: {message}")]
     RunnerInputBatch { path: PathBuf, message: String },
+    #[error("failed to parse runner input manifest `{path}`: {source}")]
+    RunnerInputManifestJson {
+        path: PathBuf,
+        #[source]
+        source: serde_json::Error,
+    },
     #[error("failed to serialize runner input manifest `{path}`: {source}")]
     RunnerInputManifestSerialize {
         path: PathBuf,
         #[source]
         source: serde_json::Error,
     },
+    #[error("failed to parse runner output rows `{path}` line {line}: {source}")]
+    RunnerOutputJson {
+        path: PathBuf,
+        line: usize,
+        #[source]
+        source: serde_json::Error,
+    },
+    #[error("invalid runner output batch `{path}`: {message}")]
+    RunnerOutput { path: PathBuf, message: String },
     #[error("failed to parse BrowseComp transfer sample `{path}` line {line}: {source}")]
     BrowseCompSampleJson {
         path: PathBuf,
@@ -1367,6 +1395,126 @@ pub fn write_evoskill_runner_input_batch(
     )?;
     write_runner_input_manifest_file(&path, &runner_manifest)?;
     Ok(path)
+}
+
+pub fn write_evoskill_runner_output_batch(
+    input: &ManifestBuildInput,
+    outputs_path: impl AsRef<Path>,
+) -> Result<Vec<PathBuf>, ManifestError> {
+    let outputs_path = root_relative_input_path(&input.root, outputs_path.as_ref());
+    let outputs = read_runner_output_prediction_rows(&outputs_path)?;
+    let sources = materialize_evoskill_sources(input)?;
+    let manifest = build_evoskill_replica_manifest_from_sources(input, &sources)?;
+    let manifest_fingerprint = manifest_fingerprint_report(&manifest)?;
+    let scorer_fingerprint = scorer_fingerprint_report(&manifest.scorer);
+    let runner_manifest =
+        read_runner_input_manifest(&input.root, &manifest_fingerprint, &scorer_fingerprint)?;
+    validate_runner_outputs_against_input_manifest(
+        &input.root,
+        &outputs_path,
+        &runner_manifest,
+        &outputs,
+    )?;
+    let (officeqa_predictions, sealqa_predictions) =
+        split_runner_outputs_by_dataset(&outputs_path, outputs)?;
+
+    let mut slots = final_score_slots(&manifest);
+    let score_path = input.root.join(SCORE_RESULT_MANIFEST_PATH);
+    let existing =
+        read_score_result_manifest(&input.root, &manifest_fingerprint, &scorer_fingerprint)?;
+    if let Some(existing) = &existing {
+        apply_score_result_manifest(
+            &input.root,
+            &sources,
+            &manifest.scorer,
+            &mut slots,
+            existing,
+        )?;
+    }
+    if !officeqa_predictions.is_empty() {
+        ensure_score_result_manifest_can_append(
+            &score_path,
+            existing.as_ref(),
+            &officeqa_prediction_slot_keys(&outputs_path, &officeqa_predictions)?,
+        )?;
+    }
+
+    let mut written_paths = Vec::new();
+    if !sealqa_predictions.is_empty() {
+        let request_path = input.root.join(SEALQA_JUDGE_REQUEST_MANIFEST_PATH);
+        let request_manifest = sealqa_judge_request_manifest_from_predictions(
+            &input.root,
+            &request_path,
+            &sources,
+            &manifest.scorer,
+            &slots,
+            &manifest_fingerprint,
+            &scorer_fingerprint,
+            sealqa_predictions,
+        )?;
+        write_sealqa_judge_request_manifest_file(&request_path, &request_manifest)?;
+        written_paths.push(request_path);
+    }
+    if !officeqa_predictions.is_empty() {
+        let score_manifest = officeqa_score_result_manifest_from_predictions(
+            &input.root,
+            &score_path,
+            &sources,
+            &slots,
+            &manifest_fingerprint,
+            &scorer_fingerprint,
+            officeqa_predictions,
+        )?;
+        let score_manifest = merge_score_result_manifest(&score_path, existing, score_manifest)?;
+        write_score_result_manifest_file(&score_path, &score_manifest)?;
+        let validated =
+            read_score_result_manifest(&input.root, &manifest_fingerprint, &scorer_fingerprint)?
+                .expect("score result manifest was just written");
+        apply_score_result_manifest(
+            &input.root,
+            &sources,
+            &manifest.scorer,
+            &mut slots,
+            &validated,
+        )?;
+        written_paths.push(score_path);
+    }
+    Ok(written_paths)
+}
+
+fn split_runner_outputs_by_dataset(
+    path: &Path,
+    outputs: Vec<RunnerOutputPredictionRow>,
+) -> Result<(Vec<OfficeQaPredictionRow>, Vec<SealQaJudgePredictionRow>), ManifestError> {
+    let mut officeqa_predictions = Vec::new();
+    let mut sealqa_predictions = Vec::new();
+    for row in outputs {
+        match row.dataset_id.as_str() {
+            "officeqa" => officeqa_predictions.push(OfficeQaPredictionRow {
+                dataset_id: row.dataset_id,
+                split_id: row.split_id,
+                split_role: row.split_role,
+                candidate_role: row.candidate_role,
+                source_id: row.source_id,
+                prediction: row.prediction,
+            }),
+            "sealqa" => sealqa_predictions.push(SealQaJudgePredictionRow {
+                dataset_id: row.dataset_id,
+                split_id: row.split_id,
+                split_role: row.split_role,
+                candidate_role: row.candidate_role,
+                source_id: row.source_id,
+                prediction: row.prediction,
+            }),
+            other => {
+                return Err(runner_output_error(
+                    path,
+                    format!("runner output dataset `{other}` is not supported"),
+                ));
+            }
+        }
+    }
+    Ok((officeqa_predictions, sealqa_predictions))
 }
 
 fn root_relative_input_path(root: &Path, path: &Path) -> PathBuf {
@@ -3543,6 +3691,39 @@ fn read_sealqa_judge_prediction_rows(
     Ok(rows)
 }
 
+fn read_runner_output_prediction_rows(
+    path: &Path,
+) -> Result<Vec<RunnerOutputPredictionRow>, ManifestError> {
+    let body = fs::read_to_string(path).map_err(|source| ManifestError::Read {
+        path: path.to_owned(),
+        source,
+    })?;
+    let mut rows = Vec::new();
+    for (line_index, line) in body.lines().enumerate() {
+        if line.trim().is_empty() {
+            return Err(runner_output_error(
+                path,
+                format!("blank line {}", line_index + 1),
+            ));
+        }
+        let row = serde_json::from_str::<RunnerOutputPredictionRow>(line).map_err(|source| {
+            ManifestError::RunnerOutputJson {
+                path: path.to_owned(),
+                line: line_index + 1,
+                source,
+            }
+        })?;
+        rows.push(row);
+    }
+    if rows.is_empty() {
+        return Err(runner_output_error(
+            path,
+            "runner output file must contain at least one row",
+        ));
+    }
+    Ok(rows)
+}
+
 fn officeqa_prediction_slot_keys(
     path: &Path,
     rows: &[OfficeQaPredictionRow],
@@ -4302,6 +4483,120 @@ fn validate_runner_input_slot(
     Ok(())
 }
 
+fn validate_runner_output_row_shape(
+    path: &Path,
+    row: &RunnerOutputPredictionRow,
+) -> Result<(), ManifestError> {
+    if !matches!(row.dataset_id.as_str(), "officeqa" | "sealqa") {
+        return Err(runner_output_error(
+            path,
+            format!(
+                "runner output row for `{}` is not supported",
+                row.dataset_id
+            ),
+        ));
+    }
+    for (field, value) in [
+        ("split_id", &row.split_id),
+        ("split_role", &row.split_role),
+        ("candidate_role", &row.candidate_role),
+        ("input_artifact_sha256", &row.input_artifact_sha256),
+        ("source_id", &row.source_id),
+        ("prediction", &row.prediction),
+    ] {
+        if value.trim().is_empty() {
+            return Err(runner_output_error(
+                path,
+                format!("runner output row field `{field}` must not be empty"),
+            ));
+        }
+    }
+    if !is_sha256_hex(&row.input_artifact_sha256) {
+        return Err(runner_output_error(
+            path,
+            format!(
+                "runner output row `{}` input_artifact_sha256 must be 64 hex characters",
+                row.source_id
+            ),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_runner_outputs_against_input_manifest(
+    root: &Path,
+    path: &Path,
+    manifest: &RunnerInputManifestFile,
+    rows: &[RunnerOutputPredictionRow],
+) -> Result<(), ManifestError> {
+    let mut expected_by_key = BTreeMap::new();
+    for entry in &manifest.entries {
+        let key = runner_input_entry_key(entry);
+        let source_ids = read_runner_input_artifact_source_ids(root, path, entry)?;
+        expected_by_key.insert(key, (entry, source_ids));
+    }
+
+    let mut actual_by_key = BTreeMap::<String, BTreeSet<String>>::new();
+    for row in rows {
+        validate_runner_output_row_shape(path, row)?;
+        let key = runner_output_slot_key(row);
+        let (entry, _) = expected_by_key.get(&key).ok_or_else(|| {
+            runner_output_error(
+                path,
+                format!("runner output rows target slot `{key}` absent from runner input manifest"),
+            )
+        })?;
+        if row.input_artifact_sha256 != entry.input_artifact.sha256 {
+            return Err(runner_output_error(
+                path,
+                format!(
+                    "runner output row `{}` for `{key}` input artifact sha256 mismatch",
+                    row.source_id
+                ),
+            ));
+        }
+        if !actual_by_key
+            .entry(key.clone())
+            .or_default()
+            .insert(row.source_id.clone())
+        {
+            return Err(runner_output_error(
+                path,
+                format!(
+                    "runner output rows for `{key}` repeat source id `{}`",
+                    row.source_id
+                ),
+            ));
+        }
+    }
+
+    for (key, actual_source_ids) in actual_by_key {
+        let (_, expected_source_ids) = expected_by_key
+            .get(&key)
+            .expect("actual keys were already validated against expected keys");
+        if actual_source_ids != *expected_source_ids {
+            let missing = expected_source_ids
+                .difference(&actual_source_ids)
+                .next()
+                .cloned();
+            let extra = actual_source_ids
+                .difference(expected_source_ids)
+                .next()
+                .cloned();
+            let detail = match (missing, extra) {
+                (Some(missing), _) => format!("missing source id `{missing}`"),
+                (_, Some(extra)) => format!("unexpected source id `{extra}`"),
+                _ => "source-id membership changed".to_owned(),
+            };
+            return Err(runner_output_error(
+                path,
+                format!("runner output rows for `{key}` do not match runner inputs: {detail}"),
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn runner_input_rows(
     path: &Path,
     key: &str,
@@ -4955,6 +5250,20 @@ fn sealqa_judge_prediction_slot_key(row: &SealQaJudgePredictionRow) -> String {
     )
 }
 
+fn runner_output_slot_key(row: &RunnerOutputPredictionRow) -> String {
+    format!(
+        "{}|{}|{}|{}",
+        row.dataset_id, row.split_id, row.split_role, row.candidate_role
+    )
+}
+
+fn runner_input_entry_key(entry: &RunnerInputManifestEntry) -> String {
+    format!(
+        "{}|{}|{}|{}",
+        entry.dataset_id, entry.split_id, entry.split_role, entry.candidate_role
+    )
+}
+
 fn officeqa_score_evidence_id(slot: &FinalScoreSlot) -> String {
     officeqa_score_evidence_id_from_key(&final_score_slot_key(slot))
 }
@@ -5010,6 +5319,295 @@ fn score_evidence_id_component(value: &str) -> String {
         }
     }
     component.trim_matches('-').to_owned()
+}
+
+fn read_runner_input_manifest(
+    root: &Path,
+    manifest_fingerprint: &ManifestFingerprintReport,
+    scorer_fingerprint: &ScorerFingerprintReport,
+) -> Result<RunnerInputManifestFile, ManifestError> {
+    let path = root.join(RUNNER_INPUT_MANIFEST_PATH);
+    let bytes = fs::read(&path).map_err(|source| ManifestError::Read {
+        path: path.clone(),
+        source,
+    })?;
+    let manifest = serde_json::from_slice::<RunnerInputManifestFile>(&bytes).map_err(|source| {
+        ManifestError::RunnerInputManifestJson {
+            path: path.clone(),
+            source,
+        }
+    })?;
+    validate_runner_input_manifest(&path, manifest, manifest_fingerprint, scorer_fingerprint)
+}
+
+fn validate_runner_input_manifest(
+    path: &Path,
+    manifest: RunnerInputManifestFile,
+    manifest_fingerprint: &ManifestFingerprintReport,
+    scorer_fingerprint: &ScorerFingerprintReport,
+) -> Result<RunnerInputManifestFile, ManifestError> {
+    if manifest.schema_version != 1 {
+        return Err(runner_input_batch_error(
+            path,
+            format!(
+                "expected schema_version 1, found {}",
+                manifest.schema_version
+            ),
+        ));
+    }
+    if manifest.manifest_fingerprint != manifest_fingerprint.fingerprint {
+        return Err(runner_input_batch_error(
+            path,
+            format!(
+                "manifest fingerprint mismatch: expected `{}`, found `{}`",
+                manifest_fingerprint.fingerprint, manifest.manifest_fingerprint
+            ),
+        ));
+    }
+    if manifest.scorer_fingerprint != scorer_fingerprint.fingerprint {
+        return Err(runner_input_batch_error(
+            path,
+            format!(
+                "scorer fingerprint mismatch: expected `{}`, found `{}`",
+                scorer_fingerprint.fingerprint, manifest.scorer_fingerprint
+            ),
+        ));
+    }
+    if manifest.entries.is_empty() {
+        return Err(runner_input_batch_error(
+            path,
+            "runner input manifest must contain at least one entry",
+        ));
+    }
+    let mut keys = BTreeSet::new();
+    for entry in &manifest.entries {
+        validate_runner_input_manifest_entry(path, entry)?;
+        let key = runner_input_entry_key(entry);
+        if !keys.insert(key.clone()) {
+            return Err(runner_input_batch_error(
+                path,
+                format!("runner input manifest repeats entry `{key}`"),
+            ));
+        }
+    }
+    Ok(manifest)
+}
+
+fn validate_runner_input_manifest_entry(
+    path: &Path,
+    entry: &RunnerInputManifestEntry,
+) -> Result<(), ManifestError> {
+    for (field, value) in [
+        ("dataset_id", &entry.dataset_id),
+        ("split_id", &entry.split_id),
+        ("split_role", &entry.split_role),
+        ("candidate_role", &entry.candidate_role),
+        ("split_fingerprint", &entry.split_fingerprint),
+        (
+            "role_source_id_fingerprint",
+            &entry.role_source_id_fingerprint,
+        ),
+    ] {
+        if value.trim().is_empty() {
+            return Err(runner_input_batch_error(
+                path,
+                format!("runner input field `{field}` must not be empty"),
+            ));
+        }
+    }
+    if !matches!(entry.dataset_id.as_str(), "officeqa" | "sealqa") {
+        return Err(runner_input_batch_error(
+            path,
+            format!(
+                "runner input entry `{}` has unsupported dataset `{}`",
+                runner_input_entry_key(entry),
+                entry.dataset_id
+            ),
+        ));
+    }
+    if entry.expected_rows == 0 || entry.input_rows != entry.expected_rows {
+        return Err(runner_input_batch_error(
+            path,
+            format!(
+                "runner input entry `{}` input rows must equal nonzero expected rows",
+                runner_input_entry_key(entry)
+            ),
+        ));
+    }
+    validate_runner_input_artifact_shape(path, entry)?;
+    Ok(())
+}
+
+fn validate_runner_input_artifact_shape(
+    sidecar_path: &Path,
+    entry: &RunnerInputManifestEntry,
+) -> Result<(), ManifestError> {
+    let key = runner_input_entry_key(entry);
+    let artifact = &entry.input_artifact;
+    if artifact.relative_path.trim().is_empty() {
+        return Err(runner_input_batch_error(
+            sidecar_path,
+            format!("runner input `{key}` artifact path must not be empty"),
+        ));
+    }
+    let relative_path = Path::new(&artifact.relative_path);
+    if !is_safe_relative_path(relative_path) {
+        return Err(runner_input_batch_error(
+            sidecar_path,
+            format!(
+                "runner input `{key}` artifact path `{}` must be a safe relative path",
+                artifact.relative_path
+            ),
+        ));
+    }
+    if !is_sha256_hex(&artifact.sha256) {
+        return Err(runner_input_batch_error(
+            sidecar_path,
+            format!("runner input `{key}` artifact sha256 must be 64 hex characters"),
+        ));
+    }
+    if artifact.bytes == 0 {
+        return Err(runner_input_batch_error(
+            sidecar_path,
+            format!("runner input `{key}` artifact must not be empty"),
+        ));
+    }
+    Ok(())
+}
+
+fn read_runner_input_artifact_source_ids(
+    root: &Path,
+    sidecar_path: &Path,
+    entry: &RunnerInputManifestEntry,
+) -> Result<BTreeSet<String>, ManifestError> {
+    let key = runner_input_entry_key(entry);
+    let relative_path = Path::new(&entry.input_artifact.relative_path);
+    let artifact_path = root.join(relative_path);
+    let metadata = fs::metadata(&artifact_path).map_err(|source| {
+        runner_input_batch_error(
+            sidecar_path,
+            format!(
+                "runner input `{key}` artifact `{}` is not readable: {source}",
+                entry.input_artifact.relative_path
+            ),
+        )
+    })?;
+    if !metadata.is_file() {
+        return Err(runner_input_batch_error(
+            sidecar_path,
+            format!(
+                "runner input `{key}` artifact `{}` is not a file",
+                entry.input_artifact.relative_path
+            ),
+        ));
+    }
+    if metadata.len() != entry.input_artifact.bytes {
+        return Err(runner_input_batch_error(
+            sidecar_path,
+            format!(
+                "runner input `{key}` artifact `{}` has {} bytes, expected {}",
+                entry.input_artifact.relative_path,
+                metadata.len(),
+                entry.input_artifact.bytes
+            ),
+        ));
+    }
+    let actual_sha256 = sha256_file(&artifact_path)?;
+    if actual_sha256 != entry.input_artifact.sha256 {
+        return Err(runner_input_batch_error(
+            sidecar_path,
+            format!(
+                "runner input `{key}` artifact `{}` sha256 mismatch",
+                entry.input_artifact.relative_path
+            ),
+        ));
+    }
+    let body = fs::read_to_string(&artifact_path).map_err(|source| ManifestError::Read {
+        path: artifact_path.clone(),
+        source,
+    })?;
+    let mut source_ids = BTreeSet::new();
+    for (line_index, line) in body.lines().enumerate() {
+        if line.trim().is_empty() {
+            return Err(runner_input_batch_error(
+                sidecar_path,
+                format!(
+                    "runner input `{key}` artifact has blank line {}",
+                    line_index + 1
+                ),
+            ));
+        }
+        let row = serde_json::from_str::<RunnerInputArtifactRow>(line).map_err(|source| {
+            runner_input_batch_error(
+                sidecar_path,
+                format!(
+                    "runner input `{key}` artifact line {} is invalid JSON: {source}",
+                    line_index + 1
+                ),
+            )
+        })?;
+        validate_runner_input_artifact_row(sidecar_path, &key, &row)?;
+        if !source_ids.insert(row.source_id.clone()) {
+            return Err(runner_input_batch_error(
+                sidecar_path,
+                format!(
+                    "runner input `{key}` artifact repeats source id `{}`",
+                    row.source_id
+                ),
+            ));
+        }
+    }
+    if u64::try_from(source_ids.len()).expect("runner input source-id count fits u64")
+        != entry.input_rows
+    {
+        return Err(runner_input_batch_error(
+            sidecar_path,
+            format!(
+                "runner input `{key}` artifact has {} source ids, expected {}",
+                source_ids.len(),
+                entry.input_rows
+            ),
+        ));
+    }
+    Ok(source_ids)
+}
+
+fn validate_runner_input_artifact_row(
+    path: &Path,
+    key: &str,
+    row: &RunnerInputArtifactRow,
+) -> Result<(), ManifestError> {
+    if row.source_id.trim().is_empty() {
+        return Err(runner_input_batch_error(
+            path,
+            format!("runner input `{key}` artifact row source_id must not be empty"),
+        ));
+    }
+    let Some(input) = row.input.as_object() else {
+        return Err(runner_input_batch_error(
+            path,
+            format!("runner input `{key}` artifact row input must be an object"),
+        ));
+    };
+    for forbidden in [
+        "answer",
+        "ground_truth",
+        "prediction",
+        "reference",
+        "score",
+        "target",
+    ] {
+        if input.contains_key(forbidden) {
+            return Err(runner_input_batch_error(
+                path,
+                format!(
+                    "runner input `{key}` artifact row `{}` exposes forbidden field `{forbidden}`",
+                    row.source_id
+                ),
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn read_score_result_manifest(
@@ -5920,6 +6518,13 @@ fn sealqa_judge_request_error(path: &Path, message: String) -> ManifestError {
 
 fn runner_input_batch_error(path: &Path, message: impl Into<String>) -> ManifestError {
     ManifestError::RunnerInputBatch {
+        path: path.to_owned(),
+        message: message.into(),
+    }
+}
+
+fn runner_output_error(path: &Path, message: impl Into<String>) -> ManifestError {
+    ManifestError::RunnerOutput {
         path: path.to_owned(),
         message: message.into(),
     }

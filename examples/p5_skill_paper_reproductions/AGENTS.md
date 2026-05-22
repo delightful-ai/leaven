@@ -205,6 +205,11 @@ belong in their owning crates.
   slots, then rewrites the manifest and final report. It provides source ids
   and inputs only; it must not include targets, references, predictions,
   scores, or BrowseComp transfer rows, and it is not live-run proof.
+- `just evoskill-paper-runner-outputs <outputs.jsonl>` imports strict runner
+  prediction JSONL that names the current runner input artifact hash for each
+  row. It validates the runner input manifest and exact source-id coverage,
+  then scores OfficeQA outputs and prepares SealQA judge requests. It does not
+  run the agent, call a judge, approve spend, or prove paper-close.
 - `just evoskill-paper-sealqa-judge-requests <predictions.jsonl>` writes
   `tmp/replication/evoskill/sealqa_judge_request_manifest.json` plus pinned
   judge-only request JSONL from strict SealQA prediction rows, then rewrites the
