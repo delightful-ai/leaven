@@ -1,11 +1,17 @@
 use std::fmt::Write as _;
 use std::fs;
+use std::fs::File;
+use std::sync::Arc;
 
+use arrow_array::builder::{ListBuilder, StringBuilder};
+use arrow_array::{ArrayRef, RecordBatch, StringArray};
+use arrow_schema::{DataType, Field, Schema};
 use leaven_kernel::CaseId;
 use p5_skill_paper_reproductions::evoskill::{
     ManifestBuildInput, MaterializationExactness, SourceMaterializationStatus,
-    build_evoskill_replica_manifest, materialize_officeqa_source,
+    build_evoskill_replica_manifest, materialize_officeqa_source, materialize_sealqa_source,
 };
+use parquet::arrow::ArrowWriter;
 
 #[test]
 fn officeqa_csv_lowers_to_row_stable_cases_with_targets_hidden_from_inputs() {
@@ -116,6 +122,63 @@ fn replica_manifest_embeds_materialization_but_stays_blocked_before_paper_close(
     );
 }
 
+#[test]
+fn sealqa_parquet_lowers_to_cases_and_row_order_substitute_split() {
+    let root = tempfile::tempdir().unwrap();
+    write_sealqa_parquet(root.path(), 111);
+
+    let materialization = materialize_sealqa_source(&ManifestBuildInput::new(root.path()))
+        .unwrap()
+        .expect("SealQA parquet exists");
+
+    assert_eq!(
+        materialization.report.source_status,
+        SourceMaterializationStatus::Materialized
+    );
+    assert_eq!(materialization.report.source_rows, Some(111));
+    assert_eq!(materialization.report.case_rows, Some(111));
+    assert_eq!(
+        materialization.report.target_policy,
+        "answers are scorer targets only; runner inputs exclude answers"
+    );
+    assert_eq!(
+        materialization
+            .report
+            .source_row_fingerprint
+            .as_deref()
+            .unwrap()
+            .len(),
+        64
+    );
+
+    let first = &materialization.rows.rows()[0];
+    assert_eq!(first.source_id(), "sealqa:000");
+    assert_eq!(first.input().question, "Seal question 0?");
+    assert_eq!(first.input().topic.as_deref(), Some("topic-a"));
+    assert_eq!(first.input().urls, vec!["https://example.test/seal/0"]);
+    assert_eq!(first.target().map(String::as_str), Some("Seal answer 0"));
+
+    let split = materialization
+        .report
+        .split_materializations
+        .iter()
+        .find(|split| split.id == "sealqa_row_order_train_11_heldout_100")
+        .expect("SealQA row-order substitute split exists");
+    assert_eq!(
+        split.exactness,
+        MaterializationExactness::PaperCloseSubstitute
+    );
+    assert_eq!(split.train_rows, 11);
+    assert_eq!(split.validation_rows, None);
+    assert_eq!(split.test_rows, Some(100));
+    assert_eq!(split.split_fingerprint.as_deref().unwrap().len(), 64);
+    assert!(
+        split
+            .blocker_ids
+            .contains(&"sealqa_split_manifest".to_owned())
+    );
+}
+
 fn write_officeqa_full_csv(root: &std::path::Path, rows: usize) {
     let path = root.join("tmp/repros/officeqa/officeqa_full.csv");
     fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -134,4 +197,65 @@ fn write_officeqa_full_csv(root: &std::path::Path, rows: usize) {
         .unwrap();
     }
     fs::write(path, csv).unwrap();
+}
+
+fn write_sealqa_parquet(root: &std::path::Path, rows: usize) {
+    let path = root.join("tmp/replication/evoskill/sealqa/seal-0.parquet");
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let schema = Arc::new(Schema::new(vec![
+        Field::new("canary", DataType::Utf8, false),
+        Field::new("question", DataType::Utf8, false),
+        Field::new("answer", DataType::Utf8, false),
+        Field::new("topic", DataType::Utf8, true),
+        Field::new(
+            "urls",
+            DataType::List(Arc::new(Field::new("item", DataType::Utf8, true))),
+            true,
+        ),
+    ]));
+    let canaries = (0..rows)
+        .map(|index| format!("duplicate-canary-{}", index % 4))
+        .collect::<Vec<_>>();
+    let questions = (0..rows)
+        .map(|index| format!("Seal question {index}?"))
+        .collect::<Vec<_>>();
+    let answers = (0..rows)
+        .map(|index| format!("Seal answer {index}"))
+        .collect::<Vec<_>>();
+    let topics = (0..rows)
+        .map(|index| {
+            if index % 2 == 0 {
+                Some("topic-a".to_owned())
+            } else {
+                Some("topic-b".to_owned())
+            }
+        })
+        .collect::<Vec<_>>();
+    let urls = {
+        let values = StringBuilder::new();
+        let mut builder = ListBuilder::new(values);
+        for index in 0..rows {
+            builder
+                .values()
+                .append_value(format!("https://example.test/seal/{index}"));
+            builder.append(true);
+        }
+        Arc::new(builder.finish()) as ArrayRef
+    };
+    let batch = RecordBatch::try_new(
+        schema.clone(),
+        vec![
+            Arc::new(StringArray::from(canaries)) as ArrayRef,
+            Arc::new(StringArray::from(questions)) as ArrayRef,
+            Arc::new(StringArray::from(answers)) as ArrayRef,
+            Arc::new(StringArray::from(topics)) as ArrayRef,
+            urls,
+        ],
+    )
+    .unwrap();
+
+    let file = File::create(path).unwrap();
+    let mut writer = ArrowWriter::try_new(file, schema, None).unwrap();
+    writer.write(&batch).unwrap();
+    writer.close().unwrap();
 }

@@ -64,7 +64,7 @@ acceptance_path:
       - examples/p5_skill_paper_reproductions/tests/evoskill_manifest.rs
       - target/evoskill-paper-close/replica-manifest.json after running `just evoskill-paper-manifest`
   - id: source_and_split_materialization
-    status: in_progress
+    status: proven
     requirement: >
       OfficeQA and SealQA inputs lower into Leaven case envelopes with stable row
       identity, hidden targets, and exact or documented paper-close
@@ -73,7 +73,7 @@ acceptance_path:
       - examples/p5_skill_paper_reproductions/src/evoskill.rs
       - examples/p5_skill_paper_reproductions/tests/evoskill_materialization.rs
       - "`cargo test -p p5_skill_paper_reproductions --test evoskill_materialization`"
-      - "OfficeQA is materialized as a documented difficulty-stratified substitute; SealQA remains blocked on a Rust parquet row reader and exact split manifest."
+      - "OfficeQA is materialized as a documented difficulty-stratified substitute; SealQA is materialized from Parquet through leaven-eval-parquet with row-order source ids because observed canary values are not unique, plus a documented row-order 10 percent train / held-out substitute. This proves no-spend materialization and split fingerprints only; exact paper split membership, SealQA judge scoring, and live scores remain separate blockers."
   - id: paper_scorer
     status: proven
     requirement: >

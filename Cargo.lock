@@ -4520,6 +4520,8 @@ dependencies = [
 name = "p5_skill_paper_reproductions"
 version = "0.0.0"
 dependencies = [
+ "arrow-array",
+ "arrow-schema",
  "clap",
  "csv",
  "futures",
@@ -4528,11 +4530,13 @@ dependencies = [
  "leaven-artifact-git",
  "leaven-core",
  "leaven-eval",
+ "leaven-eval-parquet",
  "leaven-evidence",
  "leaven-kernel",
  "leaven-population",
  "leaven-workspace",
  "leaven-workspace-local",
+ "parquet",
  "serde",
  "serde_json",
  "sha2",
