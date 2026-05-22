@@ -300,6 +300,12 @@ pub struct SealQaSourceMaterialization {
     pub report: DatasetMaterializationReport,
 }
 
+#[derive(Clone, Debug)]
+struct EvoSkillSourceMaterializations {
+    officeqa: Option<OfficeQaSourceMaterialization>,
+    sealqa: Option<SealQaSourceMaterialization>,
+}
+
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct ScorerManifest {
     pub id: String,
@@ -733,10 +739,18 @@ pub enum ManifestError {
 pub fn build_evoskill_replica_manifest(
     input: &ManifestBuildInput,
 ) -> Result<EvoSkillReplicaManifest, ManifestError> {
+    let sources = materialize_evoskill_sources(input)?;
+    build_evoskill_replica_manifest_from_sources(input, &sources)
+}
+
+fn build_evoskill_replica_manifest_from_sources(
+    input: &ManifestBuildInput,
+    sources: &EvoSkillSourceMaterializations,
+) -> Result<EvoSkillReplicaManifest, ManifestError> {
     let source_revisions = source_revisions(&input.root);
     let artifacts = source_artifacts(&input.root)?;
     let datasets = dataset_requirements();
-    let source_materializations = source_materializations(input)?;
+    let source_materializations = source_materialization_reports(sources);
     let source_universe = source_universe(&datasets, &source_materializations);
     let scorer = scorer_manifest(&artifacts);
 
@@ -767,15 +781,16 @@ pub fn build_evoskill_replica_manifest(
 pub fn build_evoskill_final_report(
     input: &ManifestBuildInput,
 ) -> Result<EvoSkillFinalReport, ManifestError> {
-    let manifest = build_evoskill_replica_manifest(input)?;
+    let sources = materialize_evoskill_sources(input)?;
+    let manifest = build_evoskill_replica_manifest_from_sources(input, &sources)?;
     let manifest_fingerprint = manifest_fingerprint_report(&manifest)?;
     let scorer_fingerprint = scorer_fingerprint_report(&manifest.scorer);
-    let loop_report = if has_materialized_officeqa(&manifest) {
+    let loop_report = if let Some(officeqa) = &sources.officeqa {
         Some(run_evoskill_replica_mechanics_with_manifest(
-            input,
             &manifest,
             &manifest_fingerprint,
             &scorer_fingerprint,
+            officeqa,
         )?)
     } else {
         None
@@ -878,10 +893,19 @@ pub fn materialize_officeqa_source(
     Ok(Some(OfficeQaSourceMaterialization { rows, report }))
 }
 
-fn source_materializations(
+fn materialize_evoskill_sources(
     input: &ManifestBuildInput,
-) -> Result<Vec<DatasetMaterializationReport>, ManifestError> {
-    let officeqa = materialize_officeqa_source(input)?.map_or_else(
+) -> Result<EvoSkillSourceMaterializations, ManifestError> {
+    Ok(EvoSkillSourceMaterializations {
+        officeqa: materialize_officeqa_source(input)?,
+        sealqa: materialize_sealqa_source(input)?,
+    })
+}
+
+fn source_materialization_reports(
+    sources: &EvoSkillSourceMaterializations,
+) -> Vec<DatasetMaterializationReport> {
+    let officeqa = sources.officeqa.as_ref().map_or_else(
         || {
             missing_materialization_report(
                 "officeqa",
@@ -889,13 +913,13 @@ fn source_materializations(
                 "officeqa_full_csv_missing",
             )
         },
-        |materialization| materialization.report,
+        |materialization| materialization.report.clone(),
     );
-    let sealqa = materialize_sealqa_source(input)?.map_or_else(
+    let sealqa = sources.sealqa.as_ref().map_or_else(
         || missing_materialization_report("sealqa", "sealqa_parquet", "sealqa_parquet_missing"),
-        |materialization| materialization.report,
+        |materialization| materialization.report.clone(),
     );
-    Ok(vec![officeqa, sealqa])
+    vec![officeqa, sealqa]
 }
 
 fn source_universe(
@@ -1250,41 +1274,44 @@ fn sealqa_row_order_split_report(
 pub fn run_evoskill_replica_mechanics(
     input: &ManifestBuildInput,
 ) -> Result<EvoSkillReplicaLoopReport, ManifestError> {
-    let manifest = build_evoskill_replica_manifest(input)?;
+    let sources = materialize_evoskill_sources(input)?;
+    let manifest = build_evoskill_replica_manifest_from_sources(input, &sources)?;
     let manifest_fingerprint = manifest_fingerprint_report(&manifest)?;
     let scorer_fingerprint = scorer_fingerprint_report(&manifest.scorer);
+    let officeqa = sources
+        .officeqa
+        .as_ref()
+        .ok_or_else(|| ManifestError::LoopBlocked {
+            reason: "OfficeQA full CSV is required for the no-spend replica loop".to_owned(),
+        })?;
     run_evoskill_replica_mechanics_with_manifest(
-        input,
         &manifest,
         &manifest_fingerprint,
         &scorer_fingerprint,
+        officeqa,
     )
 }
 
 fn run_evoskill_replica_mechanics_with_manifest(
-    input: &ManifestBuildInput,
     manifest: &EvoSkillReplicaManifest,
     manifest_fingerprint: &ManifestFingerprintReport,
     scorer_fingerprint: &ScorerFingerprintReport,
+    officeqa: &OfficeQaSourceMaterialization,
 ) -> Result<EvoSkillReplicaLoopReport, ManifestError> {
-    let officeqa =
-        materialize_officeqa_source(input)?.ok_or_else(|| ManifestError::LoopBlocked {
-            reason: "OfficeQA full CSV is required for the no-spend replica loop".to_owned(),
-        })?;
     let run_manifest = evoskill_replica_loop_run_manifest(
         manifest,
         manifest_fingerprint,
         scorer_fingerprint,
-        &officeqa,
+        officeqa,
     )?;
     let git = create_agentic_git_harness()?;
-    let mut state = initial_replica_loop_state(&officeqa, &git)?;
+    let mut state = initial_replica_loop_state(officeqa, &git)?;
     let mut iterations = Vec::new();
     let mut checkpoint_resume = None;
 
     for (index, child_score) in REPLICA_CHILD_SCORES.into_iter().enumerate() {
         let iteration = u64::try_from(index + 1).expect("iteration index fits in u64");
-        let report = run_replica_iteration(&mut state, &officeqa, &git, iteration, child_score)?;
+        let report = run_replica_iteration(&mut state, officeqa, &git, iteration, child_score)?;
         iterations.push(report);
         if iteration == EVOSKILL_REPLICA_RESUME_AFTER_ITERATION {
             checkpoint_resume = Some(round_trip_replica_checkpoint(&mut state, iteration)?);
@@ -1314,6 +1341,7 @@ fn evoskill_replica_loop_run_manifest(
 ) -> Result<EvoSkillReplicaLoopRunManifest, ManifestError> {
     let train_split = officeqa_loop_train_split(&officeqa.report)?;
     let train_role = split_role_report(train_split, "train")?;
+    validate_loop_source_matches_manifest(manifest, &officeqa.report, train_split, train_role)?;
     let source_row_fingerprint =
         officeqa
             .report
@@ -1361,6 +1389,79 @@ fn evoskill_replica_loop_run_manifest(
     })
 }
 
+fn validate_loop_source_matches_manifest(
+    manifest: &EvoSkillReplicaManifest,
+    officeqa_report: &DatasetMaterializationReport,
+    train_split: &SplitMaterializationReport,
+    train_role: &SplitRoleMaterializationReport,
+) -> Result<(), ManifestError> {
+    let manifest_officeqa = manifest_materialization(manifest, "officeqa")?;
+    let manifest_train_split = manifest_split(manifest_officeqa, &train_split.id)?;
+    let manifest_train_role = split_role_report(manifest_train_split, &train_role.role)?;
+    if manifest_officeqa.source_artifact_id != officeqa_report.source_artifact_id
+        || manifest_officeqa.source_rows != officeqa_report.source_rows
+        || manifest_officeqa.case_rows != officeqa_report.case_rows
+        || manifest_officeqa.source_row_fingerprint != officeqa_report.source_row_fingerprint
+        || manifest_officeqa.source_artifact_sha256 != officeqa_report.source_artifact_sha256
+    {
+        return Err(ManifestError::LoopBlocked {
+            reason: "OfficeQA loop source materialization drifted from the replica manifest"
+                .to_owned(),
+        });
+    }
+    if manifest_train_split.exactness != train_split.exactness
+        || manifest_train_split.train_rows != train_split.train_rows
+        || manifest_train_split.validation_rows != train_split.validation_rows
+        || manifest_train_split.test_rows != train_split.test_rows
+        || manifest_train_split.split_fingerprint != train_split.split_fingerprint
+    {
+        return Err(ManifestError::LoopBlocked {
+            reason: format!(
+                "OfficeQA loop train split `{}` drifted from the replica manifest",
+                train_split.id
+            ),
+        });
+    }
+    if manifest_train_role.rows != train_role.rows
+        || manifest_train_role.source_id_fingerprint != train_role.source_id_fingerprint
+        || manifest_train_role.source_ids != train_role.source_ids
+    {
+        return Err(ManifestError::LoopBlocked {
+            reason: format!(
+                "OfficeQA loop train role `{}` drifted from the replica manifest",
+                train_role.role
+            ),
+        });
+    }
+    Ok(())
+}
+
+fn manifest_materialization<'a>(
+    manifest: &'a EvoSkillReplicaManifest,
+    dataset_id: &str,
+) -> Result<&'a DatasetMaterializationReport, ManifestError> {
+    manifest
+        .source_materializations
+        .iter()
+        .find(|materialization| materialization.dataset_id == dataset_id)
+        .ok_or_else(|| ManifestError::LoopBlocked {
+            reason: format!("replica manifest is missing `{dataset_id}` materialization"),
+        })
+}
+
+fn manifest_split<'a>(
+    materialization: &'a DatasetMaterializationReport,
+    split_id: &str,
+) -> Result<&'a SplitMaterializationReport, ManifestError> {
+    materialization
+        .split_materializations
+        .iter()
+        .find(|split| split.id == split_id)
+        .ok_or_else(|| ManifestError::LoopBlocked {
+            reason: format!("replica manifest is missing split `{split_id}`"),
+        })
+}
+
 fn officeqa_loop_train_split(
     report: &DatasetMaterializationReport,
 ) -> Result<&SplitMaterializationReport, ManifestError> {
@@ -1386,16 +1487,6 @@ fn split_role_report<'a>(
         .find(|manifest| manifest.role == role)
         .ok_or_else(|| ManifestError::LoopBlocked {
             reason: format!("split `{}` is missing role `{role}`", split.id),
-        })
-}
-
-fn has_materialized_officeqa(manifest: &EvoSkillReplicaManifest) -> bool {
-    manifest
-        .source_materializations
-        .iter()
-        .any(|materialization| {
-            materialization.dataset_id == "officeqa"
-                && materialization.source_status == SourceMaterializationStatus::Materialized
         })
 }
 
