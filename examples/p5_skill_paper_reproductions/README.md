@@ -73,7 +73,11 @@ official simple-evals judge path. `external_judge_run` requires a nonempty
 `judge_template_fingerprint` values matching the pinned scorer template for the
 dataset. Reported score slots preserve the id as `score_evidence_id`, the
 scoring kind, the optional approval id, and the checked artifact as
-`score_evidence_artifact`. It is score evidence plumbing, not permission to
+`score_evidence_artifact`. Report-level errors, ablations, and the
+`paper_scorer` gate are recalculated after sidecar import, but only complete
+approved external judge evidence for every SealQA score slot clears the
+`sealqa_judge_scored_run` blocker. Partial imports stay blocked, and live-run
+approval remains separate. It is score evidence plumbing, not permission to
 treat fixtures, stale runs, tampered evidence files, missing SealQA judge
 execution, missing transferred BrowseComp runs, official BrowseComp judge
 approval, or missing provider approval as paper scores.

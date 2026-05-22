@@ -1085,7 +1085,7 @@ Date: 2026-05-22.
 Provider/model spend: none.
 Cloud/GPU spend: none.
 
-The P5 final report now declares schema v17 with optional
+The P5 final report now declares schema v18 with optional
 `tmp/replication/evoskill/score_result_manifest.json` ingestion. The sidecar is
 strict score evidence plumbing, not a live run: it must name schema version 5,
 the current manifest fingerprint, the current scorer fingerprint, total cost,
@@ -1123,7 +1123,16 @@ artifact path/hash/byte count as `score_evidence_artifact`; unreported and
 blocked score slots keep those fields null. This makes score provenance
 report-visible instead of only validated during import and removes the
 file-binding-only fake-proof gap for deterministic replay versus judge-backed
-scores. It still does not approve spend, run the provider, execute the SealQA
+evidence.
+
+Report-level errors, ablations, and the `paper_scorer` gate are now derived
+after score sidecar import. A single SealQA judge score import reports only its
+slot and leaves `sealqa_judge_scored_run` as a report blocker. The report clears
+that blocker and proves the `paper_scorer` gate only after every SealQA score
+slot has reported approved `external_judge_run` evidence with the pinned judge
+template fingerprint. The separate `live_run_spend_approval` gate remains
+blocked until a bounded live agent run is explicitly approved. It still does
+not approve spend, run the provider, execute the SealQA
 judge, run the transferred BrowseComp skill, or manufacture missing scores.
 
 This gives future approved live or judge runs a refusal-capable Rust path for

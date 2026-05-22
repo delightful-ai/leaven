@@ -1111,15 +1111,20 @@ pub fn build_evoskill_final_report(
         FinalReportCost::default()
     };
     let live_run_gate = final_report_live_run_gate(&manifest);
-    let paper_close_gates =
-        final_report_paper_close_gates(&manifest, loop_report.as_ref(), &live_run_gate);
-    let errors = final_report_errors(&manifest);
-    let ablations = final_report_ablations(&manifest);
+    let report_blockers = final_report_blockers(&manifest, &score_slots);
+    let paper_close_gates = final_report_paper_close_gates(
+        &manifest,
+        loop_report.as_ref(),
+        &live_run_gate,
+        &score_slots,
+    );
+    let errors = final_report_errors(&report_blockers);
+    let ablations = final_report_ablations(&manifest, &score_slots);
     let exactness = manifest.exactness.clone();
     let proxy_rejection_gates = proxy_rejection_gates();
 
     Ok(EvoSkillFinalReport {
-        schema_version: 17,
+        schema_version: 18,
         exactness,
         manifest,
         loop_report,
@@ -4186,9 +4191,23 @@ fn blocked_score_slot_audit() -> FinalScoreSlotAudit {
     }
 }
 
-fn final_report_errors(manifest: &EvoSkillReplicaManifest) -> Vec<FinalReportError> {
+fn final_report_blockers(
+    manifest: &EvoSkillReplicaManifest,
+    score_slots: &[FinalScoreSlot],
+) -> Vec<ReplicationBlocker> {
+    let sealqa_judge_scores_complete = sealqa_judge_score_evidence_complete(score_slots);
     manifest
         .blockers
+        .iter()
+        .filter(|blocker| {
+            !(sealqa_judge_scores_complete && blocker.id == "sealqa_judge_scored_run")
+        })
+        .cloned()
+        .collect()
+}
+
+fn final_report_errors(blockers: &[ReplicationBlocker]) -> Vec<FinalReportError> {
+    blockers
         .iter()
         .map(|blocker| FinalReportError {
             blocker_id: blocker.id.clone(),
@@ -4197,16 +4216,61 @@ fn final_report_errors(manifest: &EvoSkillReplicaManifest) -> Vec<FinalReportErr
         .collect()
 }
 
+fn sealqa_judge_score_evidence_complete(score_slots: &[FinalScoreSlot]) -> bool {
+    let mut sealqa_slots = score_slots
+        .iter()
+        .filter(|slot| slot.dataset_id == "sealqa")
+        .peekable();
+    if sealqa_slots.peek().is_none() {
+        return false;
+    }
+    sealqa_slots.all(|slot| {
+        slot.status == FinalScoreStatus::Reported
+            && slot.score.is_some()
+            && slot.score_evidence_id.is_some()
+            && slot.score_evidence_kind == Some(ScoreEvidenceKind::ExternalJudgeRun)
+            && slot
+                .score_evidence_approval_id
+                .as_deref()
+                .is_some_and(|approval_id| !approval_id.trim().is_empty())
+            && slot.score_evidence_artifact.is_some()
+            && !slot
+                .blocker_ids
+                .iter()
+                .any(|blocker| blocker == "sealqa_judge_scored_run")
+    })
+}
+
 fn final_report_paper_close_gates(
     manifest: &EvoSkillReplicaManifest,
     loop_report: Option<&EvoSkillReplicaLoopReport>,
     live_run_gate: &LiveRunGateReport,
+    score_slots: &[FinalScoreSlot],
 ) -> Vec<PaperCloseGateReport> {
     let source_blocker_ids = manifest
         .source_blockers
         .iter()
         .map(|blocker| blocker.blocker_id.clone())
         .collect::<Vec<_>>();
+    let sealqa_judge_scores_complete = sealqa_judge_score_evidence_complete(score_slots);
+    let paper_scorer_status = if sealqa_judge_scores_complete {
+        PaperCloseGateStatus::Proven
+    } else {
+        PaperCloseGateStatus::ApprovalBlocked
+    };
+    let paper_scorer_blockers = if sealqa_judge_scores_complete {
+        Vec::new()
+    } else {
+        vec![
+            "sealqa_judge_scored_run".to_owned(),
+            "live_run_spend_approval".to_owned(),
+        ]
+    };
+    let paper_scorer_note = if sealqa_judge_scores_complete {
+        "OfficeQA scorer laws, source-backed SealQA judge template/request surface, and approved external SealQA judge score sidecars cover every SealQA score slot"
+    } else {
+        "OfficeQA scorer laws and the source-backed SealQA judge template/request surface are proven; complete approved SealQA judge scoring still needs approval/evidence"
+    };
     vec![
         paper_close_gate(
             "replica_manifest",
@@ -4226,12 +4290,9 @@ fn final_report_paper_close_gates(
         ),
         paper_close_gate(
             "paper_scorer",
-            PaperCloseGateStatus::ApprovalBlocked,
-            vec![
-                "sealqa_judge_scored_run".to_owned(),
-                "live_run_spend_approval".to_owned(),
-            ],
-            "OfficeQA scorer laws and the source-backed SealQA judge template/request surface are proven; live SealQA judge scoring still needs approval",
+            paper_scorer_status,
+            paper_scorer_blockers,
+            paper_scorer_note,
         ),
         paper_close_gate(
             "full_loop_mechanics",
@@ -4282,15 +4343,20 @@ fn paper_close_gate(
     }
 }
 
-fn final_report_ablations(manifest: &EvoSkillReplicaManifest) -> Vec<AblationStatusReport> {
-    let all_blockers = manifest
-        .blockers
+fn final_report_ablations(
+    manifest: &EvoSkillReplicaManifest,
+    score_slots: &[FinalScoreSlot],
+) -> Vec<AblationStatusReport> {
+    let sealqa_judge_scores_complete = sealqa_judge_score_evidence_complete(score_slots);
+    let all_blockers = final_report_blockers(manifest, score_slots)
         .iter()
         .map(|blocker| blocker.id.clone())
         .collect::<Vec<_>>();
     let source_blocked = !manifest.source_blockers.is_empty();
     let main_run_note = if source_blocked {
         "requires paper split/source denominator and live scored run"
+    } else if sealqa_judge_scores_complete {
+        "source/split denominator and approved SealQA judge evidence are present; remaining scoring work is blocked on approved live execution"
     } else {
         "source/split denominator is materialized under the declared policy; scoring remains blocked on approved live execution and SealQA judge scoring"
     };
@@ -4314,14 +4380,17 @@ fn final_report_ablations(manifest: &EvoSkillReplicaManifest) -> Vec<AblationSta
     {
         "BrowseComp transfer denominator is absent; no transfer score can be interpreted".to_owned()
     } else {
-        extend_unique(
-            &mut browsecomp_blockers,
-            &[
-                "sealqa_judge_scored_run".to_owned(),
-                "live_run_spend_approval".to_owned(),
-            ],
-        );
-        "BrowseComp transfer denominator is materialized; scoring remains blocked on approved SealQA skill production and live baseline/transfer runs".to_owned()
+        let mut score_blockers = Vec::new();
+        if !sealqa_judge_scores_complete {
+            score_blockers.push("sealqa_judge_scored_run".to_owned());
+        }
+        score_blockers.push("live_run_spend_approval".to_owned());
+        extend_unique(&mut browsecomp_blockers, &score_blockers);
+        if sealqa_judge_scores_complete {
+            "BrowseComp transfer denominator and approved SealQA judge evidence are present; transferred-skill scoring remains blocked on approved live baseline/transfer runs".to_owned()
+        } else {
+            "BrowseComp transfer denominator is materialized; scoring remains blocked on approved SealQA skill production and live baseline/transfer runs".to_owned()
+        }
     };
     let skill_merge_source_blocked = skill_merge_blockers
         .iter()
