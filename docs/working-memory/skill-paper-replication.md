@@ -319,6 +319,12 @@ Next attempt:
   that same OfficeQA materialization, with explicit drift checks against the
   embedded manifest. This is closeout audit evidence, not paper-close scoring
   evidence.
+- P5 final report schema v8 links each score slot to the paper result target
+  ids it would compare against. OfficeQA optimized slots point at both
+  skill-merge candidates, SealQA baseline/optimized slots point at their judge
+  accuracy targets, and the absent BrowseComp transfer denominator now appears
+  as source-blocked held-out score slots for baseline and SealQA-skill transfer
+  instead of disappearing from `score_slots`. Scores are still absent.
 
 2026-05-22 product-backend bridge proof:
 
@@ -905,10 +911,11 @@ lineage. The first retry should stay no-spend:
 
 ## EvoSkill Paper-Close Guardrails
 
-The P5 EvoSkill final report schema v7 carries a no-spend loop `run_manifest`
+The P5 EvoSkill final report schema v8 carries a no-spend loop `run_manifest`
 that ties the mechanics loop to manifest/scorer/source/split fingerprints,
 frontier policy, schedule, checkpoint boundary, Git identity mode, and the fake
-child-score source. The loop must use the same materialized source set as the
-embedded report manifest and refuse source/split/role drift. Treat that as
-mechanics evidence only. It is not live provider, validation-set, SealQA judge,
-or paper-score evidence.
+child-score source. Score slots also carry paper target ids, including
+source-blocked BrowseComp transfer target slots. The loop must use the same
+materialized source set as the embedded report manifest and refuse
+source/split/role drift. Treat that as mechanics and denominator evidence only.
+It is not live provider, validation-set, SealQA judge, or paper-score evidence.

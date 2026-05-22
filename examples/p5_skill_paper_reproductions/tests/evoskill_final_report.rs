@@ -33,6 +33,7 @@ fn final_report_exposes_score_slots_costs_errors_and_gaps_without_fake_metrics()
     let sealqa = sealqa_materialization(&report);
     assert_officeqa_train_12_score_slots(&report, officeqa);
     assert_sealqa_score_slots(&report, sealqa);
+    assert_browsecomp_transfer_score_slots(&report);
     assert!(
         report
             .ablations
@@ -186,7 +187,7 @@ fn assert_reported_target(
 
 fn assert_report_header(report: &EvoSkillFinalReport) {
     assert_eq!(report.exactness, ExactnessClass::BlockedBeforePaperClose);
-    assert_eq!(report.schema_version, 7);
+    assert_eq!(report.schema_version, 8);
     assert_eq!(report.cost.llm_calls, 0);
     assert_eq!(report.cost.metric_calls, 0);
     assert_eq!(report.cost.prompt_tokens, 0);
@@ -416,6 +417,17 @@ fn assert_officeqa_blocked_slot(
     role: &str,
 ) {
     assert_materialized_blocked_slot(slot, split, role);
+    match slot.candidate_role.as_str() {
+        "baseline" => assert_slot_target_ids(slot, &["officeqa_baseline_exact_match_table"]),
+        "optimized" => assert_slot_target_ids(
+            slot,
+            &[
+                "officeqa_skill_merge_exact_match_prose",
+                "officeqa_skill_merge_exact_match_table",
+            ],
+        ),
+        other => panic!("unexpected OfficeQA score candidate role {other}"),
+    }
     assert!(
         slot.blocker_ids
             .contains(&"officeqa_exact_split_membership".to_owned())
@@ -457,6 +469,53 @@ fn assert_sealqa_score_slots(report: &EvoSkillFinalReport, sealqa: &DatasetMater
                 .find(|slot| slot.split_role == role && slot.candidate_role == candidate)
                 .unwrap_or_else(|| panic!("missing SealQA {candidate} {role} slot"));
             assert_materialized_blocked_slot(slot, split, role);
+            match candidate {
+                "baseline" => assert_slot_target_ids(slot, &["sealqa_baseline_accuracy"]),
+                "optimized" => assert_slot_target_ids(slot, &["sealqa_optimized_accuracy"]),
+                _ => unreachable!("test only iterates known SealQA candidate roles"),
+            }
+        }
+    }
+}
+
+fn assert_browsecomp_transfer_score_slots(report: &EvoSkillFinalReport) {
+    let browsecomp_slots = report
+        .score_slots
+        .iter()
+        .filter(|slot| slot.dataset_id == "browsecomp_transfer")
+        .collect::<Vec<_>>();
+    assert_eq!(browsecomp_slots.len(), 2);
+    assert!(
+        browsecomp_slots
+            .iter()
+            .all(|slot| slot.split_role == "held_out_test")
+    );
+    assert!(
+        browsecomp_slots
+            .iter()
+            .all(|slot| slot.split_id == "browsecomp_transfer_paper_split_unmaterialized")
+    );
+    for candidate in ["baseline", "sealqa_skill_transfer"] {
+        let slot = browsecomp_slots
+            .iter()
+            .find(|slot| slot.candidate_role == candidate)
+            .unwrap_or_else(|| panic!("missing BrowseComp {candidate} held-out slot"));
+        assert_eq!(slot.split_exactness, MaterializationExactness::Blocked);
+        assert_eq!(slot.split_fingerprint, None);
+        assert_eq!(slot.role_source_id_fingerprint, None);
+        assert_eq!(slot.expected_rows, Some(128));
+        assert_eq!(slot.status, FinalScoreStatus::Blocked);
+        assert!(slot.score.is_none());
+        assert!(
+            slot.blocker_ids
+                .contains(&"browsecomp_transfer_sample".to_owned())
+        );
+        match candidate {
+            "baseline" => assert_slot_target_ids(slot, &["browsecomp_baseline_accuracy"]),
+            "sealqa_skill_transfer" => {
+                assert_slot_target_ids(slot, &["browsecomp_sealqa_skill_transfer_accuracy"]);
+            }
+            _ => unreachable!("test only iterates known BrowseComp candidate roles"),
         }
     }
 }
@@ -485,6 +544,15 @@ fn assert_materialized_blocked_slot(
         slot.score.is_none(),
         "blocked slots must not fake zero scores"
     );
+}
+
+fn assert_slot_target_ids(slot: &FinalScoreSlot, expected: &[&str]) {
+    let actual = slot
+        .paper_result_target_ids
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+    assert_eq!(actual, expected);
 }
 
 #[test]
@@ -518,6 +586,7 @@ fn cli_writes_manifest_and_final_report_artifacts() {
     assert!(report.contains("\"source_blockers\""));
     assert!(report.contains("\"proxy_rejection_gates\""));
     assert!(report.contains("\"paper_result_targets\""));
+    assert!(report.contains("\"paper_result_target_ids\""));
     assert!(report.contains("\"role_source_id_fingerprint\""));
     assert!(report.contains("\"blocked_before_paper_close\""));
 }
