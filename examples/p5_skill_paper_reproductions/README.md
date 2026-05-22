@@ -19,6 +19,11 @@ just evoskill-paper-manifest
 just evoskill-paper-pin-local-sources
 just evoskill-paper-accept-substitute-splits
 just evoskill-paper-browsecomp-public-sample tmp/replication/evoskill/browsecomp/public_browsecomp_test_set.csv
+just evoskill-paper-no-spend-packet
+just evoskill-paper-runner-inputs
+just evoskill-paper-live-run-request
+just evoskill-paper-runner-outputs tmp/replication/evoskill/runner_outputs.jsonl
+just evoskill-paper-sealqa-judge-requests tmp/replication/evoskill/predictions/sealqa.jsonl
 just evoskill-paper-score-officeqa tmp/replication/evoskill/predictions/officeqa.jsonl
 just evoskill-paper-score-sealqa tmp/replication/evoskill/judge/sealqa.jsonl approved-run-id
 just evoskill-paper-final-report
@@ -35,6 +40,11 @@ paper-release or remote-current source policy.
 OfficeQA/SealQA substitute split fingerprints. It accepts those documented
 substitutes as the paper-close split denominator without relabeling them as
 paper-exact or producing scores.
+`just evoskill-paper-no-spend-packet` chains the local source pin, substitute
+split policy, BrowseComp public substitute, runner input, and live-run request
+steps against the local BrowseComp CSV path. It is the one-command approval
+packet path only; it still does not probe credentials, call a provider, call a
+judge, import predictions, import judged rows, or prove paper-close results.
 
 The optional ignored
 `tmp/replication/evoskill/browsecomp/transfer_sample.jsonl` sidecar is a strict

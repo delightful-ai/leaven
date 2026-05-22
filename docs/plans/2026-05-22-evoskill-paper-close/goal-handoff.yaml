@@ -142,6 +142,15 @@ explicit_non_goals:
   - do not spend provider credits or touch destructive source/dataset state without approval
 
 verification_notes:
+  - at: "2026-05-22T21:39:16Z"
+    command: "just evoskill-paper-no-spend-packet"
+    status: passed_no_spend_operator_packet
+    evidence:
+      - "one command reran the local source pin, accepted substitute split policy, BrowseComp public substitute sidecar, runner input batch, and live-run request steps against the current local CSV without provider or judge calls"
+      - "final-report.json SHA-256 d139b65f5c023c7b3fba52950752133cd85f322a357a1326328658898899895d; replica-manifest.json SHA-256 fb47eb50fc5e279d4eed6de04565decef5e1bb8f46682e43632f15d6f48b4a47"
+      - "runner_input_manifest.json stayed at SHA-256 48b4d2d3439960434812ea1f4af71e6533e37b5a8634b5588be3eab8e0503860 with 22 entries and 1698 rows; live_run_request_manifest.json stayed at SHA-256 0cc8a75a9665c4f03c7886f6e355fe591bbf9898d9788f93888d7dc21ae3d2d8 with max_generation_calls 1698, provider_calls_allowed false, judge_calls_allowed false, and blocker live_run_spend_approval"
+      - "the regenerated final report remained paper_close_candidate with no source_blockers, score_result_manifest null, paper_scorer approval_blocked on sealqa_judge_scored_run plus live_run_spend_approval, and live_small_run approval_blocked on live_run_spend_approval"
+    caveat: "This proves one-command local packet preparation only; it does not approve spend, execute the paper agent, call SealQA judging, import predictions, import judged rows, clear approval blockers, or prove paper-close results."
   - at: "2026-05-22T21:34:18Z"
     command: "just evoskill-paper-runner-inputs && just evoskill-paper-live-run-request"
     status: passed_no_spend_packet_materialization
