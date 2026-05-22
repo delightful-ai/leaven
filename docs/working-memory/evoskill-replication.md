@@ -862,3 +862,21 @@ still only substitute OfficeQA train-sampler, agentic Git readback, frontier,
 feedback, and checkpoint/resume evidence. It explicitly does not prove live
 provider behavior, validation-set behavior, SealQA judge scoring, or paper-score
 results.
+
+## No-Spend Manifest/Loop Materialization Consistency
+
+Date: 2026-05-22.
+Provider/model spend: none.
+Cloud/GPU spend: none.
+
+The P5 final-report path now materializes OfficeQA and SealQA once, builds the
+replica manifest from that source set, and runs the no-spend mechanics loop from
+the same OfficeQA materialization. The loop also validates that its OfficeQA
+source artifact identity, row counts, source-row fingerprint, artifact SHA-256,
+train split rows/fingerprint, and train role source-id membership match the
+embedded manifest before emitting loop evidence.
+
+This closes a subtle fake-proof risk: the loop can no longer re-read a changed
+OfficeQA CSV and still present itself beside an older manifest fingerprint. It
+does not resolve exact paper source policy, exact split membership, live
+provider behavior, SealQA judge execution, or paper-score results.

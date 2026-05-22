@@ -149,6 +149,7 @@ fn assert_report_header(report: &EvoSkillFinalReport) {
         loop_report.run_manifest.scorer_fingerprint,
         report.scorer_fingerprint.fingerprint
     );
+    assert_loop_manifest_matches_embedded_officeqa_materialization(report);
     assert!(
         loop_report
             .run_manifest
@@ -190,6 +191,42 @@ fn assert_report_header(report: &EvoSkillFinalReport) {
         report.manifest.schema_version
     );
     assert_eq!(report.manifest_fingerprint.fingerprint.len(), 64);
+}
+
+fn assert_loop_manifest_matches_embedded_officeqa_materialization(report: &EvoSkillFinalReport) {
+    let loop_manifest = &report
+        .loop_report
+        .as_ref()
+        .expect("OfficeQA mechanics loop should run")
+        .run_manifest;
+    let officeqa = officeqa_materialization(report);
+    assert_eq!(
+        loop_manifest.source_row_fingerprint,
+        officeqa.source_row_fingerprint.as_deref().unwrap()
+    );
+    let split = officeqa
+        .split_materializations
+        .iter()
+        .find(|split| split.id == loop_manifest.train_split_id)
+        .expect("loop train split should be embedded in the manifest");
+    assert_eq!(
+        loop_manifest.train_split_exactness,
+        MaterializationExactness::PaperCloseSubstitute
+    );
+    assert_eq!(
+        loop_manifest.train_split_fingerprint,
+        split.split_fingerprint.as_deref().unwrap()
+    );
+    let train = split
+        .role_manifests
+        .iter()
+        .find(|manifest| manifest.role == "train")
+        .expect("loop train role should be embedded in the manifest");
+    assert_eq!(
+        loop_manifest.train_role_source_id_fingerprint,
+        train.source_id_fingerprint
+    );
+    assert_eq!(loop_manifest.train_rows, train.rows);
 }
 
 fn assert_proxy_rejection_gates(report: &EvoSkillFinalReport) {

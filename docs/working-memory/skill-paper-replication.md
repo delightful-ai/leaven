@@ -309,7 +309,10 @@ Next attempt:
   Schema v7 adds a loop `run_manifest` that binds the mechanics loop to the
   replica manifest/scorer/source/split fingerprints, frontier policy, schedule,
   checkpoint boundary, Git identity mode, fake runtime, and fixed child-score
-  source. This is closeout audit evidence, not paper-close scoring evidence.
+  source. The final report now materializes sources once and runs the loop from
+  that same OfficeQA materialization, with explicit drift checks against the
+  embedded manifest. This is closeout audit evidence, not paper-close scoring
+  evidence.
 
 2026-05-22 product-backend bridge proof:
 
@@ -899,5 +902,7 @@ lineage. The first retry should stay no-spend:
 The P5 EvoSkill final report schema v7 carries a no-spend loop `run_manifest`
 that ties the mechanics loop to manifest/scorer/source/split fingerprints,
 frontier policy, schedule, checkpoint boundary, Git identity mode, and the fake
-child-score source. Treat that as mechanics evidence only. It is not live
-provider, validation-set, SealQA judge, or paper-score evidence.
+child-score source. The loop must use the same materialized source set as the
+embedded report manifest and refuse source/split/role drift. Treat that as
+mechanics evidence only. It is not live provider, validation-set, SealQA judge,
+or paper-score evidence.
