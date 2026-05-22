@@ -89,8 +89,10 @@ belong in their owning crates.
   proves a no-spend multi-iteration mechanics loop over the OfficeQA substitute
   split: train sampling, failure feedback history, round-robin parent
   selection, agentic Git materialize/readback of child proposals, typed
-  `GitProgramArtifact` child lineage, top-k admission/ignore/replacement, and
-  checkpoint/resume. It does not prove live provider behavior or paper scores.
+  `GitProgramArtifact` child lineage, full validation-role traversal before
+  frontier admission, top-k admission/ignore/replacement, and
+  checkpoint/resume. It does not prove live provider behavior, validation score
+  quality, or paper scores.
 - `cargo test -p p5_skill_paper_reproductions --test evoskill_final_report`
   proves the current no-spend final report truth surface writes manifest and
   report artifacts, carries baseline/optimized train/validation/held-out score
@@ -116,7 +118,7 @@ belong in their owning crates.
   counts, scored row counts, and resolved slot blockers match the current
   report. Stale result files fail the report build instead of becoming score
   evidence.
-  It does not prove live provider behavior, validation-set scores, or
+  It does not prove live provider behavior, validation-score values, or
   paper-close.
 - `just evoskill-paper-manifest` writes the current no-spend local manifest to
   `target/evoskill-paper-close/replica-manifest.json`.

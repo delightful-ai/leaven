@@ -610,11 +610,13 @@ mechanics loop over the OfficeQA substitute split. It uses
 `CategoryRoundRobinSampler` for train batches, accumulated scorer failure
 feedback as proposer history, `TopKParentSelector::round_robin`, real
 `leaven-agentic-git` materialize/readback for child proposals, typed
-`GitProgramArtifact`/`GitProgramChange` child lineage, `TopKFrontier` admission,
+`GitProgramArtifact`/`GitProgramChange` child lineage, full OfficeQA
+validation-role traversal before frontier admission, `TopKFrontier` admission,
 ignore, and weakest-member replacement behavior, and a serde checkpoint round
 trip that restores frontier, selector, sampler, candidates, and feedback state
-before continuing. This closes the no-spend full-loop mechanics item; it is not
-live OfficeQA/SealQA score evidence and does not resolve source/split blockers.
+before continuing. This closes the no-spend full-loop mechanics item; the fixed
+validation scores are still mechanics values, not live OfficeQA/SealQA score
+evidence, and this does not resolve source/split blockers.
 
 ## No-Spend Replica Manifest Source Universe
 
@@ -983,14 +985,15 @@ Cloud/GPU spend: none.
 The P5 final report schema v7 introduced a no-spend mechanics loop carrying
 a typed `run_manifest` that binds the loop to the replica manifest fingerprint,
 scorer fingerprint, OfficeQA source-row fingerprint, train split fingerprint,
-train role source-id fingerprint, schedule, frontier policy, checkpoint
-iteration, Git identity mode, fake runtime, and fixed child-score source.
+train role source-id fingerprint, validation split fingerprint, validation role
+source-id fingerprint, schedule, frontier policy, checkpoint iteration, Git
+identity mode, fake runtime, and fixed validation-score source.
 
 This prevents the useful mechanics loop from becoming a fake proof. The loop is
 still only substitute OfficeQA train-sampler, agentic Git readback, frontier,
-feedback, and checkpoint/resume evidence. It explicitly does not prove live
-provider behavior, validation-set behavior, SealQA judge scoring, or paper-score
-results.
+feedback, validation-role traversal, and checkpoint/resume evidence. It
+explicitly does not prove live provider behavior, validation score quality,
+SealQA judge scoring, or paper-score results.
 
 ## No-Spend Manifest/Loop Materialization Consistency
 
@@ -1002,8 +1005,9 @@ The P5 final-report path now materializes OfficeQA and SealQA once, builds the
 replica manifest from that source set, and runs the no-spend mechanics loop from
 the same OfficeQA materialization. The loop also validates that its OfficeQA
 source artifact identity, row counts, source-row fingerprint, artifact SHA-256,
-train split rows/fingerprint, and train role source-id membership match the
-embedded manifest before emitting loop evidence.
+train split rows/fingerprint, train role source-id membership, validation rows,
+and validation role source-id membership match the embedded manifest before
+emitting loop evidence.
 
 This closes a subtle fake-proof risk: the loop can no longer re-read a changed
 OfficeQA CSV and still present itself beside an older manifest fingerprint. It
@@ -1074,7 +1078,7 @@ Date: 2026-05-22.
 Provider/model spend: none.
 Cloud/GPU spend: none.
 
-The P5 final report now declares schema v11 with optional
+The P5 final report now declares schema v12 with optional
 `tmp/replication/evoskill/score_result_manifest.json` ingestion. The sidecar is
 strict score evidence plumbing, not a live run: it must name schema version 1,
 the current manifest fingerprint, the current scorer fingerprint, total cost,

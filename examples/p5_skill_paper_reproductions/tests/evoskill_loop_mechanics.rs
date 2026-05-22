@@ -29,6 +29,13 @@ fn no_spend_loop_exercises_frontier_lineage_feedback_and_checkpoint_resume() {
     assert_run_manifest(&report);
 
     assert_eq!(report.iterations[0].train_sample_rows, 2);
+    assert_eq!(report.iterations[0].validation_rows_evaluated, 17);
+    assert!(
+        report
+            .iterations
+            .iter()
+            .all(|iteration| iteration.validation_rows_evaluated == 17)
+    );
     assert_eq!(report.iterations[0].feedback_rows_seen, 0);
     assert_eq!(report.iterations[1].feedback_rows_seen, 2);
     assert_eq!(report.iterations[2].feedback_rows_seen, 4);
@@ -99,6 +106,28 @@ fn assert_run_manifest(report: &EvoSkillReplicaLoopReport) {
     );
     assert_eq!(report.run_manifest.train_rows, 12);
     assert_eq!(
+        report.run_manifest.validation_split_id,
+        report.run_manifest.train_split_id
+    );
+    assert_eq!(
+        report.run_manifest.validation_split_fingerprint,
+        report.run_manifest.train_split_fingerprint
+    );
+    assert_eq!(
+        report
+            .run_manifest
+            .validation_role_source_id_fingerprint
+            .len(),
+        64
+    );
+    assert_eq!(report.run_manifest.validation_rows, 17);
+    assert!(
+        report
+            .run_manifest
+            .validation_policy
+            .contains("full OfficeQA validation role")
+    );
+    assert_eq!(
         report.run_manifest.frontier_capacity,
         report.frontier_capacity
     );
@@ -113,7 +142,7 @@ fn assert_run_manifest(report: &EvoSkillReplicaLoopReport) {
     assert!(
         report
             .run_manifest
-            .child_score_source
+            .validation_score_source
             .contains("not paper scorer output")
     );
     assert!(
@@ -121,6 +150,12 @@ fn assert_run_manifest(report: &EvoSkillReplicaLoopReport) {
             .run_manifest
             .proof_limit
             .contains("not live provider")
+    );
+    assert!(
+        !report
+            .run_manifest
+            .proof_limit
+            .contains("not live provider, validation-set")
     );
 }
 

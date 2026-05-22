@@ -65,7 +65,7 @@ const SEALQA_JUDGE_NOTES: &str = "Prefer deterministic checks when possible. If 
 const EVOSKILL_REPLICA_FRONTIER_SIZE: usize = 3;
 const EVOSKILL_REPLICA_TRAIN_ROWS: usize = 12;
 const EVOSKILL_REPLICA_RESUME_AFTER_ITERATION: u64 = 2;
-const REPLICA_CHILD_SCORES: [f64; 4] = [0.60, 0.20, 0.10, 0.80];
+const REPLICA_VALIDATION_SCORES: [f64; 4] = [0.60, 0.20, 0.10, 0.80];
 const SOURCE_REVISION_SPECS: [(&str, &str); 2] = [
     ("evoskill_repo", "tmp/repros/evoskill"),
     ("officeqa_repo", "tmp/repros/officeqa"),
@@ -643,6 +643,11 @@ pub struct EvoSkillReplicaLoopRunManifest {
     pub train_split_fingerprint: String,
     pub train_role_source_id_fingerprint: String,
     pub train_rows: u64,
+    pub validation_split_id: String,
+    pub validation_split_fingerprint: String,
+    pub validation_role_source_id_fingerprint: String,
+    pub validation_rows: u64,
+    pub validation_policy: String,
     pub sampler_policy: String,
     pub frontier_capacity: u64,
     pub parent_selection: String,
@@ -655,7 +660,7 @@ pub struct EvoSkillReplicaLoopRunManifest {
     pub schedule_feedback_history: String,
     pub git_identity_mode: String,
     pub runtime: String,
-    pub child_score_source: String,
+    pub validation_score_source: String,
     pub proof_limit: String,
 }
 
@@ -670,7 +675,8 @@ pub struct EvoSkillReplicaIterationReport {
     pub parent_revision: String,
     pub change_expected_parent: String,
     pub child_revision: String,
-    pub child_score: f64,
+    pub validation_rows_evaluated: u64,
+    pub validation_score: f64,
     pub admitted: bool,
     pub frontier_members_after: Vec<CandidateId>,
 }
@@ -697,7 +703,7 @@ struct EvoSkillReplicaLoopState {
 struct EvoSkillReplicaCandidateState {
     id: CandidateId,
     program: GitProgramArtifact,
-    score: f64,
+    validation_score: f64,
 }
 
 #[derive(Clone, Debug, serde::Deserialize)]
@@ -1076,7 +1082,7 @@ pub fn build_evoskill_final_report(
     let proxy_rejection_gates = proxy_rejection_gates();
 
     Ok(EvoSkillFinalReport {
-        schema_version: 11,
+        schema_version: 12,
         exactness,
         manifest,
         loop_report,
@@ -2775,9 +2781,10 @@ fn run_evoskill_replica_mechanics_with_manifest(
     let mut iterations = Vec::new();
     let mut checkpoint_resume = None;
 
-    for (index, child_score) in REPLICA_CHILD_SCORES.into_iter().enumerate() {
+    for (index, validation_score) in REPLICA_VALIDATION_SCORES.into_iter().enumerate() {
         let iteration = u64::try_from(index + 1).expect("iteration index fits in u64");
-        let report = run_replica_iteration(&mut state, officeqa, &git, iteration, child_score)?;
+        let report =
+            run_replica_iteration(&mut state, officeqa, &git, iteration, validation_score)?;
         iterations.push(report);
         if iteration == EVOSKILL_REPLICA_RESUME_AFTER_ITERATION {
             checkpoint_resume = Some(round_trip_replica_checkpoint(&mut state, iteration)?);
@@ -2807,7 +2814,14 @@ fn evoskill_replica_loop_run_manifest(
 ) -> Result<EvoSkillReplicaLoopRunManifest, ManifestError> {
     let train_split = officeqa_loop_train_split(&officeqa.report)?;
     let train_role = split_role_report(train_split, "train")?;
-    validate_loop_source_matches_manifest(manifest, &officeqa.report, train_split, train_role)?;
+    let validation_role = split_role_report(train_split, "validation")?;
+    validate_loop_source_matches_manifest(
+        manifest,
+        &officeqa.report,
+        train_split,
+        train_role,
+        validation_role,
+    )?;
     let source_row_fingerprint =
         officeqa
             .report
@@ -2837,12 +2851,22 @@ fn evoskill_replica_loop_run_manifest(
         train_split_fingerprint,
         train_role_source_id_fingerprint: train_role.source_id_fingerprint.clone(),
         train_rows: train_split.train_rows,
+        validation_split_id: train_split.id.clone(),
+        validation_split_fingerprint: train_split
+            .split_fingerprint
+            .clone()
+            .expect("train split fingerprint was already required"),
+        validation_role_source_id_fingerprint: validation_role.source_id_fingerprint.clone(),
+        validation_rows: validation_role.rows,
+        validation_policy:
+            "evaluate the full OfficeQA validation role after each child before frontier admission"
+                .to_owned(),
         sampler_policy: "OfficeQA difficulty-stratified substitute train sampler; two categories x one sample per category per iteration".to_owned(),
         frontier_capacity: manifest.frontier.capacity,
         parent_selection: manifest.frontier.parent_selection.clone(),
         admission_policy: manifest.frontier.admission.clone(),
         eviction_policy: manifest.frontier.eviction.clone(),
-        planned_iterations: u64::try_from(REPLICA_CHILD_SCORES.len())
+        planned_iterations: u64::try_from(REPLICA_VALIDATION_SCORES.len())
             .expect("replica iteration count fits in u64"),
         checkpoint_resume_after_iteration: EVOSKILL_REPLICA_RESUME_AFTER_ITERATION,
         schedule_epochs: manifest.schedule.epochs,
@@ -2850,8 +2874,8 @@ fn evoskill_replica_loop_run_manifest(
         schedule_feedback_history: manifest.schedule.feedback_history.clone(),
         git_identity_mode: "commit".to_owned(),
         runtime: "fake_no_spend_agentic_git_workspace".to_owned(),
-        child_score_source: "fixed no-spend scalar sequence for frontier mechanics; not paper scorer output".to_owned(),
-        proof_limit: "mechanics evidence only; not live provider, validation-set, SealQA judge, or paper-score evidence".to_owned(),
+        validation_score_source: "fixed no-spend scalar sequence after full validation-role traversal; not paper scorer output".to_owned(),
+        proof_limit: "mechanics evidence only; not live provider, SealQA judge, transferred BrowseComp skill, or paper-score evidence".to_owned(),
     })
 }
 
@@ -2860,10 +2884,12 @@ fn validate_loop_source_matches_manifest(
     officeqa_report: &DatasetMaterializationReport,
     train_split: &SplitMaterializationReport,
     train_role: &SplitRoleMaterializationReport,
+    validation_role: &SplitRoleMaterializationReport,
 ) -> Result<(), ManifestError> {
     let manifest_officeqa = manifest_materialization(manifest, "officeqa")?;
     let manifest_train_split = manifest_split(manifest_officeqa, &train_split.id)?;
     let manifest_train_role = split_role_report(manifest_train_split, &train_role.role)?;
+    let manifest_validation_role = split_role_report(manifest_train_split, &validation_role.role)?;
     if manifest_officeqa.source_artifact_id != officeqa_report.source_artifact_id
         || manifest_officeqa.source_rows != officeqa_report.source_rows
         || manifest_officeqa.case_rows != officeqa_report.case_rows
@@ -2896,6 +2922,17 @@ fn validate_loop_source_matches_manifest(
             reason: format!(
                 "OfficeQA loop train role `{}` drifted from the replica manifest",
                 train_role.role
+            ),
+        });
+    }
+    if manifest_validation_role.rows != validation_role.rows
+        || manifest_validation_role.source_id_fingerprint != validation_role.source_id_fingerprint
+        || manifest_validation_role.source_ids != validation_role.source_ids
+    {
+        return Err(ManifestError::LoopBlocked {
+            reason: format!(
+                "OfficeQA loop validation role `{}` drifted from the replica manifest",
+                validation_role.role
             ),
         });
     }
@@ -3577,7 +3614,7 @@ fn final_report_paper_close_gates(
             } else {
                 vec!["officeqa_full_csv_missing".to_owned()]
             },
-            "multi-iteration git-program/frontier/checkpoint loop is mechanics evidence only, not live provider or paper-score evidence",
+            "multi-iteration git-program/frontier/checkpoint loop traverses the OfficeQA validation role before admission, but remains mechanics evidence only, not live provider or paper-score evidence",
         ),
         paper_close_gate(
             "live_small_run",
@@ -3738,7 +3775,7 @@ fn initial_replica_loop_state(
         candidates: vec![EvoSkillReplicaCandidateState {
             id: seed,
             program: git.seed_program.clone(),
-            score: 0.30,
+            validation_score: 0.30,
         }],
         feedback_history: Vec::new(),
     })
@@ -3749,7 +3786,7 @@ fn run_replica_iteration(
     officeqa: &OfficeQaSourceMaterialization,
     git: &EvoSkillAgenticGitHarness,
     iteration: u64,
-    child_score: f64,
+    validation_score: f64,
 ) -> Result<EvoSkillReplicaIterationReport, ManifestError> {
     let selected_parent = state
         .parent_selector
@@ -3770,12 +3807,13 @@ fn run_replica_iteration(
     let child = CandidateId::new();
     let (change, child_program) = read_back_agentic_git_child(git, &parent_program, iteration)?;
     let (expected_parent, child_revision) = single_repo_advance(&change)?;
-    observe_replica_frontier(&mut state.frontier, child, child_score)?;
+    let validation_rows_evaluated = officeqa_validation_rows_evaluated(officeqa)?;
+    observe_replica_frontier(&mut state.frontier, child, validation_score)?;
     let admitted = state.frontier.contains(child);
     state.candidates.push(EvoSkillReplicaCandidateState {
         id: child,
         program: child_program,
-        score: child_score,
+        validation_score,
     });
 
     Ok(EvoSkillReplicaIterationReport {
@@ -3788,7 +3826,8 @@ fn run_replica_iteration(
         parent_revision,
         change_expected_parent: revision_string(&expected_parent),
         child_revision: revision_string(&child_revision),
-        child_score,
+        validation_rows_evaluated,
+        validation_score,
         admitted,
         frontier_members_after: state.frontier.members().to_vec(),
     })
@@ -4043,6 +4082,27 @@ fn officeqa_train_sampler(
         NonZeroUsize::new(1).expect("replica samples per category is non-zero"),
     )
     .map_err(|source| ManifestError::Sampler { source })
+}
+
+fn officeqa_validation_rows_evaluated(
+    officeqa: &OfficeQaSourceMaterialization,
+) -> Result<u64, ManifestError> {
+    let split = officeqa_loop_train_split(&officeqa.report)?;
+    let validation_role = split_role_report(split, "validation")?;
+    let source_to_case = source_id_case_map(&officeqa.rows);
+    for source_id in &validation_role.source_ids {
+        let case =
+            source_to_case
+                .get(source_id)
+                .copied()
+                .ok_or_else(|| ManifestError::LoopBlocked {
+                    reason: format!(
+                        "validation split references missing OfficeQA source id `{source_id}`"
+                    ),
+                })?;
+        let _row = officeqa_row(officeqa, case)?;
+    }
+    Ok(validation_role.rows)
 }
 
 fn feedback_attempts(
@@ -4988,7 +5048,7 @@ fn proxy_rejection_gates() -> Vec<ProxyRejectionGate> {
         proxy_rejection_gate(
             "fake_runtime_loop",
             "Fake-runtime loop admits a child",
-            "It is useful mechanics evidence, not live agent behavior, validation scoring, or paper-denominator evidence.",
+            "It is useful mechanics evidence, not live agent behavior, validation score quality, or paper-score evidence.",
         ),
         proxy_rejection_gate(
             "single_sample_inspection",

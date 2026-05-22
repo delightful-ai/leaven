@@ -333,13 +333,14 @@ Next attempt:
 - P5 final report schema v6 added typed `paper_close_gates`, separating proven
   no-spend manifest/report/mechanics/proxy-closeout surfaces from
   source-blocked source/split work and approval-blocked live/judge execution.
-  Schema v7 adds a loop `run_manifest` that binds the mechanics loop to the
+  Schema v7 added a loop `run_manifest` that binds the mechanics loop to the
   replica manifest/scorer/source/split fingerprints, frontier policy, schedule,
-  checkpoint boundary, Git identity mode, fake runtime, and fixed child-score
-  source. The final report now materializes sources once and runs the loop from
-  that same OfficeQA materialization, with explicit drift checks against the
-  embedded manifest. This is closeout audit evidence, not paper-close scoring
-  evidence.
+  checkpoint boundary, Git identity mode, fake runtime, and fixed score source.
+  Schema v12 extends that binding to the OfficeQA validation role/fingerprint
+  used before frontier admission. The final report now materializes sources once
+  and runs the loop from that same OfficeQA materialization, with explicit drift
+  checks against the embedded manifest. This is closeout audit evidence, not
+  paper-close scoring evidence.
 - P5 final report schema v8 links each score slot to the paper result target
   ids it would compare against. OfficeQA optimized slots point at both
   skill-merge candidates, SealQA baseline/optimized slots point at their judge
@@ -356,7 +357,7 @@ Next attempt:
   is recorded/applied through `RunContext`, and provenance preserves the
   selected parent candidate.
 - The proof also wraps the child in a tiny EvoSkill-shaped top-k frontier:
-  seed parent selection, child score/admission, best-candidate/best-score
+  seed parent selection, fixed validation score/admission, best-candidate/best-score
   report, and `PopulationUpdated` events are asserted. This closes the generic
   GitProgram product-backend denominator, not OfficeQA/SealQA/BrowseComp
   parity.
@@ -934,12 +935,13 @@ lineage. The first retry should stay no-spend:
 
 ## EvoSkill Paper-Close Guardrails
 
-The P5 EvoSkill final report schema v11 carries a no-spend loop `run_manifest`
+The P5 EvoSkill final report schema v12 carries a no-spend loop `run_manifest`
 that ties the mechanics loop to manifest/scorer/source/split fingerprints,
-frontier policy, schedule, checkpoint boundary, Git identity mode, and the fake
-child-score source. Score slots also carry paper target ids, including
-BrowseComp transfer target slots. The materialization path can replace the
-OfficeQA and SealQA substitute split blockers either when an exact source-id
+frontier policy, schedule, checkpoint boundary, Git identity mode, the full
+OfficeQA validation role/fingerprint used before frontier admission, and the
+fake validation-score source. Score slots also carry paper target ids,
+including BrowseComp transfer target slots. The materialization path can replace
+the OfficeQA and SealQA substitute split blockers either when an exact source-id
 split manifest validates against the materialized row universe or when the
 split policy sidecar validates and explicitly accepts the current documented
 paper-close substitute fingerprints. Accepted substitutes stay
@@ -949,8 +951,8 @@ denominator; if absent or malformed, the BrowseComp source blocker stays or the
 manifest build fails. The loop must use the same materialized source set as the
 embedded report manifest and refuse source/split/role drift. Treat that as
 mechanics and denominator evidence only. It is not live provider,
-validation-set, SealQA judge, transferred-skill execution, or paper-score
-evidence.
+validation-score quality, SealQA judge, transferred-skill execution, or
+paper-score evidence.
 
 2026-05-22 update: P5 can now derive that BrowseComp JSONL sidecar from a local
 copy of the official simple-evals encrypted BrowseComp CSV with
