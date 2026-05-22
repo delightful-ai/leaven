@@ -935,14 +935,16 @@ lineage. The first retry should stay no-spend:
 
 ## EvoSkill Paper-Close Guardrails
 
-The P5 EvoSkill final report schema v13 carries a no-spend loop `run_manifest`
+The P5 EvoSkill final report schema v14 carries a no-spend loop `run_manifest`
 that ties the mechanics loop to manifest/scorer/source/split fingerprints,
 frontier policy, schedule, checkpoint boundary, Git identity mode, the full
 OfficeQA validation role/fingerprint used before frontier admission, and the
 fake validation-score source. Score slots also carry paper target ids,
-including BrowseComp transfer target slots, and reported score slots preserve
-the importing sidecar entry as `score_evidence_id`. The materialization path can replace
-the OfficeQA and SealQA substitute split blockers either when an exact source-id
+including BrowseComp transfer target slots. Reported score slots preserve the
+importing sidecar entry as `score_evidence_id` and the checked evidence artifact
+path/hash/byte count as `score_evidence_artifact`; unreported slots keep both
+fields null. The materialization path can replace the OfficeQA and SealQA
+substitute split blockers either when an exact source-id
 split manifest validates against the materialized row universe or when the
 split policy sidecar validates and explicitly accepts the current documented
 paper-close substitute fingerprints. Accepted substitutes stay
@@ -971,8 +973,12 @@ leaving stale absent-source notes attached after the sidecar materializes.
 `tmp/replication/evoskill/score_result_manifest.json` sidecar. It is score
 evidence plumbing only: entries must match the current manifest fingerprint,
 scorer fingerprint, slot key, split fingerprint, role source-id fingerprint, and
-row count before a score is reported. Stale result files, duplicate entries,
-unresolved slot blockers, and non-slot blocker claims fail the report build.
-Reported scores preserve the sidecar `evidence_id` in the score slot, so future
-approved runs leave an auditable score-evidence handle in the final report
-without treating fixture values, stale outputs, or missing approval as scores.
+row count before a score is reported. Schema-v2 entries also bind a readable
+score evidence artifact by relative path, byte count, and SHA-256. Stale result
+files, duplicate entries, unresolved slot blockers, non-slot blocker claims, and
+tampered evidence artifacts fail the report build. Reported scores preserve the
+sidecar `evidence_id` and checked artifact in the score slot, so future approved
+runs leave an auditable score-evidence handle in the final report without
+treating fixture values, stale outputs, tampered files, or missing approval as
+scores. This is still file-binding evidence only; the importer does not yet
+parse row-level score artifacts or recompute aggregate metrics from them.
