@@ -959,7 +959,7 @@ the public rows, selects a deterministic topic-stratified 128-row substitute,
 and keeps all transfer slots unscored. With source pins and substitute split
 policy sidecars present, source blockers can reach zero; this is still a
 paper-close substitute denominator, not the paper author's exact BrowseComp
-sample and not transferred-skill score evidence. The report's ablation rows now
-preserve that distinction by switching denominator-ready lanes to
-`approval_blocked` rather than leaving stale absent-source notes attached after
-the sidecar materializes.
+sample and not transferred-skill score evidence. The report preserves that
+distinction by moving top-level exactness only to `paper_close_candidate` and by
+switching denominator-ready ablation lanes to `approval_blocked` rather than
+leaving stale absent-source notes attached after the sidecar materializes.

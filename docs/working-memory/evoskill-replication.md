@@ -1054,8 +1054,11 @@ rows total, source ids `browsecomp-public:NNNN`, and `problem_topic` recorded
 as `stratum`. With local source pins and accepted substitute splits already
 written, the generated report has no source blockers; BrowseComp transfer slots
 become unscored `not_run` rows with paper-close-substitute exactness and split
-fingerprints. Ablation rows now track the same denominator state: once the
-strict transfer denominator is present, BrowseComp transfer is
+fingerprints. The manifest/report top-level exactness tracks the same
+denominator state: once all source blockers are gone it becomes
+`paper_close_candidate`, not `paper_close`, because live/judge evidence is still
+absent. Ablation rows also track the denominator state: once the strict transfer
+denominator is present, BrowseComp transfer is
 `approval_blocked` on approved SealQA skill production and live
 baseline/transfer execution instead of continuing to report an absent transfer
 source. The remaining blockers are approval-only: `sealqa_judge_scored_run` and

@@ -219,6 +219,11 @@ fn final_report_relabels_browsecomp_ablation_after_denominator_materializes() {
     let report = build_evoskill_final_report(&input).unwrap();
 
     assert!(report.manifest.source_blockers.is_empty());
+    assert_eq!(
+        report.manifest.exactness,
+        ExactnessClass::PaperCloseCandidate
+    );
+    assert_eq!(report.exactness, ExactnessClass::PaperCloseCandidate);
     let browsecomp = report
         .ablations
         .iter()

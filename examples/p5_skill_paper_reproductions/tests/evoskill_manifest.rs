@@ -11,7 +11,8 @@ use p5_skill_paper_reproductions::evoskill::{
     ExactnessClass, ManifestBuildInput, ManifestError, MaterializationExactness,
     PaperResultTargetStatus, SourceBlockerStatus, SourceMaterializationStatus,
     SourcePaperReleaseStatus, SourceRemoteProbeStatus, SourceRevisionStatus, SplitManifestStatus,
-    build_evoskill_replica_manifest,
+    build_evoskill_replica_manifest, write_evoskill_local_source_pin_manifest,
+    write_evoskill_paper_close_split_policy_manifest,
 };
 use parquet::arrow::ArrowWriter;
 
@@ -510,6 +511,48 @@ fn source_pin_manifest_resolves_local_checkout_policy_without_network_probe() {
     assert_eq!(
         evoskill.remote_probe_status,
         SourceRemoteProbeStatus::NotProbedNoNetworkDefault
+    );
+}
+
+#[test]
+fn manifest_becomes_paper_close_candidate_only_after_source_denominator_materializes() {
+    let root = tempfile::tempdir().unwrap();
+    write_officeqa_full_csv(root.path(), 246);
+    write_sealqa_parquet(
+        &root
+            .path()
+            .join("tmp/replication/evoskill/sealqa/seal-0.parquet"),
+        111,
+    );
+    write_sealqa_judge_source(root.path());
+    write_browsecomp_transfer_sample(root.path(), 128);
+    init_git_source(
+        &root.path().join("tmp/repros/evoskill"),
+        "https://github.com/sentient-agi/EvoSkill.git",
+    );
+    init_git_source(
+        &root.path().join("tmp/repros/officeqa"),
+        "https://github.com/databricks/officeqa.git",
+    );
+    let input = ManifestBuildInput::new(root.path());
+    write_evoskill_local_source_pin_manifest(&input).unwrap();
+    write_evoskill_paper_close_split_policy_manifest(&input).unwrap();
+
+    let manifest = build_evoskill_replica_manifest(&input).unwrap();
+
+    assert!(manifest.source_blockers.is_empty());
+    assert_eq!(manifest.exactness, ExactnessClass::PaperCloseCandidate);
+    assert!(manifest.blockers.iter().any(|blocker| {
+        blocker.id == "sealqa_judge_scored_run"
+            && blocker
+                .description
+                .contains("no approved live LLM-as-judge scored run")
+    }));
+    assert!(
+        manifest
+            .blockers
+            .iter()
+            .any(|blocker| blocker.id == "live_run_spend_approval")
     );
 }
 
