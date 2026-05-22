@@ -8,7 +8,7 @@ use arrow_array::{ArrayRef, RecordBatch, StringArray};
 use arrow_schema::{DataType, Field, Schema};
 use leaven_kernel::CaseId;
 use p5_skill_paper_reproductions::evoskill::{
-    ManifestBuildInput, MaterializationExactness, SourceMaterializationStatus,
+    ManifestBuildInput, ManifestError, MaterializationExactness, SourceMaterializationStatus,
     build_evoskill_replica_manifest, materialize_officeqa_source, materialize_sealqa_source,
 };
 use parquet::arrow::ArrowWriter;
@@ -129,6 +129,113 @@ fn officeqa_difficulty_substitute_records_split_fingerprints_without_exact_claim
 }
 
 #[test]
+fn officeqa_exact_split_manifest_replaces_substitute_blockers_when_present() {
+    let root = tempfile::tempdir().unwrap();
+    write_officeqa_full_csv(root.path(), 246);
+    write_officeqa_exact_split_manifest(root.path());
+
+    let materialization = materialize_officeqa_source(&ManifestBuildInput::new(root.path()))
+        .unwrap()
+        .expect("OfficeQA CSV exists");
+
+    assert!(materialization.report.blocker_ids.is_empty());
+    assert_eq!(materialization.report.split_materializations.len(), 1);
+    let split = &materialization.report.split_materializations[0];
+    assert_eq!(split.id, "officeqa_paper_declared_train_12_val_17");
+    assert_eq!(split.method, "paper_declared_source_id_manifest");
+    assert_eq!(split.exactness, MaterializationExactness::PaperExact);
+    assert_eq!(split.train_rows, 12);
+    assert_eq!(split.validation_rows, Some(17));
+    assert_eq!(split.test_rows, Some(217));
+    assert!(split.blocker_ids.is_empty());
+
+    let train_manifest = split
+        .role_manifests
+        .iter()
+        .find(|role| role.role == "train")
+        .expect("train role manifest exists");
+    assert_eq!(
+        train_manifest.source_ids,
+        (1..=12)
+            .map(|index| format!("UID{index:04}"))
+            .collect::<Vec<_>>()
+    );
+    assert!(
+        train_manifest
+            .source_ids
+            .iter()
+            .all(|source_id| !source_id.contains("Answer")),
+        "exact split membership exposes source ids, not hidden targets"
+    );
+}
+
+#[test]
+fn officeqa_exact_split_manifest_refuses_unknown_source_ids() {
+    let root = tempfile::tempdir().unwrap();
+    write_officeqa_full_csv(root.path(), 246);
+    let train = vec!["UID9999".to_owned()];
+    let validation = (13..=29)
+        .map(|index| format!("UID{index:04}"))
+        .collect::<Vec<_>>();
+    let held_out_test = (30..=246)
+        .map(|index| format!("UID{index:04}"))
+        .collect::<Vec<_>>();
+    write_exact_split_manifest(
+        &root
+            .path()
+            .join("tmp/replication/evoskill/officeqa/paper_split_manifest.json"),
+        "officeqa",
+        "officeqa_bad_split",
+        &train,
+        &validation,
+        &held_out_test,
+    );
+
+    let error = materialize_officeqa_source(&ManifestBuildInput::new(root.path())).unwrap_err();
+    match error {
+        ManifestError::SplitManifest { path, message } => {
+            assert!(path.ends_with("paper_split_manifest.json"));
+            assert!(message.contains("unknown source id `UID9999`"));
+        }
+        other => panic!("expected split manifest error, got {other:?}"),
+    }
+}
+
+#[test]
+fn officeqa_exact_split_manifest_refuses_partial_row_coverage() {
+    let root = tempfile::tempdir().unwrap();
+    write_officeqa_full_csv(root.path(), 246);
+    let train = (1..=12)
+        .map(|index| format!("UID{index:04}"))
+        .collect::<Vec<_>>();
+    let validation = (13..=29)
+        .map(|index| format!("UID{index:04}"))
+        .collect::<Vec<_>>();
+    let held_out_test = (30..=200)
+        .map(|index| format!("UID{index:04}"))
+        .collect::<Vec<_>>();
+    write_exact_split_manifest(
+        &root
+            .path()
+            .join("tmp/replication/evoskill/officeqa/paper_split_manifest.json"),
+        "officeqa",
+        "officeqa_partial_split",
+        &train,
+        &validation,
+        &held_out_test,
+    );
+
+    let error = materialize_officeqa_source(&ManifestBuildInput::new(root.path())).unwrap_err();
+    match error {
+        ManifestError::SplitManifest { message, .. } => {
+            assert!(message.contains("declared split covers 200 rows"));
+            assert!(message.contains("source manifest has 246 rows"));
+        }
+        other => panic!("expected split manifest error, got {other:?}"),
+    }
+}
+
+#[test]
 fn replica_manifest_embeds_materialization_but_stays_blocked_before_paper_close() {
     let root = tempfile::tempdir().unwrap();
     write_officeqa_full_csv(root.path(), 246);
@@ -153,6 +260,46 @@ fn replica_manifest_embeds_materialization_but_stays_blocked_before_paper_close(
             .blockers
             .iter()
             .any(|blocker| blocker.id == "officeqa_category_split_manifest")
+    );
+}
+
+#[test]
+fn replica_manifest_marks_exact_source_universe_when_split_manifest_is_present() {
+    let root = tempfile::tempdir().unwrap();
+    write_officeqa_full_csv(root.path(), 246);
+    write_officeqa_exact_split_manifest(root.path());
+
+    let manifest = build_evoskill_replica_manifest(&ManifestBuildInput::new(root.path())).unwrap();
+
+    let officeqa = manifest
+        .source_universe
+        .iter()
+        .find(|entry| entry.dataset_id == "officeqa")
+        .expect("OfficeQA source universe entry exists");
+    assert_eq!(
+        officeqa.source_artifact_ids,
+        ["officeqa_full_csv", "officeqa_exact_split_manifest"]
+    );
+    assert_eq!(
+        officeqa.split_exactness,
+        [MaterializationExactness::PaperExact]
+    );
+    assert!(
+        !officeqa
+            .blocker_ids
+            .contains(&"officeqa_exact_split_membership".to_owned())
+    );
+    assert!(
+        manifest
+            .source_blockers
+            .iter()
+            .all(|blocker| blocker.blocker_id != "officeqa_exact_split_membership")
+    );
+    assert!(
+        manifest
+            .blockers
+            .iter()
+            .all(|blocker| blocker.id != "officeqa_exact_split_membership")
     );
 }
 
@@ -243,6 +390,42 @@ fn sealqa_parquet_lowers_to_cases_and_row_order_substitute_split() {
     );
 }
 
+#[test]
+fn sealqa_exact_split_manifest_replaces_row_order_blocker_when_present() {
+    let root = tempfile::tempdir().unwrap();
+    write_sealqa_parquet(root.path(), 111);
+    write_sealqa_exact_split_manifest(root.path());
+
+    let materialization = materialize_sealqa_source(&ManifestBuildInput::new(root.path()))
+        .unwrap()
+        .expect("SealQA parquet exists");
+
+    assert!(materialization.report.blocker_ids.is_empty());
+    assert_eq!(materialization.report.split_materializations.len(), 1);
+    let split = &materialization.report.split_materializations[0];
+    assert_eq!(split.id, "sealqa_paper_declared_train_11_heldout_100");
+    assert_eq!(split.method, "paper_declared_source_id_manifest");
+    assert_eq!(split.exactness, MaterializationExactness::PaperExact);
+    assert_eq!(split.train_rows, 11);
+    assert_eq!(split.validation_rows, None);
+    assert_eq!(split.test_rows, Some(100));
+    assert!(split.blocker_ids.is_empty());
+
+    let held_out_manifest = split
+        .role_manifests
+        .iter()
+        .find(|role| role.role == "held_out_test")
+        .expect("held-out role manifest exists");
+    assert_eq!(
+        held_out_manifest.source_ids.first().map(String::as_str),
+        Some("sealqa:011")
+    );
+    assert_eq!(
+        held_out_manifest.source_ids.last().map(String::as_str),
+        Some("sealqa:110")
+    );
+}
+
 fn write_officeqa_full_csv(root: &std::path::Path, rows: usize) {
     let path = root.join("tmp/repros/officeqa/officeqa_full.csv");
     fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -261,6 +444,66 @@ fn write_officeqa_full_csv(root: &std::path::Path, rows: usize) {
         .unwrap();
     }
     fs::write(path, csv).unwrap();
+}
+
+fn write_officeqa_exact_split_manifest(root: &std::path::Path) {
+    let train = (1..=12)
+        .map(|index| format!("UID{index:04}"))
+        .collect::<Vec<_>>();
+    let validation = (13..=29)
+        .map(|index| format!("UID{index:04}"))
+        .collect::<Vec<_>>();
+    let held_out_test = (30..=246)
+        .map(|index| format!("UID{index:04}"))
+        .collect::<Vec<_>>();
+    write_exact_split_manifest(
+        &root.join("tmp/replication/evoskill/officeqa/paper_split_manifest.json"),
+        "officeqa",
+        "officeqa_paper_declared_train_12_val_17",
+        &train,
+        &validation,
+        &held_out_test,
+    );
+}
+
+fn write_sealqa_exact_split_manifest(root: &std::path::Path) {
+    let train = (0..11)
+        .map(|index| format!("sealqa:{index:03}"))
+        .collect::<Vec<_>>();
+    let validation = Vec::new();
+    let held_out_test = (11..111)
+        .map(|index| format!("sealqa:{index:03}"))
+        .collect::<Vec<_>>();
+    write_exact_split_manifest(
+        &root.join("tmp/replication/evoskill/sealqa/paper_split_manifest.json"),
+        "sealqa",
+        "sealqa_paper_declared_train_11_heldout_100",
+        &train,
+        &validation,
+        &held_out_test,
+    );
+}
+
+fn write_exact_split_manifest(
+    path: &std::path::Path,
+    dataset_id: &str,
+    split_id: &str,
+    train: &[String],
+    validation: &[String],
+    held_out_test: &[String],
+) {
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let manifest = serde_json::json!({
+        "schema_version": 1,
+        "dataset_id": dataset_id,
+        "split_id": split_id,
+        "roles": {
+            "train": train,
+            "validation": validation,
+            "held_out_test": held_out_test,
+        },
+    });
+    fs::write(path, serde_json::to_vec_pretty(&manifest).unwrap()).unwrap();
 }
 
 fn write_sealqa_parquet(root: &std::path::Path, rows: usize) {
