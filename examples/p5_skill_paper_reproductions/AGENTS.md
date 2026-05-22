@@ -45,6 +45,10 @@ belong in their owning crates.
   sidecar from the official encrypted BrowseComp CSV with a deterministic
   topic-stratified substitute policy; that is still `paper_close_substitute`,
   not author-exact sample membership.
+  When source pins, accepted substitute splits, and the BrowseComp denominator
+  remove all source blockers, the manifest/report top-level exactness becomes
+  `paper_close_candidate`, not `paper_close`; live/judge blockers remain
+  explicit and scores remain missing.
   The manifest also records OfficeQA baseline and skill-merge paper result
   targets, including the 67.9 versus 68.1 exact-match ambiguity, as typed
   `paper_result_targets` rather than a generic blocker. It also carries typed

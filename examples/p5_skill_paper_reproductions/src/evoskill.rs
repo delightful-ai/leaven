@@ -955,6 +955,7 @@ fn build_evoskill_replica_manifest_from_sources(
         &source_materializations,
         source_pin_manifest.is_some(),
     )?;
+    let exactness = replica_manifest_exactness(&source_blockers);
     let blockers = blockers(&source_blockers);
 
     Ok(EvoSkillReplicaManifest {
@@ -964,7 +965,7 @@ fn build_evoskill_replica_manifest_from_sources(
             arxiv_id: "2603.02766".to_owned(),
             title: "EvoSkill".to_owned(),
         },
-        exactness: ExactnessClass::BlockedBeforePaperClose,
+        exactness,
         source_revisions,
         artifacts,
         source_blockers,
@@ -979,6 +980,14 @@ fn build_evoskill_replica_manifest_from_sources(
         blockers,
         proxy_rejections: proxy_rejections(),
     })
+}
+
+fn replica_manifest_exactness(source_blockers: &[SourceBlockerReport]) -> ExactnessClass {
+    if source_blockers.is_empty() {
+        ExactnessClass::PaperCloseCandidate
+    } else {
+        ExactnessClass::BlockedBeforePaperClose
+    }
 }
 
 pub fn build_evoskill_final_report(
