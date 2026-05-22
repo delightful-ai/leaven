@@ -591,6 +591,59 @@ fn cli_writes_manifest_and_final_report_artifacts() {
     assert!(report.contains("\"blocked_before_paper_close\""));
 }
 
+#[test]
+fn cli_can_persist_local_source_pin_sidecar_before_writing_manifest() {
+    let root = tempfile::tempdir().unwrap();
+    init_git_source(
+        &root.path().join("tmp/repros/evoskill"),
+        "https://github.com/sentient-agi/EvoSkill.git",
+    );
+    init_git_source(
+        &root.path().join("tmp/repros/officeqa"),
+        "https://github.com/databricks/officeqa.git",
+    );
+    let manifest_path = root.path().join("out/replica-manifest.json");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_p5_skill_paper_reproductions"))
+        .arg("--root")
+        .arg(root.path())
+        .arg("--out")
+        .arg(&manifest_path)
+        .arg("--write-local-source-pin-manifest")
+        .output()
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let source_pin_path = root
+        .path()
+        .join("tmp/replication/evoskill/source_pin_manifest.json");
+    assert!(source_pin_path.exists());
+    let source_pin = fs::read_to_string(source_pin_path).unwrap();
+    assert!(source_pin.contains("\"local_checkout_pinned\""));
+
+    let manifest = fs::read_to_string(manifest_path).unwrap();
+    let manifest: serde_json::Value = serde_json::from_str(&manifest).unwrap();
+    assert!(
+        manifest["source_blockers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|blocker| blocker["blocker_id"] != "source_pin")
+    );
+    assert!(
+        manifest["source_revisions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|revision| revision["paper_release_status"] == "pinned_local_checkout")
+    );
+}
+
 fn write_officeqa_full_csv(root: &std::path::Path, rows: usize) {
     let path = root.join("tmp/repros/officeqa/officeqa_full.csv");
     fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -621,6 +674,33 @@ fn write_sealqa_judge_source(root: &std::path::Path) {
         "# Auto-Grader Prompt (Placeholder)\n\nPinned test source.\n",
     )
     .unwrap();
+}
+
+fn init_git_source(path: &std::path::Path, remote_url: &str) {
+    fs::create_dir_all(path).unwrap();
+    run_git(path, &["init", "-b", "main"]);
+    run_git(path, &["config", "user.email", "paper-close@example.test"]);
+    run_git(path, &["config", "user.name", "Paper Close"]);
+    fs::write(path.join("README.md"), "paper source fixture").unwrap();
+    run_git(path, &["add", "README.md"]);
+    run_git(path, &["commit", "-m", "fixture"]);
+    run_git(path, &["remote", "add", "origin", remote_url]);
+}
+
+fn run_git(path: &std::path::Path, args: &[&str]) {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(path)
+        .args(args)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "git {:?} failed\nstdout:\n{}\nstderr:\n{}",
+        args,
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
 }
 
 fn write_sealqa_parquet(root: &std::path::Path, rows: usize) {

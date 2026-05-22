@@ -670,6 +670,12 @@ pub enum ManifestError {
         #[source]
         source: std::io::Error,
     },
+    #[error("failed to write `{path}`: {source}")]
+    Write {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
     #[error("failed to parse CSV `{path}`: {source}")]
     Csv {
         path: PathBuf,
@@ -696,6 +702,12 @@ pub enum ManifestError {
     SplitManifest { path: PathBuf, message: String },
     #[error("failed to parse source pin manifest `{path}`: {source}")]
     SourcePinManifestJson {
+        path: PathBuf,
+        #[source]
+        source: serde_json::Error,
+    },
+    #[error("failed to serialize source pin manifest `{path}`: {source}")]
+    SourcePinManifestSerialize {
         path: PathBuf,
         #[source]
         source: serde_json::Error,
@@ -769,6 +781,31 @@ pub fn build_evoskill_replica_manifest(
 ) -> Result<EvoSkillReplicaManifest, ManifestError> {
     let sources = materialize_evoskill_sources(input)?;
     build_evoskill_replica_manifest_from_sources(input, &sources)
+}
+
+pub fn write_evoskill_local_source_pin_manifest(
+    input: &ManifestBuildInput,
+) -> Result<PathBuf, ManifestError> {
+    let path = input.root.join(SOURCE_PIN_MANIFEST_PATH);
+    let manifest = local_source_pin_manifest(&input.root, &path)?;
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|source| ManifestError::Write {
+            path: parent.to_owned(),
+            source,
+        })?;
+    }
+    let bytes = serde_json::to_vec_pretty(&manifest).map_err(|source| {
+        ManifestError::SourcePinManifestSerialize {
+            path: path.clone(),
+            source,
+        }
+    })?;
+    fs::write(&path, bytes).map_err(|source| ManifestError::Write {
+        path: path.clone(),
+        source,
+    })?;
+    let _ = read_source_pin_manifest(&input.root)?;
+    Ok(path)
 }
 
 fn build_evoskill_replica_manifest_from_sources(
@@ -877,7 +914,7 @@ struct ValidatedSourcePinManifest {
     sources: BTreeMap<String, SourcePinManifestEntry>,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum SourcePinPolicy {
     LocalCheckoutPinned,
@@ -891,7 +928,7 @@ impl SourcePinPolicy {
     }
 }
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 struct SourcePinManifestFile {
     schema_version: u32,
     policy: SourcePinPolicy,
@@ -899,7 +936,7 @@ struct SourcePinManifestFile {
     sources: Vec<SourcePinManifestEntry>,
 }
 
-#[derive(Clone, Debug, serde::Deserialize)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 struct SourcePinManifestEntry {
     id: String,
     relative_path: String,
@@ -1223,6 +1260,54 @@ fn read_source_pin_manifest(
         }
     })?;
     validate_source_pin_manifest(root, &path, manifest).map(Some)
+}
+
+fn local_source_pin_manifest(
+    root: &Path,
+    manifest_path: &Path,
+) -> Result<SourcePinManifestFile, ManifestError> {
+    let sources = SOURCE_REVISION_SPECS
+        .iter()
+        .map(|(id, relative_path)| local_source_pin_entry(root, manifest_path, id, relative_path))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(SourcePinManifestFile {
+        schema_version: 1,
+        policy: SourcePinPolicy::LocalCheckoutPinned,
+        sources,
+    })
+}
+
+fn local_source_pin_entry(
+    root: &Path,
+    manifest_path: &Path,
+    id: &str,
+    relative_path: &str,
+) -> Result<SourcePinManifestEntry, ManifestError> {
+    let checkout = root.join(relative_path);
+    if !checkout.exists() {
+        return Err(ManifestError::SourcePinManifest {
+            path: manifest_path.to_owned(),
+            message: format!("source `{id}` path is missing"),
+        });
+    }
+    if !checkout.join(".git").exists() {
+        return Err(ManifestError::SourcePinManifest {
+            path: manifest_path.to_owned(),
+            message: format!("source `{id}` is not a git checkout"),
+        });
+    }
+    Ok(SourcePinManifestEntry {
+        id: id.to_owned(),
+        relative_path: relative_path.to_owned(),
+        head: required_git_stdout(manifest_path, &checkout, id, &["rev-parse", "HEAD"])?,
+        branch: required_git_stdout(manifest_path, &checkout, id, &["branch", "--show-current"])?,
+        remote_url: required_git_stdout(
+            manifest_path,
+            &checkout,
+            id,
+            &["config", "--get", "remote.origin.url"],
+        )?,
+    })
 }
 
 fn validate_source_pin_manifest(

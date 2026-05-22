@@ -314,6 +314,10 @@ Next attempt:
   `local_checkout_pinned` sidecar must match every known source checkout's
   id/path/head/branch/origin before `source_pin` is removed; mismatches fail the
   manifest build instead of becoming fallback proof.
+- `just evoskill-paper-pin-local-sources` is the explicit no-spend operator
+  path for writing that sidecar from the current local checkout identities. This
+  chooses a local-checkout denominator only; it is not paper-release or
+  remote-current source evidence.
 - P5 final report schema v6 added typed `paper_close_gates`, separating proven
   no-spend manifest/report/mechanics/proxy-closeout surfaces from
   source-blocked source/split work and approval-blocked live/judge execution.

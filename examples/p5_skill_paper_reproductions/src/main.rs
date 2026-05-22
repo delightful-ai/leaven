@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use clap::Parser;
 use p5_skill_paper_reproductions::evoskill::{
     ManifestBuildInput, build_evoskill_final_report, build_evoskill_replica_manifest,
+    write_evoskill_local_source_pin_manifest,
 };
 
 #[derive(Debug, Parser)]
@@ -16,11 +17,17 @@ struct Args {
     /// Also write the current no-spend final report truth surface to this path.
     #[arg(long)]
     final_report_out: Option<PathBuf>,
+    /// Persist the current local git source checkouts as the explicit source pin sidecar.
+    #[arg(long)]
+    write_local_source_pin_manifest: bool,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
     let input = ManifestBuildInput::new(args.root);
+    if args.write_local_source_pin_manifest {
+        write_evoskill_local_source_pin_manifest(&input)?;
+    }
     let manifest = build_evoskill_replica_manifest(&input)?;
     write_json(&args.out, &manifest)?;
     if let Some(path) = args.final_report_out {
