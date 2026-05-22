@@ -75,14 +75,16 @@ acceptance_path:
       - "`cargo test -p p5_skill_paper_reproductions --test evoskill_materialization`"
       - "OfficeQA is materialized as a documented difficulty-stratified substitute; SealQA remains blocked on a Rust parquet row reader and exact split manifest."
   - id: paper_scorer
-    status: in_progress
+    status: proven
     requirement: >
       EvoSkill tolerances, weighted score, failure threshold, feedback rows, and
       failure extraction are implemented in Rust and tested without Python glue.
     evidence:
       - examples/p5_skill_paper_reproductions/src/evoskill.rs
       - examples/p5_skill_paper_reproductions/tests/evoskill_scorer.rs
+      - examples/p5_skill_paper_reproductions/tests/evoskill_feedback.rs
       - "`cargo test -p p5_skill_paper_reproductions --test evoskill_scorer`"
+      - "`cargo test -p p5_skill_paper_reproductions --test evoskill_feedback`"
   - id: full_loop_mechanics
     status: pending
     requirement: >

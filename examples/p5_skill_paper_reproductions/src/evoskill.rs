@@ -233,6 +233,30 @@ pub struct ToleranceScore {
     pub score: f64,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct EvoSkillAnswerAttempt {
+    pub source_id: String,
+    pub ground_truth: String,
+    pub prediction: String,
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct EvoSkillScoredAttempt {
+    pub source_id: String,
+    pub ground_truth: String,
+    pub prediction: String,
+    pub score: EvoSkillScoreReport,
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct EvoSkillFailureFeedbackRow {
+    pub source_id: String,
+    pub ground_truth: String,
+    pub prediction: String,
+    pub weighted_score: f64,
+    pub feedback: String,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum ManifestError {
     #[error("failed to read `{path}`: {source}")]
@@ -542,6 +566,46 @@ pub fn score_evoskill_answer(ground_truth: &str, prediction: &str) -> EvoSkillSc
     }
 }
 
+#[must_use]
+pub fn score_evoskill_attempt(attempt: EvoSkillAnswerAttempt) -> EvoSkillScoredAttempt {
+    let score = score_evoskill_answer(&attempt.ground_truth, &attempt.prediction);
+    EvoSkillScoredAttempt {
+        source_id: attempt.source_id,
+        ground_truth: attempt.ground_truth,
+        prediction: attempt.prediction,
+        score,
+    }
+}
+
+pub fn extract_evoskill_failure_feedback(
+    attempts: impl IntoIterator<Item = EvoSkillAnswerAttempt>,
+) -> Vec<EvoSkillFailureFeedbackRow> {
+    attempts
+        .into_iter()
+        .map(score_evoskill_attempt)
+        .filter(|attempt| attempt.score.is_failure)
+        .map(failure_feedback_row)
+        .collect()
+}
+
+fn failure_feedback_row(attempt: EvoSkillScoredAttempt) -> EvoSkillFailureFeedbackRow {
+    let feedback = format!(
+        "case {} failed: weighted score {:.3} below {:.3}; expected `{}`, got `{}`",
+        attempt.source_id,
+        attempt.score.weighted_score,
+        DEFAULT_FAILURE_THRESHOLD,
+        attempt.ground_truth,
+        attempt.prediction
+    );
+    EvoSkillFailureFeedbackRow {
+        source_id: attempt.source_id,
+        ground_truth: attempt.ground_truth,
+        prediction: attempt.prediction,
+        weighted_score: attempt.score.weighted_score,
+        feedback,
+    }
+}
+
 fn score_at_tolerance(ground_truth: &str, prediction: &str, tolerance: f64) -> f64 {
     if prediction.trim().is_empty() {
         return 0.0;
@@ -817,9 +881,7 @@ fn scorer_manifest() -> ScorerManifest {
         id: "evoskill-multi-tolerance-v1".to_owned(),
         tolerances: vec![0.0, 0.01, 0.025, 0.05, 0.10],
         failure_threshold: 0.8,
-        implementation_status:
-            "Rust scorer law-tested for multi-tolerance weighting, units, years, text, and lists"
-                .to_owned(),
+        implementation_status: "Rust scorer law-tested for multi-tolerance weighting, units, years, text, lists, failure feedback rows, and failure extraction".to_owned(),
     }
 }
 

@@ -590,3 +590,10 @@ the paper's LLM-derived category/pseudo-label artifact and exact split
 membership remain absent. SealQA remains blocked as a Leaven input surface until
 there is a Rust/no-spend row reader for the pinned `seal-0.parquet` plus an exact
 or declared paper-close split manifest.
+
+The paper-specific scorer now also has Rust feedback-row extraction:
+`score_evoskill_attempt` preserves per-tolerance score details for reporting, and
+`extract_evoskill_failure_feedback` emits ordered failure-only rows carrying
+source id, expected answer, prediction, weighted score, and proposer feedback
+text. This closes the scorer/feedback acceptance item but does not prove a live
+proposer consumes the feedback inside the full EvoSkill loop.
