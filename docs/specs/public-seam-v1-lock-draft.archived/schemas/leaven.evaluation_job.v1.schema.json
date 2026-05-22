@@ -1,0 +1,149 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.leaven.dev/v1/leaven.evaluation_job.v1.schema.json",
+  "title": "Leaven Evaluation Job V1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "run",
+    "evaluation_request_id",
+    "resolved_set",
+    "shape",
+    "granularity",
+    "purpose",
+    "base_revision",
+    "capability_fingerprint"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "leaven.evaluation_job.v1"
+    },
+    "run": {
+      "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/RunId"
+    },
+    "evaluation_request_id": {
+      "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/EvaluationRequestId"
+    },
+    "evaluation_attempt_id": {
+      "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/EvaluationAttemptId"
+    },
+    "resolved_set": {
+      "type": "object",
+      "required": [
+        "id",
+        "case_ids",
+        "case_set_version"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/ResolvedSetId"
+        },
+        "case_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/CaseId"
+          }
+        },
+        "case_set_version": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "shape": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "candidates"
+          ],
+          "properties": {
+            "kind": {
+              "const": "independent"
+            },
+            "candidates": {
+              "type": "array",
+              "items": {
+                "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/CandidateRef"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "pairs"
+          ],
+          "properties": {
+            "kind": {
+              "const": "pairwise"
+            },
+            "pairs": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 2,
+                "items": {
+                  "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/CandidateRef"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "groups"
+          ],
+          "properties": {
+            "kind": {
+              "const": "listwise"
+            },
+            "groups": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {
+                  "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/CandidateRef"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "granularity": {
+      "enum": [
+        "per_case",
+        "aggregate",
+        "mixed"
+      ]
+    },
+    "purpose": {
+      "enum": [
+        "train",
+        "validation",
+        "test",
+        "analysis",
+        "evaluation"
+      ]
+    },
+    "base_revision": {
+      "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/GraphRevision"
+    },
+    "capability_fingerprint": {
+      "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/CapabilityFingerprint"
+    },
+    "metadata": {
+      "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/MetadataBag"
+    }
+  },
+  "additionalProperties": false
+}

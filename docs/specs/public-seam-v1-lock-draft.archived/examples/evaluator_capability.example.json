@@ -1,0 +1,202 @@
+{
+  "schema_version": "leaven.capability.v1",
+  "grant_id": "cap_eval_01H",
+  "issuer": {
+    "kind": "run_engine",
+    "id": "engine_local"
+  },
+  "subject": {
+    "kind": "evaluation_stage_call",
+    "run": "run_abc",
+    "stage_call_id": "sc_eval_123",
+    "evaluation_request_id": "evalreq_123",
+    "evaluator": "skillbank/pytest-dspy-codex"
+  },
+  "audience": [
+    "leaven.ir.eval",
+    "leaven.worker"
+  ],
+  "issued_at": "2026-05-22T12:00:00Z",
+  "expires_at": "2026-05-22T12:20:00Z",
+  "policy_fingerprint": "fp_policy_eval_v1",
+  "capability_fingerprint": "fp_cap_eval_01H",
+  "execution_policy": {
+    "profile": "managed_sandbox",
+    "network": "leaven_endpoint_only",
+    "subprocess": "deny_except_sandbox_exec",
+    "filesystem": "workspace_handles_only",
+    "byo_effects": "forbidden",
+    "secrets": "leaven_scoped"
+  },
+  "grants": [
+    {
+      "action": "case.read",
+      "resource": {
+        "run": "run_abc",
+        "resolved_set": "rset_456",
+        "evaluation_request_id": "evalreq_123"
+      },
+      "constraints": {
+        "fields": [
+          "input",
+          "target",
+          "metadata"
+        ],
+        "case_ids": [
+          "case_17",
+          "case_18"
+        ],
+        "purpose": "evaluator",
+        "target_egress": "trusted_model_only"
+      }
+    },
+    {
+      "action": "workspace.materialize",
+      "resource": {
+        "run": "run_abc"
+      },
+      "constraints": {
+        "candidates": [
+          "cand_123"
+        ],
+        "modes": [
+          "mutable_eval_workspace",
+          "agent_workspace"
+        ],
+        "limits": {
+          "max_concurrent": 2
+        }
+      }
+    },
+    {
+      "action": "workspace.read",
+      "resource": {
+        "run": "run_abc"
+      },
+      "constraints": {
+        "ops": [
+          "snapshot",
+          "read_file",
+          "list",
+          "stat",
+          "digest",
+          "git_log",
+          "git_diff",
+          "capture_artifacts"
+        ],
+        "deny_paths": [
+          ".env",
+          ".ssh/**",
+          "**/*secret*"
+        ],
+        "limits": {
+          "max_materialized_bytes": 1048576
+        }
+      }
+    },
+    {
+      "action": "sandbox.exec",
+      "resource": {
+        "sandbox_pool": "eval-default"
+      },
+      "constraints": {
+        "allowed_commands": [
+          "pytest",
+          "python",
+          "node",
+          "cargo",
+          "git"
+        ],
+        "allowed_input_classes": [
+          "case.input",
+          "case.target",
+          "workspace.file"
+        ],
+        "limits": {
+          "max_concurrent": 2,
+          "timeout_s": 300
+        }
+      }
+    },
+    {
+      "action": "agent.run",
+      "resource": {
+        "runtime_pool": "codex-eval"
+      },
+      "constraints": {
+        "runtimes": [
+          "codex-app-server"
+        ],
+        "allow_shell": true,
+        "allowed_tools": [
+          "read_file",
+          "grep",
+          "pytest",
+          "git"
+        ],
+        "allowed_input_classes": [
+          "case.input",
+          "case.target",
+          "workspace.file"
+        ],
+        "raw_transcript_visibility": "operator_only",
+        "limits": {
+          "max_concurrent": 2,
+          "max_usd_micro": 250000
+        }
+      }
+    },
+    {
+      "action": "lm.complete",
+      "resource": {
+        "lm_pool": "trusted-grader"
+      },
+      "constraints": {
+        "model_roles": [
+          "grader"
+        ],
+        "allowed_input_classes": [
+          "case.input",
+          "case.target",
+          "candidate.output",
+          "workspace.file"
+        ],
+        "raw_prompt_logging": "redacted",
+        "limits": {
+          "max_calls": 20,
+          "max_usd_micro": 250000
+        }
+      }
+    },
+    {
+      "action": "assessment.submit",
+      "resource": {
+        "run": "run_abc",
+        "evaluation_request_id": "evalreq_123"
+      },
+      "constraints": {
+        "assessment_shapes": [
+          "independent"
+        ],
+        "granularity": "per_case",
+        "allowed_candidates": [
+          "cand_123"
+        ],
+        "allowed_cases": [
+          "case_17",
+          "case_18"
+        ],
+        "purpose": "validation",
+        "evidence_visibility_allowed": [
+          "score_and_feedback",
+          "public_only"
+        ]
+      }
+    }
+  ],
+  "delegation": {
+    "may_delegate": false,
+    "max_depth": 0,
+    "must_attenuate": true
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.leaven.dev/v1/v0.3/leaven.watch.v1.schema.json",
+  "title": "Deferred watch marker",
+  "description": "watch.v1 is deferred from the v1 lock. Use finite diff queries via leaven.plan.v1 consistency.since_revision. A full watch spec is targeted for v1.1.",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "leaven.watch.v1.deferred"
+    },
+    "use_instead": {
+      "const": "leaven.plan.v1 consistency.since_revision"
+    }
+  },
+  "required": [
+    "schema_version",
+    "use_instead"
+  ],
+  "additionalProperties": false
+}

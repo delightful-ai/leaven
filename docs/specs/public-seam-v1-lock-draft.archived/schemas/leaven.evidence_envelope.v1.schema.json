@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.leaven.dev/v1/leaven.evidence_envelope.v1.schema.json",
+  "title": "Leaven Evidence Envelope V1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "target_derived",
+    "public",
+    "redaction_policy"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "leaven.evidence_envelope.v1"
+    },
+    "target_derived": {
+      "type": "boolean"
+    },
+    "data_classes": {
+      "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/DataClassSet"
+    },
+    "public": {
+      "type": "object",
+      "description": "Optimizer-visible evidence channel after policy projection. Must not include raw targets unless explicitly authorized by run policy.",
+      "properties": {
+        "score": {
+          "type": "number"
+        },
+        "feedback": {
+          "type": "string"
+        },
+        "metrics": {
+          "type": "object",
+          "additionalProperties": {
+            "type": [
+              "number",
+              "string",
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "summary": {
+          "type": "string"
+        },
+        "trace_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/TraceRef"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "private": {
+      "type": "object",
+      "description": "Evaluator/operator-only channel; may contain target-derived traces, hidden grader output, raw transcripts, etc.",
+      "properties": {
+        "visibility": {
+          "enum": [
+            "evaluator_only",
+            "operator_only",
+            "stage_only",
+            "never_persist_raw"
+          ]
+        },
+        "payload": {},
+        "payload_ref": {
+          "type": "string"
+        },
+        "encryption_ref": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "trace_refs": {
+      "type": "array",
+      "items": {
+        "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/TraceRef"
+      }
+    },
+    "redaction_policy": {
+      "type": "object",
+      "required": [
+        "optimizer",
+        "reflector",
+        "operator"
+      ],
+      "properties": {
+        "optimizer": {
+          "enum": [
+            "none",
+            "score_only",
+            "score_and_feedback",
+            "public_only",
+            "summary_only",
+            "full"
+          ]
+        },
+        "reflector": {
+          "enum": [
+            "none",
+            "score_only",
+            "score_and_feedback",
+            "public_only",
+            "summary_only",
+            "full"
+          ]
+        },
+        "operator": {
+          "enum": [
+            "none",
+            "summary_only",
+            "full"
+          ]
+        },
+        "raw_prompt_logging": {
+          "enum": [
+            "forbidden",
+            "redacted",
+            "operator_only",
+            "full"
+          ]
+        },
+        "raw_transcript_logging": {
+          "enum": [
+            "forbidden",
+            "redacted",
+            "operator_only",
+            "full"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "source_receipts": {
+      "type": "array",
+      "items": {
+        "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/ReceiptRef"
+      }
+    },
+    "metadata": {
+      "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/MetadataBag"
+    }
+  },
+  "additionalProperties": false
+}

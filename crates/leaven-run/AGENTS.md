@@ -124,6 +124,11 @@ around engine graph mutation or a home for optimizer strategy state.
 - Domain environments belong in domain adapters or workspace/runtime seams.
   Do not add a hidden `.environment(...)` abstraction here that absorbs Python,
   CUDA, LM, or agent execution details.
+- `docs/specs/public-seam-v1/` locks the external-worker-facing public seam:
+  plan IR shape, plan-result envelopes, capability tokens, and the ACP profile
+  that wraps `optimize(seed)` ergonomics for non-Rust callers. Treat it as the
+  durable contract this crate's builder lowers toward; the lowering work itself
+  is not yet implemented.
 
 ## Decision Cards
 - when: extending `optimize(seed)` user ergonomics

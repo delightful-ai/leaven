@@ -1,0 +1,124 @@
+gate_name: public-seam-v1-goal-readiness
+created_at: 2026-05-23
+status: ready_for_goal_preparation
+
+authority:
+  source_of_truth: docs/specs/public-seam-v1
+  governing_manifest: docs/specs/public-seam-v1/manifest.json
+  governing_read_order:
+    - docs/specs/public-seam-v1/00_architecture_judgment_v0.3.md
+    - docs/specs/public-seam-v1/01_plan_ir_spec_v0.3.md
+    - docs/specs/public-seam-v1/02_capability_spec_v0.3.md
+    - docs/specs/public-seam-v1/03_result_receipts_spec_v0.3.md
+    - docs/specs/public-seam-v1/04_stage_payloads_spec_v0.3.md
+    - docs/specs/public-seam-v1/05_evaluator_spec_v0.3.md
+    - docs/specs/public-seam-v1/profiles/leaven_acp_profile_v1_v0.3.md
+    - docs/specs/public-seam-v1/08_watch_deferred_v1.1.md
+    - docs/specs/public-seam-v1/notes/CONFORMANCE_TESTS_v0.3.md
+  provenance_only:
+    archived_repo_context:
+      - docs/specs/public-seam-v1-lock-draft.archived
+    inspected_download_names:
+      - leaven-public-seam-v1-v0.3-lock-draft.zip
+      - leaven-public-seam-v1-lock-draft.zip
+  resolution:
+    - The active public-seam-v1 package is the V1 lock and the correctness standard.
+    - The v0.3 draft payload is incorporated through this package's active prose, schemas, examples, and manifest.
+    - MCP-over-ACP draft material is not part of V1 while manifest.mcp_status remains not_in_v1.
+    - Watch remains deferred from V1 while manifest.watch_status remains deferred_to_v1.1.
+
+contract_jsons:
+  manifest: docs/specs/public-seam-v1/manifest.json
+  schemas:
+    - docs/specs/public-seam-v1/schemas/common.schema.json
+    - docs/specs/public-seam-v1/schemas/leaven.plan.v1.schema.json
+    - docs/specs/public-seam-v1/schemas/leaven.plan_result.v1.schema.json
+    - docs/specs/public-seam-v1/schemas/leaven.capability.v1.schema.json
+    - docs/specs/public-seam-v1/schemas/leaven.stage_payloads.v1.schema.json
+    - docs/specs/public-seam-v1/schemas/leaven.evaluation_job.v1.schema.json
+    - docs/specs/public-seam-v1/schemas/leaven.evidence_envelope.v1.schema.json
+    - docs/specs/public-seam-v1/schemas/leaven.acp_profile.v1.schema.json
+    - docs/specs/public-seam-v1/schemas/leaven.watch.v1.schema.json
+    - docs/specs/public-seam-v1/schemas/leaven.worker_protocol.v1.schema.json
+  examples:
+    - docs/specs/public-seam-v1/examples/evaluator_capability.v0.3.example.json
+    - docs/specs/public-seam-v1/examples/reflect_then_propose.example.json
+
+correctness_standards:
+  - JSON Schemas must remain valid Draft 2020-12 schemas.
+  - Examples must validate against the active schemas they demonstrate.
+  - Reflection and proposal payloads stay structurally separate.
+  - Score.output is required wherever Score appears in public contract results.
+  - ACP is the worker transport; Leaven worker callbacks are ACP extension methods.
+  - Capability tokens enforce subject fingerprints, bindings, revocation, renewal, expiry, and aggregate budgets.
+  - Data-class propagation is monotonic by default, with only explicit deny overrides.
+  - Plan results carry typed values, typed receipts, started_at/completed_at, and the closed PlanError enum.
+  - Per-assessment replayability and plan-level roll-up remain testable contract facts.
+  - Schema fingerprints use RFC 8785 JCS plus SHA-256.
+  - Field paths use RFC 6901 JSON Pointer.
+  - Extraction uses the Leaven subset of RFC 9535 JSONPath.
+  - Templates use leaven.mustache.strict.v1.
+
+current_implementation_truth:
+  adjacent_surfaces:
+    - path: crates/leaven-stage
+      fact: Contains agent stage plan and attempt receipt vocabulary, but not the public-seam PlanResult contract.
+    - path: crates/leaven-agentic
+      fact: Contains agentic stage adapter scaffolding, but not this locked external-language worker seam.
+    - path: crates/leaven-run
+      fact: Requires Score output at the run/scoring layer, but that is not by itself the public-seam result receipt proof.
+  missing_before_product_claim:
+    - fact: No implemented Rust owner has been selected for the full public-seam wire contract.
+    - fact: No contract test currently proves every active schema/example pair as the implementation denominator.
+    - fact: No ACP extension-method bridge currently proves the worker callback contract.
+    - fact: Names goal handoff concepts that are scaffold until backed by code and tests.
+      path: crates/leaven-agentic/AGENTS.md
+
+goal_launch_gate:
+  purpose: Prepare a broad implementation goal without replacing user intent with a nearby proxy.
+  must_reference:
+    - docs/specs/public-seam-v1/goal-readiness-gate.yaml
+    - docs/specs/public-seam-v1/manifest.json
+    - docs/specs/public-seam-v1/schemas
+    - docs/specs/public-seam-v1/notes/CONFORMANCE_TESTS_v0.3.md
+  must_decide_before_coding:
+    - Which crate or crate-local module owns public-seam wire vocabulary.
+    - Which neighboring crates must refuse the wire contract dependency.
+    - Which routes are ordinary public contract, advanced public contract, explicit scaffold, or private fixture.
+    - Which conformance checks become executable tests rather than plan text.
+  must_keep_out_of_v1:
+    - MCP-over-ACP implementation.
+    - watch.v1 runtime behavior beyond explicit deferred markers.
+    - compatibility shims for older draft payloads.
+    - public claims based only on topology success or example shape validation.
+
+misleading_proxy_proofs:
+  - Schema compilation proves JSON Schema validity, not a working Rust seam.
+  - Example validation proves sample shapes, not end-to-end worker execution.
+  - Existing agentic stage vocabulary proves adjacent substrate, not the locked public-seam contract.
+  - Archived draft files and downloaded zips prove provenance, not current V1 obligations.
+  - Topology contract success proves crate layering, not product maturity.
+  - Goal text quality proves launch clarity, not implementation correctness.
+
+acceptance_path:
+  preflight:
+    - Validate manifest JSON and every active schema path.
+    - Validate active examples against the relevant schemas.
+    - Confirm manifest.mcp_status is honored by the proposed implementation scope.
+    - Confirm manifest.watch_status is honored by the proposed implementation scope.
+  implementation:
+    - Add the owning Rust surface for the active contract JSONs.
+    - Add conformance tests that fail on the proxy proofs listed above.
+    - Add route/maturity classification for any public exports, default features, or facade imports touched by the implementation.
+    - Preserve hard cutover semantics; do not accept archived or downloaded drafts at runtime.
+  completion:
+    - Run the narrow owning-crate tests for the implemented surface.
+    - Run cargo test -p leaven --test topology_contract if crate boundaries, dependencies, facades, or public routes changed.
+    - Run just check before claiming behavior complete.
+
+explicit_non_goals:
+  - This gate is not a /goal draft.
+  - This gate does not patch repo-local skills.
+  - This gate does not implement the public seam.
+  - This gate does not make the archived draft or Downloads bundles authoritative.
+  - This gate does not revive MCP-over-ACP or watch.v1 in V1.

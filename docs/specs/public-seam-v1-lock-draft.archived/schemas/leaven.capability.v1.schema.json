@@ -1,0 +1,1275 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.leaven.dev/v1/leaven.capability.v1.schema.json",
+  "title": "Leaven Capability Grant Document V1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "grant_id",
+    "issuer",
+    "subject",
+    "audience",
+    "issued_at",
+    "expires_at",
+    "policy_fingerprint",
+    "capability_fingerprint",
+    "grants",
+    "delegation"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "leaven.capability.v1"
+    },
+    "grant_id": {
+      "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/TokenId"
+    },
+    "token_id": {
+      "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/TokenId"
+    },
+    "issuer": {
+      "$ref": "#/$defs/IssuerV1"
+    },
+    "subject": {
+      "$ref": "#/$defs/SubjectV1"
+    },
+    "audience": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "leaven.ir.eval",
+          "leaven.watch",
+          "leaven.worker",
+          "leaven.cli",
+          "leaven.admin"
+        ]
+      },
+      "minItems": 1
+    },
+    "issued_at": {
+      "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/Timestamp"
+    },
+    "not_before": {
+      "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/Timestamp"
+    },
+    "expires_at": {
+      "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/Timestamp"
+    },
+    "policy_fingerprint": {
+      "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/PolicyFingerprint"
+    },
+    "capability_fingerprint": {
+      "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/CapabilityFingerprint"
+    },
+    "parent_fingerprint": {
+      "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/CapabilityFingerprint"
+    },
+    "execution_policy": {
+      "$ref": "#/$defs/ExecutionPolicyV1"
+    },
+    "grants": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/GrantV1"
+      },
+      "minItems": 1
+    },
+    "delegation": {
+      "$ref": "#/$defs/DelegationV1"
+    },
+    "revocation": {
+      "type": "object",
+      "properties": {
+        "revocation_list": {
+          "type": "string"
+        },
+        "revocation_epoch": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "metadata": {
+      "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/MetadataBag"
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "IssuerV1": {
+      "type": "object",
+      "required": [
+        "kind",
+        "id"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "run_engine",
+            "operator",
+            "service",
+            "delegated_token"
+          ]
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "SubjectV1": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "run",
+            "stage_call_id",
+            "role"
+          ],
+          "properties": {
+            "kind": {
+              "const": "stage_call"
+            },
+            "run": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/RunId"
+            },
+            "stage_call_id": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/StageCallId"
+            },
+            "role": {
+              "enum": [
+                "runner",
+                "scorer",
+                "evaluator",
+                "reflector",
+                "proposer",
+                "judge",
+                "callback",
+                "agent",
+                "operator"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "run",
+            "evaluation_request_id",
+            "evaluator"
+          ],
+          "properties": {
+            "kind": {
+              "const": "evaluation_stage_call"
+            },
+            "run": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/RunId"
+            },
+            "stage_call_id": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/StageCallId"
+            },
+            "evaluation_request_id": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/EvaluationRequestId"
+            },
+            "evaluator": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "run",
+            "principal"
+          ],
+          "properties": {
+            "kind": {
+              "const": "operator"
+            },
+            "run": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/RunId"
+            },
+            "principal": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "principal"
+          ],
+          "properties": {
+            "kind": {
+              "const": "service"
+            },
+            "principal": {
+              "type": "string"
+            },
+            "runs": {
+              "type": "array",
+              "items": {
+                "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/RunId"
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ExecutionPolicyV1": {
+      "type": "object",
+      "required": [
+        "profile"
+      ],
+      "properties": {
+        "profile": {
+          "enum": [
+            "trusted_local_operator",
+            "managed_sandbox",
+            "package_scorer",
+            "remote_untrusted",
+            "custom"
+          ]
+        },
+        "network": {
+          "enum": [
+            "allow",
+            "deny",
+            "leaven_endpoint_only",
+            "allowlist"
+          ]
+        },
+        "network_allowlist": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "subprocess": {
+          "enum": [
+            "allow",
+            "deny",
+            "deny_except_sandbox_exec",
+            "allowlist"
+          ]
+        },
+        "subprocess_allowlist": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "filesystem": {
+          "enum": [
+            "allow",
+            "workspace_handles_only",
+            "read_only_workspace",
+            "deny"
+          ]
+        },
+        "byo_effects": {
+          "enum": [
+            "forbidden",
+            "declared_only",
+            "allowed_mark_untracked"
+          ]
+        },
+        "secrets": {
+          "enum": [
+            "none",
+            "leaven_scoped",
+            "operator_local"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "DelegationV1": {
+      "type": "object",
+      "required": [
+        "may_delegate"
+      ],
+      "properties": {
+        "may_delegate": {
+          "type": "boolean"
+        },
+        "max_depth": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "allowed_actions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "must_attenuate": {
+          "type": "boolean",
+          "default": true
+        },
+        "expires_with_parent": {
+          "type": "boolean",
+          "default": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "GrantV1": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/GraphReadGrant"
+        },
+        {
+          "$ref": "#/$defs/CaseReadGrant"
+        },
+        {
+          "$ref": "#/$defs/WorkspaceReadGrant"
+        },
+        {
+          "$ref": "#/$defs/WorkspaceMaterializeGrant"
+        },
+        {
+          "$ref": "#/$defs/SandboxExecGrant"
+        },
+        {
+          "$ref": "#/$defs/LmCompleteGrant"
+        },
+        {
+          "$ref": "#/$defs/AgentRunGrant"
+        },
+        {
+          "$ref": "#/$defs/HumanReviewGrant"
+        },
+        {
+          "$ref": "#/$defs/ProposalSubmitGrant"
+        },
+        {
+          "$ref": "#/$defs/ProposalApplyGrant"
+        },
+        {
+          "$ref": "#/$defs/AssessmentSubmitGrant"
+        },
+        {
+          "$ref": "#/$defs/EvaluationRequestGrant"
+        },
+        {
+          "$ref": "#/$defs/WatchGrant"
+        },
+        {
+          "$ref": "#/$defs/ExtensionGrant"
+        }
+      ]
+    },
+    "RunResource": {
+      "type": "object",
+      "properties": {
+        "run": {
+          "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/RunId"
+        },
+        "runs": {
+          "type": "array",
+          "items": {
+            "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/RunId"
+          }
+        },
+        "run_set": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "CommonLimits": {
+      "type": "object",
+      "properties": {
+        "max_rows": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_materialized_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_calls": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_concurrent": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "timeout_s": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_usd_micro": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "RevisionWindow": {
+      "type": "object",
+      "properties": {
+        "min": {
+          "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/GraphRevision"
+        },
+        "max": {
+          "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/GraphRevision"
+        }
+      },
+      "additionalProperties": false
+    },
+    "GraphReadGrant": {
+      "type": "object",
+      "required": [
+        "action",
+        "resource",
+        "constraints"
+      ],
+      "properties": {
+        "action": {
+          "const": "graph.read"
+        },
+        "resource": {
+          "$ref": "#/$defs/RunResource"
+        },
+        "constraints": {
+          "type": "object",
+          "required": [
+            "queries"
+          ],
+          "properties": {
+            "queries": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "candidate.get",
+                  "candidate.search",
+                  "candidate.parents",
+                  "candidate.children",
+                  "candidate.lineage",
+                  "candidate.siblings",
+                  "candidate.informed_by",
+                  "candidate.informed",
+                  "artifact.project",
+                  "artifact.diff",
+                  "proposal.get",
+                  "proposal_batch.get",
+                  "proposal_that_created",
+                  "assessment.get",
+                  "assessment.search",
+                  "assessment.pairwise",
+                  "evidence.project",
+                  "population.events",
+                  "failure.recent",
+                  "cost.read",
+                  "events.since_revision",
+                  "candidate_tree"
+                ]
+              }
+            },
+            "evidence_visibility": {
+              "enum": [
+                "none",
+                "score_only",
+                "score_and_feedback",
+                "summary_only",
+                "public_only",
+                "full"
+              ]
+            },
+            "artifact_projections": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "surface_fingerprint": {
+                    "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/SurfaceFingerprint"
+                  },
+                  "projection_schema": {
+                    "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/SchemaFingerprint"
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "counts": {
+              "enum": [
+                "none",
+                "bucketed",
+                "exact"
+              ]
+            },
+            "revision_window": {
+              "$ref": "#/$defs/RevisionWindow"
+            },
+            "limits": {
+              "$ref": "#/$defs/CommonLimits"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "CaseReadGrant": {
+      "type": "object",
+      "required": [
+        "action",
+        "resource",
+        "constraints"
+      ],
+      "properties": {
+        "action": {
+          "const": "case.read"
+        },
+        "resource": {
+          "type": "object",
+          "properties": {
+            "run": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/RunId"
+            },
+            "resolved_set": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/ResolvedSetId"
+            },
+            "evaluation_request_id": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/EvaluationRequestId"
+            }
+          },
+          "additionalProperties": false
+        },
+        "constraints": {
+          "type": "object",
+          "required": [
+            "fields"
+          ],
+          "properties": {
+            "fields": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "input",
+                  "target",
+                  "metadata"
+                ]
+              }
+            },
+            "case_ids": {
+              "type": "array",
+              "items": {
+                "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/CaseId"
+              }
+            },
+            "partitions": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "train",
+                  "validation",
+                  "test",
+                  "hidden",
+                  "public"
+                ]
+              }
+            },
+            "purpose": {
+              "enum": [
+                "runner",
+                "scorer",
+                "evaluator",
+                "analysis"
+              ]
+            },
+            "target_egress": {
+              "enum": [
+                "forbidden",
+                "trusted_model_only",
+                "operator_approved",
+                "allowed"
+              ]
+            },
+            "limits": {
+              "$ref": "#/$defs/CommonLimits"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "WorkspaceReadGrant": {
+      "type": "object",
+      "required": [
+        "action",
+        "resource",
+        "constraints"
+      ],
+      "properties": {
+        "action": {
+          "const": "workspace.read"
+        },
+        "resource": {
+          "$ref": "#/$defs/RunResource"
+        },
+        "constraints": {
+          "type": "object",
+          "required": [
+            "ops"
+          ],
+          "properties": {
+            "workspace_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "ops": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "snapshot",
+                  "read_file",
+                  "list",
+                  "stat",
+                  "digest",
+                  "git_log",
+                  "git_diff",
+                  "capture_artifacts"
+                ]
+              }
+            },
+            "allow_paths": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "deny_paths": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "data_classes": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/DataClassSet"
+            },
+            "limits": {
+              "$ref": "#/$defs/CommonLimits"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "WorkspaceMaterializeGrant": {
+      "type": "object",
+      "required": [
+        "action",
+        "resource",
+        "constraints"
+      ],
+      "properties": {
+        "action": {
+          "const": "workspace.materialize"
+        },
+        "resource": {
+          "$ref": "#/$defs/RunResource"
+        },
+        "constraints": {
+          "type": "object",
+          "properties": {
+            "candidates": {
+              "type": "array",
+              "items": {
+                "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/CandidateId"
+              }
+            },
+            "modes": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "read_only_snapshot",
+                  "mutable_eval_workspace",
+                  "agent_workspace"
+                ]
+              }
+            },
+            "roots": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "limits": {
+              "$ref": "#/$defs/CommonLimits"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "SandboxExecGrant": {
+      "type": "object",
+      "required": [
+        "action",
+        "resource",
+        "constraints"
+      ],
+      "properties": {
+        "action": {
+          "const": "sandbox.exec"
+        },
+        "resource": {
+          "type": "object",
+          "properties": {
+            "sandbox_pool": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "constraints": {
+          "type": "object",
+          "properties": {
+            "allowed_commands": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "denied_commands": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "allowed_input_classes": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/DataClassSet"
+            },
+            "forbidden_input_classes": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/DataClassSet"
+            },
+            "network": {
+              "enum": [
+                "deny",
+                "allow",
+                "allowlist"
+              ]
+            },
+            "limits": {
+              "$ref": "#/$defs/CommonLimits"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "LmCompleteGrant": {
+      "type": "object",
+      "required": [
+        "action",
+        "resource",
+        "constraints"
+      ],
+      "properties": {
+        "action": {
+          "const": "lm.complete"
+        },
+        "resource": {
+          "type": "object",
+          "properties": {
+            "lm_pool": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "constraints": {
+          "type": "object",
+          "properties": {
+            "purpose": {
+              "type": "string"
+            },
+            "purposes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "models": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "model_roles": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "allowed_input_classes": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/DataClassSet"
+            },
+            "forbidden_input_classes": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/DataClassSet"
+            },
+            "raw_prompt_logging": {
+              "enum": [
+                "forbidden",
+                "redacted",
+                "operator_only",
+                "full"
+              ]
+            },
+            "raw_completion_logging": {
+              "enum": [
+                "forbidden",
+                "redacted",
+                "operator_only",
+                "full"
+              ]
+            },
+            "limits": {
+              "$ref": "#/$defs/CommonLimits"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "AgentRunGrant": {
+      "type": "object",
+      "required": [
+        "action",
+        "resource",
+        "constraints"
+      ],
+      "properties": {
+        "action": {
+          "const": "agent.run"
+        },
+        "resource": {
+          "type": "object",
+          "properties": {
+            "runtime_pool": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "constraints": {
+          "type": "object",
+          "properties": {
+            "runtimes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "allowed_tools": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "allow_shell": {
+              "type": "boolean"
+            },
+            "allowed_input_classes": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/DataClassSet"
+            },
+            "forbidden_input_classes": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/DataClassSet"
+            },
+            "raw_transcript_visibility": {
+              "enum": [
+                "forbidden",
+                "redacted",
+                "operator_only",
+                "full"
+              ]
+            },
+            "limits": {
+              "$ref": "#/$defs/CommonLimits"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "HumanReviewGrant": {
+      "type": "object",
+      "required": [
+        "action",
+        "resource",
+        "constraints"
+      ],
+      "properties": {
+        "action": {
+          "const": "human.review"
+        },
+        "resource": {
+          "type": "object",
+          "properties": {
+            "queues": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "constraints": {
+          "type": "object",
+          "properties": {
+            "allowed_input_classes": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/DataClassSet"
+            },
+            "limits": {
+              "$ref": "#/$defs/CommonLimits"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "ProposalSubmitGrant": {
+      "type": "object",
+      "required": [
+        "action",
+        "resource",
+        "constraints"
+      ],
+      "properties": {
+        "action": {
+          "const": "proposal.submit"
+        },
+        "resource": {
+          "$ref": "#/$defs/RunResource"
+        },
+        "constraints": {
+          "type": "object",
+          "properties": {
+            "effects": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "create",
+                  "change",
+                  "change_from_workspace_diff"
+                ]
+              }
+            },
+            "allowed_targets": {
+              "type": "array",
+              "items": {
+                "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/CandidateId"
+              }
+            },
+            "allowed_surfaces": {
+              "type": "array",
+              "items": {
+                "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/SurfaceFingerprint"
+              }
+            },
+            "artifact_schemas": {
+              "type": "array",
+              "items": {
+                "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/SchemaFingerprint"
+              }
+            },
+            "change_schemas": {
+              "type": "array",
+              "items": {
+                "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/SchemaFingerprint"
+              }
+            },
+            "may_apply": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "ProposalApplyGrant": {
+      "type": "object",
+      "required": [
+        "action",
+        "resource",
+        "constraints"
+      ],
+      "properties": {
+        "action": {
+          "const": "proposal.apply"
+        },
+        "resource": {
+          "$ref": "#/$defs/RunResource"
+        },
+        "constraints": {
+          "type": "object",
+          "properties": {
+            "proposal_batches": {
+              "type": "array",
+              "items": {
+                "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/ProposalBatchId"
+              }
+            },
+            "stale_policy": {
+              "enum": [
+                "reject",
+                "allow_if_optimizer_policy_allows"
+              ]
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "AssessmentSubmitGrant": {
+      "type": "object",
+      "required": [
+        "action",
+        "resource",
+        "constraints"
+      ],
+      "properties": {
+        "action": {
+          "const": "assessment.submit"
+        },
+        "resource": {
+          "type": "object",
+          "properties": {
+            "run": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/RunId"
+            },
+            "evaluation_request_id": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/EvaluationRequestId"
+            }
+          },
+          "additionalProperties": false
+        },
+        "constraints": {
+          "type": "object",
+          "properties": {
+            "assessment_shapes": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "independent",
+                  "pairwise",
+                  "listwise"
+                ]
+              }
+            },
+            "granularity": {
+              "enum": [
+                "per_case",
+                "aggregate",
+                "mixed"
+              ]
+            },
+            "allowed_candidates": {
+              "type": "array",
+              "items": {
+                "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/CandidateId"
+              }
+            },
+            "allowed_cases": {
+              "type": "array",
+              "items": {
+                "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/CaseId"
+              }
+            },
+            "purpose": {
+              "enum": [
+                "train",
+                "validation",
+                "test",
+                "analysis",
+                "evaluation"
+              ]
+            },
+            "evidence_visibility_allowed": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "score_only",
+                  "score_and_feedback",
+                  "summary_only",
+                  "public_only",
+                  "full"
+                ]
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "EvaluationRequestGrant": {
+      "type": "object",
+      "required": [
+        "action",
+        "resource",
+        "constraints"
+      ],
+      "properties": {
+        "action": {
+          "const": "evaluation.request"
+        },
+        "resource": {
+          "$ref": "#/$defs/RunResource"
+        },
+        "constraints": {
+          "type": "object",
+          "properties": {
+            "shapes": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "independent",
+                  "pairwise",
+                  "listwise"
+                ]
+              }
+            },
+            "sets": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "train",
+                  "validation",
+                  "test",
+                  "cases",
+                  "tagged",
+                  "recent",
+                  "unscoped"
+                ]
+              }
+            },
+            "hidden_partitions": {
+              "enum": [
+                "deny",
+                "allow_if_evaluator",
+                "allow"
+              ]
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "WatchGrant": {
+      "type": "object",
+      "required": [
+        "action",
+        "resource",
+        "constraints"
+      ],
+      "properties": {
+        "action": {
+          "const": "watch.start"
+        },
+        "resource": {
+          "$ref": "#/$defs/RunResource"
+        },
+        "constraints": {
+          "type": "object",
+          "properties": {
+            "event_kinds": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "max_backlog": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "projection": {
+              "enum": [
+                "ids",
+                "summary",
+                "full"
+              ]
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "ExtensionGrant": {
+      "type": "object",
+      "required": [
+        "action",
+        "resource",
+        "constraints"
+      ],
+      "properties": {
+        "action": {
+          "pattern": "^extension\\.(read|call|write)$"
+        },
+        "resource": {
+          "type": "object",
+          "required": [
+            "namespace"
+          ],
+          "properties": {
+            "namespace": {
+              "type": "string"
+            },
+            "ops": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "constraints": {
+          "type": "object",
+          "properties": {
+            "schemas": {
+              "type": "array",
+              "items": {
+                "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/SchemaFingerprint"
+              }
+            },
+            "limits": {
+              "$ref": "#/$defs/CommonLimits"
+            },
+            "allowed_input_classes": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/DataClassSet"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

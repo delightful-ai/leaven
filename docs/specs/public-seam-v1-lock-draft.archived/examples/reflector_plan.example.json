@@ -1,0 +1,233 @@
+{
+  "schema_version": "leaven.plan.v1",
+  "plan_id": "plan_reflect_01H",
+  "consistency": {
+    "kind": "at_revision",
+    "revision": "rev_00000142"
+  },
+  "mode": {
+    "kind": "execute"
+  },
+  "ops": [
+    {
+      "kind": "let",
+      "name": "lineage",
+      "expr": {
+        "kind": "graph_query",
+        "query": {
+          "source": {
+            "kind": "candidate",
+            "candidate": {
+              "kind": "candidate",
+              "id": "cand_123"
+            }
+          },
+          "steps": [
+            {
+              "kind": "traverse",
+              "edge": {
+                "kind": "lineage",
+                "depth": 3
+              }
+            }
+          ],
+          "projection": {
+            "kind": "candidate",
+            "include_origin": true,
+            "include_identity": true,
+            "include_scores": true,
+            "artifact": {
+              "kind": "artifact",
+              "surface_fingerprint": "fp_surface_skillbank_v3",
+              "projection_schema": "fp_skillbank_summary_v1",
+              "selector": {
+                "part": "pytest_debugging"
+              },
+              "max_bytes": 65536
+            }
+          }
+        }
+      }
+    },
+    {
+      "kind": "let",
+      "name": "siblings",
+      "expr": {
+        "kind": "graph_query",
+        "query": {
+          "source": {
+            "kind": "candidate",
+            "candidate": {
+              "kind": "candidate",
+              "id": "cand_123"
+            }
+          },
+          "steps": [
+            {
+              "kind": "traverse",
+              "edge": {
+                "kind": "siblings"
+              }
+            },
+            {
+              "kind": "limit",
+              "limit": 8
+            }
+          ],
+          "projection": {
+            "kind": "candidate",
+            "include_scores": true,
+            "artifact": {
+              "kind": "artifact",
+              "surface_fingerprint": "fp_surface_skillbank_v3",
+              "projection_schema": "fp_skillbank_summary_v1",
+              "selector": {
+                "part": "pytest_debugging"
+              },
+              "max_bytes": 65536
+            }
+          }
+        }
+      }
+    },
+    {
+      "kind": "call",
+      "name": "patch",
+      "call": {
+        "kind": "lm_complete",
+        "purpose": "reflection",
+        "model_role": "reflector",
+        "messages": [
+          {
+            "role": "system",
+            "content": "Improve the selected artifact part using target-safe evidence only."
+          },
+          {
+            "role": "user",
+            "content_template": {
+              "template": "Lineage: {{ lineage }}\nSiblings: {{ siblings }}\nReturn SkillPatch JSON.",
+              "vars": {
+                "lineage": {
+                  "kind": "var",
+                  "name": "lineage"
+                },
+                "siblings": {
+                  "kind": "var",
+                  "name": "siblings"
+                }
+              }
+            }
+          }
+        ],
+        "output": {
+          "kind": "json_schema",
+          "schema_fingerprint": "fp_skill_patch_v1"
+        },
+        "cache_policy": "default",
+        "limits": {
+          "max_usd_micro": 50000
+        },
+        "input_classes": [
+          "public",
+          "optimizer.visible"
+        ]
+      },
+      "deps": [
+        "lineage",
+        "siblings"
+      ],
+      "idempotency_key": "idem_lm_patch_01H"
+    },
+    {
+      "kind": "write",
+      "name": "proposal_batch",
+      "write": {
+        "kind": "submit_proposal_batch",
+        "semantics": "alternatives",
+        "proposals": [
+          {
+            "effect": {
+              "kind": "change",
+              "target": {
+                "kind": "candidate",
+                "id": "cand_123"
+              },
+              "surface_fingerprint": "fp_surface_skillbank_v3",
+              "change_schema": "fp_skill_patch_v1",
+              "change": {
+                "kind": "extract",
+                "input": {
+                  "kind": "var",
+                  "name": "patch"
+                },
+                "path": "$.parsed.change"
+              }
+            },
+            "provenance": {
+              "causal": {
+                "kind": "single",
+                "candidate": {
+                  "kind": "candidate",
+                  "id": "cand_123"
+                }
+              },
+              "informed_by": {
+                "kind": "concat",
+                "items": [
+                  {
+                    "kind": "refs_from_result",
+                    "from": "lineage"
+                  },
+                  {
+                    "kind": "refs_from_result",
+                    "from": "siblings"
+                  }
+                ]
+              }
+            },
+            "annotations": {
+              "kind": "extract",
+              "input": {
+                "kind": "var",
+                "name": "patch"
+              },
+              "path": "$.parsed.rationale"
+            }
+          }
+        ],
+        "read_receipts": [
+          "qrec_lineage_01H",
+          "qrec_siblings_01H",
+          "lmrec_patch_01H"
+        ]
+      },
+      "deps": [
+        "patch"
+      ],
+      "preconditions": [
+        {
+          "kind": "candidate_exists",
+          "candidate": {
+            "kind": "candidate",
+            "id": "cand_123"
+          }
+        },
+        {
+          "kind": "graph_revision_at_least",
+          "revision": "rev_00000142"
+        }
+      ],
+      "idempotency_key": "idem_submit_batch_01H"
+    }
+  ],
+  "return": [
+    "lineage",
+    "siblings",
+    "patch",
+    "proposal_batch"
+  ],
+  "commit": {
+    "kind": "graph_writes_atomic",
+    "on_stale": "reject"
+  }
+}

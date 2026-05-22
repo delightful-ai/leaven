@@ -1,0 +1,60 @@
+{
+  "reflect_request": {
+    "schema_version": "leaven.stage_payloads.v1",
+    "role": "reflector",
+    "run": "run_demo",
+    "stage_call_id": "sc_reflect_01",
+    "base_revision": "rev_001",
+    "parent": "cand_parent",
+    "examples": [],
+    "source_refs": [],
+    "target_safety": "target_safe_projection",
+    "capability_fingerprint": "fp_cap_sha256_demo"
+  },
+  "reflection_result": {
+    "schema_version": "leaven.stage_payloads.v1",
+    "role": "reflection_result",
+    "summary": "The parent fails empty-input cases because its guard treats empty strings as valid payloads.",
+    "failure_modes": [
+      {
+        "label": "empty_input_guard",
+        "description": "No early return for empty user input.",
+        "severity": "high"
+      }
+    ],
+    "surface_suggestions": [
+      {
+        "surface_fingerprint": "fp_surface_sha256_skill",
+        "part_label": "input_validation",
+        "diagnosis": "guard missing",
+        "suggested_direction": "add explicit empty input guard"
+      }
+    ],
+    "source_refs": [
+      "cand_parent"
+    ],
+    "read_receipts": [
+      "qrec_lineage_001"
+    ],
+    "data_classes": [
+      "optimizer.visible"
+    ],
+    "confidence": 0.82
+  },
+  "propose_request": {
+    "schema_version": "leaven.stage_payloads.v1",
+    "role": "proposer",
+    "run": "run_demo",
+    "stage_call_id": "sc_propose_01",
+    "base_revision": "rev_001",
+    "parent": "cand_parent",
+    "reflection_result": "<above>",
+    "allowed_effects": [
+      "change"
+    ],
+    "allowed_change_schemas": [
+      "fp_schema_sha256_skill_patch"
+    ],
+    "capability_fingerprint": "fp_cap_sha256_demo"
+  }
+}

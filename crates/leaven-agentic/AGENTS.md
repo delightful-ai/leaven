@@ -86,6 +86,13 @@ provider protocol details or optimizer-specific search rhythm.
   verify: run `cargo test -p leaven-agentic --test goal_handoff`
 
 ## Local Bait
+- `docs/specs/public-seam-v1/` locks the public seam for external-worker
+  reflection/proposal/assessment flow: stage payloads, evidence envelopes, and
+  the ACP profile that delivers Leaven extension methods to workers. The
+  structural split between reflection (diagnosis) and proposal (graph mutation
+  intent) is governing judgment; preserve it when shaping adapter parsers and
+  goal-loop handoff prompts. Lowering this crate's adapters onto the locked
+  seam is not yet done.
 - Agent workspace mutation is not graph mutation. Only parser-produced
   proposals or assessments enter the graph through `RunContext`.
 - Agentic evaluators are nondeterministic by default. Do not make evaluation

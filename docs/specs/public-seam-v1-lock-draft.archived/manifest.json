@@ -1,0 +1,30 @@
+{
+  "name": "leaven-public-seam-v1-lock-draft",
+  "created_at": "2026-05-22T23:28:33Z",
+  "status": "candidate normative lock draft",
+  "main_spec": "leaven_public_seam_v1_lock_spec.md",
+  "schemas": [
+    "common.schema.json",
+    "leaven.capability.v1.schema.json",
+    "leaven.evaluation_job.v1.schema.json",
+    "leaven.evidence_envelope.v1.schema.json",
+    "leaven.plan.v1.schema.json",
+    "leaven.plan_result.v1.schema.json",
+    "leaven.stage_payloads.v1.schema.json",
+    "leaven.watch.v1.schema.json",
+    "leaven.worker_protocol.v1.schema.json"
+  ],
+  "examples": [
+    "evaluator_capability.example.json",
+    "evaluator_dspy_codex.py",
+    "reflector_plan.example.json"
+  ],
+  "principles": [
+    "one IR family with Let/Call/Write semantics",
+    "capability token spine with structured attenuable grants",
+    "managed boundaries with arbitrary host-language interiors",
+    "request-scoped and egress-scoped evaluator privilege",
+    "visibility, receipts, data classes, and replay classes as first-class results",
+    "RunContext remains the only graph mutation authority"
+  ]
+}

@@ -1,0 +1,142 @@
+{
+  "schema_version": "leaven.capability.v1",
+  "jti": "jti_eval_01",
+  "capability_fingerprint": "fp_cap_sha256_eval01",
+  "policy_fingerprint": "fp_policy_sha256_evalpolicy",
+  "subject_fingerprint": "fp_subject_sha256_evalsubject",
+  "issuer": {
+    "kind": "run_engine",
+    "id": "engine_local"
+  },
+  "subject": {
+    "kind": "evaluation_stage_call",
+    "run": "run_demo",
+    "stage_call_id": "sc_eval_01",
+    "evaluation_request_id": "evalreq_01",
+    "evaluator": "skillbank/pytest-dspy-codex"
+  },
+  "audience": [
+    "leaven.acp.worker",
+    "leaven.plan.eval"
+  ],
+  "issued_at": "2026-05-23T00:00:00Z",
+  "expires_at": "2026-05-23T00:20:00Z",
+  "expiry_behavior": "drain_inflight_no_new_ops",
+  "token_binding": {
+    "kind": "opaque_lookup",
+    "token_id": "ltok_eval_01"
+  },
+  "revocation": {
+    "mode": "issuer_epoch",
+    "revocation_epoch": 7,
+    "check": "on_every_request"
+  },
+  "renewal": {
+    "mode": "renew_before_expiry",
+    "max_extensions": 2,
+    "max_total_lifetime_s": 3600
+  },
+  "budgets": {
+    "max_total_usd_micro": 300000,
+    "max_lm_usd_micro": 150000,
+    "max_agent_usd_micro": 150000,
+    "max_concurrent_calls": 4
+  },
+  "execution_policy": {
+    "profile": "managed_sandbox",
+    "network": "leaven_endpoint_only",
+    "subprocess": "deny_except_sandbox_exec",
+    "filesystem": "workspace_handles_only",
+    "byo_effects": "forbidden"
+  },
+  "grants": [
+    {
+      "action": "case.read",
+      "resource": {
+        "run": "run_demo",
+        "evaluation_request_id": "evalreq_01"
+      },
+      "constraints": {
+        "case_fields": [
+          "input",
+          "target",
+          "metadata"
+        ],
+        "partitions": [
+          "validation"
+        ],
+        "visibility_classes": [
+          "hidden"
+        ],
+        "target_egress": "trusted_model_only",
+        "allowed_input_classes": [
+          "case.input",
+          "case.target"
+        ],
+        "forbidden_input_classes": [
+          "external.secret"
+        ]
+      }
+    },
+    {
+      "action": "lm.complete",
+      "resource": {
+        "run": "run_demo",
+        "lm_pool": "trusted-grader"
+      },
+      "constraints": {
+        "purposes": [
+          "evaluation_judge"
+        ],
+        "model_roles": [
+          "grader"
+        ],
+        "raw_prompt_logging": "redacted",
+        "allowed_input_classes": [
+          "case.input",
+          "case.target",
+          "candidate.output",
+          "workspace.file"
+        ],
+        "forbidden_input_classes": [
+          "workspace.secret",
+          "external.secret"
+        ]
+      },
+      "limits": {
+        "max_usd_micro": 150000,
+        "max_calls": 20
+      }
+    },
+    {
+      "action": "assessment.submit",
+      "resource": {
+        "run": "run_demo",
+        "evaluation_request_id": "evalreq_01"
+      },
+      "constraints": {
+        "assessment_shapes": [
+          "independent"
+        ],
+        "granularity": "per_case",
+        "allowed_candidates": [
+          "cand_123"
+        ],
+        "allowed_cases": [
+          "case_17"
+        ]
+      }
+    }
+  ],
+  "delegation": {
+    "may_delegate": false,
+    "max_depth": 0,
+    "must_attenuate": true,
+    "allowed_actions": []
+  },
+  "mint_time_validation": [
+    "runner cannot receive target",
+    "evaluation subject requires evaluation_request_id",
+    "deny input classes override allow input classes"
+  ]
+}

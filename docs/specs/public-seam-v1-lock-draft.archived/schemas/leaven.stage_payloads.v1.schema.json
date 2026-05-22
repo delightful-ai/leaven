@@ -1,0 +1,524 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.leaven.dev/v1/leaven.stage_payloads.v1.schema.json",
+  "title": "Leaven Stage Payloads V1",
+  "description": "Public role-specific payloads handed to foreign-language stage workers. These are invocation payloads, not graph storage records.",
+  "type": "object",
+  "required": [
+    "schema_version"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "leaven.stage_payloads.v1"
+    },
+    "payload": {
+      "$ref": "#/$defs/StagePayloadV1"
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "StageRoleV1": {
+      "type": "string",
+      "enum": [
+        "runner",
+        "scorer",
+        "evaluator",
+        "reflector",
+        "proposer",
+        "preference",
+        "callback",
+        "artifact_adapter",
+        "dataset_adapter",
+        "operator"
+      ]
+    },
+    "StageInvocationV1": {
+      "type": "object",
+      "description": "Envelope delivered to a worker before the worker evaluates leaven.plan.v1 portals. The bearer token is delivered out-of-band and MUST NOT be stored inside this object.",
+      "required": [
+        "schema_version",
+        "role",
+        "run",
+        "stage_call_id",
+        "base_revision",
+        "payload",
+        "capability_fingerprint"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "leaven.stage_invocation.v1"
+        },
+        "role": {
+          "$ref": "#/$defs/StageRoleV1"
+        },
+        "run": {
+          "$ref": "common.schema.json#/$defs/RunRef"
+        },
+        "stage_call_id": {
+          "$ref": "common.schema.json#/$defs/StageCallId"
+        },
+        "evaluation_attempt_id": {
+          "$ref": "common.schema.json#/$defs/EvaluationAttemptId"
+        },
+        "base_revision": {
+          "$ref": "common.schema.json#/$defs/GraphRevision"
+        },
+        "deadline": {
+          "$ref": "common.schema.json#/$defs/Timestamp"
+        },
+        "capability_fingerprint": {
+          "$ref": "common.schema.json#/$defs/CapabilityFingerprint"
+        },
+        "policy_fingerprint": {
+          "$ref": "common.schema.json#/$defs/PolicyFingerprint"
+        },
+        "payload": {
+          "$ref": "#/$defs/StagePayloadV1"
+        },
+        "metadata": {
+          "$ref": "common.schema.json#/$defs/MetadataBag"
+        }
+      },
+      "additionalProperties": false
+    },
+    "StagePayloadV1": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ReflectRequestV1"
+        },
+        {
+          "$ref": "#/$defs/RunRequestV1"
+        },
+        {
+          "$ref": "#/$defs/ScoreContextV1"
+        },
+        {
+          "$ref": "#/$defs/EvaluationJobRefV1"
+        },
+        {
+          "$ref": "#/$defs/PreferenceContextV1"
+        },
+        {
+          "$ref": "#/$defs/CallbackEventV1"
+        },
+        {
+          "$ref": "#/$defs/ArtifactAdapterRequestV1"
+        },
+        {
+          "$ref": "#/$defs/DatasetAdapterRequestV1"
+        }
+      ]
+    },
+    "RunCaseV1": {
+      "type": "object",
+      "description": "Target-free case view. Suitable for runners and target-safe optimizer stages.",
+      "required": [
+        "case",
+        "input"
+      ],
+      "properties": {
+        "case": {
+          "$ref": "common.schema.json#/$defs/CaseRef"
+        },
+        "input": {},
+        "metadata": {
+          "$ref": "common.schema.json#/$defs/MetadataBag"
+        },
+        "data_classes": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/DataClass"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "TargetCaseV1": {
+      "type": "object",
+      "description": "Target-aware case view. Only scorer/evaluator/operator grants may receive this view.",
+      "required": [
+        "case",
+        "input",
+        "target"
+      ],
+      "properties": {
+        "case": {
+          "$ref": "common.schema.json#/$defs/CaseRef"
+        },
+        "input": {},
+        "target": {},
+        "metadata": {
+          "$ref": "common.schema.json#/$defs/MetadataBag"
+        },
+        "target_ref": {
+          "$ref": "common.schema.json#/$defs/InfoRef"
+        },
+        "data_classes": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/DataClass"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "RunRequestV1": {
+      "type": "object",
+      "required": [
+        "kind",
+        "candidate",
+        "artifact",
+        "case"
+      ],
+      "properties": {
+        "kind": {
+          "const": "run_request"
+        },
+        "candidate": {
+          "$ref": "common.schema.json#/$defs/CandidateRef"
+        },
+        "artifact": {
+          "description": "Adapter-projected artifact view or materialization handle."
+        },
+        "artifact_schema": {
+          "$ref": "common.schema.json#/$defs/SchemaFingerprint"
+        },
+        "case": {
+          "$ref": "#/$defs/RunCaseV1"
+        },
+        "output_contract": {
+          "$ref": "common.schema.json#/$defs/OutputContract"
+        },
+        "metadata": {
+          "$ref": "common.schema.json#/$defs/MetadataBag"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ScoreContextV1": {
+      "type": "object",
+      "description": "Target-aware scoring context. The target MAY be omitted and obtained by a receipted case.read portal if policy requires target reads to be logged separately.",
+      "required": [
+        "kind",
+        "evaluation_request_id",
+        "candidate",
+        "case",
+        "output"
+      ],
+      "properties": {
+        "kind": {
+          "const": "score_context"
+        },
+        "evaluation_request_id": {
+          "$ref": "common.schema.json#/$defs/EvaluationRequestId"
+        },
+        "candidate": {
+          "$ref": "common.schema.json#/$defs/CandidateRef"
+        },
+        "case": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/TargetCaseV1"
+            },
+            {
+              "$ref": "#/$defs/RunCaseV1"
+            }
+          ]
+        },
+        "output": {},
+        "runner_trace_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/TraceRef"
+          }
+        },
+        "read_receipts": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/ReceiptRef"
+          }
+        },
+        "effect_receipts": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/ReceiptRef"
+          }
+        },
+        "metadata": {
+          "$ref": "common.schema.json#/$defs/MetadataBag"
+        }
+      },
+      "additionalProperties": false
+    },
+    "EvaluationJobRefV1": {
+      "type": "object",
+      "description": "Pointer to leaven.evaluation_job.v1. Large jobs may be passed by ref and loaded through a receipted portal.",
+      "required": [
+        "kind",
+        "evaluation_request_id"
+      ],
+      "properties": {
+        "kind": {
+          "const": "evaluation_job_ref"
+        },
+        "evaluation_request_id": {
+          "$ref": "common.schema.json#/$defs/EvaluationRequestId"
+        },
+        "job_ref": {
+          "$ref": "common.schema.json#/$defs/ExternalRef"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ReflectRequestV1": {
+      "type": "object",
+      "description": "Target-safe build-once reflection request plus live-query authority through the worker token. Raw targets MUST NOT appear in this object.",
+      "required": [
+        "kind",
+        "parent",
+        "part",
+        "part_label",
+        "examples",
+        "source_refs",
+        "attempt_index"
+      ],
+      "properties": {
+        "kind": {
+          "const": "reflect_request"
+        },
+        "request_id": {
+          "$ref": "common.schema.json#/$defs/OpaqueId"
+        },
+        "parent": {
+          "$ref": "common.schema.json#/$defs/CandidateRef"
+        },
+        "part": {
+          "description": "Adapter-defined part selector or projected part payload."
+        },
+        "part_label": {
+          "type": "string"
+        },
+        "surface_fingerprint": {
+          "$ref": "common.schema.json#/$defs/SurfaceFingerprint"
+        },
+        "part_schema": {
+          "$ref": "common.schema.json#/$defs/SchemaFingerprint"
+        },
+        "examples": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ReflectiveExampleV1"
+          }
+        },
+        "source_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/InfoRef"
+          }
+        },
+        "attempt_index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "base_revision": {
+          "$ref": "common.schema.json#/$defs/GraphRevision"
+        },
+        "metadata": {
+          "$ref": "common.schema.json#/$defs/MetadataBag"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ReflectiveExampleV1": {
+      "type": "object",
+      "description": "A target-safe example for reflection. It may contain scorer-derived feedback; it MUST NOT contain raw target/answer-key fields.",
+      "required": [
+        "case",
+        "input",
+        "output",
+        "score",
+        "feedback",
+        "source_refs"
+      ],
+      "properties": {
+        "side_info": {},
+        "case": {
+          "$ref": "common.schema.json#/$defs/CaseRef"
+        },
+        "input": {},
+        "output": {},
+        "score": {
+          "$ref": "common.schema.json#/$defs/Score"
+        },
+        "feedback": {
+          "type": "string"
+        },
+        "evidence_visibility": {
+          "type": "string",
+          "enum": [
+            "score_only",
+            "feedback",
+            "summary",
+            "full_public",
+            "redacted"
+          ]
+        },
+        "source_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/InfoRef"
+          }
+        },
+        "trace_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/TraceRef"
+          }
+        },
+        "redactions": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/Redaction"
+          }
+        },
+        "metadata": {
+          "$ref": "common.schema.json#/$defs/MetadataBag"
+        }
+      },
+      "additionalProperties": false
+    },
+    "PreferenceContextV1": {
+      "type": "object",
+      "required": [
+        "kind",
+        "evaluation_request_id",
+        "candidates",
+        "case"
+      ],
+      "properties": {
+        "kind": {
+          "const": "preference_context"
+        },
+        "evaluation_request_id": {
+          "$ref": "common.schema.json#/$defs/EvaluationRequestId"
+        },
+        "candidates": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "$ref": "common.schema.json#/$defs/CandidateRef"
+          }
+        },
+        "case": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/TargetCaseV1"
+            },
+            {
+              "$ref": "#/$defs/RunCaseV1"
+            }
+          ]
+        },
+        "outputs": {
+          "type": "array"
+        },
+        "metadata": {
+          "$ref": "common.schema.json#/$defs/MetadataBag"
+        }
+      },
+      "additionalProperties": false
+    },
+    "CallbackEventV1": {
+      "type": "object",
+      "required": [
+        "kind",
+        "event"
+      ],
+      "properties": {
+        "kind": {
+          "const": "callback_event"
+        },
+        "event": {},
+        "event_schema": {
+          "$ref": "common.schema.json#/$defs/SchemaFingerprint"
+        },
+        "metadata": {
+          "$ref": "common.schema.json#/$defs/MetadataBag"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ArtifactAdapterRequestV1": {
+      "type": "object",
+      "required": [
+        "kind",
+        "op",
+        "artifact_type"
+      ],
+      "properties": {
+        "kind": {
+          "const": "artifact_adapter_request"
+        },
+        "op": {
+          "type": "string",
+          "enum": [
+            "project",
+            "diff",
+            "apply_change",
+            "materialize",
+            "parse_workspace_diff",
+            "fingerprint"
+          ]
+        },
+        "artifact_type": {
+          "$ref": "common.schema.json#/$defs/ArtifactTypeId"
+        },
+        "surface_fingerprint": {
+          "$ref": "common.schema.json#/$defs/SurfaceFingerprint"
+        },
+        "payload": {},
+        "payload_schema": {
+          "$ref": "common.schema.json#/$defs/SchemaFingerprint"
+        },
+        "metadata": {
+          "$ref": "common.schema.json#/$defs/MetadataBag"
+        }
+      },
+      "additionalProperties": false
+    },
+    "DatasetAdapterRequestV1": {
+      "type": "object",
+      "required": [
+        "kind",
+        "op"
+      ],
+      "properties": {
+        "kind": {
+          "const": "dataset_adapter_request"
+        },
+        "op": {
+          "type": "string",
+          "enum": [
+            "list_cases",
+            "load_case",
+            "resolve_set",
+            "project_input",
+            "project_target",
+            "fingerprint"
+          ]
+        },
+        "dataset_ref": {
+          "$ref": "common.schema.json#/$defs/ExternalRef"
+        },
+        "payload": {},
+        "payload_schema": {
+          "$ref": "common.schema.json#/$defs/SchemaFingerprint"
+        },
+        "metadata": {
+          "$ref": "common.schema.json#/$defs/MetadataBag"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

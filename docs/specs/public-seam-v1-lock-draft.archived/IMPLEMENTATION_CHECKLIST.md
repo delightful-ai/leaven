@@ -1,0 +1,22 @@
+# Leaven Public Seam V1 Implementation Checklist
+
+- Implement exactly one authorization kernel for CLI, SDK, workers, workspace agents, and remote service.
+- Resolve `latest_at_start` once per plan and report the concrete base revision.
+- Reject syntactic case-set shortcuts that avoid partition resolution.
+- Split query receipts from semantic `InfoRef`s.
+- Split effect receipts from write receipts.
+- Validate data-class egress before LM, agent, sandbox, or human calls.
+- Treat target access and target egress as separate grants.
+- Treat workspace reads as snapshot reads and workspace exec as effects.
+- Make `lm_complete` and `agent_run` the easy/default SDK path.
+- Mark BYO network/subprocess as declared or untracked external effects.
+- Validate evaluator assessment writes against `evaluation_request_id`, resolved set, candidates, cases, shape, purpose, and granularity.
+- Validate proposal writes against causal refs, surface fingerprint, change schema, artifact schema, and read receipts.
+- Persist token fingerprints and grant summaries, never bearer secrets.
+- Persist capability, policy, execution-policy, runtime, adapter, schema, and code/package fingerprints.
+- Return redactions and count policy in results.
+- Expose exact counts only when granted.
+- Keep artifact semantics in adapter namespaces.
+- Reject unknown core fields unless under `metadata` or registered `extension` payload.
+- Add DSPy LM adapter and callbacks before promoting DSPy evaluator ergonomics.
+- Use OS/container policy to enforce no-BYO profiles; capability grants alone cannot stop sockets or subprocesses.

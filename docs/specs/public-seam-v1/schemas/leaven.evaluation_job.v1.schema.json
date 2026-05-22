@@ -1,0 +1,190 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.leaven.dev/v1/v0.3/leaven.evaluation_job.v1.schema.json",
+  "title": "Leaven Evaluation Job v1 v0.3",
+  "description": "Evaluator-specific invocation. Targets are handles; explicit case target reads cross case.load under evaluator capability.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "run",
+    "stage_call_id",
+    "evaluation_request_id",
+    "base_revision",
+    "kind",
+    "resolved_set",
+    "granularity",
+    "purpose",
+    "capability_fingerprint",
+    "evaluator_id"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "leaven.evaluation_job.v1"
+    },
+    "run": {
+      "$ref": "common.schema.json#/$defs/RunId"
+    },
+    "stage_call_id": {
+      "$ref": "common.schema.json#/$defs/StageCallId"
+    },
+    "evaluation_attempt_id": {
+      "$ref": "common.schema.json#/$defs/EvaluationAttemptId"
+    },
+    "evaluation_request_id": {
+      "$ref": "common.schema.json#/$defs/EvaluationRequestId"
+    },
+    "evaluator_id": {
+      "type": "string"
+    },
+    "evaluator_fingerprint": {
+      "$ref": "common.schema.json#/$defs/Fingerprint"
+    },
+    "base_revision": {
+      "$ref": "common.schema.json#/$defs/GraphRevision"
+    },
+    "deadline_at": {
+      "$ref": "common.schema.json#/$defs/Timestamp"
+    },
+    "parent_job_id": {
+      "type": "string"
+    },
+    "target_egress_policy_ref": {
+      "$ref": "common.schema.json#/$defs/PolicyFingerprint"
+    },
+    "kind": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "independent"
+            },
+            "candidates": {
+              "type": "array",
+              "items": {
+                "$ref": "common.schema.json#/$defs/CandidateRef"
+              },
+              "minItems": 1
+            }
+          },
+          "required": [
+            "kind",
+            "candidates"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "pairwise"
+            },
+            "pairs": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "left": {
+                    "$ref": "common.schema.json#/$defs/CandidateRef"
+                  },
+                  "right": {
+                    "$ref": "common.schema.json#/$defs/CandidateRef"
+                  }
+                },
+                "required": [
+                  "left",
+                  "right"
+                ],
+                "additionalProperties": false
+              },
+              "minItems": 1
+            }
+          },
+          "required": [
+            "kind",
+            "pairs"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "listwise"
+            },
+            "candidates": {
+              "type": "array",
+              "items": {
+                "$ref": "common.schema.json#/$defs/CandidateRef"
+              },
+              "minItems": 1
+            }
+          },
+          "required": [
+            "kind",
+            "candidates"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "granularity": {
+      "enum": [
+        "aggregate",
+        "per_case"
+      ]
+    },
+    "purpose": {
+      "enum": [
+        "train",
+        "validation",
+        "test",
+        "diagnostic",
+        "custom"
+      ]
+    },
+    "resolved_set": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^rset_[A-Za-z0-9_.:-]+$"
+        },
+        "case_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/CaseRef"
+          }
+        },
+        "case_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "case_cursor": {
+          "$ref": "common.schema.json#/$defs/Cursor"
+        },
+        "case_set_version": {
+          "type": "string"
+        },
+        "partition_summary": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "case_count"
+      ],
+      "additionalProperties": false
+    },
+    "capability_fingerprint": {
+      "$ref": "common.schema.json#/$defs/CapabilityFingerprint"
+    },
+    "metadata": {
+      "$ref": "common.schema.json#/$defs/MetadataBag"
+    }
+  }
+}

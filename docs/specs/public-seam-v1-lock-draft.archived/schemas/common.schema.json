@@ -1,0 +1,711 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.leaven.dev/v1/common.schema.json",
+  "title": "Leaven Common V1 Definitions",
+  "type": "object",
+  "$defs": {
+    "NonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "Identifier": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,127}$"
+    },
+    "OpaqueId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_:-]{1,191}$"
+    },
+    "RunId": {
+      "type": "string",
+      "pattern": "^run_[A-Za-z0-9_.:-]+$"
+    },
+    "CandidateId": {
+      "type": "string",
+      "pattern": "^cand_[A-Za-z0-9_.:-]+$"
+    },
+    "ProposalId": {
+      "type": "string",
+      "pattern": "^prop_[A-Za-z0-9_.:-]+$"
+    },
+    "ProposalBatchId": {
+      "type": "string",
+      "pattern": "^pb_[A-Za-z0-9_.:-]+$"
+    },
+    "AssessmentId": {
+      "type": "string",
+      "pattern": "^assess_[A-Za-z0-9_.:-]+$"
+    },
+    "EvidenceId": {
+      "type": "string",
+      "pattern": "^evid_[A-Za-z0-9_.:-]+$"
+    },
+    "CaseId": {
+      "type": "string",
+      "pattern": "^case_[A-Za-z0-9_.:-]+$"
+    },
+    "ResolvedSetId": {
+      "type": "string",
+      "pattern": "^rset_[A-Za-z0-9_.:-]+$"
+    },
+    "EvaluationRequestId": {
+      "type": "string",
+      "pattern": "^evalreq_[A-Za-z0-9_.:-]+$"
+    },
+    "EvaluationAttemptId": {
+      "type": "string",
+      "pattern": "^evalatt_[A-Za-z0-9_.:-]+$"
+    },
+    "WorkspaceId": {
+      "type": "string",
+      "pattern": "^ws_[A-Za-z0-9_.:-]+$"
+    },
+    "StageCallId": {
+      "type": "string",
+      "pattern": "^sc_[A-Za-z0-9_.:-]+$"
+    },
+    "PlanId": {
+      "type": "string",
+      "pattern": "^plan_[A-Za-z0-9_.:-]+$"
+    },
+    "TokenId": {
+      "type": "string",
+      "pattern": "^cap_[A-Za-z0-9_.:-]+$|^ltok_[A-Za-z0-9_.:-]+$"
+    },
+    "ReceiptId": {
+      "type": "string",
+      "pattern": "^(qrec|lmrec|agentrec|execrec|humanrec|wrec|caseread|wsread|effect|chargerec)_[A-Za-z0-9_.:-]+$"
+    },
+    "TraceId": {
+      "type": "string",
+      "pattern": "^trace_[A-Za-z0-9_.:-]+$"
+    },
+    "GraphRevision": {
+      "type": "string",
+      "pattern": "^rev_[0-9A-Za-z_.:-]+$"
+    },
+    "Fingerprint": {
+      "type": "string",
+      "pattern": "^fp_[A-Za-z0-9_.:-]+$"
+    },
+    "SchemaFingerprint": {
+      "$ref": "#/$defs/Fingerprint"
+    },
+    "SurfaceFingerprint": {
+      "$ref": "#/$defs/Fingerprint"
+    },
+    "PolicyFingerprint": {
+      "$ref": "#/$defs/Fingerprint"
+    },
+    "CapabilityFingerprint": {
+      "$ref": "#/$defs/Fingerprint"
+    },
+    "RuntimeFingerprint": {
+      "$ref": "#/$defs/Fingerprint"
+    },
+    "IdempotencyKey": {
+      "type": "string",
+      "pattern": "^idem_[A-Za-z0-9_.:-]+$"
+    },
+    "JsonPointer": {
+      "type": "string",
+      "pattern": "^(/([^/~]|~0|~1)*)*$"
+    },
+    "JsonPath": {
+      "type": "string",
+      "minLength": 1
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "DurationMs": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "UsdMicro": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "Var": {
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,127}$"
+    },
+    "ArtifactTypeId": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,191}$"
+    },
+    "MetadataBag": {
+      "type": "object",
+      "description": "Opaque user metadata. Core must not attach authorization meaning to unregistered keys.",
+      "additionalProperties": true
+    },
+    "DataClass": {
+      "description": "Information-flow label for values crossing Leaven-managed boundaries.",
+      "oneOf": [
+        {
+          "enum": [
+            "public",
+            "case.input",
+            "case.target",
+            "case.metadata",
+            "candidate.output",
+            "candidate.artifact",
+            "workspace.file",
+            "workspace.secret",
+            "scorer.private",
+            "evaluator.private",
+            "optimizer.visible",
+            "prompt.raw",
+            "completion.raw",
+            "transcript.raw",
+            "human.review",
+            "external.secret"
+          ]
+        },
+        {
+          "type": "string",
+          "pattern": "^x\\.[A-Za-z0-9_.:-]+$"
+        }
+      ]
+    },
+    "DataClassSet": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/DataClass"
+      },
+      "uniqueItems": true
+    },
+    "RunRef": {
+      "type": "object",
+      "required": [
+        "run"
+      ],
+      "properties": {
+        "run": {
+          "$ref": "#/$defs/RunId"
+        }
+      },
+      "additionalProperties": false
+    },
+    "CandidateRef": {
+      "type": "object",
+      "required": [
+        "kind",
+        "id"
+      ],
+      "properties": {
+        "kind": {
+          "const": "candidate"
+        },
+        "run": {
+          "$ref": "#/$defs/RunId"
+        },
+        "id": {
+          "$ref": "#/$defs/CandidateId"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ProposalRef": {
+      "type": "object",
+      "required": [
+        "kind",
+        "id"
+      ],
+      "properties": {
+        "kind": {
+          "const": "proposal"
+        },
+        "run": {
+          "$ref": "#/$defs/RunId"
+        },
+        "id": {
+          "$ref": "#/$defs/ProposalId"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ProposalBatchRef": {
+      "type": "object",
+      "required": [
+        "kind",
+        "id"
+      ],
+      "properties": {
+        "kind": {
+          "const": "proposal_batch"
+        },
+        "run": {
+          "$ref": "#/$defs/RunId"
+        },
+        "id": {
+          "$ref": "#/$defs/ProposalBatchId"
+        }
+      },
+      "additionalProperties": false
+    },
+    "AssessmentRef": {
+      "type": "object",
+      "required": [
+        "kind",
+        "id"
+      ],
+      "properties": {
+        "kind": {
+          "const": "assessment"
+        },
+        "run": {
+          "$ref": "#/$defs/RunId"
+        },
+        "id": {
+          "$ref": "#/$defs/AssessmentId"
+        }
+      },
+      "additionalProperties": false
+    },
+    "EvidenceRef": {
+      "type": "object",
+      "required": [
+        "kind",
+        "id"
+      ],
+      "properties": {
+        "kind": {
+          "const": "evidence"
+        },
+        "run": {
+          "$ref": "#/$defs/RunId"
+        },
+        "id": {
+          "$ref": "#/$defs/EvidenceId"
+        }
+      },
+      "additionalProperties": false
+    },
+    "CaseRef": {
+      "type": "object",
+      "required": [
+        "kind",
+        "id"
+      ],
+      "properties": {
+        "kind": {
+          "const": "case"
+        },
+        "run": {
+          "$ref": "#/$defs/RunId"
+        },
+        "set": {
+          "$ref": "#/$defs/ResolvedSetId"
+        },
+        "id": {
+          "$ref": "#/$defs/CaseId"
+        }
+      },
+      "additionalProperties": false
+    },
+    "WorkspaceRef": {
+      "type": "object",
+      "required": [
+        "kind",
+        "id"
+      ],
+      "properties": {
+        "kind": {
+          "const": "workspace"
+        },
+        "run": {
+          "$ref": "#/$defs/RunId"
+        },
+        "id": {
+          "$ref": "#/$defs/WorkspaceId"
+        },
+        "snapshot_fingerprint": {
+          "$ref": "#/$defs/Fingerprint"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ExternalRef": {
+      "type": "object",
+      "required": [
+        "kind",
+        "uri"
+      ],
+      "properties": {
+        "kind": {
+          "const": "external"
+        },
+        "uri": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "fingerprint": {
+          "$ref": "#/$defs/Fingerprint"
+        }
+      },
+      "additionalProperties": false
+    },
+    "InfoRef": {
+      "description": "Semantic graph/external object a stage relied on. Distinct from read/effect receipts.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/CandidateRef"
+        },
+        {
+          "$ref": "#/$defs/ProposalRef"
+        },
+        {
+          "$ref": "#/$defs/ProposalBatchRef"
+        },
+        {
+          "$ref": "#/$defs/AssessmentRef"
+        },
+        {
+          "$ref": "#/$defs/EvidenceRef"
+        },
+        {
+          "$ref": "#/$defs/CaseRef"
+        },
+        {
+          "$ref": "#/$defs/WorkspaceRef"
+        },
+        {
+          "$ref": "#/$defs/ExternalRef"
+        }
+      ]
+    },
+    "ReceiptRef": {
+      "$ref": "#/$defs/ReceiptId"
+    },
+    "Score": {
+      "type": "object",
+      "required": [
+        "value"
+      ],
+      "properties": {
+        "value": {
+          "type": "number"
+        },
+        "normalized": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "higher_is_better": {
+          "type": "boolean",
+          "default": true
+        },
+        "metrics": {
+          "type": "object",
+          "additionalProperties": {
+            "type": [
+              "number",
+              "string",
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "uncertainty": {
+          "type": "number",
+          "minimum": 0
+        },
+        "label": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Preference": {
+      "type": "object",
+      "required": [
+        "winner"
+      ],
+      "properties": {
+        "winner": {
+          "enum": [
+            "left",
+            "right",
+            "tie",
+            "abstain"
+          ]
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "rationale": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Ranking": {
+      "type": "object",
+      "required": [
+        "ordered"
+      ],
+      "properties": {
+        "ordered": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CandidateRef"
+          }
+        },
+        "ties": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/CandidateRef"
+            }
+          }
+        },
+        "rationale": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Cost": {
+      "type": "object",
+      "properties": {
+        "usd_micro": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "input_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "output_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "lm_calls": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "agent_sessions": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sandbox_execs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "metric_calls": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "human_review_usd_micro": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "wall_time_ms": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "OutputContract": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "const": "final_message"
+            },
+            "max_bytes": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "schema_fingerprint"
+          ],
+          "properties": {
+            "kind": {
+              "const": "json_schema"
+            },
+            "schema_fingerprint": {
+              "$ref": "#/$defs/SchemaFingerprint"
+            },
+            "schema": {
+              "type": "object"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "paths"
+          ],
+          "properties": {
+            "kind": {
+              "const": "files"
+            },
+            "paths": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "max_bytes": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "path"
+          ],
+          "properties": {
+            "kind": {
+              "const": "json_file"
+            },
+            "path": {
+              "type": "string"
+            },
+            "schema_fingerprint": {
+              "$ref": "#/$defs/SchemaFingerprint"
+            },
+            "max_bytes": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "const": "workspace_diff"
+            },
+            "roots": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "max_bytes": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "TraceRef": {
+      "type": "object",
+      "required": [
+        "kind",
+        "id",
+        "visibility"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "id": {
+          "$ref": "#/$defs/TraceId"
+        },
+        "visibility": {
+          "enum": [
+            "summary",
+            "redacted_prompt",
+            "redacted_transcript",
+            "operator_only",
+            "full"
+          ]
+        },
+        "receipt": {
+          "$ref": "#/$defs/ReceiptId"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Redaction": {
+      "type": "object",
+      "required": [
+        "path",
+        "reason"
+      ],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "reason": {
+          "enum": [
+            "not_visible",
+            "policy_denied",
+            "hidden_target",
+            "evidence_visibility",
+            "secret",
+            "byte_limit",
+            "count_policy",
+            "path_denied",
+            "provider_policy",
+            "other"
+          ]
+        },
+        "detail": {
+          "type": "string"
+        },
+        "policy_fingerprint": {
+          "$ref": "#/$defs/PolicyFingerprint"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ExtensionObject": {
+      "type": "object",
+      "required": [
+        "namespace",
+        "op",
+        "schema_fingerprint",
+        "payload"
+      ],
+      "properties": {
+        "namespace": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,191}$"
+        },
+        "op": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_.:-]{0,191}$"
+        },
+        "schema_fingerprint": {
+          "$ref": "#/$defs/SchemaFingerprint"
+        },
+        "payload": {}
+      },
+      "additionalProperties": false
+    }
+  }
+}
