@@ -152,6 +152,12 @@ belong in their owning crates.
   judge imports leave `sealqa_judge_scored_run` blocked, while complete approved
   external judge evidence for every SealQA score slot can clear that blocker
   without clearing the separate live-run approval gate.
+  The `--write-officeqa-score-result` CLI path, exposed as
+  `just evoskill-paper-score-officeqa <predictions.jsonl>`, writes that strict
+  score sidecar from external OfficeQA prediction rows. It refuses blocked score
+  slots, requires exact role coverage, recomputes row scores in Rust, and writes
+  evidence rows without ground-truth/reference fields. It is not an agent run
+  and must not be used to resolve missing split/source proof.
   It does not prove live provider behavior, validation-score values, or
   paper-close.
 - `just evoskill-paper-manifest` writes the current no-spend local manifest to
@@ -172,5 +178,10 @@ belong in their owning crates.
   chooses a deterministic public BrowseComp substitute transfer denominator
   only; it is not the paper author's exact 128-example sample and it does not
   run the transferred SealQA skill.
+- `just evoskill-paper-score-officeqa <predictions.jsonl>` writes
+  `tmp/replication/evoskill/score_result_manifest.json` plus checked OfficeQA
+  score evidence JSONL from strict prediction rows, then rewrites the manifest
+  and final report. It scores only already-unblocked materialized OfficeQA
+  slots.
 - `just evoskill-paper-final-report` writes both the manifest and current
   no-spend final report truth surface under `target/evoskill-paper-close/`.

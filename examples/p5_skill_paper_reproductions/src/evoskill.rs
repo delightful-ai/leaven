@@ -746,7 +746,7 @@ struct EvoSkillReplicaCandidateState {
     validation_score: f64,
 }
 
-#[derive(Clone, Debug, serde::Deserialize)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ScoreResultManifestFile {
     schema_version: u32,
@@ -756,7 +756,7 @@ struct ScoreResultManifestFile {
     entries: Vec<ScoreResultManifestEntry>,
 }
 
-#[derive(Clone, Debug, serde::Deserialize)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ScoreResultManifestEntry {
     dataset_id: String,
@@ -775,13 +775,24 @@ struct ScoreResultManifestEntry {
     evidence_artifact: ScoreEvidenceArtifact,
 }
 
-#[derive(Clone, Debug, serde::Deserialize)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ScoreEvidenceRow {
     source_id: String,
     prediction: String,
     score: f64,
     judge_template_fingerprint: Option<String>,
+}
+
+#[derive(Clone, Debug, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct OfficeQaPredictionRow {
+    dataset_id: String,
+    split_id: String,
+    split_role: String,
+    candidate_role: String,
+    source_id: String,
+    prediction: String,
 }
 
 struct ValidatedScoreResultManifest {
@@ -867,8 +878,23 @@ pub enum ManifestError {
         #[source]
         source: serde_json::Error,
     },
+    #[error("failed to serialize score result manifest `{path}`: {source}")]
+    ScoreResultManifestSerialize {
+        path: PathBuf,
+        #[source]
+        source: serde_json::Error,
+    },
     #[error("invalid score result manifest `{path}`: {message}")]
     ScoreResultManifest { path: PathBuf, message: String },
+    #[error("failed to parse OfficeQA prediction rows `{path}` line {line}: {source}")]
+    OfficeQaPredictionJson {
+        path: PathBuf,
+        line: usize,
+        #[source]
+        source: serde_json::Error,
+    },
+    #[error("invalid OfficeQA prediction rows `{path}`: {message}")]
+    OfficeQaPrediction { path: PathBuf, message: String },
     #[error("failed to parse BrowseComp transfer sample `{path}` line {line}: {source}")]
     BrowseCompSampleJson {
         path: PathBuf,
@@ -1044,6 +1070,49 @@ pub fn write_evoskill_browsecomp_public_transfer_sample(
         });
     }
     Ok(path)
+}
+
+pub fn write_evoskill_officeqa_score_result_manifest(
+    input: &ManifestBuildInput,
+    predictions_path: impl AsRef<Path>,
+) -> Result<PathBuf, ManifestError> {
+    let predictions_path = root_relative_input_path(&input.root, predictions_path.as_ref());
+    let predictions = read_officeqa_prediction_rows(&predictions_path)?;
+    let sources = materialize_evoskill_sources(input)?;
+    let manifest = build_evoskill_replica_manifest_from_sources(input, &sources)?;
+    let manifest_fingerprint = manifest_fingerprint_report(&manifest)?;
+    let scorer_fingerprint = scorer_fingerprint_report(&manifest.scorer);
+    let mut slots = final_score_slots(&manifest);
+    let path = input.root.join(SCORE_RESULT_MANIFEST_PATH);
+    let score_manifest = officeqa_score_result_manifest_from_predictions(
+        &input.root,
+        &path,
+        &sources,
+        &slots,
+        &manifest_fingerprint,
+        &scorer_fingerprint,
+        predictions,
+    )?;
+    write_score_result_manifest_file(&path, &score_manifest)?;
+    let validated =
+        read_score_result_manifest(&input.root, &manifest_fingerprint, &scorer_fingerprint)?
+            .expect("score result manifest was just written");
+    apply_score_result_manifest(
+        &input.root,
+        &sources,
+        &manifest.scorer,
+        &mut slots,
+        &validated,
+    )?;
+    Ok(path)
+}
+
+fn root_relative_input_path(root: &Path, path: &Path) -> PathBuf {
+    if path.is_absolute() {
+        path.to_owned()
+    } else {
+        root.join(path)
+    }
 }
 
 fn build_evoskill_replica_manifest_from_sources(
@@ -3115,6 +3184,404 @@ fn scorer_fingerprint_report(scorer: &ScorerManifest) -> ScorerFingerprintReport
         scorer_id: scorer.id.clone(),
         fingerprint: hex::encode(hasher.finalize()),
     }
+}
+
+fn read_officeqa_prediction_rows(path: &Path) -> Result<Vec<OfficeQaPredictionRow>, ManifestError> {
+    let body = fs::read_to_string(path).map_err(|source| ManifestError::Read {
+        path: path.to_owned(),
+        source,
+    })?;
+    let mut rows = Vec::new();
+    for (line_index, line) in body.lines().enumerate() {
+        if line.trim().is_empty() {
+            return Err(ManifestError::OfficeQaPrediction {
+                path: path.to_owned(),
+                message: format!("blank line {}", line_index + 1),
+            });
+        }
+        let row = serde_json::from_str::<OfficeQaPredictionRow>(line).map_err(|source| {
+            ManifestError::OfficeQaPredictionJson {
+                path: path.to_owned(),
+                line: line_index + 1,
+                source,
+            }
+        })?;
+        rows.push(row);
+    }
+    if rows.is_empty() {
+        return Err(ManifestError::OfficeQaPrediction {
+            path: path.to_owned(),
+            message: "prediction file must contain at least one row".to_owned(),
+        });
+    }
+    Ok(rows)
+}
+
+fn officeqa_score_result_manifest_from_predictions(
+    root: &Path,
+    sidecar_path: &Path,
+    sources: &EvoSkillSourceMaterializations,
+    slots: &[FinalScoreSlot],
+    manifest_fingerprint: &ManifestFingerprintReport,
+    scorer_fingerprint: &ScorerFingerprintReport,
+    predictions: Vec<OfficeQaPredictionRow>,
+) -> Result<ScoreResultManifestFile, ManifestError> {
+    let slots_by_key = slots
+        .iter()
+        .map(|slot| (final_score_slot_key(slot), slot))
+        .collect::<BTreeMap<_, _>>();
+    let targets = officeqa_targets_by_source_id(sources, sidecar_path)?;
+    let mut grouped = BTreeMap::<String, Vec<OfficeQaPredictionRow>>::new();
+    for row in predictions {
+        validate_officeqa_prediction_row_shape(sidecar_path, &row)?;
+        grouped
+            .entry(officeqa_prediction_slot_key(&row))
+            .or_default()
+            .push(row);
+    }
+
+    let mut metric_calls = 0_u64;
+    let mut entries = Vec::new();
+    for (key, rows) in grouped {
+        let slot = slots_by_key.get(&key).ok_or_else(|| {
+            score_result_manifest_error(
+                sidecar_path,
+                format!("OfficeQA prediction rows target unknown score slot `{key}`"),
+            )
+        })?;
+        validate_officeqa_score_writer_slot(sidecar_path, &key, slot)?;
+        let evidence_rows =
+            officeqa_score_evidence_rows(sidecar_path, &key, sources, &targets, slot, rows)?;
+        let evidence_artifact =
+            write_score_evidence_artifact(root, sidecar_path, &key, &evidence_rows)?;
+        let scored_rows =
+            u64::try_from(evidence_rows.len()).expect("score evidence row count fits in u64");
+        let score = evidence_rows.iter().map(|row| row.score).sum::<f64>() / scored_rows as f64;
+        metric_calls = metric_calls.saturating_add(scored_rows);
+        entries.push(ScoreResultManifestEntry {
+            dataset_id: slot.dataset_id.clone(),
+            split_id: slot.split_id.clone(),
+            split_role: slot.split_role.clone(),
+            candidate_role: slot.candidate_role.clone(),
+            split_fingerprint: slot.split_fingerprint.clone(),
+            role_source_id_fingerprint: slot.role_source_id_fingerprint.clone(),
+            expected_rows: slot.expected_rows,
+            scored_rows,
+            score,
+            resolved_blocker_ids: Vec::new(),
+            score_evidence_kind: ScoreEvidenceKind::RustScorerReplay,
+            score_evidence_approval_id: None,
+            evidence_id: officeqa_score_evidence_id(slot),
+            evidence_artifact,
+        });
+    }
+
+    Ok(ScoreResultManifestFile {
+        schema_version: 5,
+        manifest_fingerprint: manifest_fingerprint.fingerprint.clone(),
+        scorer_fingerprint: scorer_fingerprint.fingerprint.clone(),
+        cost: FinalReportCost {
+            llm_calls: 0,
+            metric_calls,
+            prompt_tokens: 0,
+            completion_tokens: 0,
+        },
+        entries,
+    })
+}
+
+fn validate_officeqa_prediction_row_shape(
+    path: &Path,
+    row: &OfficeQaPredictionRow,
+) -> Result<(), ManifestError> {
+    if row.dataset_id != "officeqa" {
+        return Err(ManifestError::OfficeQaPrediction {
+            path: path.to_owned(),
+            message: format!(
+                "prediction row for `{}` is not supported by the OfficeQA scorer writer",
+                row.dataset_id
+            ),
+        });
+    }
+    for (field, value) in [
+        ("split_id", &row.split_id),
+        ("split_role", &row.split_role),
+        ("candidate_role", &row.candidate_role),
+        ("source_id", &row.source_id),
+    ] {
+        if value.trim().is_empty() {
+            return Err(ManifestError::OfficeQaPrediction {
+                path: path.to_owned(),
+                message: format!("prediction row field `{field}` must not be empty"),
+            });
+        }
+    }
+    Ok(())
+}
+
+fn officeqa_targets_by_source_id(
+    sources: &EvoSkillSourceMaterializations,
+    path: &Path,
+) -> Result<BTreeMap<String, String>, ManifestError> {
+    let officeqa = sources.officeqa.as_ref().ok_or_else(|| {
+        score_result_manifest_error(
+            path,
+            "OfficeQA predictions require OfficeQA source rows".into(),
+        )
+    })?;
+    Ok(officeqa
+        .rows
+        .rows()
+        .iter()
+        .map(|row| {
+            (
+                row.source_id().to_owned(),
+                row.target().expect("OfficeQA rows are targeted").clone(),
+            )
+        })
+        .collect())
+}
+
+fn validate_officeqa_score_writer_slot(
+    path: &Path,
+    key: &str,
+    slot: &FinalScoreSlot,
+) -> Result<(), ManifestError> {
+    if slot.dataset_id != "officeqa" {
+        return Err(score_result_manifest_error(
+            path,
+            format!("OfficeQA score writer cannot report non-OfficeQA slot `{key}`"),
+        ));
+    }
+    if !slot.blocker_ids.is_empty() {
+        return Err(score_result_manifest_error(
+            path,
+            format!(
+                "OfficeQA score writer refuses blocked slot `{key}`; resolve source/split blockers before scoring"
+            ),
+        ));
+    }
+    if slot.split_fingerprint.is_none() || slot.role_source_id_fingerprint.is_none() {
+        return Err(score_result_manifest_error(
+            path,
+            format!(
+                "OfficeQA score writer requires materialized split and role fingerprints for `{key}`"
+            ),
+        ));
+    }
+    if slot.expected_rows.is_none() {
+        return Err(score_result_manifest_error(
+            path,
+            format!("OfficeQA score writer requires expected rows for `{key}`"),
+        ));
+    }
+    Ok(())
+}
+
+fn officeqa_score_evidence_rows(
+    path: &Path,
+    key: &str,
+    sources: &EvoSkillSourceMaterializations,
+    targets: &BTreeMap<String, String>,
+    slot: &FinalScoreSlot,
+    rows: Vec<OfficeQaPredictionRow>,
+) -> Result<Vec<ScoreEvidenceRow>, ManifestError> {
+    let expected_rows = slot.expected_rows.expect("validated expected rows");
+    let actual_rows = u64::try_from(rows.len()).expect("prediction row count fits in u64");
+    if actual_rows != expected_rows {
+        return Err(score_result_manifest_error(
+            path,
+            format!(
+                "OfficeQA prediction rows for `{key}` cover {actual_rows} rows, expected {expected_rows}"
+            ),
+        ));
+    }
+    let mut predictions = BTreeMap::new();
+    for row in rows {
+        if predictions
+            .insert(row.source_id.clone(), row.prediction.clone())
+            .is_some()
+        {
+            return Err(score_result_manifest_error(
+                path,
+                format!(
+                    "OfficeQA prediction rows for `{key}` repeat source id `{}`",
+                    row.source_id
+                ),
+            ));
+        }
+    }
+    let expected_source_ids = officeqa_score_slot_source_ids(sources, path, key, slot)?;
+    if u64::try_from(expected_source_ids.len()).expect("source id count fits in u64")
+        != expected_rows
+    {
+        return Err(score_result_manifest_error(
+            path,
+            format!("OfficeQA score slot `{key}` source-id manifest does not match expected rows"),
+        ));
+    }
+    let mut evidence_rows = Vec::with_capacity(expected_source_ids.len());
+    for source_id in expected_source_ids {
+        let prediction = predictions.get(&source_id).ok_or_else(|| {
+            score_result_manifest_error(
+                path,
+                format!("OfficeQA prediction rows for `{key}` are missing source id `{source_id}`"),
+            )
+        })?;
+        let target = targets.get(&source_id).ok_or_else(|| {
+            score_result_manifest_error(
+                path,
+                format!(
+                    "OfficeQA prediction rows for `{key}` reference unknown source id `{source_id}`"
+                ),
+            )
+        })?;
+        let score = score_evoskill_answer(target, prediction).weighted_score;
+        evidence_rows.push(ScoreEvidenceRow {
+            source_id,
+            prediction: prediction.clone(),
+            score,
+            judge_template_fingerprint: None,
+        });
+    }
+    if let Some(extra) = predictions
+        .keys()
+        .find(|source_id| !evidence_rows.iter().any(|row| &row.source_id == *source_id))
+    {
+        return Err(score_result_manifest_error(
+            path,
+            format!(
+                "OfficeQA prediction rows for `{key}` include source id `{extra}` outside the slot role"
+            ),
+        ));
+    }
+    Ok(evidence_rows)
+}
+
+fn officeqa_score_slot_source_ids(
+    sources: &EvoSkillSourceMaterializations,
+    path: &Path,
+    key: &str,
+    slot: &FinalScoreSlot,
+) -> Result<Vec<String>, ManifestError> {
+    let officeqa = sources.officeqa.as_ref().ok_or_else(|| {
+        score_result_manifest_error(
+            path,
+            "OfficeQA predictions require OfficeQA source rows".into(),
+        )
+    })?;
+    let split = officeqa
+        .report
+        .split_materializations
+        .iter()
+        .find(|split| split.id == slot.split_id)
+        .ok_or_else(|| {
+            score_result_manifest_error(
+                path,
+                format!("OfficeQA score slot `{key}` has no materialized split"),
+            )
+        })?;
+    if split.split_fingerprint != slot.split_fingerprint {
+        return Err(score_result_manifest_error(
+            path,
+            format!("OfficeQA score slot `{key}` split fingerprint changed during scoring"),
+        ));
+    }
+    let role = split
+        .role_manifests
+        .iter()
+        .find(|role| role.role == slot.split_role)
+        .ok_or_else(|| {
+            score_result_manifest_error(
+                path,
+                format!("OfficeQA score slot `{key}` has no materialized role"),
+            )
+        })?;
+    if Some(&role.source_id_fingerprint) != slot.role_source_id_fingerprint.as_ref() {
+        return Err(score_result_manifest_error(
+            path,
+            format!("OfficeQA score slot `{key}` role fingerprint changed during scoring"),
+        ));
+    }
+    Ok(role.source_ids.clone())
+}
+
+fn write_score_evidence_artifact(
+    root: &Path,
+    sidecar_path: &Path,
+    key: &str,
+    rows: &[ScoreEvidenceRow],
+) -> Result<ScoreEvidenceArtifact, ManifestError> {
+    let evidence_id = officeqa_score_evidence_id_from_key(key);
+    let relative_path = format!("tmp/replication/evoskill/score-evidence/{evidence_id}.jsonl");
+    let path = root.join(&relative_path);
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|source| ManifestError::Write {
+            path: parent.to_owned(),
+            source,
+        })?;
+    }
+    let mut body = String::new();
+    for row in rows {
+        let line = serde_json::to_string(row).map_err(|source| {
+            ManifestError::ScoreResultManifestSerialize {
+                path: sidecar_path.to_owned(),
+                source,
+            }
+        })?;
+        body.push_str(&line);
+        body.push('\n');
+    }
+    fs::write(&path, body.as_bytes()).map_err(|source| ManifestError::Write {
+        path: path.clone(),
+        source,
+    })?;
+    let bytes = u64::try_from(body.len()).expect("score evidence artifact size fits in u64");
+    Ok(ScoreEvidenceArtifact {
+        relative_path,
+        sha256: sha256_file(&path)?,
+        bytes,
+    })
+}
+
+fn write_score_result_manifest_file(
+    path: &Path,
+    manifest: &ScoreResultManifestFile,
+) -> Result<(), ManifestError> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|source| ManifestError::Write {
+            path: parent.to_owned(),
+            source,
+        })?;
+    }
+    let bytes = serde_json::to_vec_pretty(manifest).map_err(|source| {
+        ManifestError::ScoreResultManifestSerialize {
+            path: path.to_owned(),
+            source,
+        }
+    })?;
+    fs::write(path, bytes).map_err(|source| ManifestError::Write {
+        path: path.to_owned(),
+        source,
+    })
+}
+
+fn officeqa_prediction_slot_key(row: &OfficeQaPredictionRow) -> String {
+    format!(
+        "{}|{}|{}|{}",
+        row.dataset_id, row.split_id, row.split_role, row.candidate_role
+    )
+}
+
+fn officeqa_score_evidence_id(slot: &FinalScoreSlot) -> String {
+    officeqa_score_evidence_id_from_key(&final_score_slot_key(slot))
+}
+
+fn officeqa_score_evidence_id_from_key(key: &str) -> String {
+    format!(
+        "officeqa-rust-scorer-replay-{}",
+        key.replace('|', "-").replace('_', "-")
+    )
 }
 
 fn read_score_result_manifest(

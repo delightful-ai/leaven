@@ -210,6 +210,12 @@ Leaven primitive blockers:
 - paper-grade scorer/evaluator records with failure-threshold extraction;
 - evidence history that can feed proposer prompts without paper-side custom
   plumbing.
+- EvoSkill OfficeQA scorer replay now has a Rust operator path:
+  `just evoskill-paper-score-officeqa <predictions.jsonl>` consumes strict
+  slot-keyed prediction JSONL, refuses blocked slots, computes row scores with
+  the Rust scorer, writes checked score evidence without target/reference
+  fields, and writes the strict score result sidecar for final-report import.
+  This is score evidence plumbing, not an agent run or split/source proof.
 
 Notes:
 
