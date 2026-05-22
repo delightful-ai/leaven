@@ -42,6 +42,15 @@ fn final_report_exposes_score_slots_costs_errors_and_gaps_without_fake_metrics()
         report.manifest.scorer.id,
         report.scorer_fingerprint.scorer_id
     );
+    let sealqa_judge = report
+        .manifest
+        .scorer
+        .judge_templates
+        .iter()
+        .find(|template| template.id == "sealqa-auto-grader-placeholder-v1")
+        .expect("SealQA judge template is fingerprinted in the scorer manifest");
+    assert_eq!(sealqa_judge.runtime_status, "template_pinned_no_spend");
+    assert_eq!(sealqa_judge.fingerprint.len(), 64);
     assert_eq!(
         report.manifest_fingerprint.schema_version,
         report.manifest.schema_version
@@ -80,6 +89,22 @@ fn final_report_exposes_score_slots_costs_errors_and_gaps_without_fake_metrics()
             .iter()
             .any(|error| error.blocker_id == "sealqa_split_manifest")
     );
+    assert!(
+        report
+            .errors
+            .iter()
+            .any(|error| error.blocker_id == "sealqa_judge_scored_run")
+    );
+    let sealqa_slots = report
+        .score_slots
+        .iter()
+        .filter(|slot| slot.dataset_id == "sealqa")
+        .collect::<Vec<_>>();
+    assert_eq!(sealqa_slots.len(), 4);
+    assert!(sealqa_slots.iter().all(|slot| {
+        slot.blocker_ids
+            .contains(&"sealqa_judge_scored_run".to_owned())
+    }));
     assert!(
         report
             .ablations

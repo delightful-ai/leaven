@@ -32,8 +32,10 @@ belong in their owning crates.
   proves the paper-specific Rust scorer laws for weighted multi-tolerance
   scoring, failure-threshold classification, unit normalization, incidental
   year filtering, hybrid text+number answers, multi-number answers, and
-  normalized text containment. It does not prove OfficeQA/SealQA split
-  materialization or live agent performance.
+  normalized text containment. It also proves the SealQA paper auto-grader
+  placeholder is pinned as a no-spend judge request template with a stable
+  fingerprint. It does not prove OfficeQA/SealQA split materialization, live
+  judge execution, or live agent performance.
 - `cargo test -p p5_skill_paper_reproductions --test evoskill_feedback`
   proves scorer-visible attempts turn into ordered failure-only feedback rows
   with source identity, expected/actual values, weighted score, and proposer

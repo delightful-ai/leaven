@@ -604,6 +604,13 @@ source id, expected answer, prediction, weighted score, and proposer feedback
 text. This closes the scorer/feedback acceptance item but does not prove a live
 proposer consumes the feedback inside the full EvoSkill loop.
 
+For SealQA, the paper's appendix only provides the default auto-grader
+placeholder template, not a local scored-result artifact. The P5 scorer manifest
+now pins that template as `sealqa-auto-grader-placeholder-v1`, exposes a
+fingerprinted no-spend judge request builder, and records
+`sealqa_judge_scored_run` as the remaining execution blocker. This closes prompt
+materialization only; it does not execute a judge or produce SealQA scores.
+
 The no-spend reproduction package now has a deterministic multi-iteration
 mechanics loop over the OfficeQA substitute split. It uses
 `CategoryRoundRobinSampler` for train batches, accumulated scorer failure
@@ -638,12 +645,13 @@ The reproduction package now emits a no-spend final report truth surface through
 embeds the current manifest, runs the no-spend OfficeQA substitute mechanics
 loop when the OfficeQA CSV is present, records manifest and scorer fingerprints,
 emits baseline/optimized score slots for train, validation, and held-out test
-roles, records zero LLM/metric/token spend, copies blocker/errors, and records
-ablation statuses for skill-only, prompt-only, skill-merge, and BrowseComp
-transfer.
+roles, records the SealQA judge-template fingerprint, records zero
+LLM/metric/token spend, copies blocker/errors, and records ablation statuses for
+skill-only, prompt-only, skill-merge, and BrowseComp transfer.
 
 This deliberately does not fill blocked metrics with zeroes or claim paper-close:
 OfficeQA score slots stay `blocked` until exact membership or an accepted
 paper-close substitute can be used for a scored run, SealQA score slots stay
-blocked on exact split membership and judge/scored-run evidence, and live
+blocked on exact split membership and the approved judge/scored-run evidence,
+and live
 provider/model scores still need explicit approval and a real run.
