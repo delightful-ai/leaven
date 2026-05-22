@@ -373,6 +373,7 @@ pub struct EvoSkillFinalReport {
     pub manifest: EvoSkillReplicaManifest,
     pub loop_report: Option<EvoSkillReplicaLoopReport>,
     pub live_run_gate: LiveRunGateReport,
+    pub paper_close_gates: Vec<PaperCloseGateReport>,
     pub manifest_fingerprint: ManifestFingerprintReport,
     pub scorer_fingerprint: ScorerFingerprintReport,
     pub score_slots: Vec<FinalScoreSlot>,
@@ -380,6 +381,22 @@ pub struct EvoSkillFinalReport {
     pub errors: Vec<FinalReportError>,
     pub ablations: Vec<AblationStatusReport>,
     pub proxy_rejection_gates: Vec<ProxyRejectionGate>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct PaperCloseGateReport {
+    pub id: String,
+    pub status: PaperCloseGateStatus,
+    pub blocker_ids: Vec<String>,
+    pub note: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PaperCloseGateStatus {
+    Proven,
+    SourceBlocked,
+    ApprovalBlocked,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -715,17 +732,20 @@ pub fn build_evoskill_final_report(
     let scorer_fingerprint = scorer_fingerprint_report(&manifest.scorer);
     let score_slots = final_score_slots(&manifest);
     let live_run_gate = final_report_live_run_gate(&manifest);
+    let paper_close_gates =
+        final_report_paper_close_gates(&manifest, loop_report.as_ref(), &live_run_gate);
     let errors = final_report_errors(&manifest);
     let ablations = final_report_ablations(&manifest);
     let exactness = manifest.exactness.clone();
     let proxy_rejection_gates = proxy_rejection_gates();
 
     Ok(EvoSkillFinalReport {
-        schema_version: 5,
+        schema_version: 6,
         exactness,
         manifest,
         loop_report,
         live_run_gate,
+        paper_close_gates,
         manifest_fingerprint,
         scorer_fingerprint,
         score_slots,
@@ -1424,6 +1444,87 @@ fn final_report_errors(manifest: &EvoSkillReplicaManifest) -> Vec<FinalReportErr
             message: blocker.description.clone(),
         })
         .collect()
+}
+
+fn final_report_paper_close_gates(
+    manifest: &EvoSkillReplicaManifest,
+    loop_report: Option<&EvoSkillReplicaLoopReport>,
+    live_run_gate: &LiveRunGateReport,
+) -> Vec<PaperCloseGateReport> {
+    let source_blocker_ids = manifest
+        .source_blockers
+        .iter()
+        .map(|blocker| blocker.blocker_id.clone())
+        .collect::<Vec<_>>();
+    vec![
+        paper_close_gate(
+            "replica_manifest",
+            PaperCloseGateStatus::Proven,
+            Vec::new(),
+            "schema v8 manifest declares source universe, local source identity, fingerprints, paper targets, source blockers, model pins, scorer, frontier, and schedule",
+        ),
+        paper_close_gate(
+            "source_and_split_materialization",
+            PaperCloseGateStatus::SourceBlocked,
+            source_blocker_ids,
+            "OfficeQA and SealQA substitute materializations are auditable, but exact paper source/split artifacts remain source-blocked",
+        ),
+        paper_close_gate(
+            "paper_scorer",
+            PaperCloseGateStatus::ApprovalBlocked,
+            vec![
+                "sealqa_judge_scored_run".to_owned(),
+                "live_run_spend_approval".to_owned(),
+            ],
+            "OfficeQA scorer laws and SealQA judge template are proven; live SealQA judge scoring still needs approval",
+        ),
+        paper_close_gate(
+            "full_loop_mechanics",
+            if loop_report.is_some() {
+                PaperCloseGateStatus::Proven
+            } else {
+                PaperCloseGateStatus::SourceBlocked
+            },
+            if loop_report.is_some() {
+                Vec::new()
+            } else {
+                vec!["officeqa_full_csv_missing".to_owned()]
+            },
+            "multi-iteration git-program/frontier/checkpoint loop is mechanics evidence only, not live provider or paper-score evidence",
+        ),
+        paper_close_gate(
+            "live_small_run",
+            PaperCloseGateStatus::ApprovalBlocked,
+            live_run_gate.blocker_ids.clone(),
+            "no provider call or credential probe has run without explicit spend approval",
+        ),
+        paper_close_gate(
+            "final_report_truth",
+            PaperCloseGateStatus::Proven,
+            Vec::new(),
+            "report keeps blocked metrics missing, records exactness gaps, costs, score slots, source blockers, and approval gates",
+        ),
+        paper_close_gate(
+            "proxy_closeout",
+            PaperCloseGateStatus::Proven,
+            Vec::new(),
+            "typed proxy rejection gates reject fixtures, benchmarks, fake runtime, single-sample inspection, and repo health as completion evidence",
+        ),
+    ]
+}
+
+fn paper_close_gate(
+    id: &str,
+    status: PaperCloseGateStatus,
+    blocker_ids: Vec<String>,
+    note: &str,
+) -> PaperCloseGateReport {
+    PaperCloseGateReport {
+        id: id.to_owned(),
+        status,
+        blocker_ids,
+        note: note.to_owned(),
+    }
 }
 
 fn final_report_ablations(manifest: &EvoSkillReplicaManifest) -> Vec<AblationStatusReport> {

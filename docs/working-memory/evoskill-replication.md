@@ -793,3 +793,19 @@ This does not make the missing artifacts available and does not turn substitute
 splits into paper-close scores. It makes the closeout denominator sharper:
 future work can replace each source blocker with a pinned artifact or explicit
 access denial instead of treating the blocker list as loose prose.
+
+## No-Spend Paper-Close Gate Summary
+
+Date: 2026-05-22.
+Provider/model spend: none.
+Cloud/GPU spend: none.
+
+The P5 final report now declares schema v6 with typed `paper_close_gates`.
+Those gates mark the manifest, no-spend mechanics loop, final report, and proxy
+closeout as proven surfaces while keeping source/split materialization
+`source_blocked` and live/judge execution `approval_blocked`.
+
+This is not a paper-close claim. It is a closeout guard: future readers can see
+which acceptance lanes have evidence, which lanes are blocked by missing paper
+source artifacts, and which lanes require explicit provider/judge spend before
+any score can be reported.
