@@ -1,8 +1,8 @@
 artifact_kind: leaven_goal_handoff
 objective_name: pod_snapshotting_efficiency_for_artifact_reconstruction
 created_at: "2026-05-22"
-status: ready_to_goal
-decision: set_goal
+status: implemented_verified_git_hot_path
+decision: complete_git_artifact_hot_path_without_firkin_snapshot_in_hot_path
 
 original_intent:
   - make Leaven able to reconstruct every intermediate artifact state from an optimizer or agentic run
@@ -136,6 +136,34 @@ sla_policy:
       reads back one atomic GitProgramChange::AdvanceRepos, applies it through
       Artifact::apply_change, rematerializes the child artifact into a fresh
       workspace, and checks both repo file contents exactly.
+  firkin_boundary_audit:
+    commands:
+      - cargo test -p leaven-workspace-firkin
+      - cargo test -p leaven --no-default-features --features workspace-firkin --test public_surface_contract
+    leaven_evidence:
+      - crates/leaven-workspace-firkin/src/runtime.rs
+      - crates/leaven-workspace-firkin/tests/firkin_git_e2e.rs::firkin_product_pod_materializes_and_reads_back_isolated_git_workspaces
+      - crates/leaven/Cargo.toml
+      - crates/leaven/src/lib.rs
+    firkin_evidence:
+      - /Users/darin/vendor/github.com/apple/containerization/crates/runtime/src/continuation.rs
+      - /Users/darin/vendor/github.com/apple/containerization/crates/runtime/src/restore.rs
+      - /Users/darin/vendor/github.com/apple/containerization/crates/runtime/tests/live_snapshot_restore.rs
+    decision: >
+      Do not use Firkin snapshots for Git artifact intermediate reconstruction.
+      Use Git object import plus GitProgramArtifact revisions as the hot path;
+      reserve Firkin continuation snapshots for runtime/process/session state.
+  verification_closeout:
+    commands:
+      - cargo fmt --check
+      - ruby -e 'require "yaml"; YAML.load_file("docs/plans/2026-05-22-pod-snapshotting-efficiency/goal-handoff.yaml"); puts "yaml ok"'
+      - git diff --check
+      - cargo test -p leaven-agentic-git readback_children_rematerialize_every_multi_repo_intermediate -- --nocapture
+      - cargo test -p leaven-workspace-firkin
+      - cargo test -p leaven --no-default-features --features workspace-firkin --test public_surface_contract
+      - cargo clippy -p leaven-agentic-git --tests -- -D warnings
+      - cargo clippy -p leaven-workspace-firkin --tests -- -D warnings
+    result: passed
 
 companion_artifact_policy:
   decision: explicit_future_work_for_non_git_companions
@@ -197,20 +225,29 @@ acceptance_path:
     evidence:
       - docs/plans/2026-05-22-pod-snapshotting-efficiency/goal-handoff.yaml#companion_artifact_policy
   - id: firkin_snapshot_boundary
-    status: in_progress
+    status: completed_boundary_only
     requirement: >
       Implementation and docs show whether Firkin snapshots are used; if used,
       live or contract tests prove they restore runtime/workspace state without
       becoming artifact truth.
     evidence:
       - docs/working-memory/pod-snapshotting-efficiency.md
+      - crates/leaven-workspace-firkin/src/runtime.rs
+      - crates/leaven-workspace-firkin/tests/firkin_git_e2e.rs::firkin_product_pod_materializes_and_reads_back_isolated_git_workspaces
+      - "`cargo test -p leaven-workspace-firkin`"
+      - "`cargo test -p leaven --no-default-features --features workspace-firkin --test public_surface_contract`"
   - id: verification_closeout
-    status: pending
+    status: completed
     requirement: >
       Focused tests, relevant optional-feature clippy, formatting/diff hygiene,
       and practical suite/SLA checks pass or are honestly blocked with exact
       command output.
-    evidence: []
+    evidence:
+      - docs/working-memory/pod-snapshotting-efficiency.md#2026-05-22-verification-closeout
+      - cargo fmt --check
+      - git diff --check
+      - cargo clippy -p leaven-agentic-git --tests -- -D warnings
+      - cargo clippy -p leaven-workspace-firkin --tests -- -D warnings
 
 proof_denominator:
   required:

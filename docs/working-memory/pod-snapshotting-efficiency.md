@@ -88,11 +88,83 @@ Companion artifact policy:
   artifact value; mixed artifact composition remains future work unless a real
   product artifact type needs it.
 
+## 2026-05-22 Firkin Boundary Audit
+
+Current Leaven/Firkin state:
+
+- `crates/leaven-workspace-firkin` is present and optional.
+- `crates/leaven/Cargo.toml` exposes it through `workspace-firkin`; it is not a
+  default feature and is not routed through `leaven::prelude`.
+- `FirkinWorkspaceRuntime` owns workspace allocation, file operations, command
+  execution, and cleanup. It does not expose snapshot save/restore as a Leaven
+  workspace operation.
+- `firkin_product_pod_materializes_and_reads_back_isolated_git_workspaces`
+  proves two workspace allocations share one product pod id while using
+  different container ids and workspace roots; Git materialization/readback
+  stays isolated between them.
+
+Firkin runtime snapshot facts from
+`/Users/darin/vendor/github.com/apple/containerization`:
+
+- `crates/runtime/src/continuation.rs` has
+  `RuntimeContinuationSnapshotCapture` and
+  `RuntimeContinuationSnapshotRestore`.
+- `CoreContainerSnapshotSink` saves VM/container snapshot bytes plus persisted
+  restore state.
+- `RuntimeSnapshotRestore` records `warm_snapshot_restore`; continuation
+  capture records `snapshot_save`.
+- `crates/runtime/tests/live_snapshot_restore.rs` has ignored signed Apple/VZ
+  tests for snapshot restore, continuation restore, product-route snapshot
+  restore, and restore timing artifacts.
+
+Decision for this goal:
+
+- Git intermediate reconstruction should not use Firkin snapshots in the hot
+  path. Durable Git object import plus `GitProgramArtifact` revisions are
+  lighter, already measured at 30 intermediates, and reconstruct exact artifact
+  states without restoring a VM/rootfs.
+- Firkin snapshots are still useful for runtime continuation: preserving
+  process state, warm pools, expensive dependency setup, or an interactive
+  agent session that is not recoverable from artifact-native state.
+- Therefore Leaven should keep Firkin snapshot support out of the artifact law.
+  If a later backend wants runtime continuation, add it as an explicit runtime
+  capability/report, with `snapshot_save`/`warm_snapshot_restore` measurements
+  and signed live proof.
+
+Verification run:
+
+- `cargo test -p leaven-workspace-firkin`
+- `cargo test -p leaven --no-default-features --features workspace-firkin --test public_surface_contract`
+
+## 2026-05-22 Verification Closeout
+
+Fresh verification after the multi-repo proof and Firkin boundary docs:
+
+- `cargo fmt --check`
+- `ruby -e 'require "yaml"; YAML.load_file("docs/plans/2026-05-22-pod-snapshotting-efficiency/goal-handoff.yaml"); puts "yaml ok"'`
+- `git diff --check`
+- `cargo test -p leaven-agentic-git readback_children_rematerialize_every_multi_repo_intermediate -- --nocapture`
+- `cargo test -p leaven-workspace-firkin`
+- `cargo test -p leaven --no-default-features --features workspace-firkin --test public_surface_contract`
+- `cargo clippy -p leaven-agentic-git --tests -- -D warnings`
+- `cargo clippy -p leaven-workspace-firkin --tests -- -D warnings`
+
+Goal-scope conclusion:
+
+- For Git-backed evolutionary/agentic intermediates, the lightest proven path is
+  artifact-native Git object import/readback plus `GitProgramArtifact` revision
+  identity.
+- Firkin product pods are the execution backend boundary. They provide isolated
+  workspace containers under one product pod and compose with the existing Git
+  materializer/readback path.
+- Firkin VM/container snapshots are not on the Git artifact hot path. They
+  should be added only as explicit runtime continuation support when preserving
+  process/session state matters more than reconstructing artifact state.
+- Non-Git companion artifacts remain intentionally unclaimed future work unless
+  a real artifact type includes them in identity/materialization/readback law.
+
 Next concrete actions:
 
-- Inspect the Firkin live snapshot route only after artifact-native
-  reconstruction has a stronger denominator; do not use a restored VM snapshot
-  as artifact truth.
-- Decide whether the goal should add a Firkin no-spend contract/proxy benchmark
-  now, or leave Firkin runtime snapshot restore as a follow-up behind the
-  optional backend feature.
+- If this goal is extended beyond Git artifacts, pick one real companion
+  artifact type and implement its own artifact-native reconstruction proof
+  instead of widening the Git proof by assertion.
