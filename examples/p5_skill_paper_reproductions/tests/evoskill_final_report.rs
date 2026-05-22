@@ -6,6 +6,7 @@ use std::sync::Arc;
 use arrow_array::builder::{ListBuilder, StringBuilder};
 use arrow_array::{ArrayRef, RecordBatch, StringArray};
 use arrow_schema::{DataType, Field, Schema};
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
 use p5_skill_paper_reproductions::evoskill::{
     DatasetMaterializationReport, EvoSkillFinalReport, ExactnessClass, FinalScoreSlot,
     FinalScoreStatus, LiveRunGateStatus, ManifestBuildInput, MaterializationExactness,
@@ -14,6 +15,7 @@ use p5_skill_paper_reproductions::evoskill::{
     write_evoskill_paper_close_split_policy_manifest,
 };
 use parquet::arrow::ArrowWriter;
+use sha2::{Digest, Sha256};
 
 #[test]
 fn final_report_exposes_score_slots_costs_errors_and_gaps_without_fake_metrics() {
@@ -852,6 +854,53 @@ fn cli_can_persist_paper_close_split_policy_sidecar_before_writing_manifest() {
     );
 }
 
+#[test]
+fn cli_writes_browsecomp_public_sample_before_split_policy() {
+    let root = tempfile::tempdir().unwrap();
+    write_officeqa_full_csv(root.path(), 246);
+    write_sealqa_parquet(root.path(), 111);
+    write_browsecomp_public_csv(root.path(), 256);
+    let manifest_path = root.path().join("out/replica-manifest.json");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_p5_skill_paper_reproductions"))
+        .arg("--root")
+        .arg(root.path())
+        .arg("--out")
+        .arg(&manifest_path)
+        .arg("--write-browsecomp-public-transfer-sample")
+        .arg("tmp/replication/evoskill/browsecomp/public_browsecomp_test_set.csv")
+        .arg("--write-paper-close-split-policy-manifest")
+        .output()
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let manifest = fs::read_to_string(manifest_path).unwrap();
+    let manifest: serde_json::Value = serde_json::from_str(&manifest).unwrap();
+    assert!(
+        manifest["source_blockers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|blocker| blocker["blocker_id"] != "browsecomp_transfer_sample")
+    );
+    let browsecomp = manifest["source_materializations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|materialization| materialization["dataset_id"] == "browsecomp_transfer")
+        .expect("BrowseComp transfer materialization exists");
+    assert_eq!(browsecomp["source_rows"], 128);
+    assert_eq!(
+        browsecomp["split_materializations"][0]["acceptance_status"],
+        "accepted_paper_close_policy"
+    );
+}
+
 fn write_officeqa_full_csv(root: &std::path::Path, rows: usize) {
     let path = root.join("tmp/repros/officeqa/officeqa_full.csv");
     fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -891,6 +940,37 @@ fn write_browsecomp_transfer_sample(root: &std::path::Path, rows: usize) {
         .unwrap();
     }
     fs::write(path, jsonl).unwrap();
+}
+
+fn write_browsecomp_public_csv(root: &std::path::Path, rows: usize) {
+    let path = root.join("tmp/replication/evoskill/browsecomp/public_browsecomp_test_set.csv");
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let canary =
+        "BENCHMARK DATA SHOULD NEVER APPEAR AS PLAIN TEXT ONLINE. canary GUID browsecomp:test";
+    let mut csv = String::from("problem,answer,problem_topic,canary\n");
+    for index in 0..rows {
+        let topic = if index % 2 == 0 { "alpha" } else { "beta" };
+        let problem = encrypt_browsecomp_public_field(
+            &format!("BrowseComp public question {index}?"),
+            canary,
+        );
+        let answer = encrypt_browsecomp_public_field(&format!("Public answer {index}"), canary);
+        writeln!(csv, "{problem},{answer},{topic},{canary}").unwrap();
+    }
+    fs::write(path, csv).unwrap();
+}
+
+fn encrypt_browsecomp_public_field(value: &str, canary: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(canary.as_bytes());
+    let digest = hasher.finalize();
+    let encrypted = value
+        .as_bytes()
+        .iter()
+        .zip(digest.iter().copied().cycle())
+        .map(|(plain, key)| *plain ^ key)
+        .collect::<Vec<_>>();
+    BASE64_STANDARD.encode(encrypted)
 }
 
 fn write_sealqa_judge_source(root: &std::path::Path) {

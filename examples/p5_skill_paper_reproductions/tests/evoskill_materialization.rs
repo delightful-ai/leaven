@@ -6,14 +6,17 @@ use std::sync::Arc;
 use arrow_array::builder::{ListBuilder, StringBuilder};
 use arrow_array::{ArrayRef, RecordBatch, StringArray};
 use arrow_schema::{DataType, Field, Schema};
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
 use leaven_kernel::CaseId;
 use p5_skill_paper_reproductions::evoskill::{
     ManifestBuildInput, ManifestError, MaterializationExactness, SourceMaterializationStatus,
     SplitAcceptanceStatus, SplitManifestStatus, build_evoskill_replica_manifest,
     materialize_browsecomp_transfer_source, materialize_officeqa_source, materialize_sealqa_source,
+    write_evoskill_browsecomp_public_transfer_sample,
     write_evoskill_paper_close_split_policy_manifest,
 };
 use parquet::arrow::ArrowWriter;
+use sha2::{Digest, Sha256};
 
 #[test]
 fn officeqa_csv_lowers_to_row_stable_cases_with_targets_hidden_from_inputs() {
@@ -618,6 +621,80 @@ fn browsecomp_transfer_jsonl_lowers_to_held_out_denominator_without_score_proof(
 }
 
 #[test]
+fn browsecomp_public_csv_writer_derives_topic_stratified_substitute_sample() {
+    let root = tempfile::tempdir().unwrap();
+    let public_csv = write_browsecomp_public_csv(root.path(), 256);
+
+    let sample_path = write_evoskill_browsecomp_public_transfer_sample(
+        &ManifestBuildInput::new(root.path()),
+        public_csv,
+    )
+    .unwrap();
+    assert!(sample_path.ends_with("tmp/replication/evoskill/browsecomp/transfer_sample.jsonl"));
+
+    let materialization =
+        materialize_browsecomp_transfer_source(&ManifestBuildInput::new(root.path()))
+            .unwrap()
+            .expect("derived BrowseComp transfer JSONL exists");
+    assert_eq!(materialization.report.source_rows, Some(128));
+    assert_eq!(materialization.report.strata[0].name, "alpha");
+    assert_eq!(materialization.report.strata[0].rows, 64);
+    assert_eq!(materialization.report.strata[1].name, "beta");
+    assert_eq!(materialization.report.strata[1].rows, 64);
+    assert!(
+        materialization
+            .rows
+            .rows()
+            .iter()
+            .all(|row| row.source_id().starts_with("browsecomp-public:"))
+    );
+    assert!(
+        materialization
+            .rows
+            .rows()
+            .iter()
+            .all(|row| !row.input().question.is_empty() && row.target().is_some())
+    );
+
+    let manifest = build_evoskill_replica_manifest(&ManifestBuildInput::new(root.path())).unwrap();
+    assert!(manifest.artifacts.iter().any(|artifact| {
+        artifact.id == "browsecomp_public_csv"
+            && artifact.exists
+            && artifact
+                .sha256
+                .as_deref()
+                .is_some_and(|hash| hash.len() == 64)
+    }));
+    assert!(
+        manifest
+            .source_blockers
+            .iter()
+            .all(|blocker| blocker.blocker_id != "browsecomp_transfer_sample")
+    );
+}
+
+#[test]
+fn browsecomp_public_csv_writer_refuses_insufficient_rows() {
+    let root = tempfile::tempdir().unwrap();
+    let public_csv = write_browsecomp_public_csv(root.path(), 12);
+
+    let error = write_evoskill_browsecomp_public_transfer_sample(
+        &ManifestBuildInput::new(root.path()),
+        public_csv,
+    )
+    .unwrap_err();
+
+    match error {
+        ManifestError::BrowseCompSample { path, message } => {
+            assert!(path.ends_with("public_browsecomp_test_set.csv"));
+            assert!(message.contains("official BrowseComp CSV has 12 rows"));
+            assert!(message.contains("128 are required"));
+        }
+        other => panic!("expected BrowseComp sample error, got {other:?}"),
+    }
+}
+
+#[test]
 fn browsecomp_transfer_jsonl_refuses_wrong_row_count() {
     let root = tempfile::tempdir().unwrap();
     write_browsecomp_transfer_sample(root.path(), 127);
@@ -720,6 +797,38 @@ fn write_browsecomp_transfer_sample(root: &std::path::Path, rows: usize) {
         .unwrap();
     }
     fs::write(path, jsonl).unwrap();
+}
+
+fn write_browsecomp_public_csv(root: &std::path::Path, rows: usize) -> std::path::PathBuf {
+    let path = root.join("tmp/replication/evoskill/browsecomp/public_browsecomp_test_set.csv");
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let canary =
+        "BENCHMARK DATA SHOULD NEVER APPEAR AS PLAIN TEXT ONLINE. canary GUID browsecomp:test";
+    let mut csv = String::from("problem,answer,problem_topic,canary\n");
+    for index in 0..rows {
+        let topic = if index % 2 == 0 { "alpha" } else { "beta" };
+        let problem = encrypt_browsecomp_public_field(
+            &format!("BrowseComp public question {index}?"),
+            canary,
+        );
+        let answer = encrypt_browsecomp_public_field(&format!("Public answer {index}"), canary);
+        writeln!(csv, "{problem},{answer},{topic},{canary}").unwrap();
+    }
+    fs::write(&path, csv).unwrap();
+    path
+}
+
+fn encrypt_browsecomp_public_field(value: &str, canary: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(canary.as_bytes());
+    let digest = hasher.finalize();
+    let encrypted = value
+        .as_bytes()
+        .iter()
+        .zip(digest.iter().copied().cycle())
+        .map(|(plain, key)| *plain ^ key)
+        .collect::<Vec<_>>();
+    BASE64_STANDARD.encode(encrypted)
 }
 
 fn write_officeqa_full_csv(root: &std::path::Path, rows: usize) {

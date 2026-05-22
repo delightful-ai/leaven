@@ -1033,3 +1033,30 @@ report still emits source-blocked BrowseComp target slots for the paper's
 sidecar is present and valid, those slots become unscored `not_run`
 denominator slots with split and role fingerprints. This still does not locate
 the original paper sample, run the transferred SealQA skill, or fill any score.
+
+## Public BrowseComp Substitute Denominator
+
+Date: 2026-05-22.
+Provider/model spend: none.
+Cloud/GPU spend: none.
+
+The P5 harness now has a no-spend operator path for the public BrowseComp
+dataset when the paper author's exact 128-example transfer sample remains
+absent. The command `just evoskill-paper-browsecomp-public-sample <csv>` reads
+a local copy of OpenAI simple-evals'
+`browse_comp_test_set.csv`, decrypts `problem` and `answer` in Rust using the
+public `canary` key scheme from `browsecomp_eval.py`, and writes the strict
+`tmp/replication/evoskill/browsecomp/transfer_sample.jsonl` sidecar.
+
+The sample policy is deliberately named as a substitute: deterministic
+topic-stratified SHA-256 ranking over the official public rows, 128 held-out
+rows total, source ids `browsecomp-public:NNNN`, and `problem_topic` recorded
+as `stratum`. With local source pins and accepted substitute splits already
+written, the generated report has no source blockers; BrowseComp transfer slots
+become unscored `not_run` rows with paper-close-substitute exactness and split
+fingerprints. The remaining blockers are approval-only: `sealqa_judge_scored_run`
+and `live_run_spend_approval`.
+
+This removes the vague local BrowseComp source blocker for no-spend paper-close
+work. It does not recover the author sample, reproduce the 43.5/48.8 transfer
+scores, or make the denominator paper-exact.

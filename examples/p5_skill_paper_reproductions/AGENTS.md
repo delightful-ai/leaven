@@ -40,7 +40,11 @@ belong in their owning crates.
   Optional `tmp/replication/evoskill/browsecomp/transfer_sample.jsonl` input
   materializes only a strict 128-row BrowseComp transfer denominator with
   source-id fingerprints and a held-out transfer split; it removes the
-  BrowseComp source blocker without producing any score.
+  BrowseComp source blocker without producing any score. The
+  `--write-browsecomp-public-transfer-sample` operator path may derive that
+  sidecar from the official encrypted BrowseComp CSV with a deterministic
+  topic-stratified substitute policy; that is still `paper_close_substitute`,
+  not author-exact sample membership.
   The manifest also records OfficeQA baseline and skill-merge paper result
   targets, including the 67.9 versus 68.1 exact-match ambiguity, as typed
   `paper_result_targets` rather than a generic blocker. It also carries typed
@@ -70,8 +74,9 @@ belong in their owning crates.
   `leaven-eval-parquet` into row-stable cases, and records a row-order 10
   percent train / held-out substitute split with role-level source-id membership
   manifests. It also proves the strict BrowseComp transfer JSONL sidecar lowers
-  into a 128-row held-out denominator and refuses malformed row counts or
-  duplicate source ids. SealQA row identity is physical row order, because the observed
+  into a 128-row held-out denominator, proves the official encrypted BrowseComp
+  CSV can produce a deterministic topic-stratified substitute sidecar in Rust,
+  and refuses malformed row counts or duplicate source ids. SealQA row identity is physical row order, because the observed
   `canary` column is not unique. It keeps missing paper category/exact split
   artifacts as blockers unless the explicit paper-close split policy sidecar
   validates the current substitute fingerprints. Even then it does not prove
@@ -112,5 +117,11 @@ belong in their owning crates.
   OfficeQA/SealQA substitute split fingerprints and then rewrites the manifest.
   This chooses a documented paper-close split denominator only; it is not
   paper-exact split membership or score evidence.
+- `just evoskill-paper-browsecomp-public-sample <csv>` writes
+  `tmp/replication/evoskill/browsecomp/transfer_sample.jsonl` from a local copy
+  of the official encrypted BrowseComp CSV, then rewrites the manifest. This
+  chooses a deterministic public BrowseComp substitute transfer denominator
+  only; it is not the paper author's exact 128-example sample and it does not
+  run the transferred SealQA skill.
 - `just evoskill-paper-final-report` writes both the manifest and current
   no-spend final report truth surface under `target/evoskill-paper-close/`.
