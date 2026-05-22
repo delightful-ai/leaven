@@ -97,13 +97,16 @@ belong in their owning crates.
   proves the current no-spend final report truth surface writes manifest and
   report artifacts, carries baseline/optimized train/validation/held-out score
   slots, exposes zero spend by default, blockers, ablation statuses, and
-  exactness gaps. It proves final report schema v15.
+  exactness gaps. It proves final report schema v16.
   Materialized score slots carry split exactness, split fingerprint, and
   role-level source-id fingerprint directly. Unreported slots carry a null
-  `score_evidence_id` and null `score_evidence_artifact`; reported slots
-  preserve the strict score sidecar entry's `evidence_id` as
-  `score_evidence_id` and the checked evidence artifact path/hash/byte count as
-  `score_evidence_artifact`. The embedded manifest carries
+  `score_evidence_id`, null `score_evidence_kind`, null
+  `score_evidence_approval_id`, and null `score_evidence_artifact`; reported
+  slots preserve the strict score sidecar entry's `evidence_id` as
+  `score_evidence_id`, the checked scoring method as `score_evidence_kind`, any
+  required external judge approval id as `score_evidence_approval_id`, and the
+  checked evidence artifact path/hash/byte count as `score_evidence_artifact`.
+  The embedded manifest carries
   typed `source_blockers`. The report also carries typed `paper_close_gates`
   that separate proven no-spend surfaces from source-blocked and
   approval-blocked gates, a `live_run_gate` that blocks live execution until
@@ -121,7 +124,12 @@ belong in their owning crates.
   reported scores only after manifest/scorer/slot fingerprints, expected row
   counts, scored row counts, resolved slot blockers, a nonempty score evidence
   id, and a readable strict JSONL evidence artifact with matching SHA-256 and
-  byte count match the current report. Schema-v3 evidence rows must exactly
+  byte count match the current report. Schema-v4 entries must declare
+  `score_evidence_kind`: `rust_scorer_replay` for OfficeQA scorer replay,
+  `exact_answer_replay` for conservative BrowseComp answer checks, or
+  `external_judge_run` for approved judge outputs. External judge entries must
+  carry a nonempty `score_evidence_approval_id` and enough reported LLM calls for
+  the judged rows. Evidence rows must exactly
   cover the slot role source ids, cannot duplicate or omit rows, must carry
   finite scores in `[0, 1]`, and must aggregate back to the reported score.
   OfficeQA score rows are recomputed with the Rust paper scorer from the

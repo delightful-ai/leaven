@@ -1083,9 +1083,9 @@ Date: 2026-05-22.
 Provider/model spend: none.
 Cloud/GPU spend: none.
 
-The P5 final report now declares schema v15 with optional
+The P5 final report now declares schema v16 with optional
 `tmp/replication/evoskill/score_result_manifest.json` ingestion. The sidecar is
-strict score evidence plumbing, not a live run: it must name schema version 3,
+strict score evidence plumbing, not a live run: it must name schema version 4,
 the current manifest fingerprint, the current scorer fingerprint, total cost,
 and one or more score entries keyed by dataset id, split id, split role, and
 candidate role.
@@ -1104,15 +1104,22 @@ The evidence artifact is now strict JSONL. Each row must carry `source_id`,
 membership, rejects duplicate or missing rows, validates finite `[0, 1]` row
 scores, and recomputes the aggregate before surfacing the entry's score. For
 OfficeQA, it also replays the Rust paper scorer from the materialized
-scorer-only targets and rejects row scores that do not match the scorer.
+scorer-only targets and rejects row scores that do not match the scorer. Each
+entry must declare `score_evidence_kind`; OfficeQA requires
+`rust_scorer_replay`, conservative BrowseComp exact-answer checks use
+`exact_answer_replay`, and SealQA or official judge-backed BrowseComp evidence
+must use `external_judge_run` with a nonempty `score_evidence_approval_id` and
+reported LLM-call cost covering judged rows.
 
 Imported scores preserve the sidecar entry `evidence_id` on the reported score
-slot as `score_evidence_id` and the checked artifact path/hash/byte count as
-`score_evidence_artifact`; unreported and blocked score slots keep both fields
-null. This makes score provenance report-visible instead of only validated
-during import and removes the file-binding-only fake-proof gap for OfficeQA.
-It still does not approve spend, run the provider, execute the SealQA judge,
-run the transferred BrowseComp skill, or manufacture missing scores.
+slot as `score_evidence_id`, the scoring method as `score_evidence_kind`, any
+external judge approval id as `score_evidence_approval_id`, and the checked
+artifact path/hash/byte count as `score_evidence_artifact`; unreported and
+blocked score slots keep those fields null. This makes score provenance
+report-visible instead of only validated during import and removes the
+file-binding-only fake-proof gap for deterministic replay versus judge-backed
+scores. It still does not approve spend, run the provider, execute the SealQA
+judge, run the transferred BrowseComp skill, or manufacture missing scores.
 
 This gives future approved live or judge runs a refusal-capable Rust path for
 entering the final report without converting opaque artifacts into paper-close
