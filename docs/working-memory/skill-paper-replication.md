@@ -934,18 +934,20 @@ lineage. The first retry should stay no-spend:
 
 ## EvoSkill Paper-Close Guardrails
 
-The P5 EvoSkill final report schema v9 carries a no-spend loop `run_manifest`
+The P5 EvoSkill final report schema v10 carries a no-spend loop `run_manifest`
 that ties the mechanics loop to manifest/scorer/source/split fingerprints,
 frontier policy, schedule, checkpoint boundary, Git identity mode, and the fake
 child-score source. Score slots also carry paper target ids, including
-source-blocked BrowseComp transfer target slots. The materialization path can
-replace the OfficeQA and SealQA substitute split blockers either when an exact
-source-id split manifest validates against the materialized row universe or
-when the split policy sidecar validates and explicitly accepts the current
-documented paper-close substitute fingerprints. Accepted substitutes stay
-`paper_close_substitute`, not paper-exact. Absent manifests still leave the
-ordinary substitute blockers in place. The loop must use the same materialized
-source set as the embedded
-report manifest and refuse source/split/role drift. Treat that as mechanics and
-denominator evidence only. It is not live provider, validation-set, SealQA
-judge, or paper-score evidence.
+BrowseComp transfer target slots. The materialization path can replace the
+OfficeQA and SealQA substitute split blockers either when an exact source-id
+split manifest validates against the materialized row universe or when the
+split policy sidecar validates and explicitly accepts the current documented
+paper-close substitute fingerprints. Accepted substitutes stay
+`paper_close_substitute`, not paper-exact. A valid strict 128-row BrowseComp
+transfer JSONL sidecar materializes only an unscored held-out transfer
+denominator; if absent or malformed, the BrowseComp source blocker stays or the
+manifest build fails. The loop must use the same materialized source set as the
+embedded report manifest and refuse source/split/role drift. Treat that as
+mechanics and denominator evidence only. It is not live provider,
+validation-set, SealQA judge, transferred-skill execution, or paper-score
+evidence.

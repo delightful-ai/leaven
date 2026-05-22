@@ -80,6 +80,16 @@ fn final_report_uses_accepted_substitute_splits_as_unscored_denominator() {
             .iter()
             .all(|blocker| blocker.dataset_id != "officeqa" && blocker.dataset_id != "sealqa")
     );
+    let missing_browsecomp = report
+        .manifest
+        .source_materializations
+        .iter()
+        .find(|materialization| materialization.dataset_id == "browsecomp_transfer")
+        .expect("BrowseComp transfer materialization status is embedded");
+    assert_eq!(
+        missing_browsecomp.blocker_ids,
+        ["browsecomp_transfer_sample".to_owned()]
+    );
 
     let officeqa = officeqa_materialization(&report);
     let officeqa_split = officeqa
@@ -125,6 +135,64 @@ fn final_report_uses_accepted_substitute_splits_as_unscored_denominator() {
             && slot.score.is_none()
             && slot.blocker_ids == ["sealqa_judge_scored_run".to_owned()]
     }));
+}
+
+#[test]
+fn final_report_uses_browsecomp_sample_as_unscored_transfer_denominator() {
+    let root = tempfile::tempdir().unwrap();
+    write_browsecomp_transfer_sample(root.path(), 128);
+
+    let report = build_evoskill_final_report(&ManifestBuildInput::new(root.path())).unwrap();
+
+    assert!(
+        report
+            .manifest
+            .source_blockers
+            .iter()
+            .all(|blocker| blocker.blocker_id != "browsecomp_transfer_sample")
+    );
+    let browsecomp = report
+        .manifest
+        .source_materializations
+        .iter()
+        .find(|materialization| materialization.dataset_id == "browsecomp_transfer")
+        .expect("BrowseComp transfer materialization is embedded");
+    assert_eq!(browsecomp.source_rows, Some(128));
+    let split = browsecomp
+        .split_materializations
+        .iter()
+        .find(|split| split.id == "browsecomp_transfer_sample_128_heldout")
+        .expect("BrowseComp held-out transfer split exists");
+    assert_eq!(
+        split.exactness,
+        MaterializationExactness::PaperCloseSubstitute
+    );
+    assert_eq!(split.test_rows, Some(128));
+    assert!(split.blocker_ids.is_empty());
+
+    let browsecomp_slots = report
+        .score_slots
+        .iter()
+        .filter(|slot| slot.dataset_id == "browsecomp_transfer")
+        .collect::<Vec<_>>();
+    assert_eq!(browsecomp_slots.len(), 2);
+    for slot in browsecomp_slots {
+        assert_eq!(slot.split_id, "browsecomp_transfer_sample_128_heldout");
+        assert_eq!(slot.split_role, "held_out_test");
+        assert_eq!(
+            slot.split_exactness,
+            MaterializationExactness::PaperCloseSubstitute
+        );
+        assert_eq!(slot.split_fingerprint, split.split_fingerprint);
+        assert_eq!(
+            slot.role_source_id_fingerprint.as_deref().unwrap().len(),
+            64
+        );
+        assert_eq!(slot.expected_rows, Some(128));
+        assert_eq!(slot.status, FinalScoreStatus::NotRun);
+        assert!(slot.score.is_none());
+        assert!(slot.blocker_ids.is_empty());
+    }
 }
 
 fn assert_paper_close_gates_separate_proof_from_blockers(report: &EvoSkillFinalReport) {
@@ -272,7 +340,7 @@ fn assert_reported_target(
 
 fn assert_report_header(report: &EvoSkillFinalReport) {
     assert_eq!(report.exactness, ExactnessClass::BlockedBeforePaperClose);
-    assert_eq!(report.schema_version, 9);
+    assert_eq!(report.schema_version, 10);
     assert_eq!(report.cost.llm_calls, 0);
     assert_eq!(report.cost.metric_calls, 0);
     assert_eq!(report.cost.prompt_tokens, 0);
@@ -802,6 +870,27 @@ fn write_officeqa_full_csv(root: &std::path::Path, rows: usize) {
         .unwrap();
     }
     fs::write(path, csv).unwrap();
+}
+
+fn write_browsecomp_transfer_sample(root: &std::path::Path, rows: usize) {
+    let path = root.join("tmp/replication/evoskill/browsecomp/transfer_sample.jsonl");
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let mut jsonl = String::new();
+    for index in 0..rows {
+        let stratum = if index % 2 == 0 { "simple" } else { "hard" };
+        writeln!(
+            jsonl,
+            "{}",
+            serde_json::json!({
+                "source_id": format!("browsecomp:{index:03}"),
+                "question": format!("Browse question {index}?"),
+                "answer": format!("Browse answer {index}"),
+                "stratum": stratum
+            })
+        )
+        .unwrap();
+    }
+    fs::write(path, jsonl).unwrap();
 }
 
 fn write_sealqa_judge_source(root: &std::path::Path) {

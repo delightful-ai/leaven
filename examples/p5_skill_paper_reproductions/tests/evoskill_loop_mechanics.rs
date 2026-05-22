@@ -77,7 +77,7 @@ fn no_spend_loop_exercises_frontier_lineage_feedback_and_checkpoint_resume() {
 }
 
 fn assert_run_manifest(report: &EvoSkillReplicaLoopReport) {
-    assert_eq!(report.run_manifest.manifest_schema_version, 12);
+    assert_eq!(report.run_manifest.manifest_schema_version, 13);
     assert_eq!(report.run_manifest.manifest_fingerprint.len(), 64);
     assert_eq!(report.run_manifest.scorer_id, "evoskill-multi-tolerance-v1");
     assert_eq!(report.run_manifest.scorer_fingerprint.len(), 64);
