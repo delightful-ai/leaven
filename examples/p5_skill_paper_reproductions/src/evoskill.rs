@@ -332,6 +332,7 @@ pub struct EvoSkillFinalReport {
     pub exactness: ExactnessClass,
     pub manifest: EvoSkillReplicaManifest,
     pub loop_report: Option<EvoSkillReplicaLoopReport>,
+    pub live_run_gate: LiveRunGateReport,
     pub manifest_fingerprint: ManifestFingerprintReport,
     pub scorer_fingerprint: ScorerFingerprintReport,
     pub score_slots: Vec<FinalScoreSlot>,
@@ -400,6 +401,23 @@ pub struct FinalReportError {
 pub struct AblationStatusReport {
     pub id: String,
     pub status: String,
+    pub blocker_ids: Vec<String>,
+    pub note: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LiveRunGateStatus {
+    BlockedNoSpendApproval,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct LiveRunGateReport {
+    pub status: LiveRunGateStatus,
+    pub runtime_role: String,
+    pub candidate_model: Option<String>,
+    pub credential_probe_status: String,
+    pub spend_approval_status: String,
     pub blocker_ids: Vec<String>,
     pub note: String,
 }
@@ -640,16 +658,18 @@ pub fn build_evoskill_final_report(
     let manifest_fingerprint = manifest_fingerprint_report(&manifest)?;
     let scorer_fingerprint = scorer_fingerprint_report(&manifest.scorer);
     let score_slots = final_score_slots(&manifest);
+    let live_run_gate = final_report_live_run_gate(&manifest);
     let errors = final_report_errors(&manifest);
     let ablations = final_report_ablations(&manifest);
     let exactness = manifest.exactness.clone();
     let proxy_rejections = manifest.proxy_rejections.clone();
 
     Ok(EvoSkillFinalReport {
-        schema_version: 3,
+        schema_version: 4,
         exactness,
         manifest,
         loop_report,
+        live_run_gate,
         manifest_fingerprint,
         scorer_fingerprint,
         score_slots,
@@ -1386,6 +1406,23 @@ fn final_report_ablations(manifest: &EvoSkillReplicaManifest) -> Vec<AblationSta
             note: "BrowseComp transfer sample/result source is absent locally".to_owned(),
         },
     ]
+}
+
+fn final_report_live_run_gate(manifest: &EvoSkillReplicaManifest) -> LiveRunGateReport {
+    let runtime_model = manifest
+        .model_pins
+        .iter()
+        .find(|pin| pin.role == "paper_agent_runtime")
+        .and_then(|pin| pin.leaven_candidate_model.clone());
+    LiveRunGateReport {
+        status: LiveRunGateStatus::BlockedNoSpendApproval,
+        runtime_role: "paper_agent_runtime".to_owned(),
+        candidate_model: runtime_model,
+        credential_probe_status: "not_probed_no_spend_default".to_owned(),
+        spend_approval_status: "not_approved".to_owned(),
+        blocker_ids: vec!["live_run_spend_approval".to_owned()],
+        note: "bounded live agent run is intentionally not executed without explicit provider spend and credential approval".to_owned(),
+    }
 }
 
 fn initial_replica_loop_state(
@@ -2266,6 +2303,10 @@ fn blockers() -> Vec<ReplicationBlocker> {
         blocker(
             "sealqa_judge_scored_run",
             "SealQA auto-grader template is pinned, but no approved live LLM-as-judge scored run has executed",
+        ),
+        blocker(
+            "live_run_spend_approval",
+            "bounded live agent run requires explicit provider spend and credential approval",
         ),
         blocker(
             "browsecomp_transfer_sample",

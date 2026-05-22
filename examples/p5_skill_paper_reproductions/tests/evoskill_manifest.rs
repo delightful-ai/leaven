@@ -45,6 +45,12 @@ fn evoskill_manifest_records_paper_close_denominator_without_claiming_proof() {
             .iter()
             .any(|blocker| blocker.id == "officeqa_category_split_manifest")
     );
+    assert!(
+        manifest
+            .blockers
+            .iter()
+            .any(|blocker| blocker.id == "live_run_spend_approval")
+    );
 }
 
 #[test]
