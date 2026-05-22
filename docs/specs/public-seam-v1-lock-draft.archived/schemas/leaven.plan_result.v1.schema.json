@@ -1,0 +1,538 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.leaven.dev/v1/leaven.plan_result.v1.schema.json",
+  "title": "Leaven Plan Result V1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "plan_id",
+    "capability_fingerprint",
+    "policy_fingerprint",
+    "base_revision",
+    "mode",
+    "values",
+    "receipts",
+    "redactions",
+    "charges",
+    "errors"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "leaven.plan_result.v1"
+    },
+    "plan_id": {
+      "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/PlanId"
+    },
+    "capability_fingerprint": {
+      "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/CapabilityFingerprint"
+    },
+    "policy_fingerprint": {
+      "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/PolicyFingerprint"
+    },
+    "base_revision": {
+      "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/GraphRevision"
+    },
+    "final_revision": {
+      "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/GraphRevision"
+    },
+    "mode": {
+      "$ref": "https://schemas.leaven.dev/v1/leaven.plan.v1.schema.json#/$defs/EvalModeV1"
+    },
+    "values": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/LeavenValueV1"
+      }
+    },
+    "receipts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/OperationReceiptV1"
+      }
+    },
+    "redactions": {
+      "type": "array",
+      "items": {
+        "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/Redaction"
+      }
+    },
+    "charges": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ChargeReceiptV1"
+      }
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/PlanErrorV1"
+      }
+    },
+    "replayability": {
+      "enum": [
+        "pure_read",
+        "fully_managed",
+        "boundary_managed",
+        "has_declared_external_effects",
+        "has_untracked_external_effects"
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "LeavenValueV1": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "graph_revision",
+            "items"
+          ],
+          "properties": {
+            "kind": {
+              "const": "graph_set"
+            },
+            "graph_revision": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/GraphRevision"
+            },
+            "items": {
+              "type": "array"
+            },
+            "source_refs": {
+              "type": "array",
+              "items": {
+                "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/InfoRef"
+              }
+            },
+            "redactions": {
+              "type": "array",
+              "items": {
+                "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/Redaction"
+              }
+            },
+            "receipt": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/ReceiptRef"
+            }
+          },
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "receipt"
+          ],
+          "properties": {
+            "kind": {
+              "enum": [
+                "case_record",
+                "workspace_snapshot",
+                "workspace_file",
+                "workspace_diff",
+                "workspace_listing"
+              ]
+            },
+            "receipt": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/ReceiptRef"
+            },
+            "value": {},
+            "data_classes": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/DataClassSet"
+            },
+            "redactions": {
+              "type": "array",
+              "items": {
+                "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/Redaction"
+              }
+            }
+          },
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "receipt"
+          ],
+          "properties": {
+            "kind": {
+              "const": "lm_response"
+            },
+            "receipt": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/ReceiptRef"
+            },
+            "cache": {
+              "enum": [
+                "hit",
+                "miss",
+                "replayed",
+                "bypassed"
+              ]
+            },
+            "model_fingerprint": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/RuntimeFingerprint"
+            },
+            "cost": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/Cost"
+            },
+            "message": {},
+            "parsed": {},
+            "trace_ref": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/TraceRef"
+            },
+            "redactions": {
+              "type": "array",
+              "items": {
+                "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/Redaction"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "receipt"
+          ],
+          "properties": {
+            "kind": {
+              "const": "agent_session"
+            },
+            "receipt": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/ReceiptRef"
+            },
+            "runtime_fingerprint": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/RuntimeFingerprint"
+            },
+            "status": {
+              "enum": [
+                "succeeded",
+                "failed",
+                "timeout",
+                "cancelled"
+              ]
+            },
+            "parsed": {},
+            "output_files": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "cost": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/Cost"
+            },
+            "trace_ref": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/TraceRef"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "receipt",
+            "status"
+          ],
+          "properties": {
+            "kind": {
+              "const": "sandbox_exec"
+            },
+            "receipt": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/ReceiptRef"
+            },
+            "status": {
+              "enum": [
+                "succeeded",
+                "failed",
+                "timeout",
+                "cancelled"
+              ]
+            },
+            "exit_code": {
+              "type": "integer"
+            },
+            "stdout_ref": {
+              "type": "string"
+            },
+            "stderr_ref": {
+              "type": "string"
+            },
+            "files": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "cost": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/Cost"
+            },
+            "trace_ref": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/TraceRef"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "status"
+          ],
+          "properties": {
+            "kind": {
+              "enum": [
+                "proposal_batch_receipt",
+                "assessment_batch_receipt",
+                "evaluation_request_receipt",
+                "apply_receipt",
+                "event_receipt"
+              ]
+            },
+            "status": {
+              "enum": [
+                "committed",
+                "staged",
+                "failed",
+                "dry_run"
+              ]
+            },
+            "ids": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "receipt": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/ReceiptRef"
+            },
+            "committed_revision": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/GraphRevision"
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "extension"
+          ],
+          "properties": {
+            "kind": {
+              "const": "extension_value"
+            },
+            "extension": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/ExtensionObject"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "OperationReceiptV1": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "receipt",
+            "op_hash",
+            "result_hash",
+            "graph_revision"
+          ],
+          "properties": {
+            "kind": {
+              "const": "query"
+            },
+            "receipt": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/ReceiptRef"
+            },
+            "op": {
+              "type": "string"
+            },
+            "op_hash": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/Fingerprint"
+            },
+            "result_hash": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/Fingerprint"
+            },
+            "graph_revision": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/GraphRevision"
+            },
+            "read_scope_fingerprint": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/Fingerprint"
+            },
+            "projection_fingerprint": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/Fingerprint"
+            },
+            "source_refs": {
+              "type": "array",
+              "items": {
+                "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/InfoRef"
+              }
+            },
+            "redactions": {
+              "type": "array",
+              "items": {
+                "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/Redaction"
+              }
+            },
+            "bytes": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "receipt",
+            "call_kind",
+            "status"
+          ],
+          "properties": {
+            "kind": {
+              "const": "call"
+            },
+            "receipt": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/ReceiptRef"
+            },
+            "call_kind": {
+              "enum": [
+                "lm_complete",
+                "agent_run",
+                "sandbox_exec",
+                "human_review",
+                "workspace_materialize",
+                "extension_call"
+              ]
+            },
+            "status": {
+              "enum": [
+                "succeeded",
+                "failed",
+                "timeout",
+                "cancelled",
+                "replayed",
+                "cached"
+              ]
+            },
+            "request_hash": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/Fingerprint"
+            },
+            "runtime_fingerprint": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/RuntimeFingerprint"
+            },
+            "cost": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/Cost"
+            },
+            "trace_ref": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/TraceRef"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "receipt",
+            "write",
+            "status",
+            "base_revision"
+          ],
+          "properties": {
+            "kind": {
+              "const": "write"
+            },
+            "receipt": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/ReceiptRef"
+            },
+            "write": {
+              "type": "string"
+            },
+            "status": {
+              "enum": [
+                "committed",
+                "staged",
+                "failed",
+                "dry_run"
+              ]
+            },
+            "base_revision": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/GraphRevision"
+            },
+            "committed_revision": {
+              "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/GraphRevision"
+            },
+            "ids": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "preconditions": {
+              "type": "array",
+              "items": {}
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ChargeReceiptV1": {
+      "type": "object",
+      "required": [
+        "receipt",
+        "cost"
+      ],
+      "properties": {
+        "receipt": {
+          "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/ReceiptRef"
+        },
+        "stage_call_id": {
+          "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/StageCallId"
+        },
+        "cost": {
+          "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/Cost"
+        },
+        "attribution": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "PlanErrorV1": {
+      "type": "object",
+      "required": [
+        "code",
+        "message"
+      ],
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "op": {
+          "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/Var"
+        },
+        "path": {
+          "type": "string"
+        },
+        "retryable": {
+          "type": "boolean"
+        },
+        "details": {}
+      },
+      "additionalProperties": false
+    }
+  }
+}

@@ -90,6 +90,12 @@ Evidence here is data a stage or evaluator can produce and another component can
   those key domains.
 
 ## Local Bait
+- `docs/specs/public-seam-v1/schemas/leaven.evidence_envelope.v1.schema.json`
+  and the surrounding spec lock the public/private visibility split for
+  evidence crossing the worker boundary. The reusable evidence shapes in this
+  crate are the durable source those envelopes lower from; visibility itself
+  lives in values and receipts per the architecture judgment, not only in
+  policy. The wire bridge is not implemented yet.
 - Human prose fields such as rationales and notes are debug context. Algorithms should route on typed fields such as `ScalarEvidence::score`, `PairwiseJudgment`, and `CaseOutcome`, not require prose to exist.
 - Placeholder modules in `src/lib.rs` are naming reservations, not permission to hide real implementation in `lib.rs`. Move behavior into the named module first.
 - The crate doc still says skeleton, and audit docs flag that as stale/ambiguous.

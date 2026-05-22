@@ -88,6 +88,12 @@ must not reach into graph storage to make progress.
   verify: run `cargo nextest run -p leaven-engine --test context_services --test evaluator_registry`
 
 ## Local Bait
+- `docs/specs/public-seam-v1/` locks the engine-bearing facts of the public
+  seam: capability-token authorization kernel, data-class taint propagation,
+  replay-by-receipt semantics, plan evaluation, and the `RunContext`-as-only-
+  graph-mutation-authority judgment. Treat it as the durable target for
+  trust/cache/budget/event behavior visible across the worker boundary; the
+  lowering work is not yet implemented here.
 - `RunGraph` has public view types and snapshots, but mutation still goes
   through `RunContext`. Do not expose graph storage fields or constructors just
   to satisfy callers or tests.

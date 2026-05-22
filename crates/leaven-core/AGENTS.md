@@ -77,6 +77,12 @@ optimizer strategy state.
   cold-core leak boundaries when the public surface or manifest changes.
 
 ## Local Bait
+- `docs/specs/public-seam-v1/` locks the cold vocabulary the public seam
+  exposes: `Proposal`/`Assessment` write shapes, `ReflectionResult` and
+  `ProposeRequest` payloads, scorer `OutputRecord` placement, and evaluation
+  envelope shapes for external-language workers. It is the durable target this
+  crate's cold algebra lowers toward; do not preempt the wire schema by adding
+  store/graph/engine vocabulary here.
 - `ProposalEffect::Change` is the cold shape of a change; applying it and
   recording success/failure belongs in `RunContext` and `RunGraph`.
 - `EvaluationSet` is an expression. Case lookup, partition resolution, and

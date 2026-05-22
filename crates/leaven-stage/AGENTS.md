@@ -26,6 +26,14 @@ It is not the candidate-evaluation workload crate. `AgentCase`,
   no-receipt mode.
 - Keep `lib.rs` as a tiered map: user, adapter, and receipt/debug surfaces.
 
+## Local Bait
+
+- `docs/specs/public-seam-v1/` is the locked public seam contract for
+  external-language workers (plan IR, capability tokens, stage payloads, ACP
+  profile). It supersedes `worker_protocol.v1` and is the durable target this
+  crate's stage surface lowers toward. The lowering is not yet done; do not
+  claim alignment until the bridge lands.
+
 ## Verification
 
 - `cargo nextest run -p leaven-stage` proves the stage surface.

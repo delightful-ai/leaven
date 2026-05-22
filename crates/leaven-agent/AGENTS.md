@@ -56,6 +56,12 @@ GEPA, skill banks, run graphs, or optimizer rhythm.
   verify: pair fake-runtime tests with the concrete provider leaf test once provider lowering is the claim
 
 ## Local Bait
+- `docs/specs/public-seam-v1/profiles/leaven_acp_profile_v1_v0.3.md` is the
+  locked ACP profile that lifts this crate's session vocabulary into the
+  external-worker public seam. All worker callbacks travel as Leaven ACP
+  extension methods; there is no MCP layer in v1. Use it as the durable target
+  when shaping runtime/output-contract changes, not as proof of an implemented
+  bridge.
 - `FakeAgentRuntime` is a contract-test helper, not a provider architecture.
   New real providers should implement `AgentRuntime` in provider leaves.
 - `OutputContract::WorkspaceDiff` does not parse diffs and does not create

@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.leaven.dev/v1/leaven.watch.v1.schema.json",
+  "title": "Leaven Watch V1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "watch_id",
+    "source",
+    "projection"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "leaven.watch.v1"
+    },
+    "watch_id": {
+      "type": "string",
+      "pattern": "^watch_[A-Za-z0-9_.:-]+$"
+    },
+    "source": {
+      "type": "object",
+      "required": [
+        "kind",
+        "run"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "run_events",
+            "graph_changes"
+          ]
+        },
+        "run": {
+          "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/RunId"
+        },
+        "since_revision": {
+          "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/GraphRevision"
+        },
+        "cursor": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "filter": {
+      "$ref": "https://schemas.leaven.dev/v1/leaven.plan.v1.schema.json#/$defs/PredicateV1"
+    },
+    "projection": {
+      "enum": [
+        "ids",
+        "summary",
+        "full",
+        "extension"
+      ]
+    },
+    "extension_projection": {
+      "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/ExtensionObject"
+    },
+    "limits": {
+      "type": "object",
+      "properties": {
+        "max_backlog": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "heartbeat_ms": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.leaven.dev/v1/leaven.worker_protocol.v1.schema.json",
+  "title": "Leaven Worker Protocol V1",
+  "description": "JSON-RPC payload envelopes for foreign-language stage workers. Transport is JSON-RPC over stdio, Unix socket, or HTTPS; authorization token is out-of-band.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/WorkerHandshake"
+    },
+    {
+      "$ref": "#/$defs/StageCall"
+    },
+    {
+      "$ref": "#/$defs/StageCallResult"
+    }
+  ],
+  "$defs": {
+    "WorkerHandshake": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "worker_id",
+        "protocols",
+        "capabilities"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "leaven.worker_handshake.v1"
+        },
+        "worker_id": {
+          "type": "string"
+        },
+        "protocols": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "leaven.plan.v1",
+              "leaven.capability.v1",
+              "leaven.evaluation_job.v1"
+            ]
+          }
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "runner",
+              "scorer",
+              "evaluator",
+              "reflector",
+              "proposer",
+              "judge",
+              "callback",
+              "artifact_adapter",
+              "dataset_adapter"
+            ]
+          }
+        },
+        "code_fingerprint": {
+          "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/Fingerprint"
+        }
+      },
+      "additionalProperties": false
+    },
+    "StageCall": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "stage_call_id",
+        "role",
+        "payload",
+        "capability_fingerprint"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "leaven.stage_call.v1"
+        },
+        "stage_call_id": {
+          "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/StageCallId"
+        },
+        "role": {
+          "enum": [
+            "runner",
+            "scorer",
+            "evaluator",
+            "reflector",
+            "proposer",
+            "judge",
+            "callback"
+          ]
+        },
+        "payload": {},
+        "capability_fingerprint": {
+          "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/CapabilityFingerprint"
+        },
+        "base_revision": {
+          "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/GraphRevision"
+        }
+      },
+      "additionalProperties": false
+    },
+    "StageCallResult": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "stage_call_id",
+        "status"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "leaven.stage_call_result.v1"
+        },
+        "stage_call_id": {
+          "$ref": "https://schemas.leaven.dev/v1/common.schema.json#/$defs/StageCallId"
+        },
+        "status": {
+          "enum": [
+            "succeeded",
+            "failed",
+            "cancelled"
+          ]
+        },
+        "plan_result": {
+          "$ref": "https://schemas.leaven.dev/v1/leaven.plan_result.v1.schema.json"
+        },
+        "error": {}
+      },
+      "additionalProperties": false
+    }
+  }
+}

@@ -44,6 +44,7 @@ surface or encode the warning at the owning layer.
 - `crates/leaven-derive`: derive macros only; no runtime or adapter dependencies without an explicit derive contract.
 - `crates/leaven`: umbrella import experience and re-exports only.
 - `docs/specs`: durable product and architecture specs. Read the relevant spec before implementing spec-derived behavior.
+- `docs/specs/public-seam-v1`: locked public seam specification for external-language workers: plan IR, capability tokens, result receipts, stage payloads, evaluator/evidence envelopes, the Leaven ACP profile, and JSON Schemas. Watch is deferred from v1.
 - `docs/working-memory`: active goal ledgers and continuation notes for long-running Leaven work. These files are durable working memory, not product law; use them to resume investigations, then verify against specs/code/tests before implementing or claiming completion.
 - `docs/testing/README.md`: test contract, suite layout, coverage ratchet, and runtime SLA.
 - `docs/philosophy`: design pressure and agent skills, not implementation status or subsystem plans.
