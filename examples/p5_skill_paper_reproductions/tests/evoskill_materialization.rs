@@ -9,7 +9,9 @@ use arrow_schema::{DataType, Field, Schema};
 use leaven_kernel::CaseId;
 use p5_skill_paper_reproductions::evoskill::{
     ManifestBuildInput, ManifestError, MaterializationExactness, SourceMaterializationStatus,
-    build_evoskill_replica_manifest, materialize_officeqa_source, materialize_sealqa_source,
+    SplitAcceptanceStatus, SplitManifestStatus, build_evoskill_replica_manifest,
+    materialize_officeqa_source, materialize_sealqa_source,
+    write_evoskill_paper_close_split_policy_manifest,
 };
 use parquet::arrow::ArrowWriter;
 
@@ -78,6 +80,10 @@ fn officeqa_difficulty_substitute_records_split_fingerprints_without_exact_claim
         train_12.exactness,
         MaterializationExactness::PaperCloseSubstitute
     );
+    assert_eq!(
+        train_12.acceptance_status,
+        SplitAcceptanceStatus::PendingPaperClosePolicy
+    );
     assert_eq!(train_12.train_rows, 12);
     assert_eq!(train_12.validation_rows, Some(17));
     assert_eq!(train_12.test_rows, Some(217));
@@ -144,6 +150,7 @@ fn officeqa_exact_split_manifest_replaces_substitute_blockers_when_present() {
     assert_eq!(split.id, "officeqa_paper_declared_train_12_val_17");
     assert_eq!(split.method, "paper_declared_source_id_manifest");
     assert_eq!(split.exactness, MaterializationExactness::PaperExact);
+    assert_eq!(split.acceptance_status, SplitAcceptanceStatus::NotRequired);
     assert_eq!(split.train_rows, 12);
     assert_eq!(split.validation_rows, Some(17));
     assert_eq!(split.test_rows, Some(217));
@@ -304,6 +311,115 @@ fn replica_manifest_marks_exact_source_universe_when_split_manifest_is_present()
 }
 
 #[test]
+fn paper_close_split_policy_manifest_accepts_documented_substitutes_without_exact_claim() {
+    let root = tempfile::tempdir().unwrap();
+    write_officeqa_full_csv(root.path(), 246);
+    write_sealqa_parquet(root.path(), 111);
+
+    let policy_path =
+        write_evoskill_paper_close_split_policy_manifest(&ManifestBuildInput::new(root.path()))
+            .unwrap();
+    assert!(policy_path.ends_with("tmp/replication/evoskill/split_policy_manifest.json"));
+
+    let manifest = build_evoskill_replica_manifest(&ManifestBuildInput::new(root.path())).unwrap();
+    assert_eq!(manifest.schema_version, 12);
+    assert!(manifest.artifacts.iter().any(|artifact| {
+        artifact.id == "split_policy_manifest"
+            && artifact.exists
+            && artifact
+                .sha256
+                .as_deref()
+                .is_some_and(|hash| hash.len() == 64)
+    }));
+
+    let officeqa = manifest
+        .source_materializations
+        .iter()
+        .find(|materialization| materialization.dataset_id == "officeqa")
+        .expect("OfficeQA materialization exists");
+    assert_eq!(officeqa.blocker_ids, Vec::<String>::new());
+    assert!(officeqa.split_materializations.iter().all(|split| {
+        split.exactness == MaterializationExactness::PaperCloseSubstitute
+            && split.acceptance_status == SplitAcceptanceStatus::AcceptedPaperClosePolicy
+            && split.blocker_ids.is_empty()
+    }));
+
+    let sealqa = manifest
+        .source_materializations
+        .iter()
+        .find(|materialization| materialization.dataset_id == "sealqa")
+        .expect("SealQA materialization exists");
+    assert_eq!(sealqa.blocker_ids, Vec::<String>::new());
+    let sealqa_split = sealqa
+        .split_materializations
+        .iter()
+        .find(|split| split.id == "sealqa_row_order_train_11_heldout_100")
+        .expect("SealQA substitute split exists");
+    assert_eq!(
+        sealqa_split.exactness,
+        MaterializationExactness::PaperCloseSubstitute
+    );
+    assert_eq!(
+        sealqa_split.acceptance_status,
+        SplitAcceptanceStatus::AcceptedPaperClosePolicy
+    );
+    assert!(sealqa_split.blocker_ids.is_empty());
+
+    for dataset_id in ["officeqa", "sealqa"] {
+        let requirement = manifest
+            .datasets
+            .iter()
+            .find(|dataset| dataset.id == dataset_id)
+            .unwrap_or_else(|| panic!("missing dataset requirement {dataset_id}"));
+        assert_eq!(
+            requirement.split_status,
+            SplitManifestStatus::PaperCloseSubstituteAccepted
+        );
+        assert!(requirement.blocker_ids.is_empty());
+        let universe = manifest
+            .source_universe
+            .iter()
+            .find(|entry| entry.dataset_id == dataset_id)
+            .unwrap_or_else(|| panic!("missing source universe {dataset_id}"));
+        assert!(
+            universe
+                .source_artifact_ids
+                .contains(&"split_policy_manifest".to_owned())
+        );
+        assert!(universe.blocker_ids.is_empty());
+    }
+    assert!(
+        manifest
+            .source_blockers
+            .iter()
+            .all(|blocker| blocker.dataset_id != "officeqa" && blocker.dataset_id != "sealqa")
+    );
+}
+
+#[test]
+fn paper_close_split_policy_manifest_refuses_stale_split_fingerprint() {
+    let root = tempfile::tempdir().unwrap();
+    write_officeqa_full_csv(root.path(), 246);
+    write_sealqa_parquet(root.path(), 111);
+    let policy_path =
+        write_evoskill_paper_close_split_policy_manifest(&ManifestBuildInput::new(root.path()))
+            .unwrap();
+    let mut manifest =
+        serde_json::from_slice::<serde_json::Value>(&fs::read(&policy_path).unwrap()).unwrap();
+    manifest["splits"][0]["split_fingerprint"] = serde_json::Value::String("stale".to_owned());
+    fs::write(&policy_path, serde_json::to_vec_pretty(&manifest).unwrap()).unwrap();
+
+    let error = build_evoskill_replica_manifest(&ManifestBuildInput::new(root.path())).unwrap_err();
+    match error {
+        ManifestError::SplitPolicyManifest { path, message } => {
+            assert!(path.ends_with("split_policy_manifest.json"));
+            assert!(message.contains("split_fingerprint mismatch"));
+        }
+        other => panic!("expected split policy manifest error, got {other:?}"),
+    }
+}
+
+#[test]
 fn sealqa_parquet_lowers_to_cases_and_row_order_substitute_split() {
     let root = tempfile::tempdir().unwrap();
     write_sealqa_parquet(root.path(), 111);
@@ -348,6 +464,10 @@ fn sealqa_parquet_lowers_to_cases_and_row_order_substitute_split() {
     assert_eq!(
         split.exactness,
         MaterializationExactness::PaperCloseSubstitute
+    );
+    assert_eq!(
+        split.acceptance_status,
+        SplitAcceptanceStatus::PendingPaperClosePolicy
     );
     assert_eq!(split.train_rows, 11);
     assert_eq!(split.validation_rows, None);
@@ -406,6 +526,7 @@ fn sealqa_exact_split_manifest_replaces_row_order_blocker_when_present() {
     assert_eq!(split.id, "sealqa_paper_declared_train_11_heldout_100");
     assert_eq!(split.method, "paper_declared_source_id_manifest");
     assert_eq!(split.exactness, MaterializationExactness::PaperExact);
+    assert_eq!(split.acceptance_status, SplitAcceptanceStatus::NotRequired);
     assert_eq!(split.train_rows, 11);
     assert_eq!(split.validation_rows, None);
     assert_eq!(split.test_rows, Some(100));

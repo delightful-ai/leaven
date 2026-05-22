@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use clap::Parser;
 use p5_skill_paper_reproductions::evoskill::{
     ManifestBuildInput, build_evoskill_final_report, build_evoskill_replica_manifest,
-    write_evoskill_local_source_pin_manifest,
+    write_evoskill_local_source_pin_manifest, write_evoskill_paper_close_split_policy_manifest,
 };
 
 #[derive(Debug, Parser)]
@@ -20,6 +20,9 @@ struct Args {
     /// Persist the current local git source checkouts as the explicit source pin sidecar.
     #[arg(long)]
     write_local_source_pin_manifest: bool,
+    /// Persist current substitute split fingerprints as the explicit paper-close split policy.
+    #[arg(long)]
+    write_paper_close_split_policy_manifest: bool,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -27,6 +30,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let input = ManifestBuildInput::new(args.root);
     if args.write_local_source_pin_manifest {
         write_evoskill_local_source_pin_manifest(&input)?;
+    }
+    if args.write_paper_close_split_policy_manifest {
+        write_evoskill_paper_close_split_policy_manifest(&input)?;
     }
     let manifest = build_evoskill_replica_manifest(&input)?;
     write_json(&args.out, &manifest)?;
