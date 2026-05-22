@@ -170,6 +170,10 @@ belong in their owning crates.
   JSONL and reported LLM-call cost through the normal importer. It is an import
   lane only; it does not run a judge, approve spend, resolve source/split
   blockers, or make partial SealQA evidence prove the full scorer gate.
+  Score writer commands append disjoint score-slot batches to an existing
+  validated `score_result_manifest.json`; they refuse duplicate slot keys before
+  writing new evidence artifacts, so OfficeQA and SealQA evidence can accumulate
+  without silent replacement.
   It does not prove live provider behavior, validation-score values, or
   paper-close.
 - `just evoskill-paper-manifest` writes the current no-spend local manifest to
@@ -200,5 +204,8 @@ belong in their owning crates.
   external judge score evidence JSONL from strict approved rows, then rewrites
   the manifest and final report. It imports only already-approved judge outputs
   for materialized SealQA slots whose only blocker is `sealqa_judge_scored_run`.
+- Score writer commands append only disjoint score-slot entries to the current
+  validated score sidecar. To replace a slot, rebuild or remove the sidecar
+  explicitly; do not rely on later writer invocations to overwrite evidence.
 - `just evoskill-paper-final-report` writes both the manifest and current
   no-spend final report truth surface under `target/evoskill-paper-close/`.

@@ -1158,6 +1158,14 @@ This gives future approved live or judge runs a refusal-capable Rust path for
 entering the final report without converting opaque artifacts into paper-close
 claims.
 
+Score result writers now merge disjoint reported slots instead of overwriting
+the score sidecar. OfficeQA scorer replay and approved SealQA judge imports
+load and validate the existing schema-v5 `score_result_manifest.json`, reject
+requested keys that are already present before writing new evidence artifacts,
+sum reported costs, and then rerun the normal final-report importer. This makes
+the combined OfficeQA/SealQA score path possible without letting a later writer
+silently replace earlier evidence.
+
 ## Final Report Exactness Gaps
 
 Date: 2026-05-22.
