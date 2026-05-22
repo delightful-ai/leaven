@@ -303,10 +303,13 @@ Next attempt:
   judge template carries the checked paper-source artifact existence, byte
   count, and SHA-256, and the request builder consumes the pinned template
   manifest. This is prompt/request evidence only, not a judge-scored run.
-- P5 final report schema v6 adds typed `paper_close_gates`, separating proven
+- P5 final report schema v6 added typed `paper_close_gates`, separating proven
   no-spend manifest/report/mechanics/proxy-closeout surfaces from
   source-blocked source/split work and approval-blocked live/judge execution.
-  This is closeout audit evidence, not paper-close scoring evidence.
+  Schema v7 adds a loop `run_manifest` that binds the mechanics loop to the
+  replica manifest/scorer/source/split fingerprints, frontier policy, schedule,
+  checkpoint boundary, Git identity mode, fake runtime, and fixed child-score
+  source. This is closeout audit evidence, not paper-close scoring evidence.
 
 2026-05-22 product-backend bridge proof:
 
@@ -888,5 +891,13 @@ lineage. The first retry should stay no-spend:
 - reproduce scorer/sampler/frontier semantics with fixtures;
 - implement the first generic primitive only when the replica cannot proceed
   without it;
-- keep paper-specific code thin enough that replacing the fixture with the
+  - keep paper-specific code thin enough that replacing the fixture with the
   paper data does not rewrite Leaven behavior.
+
+## EvoSkill Paper-Close Guardrails
+
+The P5 EvoSkill final report schema v7 carries a no-spend loop `run_manifest`
+that ties the mechanics loop to manifest/scorer/source/split fingerprints,
+frontier policy, schedule, checkpoint boundary, Git identity mode, and the fake
+child-score source. Treat that as mechanics evidence only. It is not live
+provider, validation-set, SealQA judge, or paper-score evidence.

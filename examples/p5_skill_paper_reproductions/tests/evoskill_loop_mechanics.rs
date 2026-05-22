@@ -1,7 +1,10 @@
 use std::fmt::Write as _;
 use std::fs;
 
-use p5_skill_paper_reproductions::evoskill::{ManifestBuildInput, run_evoskill_replica_mechanics};
+use p5_skill_paper_reproductions::evoskill::{
+    EvoSkillReplicaLoopReport, ManifestBuildInput, MaterializationExactness,
+    run_evoskill_replica_mechanics,
+};
 
 #[test]
 fn no_spend_loop_exercises_frontier_lineage_feedback_and_checkpoint_resume() {
@@ -23,6 +26,7 @@ fn no_spend_loop_exercises_frontier_lineage_feedback_and_checkpoint_resume() {
     );
     assert_eq!(report.frontier_capacity, 3);
     assert_eq!(report.final_frontier_members.len(), 3);
+    assert_run_manifest(&report);
 
     assert_eq!(report.iterations[0].train_sample_rows, 2);
     assert_eq!(report.iterations[0].feedback_rows_seen, 0);
@@ -69,6 +73,54 @@ fn no_spend_loop_exercises_frontier_lineage_feedback_and_checkpoint_resume() {
     assert_ne!(
         selected_parents[0], selected_parents[1],
         "round-robin parent selection must advance after the first admitted child"
+    );
+}
+
+fn assert_run_manifest(report: &EvoSkillReplicaLoopReport) {
+    assert_eq!(report.run_manifest.manifest_schema_version, 10);
+    assert_eq!(report.run_manifest.manifest_fingerprint.len(), 64);
+    assert_eq!(report.run_manifest.scorer_id, "evoskill-multi-tolerance-v1");
+    assert_eq!(report.run_manifest.scorer_fingerprint.len(), 64);
+    assert_eq!(report.run_manifest.source_dataset_id, "officeqa");
+    assert_eq!(report.run_manifest.source_artifact_id, "officeqa_full_csv");
+    assert_eq!(report.run_manifest.source_row_fingerprint.len(), 64);
+    assert_eq!(
+        report.run_manifest.train_split_id,
+        "officeqa_difficulty_train_12_val_17"
+    );
+    assert_eq!(
+        report.run_manifest.train_split_exactness,
+        MaterializationExactness::PaperCloseSubstitute
+    );
+    assert_eq!(report.run_manifest.train_split_fingerprint.len(), 64);
+    assert_eq!(
+        report.run_manifest.train_role_source_id_fingerprint.len(),
+        64
+    );
+    assert_eq!(report.run_manifest.train_rows, 12);
+    assert_eq!(
+        report.run_manifest.frontier_capacity,
+        report.frontier_capacity
+    );
+    assert_eq!(
+        report.run_manifest.planned_iterations,
+        u64::try_from(report.iterations.len()).unwrap()
+    );
+    assert_eq!(
+        report.run_manifest.checkpoint_resume_after_iteration,
+        report.checkpoint_resume.after_iteration
+    );
+    assert!(
+        report
+            .run_manifest
+            .child_score_source
+            .contains("not paper scorer output")
+    );
+    assert!(
+        report
+            .run_manifest
+            .proof_limit
+            .contains("not live provider")
     );
 }
 
