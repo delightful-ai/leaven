@@ -23,6 +23,9 @@ pub struct Args {
     /// Iterations per case.
     #[arg(long, default_value_t = 3)]
     iterations: usize,
+    /// Child revisions to create and reconstruct per sample.
+    #[arg(long, default_value_t = 0)]
+    intermediate_count: usize,
     /// Parallel workers. Defaults to half of logical CPUs.
     #[arg(long)]
     jobs: Option<usize>,
@@ -74,6 +77,7 @@ struct GitTrustTask {
 struct GitTrustSample {
     case: BenchCase,
     iteration: usize,
+    intermediate_count: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -110,6 +114,7 @@ struct TaskReport {
     structure: &'static str,
     environment: EnvironmentKind,
     sample_count: usize,
+    intermediate_count: usize,
 }
 
 #[derive(Debug, Serialize)]
@@ -137,7 +142,35 @@ struct SampleReport {
     durable_kib: u64,
     workspace_kib: u64,
     imported_child: String,
+    intermediate_chain: Option<IntermediateChainReport>,
     score: TrustScore,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct IntermediateChainReport {
+    count: usize,
+    save_total_seconds: f64,
+    save_mean_seconds: f64,
+    restore_total_seconds: f64,
+    restore_mean_seconds: f64,
+    restore_max_seconds: f64,
+    changed_bytes: usize,
+    durable_before_kib: u64,
+    durable_after_kib: u64,
+    durable_growth_kib: u64,
+    storage_amplification: f64,
+    revisions: Vec<IntermediateRevisionReport>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct IntermediateRevisionReport {
+    index: usize,
+    commit: String,
+    save_seconds: f64,
+    restore_seconds: f64,
+    changed_bytes: usize,
+    restored_head_matches: bool,
+    restored_content_matches: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -190,6 +223,7 @@ struct SolverOutput {
     durable_kib: u64,
     workspace_kib: u64,
     imported_child: String,
+    intermediate_chain: Option<IntermediateChainReport>,
     hidden_ref_absent: bool,
     hidden_object_absent: bool,
     alternates_absent: bool,
@@ -229,7 +263,7 @@ pub fn run(args: Args) -> Result<()> {
         return Err("--iterations must be positive".into());
     }
 
-    let samples = samples(cases, args.iterations);
+    let samples = samples(cases, args.iterations, args.intermediate_count);
     let options = RunOptions {
         jobs,
         report_path,
@@ -273,6 +307,7 @@ pub fn run(args: Args) -> Result<()> {
             structure: "task/sample/solver/scorer/environment/report",
             environment: task.environment,
             sample_count: task.samples.len(),
+            intermediate_count: args.intermediate_count,
         },
         host: HostReport {
             logical_cpus: logical_cpus(),
@@ -429,7 +464,20 @@ impl LocalGitSolver {
         let materialize_seconds = seconds(started.elapsed());
 
         let started = Instant::now();
-        let imported_child = mutate_and_import_child(&paths.durable, &checkout, parent.trim())?;
+        let (imported_child, intermediate_chain) = if sample.intermediate_count == 0 {
+            (
+                mutate_and_import_child(&paths.durable, &checkout, parent.trim())?,
+                None,
+            )
+        } else {
+            run_intermediate_chain(
+                &paths.durable,
+                &checkout,
+                &paths.workspace,
+                parent.trim(),
+                sample.intermediate_count,
+            )?
+        };
         let readback_seconds = seconds(started.elapsed());
 
         Ok(SolverOutput {
@@ -442,6 +490,7 @@ impl LocalGitSolver {
             durable_kib: du_kib(&paths.durable)?,
             workspace_kib: du_kib(&paths.workspace)?,
             imported_child,
+            intermediate_chain,
             hidden_ref_absent: score_inputs.hidden_ref_absent,
             hidden_object_absent: score_inputs.hidden_object_absent,
             alternates_absent: score_inputs.alternates_absent,
@@ -452,10 +501,17 @@ impl LocalGitSolver {
 impl TrustScorer {
     fn score(output: SolverOutput) -> Result<SampleReport> {
         let imported_child_present = !output.imported_child.is_empty();
+        let intermediate_chain_passed = output.intermediate_chain.as_ref().is_none_or(|chain| {
+            chain
+                .revisions
+                .iter()
+                .all(|revision| revision.restored_head_matches && revision.restored_content_matches)
+        });
         let passed = output.hidden_ref_absent
             && output.hidden_object_absent
             && output.alternates_absent
-            && imported_child_present;
+            && imported_child_present
+            && intermediate_chain_passed;
         if !passed {
             return Err(format!(
                 "sample {}#{} failed trust score",
@@ -473,6 +529,7 @@ impl TrustScorer {
             durable_kib: output.durable_kib,
             workspace_kib: output.workspace_kib,
             imported_child: output.imported_child,
+            intermediate_chain: output.intermediate_chain,
             score: TrustScore {
                 passed,
                 projection: ProjectionTrustScore {
@@ -594,14 +651,33 @@ fn materialize_program(durable: &Path, workspace: &Path, parent: &str) -> Result
 }
 
 fn mutate_and_import_child(durable: &Path, checkout: &Path, parent: &str) -> Result<String> {
+    mutate_and_import_child_step(durable, checkout, parent, 1).map(|child| child.commit)
+}
+
+struct ImportedStep {
+    commit: String,
+    save_seconds: f64,
+    changed_bytes: usize,
+}
+
+fn mutate_and_import_child_step(
+    durable: &Path,
+    checkout: &Path,
+    parent: &str,
+    step: usize,
+) -> Result<ImportedStep> {
+    let started = Instant::now();
     git(checkout, ["config", "user.name", "Leaven Benchmark"]).status_checked()?;
     git(checkout, ["config", "user.email", "leaven@example.invalid"]).status_checked()?;
+    let mutation = mutation_marker(step);
     let mut file = fs::OpenOptions::new()
         .append(true)
         .open(checkout.join("src/file-00000.dat"))?;
-    file.write_all(b"\nleaven benchmark child mutation\n")?;
+    file.write_all(mutation.as_bytes())?;
     git(checkout, ["add", "-A"]).status_checked()?;
-    git(checkout, ["commit", "-m", "leaven workspace snapshot"]).status_checked()?;
+    git(checkout, ["commit", "-m"])
+        .arg(format!("leaven workspace snapshot {step:04}"))
+        .status_checked()?;
     let child = git_output(checkout, ["rev-parse", "HEAD"])?
         .trim()
         .to_owned();
@@ -613,7 +689,106 @@ fn mutate_and_import_child(durable: &Path, checkout: &Path, parent: &str) -> Res
         .status_checked()?;
     import_bundle(durable, &bundle, parent, &child)?;
     fs::remove_file(bundle)?;
-    Ok(child)
+    Ok(ImportedStep {
+        commit: child,
+        save_seconds: seconds(started.elapsed()),
+        changed_bytes: mutation.len(),
+    })
+}
+
+fn run_intermediate_chain(
+    durable: &Path,
+    checkout: &Path,
+    workspace: &Path,
+    parent: &str,
+    count: usize,
+) -> Result<(String, Option<IntermediateChainReport>)> {
+    let durable_before_kib = du_kib(durable)?;
+    let mut current_parent = parent.to_owned();
+    let mut imported = Vec::with_capacity(count);
+    for step in 1..=count {
+        let child = mutate_and_import_child_step(durable, checkout, &current_parent, step)?;
+        current_parent.clone_from(&child.commit);
+        imported.push(child);
+    }
+    let durable_after_kib = du_kib(durable)?;
+    let restore_root = workspace.join("reconstructed");
+    fs::create_dir_all(&restore_root)?;
+    let mut revisions = Vec::with_capacity(imported.len());
+    for (offset, child) in imported.iter().enumerate() {
+        let index = offset + 1;
+        let restore_workspace = restore_root.join(format!("rev-{index:04}"));
+        let started = Instant::now();
+        let restored_checkout = materialize_program(durable, &restore_workspace, &child.commit)?;
+        let restore_seconds = seconds(started.elapsed());
+        let restored_head = git_output(&restored_checkout, ["rev-parse", "HEAD"])?
+            .trim()
+            .to_owned();
+        let restored_content = fs::read(restored_checkout.join("src/file-00000.dat"))?;
+        let restored_content_matches =
+            contains_bytes(&restored_content, mutation_marker(index).as_bytes())
+                && (index == count
+                    || !contains_bytes(&restored_content, mutation_marker(index + 1).as_bytes()));
+        revisions.push(IntermediateRevisionReport {
+            index,
+            commit: child.commit.clone(),
+            save_seconds: child.save_seconds,
+            restore_seconds,
+            changed_bytes: child.changed_bytes,
+            restored_head_matches: restored_head == child.commit,
+            restored_content_matches,
+        });
+    }
+    let changed_bytes = revisions
+        .iter()
+        .map(|revision| revision.changed_bytes)
+        .sum::<usize>();
+    let durable_growth_kib = durable_after_kib.saturating_sub(durable_before_kib);
+    let storage_amplification = if changed_bytes == 0 {
+        0.0
+    } else {
+        (u64_to_f64(durable_growth_kib) * 1024.0) / usize_to_f64(changed_bytes)
+    };
+    let save_total_seconds = revisions
+        .iter()
+        .map(|revision| revision.save_seconds)
+        .sum::<f64>();
+    let restore_total_seconds = revisions
+        .iter()
+        .map(|revision| revision.restore_seconds)
+        .sum::<f64>();
+    let restore_max_seconds = revisions
+        .iter()
+        .map(|revision| revision.restore_seconds)
+        .fold(0.0, f64::max);
+    let last_child = current_parent;
+    Ok((
+        last_child,
+        Some(IntermediateChainReport {
+            count,
+            save_total_seconds,
+            save_mean_seconds: mean(revisions.iter().map(|revision| revision.save_seconds)),
+            restore_total_seconds,
+            restore_mean_seconds: mean(revisions.iter().map(|revision| revision.restore_seconds)),
+            restore_max_seconds,
+            changed_bytes,
+            durable_before_kib,
+            durable_after_kib,
+            durable_growth_kib,
+            storage_amplification,
+            revisions,
+        }),
+    ))
+}
+
+fn mutation_marker(step: usize) -> String {
+    format!("\nleaven benchmark child mutation step {step:04}\n")
+}
+
+fn contains_bytes(haystack: &[u8], needle: &[u8]) -> bool {
+    haystack
+        .windows(needle.len())
+        .any(|candidate| candidate == needle)
 }
 
 fn import_bundle(durable: &Path, bundle: &Path, parent: &str, child: &str) -> Result<()> {
@@ -741,13 +916,18 @@ fn write_report(path: &Path, report: &BenchReport) -> Result<()> {
     Ok(())
 }
 
-fn samples(cases: Vec<BenchCase>, iterations: usize) -> Vec<GitTrustSample> {
+fn samples(
+    cases: Vec<BenchCase>,
+    iterations: usize,
+    intermediate_count: usize,
+) -> Vec<GitTrustSample> {
     cases
         .into_iter()
         .flat_map(|case| {
             (1..=iterations).map(move |iteration| GitTrustSample {
                 case: case.clone(),
                 iteration,
+                intermediate_count,
             })
         })
         .collect()

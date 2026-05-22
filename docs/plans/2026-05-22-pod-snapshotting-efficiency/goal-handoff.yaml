@@ -1,0 +1,196 @@
+artifact_kind: leaven_goal_handoff
+objective_name: pod_snapshotting_efficiency_for_artifact_reconstruction
+created_at: "2026-05-22"
+status: ready_to_goal
+decision: set_goal
+
+original_intent:
+  - make Leaven able to reconstruct every intermediate artifact state from an optimizer or agentic run
+  - use Firkin as the likely sandbox backend without confusing pod snapshots with artifact truth
+  - keep the path extremely lightweight, scaling to many intermediate Git artifact states
+
+designed_surface:
+  governing_leaven_specs:
+    - docs/specs/firkin_git_workspace_backend.md
+    - docs/specs/firkin_git_workspace_api_shape.md
+  current_leaven_code_anchors:
+    - crates/leaven-artifact-git
+    - crates/leaven-agentic-git
+    - crates/leaven-workspace-firkin
+    - xtask/src/git_trust_bench.rs
+  firkin_code_anchors:
+    - /Users/darin/vendor/github.com/apple/containerization/crates/runtime/src/continuation.rs
+    - /Users/darin/vendor/github.com/apple/containerization/crates/runtime/src/restore.rs
+    - /Users/darin/vendor/github.com/apple/containerization/crates/core/src/snapshot.rs
+    - /Users/darin/vendor/github.com/apple/containerization/crates/single-node/src/apple_vz.rs
+    - /Users/darin/vendor/github.com/apple/containerization/crates/runtime/tests/live_snapshot_restore.rs
+  intended_user_workflow:
+    - run an optimizer that emits many intermediate artifact states
+    - persist enough artifact-native state to reconstruct any intermediate Git artifact revision
+    - use Firkin pod/container snapshots only for execution state that artifact-native records cannot reconstruct
+    - inspect a durable report showing correctness, save/restore latency, bytes written, and amplification
+
+intent_preservation:
+  preserved_if:
+    - multiple intermediate Git artifact states can be reconstructed from durable records, not from live workspace luck
+    - multi-repo Git artifacts round-trip with lineage and expected-parent checks
+    - any file or non-Git companion artifact support is either proven or explicitly marked out of scope
+    - Firkin snapshot usage is measured and limited to runtime state, not treated as the artifact source of truth
+    - benchmark scale reaches 30-50x the current single-candidate proof denominator or records a measured blocker
+  not_preserved_by:
+    - a VM snapshot API existing without Leaven artifact reconstruction
+    - checking out one Git commit
+    - fake-product-pod tests alone
+    - the local Git trust benchmark alone
+    - a document-only design that does not produce reconstructable states and measurements
+
+misleading_proxy_proofs:
+  - proxy: Firkin continuation snapshot APIs compile or tests pass in isolation.
+    why_not: They prove runtime snapshot mechanics, not Leaven artifact reconstruction or artifact truth.
+  - proxy: Git materialization/readback handles one parent and one child.
+    why_not: The goal is all intermediate states at 30-50x scale with reportable restore correctness and cost.
+  - proxy: A full pod or rootfs snapshot can be restored.
+    why_not: That may be much heavier than artifact-native Git object persistence and can hide workspace state as truth.
+  - proxy: Fake runtime or local-only tests pass.
+    why_not: Useful no-spend proof, but not sufficient for Firkin backend claims.
+  - proxy: `just check` or coverage passes.
+    why_not: Repo health does not prove the snapshot/reconstruction denominator.
+
+initial_state_from_current_code:
+  leaven:
+    - GitProgramArtifact already records one-or-many repos, layout, revision, and identity mode.
+    - GitProgramReadback imports workspace mutations as typed GitProgramChange after concrete child revisions exist.
+    - The git-trust xtask writes JSON reports for local projection/materialization/readback samples.
+    - The git-trust xtask explicitly refuses --environment firkin today.
+  firkin:
+    - RuntimeContinuationSnapshotCapture records snapshot_save benchmark samples.
+    - RuntimeSnapshotRestore records warm_snapshot_restore benchmark samples.
+    - CoreContainerSnapshotSink saves a container snapshot plus persisted restore state.
+    - Apple/VZ single-node has sandbox snapshot/delete/restore plumbing and live snapshot tests.
+  gap:
+    - No current Leaven/Firkin path proves efficient reconstruction of many intermediate artifact states.
+    - No current benchmark reports artifact reconstruction cost or amplification at 30-50x scale.
+
+sla_policy:
+  baseline_required: true
+  baseline_command_status: completed_probe
+  baseline_probe:
+    command: cargo run -p xtask -- git-trust-bench --skip-trust-tests --iterations 1 --jobs 2 --case tiny-30x-probe:3:1024 --out target/git-trust-lane/pod-snapshot-baseline-probe.json
+    report: target/git-trust-lane/pod-snapshot-baseline-probe.json
+    sample_count: 1
+    wall_seconds: 0.550925166
+    projection_mean_seconds: 0.080948875
+    materialize_mean_seconds: 0.084997958
+    readback_mean_seconds: 0.219587416
+    durable_kib: 128
+    workspace_kib: 136
+    limitation: >
+      This proves only the current local single-parent/single-child trust lane.
+      It is not the required 30-50x intermediate reconstruction denominator.
+  initial_targets_after_probe:
+    - save/readback cost should grow with changed artifact bytes, not full workspace or rootfs bytes
+    - restoring a Git intermediate should require only durable Git objects plus artifact metadata unless runtime state is explicitly requested
+    - report must include wall time, bytes written, storage amplification, restore latency, and correctness for each strategy
+  after_baseline:
+    - replace these qualitative targets with measured p50/p95 or per-sample thresholds
+    - keep failed targets as evidence and name whether the blocker is Leaven artifact policy, Firkin snapshot mechanics, or host filesystem behavior
+  scaled_local_probe:
+    command: cargo run -p xtask -- git-trust-bench --skip-trust-tests --iterations 30 --jobs 8 --case tiny-30x-local:3:1024 --out target/git-trust-lane/pod-snapshot-baseline-30x-local.json
+    report: target/git-trust-lane/pod-snapshot-baseline-30x-local.json
+    sample_count: 30
+    wall_seconds: 3.7447559999999998
+    projection_mean_seconds: 0.13580189303333334
+    materialize_mean_seconds: 0.14017849316666667
+    readback_mean_seconds: 0.3663439041666667
+    readback_p95_seconds: 0.405851583
+    limitation: >
+      This scales the current independent-sample trust lane. It is useful
+      baseline evidence, but it still does not reconstruct a chain of
+      intermediate states from one optimizer lineage.
+  intermediate_chain_probe:
+    command: cargo run -p xtask -- git-trust-bench --skip-trust-tests --iterations 1 --jobs 1 --case tiny-intermediate-chain:3:1024 --intermediate-count 30 --out target/git-trust-lane/pod-snapshot-intermediate-chain-30.json
+    report: target/git-trust-lane/pod-snapshot-intermediate-chain-30.json
+    sample_count: 1
+    intermediate_count: 30
+    wall_seconds: 11.12328425
+    save_total_seconds: 7.824573879
+    save_mean_seconds: 0.2608191293
+    restore_total_seconds: 2.68220675
+    restore_mean_seconds: 0.08940689166666667
+    restore_max_seconds: 0.098101
+    changed_bytes: 1290
+    durable_growth_kib: 604
+    storage_amplification: 479.4542635658915
+    all_restored: true
+    limitation: >
+      This is the first real intermediate-chain reconstruction proof, but it is
+      still single-repo/local and uses coarse du(1) storage accounting.
+
+acceptance_path:
+  - id: handoff_and_design_record
+    status: in_progress
+    requirement: >
+      Durable plan explains what is artifact-native Git reconstruction, what is
+      Firkin runtime snapshotting, what is intentionally not supported, and why
+      the chosen path is the lightest real path.
+    evidence:
+      - docs/plans/2026-05-22-pod-snapshotting-efficiency/goal-handoff.yaml
+  - id: baseline_benchmark
+    status: in_progress
+    requirement: >
+      Existing Git trust benchmark or successor runs from a fresh checkout,
+      writes a durable report, and establishes baseline timings/bytes before
+      adding the scaled path.
+    evidence:
+      - target/git-trust-lane/pod-snapshot-baseline-probe.json
+  - id: scaled_intermediate_reconstruction
+    status: in_progress
+    requirement: >
+      Benchmark or test produces 30-50x intermediate Git artifact states and
+      reconstructs each selected state with correctness checks and measured
+      cost/amplification.
+    evidence:
+      - target/git-trust-lane/pod-snapshot-intermediate-chain-30.json
+  - id: multi_repo_lineage
+    status: pending
+    requirement: >
+      At least two repos in one GitProgramArtifact round-trip through intermediate
+      reconstruction with expected-parent validation and durable object presence.
+    evidence: []
+  - id: companion_artifact_policy
+    status: pending
+    requirement: >
+      File or non-Git companion artifacts either round-trip in the same report or
+      are explicitly documented as future work with no arbitrary-artifact claim.
+    evidence: []
+  - id: firkin_snapshot_boundary
+    status: pending
+    requirement: >
+      Implementation and docs show whether Firkin snapshots are used; if used,
+      live or contract tests prove they restore runtime/workspace state without
+      becoming artifact truth.
+    evidence: []
+  - id: verification_closeout
+    status: pending
+    requirement: >
+      Focused tests, relevant optional-feature clippy, formatting/diff hygiene,
+      and practical suite/SLA checks pass or are honestly blocked with exact
+      command output.
+    evidence: []
+
+proof_denominator:
+  required:
+    - durable report from the scaled benchmark or reconstruction proof
+    - tests covering multiple intermediate Git revisions
+    - tests covering multi-repo GitProgramArtifact reconstruction
+    - explicit artifact-vs-workspace-vs-pod snapshot boundary in docs or code
+  conditional:
+    - signed/ignored Apple/VZ live proof if implementation claims real Firkin runtime snapshot restore
+    - crate topology check if new crates or public features are added
+
+explicit_non_goals:
+  - do not make Firkin own Leaven artifact identity or optimizer lineage
+  - do not claim arbitrary artifact reconstruction without a file/non-Git proof
+  - do not use full rootfs snapshots in the hot path unless measurements prove they are necessary and acceptable
+  - do not spend provider/cloud resources or require destructive repo operations
+  - do not treat recovered design docs or fake-product-pod tests as implementation proof

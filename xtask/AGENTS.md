@@ -4,7 +4,7 @@ This is the Rust automation package for repo tasks that are better expressed as 
 Do not add library behavior here; it is only for repository automation with clear local side effects.
 
 Current commands:
-- `git-trust-bench`: local-only Git trust/projection/materialization/readback benchmark with an AISI/Inspect-shaped internal structure: task, sample, solver, scorer, environment, and report. It runs focused trust tests unless skipped, writes reports under `target/git-trust-lane/`, and explicitly refuses `--environment firkin` until live product-pod benchmark execution is wired.
+- `git-trust-bench`: local-only Git trust/projection/materialization/readback benchmark with an AISI/Inspect-shaped internal structure: task, sample, solver, scorer, environment, and report. It runs focused trust tests unless skipped, writes reports under `target/git-trust-lane/`, can run `--intermediate-count N` to reconstruct every imported child revision in a local Git chain, and explicitly refuses `--environment firkin` until live product-pod benchmark execution is wired.
 
 ## Local Rules
 - Keep automation deterministic and safe to rerun.
