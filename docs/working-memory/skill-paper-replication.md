@@ -934,7 +934,7 @@ lineage. The first retry should stay no-spend:
 
 ## EvoSkill Paper-Close Guardrails
 
-The P5 EvoSkill final report schema v10 carries a no-spend loop `run_manifest`
+The P5 EvoSkill final report schema v11 carries a no-spend loop `run_manifest`
 that ties the mechanics loop to manifest/scorer/source/split fingerprints,
 frontier policy, schedule, checkpoint boundary, Git identity mode, and the fake
 child-score source. Score slots also carry paper target ids, including
@@ -963,3 +963,12 @@ sample and not transferred-skill score evidence. The report preserves that
 distinction by moving top-level exactness only to `paper_close_candidate` and by
 switching denominator-ready ablation lanes to `approval_blocked` rather than
 leaving stale absent-source notes attached after the sidecar materializes.
+
+2026-05-22 update: P5 can now ingest an optional strict
+`tmp/replication/evoskill/score_result_manifest.json` sidecar. It is score
+evidence plumbing only: entries must match the current manifest fingerprint,
+scorer fingerprint, slot key, split fingerprint, role source-id fingerprint, and
+row count before a score is reported. Stale result files, duplicate entries,
+unresolved slot blockers, and non-slot blocker claims fail the report build.
+This gives future approved runs a Rust path into the report without treating
+fixture values, stale outputs, or missing approval as scores.

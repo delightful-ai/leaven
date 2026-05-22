@@ -640,9 +640,9 @@ embeds the current manifest, runs the no-spend OfficeQA substitute mechanics
 loop when the OfficeQA CSV is present, records manifest and scorer fingerprints,
 emits baseline/optimized score slots for train, validation, and held-out test
 roles, records the SealQA judge-template fingerprint, records zero
-LLM/metric/token spend, copies blocker/errors, links score slots to paper target
-ids, and records ablation statuses for skill-only, prompt-only, skill-merge,
-and BrowseComp transfer.
+LLM/metric/token spend unless a strict score result sidecar is present, copies
+blocker/errors, links score slots to paper target ids, and records ablation
+statuses for skill-only, prompt-only, skill-merge, and BrowseComp transfer.
 
 This deliberately does not fill blocked metrics with zeroes or claim paper-close:
 OfficeQA score slots stay `blocked` until exact membership or an accepted
@@ -1067,3 +1067,28 @@ source. The remaining blockers are approval-only: `sealqa_judge_scored_run` and
 This removes the vague local BrowseComp source blocker for no-spend paper-close
 work. It does not recover the author sample, reproduce the 43.5/48.8 transfer
 scores, or make the denominator paper-exact.
+
+## No-Spend Score Result Manifest Ingestion
+
+Date: 2026-05-22.
+Provider/model spend: none.
+Cloud/GPU spend: none.
+
+The P5 final report now declares schema v11 with optional
+`tmp/replication/evoskill/score_result_manifest.json` ingestion. The sidecar is
+strict score evidence plumbing, not a live run: it must name schema version 1,
+the current manifest fingerprint, the current scorer fingerprint, total cost,
+and one or more score entries keyed by dataset id, split id, split role, and
+candidate role.
+
+Each score entry must match the current score slot's split fingerprint,
+role-level source-id fingerprint, expected row count, and scored row count. A
+reported score must be finite and within `[0, 1]`. If the slot is blocked, the
+entry must explicitly resolve every slot blocker and may not claim non-slot
+blockers; otherwise the report build fails. Duplicate entries, empty evidence
+ids, stale manifest/scorer fingerprints, stale split fingerprints, and partial
+row coverage are rejected before any score is surfaced.
+
+This gives future approved live or judge runs a refusal-capable Rust path for
+entering the final report. It still does not approve spend, run the provider,
+execute the SealQA judge, or manufacture missing scores.

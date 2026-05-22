@@ -48,6 +48,7 @@ const BROWSECOMP_PUBLIC_CSV_PATH: &str =
     "tmp/replication/evoskill/browsecomp/public_browsecomp_test_set.csv";
 const SOURCE_PIN_MANIFEST_PATH: &str = "tmp/replication/evoskill/source_pin_manifest.json";
 const SPLIT_POLICY_MANIFEST_PATH: &str = "tmp/replication/evoskill/split_policy_manifest.json";
+const SCORE_RESULT_MANIFEST_PATH: &str = "tmp/replication/evoskill/score_result_manifest.json";
 const PAPER_DECLARED_SOURCE_ID_MANIFEST_METHOD: &str = "paper_declared_source_id_manifest";
 const BROWSECOMP_TRANSFER_ROWS: usize = 128;
 const BROWSECOMP_TRANSFER_ROWS_U64: u64 = 128;
@@ -438,6 +439,7 @@ pub struct EvoSkillFinalReport {
     pub paper_close_gates: Vec<PaperCloseGateReport>,
     pub manifest_fingerprint: ManifestFingerprintReport,
     pub scorer_fingerprint: ScorerFingerprintReport,
+    pub score_result_manifest: Option<ScoreResultManifestReport>,
     pub score_slots: Vec<FinalScoreSlot>,
     pub cost: FinalReportCost,
     pub errors: Vec<FinalReportError>,
@@ -485,6 +487,16 @@ pub struct ManifestFingerprintReport {
 pub struct ScorerFingerprintReport {
     pub scorer_id: String,
     pub fingerprint: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ScoreResultManifestReport {
+    pub relative_path: String,
+    pub schema_version: u32,
+    pub entries: u64,
+    pub manifest_fingerprint: String,
+    pub scorer_fingerprint: String,
+    pub cost: FinalReportCost,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -688,6 +700,37 @@ struct EvoSkillReplicaCandidateState {
     score: f64,
 }
 
+#[derive(Clone, Debug, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ScoreResultManifestFile {
+    schema_version: u32,
+    manifest_fingerprint: String,
+    scorer_fingerprint: String,
+    cost: FinalReportCost,
+    entries: Vec<ScoreResultManifestEntry>,
+}
+
+#[derive(Clone, Debug, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ScoreResultManifestEntry {
+    dataset_id: String,
+    split_id: String,
+    split_role: String,
+    candidate_role: String,
+    split_fingerprint: Option<String>,
+    role_source_id_fingerprint: Option<String>,
+    expected_rows: Option<u64>,
+    scored_rows: u64,
+    score: f64,
+    resolved_blocker_ids: Vec<String>,
+    evidence_id: String,
+}
+
+struct ValidatedScoreResultManifest {
+    report: ScoreResultManifestReport,
+    entries: Vec<ScoreResultManifestEntry>,
+}
+
 struct EvoSkillAgenticGitHarness {
     stores: GitProgramStores,
     seed_program: GitProgramArtifact,
@@ -760,6 +803,14 @@ pub enum ManifestError {
     },
     #[error("invalid split policy manifest `{path}`: {message}")]
     SplitPolicyManifest { path: PathBuf, message: String },
+    #[error("failed to parse score result manifest `{path}`: {source}")]
+    ScoreResultManifestJson {
+        path: PathBuf,
+        #[source]
+        source: serde_json::Error,
+    },
+    #[error("invalid score result manifest `{path}`: {message}")]
+    ScoreResultManifest { path: PathBuf, message: String },
     #[error("failed to parse BrowseComp transfer sample `{path}` line {line}: {source}")]
     BrowseCompSampleJson {
         path: PathBuf,
@@ -1007,7 +1058,15 @@ pub fn build_evoskill_final_report(
     } else {
         None
     };
-    let score_slots = final_score_slots(&manifest);
+    let mut score_slots = final_score_slots(&manifest);
+    let score_result_manifest =
+        read_score_result_manifest(&input.root, &manifest_fingerprint, &scorer_fingerprint)?;
+    let cost = if let Some(score_result_manifest) = &score_result_manifest {
+        apply_score_result_manifest(&mut score_slots, score_result_manifest)?;
+        score_result_manifest.report.cost.clone()
+    } else {
+        FinalReportCost::default()
+    };
     let live_run_gate = final_report_live_run_gate(&manifest);
     let paper_close_gates =
         final_report_paper_close_gates(&manifest, loop_report.as_ref(), &live_run_gate);
@@ -1017,7 +1076,7 @@ pub fn build_evoskill_final_report(
     let proxy_rejection_gates = proxy_rejection_gates();
 
     Ok(EvoSkillFinalReport {
-        schema_version: 10,
+        schema_version: 11,
         exactness,
         manifest,
         loop_report,
@@ -1025,8 +1084,9 @@ pub fn build_evoskill_final_report(
         paper_close_gates,
         manifest_fingerprint,
         scorer_fingerprint,
+        score_result_manifest: score_result_manifest.map(|manifest| manifest.report),
         score_slots,
-        cost: FinalReportCost::default(),
+        cost,
         errors,
         ablations,
         proxy_rejection_gates,
@@ -2952,6 +3012,256 @@ fn scorer_fingerprint_report(scorer: &ScorerManifest) -> ScorerFingerprintReport
     ScorerFingerprintReport {
         scorer_id: scorer.id.clone(),
         fingerprint: hex::encode(hasher.finalize()),
+    }
+}
+
+fn read_score_result_manifest(
+    root: &Path,
+    manifest_fingerprint: &ManifestFingerprintReport,
+    scorer_fingerprint: &ScorerFingerprintReport,
+) -> Result<Option<ValidatedScoreResultManifest>, ManifestError> {
+    let path = root.join(SCORE_RESULT_MANIFEST_PATH);
+    if !path.exists() {
+        return Ok(None);
+    }
+    let bytes = fs::read(&path).map_err(|source| ManifestError::Read {
+        path: path.clone(),
+        source,
+    })?;
+    let manifest = serde_json::from_slice::<ScoreResultManifestFile>(&bytes).map_err(|source| {
+        ManifestError::ScoreResultManifestJson {
+            path: path.clone(),
+            source,
+        }
+    })?;
+    validate_score_result_manifest(&path, manifest, manifest_fingerprint, scorer_fingerprint)
+        .map(Some)
+}
+
+fn validate_score_result_manifest(
+    path: &Path,
+    manifest: ScoreResultManifestFile,
+    manifest_fingerprint: &ManifestFingerprintReport,
+    scorer_fingerprint: &ScorerFingerprintReport,
+) -> Result<ValidatedScoreResultManifest, ManifestError> {
+    if manifest.schema_version != 1 {
+        return Err(score_result_manifest_error(
+            path,
+            format!(
+                "expected schema_version 1, found {}",
+                manifest.schema_version
+            ),
+        ));
+    }
+    if manifest.manifest_fingerprint != manifest_fingerprint.fingerprint {
+        return Err(score_result_manifest_error(
+            path,
+            format!(
+                "manifest fingerprint mismatch: expected `{}`, found `{}`",
+                manifest_fingerprint.fingerprint, manifest.manifest_fingerprint
+            ),
+        ));
+    }
+    if manifest.scorer_fingerprint != scorer_fingerprint.fingerprint {
+        return Err(score_result_manifest_error(
+            path,
+            format!(
+                "scorer fingerprint mismatch: expected `{}`, found `{}`",
+                scorer_fingerprint.fingerprint, manifest.scorer_fingerprint
+            ),
+        ));
+    }
+    if manifest.entries.is_empty() {
+        return Err(score_result_manifest_error(
+            path,
+            "score result manifest must contain at least one entry".to_owned(),
+        ));
+    }
+    let mut keys = BTreeSet::new();
+    for entry in &manifest.entries {
+        validate_score_result_entry_shape(path, entry)?;
+        let key = score_result_entry_key(entry);
+        if !keys.insert(key.clone()) {
+            return Err(score_result_manifest_error(
+                path,
+                format!("duplicate score result entry for `{key}`"),
+            ));
+        }
+    }
+    let entries = u64::try_from(manifest.entries.len()).expect("score result count fits in u64");
+    Ok(ValidatedScoreResultManifest {
+        report: ScoreResultManifestReport {
+            relative_path: SCORE_RESULT_MANIFEST_PATH.to_owned(),
+            schema_version: manifest.schema_version,
+            entries,
+            manifest_fingerprint: manifest.manifest_fingerprint,
+            scorer_fingerprint: manifest.scorer_fingerprint,
+            cost: manifest.cost,
+        },
+        entries: manifest.entries,
+    })
+}
+
+fn validate_score_result_entry_shape(
+    path: &Path,
+    entry: &ScoreResultManifestEntry,
+) -> Result<(), ManifestError> {
+    for (field, value) in [
+        ("dataset_id", &entry.dataset_id),
+        ("split_id", &entry.split_id),
+        ("split_role", &entry.split_role),
+        ("candidate_role", &entry.candidate_role),
+        ("evidence_id", &entry.evidence_id),
+    ] {
+        if value.trim().is_empty() {
+            return Err(score_result_manifest_error(
+                path,
+                format!("score result field `{field}` must not be empty"),
+            ));
+        }
+    }
+    if !(0.0..=1.0).contains(&entry.score) || !entry.score.is_finite() {
+        return Err(score_result_manifest_error(
+            path,
+            format!(
+                "score result `{}` has non-finite or out-of-range score {}",
+                score_result_entry_key(entry),
+                entry.score
+            ),
+        ));
+    }
+    if entry.scored_rows == 0 {
+        return Err(score_result_manifest_error(
+            path,
+            format!(
+                "score result `{}` must cover at least one row",
+                score_result_entry_key(entry)
+            ),
+        ));
+    }
+    Ok(())
+}
+
+fn apply_score_result_manifest(
+    slots: &mut [FinalScoreSlot],
+    manifest: &ValidatedScoreResultManifest,
+) -> Result<(), ManifestError> {
+    let path = Path::new(SCORE_RESULT_MANIFEST_PATH);
+    let mut slot_indexes = BTreeMap::new();
+    for (index, slot) in slots.iter().enumerate() {
+        let key = final_score_slot_key(slot);
+        if slot_indexes.insert(key.clone(), index).is_some() {
+            return Err(score_result_manifest_error(
+                path,
+                format!("final report has duplicate score slot `{key}`"),
+            ));
+        }
+    }
+
+    for entry in &manifest.entries {
+        let key = score_result_entry_key(entry);
+        let slot_index = *slot_indexes.get(&key).ok_or_else(|| {
+            score_result_manifest_error(
+                path,
+                format!("score result entry `{key}` has no matching slot"),
+            )
+        })?;
+        validate_score_result_matches_slot(path, entry, &slots[slot_index])?;
+        let slot = &mut slots[slot_index];
+        slot.score = Some(entry.score);
+        slot.status = FinalScoreStatus::Reported;
+        slot.blocker_ids.clear();
+    }
+    Ok(())
+}
+
+fn validate_score_result_matches_slot(
+    path: &Path,
+    entry: &ScoreResultManifestEntry,
+    slot: &FinalScoreSlot,
+) -> Result<(), ManifestError> {
+    let key = score_result_entry_key(entry);
+    if entry.split_fingerprint != slot.split_fingerprint {
+        return Err(score_result_manifest_error(
+            path,
+            format!("score result `{key}` split fingerprint does not match the current slot"),
+        ));
+    }
+    if entry.role_source_id_fingerprint != slot.role_source_id_fingerprint {
+        return Err(score_result_manifest_error(
+            path,
+            format!(
+                "score result `{key}` role source-id fingerprint does not match the current slot"
+            ),
+        ));
+    }
+    if entry.expected_rows != slot.expected_rows {
+        return Err(score_result_manifest_error(
+            path,
+            format!("score result `{key}` expected_rows does not match the current slot"),
+        ));
+    }
+    let expected_rows = slot.expected_rows.ok_or_else(|| {
+        score_result_manifest_error(
+            path,
+            format!("score result `{key}` cannot report a slot without expected rows"),
+        )
+    })?;
+    if entry.scored_rows != expected_rows {
+        return Err(score_result_manifest_error(
+            path,
+            format!(
+                "score result `{key}` covers {} rows, expected {expected_rows}",
+                entry.scored_rows
+            ),
+        ));
+    }
+    let mut resolved = entry.resolved_blocker_ids.clone();
+    resolved.sort();
+    resolved.dedup();
+    if resolved.len() != entry.resolved_blocker_ids.len() {
+        return Err(score_result_manifest_error(
+            path,
+            format!("score result `{key}` repeats a resolved blocker id"),
+        ));
+    }
+    for blocker in &entry.resolved_blocker_ids {
+        if !slot.blocker_ids.contains(blocker) {
+            return Err(score_result_manifest_error(
+                path,
+                format!("score result `{key}` claims to resolve non-slot blocker `{blocker}`"),
+            ));
+        }
+    }
+    for blocker in &slot.blocker_ids {
+        if !entry.resolved_blocker_ids.contains(blocker) {
+            return Err(score_result_manifest_error(
+                path,
+                format!("score result `{key}` leaves slot blocker `{blocker}` unresolved"),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn final_score_slot_key(slot: &FinalScoreSlot) -> String {
+    format!(
+        "{}|{}|{}|{}",
+        slot.dataset_id, slot.split_id, slot.split_role, slot.candidate_role
+    )
+}
+
+fn score_result_entry_key(entry: &ScoreResultManifestEntry) -> String {
+    format!(
+        "{}|{}|{}|{}",
+        entry.dataset_id, entry.split_id, entry.split_role, entry.candidate_role
+    )
+}
+
+fn score_result_manifest_error(path: &Path, message: String) -> ManifestError {
+    ManifestError::ScoreResultManifest {
+        path: path.to_owned(),
+        message,
     }
 }
 
