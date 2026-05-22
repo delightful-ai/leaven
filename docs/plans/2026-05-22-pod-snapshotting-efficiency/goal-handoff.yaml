@@ -53,7 +53,7 @@ misleading_proxy_proofs:
     why_not: That may be much heavier than artifact-native Git object persistence and can hide workspace state as truth.
   - proxy: Fake runtime or local-only tests pass.
     why_not: Useful no-spend proof, but not sufficient for Firkin backend claims.
-  - proxy: `just check` or coverage passes.
+  - proxy: "`just check` or coverage passes."
     why_not: Repo health does not prove the snapshot/reconstruction denominator.
 
 initial_state_from_current_code:
@@ -125,6 +125,37 @@ sla_policy:
     limitation: >
       This is the first real intermediate-chain reconstruction proof, but it is
       still single-repo/local and uses coarse du(1) storage accounting.
+  multi_repo_intermediate_test:
+    command: cargo test -p leaven-agentic-git readback_children_rematerialize_every_multi_repo_intermediate -- --nocapture
+    test: crates/leaven-agentic-git/tests/git_program_materializer.rs::readback_children_rematerialize_every_multi_repo_intermediate
+    commit: uqstssov / 02da66c5
+    intermediate_count: 3
+    repo_count: 2
+    behavior: >
+      Each step materializes a two-repo GitProgramArtifact, mutates both repos,
+      reads back one atomic GitProgramChange::AdvanceRepos, applies it through
+      Artifact::apply_change, rematerializes the child artifact into a fresh
+      workspace, and checks both repo file contents exactly.
+
+companion_artifact_policy:
+  decision: explicit_future_work_for_non_git_companions
+  current_claim: >
+    This goal proves artifact-native reconstruction for GitProgramArtifact,
+    including one-or-many Git repositories. It does not claim arbitrary mixed
+    file/text/prompt/non-Git artifact reconstruction.
+  reason: >
+    leaven_core::Artifact already lets product artifacts be anything, and each
+    artifact type must own its own durable identity and typed change law.
+    Widening the Git proof into a generic codebase wrapper would duplicate the
+    artifact law and hide unproven companion readback behavior.
+  allowed_next_step: >
+    Add a real product artifact type or composition type only when a product
+    needs file/text/prompt companions to share one candidate identity, then
+    prove its own materialization/readback contract.
+  forbidden_proxy: >
+    Do not attach extra files to a Git workspace and call them reconstructed
+    artifacts unless their state is included in the artifact identity and
+    readback contract.
 
 acceptance_path:
   - id: handoff_and_design_record
@@ -136,7 +167,7 @@ acceptance_path:
     evidence:
       - docs/plans/2026-05-22-pod-snapshotting-efficiency/goal-handoff.yaml
   - id: baseline_benchmark
-    status: in_progress
+    status: completed
     requirement: >
       Existing Git trust benchmark or successor runs from a fresh checkout,
       writes a durable report, and establishes baseline timings/bytes before
@@ -144,7 +175,7 @@ acceptance_path:
     evidence:
       - target/git-trust-lane/pod-snapshot-baseline-probe.json
   - id: scaled_intermediate_reconstruction
-    status: in_progress
+    status: completed
     requirement: >
       Benchmark or test produces 30-50x intermediate Git artifact states and
       reconstructs each selected state with correctness checks and measured
@@ -152,24 +183,27 @@ acceptance_path:
     evidence:
       - target/git-trust-lane/pod-snapshot-intermediate-chain-30.json
   - id: multi_repo_lineage
-    status: pending
+    status: completed
     requirement: >
       At least two repos in one GitProgramArtifact round-trip through intermediate
       reconstruction with expected-parent validation and durable object presence.
-    evidence: []
+    evidence:
+      - crates/leaven-agentic-git/tests/git_program_materializer.rs::readback_children_rematerialize_every_multi_repo_intermediate
   - id: companion_artifact_policy
-    status: pending
+    status: completed_policy_only
     requirement: >
       File or non-Git companion artifacts either round-trip in the same report or
       are explicitly documented as future work with no arbitrary-artifact claim.
-    evidence: []
+    evidence:
+      - docs/plans/2026-05-22-pod-snapshotting-efficiency/goal-handoff.yaml#companion_artifact_policy
   - id: firkin_snapshot_boundary
-    status: pending
+    status: in_progress
     requirement: >
       Implementation and docs show whether Firkin snapshots are used; if used,
       live or contract tests prove they restore runtime/workspace state without
       becoming artifact truth.
-    evidence: []
+    evidence:
+      - docs/working-memory/pod-snapshotting-efficiency.md
   - id: verification_closeout
     status: pending
     requirement: >

@@ -47,17 +47,52 @@ Important limitation:
 
 - This is a local artifact-native Git reconstruction proof, not a Firkin runtime
   snapshot proof.
-- It is still single-repo. Multi-repo chain reconstruction is pending.
-- It does not yet prove file/non-Git companion artifact policy.
+- The 30x benchmark report is still single-repo.
 - Storage accounting uses coarse `du -sk`, so amplification is useful as
   first-pass evidence, not a final storage model.
 
+## 2026-05-22 Multi-Repo Artifact Reconstruction Proof
+
+Code evidence:
+
+- `crates/leaven-agentic-git/tests/git_program_materializer.rs` now has
+  `readback_children_rematerialize_every_multi_repo_intermediate`.
+- jj commit: `uqstssov` / `02da66c5`
+  `pod-snapshotting: prove multi-repo intermediate restoration`.
+
+Behavior proven:
+
+- Start from one `GitProgramArtifact` with two repos: `program` and `bench`.
+- For three sequential intermediate steps:
+  - materialize the parent artifact into a workspace;
+  - mutate both repo worktrees;
+  - read back one atomic `GitProgramChange::AdvanceRepos`;
+  - apply the change through `Artifact::apply_change`;
+  - rematerialize the child artifact into a fresh workspace;
+  - assert both repo files exactly match that intermediate's expected content.
+
+Verification run:
+
+- `cargo test -p leaven-agentic-git readback_children_rematerialize_every_multi_repo_intermediate -- --nocapture`
+
+Companion artifact policy:
+
+- Current implementation evidence is intentionally Git-artifact-native:
+  `GitProgramArtifact` owns one-or-many repo revisions and layout.
+- File, text, prompt, and other non-Git companions are separate artifacts under
+  the existing `leaven_core::Artifact` law. This goal does not claim arbitrary
+  mixed-artifact reconstruction until those artifact types have their own
+  durable identity plus materialization/readback proof.
+- Do not add a generic "codebase" wrapper or proxy companion state just to make
+  the Git proof look broader. Multiple repos are already native to the Git
+  artifact value; mixed artifact composition remains future work unless a real
+  product artifact type needs it.
+
 Next concrete actions:
 
-- Add multi-repo intermediate-chain reconstruction evidence, preferably through
-  the same xtask report surface or a focused `leaven-agentic-git` test.
-- Decide whether file/non-Git companion artifacts are in this slice or explicitly
-  future work in the handoff.
 - Inspect the Firkin live snapshot route only after artifact-native
   reconstruction has a stronger denominator; do not use a restored VM snapshot
   as artifact truth.
+- Decide whether the goal should add a Firkin no-spend contract/proxy benchmark
+  now, or leave Firkin runtime snapshot restore as a follow-up behind the
+  optional backend feature.
