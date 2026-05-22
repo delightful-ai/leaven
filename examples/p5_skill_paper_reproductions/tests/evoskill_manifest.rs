@@ -9,8 +9,9 @@ use arrow_array::{ArrayRef, RecordBatch, StringArray};
 use arrow_schema::{DataType, Field, Schema};
 use p5_skill_paper_reproductions::evoskill::{
     ExactnessClass, ManifestBuildInput, MaterializationExactness, PaperResultTargetStatus,
-    SourceMaterializationStatus, SourcePaperReleaseStatus, SourceRemoteProbeStatus,
-    SourceRevisionStatus, SplitManifestStatus, build_evoskill_replica_manifest,
+    SourceBlockerStatus, SourceMaterializationStatus, SourcePaperReleaseStatus,
+    SourceRemoteProbeStatus, SourceRevisionStatus, SplitManifestStatus,
+    build_evoskill_replica_manifest,
 };
 use parquet::arrow::ArrowWriter;
 
@@ -27,7 +28,7 @@ fn evoskill_manifest_records_paper_close_denominator_without_claiming_proof() {
 
     let manifest = build_evoskill_replica_manifest(&ManifestBuildInput::new(root.path())).unwrap();
 
-    assert_eq!(manifest.schema_version, 7);
+    assert_eq!(manifest.schema_version, 8);
     assert_eq!(manifest.paper.arxiv_id, "2603.02766");
     assert_eq!(manifest.exactness, ExactnessClass::BlockedBeforePaperClose);
     assert_eq!(manifest.scorer.tolerances, [0.0, 0.01, 0.025, 0.05, 0.10]);
@@ -59,6 +60,7 @@ fn evoskill_manifest_records_paper_close_denominator_without_claiming_proof() {
             .all(|blocker| blocker.id != "officeqa_reported_result_target")
     );
     assert_paper_result_targets_report_the_officeqa_ambiguity(&manifest);
+    assert_source_blockers_report_missing_paper_artifacts(&manifest);
 }
 
 fn assert_paper_result_targets_report_the_officeqa_ambiguity(
@@ -89,6 +91,62 @@ fn assert_paper_result_targets_report_the_officeqa_ambiguity(
         .collect::<Vec<_>>();
     values.sort_by(f64::total_cmp);
     assert_eq!(values, [67.9, 68.1]);
+}
+
+fn assert_source_blockers_report_missing_paper_artifacts(
+    manifest: &p5_skill_paper_reproductions::evoskill::EvoSkillReplicaManifest,
+) {
+    assert_eq!(manifest.source_blockers.len(), 5);
+    let blocker = |id: &str| {
+        manifest
+            .source_blockers
+            .iter()
+            .find(|blocker| blocker.blocker_id == id)
+            .unwrap_or_else(|| panic!("missing source blocker {id}"))
+    };
+
+    assert_eq!(
+        blocker("source_pin").status,
+        SourceBlockerStatus::UnresolvedSourcePolicy
+    );
+    assert!(
+        blocker("source_pin")
+            .required_for
+            .contains(&"paper_close_comparison_denominator".to_owned())
+    );
+
+    let officeqa_category = blocker("officeqa_category_split_manifest");
+    assert_eq!(
+        officeqa_category.status,
+        SourceBlockerStatus::MissingLocalArtifact
+    );
+    assert_eq!(officeqa_category.dataset_id, "officeqa");
+    assert!(
+        officeqa_category
+            .local_path_candidates
+            .iter()
+            .any(|path| path.ends_with("solved_dataset.csv"))
+    );
+
+    let officeqa_split = blocker("officeqa_exact_split_membership");
+    assert_eq!(
+        officeqa_split.status,
+        SourceBlockerStatus::MissingExactSplitManifest
+    );
+    assert!(
+        officeqa_split
+            .note
+            .contains("paper exact membership is absent")
+    );
+
+    assert_eq!(
+        blocker("sealqa_split_manifest").status,
+        SourceBlockerStatus::MissingExactSplitManifest
+    );
+    assert_eq!(
+        blocker("browsecomp_transfer_sample").status,
+        SourceBlockerStatus::MissingLocalArtifact
+    );
 }
 
 #[test]
