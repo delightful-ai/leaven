@@ -1187,6 +1187,17 @@ hand-authored-run-input gap before live execution, but it does not run the
 agent, import predictions, score outputs, call the SealQA judge, approve spend,
 or prove paper-close results.
 
+Runner outputs now have a strict no-spend import bridge to those generated
+inputs. `just evoskill-paper-runner-outputs <outputs.jsonl>` requires each
+prediction row to carry the dataset/split role/candidate/source id and the
+current runner input artifact SHA-256. The importer validates
+`runner_input_manifest.json`, checks artifact integrity and exact source-id
+coverage, scores OfficeQA outputs into `score_result_manifest.json`, and writes
+SealQA judge requests for later approved judging. This removes manual
+input-output stitching as a proxy gap; it still does not run the live agent,
+execute or approve the judge, import judged SealQA scores, or prove
+paper-close results.
+
 ## Final Report Exactness Gaps
 
 Date: 2026-05-22.

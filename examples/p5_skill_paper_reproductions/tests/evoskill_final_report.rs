@@ -1958,6 +1958,171 @@ fn cli_writes_runner_input_batch_without_targets_predictions_or_scores() {
     assert!(!manifest_body.contains("Seal answer"));
 }
 
+#[test]
+fn cli_imports_runner_outputs_only_when_bound_to_runner_input_manifest() {
+    let root = tempfile::tempdir().unwrap();
+    write_runner_input_sources(root.path());
+    let input = ManifestBuildInput::new(root.path());
+    write_evoskill_paper_close_split_policy_manifest(&input).unwrap();
+    let initial_report = build_evoskill_final_report(&input).unwrap();
+    let officeqa_slot = score_slot(
+        &initial_report,
+        "officeqa",
+        "officeqa_difficulty_train_12_val_17",
+        "train",
+        "baseline",
+    );
+    let sealqa_slot = score_slot(
+        &initial_report,
+        "sealqa",
+        "sealqa_runner_declared_three_row",
+        "train",
+        "baseline",
+    );
+    let manifest_path = root.path().join("out/replica-manifest.json");
+    let report_path = root.path().join("out/final-report.json");
+    let runner_manifest =
+        write_runner_input_manifest_with_cli(root.path(), &manifest_path, &report_path);
+    let outputs_path = root
+        .path()
+        .join("tmp/replication/evoskill/runner-outputs/batch.jsonl");
+    write_runner_output_rows_from_manifest(
+        root.path(),
+        &runner_manifest,
+        &[officeqa_slot, sealqa_slot],
+        &outputs_path,
+        None,
+    );
+    assert_runner_output_import_succeeds(root.path(), &manifest_path, &report_path);
+
+    let bad_outputs_path = root
+        .path()
+        .join("tmp/replication/evoskill/runner-outputs/bad-sha.jsonl");
+    write_runner_output_rows_from_manifest(
+        root.path(),
+        &runner_manifest,
+        &[sealqa_slot],
+        &bad_outputs_path,
+        Some("0000000000000000000000000000000000000000000000000000000000000000"),
+    );
+    assert_runner_output_import_rejects_bad_binding(root.path(), &manifest_path);
+}
+
+fn write_runner_input_manifest_with_cli(
+    root: &std::path::Path,
+    manifest_path: &std::path::Path,
+    report_path: &std::path::Path,
+) -> serde_json::Value {
+    let output = Command::new(env!("CARGO_BIN_EXE_p5_skill_paper_reproductions"))
+        .arg("--root")
+        .arg(root)
+        .arg("--out")
+        .arg(manifest_path)
+        .arg("--final-report-out")
+        .arg(report_path)
+        .arg("--write-runner-input-batch")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let runner_manifest_path = root.join("tmp/replication/evoskill/runner_input_manifest.json");
+    serde_json::from_slice(&fs::read(runner_manifest_path).unwrap()).unwrap()
+}
+
+fn assert_runner_output_import_succeeds(
+    root: &std::path::Path,
+    manifest_path: &std::path::Path,
+    report_path: &std::path::Path,
+) {
+    let output = Command::new(env!("CARGO_BIN_EXE_p5_skill_paper_reproductions"))
+        .arg("--root")
+        .arg(root)
+        .arg("--out")
+        .arg(manifest_path)
+        .arg("--final-report-out")
+        .arg(report_path)
+        .arg("--write-runner-output-batch")
+        .arg("tmp/replication/evoskill/runner-outputs/batch.jsonl")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let report: EvoSkillFinalReport =
+        serde_json::from_slice(&fs::read(report_path).unwrap()).unwrap();
+    let reported_officeqa = score_slot(
+        &report,
+        "officeqa",
+        "officeqa_difficulty_train_12_val_17",
+        "train",
+        "baseline",
+    );
+    assert_eq!(reported_officeqa.status, FinalScoreStatus::Reported);
+    assert_eq!(
+        reported_officeqa.score_evidence_kind,
+        Some(ScoreEvidenceKind::RustScorerReplay)
+    );
+    assert_eq!(reported_officeqa.score, Some(1.0));
+    let pending_sealqa = score_slot(
+        &report,
+        "sealqa",
+        "sealqa_runner_declared_three_row",
+        "train",
+        "baseline",
+    );
+    assert_ne!(pending_sealqa.status, FinalScoreStatus::Reported);
+
+    let judge_request_manifest_path =
+        root.join("tmp/replication/evoskill/sealqa_judge_request_manifest.json");
+    let judge_request_manifest: serde_json::Value =
+        serde_json::from_slice(&fs::read(judge_request_manifest_path).unwrap()).unwrap();
+    assert_eq!(judge_request_manifest["schema_version"], 1);
+    assert!(
+        judge_request_manifest["entries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|entry| entry["dataset_id"] == "sealqa"
+                && entry["split_id"] == "sealqa_runner_declared_three_row"
+                && entry["split_role"] == "train"
+                && entry["candidate_role"] == "baseline")
+    );
+}
+
+fn assert_runner_output_import_rejects_bad_binding(
+    root: &std::path::Path,
+    manifest_path: &std::path::Path,
+) {
+    let output = Command::new(env!("CARGO_BIN_EXE_p5_skill_paper_reproductions"))
+        .arg("--root")
+        .arg(root)
+        .arg("--out")
+        .arg(manifest_path)
+        .arg("--write-runner-output-batch")
+        .arg("tmp/replication/evoskill/runner-outputs/bad-sha.jsonl")
+        .output()
+        .unwrap();
+    assert!(
+        !output.status.success(),
+        "runner-output import accepted stale input binding\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("input artifact sha256 mismatch"),
+        "stderr:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
 fn assert_runner_input_entry(
     root: &std::path::Path,
     runner_manifest: &serde_json::Value,
@@ -2020,6 +2185,57 @@ fn assert_runner_input_entry(
     );
     assert_eq!(input_rows[0]["source_id"], expected_first_source_id);
     assert_eq!(input_rows[0]["input"]["question"], expected_first_question);
+}
+
+fn write_runner_output_rows_from_manifest(
+    root: &std::path::Path,
+    runner_manifest: &serde_json::Value,
+    slots: &[&FinalScoreSlot],
+    path: &std::path::Path,
+    override_input_artifact_sha256: Option<&str>,
+) {
+    let mut jsonl = String::new();
+    for slot in slots {
+        let entry = runner_manifest["entries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|entry| {
+                entry["dataset_id"] == slot.dataset_id
+                    && entry["split_id"] == slot.split_id
+                    && entry["split_role"] == slot.split_role
+                    && entry["candidate_role"] == slot.candidate_role
+            })
+            .expect("runner manifest entry exists for test slot");
+        let input_artifact_sha256 = override_input_artifact_sha256
+            .unwrap_or_else(|| entry["input_artifact"]["sha256"].as_str().unwrap());
+        let artifact_path = root.join(entry["input_artifact"]["relative_path"].as_str().unwrap());
+        let artifact_body = fs::read_to_string(artifact_path).unwrap();
+        for line in artifact_body.lines() {
+            let input_row: serde_json::Value = serde_json::from_str(line).unwrap();
+            let source_id = input_row["source_id"].as_str().unwrap();
+            writeln!(
+                jsonl,
+                "{}",
+                serde_json::json!({
+                    "dataset_id": &slot.dataset_id,
+                    "split_id": &slot.split_id,
+                    "split_role": &slot.split_role,
+                    "candidate_role": &slot.candidate_role,
+                    "input_artifact_sha256": input_artifact_sha256,
+                    "source_id": source_id,
+                    "prediction": score_artifact_prediction_for_source_id(slot, source_id)
+                })
+            )
+            .unwrap();
+        }
+    }
+    let relative_path = path
+        .strip_prefix(root)
+        .expect("test runner-output path lives below root");
+    let path = root.join(relative_path);
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(path, jsonl).unwrap();
 }
 
 #[test]

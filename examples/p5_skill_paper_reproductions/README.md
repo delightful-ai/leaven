@@ -108,6 +108,16 @@ omit targets, references, predictions, scores, and BrowseComp transfer rows.
 This prepares bounded run inputs only; it does not run an agent, score outputs,
 call a judge, or prove live/paper-close results.
 
+`just evoskill-paper-runner-outputs <outputs.jsonl>` is the Rust no-spend
+import path for predictions produced from the current runner input manifest.
+Each row is strict JSONL with `dataset_id`, `split_id`, `split_role`,
+`candidate_role`, `input_artifact_sha256`, `source_id`, and `prediction`.
+The importer validates the current `runner_input_manifest.json`, checks the
+referenced input artifact hash and exact source-id coverage, scores OfficeQA
+outputs with the Rust scorer, and materializes SealQA judge-request batches
+for future approved judging. This imports runner outputs only; it does not run
+an agent, call a judge, approve spend, or prove live/paper-close results.
+
 `just evoskill-paper-sealqa-judge-requests <predictions.jsonl>` is the Rust
 no-spend request-materialization path for future approved SealQA judge runs.
 Each input row is strict JSONL with `dataset_id`, `split_id`, `split_role`,
