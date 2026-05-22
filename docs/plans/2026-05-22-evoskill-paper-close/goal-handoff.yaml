@@ -1,0 +1,102 @@
+objective_name: evoskill_paper_close_replication
+created_at: "2026-05-22T08:59:00Z"
+status: ready_to_goal
+decision: set_goal
+
+original_intent:
+  - get Leaven to paper-close EvoSkill replication, not just product-proof
+  - preserve train/validation/test semantics even when exact split membership is unavailable
+  - avoid fake proofs and proxy demos as completion evidence
+
+designed_surface:
+  governing_ledgers:
+    - docs/working-memory/skill-paper-replication.md
+    - docs/working-memory/evoskill-replication.md
+  governing_specs:
+    - docs/specs/agentic_skill_optimization_primitives.md
+    - docs/specs/agentic_task_execution_substrate.md
+    - docs/specs/firkin_git_workspace_backend.md
+  intended_user_workflow:
+    - choose a pinned EvoSkill source/corpus manifest
+    - materialize OfficeQA and SealQA cases into Leaven case envelopes
+    - declare exact or paper-close train/validation/test splits with fingerprints
+    - run the EvoSkill multi-iteration git-program/frontier loop
+    - emit baseline/optimized split reports plus exactness gaps and ablations
+  reusable_substrate:
+    - leaven-eval SourceRowManifest and split builders
+    - leaven-artifact-git and leaven-workspace-git materialization/readback
+    - leaven-population TopKFrontier and TopKParentSelector
+    - agentic Git bridge and evidence/checkpoint/report surfaces
+
+intent_preservation:
+  preserved_if:
+    - the run denominator is OfficeQA/SealQA paper-close, not a tiny fixture
+    - source pins, split fingerprints, scorer versions, provider/model pins, and exactness gaps are report-visible
+    - multi-iteration parent selection, train sampling, child validation, frontier admission, weakest eviction, and checkpoint/resume are exercised
+  not_preserved_by:
+    - P5 one-iteration fixture alone
+    - local Git trust benchmark alone
+    - fake runtime or single-sample inspect path
+    - topology/just check without paper denominator
+    - live Codex smoke without paper loaders/splits/scorer/reporting
+
+misleading_proxy_proofs:
+  - proxy: P5 live fixture completes.
+    why_not: It is product wiring evidence, not OfficeQA/SealQA paper-close replication.
+  - proxy: Git materialization/readback benchmarks pass.
+    why_not: They prove substrate isolation and performance, not EvoSkill loop semantics.
+  - proxy: A fake-runtime loop admits a child.
+    why_not: Useful mechanics proof, but not live agent behavior or paper denominator.
+  - proxy: One OfficeQA or SealQA sample can be inspected.
+    why_not: It does not prove split construction, scorer distribution, or held-out reporting.
+  - proxy: `just check` passes.
+    why_not: It proves repo health, not paper-close reproduction.
+
+acceptance_path:
+  - id: replica_manifest
+    status: pending
+    requirement: >
+      Durable manifest names source revisions, corpus fingerprints, model/provider
+      pins, scorer version, split mode, frontier config, epoch schedule, and
+      paper-close/exactness classification.
+    evidence: []
+  - id: source_and_split_materialization
+    status: pending
+    requirement: >
+      OfficeQA and SealQA inputs lower into Leaven case envelopes with stable row
+      identity, hidden targets, and exact or documented paper-close
+      train/validation/test split fingerprints.
+    evidence: []
+  - id: paper_scorer
+    status: pending
+    requirement: >
+      EvoSkill tolerances, weighted score, failure threshold, feedback rows, and
+      failure extraction are implemented in Rust and tested without Python glue.
+    evidence: []
+  - id: full_loop_mechanics
+    status: pending
+    requirement: >
+      Multi-iteration git-program loop exercises train sampling, feedback
+      history, parent selection, child proposal/readback, validation admission,
+      top-k frontier, weakest eviction, and checkpoint/resume.
+    evidence: []
+  - id: live_small_run
+    status: pending
+    requirement: >
+      At least one bounded live run uses the same replica harness and labels all
+      remaining exactness gaps; no provider spend happens without approval.
+    evidence: []
+  - id: final_report_truth
+    status: pending
+    requirement: >
+      Report contains baseline/optimized train, validation, held-out test,
+      paper-close classification, source/split/scorer fingerprints, costs,
+      errors, and ablation status.
+    evidence: []
+
+explicit_non_goals:
+  - do not claim paper-exact when only paper-close is proven
+  - do not implement Leaven-owned replication logic in Python
+  - do not bake EvoSkill policy into leaven-engine
+  - do not expose hidden targets, exact answers, or held-out feedback to runners
+  - do not spend provider credits or touch destructive source/dataset state without approval
