@@ -208,6 +208,13 @@ mod tests {
         assert_eq!(latest_checkpoint(&prepared).unwrap(), None);
         mark_latest_checkpoint(&prepared, None).unwrap();
         mark_latest_checkpoint(&prepared, Some(CheckpointId::new())).unwrap();
+
+        let artifact = TestArtifact;
+        assert_eq!(
+            artifact.identity(),
+            ArtifactIdentity::Content(ContentId::from_bytes([1; 32]))
+        );
+        assert!(artifact.apply_change(&()).is_ok());
     }
 
     #[derive(Clone, Debug, Serialize, Deserialize)]

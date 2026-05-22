@@ -226,7 +226,7 @@ fn default_reflective_dataset_projects_parse_failures_without_hidden_case_target
         )
         .reflective_dataset(GepaReflectiveDataset::with_case_input(
             |case: &SecretCase| {
-                let _hidden_target_is_available_but_not_projected = case.hidden_target;
+                assert_eq!(case.hidden_target, "SECRET_TARGET_DO_NOT_RENDER");
                 case.input.to_owned()
             },
         ))
@@ -285,6 +285,7 @@ fn reflect_request_informed_by_unions_request_and_example_source_refs() {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn default_renderer_and_plain_text_parser_cover_empty_feedback_and_bad_part() {
     let parent = CandidateId::new();
     let artifact = TestArtifact("seed".to_owned());

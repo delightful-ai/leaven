@@ -1,6 +1,8 @@
 /target
 /vendor
 .env
+__pycache__/
+*.py[cod]
 tmp/
 .orientation/
 .beads/issues.jsonl

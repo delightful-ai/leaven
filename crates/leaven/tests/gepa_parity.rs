@@ -1,15 +1,21 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::{Arc, Mutex},
+};
 
 use futures::executor::block_on;
 use leaven::extend::{
     CachePolicy, EvaluationRequest, Evaluator, InfoRef, Optimizer, Proposal, ProposalBatch,
     ProposalBatchSemantics, ProposalEffect, RunEvent, TrustPolicy,
 };
-use leaven::gepa::{Gepa, SurfaceProposer, test_support::FixedSurfaceEdit};
+use leaven::gepa::{
+    Gepa, GepaReflectiveDataset, GepaReflector, ReflectRequest, ReflectiveValue, SurfaceProposer,
+    test_support::FixedSurfaceEdit,
+};
 use leaven::plumbing::ContentId;
 use leaven::prelude::{
     Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, AssessmentTarget, Budget,
-    CandidateId, Cost,
+    CandidateId, Cost, RunOutput, Score, ScoreContext, optimize,
 };
 use leaven::stdlib::{
     evidence::{CaseOutcome, CasewiseEvidence, ScalarEvidence},
@@ -20,6 +26,7 @@ use leaven_core::{
     ResolvedRequestKind,
 };
 use leaven_engine::{CaseSet, EvaluationContext, EvaluationError, OptimizerError, RunContext};
+use leaven_eval::NoTarget;
 use leaven_kernel::{
     AssessmentId, CaseId, EvaluationRequestId, EvaluatorId, Fingerprint, MetadataBag, Metered,
     StageId,
@@ -130,10 +137,133 @@ fn engine_runs_gepa_parity_end_to_end() {
     });
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[test]
+#[allow(clippy::too_many_lines)]
+fn public_run_gepa_path_reflects_rendered_typed_output() {
+    #[derive(Clone, Debug)]
+    struct TypedAnswer {
+        answer: String,
+        private_reasoning: String,
+    }
+
+    #[derive(Clone, Debug)]
+    struct CapturingReflector {
+        outputs: Arc<Mutex<Vec<Option<String>>>>,
+    }
+
+    impl GepaReflector<leaven::run::RunProblem<PartMapArtifact, String, NoTarget>, PartMapSurface>
+        for CapturingReflector
+    {
+        async fn reflect_candidate(
+            &mut self,
+            ctx: &mut RunContext<'_, leaven::run::RunProblem<PartMapArtifact, String, NoTarget>>,
+            surface: &PartMapSurface,
+            request: ReflectRequest<String>,
+        ) -> Result<Option<CandidateId>, OptimizerError> {
+            self.outputs.lock().expect("captured outputs lock").extend(
+                request
+                    .examples
+                    .iter()
+                    .flat_map(|case| case.runs.iter())
+                    .map(|run| match run.produced.as_ref() {
+                        Some(ReflectiveValue::Text(text)) => Some(text.clone()),
+                        Some(_) | None => None,
+                    }),
+            );
+            FixedSurfaceEdit::new(PartMapEdit::Replace("improved answer".to_owned()))
+                .reflect_candidate(ctx, surface, request)
+                .await
+        }
+    }
+
+    let captured_outputs = Arc::new(Mutex::new(Vec::new()));
+    let result = block_on(
+        optimize(PartMapArtifact(BTreeMap::from([
+            ("answer".to_owned(), "draft answer".to_owned()),
+            ("search".to_owned(), "stable search query".to_owned()),
+        ])))
+        .train_inputs(vec!["TRAIN example".to_owned()])
+        .validation_inputs(vec!["VALIDATION example".to_owned()])
+        .runner(
+            |artifact: PartMapArtifact, case: leaven::run::RunCase<String>| async move {
+                let answer = artifact
+                    .0
+                    .get("answer")
+                    .expect("answer part exists")
+                    .clone();
+                Ok(RunOutput::typed(TypedAnswer {
+                    answer,
+                    private_reasoning: format!("typed reasoning for {}", case.input()),
+                }))
+            },
+        )
+        .score(
+            |ctx: ScoreContext<PartMapArtifact, String, NoTarget, TypedAnswer>| async move {
+                assert!(ctx.output.output.private_reasoning.contains("example"));
+                let value = if ctx.output.output.answer == "improved answer" {
+                    0.9
+                } else {
+                    0.2
+                };
+                Ok(Score::new(value, "typed score")
+                    .with_text_output(format!("rendered answer: {}", ctx.output.output.answer)))
+            },
+        )
+        .using(
+            Gepa::new(
+                PartMapSurface,
+                ParetoFrontier::by_case().build(),
+                CapturingReflector {
+                    outputs: Arc::clone(&captured_outputs),
+                },
+            )
+            .reflective_dataset(GepaReflectiveDataset::with_case_input(
+                |case: &leaven_eval::Case<String, NoTarget>| case.input.clone(),
+            ))
+            .max_iterations(1),
+        )
+        .budget(Budget::metric_calls(16))
+        .ephemeral()
+        .run(),
+    )
+    .unwrap();
+
+    assert_eq!(
+        result.best().and_then(|artifact| artifact.0.get("answer")),
+        Some(&"improved answer".to_owned())
+    );
+    let captured = captured_outputs.lock().expect("captured outputs lock");
+    assert!(!captured.is_empty());
+    assert!(
+        captured
+            .iter()
+            .all(|output| output.as_deref() == Some("rendered answer: draft answer"))
+    );
+
+    let report_outputs = result
+        .report()
+        .splits_reported
+        .iter()
+        .flat_map(|split| split.candidates.iter())
+        .flat_map(|candidate| candidate.cases.iter())
+        .map(|case| case.output.as_str())
+        .collect::<Vec<_>>();
+    assert!(
+        report_outputs.contains(&"rendered answer: improved answer"),
+        "expected public report to contain rendered best output, got {report_outputs:?}"
+    );
+    assert!(
+        report_outputs
+            .iter()
+            .all(|output| !output.contains("TypedAnswer") && !output.contains("private_reasoning")),
+        "public report must not expose typed/debug internals: {report_outputs:?}"
+    );
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 struct PartMapArtifact(BTreeMap<String, String>);
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 struct PartMapChange {
     part: String,
     value: String,

@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use leaven_core::{
     AssessmentGranularity, AssessmentTarget, EvaluationPurpose, EvaluationRequest, EvaluationSet,
@@ -247,6 +247,16 @@ impl<P: OptimizationProblem> RunContext<'_, P> {
         )?;
         let cost = report.cost.clone();
         let mut by_case = self.casewise_batch_rows_by_case(&report.assessment_ids)?;
+        // Reject batches with rows for cases that were not requested *before*
+        // touching the cache: those rows are pure noise from a misbehaving
+        // evaluator, and caching the in-set siblings of a poisoned batch would
+        // silently legitimize the evaluator's output.
+        let requested_cases: BTreeSet<CaseId> = missing.iter().map(|miss| miss.case).collect();
+        if by_case.keys().any(|case| !requested_cases.contains(case)) {
+            return Err(RunContextError::Evaluation(EvaluationError::Message(
+                "casewise batch returned rows outside requested cases".to_owned(),
+            )));
+        }
         for miss in missing {
             let assessment = pop_casewise_batch_assessment(&mut by_case, miss.case)?;
             if let Ok(cache_key) = miss.cache_key
@@ -255,6 +265,15 @@ impl<P: OptimizationProblem> RunContext<'_, P> {
                 cache.insert(cache_key, vec![assessment]);
             }
             rows.push((miss.index, vec![assessment]));
+        }
+        // Duplicate detection: any leftover rows after popping one per `miss`
+        // indicate the evaluator returned more rows than requested for a case.
+        // The in-set rows already in cache are still legitimate evaluations,
+        // but the evaluator misbehaved — surface it.
+        if by_case.values().any(|assessments| !assessments.is_empty()) {
+            return Err(RunContextError::Evaluation(EvaluationError::Message(
+                "casewise batch returned duplicate rows for requested cases".to_owned(),
+            )));
         }
         if self.cache.is_some() {
             self.checkpoint()?;

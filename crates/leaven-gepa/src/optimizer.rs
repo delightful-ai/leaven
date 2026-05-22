@@ -1,26 +1,23 @@
 //! Reusable GEPA optimizer loop.
 
+mod assessment;
 mod checkpoint;
 mod step;
 
 pub use checkpoint::GepaCheckpointState;
 
+use assessment::GepaAssessment;
+
 use std::{collections::BTreeSet, sync::Arc};
 
-use leaven_core::{
-    AssessmentGranularity, AssessmentTarget, EvaluationPurpose, EvaluationRequest, EvaluationSet,
-    OptimizationProblem, PartitionId,
-};
+use leaven_core::{EvaluationPurpose, EvaluationSet, OptimizationProblem, PartitionId};
 use leaven_engine::{
     CheckpointContext, CheckpointableOptimizer, Optimizer, OptimizerCompatibility, OptimizerError,
     OptimizerReportPayload, OptimizerStateReader, OptimizerStateWrite, PrivateStatePolicy,
     RestoreContext, RunContext, RunGraphView, StateFormat, StopReason,
     restore_checkpointable_optimizer_state,
 };
-use leaven_evidence::{CaseOutcome, CasewiseEvidence, ScalarEvidence};
-use leaven_kernel::{
-    AssessmentId, CandidateId, CaseId, EvaluatorId, Fingerprint, FingerprintBuilder,
-};
+use leaven_kernel::{AssessmentId, CandidateId, CaseId, Fingerprint, FingerprintBuilder};
 use leaven_population::ParetoFrontier;
 use leaven_surface::{EditSurface, SurfaceError};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
@@ -62,14 +59,14 @@ pub enum GepaProfile {
     /// validation before reference admission.
     ///
     /// This is the algorithm profile used by optimize-anything examples such
-    /// as AIME. It is still not DSPy-default parity: DSPy merge and trace
+    /// as AIME. It is still not `DSPy`-default parity: `DSPy` merge and trace
     /// defaults require their own explicit profile.
     OptimizeAnything,
     /// Faster certified profile: smaller train probes and two serial proposal
     /// attempts per selected parent, while still requiring full validation
     /// before a child enters the GEPA reference state.
     ///
-    /// This is not the future async/lazy-certification FastGEPA design; it is
+    /// This is not the future async/lazy-certification `FastGEPA` design; it is
     /// the currently implemented safe speed preset.
     FastCertified,
 }
@@ -511,7 +508,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
     pub fn proposal_count(mut self, proposal_count: usize) -> Self {
         let proposal_count = proposal_count.max(1);
         self.proposal_count = proposal_count;
-        self.profile.label = "custom".to_owned();
+        "custom".clone_into(&mut self.profile.label);
         self.profile.proposal_count = proposal_count;
         self
     }
@@ -520,7 +517,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
     #[must_use]
     pub fn skip_perfect_score(mut self, skip: bool) -> Self {
         self.skip_perfect_score = skip;
-        self.profile.label = "custom".to_owned();
+        "custom".clone_into(&mut self.profile.label);
         self.profile.skip_perfect_score = skip;
         self
     }
@@ -529,7 +526,7 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
     #[must_use]
     pub fn perfect_score(mut self, perfect_score: f64) -> Self {
         self.perfect_score = perfect_score;
-        self.profile.label = "custom".to_owned();
+        "custom".clone_into(&mut self.profile.label);
         self.profile.perfect_score = perfect_score.to_string();
         self
     }
@@ -541,10 +538,10 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
         validation_policy: &str,
         certification_mode: &str,
     ) -> Self {
-        self.profile.label = label.to_owned();
+        label.clone_into(&mut self.profile.label);
         self.profile.train_minibatch_size = train_minibatch_size;
-        self.profile.validation_policy = validation_policy.to_owned();
-        self.profile.certification_mode = certification_mode.to_owned();
+        validation_policy.clone_into(&mut self.profile.validation_policy);
+        certification_mode.clone_into(&mut self.profile.certification_mode);
         self
     }
 
@@ -1007,244 +1004,6 @@ impl<S, Pop, Reflect, CandidateSel, PartSel, GatePol, Batch, Validate, Dataset>
             skip_reason: None,
         })
     }
-
-    async fn validate_candidate<P>(
-        &mut self,
-        ctx: &mut RunContext<'_, P>,
-        candidate: CandidateId,
-        parents: Vec<GepaCandidateIndex>,
-        seed_validation: bool,
-    ) -> Result<Option<GepaCandidateIndex>, OptimizerError>
-    where
-        P: OptimizationProblem,
-        P::Evidence: GepaCaseEvidence,
-        Validate: ValidationPolicy + Sync,
-        S: Sync,
-        Pop: Sync,
-        Reflect: Sync,
-        CandidateSel: Sync,
-        PartSel: Sync,
-        GatePol: Sync,
-        Batch: Sync,
-        Dataset: Sync,
-    {
-        let Some(set) = self.validation_policy.validation_set(candidate) else {
-            return Ok(None);
-        };
-        let assessment = self
-            .evaluate_casewise(ctx, candidate, set, EvaluationPurpose::Validation)
-            .await?;
-        self.reference_state
-            .add_metric_calls(assessment.metric_calls_new);
-        self.reference_state.note_full_validation();
-        let index = self.reference_state.add_validated_candidate(
-            candidate,
-            parents,
-            self.reference_state.total_metric_calls(),
-            assessment.average_score,
-            assessment.assessments.clone(),
-            &assessment.scalar_evidence,
-        );
-        if self
-            .validation_best
-            .as_ref()
-            .is_none_or(|best| assessment.average_score > best.score)
-        {
-            self.validation_best = Some(GepaValidationBest {
-                candidate,
-                assessments: assessment.assessments.clone(),
-                score: assessment.average_score,
-            });
-        }
-        if seed_validation {
-            self.record_event(GepaEventSummary::SeedValidationCompleted {
-                candidate_index: index,
-                metric_calls_delta: assessment.metric_calls_new,
-                score: assessment.average_score.to_string(),
-            });
-        } else {
-            self.record_event(GepaEventSummary::AcceptedValidationCompleted {
-                candidate_index: index,
-                metric_calls_delta: assessment.metric_calls_new,
-                score: assessment.average_score.to_string(),
-            });
-            self.record_event(GepaEventSummary::CandidateAdmitted {
-                candidate,
-                candidate_index: index,
-            });
-        }
-        self.record_event(GepaEventSummary::FrontierUpdated);
-        Ok(Some(index))
-    }
-
-    async fn evaluate_casewise<P>(
-        &self,
-        ctx: &mut RunContext<'_, P>,
-        candidate: CandidateId,
-        set: EvaluationSet,
-        purpose: EvaluationPurpose,
-    ) -> Result<GepaAssessment, OptimizerError>
-    where
-        P: OptimizationProblem,
-        P::Evidence: GepaCaseEvidence,
-        S: Sync,
-        Pop: Sync,
-        Reflect: Sync,
-        CandidateSel: Sync,
-        PartSel: Sync,
-        GatePol: Sync,
-        Batch: Sync,
-        Validate: Sync,
-        Dataset: Sync,
-    {
-        Self::ensure_non_empty_casewise_set(ctx, candidate, &set, &purpose)?;
-        let report = ctx
-            .evaluate_independent_casewise_cached(
-                EvaluatorId::PRIMARY,
-                candidate,
-                set,
-                purpose.clone(),
-            )
-            .await
-            .map_err(|source| OptimizerError::with_source("GEPA evaluation failed", source))?;
-        let metric_calls_new = report.cost.metric_calls;
-        let assessments = report.assessment_ids;
-        if assessments.is_empty() {
-            return Err(OptimizerError::Message(format!(
-                "GEPA {purpose:?} expected at least one case assessment row"
-            )));
-        }
-        let mut outcomes = Vec::with_capacity(assessments.len());
-        for assessment in &assessments {
-            let assessment_view = ctx.graph().assessment(*assessment).ok_or_else(|| {
-                OptimizerError::Message(format!(
-                    "GEPA assessment row `{assessment}` is missing from graph"
-                ))
-            })?;
-            let row_candidate = assessment_view.independent_candidate().ok_or_else(|| {
-                OptimizerError::Message("GEPA expected independent assessment rows".to_owned())
-            })?;
-            if row_candidate != candidate {
-                return Err(OptimizerError::Message(
-                    "GEPA evaluation returned a row for the wrong candidate".to_owned(),
-                ));
-            }
-            let case = match assessment_view.target() {
-                AssessmentTarget::Case { case, .. } => *case,
-                AssessmentTarget::Unscoped | AssessmentTarget::EvaluationSet(_) => {
-                    return Err(OptimizerError::Message(
-                        "GEPA expected case-targeted assessment rows".to_owned(),
-                    ));
-                }
-            };
-            let evidence = ctx.assessment_evidence(*assessment).map_err(|source| {
-                OptimizerError::with_source("GEPA evidence lookup failed", source)
-            })?;
-            let score = evidence.scalar_score().ok_or_else(|| {
-                OptimizerError::Message("GEPA expected comparable case scores".to_owned())
-            })?;
-            outcomes.push(CaseOutcome::new(case, score));
-        }
-        let scalar_evidence = CasewiseEvidence::new(outcomes);
-        let average_score = average_scalar(&scalar_evidence).ok_or_else(|| {
-            OptimizerError::Message("GEPA expected comparable case scores".to_owned())
-        })?;
-        Ok(GepaAssessment {
-            assessments,
-            scalar_evidence,
-            average_score,
-            metric_calls_new,
-        })
-    }
-
-    fn ensure_non_empty_casewise_set<P>(
-        ctx: &RunContext<'_, P>,
-        candidate: CandidateId,
-        set: &EvaluationSet,
-        purpose: &EvaluationPurpose,
-    ) -> Result<(), OptimizerError>
-    where
-        P: OptimizationProblem,
-    {
-        let request = EvaluationRequest::Independent {
-            candidates: vec![candidate],
-            set: set.clone(),
-            granularity: AssessmentGranularity::PerCase,
-            purpose: purpose.clone(),
-        };
-        let resolved = match ctx.resolve_evaluation_request(&request) {
-            Ok(resolved) => resolved,
-            Err(source) if matches!(purpose, EvaluationPurpose::Validation) => {
-                return Err(OptimizerError::with_source(
-                    reference_validation_required_message(),
-                    source,
-                ));
-            }
-            Err(source) => {
-                return Err(OptimizerError::with_source(
-                    "GEPA could not resolve casewise evaluation set",
-                    source,
-                ));
-            }
-        };
-        if !resolved.case_ids.is_empty() {
-            return Ok(());
-        }
-        let reason = match purpose {
-            EvaluationPurpose::Validation => reference_validation_required_message(),
-            _ => "GEPA casewise evaluation requires at least one visible case",
-        };
-        Err(OptimizerError::Message(reason.to_owned()))
-    }
-}
-
-fn reference_validation_required_message() -> &'static str {
-    "GEPA reference profile requires a non-empty validation set; supply `.validation(...)` or choose an explicit non-reference fallback profile"
-}
-
-struct GepaAssessment {
-    assessments: Vec<AssessmentId>,
-    scalar_evidence: CasewiseEvidence<ScalarEvidence>,
-    average_score: f64,
-    metric_calls_new: u64,
-}
-
-impl GepaAssessment {
-    fn history_entry(&self, candidate: CandidateId) -> GepaCandidateHistoryEntry {
-        GepaCandidateHistoryEntry {
-            candidate,
-            assessments: self.assessments.clone(),
-            score: self.average_score,
-        }
-    }
-
-    fn all_scores_at_least(&self, threshold: f64) -> bool {
-        self.scalar_evidence
-            .outcomes()
-            .iter()
-            .all(|outcome| outcome.evidence().score() >= threshold)
-    }
-
-    fn cases(&self) -> Vec<CaseId> {
-        self.scalar_evidence
-            .outcomes()
-            .iter()
-            .map(CaseOutcome::case)
-            .collect()
-    }
-}
-
-fn average_scalar(evidence: &CasewiseEvidence<ScalarEvidence>) -> Option<f64> {
-    if evidence.outcomes().is_empty() {
-        return None;
-    }
-    let total: f64 = evidence
-        .outcomes()
-        .iter()
-        .map(|outcome| outcome.evidence().score())
-        .sum();
-    let count = u32::try_from(evidence.outcomes().len()).expect("case count fits into u32");
-    Some(total / f64::from(count))
 }
 
 #[cfg(test)]
@@ -1252,46 +1011,11 @@ mod tests {
     use std::sync::Arc;
 
     use leaven_engine::{BudgetLedger, OptimizerError};
-    use leaven_evidence::{CaseOutcome, CasewiseEvidence, ScalarEvidence};
-    use leaven_kernel::{
-        AssessmentId, Budget, BudgetDimension, BudgetExceeded, CandidateId, CaseId, Cost, StageId,
-    };
+    use leaven_kernel::{Budget, BudgetDimension, BudgetExceeded, Cost, StageId};
 
     use crate::{GepaEventSummary, GepaReport};
 
-    use super::{
-        GepaAssessment, GepaCandidateHistoryEntry, GepaEventSink, GepaReportSink, average_scalar,
-        optimizer_error_contains_budget_exceeded,
-    };
-
-    #[test]
-    fn assessment_helpers_preserve_casewise_average_and_history_rows() {
-        let evidence = CasewiseEvidence::new(vec![
-            CaseOutcome::new(CaseId::new(0), ScalarEvidence::new(0.25).unwrap()),
-            CaseOutcome::new(CaseId::new(1), ScalarEvidence::new(0.75).unwrap()),
-        ]);
-        assert_eq!(average_scalar(&evidence), Some(0.5));
-        assert_eq!(
-            average_scalar(&CasewiseEvidence::<ScalarEvidence>::new(Vec::new())),
-            None
-        );
-
-        let candidate = CandidateId::new();
-        let rows = vec![AssessmentId::new(), AssessmentId::new()];
-        let assessment = GepaAssessment {
-            assessments: rows.clone(),
-            scalar_evidence: evidence,
-            average_score: 0.5,
-            metric_calls_new: 2,
-        };
-        let entry: GepaCandidateHistoryEntry = assessment.history_entry(candidate);
-
-        assert_eq!(entry.candidate(), candidate);
-        assert_eq!(entry.assessments(), rows.as_slice());
-        assert!((entry.score() - 0.5).abs() < f64::EPSILON);
-        assert_eq!(assessment.metric_calls_new, 2);
-        assert_eq!(assessment.scalar_evidence.outcomes().len(), 2);
-    }
+    use super::{GepaEventSink, GepaReportSink, optimizer_error_contains_budget_exceeded};
 
     #[test]
     fn event_and_report_sinks_have_stable_debug_names() {

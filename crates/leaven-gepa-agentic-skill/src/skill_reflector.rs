@@ -283,7 +283,7 @@ mod tests {
         assert!(!change_touches_only_skill(
             &SkillBankChange::RenameSkill {
                 from: selected.clone(),
-                to: other.clone(),
+                to: other,
             },
             selected.as_str(),
         ));

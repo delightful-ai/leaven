@@ -17,6 +17,14 @@ pub enum OptimizeError {
     /// The caller did not install a scoring function.
     #[error("score function is required")]
     MissingScore,
+    /// Builder methods were called in an order that would discard typed state.
+    #[error("invalid builder call order: `{operation}` cannot be called after `{after}`")]
+    InvalidBuilderOrder {
+        /// Operation that was called too late.
+        operation: &'static str,
+        /// Earlier operation that fixed incompatible builder state.
+        after: &'static str,
+    },
     /// Validation or test cases were supplied without train cases.
     #[error("validation/test cases require at least one train case")]
     HeldOutWithoutTrain,
@@ -108,5 +116,26 @@ impl From<DatasetError> for OptimizeError {
 impl From<ResumeCompatibilityError> for OptimizeError {
     fn from(source: ResumeCompatibilityError) -> Self {
         Self::ResumeCompatibility(Box::new(source))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use leaven_eval::DatasetError;
+    use leaven_kernel::CaseId;
+
+    use super::OptimizeError;
+
+    #[test]
+    fn dataset_errors_convert_to_public_optimize_errors() {
+        let case = CaseId::new(7);
+        let error = OptimizeError::from(DatasetError::DuplicateCase(case));
+
+        match error {
+            OptimizeError::Dataset { source } => {
+                assert_eq!(source, DatasetError::DuplicateCase(case));
+            }
+            other => panic!("expected dataset error, got {other:?}"),
+        }
     }
 }

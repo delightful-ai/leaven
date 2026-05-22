@@ -162,7 +162,7 @@ impl EpochShuffled {
         &mut self,
         train_partition: &PartitionId,
         train_cases: &[CaseId],
-        mut shared_rng: Option<&mut GepaRandom>,
+        shared_rng: Option<&mut GepaRandom>,
     ) -> Result<EvaluationSet, BatchSamplingError> {
         if train_cases.is_empty() {
             return Err(BatchSamplingError::EmptyTrainPartition {
@@ -179,7 +179,7 @@ impl EpochShuffled {
         {
             self.epoch = Some(current_epoch);
             if self.use_shared_rng {
-                if let Some(rng) = shared_rng.as_deref_mut() {
+                if let Some(rng) = shared_rng {
                     self.refresh_with_rng(train_cases, rng);
                 } else {
                     self.refresh(train_cases);
@@ -280,4 +280,58 @@ impl CheckpointValidationPolicy for MinibatchThenValidation {
     fn checkpoint_state(&self) -> Self::State {}
 
     fn restore_state(&mut self, _state: Self::State) {}
+}
+
+#[cfg(test)]
+mod tests {
+    use leaven_core::{EvaluationSet, PartitionId};
+    use leaven_kernel::CaseId;
+
+    use super::{BatchSampler, BatchSamplingError, EpochShuffled, GepaRandom};
+
+    struct DelegatingSampler;
+
+    impl BatchSampler for DelegatingSampler {
+        fn sample_train(
+            &mut self,
+            train_partition: &PartitionId,
+            train_cases: &[CaseId],
+        ) -> Result<EvaluationSet, BatchSamplingError> {
+            assert_eq!(train_partition, &PartitionId::from("TRAIN"));
+            Ok(EvaluationSet::Cases(train_cases.to_vec()))
+        }
+    }
+
+    #[test]
+    fn default_gepa_rng_sampler_hook_delegates_to_plain_sampling() {
+        let partition = PartitionId::from("TRAIN");
+        let cases = vec![CaseId::new(1), CaseId::new(2)];
+        let mut sampler = DelegatingSampler;
+        let mut rng = GepaRandom::seeded(0);
+
+        match sampler
+            .sample_train_with_gepa_rng(&partition, &cases, &mut rng)
+            .unwrap()
+        {
+            EvaluationSet::Cases(sampled_cases) => assert_eq!(sampled_cases, cases),
+            other => panic!("expected delegated cases, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn epoch_sampler_without_shared_rng_refreshes_with_owned_rng() {
+        let partition = PartitionId::from("TRAIN");
+        let cases = vec![CaseId::new(1), CaseId::new(2), CaseId::new(3)];
+        let mut sampler = EpochShuffled::new(2);
+
+        let sampled = sampler.sample_train(&partition, &cases).unwrap();
+
+        match sampled {
+            EvaluationSet::Cases(sampled_cases) => {
+                assert_eq!(sampled_cases.len(), 2);
+                assert!(sampled_cases.iter().all(|case| cases.contains(case)));
+            }
+            other => panic!("expected sampled cases, got {other:?}"),
+        }
+    }
 }

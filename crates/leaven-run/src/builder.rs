@@ -1,32 +1,31 @@
 //! Optimize builder lowering into the engine.
 
 use std::{
-    collections::{BTreeMap, BTreeSet},
-    future::Future,
-    marker::PhantomData,
-    num::NonZeroUsize,
-    path::PathBuf,
+    collections::BTreeMap, future::Future, marker::PhantomData, num::NonZeroUsize, path::PathBuf,
     sync::Arc,
 };
 
 use futures::{FutureExt, future::BoxFuture};
 use leaven_core::{Artifact, OptimizationProblem, PartitionId};
-use leaven_engine::{CachePolicy, Callback, Optimizer, OptimizerError, TrustPolicy};
-use leaven_eval::{Case, Dataset, DatasetSplits, NoTarget, SplitPolicy, SplitRole};
+use leaven_engine::{CachePolicy, Callback, Optimizer, TrustPolicy};
+use leaven_eval::{Case, Dataset, DatasetSplits, NoTarget};
 use leaven_evidence::CaseAssessmentEvidence;
-use leaven_kernel::{
-    Budget, BudgetSnapshot, CandidateId, CaseId, CheckpointId, Fingerprint, RunId,
-};
+use leaven_kernel::{Budget, BudgetSnapshot, CandidateId, CheckpointId, Fingerprint, RunId};
 use serde::{Serialize, de::DeserializeOwned};
 
-use self::final_eval::{final_evaluation_inputs, run_final_evaluations};
+use self::{
+    cases::{build_case_plan, case_set_cases, cases_from_inputs},
+    final_eval::{final_evaluation_inputs, run_final_evaluations},
+    order::BuilderOrder,
+    resume::restore_optimizer_checkpoint,
+};
 use crate::{
     IntoOptimizeStore, IntoRunResult, OptimizeError, RunCase, RunError, RunOutput, Score,
     ScoreContext, ScoreError,
     compatibility::{
         DatasetCompatibility, RunCompatibilityManifest, RuntimeFingerprint, RuntimeKind,
-        ScoringEvaluatorIdentity, case_content_fingerprint, case_set_version,
-        compare_stored_manifest, store_fresh_manifest,
+        ScoringEvaluatorIdentity, case_content_fingerprint, compare_stored_manifest,
+        store_fresh_manifest,
     },
     evaluator::{ScoringEvaluator, default_parallelism},
     result::Optimized,
@@ -39,19 +38,19 @@ use crate::{
     },
 };
 
-type Runner<A, I> =
-    Arc<dyn Fn(A, RunCase<I>) -> BoxFuture<'static, Result<RunOutput, RunError>> + Send + Sync>;
-type Scorer<A, I, T> = Arc<
-    dyn Fn(ScoreContext<A, I, T>) -> BoxFuture<'static, Result<Score, ScoreError>> + Send + Sync,
+type Runner<A, I, Out> = Arc<
+    dyn Fn(A, RunCase<I>) -> BoxFuture<'static, Result<RunOutput<Out>, RunError>> + Send + Sync,
+>;
+type Scorer<A, I, T, Out> = Arc<
+    dyn Fn(ScoreContext<A, I, T, Out>) -> BoxFuture<'static, Result<Score, ScoreError>>
+        + Send
+        + Sync,
 >;
 
+mod cases;
 mod final_eval;
-
-struct CasePlan<I, T> {
-    dataset: Dataset<Case<I, T>>,
-    splits: DatasetSplits,
-    case_set: leaven_engine::CaseSet<Case<I, T>>,
-}
+mod order;
+mod resume;
 
 /// Problem type used by the public run builder.
 pub struct RunProblem<A, I, T = NoTarget> {
@@ -72,7 +71,7 @@ where
 
 /// Starts optimizing a seed artifact through the high-level product API.
 #[must_use]
-pub fn optimize<A>(seed: A) -> OptimizeBuilder<A, (), NoTarget, ()>
+pub fn optimize<A>(seed: A) -> OptimizeBuilder<A, (), NoTarget, (), ()>
 where
     A: Artifact,
 {
@@ -93,11 +92,12 @@ where
         callbacks: Vec::new(),
         store: StoreConfig::Source(StoreSource::DefaultDurable),
         run_id: RunId::new(),
+        order: BuilderOrder::default(),
     }
 }
 
 /// Public optimize/train/validation/test builder.
-pub struct OptimizeBuilder<A, I, T, O>
+pub struct OptimizeBuilder<A, I, T, O, Out = ()>
 where
     A: Artifact,
     I: Send + Sync + 'static,
@@ -107,8 +107,8 @@ where
     train: Vec<Case<I, T>>,
     validation: Vec<Case<I, T>>,
     test: Vec<Case<I, T>>,
-    runner: Runner<A, I>,
-    scorer: Option<Scorer<A, I, T>>,
+    runner: Runner<A, I, Out>,
+    scorer: Option<Scorer<A, I, T, Out>>,
     runner_fingerprint: Option<RuntimeFingerprint>,
     scorer_fingerprint: Option<RuntimeFingerprint>,
     lm_role_fingerprints: BTreeMap<String, RuntimeFingerprint>,
@@ -119,15 +119,16 @@ where
     callbacks: Vec<Box<dyn Callback<RunProblem<A, I, T>>>>,
     store: StoreConfig<RunProblem<A, I, T>>,
     run_id: RunId,
+    order: BuilderOrder,
 }
 
-impl<A> OptimizeBuilder<A, (), NoTarget, ()>
+impl<A> OptimizeBuilder<A, (), NoTarget, (), ()>
 where
     A: Artifact,
 {
     /// Supplies training case envelopes and fixes the run case type.
     #[must_use]
-    pub fn train<I, T>(self, train: Vec<Case<I, T>>) -> OptimizeBuilder<A, I, T, ()>
+    pub fn train<I, T>(self, train: Vec<Case<I, T>>) -> OptimizeBuilder<A, I, T, (), ()>
     where
         I: Clone + Send + Sync + 'static,
         T: Clone + Send + Sync + 'static,
@@ -149,12 +150,13 @@ where
             callbacks: Vec::new(),
             store: StoreConfig::Source(self.store.into_source()),
             run_id: self.run_id,
+            order: self.order,
         }
     }
 
     /// Supplies input-only toy training cases with dense generated IDs.
     #[must_use]
-    pub fn train_inputs<I>(self, train: Vec<I>) -> OptimizeBuilder<A, I, NoTarget, ()>
+    pub fn train_inputs<I>(self, train: Vec<I>) -> OptimizeBuilder<A, I, NoTarget, (), ()>
     where
         I: Clone + Send + Sync + 'static,
     {
@@ -162,7 +164,7 @@ where
     }
 }
 
-impl<A, I, T, O> OptimizeBuilder<A, I, T, O>
+impl<A, I, T, O, Out> OptimizeBuilder<A, I, T, O, Out>
 where
     A: Artifact,
     I: Clone + Send + Sync + 'static,
@@ -183,25 +185,45 @@ where
     }
 
     /// Supplies the runner/executor.
+    /// Must be called before [`Self::score`]; changing output type after scoring is a hard error.
     #[must_use]
-    pub fn runner<F, Fut>(mut self, runner: F) -> Self
+    pub fn runner<F, Fut, NextOut>(self, runner: F) -> OptimizeBuilder<A, I, T, O, NextOut>
     where
         F: Fn(A, RunCase<I>) -> Fut + Send + Sync + 'static,
         Fut: Future + Send + 'static,
-        Fut::Output: IntoRunResult,
+        Fut::Output: IntoRunResult<NextOut>,
+        NextOut: Clone + Send + Sync + 'static,
     {
-        self.runner = Arc::new(move |artifact, case| {
-            let output = runner(artifact, case);
-            async move { output.await.into_run_result() }.boxed()
-        });
-        self
+        let order = self.order.runner_after_score(self.scorer.is_some());
+        OptimizeBuilder {
+            seed: self.seed,
+            train: self.train,
+            validation: self.validation,
+            test: self.test,
+            runner: Arc::new(move |artifact, case| {
+                let output = runner(artifact, case);
+                async move { output.await.into_run_result() }.boxed()
+            }),
+            scorer: None,
+            runner_fingerprint: self.runner_fingerprint,
+            scorer_fingerprint: self.scorer_fingerprint,
+            lm_role_fingerprints: self.lm_role_fingerprints,
+            optimizer: self.optimizer,
+            budget: self.budget,
+            evaluation_cache_policy: self.evaluation_cache_policy,
+            evaluation_parallelism: self.evaluation_parallelism,
+            callbacks: self.callbacks,
+            store: self.store,
+            run_id: self.run_id,
+            order,
+        }
     }
 
     /// Supplies the async scoring function.
     #[must_use]
     pub fn score<F, Fut>(mut self, scorer: F) -> Self
     where
-        F: Fn(ScoreContext<A, I, T>) -> Fut + Send + Sync + 'static,
+        F: Fn(ScoreContext<A, I, T, Out>) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Result<Score, ScoreError>> + Send + 'static,
     {
         self.scorer = Some(Arc::new(move |ctx| scorer(ctx).boxed()));
@@ -236,7 +258,7 @@ where
 
     /// Supplies the optimizer.
     #[must_use]
-    pub fn using<Next>(self, optimizer: Next) -> OptimizeBuilder<A, I, T, Next> {
+    pub fn using<Next>(self, optimizer: Next) -> OptimizeBuilder<A, I, T, Next, Out> {
         OptimizeBuilder {
             seed: self.seed,
             train: self.train,
@@ -254,6 +276,7 @@ where
             callbacks: self.callbacks,
             store: self.store,
             run_id: self.run_id,
+            order: self.order,
         }
     }
 
@@ -328,7 +351,7 @@ where
     }
 }
 
-impl<A, I, O> OptimizeBuilder<A, I, NoTarget, O>
+impl<A, I, O, Out> OptimizeBuilder<A, I, NoTarget, O, Out>
 where
     A: Artifact,
     I: Clone + Send + Sync + 'static,
@@ -348,16 +371,18 @@ where
     }
 }
 
-impl<A, I, T, O> OptimizeBuilder<A, I, T, O>
+impl<A, I, T, O, Out> OptimizeBuilder<A, I, T, O, Out>
 where
     A: Artifact + Serialize + DeserializeOwned,
     <A as Artifact>::Change: Serialize + DeserializeOwned,
     I: Clone + Serialize + Send + Sync + 'static,
     T: Clone + Serialize + Send + Sync + 'static,
     O: Optimizer<RunProblem<A, I, T>>,
+    Out: Clone + Send + Sync + 'static,
 {
     /// Runs the optimization.
     pub async fn run(mut self) -> Result<Optimized<A>, OptimizeError> {
+        self.order.check()?;
         let scorer = self.scorer.take().ok_or(OptimizeError::MissingScore)?;
         let budget = self.budget.take().ok_or(OptimizeError::MissingBudget)?;
         let metric_call_limit = budget.metric_calls;
@@ -420,15 +445,11 @@ where
             callbacks,
         })?;
         if let Some(checkpoint) = checkpoint {
-            let reader = prepared_store.local_persistence.as_ref().ok_or_else(|| {
-                OptimizeError::Optimizer(OptimizerError::Message(
-                    "stored run resume requires a readable local persistence store".to_owned(),
-                ))
-            })?;
-            self.optimizer.restore_checkpoint_state(
+            restore_optimizer_checkpoint(
+                &mut self.optimizer,
                 &checkpoint,
-                reader,
-                leaven_engine::RestoreContext::new(engine.view()),
+                &prepared_store,
+                engine.view(),
             )?;
             return run_with_engine(
                 self,
@@ -523,7 +544,7 @@ fn scoring_evaluator_identity(
     }
 }
 
-struct EngineStartInputs<'a, A, I, T>
+struct EngineStartInputs<'a, A, I, T, Out>
 where
     A: Artifact,
     I: Send + Sync + 'static,
@@ -531,7 +552,7 @@ where
 {
     budget: Budget,
     metric_call_limit: Option<u64>,
-    evaluator: ScoringEvaluator<A, I, T>,
+    evaluator: ScoringEvaluator<A, I, T, Out>,
     prepared_store: &'a mut PreparedStore<RunProblem<A, I, T>>,
     compatibility: &'a RunCompatibilityManifest,
     callbacks: Vec<Box<dyn Callback<RunProblem<A, I, T>>>>,
@@ -559,13 +580,14 @@ where
     checkpoint: Option<Box<leaven_engine::RunCheckpoint>>,
 }
 
-fn start_engine<A, I, T>(
-    inputs: EngineStartInputs<'_, A, I, T>,
+fn start_engine<A, I, T, Out>(
+    inputs: EngineStartInputs<'_, A, I, T, Out>,
 ) -> Result<EngineStart<A, I, T>, OptimizeError>
 where
     A: Artifact,
     I: Clone + Send + Sync + 'static,
     T: Clone + Send + Sync + 'static,
+    Out: Clone + Send + Sync + 'static,
 {
     let EngineStartInputs {
         budget,
@@ -679,8 +701,8 @@ struct SearchRun {
     optimizer_report: Option<leaven_engine::OptimizerReportPayload>,
 }
 
-async fn run_with_engine<A, I, T, O>(
-    mut builder: OptimizeBuilder<A, I, T, O>,
+async fn run_with_engine<A, I, T, O, Out>(
+    mut builder: OptimizeBuilder<A, I, T, O, Out>,
     mut engine: leaven_engine::Engine<RunProblem<A, I, T>>,
     inputs: EngineRunInputs<'_, A, I, T>,
 ) -> Result<Optimized<A>, OptimizeError>
@@ -690,6 +712,7 @@ where
     I: Clone + Send + Sync + 'static,
     T: Clone + Send + Sync + 'static,
     O: Optimizer<RunProblem<A, I, T>>,
+    Out: Clone + Send + Sync + 'static,
 {
     let EngineRunInputs {
         case_set,
@@ -762,7 +785,7 @@ where
             compatibility: compatibility_summary,
             stop_reason: search.stop_reason,
         },
-    )?;
+    );
     write_summary_report(&summary)?;
     let budget = summary.budget.clone();
     Ok(Optimized {
@@ -777,8 +800,8 @@ where
     })
 }
 
-async fn run_optimizer_search<A, I, T, O>(
-    builder: &mut OptimizeBuilder<A, I, T, O>,
+async fn run_optimizer_search<A, I, T, O, Out>(
+    builder: &mut OptimizeBuilder<A, I, T, O, Out>,
     engine: &mut leaven_engine::Engine<RunProblem<A, I, T>>,
     case_set: &leaven_engine::CaseSet<Case<I, T>>,
     prepared_store: &PreparedStore<RunProblem<A, I, T>>,
@@ -885,127 +908,6 @@ fn ephemeral_runtime_fingerprint(runtime: RuntimeKind) -> Fingerprint {
     fingerprint.update(b"leaven-run.ephemeral-runtime.v1");
     fingerprint.update(runtime.as_str().as_bytes());
     fingerprint.finish()
-}
-
-fn cases_from_inputs<I>(start: usize, inputs: Vec<I>) -> Vec<Case<I, NoTarget>> {
-    inputs
-        .into_iter()
-        .enumerate()
-        .map(|(offset, input)| Case::input(CaseId::from_index(start + offset), input))
-        .collect()
-}
-
-fn build_case_plan<I, T>(
-    train: &[Case<I, T>],
-    validation: &[Case<I, T>],
-    test: &[Case<I, T>],
-    case_content: Fingerprint,
-) -> Result<CasePlan<I, T>, OptimizeError>
-where
-    I: Clone,
-    T: Clone,
-{
-    let all_cases = all_cases(train, validation, test);
-    let dataset = Dataset::from_cases(all_cases.clone())?;
-    let splits = dataset_splits(train, validation, test, case_content);
-    let case_set = case_set(all_cases, train.len(), validation.len(), test.len());
-    Ok(CasePlan {
-        dataset,
-        splits,
-        case_set,
-    })
-}
-
-fn all_cases<I: Clone, T: Clone>(
-    train: &[Case<I, T>],
-    validation: &[Case<I, T>],
-    test: &[Case<I, T>],
-) -> Vec<Case<I, T>> {
-    train
-        .iter()
-        .chain(validation)
-        .chain(test)
-        .cloned()
-        .collect()
-}
-
-fn case_set_cases<I: Clone, T: Clone>(
-    train: &[Case<I, T>],
-    validation: &[Case<I, T>],
-    test: &[Case<I, T>],
-) -> Vec<Case<I, T>> {
-    all_cases(train, validation, test)
-}
-
-fn case_set<I: Clone, T: Clone>(
-    cases: Vec<Case<I, T>>,
-    train: usize,
-    validation: usize,
-    test: usize,
-) -> leaven_engine::CaseSet<Case<I, T>> {
-    let train_ids = cases
-        .iter()
-        .take(train)
-        .map(|case| case.id)
-        .collect::<Vec<_>>();
-    let validation_ids = cases
-        .iter()
-        .skip(train)
-        .take(validation)
-        .map(|case| case.id)
-        .collect::<Vec<_>>();
-    let test_ids = cases
-        .iter()
-        .skip(train + validation)
-        .take(test)
-        .map(|case| case.id)
-        .collect::<Vec<_>>();
-    let entries = cases.into_iter().map(|case| (case.id, case));
-    leaven_engine::CaseSet::from_entries(entries)
-        .with_partition(PartitionId::from("TRAIN"), train_ids)
-        .with_partition(PartitionId::from("VALIDATION"), validation_ids)
-        .with_partition(PartitionId::from("TEST"), test_ids)
-}
-
-fn dataset_splits<I, T>(
-    train: &[Case<I, T>],
-    validation: &[Case<I, T>],
-    test: &[Case<I, T>],
-    case_content: Fingerprint,
-) -> DatasetSplits {
-    let known = train
-        .iter()
-        .chain(validation)
-        .chain(test)
-        .map(|case| case.id)
-        .collect::<BTreeSet<_>>();
-    let roles = BTreeMap::from([
-        (PartitionId::from("TRAIN"), SplitRole::Train),
-        (PartitionId::from("VALIDATION"), SplitRole::Validation),
-        (PartitionId::from("TEST"), SplitRole::Test),
-    ]);
-    let cases = BTreeMap::from([
-        (
-            PartitionId::from("TRAIN"),
-            train.iter().map(|case| case.id).collect(),
-        ),
-        (
-            PartitionId::from("VALIDATION"),
-            validation.iter().map(|case| case.id).collect(),
-        ),
-        (
-            PartitionId::from("TEST"),
-            test.iter().map(|case| case.id).collect(),
-        ),
-    ]);
-    DatasetSplits::new(
-        case_set_version(case_content),
-        roles,
-        cases,
-        &known,
-        SplitPolicy::DisjointRequired,
-    )
-    .expect("builder constructs disjoint split ids")
 }
 
 fn stop_reason_from_events<A, I, T>(

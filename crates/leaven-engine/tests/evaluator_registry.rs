@@ -343,6 +343,64 @@ fn registered_casewise_batch_requires_every_requested_case() {
 }
 
 #[test]
+fn registered_casewise_batch_rejects_rows_outside_requested_cases() {
+    block_on(async {
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let cases = CaseSet::new(vec!["case 0", "case 1"]);
+        let mut engine = optimize::<TestProblem>()
+            .budget(Budget::metric_calls(10))
+            .evaluator(CasewiseRegisteredEvaluator {
+                behavior: CasewiseBehavior::ExtraCaseRows,
+                ..CasewiseRegisteredEvaluator::good()
+            })
+            .build();
+        let seed = engine
+            .insert_seed(TextArtifact("seed".to_owned()), 0)
+            .unwrap();
+        let mut optimizer = CasewiseErrorOptimizer {
+            seed,
+            set: EvaluationSet::All,
+            expected: CasewiseExpectedError::Evaluation(
+                "casewise batch returned rows outside requested cases",
+            ),
+        };
+
+        let result = engine.run(&mut optimizer, &cases, &store).await.unwrap();
+
+        assert_eq!(result.best, Some(seed));
+    });
+}
+
+#[test]
+fn registered_casewise_batch_rejects_duplicate_rows_for_requested_cases() {
+    block_on(async {
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let cases = CaseSet::new(vec!["case 0", "case 1"]);
+        let mut engine = optimize::<TestProblem>()
+            .budget(Budget::metric_calls(10))
+            .evaluator(CasewiseRegisteredEvaluator {
+                behavior: CasewiseBehavior::DuplicateFirstCase,
+                ..CasewiseRegisteredEvaluator::good()
+            })
+            .build();
+        let seed = engine
+            .insert_seed(TextArtifact("seed".to_owned()), 0)
+            .unwrap();
+        let mut optimizer = CasewiseErrorOptimizer {
+            seed,
+            set: EvaluationSet::All,
+            expected: CasewiseExpectedError::Evaluation(
+                "casewise batch returned duplicate rows for requested cases",
+            ),
+        };
+
+        let result = engine.run(&mut optimizer, &cases, &store).await.unwrap();
+
+        assert_eq!(result.best, Some(seed));
+    });
+}
+
+#[test]
 fn registered_evaluator_error_records_dyn_stage_error() {
     block_on(async {
         let store = InlineEvidenceStore::<TestEvidence>::new("inline");
@@ -755,6 +813,8 @@ enum CasewiseBehavior {
     Fails,
     UnscopedTarget,
     MissingLastCase,
+    ExtraCaseRows,
+    DuplicateFirstCase,
 }
 
 struct CasewiseRegisteredEvaluator {
@@ -806,6 +866,14 @@ impl Evaluator<TestProblem> for CasewiseRegisteredEvaluator {
         let mut cases = request.set.case_ids;
         if matches!(self.behavior, CasewiseBehavior::MissingLastCase) {
             cases.pop();
+        }
+        if matches!(self.behavior, CasewiseBehavior::ExtraCaseRows) {
+            cases.push(CaseId::new(999));
+        }
+        if matches!(self.behavior, CasewiseBehavior::DuplicateFirstCase)
+            && let Some(first) = cases.first().copied()
+        {
+            cases.push(first);
         }
         let set = EvaluationSetId::from_uuid(request.set.id.as_uuid());
         let assessments = cases

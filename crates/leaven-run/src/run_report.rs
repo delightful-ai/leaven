@@ -81,7 +81,7 @@ type SummaryBuild<A> = (
 pub fn build_summary<A, I, T>(
     engine: &leaven_engine::Engine<RunProblem<A, I, T>>,
     inputs: ReportInputs<'_, I, T>,
-) -> Result<SummaryBuild<A>, leaven_engine::OptimizerError>
+) -> SummaryBuild<A>
 where
     A: Artifact,
     I: Clone + Send + Sync + 'static,
@@ -147,7 +147,7 @@ where
         .filter(|event| should_include_event_summary(event, inputs.stop_reason))
         .map(event_summary)
         .collect();
-    Ok((best, summary, events))
+    (best, summary, events)
 }
 
 fn final_evaluation_split_reports(final_evaluations: &FinalEvaluations) -> Vec<SplitReport> {

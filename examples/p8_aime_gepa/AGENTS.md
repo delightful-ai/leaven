@@ -24,11 +24,12 @@ P8 owns the example artifact, edit surface, deterministic AIME-shaped import rec
   answer as `RunOutput` plus metered cost. The ordinary runner path sees the
   problem input and case id, not AIME targets, source metadata, split role, or
   report tags.
-- `score_answer` receives `ScoreContext<AimePrompt, AimeInput, AimeTarget>` and
-  reads the hidden answer/reference solution through scorer context. It proves
-  the async/fallible score surface on a fixed-reference local checker by
-  producing scalar scores and feedback text. It does not prove live model-judge
-  quality or domain-specific score semantics.
+- `score_answer` receives
+  `ScoreContext<AimePrompt, AimeInput, AimeTarget, AimeRunOutput>` and reads
+  the hidden answer/reference solution through scorer context. It proves the
+  async/fallible score surface on a fixed-reference local checker by producing
+  scalar scores and feedback text. It does not prove live model-judge quality
+  or domain-specific score semantics.
 - `run_openai_solver` is a native async runner over the P8-local OpenAI solver
   role. It returns `RunOutput` with the LM cost attached so solver spend is
   charged through normal evaluation accounting. The solver renders the

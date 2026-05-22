@@ -77,6 +77,7 @@ impl ReflectionWorkspace {
         self
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn run<R, Case, Factory, Runtime>(
         &self,
         reflector: &R,
@@ -216,6 +217,8 @@ pub struct ReflectionRunOutcome<C> {
     pub cost: Cost,
 }
 
+// `serde_json::Value` has `f64` numbers (no `Eq`), so this stays `PartialEq`-only.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ReflectionSessionAttachment {
     pub name: String,
@@ -224,7 +227,7 @@ pub struct ReflectionSessionAttachment {
 }
 
 #[derive(Debug, Error)]
-pub enum ReflectionError<E: std::error::Error + Send + Sync + 'static> {
+pub enum ReflectionError<E> {
     #[error(transparent)]
     Allocate(#[from] FactoryError),
     #[error(transparent)]

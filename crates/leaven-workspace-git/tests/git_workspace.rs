@@ -54,9 +54,8 @@ fn git_workspace_checkout_failure_removes_allocated_clone() {
             .with_checkout("missing/ref")
             .with_workspace_root(workspace_root.path());
 
-        let error = match factory.allocate(WorkspaceConfig::default()).await {
-            Ok(_) => panic!("checkout unexpectedly succeeded"),
-            Err(error) => error,
+        let Err(error) = factory.allocate(WorkspaceConfig::default()).await else {
+            panic!("checkout unexpectedly succeeded")
         };
 
         assert!(error.to_string().contains("git checkout"));

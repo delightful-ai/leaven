@@ -1,25 +1,44 @@
 //! Public runner and scoring evidence shapes.
 
 use leaven_eval::Case;
+use leaven_evidence::OutputRecord;
 use leaven_kernel::{BudgetSnapshot, CaseId, Cost};
 
 /// Output produced by running one artifact on one case.
+///
+/// The default `Out = ()` matches `case_visibility_and_target_isolation.md` §6:
+/// runner output is opaque to Leaven by default. Domain runners declare their
+/// own typed `Out` (string, structured prediction, agent transcript), and the
+/// scorer renders that output into a durable `OutputRecord` via
+/// `Score::with_output` / `Score::with_text_output`.
 #[derive(Clone, Debug, Default)]
-pub struct RunOutput {
+pub struct RunOutput<Out = ()> {
     /// User-facing answer/output.
-    pub output: String,
+    pub output: Out,
     /// Metered cost incurred while producing the output.
     pub cost: Cost,
     /// Runner trace lines associated with this successful output.
     pub trace: Vec<String>,
 }
 
-impl RunOutput {
-    /// Builds a generated output.
+impl RunOutput<String> {
+    /// Builds a generated string output.
     #[must_use]
     pub fn new(output: impl Into<String>) -> Self {
         Self {
             output: output.into(),
+            cost: Cost::zero(),
+            trace: Vec::new(),
+        }
+    }
+}
+
+impl<Out> RunOutput<Out> {
+    /// Builds a typed generated output.
+    #[must_use]
+    pub fn typed(output: Out) -> Self {
+        Self {
+            output,
             cost: Cost::zero(),
             trace: Vec::new(),
         }
@@ -111,19 +130,19 @@ impl RunError {
 }
 
 /// Conversion accepted by the public runner builder.
-pub trait IntoRunResult {
+pub trait IntoRunResult<Out = ()> {
     /// Converts a runner return value into the fallible runner contract.
-    fn into_run_result(self) -> Result<RunOutput, RunError>;
+    fn into_run_result(self) -> Result<RunOutput<Out>, RunError>;
 }
 
-impl IntoRunResult for RunOutput {
-    fn into_run_result(self) -> Result<RunOutput, RunError> {
+impl<Out> IntoRunResult<Out> for RunOutput<Out> {
+    fn into_run_result(self) -> Result<Self, RunError> {
         Ok(self)
     }
 }
 
-impl IntoRunResult for Result<RunOutput, RunError> {
-    fn into_run_result(self) -> Result<RunOutput, RunError> {
+impl<Out> IntoRunResult<Out> for Result<RunOutput<Out>, RunError> {
+    fn into_run_result(self) -> Self {
         self
     }
 }
@@ -139,6 +158,10 @@ pub struct Score {
     pub cost: Cost,
     /// Scorer trace lines associated with this successful score.
     pub trace: Vec<String>,
+    /// Reportable generated output. Required: every successful score must
+    /// call `with_output` / `with_text_output` so reports, evidence stores,
+    /// and reflection see a durable rendering of the runner's typed output.
+    pub output: Option<OutputRecord>,
 }
 
 impl Score {
@@ -150,6 +173,7 @@ impl Score {
             feedback: feedback.into(),
             cost: Cost::zero(),
             trace: Vec::new(),
+            output: None,
         }
     }
 
@@ -165,6 +189,19 @@ impl Score {
     pub fn with_trace(mut self, line: impl Into<String>) -> Self {
         self.trace.push(line.into());
         self
+    }
+
+    /// Supplies the generated output that should appear in reports and feedback.
+    #[must_use]
+    pub fn with_output(mut self, output: OutputRecord) -> Self {
+        self.output = Some(output);
+        self
+    }
+
+    /// Supplies inline generated output text for reports and feedback.
+    #[must_use]
+    pub fn with_text_output(self, output: impl Into<String>) -> Self {
+        self.with_output(OutputRecord::inline(output))
     }
 }
 
@@ -336,13 +373,13 @@ impl<I, T> ScoreCase<I, T> {
 }
 
 /// Context passed to scoring closures.
-pub struct ScoreContext<A, I, T = leaven_eval::NoTarget> {
+pub struct ScoreContext<A, I, T = leaven_eval::NoTarget, Out = ()> {
     /// Artifact/candidate that was run.
     pub artifact: A,
     /// Evaluation case with target-aware scorer visibility.
     pub case: ScoreCase<I, T>,
     /// Runner output.
-    pub output: RunOutput,
+    pub output: RunOutput<Out>,
     /// Point-in-time budget snapshot visible to the scorer.
     pub budget: BudgetSnapshot,
 }

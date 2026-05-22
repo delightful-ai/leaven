@@ -7,7 +7,11 @@ const UPPER_MASK: u32 = 0x8000_0000;
 const LOWER_MASK: u32 = 0x7fff_ffff;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub(crate) struct PythonRandom {
+// `pub` despite being crate-internal: the module declaration `mod python_random;`
+// is private (no `pub mod`), so external code cannot reach this name; the inner
+// `pub` is needed because clippy's `redundant_pub_crate` lint refuses
+// `pub(crate)` inside a private module.
+pub struct PythonRandom {
     mt: Vec<u32>,
     index: usize,
 }
@@ -19,7 +23,7 @@ impl Default for PythonRandom {
 }
 
 impl PythonRandom {
-    pub(crate) fn seeded(seed: u64) -> Self {
+    pub(super) fn seeded(seed: u64) -> Self {
         let key = seed_key(seed);
         let mut rng = Self {
             mt: vec![0; N],
@@ -29,7 +33,7 @@ impl PythonRandom {
         rng
     }
 
-    pub(crate) fn randbelow(&mut self, upper: usize) -> usize {
+    pub(super) fn randbelow(&mut self, upper: usize) -> usize {
         assert!(upper > 0, "upper bound must be nonzero");
         let bits = usize::BITS - upper.leading_zeros();
         loop {
@@ -40,7 +44,7 @@ impl PythonRandom {
         }
     }
 
-    pub(crate) fn shuffle<T>(&mut self, values: &mut [T]) {
+    pub(super) fn shuffle<T>(&mut self, values: &mut [T]) {
         for i in (1..values.len()).rev() {
             let j = self.randbelow(i + 1);
             values.swap(i, j);
@@ -136,7 +140,9 @@ fn seed_key(seed: u64) -> Vec<u32> {
     let mut remaining = seed;
     let mut key = Vec::new();
     while remaining > 0 {
-        key.push((remaining & u64::from(u32::MAX)) as u32);
+        key.push(
+            u32::try_from(remaining & u64::from(u32::MAX)).expect("masked seed word fits u32"),
+        );
         remaining >>= 32;
     }
     key

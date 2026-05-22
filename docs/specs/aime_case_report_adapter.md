@@ -109,8 +109,8 @@ view. It may read `case.id()` and `case.input().problem`. It must not be able to
 read `AimeTarget`, `AimeReportMetadata`, source ids, split policy, tags, or
 reference solution through the ordinary runner path.
 
-Scorer code receives `ScoreContext<AimePrompt, AimeInput, AimeTarget>`. It may
-read:
+Scorer code receives
+`ScoreContext<AimePrompt, AimeInput, AimeTarget, AimeRunOutput>`. It may read:
 
 - case id;
 - problem input;

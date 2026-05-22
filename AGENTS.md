@@ -136,7 +136,7 @@ Repo-local design skills are rollout-scoped context. Read each applicable Leaven
 The skill descriptions own trigger routing. Do not duplicate their full routing table here.
 
 ## Verification Policy
-- The workspace pins nightly via `rust-toolchain.toml`. The `dev` profile compiles workspace crates through the Cranelift backend for faster codegen (`unsafe_code = "forbid"` keeps every `leaven-*` crate asm-free, so Cranelift is safe); dependencies stay on LLVM via the `[profile.dev.package."*"]` override. `.cargo/config.toml` enables the parallel rustc frontend (`-Zthreads`). Coverage builds run under the `coverage` profile (LLVM) because `-Cinstrument-coverage` is unsupported by Cranelift.
+- The workspace pins nightly via `rust-toolchain.toml`. The `dev` profile keeps LLVM as the default backend with line-table debuginfo; local PR 2 measurements showed no meaningful wall-time win from Cranelift, and the pinned nightly ICEs when Cranelift, incremental compilation, and the parallel rustc frontend are combined. `.cargo/config.toml` still enables the parallel rustc frontend (`-Zthreads`).
 - `just test`: canonical full test suite; must finish in `<30s` and includes nextest workspace tests plus doctests.
 - `just check`: completion gate; runs formatting, production line-count lint, clippy, SLA-enforced tests, and line/branch coverage.
 - Use narrower commands only while iterating. Before claiming behavior is complete, run `just check` unless the user explicitly requested a narrower proof.
