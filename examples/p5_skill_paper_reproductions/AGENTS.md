@@ -23,11 +23,11 @@ belong in their owning crates.
 ## Proof
 - `cargo test -p p5_skill_paper_reproductions --test evoskill_manifest`
   proves the EvoSkill replica manifest preserves the paper-close denominator
-  and rejects proxy completion claims. It also proves the schema v3
+  and rejects proxy completion claims. It also proves the schema v6
   `source_universe` links datasets to source artifact ids, available source
   revision ids, materialized row counts, source-row fingerprints, split ids,
-  split exactness labels, and blockers without treating substitute splits as
-  exact paper membership.
+  split exactness labels, source revision status fields, and blockers without
+  treating local source identity or substitute splits as exact paper evidence.
 - `cargo test -p p5_skill_paper_reproductions --test evoskill_scorer`
   proves the paper-specific Rust scorer laws for weighted multi-tolerance
   scoring, failure-threshold classification, unit normalization, incidental
@@ -43,13 +43,14 @@ belong in their owning crates.
 - `cargo test -p p5_skill_paper_reproductions --test evoskill_materialization`
   proves the OfficeQA CSV lowers through `leaven-eval::SourceRowManifest` into
   row-stable Leaven cases, records deterministic difficulty-stratified
-  train/validation/test substitute split fingerprints, lowers SealQA Parquet
-  rows through `leaven-eval-parquet` into row-stable cases, and records a
-  row-order 10 percent train / held-out substitute split. SealQA row identity is
-  physical row order, because the observed `canary` column is not unique. It
-  keeps missing paper category/exact split artifacts as blockers and does not
-  prove exact OfficeQA/SealQA paper membership, SealQA judge scores, or live
-  scores.
+  train/validation/test substitute split fingerprints and role-level source-id
+  membership manifests, lowers SealQA Parquet rows through
+  `leaven-eval-parquet` into row-stable cases, and records a row-order 10
+  percent train / held-out substitute split with role-level source-id membership
+  manifests. SealQA row identity is physical row order, because the observed
+  `canary` column is not unique. It keeps missing paper category/exact split
+  artifacts as blockers and does not prove exact OfficeQA/SealQA paper
+  membership, SealQA judge scores, or live scores.
 - `cargo test -p p5_skill_paper_reproductions --test evoskill_loop_mechanics`
   proves a no-spend multi-iteration mechanics loop over the OfficeQA substitute
   split: train sampling, failure feedback history, round-robin parent

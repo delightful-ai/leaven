@@ -628,7 +628,7 @@ Date: 2026-05-22.
 Provider/model spend: none.
 Cloud/GPU spend: none.
 
-The P5 replica manifest now declares a tested `source_universe` in schema v3.
+That slice introduced a tested `source_universe` in manifest schema v3.
 Each dataset entry links the paper row count to the source artifact ids,
 available source revision ids, materialized row count, source-row fingerprint,
 split ids, split exactness labels, and blockers. OfficeQA maps to the local
@@ -662,7 +662,7 @@ Date: 2026-05-22.
 Provider/model spend: none.
 Cloud/GPU spend: none.
 
-The P5 replica manifest now declares source revision identity in schema v5
+That slice introduced source revision identity in manifest schema v5
 without pretending the local checkout hash is the paper pin. Each source
 revision records the local checkout head, checked-out branch, origin URL,
 `remote_head: null`, `remote_probe_status:
@@ -687,3 +687,24 @@ This closes only the source-status truth surface. Paper-close still requires a
 chosen paper-release source policy and, if remote-current evidence is desired in
 the report, an explicit live probe mode or sidecar input that records the remote
 heads without making ordinary manifest tests depend on the network.
+
+## No-Spend Split Membership Manifests
+
+Date: 2026-05-22.
+Provider/model spend: none.
+Cloud/GPU spend: none.
+
+The P5 replica manifest now declares schema v6 split materializations with
+role-level source-id membership manifests. Each materialized substitute split
+records the role name (`train`, `validation`, or `held_out_test`), row count,
+ordered source ids, and a source-id fingerprint in addition to the existing
+Leaven split fingerprint. This makes the actual train/validation/held-out
+membership auditable in the JSON artifact without exposing answers or other
+hidden targets to runners.
+
+This is still substitute evidence, not paper-exact membership. OfficeQA remains
+blocked on the missing LLM category/pseudo-label artifact and exact paper split
+membership. SealQA remains blocked on the exact split manifest and the approved
+judge-scored run. The new field closes the weaker “counts only” split surface:
+future paper-release sidecars can use the same manifest shape to replace the
+current substitute membership when exact membership becomes available.
