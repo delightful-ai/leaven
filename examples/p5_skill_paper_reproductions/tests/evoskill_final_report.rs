@@ -12,7 +12,7 @@ use p5_skill_paper_reproductions::evoskill::{
     FinalScoreStatus, LiveRunGateStatus, ManifestBuildInput, MaterializationExactness,
     PaperCloseGateStatus, PaperResultTargetStatus, ProxyRejectionStatus, SourceBlockerStatus,
     SplitAcceptanceStatus, SplitMaterializationReport, build_evoskill_final_report,
-    write_evoskill_paper_close_split_policy_manifest,
+    write_evoskill_local_source_pin_manifest, write_evoskill_paper_close_split_policy_manifest,
 };
 use parquet::arrow::ArrowWriter;
 use sha2::{Digest, Sha256};
@@ -195,6 +195,56 @@ fn final_report_uses_browsecomp_sample_as_unscored_transfer_denominator() {
         assert!(slot.score.is_none());
         assert!(slot.blocker_ids.is_empty());
     }
+}
+
+#[test]
+fn final_report_relabels_browsecomp_ablation_after_denominator_materializes() {
+    let root = tempfile::tempdir().unwrap();
+    write_officeqa_full_csv(root.path(), 246);
+    write_sealqa_parquet(root.path(), 111);
+    write_sealqa_judge_source(root.path());
+    write_browsecomp_transfer_sample(root.path(), 128);
+    init_git_source(
+        &root.path().join("tmp/repros/evoskill"),
+        "https://github.com/sentient-agi/EvoSkill.git",
+    );
+    init_git_source(
+        &root.path().join("tmp/repros/officeqa"),
+        "https://github.com/databricks/officeqa.git",
+    );
+    let input = ManifestBuildInput::new(root.path());
+    write_evoskill_local_source_pin_manifest(&input).unwrap();
+    write_evoskill_paper_close_split_policy_manifest(&input).unwrap();
+
+    let report = build_evoskill_final_report(&input).unwrap();
+
+    assert!(report.manifest.source_blockers.is_empty());
+    let browsecomp = report
+        .ablations
+        .iter()
+        .find(|ablation| ablation.id == "browsecomp_transfer")
+        .expect("BrowseComp transfer ablation exists");
+    assert_eq!(browsecomp.status, "approval_blocked");
+    assert_eq!(
+        browsecomp.blocker_ids,
+        [
+            "sealqa_judge_scored_run".to_owned(),
+            "live_run_spend_approval".to_owned()
+        ]
+    );
+    assert!(browsecomp.note.contains("denominator is materialized"));
+    assert!(!browsecomp.note.contains("absent"));
+    let skill_merge = report
+        .ablations
+        .iter()
+        .find(|ablation| ablation.id == "skill_merge")
+        .expect("skill-merge ablation exists");
+    assert_eq!(skill_merge.status, "approval_blocked");
+    assert_eq!(
+        skill_merge.blocker_ids,
+        ["live_run_spend_approval".to_owned()]
+    );
+    assert!(skill_merge.note.contains("declared denominator is ready"));
 }
 
 fn assert_paper_close_gates_separate_proof_from_blockers(report: &EvoSkillFinalReport) {

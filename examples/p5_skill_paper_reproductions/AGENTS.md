@@ -103,8 +103,11 @@ belong in their owning crates.
   execution, without faking score values. A valid BrowseComp transfer sample
   turns its held-out transfer slots into unscored `not_run` denominator slots;
   if absent, they stay source-blocked. Blocked metrics stay missing rather
-  than fake zeros. It does not prove live provider behavior, validation-set
-  scores, or paper-close.
+  than fake zeros. When source pins, accepted substitutes, and a BrowseComp
+  transfer sidecar remove source blockers, ablation rows relabel those lanes as
+  approval-blocked rather than continuing to cite absent source denominators.
+  It does not prove live provider behavior, validation-set scores, or
+  paper-close.
 - `just evoskill-paper-manifest` writes the current no-spend local manifest to
   `target/evoskill-paper-close/replica-manifest.json`.
 - `just evoskill-paper-pin-local-sources` writes

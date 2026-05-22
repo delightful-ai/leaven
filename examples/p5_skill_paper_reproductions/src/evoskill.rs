@@ -3301,6 +3301,12 @@ fn final_report_ablations(manifest: &EvoSkillReplicaManifest) -> Vec<AblationSta
         .iter()
         .map(|blocker| blocker.id.clone())
         .collect::<Vec<_>>();
+    let source_blocked = !manifest.source_blockers.is_empty();
+    let main_run_note = if source_blocked {
+        "requires paper split/source denominator and live scored run"
+    } else {
+        "source/split denominator is materialized under the declared policy; scoring remains blocked on approved live execution and SealQA judge scoring"
+    };
     let mut skill_merge_blockers = source_universe_blocker_ids(
         manifest,
         "officeqa",
@@ -3310,35 +3316,71 @@ fn final_report_ablations(manifest: &EvoSkillReplicaManifest) -> Vec<AblationSta
         &mut skill_merge_blockers,
         &["live_run_spend_approval".to_owned()],
     );
-    let browsecomp_blockers = source_universe_blocker_ids(
+    let mut browsecomp_blockers = source_universe_blocker_ids(
         manifest,
         "browsecomp_transfer",
         &["browsecomp_transfer_sample".to_owned()],
     );
+    let browsecomp_note = if browsecomp_blockers
+        .iter()
+        .any(|blocker| blocker == "browsecomp_transfer_sample")
+    {
+        "BrowseComp transfer denominator is absent; no transfer score can be interpreted".to_owned()
+    } else {
+        extend_unique(
+            &mut browsecomp_blockers,
+            &[
+                "sealqa_judge_scored_run".to_owned(),
+                "live_run_spend_approval".to_owned(),
+            ],
+        );
+        "BrowseComp transfer denominator is materialized; scoring remains blocked on approved SealQA skill production and live baseline/transfer runs".to_owned()
+    };
+    let skill_merge_source_blocked = skill_merge_blockers
+        .iter()
+        .any(|blocker| blocker == "officeqa_exact_split_membership");
+    let skill_merge_note = if skill_merge_source_blocked {
+        "OfficeQA skill-merge comparison targets are reported as two paper-source candidates; the run still needs exact split/source denominator and live scoring"
+    } else {
+        "OfficeQA skill-merge comparison targets are reported as two paper-source candidates; the declared denominator is ready and scoring remains blocked on approved live execution"
+    };
     vec![
         AblationStatusReport {
             id: "skill_only".to_owned(),
             status: "blocked".to_owned(),
             blocker_ids: all_blockers.clone(),
-            note: "requires paper split/source denominator and live scored run".to_owned(),
+            note: main_run_note.to_owned(),
         },
         AblationStatusReport {
             id: "prompt_only".to_owned(),
             status: "blocked".to_owned(),
             blocker_ids: all_blockers,
-            note: "requires paper split/source denominator and live scored run".to_owned(),
+            note: main_run_note.to_owned(),
         },
         AblationStatusReport {
             id: "skill_merge".to_owned(),
-            status: "blocked".to_owned(),
+            status: if skill_merge_source_blocked {
+                "blocked"
+            } else {
+                "approval_blocked"
+            }
+            .to_owned(),
             blocker_ids: skill_merge_blockers,
-            note: "OfficeQA skill-merge comparison targets are reported as two paper-source candidates; the run still needs exact split/source denominator and live scoring".to_owned(),
+            note: skill_merge_note.to_owned(),
         },
         AblationStatusReport {
             id: "browsecomp_transfer".to_owned(),
-            status: "blocked".to_owned(),
+            status: if browsecomp_blockers
+                .iter()
+                .any(|blocker| blocker == "browsecomp_transfer_sample")
+            {
+                "blocked"
+            } else {
+                "approval_blocked"
+            }
+            .to_owned(),
             blocker_ids: browsecomp_blockers,
-            note: "BrowseComp transfer sample/result source is absent locally".to_owned(),
+            note: browsecomp_note,
         },
     ]
 }

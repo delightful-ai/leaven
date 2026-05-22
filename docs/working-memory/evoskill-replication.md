@@ -1054,8 +1054,12 @@ rows total, source ids `browsecomp-public:NNNN`, and `problem_topic` recorded
 as `stratum`. With local source pins and accepted substitute splits already
 written, the generated report has no source blockers; BrowseComp transfer slots
 become unscored `not_run` rows with paper-close-substitute exactness and split
-fingerprints. The remaining blockers are approval-only: `sealqa_judge_scored_run`
-and `live_run_spend_approval`.
+fingerprints. Ablation rows now track the same denominator state: once the
+strict transfer denominator is present, BrowseComp transfer is
+`approval_blocked` on approved SealQA skill production and live
+baseline/transfer execution instead of continuing to report an absent transfer
+source. The remaining blockers are approval-only: `sealqa_judge_scored_run` and
+`live_run_spend_approval`.
 
 This removes the vague local BrowseComp source blocker for no-spend paper-close
 work. It does not recover the author sample, reproduce the 43.5/48.8 transfer
