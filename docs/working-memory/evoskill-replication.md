@@ -645,14 +645,19 @@ roles, records the SealQA judge-template fingerprint, records zero
 LLM/metric/token spend unless a strict score result sidecar is present, copies
 blocker/errors, links score slots to paper target ids, and records ablation
 statuses for skill-only, prompt-only, skill-merge, and BrowseComp transfer.
+Strict score sidecars are refusal-capable: OfficeQA rows replay the Rust scorer,
+and BrowseComp transfer rows use a conservative exact-normalized answer scorer
+against materialized scorer-only targets. That BrowseComp check is an anti-fake
+sidecar guard, not the official simple-evals judge.
 
 This deliberately does not fill blocked metrics with zeroes or claim paper-close:
 OfficeQA score slots stay `blocked` until exact membership or an accepted
 paper-close substitute can be used for a scored run, SealQA score slots stay
 blocked on exact split membership and the approved judge/scored-run evidence,
 BrowseComp transfer score slots stay blocked on the missing 128-example
-transfer sample, and live provider/model scores still need explicit approval
-and a real run.
+transfer sample or remain unscored until an approved transferred-skill run and
+official judge/score path exists, and live provider/model scores still need
+explicit approval and a real run.
 
 ## No-Spend Source Pin Status Surface
 

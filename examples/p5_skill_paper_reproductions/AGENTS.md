@@ -124,11 +124,14 @@ belong in their owning crates.
   byte count match the current report. Schema-v3 evidence rows must exactly
   cover the slot role source ids, cannot duplicate or omit rows, must carry
   finite scores in `[0, 1]`, and must aggregate back to the reported score.
-  OfficeQA score rows are also recomputed with the Rust paper scorer from the
-  materialized hidden targets before import. Stale result files, tampered
-  evidence artifacts, fabricated aggregate rows, or OfficeQA predictions whose
-  scores do not match the scorer fail the report build instead of becoming
-  score evidence.
+  OfficeQA score rows are recomputed with the Rust paper scorer from the
+  materialized hidden targets before import. BrowseComp transfer rows are
+  recomputed only with a conservative exact-normalized answer scorer against
+  materialized scorer-only targets; this is not the official simple-evals
+  BrowseComp judge path. Stale result files, tampered evidence artifacts,
+  fabricated aggregate rows, OfficeQA predictions whose scores do not match the
+  scorer, or BrowseComp row scores that fail the exact-answer check fail the
+  report build instead of becoming score evidence.
   It does not prove live provider behavior, validation-score values, or
   paper-close.
 - `just evoskill-paper-manifest` writes the current no-spend local manifest to
