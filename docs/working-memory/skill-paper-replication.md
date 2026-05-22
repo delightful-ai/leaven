@@ -863,8 +863,10 @@ Start with these generic primitives as failures expose them:
 6. Split/sampler/metric adapters: category-aware without-replacement sampler
    state, exact stratified split construction, and exact caller-declared split
    manifest lowering exist in `leaven-eval`; P5 threads sampler state through
-   checkpoints. Official metric wrappers, held-out report manifests, and the
-   missing paper source manifests for EvoSkill remain.
+   checkpoints and now has optional EvoSkill OfficeQA/SealQA source-id split
+   manifest ingestion that hard-fails bad membership before it can become a
+   proof. Official metric wrappers, held-out report manifests, and the missing
+   paper source manifests for EvoSkill remain.
 7. Skill optimization surfaces: manifest description/frontmatter, `SKILL.md`
    body, and direct `references/*.md` module surfaces exist in
    `leaven-artifact-skill`; tokenizer-agnostic token profiles now account for
@@ -915,7 +917,11 @@ The P5 EvoSkill final report schema v8 carries a no-spend loop `run_manifest`
 that ties the mechanics loop to manifest/scorer/source/split fingerprints,
 frontier policy, schedule, checkpoint boundary, Git identity mode, and the fake
 child-score source. Score slots also carry paper target ids, including
-source-blocked BrowseComp transfer target slots. The loop must use the same
-materialized source set as the embedded report manifest and refuse
-source/split/role drift. Treat that as mechanics and denominator evidence only.
-It is not live provider, validation-set, SealQA judge, or paper-score evidence.
+source-blocked BrowseComp transfer target slots. The materialization path can
+replace the OfficeQA and SealQA substitute split blockers only when an exact
+source-id split manifest is present and validates against the materialized row
+universe; absent manifests still leave the ordinary substitute blockers in
+place. The loop must use the same materialized source set as the embedded
+report manifest and refuse source/split/role drift. Treat that as mechanics and
+denominator evidence only. It is not live provider, validation-set, SealQA
+judge, or paper-score evidence.

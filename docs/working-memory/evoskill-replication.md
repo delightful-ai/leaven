@@ -705,6 +705,30 @@ judge-scored run. The new field closes the weaker “counts only” split surfac
 future paper-release sidecars can use the same manifest shape to replace the
 current substitute membership when exact membership becomes available.
 
+## No-Spend Exact Split Manifest Ingestion
+
+Date: 2026-05-22.
+Provider/model spend: none.
+Cloud/GPU spend: none.
+
+The P5 EvoSkill harness now accepts optional paper-declared source-id split
+manifests at
+`tmp/replication/evoskill/officeqa/paper_split_manifest.json` and
+`tmp/replication/evoskill/sealqa/paper_split_manifest.json`. When present, the
+manifest must be schema version 1, match the expected dataset id, name a
+nonempty split id, declare nonempty required roles, reference only known source
+ids, and cover the full materialized source-row universe. The harness lowers
+that membership through `leaven_eval::ExplicitSplitBuilder`, records the split
+as `paper_exact`, emits role-level source-id manifests/fingerprints, and removes
+only the source/split blockers that the exact manifest resolves.
+
+This is not a new proof that the current checkout contains the paper's exact
+manifests. In the ordinary local state those files are still absent, so OfficeQA
+falls back to the difficulty-stratified substitute and SealQA falls back to the
+row-order substitute. The new behavior is a refusal-capable ingestion path:
+unknown source ids, wrong dataset ids, empty required roles, and incomplete
+coverage fail the build instead of silently becoming paper-close evidence.
+
 ## No-Spend Score-Slot Fingerprints
 
 Date: 2026-05-22.
