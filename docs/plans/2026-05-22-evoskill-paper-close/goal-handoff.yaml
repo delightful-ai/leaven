@@ -142,13 +142,30 @@ explicit_non_goals:
   - do not spend provider credits or touch destructive source/dataset state without approval
 
 verification_notes:
+  - at: "2026-05-22T22:22:34Z"
+    command: "ulimit -n 8192 && CARGO_BUILD_JOBS=8 just check"
+    status: failed_runtime_sla_only
+    evidence:
+      - "cargo fmt --check, production line-count lint, workspace clippy, SLA runner self-tests, the full 891-test nextest workspace suite, and doctests all completed without test or lint failures"
+      - "the first broad run failed only the runtime SLA at 82.43s after recompiling p5_skill_paper_reproductions; the immediate warm rerun failed only the runtime SLA at 38.61s"
+      - "the machine was under high load during the rerun, with load average observed around 13.50 on 16 logical CPUs after the second failure"
+    caveat: "This is not a passing just check; do not use it as repo-completion evidence. It records that the remaining failure was the timing guard, not the EvoSkill gate-truth behavior."
+  - at: "2026-05-22T22:17:44Z"
+    command: "cargo nextest run -p p5_skill_paper_reproductions --test evoskill_final_report final_report_exposes_score_slots_costs_errors_and_gaps_without_fake_metrics && cargo nextest run -p p5_skill_paper_reproductions --test evoskill_final_report final_report_promotes_scorer_gate_only_after_all_sealqa_judge_slots_reported && just evoskill-paper-closeout-audit"
+    status: focused_tests_passed_closeout_audit_expected_failure
+    evidence:
+      - "the default no-spend final-report gate now keeps paper_scorer approval_blocked only on sealqa_judge_scored_run; live_run_spend_approval stays isolated to live_small_run"
+      - "the complete-approved-SealQA-judge-sidecar path still proves paper_scorer while live_small_run remains approval_blocked on live_run_spend_approval"
+      - "just evoskill-paper-closeout-audit regenerated target/evoskill-paper-close/replica-manifest.json and target/evoskill-paper-close/final-report.json, then exited 1 as expected"
+      - "audit refusal message reported exactness=paper_close_candidate, score_result_manifest=absent, paper_scorer=approval_blocked blockers=[sealqa_judge_scored_run], and live_small_run=approval_blocked blockers=[live_run_spend_approval]"
+    caveat: "This fixes gate truth only; it does not import approved SealQA judge rows, approve live provider spend, execute the paper agent, or prove paper-close results."
   - at: "2026-05-22T21:49:29Z"
     command: "cargo test -p p5_skill_paper_reproductions paper_close_audit -- --nocapture && just evoskill-paper-closeout-audit"
-    status: audit_unit_tests_passed_closeout_audit_expected_failure
+    status: historical_audit_unit_tests_passed_closeout_audit_expected_failure
     evidence:
       - "the audit guard has focused unit coverage: paper_close_audit_names_approval_blocked_gates_without_fixture_build rejects paper-close candidates with approval-blocked paper_scorer/live_small_run gates, and paper_close_audit_accepts_only_fully_proven_gates accepts the fully proven case"
       - "just evoskill-paper-closeout-audit regenerated target/evoskill-paper-close/replica-manifest.json and target/evoskill-paper-close/final-report.json, then exited 1 as expected"
-      - "audit refusal message reported exactness=paper_close_candidate, score_result_manifest=absent, paper_scorer=approval_blocked with sealqa_judge_scored_run plus live_run_spend_approval, and live_small_run=approval_blocked with live_run_spend_approval"
+      - "historical audit refusal message still bundled live_run_spend_approval into paper_scorer; the 2026-05-22T22:17:44Z gate-truth note above supersedes this with paper_scorer blocked only on sealqa_judge_scored_run"
       - "the audit guard avoids adding another multi-second fixture build to the final-report integration hot path; the operator CLI path is verified by the explicit just recipe"
     caveat: "The closeout audit is a completion guard, not a proof of paper-close results; it must keep failing until approved provider execution, complete SealQA judged scoring, and imported real result evidence clear the approval blockers."
   - at: "2026-05-22T21:39:16Z"
@@ -158,7 +175,7 @@ verification_notes:
       - "one command reran the local source pin, accepted substitute split policy, BrowseComp public substitute sidecar, runner input batch, and live-run request steps against the current local CSV without provider or judge calls"
       - "final-report.json SHA-256 d139b65f5c023c7b3fba52950752133cd85f322a357a1326328658898899895d; replica-manifest.json SHA-256 fb47eb50fc5e279d4eed6de04565decef5e1bb8f46682e43632f15d6f48b4a47"
       - "runner_input_manifest.json stayed at SHA-256 48b4d2d3439960434812ea1f4af71e6533e37b5a8634b5588be3eab8e0503860 with 22 entries and 1698 rows; live_run_request_manifest.json stayed at SHA-256 0cc8a75a9665c4f03c7886f6e355fe591bbf9898d9788f93888d7dc21ae3d2d8 with max_generation_calls 1698, provider_calls_allowed false, judge_calls_allowed false, and blocker live_run_spend_approval"
-      - "the regenerated final report remained paper_close_candidate with no source_blockers, score_result_manifest null, paper_scorer approval_blocked on sealqa_judge_scored_run plus live_run_spend_approval, and live_small_run approval_blocked on live_run_spend_approval"
+      - "the regenerated final report remained paper_close_candidate with no source_blockers and score_result_manifest null; historical gate text bundled live_run_spend_approval into paper_scorer, superseded by the 2026-05-22T22:17:44Z gate-truth note above"
     caveat: "This proves one-command local packet preparation only; it does not approve spend, execute the paper agent, call SealQA judging, import predictions, import judged rows, clear approval blockers, or prove paper-close results."
   - at: "2026-05-22T21:34:18Z"
     command: "just evoskill-paper-runner-inputs && just evoskill-paper-live-run-request"

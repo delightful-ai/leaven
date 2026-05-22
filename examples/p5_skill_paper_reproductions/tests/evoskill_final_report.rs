@@ -826,6 +826,11 @@ fn assert_paper_close_gates_separate_proof_from_blockers(report: &EvoSkillFinalR
             .blocker_ids
             .contains(&"sealqa_judge_scored_run".to_owned())
     );
+    assert!(
+        !gate("paper_scorer")
+            .blocker_ids
+            .contains(&"live_run_spend_approval".to_owned())
+    );
     assert_eq!(
         gate("full_loop_mechanics").status,
         PaperCloseGateStatus::Proven

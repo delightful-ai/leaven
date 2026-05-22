@@ -7338,10 +7338,7 @@ fn final_report_paper_close_gates(
     let paper_scorer_blockers = if sealqa_judge_scores_complete {
         Vec::new()
     } else {
-        vec![
-            "sealqa_judge_scored_run".to_owned(),
-            "live_run_spend_approval".to_owned(),
-        ]
+        vec!["sealqa_judge_scored_run".to_owned()]
     };
     let paper_scorer_note = if sealqa_judge_scores_complete {
         "OfficeQA scorer laws, source-backed SealQA judge template/request surface, and approved external SealQA judge score sidecars cover every SealQA score slot"
