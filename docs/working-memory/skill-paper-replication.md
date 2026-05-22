@@ -935,7 +935,7 @@ lineage. The first retry should stay no-spend:
 
 ## EvoSkill Paper-Close Guardrails
 
-The P5 EvoSkill final report schema v17 carries a no-spend loop `run_manifest`
+The P5 EvoSkill final report schema v18 carries a no-spend loop `run_manifest`
 that ties the mechanics loop to manifest/scorer/source/split fingerprints,
 frontier policy, schedule, checkpoint boundary, Git identity mode, the full
 OfficeQA validation role/fingerprint used before frontier admission, and the
@@ -1008,3 +1008,11 @@ template for that dataset. This does not run a judge or approve spend; it
 prevents opaque row scores from masquerading as deterministic replay evidence or
 as outputs from a different judge prompt, and gives approved judge outputs a
 typed import lane.
+
+2026-05-22 update: final report blockers are now evidence-sensitive after score
+sidecar import. Partial SealQA judge score imports report only their slots and
+leave `sealqa_judge_scored_run` on errors, ablations, and the `paper_scorer`
+gate. Complete approved `external_judge_run` evidence for every SealQA score
+slot clears that blocker and can prove the scorer gate, while the separate
+`live_run_spend_approval` gate remains blocked until an approved bounded live
+agent run exists.

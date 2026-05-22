@@ -97,7 +97,7 @@ belong in their owning crates.
   proves the current no-spend final report truth surface writes manifest and
   report artifacts, carries baseline/optimized train/validation/held-out score
   slots, exposes zero spend by default, blockers, ablation statuses, and
-  exactness gaps. It proves final report schema v17.
+  exactness gaps. It proves final report schema v18.
   Materialized score slots carry split exactness, split fingerprint, and
   role-level source-id fingerprint directly. Unreported slots carry a null
   `score_evidence_id`, null `score_evidence_kind`, null
@@ -141,7 +141,11 @@ belong in their owning crates.
   fabricated aggregate rows, OfficeQA predictions whose scores do not match the
   scorer, BrowseComp row scores that fail the exact-answer check, or external
   judge rows without matching template fingerprints fail the report build
-  instead of becoming score evidence.
+  instead of becoming score evidence. Report-level errors, ablations, and the
+  `paper_scorer` gate are derived after score sidecar import: partial SealQA
+  judge imports leave `sealqa_judge_scored_run` blocked, while complete approved
+  external judge evidence for every SealQA score slot can clear that blocker
+  without clearing the separate live-run approval gate.
   It does not prove live provider behavior, validation-score values, or
   paper-close.
 - `just evoskill-paper-manifest` writes the current no-spend local manifest to

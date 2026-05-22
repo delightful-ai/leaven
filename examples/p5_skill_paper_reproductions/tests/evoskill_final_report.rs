@@ -273,7 +273,7 @@ fn final_report_imports_matching_score_result_sidecar_without_filling_other_slot
 
     let report = build_evoskill_final_report(&input).unwrap();
 
-    assert_eq!(report.schema_version, 17);
+    assert_eq!(report.schema_version, 18);
     let result_manifest = report
         .score_result_manifest
         .as_ref()
@@ -555,6 +555,113 @@ fn final_report_imports_sealqa_judge_score_sidecar_with_approval_evidence() {
     );
     assert!(reported.blocker_ids.is_empty());
     assert_eq!(report.cost.llm_calls, scored_slot.expected_rows.unwrap());
+    let scorer_gate = report
+        .paper_close_gates
+        .iter()
+        .find(|gate| gate.id == "paper_scorer")
+        .expect("paper scorer gate exists");
+    assert_eq!(scorer_gate.status, PaperCloseGateStatus::ApprovalBlocked);
+    assert!(
+        scorer_gate
+            .blocker_ids
+            .contains(&"sealqa_judge_scored_run".to_owned())
+    );
+}
+
+#[test]
+fn final_report_promotes_scorer_gate_only_after_all_sealqa_judge_slots_reported() {
+    let root = tempfile::tempdir().unwrap();
+    write_denominator_ready_sources(root.path());
+    let input = ManifestBuildInput::new(root.path());
+    write_evoskill_local_source_pin_manifest(&input).unwrap();
+    write_evoskill_paper_close_split_policy_manifest(&input).unwrap();
+    let initial_report = build_evoskill_final_report(&input).unwrap();
+    let sealqa_slots = initial_report
+        .score_slots
+        .iter()
+        .filter(|slot| slot.dataset_id == "sealqa")
+        .cloned()
+        .collect::<Vec<_>>();
+    assert_eq!(sealqa_slots.len(), 4);
+    assert!(sealqa_slots.iter().all(|slot| {
+        slot.status == FinalScoreStatus::Blocked
+            && slot.blocker_ids == ["sealqa_judge_scored_run".to_owned()]
+    }));
+    write_score_result_manifest_for_slots_with_judge_template_fingerprint(
+        root.path(),
+        &initial_report,
+        &sealqa_slots,
+        1.0,
+        ScoreEvidenceKind::ExternalJudgeRun,
+        Some("unit-test-approved-sealqa-judge-run"),
+        Some(judge_template_fingerprint_for_dataset(
+            &initial_report,
+            "sealqa",
+        )),
+    );
+
+    let report = build_evoskill_final_report(&input).unwrap();
+
+    let reported_sealqa_slots = report
+        .score_slots
+        .iter()
+        .filter(|slot| slot.dataset_id == "sealqa")
+        .collect::<Vec<_>>();
+    assert_eq!(reported_sealqa_slots.len(), sealqa_slots.len());
+    assert!(reported_sealqa_slots.iter().all(|slot| {
+        slot.status == FinalScoreStatus::Reported
+            && slot.score == Some(1.0)
+            && slot.score_evidence_kind == Some(ScoreEvidenceKind::ExternalJudgeRun)
+            && slot.score_evidence_approval_id.as_deref()
+                == Some("unit-test-approved-sealqa-judge-run")
+            && slot.blocker_ids.is_empty()
+    }));
+    assert_eq!(
+        report.cost.llm_calls,
+        sealqa_slots
+            .iter()
+            .map(|slot| slot.expected_rows.unwrap())
+            .sum::<u64>()
+    );
+
+    let paper_scorer = report
+        .paper_close_gates
+        .iter()
+        .find(|gate| gate.id == "paper_scorer")
+        .expect("paper scorer gate exists");
+    assert_eq!(paper_scorer.status, PaperCloseGateStatus::Proven);
+    assert!(paper_scorer.blocker_ids.is_empty());
+    let live_small_run = report
+        .paper_close_gates
+        .iter()
+        .find(|gate| gate.id == "live_small_run")
+        .expect("live small run gate exists");
+    assert_eq!(live_small_run.status, PaperCloseGateStatus::ApprovalBlocked);
+    assert_eq!(
+        live_small_run.blocker_ids,
+        ["live_run_spend_approval".to_owned()]
+    );
+    assert!(
+        report
+            .errors
+            .iter()
+            .all(|error| error.blocker_id != "sealqa_judge_scored_run")
+    );
+    assert!(
+        report
+            .errors
+            .iter()
+            .any(|error| error.blocker_id == "live_run_spend_approval")
+    );
+    let browsecomp = report
+        .ablations
+        .iter()
+        .find(|ablation| ablation.id == "browsecomp_transfer")
+        .expect("BrowseComp transfer ablation exists");
+    assert_eq!(
+        browsecomp.blocker_ids,
+        ["live_run_spend_approval".to_owned()]
+    );
 }
 
 #[test]
@@ -856,7 +963,7 @@ fn assert_reported_target(
 
 fn assert_report_header(report: &EvoSkillFinalReport) {
     assert_eq!(report.exactness, ExactnessClass::BlockedBeforePaperClose);
-    assert_eq!(report.schema_version, 17);
+    assert_eq!(report.schema_version, 18);
     assert_eq!(report.score_result_manifest, None);
     assert_eq!(report.cost.llm_calls, 0);
     assert_eq!(report.cost.metric_calls, 0);
@@ -1573,6 +1680,90 @@ fn write_score_result_manifest_with_judge_template_fingerprint(
         ScoreResultEvidenceOptions::new(evidence_kind, approval_id)
             .with_judge_template_fingerprint(judge_template_fingerprint),
     );
+}
+
+fn write_score_result_manifest_for_slots_with_judge_template_fingerprint(
+    root: &std::path::Path,
+    report: &EvoSkillFinalReport,
+    slots: &[FinalScoreSlot],
+    score: f64,
+    evidence_kind: ScoreEvidenceKind,
+    approval_id: Option<&str>,
+    judge_template_fingerprint: Option<&str>,
+) {
+    let path = root.join("tmp/replication/evoskill/score_result_manifest.json");
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let mut entries = Vec::new();
+    let mut llm_calls = 0_u64;
+    let mut metric_calls = 0_u64;
+    for (index, slot) in slots.iter().enumerate() {
+        let expected_rows = slot.expected_rows.unwrap();
+        let evidence_relative_path = format!(
+            "tmp/replication/evoskill/score-evidence/unit-test-scored-output-import-{index}.jsonl"
+        );
+        let evidence_path = root.join(&evidence_relative_path);
+        fs::create_dir_all(evidence_path.parent().unwrap()).unwrap();
+        let mut evidence_body = String::new();
+        for source_id in score_slot_source_ids(report, slot) {
+            let prediction = score_artifact_prediction_for_source_id(slot, &source_id);
+            let mut row = serde_json::json!({
+                "source_id": source_id,
+                "prediction": prediction,
+                "score": score
+            });
+            if let Some(fingerprint) = judge_template_fingerprint {
+                row.as_object_mut()
+                    .expect("score evidence row is a JSON object")
+                    .insert(
+                        "judge_template_fingerprint".to_owned(),
+                        serde_json::json!(fingerprint),
+                    );
+            }
+            writeln!(evidence_body, "{row}").unwrap();
+        }
+        fs::write(&evidence_path, evidence_body.as_bytes()).unwrap();
+        let evidence_sha256 = sha256_bytes(evidence_body.as_bytes());
+        if evidence_kind == ScoreEvidenceKind::ExternalJudgeRun {
+            llm_calls += expected_rows;
+        }
+        metric_calls += expected_rows;
+        entries.push(serde_json::json!({
+            "dataset_id": &slot.dataset_id,
+            "split_id": &slot.split_id,
+            "split_role": &slot.split_role,
+            "candidate_role": &slot.candidate_role,
+            "split_fingerprint": slot
+                .split_fingerprint
+                .as_deref()
+                .expect("materialized score slot carries split fingerprint"),
+            "role_source_id_fingerprint": &slot.role_source_id_fingerprint,
+            "expected_rows": expected_rows,
+            "scored_rows": expected_rows,
+            "score": score,
+            "resolved_blocker_ids": &slot.blocker_ids,
+            "score_evidence_kind": evidence_kind,
+            "score_evidence_approval_id": approval_id,
+            "evidence_id": format!("unit-test-scored-output-import-{index}"),
+            "evidence_artifact": {
+                "relative_path": evidence_relative_path,
+                "sha256": evidence_sha256,
+                "bytes": evidence_body.len()
+            }
+        }));
+    }
+    let manifest = serde_json::json!({
+        "schema_version": 5,
+        "manifest_fingerprint": &report.manifest_fingerprint.fingerprint,
+        "scorer_fingerprint": &report.scorer_fingerprint.fingerprint,
+        "cost": {
+            "llm_calls": llm_calls,
+            "metric_calls": metric_calls,
+            "prompt_tokens": 0,
+            "completion_tokens": 0
+        },
+        "entries": entries
+    });
+    fs::write(path, serde_json::to_vec_pretty(&manifest).unwrap()).unwrap();
 }
 
 fn write_score_result_manifest_with_prediction_override(
