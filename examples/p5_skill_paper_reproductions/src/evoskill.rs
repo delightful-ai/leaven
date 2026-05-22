@@ -216,7 +216,16 @@ pub struct SplitMaterializationReport {
     pub validation_rows: Option<u64>,
     pub test_rows: Option<u64>,
     pub split_fingerprint: Option<String>,
+    pub role_manifests: Vec<SplitRoleMaterializationReport>,
     pub blocker_ids: Vec<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct SplitRoleMaterializationReport {
+    pub role: String,
+    pub rows: u64,
+    pub source_ids: Vec<String>,
+    pub source_id_fingerprint: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -589,7 +598,7 @@ pub fn build_evoskill_replica_manifest(
     let source_universe = source_universe(&datasets, &source_materializations);
 
     Ok(EvoSkillReplicaManifest {
-        schema_version: 5,
+        schema_version: 6,
         paper: PaperTarget {
             id: "evoskill".to_owned(),
             arxiv_id: "2603.02766".to_owned(),
@@ -694,7 +703,7 @@ pub fn materialize_officeqa_source(
         .into_dataset()
         .map_err(|source| ManifestError::Dataset { source })?;
     let strata = officeqa_difficulty_strata(&rows);
-    let split_materializations = officeqa_difficulty_split_reports(rows.len(), &strata)?;
+    let split_materializations = officeqa_difficulty_split_reports(&rows, &strata)?;
     let report = DatasetMaterializationReport {
         dataset_id: "officeqa".to_owned(),
         source_artifact_id: "officeqa_full_csv".to_owned(),
@@ -824,25 +833,22 @@ fn officeqa_difficulty_strata(
 }
 
 fn officeqa_difficulty_split_reports(
-    source_rows: usize,
+    rows: &SourceRowManifest<OfficeQaInput, String>,
     strata: &BTreeMap<SmolStr, Vec<CaseId>>,
 ) -> Result<Vec<SplitMaterializationReport>, ManifestError> {
     let mut reports = Vec::new();
     for train_rows in OFFICEQA_TRAIN_SIZES {
-        reports.push(officeqa_difficulty_split_report(
-            source_rows,
-            strata,
-            train_rows,
-        )?);
+        reports.push(officeqa_difficulty_split_report(rows, strata, train_rows)?);
     }
     Ok(reports)
 }
 
 fn officeqa_difficulty_split_report(
-    source_rows: usize,
+    rows: &SourceRowManifest<OfficeQaInput, String>,
     strata: &BTreeMap<SmolStr, Vec<CaseId>>,
     train_rows: usize,
 ) -> Result<SplitMaterializationReport, ManifestError> {
+    let source_rows = rows.len();
     let id = format!("officeqa_difficulty_train_{train_rows}_val_{OFFICEQA_VALIDATION_ROWS}");
     if source_rows <= train_rows + OFFICEQA_VALIDATION_ROWS {
         return Ok(SplitMaterializationReport {
@@ -855,11 +861,21 @@ fn officeqa_difficulty_split_report(
             ),
             test_rows: None,
             split_fingerprint: None,
+            role_manifests: Vec::new(),
             blocker_ids: vec!["officeqa_insufficient_rows".to_owned()],
         });
     }
 
     let splits = officeqa_difficulty_splits(source_rows, strata, train_rows)?;
+    let role_manifests = split_role_manifests(
+        rows,
+        &splits,
+        &[
+            (SplitRole::Train, "train"),
+            (SplitRole::Validation, "validation"),
+            (SplitRole::Test, "held_out_test"),
+        ],
+    )?;
 
     Ok(SplitMaterializationReport {
         id,
@@ -869,6 +885,7 @@ fn officeqa_difficulty_split_report(
         validation_rows: Some(split_len(&splits, &SplitRole::Validation)),
         test_rows: Some(split_len(&splits, &SplitRole::Test)),
         split_fingerprint: Some(fingerprint_hex(splits.fingerprint())),
+        role_manifests,
         blocker_ids: vec![
             "officeqa_category_split_manifest".to_owned(),
             "officeqa_exact_split_membership".to_owned(),
@@ -897,6 +914,59 @@ fn split_len(splits: &leaven_eval::DatasetSplits, role: &SplitRole) -> u64 {
     splits.cases(&role.partition_id()).map_or(0, |cases| {
         u64::try_from(cases.len()).expect("split count fits in u64")
     })
+}
+
+fn split_role_manifests<T>(
+    rows: &SourceRowManifest<T, String>,
+    splits: &leaven_eval::DatasetSplits,
+    roles: &[(SplitRole, &str)],
+) -> Result<Vec<SplitRoleMaterializationReport>, ManifestError> {
+    roles
+        .iter()
+        .map(|(role, label)| split_role_manifest(rows, splits, role, label))
+        .collect()
+}
+
+fn split_role_manifest<T>(
+    rows: &SourceRowManifest<T, String>,
+    splits: &leaven_eval::DatasetSplits,
+    role: &SplitRole,
+    label: &str,
+) -> Result<SplitRoleMaterializationReport, ManifestError> {
+    let cases = splits
+        .cases(&role.partition_id())
+        .ok_or_else(|| ManifestError::LoopBlocked {
+            reason: format!("split does not contain required role {label}"),
+        })?;
+    let source_ids = cases
+        .iter()
+        .map(|case| {
+            let row_index = usize::try_from(case.0).map_err(|_| ManifestError::LoopBlocked {
+                reason: format!("split role {label} references oversized case {case}"),
+            })?;
+            rows.rows()
+                .get(row_index)
+                .map(|row| row.source_id().to_owned())
+                .ok_or_else(|| ManifestError::LoopBlocked {
+                    reason: format!("split role {label} references missing case {case}"),
+                })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(SplitRoleMaterializationReport {
+        role: label.to_owned(),
+        rows: u64::try_from(source_ids.len()).expect("split role row count fits in u64"),
+        source_id_fingerprint: source_id_fingerprint(&source_ids),
+        source_ids,
+    })
+}
+
+fn source_id_fingerprint(source_ids: &[String]) -> String {
+    let mut hasher = Sha256::new();
+    for source_id in source_ids {
+        hasher.update(source_id.as_bytes());
+        hasher.update(b"\0");
+    }
+    hex::encode(hasher.finalize())
 }
 
 fn strata_reports(strata: &BTreeMap<SmolStr, Vec<CaseId>>) -> Vec<StratumMaterializationReport> {
@@ -937,7 +1007,7 @@ pub fn materialize_sealqa_source(
         .into_dataset()
         .map_err(|source| ManifestError::Dataset { source })?;
     let strata = sealqa_topic_strata(&rows);
-    let split_materializations = vec![sealqa_row_order_split_report(rows.len())?];
+    let split_materializations = vec![sealqa_row_order_split_report(&rows)?];
     let report = DatasetMaterializationReport {
         dataset_id: "sealqa".to_owned(),
         source_artifact_id: "sealqa_parquet".to_owned(),
@@ -969,8 +1039,9 @@ fn sealqa_topic_strata(
 }
 
 fn sealqa_row_order_split_report(
-    source_rows: usize,
+    rows: &SourceRowManifest<SealQaInput, String>,
 ) -> Result<SplitMaterializationReport, ManifestError> {
+    let source_rows = rows.len();
     let test_rows = source_rows.saturating_sub(SEALQA_TRAIN_ROWS);
     let id = format!("sealqa_row_order_train_{SEALQA_TRAIN_ROWS}_heldout_{test_rows}");
     if source_rows <= SEALQA_TRAIN_ROWS {
@@ -982,6 +1053,7 @@ fn sealqa_row_order_split_report(
             validation_rows: None,
             test_rows: None,
             split_fingerprint: None,
+            role_manifests: Vec::new(),
             blocker_ids: vec!["sealqa_insufficient_rows".to_owned()],
         });
     }
@@ -994,6 +1066,14 @@ fn sealqa_row_order_split_report(
                 "sealqa-row-order-substitute-v1-rows-{source_rows}-train-{SEALQA_TRAIN_ROWS}"
             )))
             .map_err(|source| ManifestError::Split { source })?;
+    let role_manifests = split_role_manifests(
+        rows,
+        &splits,
+        &[
+            (SplitRole::Train, "train"),
+            (SplitRole::Test, "held_out_test"),
+        ],
+    )?;
     let mut blocker_ids = vec!["sealqa_split_manifest".to_owned()];
     if source_rows != SEALQA_ROWS {
         blocker_ids.push("sealqa_row_count_mismatch".to_owned());
@@ -1007,6 +1087,7 @@ fn sealqa_row_order_split_report(
         validation_rows: None,
         test_rows: Some(split_len(&splits, &SplitRole::Test)),
         split_fingerprint: Some(fingerprint_hex(splits.fingerprint())),
+        role_manifests,
         blocker_ids,
     })
 }

@@ -82,6 +82,40 @@ fn officeqa_difficulty_substitute_records_split_fingerprints_without_exact_claim
     assert_eq!(train_12.validation_rows, Some(17));
     assert_eq!(train_12.test_rows, Some(217));
     assert_eq!(train_12.split_fingerprint.as_deref().unwrap().len(), 64);
+    assert_eq!(train_12.role_manifests.len(), 3);
+    let train_manifest = train_12
+        .role_manifests
+        .iter()
+        .find(|role| role.role == "train")
+        .expect("train role manifest exists");
+    assert_eq!(train_manifest.rows, 12);
+    assert_eq!(train_manifest.source_ids.len(), 12);
+    assert_eq!(train_manifest.source_id_fingerprint.len(), 64);
+    assert!(
+        train_manifest
+            .source_ids
+            .iter()
+            .all(|source_id| source_id.starts_with("UID"))
+    );
+    assert!(
+        train_manifest
+            .source_ids
+            .iter()
+            .all(|source_id| !source_id.contains("Answer")),
+        "split membership exposes source ids, not hidden targets"
+    );
+    let validation_manifest = train_12
+        .role_manifests
+        .iter()
+        .find(|role| role.role == "validation")
+        .expect("validation role manifest exists");
+    assert_eq!(validation_manifest.rows, 17);
+    let held_out_manifest = train_12
+        .role_manifests
+        .iter()
+        .find(|role| role.role == "held_out_test")
+        .expect("held-out role manifest exists");
+    assert_eq!(held_out_manifest.rows, 217);
     assert!(
         train_12
             .blocker_ids
@@ -172,6 +206,36 @@ fn sealqa_parquet_lowers_to_cases_and_row_order_substitute_split() {
     assert_eq!(split.validation_rows, None);
     assert_eq!(split.test_rows, Some(100));
     assert_eq!(split.split_fingerprint.as_deref().unwrap().len(), 64);
+    assert_eq!(split.role_manifests.len(), 2);
+    let train_manifest = split
+        .role_manifests
+        .iter()
+        .find(|role| role.role == "train")
+        .expect("SealQA train role manifest exists");
+    assert_eq!(train_manifest.rows, 11);
+    assert_eq!(
+        train_manifest.source_ids.first().map(String::as_str),
+        Some("sealqa:000")
+    );
+    assert_eq!(
+        train_manifest.source_ids.last().map(String::as_str),
+        Some("sealqa:010")
+    );
+    assert_eq!(train_manifest.source_id_fingerprint.len(), 64);
+    let held_out_manifest = split
+        .role_manifests
+        .iter()
+        .find(|role| role.role == "held_out_test")
+        .expect("SealQA held-out role manifest exists");
+    assert_eq!(held_out_manifest.rows, 100);
+    assert_eq!(
+        held_out_manifest.source_ids.first().map(String::as_str),
+        Some("sealqa:011")
+    );
+    assert_eq!(
+        held_out_manifest.source_ids.last().map(String::as_str),
+        Some("sealqa:110")
+    );
     assert!(
         split
             .blocker_ids
