@@ -57,7 +57,7 @@ topic-stratified 128-row substitute sidecar, and keeps BrowseComp slots
 unscored. It is not paper-exact sample membership.
 
 The optional ignored `tmp/replication/evoskill/score_result_manifest.json`
-sidecar is the only no-spend import path for external scores. Schema-v4 entries
+sidecar is the only no-spend import path for external scores. Schema-v5 entries
 must match the current manifest fingerprint, scorer fingerprint, slot key, split
 fingerprint, role source-id fingerprint, row counts, resolved blockers, a
 nonempty `evidence_id`, and a readable JSONL evidence artifact with matching
@@ -69,9 +69,11 @@ score. `exact_answer_replay` checks BrowseComp transfer rows with a conservative
 exact-normalized answer scorer when materialized targets are present. The
 BrowseComp exact-answer check rejects fabricated row scores; it is not the
 official simple-evals judge path. `external_judge_run` requires a nonempty
-`score_evidence_approval_id` and reported LLM-call cost. Reported score slots
-preserve the id as `score_evidence_id`, the scoring kind, the optional approval
-id, and the checked artifact as `score_evidence_artifact`. It is score evidence
-plumbing, not permission to treat fixtures, stale runs, tampered evidence files,
-missing SealQA judge execution, missing transferred BrowseComp runs, official
-BrowseComp judge approval, or missing provider approval as paper scores.
+`score_evidence_approval_id`, reported LLM-call cost, and row-level
+`judge_template_fingerprint` values matching the pinned scorer template for the
+dataset. Reported score slots preserve the id as `score_evidence_id`, the
+scoring kind, the optional approval id, and the checked artifact as
+`score_evidence_artifact`. It is score evidence plumbing, not permission to
+treat fixtures, stale runs, tampered evidence files, missing SealQA judge
+execution, missing transferred BrowseComp runs, official BrowseComp judge
+approval, or missing provider approval as paper scores.

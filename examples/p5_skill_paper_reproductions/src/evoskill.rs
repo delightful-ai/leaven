@@ -760,6 +760,7 @@ struct ScoreEvidenceRow {
     source_id: String,
     prediction: String,
     score: f64,
+    judge_template_fingerprint: Option<String>,
 }
 
 struct ValidatedScoreResultManifest {
@@ -1101,6 +1102,7 @@ pub fn build_evoskill_final_report(
         apply_score_result_manifest(
             &input.root,
             &sources,
+            &manifest.scorer,
             &mut score_slots,
             score_result_manifest,
         )?;
@@ -1117,7 +1119,7 @@ pub fn build_evoskill_final_report(
     let proxy_rejection_gates = proxy_rejection_gates();
 
     Ok(EvoSkillFinalReport {
-        schema_version: 16,
+        schema_version: 17,
         exactness,
         manifest,
         loop_report,
@@ -3123,11 +3125,11 @@ fn validate_score_result_manifest(
     manifest_fingerprint: &ManifestFingerprintReport,
     scorer_fingerprint: &ScorerFingerprintReport,
 ) -> Result<ValidatedScoreResultManifest, ManifestError> {
-    if manifest.schema_version != 4 {
+    if manifest.schema_version != 5 {
         return Err(score_result_manifest_error(
             path,
             format!(
-                "expected schema_version 4, found {}",
+                "expected schema_version 5, found {}",
                 manifest.schema_version
             ),
         ));
@@ -3393,6 +3395,7 @@ fn is_sha256_hex(value: &str) -> bool {
 fn apply_score_result_manifest(
     root: &Path,
     sources: &EvoSkillSourceMaterializations,
+    scorer: &ScorerManifest,
     slots: &mut [FinalScoreSlot],
     manifest: &ValidatedScoreResultManifest,
 ) -> Result<(), ManifestError> {
@@ -3417,7 +3420,7 @@ fn apply_score_result_manifest(
             )
         })?;
         validate_score_result_matches_slot(&path, entry, &slots[slot_index])?;
-        validate_score_evidence_rows(root, sources, &path, entry, &slots[slot_index])?;
+        validate_score_evidence_rows(root, sources, scorer, &path, entry, &slots[slot_index])?;
         let slot = &mut slots[slot_index];
         slot.score = Some(entry.score);
         slot.score_evidence_id = Some(entry.evidence_id.clone());
@@ -3434,6 +3437,7 @@ fn apply_score_result_manifest(
 fn validate_score_evidence_rows(
     root: &Path,
     sources: &EvoSkillSourceMaterializations,
+    scorer: &ScorerManifest,
     sidecar_path: &Path,
     entry: &ScoreResultManifestEntry,
     slot: &FinalScoreSlot,
@@ -3520,6 +3524,7 @@ fn validate_score_evidence_rows(
     {
         validate_browsecomp_score_evidence_rows(sources, sidecar_path, entry, &rows)?;
     }
+    validate_judge_template_fingerprint_evidence_rows(scorer, sidecar_path, entry, &rows)?;
 
     let aggregate_row_count = u32::try_from(rows.len()).map_err(|_| {
         score_result_manifest_error(
@@ -3538,6 +3543,67 @@ fn validate_score_evidence_rows(
         ));
     }
 
+    Ok(())
+}
+
+fn validate_judge_template_fingerprint_evidence_rows(
+    scorer: &ScorerManifest,
+    sidecar_path: &Path,
+    entry: &ScoreResultManifestEntry,
+    rows: &[ScoreEvidenceRow],
+) -> Result<(), ManifestError> {
+    let key = score_result_entry_key(entry);
+    match entry.score_evidence_kind {
+        ScoreEvidenceKind::ExternalJudgeRun => {
+            let expected_fingerprint = scorer
+                .judge_templates
+                .iter()
+                .find(|template| template.dataset_id == entry.dataset_id)
+                .map(|template| template.fingerprint.as_str())
+                .ok_or_else(|| {
+                    score_result_manifest_error(
+                        sidecar_path,
+                        format!(
+                            "score result `{key}` external judge evidence has no pinned judge template fingerprint for dataset `{}`",
+                            entry.dataset_id
+                        ),
+                    )
+                })?;
+            for row in rows {
+                let Some(actual_fingerprint) = row.judge_template_fingerprint.as_deref() else {
+                    return Err(score_result_manifest_error(
+                        sidecar_path,
+                        format!(
+                            "score result `{key}` external judge evidence row `{}` must carry the pinned judge template fingerprint",
+                            row.source_id
+                        ),
+                    ));
+                };
+                if actual_fingerprint != expected_fingerprint {
+                    return Err(score_result_manifest_error(
+                        sidecar_path,
+                        format!(
+                            "score result `{key}` external judge evidence row `{}` judge template fingerprint mismatch: expected `{expected_fingerprint}`, found `{actual_fingerprint}`",
+                            row.source_id
+                        ),
+                    ));
+                }
+            }
+        }
+        ScoreEvidenceKind::RustScorerReplay | ScoreEvidenceKind::ExactAnswerReplay => {
+            for row in rows {
+                if row.judge_template_fingerprint.is_some() {
+                    return Err(score_result_manifest_error(
+                        sidecar_path,
+                        format!(
+                            "score result `{key}` non-judge replay evidence row `{}` must not carry a judge template fingerprint",
+                            row.source_id
+                        ),
+                    ));
+                }
+            }
+        }
+    }
     Ok(())
 }
 

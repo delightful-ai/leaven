@@ -648,7 +648,9 @@ statuses for skill-only, prompt-only, skill-merge, and BrowseComp transfer.
 Strict score sidecars are refusal-capable: OfficeQA rows replay the Rust scorer,
 and BrowseComp transfer rows use a conservative exact-normalized answer scorer
 against materialized scorer-only targets. That BrowseComp check is an anti-fake
-sidecar guard, not the official simple-evals judge.
+sidecar guard, not the official simple-evals judge. External judge rows must
+bind to the scorer's pinned judge-template fingerprint before they can become
+reported score evidence.
 
 This deliberately does not fill blocked metrics with zeroes or claim paper-close:
 OfficeQA score slots stay `blocked` until exact membership or an accepted
@@ -1083,9 +1085,9 @@ Date: 2026-05-22.
 Provider/model spend: none.
 Cloud/GPU spend: none.
 
-The P5 final report now declares schema v16 with optional
+The P5 final report now declares schema v17 with optional
 `tmp/replication/evoskill/score_result_manifest.json` ingestion. The sidecar is
-strict score evidence plumbing, not a live run: it must name schema version 4,
+strict score evidence plumbing, not a live run: it must name schema version 5,
 the current manifest fingerprint, the current scorer fingerprint, total cost,
 and one or more score entries keyed by dataset id, split id, split role, and
 candidate role.
@@ -1109,7 +1111,10 @@ entry must declare `score_evidence_kind`; OfficeQA requires
 `rust_scorer_replay`, conservative BrowseComp exact-answer checks use
 `exact_answer_replay`, and SealQA or official judge-backed BrowseComp evidence
 must use `external_judge_run` with a nonempty `score_evidence_approval_id` and
-reported LLM-call cost covering judged rows.
+reported LLM-call cost covering judged rows. External judge rows must also carry
+the row-level `judge_template_fingerprint` matching the pinned scorer template
+for the dataset, so imported judge scores cannot silently come from a different
+prompt or template.
 
 Imported scores preserve the sidecar entry `evidence_id` on the reported score
 slot as `score_evidence_id`, the scoring method as `score_evidence_kind`, any
