@@ -5,7 +5,7 @@ use leaven_agentic::AgentPromptTarget;
 use leaven_artifact_git::GitProgramArtifact;
 use leaven_core::OptimizationProblem;
 use leaven_engine::{RenderContext, RenderError, Renderer};
-use leaven_gepa::{ReflectiveExample, ReflectiveSideInfoValue};
+use leaven_gepa::{ReflectiveCase, ReflectiveSideInfoValue, ReflectiveValue};
 use leaven_kernel::{Cost, Metered};
 use leaven_workspace::WorkspacePath;
 
@@ -106,7 +106,7 @@ fn context_refs(artifact: &GitProgramArtifact) -> Result<Vec<AgentContextRef>, R
     Ok(refs)
 }
 
-fn render_examples(examples: &[ReflectiveExample]) -> String {
+fn render_examples(examples: &[ReflectiveCase]) -> String {
     if examples.is_empty() {
         return "## Reflective Examples\n(no reflective examples selected)\n".to_owned();
     }
@@ -116,35 +116,65 @@ fn render_examples(examples: &[ReflectiveExample]) -> String {
         rendered.push_str("### Example ");
         rendered.push_str(&(index + 1).to_string());
         rendered.push('\n');
-        for (name, value) in &example.side_info {
-            rendered.push_str("#### ");
-            rendered.push_str(name.trim());
-            rendered.push('\n');
-            render_side_info(&mut rendered, value, 5);
+        rendered.push_str("#### Input\n");
+        render_reflective_value(&mut rendered, &example.input);
+        if let Some(expected) = &example.expected {
+            rendered.push_str("#### Expected\n");
+            render_reflective_value(&mut rendered, expected);
         }
-        if !example.input.is_empty() {
-            rendered.push_str("#### Input\n");
-            rendered.push_str(example.input.trim());
+        for (run_index, run) in example.runs.iter().enumerate() {
+            rendered.push_str("#### Run ");
+            rendered.push_str(&(run_index + 1).to_string());
             rendered.push('\n');
-        }
-        if let Some(output) = &example.output {
-            rendered.push_str("#### Output\n");
-            rendered.push_str(output.trim());
-            rendered.push('\n');
-        }
-        if let Some(score) = example.score {
-            rendered.push_str("#### Score\n");
-            rendered.push_str(&score.to_string());
-            rendered.push('\n');
-        }
-        if !example.feedback.is_empty() {
-            rendered.push_str("#### Feedback\n");
-            rendered.push_str(example.feedback.trim());
-            rendered.push('\n');
+            if let Some(output) = &run.produced {
+                rendered.push_str("##### Output\n");
+                render_reflective_value(&mut rendered, output);
+            }
+            if let Some(score) = run.score {
+                rendered.push_str("##### Score\n");
+                rendered.push_str(&score.to_string());
+                rendered.push('\n');
+            }
+            for (name, value) in &run.side_info {
+                rendered.push_str("##### ");
+                rendered.push_str(name.trim());
+                rendered.push('\n');
+                render_side_info(&mut rendered, value, 6);
+            }
+            if !run.feedback.is_empty() {
+                rendered.push_str("##### Feedback\n");
+                rendered.push_str(run.feedback.trim());
+                rendered.push('\n');
+            }
         }
         rendered.push('\n');
     }
     rendered
+}
+
+fn render_reflective_value(rendered: &mut String, value: &ReflectiveValue) {
+    match value {
+        ReflectiveValue::Text(text) => {
+            rendered.push_str(text.trim());
+            rendered.push('\n');
+        }
+        ReflectiveValue::Json(value) => {
+            rendered.push_str(&value.to_string());
+            rendered.push('\n');
+        }
+        ReflectiveValue::File(trace_ref) => {
+            let _ = write!(rendered, "{trace_ref:?}");
+            rendered.push('\n');
+        }
+        ReflectiveValue::Mapping(fields) => {
+            for (name, value) in fields {
+                rendered.push_str("##### ");
+                rendered.push_str(name.trim());
+                rendered.push('\n');
+                render_reflective_value(rendered, value);
+            }
+        }
+    }
 }
 
 fn render_side_info(rendered: &mut String, value: &ReflectiveSideInfoValue, level: usize) {

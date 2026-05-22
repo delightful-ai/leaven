@@ -16,7 +16,7 @@ use leaven_engine::{
     RunGraphView,
 };
 use leaven_evidence::ScalarEvidence;
-use leaven_gepa::{ReflectRequest, ReflectiveExample, ReflectiveSideInfoValue};
+use leaven_gepa::{ReflectRequest, ReflectiveCase, ReflectiveSideInfoValue, ReflectiveValue};
 use leaven_gepa_agentic_git::{
     GepaGitProgramReflectionRenderer, GitProgramGepaReflectionInput,
     GitProgramGepaReflectionMaterializer, GitProgramGepaReflectionParser,
@@ -95,8 +95,15 @@ fn renderer_covers_empty_and_nested_reflective_examples() {
         "repos/program/program.txt".to_owned(),
         "program.txt",
     )
-    .with_examples([ReflectiveExample {
-        side_info: vec![(
+    .with_examples([{
+        let mut example = ReflectiveCase::from_example(
+            ReflectiveValue::Text("program base".to_owned()),
+            None,
+            None,
+            None,
+            "Use the trace.",
+        );
+        example.runs[0].side_info = vec![(
             "Trace".to_owned(),
             ReflectiveSideInfoValue::Mapping(vec![(
                 "Steps".to_owned(),
@@ -104,10 +111,8 @@ fn renderer_covers_empty_and_nested_reflective_examples() {
                     "read program.txt".to_owned(),
                 )]),
             )]),
-        )],
-        input: "program base".to_owned(),
-        feedback: "Use the trace.".to_owned(),
-        ..ReflectiveExample::default()
+        )];
+        example
     }]);
     let nested =
         GitProgramGepaReflectionInput::from_request(fixture.program_artifact(), nested_request);
@@ -221,11 +226,13 @@ fn reflector_wrapper_runs_agentic_proposer_under_llvm_coverage() {
             "repos/program/program.txt".to_owned(),
             "program.txt",
         )
-        .with_examples([ReflectiveExample {
-            input: "runtime read the parent".to_owned(),
-            feedback: "write the reflected body".to_owned(),
-            ..ReflectiveExample::default()
-        }])
+        .with_examples([ReflectiveCase::from_example(
+            ReflectiveValue::Text("runtime read the parent".to_owned()),
+            None,
+            None,
+            None,
+            "write the reflected body",
+        )])
         .with_source_refs([InfoRef::Candidate(parent)]);
         let mut ctx = RunContext::<GitProblem>::new(&mut graph, &mut budget);
 
@@ -281,13 +288,15 @@ fn reflection_input(
         "repos/program/program.txt".to_owned(),
         "program.txt",
     )
-    .with_examples([ReflectiveExample {
-        input: "The program returned the base answer.".to_owned(),
-        output: Some("The reflected program should change its answer.".to_owned()),
-        score: Some(0.25),
-        feedback: "Patch program.txt so the candidate has a new behavior.".to_owned(),
-        ..ReflectiveExample::default()
-    }])
+    .with_examples([ReflectiveCase::from_example(
+        ReflectiveValue::Text("The program returned the base answer.".to_owned()),
+        None,
+        Some(ReflectiveValue::Text(
+            "The reflected program should change its answer.".to_owned(),
+        )),
+        Some(0.25),
+        "Patch program.txt so the candidate has a new behavior.",
+    )])
     .with_source_refs([InfoRef::Candidate(selected_parent)])
     .with_attempt_index(0);
     GitProgramGepaReflectionInput::from_request(seed, request)

@@ -1,6 +1,6 @@
 use leaven_artifact_git::GitProgramArtifact;
 use leaven_core::InfoRef;
-use leaven_gepa::{ReflectRequest, ReflectiveExample};
+use leaven_gepa::{ReflectRequest, ReflectiveCase};
 use leaven_kernel::CandidateId;
 
 /// GEPA reflection input handed to the Git-program agentic proposer.
@@ -15,7 +15,7 @@ pub struct GitProgramGepaReflectionInput<Part = String> {
     /// Human-readable selected-part label.
     pub part_label: String,
     /// Pre-built GEPA reflective examples.
-    pub examples: Vec<ReflectiveExample>,
+    pub examples: Vec<ReflectiveCase>,
     /// Provenance refs lowered into the resulting proposal.
     pub source_refs: Vec<InfoRef>,
     /// GEPA proposal-attempt ordinal, when available.
@@ -44,11 +44,14 @@ impl<Part> GitProgramGepaReflectionInput<Part> {
         self.source_refs
             .iter()
             .cloned()
-            .chain(
-                self.examples
-                    .iter()
-                    .flat_map(|example| example.source_refs.iter().cloned()),
-            )
+            .chain(self.examples.iter().flat_map(|example| {
+                example.source_refs.iter().cloned().chain(
+                    example
+                        .runs
+                        .iter()
+                        .flat_map(|run| run.source_refs.iter().cloned()),
+                )
+            }))
             .collect()
     }
 }

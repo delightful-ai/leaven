@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
 use leaven_artifact_git::{
-    GitArtifact, GitChange, GitLineage, GitObjectId, GitPath, GitRef, GitRefKind, GitRefName,
-    GitRefTarget,
+    GitArtifact, GitArtifactError, GitChange, GitDiff, GitDiffSummary, GitLineage, GitObjectId,
+    GitPath, GitRef, GitRefKind, GitRefName, GitRefTarget,
 };
 use leaven_core::{Artifact, ArtifactIdentity, CacheIdentity};
 
@@ -172,6 +172,152 @@ fn git_file_fingerprints_separate_path_and_payload_fields() {
     let second = GitArtifact::new(BTreeMap::from([(git_path("program/a"), b"bc".to_vec())]));
 
     assert_ne!(first.identity(), second.identity());
+}
+
+#[test]
+fn git_refs_preserve_symbolic_targets_metadata_and_display_contracts() {
+    let symbolic = GitRef::new(
+        GitRefKind::Branch,
+        ref_name("program/current"),
+        GitRefTarget::Symbolic(ref_name("program/base")),
+    )
+    .with_lineage(GitLineage::root())
+    .with_metadata("role", "active");
+    let child_lineage = GitLineage::child(symbolic.key(), 2);
+    let tag = GitRef::new(
+        GitRefKind::Tag,
+        ref_name("frontier/current"),
+        GitRefTarget::Object(oid("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")),
+    )
+    .with_lineage(child_lineage.clone());
+    let artifact = GitArtifact::empty()
+        .apply_change(&GitChange::Atomic(vec![
+            GitChange::UpsertRef(symbolic.clone()),
+            GitChange::UpsertRef(tag.clone()),
+        ]))
+        .unwrap();
+
+    assert_eq!(GitRefKind::Branch.to_string(), "branch");
+    assert_eq!(GitRefKind::Tag.to_string(), "tag");
+    assert_eq!(symbolic.key().to_string(), "branch:program/current");
+    assert_eq!(symbolic.name().as_str(), "program/current");
+    assert!(matches!(
+        symbolic.target(),
+        GitRefTarget::Symbolic(name) if name.as_str() == "program/base"
+    ));
+    assert_eq!(symbolic.lineage().and_then(GitLineage::parent), None);
+    assert_eq!(symbolic.lineage().unwrap().generation(), 0);
+    assert_eq!(child_lineage.parent(), Some(symbolic.key()));
+    assert_eq!(child_lineage.generation(), 2);
+    assert_eq!(
+        symbolic.metadata().get("role").map(String::as_str),
+        Some("active")
+    );
+    assert_eq!(tag.key().kind(), GitRefKind::Tag);
+    assert_eq!(tag.key().name().as_str(), "frontier/current");
+    assert!(artifact.ref_by_key(symbolic.key()).is_some());
+    assert_eq!(
+        artifact.refs_for_prefix("program/").collect::<Vec<_>>(),
+        vec![&symbolic]
+    );
+}
+
+#[test]
+fn git_paths_refs_and_object_ids_reject_each_non_normal_boundary() {
+    assert!(GitPath::new("").is_err());
+    assert!(GitPath::new("/absolute").is_err());
+    assert!(GitPath::new("bad\\slash").is_err());
+    assert!(GitPath::new("nul\0path").is_err());
+    assert!(GitPath::new("double//slash").is_err());
+    assert!(GitPath::new("./relative").is_err());
+    assert!(GitPath::new("parent/..").is_err());
+
+    assert!(GitRefName::new("").is_err());
+    assert!(GitRefName::new("/program").is_err());
+    assert!(GitRefName::new("program/").is_err());
+    assert!(GitRefName::new("program..child").is_err());
+    assert!(GitRefName::new("program/current.LOCK").is_err());
+    assert!(GitRefName::new("program/~child").is_err());
+    assert!(GitRefName::new("program/[child]").is_err());
+    assert!(GitRefName::new("program/.").is_err());
+
+    assert!(GitObjectId::new("a").is_err());
+    assert!(GitObjectId::new("z000000000000000000000000000000000000000").is_err());
+    assert_eq!(
+        GitObjectId::new("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
+            .unwrap()
+            .as_str(),
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    );
+    assert_eq!(
+        GitObjectId::new("BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",)
+            .unwrap()
+            .as_str(),
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    );
+}
+
+#[test]
+fn git_artifact_file_changes_and_diff_summary_are_public_contracts() {
+    let main = git_path("src/main.rs");
+    let lib = git_path("src/lib.rs");
+    let readme = git_path("README.md");
+    let base = GitArtifact::empty();
+    let written = base
+        .apply_change(&GitChange::WriteFile {
+            path: main.clone(),
+            bytes: b"fn main() {}\n".to_vec(),
+        })
+        .unwrap();
+    let replaced = written
+        .apply_change(&GitChange::ReplaceFiles(BTreeMap::from([
+            (lib.clone(), b"pub fn library() {}\n".to_vec()),
+            (readme.clone(), b"# program\n".to_vec()),
+        ])))
+        .unwrap();
+    let removed = replaced
+        .apply_change(&GitChange::RemoveFile {
+            path: readme.clone(),
+        })
+        .unwrap();
+    let missing_file = removed.apply_change(&GitChange::RemoveFile {
+        path: readme.clone(),
+    });
+    let missing_ref = removed.apply_change(&GitChange::RemoveRef(
+        GitRef::new(
+            GitRefKind::Branch,
+            ref_name("program/missing"),
+            GitRefTarget::Object(oid("1111111111111111111111111111111111111111")),
+        )
+        .key()
+        .clone(),
+    ));
+    let diff = GitDiff::new(GitDiffSummary {
+        files_changed: 2,
+        refs_changed: 1,
+    });
+
+    assert_eq!(
+        written.files().get(&main).map(Vec::as_slice),
+        Some(&b"fn main() {}\n"[..])
+    );
+    assert!(written.refs().is_empty());
+    assert_eq!(
+        replaced.files().keys().collect::<Vec<_>>(),
+        vec![&readme, &lib]
+    );
+    assert_eq!(removed.files().keys().collect::<Vec<_>>(), vec![&lib]);
+    assert!(matches!(
+        missing_file,
+        Err(GitArtifactError::MissingPath { path }) if path == git_path("README.md")
+    ));
+    assert!(matches!(
+        missing_ref,
+        Err(GitArtifactError::MissingRef { key }) if key.name().as_str() == "program/missing"
+    ));
+    assert_eq!(diff.summary().files_changed, 2);
+    assert_eq!(diff.summary().refs_changed, 1);
+    assert_ne!(base.identity(), removed.identity());
 }
 
 fn git_path(path: &str) -> GitPath {

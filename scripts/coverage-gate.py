@@ -48,6 +48,28 @@ RUN_COMMANDS = [
         "--out",
         "target/git-trust-lane/coverage-smoke.json",
     ],
+    [
+        "cargo",
+        "llvm-cov",
+        "run",
+        "--no-report",
+        *COVERAGE_PROFILE,
+        "-p",
+        "xtask",
+        "--",
+        "git-trust-bench",
+        "--skip-trust-tests",
+        "--iterations",
+        "1",
+        "--jobs",
+        "1",
+        "--intermediate-count",
+        "2",
+        "--case",
+        "coverage-chain:2:8",
+        "--out",
+        "target/git-trust-lane/coverage-chain-smoke.json",
+    ],
 ]
 
 TEST_SOURCE_RE = re.compile(r"(^|/)(tests|benches)/|(^|/)target/tests/")
