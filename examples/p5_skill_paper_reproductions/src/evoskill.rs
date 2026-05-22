@@ -103,7 +103,15 @@ pub struct SourceRevision {
     pub id: String,
     pub relative_path: String,
     pub head: Option<String>,
+    pub branch: Option<String>,
+    pub remote_url: Option<String>,
+    pub remote_head: Option<String>,
+    pub remote_probe_status: SourceRemoteProbeStatus,
+    pub paper_release_ref: Option<String>,
+    pub paper_release_head: Option<String>,
+    pub paper_release_status: SourcePaperReleaseStatus,
     pub status: SourceRevisionStatus,
+    pub blocker_ids: Vec<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -112,6 +120,25 @@ pub enum SourceRevisionStatus {
     MissingPath,
     NotGitCheckout,
     Present,
+    ProbeFailed,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SourceRemoteProbeStatus {
+    MissingPath,
+    NotGitCheckout,
+    MissingRemote,
+    NotProbedNoNetworkDefault,
+    ProbeFailed,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SourcePaperReleaseStatus {
+    MissingPath,
+    NotGitCheckout,
+    Unresolved,
     ProbeFailed,
 }
 
@@ -562,7 +589,7 @@ pub fn build_evoskill_replica_manifest(
     let source_universe = source_universe(&datasets, &source_materializations);
 
     Ok(EvoSkillReplicaManifest {
-        schema_version: 4,
+        schema_version: 5,
         paper: PaperTarget {
             id: "evoskill".to_owned(),
             arxiv_id: "2603.02766".to_owned(),
@@ -2143,31 +2170,93 @@ fn proxy_rejections() -> Vec<String> {
 
 fn source_revision(root: &Path, id: &str, relative_path: &str) -> SourceRevision {
     let path = root.join(relative_path);
-    let (head, status) = if !path.exists() {
-        (None, SourceRevisionStatus::MissingPath)
-    } else if !path.join(".git").exists() {
-        (None, SourceRevisionStatus::NotGitCheckout)
+    if !path.exists() {
+        return source_revision_status(
+            id,
+            relative_path,
+            SourceRevisionStatus::MissingPath,
+            SourceRemoteProbeStatus::MissingPath,
+            SourcePaperReleaseStatus::MissingPath,
+        );
+    }
+    if !path.join(".git").exists() {
+        return source_revision_status(
+            id,
+            relative_path,
+            SourceRevisionStatus::NotGitCheckout,
+            SourceRemoteProbeStatus::NotGitCheckout,
+            SourcePaperReleaseStatus::NotGitCheckout,
+        );
+    }
+
+    let Some(head) = git_stdout(&path, &["rev-parse", "HEAD"]) else {
+        return source_revision_status(
+            id,
+            relative_path,
+            SourceRevisionStatus::ProbeFailed,
+            SourceRemoteProbeStatus::ProbeFailed,
+            SourcePaperReleaseStatus::ProbeFailed,
+        );
+    };
+
+    let branch = git_stdout(&path, &["branch", "--show-current"]);
+    let remote_url = git_stdout(&path, &["config", "--get", "remote.origin.url"]);
+    let remote_probe_status = if remote_url.is_some() {
+        SourceRemoteProbeStatus::NotProbedNoNetworkDefault
     } else {
-        match Command::new("git")
-            .arg("-C")
-            .arg(&path)
-            .arg("rev-parse")
-            .arg("HEAD")
-            .output()
-        {
-            Ok(output) if output.status.success() => (
-                Some(String::from_utf8_lossy(&output.stdout).trim().to_owned()),
-                SourceRevisionStatus::Present,
-            ),
-            _ => (None, SourceRevisionStatus::ProbeFailed),
-        }
+        SourceRemoteProbeStatus::MissingRemote
     };
     SourceRevision {
         id: id.to_owned(),
         relative_path: relative_path.to_owned(),
-        head,
-        status,
+        head: Some(head),
+        branch,
+        remote_url,
+        remote_head: None,
+        remote_probe_status,
+        paper_release_ref: None,
+        paper_release_head: None,
+        paper_release_status: SourcePaperReleaseStatus::Unresolved,
+        status: SourceRevisionStatus::Present,
+        blocker_ids: vec!["source_pin".to_owned()],
     }
+}
+
+fn source_revision_status(
+    id: &str,
+    relative_path: &str,
+    status: SourceRevisionStatus,
+    remote_probe_status: SourceRemoteProbeStatus,
+    paper_release_status: SourcePaperReleaseStatus,
+) -> SourceRevision {
+    SourceRevision {
+        id: id.to_owned(),
+        relative_path: relative_path.to_owned(),
+        head: None,
+        branch: None,
+        remote_url: None,
+        remote_head: None,
+        remote_probe_status,
+        paper_release_ref: None,
+        paper_release_head: None,
+        paper_release_status,
+        status,
+        blocker_ids: vec!["source_pin".to_owned()],
+    }
+}
+
+fn git_stdout(path: &Path, args: &[&str]) -> Option<String> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(path)
+        .args(args)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let value = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+    if value.is_empty() { None } else { Some(value) }
 }
 
 fn source_artifact(
