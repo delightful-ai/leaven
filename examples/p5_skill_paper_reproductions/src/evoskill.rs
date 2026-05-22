@@ -519,6 +519,7 @@ pub struct FinalScoreSlot {
     pub paper_result_target_ids: Vec<String>,
     pub expected_rows: Option<u64>,
     pub score: Option<f64>,
+    pub score_evidence_id: Option<String>,
     pub status: FinalScoreStatus,
     pub blocker_ids: Vec<String>,
 }
@@ -1082,7 +1083,7 @@ pub fn build_evoskill_final_report(
     let proxy_rejection_gates = proxy_rejection_gates();
 
     Ok(EvoSkillFinalReport {
-        schema_version: 12,
+        schema_version: 13,
         exactness,
         manifest,
         loop_report,
@@ -3206,6 +3207,7 @@ fn apply_score_result_manifest(
         validate_score_result_matches_slot(path, entry, &slots[slot_index])?;
         let slot = &mut slots[slot_index];
         slot.score = Some(entry.score);
+        slot.score_evidence_id = Some(entry.evidence_id.clone());
         slot.status = FinalScoreStatus::Reported;
         slot.blocker_ids.clear();
     }
@@ -3467,6 +3469,7 @@ fn score_slots_for_role(
             ),
             expected_rows,
             score: None,
+            score_evidence_id: None,
             status: if blocker_ids.is_empty() {
                 FinalScoreStatus::NotRun
             } else {

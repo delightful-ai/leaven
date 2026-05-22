@@ -1078,7 +1078,7 @@ Date: 2026-05-22.
 Provider/model spend: none.
 Cloud/GPU spend: none.
 
-The P5 final report now declares schema v12 with optional
+The P5 final report now declares schema v13 with optional
 `tmp/replication/evoskill/score_result_manifest.json` ingestion. The sidecar is
 strict score evidence plumbing, not a live run: it must name schema version 1,
 the current manifest fingerprint, the current scorer fingerprint, total cost,
@@ -1092,6 +1092,11 @@ entry must explicitly resolve every slot blocker and may not claim non-slot
 blockers; otherwise the report build fails. Duplicate entries, empty evidence
 ids, stale manifest/scorer fingerprints, stale split fingerprints, and partial
 row coverage are rejected before any score is surfaced.
+
+Imported scores now preserve the sidecar entry `evidence_id` on the reported
+score slot as `score_evidence_id`; unreported and blocked score slots keep that
+field null. This makes score provenance report-visible instead of only
+validated during import.
 
 This gives future approved live or judge runs a refusal-capable Rust path for
 entering the final report. It still does not approve spend, run the provider,

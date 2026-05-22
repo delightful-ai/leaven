@@ -935,12 +935,13 @@ lineage. The first retry should stay no-spend:
 
 ## EvoSkill Paper-Close Guardrails
 
-The P5 EvoSkill final report schema v12 carries a no-spend loop `run_manifest`
+The P5 EvoSkill final report schema v13 carries a no-spend loop `run_manifest`
 that ties the mechanics loop to manifest/scorer/source/split fingerprints,
 frontier policy, schedule, checkpoint boundary, Git identity mode, the full
 OfficeQA validation role/fingerprint used before frontier admission, and the
 fake validation-score source. Score slots also carry paper target ids,
-including BrowseComp transfer target slots. The materialization path can replace
+including BrowseComp transfer target slots, and reported score slots preserve
+the importing sidecar entry as `score_evidence_id`. The materialization path can replace
 the OfficeQA and SealQA substitute split blockers either when an exact source-id
 split manifest validates against the materialized row universe or when the
 split policy sidecar validates and explicitly accepts the current documented
@@ -972,5 +973,6 @@ evidence plumbing only: entries must match the current manifest fingerprint,
 scorer fingerprint, slot key, split fingerprint, role source-id fingerprint, and
 row count before a score is reported. Stale result files, duplicate entries,
 unresolved slot blockers, and non-slot blocker claims fail the report build.
-This gives future approved runs a Rust path into the report without treating
-fixture values, stale outputs, or missing approval as scores.
+Reported scores preserve the sidecar `evidence_id` in the score slot, so future
+approved runs leave an auditable score-evidence handle in the final report
+without treating fixture values, stale outputs, or missing approval as scores.
