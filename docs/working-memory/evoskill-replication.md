@@ -601,10 +601,10 @@ proposer consumes the feedback inside the full EvoSkill loop.
 The no-spend reproduction package now has a deterministic multi-iteration
 mechanics loop over the OfficeQA substitute split. It uses
 `CategoryRoundRobinSampler` for train batches, accumulated scorer failure
-feedback as proposer history, `TopKParentSelector::round_robin`, typed
-`GitProgramArtifact`/`GitProgramChange` child lineage, `TopKFrontier` admission
-and ignore behavior, and a serde checkpoint round trip that restores frontier,
-selector, sampler, candidates, and feedback state before continuing. This is a
-mechanics proof only: child changes are deterministic in-process Git program
-advances, not agentic workspace proposal/readback, and no live OfficeQA/SealQA
-score is claimed.
+feedback as proposer history, `TopKParentSelector::round_robin`, real
+`leaven-agentic-git` materialize/readback for child proposals, typed
+`GitProgramArtifact`/`GitProgramChange` child lineage, `TopKFrontier` admission,
+ignore, and weakest-member replacement behavior, and a serde checkpoint round
+trip that restores frontier, selector, sampler, candidates, and feedback state
+before continuing. This closes the no-spend full-loop mechanics item; it is not
+live OfficeQA/SealQA score evidence and does not resolve source/split blockers.

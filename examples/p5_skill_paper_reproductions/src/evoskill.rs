@@ -1,13 +1,17 @@
 use std::collections::BTreeMap;
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::Read;
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use futures::executor::block_on;
+use leaven_agentic_git::{
+    GitAgenticGitError, GitProgramMaterializer, GitProgramReadback, GitProgramStores,
+};
 use leaven_artifact_git::{
-    GitArtifactIdentityMode, GitPath, GitProgramArtifact, GitProgramChange, GitProgramLayout,
-    GitRepoArtifact, GitRevision, RepoKey, RepoRef,
+    GitArtifactIdentityMode, GitObjectId, GitPath, GitProgramArtifact, GitProgramChange,
+    GitProgramLayout, GitRepoArtifact, GitRevision, RepoKey, RepoRef,
 };
 use leaven_core::{Artifact, CaseSetVersion};
 use leaven_eval::{
@@ -16,6 +20,10 @@ use leaven_eval::{
 use leaven_evidence::ScalarEvidence;
 use leaven_kernel::{AssessmentId, CandidateId, CaseId, Fingerprint};
 use leaven_population::{TopKFrontier, TopKParentSelector};
+use leaven_workspace::{
+    Command as WorkspaceCommand, WorkspaceConfig, WorkspaceFactory, WorkspacePath,
+};
+use leaven_workspace_local::LocalWorkspaceFactory;
 use sha2::{Digest, Sha256};
 use smol_str::SmolStr;
 
@@ -323,6 +331,12 @@ struct EvoSkillReplicaCandidateState {
     score: f64,
 }
 
+struct EvoSkillAgenticGitHarness {
+    stores: GitProgramStores,
+    seed_program: GitProgramArtifact,
+    _temp: tempfile::TempDir,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum ManifestError {
     #[error("failed to read `{path}`: {source}")]
@@ -361,6 +375,34 @@ pub enum ManifestError {
     Git {
         #[source]
         source: leaven_artifact_git::GitArtifactError,
+    },
+    #[error("failed in agentic Git adapter: {source}")]
+    AgenticGit {
+        #[source]
+        source: GitAgenticGitError,
+    },
+    #[error("failed to allocate workspace for agentic Git readback: {source}")]
+    WorkspaceFactory {
+        #[source]
+        source: leaven_workspace::FactoryError,
+    },
+    #[error("failed to use workspace for agentic Git readback: {source}")]
+    Workspace {
+        #[source]
+        source: leaven_workspace::WorkspaceError,
+    },
+    #[error("failed to {action} `{path}`: {source}")]
+    Io {
+        action: &'static str,
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("git command `{args}` failed in `{cwd}`: {stderr}")]
+    GitCommand {
+        cwd: PathBuf,
+        args: String,
+        stderr: String,
     },
     #[error("failed to round-trip EvoSkill replica checkpoint: {source}")]
     Checkpoint {
@@ -620,13 +662,14 @@ pub fn run_evoskill_replica_mechanics(
         materialize_officeqa_source(input)?.ok_or_else(|| ManifestError::LoopBlocked {
             reason: "OfficeQA full CSV is required for the no-spend replica loop".to_owned(),
         })?;
-    let mut state = initial_replica_loop_state(&officeqa)?;
+    let git = create_agentic_git_harness()?;
+    let mut state = initial_replica_loop_state(&officeqa, &git)?;
     let mut iterations = Vec::new();
     let mut checkpoint_resume = None;
 
     for (index, child_score) in REPLICA_CHILD_SCORES.into_iter().enumerate() {
         let iteration = u64::try_from(index + 1).expect("iteration index fits in u64");
-        let report = run_replica_iteration(&mut state, &officeqa, iteration, child_score)?;
+        let report = run_replica_iteration(&mut state, &officeqa, &git, iteration, child_score)?;
         iterations.push(report);
         if iteration == EVOSKILL_REPLICA_RESUME_AFTER_ITERATION {
             checkpoint_resume = Some(round_trip_replica_checkpoint(&mut state, iteration)?);
@@ -643,17 +686,15 @@ pub fn run_evoskill_replica_mechanics(
         final_frontier_members: state.frontier.members().to_vec(),
         final_best_score: state.frontier.best_score(),
         checkpoint_resume: checkpoint_resume.expect("configured loop writes one checkpoint"),
-        proxy_rejection:
-            "fake runtime loop proves mechanics only; live OfficeQA/SealQA paper scores remain unproven"
-                .to_owned(),
+        proxy_rejection: "no-spend agentic Git readback loop proves mechanics only; live OfficeQA/SealQA paper scores remain unproven".to_owned(),
     })
 }
 
 fn initial_replica_loop_state(
     officeqa: &OfficeQaSourceMaterialization,
+    git: &EvoSkillAgenticGitHarness,
 ) -> Result<EvoSkillReplicaLoopState, ManifestError> {
     let seed = CandidateId::new();
-    let seed_program = seed_git_program()?;
     let mut frontier = TopKFrontier::new(
         NonZeroUsize::new(EVOSKILL_REPLICA_FRONTIER_SIZE)
             .expect("replica frontier capacity is non-zero"),
@@ -665,7 +706,7 @@ fn initial_replica_loop_state(
         train_sampler: officeqa_train_sampler(officeqa)?,
         candidates: vec![EvoSkillReplicaCandidateState {
             id: seed,
-            program: seed_program,
+            program: git.seed_program.clone(),
             score: 0.30,
         }],
         feedback_history: Vec::new(),
@@ -675,6 +716,7 @@ fn initial_replica_loop_state(
 fn run_replica_iteration(
     state: &mut EvoSkillReplicaLoopState,
     officeqa: &OfficeQaSourceMaterialization,
+    git: &EvoSkillAgenticGitHarness,
     iteration: u64,
     child_score: f64,
 ) -> Result<EvoSkillReplicaIterationReport, ManifestError> {
@@ -695,16 +737,8 @@ fn run_replica_iteration(
     state.feedback_history.extend(new_feedback);
 
     let child = CandidateId::new();
-    let child_revision = fake_commit(100 + iteration)?;
-    let expected_parent = parent_program_revision(&parent_program)?;
-    let change = GitProgramChange::AdvanceRepo {
-        repo: repo_key("program")?,
-        expected_parent: expected_parent.clone(),
-        child: child_revision.clone(),
-    };
-    let child_program = parent_program
-        .apply_change(&change)
-        .map_err(|source| ManifestError::Git { source })?;
+    let (change, child_program) = read_back_agentic_git_child(git, &parent_program, iteration)?;
+    let (expected_parent, child_revision) = single_repo_advance(&change)?;
     observe_replica_frontier(&mut state.frontier, child, child_score)?;
     let admitted = state.frontier.contains(child);
     state.candidates.push(EvoSkillReplicaCandidateState {
@@ -748,6 +782,204 @@ fn round_trip_replica_checkpoint(
         frontier_after,
         parent_selector_cursor_before,
         parent_selector_cursor_after,
+    })
+}
+
+fn create_agentic_git_harness() -> Result<EvoSkillAgenticGitHarness, ManifestError> {
+    let temp = tempfile::tempdir().map_err(|source| ManifestError::Io {
+        action: "create temporary agentic Git harness",
+        path: std::env::temp_dir(),
+        source,
+    })?;
+    let source = temp.path().join("program-source");
+    let store = temp.path().join("program.git");
+    create_local_git_repo(&source, "program.txt", "program base\n")?;
+    run_local_git(
+        temp.path(),
+        ["clone", "--bare", "program-source", "program.git"],
+    )?;
+    let parent = git_revision_from_repo(&source, "HEAD")?;
+    let program = repo_key("program")?;
+    let stores = GitProgramStores::new(BTreeMap::from([(program.clone(), store)]))
+        .map_err(|source| ManifestError::AgenticGit { source })?;
+    let seed_program = GitProgramArtifact::new(
+        BTreeMap::from([(
+            program.clone(),
+            GitRepoArtifact::new(
+                RepoRef::global(program.clone()),
+                parent,
+                None,
+                GitArtifactIdentityMode::Commit,
+            ),
+        )]),
+        GitProgramLayout::new(BTreeMap::from([(
+            program,
+            GitPath::new("repos/program").map_err(|source| ManifestError::Git { source })?,
+        )]))
+        .map_err(|source| ManifestError::Git { source })?,
+    )
+    .map_err(|source| ManifestError::Git { source })?;
+    Ok(EvoSkillAgenticGitHarness {
+        stores,
+        seed_program,
+        _temp: temp,
+    })
+}
+
+fn read_back_agentic_git_child(
+    git: &EvoSkillAgenticGitHarness,
+    parent: &GitProgramArtifact,
+    iteration: u64,
+) -> Result<(GitProgramChange, GitProgramArtifact), ManifestError> {
+    block_on(async {
+        let workspace_root = tempfile::tempdir().map_err(|source| ManifestError::Io {
+            action: "create temporary agentic Git workspace",
+            path: std::env::temp_dir(),
+            source,
+        })?;
+        let mut workspace = LocalWorkspaceFactory::new(workspace_root.path())
+            .allocate(WorkspaceConfig::default())
+            .await
+            .map_err(|source| ManifestError::WorkspaceFactory { source })?;
+        let mut view = workspace.view();
+        GitProgramMaterializer::new(git.stores.clone())
+            .materialize_program(parent, &mut view)
+            .map_err(|source| ManifestError::AgenticGit { source })?;
+        configure_workspace_git(&mut view)?;
+        let body = format!("program child iteration {iteration}\n");
+        view.write_file(
+            &workspace_path("repos/program/program.txt")?,
+            body.as_bytes(),
+        )
+        .map_err(|source| ManifestError::Workspace { source })?;
+        workspace_git(&mut view, ["add", "program.txt"])?;
+        workspace_git(&mut view, ["commit", "-m", "replica child"])?;
+        let change = GitProgramReadback::new(git.stores.clone())
+            .read_back_change(parent, &mut view)
+            .map_err(|source| ManifestError::AgenticGit { source })?
+            .ok_or_else(|| ManifestError::LoopBlocked {
+                reason: "agentic Git readback returned no child proposal".to_owned(),
+            })?;
+        let child = parent
+            .apply_change(&change)
+            .map_err(|source| ManifestError::Git { source })?;
+        drop(view);
+        workspace
+            .cleanup()
+            .await
+            .map_err(|source| ManifestError::Workspace { source })?;
+        drop(workspace_root);
+        Ok((change, child))
+    })
+}
+
+fn single_repo_advance(
+    change: &GitProgramChange,
+) -> Result<(GitRevision, GitRevision), ManifestError> {
+    match change {
+        GitProgramChange::AdvanceRepo {
+            expected_parent,
+            child,
+            ..
+        } => Ok((expected_parent.clone(), child.clone())),
+        GitProgramChange::AdvanceRepos { .. } => Err(ManifestError::LoopBlocked {
+            reason: "replica readback expected a single program repo child".to_owned(),
+        }),
+    }
+}
+
+fn create_local_git_repo(root: &Path, file: &str, body: &str) -> Result<(), ManifestError> {
+    fs::create_dir_all(root).map_err(|source| ManifestError::Io {
+        action: "create local git source",
+        path: root.to_owned(),
+        source,
+    })?;
+    run_local_git(root, ["init", "--initial-branch=main"])?;
+    run_local_git(root, ["config", "user.name", "Leaven Test"])?;
+    run_local_git(root, ["config", "user.email", "leaven@example.invalid"])?;
+    fs::write(root.join(file), body).map_err(|source| ManifestError::Io {
+        action: "write local git source file",
+        path: root.join(file),
+        source,
+    })?;
+    run_local_git(root, ["add", file])?;
+    run_local_git(root, ["commit", "-m", "base"])?;
+    Ok(())
+}
+
+fn run_local_git<const N: usize>(cwd: &Path, args: [&str; N]) -> Result<(), ManifestError> {
+    let output = Command::new("git")
+        .args(args)
+        .current_dir(cwd)
+        .output()
+        .map_err(|source| ManifestError::Io {
+            action: "run local git",
+            path: cwd.to_owned(),
+            source,
+        })?;
+    if output.status.success() {
+        return Ok(());
+    }
+    Err(ManifestError::GitCommand {
+        cwd: cwd.to_owned(),
+        args: args.join(" "),
+        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+    })
+}
+
+fn git_revision_from_repo(root: &Path, revision: &str) -> Result<GitRevision, ManifestError> {
+    let output = Command::new("git")
+        .args(["rev-parse", revision])
+        .current_dir(root)
+        .output()
+        .map_err(|source| ManifestError::Io {
+            action: "resolve git revision",
+            path: root.to_owned(),
+            source,
+        })?;
+    if !output.status.success() {
+        return Err(ManifestError::GitCommand {
+            cwd: root.to_owned(),
+            args: format!("rev-parse {revision}"),
+            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+        });
+    }
+    let id = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+    Ok(GitRevision::Commit(
+        GitObjectId::new(id).map_err(|source| ManifestError::Git { source })?,
+    ))
+}
+
+fn configure_workspace_git(
+    view: &mut leaven_workspace::WorkspaceView<'_>,
+) -> Result<(), ManifestError> {
+    workspace_git(view, ["config", "user.name", "Leaven Test"])?;
+    workspace_git(view, ["config", "user.email", "leaven@example.invalid"])
+}
+
+fn workspace_git<const N: usize>(
+    view: &mut leaven_workspace::WorkspaceView<'_>,
+    args: [&str; N],
+) -> Result<(), ManifestError> {
+    let mut command = WorkspaceCommand::new("git");
+    command.cwd = Some(workspace_path("repos/program")?);
+    command.args = args.into_iter().map(str::to_owned).collect();
+    let output = view
+        .run_command(command)
+        .map_err(|source| ManifestError::Workspace { source })?;
+    if output.status.code == Some(0) {
+        return Ok(());
+    }
+    Err(ManifestError::GitCommand {
+        cwd: PathBuf::from("workspace:/repos/program"),
+        args: args.join(" "),
+        stderr: String::from_utf8_lossy(&output.stderr.bytes).into_owned(),
+    })
+}
+
+fn workspace_path(path: &str) -> Result<WorkspacePath, ManifestError> {
+    WorkspacePath::new(path).map_err(|source| ManifestError::AgenticGit {
+        source: GitAgenticGitError::WorkspacePath(source),
     })
 }
 
@@ -833,27 +1065,6 @@ fn officeqa_row(
         })
 }
 
-fn seed_git_program() -> Result<GitProgramArtifact, ManifestError> {
-    let program = repo_key("program")?;
-    GitProgramArtifact::new(
-        BTreeMap::from([(
-            program.clone(),
-            GitRepoArtifact::new(
-                RepoRef::global(program.clone()),
-                fake_commit(1)?,
-                None,
-                GitArtifactIdentityMode::Commit,
-            ),
-        )]),
-        GitProgramLayout::new(BTreeMap::from([(
-            program,
-            GitPath::new("repos/program").map_err(|source| ManifestError::Git { source })?,
-        )]))
-        .map_err(|source| ManifestError::Git { source })?,
-    )
-    .map_err(|source| ManifestError::Git { source })
-}
-
 fn parent_program_revision(program: &GitProgramArtifact) -> Result<GitRevision, ManifestError> {
     let key = repo_key("program")?;
     program
@@ -874,10 +1085,6 @@ fn revision_string(revision: &GitRevision) -> String {
 
 fn repo_key(value: &str) -> Result<RepoKey, ManifestError> {
     RepoKey::new(value).map_err(|source| ManifestError::Git { source })
-}
-
-fn fake_commit(value: u64) -> Result<GitRevision, ManifestError> {
-    GitRevision::commit(format!("{value:040x}")).map_err(|source| ManifestError::Git { source })
 }
 
 fn missing_materialization_report(

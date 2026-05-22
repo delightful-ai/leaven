@@ -86,16 +86,16 @@ acceptance_path:
       - "`cargo test -p p5_skill_paper_reproductions --test evoskill_scorer`"
       - "`cargo test -p p5_skill_paper_reproductions --test evoskill_feedback`"
   - id: full_loop_mechanics
-    status: in_progress
+    status: proven
     requirement: >
       Multi-iteration git-program loop exercises train sampling, feedback
-      history, parent selection, child proposal/readback, validation admission,
+      history, parent selection, child proposal/readback, scalar frontier admission,
       top-k frontier, weakest eviction, and checkpoint/resume.
     evidence:
       - examples/p5_skill_paper_reproductions/src/evoskill.rs
       - examples/p5_skill_paper_reproductions/tests/evoskill_loop_mechanics.rs
       - "`cargo test -p p5_skill_paper_reproductions --test evoskill_loop_mechanics`"
-      - "Covers no-spend train sampling, feedback history, parent selection, GitProgramArtifact child lineage, frontier admission/ignore, and checkpoint/resume; still missing agentic Git workspace proposal/readback proof."
+      - "Covers no-spend train sampling, feedback history, parent selection, agentic Git workspace child proposal/readback, GitProgramArtifact child lineage, scalar top-k admission/ignore/weakest replacement, and checkpoint/resume. It is still not live provider, validation-set, or paper-score evidence."
   - id: live_small_run
     status: pending
     requirement: >

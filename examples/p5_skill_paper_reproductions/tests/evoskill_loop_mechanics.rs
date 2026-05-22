@@ -49,6 +49,17 @@ fn no_spend_loop_exercises_frontier_lineage_feedback_and_checkpoint_resume() {
             .iter()
             .all(|iteration| iteration.change_expected_parent == iteration.parent_revision)
     );
+    assert!(
+        !report
+            .final_frontier_members
+            .contains(&report.iterations[1].child),
+        "the final high-scoring child should evict the weakest admitted child"
+    );
+    assert!(
+        report
+            .final_frontier_members
+            .contains(&report.iterations[3].child)
+    );
 
     let selected_parents = report
         .iterations
