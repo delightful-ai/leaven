@@ -4391,8 +4391,24 @@ fn validate_score_result_matches_slot(
                 format!("score result `{key}` claims to resolve non-slot blocker `{blocker}`"),
             ));
         }
+        if !score_result_can_resolve_blocker(entry, blocker) {
+            return Err(score_result_manifest_error(
+                path,
+                format!(
+                    "score result `{key}` cannot resolve non-score blocker `{blocker}`; resolve source/split blockers before importing score evidence"
+                ),
+            ));
+        }
     }
     for blocker in &slot.blocker_ids {
+        if !score_result_can_resolve_blocker(entry, blocker) {
+            return Err(score_result_manifest_error(
+                path,
+                format!(
+                    "score result `{key}` cannot resolve non-score blocker `{blocker}`; resolve source/split blockers before importing score evidence"
+                ),
+            ));
+        }
         if !entry.resolved_blocker_ids.contains(blocker) {
             return Err(score_result_manifest_error(
                 path,
@@ -4401,6 +4417,12 @@ fn validate_score_result_matches_slot(
         }
     }
     Ok(())
+}
+
+fn score_result_can_resolve_blocker(entry: &ScoreResultManifestEntry, blocker: &str) -> bool {
+    entry.dataset_id == "sealqa"
+        && entry.score_evidence_kind == ScoreEvidenceKind::ExternalJudgeRun
+        && blocker == "sealqa_judge_scored_run"
 }
 
 fn final_score_slot_key(slot: &FinalScoreSlot) -> String {

@@ -65,6 +65,10 @@ nonempty `evidence_id`, and a readable JSONL evidence artifact with matching
 SHA-256 and byte count. Each artifact row must name a source id, prediction, and
 score; the importer checks exact role membership, rejects duplicate or missing
 rows, recomputes the aggregate from rows, and requires `score_evidence_kind`.
+Score evidence cannot resolve source or split provenance blockers; those must
+be cleared by the source pin, exact split, or accepted substitute split policy
+manifests first. The current resolver only lets approved SealQA external-judge
+evidence clear `sealqa_judge_scored_run`.
 `rust_scorer_replay` replays the OfficeQA scorer before reporting an OfficeQA
 score. `exact_answer_replay` checks BrowseComp transfer rows with a conservative
 exact-normalized answer scorer when materialized targets are present. The

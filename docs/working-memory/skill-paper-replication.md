@@ -1020,6 +1020,17 @@ prevents opaque row scores from masquerading as deterministic replay evidence or
 as outputs from a different judge prompt, and gives approved judge outputs a
 typed import lane.
 
+2026-05-22 update: score result sidecars can no longer clear source or split
+provenance blockers. The importer rejects entries that claim to resolve
+blockers such as `officeqa_category_split_manifest`,
+`officeqa_exact_split_membership`, or `sealqa_split_manifest`; those remain the
+responsibility of source pin, exact split, or accepted substitute split policy
+manifests. Today the only score-resolvable blocker is
+`sealqa_judge_scored_run`, and only for approved SealQA `external_judge_run`
+evidence with matching judge-template fingerprints. This closes the
+hand-authored-sidecar path where a row-score artifact could otherwise stand in
+for missing denominator proof.
+
 2026-05-22 update: final report blockers are now evidence-sensitive after score
 sidecar import. Partial SealQA judge score imports report only their slots and
 leave `sealqa_judge_scored_run` on errors, ablations, and the `paper_scorer`

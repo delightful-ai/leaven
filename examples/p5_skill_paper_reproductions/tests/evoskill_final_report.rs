@@ -416,6 +416,43 @@ fn final_report_imports_matching_score_result_sidecar_without_filling_other_slot
 }
 
 #[test]
+fn final_report_refuses_score_result_sidecar_that_claims_source_or_split_blockers() {
+    let root = tempfile::tempdir().unwrap();
+    write_denominator_ready_sources(root.path());
+    let input = ManifestBuildInput::new(root.path());
+    write_evoskill_local_source_pin_manifest(&input).unwrap();
+    let initial_report = build_evoskill_final_report(&input).unwrap();
+    let scored_slot = score_slot(
+        &initial_report,
+        "officeqa",
+        "officeqa_difficulty_train_12_val_17",
+        "train",
+        "baseline",
+    )
+    .clone();
+    assert_eq!(scored_slot.status, FinalScoreStatus::Blocked);
+    assert!(
+        scored_slot
+            .blocker_ids
+            .contains(&"officeqa_exact_split_membership".to_owned())
+    );
+    write_score_result_manifest(root.path(), &initial_report, &scored_slot, 1.0);
+
+    let error = build_evoskill_final_report(&input).unwrap_err();
+
+    match error {
+        ManifestError::ScoreResultManifest { message, .. } => {
+            assert!(message.contains("cannot resolve non-score blocker"));
+            assert!(message.contains("officeqa_category_split_manifest"));
+            assert!(
+                message.contains("officeqa|officeqa_difficulty_train_12_val_17|train|baseline")
+            );
+        }
+        other => panic!("expected score result manifest error, got {other:?}"),
+    }
+}
+
+#[test]
 fn final_report_refuses_score_result_sidecar_with_stale_slot_fingerprint() {
     let root = tempfile::tempdir().unwrap();
     write_denominator_ready_sources(root.path());
