@@ -55,3 +55,11 @@ just evoskill-paper-browsecomp-public-sample tmp/replication/evoskill/browsecomp
 That command decrypts the local CSV in Rust, selects a deterministic
 topic-stratified 128-row substitute sidecar, and keeps BrowseComp slots
 unscored. It is not paper-exact sample membership.
+
+The optional ignored `tmp/replication/evoskill/score_result_manifest.json`
+sidecar is the only no-spend import path for external scores. Entries must
+match the current manifest fingerprint, scorer fingerprint, slot key, split
+fingerprint, role source-id fingerprint, row counts, resolved blockers, and a
+nonempty `evidence_id`; reported score slots preserve that id as
+`score_evidence_id`. It is score evidence plumbing, not permission to treat
+fixtures, stale runs, or missing provider approval as paper scores.

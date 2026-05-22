@@ -97,9 +97,11 @@ belong in their owning crates.
   proves the current no-spend final report truth surface writes manifest and
   report artifacts, carries baseline/optimized train/validation/held-out score
   slots, exposes zero spend by default, blockers, ablation statuses, and
-  exactness gaps.
+  exactness gaps. It proves final report schema v13.
   Materialized score slots carry split exactness, split fingerprint, and
-  role-level source-id fingerprint directly. The embedded manifest carries
+  role-level source-id fingerprint directly. Unreported slots carry a null
+  `score_evidence_id`; reported slots preserve the strict score sidecar entry's
+  `evidence_id` as `score_evidence_id`. The embedded manifest carries
   typed `source_blockers`. The report also carries typed `paper_close_gates`
   that separate proven no-spend surfaces from source-blocked and
   approval-blocked gates, a `live_run_gate` that blocks live execution until
@@ -115,9 +117,9 @@ belong in their owning crates.
   approval-blocked rather than continuing to cite absent source denominators.
   Optional `tmp/replication/evoskill/score_result_manifest.json` input can fill
   reported scores only after manifest/scorer/slot fingerprints, expected row
-  counts, scored row counts, and resolved slot blockers match the current
-  report. Stale result files fail the report build instead of becoming score
-  evidence.
+  counts, scored row counts, resolved slot blockers, and a nonempty score
+  evidence id match the current report. Stale result files fail the report build
+  instead of becoming score evidence.
   It does not prove live provider behavior, validation-score values, or
   paper-close.
 - `just evoskill-paper-manifest` writes the current no-spend local manifest to

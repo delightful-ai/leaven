@@ -273,7 +273,7 @@ fn final_report_imports_matching_score_result_sidecar_without_filling_other_slot
 
     let report = build_evoskill_final_report(&input).unwrap();
 
-    assert_eq!(report.schema_version, 12);
+    assert_eq!(report.schema_version, 13);
     let result_manifest = report
         .score_result_manifest
         .as_ref()
@@ -300,6 +300,10 @@ fn final_report_imports_matching_score_result_sidecar_without_filling_other_slot
     );
     assert_eq!(reported.status, FinalScoreStatus::Reported);
     assert_eq!(reported.score, Some(0.812));
+    assert_eq!(
+        reported.score_evidence_id.as_deref(),
+        Some("unit-test-scored-output-import")
+    );
     assert!(reported.blocker_ids.is_empty());
     let untouched = score_slot(
         &report,
@@ -310,6 +314,7 @@ fn final_report_imports_matching_score_result_sidecar_without_filling_other_slot
     );
     assert_eq!(untouched.status, FinalScoreStatus::NotRun);
     assert!(untouched.score.is_none());
+    assert_eq!(untouched.score_evidence_id, None);
     let sealqa = score_slot(
         &report,
         "sealqa",
@@ -519,7 +524,7 @@ fn assert_reported_target(
 
 fn assert_report_header(report: &EvoSkillFinalReport) {
     assert_eq!(report.exactness, ExactnessClass::BlockedBeforePaperClose);
-    assert_eq!(report.schema_version, 12);
+    assert_eq!(report.schema_version, 13);
     assert_eq!(report.score_result_manifest, None);
     assert_eq!(report.cost.llm_calls, 0);
     assert_eq!(report.cost.metric_calls, 0);
@@ -942,6 +947,7 @@ fn cli_writes_manifest_and_final_report_artifacts() {
     assert!(report.contains("\"paper_result_target_ids\""));
     assert!(report.contains("\"role_source_id_fingerprint\""));
     assert!(report.contains("\"score_result_manifest\""));
+    assert!(report.contains("\"score_evidence_id\""));
     assert!(report.contains("\"blocked_before_paper_close\""));
 }
 
