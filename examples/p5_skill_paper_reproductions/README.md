@@ -19,6 +19,7 @@ just evoskill-paper-manifest
 just evoskill-paper-pin-local-sources
 just evoskill-paper-accept-substitute-splits
 just evoskill-paper-browsecomp-public-sample tmp/replication/evoskill/browsecomp/public_browsecomp_test_set.csv
+just evoskill-paper-score-officeqa tmp/replication/evoskill/predictions/officeqa.jsonl
 just evoskill-paper-final-report
 ```
 
@@ -81,6 +82,17 @@ approval remains separate. It is score evidence plumbing, not permission to
 treat fixtures, stale runs, tampered evidence files, missing SealQA judge
 execution, missing transferred BrowseComp runs, official BrowseComp judge
 approval, or missing provider approval as paper scores.
+
+`just evoskill-paper-score-officeqa <predictions.jsonl>` is the Rust
+operator path for OfficeQA scorer replay. Each prediction row must be strict
+JSONL with `dataset_id`, `split_id`, `split_role`, `candidate_role`,
+`source_id`, and `prediction`. The writer groups rows by score slot, refuses
+blocked slots, requires exact role membership, computes row scores with the
+Rust EvoSkill scorer, writes checked score-evidence JSONL without ground-truth
+or reference fields, writes schema-v5 `score_result_manifest.json`, and then
+regenerates the final report through the normal importer. This scores supplied
+prediction artifacts only; it does not run an agent or resolve missing split
+proof.
 
 The final report also carries first-class `exactness_gaps`. When local source
 pins, accepted substitute splits, and the BrowseComp substitute denominator make

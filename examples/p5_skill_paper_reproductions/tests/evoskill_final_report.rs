@@ -1614,6 +1614,129 @@ fn cli_writes_browsecomp_public_sample_before_split_policy() {
     );
 }
 
+#[test]
+fn cli_writes_officeqa_score_result_sidecar_from_prediction_rows() {
+    let root = tempfile::tempdir().unwrap();
+    write_officeqa_full_csv(root.path(), 246);
+    let input = ManifestBuildInput::new(root.path());
+    write_evoskill_paper_close_split_policy_manifest(&input).unwrap();
+    let initial_report = build_evoskill_final_report(&input).unwrap();
+    let slot = score_slot(
+        &initial_report,
+        "officeqa",
+        "officeqa_difficulty_train_12_val_17",
+        "train",
+        "baseline",
+    );
+    assert_eq!(slot.status, FinalScoreStatus::NotRun);
+    let predictions_path = root
+        .path()
+        .join("tmp/replication/evoskill/predictions/officeqa-train-baseline.jsonl");
+    write_officeqa_prediction_rows(root.path(), &initial_report, slot, &predictions_path);
+
+    let manifest_path = root.path().join("out/replica-manifest.json");
+    let report_path = root.path().join("out/final-report.json");
+    let output = Command::new(env!("CARGO_BIN_EXE_p5_skill_paper_reproductions"))
+        .arg("--root")
+        .arg(root.path())
+        .arg("--out")
+        .arg(&manifest_path)
+        .arg("--final-report-out")
+        .arg(&report_path)
+        .arg("--write-officeqa-score-result")
+        .arg("tmp/replication/evoskill/predictions/officeqa-train-baseline.jsonl")
+        .output()
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let score_result_path = root
+        .path()
+        .join("tmp/replication/evoskill/score_result_manifest.json");
+    assert!(score_result_path.exists());
+    let report = fs::read_to_string(report_path).unwrap();
+    let report: EvoSkillFinalReport = serde_json::from_str(&report).unwrap();
+    let reported = score_slot(
+        &report,
+        "officeqa",
+        "officeqa_difficulty_train_12_val_17",
+        "train",
+        "baseline",
+    );
+    assert_eq!(reported.status, FinalScoreStatus::Reported);
+    assert_eq!(reported.score, Some(1.0));
+    assert_eq!(
+        reported.score_evidence_kind,
+        Some(ScoreEvidenceKind::RustScorerReplay)
+    );
+    assert_eq!(reported.score_evidence_approval_id, None);
+    let evidence_artifact = reported
+        .score_evidence_artifact
+        .as_ref()
+        .expect("CLI writer preserves checked score evidence artifact");
+    let evidence_body = fs::read_to_string(root.path().join(&evidence_artifact.relative_path))
+        .expect("score evidence artifact is readable");
+    assert!(evidence_body.contains("\"prediction\""));
+    assert!(!evidence_body.contains("ground_truth"));
+    assert!(!evidence_body.contains("reference"));
+}
+
+#[test]
+fn cli_refuses_officeqa_score_result_sidecar_for_blocked_split_slot() {
+    let root = tempfile::tempdir().unwrap();
+    write_officeqa_full_csv(root.path(), 246);
+    let input = ManifestBuildInput::new(root.path());
+    let initial_report = build_evoskill_final_report(&input).unwrap();
+    let slot = score_slot(
+        &initial_report,
+        "officeqa",
+        "officeqa_difficulty_train_12_val_17",
+        "train",
+        "baseline",
+    );
+    assert_eq!(slot.status, FinalScoreStatus::Blocked);
+    assert!(
+        slot.blocker_ids
+            .contains(&"officeqa_exact_split_membership".to_owned())
+    );
+    let predictions_path = root
+        .path()
+        .join("tmp/replication/evoskill/predictions/officeqa-train-baseline.jsonl");
+    write_officeqa_prediction_rows(root.path(), &initial_report, slot, &predictions_path);
+
+    let output = Command::new(env!("CARGO_BIN_EXE_p5_skill_paper_reproductions"))
+        .arg("--root")
+        .arg(root.path())
+        .arg("--out")
+        .arg(root.path().join("out/replica-manifest.json"))
+        .arg("--write-officeqa-score-result")
+        .arg("tmp/replication/evoskill/predictions/officeqa-train-baseline.jsonl")
+        .output()
+        .unwrap();
+
+    assert!(
+        !output.status.success(),
+        "blocked score writer unexpectedly succeeded\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("refuses blocked slot"),
+        "stderr:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        !root
+            .path()
+            .join("tmp/replication/evoskill/score_result_manifest.json")
+            .exists()
+    );
+}
+
 fn write_denominator_ready_sources(root: &std::path::Path) {
     write_officeqa_full_csv(root, 246);
     write_sealqa_parquet(root, 111);
@@ -1627,6 +1750,41 @@ fn write_denominator_ready_sources(root: &std::path::Path) {
         &root.join("tmp/repros/officeqa"),
         "https://github.com/databricks/officeqa.git",
     );
+}
+
+fn write_officeqa_prediction_rows(
+    root: &std::path::Path,
+    report: &EvoSkillFinalReport,
+    slot: &FinalScoreSlot,
+    path: &std::path::Path,
+) {
+    let mut jsonl = String::new();
+    for source_id in score_slot_source_ids(report, slot) {
+        let row_number = source_id
+            .strip_prefix("UID")
+            .expect("OfficeQA fixture source ids are UID-prefixed")
+            .parse::<usize>()
+            .expect("OfficeQA fixture source ids end in row numbers");
+        writeln!(
+            jsonl,
+            "{}",
+            serde_json::json!({
+                "dataset_id": &slot.dataset_id,
+                "split_id": &slot.split_id,
+                "split_role": &slot.split_role,
+                "candidate_role": &slot.candidate_role,
+                "source_id": source_id,
+                "prediction": format!("Answer {row_number}")
+            })
+        )
+        .unwrap();
+    }
+    let relative_path = path
+        .strip_prefix(root)
+        .expect("test prediction path lives below root");
+    let path = root.join(relative_path);
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(path, jsonl).unwrap();
 }
 
 fn score_slot<'a>(

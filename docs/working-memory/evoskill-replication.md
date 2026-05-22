@@ -228,6 +228,14 @@ OfficeQA derivative with `pseudo_labels`/`category` values, not from the public
 OfficeQA CSV as checked out locally. Treat the category/split manifest as an
 external provenance blocker until located or explicitly substituted.
 
+Score evidence note: Leaven now has a no-spend Rust writer for OfficeQA
+prediction artifacts. `just evoskill-paper-score-officeqa <predictions.jsonl>`
+requires strict rows keyed by dataset/split role/candidate/source id, refuses
+blocked score slots, recomputes row scores with the EvoSkill scorer, writes
+score evidence JSONL without ground-truth/reference fields, and writes the
+strict score result manifest consumed by the final report. This does not run an
+agent and does not make substitute split membership paper-exact.
+
 ## Source Bundle Recheck
 
 Date: 2026-05-20.

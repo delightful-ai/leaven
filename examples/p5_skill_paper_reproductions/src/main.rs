@@ -4,6 +4,7 @@ use clap::Parser;
 use p5_skill_paper_reproductions::evoskill::{
     ManifestBuildInput, build_evoskill_final_report, build_evoskill_replica_manifest,
     write_evoskill_browsecomp_public_transfer_sample, write_evoskill_local_source_pin_manifest,
+    write_evoskill_officeqa_score_result_manifest,
     write_evoskill_paper_close_split_policy_manifest,
 };
 
@@ -27,6 +28,9 @@ struct Args {
     /// Derive the strict 128-row `BrowseComp` transfer sidecar from a local official public CSV.
     #[arg(long)]
     write_browsecomp_public_transfer_sample: Option<PathBuf>,
+    /// Score OfficeQA prediction JSONL rows with the Rust scorer and write the strict score sidecar.
+    #[arg(long)]
+    write_officeqa_score_result: Option<PathBuf>,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -40,6 +44,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     if args.write_paper_close_split_policy_manifest {
         write_evoskill_paper_close_split_policy_manifest(&input)?;
+    }
+    if let Some(path) = args.write_officeqa_score_result {
+        write_evoskill_officeqa_score_result_manifest(&input, path)?;
     }
     let manifest = build_evoskill_replica_manifest(&input)?;
     write_json(&args.out, &manifest)?;
