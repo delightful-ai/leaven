@@ -679,10 +679,33 @@ mutation, showed the current local source checkouts are not remote-current:
 `49e893d97db5d5d32fb7fbb73d913e9e2829c6d9`, and live
 `origin/officeqa_pro` was `b0b3f8be2a91df835fe40bd488e349f970b1fe40`.
 
-This closes only the source-status truth surface. Paper-close still requires a
-chosen paper-release source policy and, if remote-current evidence is desired in
-the report, an explicit live probe mode or sidecar input that records the remote
-heads without making ordinary manifest tests depend on the network.
+This closes only the source-status truth surface. In the ordinary local state,
+paper-close still requires a chosen source policy sidecar and, if remote-current
+evidence is desired in the report, an explicit live probe mode or sidecar input
+that records the remote heads without making ordinary manifest tests depend on
+the network.
+
+## No-Spend Source Pin Manifest Ingestion
+
+Date: 2026-05-22.
+Provider/model spend: none.
+Cloud/GPU spend: none.
+
+The P5 EvoSkill harness now accepts an optional schema-v1 source pin manifest
+at `tmp/replication/evoskill/source_pin_manifest.json`. When present, it must
+declare `policy: local_checkout_pinned` and one entry for every known source
+revision (`evoskill_repo` and `officeqa_repo`). Each entry must match the
+expected id, relative path, local git `HEAD`, checked-out branch, and
+`remote.origin.url`. The harness records the source pin manifest as a
+fingerprinted source artifact, marks matching source revisions as
+`pinned_local_checkout`, carries `paper_release_ref: local_checkout_pinned`,
+and removes only the `source_pin` blocker.
+
+This is local-checkout pinning, not a paper-release or remote-current proof.
+Absent sidecars keep `source_pin` unresolved. Present sidecars with an unknown
+source id, wrong path, missing required source, non-git checkout, failed git
+identity probe, or head/branch/origin mismatch fail the manifest build instead
+of silently falling back to blocked evidence.
 
 ## No-Spend Split Membership Manifests
 

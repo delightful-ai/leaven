@@ -8,9 +8,9 @@ use arrow_array::builder::{ListBuilder, StringBuilder};
 use arrow_array::{ArrayRef, RecordBatch, StringArray};
 use arrow_schema::{DataType, Field, Schema};
 use p5_skill_paper_reproductions::evoskill::{
-    ExactnessClass, ManifestBuildInput, MaterializationExactness, PaperResultTargetStatus,
-    SourceBlockerStatus, SourceMaterializationStatus, SourcePaperReleaseStatus,
-    SourceRemoteProbeStatus, SourceRevisionStatus, SplitManifestStatus,
+    ExactnessClass, ManifestBuildInput, ManifestError, MaterializationExactness,
+    PaperResultTargetStatus, SourceBlockerStatus, SourceMaterializationStatus,
+    SourcePaperReleaseStatus, SourceRemoteProbeStatus, SourceRevisionStatus, SplitManifestStatus,
     build_evoskill_replica_manifest,
 };
 use parquet::arrow::ArrowWriter;
@@ -29,7 +29,7 @@ fn evoskill_manifest_records_paper_close_denominator_without_claiming_proof() {
 
     let manifest = build_evoskill_replica_manifest(&ManifestBuildInput::new(root.path())).unwrap();
 
-    assert_eq!(manifest.schema_version, 10);
+    assert_eq!(manifest.schema_version, 11);
     assert_eq!(manifest.paper.arxiv_id, "2603.02766");
     assert_eq!(manifest.exactness, ExactnessClass::BlockedBeforePaperClose);
     assert_eq!(manifest.scorer.tolerances, [0.0, 0.01, 0.025, 0.05, 0.10]);
@@ -400,6 +400,91 @@ fn source_revisions_record_local_git_identity_without_claiming_paper_pin() {
     assert_eq!(evoskill.blocker_ids, ["source_pin".to_owned()]);
 }
 
+#[test]
+fn source_pin_manifest_resolves_local_checkout_policy_without_network_probe() {
+    let root = tempfile::tempdir().unwrap();
+    let evoskill_path = root.path().join("tmp/repros/evoskill");
+    let officeqa_path = root.path().join("tmp/repros/officeqa");
+    init_git_source(
+        &evoskill_path,
+        "https://github.com/sentient-agi/EvoSkill.git",
+    );
+    init_git_source(&officeqa_path, "https://github.com/databricks/officeqa.git");
+    write_source_pin_manifest(
+        root.path(),
+        &git_stdout(&evoskill_path, &["rev-parse", "HEAD"]),
+        &git_stdout(&officeqa_path, &["rev-parse", "HEAD"]),
+    );
+
+    let manifest = build_evoskill_replica_manifest(&ManifestBuildInput::new(root.path())).unwrap();
+
+    assert!(
+        manifest
+            .source_blockers
+            .iter()
+            .all(|blocker| blocker.blocker_id != "source_pin")
+    );
+    assert!(
+        manifest
+            .blockers
+            .iter()
+            .all(|blocker| blocker.id != "source_pin")
+    );
+    let source_pin_artifact = manifest
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.id == "source_pin_manifest")
+        .expect("source pin manifest artifact is recorded");
+    assert!(source_pin_artifact.exists);
+    assert_eq!(source_pin_artifact.sha256.as_deref().unwrap().len(), 64);
+    let evoskill = manifest
+        .source_revisions
+        .iter()
+        .find(|revision| revision.id == "evoskill_repo")
+        .expect("EvoSkill source revision is recorded");
+    assert_eq!(
+        evoskill.paper_release_status,
+        SourcePaperReleaseStatus::PinnedLocalCheckout
+    );
+    assert_eq!(
+        evoskill.paper_release_ref.as_deref(),
+        Some("local_checkout_pinned")
+    );
+    assert_eq!(evoskill.paper_release_head, evoskill.head);
+    assert!(evoskill.blocker_ids.is_empty());
+    assert_eq!(
+        evoskill.remote_probe_status,
+        SourceRemoteProbeStatus::NotProbedNoNetworkDefault
+    );
+}
+
+#[test]
+fn source_pin_manifest_refuses_head_mismatch() {
+    let root = tempfile::tempdir().unwrap();
+    let evoskill_path = root.path().join("tmp/repros/evoskill");
+    let officeqa_path = root.path().join("tmp/repros/officeqa");
+    init_git_source(
+        &evoskill_path,
+        "https://github.com/sentient-agi/EvoSkill.git",
+    );
+    init_git_source(&officeqa_path, "https://github.com/databricks/officeqa.git");
+    write_source_pin_manifest(
+        root.path(),
+        "0000000000000000000000000000000000000000",
+        &git_stdout(&officeqa_path, &["rev-parse", "HEAD"]),
+    );
+
+    let error = build_evoskill_replica_manifest(&ManifestBuildInput::new(root.path())).unwrap_err();
+
+    match error {
+        ManifestError::SourcePinManifest { message, .. } => {
+            assert!(message.contains("evoskill_repo"));
+            assert!(message.contains("head mismatch"));
+        }
+        other => panic!("expected source pin manifest error, got {other:?}"),
+    }
+}
+
 fn write_officeqa_full_csv(root: &std::path::Path, rows: usize) {
     let path = root.join("tmp/repros/officeqa/officeqa_full.csv");
     fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -432,6 +517,32 @@ fn write_sealqa_judge_source(root: &std::path::Path) {
     .unwrap();
 }
 
+fn write_source_pin_manifest(root: &std::path::Path, evoskill_head: &str, officeqa_head: &str) {
+    let path = root.join("tmp/replication/evoskill/source_pin_manifest.json");
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let manifest = serde_json::json!({
+        "schema_version": 1,
+        "policy": "local_checkout_pinned",
+        "sources": [
+            {
+                "id": "evoskill_repo",
+                "relative_path": "tmp/repros/evoskill",
+                "head": evoskill_head,
+                "branch": "main",
+                "remote_url": "https://github.com/sentient-agi/EvoSkill.git"
+            },
+            {
+                "id": "officeqa_repo",
+                "relative_path": "tmp/repros/officeqa",
+                "head": officeqa_head,
+                "branch": "main",
+                "remote_url": "https://github.com/databricks/officeqa.git"
+            }
+        ]
+    });
+    fs::write(path, serde_json::to_vec_pretty(&manifest).unwrap()).unwrap();
+}
+
 fn init_git_source(path: &std::path::Path, remote_url: &str) {
     fs::create_dir_all(path).unwrap();
     run_git(path, &["init", "-b", "main"]);
@@ -441,6 +552,23 @@ fn init_git_source(path: &std::path::Path, remote_url: &str) {
     run_git(path, &["add", "README.md"]);
     run_git(path, &["commit", "-m", "fixture"]);
     run_git(path, &["remote", "add", "origin", remote_url]);
+}
+
+fn git_stdout(path: &std::path::Path, args: &[&str]) -> String {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(path)
+        .args(args)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "git {:?} failed\nstdout:\n{}\nstderr:\n{}",
+        args,
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8_lossy(&output.stdout).trim().to_owned()
 }
 
 fn run_git(path: &std::path::Path, args: &[&str]) {

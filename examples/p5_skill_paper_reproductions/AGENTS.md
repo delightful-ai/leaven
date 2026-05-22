@@ -23,11 +23,14 @@ belong in their owning crates.
 ## Proof
 - `cargo test -p p5_skill_paper_reproductions --test evoskill_manifest`
   proves the EvoSkill replica manifest preserves the paper-close denominator
-  and rejects proxy completion claims. It also proves the schema v10
+  and rejects proxy completion claims. It also proves the schema v11
   `source_universe` links datasets to source artifact ids, available source
   revision ids, materialized row counts, source-row fingerprints, split ids,
   split exactness labels, source revision status fields, and blockers without
   treating local source identity or substitute splits as exact paper evidence.
+  Optional schema-v1 `source_pin_manifest.json` input resolves only the
+  `source_pin` blocker after id/path/head/branch/origin checks match the local
+  git checkouts; mismatches fail the manifest build.
   The manifest also records OfficeQA baseline and skill-merge paper result
   targets, including the 67.9 versus 68.1 exact-match ambiguity, as typed
   `paper_result_targets` rather than a generic blocker. It also carries typed
