@@ -29,7 +29,7 @@ fn evoskill_manifest_records_paper_close_denominator_without_claiming_proof() {
 
     let manifest = build_evoskill_replica_manifest(&ManifestBuildInput::new(root.path())).unwrap();
 
-    assert_eq!(manifest.schema_version, 12);
+    assert_eq!(manifest.schema_version, 13);
     assert_eq!(manifest.paper.arxiv_id, "2603.02766");
     assert_eq!(manifest.exactness, ExactnessClass::BlockedBeforePaperClose);
     assert_eq!(manifest.scorer.tolerances, [0.0, 0.01, 0.025, 0.05, 0.10]);
@@ -365,6 +365,61 @@ fn source_artifacts_are_fingerprinted_without_certifying_missing_splits() {
 }
 
 #[test]
+fn browsecomp_transfer_sample_materializes_denominator_without_score_proof() {
+    let root = tempfile::tempdir().unwrap();
+    write_browsecomp_transfer_sample(root.path(), 128);
+
+    let manifest = build_evoskill_replica_manifest(&ManifestBuildInput::new(root.path())).unwrap();
+
+    let browsecomp_dataset = manifest
+        .datasets
+        .iter()
+        .find(|dataset| dataset.id == "browsecomp_transfer")
+        .expect("BrowseComp transfer dataset is declared");
+    assert_eq!(
+        browsecomp_dataset.split_status,
+        SplitManifestStatus::PaperCloseSubstituteAccepted
+    );
+    assert!(browsecomp_dataset.blocker_ids.is_empty());
+
+    let browsecomp = manifest
+        .source_universe
+        .iter()
+        .find(|entry| entry.dataset_id == "browsecomp_transfer")
+        .expect("BrowseComp transfer source universe entry exists");
+    assert_eq!(
+        browsecomp.source_artifact_ids,
+        ["browsecomp_transfer_sample"]
+    );
+    assert_eq!(browsecomp.materialized_rows, Some(128));
+    assert_eq!(
+        browsecomp.source_row_fingerprint.as_deref().unwrap().len(),
+        64
+    );
+    assert_eq!(
+        browsecomp.split_ids,
+        ["browsecomp_transfer_sample_128_heldout".to_owned()]
+    );
+    assert_eq!(
+        browsecomp.split_exactness,
+        [MaterializationExactness::PaperCloseSubstitute]
+    );
+    assert!(browsecomp.blocker_ids.is_empty());
+    assert!(
+        manifest
+            .source_blockers
+            .iter()
+            .all(|blocker| blocker.blocker_id != "browsecomp_transfer_sample")
+    );
+    assert!(
+        manifest
+            .blockers
+            .iter()
+            .all(|blocker| blocker.id != "browsecomp_transfer_sample")
+    );
+}
+
+#[test]
 fn source_revisions_record_local_git_identity_without_claiming_paper_pin() {
     let root = tempfile::tempdir().unwrap();
     init_git_source(
@@ -503,6 +558,27 @@ fn write_officeqa_full_csv(root: &std::path::Path, rows: usize) {
         .unwrap();
     }
     fs::write(path, csv).unwrap();
+}
+
+fn write_browsecomp_transfer_sample(root: &std::path::Path, rows: usize) {
+    let path = root.join("tmp/replication/evoskill/browsecomp/transfer_sample.jsonl");
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let mut jsonl = String::new();
+    for index in 0..rows {
+        let stratum = if index % 2 == 0 { "simple" } else { "hard" };
+        writeln!(
+            jsonl,
+            "{}",
+            serde_json::json!({
+                "source_id": format!("browsecomp:{index:03}"),
+                "question": format!("Browse question {index}?"),
+                "answer": format!("Browse answer {index}"),
+                "stratum": stratum
+            })
+        )
+        .unwrap();
+    }
+    fs::write(path, jsonl).unwrap();
 }
 
 fn write_sealqa_judge_source(root: &std::path::Path) {

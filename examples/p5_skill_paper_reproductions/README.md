@@ -32,3 +32,10 @@ paper-release or remote-current source policy.
 OfficeQA/SealQA substitute split fingerprints. It accepts those documented
 substitutes as the paper-close split denominator without relabeling them as
 paper-exact or producing scores.
+
+The optional ignored
+`tmp/replication/evoskill/browsecomp/transfer_sample.jsonl` sidecar is a strict
+128-row BrowseComp transfer denominator. Each JSONL row must carry
+`source_id`, `question`, and `answer`, with optional `stratum`. When present it
+only materializes held-out transfer score slots as unscored `not_run` rows; it
+does not reproduce the paper's 43.5/48.8 percent scores.

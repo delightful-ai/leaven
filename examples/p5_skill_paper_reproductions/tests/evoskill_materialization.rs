@@ -10,7 +10,7 @@ use leaven_kernel::CaseId;
 use p5_skill_paper_reproductions::evoskill::{
     ManifestBuildInput, ManifestError, MaterializationExactness, SourceMaterializationStatus,
     SplitAcceptanceStatus, SplitManifestStatus, build_evoskill_replica_manifest,
-    materialize_officeqa_source, materialize_sealqa_source,
+    materialize_browsecomp_transfer_source, materialize_officeqa_source, materialize_sealqa_source,
     write_evoskill_paper_close_split_policy_manifest,
 };
 use parquet::arrow::ArrowWriter;
@@ -322,7 +322,7 @@ fn paper_close_split_policy_manifest_accepts_documented_substitutes_without_exac
     assert!(policy_path.ends_with("tmp/replication/evoskill/split_policy_manifest.json"));
 
     let manifest = build_evoskill_replica_manifest(&ManifestBuildInput::new(root.path())).unwrap();
-    assert_eq!(manifest.schema_version, 12);
+    assert_eq!(manifest.schema_version, 13);
     assert!(manifest.artifacts.iter().any(|artifact| {
         artifact.id == "split_policy_manifest"
             && artifact.exists
@@ -545,6 +545,181 @@ fn sealqa_exact_split_manifest_replaces_row_order_blocker_when_present() {
         held_out_manifest.source_ids.last().map(String::as_str),
         Some("sealqa:110")
     );
+}
+
+#[test]
+fn browsecomp_transfer_jsonl_lowers_to_held_out_denominator_without_score_proof() {
+    let root = tempfile::tempdir().unwrap();
+    write_browsecomp_transfer_sample(root.path(), 128);
+
+    let materialization =
+        materialize_browsecomp_transfer_source(&ManifestBuildInput::new(root.path()))
+            .unwrap()
+            .expect("BrowseComp transfer JSONL exists");
+
+    assert_eq!(
+        materialization.report.source_status,
+        SourceMaterializationStatus::Materialized
+    );
+    assert_eq!(materialization.report.source_rows, Some(128));
+    assert_eq!(materialization.report.case_rows, Some(128));
+    assert_eq!(
+        materialization.report.target_policy,
+        "answers are scorer targets only; transfer runner inputs exclude answers"
+    );
+    assert_eq!(
+        materialization
+            .report
+            .source_row_fingerprint
+            .as_deref()
+            .unwrap()
+            .len(),
+        64
+    );
+    assert_eq!(materialization.report.strata[0].name, "hard");
+    assert_eq!(materialization.report.strata[0].rows, 64);
+    assert_eq!(materialization.report.strata[1].name, "simple");
+    assert_eq!(materialization.report.strata[1].rows, 64);
+
+    let first = &materialization.rows.rows()[0];
+    assert_eq!(first.source_id(), "browsecomp:000");
+    assert_eq!(first.input().question, "Browse question 0?");
+    assert_eq!(first.input().stratum.as_deref(), Some("simple"));
+    assert_eq!(first.target().map(String::as_str), Some("Browse answer 0"));
+
+    let split = materialization
+        .report
+        .split_materializations
+        .iter()
+        .find(|split| split.id == "browsecomp_transfer_sample_128_heldout")
+        .expect("BrowseComp transfer held-out split exists");
+    assert_eq!(
+        split.exactness,
+        MaterializationExactness::PaperCloseSubstitute
+    );
+    assert_eq!(split.acceptance_status, SplitAcceptanceStatus::NotRequired);
+    assert_eq!(split.train_rows, 0);
+    assert_eq!(split.validation_rows, None);
+    assert_eq!(split.test_rows, Some(128));
+    assert!(split.blocker_ids.is_empty());
+    assert_eq!(split.role_manifests.len(), 1);
+    let held_out_manifest = &split.role_manifests[0];
+    assert_eq!(held_out_manifest.role, "held_out_test");
+    assert_eq!(held_out_manifest.rows, 128);
+    assert_eq!(
+        held_out_manifest.source_ids.first().map(String::as_str),
+        Some("browsecomp:000")
+    );
+    assert_eq!(
+        held_out_manifest.source_ids.last().map(String::as_str),
+        Some("browsecomp:127")
+    );
+    assert_eq!(held_out_manifest.source_id_fingerprint.len(), 64);
+}
+
+#[test]
+fn browsecomp_transfer_jsonl_refuses_wrong_row_count() {
+    let root = tempfile::tempdir().unwrap();
+    write_browsecomp_transfer_sample(root.path(), 127);
+
+    let error =
+        materialize_browsecomp_transfer_source(&ManifestBuildInput::new(root.path())).unwrap_err();
+
+    match error {
+        ManifestError::BrowseCompSample { path, message } => {
+            assert!(path.ends_with("transfer_sample.jsonl"));
+            assert!(message.contains("expected 128 rows"));
+            assert!(message.contains("found 127"));
+        }
+        other => panic!("expected BrowseComp sample error, got {other:?}"),
+    }
+}
+
+#[test]
+fn browsecomp_transfer_jsonl_refuses_duplicate_source_ids() {
+    let root = tempfile::tempdir().unwrap();
+    write_browsecomp_transfer_sample(root.path(), 128);
+    let path = root
+        .path()
+        .join("tmp/replication/evoskill/browsecomp/transfer_sample.jsonl");
+    let mut rows = fs::read_to_string(&path).unwrap();
+    rows.push_str(
+        &serde_json::json!({
+            "source_id": "browsecomp:000",
+            "question": "Duplicate?",
+            "answer": "duplicate",
+            "stratum": "hard"
+        })
+        .to_string(),
+    );
+    rows.push('\n');
+    fs::write(&path, rows).unwrap();
+
+    let error =
+        materialize_browsecomp_transfer_source(&ManifestBuildInput::new(root.path())).unwrap_err();
+
+    match error {
+        ManifestError::BrowseCompSample { path, message } => {
+            assert!(path.ends_with("transfer_sample.jsonl"));
+            assert!(message.contains("repeats source_id `browsecomp:000`"));
+        }
+        other => panic!("expected BrowseComp sample error, got {other:?}"),
+    }
+}
+
+#[test]
+fn browsecomp_transfer_jsonl_refuses_unknown_fields() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root
+        .path()
+        .join("tmp/replication/evoskill/browsecomp/transfer_sample.jsonl");
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(
+        &path,
+        format!(
+            "{}\n",
+            serde_json::json!({
+            "source_id": "browsecomp:000",
+            "question": "Browse question?",
+            "answer": "Browse answer",
+            "unexpected": "not part of the strict Leaven sidecar schema"
+            })
+        ),
+    )
+    .unwrap();
+
+    let error =
+        materialize_browsecomp_transfer_source(&ManifestBuildInput::new(root.path())).unwrap_err();
+
+    match error {
+        ManifestError::BrowseCompSampleJson { path, line, source } => {
+            assert!(path.ends_with("transfer_sample.jsonl"));
+            assert_eq!(line, 1);
+            assert!(source.to_string().contains("unknown field"));
+        }
+        other => panic!("expected BrowseComp JSONL parse error, got {other:?}"),
+    }
+}
+
+fn write_browsecomp_transfer_sample(root: &std::path::Path, rows: usize) {
+    let path = root.join("tmp/replication/evoskill/browsecomp/transfer_sample.jsonl");
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let mut jsonl = String::new();
+    for index in 0..rows {
+        let stratum = if index % 2 == 0 { "simple" } else { "hard" };
+        writeln!(
+            jsonl,
+            "{}",
+            serde_json::json!({
+                "source_id": format!("browsecomp:{index:03}"),
+                "question": format!("Browse question {index}?"),
+                "answer": format!("Browse answer {index}"),
+                "stratum": stratum
+            })
+        )
+        .unwrap();
+    }
+    fs::write(path, jsonl).unwrap();
 }
 
 fn write_officeqa_full_csv(root: &std::path::Path, rows: usize) {

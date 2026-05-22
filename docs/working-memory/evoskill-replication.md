@@ -1009,3 +1009,27 @@ This closes a subtle fake-proof risk: the loop can no longer re-read a changed
 OfficeQA CSV and still present itself beside an older manifest fingerprint. It
 does not resolve exact paper source policy, exact split membership, live
 provider behavior, SealQA judge execution, or paper-score results.
+
+## No-Spend BrowseComp Transfer Sample Ingestion
+
+Date: 2026-05-22.
+Provider/model spend: none.
+Cloud/GPU spend: none.
+
+The P5 replica manifest now declares schema v13. The BrowseComp transfer
+sample blocker has a Leaven-owned Rust ingestion path for
+`tmp/replication/evoskill/browsecomp/transfer_sample.jsonl`: a strict 128-row
+JSONL sidecar where each row carries `source_id`, `question`, `answer`, and an
+optional `stratum`. The materializer lowers valid rows into
+`SourceRowManifest`, records source-row and held-out-role fingerprints, creates
+one `paper_close_substitute` held-out transfer split, and removes only the
+`browsecomp_transfer_sample` source blocker.
+
+Malformed local samples fail the manifest build rather than becoming fallback
+evidence: wrong row counts, blank rows, duplicate source ids, empty required
+fields, and unknown JSON fields are refused. When the sidecar is absent, the
+report still emits source-blocked BrowseComp target slots for the paper's
+43.5 percent baseline and 48.8 percent SealQA-skill transfer targets. When the
+sidecar is present and valid, those slots become unscored `not_run`
+denominator slots with split and role fingerprints. This still does not locate
+the original paper sample, run the transferred SealQA skill, or fill any score.

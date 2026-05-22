@@ -23,7 +23,7 @@ belong in their owning crates.
 ## Proof
 - `cargo test -p p5_skill_paper_reproductions --test evoskill_manifest`
   proves the EvoSkill replica manifest preserves the paper-close denominator
-  and rejects proxy completion claims. It also proves the schema v12
+  and rejects proxy completion claims. It also proves the schema v13
   `source_universe` links datasets to source artifact ids, available source
   revision ids, materialized row counts, source-row fingerprints, split ids,
   split exactness labels, source revision status fields, and blockers without
@@ -37,6 +37,10 @@ belong in their owning crates.
   OfficeQA/SealQA reports. It removes split blockers without changing
   `paper_close_substitute` exactness; stale or partial policy manifests fail the
   build instead of becoming paper-exact proof.
+  Optional `tmp/replication/evoskill/browsecomp/transfer_sample.jsonl` input
+  materializes only a strict 128-row BrowseComp transfer denominator with
+  source-id fingerprints and a held-out transfer split; it removes the
+  BrowseComp source blocker without producing any score.
   The manifest also records OfficeQA baseline and skill-merge paper result
   targets, including the 67.9 versus 68.1 exact-match ambiguity, as typed
   `paper_result_targets` rather than a generic blocker. It also carries typed
@@ -65,7 +69,9 @@ belong in their owning crates.
   membership manifests, lowers SealQA Parquet rows through
   `leaven-eval-parquet` into row-stable cases, and records a row-order 10
   percent train / held-out substitute split with role-level source-id membership
-  manifests. SealQA row identity is physical row order, because the observed
+  manifests. It also proves the strict BrowseComp transfer JSONL sidecar lowers
+  into a 128-row held-out denominator and refuses malformed row counts or
+  duplicate source ids. SealQA row identity is physical row order, because the observed
   `canary` column is not unique. It keeps missing paper category/exact split
   artifacts as blockers unless the explicit paper-close split policy sidecar
   validates the current substitute fingerprints. Even then it does not prove
@@ -89,7 +95,9 @@ belong in their owning crates.
   `proxy_rejection_gates` that reject known scaffolds and repo-health checks as
   completion evidence. Accepted substitute split policies turn OfficeQA slots
   into unscored `not_run` denominator slots and leave SealQA blocked on judge
-  execution, without faking score values. Blocked metrics stay missing rather
+  execution, without faking score values. A valid BrowseComp transfer sample
+  turns its held-out transfer slots into unscored `not_run` denominator slots;
+  if absent, they stay source-blocked. Blocked metrics stay missing rather
   than fake zeros. It does not prove live provider behavior, validation-set
   scores, or paper-close.
 - `just evoskill-paper-manifest` writes the current no-spend local manifest to

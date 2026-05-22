@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File};
 use std::io::Read;
 use std::num::NonZeroUsize;
@@ -41,9 +41,13 @@ const OFFICEQA_EXACT_SPLIT_MANIFEST_PATH: &str =
     "tmp/replication/evoskill/officeqa/paper_split_manifest.json";
 const SEALQA_EXACT_SPLIT_MANIFEST_PATH: &str =
     "tmp/replication/evoskill/sealqa/paper_split_manifest.json";
+const BROWSECOMP_TRANSFER_SAMPLE_PATH: &str =
+    "tmp/replication/evoskill/browsecomp/transfer_sample.jsonl";
 const SOURCE_PIN_MANIFEST_PATH: &str = "tmp/replication/evoskill/source_pin_manifest.json";
 const SPLIT_POLICY_MANIFEST_PATH: &str = "tmp/replication/evoskill/split_policy_manifest.json";
 const PAPER_DECLARED_SOURCE_ID_MANIFEST_METHOD: &str = "paper_declared_source_id_manifest";
+const BROWSECOMP_TRANSFER_ROWS: usize = 128;
+const BROWSECOMP_TRANSFER_ROWS_U64: u64 = 128;
 const SEALQA_JUDGE_TEMPLATE_ID: &str = "sealqa-auto-grader-placeholder-v1";
 const SEALQA_JUDGE_SOURCE_ARTIFACT_ID: &str = "paper_auto_grader_placeholder";
 const SEALQA_JUDGE_RUNTIME_STATUS: &str = "template_pinned_no_spend";
@@ -323,10 +327,23 @@ pub struct SealQaSourceMaterialization {
     pub report: DatasetMaterializationReport,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BrowseCompTransferInput {
+    pub question: String,
+    pub stratum: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+pub struct BrowseCompTransferSourceMaterialization {
+    pub rows: SourceRowManifest<BrowseCompTransferInput, String>,
+    pub report: DatasetMaterializationReport,
+}
+
 #[derive(Clone, Debug)]
 struct EvoSkillSourceMaterializations {
     officeqa: Option<OfficeQaSourceMaterialization>,
     sealqa: Option<SealQaSourceMaterialization>,
+    browsecomp_transfer: Option<BrowseCompTransferSourceMaterialization>,
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -740,6 +757,15 @@ pub enum ManifestError {
     },
     #[error("invalid split policy manifest `{path}`: {message}")]
     SplitPolicyManifest { path: PathBuf, message: String },
+    #[error("failed to parse BrowseComp transfer sample `{path}` line {line}: {source}")]
+    BrowseCompSampleJson {
+        path: PathBuf,
+        line: usize,
+        #[source]
+        source: serde_json::Error,
+    },
+    #[error("invalid BrowseComp transfer sample `{path}`: {message}")]
+    BrowseCompSample { path: PathBuf, message: String },
     #[error("failed to materialize Parquet source rows: {source}")]
     Parquet {
         #[source]
@@ -882,7 +908,7 @@ fn build_evoskill_replica_manifest_from_sources(
     let blockers = blockers(&source_blockers);
 
     Ok(EvoSkillReplicaManifest {
-        schema_version: 12,
+        schema_version: 13,
         paper: PaperTarget {
             id: "evoskill".to_owned(),
             arxiv_id: "2603.02766".to_owned(),
@@ -932,7 +958,7 @@ pub fn build_evoskill_final_report(
     let proxy_rejection_gates = proxy_rejection_gates();
 
     Ok(EvoSkillFinalReport {
-        schema_version: 9,
+        schema_version: 10,
         exactness,
         manifest,
         loop_report,
@@ -956,6 +982,16 @@ struct OfficeQaCsvRecord {
     source_docs: String,
     source_files: String,
     difficulty: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct BrowseCompTransferJsonlRecord {
+    source_id: String,
+    question: String,
+    answer: String,
+    #[serde(default)]
+    stratum: Option<String>,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -1137,6 +1173,7 @@ fn materialize_evoskill_sources(
     Ok(EvoSkillSourceMaterializations {
         officeqa: materialize_officeqa_source(input)?,
         sealqa: materialize_sealqa_source(input)?,
+        browsecomp_transfer: materialize_browsecomp_transfer_source(input)?,
     })
 }
 
@@ -1167,7 +1204,17 @@ fn raw_source_materialization_reports(
         || missing_materialization_report("sealqa", "sealqa_parquet", "sealqa_parquet_missing"),
         |materialization| materialization.report.clone(),
     );
-    vec![officeqa, sealqa]
+    let browsecomp_transfer = sources.browsecomp_transfer.as_ref().map_or_else(
+        || {
+            missing_materialization_report(
+                "browsecomp_transfer",
+                "browsecomp_transfer_sample",
+                "browsecomp_transfer_sample",
+            )
+        },
+        |materialization| materialization.report.clone(),
+    );
+    vec![officeqa, sealqa, browsecomp_transfer]
 }
 
 fn apply_split_policy_manifest(
@@ -1180,6 +1227,7 @@ fn apply_split_policy_manifest(
     match split_policy_manifest.policy {
         SplitPolicy::AcceptDocumentedPaperCloseSubstitutes => {}
     }
+    let mut accepted_substitute = false;
     for split in &mut report.split_materializations {
         if split.exactness == MaterializationExactness::PaperCloseSubstitute
             && split_policy_manifest
@@ -1188,9 +1236,12 @@ fn apply_split_policy_manifest(
         {
             split.blocker_ids.clear();
             split.acceptance_status = split_policy_manifest.policy.acceptance_status();
+            accepted_substitute = true;
         }
     }
-    report.blocker_ids = materialization_blocker_ids(&report.split_materializations);
+    if accepted_substitute {
+        report.blocker_ids = materialization_blocker_ids(&report.split_materializations);
+    }
     report
 }
 
@@ -2213,6 +2264,157 @@ fn sealqa_row_order_split_report(
     })
 }
 
+pub fn materialize_browsecomp_transfer_source(
+    input: &ManifestBuildInput,
+) -> Result<Option<BrowseCompTransferSourceMaterialization>, ManifestError> {
+    let path = input.root.join(BROWSECOMP_TRANSFER_SAMPLE_PATH);
+    if !path.exists() {
+        return Ok(None);
+    }
+
+    let rows = read_browsecomp_transfer_rows(&path)?;
+    if rows.len() != BROWSECOMP_TRANSFER_ROWS {
+        return Err(ManifestError::BrowseCompSample {
+            path,
+            message: format!(
+                "expected {BROWSECOMP_TRANSFER_ROWS} rows from the paper transfer sample, found {}",
+                rows.len()
+            ),
+        });
+    }
+    let dataset = rows
+        .clone()
+        .into_dataset()
+        .map_err(|source| ManifestError::Dataset { source })?;
+    let strata = browsecomp_transfer_strata(&rows);
+    let split_materializations = vec![browsecomp_transfer_split_report(&rows)?];
+    let report = DatasetMaterializationReport {
+        dataset_id: "browsecomp_transfer".to_owned(),
+        source_artifact_id: "browsecomp_transfer_sample".to_owned(),
+        source_status: SourceMaterializationStatus::Materialized,
+        source_rows: Some(u64::try_from(rows.len()).expect("row count fits in u64")),
+        case_rows: Some(u64::try_from(dataset.cases().len()).expect("case count fits in u64")),
+        source_row_fingerprint: Some(fingerprint_hex(rows.fingerprint())),
+        source_artifact_sha256: Some(sha256_file(&path)?),
+        target_policy: "answers are scorer targets only; transfer runner inputs exclude answers"
+            .to_owned(),
+        strata: strata_reports(&strata),
+        split_materializations,
+        blocker_ids: Vec::new(),
+    };
+    Ok(Some(BrowseCompTransferSourceMaterialization {
+        rows,
+        report,
+    }))
+}
+
+fn read_browsecomp_transfer_rows(
+    path: &Path,
+) -> Result<SourceRowManifest<BrowseCompTransferInput, String>, ManifestError> {
+    let contents = fs::read_to_string(path).map_err(|source| ManifestError::Read {
+        path: path.to_owned(),
+        source,
+    })?;
+    let mut rows = Vec::new();
+    let mut source_ids = BTreeSet::new();
+    for (line_index, line) in contents.lines().enumerate() {
+        let line_number = line_index + 1;
+        if line.trim().is_empty() {
+            return Err(ManifestError::BrowseCompSample {
+                path: path.to_owned(),
+                message: format!("line {line_number} is blank"),
+            });
+        }
+        let record =
+            serde_json::from_str::<BrowseCompTransferJsonlRecord>(line).map_err(|source| {
+                ManifestError::BrowseCompSampleJson {
+                    path: path.to_owned(),
+                    line: line_number,
+                    source,
+                }
+            })?;
+        validate_browsecomp_transfer_record(path, line_number, &record, &mut source_ids)?;
+        rows.push(SourceRow::targeted(
+            record.source_id,
+            BrowseCompTransferInput {
+                question: record.question,
+                stratum: record.stratum,
+            },
+            record.answer,
+        ));
+    }
+    SourceRowManifest::new(rows).map_err(|source| ManifestError::Dataset { source })
+}
+
+fn validate_browsecomp_transfer_record(
+    path: &Path,
+    line: usize,
+    record: &BrowseCompTransferJsonlRecord,
+    source_ids: &mut BTreeSet<String>,
+) -> Result<(), ManifestError> {
+    for (field, value) in [
+        ("source_id", record.source_id.as_str()),
+        ("question", record.question.as_str()),
+        ("answer", record.answer.as_str()),
+    ] {
+        if value.trim().is_empty() {
+            return Err(ManifestError::BrowseCompSample {
+                path: path.to_owned(),
+                message: format!("line {line} field `{field}` must not be empty"),
+            });
+        }
+    }
+    if !source_ids.insert(record.source_id.clone()) {
+        return Err(ManifestError::BrowseCompSample {
+            path: path.to_owned(),
+            message: format!("line {line} repeats source_id `{}`", record.source_id),
+        });
+    }
+    Ok(())
+}
+
+fn browsecomp_transfer_strata(
+    rows: &SourceRowManifest<BrowseCompTransferInput, String>,
+) -> BTreeMap<SmolStr, Vec<CaseId>> {
+    let mut strata = BTreeMap::<SmolStr, Vec<CaseId>>::new();
+    for (row_index, row) in rows.rows().iter().enumerate() {
+        let stratum = row.input().stratum.as_deref().unwrap_or("unlabeled");
+        strata
+            .entry(SmolStr::new(stratum))
+            .or_default()
+            .push(CaseId::from_index(row_index));
+    }
+    strata
+}
+
+fn browsecomp_transfer_split_report(
+    rows: &SourceRowManifest<BrowseCompTransferInput, String>,
+) -> Result<SplitMaterializationReport, ManifestError> {
+    let source_rows = rows.len();
+    let splits =
+        RowOrderSplitBuilder::new((0..source_rows).map(CaseId::from_index).collect::<Vec<_>>())
+            .role_range(SplitRole::Test, 0..source_rows)
+            .build(CaseSetVersion(format!(
+                "browsecomp-transfer-sample-v1-rows-{source_rows}"
+            )))
+            .map_err(|source| ManifestError::Split { source })?;
+    let role_manifests =
+        split_role_manifests(rows, &splits, &[(SplitRole::Test, "held_out_test")])?;
+
+    Ok(SplitMaterializationReport {
+        id: format!("browsecomp_transfer_sample_{source_rows}_heldout"),
+        method: "operator_supplied_jsonl_transfer_sample".to_owned(),
+        exactness: MaterializationExactness::PaperCloseSubstitute,
+        train_rows: 0,
+        validation_rows: None,
+        test_rows: Some(split_len(&splits, &SplitRole::Test)),
+        split_fingerprint: Some(fingerprint_hex(splits.fingerprint())),
+        role_manifests,
+        blocker_ids: Vec::new(),
+        acceptance_status: SplitAcceptanceStatus::NotRequired,
+    })
+}
+
 pub fn run_evoskill_replica_mechanics(
     input: &ManifestBuildInput,
 ) -> Result<EvoSkillReplicaLoopReport, ManifestError> {
@@ -2533,12 +2735,7 @@ fn split_score_slots(
     split: &SplitMaterializationReport,
 ) -> Vec<FinalScoreSlot> {
     let blocker_ids = scoring_blocker_ids(&materialization.dataset_id, &split.blocker_ids);
-    let roles = [
-        ("train", Some(split.train_rows)),
-        ("validation", split.validation_rows),
-        ("held_out_test", split.test_rows),
-    ];
-    roles
+    split_score_roles(&materialization.dataset_id, split)
         .into_iter()
         .filter_map(|(role, expected_rows)| {
             expected_rows.map(|rows| {
@@ -2556,6 +2753,20 @@ fn split_score_slots(
         })
         .flatten()
         .collect()
+}
+
+fn split_score_roles(
+    dataset_id: &str,
+    split: &SplitMaterializationReport,
+) -> Vec<(&'static str, Option<u64>)> {
+    if dataset_id == "browsecomp_transfer" {
+        return vec![("held_out_test", split.test_rows)];
+    }
+    vec![
+        ("train", Some(split.train_rows)),
+        ("validation", split.validation_rows),
+        ("held_out_test", split.test_rows),
+    ]
 }
 
 fn scoring_blocker_ids(dataset_id: &str, split_blocker_ids: &[String]) -> Vec<String> {
@@ -2761,7 +2972,7 @@ fn final_report_paper_close_gates(
             "replica_manifest",
             PaperCloseGateStatus::Proven,
             Vec::new(),
-            "schema v12 manifest declares source universe, local source identity, optional validated source pins, optional accepted paper-close substitute split policy, fingerprints, paper targets, source blockers with checked local candidate evidence, source-backed judge template pins, model pins, scorer, frontier, and schedule",
+            "schema v13 manifest declares source universe, local source identity, optional validated source pins, optional accepted paper-close substitute split policy, optional BrowseComp transfer JSONL materialization, fingerprints, paper targets, source blockers with checked local candidate evidence, source-backed judge template pins, model pins, scorer, frontier, and schedule",
         ),
         paper_close_gate(
             "source_and_split_materialization",
@@ -2806,7 +3017,7 @@ fn final_report_paper_close_gates(
             "final_report_truth",
             PaperCloseGateStatus::Proven,
             Vec::new(),
-            "report keeps blocked metrics missing, records exactness gaps, costs, paper-target-linked score slots including source-blocked BrowseComp transfer slots, source blockers, and approval gates",
+            "report keeps blocked metrics missing, records exactness gaps, costs, paper-target-linked score slots including unscored or source-blocked BrowseComp transfer slots, source blockers, and approval gates",
         ),
         paper_close_gate(
             "proxy_closeout",
@@ -3659,7 +3870,7 @@ fn source_artifacts(root: &Path) -> Result<Vec<SourceArtifact>, ManifestError> {
             root,
             "browsecomp_transfer_sample",
             "BrowseComp transfer sample",
-            "tmp/replication/evoskill/browsecomp/transfer_sample.jsonl",
+            BROWSECOMP_TRANSFER_SAMPLE_PATH,
         )?,
     ])
 }
@@ -3739,18 +3950,24 @@ fn source_blockers(
             "seal-0 rows are materialized from Parquet, but the exact 10 percent train versus held-out row ids are not present",
         )?);
     }
-    reports.push(source_blocker(
-        root,
-        "browsecomp_transfer_sample",
-        "browsecomp_transfer",
-        SourceBlockerStatus::MissingLocalArtifact,
-        &["browsecomp_zero_shot_transfer_report"],
-        &[
-            "tmp/replication/evoskill/browsecomp/transfer_sample.jsonl",
-            "tmp/repros/evoskill/results/deep_cc_runs",
-        ],
-        "paper reports a 128-example stratified transfer sample, but no local sample or result source is present",
-    )?);
+    if !materializations
+        .iter()
+        .find(|materialization| materialization.dataset_id == "browsecomp_transfer")
+        .is_some_and(has_materialized_browsecomp_transfer_sample)
+    {
+        reports.push(source_blocker(
+            root,
+            "browsecomp_transfer_sample",
+            "browsecomp_transfer",
+            SourceBlockerStatus::MissingLocalArtifact,
+            &["browsecomp_zero_shot_transfer_report"],
+            &[
+                BROWSECOMP_TRANSFER_SAMPLE_PATH,
+                "tmp/repros/evoskill/results/deep_cc_runs",
+            ],
+            "paper reports a 128-example stratified transfer sample, but no local sample or result source is present",
+        )?);
+    }
     Ok(reports)
 }
 
@@ -3854,13 +4071,29 @@ fn dataset_requirements(
             if has_paper_exact_split(materialization) {
                 requirement.split_status = SplitManifestStatus::ExactPublished;
                 requirement.blocker_ids.clear();
-            } else if has_accepted_or_exact_split(materialization) {
+            } else if has_accepted_or_exact_split(materialization)
+                || has_materialized_browsecomp_transfer_sample(materialization)
+            {
                 requirement.split_status = SplitManifestStatus::PaperCloseSubstituteAccepted;
                 requirement.blocker_ids.clear();
             }
         }
     }
     requirements
+}
+
+fn has_materialized_browsecomp_transfer_sample(
+    materialization: &DatasetMaterializationReport,
+) -> bool {
+    materialization.dataset_id == "browsecomp_transfer"
+        && materialization.source_status == SourceMaterializationStatus::Materialized
+        && materialization.source_rows == Some(BROWSECOMP_TRANSFER_ROWS_U64)
+        && materialization.blocker_ids.is_empty()
+        && materialization.split_materializations.iter().any(|split| {
+            split.exactness == MaterializationExactness::PaperCloseSubstitute
+                && split.test_rows == Some(BROWSECOMP_TRANSFER_ROWS_U64)
+                && split.blocker_ids.is_empty()
+        })
 }
 
 fn scorer_manifest(artifacts: &[SourceArtifact]) -> ScorerManifest {
