@@ -63,9 +63,13 @@ fingerprint, role source-id fingerprint, row counts, resolved blockers, a
 nonempty `evidence_id`, and a readable JSONL evidence artifact with matching
 SHA-256 and byte count. Each artifact row must name a source id, prediction, and
 score; the importer checks exact role membership, rejects duplicate or missing
-rows, recomputes the aggregate from rows, and replays the OfficeQA scorer before
-reporting an OfficeQA score. Reported score slots preserve the id as
-`score_evidence_id` and the checked artifact as `score_evidence_artifact`. It
-is score evidence plumbing, not permission to treat fixtures, stale runs,
-tampered evidence files, missing SealQA judge execution, missing transferred
-BrowseComp runs, or missing provider approval as paper scores.
+rows, recomputes the aggregate from rows, replays the OfficeQA scorer before
+reporting an OfficeQA score, and checks BrowseComp transfer rows with a
+conservative exact-normalized answer scorer when materialized targets are
+present. The BrowseComp check rejects fabricated row scores; it is not the
+official simple-evals judge path. Reported score slots preserve the id as
+`score_evidence_id` and the checked artifact as `score_evidence_artifact`. It is
+score evidence plumbing, not permission to treat fixtures, stale runs, tampered
+evidence files, missing SealQA judge execution, missing transferred BrowseComp
+runs, official BrowseComp judge approval, or missing provider approval as paper
+scores.

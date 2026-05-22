@@ -976,14 +976,19 @@ fingerprint, scorer fingerprint, slot key, split fingerprint, role source-id
 fingerprint, and row count before a score is reported. The checked evidence
 artifact is now strict JSONL: each row carries `source_id`, `prediction`, and
 `score`; the importer verifies exact role membership, rejects duplicate or
-missing rows, requires finite `[0, 1]` row scores, recomputes the aggregate, and
+missing rows, requires finite `[0, 1]` row scores, recomputes the aggregate,
 replays the OfficeQA Rust scorer against materialized scorer-only targets before
-importing OfficeQA scores. Stale result files, duplicate entries, unresolved
-slot blockers, non-slot blocker claims, tampered evidence artifacts, fabricated
-aggregates, and OfficeQA predictions whose row scores do not match the scorer
-fail the report build. Reported scores preserve the sidecar `evidence_id` and
-checked artifact in the score slot, so future approved runs leave an auditable
-score-evidence handle in the final report without treating fixture values,
-stale outputs, tampered files, or missing approval as scores. This still does
-not execute the live provider, SealQA judge, transferred BrowseComp skill, or
-any missing paper score path.
+importing OfficeQA scores, and rechecks BrowseComp transfer rows with a
+conservative exact-normalized answer scorer against materialized scorer-only
+targets. The BrowseComp check rejects fabricated row scores when exact answers
+are present, but it is not the official simple-evals judge path. Stale result
+files, duplicate entries, unresolved slot blockers, non-slot blocker claims,
+tampered evidence artifacts, fabricated aggregates, OfficeQA predictions whose
+row scores do not match the scorer, and BrowseComp row scores that fail the
+exact-answer check fail the report build. Reported scores preserve the sidecar
+`evidence_id` and checked artifact in the score slot, so future approved runs
+leave an auditable score-evidence handle in the final report without treating
+fixture values, stale outputs, tampered files, exact-answer checks, or missing
+approval as paper scores. This still does not execute the live provider, SealQA
+judge, official BrowseComp judge, transferred BrowseComp skill, or any missing
+paper score path.

@@ -3421,6 +3421,9 @@ fn validate_score_evidence_rows(
     if entry.dataset_id == "officeqa" {
         validate_officeqa_score_evidence_rows(sources, sidecar_path, entry, &rows)?;
     }
+    if entry.dataset_id == "browsecomp_transfer" {
+        validate_browsecomp_score_evidence_rows(sources, sidecar_path, entry, &rows)?;
+    }
 
     let aggregate_row_count = u32::try_from(rows.len()).map_err(|_| {
         score_result_manifest_error(
@@ -3601,6 +3604,73 @@ fn validate_officeqa_score_evidence_rows(
         }
     }
     Ok(())
+}
+
+fn validate_browsecomp_score_evidence_rows(
+    sources: &EvoSkillSourceMaterializations,
+    sidecar_path: &Path,
+    entry: &ScoreResultManifestEntry,
+    rows: &[ScoreEvidenceRow],
+) -> Result<(), ManifestError> {
+    let key = score_result_entry_key(entry);
+    let browsecomp = sources.browsecomp_transfer.as_ref().ok_or_else(|| {
+        score_result_manifest_error(
+            sidecar_path,
+            format!("score result `{key}` has no BrowseComp transfer source materialization"),
+        )
+    })?;
+    let targets = browsecomp
+        .rows
+        .rows()
+        .iter()
+        .map(|row| {
+            (
+                row.source_id().to_owned(),
+                row.target()
+                    .expect("BrowseComp transfer rows are targeted")
+                    .clone(),
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
+    for row in rows {
+        let target = targets.get(&row.source_id).ok_or_else(|| {
+            score_result_manifest_error(
+                sidecar_path,
+                format!(
+                    "score result `{key}` BrowseComp row `{}` has no scorer target",
+                    row.source_id
+                ),
+            )
+        })?;
+        let recomputed = score_browsecomp_exact_answer(target, &row.prediction);
+        if !score_values_match(recomputed, row.score) {
+            return Err(score_result_manifest_error(
+                sidecar_path,
+                format!(
+                    "score result `{key}` row `{}` score {} does not match BrowseComp exact-answer scorer {recomputed}",
+                    row.source_id, row.score
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn score_browsecomp_exact_answer(reference: &str, prediction: &str) -> f64 {
+    if normalize_browsecomp_exact_answer(reference) == normalize_browsecomp_exact_answer(prediction)
+    {
+        1.0
+    } else {
+        0.0
+    }
+}
+
+fn normalize_browsecomp_exact_answer(value: &str) -> String {
+    value
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase()
 }
 
 fn score_values_match(left: f64, right: f64) -> bool {

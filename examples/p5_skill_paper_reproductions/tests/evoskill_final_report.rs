@@ -463,6 +463,87 @@ fn final_report_refuses_score_result_sidecar_when_officeqa_artifact_predictions_
     }
 }
 
+#[test]
+fn final_report_imports_browsecomp_score_sidecar_after_recomputing_accuracy() {
+    let root = tempfile::tempdir().unwrap();
+    write_denominator_ready_sources(root.path());
+    let input = ManifestBuildInput::new(root.path());
+    write_evoskill_local_source_pin_manifest(&input).unwrap();
+    write_evoskill_paper_close_split_policy_manifest(&input).unwrap();
+    let initial_report = build_evoskill_final_report(&input).unwrap();
+    let scored_slot = score_slot(
+        &initial_report,
+        "browsecomp_transfer",
+        "browsecomp_transfer_sample_128_heldout",
+        "held_out_test",
+        "baseline",
+    )
+    .clone();
+    write_score_result_manifest(root.path(), &initial_report, &scored_slot, 1.0);
+
+    let report = build_evoskill_final_report(&input).unwrap();
+
+    let reported = score_slot(
+        &report,
+        "browsecomp_transfer",
+        "browsecomp_transfer_sample_128_heldout",
+        "held_out_test",
+        "baseline",
+    );
+    assert_eq!(reported.status, FinalScoreStatus::Reported);
+    assert_eq!(reported.score, Some(1.0));
+    assert_eq!(
+        reported.score_evidence_id.as_deref(),
+        Some("unit-test-scored-output-import")
+    );
+    let transfer = score_slot(
+        &report,
+        "browsecomp_transfer",
+        "browsecomp_transfer_sample_128_heldout",
+        "held_out_test",
+        "sealqa_skill_transfer",
+    );
+    assert_eq!(transfer.status, FinalScoreStatus::NotRun);
+    assert!(transfer.score.is_none());
+}
+
+#[test]
+fn final_report_refuses_browsecomp_sidecar_when_predictions_do_not_match_answers() {
+    let root = tempfile::tempdir().unwrap();
+    write_denominator_ready_sources(root.path());
+    let input = ManifestBuildInput::new(root.path());
+    write_evoskill_local_source_pin_manifest(&input).unwrap();
+    write_evoskill_paper_close_split_policy_manifest(&input).unwrap();
+    let initial_report = build_evoskill_final_report(&input).unwrap();
+    let scored_slot = score_slot(
+        &initial_report,
+        "browsecomp_transfer",
+        "browsecomp_transfer_sample_128_heldout",
+        "held_out_test",
+        "baseline",
+    )
+    .clone();
+    write_score_result_manifest_with_prediction_override(
+        root.path(),
+        &initial_report,
+        &scored_slot,
+        "definitely not the browsecomp answer",
+        1.0,
+    );
+
+    let error = build_evoskill_final_report(&input).unwrap_err();
+
+    match error {
+        ManifestError::ScoreResultManifest { message, .. } => {
+            assert!(message.contains("BrowseComp exact-answer scorer"));
+            assert!(message.contains(
+                "browsecomp_transfer|browsecomp_transfer_sample_128_heldout|held_out_test|baseline"
+            ));
+        }
+        other => panic!("expected score result manifest error, got {other:?}"),
+    }
+}
+
 fn assert_paper_close_gates_separate_proof_from_blockers(report: &EvoSkillFinalReport) {
     assert_eq!(report.paper_close_gates.len(), 7);
     let gate = |id: &str| {
@@ -1292,7 +1373,7 @@ fn write_score_result_manifest_with_options(
     for source_id in score_slot_source_ids(report, slot) {
         let prediction = prediction_override
             .map(str::to_owned)
-            .unwrap_or_else(|| officeqa_answer_for_source_id(&source_id));
+            .unwrap_or_else(|| score_artifact_prediction_for_source_id(slot, &source_id));
         writeln!(
             evidence_body,
             "{}",
@@ -1359,13 +1440,26 @@ fn score_slot_source_ids(report: &EvoSkillFinalReport, slot: &FinalScoreSlot) ->
         .clone()
 }
 
-fn officeqa_answer_for_source_id(source_id: &str) -> String {
-    let row_number = source_id
-        .strip_prefix("UID")
-        .expect("OfficeQA fixture source ids are UID-prefixed")
-        .parse::<usize>()
-        .expect("OfficeQA fixture source ids end in row numbers");
-    format!("Answer {row_number}")
+fn score_artifact_prediction_for_source_id(slot: &FinalScoreSlot, source_id: &str) -> String {
+    match slot.dataset_id.as_str() {
+        "officeqa" => {
+            let row_number = source_id
+                .strip_prefix("UID")
+                .expect("OfficeQA fixture source ids are UID-prefixed")
+                .parse::<usize>()
+                .expect("OfficeQA fixture source ids end in row numbers");
+            format!("Answer {row_number}")
+        }
+        "browsecomp_transfer" => {
+            let row_number = source_id
+                .strip_prefix("browsecomp:")
+                .expect("BrowseComp fixture source ids are browsecomp-prefixed")
+                .parse::<usize>()
+                .expect("BrowseComp fixture source ids end in row numbers");
+            format!("Browse answer {row_number}")
+        }
+        other => panic!("test helper has no score prediction for dataset {other}"),
+    }
 }
 
 fn sha256_bytes(bytes: &[u8]) -> String {
