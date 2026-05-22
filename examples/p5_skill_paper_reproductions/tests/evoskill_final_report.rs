@@ -273,7 +273,7 @@ fn final_report_imports_matching_score_result_sidecar_without_filling_other_slot
 
     let report = build_evoskill_final_report(&input).unwrap();
 
-    assert_eq!(report.schema_version, 11);
+    assert_eq!(report.schema_version, 12);
     let result_manifest = report
         .score_result_manifest
         .as_ref()
@@ -519,7 +519,7 @@ fn assert_reported_target(
 
 fn assert_report_header(report: &EvoSkillFinalReport) {
     assert_eq!(report.exactness, ExactnessClass::BlockedBeforePaperClose);
-    assert_eq!(report.schema_version, 11);
+    assert_eq!(report.schema_version, 12);
     assert_eq!(report.score_result_manifest, None);
     assert_eq!(report.cost.llm_calls, 0);
     assert_eq!(report.cost.metric_calls, 0);
@@ -542,7 +542,7 @@ fn assert_report_header(report: &EvoSkillFinalReport) {
     assert!(
         loop_report
             .run_manifest
-            .child_score_source
+            .validation_score_source
             .contains("not paper scorer output")
     );
     assert!(
@@ -616,6 +616,26 @@ fn assert_loop_manifest_matches_embedded_officeqa_materialization(report: &EvoSk
         train.source_id_fingerprint
     );
     assert_eq!(loop_manifest.train_rows, train.rows);
+    assert_eq!(loop_manifest.validation_split_id, split.id);
+    assert_eq!(
+        loop_manifest.validation_split_fingerprint,
+        split.split_fingerprint.as_deref().unwrap()
+    );
+    let validation = split
+        .role_manifests
+        .iter()
+        .find(|manifest| manifest.role == "validation")
+        .expect("loop validation role should be embedded in the manifest");
+    assert_eq!(
+        loop_manifest.validation_role_source_id_fingerprint,
+        validation.source_id_fingerprint
+    );
+    assert_eq!(loop_manifest.validation_rows, validation.rows);
+    assert!(
+        loop_manifest
+            .validation_policy
+            .contains("full OfficeQA validation role")
+    );
 }
 
 fn assert_proxy_rejection_gates(report: &EvoSkillFinalReport) {
