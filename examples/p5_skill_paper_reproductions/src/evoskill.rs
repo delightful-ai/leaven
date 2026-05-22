@@ -42,6 +42,7 @@ const OFFICEQA_EXACT_SPLIT_MANIFEST_PATH: &str =
 const SEALQA_EXACT_SPLIT_MANIFEST_PATH: &str =
     "tmp/replication/evoskill/sealqa/paper_split_manifest.json";
 const SOURCE_PIN_MANIFEST_PATH: &str = "tmp/replication/evoskill/source_pin_manifest.json";
+const SPLIT_POLICY_MANIFEST_PATH: &str = "tmp/replication/evoskill/split_policy_manifest.json";
 const PAPER_DECLARED_SOURCE_ID_MANIFEST_METHOD: &str = "paper_declared_source_id_manifest";
 const SEALQA_JUDGE_TEMPLATE_ID: &str = "sealqa-auto-grader-placeholder-v1";
 const SEALQA_JUDGE_SOURCE_ARTIFACT_ID: &str = "paper_auto_grader_placeholder";
@@ -221,6 +222,7 @@ pub struct SourceUniverseEntry {
 #[serde(rename_all = "snake_case")]
 pub enum SplitManifestStatus {
     ExactPublished,
+    PaperCloseSubstituteAccepted,
     PaperCloseSubstituteRequired,
     BlockedMissingCategoryManifest,
     BlockedMissingSplitManifest,
@@ -243,6 +245,15 @@ pub enum MaterializationExactness {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SplitAcceptanceStatus {
+    NotRequired,
+    PendingPaperClosePolicy,
+    AcceptedPaperClosePolicy,
+    Blocked,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct StratumMaterializationReport {
     pub name: String,
     pub rows: u64,
@@ -259,6 +270,7 @@ pub struct SplitMaterializationReport {
     pub split_fingerprint: Option<String>,
     pub role_manifests: Vec<SplitRoleMaterializationReport>,
     pub blocker_ids: Vec<String>,
+    pub acceptance_status: SplitAcceptanceStatus,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -714,6 +726,20 @@ pub enum ManifestError {
     },
     #[error("invalid source pin manifest `{path}`: {message}")]
     SourcePinManifest { path: PathBuf, message: String },
+    #[error("failed to parse split policy manifest `{path}`: {source}")]
+    SplitPolicyManifestJson {
+        path: PathBuf,
+        #[source]
+        source: serde_json::Error,
+    },
+    #[error("failed to serialize split policy manifest `{path}`: {source}")]
+    SplitPolicyManifestSerialize {
+        path: PathBuf,
+        #[source]
+        source: serde_json::Error,
+    },
+    #[error("invalid split policy manifest `{path}`: {message}")]
+    SplitPolicyManifest { path: PathBuf, message: String },
     #[error("failed to materialize Parquet source rows: {source}")]
     Parquet {
         #[source]
@@ -808,22 +834,55 @@ pub fn write_evoskill_local_source_pin_manifest(
     Ok(path)
 }
 
+pub fn write_evoskill_paper_close_split_policy_manifest(
+    input: &ManifestBuildInput,
+) -> Result<PathBuf, ManifestError> {
+    let path = input.root.join(SPLIT_POLICY_MANIFEST_PATH);
+    let sources = materialize_evoskill_sources(input)?;
+    let reports = raw_source_materialization_reports(&sources);
+    let manifest = paper_close_split_policy_manifest(&reports, &path)?;
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|source| ManifestError::Write {
+            path: parent.to_owned(),
+            source,
+        })?;
+    }
+    let bytes = serde_json::to_vec_pretty(&manifest).map_err(|source| {
+        ManifestError::SplitPolicyManifestSerialize {
+            path: path.clone(),
+            source,
+        }
+    })?;
+    fs::write(&path, bytes).map_err(|source| ManifestError::Write {
+        path: path.clone(),
+        source,
+    })?;
+    let _ = read_split_policy_manifest(&input.root, &sources)?;
+    Ok(path)
+}
+
 fn build_evoskill_replica_manifest_from_sources(
     input: &ManifestBuildInput,
     sources: &EvoSkillSourceMaterializations,
 ) -> Result<EvoSkillReplicaManifest, ManifestError> {
     let source_pin_manifest = read_source_pin_manifest(&input.root)?;
+    let split_policy_manifest = read_split_policy_manifest(&input.root, sources)?;
     let source_revisions = source_revisions(&input.root, source_pin_manifest.as_ref());
     let artifacts = source_artifacts(&input.root)?;
-    let source_materializations = source_materialization_reports(sources);
+    let source_materializations =
+        source_materialization_reports(sources, split_policy_manifest.as_ref());
     let datasets = dataset_requirements(&source_materializations);
     let source_universe = source_universe(&datasets, &source_materializations);
     let scorer = scorer_manifest(&artifacts);
-    let source_blockers = source_blockers(&input.root, sources, source_pin_manifest.is_some())?;
+    let source_blockers = source_blockers(
+        &input.root,
+        &source_materializations,
+        source_pin_manifest.is_some(),
+    )?;
     let blockers = blockers(&source_blockers);
 
     Ok(EvoSkillReplicaManifest {
-        schema_version: 11,
+        schema_version: 12,
         paper: PaperTarget {
             id: "evoskill".to_owned(),
             arxiv_id: "2603.02766".to_owned(),
@@ -873,7 +932,7 @@ pub fn build_evoskill_final_report(
     let proxy_rejection_gates = proxy_rejection_gates();
 
     Ok(EvoSkillFinalReport {
-        schema_version: 8,
+        schema_version: 9,
         exactness,
         manifest,
         loop_report,
@@ -943,6 +1002,53 @@ struct SourcePinManifestEntry {
     head: String,
     branch: String,
     remote_url: String,
+}
+
+#[derive(Debug)]
+struct ValidatedSplitPolicyManifest {
+    policy: SplitPolicy,
+    splits: BTreeMap<(String, String), SplitPolicyManifestEntry>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum SplitPolicy {
+    AcceptDocumentedPaperCloseSubstitutes,
+}
+
+impl SplitPolicy {
+    const fn acceptance_status(self) -> SplitAcceptanceStatus {
+        match self {
+            Self::AcceptDocumentedPaperCloseSubstitutes => {
+                SplitAcceptanceStatus::AcceptedPaperClosePolicy
+            }
+        }
+    }
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+struct SplitPolicyManifestFile {
+    schema_version: u32,
+    policy: SplitPolicy,
+    #[serde(default)]
+    splits: Vec<SplitPolicyManifestEntry>,
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+struct SplitPolicyManifestEntry {
+    dataset_id: String,
+    split_id: String,
+    source_row_fingerprint: String,
+    split_fingerprint: String,
+    #[serde(default)]
+    roles: Vec<SplitPolicyRoleEntry>,
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+struct SplitPolicyRoleEntry {
+    role: String,
+    rows: u64,
+    source_id_fingerprint: String,
 }
 
 #[derive(Default, Debug, serde::Deserialize)]
@@ -1036,6 +1142,16 @@ fn materialize_evoskill_sources(
 
 fn source_materialization_reports(
     sources: &EvoSkillSourceMaterializations,
+    split_policy_manifest: Option<&ValidatedSplitPolicyManifest>,
+) -> Vec<DatasetMaterializationReport> {
+    raw_source_materialization_reports(sources)
+        .into_iter()
+        .map(|report| apply_split_policy_manifest(report, split_policy_manifest))
+        .collect()
+}
+
+fn raw_source_materialization_reports(
+    sources: &EvoSkillSourceMaterializations,
 ) -> Vec<DatasetMaterializationReport> {
     let officeqa = sources.officeqa.as_ref().map_or_else(
         || {
@@ -1052,6 +1168,30 @@ fn source_materialization_reports(
         |materialization| materialization.report.clone(),
     );
     vec![officeqa, sealqa]
+}
+
+fn apply_split_policy_manifest(
+    mut report: DatasetMaterializationReport,
+    split_policy_manifest: Option<&ValidatedSplitPolicyManifest>,
+) -> DatasetMaterializationReport {
+    let Some(split_policy_manifest) = split_policy_manifest else {
+        return report;
+    };
+    match split_policy_manifest.policy {
+        SplitPolicy::AcceptDocumentedPaperCloseSubstitutes => {}
+    }
+    for split in &mut report.split_materializations {
+        if split.exactness == MaterializationExactness::PaperCloseSubstitute
+            && split_policy_manifest
+                .splits
+                .contains_key(&(report.dataset_id.clone(), split.id.clone()))
+        {
+            split.blocker_ids.clear();
+            split.acceptance_status = split_policy_manifest.policy.acceptance_status();
+        }
+    }
+    report.blocker_ids = materialization_blocker_ids(&report.split_materializations);
+    report
 }
 
 fn source_universe(
@@ -1123,6 +1263,8 @@ fn source_artifact_ids_for_dataset(
                 "sealqa" => artifact_ids.push("sealqa_exact_split_manifest".to_owned()),
                 _ => {}
             }
+        } else if has_accepted_or_exact_split(materialization) {
+            artifact_ids.push("split_policy_manifest".to_owned());
         }
         return artifact_ids;
     }
@@ -1139,6 +1281,13 @@ fn has_paper_exact_split(materialization: &DatasetMaterializationReport) -> bool
         .split_materializations
         .iter()
         .any(|split| split.exactness == MaterializationExactness::PaperExact)
+}
+
+fn has_accepted_or_exact_split(materialization: &DatasetMaterializationReport) -> bool {
+    materialization.split_materializations.iter().any(|split| {
+        split.exactness == MaterializationExactness::PaperExact
+            || split.acceptance_status == SplitAcceptanceStatus::AcceptedPaperClosePolicy
+    })
 }
 
 fn extend_unique(values: &mut Vec<String>, additions: &[String]) {
@@ -1443,6 +1592,244 @@ fn source_revision_relative_path(id: &str) -> Option<&'static str> {
         .find_map(|(source_id, relative_path)| (*source_id == id).then_some(*relative_path))
 }
 
+fn read_split_policy_manifest(
+    root: &Path,
+    sources: &EvoSkillSourceMaterializations,
+) -> Result<Option<ValidatedSplitPolicyManifest>, ManifestError> {
+    let path = root.join(SPLIT_POLICY_MANIFEST_PATH);
+    if !path.exists() {
+        return Ok(None);
+    }
+    let bytes = fs::read(&path).map_err(|source| ManifestError::Read {
+        path: path.clone(),
+        source,
+    })?;
+    let manifest = serde_json::from_slice::<SplitPolicyManifestFile>(&bytes).map_err(|source| {
+        ManifestError::SplitPolicyManifestJson {
+            path: path.clone(),
+            source,
+        }
+    })?;
+    let reports = raw_source_materialization_reports(sources);
+    validate_split_policy_manifest(&path, manifest, &reports).map(Some)
+}
+
+fn paper_close_split_policy_manifest(
+    reports: &[DatasetMaterializationReport],
+    path: &Path,
+) -> Result<SplitPolicyManifestFile, ManifestError> {
+    let splits = paper_close_substitute_split_entries(reports)?;
+    if splits.is_empty() {
+        return Err(ManifestError::SplitPolicyManifest {
+            path: path.to_owned(),
+            message: "no materialized paper-close substitute splits are available".to_owned(),
+        });
+    }
+    Ok(SplitPolicyManifestFile {
+        schema_version: 1,
+        policy: SplitPolicy::AcceptDocumentedPaperCloseSubstitutes,
+        splits,
+    })
+}
+
+fn validate_split_policy_manifest(
+    path: &Path,
+    manifest: SplitPolicyManifestFile,
+    reports: &[DatasetMaterializationReport],
+) -> Result<ValidatedSplitPolicyManifest, ManifestError> {
+    if manifest.schema_version != 1 {
+        return Err(ManifestError::SplitPolicyManifest {
+            path: path.to_owned(),
+            message: format!(
+                "expected schema_version 1, found {}",
+                manifest.schema_version
+            ),
+        });
+    }
+    let expected = paper_close_substitute_split_entries(reports)?
+        .into_iter()
+        .map(|entry| ((entry.dataset_id.clone(), entry.split_id.clone()), entry))
+        .collect::<BTreeMap<_, _>>();
+    if expected.is_empty() {
+        return Err(ManifestError::SplitPolicyManifest {
+            path: path.to_owned(),
+            message: "no materialized paper-close substitute splits are available".to_owned(),
+        });
+    }
+
+    let mut splits = BTreeMap::new();
+    for entry in manifest.splits {
+        let key = (entry.dataset_id.clone(), entry.split_id.clone());
+        let expected_entry = expected.get(&key).ok_or_else(|| {
+            ManifestError::SplitPolicyManifest {
+                path: path.to_owned(),
+                message: format!(
+                    "split policy references unknown or non-substitute split `{}` for dataset `{}`",
+                    entry.split_id, entry.dataset_id
+                ),
+            }
+        })?;
+        validate_split_policy_entry(path, &entry, expected_entry)?;
+        if splits.insert(key, entry).is_some() {
+            return Err(ManifestError::SplitPolicyManifest {
+                path: path.to_owned(),
+                message: "split policy entries must be unique by dataset_id and split_id"
+                    .to_owned(),
+            });
+        }
+    }
+
+    for key in expected.keys() {
+        if !splits.contains_key(key) {
+            return Err(ManifestError::SplitPolicyManifest {
+                path: path.to_owned(),
+                message: format!(
+                    "missing split policy entry for dataset `{}` split `{}`",
+                    key.0, key.1
+                ),
+            });
+        }
+    }
+
+    Ok(ValidatedSplitPolicyManifest {
+        policy: manifest.policy,
+        splits,
+    })
+}
+
+fn validate_split_policy_entry(
+    path: &Path,
+    actual: &SplitPolicyManifestEntry,
+    expected: &SplitPolicyManifestEntry,
+) -> Result<(), ManifestError> {
+    if actual.source_row_fingerprint != expected.source_row_fingerprint {
+        return Err(split_policy_mismatch(
+            path,
+            actual,
+            "source_row_fingerprint",
+            &expected.source_row_fingerprint,
+            &actual.source_row_fingerprint,
+        ));
+    }
+    if actual.split_fingerprint != expected.split_fingerprint {
+        return Err(split_policy_mismatch(
+            path,
+            actual,
+            "split_fingerprint",
+            &expected.split_fingerprint,
+            &actual.split_fingerprint,
+        ));
+    }
+    if actual.roles.len() != expected.roles.len() {
+        return Err(ManifestError::SplitPolicyManifest {
+            path: path.to_owned(),
+            message: format!(
+                "split `{}` for dataset `{}` expected {} roles, found {}",
+                actual.split_id,
+                actual.dataset_id,
+                expected.roles.len(),
+                actual.roles.len()
+            ),
+        });
+    }
+    let expected_roles = expected
+        .roles
+        .iter()
+        .map(|role| (role.role.as_str(), role))
+        .collect::<BTreeMap<_, _>>();
+    for actual_role in &actual.roles {
+        let expected_role = expected_roles
+            .get(actual_role.role.as_str())
+            .ok_or_else(|| ManifestError::SplitPolicyManifest {
+                path: path.to_owned(),
+                message: format!(
+                    "split `{}` for dataset `{}` references unknown role `{}`",
+                    actual.split_id, actual.dataset_id, actual_role.role
+                ),
+            })?;
+        if actual_role.rows != expected_role.rows {
+            return Err(ManifestError::SplitPolicyManifest {
+                path: path.to_owned(),
+                message: format!(
+                    "split `{}` for dataset `{}` role `{}` rows mismatch: expected {}, found {}",
+                    actual.split_id,
+                    actual.dataset_id,
+                    actual_role.role,
+                    expected_role.rows,
+                    actual_role.rows
+                ),
+            });
+        }
+        if actual_role.source_id_fingerprint != expected_role.source_id_fingerprint {
+            return Err(ManifestError::SplitPolicyManifest {
+                path: path.to_owned(),
+                message: format!(
+                    "split `{}` for dataset `{}` role `{}` source_id_fingerprint mismatch",
+                    actual.split_id, actual.dataset_id, actual_role.role
+                ),
+            });
+        }
+    }
+    Ok(())
+}
+
+fn split_policy_mismatch(
+    path: &Path,
+    entry: &SplitPolicyManifestEntry,
+    field: &str,
+    expected: &str,
+    actual: &str,
+) -> ManifestError {
+    ManifestError::SplitPolicyManifest {
+        path: path.to_owned(),
+        message: format!(
+            "split `{}` for dataset `{}` {field} mismatch: expected `{expected}`, found `{actual}`",
+            entry.split_id, entry.dataset_id
+        ),
+    }
+}
+
+fn paper_close_substitute_split_entries(
+    reports: &[DatasetMaterializationReport],
+) -> Result<Vec<SplitPolicyManifestEntry>, ManifestError> {
+    let mut entries = Vec::new();
+    for report in reports {
+        let Some(source_row_fingerprint) = &report.source_row_fingerprint else {
+            continue;
+        };
+        for split in &report.split_materializations {
+            if split.exactness != MaterializationExactness::PaperCloseSubstitute {
+                continue;
+            }
+            let split_fingerprint = split.split_fingerprint.clone().ok_or_else(|| {
+                ManifestError::SplitPolicyManifest {
+                    path: PathBuf::from(SPLIT_POLICY_MANIFEST_PATH),
+                    message: format!(
+                        "split `{}` for dataset `{}` has no split fingerprint",
+                        split.id, report.dataset_id
+                    ),
+                }
+            })?;
+            entries.push(SplitPolicyManifestEntry {
+                dataset_id: report.dataset_id.clone(),
+                split_id: split.id.clone(),
+                source_row_fingerprint: source_row_fingerprint.clone(),
+                split_fingerprint,
+                roles: split
+                    .role_manifests
+                    .iter()
+                    .map(|role| SplitPolicyRoleEntry {
+                        role: role.role.clone(),
+                        rows: role.rows,
+                        source_id_fingerprint: role.source_id_fingerprint.clone(),
+                    })
+                    .collect(),
+            });
+        }
+    }
+    Ok(entries)
+}
+
 fn paper_declared_split_report<T>(
     rows: &SourceRowManifest<T, String>,
     manifest: &PaperSplitManifestFile,
@@ -1502,6 +1889,7 @@ fn paper_declared_split_report<T>(
         split_fingerprint: Some(fingerprint_hex(splits.fingerprint())),
         role_manifests,
         blocker_ids: Vec::new(),
+        acceptance_status: SplitAcceptanceStatus::NotRequired,
     })
 }
 
@@ -1561,6 +1949,7 @@ fn officeqa_difficulty_split_report(
             split_fingerprint: None,
             role_manifests: Vec::new(),
             blocker_ids: vec!["officeqa_insufficient_rows".to_owned()],
+            acceptance_status: SplitAcceptanceStatus::Blocked,
         });
     }
 
@@ -1588,6 +1977,7 @@ fn officeqa_difficulty_split_report(
             "officeqa_category_split_manifest".to_owned(),
             "officeqa_exact_split_membership".to_owned(),
         ],
+        acceptance_status: SplitAcceptanceStatus::PendingPaperClosePolicy,
     })
 }
 
@@ -1784,6 +2174,7 @@ fn sealqa_row_order_split_report(
             split_fingerprint: None,
             role_manifests: Vec::new(),
             blocker_ids: vec!["sealqa_insufficient_rows".to_owned()],
+            acceptance_status: SplitAcceptanceStatus::Blocked,
         });
     }
 
@@ -1818,6 +2209,7 @@ fn sealqa_row_order_split_report(
         split_fingerprint: Some(fingerprint_hex(splits.fingerprint())),
         role_manifests,
         blocker_ids,
+        acceptance_status: SplitAcceptanceStatus::PendingPaperClosePolicy,
     })
 }
 
@@ -2369,13 +2761,17 @@ fn final_report_paper_close_gates(
             "replica_manifest",
             PaperCloseGateStatus::Proven,
             Vec::new(),
-            "schema v11 manifest declares source universe, local source identity, optional validated source pins, fingerprints, paper targets, source blockers with checked local candidate evidence, source-backed judge template pins, model pins, scorer, frontier, and schedule",
+            "schema v12 manifest declares source universe, local source identity, optional validated source pins, optional accepted paper-close substitute split policy, fingerprints, paper targets, source blockers with checked local candidate evidence, source-backed judge template pins, model pins, scorer, frontier, and schedule",
         ),
         paper_close_gate(
             "source_and_split_materialization",
-            PaperCloseGateStatus::SourceBlocked,
+            if source_blocker_ids.is_empty() {
+                PaperCloseGateStatus::Proven
+            } else {
+                PaperCloseGateStatus::SourceBlocked
+            },
             source_blocker_ids,
-            "OfficeQA and SealQA substitute materializations are auditable, but exact paper source/split artifacts remain source-blocked",
+            "OfficeQA and SealQA materializations are auditable; exact paper splits or accepted paper-close substitute policy decide whether split blockers remain",
         ),
         paper_close_gate(
             "paper_scorer",
@@ -3201,6 +3597,12 @@ fn source_artifacts(root: &Path) -> Result<Vec<SourceArtifact>, ManifestError> {
         )?,
         source_artifact(
             root,
+            "split_policy_manifest",
+            "paper-close substitute split policy manifest",
+            SPLIT_POLICY_MANIFEST_PATH,
+        )?,
+        source_artifact(
+            root,
             "paper_full_source",
             "paper source text",
             "tmp/skill_opt_sources/arx_2603.02766/full_source.md",
@@ -3264,7 +3666,7 @@ fn source_artifacts(root: &Path) -> Result<Vec<SourceArtifact>, ManifestError> {
 
 fn source_blockers(
     root: &Path,
-    sources: &EvoSkillSourceMaterializations,
+    materializations: &[DatasetMaterializationReport],
     source_pin_resolved: bool,
 ) -> Result<Vec<SourceBlockerReport>, ManifestError> {
     let mut reports = Vec::new();
@@ -3284,10 +3686,10 @@ fn source_blockers(
             "schema-v1 local-checkout source pin manifest is absent",
         )?);
     }
-    if !sources
-        .officeqa
-        .as_ref()
-        .is_some_and(|materialization| has_paper_exact_split(&materialization.report))
+    if !materializations
+        .iter()
+        .find(|materialization| materialization.dataset_id == "officeqa")
+        .is_some_and(has_accepted_or_exact_split)
     {
         reports.push(source_blocker(
             root,
@@ -3299,6 +3701,7 @@ fn source_blockers(
                 "tmp/repros/evoskill/.dataset/new_runs_base/solved_dataset.csv",
                 "tmp/repros/evoskill/results/full_run_new_evolved_final_two.pkl",
                 "tmp/repros/evoskill/ablation_run_incorrect.csv",
+                SPLIT_POLICY_MANIFEST_PATH,
             ],
             "paper references LLM-derived categories/pseudo-labels, but the local source tree only exposes difficulty labels",
         )?);
@@ -3310,16 +3713,17 @@ fn source_blockers(
             &["officeqa_scored_train_validation_held_out_report"],
             &[
                 OFFICEQA_EXACT_SPLIT_MANIFEST_PATH,
+                SPLIT_POLICY_MANIFEST_PATH,
                 "tmp/repros/evoskill/.dataset/new_runs_base/solved_dataset.csv",
                 "tmp/repros/evoskill/ablation_run_incorrect.csv",
             ],
             "difficulty-stratified substitute splits are auditable, but paper exact membership is absent",
         )?);
     }
-    if !sources
-        .sealqa
-        .as_ref()
-        .is_some_and(|materialization| has_paper_exact_split(&materialization.report))
+    if !materializations
+        .iter()
+        .find(|materialization| materialization.dataset_id == "sealqa")
+        .is_some_and(has_accepted_or_exact_split)
     {
         reports.push(source_blocker(
             root,
@@ -3329,6 +3733,7 @@ fn source_blockers(
             &["sealqa_scored_train_held_out_report"],
             &[
                 SEALQA_EXACT_SPLIT_MANIFEST_PATH,
+                SPLIT_POLICY_MANIFEST_PATH,
                 "tmp/replication/evoskill/sealqa/seal-0.parquet",
             ],
             "seal-0 rows are materialized from Parquet, but the exact 10 percent train versus held-out row ids are not present",
@@ -3442,13 +3847,17 @@ fn dataset_requirements(
         },
     ];
     for requirement in &mut requirements {
-        if materializations
+        if let Some(materialization) = materializations
             .iter()
             .find(|materialization| materialization.dataset_id == requirement.id)
-            .is_some_and(has_paper_exact_split)
         {
-            requirement.split_status = SplitManifestStatus::ExactPublished;
-            requirement.blocker_ids.clear();
+            if has_paper_exact_split(materialization) {
+                requirement.split_status = SplitManifestStatus::ExactPublished;
+                requirement.blocker_ids.clear();
+            } else if has_accepted_or_exact_split(materialization) {
+                requirement.split_status = SplitManifestStatus::PaperCloseSubstituteAccepted;
+                requirement.blocker_ids.clear();
+            }
         }
     }
     requirements

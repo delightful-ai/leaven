@@ -10,7 +10,8 @@ use p5_skill_paper_reproductions::evoskill::{
     DatasetMaterializationReport, EvoSkillFinalReport, ExactnessClass, FinalScoreSlot,
     FinalScoreStatus, LiveRunGateStatus, ManifestBuildInput, MaterializationExactness,
     PaperCloseGateStatus, PaperResultTargetStatus, ProxyRejectionStatus, SourceBlockerStatus,
-    SplitMaterializationReport, build_evoskill_final_report,
+    SplitAcceptanceStatus, SplitMaterializationReport, build_evoskill_final_report,
+    write_evoskill_paper_close_split_policy_manifest,
 };
 use parquet::arrow::ArrowWriter;
 
@@ -40,6 +41,90 @@ fn final_report_exposes_score_slots_costs_errors_and_gaps_without_fake_metrics()
             .iter()
             .any(|ablation| ablation.id == "skill_merge" && ablation.status == "blocked")
     );
+}
+
+#[test]
+fn final_report_uses_accepted_substitute_splits_as_unscored_denominator() {
+    let root = tempfile::tempdir().unwrap();
+    write_officeqa_full_csv(root.path(), 246);
+    write_sealqa_parquet(root.path(), 111);
+    write_sealqa_judge_source(root.path());
+    write_evoskill_paper_close_split_policy_manifest(&ManifestBuildInput::new(root.path()))
+        .unwrap();
+
+    let report = build_evoskill_final_report(&ManifestBuildInput::new(root.path())).unwrap();
+
+    let source_split_gate = report
+        .paper_close_gates
+        .iter()
+        .find(|gate| gate.id == "source_and_split_materialization")
+        .expect("source/split paper-close gate exists");
+    assert_eq!(
+        source_split_gate.status,
+        PaperCloseGateStatus::SourceBlocked
+    );
+    assert!(
+        source_split_gate
+            .blocker_ids
+            .contains(&"browsecomp_transfer_sample".to_owned())
+    );
+    assert!(source_split_gate.blocker_ids.iter().all(|blocker| {
+        blocker != "officeqa_exact_split_membership"
+            && blocker != "officeqa_category_split_manifest"
+            && blocker != "sealqa_split_manifest"
+    }));
+    assert!(
+        report
+            .manifest
+            .source_blockers
+            .iter()
+            .all(|blocker| blocker.dataset_id != "officeqa" && blocker.dataset_id != "sealqa")
+    );
+
+    let officeqa = officeqa_materialization(&report);
+    let officeqa_split = officeqa
+        .split_materializations
+        .iter()
+        .find(|split| split.id == "officeqa_difficulty_train_12_val_17")
+        .expect("OfficeQA accepted substitute split exists");
+    assert_eq!(
+        officeqa_split.acceptance_status,
+        SplitAcceptanceStatus::AcceptedPaperClosePolicy
+    );
+    assert!(officeqa_split.blocker_ids.is_empty());
+    let officeqa_slots = report
+        .score_slots
+        .iter()
+        .filter(|slot| slot.dataset_id == "officeqa")
+        .collect::<Vec<_>>();
+    assert!(officeqa_slots.iter().all(|slot| {
+        slot.status == FinalScoreStatus::NotRun
+            && slot.score.is_none()
+            && slot.blocker_ids.is_empty()
+            && slot.split_exactness == MaterializationExactness::PaperCloseSubstitute
+    }));
+
+    let sealqa = sealqa_materialization(&report);
+    let sealqa_split = sealqa
+        .split_materializations
+        .iter()
+        .find(|split| split.id == "sealqa_row_order_train_11_heldout_100")
+        .expect("SealQA accepted substitute split exists");
+    assert_eq!(
+        sealqa_split.acceptance_status,
+        SplitAcceptanceStatus::AcceptedPaperClosePolicy
+    );
+    assert!(sealqa_split.blocker_ids.is_empty());
+    let sealqa_slots = report
+        .score_slots
+        .iter()
+        .filter(|slot| slot.dataset_id == "sealqa")
+        .collect::<Vec<_>>();
+    assert!(sealqa_slots.iter().all(|slot| {
+        slot.status == FinalScoreStatus::Blocked
+            && slot.score.is_none()
+            && slot.blocker_ids == ["sealqa_judge_scored_run".to_owned()]
+    }));
 }
 
 fn assert_paper_close_gates_separate_proof_from_blockers(report: &EvoSkillFinalReport) {
@@ -187,7 +272,7 @@ fn assert_reported_target(
 
 fn assert_report_header(report: &EvoSkillFinalReport) {
     assert_eq!(report.exactness, ExactnessClass::BlockedBeforePaperClose);
-    assert_eq!(report.schema_version, 8);
+    assert_eq!(report.schema_version, 9);
     assert_eq!(report.cost.llm_calls, 0);
     assert_eq!(report.cost.metric_calls, 0);
     assert_eq!(report.cost.prompt_tokens, 0);
@@ -641,6 +726,61 @@ fn cli_can_persist_local_source_pin_sidecar_before_writing_manifest() {
             .unwrap()
             .iter()
             .all(|revision| revision["paper_release_status"] == "pinned_local_checkout")
+    );
+}
+
+#[test]
+fn cli_can_persist_paper_close_split_policy_sidecar_before_writing_manifest() {
+    let root = tempfile::tempdir().unwrap();
+    write_officeqa_full_csv(root.path(), 246);
+    write_sealqa_parquet(root.path(), 111);
+    let manifest_path = root.path().join("out/replica-manifest.json");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_p5_skill_paper_reproductions"))
+        .arg("--root")
+        .arg(root.path())
+        .arg("--out")
+        .arg(&manifest_path)
+        .arg("--write-paper-close-split-policy-manifest")
+        .output()
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let split_policy_path = root
+        .path()
+        .join("tmp/replication/evoskill/split_policy_manifest.json");
+    assert!(split_policy_path.exists());
+    let split_policy = fs::read_to_string(split_policy_path).unwrap();
+    assert!(split_policy.contains("\"accept_documented_paper_close_substitutes\""));
+
+    let manifest = fs::read_to_string(manifest_path).unwrap();
+    let manifest: serde_json::Value = serde_json::from_str(&manifest).unwrap();
+    assert!(
+        manifest["source_blockers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|blocker| blocker["dataset_id"] != "officeqa"
+                && blocker["dataset_id"] != "sealqa")
+    );
+    assert!(
+        manifest["source_materializations"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .flat_map(|materialization| {
+                materialization["split_materializations"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+            })
+            .filter(|split| split["exactness"] == "paper_close_substitute")
+            .all(|split| split["acceptance_status"] == "accepted_paper_close_policy")
     );
 }
 

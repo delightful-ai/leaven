@@ -57,6 +57,9 @@ evoskill-paper-manifest *args:
 evoskill-paper-pin-local-sources *args:
     cargo run -p p5_skill_paper_reproductions -- --out target/evoskill-paper-close/replica-manifest.json --write-local-source-pin-manifest {{args}}
 
+evoskill-paper-accept-substitute-splits *args:
+    cargo run -p p5_skill_paper_reproductions -- --out target/evoskill-paper-close/replica-manifest.json --write-paper-close-split-policy-manifest {{args}}
+
 evoskill-paper-final-report *args:
     cargo run -p p5_skill_paper_reproductions -- --out target/evoskill-paper-close/replica-manifest.json --final-report-out target/evoskill-paper-close/final-report.json {{args}}
 

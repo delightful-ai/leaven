@@ -23,7 +23,7 @@ belong in their owning crates.
 ## Proof
 - `cargo test -p p5_skill_paper_reproductions --test evoskill_manifest`
   proves the EvoSkill replica manifest preserves the paper-close denominator
-  and rejects proxy completion claims. It also proves the schema v11
+  and rejects proxy completion claims. It also proves the schema v12
   `source_universe` links datasets to source artifact ids, available source
   revision ids, materialized row counts, source-row fingerprints, split ids,
   split exactness labels, source revision status fields, and blockers without
@@ -31,6 +31,12 @@ belong in their owning crates.
   Optional schema-v1 `source_pin_manifest.json` input resolves only the
   `source_pin` blocker after id/path/head/branch/origin checks match the local
   git checkouts; mismatches fail the manifest build.
+  Optional schema-v1 `split_policy_manifest.json` input accepts the current
+  documented paper-close substitute split fingerprints only after
+  dataset/split/source-row/split/role fingerprint checks match the materialized
+  OfficeQA/SealQA reports. It removes split blockers without changing
+  `paper_close_substitute` exactness; stale or partial policy manifests fail the
+  build instead of becoming paper-exact proof.
   The manifest also records OfficeQA baseline and skill-merge paper result
   targets, including the 67.9 versus 68.1 exact-match ambiguity, as typed
   `paper_result_targets` rather than a generic blocker. It also carries typed
@@ -61,8 +67,9 @@ belong in their owning crates.
   percent train / held-out substitute split with role-level source-id membership
   manifests. SealQA row identity is physical row order, because the observed
   `canary` column is not unique. It keeps missing paper category/exact split
-  artifacts as blockers and does not prove exact OfficeQA/SealQA paper
-  membership, SealQA judge scores, or live scores.
+  artifacts as blockers unless the explicit paper-close split policy sidecar
+  validates the current substitute fingerprints. Even then it does not prove
+  exact OfficeQA/SealQA paper membership, SealQA judge scores, or live scores.
 - `cargo test -p p5_skill_paper_reproductions --test evoskill_loop_mechanics`
   proves a no-spend multi-iteration mechanics loop over the OfficeQA substitute
   split: train sampling, failure feedback history, round-robin parent
@@ -80,8 +87,11 @@ belong in their owning crates.
   approval-blocked gates, a `live_run_gate` that blocks live execution until
   explicit provider spend and credential approval, plus typed
   `proxy_rejection_gates` that reject known scaffolds and repo-health checks as
-  completion evidence. Blocked metrics stay missing rather than fake zeros. It
-  does not prove live provider behavior, validation-set scores, or paper-close.
+  completion evidence. Accepted substitute split policies turn OfficeQA slots
+  into unscored `not_run` denominator slots and leave SealQA blocked on judge
+  execution, without faking score values. Blocked metrics stay missing rather
+  than fake zeros. It does not prove live provider behavior, validation-set
+  scores, or paper-close.
 - `just evoskill-paper-manifest` writes the current no-spend local manifest to
   `target/evoskill-paper-close/replica-manifest.json`.
 - `just evoskill-paper-pin-local-sources` writes
@@ -89,5 +99,10 @@ belong in their owning crates.
   source checkout identities and then rewrites the manifest. This chooses the
   local-checkout source denominator only; it is not paper-release or
   remote-current evidence.
+- `just evoskill-paper-accept-substitute-splits` writes
+  `tmp/replication/evoskill/split_policy_manifest.json` from the current
+  OfficeQA/SealQA substitute split fingerprints and then rewrites the manifest.
+  This chooses a documented paper-close split denominator only; it is not
+  paper-exact split membership or score evidence.
 - `just evoskill-paper-final-report` writes both the manifest and current
   no-spend final report truth surface under `target/evoskill-paper-close/`.

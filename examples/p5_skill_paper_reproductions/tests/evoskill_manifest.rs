@@ -29,7 +29,7 @@ fn evoskill_manifest_records_paper_close_denominator_without_claiming_proof() {
 
     let manifest = build_evoskill_replica_manifest(&ManifestBuildInput::new(root.path())).unwrap();
 
-    assert_eq!(manifest.schema_version, 11);
+    assert_eq!(manifest.schema_version, 12);
     assert_eq!(manifest.paper.arxiv_id, "2603.02766");
     assert_eq!(manifest.exactness, ExactnessClass::BlockedBeforePaperClose);
     assert_eq!(manifest.scorer.tolerances, [0.0, 0.01, 0.025, 0.05, 0.10]);

@@ -773,6 +773,31 @@ row-order substitute. The new behavior is a refusal-capable ingestion path:
 unknown source ids, wrong dataset ids, empty required roles, and incomplete
 coverage fail the build instead of silently becoming paper-close evidence.
 
+## No-Spend Paper-Close Split Policy
+
+Date: 2026-05-22.
+Provider/model spend: none.
+Cloud/GPU spend: none.
+
+The P5 EvoSkill harness now accepts an optional schema-v1 split policy manifest
+at `tmp/replication/evoskill/split_policy_manifest.json`. The only current
+policy is `accept_documented_paper_close_substitutes`. The sidecar must match
+every materialized paper-close substitute split by dataset id, split id,
+source-row fingerprint, split fingerprint, role names, role row counts, and
+role source-id fingerprints. Unknown splits, stale fingerprints, duplicate
+entries, and partial coverage fail the manifest build.
+
+The CLI flag `--write-paper-close-split-policy-manifest` and repo shortcut
+`just evoskill-paper-accept-substitute-splits` write that sidecar from the
+current local OfficeQA/SealQA materializations before regenerating the manifest.
+When validated, OfficeQA difficulty-stratified splits and the SealQA row-order
+split keep `paper_close_substitute` exactness but move to
+`accepted_paper_close_policy`; their split blockers are removed. This is an
+operator choice of a documented paper-close denominator, not paper-exact split
+membership and not score evidence. BrowseComp transfer source, SealQA judge
+execution, live provider approval, and paper-release source status remain
+separate blockers.
+
 ## No-Spend Score-Slot Fingerprints
 
 Date: 2026-05-22.
