@@ -9,7 +9,7 @@ use arrow_schema::{DataType, Field, Schema};
 use p5_skill_paper_reproductions::evoskill::{
     DatasetMaterializationReport, EvoSkillFinalReport, ExactnessClass, FinalScoreSlot,
     FinalScoreStatus, LiveRunGateStatus, ManifestBuildInput, MaterializationExactness,
-    SplitMaterializationReport, build_evoskill_final_report,
+    ProxyRejectionStatus, SplitMaterializationReport, build_evoskill_final_report,
 };
 use parquet::arrow::ArrowWriter;
 
@@ -23,6 +23,7 @@ fn final_report_exposes_score_slots_costs_errors_and_gaps_without_fake_metrics()
 
     assert_report_header(&report);
     assert_live_run_gate_blocks_unapproved_spend(&report);
+    assert_proxy_rejection_gates(&report);
     let officeqa = officeqa_materialization(&report);
     let sealqa = sealqa_materialization(&report);
     assert_officeqa_train_12_score_slots(&report, officeqa);
@@ -37,7 +38,7 @@ fn final_report_exposes_score_slots_costs_errors_and_gaps_without_fake_metrics()
 
 fn assert_report_header(report: &EvoSkillFinalReport) {
     assert_eq!(report.exactness, ExactnessClass::BlockedBeforePaperClose);
-    assert_eq!(report.schema_version, 4);
+    assert_eq!(report.schema_version, 5);
     assert_eq!(report.cost.llm_calls, 0);
     assert_eq!(report.cost.metric_calls, 0);
     assert_eq!(report.cost.prompt_tokens, 0);
@@ -69,6 +70,50 @@ fn assert_report_header(report: &EvoSkillFinalReport) {
         report.manifest.schema_version
     );
     assert_eq!(report.manifest_fingerprint.fingerprint.len(), 64);
+}
+
+fn assert_proxy_rejection_gates(report: &EvoSkillFinalReport) {
+    assert_eq!(report.proxy_rejection_gates.len(), 5);
+    assert!(
+        report
+            .proxy_rejection_gates
+            .iter()
+            .all(|gate| { gate.status == ProxyRejectionStatus::RejectedAsCompletionEvidence })
+    );
+
+    let gate = |id: &str| {
+        report
+            .proxy_rejection_gates
+            .iter()
+            .find(|gate| gate.id == id)
+            .unwrap_or_else(|| panic!("missing proxy rejection gate {id}"))
+    };
+
+    assert!(
+        gate("p5_one_iteration_fixture")
+            .why_not
+            .contains("OfficeQA/SealQA paper-close")
+    );
+    assert!(
+        gate("git_trust_benchmark")
+            .why_not
+            .contains("not EvoSkill loop semantics")
+    );
+    assert!(
+        gate("fake_runtime_loop")
+            .why_not
+            .contains("not live agent behavior")
+    );
+    assert!(
+        gate("single_sample_inspection")
+            .why_not
+            .contains("train/validation/test")
+    );
+    assert!(
+        gate("just_check_repo_health")
+            .why_not
+            .contains("repo health only")
+    );
 }
 
 fn assert_live_run_gate_blocks_unapproved_spend(report: &EvoSkillFinalReport) {
@@ -257,6 +302,7 @@ fn cli_writes_manifest_and_final_report_artifacts() {
     let report = fs::read_to_string(report_path).unwrap();
     assert!(report.contains("\"score_slots\""));
     assert!(report.contains("\"live_run_gate\""));
+    assert!(report.contains("\"proxy_rejection_gates\""));
     assert!(report.contains("\"role_source_id_fingerprint\""));
     assert!(report.contains("\"blocked_before_paper_close\""));
 }

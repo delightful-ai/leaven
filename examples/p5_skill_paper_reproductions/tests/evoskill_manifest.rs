@@ -37,7 +37,7 @@ fn evoskill_manifest_records_paper_close_denominator_without_claiming_proof() {
         manifest
             .proxy_rejections
             .iter()
-            .any(|proxy| proxy.contains("P5"))
+            .any(|proxy| proxy.contains("P5") && proxy.contains("paper-close"))
     );
     assert!(
         manifest

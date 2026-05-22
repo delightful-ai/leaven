@@ -745,3 +745,22 @@ a provider, inspect secrets, execute the SealQA judge, or produce live
 OfficeQA/SealQA scores. A future live run still needs explicit spend/credential
 approval and must reuse the same report surface rather than replacing missing
 metrics with zeros.
+
+## No-Spend Proxy Closeout Gates
+
+Date: 2026-05-22.
+Provider/model spend: none.
+Cloud/GPU spend: none.
+
+The P5 final report now declares schema v5 with typed
+`proxy_rejection_gates`. The gates mark P5 one-iteration fixture completion,
+Git materialization/readback trust benchmarks, fake-runtime child admission,
+single OfficeQA/SealQA sample inspection, and `just check`/topology success as
+`rejected_as_completion_evidence`.
+
+This closes the loose-string closeout surface: those proxy artifacts can still
+be useful evidence for wiring, substrate, mechanics, provenance inspection, or
+repo health, but the final report now names why each one does not prove
+OfficeQA/SealQA paper-close replication. Paper-close still requires the exact
+source/split policy, live judge/provider approval where needed, and reported
+train/validation/test scores with the existing exactness classification.
