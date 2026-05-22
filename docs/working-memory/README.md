@@ -17,3 +17,6 @@ Current ledgers:
 - `evoskill-replication.md`: EvoSkill-specific dossier with the first
   no-spend OfficeQA/SealQA setup probe, source pin state, data availability,
   split mismatch, and the current blocker before `leaven-artifact-git`.
+- `pod-snapshotting-efficiency.md`: active goal ledger for lightweight
+  artifact-native Git intermediate reconstruction and Firkin snapshot boundary
+  evidence.
