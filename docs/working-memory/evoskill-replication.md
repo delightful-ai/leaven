@@ -640,15 +640,17 @@ embeds the current manifest, runs the no-spend OfficeQA substitute mechanics
 loop when the OfficeQA CSV is present, records manifest and scorer fingerprints,
 emits baseline/optimized score slots for train, validation, and held-out test
 roles, records the SealQA judge-template fingerprint, records zero
-LLM/metric/token spend, copies blocker/errors, and records ablation statuses for
-skill-only, prompt-only, skill-merge, and BrowseComp transfer.
+LLM/metric/token spend, copies blocker/errors, links score slots to paper target
+ids, and records ablation statuses for skill-only, prompt-only, skill-merge,
+and BrowseComp transfer.
 
 This deliberately does not fill blocked metrics with zeroes or claim paper-close:
 OfficeQA score slots stay `blocked` until exact membership or an accepted
 paper-close substitute can be used for a scored run, SealQA score slots stay
 blocked on exact split membership and the approved judge/scored-run evidence,
-and live
-provider/model scores still need explicit approval and a real run.
+BrowseComp transfer score slots stay blocked on the missing 128-example
+transfer sample, and live provider/model scores still need explicit approval
+and a real run.
 
 ## No-Spend Source Pin Status Surface
 
@@ -721,6 +723,23 @@ source-id membership the slot referred to. The report still does not invent
 OfficeQA or SealQA scores: blocked score values remain `null`, SealQA slots
 retain the `sealqa_judge_scored_run` blocker, and live/provider scores still
 require explicit approval plus real run evidence.
+
+## No-Spend Score-Slot Paper Targets
+
+Date: 2026-05-22.
+Provider/model spend: none.
+Cloud/GPU spend: none.
+
+The P5 final report now declares schema v8. Every score slot carries
+`paper_result_target_ids`, so blocked score rows state the paper comparison
+target they would eventually report against. OfficeQA baseline slots point at
+the 60.6 percent table target, OfficeQA optimized slots point at both
+skill-merge candidates, SealQA slots point at the 26.6/38.7 judge-accuracy
+targets, and BrowseComp transfer emits source-blocked held-out slots for the
+43.5 percent baseline and 48.8 percent SealQA-skill transfer targets.
+
+This is still denominator visibility only. It does not locate the missing
+BrowseComp 128-example sample, run the SealQA judge, or fill any score value.
 
 ## No-Spend Live Run Approval Gate
 
@@ -868,7 +887,7 @@ Date: 2026-05-22.
 Provider/model spend: none.
 Cloud/GPU spend: none.
 
-The P5 final report now declares schema v7. The no-spend mechanics loop carries
+The P5 final report schema v7 introduced a no-spend mechanics loop carrying
 a typed `run_manifest` that binds the loop to the replica manifest fingerprint,
 scorer fingerprint, OfficeQA source-row fingerprint, train split fingerprint,
 train role source-id fingerprint, schedule, frontier policy, checkpoint

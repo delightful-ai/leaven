@@ -461,6 +461,7 @@ pub struct FinalScoreSlot {
     pub split_fingerprint: Option<String>,
     pub role_source_id_fingerprint: Option<String>,
     pub candidate_role: String,
+    pub paper_result_target_ids: Vec<String>,
     pub expected_rows: Option<u64>,
     pub score: Option<f64>,
     pub status: FinalScoreStatus,
@@ -805,7 +806,7 @@ pub fn build_evoskill_final_report(
     let proxy_rejection_gates = proxy_rejection_gates();
 
     Ok(EvoSkillFinalReport {
-        schema_version: 7,
+        schema_version: 8,
         exactness,
         manifest,
         loop_report,
@@ -1543,19 +1544,42 @@ fn scorer_fingerprint_report(scorer: &ScorerManifest) -> ScorerFingerprintReport
 
 fn final_score_slots(manifest: &EvoSkillReplicaManifest) -> Vec<FinalScoreSlot> {
     let mut slots = Vec::new();
-    for materialization in &manifest.source_materializations {
-        if materialization.split_materializations.is_empty() {
-            slots.extend(dataset_placeholder_score_slots(manifest, materialization));
-            continue;
-        }
-        for split in &materialization.split_materializations {
-            slots.extend(split_score_slots(materialization, split));
+    let materializations_by_dataset = manifest
+        .source_materializations
+        .iter()
+        .map(|materialization| (materialization.dataset_id.as_str(), materialization))
+        .collect::<BTreeMap<_, _>>();
+
+    for dataset in &manifest.datasets {
+        if let Some(materialization) = materializations_by_dataset.get(dataset.id.as_str()) {
+            if materialization.split_materializations.is_empty() {
+                slots.extend(dataset_placeholder_score_slots(
+                    manifest,
+                    dataset,
+                    &source_universe_blocker_ids(
+                        manifest,
+                        &dataset.id,
+                        &materialization.blocker_ids,
+                    ),
+                ));
+                continue;
+            }
+            for split in &materialization.split_materializations {
+                slots.extend(split_score_slots(manifest, materialization, split));
+            }
+        } else {
+            slots.extend(dataset_placeholder_score_slots(
+                manifest,
+                dataset,
+                &source_universe_blocker_ids(manifest, &dataset.id, &dataset.blocker_ids),
+            ));
         }
     }
     slots
 }
 
 fn split_score_slots(
+    manifest: &EvoSkillReplicaManifest,
     materialization: &DatasetMaterializationReport,
     split: &SplitMaterializationReport,
 ) -> Vec<FinalScoreSlot> {
@@ -1571,6 +1595,7 @@ fn split_score_slots(
             expected_rows.map(|rows| {
                 let audit = score_slot_audit_for_split_role(split, role);
                 score_slots_for_role(
+                    manifest,
                     &materialization.dataset_id,
                     &split.id,
                     role,
@@ -1594,34 +1619,18 @@ fn scoring_blocker_ids(dataset_id: &str, split_blocker_ids: &[String]) -> Vec<St
 
 fn dataset_placeholder_score_slots(
     manifest: &EvoSkillReplicaManifest,
-    materialization: &DatasetMaterializationReport,
+    dataset: &DatasetRequirement,
+    blocker_ids: &[String],
 ) -> Vec<FinalScoreSlot> {
-    let blocker_ids =
-        scoring_blocker_ids(&materialization.dataset_id, &materialization.blocker_ids);
-    let dataset = manifest
-        .datasets
-        .iter()
-        .find(|dataset| dataset.id == materialization.dataset_id);
-    let split_id = format!("{}_paper_split_unmaterialized", materialization.dataset_id);
-    let mut roles = Vec::new();
-    if let Some(dataset) = dataset {
-        let train_rows = dataset.train_sizes.first().copied();
-        roles.push(("train", train_rows));
-        if dataset.validation_rows.is_some() {
-            roles.push(("validation", dataset.validation_rows));
-        }
-        roles.push(("held_out_test", held_out_rows(dataset)));
-    } else {
-        roles.push(("train", None));
-        roles.push(("validation", None));
-        roles.push(("held_out_test", None));
-    }
-    roles
+    let blocker_ids = scoring_blocker_ids(&dataset.id, blocker_ids);
+    let split_id = format!("{}_paper_split_unmaterialized", dataset.id);
+    placeholder_score_roles(dataset)
         .into_iter()
         .flat_map(|(role, expected_rows)| {
             let audit = blocked_score_slot_audit();
             score_slots_for_role(
-                &materialization.dataset_id,
+                manifest,
+                &dataset.id,
                 &split_id,
                 role,
                 &audit,
@@ -1632,6 +1641,30 @@ fn dataset_placeholder_score_slots(
         .collect()
 }
 
+fn source_universe_blocker_ids(
+    manifest: &EvoSkillReplicaManifest,
+    dataset_id: &str,
+    fallback: &[String],
+) -> Vec<String> {
+    manifest
+        .source_universe
+        .iter()
+        .find(|entry| entry.dataset_id == dataset_id)
+        .map_or_else(|| fallback.to_vec(), |entry| entry.blocker_ids.clone())
+}
+
+fn placeholder_score_roles(dataset: &DatasetRequirement) -> Vec<(&'static str, Option<u64>)> {
+    let mut roles = Vec::new();
+    if let Some(train_rows) = dataset.train_sizes.first().copied() {
+        roles.push(("train", Some(train_rows)));
+    }
+    if let Some(validation_rows) = dataset.validation_rows {
+        roles.push(("validation", Some(validation_rows)));
+    }
+    roles.push(("held_out_test", held_out_rows(dataset)));
+    roles
+}
+
 fn held_out_rows(dataset: &DatasetRequirement) -> Option<u64> {
     let paper_rows = dataset.paper_rows?;
     let train_rows = dataset.train_sizes.first().copied().unwrap_or_default();
@@ -1640,6 +1673,7 @@ fn held_out_rows(dataset: &DatasetRequirement) -> Option<u64> {
 }
 
 fn score_slots_for_role(
+    manifest: &EvoSkillReplicaManifest,
     dataset_id: &str,
     split_id: &str,
     split_role: &str,
@@ -1647,7 +1681,7 @@ fn score_slots_for_role(
     expected_rows: Option<u64>,
     blocker_ids: &[String],
 ) -> Vec<FinalScoreSlot> {
-    ["baseline", "optimized"]
+    score_candidate_roles(dataset_id)
         .into_iter()
         .map(|candidate_role| FinalScoreSlot {
             dataset_id: dataset_id.to_owned(),
@@ -1656,7 +1690,12 @@ fn score_slots_for_role(
             split_exactness: audit.split_exactness.clone(),
             split_fingerprint: audit.split_fingerprint.clone(),
             role_source_id_fingerprint: audit.role_source_id_fingerprint.clone(),
-            candidate_role: candidate_role.to_owned(),
+            candidate_role: candidate_role.slot_role.to_owned(),
+            paper_result_target_ids: paper_result_target_ids(
+                manifest,
+                dataset_id,
+                candidate_role.paper_target_role,
+            ),
             expected_rows,
             score: None,
             status: if blocker_ids.is_empty() {
@@ -1666,6 +1705,61 @@ fn score_slots_for_role(
             },
             blocker_ids: blocker_ids.to_vec(),
         })
+        .collect()
+}
+
+struct ScoreCandidateRole {
+    slot_role: &'static str,
+    paper_target_role: &'static str,
+}
+
+fn score_candidate_roles(dataset_id: &str) -> Vec<ScoreCandidateRole> {
+    match dataset_id {
+        "browsecomp_transfer" => vec![
+            ScoreCandidateRole {
+                slot_role: "baseline",
+                paper_target_role: "baseline",
+            },
+            ScoreCandidateRole {
+                slot_role: "sealqa_skill_transfer",
+                paper_target_role: "sealqa_skill_transfer",
+            },
+        ],
+        "officeqa" => vec![
+            ScoreCandidateRole {
+                slot_role: "baseline",
+                paper_target_role: "baseline",
+            },
+            ScoreCandidateRole {
+                slot_role: "optimized",
+                paper_target_role: "skill_merge",
+            },
+        ],
+        _ => vec![
+            ScoreCandidateRole {
+                slot_role: "baseline",
+                paper_target_role: "baseline",
+            },
+            ScoreCandidateRole {
+                slot_role: "optimized",
+                paper_target_role: "optimized",
+            },
+        ],
+    }
+}
+
+fn paper_result_target_ids(
+    manifest: &EvoSkillReplicaManifest,
+    dataset_id: &str,
+    paper_candidate_role: &str,
+) -> Vec<String> {
+    manifest
+        .paper_result_targets
+        .iter()
+        .filter(|target| {
+            target.dataset_id == dataset_id && target.candidate_role == paper_candidate_role
+        })
+        .map(|target| target.id.clone())
         .collect()
 }
 
@@ -1759,7 +1853,7 @@ fn final_report_paper_close_gates(
             "final_report_truth",
             PaperCloseGateStatus::Proven,
             Vec::new(),
-            "report keeps blocked metrics missing, records exactness gaps, costs, score slots, source blockers, and approval gates",
+            "report keeps blocked metrics missing, records exactness gaps, costs, paper-target-linked score slots including source-blocked BrowseComp transfer slots, source blockers, and approval gates",
         ),
         paper_close_gate(
             "proxy_closeout",
