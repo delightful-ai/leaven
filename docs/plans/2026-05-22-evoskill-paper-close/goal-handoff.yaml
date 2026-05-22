@@ -142,6 +142,23 @@ explicit_non_goals:
   - do not spend provider credits or touch destructive source/dataset state without approval
 
 verification_notes:
+  - at: "2026-05-22T22:34:34Z"
+    command: "ulimit -n 8192 && CARGO_BUILD_JOBS=8 just check"
+    status: blocked_nextest_discovery_hang
+    evidence:
+      - "cargo fmt --check, production line-count lint, workspace clippy, and SLA runner self-tests completed before the workspace test phase"
+      - "cargo nextest compiled p5_skill_paper_reproductions, then stalled in test discovery for several minutes with many zero-CPU target/debug/deps/* --list --format terse child processes"
+      - "the hung just/check, test-suite-sla.py, cargo-nextest, and orphaned --list children were terminated after inspection; no test failure output was produced"
+    caveat: "This is not a passing just check and not paper-close evidence. Focused P5 tests and clippy below are the behavioral proof for this slice."
+  - at: "2026-05-22T22:27:26Z"
+    command: "cargo nextest run -p p5_skill_paper_reproductions paper_close_audit && just evoskill-paper-closeout-audit"
+    status: audit_unit_tests_passed_closeout_audit_expected_failure
+    evidence:
+      - "the closeout audit now refuses all-gates-proven fake completion when exactness is still paper_close_candidate"
+      - "the closeout audit now refuses all-gates-proven fake completion when score_result_manifest is absent"
+      - "the closeout audit accepts only paper_close-or-better exactness, present score_result_manifest evidence, and all paper_close_gates proven"
+      - "just evoskill-paper-closeout-audit still exits 1 on current artifacts with exactness=paper_close_candidate, score_result_manifest=absent, paper_scorer=approval_blocked blockers=[sealqa_judge_scored_run], and live_small_run=approval_blocked blockers=[live_run_spend_approval]"
+    caveat: "This is an anti-fake closeout guard only; it does not produce score evidence, approve provider spend, execute the paper agent, or make current artifacts paper-close."
   - at: "2026-05-22T22:22:34Z"
     command: "ulimit -n 8192 && CARGO_BUILD_JOBS=8 just check"
     status: failed_runtime_sla_only

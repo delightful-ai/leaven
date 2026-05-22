@@ -1799,7 +1799,11 @@ fn audit_evoskill_paper_close_fields(
             )
         })
         .collect::<Vec<_>>();
-    if unproven_gates.is_empty() {
+    let exactness_satisfies_paper_close = matches!(
+        exactness,
+        ExactnessClass::PaperClose | ExactnessClass::PaperExact
+    );
+    if exactness_satisfies_paper_close && has_score_result_manifest && unproven_gates.is_empty() {
         return Ok(());
     }
 
@@ -1813,7 +1817,11 @@ fn audit_evoskill_paper_close_fields(
             "paper-close audit failed: exactness={} score_result_manifest={} unproven_gates={}",
             exactness_class_name(exactness),
             score_manifest_status,
-            unproven_gates.join("; ")
+            if unproven_gates.is_empty() {
+                "none".to_owned()
+            } else {
+                unproven_gates.join("; ")
+            }
         ),
     })
 }
@@ -9214,6 +9222,45 @@ mod tests {
         }];
 
         audit_evoskill_paper_close_fields(&ExactnessClass::PaperClose, true, &gates).unwrap();
+    }
+
+    #[test]
+    fn paper_close_audit_refuses_candidate_exactness_even_when_gates_are_proven() {
+        let gates = vec![PaperCloseGateReport {
+            id: "replica_source_universe".to_owned(),
+            status: PaperCloseGateStatus::Proven,
+            blocker_ids: Vec::new(),
+            note: "unit proven gate".to_owned(),
+        }];
+
+        let error =
+            audit_evoskill_paper_close_fields(&ExactnessClass::PaperCloseCandidate, true, &gates)
+                .unwrap_err();
+
+        let message = error.to_string();
+        assert!(message.contains("paper-close audit failed"));
+        assert!(message.contains("exactness=paper_close_candidate"));
+        assert!(message.contains("score_result_manifest=present"));
+        assert!(message.contains("unproven_gates=none"));
+    }
+
+    #[test]
+    fn paper_close_audit_refuses_missing_score_manifest_even_when_gates_are_proven() {
+        let gates = vec![PaperCloseGateReport {
+            id: "replica_source_universe".to_owned(),
+            status: PaperCloseGateStatus::Proven,
+            blocker_ids: Vec::new(),
+            note: "unit proven gate".to_owned(),
+        }];
+
+        let error = audit_evoskill_paper_close_fields(&ExactnessClass::PaperClose, false, &gates)
+            .unwrap_err();
+
+        let message = error.to_string();
+        assert!(message.contains("paper-close audit failed"));
+        assert!(message.contains("exactness=paper_close"));
+        assert!(message.contains("score_result_manifest=absent"));
+        assert!(message.contains("unproven_gates=none"));
     }
 
     fn score_manifest_file(
