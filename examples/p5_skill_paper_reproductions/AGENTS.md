@@ -97,7 +97,13 @@ belong in their owning crates.
   proves the current no-spend final report truth surface writes manifest and
   report artifacts, carries baseline/optimized train/validation/held-out score
   slots, exposes zero spend by default, blockers, ablation statuses, and
-  exactness gaps. It proves final report schema v18.
+  exactness gaps. It proves final report schema v19.
+  `exactness_gaps` is first-class report data: local source pins remain
+  `paper_release_unverified`, accepted OfficeQA/SealQA/BrowseComp substitute
+  splits remain `accepted_paper_close_substitute`, and unresolved source
+  artifacts remain `blocked_before_paper_close`. This keeps
+  `paper_close_candidate` visibly separate from paper-exact even when source
+  blockers are otherwise resolved.
   Materialized score slots carry split exactness, split fingerprint, and
   role-level source-id fingerprint directly. Unreported slots carry a null
   `score_evidence_id`, null `score_evidence_kind`, null

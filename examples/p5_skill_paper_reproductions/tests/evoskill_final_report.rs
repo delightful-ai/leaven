@@ -8,8 +8,8 @@ use arrow_array::{ArrayRef, RecordBatch, StringArray};
 use arrow_schema::{DataType, Field, Schema};
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
 use p5_skill_paper_reproductions::evoskill::{
-    DatasetMaterializationReport, EvoSkillFinalReport, ExactnessClass, FinalScoreSlot,
-    FinalScoreStatus, LiveRunGateStatus, ManifestBuildInput, ManifestError,
+    DatasetMaterializationReport, EvoSkillFinalReport, ExactnessClass, ExactnessGapStatus,
+    FinalScoreSlot, FinalScoreStatus, LiveRunGateStatus, ManifestBuildInput, ManifestError,
     MaterializationExactness, PaperCloseGateStatus, PaperResultTargetStatus, ProxyRejectionStatus,
     ScoreEvidenceKind, SourceBlockerStatus, SplitAcceptanceStatus, SplitMaterializationReport,
     build_evoskill_final_report, write_evoskill_local_source_pin_manifest,
@@ -251,6 +251,68 @@ fn final_report_relabels_browsecomp_ablation_after_denominator_materializes() {
         ["live_run_spend_approval".to_owned()]
     );
     assert!(skill_merge.note.contains("declared denominator is ready"));
+    let gap = |id: &str| {
+        report
+            .exactness_gaps
+            .iter()
+            .find(|gap| gap.id == id)
+            .unwrap_or_else(|| panic!("missing exactness gap {id}"))
+    };
+
+    assert_eq!(
+        gap("source_revision_evoskill_repo_local_checkout").status,
+        ExactnessGapStatus::PaperReleaseUnverified
+    );
+    assert!(
+        gap("source_revision_evoskill_repo_local_checkout")
+            .required_for_paper_exact
+            .contains("paper-release")
+    );
+    assert_eq!(
+        gap("source_revision_officeqa_repo_local_checkout").status,
+        ExactnessGapStatus::PaperReleaseUnverified
+    );
+    assert_eq!(
+        gap("split_officeqa_officeqa_difficulty_train_12_val_17").status,
+        ExactnessGapStatus::AcceptedPaperCloseSubstitute
+    );
+    assert!(
+        gap("split_officeqa_officeqa_difficulty_train_12_val_17")
+            .required_for_paper_exact
+            .contains("LLM-clustered")
+    );
+    assert_eq!(
+        gap("split_sealqa_sealqa_row_order_train_11_heldout_100").status,
+        ExactnessGapStatus::AcceptedPaperCloseSubstitute
+    );
+    assert!(
+        gap("split_sealqa_sealqa_row_order_train_11_heldout_100")
+            .required_for_paper_exact
+            .contains("exact train/held-out")
+    );
+    assert_eq!(
+        gap("split_browsecomp_transfer_browsecomp_transfer_sample_128_heldout").status,
+        ExactnessGapStatus::AcceptedPaperCloseSubstitute
+    );
+    assert!(
+        gap("split_browsecomp_transfer_browsecomp_transfer_sample_128_heldout")
+            .required_for_paper_exact
+            .contains("paper author's exact 128-example")
+    );
+    assert!(
+        report
+            .exactness_gaps
+            .iter()
+            .all(|gap| !gap.evidence.is_empty())
+    );
+    assert!(report.exactness_gaps.iter().all(|gap| {
+        !gap.observed.contains("Some(")
+            && !gap.observed.contains("None")
+            && !gap.evidence.iter().any(|evidence| {
+                evidence.contains("PaperCloseSubstitute")
+                    || evidence.contains("AcceptedPaperClosePolicy")
+            })
+    }));
 }
 
 #[test]
@@ -273,7 +335,7 @@ fn final_report_imports_matching_score_result_sidecar_without_filling_other_slot
 
     let report = build_evoskill_final_report(&input).unwrap();
 
-    assert_eq!(report.schema_version, 18);
+    assert_eq!(report.schema_version, 19);
     let result_manifest = report
         .score_result_manifest
         .as_ref()
@@ -963,8 +1025,11 @@ fn assert_reported_target(
 
 fn assert_report_header(report: &EvoSkillFinalReport) {
     assert_eq!(report.exactness, ExactnessClass::BlockedBeforePaperClose);
-    assert_eq!(report.schema_version, 18);
+    assert_eq!(report.schema_version, 19);
     assert_eq!(report.score_result_manifest, None);
+    assert!(report.exactness_gaps.iter().any(|gap| gap.status
+        == ExactnessGapStatus::BlockedBeforePaperClose
+        && gap.id == "source_blocker_source_pin"));
     assert_eq!(report.cost.llm_calls, 0);
     assert_eq!(report.cost.metric_calls, 0);
     assert_eq!(report.cost.prompt_tokens, 0);
@@ -1378,6 +1443,7 @@ fn cli_writes_manifest_and_final_report_artifacts() {
     assert!(manifest_path.exists());
     let report = fs::read_to_string(report_path).unwrap();
     assert!(report.contains("\"score_slots\""));
+    assert!(report.contains("\"exactness_gaps\""));
     assert!(report.contains("\"live_run_gate\""));
     assert!(report.contains("\"paper_close_gates\""));
     assert!(report.contains("\"source_blockers\""));

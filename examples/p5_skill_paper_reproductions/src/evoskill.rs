@@ -433,6 +433,7 @@ pub struct ReplicationBlocker {
 pub struct EvoSkillFinalReport {
     pub schema_version: u32,
     pub exactness: ExactnessClass,
+    pub exactness_gaps: Vec<ExactnessGapReport>,
     pub manifest: EvoSkillReplicaManifest,
     pub loop_report: Option<EvoSkillReplicaLoopReport>,
     pub live_run_gate: LiveRunGateReport,
@@ -445,6 +446,26 @@ pub struct EvoSkillFinalReport {
     pub errors: Vec<FinalReportError>,
     pub ablations: Vec<AblationStatusReport>,
     pub proxy_rejection_gates: Vec<ProxyRejectionGate>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ExactnessGapReport {
+    pub id: String,
+    pub dataset_id: Option<String>,
+    pub status: ExactnessGapStatus,
+    pub observed: String,
+    pub required_for_paper_exact: String,
+    pub paper_close_policy: String,
+    pub evidence: Vec<String>,
+    pub blocker_ids: Vec<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExactnessGapStatus {
+    PaperReleaseUnverified,
+    AcceptedPaperCloseSubstitute,
+    BlockedBeforePaperClose,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -1121,11 +1142,13 @@ pub fn build_evoskill_final_report(
     let errors = final_report_errors(&report_blockers);
     let ablations = final_report_ablations(&manifest, &score_slots);
     let exactness = manifest.exactness.clone();
+    let exactness_gaps = final_report_exactness_gaps(&manifest);
     let proxy_rejection_gates = proxy_rejection_gates();
 
     Ok(EvoSkillFinalReport {
-        schema_version: 18,
+        schema_version: 19,
         exactness,
+        exactness_gaps,
         manifest,
         loop_report,
         live_run_gate,
@@ -4239,6 +4262,244 @@ fn sealqa_judge_score_evidence_complete(score_slots: &[FinalScoreSlot]) -> bool 
                 .iter()
                 .any(|blocker| blocker == "sealqa_judge_scored_run")
     })
+}
+
+fn final_report_exactness_gaps(manifest: &EvoSkillReplicaManifest) -> Vec<ExactnessGapReport> {
+    let mut gaps = Vec::new();
+    for revision in &manifest.source_revisions {
+        match revision.paper_release_status {
+            SourcePaperReleaseStatus::PinnedLocalCheckout => {
+                gaps.push(source_revision_exactness_gap(revision));
+            }
+            SourcePaperReleaseStatus::MissingPath
+            | SourcePaperReleaseStatus::NotGitCheckout
+            | SourcePaperReleaseStatus::Unresolved
+            | SourcePaperReleaseStatus::ProbeFailed => {
+                if !revision.blocker_ids.is_empty() {
+                    gaps.push(blocked_source_revision_exactness_gap(revision));
+                }
+            }
+        }
+    }
+    for blocker in &manifest.source_blockers {
+        gaps.push(source_blocker_exactness_gap(blocker));
+    }
+    for materialization in &manifest.source_materializations {
+        for split in &materialization.split_materializations {
+            if split.exactness != MaterializationExactness::PaperExact {
+                gaps.push(split_exactness_gap(materialization, split));
+            }
+        }
+    }
+    gaps
+}
+
+fn source_revision_exactness_gap(revision: &SourceRevision) -> ExactnessGapReport {
+    ExactnessGapReport {
+        id: format!("source_revision_{}_local_checkout", revision.id),
+        dataset_id: None,
+        status: ExactnessGapStatus::PaperReleaseUnverified,
+        observed: format!(
+            "local checkout `{}` is pinned at `{}`",
+            revision.relative_path,
+            revision
+                .paper_release_head
+                .as_deref()
+                .or(revision.head.as_deref())
+                .unwrap_or("unknown")
+        ),
+        required_for_paper_exact:
+            "paper-release revision or explicitly chosen remote-current source policy".to_owned(),
+        paper_close_policy:
+            "accepted as the local no-spend paper-close denominator by source_pin_manifest"
+                .to_owned(),
+        evidence: source_revision_gap_evidence(revision),
+        blocker_ids: revision.blocker_ids.clone(),
+    }
+}
+
+fn blocked_source_revision_exactness_gap(revision: &SourceRevision) -> ExactnessGapReport {
+    ExactnessGapReport {
+        id: format!("source_revision_{}_blocked", revision.id),
+        dataset_id: None,
+        status: ExactnessGapStatus::BlockedBeforePaperClose,
+        observed: format!(
+            "source checkout `{}` has paper-release status `{:?}`",
+            revision.relative_path, revision.paper_release_status
+        ),
+        required_for_paper_exact:
+            "paper-release revision or explicitly chosen remote-current source policy".to_owned(),
+        paper_close_policy: "source policy must be resolved before paper-close".to_owned(),
+        evidence: source_revision_gap_evidence(revision),
+        blocker_ids: revision.blocker_ids.clone(),
+    }
+}
+
+fn source_revision_gap_evidence(revision: &SourceRevision) -> Vec<String> {
+    let mut evidence = vec![format!("path={}", revision.relative_path)];
+    if let Some(head) = &revision.head {
+        evidence.push(format!("head={head}"));
+    }
+    if let Some(branch) = &revision.branch {
+        evidence.push(format!("branch={branch}"));
+    }
+    if let Some(remote_url) = &revision.remote_url {
+        evidence.push(format!("remote_url={remote_url}"));
+    }
+    if let Some(paper_release_ref) = &revision.paper_release_ref {
+        evidence.push(format!("paper_release_ref={paper_release_ref}"));
+    }
+    if let Some(paper_release_head) = &revision.paper_release_head {
+        evidence.push(format!("paper_release_head={paper_release_head}"));
+    }
+    evidence
+}
+
+fn source_blocker_exactness_gap(blocker: &SourceBlockerReport) -> ExactnessGapReport {
+    ExactnessGapReport {
+        id: format!("source_blocker_{}", blocker.blocker_id),
+        dataset_id: Some(blocker.dataset_id.clone()),
+        status: ExactnessGapStatus::BlockedBeforePaperClose,
+        observed: blocker.note.clone(),
+        required_for_paper_exact: source_blocker_paper_exact_requirement(blocker).to_owned(),
+        paper_close_policy: "missing source artifact remains a paper-close blocker".to_owned(),
+        evidence: source_blocker_gap_evidence(blocker),
+        blocker_ids: vec![blocker.blocker_id.clone()],
+    }
+}
+
+fn source_blocker_paper_exact_requirement(blocker: &SourceBlockerReport) -> &'static str {
+    match blocker.status {
+        SourceBlockerStatus::UnresolvedSourcePolicy => {
+            "explicit paper-release source policy for every referenced checkout"
+        }
+        SourceBlockerStatus::MissingLocalArtifact => {
+            "paper source artifact or approved substitute denominator"
+        }
+        SourceBlockerStatus::MissingExactSplitManifest => {
+            "paper exact split/category membership manifest"
+        }
+    }
+}
+
+fn source_blocker_gap_evidence(blocker: &SourceBlockerReport) -> Vec<String> {
+    let mut evidence = vec![format!("status={:?}", blocker.status)];
+    for candidate in &blocker.local_path_candidates {
+        evidence.push(format!(
+            "candidate={} exists={} file={} dir={} bytes={}",
+            candidate.relative_path,
+            candidate.exists,
+            candidate.is_file,
+            candidate.is_dir,
+            candidate
+                .bytes
+                .map_or_else(|| "unknown".to_owned(), |bytes| bytes.to_string())
+        ));
+    }
+    evidence
+}
+
+fn split_exactness_gap(
+    materialization: &DatasetMaterializationReport,
+    split: &SplitMaterializationReport,
+) -> ExactnessGapReport {
+    let accepted = split.exactness == MaterializationExactness::PaperCloseSubstitute
+        && split.acceptance_status == SplitAcceptanceStatus::AcceptedPaperClosePolicy
+        && split.blocker_ids.is_empty();
+    ExactnessGapReport {
+        id: format!("split_{}_{}", materialization.dataset_id, split.id),
+        dataset_id: Some(materialization.dataset_id.clone()),
+        status: if accepted {
+            ExactnessGapStatus::AcceptedPaperCloseSubstitute
+        } else {
+            ExactnessGapStatus::BlockedBeforePaperClose
+        },
+        observed: format!(
+            "split `{}` uses `{}` with {} train rows, {}, and {}",
+            split.id,
+            split.method,
+            split.train_rows,
+            optional_rows(split.validation_rows, "validation"),
+            optional_rows(split.test_rows, "held-out")
+        ),
+        required_for_paper_exact: split_paper_exact_requirement(&materialization.dataset_id)
+            .to_owned(),
+        paper_close_policy: split_paper_close_policy(split).to_owned(),
+        evidence: split_gap_evidence(split),
+        blocker_ids: split.blocker_ids.clone(),
+    }
+}
+
+fn split_paper_exact_requirement(dataset_id: &str) -> &'static str {
+    match dataset_id {
+        "officeqa" => {
+            "paper's LLM-clustered category labels plus exact train/validation/held-out membership"
+        }
+        "sealqa" => "paper's exact train/held-out split membership",
+        "browsecomp_transfer" => "paper author's exact 128-example stratified BrowseComp sample",
+        _ => "paper-exact split membership",
+    }
+}
+
+fn split_paper_close_policy(split: &SplitMaterializationReport) -> &'static str {
+    if split.exactness == MaterializationExactness::PaperCloseSubstitute
+        && split.acceptance_status == SplitAcceptanceStatus::AcceptedPaperClosePolicy
+    {
+        "accepted by split_policy_manifest as a documented paper-close substitute, not paper-exact"
+    } else if split.exactness == MaterializationExactness::PaperCloseSubstitute {
+        "requires split_policy_manifest acceptance before paper-close"
+    } else {
+        "blocked before paper-close"
+    }
+}
+
+fn split_gap_evidence(split: &SplitMaterializationReport) -> Vec<String> {
+    let mut evidence = vec![
+        format!("split_id={}", split.id),
+        format!("method={}", split.method),
+        format!(
+            "exactness={}",
+            materialization_exactness_name(&split.exactness)
+        ),
+        format!(
+            "acceptance_status={}",
+            split_acceptance_status_name(&split.acceptance_status)
+        ),
+    ];
+    if let Some(fingerprint) = &split.split_fingerprint {
+        evidence.push(format!("split_fingerprint={fingerprint}"));
+    }
+    for role in &split.role_manifests {
+        evidence.push(format!(
+            "role={} rows={} source_id_fingerprint={}",
+            role.role, role.rows, role.source_id_fingerprint
+        ));
+    }
+    evidence
+}
+
+fn optional_rows(rows: Option<u64>, role: &str) -> String {
+    rows.map_or_else(
+        || format!("no {role} role"),
+        |rows| format!("{rows} {role} rows"),
+    )
+}
+
+fn materialization_exactness_name(exactness: &MaterializationExactness) -> &'static str {
+    match exactness {
+        MaterializationExactness::PaperExact => "paper_exact",
+        MaterializationExactness::PaperCloseSubstitute => "paper_close_substitute",
+        MaterializationExactness::Blocked => "blocked",
+    }
+}
+
+fn split_acceptance_status_name(status: &SplitAcceptanceStatus) -> &'static str {
+    match status {
+        SplitAcceptanceStatus::NotRequired => "not_required",
+        SplitAcceptanceStatus::PendingPaperClosePolicy => "pending_paper_close_policy",
+        SplitAcceptanceStatus::AcceptedPaperClosePolicy => "accepted_paper_close_policy",
+        SplitAcceptanceStatus::Blocked => "blocked",
+    }
 }
 
 fn final_report_paper_close_gates(

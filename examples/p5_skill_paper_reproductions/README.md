@@ -81,3 +81,9 @@ approval remains separate. It is score evidence plumbing, not permission to
 treat fixtures, stale runs, tampered evidence files, missing SealQA judge
 execution, missing transferred BrowseComp runs, official BrowseComp judge
 approval, or missing provider approval as paper scores.
+
+The final report also carries first-class `exactness_gaps`. When local source
+pins, accepted substitute splits, and the BrowseComp substitute denominator make
+the report a `paper_close_candidate`, those gap rows still say which source
+revisions are only local-checkout pins and which OfficeQA/SealQA/BrowseComp
+splits are documented substitutes rather than paper-exact membership.

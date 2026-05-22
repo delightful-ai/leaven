@@ -1138,3 +1138,28 @@ judge, run the transferred BrowseComp skill, or manufacture missing scores.
 This gives future approved live or judge runs a refusal-capable Rust path for
 entering the final report without converting opaque artifacts into paper-close
 claims.
+
+## Final Report Exactness Gaps
+
+Date: 2026-05-22.
+Provider/model spend: none.
+Cloud/GPU spend: none.
+
+The P5 final report now declares schema v19 with first-class
+`exactness_gaps`. These rows are separate from execution blockers. They preserve
+why a `paper_close_candidate` is still not paper-exact after source pins,
+accepted substitute split policy, and a BrowseComp substitute denominator remove
+ordinary source blockers.
+
+The new rows classify local source pins as `paper_release_unverified`, accepted
+OfficeQA/SealQA/BrowseComp split substitutions as
+`accepted_paper_close_substitute`, and unresolved source artifacts as
+`blocked_before_paper_close`. Each row carries the paper-exact requirement, the
+paper-close policy being used, blocker ids where applicable, and concrete
+evidence such as local checkout heads, split fingerprints, and role source-id
+fingerprints.
+
+This closes a report-surface ambiguity only. It does not locate the missing
+OfficeQA paper category/exact split artifact, the exact SealQA split, the paper
+author's BrowseComp sample, any paper-release source revision, or any live score
+evidence.
