@@ -73,7 +73,7 @@ fn final_report_exposes_score_slots_costs_errors_and_gaps_without_fake_metrics()
         report
             .errors
             .iter()
-            .any(|error| error.blocker_id == "sealqa_parquet_row_reader")
+            .any(|error| error.blocker_id == "sealqa_split_manifest")
     );
     assert!(
         report

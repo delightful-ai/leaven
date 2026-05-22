@@ -15,8 +15,10 @@ use leaven_artifact_git::{
 };
 use leaven_core::{Artifact, CaseSetVersion};
 use leaven_eval::{
-    CategoryRoundRobinSampler, SourceRow, SourceRowManifest, SplitRole, StratifiedSplitBuilder,
+    CategoryRoundRobinSampler, RowOrderSplitBuilder, SourceRow, SourceRowManifest, SplitRole,
+    StratifiedSplitBuilder,
 };
+use leaven_eval_parquet::{ParquetSourceRowError, read_parquet_source_rows};
 use leaven_evidence::ScalarEvidence;
 use leaven_kernel::{AssessmentId, CandidateId, CaseId, Fingerprint};
 use leaven_population::{TopKFrontier, TopKParentSelector};
@@ -33,6 +35,8 @@ const YEAR_START: f64 = 1900.0;
 const YEAR_END: f64 = 2100.0;
 const OFFICEQA_VALIDATION_ROWS: usize = 17;
 const OFFICEQA_TRAIN_SIZES: [usize; 3] = [12, 24, 36];
+const SEALQA_ROWS: usize = 111;
+const SEALQA_TRAIN_ROWS: usize = 11;
 const EVOSKILL_REPLICA_FRONTIER_SIZE: usize = 3;
 const EVOSKILL_REPLICA_TRAIN_ROWS: usize = 12;
 const EVOSKILL_REPLICA_RESUME_AFTER_ITERATION: u64 = 2;
@@ -190,6 +194,19 @@ pub struct OfficeQaInput {
 #[derive(Clone, Debug)]
 pub struct OfficeQaSourceMaterialization {
     pub rows: SourceRowManifest<OfficeQaInput, String>,
+    pub report: DatasetMaterializationReport,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SealQaInput {
+    pub question: String,
+    pub urls: Vec<String>,
+    pub topic: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+pub struct SealQaSourceMaterialization {
+    pub rows: SourceRowManifest<SealQaInput, String>,
     pub report: DatasetMaterializationReport,
 }
 
@@ -423,6 +440,11 @@ pub enum ManifestError {
         #[source]
         source: leaven_eval::DatasetSplitsError,
     },
+    #[error("failed to materialize Parquet source rows: {source}")]
+    Parquet {
+        #[source]
+        source: ParquetSourceRowError,
+    },
     #[error("failed to build Leaven sampler: {source}")]
     Sampler {
         #[source]
@@ -614,7 +636,11 @@ fn source_materializations(
         },
         |materialization| materialization.report,
     );
-    Ok(vec![officeqa, sealqa_materialization_report(&input.root)?])
+    let sealqa = materialize_sealqa_source(input)?.map_or_else(
+        || missing_materialization_report("sealqa", "sealqa_parquet", "sealqa_parquet_missing"),
+        |materialization| materialization.report,
+    );
+    Ok(vec![officeqa, sealqa])
 }
 
 fn officeqa_difficulty_strata(
@@ -716,34 +742,105 @@ fn strata_reports(strata: &BTreeMap<SmolStr, Vec<CaseId>>) -> Vec<StratumMateria
         .collect()
 }
 
-fn sealqa_materialization_report(
-    root: &Path,
-) -> Result<DatasetMaterializationReport, ManifestError> {
-    let path = root.join("tmp/replication/evoskill/sealqa/seal-0.parquet");
-    let source_artifact_sha256 = if path.exists() {
-        Some(sha256_file(&path)?)
-    } else {
-        None
-    };
-    Ok(DatasetMaterializationReport {
+pub fn materialize_sealqa_source(
+    input: &ManifestBuildInput,
+) -> Result<Option<SealQaSourceMaterialization>, ManifestError> {
+    let path = input
+        .root
+        .join("tmp/replication/evoskill/sealqa/seal-0.parquet");
+    if !path.exists() {
+        return Ok(None);
+    }
+
+    let rows = read_parquet_source_rows(&path, |row| {
+        Ok(SourceRow::targeted(
+            format!("sealqa:{:03}", row.row_index()),
+            SealQaInput {
+                question: row.required_string("question")?,
+                urls: row.optional_string_list("urls")?,
+                topic: row.optional_string("topic")?,
+            },
+            row.required_string("answer")?,
+        ))
+    })
+    .map_err(|source| ManifestError::Parquet { source })?
+    .into_manifest();
+    let dataset = rows
+        .clone()
+        .into_dataset()
+        .map_err(|source| ManifestError::Dataset { source })?;
+    let strata = sealqa_topic_strata(&rows);
+    let split_materializations = vec![sealqa_row_order_split_report(rows.len())?];
+    let report = DatasetMaterializationReport {
         dataset_id: "sealqa".to_owned(),
         source_artifact_id: "sealqa_parquet".to_owned(),
-        source_status: if path.exists() {
-            SourceMaterializationStatus::BlockedMissingRowReader
-        } else {
-            SourceMaterializationStatus::MissingArtifact
-        },
-        source_rows: None,
-        case_rows: None,
-        source_row_fingerprint: None,
-        source_artifact_sha256,
-        target_policy: "blocked: no Leaven-owned seal-0 parquet row reader yet".to_owned(),
-        strata: Vec::new(),
-        split_materializations: Vec::new(),
-        blocker_ids: vec![
-            "sealqa_parquet_row_reader".to_owned(),
-            "sealqa_split_manifest".to_owned(),
-        ],
+        source_status: SourceMaterializationStatus::Materialized,
+        source_rows: Some(u64::try_from(rows.len()).expect("row count fits in u64")),
+        case_rows: Some(u64::try_from(dataset.cases().len()).expect("case count fits in u64")),
+        source_row_fingerprint: Some(fingerprint_hex(rows.fingerprint())),
+        source_artifact_sha256: Some(sha256_file(&path)?),
+        target_policy: "answers are scorer targets only; runner inputs exclude answers".to_owned(),
+        strata: strata_reports(&strata),
+        split_materializations,
+        blocker_ids: vec!["sealqa_split_manifest".to_owned()],
+    };
+    Ok(Some(SealQaSourceMaterialization { rows, report }))
+}
+
+fn sealqa_topic_strata(
+    rows: &SourceRowManifest<SealQaInput, String>,
+) -> BTreeMap<SmolStr, Vec<CaseId>> {
+    let mut strata = BTreeMap::<SmolStr, Vec<CaseId>>::new();
+    for (row_index, row) in rows.rows().iter().enumerate() {
+        let topic = row.input().topic.as_deref().unwrap_or("unknown");
+        strata
+            .entry(SmolStr::new(topic))
+            .or_default()
+            .push(CaseId::from_index(row_index));
+    }
+    strata
+}
+
+fn sealqa_row_order_split_report(
+    source_rows: usize,
+) -> Result<SplitMaterializationReport, ManifestError> {
+    let test_rows = source_rows.saturating_sub(SEALQA_TRAIN_ROWS);
+    let id = format!("sealqa_row_order_train_{SEALQA_TRAIN_ROWS}_heldout_{test_rows}");
+    if source_rows <= SEALQA_TRAIN_ROWS {
+        return Ok(SplitMaterializationReport {
+            id,
+            method: "row_order_10_percent_train_substitute".to_owned(),
+            exactness: MaterializationExactness::Blocked,
+            train_rows: u64::try_from(SEALQA_TRAIN_ROWS).expect("train count fits in u64"),
+            validation_rows: None,
+            test_rows: None,
+            split_fingerprint: None,
+            blocker_ids: vec!["sealqa_insufficient_rows".to_owned()],
+        });
+    }
+
+    let splits =
+        RowOrderSplitBuilder::new((0..source_rows).map(CaseId::from_index).collect::<Vec<_>>())
+            .role_range(SplitRole::Train, 0..SEALQA_TRAIN_ROWS)
+            .role_range(SplitRole::Test, SEALQA_TRAIN_ROWS..source_rows)
+            .build(CaseSetVersion(format!(
+                "sealqa-row-order-substitute-v1-rows-{source_rows}-train-{SEALQA_TRAIN_ROWS}"
+            )))
+            .map_err(|source| ManifestError::Split { source })?;
+    let mut blocker_ids = vec!["sealqa_split_manifest".to_owned()];
+    if source_rows != SEALQA_ROWS {
+        blocker_ids.push("sealqa_row_count_mismatch".to_owned());
+    }
+
+    Ok(SplitMaterializationReport {
+        id,
+        method: "row_order_10_percent_train_substitute".to_owned(),
+        exactness: MaterializationExactness::PaperCloseSubstitute,
+        train_rows: split_len(&splits, &SplitRole::Train),
+        validation_rows: None,
+        test_rows: Some(split_len(&splits, &SplitRole::Test)),
+        split_fingerprint: Some(fingerprint_hex(splits.fingerprint())),
+        blocker_ids,
     })
 }
 
@@ -1706,10 +1803,7 @@ fn dataset_requirements() -> Vec<DatasetRequirement> {
             validation_rows: None,
             held_out: "paper uses 10 percent train and held-out remainder".to_owned(),
             split_status: SplitManifestStatus::BlockedMissingSplitManifest,
-            blocker_ids: vec![
-                "sealqa_parquet_row_reader".to_owned(),
-                "sealqa_split_manifest".to_owned(),
-            ],
+            blocker_ids: vec!["sealqa_split_manifest".to_owned()],
         },
         DatasetRequirement {
             id: "browsecomp_transfer".to_owned(),
@@ -1785,12 +1879,8 @@ fn blockers() -> Vec<ReplicationBlocker> {
             "OfficeQA can be difficulty-stratified as a documented substitute, but exact paper split membership is absent",
         ),
         blocker(
-            "sealqa_parquet_row_reader",
-            "SealQA parquet is pinned locally, but Leaven does not yet have a no-spend Rust row reader for seal-0",
-        ),
-        blocker(
             "sealqa_split_manifest",
-            "SealQA seal-0 parquet is pinned, but Leaven still lacks exact train/held-out split membership",
+            "SealQA seal-0 parquet can be materialized, but Leaven still lacks exact train/held-out split membership",
         ),
         blocker(
             "browsecomp_transfer_sample",

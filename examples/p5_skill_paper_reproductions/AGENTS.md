@@ -37,9 +37,13 @@ belong in their owning crates.
 - `cargo test -p p5_skill_paper_reproductions --test evoskill_materialization`
   proves the OfficeQA CSV lowers through `leaven-eval::SourceRowManifest` into
   row-stable Leaven cases, records deterministic difficulty-stratified
-  train/validation/test substitute split fingerprints, and keeps missing paper
-  category/exact split artifacts as blockers. It does not prove SealQA row
-  extraction, exact OfficeQA paper membership, or live scores.
+  train/validation/test substitute split fingerprints, lowers SealQA Parquet
+  rows through `leaven-eval-parquet` into row-stable cases, and records a
+  row-order 10 percent train / held-out substitute split. SealQA row identity is
+  physical row order, because the observed `canary` column is not unique. It
+  keeps missing paper category/exact split artifacts as blockers and does not
+  prove exact OfficeQA/SealQA paper membership, SealQA judge scores, or live
+  scores.
 - `cargo test -p p5_skill_paper_reproductions --test evoskill_loop_mechanics`
   proves a no-spend multi-iteration mechanics loop over the OfficeQA substitute
   split: train sampling, failure feedback history, round-robin parent

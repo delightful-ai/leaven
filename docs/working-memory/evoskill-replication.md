@@ -555,9 +555,9 @@ Stay no-spend until the provenance blockers are closed:
 2. Locate or reconstruct the paper's OfficeQA category/split manifest. If the
    manifest is unavailable, record an exact documented substitute before any
    live run.
-3. Promote the pinned SealQA parquet through `leaven-eval-parquet` into a
-   paper-specific Leaven input manifest, then attach the exact 10 percent
-   train/held-out split when the split source is located or documented.
+3. Attach the exact SealQA 10 percent train/held-out split when the split
+   source is located or documented; the current P5 path materializes the
+   pinned parquet and records a row-order substitute only.
 4. Locate the BrowseComp transfer sample/result source, or record the exact
    access blocker with source links.
 5. Resolve the OfficeQA reported-result comparison target: prose 67.9 percent
@@ -590,9 +590,12 @@ fingerprints for train sizes 12/24/36 with validation size 17 by using
 `leaven-eval::StratifiedSplitBuilder` over the local CSV's `difficulty` column.
 These are explicitly labeled `paper_close_substitute`, not paper-exact, because
 the paper's LLM-derived category/pseudo-label artifact and exact split
-membership remain absent. SealQA remains blocked as a Leaven input surface until
-there is a Rust/no-spend row reader for the pinned `seal-0.parquet` plus an exact
-or declared paper-close split manifest.
+membership remain absent. SealQA now lowers through `leaven-eval-parquet` into
+row-stable cases and records a row-order 10 percent train / held-out substitute
+split. The row id is physical row order, because the observed `canary` values
+are not unique. It still lacks exact train/held-out membership and the paper's
+LLM-as-judge scorer harness, so it remains input/materialization evidence rather
+than a scored paper replica.
 
 The paper-specific scorer now also has Rust feedback-row extraction:
 `score_evoskill_attempt` preserves per-tolerance score details for reporting, and
@@ -624,6 +627,6 @@ statuses for skill-only, prompt-only, skill-merge, and BrowseComp transfer.
 
 This deliberately does not fill blocked metrics with zeroes or claim paper-close:
 OfficeQA score slots stay `blocked` until exact membership or an accepted
-paper-close substitute can be used for a scored run, SealQA remains blocked on
-row extraction/split materialization, and live provider/model scores still need
-explicit approval and a real run.
+paper-close substitute can be used for a scored run, SealQA score slots stay
+blocked on exact split membership and judge/scored-run evidence, and live
+provider/model scores still need explicit approval and a real run.
