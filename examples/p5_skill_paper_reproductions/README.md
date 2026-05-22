@@ -99,6 +99,17 @@ regenerates the final report through the normal importer. This scores supplied
 prediction artifacts only; it does not run an agent or resolve missing split
 proof.
 
+`just evoskill-paper-sealqa-judge-requests <predictions.jsonl>` is the Rust
+no-spend request-materialization path for future approved SealQA judge runs.
+Each input row is strict JSONL with `dataset_id`, `split_id`, `split_role`,
+`candidate_role`, `source_id`, and `prediction`. The writer refuses
+source/split-blocked slots and already-reported slots, requires exact role
+coverage, binds every row to the current pinned judge-template fingerprint, and
+writes `sealqa_judge_request_manifest.json` plus judge-only request JSONL. The
+request artifact may contain reference answers because it is scorer input, not
+runner input; it does not write score evidence, call a judge, or clear
+`sealqa_judge_scored_run`.
+
 `just evoskill-paper-score-sealqa <judged_rows.jsonl> <approval_id>` is the
 Rust no-spend import path for already-approved SealQA external judge outputs.
 Each row must be strict JSONL with `dataset_id`, `split_id`, `split_role`,

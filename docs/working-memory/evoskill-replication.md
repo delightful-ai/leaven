@@ -1166,6 +1166,17 @@ sum reported costs, and then rerun the normal final-report importer. This makes
 the combined OfficeQA/SealQA score path possible without letting a later writer
 silently replace earlier evidence.
 
+SealQA judge request batches now have a strict no-spend materialization lane.
+`just evoskill-paper-sealqa-judge-requests <predictions.jsonl>` reads SealQA
+prediction rows for materialized score slots, refuses source/split-blocked or
+already-reported slots, validates exact role source-id coverage, and writes
+`sealqa_judge_request_manifest.json` with request artifacts pinned to the
+current manifest/scorer fingerprints and judge-template fingerprint. The
+request JSONL contains the reference answer inside the judge prompt because it
+is scorer input, not runner input. This closes the hand-built-prompt gap before
+approved judge execution, but it does not run the judge, approve spend, or
+produce score evidence.
+
 ## Final Report Exactness Gaps
 
 Date: 2026-05-22.

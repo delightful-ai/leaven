@@ -49,6 +49,8 @@ const BROWSECOMP_PUBLIC_CSV_PATH: &str =
 const SOURCE_PIN_MANIFEST_PATH: &str = "tmp/replication/evoskill/source_pin_manifest.json";
 const SPLIT_POLICY_MANIFEST_PATH: &str = "tmp/replication/evoskill/split_policy_manifest.json";
 const SCORE_RESULT_MANIFEST_PATH: &str = "tmp/replication/evoskill/score_result_manifest.json";
+const SEALQA_JUDGE_REQUEST_MANIFEST_PATH: &str =
+    "tmp/replication/evoskill/sealqa_judge_request_manifest.json";
 const PAPER_DECLARED_SOURCE_ID_MANIFEST_METHOD: &str = "paper_declared_source_id_manifest";
 const BROWSECOMP_TRANSFER_ROWS: usize = 128;
 const BROWSECOMP_TRANSFER_ROWS_U64: u64 = 128;
@@ -777,6 +779,31 @@ struct ScoreResultManifestEntry {
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
+struct SealQaJudgeRequestManifestFile {
+    schema_version: u32,
+    manifest_fingerprint: String,
+    scorer_fingerprint: String,
+    entries: Vec<SealQaJudgeRequestManifestEntry>,
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SealQaJudgeRequestManifestEntry {
+    dataset_id: String,
+    split_id: String,
+    split_role: String,
+    candidate_role: String,
+    split_fingerprint: Option<String>,
+    role_source_id_fingerprint: Option<String>,
+    expected_rows: Option<u64>,
+    request_rows: u64,
+    judge_template_id: String,
+    judge_template_fingerprint: String,
+    request_artifact: ScoreEvidenceArtifact,
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 struct ScoreEvidenceRow {
     source_id: String,
     prediction: String,
@@ -806,6 +833,24 @@ struct SealQaJudgeScoreRow {
     prediction: String,
     score: f64,
     judge_template_fingerprint: String,
+}
+
+#[derive(Clone, Debug, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SealQaJudgePredictionRow {
+    dataset_id: String,
+    split_id: String,
+    split_role: String,
+    candidate_role: String,
+    source_id: String,
+    prediction: String,
+}
+
+#[derive(Clone, Debug, serde::Serialize)]
+struct SealQaJudgeRequestArtifactRow {
+    source_id: String,
+    prediction: String,
+    request: SealQaJudgeRequest,
 }
 
 struct ValidatedScoreResultManifest {
@@ -917,6 +962,21 @@ pub enum ManifestError {
     },
     #[error("invalid SealQA judge score rows `{path}`: {message}")]
     SealQaJudgeScore { path: PathBuf, message: String },
+    #[error("failed to parse SealQA judge request prediction rows `{path}` line {line}: {source}")]
+    SealQaJudgeRequestJson {
+        path: PathBuf,
+        line: usize,
+        #[source]
+        source: serde_json::Error,
+    },
+    #[error("invalid SealQA judge request batch `{path}`: {message}")]
+    SealQaJudgeRequest { path: PathBuf, message: String },
+    #[error("failed to serialize SealQA judge request manifest `{path}`: {source}")]
+    SealQaJudgeRequestManifestSerialize {
+        path: PathBuf,
+        #[source]
+        source: serde_json::Error,
+    },
     #[error("failed to parse BrowseComp transfer sample `{path}` line {line}: {source}")]
     BrowseCompSampleJson {
         path: PathBuf,
@@ -1199,6 +1259,43 @@ pub fn write_evoskill_sealqa_judge_score_result_manifest(
         &mut slots,
         &validated,
     )?;
+    Ok(path)
+}
+
+pub fn write_evoskill_sealqa_judge_request_batch(
+    input: &ManifestBuildInput,
+    predictions_path: impl AsRef<Path>,
+) -> Result<PathBuf, ManifestError> {
+    let predictions_path = root_relative_input_path(&input.root, predictions_path.as_ref());
+    let predictions = read_sealqa_judge_prediction_rows(&predictions_path)?;
+    let sources = materialize_evoskill_sources(input)?;
+    let manifest = build_evoskill_replica_manifest_from_sources(input, &sources)?;
+    let manifest_fingerprint = manifest_fingerprint_report(&manifest)?;
+    let scorer_fingerprint = scorer_fingerprint_report(&manifest.scorer);
+    let mut slots = final_score_slots(&manifest);
+    if let Some(existing) =
+        read_score_result_manifest(&input.root, &manifest_fingerprint, &scorer_fingerprint)?
+    {
+        apply_score_result_manifest(
+            &input.root,
+            &sources,
+            &manifest.scorer,
+            &mut slots,
+            &existing,
+        )?;
+    }
+    let path = input.root.join(SEALQA_JUDGE_REQUEST_MANIFEST_PATH);
+    let request_manifest = sealqa_judge_request_manifest_from_predictions(
+        &input.root,
+        &path,
+        &sources,
+        &manifest.scorer,
+        &slots,
+        &manifest_fingerprint,
+        &scorer_fingerprint,
+        predictions,
+    )?;
+    write_sealqa_judge_request_manifest_file(&path, &request_manifest)?;
     Ok(path)
 }
 
@@ -3343,6 +3440,39 @@ fn read_sealqa_judge_score_rows(path: &Path) -> Result<Vec<SealQaJudgeScoreRow>,
     Ok(rows)
 }
 
+fn read_sealqa_judge_prediction_rows(
+    path: &Path,
+) -> Result<Vec<SealQaJudgePredictionRow>, ManifestError> {
+    let body = fs::read_to_string(path).map_err(|source| ManifestError::Read {
+        path: path.to_owned(),
+        source,
+    })?;
+    let mut rows = Vec::new();
+    for (line_index, line) in body.lines().enumerate() {
+        if line.trim().is_empty() {
+            return Err(ManifestError::SealQaJudgeRequest {
+                path: path.to_owned(),
+                message: format!("blank line {}", line_index + 1),
+            });
+        }
+        let row = serde_json::from_str::<SealQaJudgePredictionRow>(line).map_err(|source| {
+            ManifestError::SealQaJudgeRequestJson {
+                path: path.to_owned(),
+                line: line_index + 1,
+                source,
+            }
+        })?;
+        rows.push(row);
+    }
+    if rows.is_empty() {
+        return Err(ManifestError::SealQaJudgeRequest {
+            path: path.to_owned(),
+            message: "judge request prediction file must contain at least one row".to_owned(),
+        });
+    }
+    Ok(rows)
+}
+
 fn officeqa_prediction_slot_keys(
     path: &Path,
     rows: &[OfficeQaPredictionRow],
@@ -3620,6 +3750,68 @@ fn sealqa_judge_score_result_manifest_from_rows(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
+fn sealqa_judge_request_manifest_from_predictions(
+    root: &Path,
+    sidecar_path: &Path,
+    sources: &EvoSkillSourceMaterializations,
+    scorer: &ScorerManifest,
+    slots: &[FinalScoreSlot],
+    manifest_fingerprint: &ManifestFingerprintReport,
+    scorer_fingerprint: &ScorerFingerprintReport,
+    predictions: Vec<SealQaJudgePredictionRow>,
+) -> Result<SealQaJudgeRequestManifestFile, ManifestError> {
+    let template = sealqa_judge_template_from_scorer(sidecar_path, scorer, "sealqa")?;
+    let slots_by_key = slots
+        .iter()
+        .map(|slot| (final_score_slot_key(slot), slot))
+        .collect::<BTreeMap<_, _>>();
+    let targets = sealqa_targets_by_source_id(sources, sidecar_path)?;
+    let mut grouped = BTreeMap::<String, Vec<SealQaJudgePredictionRow>>::new();
+    for row in predictions {
+        validate_sealqa_judge_prediction_row_shape(sidecar_path, &row)?;
+        grouped
+            .entry(sealqa_judge_prediction_slot_key(&row))
+            .or_default()
+            .push(row);
+    }
+
+    let mut entries = Vec::new();
+    for (key, rows) in grouped {
+        let slot = slots_by_key.get(&key).ok_or_else(|| {
+            sealqa_judge_request_error(
+                sidecar_path,
+                format!("SealQA judge request rows target unknown score slot `{key}`"),
+            )
+        })?;
+        validate_sealqa_judge_request_writer_slot(sidecar_path, &key, slot)?;
+        let request_rows =
+            sealqa_judge_request_rows(sidecar_path, &key, sources, &targets, slot, rows, template)?;
+        let request_artifact =
+            write_sealqa_judge_request_artifact(root, sidecar_path, &key, &request_rows)?;
+        entries.push(SealQaJudgeRequestManifestEntry {
+            dataset_id: slot.dataset_id.clone(),
+            split_id: slot.split_id.clone(),
+            split_role: slot.split_role.clone(),
+            candidate_role: slot.candidate_role.clone(),
+            split_fingerprint: slot.split_fingerprint.clone(),
+            role_source_id_fingerprint: slot.role_source_id_fingerprint.clone(),
+            expected_rows: slot.expected_rows,
+            request_rows: u64::try_from(request_rows.len()).expect("request row count fits in u64"),
+            judge_template_id: template.id.clone(),
+            judge_template_fingerprint: template.fingerprint.clone(),
+            request_artifact,
+        });
+    }
+
+    Ok(SealQaJudgeRequestManifestFile {
+        schema_version: 1,
+        manifest_fingerprint: manifest_fingerprint.fingerprint.clone(),
+        scorer_fingerprint: scorer_fingerprint.fingerprint.clone(),
+        entries,
+    })
+}
+
 fn score_evidence_row_count(
     path: &Path,
     key: &str,
@@ -3723,6 +3915,36 @@ fn validate_sealqa_judge_score_row_shape(
     Ok(())
 }
 
+fn validate_sealqa_judge_prediction_row_shape(
+    path: &Path,
+    row: &SealQaJudgePredictionRow,
+) -> Result<(), ManifestError> {
+    if row.dataset_id != "sealqa" {
+        return Err(ManifestError::SealQaJudgeRequest {
+            path: path.to_owned(),
+            message: format!(
+                "judge request row for `{}` is not supported by the SealQA judge request writer",
+                row.dataset_id
+            ),
+        });
+    }
+    for (field, value) in [
+        ("split_id", &row.split_id),
+        ("split_role", &row.split_role),
+        ("candidate_role", &row.candidate_role),
+        ("source_id", &row.source_id),
+        ("prediction", &row.prediction),
+    ] {
+        if value.trim().is_empty() {
+            return Err(ManifestError::SealQaJudgeRequest {
+                path: path.to_owned(),
+                message: format!("judge request row field `{field}` must not be empty"),
+            });
+        }
+    }
+    Ok(())
+}
+
 fn officeqa_targets_by_source_id(
     sources: &EvoSkillSourceMaterializations,
     path: &Path,
@@ -3741,6 +3963,32 @@ fn officeqa_targets_by_source_id(
             (
                 row.source_id().to_owned(),
                 row.target().expect("OfficeQA rows are targeted").clone(),
+            )
+        })
+        .collect())
+}
+
+fn sealqa_targets_by_source_id(
+    sources: &EvoSkillSourceMaterializations,
+    path: &Path,
+) -> Result<BTreeMap<String, (String, String)>, ManifestError> {
+    let sealqa = sources.sealqa.as_ref().ok_or_else(|| {
+        sealqa_judge_request_error(
+            path,
+            "SealQA judge requests require SealQA source rows".into(),
+        )
+    })?;
+    Ok(sealqa
+        .rows
+        .rows()
+        .iter()
+        .map(|row| {
+            (
+                row.source_id().to_owned(),
+                (
+                    row.input().question.clone(),
+                    row.target().expect("SealQA rows are targeted").clone(),
+                ),
             )
         })
         .collect())
@@ -3827,6 +4075,56 @@ fn validate_sealqa_judge_score_writer_slot(
         return Err(score_result_manifest_error(
             path,
             format!("SealQA judge score writer requires expected rows for `{key}`"),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_sealqa_judge_request_writer_slot(
+    path: &Path,
+    key: &str,
+    slot: &FinalScoreSlot,
+) -> Result<(), ManifestError> {
+    if slot.dataset_id != "sealqa" {
+        return Err(sealqa_judge_request_error(
+            path,
+            format!("SealQA judge request writer cannot target non-SealQA slot `{key}`"),
+        ));
+    }
+    for blocker in &slot.blocker_ids {
+        if blocker != "sealqa_judge_scored_run" {
+            return Err(sealqa_judge_request_error(
+                path,
+                format!(
+                    "SealQA judge request writer refuses slot `{key}` with non-score blocker `{blocker}`; resolve source/split blockers before preparing judge requests"
+                ),
+            ));
+        }
+    }
+    if !slot
+        .blocker_ids
+        .iter()
+        .any(|blocker| blocker == "sealqa_judge_scored_run")
+    {
+        return Err(sealqa_judge_request_error(
+            path,
+            format!(
+                "SealQA judge request writer requires slot `{key}` to be blocked by sealqa_judge_scored_run"
+            ),
+        ));
+    }
+    if slot.split_fingerprint.is_none() || slot.role_source_id_fingerprint.is_none() {
+        return Err(sealqa_judge_request_error(
+            path,
+            format!(
+                "SealQA judge request writer requires materialized split and role fingerprints for `{key}`"
+            ),
+        ));
+    }
+    if slot.expected_rows.is_none() {
+        return Err(sealqa_judge_request_error(
+            path,
+            format!("SealQA judge request writer requires expected rows for `{key}`"),
         ));
     }
     Ok(())
@@ -3987,6 +4285,88 @@ fn sealqa_judge_score_evidence_rows(
     Ok(evidence_rows)
 }
 
+fn sealqa_judge_request_rows(
+    path: &Path,
+    key: &str,
+    sources: &EvoSkillSourceMaterializations,
+    targets: &BTreeMap<String, (String, String)>,
+    slot: &FinalScoreSlot,
+    rows: Vec<SealQaJudgePredictionRow>,
+    template: &JudgeTemplateManifest,
+) -> Result<Vec<SealQaJudgeRequestArtifactRow>, ManifestError> {
+    let expected_rows = slot.expected_rows.expect("validated expected rows");
+    let actual_rows = u64::try_from(rows.len()).expect("judge request row count fits in u64");
+    if actual_rows != expected_rows {
+        return Err(sealqa_judge_request_error(
+            path,
+            format!(
+                "SealQA judge request rows for `{key}` cover {actual_rows} rows, expected {expected_rows}"
+            ),
+        ));
+    }
+    let mut predictions = BTreeMap::new();
+    for row in rows {
+        let source_id = row.source_id.clone();
+        if predictions.insert(source_id.clone(), row).is_some() {
+            return Err(sealqa_judge_request_error(
+                path,
+                format!("SealQA judge request rows for `{key}` repeat source id `{source_id}`"),
+            ));
+        }
+    }
+    let expected_source_ids = score_writer_slot_source_ids(sources, path, key, slot)?;
+    if u64::try_from(expected_source_ids.len()).expect("source id count fits in u64")
+        != expected_rows
+    {
+        return Err(sealqa_judge_request_error(
+            path,
+            format!("SealQA score slot `{key}` source-id manifest does not match expected rows"),
+        ));
+    }
+    let mut request_rows = Vec::with_capacity(expected_source_ids.len());
+    for source_id in expected_source_ids {
+        let row = predictions.get(&source_id).ok_or_else(|| {
+            sealqa_judge_request_error(
+                path,
+                format!(
+                    "SealQA judge request rows for `{key}` are missing source id `{source_id}`"
+                ),
+            )
+        })?;
+        let (question, reference) = targets.get(&source_id).ok_or_else(|| {
+            sealqa_judge_request_error(
+                path,
+                format!(
+                    "SealQA judge request rows for `{key}` reference unknown source id `{source_id}`"
+                ),
+            )
+        })?;
+        request_rows.push(SealQaJudgeRequestArtifactRow {
+            source_id,
+            prediction: row.prediction.clone(),
+            request: build_sealqa_judge_request(
+                template,
+                question,
+                &row.prediction,
+                reference,
+                0.0,
+            ),
+        });
+    }
+    if let Some(extra) = predictions
+        .keys()
+        .find(|source_id| !request_rows.iter().any(|row| &row.source_id == *source_id))
+    {
+        return Err(sealqa_judge_request_error(
+            path,
+            format!(
+                "SealQA judge request rows for `{key}` include source id `{extra}` outside the slot role"
+            ),
+        ));
+    }
+    Ok(request_rows)
+}
+
 fn officeqa_score_slot_source_ids(
     sources: &EvoSkillSourceMaterializations,
     path: &Path,
@@ -4093,6 +4473,44 @@ fn write_score_evidence_artifact_with_id(
     })
 }
 
+fn write_sealqa_judge_request_artifact(
+    root: &Path,
+    sidecar_path: &Path,
+    key: &str,
+    rows: &[SealQaJudgeRequestArtifactRow],
+) -> Result<ScoreEvidenceArtifact, ManifestError> {
+    let request_id = sealqa_judge_request_artifact_id_from_key(key);
+    let relative_path = format!("tmp/replication/evoskill/judge-requests/{request_id}.jsonl");
+    let path = root.join(&relative_path);
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|source| ManifestError::Write {
+            path: parent.to_owned(),
+            source,
+        })?;
+    }
+    let mut body = String::new();
+    for row in rows {
+        let line = serde_json::to_string(row).map_err(|source| {
+            ManifestError::SealQaJudgeRequestManifestSerialize {
+                path: sidecar_path.to_owned(),
+                source,
+            }
+        })?;
+        body.push_str(&line);
+        body.push('\n');
+    }
+    fs::write(&path, body.as_bytes()).map_err(|source| ManifestError::Write {
+        path: path.clone(),
+        source,
+    })?;
+    let bytes = u64::try_from(body.len()).expect("judge request artifact size fits in u64");
+    Ok(ScoreEvidenceArtifact {
+        relative_path,
+        sha256: sha256_file(&path)?,
+        bytes,
+    })
+}
+
 fn write_score_result_manifest_file(
     path: &Path,
     manifest: &ScoreResultManifestFile,
@@ -4105,6 +4523,28 @@ fn write_score_result_manifest_file(
     }
     let bytes = serde_json::to_vec_pretty(manifest).map_err(|source| {
         ManifestError::ScoreResultManifestSerialize {
+            path: path.to_owned(),
+            source,
+        }
+    })?;
+    fs::write(path, bytes).map_err(|source| ManifestError::Write {
+        path: path.to_owned(),
+        source,
+    })
+}
+
+fn write_sealqa_judge_request_manifest_file(
+    path: &Path,
+    manifest: &SealQaJudgeRequestManifestFile,
+) -> Result<(), ManifestError> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|source| ManifestError::Write {
+            path: parent.to_owned(),
+            source,
+        })?;
+    }
+    let bytes = serde_json::to_vec_pretty(manifest).map_err(|source| {
+        ManifestError::SealQaJudgeRequestManifestSerialize {
             path: path.to_owned(),
             source,
         }
@@ -4129,6 +4569,13 @@ fn sealqa_judge_score_slot_key(row: &SealQaJudgeScoreRow) -> String {
     )
 }
 
+fn sealqa_judge_prediction_slot_key(row: &SealQaJudgePredictionRow) -> String {
+    format!(
+        "{}|{}|{}|{}",
+        row.dataset_id, row.split_id, row.split_role, row.candidate_role
+    )
+}
+
 fn officeqa_score_evidence_id(slot: &FinalScoreSlot) -> String {
     officeqa_score_evidence_id_from_key(&final_score_slot_key(slot))
 }
@@ -4138,6 +4585,10 @@ fn officeqa_score_evidence_id_from_key(key: &str) -> String {
         "officeqa-rust-scorer-replay-{}",
         key.replace(['|', '_'], "-")
     )
+}
+
+fn sealqa_judge_request_artifact_id_from_key(key: &str) -> String {
+    format!("sealqa-judge-requests-{}", key.replace(['|', '_'], "-"))
 }
 
 fn sealqa_judge_score_evidence_id(
@@ -4696,6 +5147,25 @@ fn validate_judge_template_fingerprint_evidence_rows(
     Ok(())
 }
 
+fn sealqa_judge_template_from_scorer<'a>(
+    sidecar_path: &Path,
+    scorer: &'a ScorerManifest,
+    dataset_id: &str,
+) -> Result<&'a JudgeTemplateManifest, ManifestError> {
+    scorer
+        .judge_templates
+        .iter()
+        .find(|template| template.dataset_id == dataset_id)
+        .ok_or_else(|| {
+            sealqa_judge_request_error(
+                sidecar_path,
+                format!(
+                    "SealQA judge request writer has no pinned judge template for `{dataset_id}`"
+                ),
+            )
+        })
+}
+
 fn sealqa_judge_template_fingerprint_from_scorer(
     sidecar_path: &Path,
     scorer: &ScorerManifest,
@@ -5053,6 +5523,13 @@ fn score_result_entry_key(entry: &ScoreResultManifestEntry) -> String {
 
 fn score_result_manifest_error(path: &Path, message: String) -> ManifestError {
     ManifestError::ScoreResultManifest {
+        path: path.to_owned(),
+        message,
+    }
+}
+
+fn sealqa_judge_request_error(path: &Path, message: String) -> ManifestError {
+    ManifestError::SealQaJudgeRequest {
         path: path.to_owned(),
         message,
     }

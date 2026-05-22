@@ -1058,3 +1058,15 @@ writer and approved SealQA judge import writer first validate the existing
 reported, then merge new entries and summed costs through schema v5 before the
 normal importer runs. This keeps replacement explicit while letting OfficeQA
 and SealQA score evidence coexist in the final report.
+
+2026-05-22 update: SealQA judge request batches now have a no-spend Rust
+operator path. `just evoskill-paper-sealqa-judge-requests <predictions.jsonl>`
+consumes strict SealQA prediction rows keyed by dataset/split role/candidate
+and source id, validates the current materialized role membership, refuses
+source/split-blocked or already-reported slots, and writes
+`tmp/replication/evoskill/sealqa_judge_request_manifest.json` plus judge-only
+request JSONL bound to the current manifest fingerprint, scorer fingerprint,
+and pinned judge-template fingerprint. This prepares inputs for a future
+approved judge run only; it does not write score evidence, run a judge, clear
+`sealqa_judge_scored_run`, or expose these reference-bearing prompts to a
+runner.

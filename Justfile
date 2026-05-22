@@ -69,6 +69,9 @@ evoskill-paper-score-officeqa predictions_path *args:
 evoskill-paper-score-sealqa judged_rows_path approval_id *args:
     cargo run -p p5_skill_paper_reproductions -- --out target/evoskill-paper-close/replica-manifest.json --final-report-out target/evoskill-paper-close/final-report.json --write-sealqa-judge-score-result {{judged_rows_path}} --sealqa-judge-approval-id {{approval_id}} {{args}}
 
+evoskill-paper-sealqa-judge-requests predictions_path *args:
+    cargo run -p p5_skill_paper_reproductions -- --out target/evoskill-paper-close/replica-manifest.json --final-report-out target/evoskill-paper-close/final-report.json --write-sealqa-judge-request-batch {{predictions_path}} {{args}}
+
 evoskill-paper-final-report *args:
     cargo run -p p5_skill_paper_reproductions -- --out target/evoskill-paper-close/replica-manifest.json --final-report-out target/evoskill-paper-close/final-report.json {{args}}
 
