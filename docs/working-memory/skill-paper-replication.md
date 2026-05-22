@@ -309,6 +309,11 @@ Next attempt:
   judge template carries the checked paper-source artifact existence, byte
   count, and SHA-256, and the request builder consumes the pinned template
   manifest. This is prompt/request evidence only, not a judge-scored run.
+- P5 schema v11 adds optional source pin manifest ingestion at
+  `tmp/replication/evoskill/source_pin_manifest.json`. A schema-v1
+  `local_checkout_pinned` sidecar must match every known source checkout's
+  id/path/head/branch/origin before `source_pin` is removed; mismatches fail the
+  manifest build instead of becoming fallback proof.
 - P5 final report schema v6 added typed `paper_close_gates`, separating proven
   no-spend manifest/report/mechanics/proxy-closeout surfaces from
   source-blocked source/split work and approval-blocked live/judge execution.

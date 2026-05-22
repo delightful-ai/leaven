@@ -41,6 +41,7 @@ const OFFICEQA_EXACT_SPLIT_MANIFEST_PATH: &str =
     "tmp/replication/evoskill/officeqa/paper_split_manifest.json";
 const SEALQA_EXACT_SPLIT_MANIFEST_PATH: &str =
     "tmp/replication/evoskill/sealqa/paper_split_manifest.json";
+const SOURCE_PIN_MANIFEST_PATH: &str = "tmp/replication/evoskill/source_pin_manifest.json";
 const PAPER_DECLARED_SOURCE_ID_MANIFEST_METHOD: &str = "paper_declared_source_id_manifest";
 const SEALQA_JUDGE_TEMPLATE_ID: &str = "sealqa-auto-grader-placeholder-v1";
 const SEALQA_JUDGE_SOURCE_ARTIFACT_ID: &str = "paper_auto_grader_placeholder";
@@ -56,6 +57,10 @@ const EVOSKILL_REPLICA_FRONTIER_SIZE: usize = 3;
 const EVOSKILL_REPLICA_TRAIN_ROWS: usize = 12;
 const EVOSKILL_REPLICA_RESUME_AFTER_ITERATION: u64 = 2;
 const REPLICA_CHILD_SCORES: [f64; 4] = [0.60, 0.20, 0.10, 0.80];
+const SOURCE_REVISION_SPECS: [(&str, &str); 2] = [
+    ("evoskill_repo", "tmp/repros/evoskill"),
+    ("officeqa_repo", "tmp/repros/officeqa"),
+];
 
 #[derive(Clone, Debug)]
 pub struct ManifestBuildInput {
@@ -146,6 +151,7 @@ pub enum SourcePaperReleaseStatus {
     MissingPath,
     NotGitCheckout,
     Unresolved,
+    PinnedLocalCheckout,
     ProbeFailed,
 }
 
@@ -688,6 +694,14 @@ pub enum ManifestError {
     },
     #[error("invalid split manifest `{path}`: {message}")]
     SplitManifest { path: PathBuf, message: String },
+    #[error("failed to parse source pin manifest `{path}`: {source}")]
+    SourcePinManifestJson {
+        path: PathBuf,
+        #[source]
+        source: serde_json::Error,
+    },
+    #[error("invalid source pin manifest `{path}`: {message}")]
+    SourcePinManifest { path: PathBuf, message: String },
     #[error("failed to materialize Parquet source rows: {source}")]
     Parquet {
         #[source]
@@ -761,17 +775,18 @@ fn build_evoskill_replica_manifest_from_sources(
     input: &ManifestBuildInput,
     sources: &EvoSkillSourceMaterializations,
 ) -> Result<EvoSkillReplicaManifest, ManifestError> {
-    let source_revisions = source_revisions(&input.root);
+    let source_pin_manifest = read_source_pin_manifest(&input.root)?;
+    let source_revisions = source_revisions(&input.root, source_pin_manifest.as_ref());
     let artifacts = source_artifacts(&input.root)?;
     let source_materializations = source_materialization_reports(sources);
     let datasets = dataset_requirements(&source_materializations);
     let source_universe = source_universe(&datasets, &source_materializations);
     let scorer = scorer_manifest(&artifacts);
-    let source_blockers = source_blockers(&input.root, sources)?;
+    let source_blockers = source_blockers(&input.root, sources, source_pin_manifest.is_some())?;
     let blockers = blockers(&source_blockers);
 
     Ok(EvoSkillReplicaManifest {
-        schema_version: 10,
+        schema_version: 11,
         paper: PaperTarget {
             id: "evoskill".to_owned(),
             arxiv_id: "2603.02766".to_owned(),
@@ -854,6 +869,43 @@ struct PaperSplitManifestFile {
     split_id: String,
     #[serde(default)]
     roles: PaperSplitRoles,
+}
+
+#[derive(Debug)]
+struct ValidatedSourcePinManifest {
+    policy: SourcePinPolicy,
+    sources: BTreeMap<String, SourcePinManifestEntry>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum SourcePinPolicy {
+    LocalCheckoutPinned,
+}
+
+impl SourcePinPolicy {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::LocalCheckoutPinned => "local_checkout_pinned",
+        }
+    }
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct SourcePinManifestFile {
+    schema_version: u32,
+    policy: SourcePinPolicy,
+    #[serde(default)]
+    sources: Vec<SourcePinManifestEntry>,
+}
+
+#[derive(Clone, Debug, serde::Deserialize)]
+struct SourcePinManifestEntry {
+    id: String,
+    relative_path: String,
+    head: String,
+    branch: String,
+    remote_url: String,
 }
 
 #[derive(Default, Debug, serde::Deserialize)]
@@ -1151,6 +1203,159 @@ fn read_paper_split_manifest(
         });
     }
     Ok(Some(manifest))
+}
+
+fn read_source_pin_manifest(
+    root: &Path,
+) -> Result<Option<ValidatedSourcePinManifest>, ManifestError> {
+    let path = root.join(SOURCE_PIN_MANIFEST_PATH);
+    if !path.exists() {
+        return Ok(None);
+    }
+    let bytes = fs::read(&path).map_err(|source| ManifestError::Read {
+        path: path.clone(),
+        source,
+    })?;
+    let manifest = serde_json::from_slice::<SourcePinManifestFile>(&bytes).map_err(|source| {
+        ManifestError::SourcePinManifestJson {
+            path: path.clone(),
+            source,
+        }
+    })?;
+    validate_source_pin_manifest(root, &path, manifest).map(Some)
+}
+
+fn validate_source_pin_manifest(
+    root: &Path,
+    path: &Path,
+    manifest: SourcePinManifestFile,
+) -> Result<ValidatedSourcePinManifest, ManifestError> {
+    if manifest.schema_version != 1 {
+        return Err(ManifestError::SourcePinManifest {
+            path: path.to_owned(),
+            message: format!(
+                "expected schema_version 1, found {}",
+                manifest.schema_version
+            ),
+        });
+    }
+
+    let mut sources = BTreeMap::new();
+    for entry in manifest.sources {
+        let expected_relative_path = source_revision_relative_path(&entry.id).ok_or_else(|| {
+            ManifestError::SourcePinManifest {
+                path: path.to_owned(),
+                message: format!("unknown source id `{}`", entry.id),
+            }
+        })?;
+        if entry.relative_path != expected_relative_path {
+            return Err(ManifestError::SourcePinManifest {
+                path: path.to_owned(),
+                message: format!(
+                    "source `{}` expected relative_path `{expected_relative_path}`, found `{}`",
+                    entry.id, entry.relative_path
+                ),
+            });
+        }
+        validate_source_pin_entry(root, path, &entry)?;
+        if sources.insert(entry.id.clone(), entry).is_some() {
+            return Err(ManifestError::SourcePinManifest {
+                path: path.to_owned(),
+                message: "source ids must be unique".to_owned(),
+            });
+        }
+    }
+
+    for (id, _) in SOURCE_REVISION_SPECS {
+        if !sources.contains_key(id) {
+            return Err(ManifestError::SourcePinManifest {
+                path: path.to_owned(),
+                message: format!("missing source pin for `{id}`"),
+            });
+        }
+    }
+
+    Ok(ValidatedSourcePinManifest {
+        policy: manifest.policy,
+        sources,
+    })
+}
+
+fn validate_source_pin_entry(
+    root: &Path,
+    path: &Path,
+    entry: &SourcePinManifestEntry,
+) -> Result<(), ManifestError> {
+    let checkout = root.join(&entry.relative_path);
+    if !checkout.exists() {
+        return Err(ManifestError::SourcePinManifest {
+            path: path.to_owned(),
+            message: format!("source `{}` path is missing", entry.id),
+        });
+    }
+    if !checkout.join(".git").exists() {
+        return Err(ManifestError::SourcePinManifest {
+            path: path.to_owned(),
+            message: format!("source `{}` is not a git checkout", entry.id),
+        });
+    }
+    let head = required_git_stdout(path, &checkout, &entry.id, &["rev-parse", "HEAD"])?;
+    if head != entry.head {
+        return Err(ManifestError::SourcePinManifest {
+            path: path.to_owned(),
+            message: format!(
+                "source `{}` head mismatch: expected `{}`, found `{head}`",
+                entry.id, entry.head
+            ),
+        });
+    }
+    let branch = required_git_stdout(path, &checkout, &entry.id, &["branch", "--show-current"])?;
+    if branch != entry.branch {
+        return Err(ManifestError::SourcePinManifest {
+            path: path.to_owned(),
+            message: format!(
+                "source `{}` branch mismatch: expected `{}`, found `{branch}`",
+                entry.id, entry.branch
+            ),
+        });
+    }
+    let remote_url = required_git_stdout(
+        path,
+        &checkout,
+        &entry.id,
+        &["config", "--get", "remote.origin.url"],
+    )?;
+    if remote_url != entry.remote_url {
+        return Err(ManifestError::SourcePinManifest {
+            path: path.to_owned(),
+            message: format!(
+                "source `{}` remote_url mismatch: expected `{}`, found `{remote_url}`",
+                entry.id, entry.remote_url
+            ),
+        });
+    }
+    Ok(())
+}
+
+fn required_git_stdout(
+    manifest_path: &Path,
+    checkout: &Path,
+    source_id: &str,
+    args: &[&str],
+) -> Result<String, ManifestError> {
+    git_stdout(checkout, args).ok_or_else(|| ManifestError::SourcePinManifest {
+        path: manifest_path.to_owned(),
+        message: format!(
+            "source `{source_id}` git command `{}` failed",
+            args.join(" ")
+        ),
+    })
+}
+
+fn source_revision_relative_path(id: &str) -> Option<&'static str> {
+    SOURCE_REVISION_SPECS
+        .iter()
+        .find_map(|(source_id, relative_path)| (*source_id == id).then_some(*relative_path))
 }
 
 fn paper_declared_split_report<T>(
@@ -2079,7 +2284,7 @@ fn final_report_paper_close_gates(
             "replica_manifest",
             PaperCloseGateStatus::Proven,
             Vec::new(),
-            "schema v10 manifest declares source universe, local source identity, fingerprints, paper targets, source blockers with checked local candidate evidence, source-backed judge template pins, model pins, scorer, frontier, and schedule",
+            "schema v11 manifest declares source universe, local source identity, optional validated source pins, fingerprints, paper targets, source blockers with checked local candidate evidence, source-backed judge template pins, model pins, scorer, frontier, and schedule",
         ),
         paper_close_gate(
             "source_and_split_materialization",
@@ -2883,15 +3088,32 @@ fn is_ignored_text_token(token: &str) -> bool {
     is_unit_word(token) || matches!(token, "and" | "or" | "the" | "a" | "an" | "of")
 }
 
-fn source_revisions(root: &Path) -> Vec<SourceRevision> {
-    vec![
-        source_revision(root, "evoskill_repo", "tmp/repros/evoskill"),
-        source_revision(root, "officeqa_repo", "tmp/repros/officeqa"),
-    ]
+fn source_revisions(
+    root: &Path,
+    source_pin_manifest: Option<&ValidatedSourcePinManifest>,
+) -> Vec<SourceRevision> {
+    SOURCE_REVISION_SPECS
+        .iter()
+        .map(|(id, relative_path)| {
+            let pinned = source_pin_manifest.and_then(|manifest| {
+                manifest
+                    .sources
+                    .get(*id)
+                    .map(|entry| (manifest.policy, entry))
+            });
+            source_revision(root, id, relative_path, pinned)
+        })
+        .collect()
 }
 
 fn source_artifacts(root: &Path) -> Result<Vec<SourceArtifact>, ManifestError> {
     Ok(vec![
+        source_artifact(
+            root,
+            "source_pin_manifest",
+            "source pin manifest",
+            SOURCE_PIN_MANIFEST_PATH,
+        )?,
         source_artifact(
             root,
             "paper_full_source",
@@ -2958,20 +3180,25 @@ fn source_artifacts(root: &Path) -> Result<Vec<SourceArtifact>, ManifestError> {
 fn source_blockers(
     root: &Path,
     sources: &EvoSkillSourceMaterializations,
+    source_pin_resolved: bool,
 ) -> Result<Vec<SourceBlockerReport>, ManifestError> {
-    let mut reports = vec![source_blocker(
-        root,
-        "source_pin",
-        "all",
-        SourceBlockerStatus::UnresolvedSourcePolicy,
-        &["paper_close_comparison_denominator"],
-        &[
-            "tmp/skill_opt_sources/arx_2603.02766/full_source.md",
-            "tmp/repros/evoskill",
-            "tmp/repros/officeqa",
-        ],
-        "paper-release, local-checkout, or remote-current source policy is not chosen",
-    )?];
+    let mut reports = Vec::new();
+    if !source_pin_resolved {
+        reports.push(source_blocker(
+            root,
+            "source_pin",
+            "all",
+            SourceBlockerStatus::UnresolvedSourcePolicy,
+            &["paper_close_comparison_denominator"],
+            &[
+                SOURCE_PIN_MANIFEST_PATH,
+                "tmp/skill_opt_sources/arx_2603.02766/full_source.md",
+                "tmp/repros/evoskill",
+                "tmp/repros/officeqa",
+            ],
+            "schema-v1 local-checkout source pin manifest is absent",
+        )?);
+    }
     if !sources
         .officeqa
         .as_ref()
@@ -3437,7 +3664,12 @@ fn proxy_rejection_gate(id: &str, proxy: &str, why_not: &str) -> ProxyRejectionG
     }
 }
 
-fn source_revision(root: &Path, id: &str, relative_path: &str) -> SourceRevision {
+fn source_revision(
+    root: &Path,
+    id: &str,
+    relative_path: &str,
+    pinned: Option<(SourcePinPolicy, &SourcePinManifestEntry)>,
+) -> SourceRevision {
     let path = root.join(relative_path);
     if !path.exists() {
         return source_revision_status(
@@ -3483,11 +3715,19 @@ fn source_revision(root: &Path, id: &str, relative_path: &str) -> SourceRevision
         remote_url,
         remote_head: None,
         remote_probe_status,
-        paper_release_ref: None,
-        paper_release_head: None,
-        paper_release_status: SourcePaperReleaseStatus::Unresolved,
+        paper_release_ref: pinned.map(|(policy, _)| policy.as_str().to_owned()),
+        paper_release_head: pinned.map(|(_, entry)| entry.head.clone()),
+        paper_release_status: if pinned.is_some() {
+            SourcePaperReleaseStatus::PinnedLocalCheckout
+        } else {
+            SourcePaperReleaseStatus::Unresolved
+        },
         status: SourceRevisionStatus::Present,
-        blocker_ids: vec!["source_pin".to_owned()],
+        blocker_ids: if pinned.is_some() {
+            Vec::new()
+        } else {
+            vec!["source_pin".to_owned()]
+        },
     }
 }
 
