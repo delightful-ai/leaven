@@ -951,3 +951,12 @@ embedded report manifest and refuse source/split/role drift. Treat that as
 mechanics and denominator evidence only. It is not live provider,
 validation-set, SealQA judge, transferred-skill execution, or paper-score
 evidence.
+
+2026-05-22 update: P5 can now derive that BrowseComp JSONL sidecar from a local
+copy of the official simple-evals encrypted BrowseComp CSV with
+`just evoskill-paper-browsecomp-public-sample <csv>`. The Rust path decrypts
+the public rows, selects a deterministic topic-stratified 128-row substitute,
+and keeps all transfer slots unscored. With source pins and substitute split
+policy sidecars present, source blockers can reach zero; this is still a
+paper-close substitute denominator, not the paper author's exact BrowseComp
+sample and not transferred-skill score evidence.

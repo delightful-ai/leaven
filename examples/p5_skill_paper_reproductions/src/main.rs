@@ -3,7 +3,8 @@ use std::path::PathBuf;
 use clap::Parser;
 use p5_skill_paper_reproductions::evoskill::{
     ManifestBuildInput, build_evoskill_final_report, build_evoskill_replica_manifest,
-    write_evoskill_local_source_pin_manifest, write_evoskill_paper_close_split_policy_manifest,
+    write_evoskill_browsecomp_public_transfer_sample, write_evoskill_local_source_pin_manifest,
+    write_evoskill_paper_close_split_policy_manifest,
 };
 
 #[derive(Debug, Parser)]
@@ -23,6 +24,9 @@ struct Args {
     /// Persist current substitute split fingerprints as the explicit paper-close split policy.
     #[arg(long)]
     write_paper_close_split_policy_manifest: bool,
+    /// Derive the strict 128-row `BrowseComp` transfer sidecar from a local official public CSV.
+    #[arg(long)]
+    write_browsecomp_public_transfer_sample: Option<PathBuf>,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -30,6 +34,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let input = ManifestBuildInput::new(args.root);
     if args.write_local_source_pin_manifest {
         write_evoskill_local_source_pin_manifest(&input)?;
+    }
+    if let Some(path) = args.write_browsecomp_public_transfer_sample {
+        write_evoskill_browsecomp_public_transfer_sample(&input, path)?;
     }
     if args.write_paper_close_split_policy_manifest {
         write_evoskill_paper_close_split_policy_manifest(&input)?;

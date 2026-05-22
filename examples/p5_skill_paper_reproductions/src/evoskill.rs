@@ -5,6 +5,7 @@ use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
 use futures::executor::block_on;
 use leaven_agentic_git::{
     GitAgenticGitError, GitProgramMaterializer, GitProgramReadback, GitProgramStores,
@@ -43,6 +44,8 @@ const SEALQA_EXACT_SPLIT_MANIFEST_PATH: &str =
     "tmp/replication/evoskill/sealqa/paper_split_manifest.json";
 const BROWSECOMP_TRANSFER_SAMPLE_PATH: &str =
     "tmp/replication/evoskill/browsecomp/transfer_sample.jsonl";
+const BROWSECOMP_PUBLIC_CSV_PATH: &str =
+    "tmp/replication/evoskill/browsecomp/public_browsecomp_test_set.csv";
 const SOURCE_PIN_MANIFEST_PATH: &str = "tmp/replication/evoskill/source_pin_manifest.json";
 const SPLIT_POLICY_MANIFEST_PATH: &str = "tmp/replication/evoskill/split_policy_manifest.json";
 const PAPER_DECLARED_SOURCE_ID_MANIFEST_METHOD: &str = "paper_declared_source_id_manifest";
@@ -887,6 +890,53 @@ pub fn write_evoskill_paper_close_split_policy_manifest(
     Ok(path)
 }
 
+pub fn write_evoskill_browsecomp_public_transfer_sample(
+    input: &ManifestBuildInput,
+    public_csv_path: impl AsRef<Path>,
+) -> Result<PathBuf, ManifestError> {
+    let public_csv_path = public_csv_path.as_ref();
+    let public_csv_path = if public_csv_path.is_absolute() {
+        public_csv_path.to_owned()
+    } else {
+        input.root.join(public_csv_path)
+    };
+    let path = input.root.join(BROWSECOMP_TRANSFER_SAMPLE_PATH);
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|source| ManifestError::Write {
+            path: parent.to_owned(),
+            source,
+        })?;
+    }
+    let records = browsecomp_public_transfer_sample_records(&public_csv_path)?;
+    let mut jsonl = String::new();
+    for record in records {
+        let line = serde_json::to_string(&record).map_err(|source| {
+            ManifestError::BrowseCompSampleJson {
+                path: path.clone(),
+                line: 0,
+                source,
+            }
+        })?;
+        jsonl.push_str(&line);
+        jsonl.push('\n');
+    }
+    fs::write(&path, jsonl).map_err(|source| ManifestError::Write {
+        path: path.clone(),
+        source,
+    })?;
+    let rows = read_browsecomp_transfer_rows(&path)?;
+    if rows.len() != BROWSECOMP_TRANSFER_ROWS {
+        return Err(ManifestError::BrowseCompSample {
+            path,
+            message: format!(
+                "generated public BrowseComp substitute has {} rows, expected {BROWSECOMP_TRANSFER_ROWS}",
+                rows.len()
+            ),
+        });
+    }
+    Ok(path)
+}
+
 fn build_evoskill_replica_manifest_from_sources(
     input: &ManifestBuildInput,
     sources: &EvoSkillSourceMaterializations,
@@ -984,7 +1034,7 @@ struct OfficeQaCsvRecord {
     difficulty: String,
 }
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 struct BrowseCompTransferJsonlRecord {
     source_id: String,
@@ -992,6 +1042,23 @@ struct BrowseCompTransferJsonlRecord {
     answer: String,
     #[serde(default)]
     stratum: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct BrowseCompPublicCsvRecord {
+    problem: String,
+    answer: String,
+    problem_topic: String,
+    canary: String,
+}
+
+#[derive(Clone, Debug)]
+struct BrowseCompPublicPlainRow {
+    source_id: String,
+    question: String,
+    answer: String,
+    stratum: String,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -2346,6 +2413,192 @@ fn read_browsecomp_transfer_rows(
     SourceRowManifest::new(rows).map_err(|source| ManifestError::Dataset { source })
 }
 
+fn browsecomp_public_transfer_sample_records(
+    path: &Path,
+) -> Result<Vec<BrowseCompTransferJsonlRecord>, ManifestError> {
+    let rows = read_browsecomp_public_rows(path)?;
+    let sample = topic_stratified_browsecomp_sample(path, rows, BROWSECOMP_TRANSFER_ROWS)?;
+    Ok(sample
+        .into_iter()
+        .map(|row| BrowseCompTransferJsonlRecord {
+            source_id: row.source_id,
+            question: row.question,
+            answer: row.answer,
+            stratum: Some(row.stratum),
+        })
+        .collect())
+}
+
+fn read_browsecomp_public_rows(
+    path: &Path,
+) -> Result<Vec<BrowseCompPublicPlainRow>, ManifestError> {
+    let mut reader = csv::ReaderBuilder::new()
+        .trim(csv::Trim::All)
+        .from_path(path)
+        .map_err(|source| ManifestError::Csv {
+            path: path.to_owned(),
+            source,
+        })?;
+    let mut rows = Vec::new();
+    for (index, record) in reader
+        .deserialize::<BrowseCompPublicCsvRecord>()
+        .enumerate()
+    {
+        let line = index + 2;
+        let record = record.map_err(|source| ManifestError::Csv {
+            path: path.to_owned(),
+            source,
+        })?;
+        let source_id = format!("browsecomp-public:{:04}", index + 1);
+        let question = decrypt_browsecomp_public_field(
+            path,
+            line,
+            "problem",
+            &record.problem,
+            &record.canary,
+        )?;
+        let answer =
+            decrypt_browsecomp_public_field(path, line, "answer", &record.answer, &record.canary)?;
+        for (field, value) in [
+            ("problem", question.as_str()),
+            ("answer", answer.as_str()),
+            ("problem_topic", record.problem_topic.as_str()),
+        ] {
+            if value.trim().is_empty() {
+                return Err(ManifestError::BrowseCompSample {
+                    path: path.to_owned(),
+                    message: format!("line {line} field `{field}` must not be empty"),
+                });
+            }
+        }
+        rows.push(BrowseCompPublicPlainRow {
+            source_id,
+            question,
+            answer,
+            stratum: record.problem_topic,
+        });
+    }
+    Ok(rows)
+}
+
+fn topic_stratified_browsecomp_sample(
+    path: &Path,
+    rows: Vec<BrowseCompPublicPlainRow>,
+    sample_rows: usize,
+) -> Result<Vec<BrowseCompPublicPlainRow>, ManifestError> {
+    if rows.len() < sample_rows {
+        return Err(ManifestError::BrowseCompSample {
+            path: path.to_owned(),
+            message: format!(
+                "official BrowseComp CSV has {} rows, but {sample_rows} are required",
+                rows.len()
+            ),
+        });
+    }
+    let total_rows = rows.len();
+    let mut by_topic = BTreeMap::<String, Vec<BrowseCompPublicPlainRow>>::new();
+    for row in rows {
+        by_topic.entry(row.stratum.clone()).or_default().push(row);
+    }
+
+    let mut allocations = by_topic
+        .iter()
+        .map(|(topic, topic_rows)| {
+            let scaled = topic_rows.len() * sample_rows;
+            (topic.clone(), scaled / total_rows, scaled % total_rows)
+        })
+        .collect::<Vec<_>>();
+    let allocated = allocations
+        .iter()
+        .map(|(_, count, _)| *count)
+        .sum::<usize>();
+    let mut remainder =
+        sample_rows
+            .checked_sub(allocated)
+            .ok_or_else(|| ManifestError::BrowseCompSample {
+                path: path.to_owned(),
+                message: "topic allocation exceeded requested sample rows".to_owned(),
+            })?;
+    allocations.sort_by(|(left_topic, _, left_rem), (right_topic, _, right_rem)| {
+        right_rem
+            .cmp(left_rem)
+            .then_with(|| left_topic.cmp(right_topic))
+    });
+    for (_, count, _) in &mut allocations {
+        if remainder == 0 {
+            break;
+        }
+        *count += 1;
+        remainder -= 1;
+    }
+
+    let counts_by_topic = allocations
+        .into_iter()
+        .map(|(topic, count, _)| (topic, count))
+        .collect::<BTreeMap<_, _>>();
+    let mut sample = Vec::with_capacity(sample_rows);
+    for (topic, mut topic_rows) in by_topic {
+        topic_rows.sort_by(|left, right| {
+            browsecomp_public_sample_rank(left)
+                .cmp(&browsecomp_public_sample_rank(right))
+                .then_with(|| left.source_id.cmp(&right.source_id))
+        });
+        let count = counts_by_topic
+            .get(&topic)
+            .copied()
+            .expect("all topics have allocation counts");
+        sample.extend(topic_rows.into_iter().take(count));
+    }
+    sample.sort_by(|left, right| left.source_id.cmp(&right.source_id));
+    Ok(sample)
+}
+
+fn browsecomp_public_sample_rank(row: &BrowseCompPublicPlainRow) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    hasher.update(b"leaven-evoskill-browsecomp-topic-stratified-v1");
+    hasher.update(b"\0");
+    hasher.update(row.stratum.as_bytes());
+    hasher.update(b"\0");
+    hasher.update(row.source_id.as_bytes());
+    hasher.update(b"\0");
+    hasher.update(row.question.as_bytes());
+    hasher.update(b"\0");
+    hasher.update(row.answer.as_bytes());
+    hasher.finalize().into()
+}
+
+fn decrypt_browsecomp_public_field(
+    path: &Path,
+    line: usize,
+    field: &str,
+    ciphertext_b64: &str,
+    canary: &str,
+) -> Result<String, ManifestError> {
+    let encrypted = BASE64_STANDARD.decode(ciphertext_b64).map_err(|source| {
+        ManifestError::BrowseCompSample {
+            path: path.to_owned(),
+            message: format!("line {line} field `{field}` is not valid base64: {source}"),
+        }
+    })?;
+    let key = browsecomp_public_key(canary, encrypted.len());
+    let decrypted = encrypted
+        .iter()
+        .zip(key)
+        .map(|(cipher, key)| *cipher ^ key)
+        .collect::<Vec<_>>();
+    String::from_utf8(decrypted).map_err(|source| ManifestError::BrowseCompSample {
+        path: path.to_owned(),
+        message: format!("line {line} field `{field}` is not valid UTF-8 after decrypt: {source}"),
+    })
+}
+
+fn browsecomp_public_key(canary: &str, length: usize) -> Vec<u8> {
+    let mut hasher = Sha256::new();
+    hasher.update(canary.as_bytes());
+    let digest = hasher.finalize();
+    digest.iter().copied().cycle().take(length).collect()
+}
+
 fn validate_browsecomp_transfer_record(
     path: &Path,
     line: usize,
@@ -2982,7 +3235,7 @@ fn final_report_paper_close_gates(
                 PaperCloseGateStatus::SourceBlocked
             },
             source_blocker_ids,
-            "OfficeQA and SealQA materializations are auditable; exact paper splits or accepted paper-close substitute policy decide whether split blockers remain",
+            "OfficeQA, SealQA, and BrowseComp materializations are auditable; exact paper splits, strict transfer sidecars, or accepted paper-close substitute policy decide whether source blockers remain",
         ),
         paper_close_gate(
             "paper_scorer",
@@ -3868,6 +4121,12 @@ fn source_artifacts(root: &Path) -> Result<Vec<SourceArtifact>, ManifestError> {
         )?,
         source_artifact(
             root,
+            "browsecomp_public_csv",
+            "official BrowseComp public encrypted CSV",
+            BROWSECOMP_PUBLIC_CSV_PATH,
+        )?,
+        source_artifact(
+            root,
             "browsecomp_transfer_sample",
             "BrowseComp transfer sample",
             BROWSECOMP_TRANSFER_SAMPLE_PATH,
@@ -3963,9 +4222,10 @@ fn source_blockers(
             &["browsecomp_zero_shot_transfer_report"],
             &[
                 BROWSECOMP_TRANSFER_SAMPLE_PATH,
+                BROWSECOMP_PUBLIC_CSV_PATH,
                 "tmp/repros/evoskill/results/deep_cc_runs",
             ],
-            "paper reports a 128-example stratified transfer sample, but no local sample or result source is present",
+            "paper reports a 128-example stratified transfer sample; use the strict sidecar when the exact sample is found or generate a declared public BrowseComp substitute from the official encrypted CSV",
         )?);
     }
     Ok(reports)

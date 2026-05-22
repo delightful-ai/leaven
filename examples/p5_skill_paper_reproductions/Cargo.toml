@@ -11,6 +11,7 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
+base64 = { workspace = true }
 clap = { workspace = true }
 csv = { workspace = true }
 hex = { workspace = true }

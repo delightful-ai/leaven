@@ -18,6 +18,7 @@ cargo test -p p5_skill_paper_reproductions --test evoskill_loop_mechanics
 just evoskill-paper-manifest
 just evoskill-paper-pin-local-sources
 just evoskill-paper-accept-substitute-splits
+just evoskill-paper-browsecomp-public-sample tmp/replication/evoskill/browsecomp/public_browsecomp_test_set.csv
 just evoskill-paper-final-report
 ```
 
@@ -39,3 +40,18 @@ The optional ignored
 `source_id`, `question`, and `answer`, with optional `stratum`. When present it
 only materializes held-out transfer score slots as unscored `not_run` rows; it
 does not reproduce the paper's 43.5/48.8 percent scores.
+
+If the paper author's exact BrowseComp transfer sample is still absent, the
+operator can create a declared paper-close substitute from the official
+encrypted BrowseComp CSV:
+
+```bash
+mkdir -p tmp/replication/evoskill/browsecomp
+curl -fsSL https://openaipublic.blob.core.windows.net/simple-evals/browse_comp_test_set.csv \
+  -o tmp/replication/evoskill/browsecomp/public_browsecomp_test_set.csv
+just evoskill-paper-browsecomp-public-sample tmp/replication/evoskill/browsecomp/public_browsecomp_test_set.csv
+```
+
+That command decrypts the local CSV in Rust, selects a deterministic
+topic-stratified 128-row substitute sidecar, and keeps BrowseComp slots
+unscored. It is not paper-exact sample membership.
