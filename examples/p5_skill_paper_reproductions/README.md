@@ -112,6 +112,13 @@ report through the normal importer. This imports approved score evidence only;
 it does not call a judge, approve spend, or make partial SealQA evidence clear
 the full `sealqa_judge_scored_run` blocker.
 
+Score writers append disjoint score-slot batches to the existing
+`score_result_manifest.json` after validating the current sidecar. This lets
+OfficeQA scorer replay and approved SealQA judge outputs accumulate in one
+report. A batch that targets an already-reported slot is refused before new
+evidence artifacts are written; replacement requires rebuilding the sidecar
+explicitly.
+
 The final report also carries first-class `exactness_gaps`. When local source
 pins, accepted substitute splits, and the BrowseComp substitute denominator make
 the report a `paper_close_candidate`, those gap rows still say which source

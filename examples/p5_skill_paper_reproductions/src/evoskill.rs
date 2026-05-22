@@ -1106,6 +1106,22 @@ pub fn write_evoskill_officeqa_score_result_manifest(
     let scorer_fingerprint = scorer_fingerprint_report(&manifest.scorer);
     let mut slots = final_score_slots(&manifest);
     let path = input.root.join(SCORE_RESULT_MANIFEST_PATH);
+    let existing =
+        read_score_result_manifest(&input.root, &manifest_fingerprint, &scorer_fingerprint)?;
+    ensure_score_result_manifest_can_append(
+        &path,
+        existing.as_ref(),
+        &officeqa_prediction_slot_keys(&path, &predictions)?,
+    )?;
+    if let Some(existing) = &existing {
+        apply_score_result_manifest(
+            &input.root,
+            &sources,
+            &manifest.scorer,
+            &mut slots,
+            existing,
+        )?;
+    }
     let score_manifest = officeqa_score_result_manifest_from_predictions(
         &input.root,
         &path,
@@ -1115,6 +1131,7 @@ pub fn write_evoskill_officeqa_score_result_manifest(
         &scorer_fingerprint,
         predictions,
     )?;
+    let score_manifest = merge_score_result_manifest(&path, existing, score_manifest)?;
     write_score_result_manifest_file(&path, &score_manifest)?;
     let validated =
         read_score_result_manifest(&input.root, &manifest_fingerprint, &scorer_fingerprint)?
@@ -1143,6 +1160,22 @@ pub fn write_evoskill_sealqa_judge_score_result_manifest(
     let scorer_fingerprint = scorer_fingerprint_report(&manifest.scorer);
     let mut slots = final_score_slots(&manifest);
     let path = input.root.join(SCORE_RESULT_MANIFEST_PATH);
+    let existing =
+        read_score_result_manifest(&input.root, &manifest_fingerprint, &scorer_fingerprint)?;
+    ensure_score_result_manifest_can_append(
+        &path,
+        existing.as_ref(),
+        &sealqa_judge_score_slot_keys(&path, &judged_rows)?,
+    )?;
+    if let Some(existing) = &existing {
+        apply_score_result_manifest(
+            &input.root,
+            &sources,
+            &manifest.scorer,
+            &mut slots,
+            existing,
+        )?;
+    }
     let score_manifest = sealqa_judge_score_result_manifest_from_rows(
         &input.root,
         &path,
@@ -1154,6 +1187,7 @@ pub fn write_evoskill_sealqa_judge_score_result_manifest(
         judged_rows,
         approval_id,
     )?;
+    let score_manifest = merge_score_result_manifest(&path, existing, score_manifest)?;
     write_score_result_manifest_file(&path, &score_manifest)?;
     let validated =
         read_score_result_manifest(&input.root, &manifest_fingerprint, &scorer_fingerprint)?
@@ -3307,6 +3341,122 @@ fn read_sealqa_judge_score_rows(path: &Path) -> Result<Vec<SealQaJudgeScoreRow>,
         });
     }
     Ok(rows)
+}
+
+fn officeqa_prediction_slot_keys(
+    path: &Path,
+    rows: &[OfficeQaPredictionRow],
+) -> Result<BTreeSet<String>, ManifestError> {
+    let mut keys = BTreeSet::new();
+    for row in rows {
+        validate_officeqa_prediction_row_shape(path, row)?;
+        keys.insert(officeqa_prediction_slot_key(row));
+    }
+    Ok(keys)
+}
+
+fn sealqa_judge_score_slot_keys(
+    path: &Path,
+    rows: &[SealQaJudgeScoreRow],
+) -> Result<BTreeSet<String>, ManifestError> {
+    let mut keys = BTreeSet::new();
+    for row in rows {
+        validate_sealqa_judge_score_row_shape(path, row)?;
+        keys.insert(sealqa_judge_score_slot_key(row));
+    }
+    Ok(keys)
+}
+
+fn ensure_score_result_manifest_can_append(
+    path: &Path,
+    existing: Option<&ValidatedScoreResultManifest>,
+    requested_keys: &BTreeSet<String>,
+) -> Result<(), ManifestError> {
+    let Some(existing) = existing else {
+        return Ok(());
+    };
+    let existing_keys = existing
+        .entries
+        .iter()
+        .map(score_result_entry_key)
+        .collect::<BTreeSet<_>>();
+    if let Some(duplicate_key) = requested_keys
+        .iter()
+        .find(|key| existing_keys.contains(key.as_str()))
+    {
+        return Err(score_result_manifest_error(
+            path,
+            format!(
+                "score result manifest already contains entry for `{duplicate_key}`; remove or rebuild the sidecar before replacing score evidence"
+            ),
+        ));
+    }
+    Ok(())
+}
+
+fn merge_score_result_manifest(
+    path: &Path,
+    existing: Option<ValidatedScoreResultManifest>,
+    incoming: ScoreResultManifestFile,
+) -> Result<ScoreResultManifestFile, ManifestError> {
+    let Some(existing) = existing else {
+        return Ok(incoming);
+    };
+    let mut entries = existing.entries;
+    let mut keys = entries
+        .iter()
+        .map(score_result_entry_key)
+        .collect::<BTreeSet<_>>();
+    for entry in incoming.entries {
+        let key = score_result_entry_key(&entry);
+        if !keys.insert(key.clone()) {
+            return Err(score_result_manifest_error(
+                path,
+                format!("score result manifest already contains entry for `{key}`"),
+            ));
+        }
+        entries.push(entry);
+    }
+    entries.sort_by_key(score_result_entry_key);
+    Ok(ScoreResultManifestFile {
+        schema_version: incoming.schema_version,
+        manifest_fingerprint: incoming.manifest_fingerprint,
+        scorer_fingerprint: incoming.scorer_fingerprint,
+        cost: add_final_report_cost(path, &existing.report.cost, &incoming.cost)?,
+        entries,
+    })
+}
+
+fn add_final_report_cost(
+    path: &Path,
+    left: &FinalReportCost,
+    right: &FinalReportCost,
+) -> Result<FinalReportCost, ManifestError> {
+    Ok(FinalReportCost {
+        llm_calls: add_cost_field(path, "llm_calls", left.llm_calls, right.llm_calls)?,
+        metric_calls: add_cost_field(path, "metric_calls", left.metric_calls, right.metric_calls)?,
+        prompt_tokens: add_cost_field(
+            path,
+            "prompt_tokens",
+            left.prompt_tokens,
+            right.prompt_tokens,
+        )?,
+        completion_tokens: add_cost_field(
+            path,
+            "completion_tokens",
+            left.completion_tokens,
+            right.completion_tokens,
+        )?,
+    })
+}
+
+fn add_cost_field(path: &Path, field: &str, left: u64, right: u64) -> Result<u64, ManifestError> {
+    left.checked_add(right).ok_or_else(|| {
+        score_result_manifest_error(
+            path,
+            format!("score result manifest cost field `{field}` overflows while merging batches"),
+        )
+    })
 }
 
 fn officeqa_score_result_manifest_from_predictions(
@@ -7147,5 +7297,243 @@ fn blocker(id: &str, description: &str) -> ReplicationBlocker {
     ReplicationBlocker {
         id: id.to_owned(),
         description: description.to_owned(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeSet;
+    use std::path::Path;
+
+    use super::*;
+
+    #[test]
+    fn score_result_manifest_merge_accumulates_disjoint_entries_and_costs() {
+        let path = Path::new(SCORE_RESULT_MANIFEST_PATH);
+        let sealqa_entry = score_entry(
+            "sealqa",
+            "sealqa_row_order_train_11_heldout_100",
+            ScoreEvidenceKind::ExternalJudgeRun,
+        );
+        let officeqa_entry = score_entry(
+            "officeqa",
+            "officeqa_difficulty_train_12_val_17",
+            ScoreEvidenceKind::RustScorerReplay,
+        );
+        let existing = validated_score_manifest(
+            FinalReportCost {
+                llm_calls: 100,
+                metric_calls: 0,
+                prompt_tokens: 200,
+                completion_tokens: 300,
+            },
+            vec![sealqa_entry],
+        );
+        let incoming = score_manifest_file(
+            FinalReportCost {
+                llm_calls: 0,
+                metric_calls: 12,
+                prompt_tokens: 0,
+                completion_tokens: 0,
+            },
+            vec![officeqa_entry],
+        );
+
+        let merged = merge_score_result_manifest(path, Some(existing), incoming).unwrap();
+
+        assert_eq!(merged.entries.len(), 2);
+        assert_eq!(
+            merged
+                .entries
+                .iter()
+                .map(score_result_entry_key)
+                .collect::<Vec<_>>(),
+            [
+                "officeqa|officeqa_difficulty_train_12_val_17|train|baseline",
+                "sealqa|sealqa_row_order_train_11_heldout_100|train|baseline",
+            ]
+        );
+        assert_eq!(
+            merged.cost,
+            FinalReportCost {
+                llm_calls: 100,
+                metric_calls: 12,
+                prompt_tokens: 200,
+                completion_tokens: 300,
+            }
+        );
+    }
+
+    #[test]
+    fn score_result_manifest_append_refuses_existing_slot_keys_before_merge() {
+        let path = Path::new(SCORE_RESULT_MANIFEST_PATH);
+        let officeqa_key = "officeqa|officeqa_difficulty_train_12_val_17|train|baseline";
+        let existing = validated_score_manifest(
+            FinalReportCost::default(),
+            vec![score_entry(
+                "officeqa",
+                "officeqa_difficulty_train_12_val_17",
+                ScoreEvidenceKind::RustScorerReplay,
+            )],
+        );
+        let requested_keys = BTreeSet::from([officeqa_key.to_owned()]);
+
+        let error = ensure_score_result_manifest_can_append(path, Some(&existing), &requested_keys)
+            .unwrap_err();
+
+        let ManifestError::ScoreResultManifest { message, .. } = error else {
+            panic!("expected score result manifest error");
+        };
+        assert!(message.contains(officeqa_key));
+        assert!(message.contains("remove or rebuild the sidecar before replacing score evidence"));
+    }
+
+    #[test]
+    fn external_judge_score_evidence_requires_nonempty_approval_id() {
+        let path = Path::new(SCORE_RESULT_MANIFEST_PATH);
+        let entry = score_entry(
+            "sealqa",
+            "sealqa_row_order_train_11_heldout_100",
+            ScoreEvidenceKind::ExternalJudgeRun,
+        );
+
+        let error = validate_score_evidence_kind(path, &entry).unwrap_err();
+
+        let ManifestError::ScoreResultManifest { message, .. } = error else {
+            panic!("expected score result manifest error");
+        };
+        assert!(message.contains("external judge evidence"));
+        assert!(message.contains("approval id"));
+        assert!(message.contains("sealqa|sealqa_row_order_train_11_heldout_100|train|baseline"));
+    }
+
+    #[test]
+    fn external_judge_evidence_rows_must_carry_pinned_template_fingerprint() {
+        let path = Path::new(SCORE_RESULT_MANIFEST_PATH);
+        let entry = score_entry(
+            "sealqa",
+            "sealqa_row_order_train_11_heldout_100",
+            ScoreEvidenceKind::ExternalJudgeRun,
+        );
+        let scorer = scorer_with_judge_template("sealqa-template-fingerprint");
+        let rows = [score_evidence_row(None)];
+
+        let error = validate_judge_template_fingerprint_evidence_rows(&scorer, path, &entry, &rows)
+            .unwrap_err();
+
+        let ManifestError::ScoreResultManifest { message, .. } = error else {
+            panic!("expected score result manifest error");
+        };
+        assert!(message.contains("judge template fingerprint"));
+        assert!(message.contains("source-1"));
+        assert!(message.contains("sealqa|sealqa_row_order_train_11_heldout_100|train|baseline"));
+    }
+
+    #[test]
+    fn external_judge_evidence_rows_refuse_stale_template_fingerprint() {
+        let path = Path::new(SCORE_RESULT_MANIFEST_PATH);
+        let entry = score_entry(
+            "sealqa",
+            "sealqa_row_order_train_11_heldout_100",
+            ScoreEvidenceKind::ExternalJudgeRun,
+        );
+        let scorer = scorer_with_judge_template("sealqa-template-fingerprint");
+        let rows = [score_evidence_row(Some("stale-template-fingerprint"))];
+
+        let error = validate_judge_template_fingerprint_evidence_rows(&scorer, path, &entry, &rows)
+            .unwrap_err();
+
+        let ManifestError::ScoreResultManifest { message, .. } = error else {
+            panic!("expected score result manifest error");
+        };
+        assert!(message.contains("judge template fingerprint mismatch"));
+        assert!(message.contains("stale-template-fingerprint"));
+        assert!(message.contains("sealqa-template-fingerprint"));
+    }
+
+    fn score_manifest_file(
+        cost: FinalReportCost,
+        entries: Vec<ScoreResultManifestEntry>,
+    ) -> ScoreResultManifestFile {
+        ScoreResultManifestFile {
+            schema_version: 5,
+            manifest_fingerprint: "manifest-fingerprint".to_owned(),
+            scorer_fingerprint: "scorer-fingerprint".to_owned(),
+            cost,
+            entries,
+        }
+    }
+
+    fn validated_score_manifest(
+        cost: FinalReportCost,
+        entries: Vec<ScoreResultManifestEntry>,
+    ) -> ValidatedScoreResultManifest {
+        let entry_count = entries.len() as u64;
+        ValidatedScoreResultManifest {
+            report: ScoreResultManifestReport {
+                relative_path: SCORE_RESULT_MANIFEST_PATH.to_owned(),
+                schema_version: 5,
+                entries: entry_count,
+                manifest_fingerprint: "manifest-fingerprint".to_owned(),
+                scorer_fingerprint: "scorer-fingerprint".to_owned(),
+                cost,
+            },
+            entries,
+        }
+    }
+
+    fn score_entry(
+        dataset_id: &str,
+        split_id: &str,
+        score_evidence_kind: ScoreEvidenceKind,
+    ) -> ScoreResultManifestEntry {
+        ScoreResultManifestEntry {
+            dataset_id: dataset_id.to_owned(),
+            split_id: split_id.to_owned(),
+            split_role: "train".to_owned(),
+            candidate_role: "baseline".to_owned(),
+            split_fingerprint: Some(format!("{dataset_id}-split-fingerprint")),
+            role_source_id_fingerprint: Some(format!("{dataset_id}-source-fingerprint")),
+            expected_rows: Some(1),
+            scored_rows: 1,
+            score: 1.0,
+            resolved_blocker_ids: Vec::new(),
+            score_evidence_kind,
+            score_evidence_approval_id: None,
+            evidence_id: format!("{dataset_id}-evidence"),
+            evidence_artifact: ScoreEvidenceArtifact {
+                relative_path: format!("tmp/replication/evoskill/evidence/{dataset_id}.json"),
+                sha256: "0".repeat(64),
+                bytes: 1,
+            },
+        }
+    }
+
+    fn scorer_with_judge_template(fingerprint: &str) -> ScorerManifest {
+        ScorerManifest {
+            id: "unit-test-scorer".to_owned(),
+            tolerances: vec![0.0],
+            failure_threshold: DEFAULT_FAILURE_THRESHOLD,
+            implementation_status: "unit-test".to_owned(),
+            judge_templates: vec![JudgeTemplateManifest {
+                id: "sealqa-auto-grader-placeholder-v1".to_owned(),
+                dataset_id: "sealqa".to_owned(),
+                source_artifact_id: "paper_auto_grader_placeholder".to_owned(),
+                source_artifact_exists: true,
+                source_artifact_bytes: Some(1),
+                source_artifact_sha256: Some("0".repeat(64)),
+                runtime_status: "template_pinned_no_spend".to_owned(),
+                fingerprint: fingerprint.to_owned(),
+            }],
+        }
+    }
+
+    fn score_evidence_row(judge_template_fingerprint: Option<&str>) -> ScoreEvidenceRow {
+        ScoreEvidenceRow {
+            source_id: "source-1".to_owned(),
+            prediction: "prediction".to_owned(),
+            score: 1.0,
+            judge_template_fingerprint: judge_template_fingerprint.map(str::to_owned),
+        }
     }
 }

@@ -1050,3 +1050,11 @@ evidence JSONL and the schema-v5 score result manifest through the normal
 importer. This is an import lane only: it does not run or approve a judge,
 resolve source/split blockers, or make partial SealQA rows prove the whole
 scorer gate.
+
+2026-05-22 update: score result writers now accumulate disjoint score-slot
+batches instead of silently replacing the sidecar. The OfficeQA scorer replay
+writer and approved SealQA judge import writer first validate the existing
+`score_result_manifest.json`, refuse requested slot keys that are already
+reported, then merge new entries and summed costs through schema v5 before the
+normal importer runs. This keeps replacement explicit while letting OfficeQA
+and SealQA score evidence coexist in the final report.
