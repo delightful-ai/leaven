@@ -62,6 +62,7 @@ pub struct EvoSkillReplicaManifest {
     pub source_revisions: Vec<SourceRevision>,
     pub artifacts: Vec<SourceArtifact>,
     pub datasets: Vec<DatasetRequirement>,
+    pub source_universe: Vec<SourceUniverseEntry>,
     pub source_materializations: Vec<DatasetMaterializationReport>,
     pub scorer: ScorerManifest,
     pub frontier: FrontierManifest,
@@ -122,6 +123,19 @@ pub struct DatasetRequirement {
     pub validation_rows: Option<u64>,
     pub held_out: String,
     pub split_status: SplitManifestStatus,
+    pub blocker_ids: Vec<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct SourceUniverseEntry {
+    pub dataset_id: String,
+    pub source_revision_ids: Vec<String>,
+    pub source_artifact_ids: Vec<String>,
+    pub paper_rows: Option<u64>,
+    pub materialized_rows: Option<u64>,
+    pub source_row_fingerprint: Option<String>,
+    pub split_ids: Vec<String>,
+    pub split_exactness: Vec<MaterializationExactness>,
     pub blocker_ids: Vec<String>,
 }
 
@@ -253,12 +267,19 @@ pub struct EvoSkillFinalReport {
     pub exactness: ExactnessClass,
     pub manifest: EvoSkillReplicaManifest,
     pub loop_report: Option<EvoSkillReplicaLoopReport>,
+    pub manifest_fingerprint: ManifestFingerprintReport,
     pub scorer_fingerprint: ScorerFingerprintReport,
     pub score_slots: Vec<FinalScoreSlot>,
     pub cost: FinalReportCost,
     pub errors: Vec<FinalReportError>,
     pub ablations: Vec<AblationStatusReport>,
     pub proxy_rejections: Vec<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ManifestFingerprintReport {
+    pub schema_version: u32,
+    pub fingerprint: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -493,6 +514,11 @@ pub enum ManifestError {
         #[source]
         source: serde_json::Error,
     },
+    #[error("failed to serialize EvoSkill replica manifest for fingerprinting: {source}")]
+    ManifestSerialize {
+        #[source]
+        source: serde_json::Error,
+    },
     #[error("EvoSkill replica loop is blocked: {reason}")]
     LoopBlocked { reason: String },
 }
@@ -500,18 +526,25 @@ pub enum ManifestError {
 pub fn build_evoskill_replica_manifest(
     input: &ManifestBuildInput,
 ) -> Result<EvoSkillReplicaManifest, ManifestError> {
+    let source_revisions = source_revisions(&input.root);
+    let artifacts = source_artifacts(&input.root)?;
+    let datasets = dataset_requirements();
+    let source_materializations = source_materializations(input)?;
+    let source_universe = source_universe(&datasets, &source_materializations);
+
     Ok(EvoSkillReplicaManifest {
-        schema_version: 2,
+        schema_version: 3,
         paper: PaperTarget {
             id: "evoskill".to_owned(),
             arxiv_id: "2603.02766".to_owned(),
             title: "EvoSkill".to_owned(),
         },
         exactness: ExactnessClass::BlockedBeforePaperClose,
-        source_revisions: source_revisions(&input.root),
-        artifacts: source_artifacts(&input.root)?,
-        datasets: dataset_requirements(),
-        source_materializations: source_materializations(input)?,
+        source_revisions,
+        artifacts,
+        datasets,
+        source_universe,
+        source_materializations,
         scorer: scorer_manifest(),
         frontier: frontier_manifest(),
         schedule: schedule_manifest(),
@@ -530,6 +563,7 @@ pub fn build_evoskill_final_report(
     } else {
         None
     };
+    let manifest_fingerprint = manifest_fingerprint_report(&manifest)?;
     let scorer_fingerprint = scorer_fingerprint_report(&manifest.scorer);
     let score_slots = final_score_slots(&manifest);
     let errors = final_report_errors(&manifest);
@@ -538,10 +572,11 @@ pub fn build_evoskill_final_report(
     let proxy_rejections = manifest.proxy_rejections.clone();
 
     Ok(EvoSkillFinalReport {
-        schema_version: 1,
+        schema_version: 2,
         exactness,
         manifest,
         loop_report,
+        manifest_fingerprint,
         scorer_fingerprint,
         score_slots,
         cost: FinalReportCost::default(),
@@ -641,6 +676,82 @@ fn source_materializations(
         |materialization| materialization.report,
     );
     Ok(vec![officeqa, sealqa])
+}
+
+fn source_universe(
+    datasets: &[DatasetRequirement],
+    materializations: &[DatasetMaterializationReport],
+) -> Vec<SourceUniverseEntry> {
+    datasets
+        .iter()
+        .map(|dataset| {
+            let materialization = materializations
+                .iter()
+                .find(|materialization| materialization.dataset_id == dataset.id);
+            let mut blocker_ids = dataset.blocker_ids.clone();
+            if let Some(materialization) = materialization {
+                extend_unique(&mut blocker_ids, &materialization.blocker_ids);
+            }
+            SourceUniverseEntry {
+                dataset_id: dataset.id.clone(),
+                source_revision_ids: source_revision_ids_for_dataset(&dataset.id),
+                source_artifact_ids: source_artifact_ids_for_dataset(&dataset.id, materialization),
+                paper_rows: dataset.paper_rows,
+                materialized_rows: materialization.and_then(|report| report.source_rows),
+                source_row_fingerprint: materialization
+                    .and_then(|report| report.source_row_fingerprint.clone()),
+                split_ids: materialization
+                    .map(|report| {
+                        report
+                            .split_materializations
+                            .iter()
+                            .map(|split| split.id.clone())
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+                split_exactness: materialization
+                    .map(|report| {
+                        report
+                            .split_materializations
+                            .iter()
+                            .map(|split| split.exactness.clone())
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+                blocker_ids,
+            }
+        })
+        .collect()
+}
+
+fn source_revision_ids_for_dataset(dataset_id: &str) -> Vec<String> {
+    match dataset_id {
+        "officeqa" => vec!["officeqa_repo".to_owned()],
+        _ => Vec::new(),
+    }
+}
+
+fn source_artifact_ids_for_dataset(
+    dataset_id: &str,
+    materialization: Option<&DatasetMaterializationReport>,
+) -> Vec<String> {
+    if let Some(materialization) = materialization {
+        return vec![materialization.source_artifact_id.clone()];
+    }
+    match dataset_id {
+        "officeqa" => vec!["officeqa_full_csv".to_owned()],
+        "sealqa" => vec!["sealqa_parquet".to_owned()],
+        "browsecomp_transfer" => vec!["browsecomp_transfer_sample".to_owned()],
+        _ => Vec::new(),
+    }
+}
+
+fn extend_unique(values: &mut Vec<String>, additions: &[String]) {
+    for addition in additions {
+        if !values.contains(addition) {
+            values.push(addition.clone());
+        }
+    }
 }
 
 fn officeqa_difficulty_strata(
@@ -887,6 +998,19 @@ fn has_materialized_officeqa(manifest: &EvoSkillReplicaManifest) -> bool {
             materialization.dataset_id == "officeqa"
                 && materialization.source_status == SourceMaterializationStatus::Materialized
         })
+}
+
+fn manifest_fingerprint_report(
+    manifest: &EvoSkillReplicaManifest,
+) -> Result<ManifestFingerprintReport, ManifestError> {
+    let bytes = serde_json::to_vec(manifest)
+        .map_err(|source| ManifestError::ManifestSerialize { source })?;
+    let mut hasher = Sha256::new();
+    hasher.update(&bytes);
+    Ok(ManifestFingerprintReport {
+        schema_version: manifest.schema_version,
+        fingerprint: hex::encode(hasher.finalize()),
+    })
 }
 
 fn scorer_fingerprint_report(scorer: &ScorerManifest) -> ScorerFingerprintReport {
@@ -1777,6 +1901,12 @@ fn source_artifacts(root: &Path) -> Result<Vec<SourceArtifact>, ManifestError> {
             "sealqa_validation_sample",
             "SealQA inspected sample",
             "tmp/paper_exact_samples/evoskill/sealqa/seal_0_first_case.json",
+        )?,
+        source_artifact(
+            root,
+            "browsecomp_transfer_sample",
+            "BrowseComp transfer sample",
+            "tmp/replication/evoskill/browsecomp/transfer_sample.jsonl",
         )?,
     ])
 }

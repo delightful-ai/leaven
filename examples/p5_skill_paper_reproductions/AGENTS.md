@@ -23,7 +23,11 @@ belong in their owning crates.
 ## Proof
 - `cargo test -p p5_skill_paper_reproductions --test evoskill_manifest`
   proves the EvoSkill replica manifest preserves the paper-close denominator
-  and rejects proxy completion claims.
+  and rejects proxy completion claims. It also proves the schema v3
+  `source_universe` links datasets to source artifact ids, available source
+  revision ids, materialized row counts, source-row fingerprints, split ids,
+  split exactness labels, and blockers without treating substitute splits as
+  exact paper membership.
 - `cargo test -p p5_skill_paper_reproductions --test evoskill_scorer`
   proves the paper-specific Rust scorer laws for weighted multi-tolerance
   scoring, failure-threshold classification, unit normalization, incidental

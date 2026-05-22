@@ -1,3 +1,4 @@
+use std::fmt::Write as _;
 use std::fs;
 use std::fs::File;
 use std::sync::Arc;
@@ -6,8 +7,8 @@ use arrow_array::builder::{ListBuilder, StringBuilder};
 use arrow_array::{ArrayRef, RecordBatch, StringArray};
 use arrow_schema::{DataType, Field, Schema};
 use p5_skill_paper_reproductions::evoskill::{
-    ExactnessClass, ManifestBuildInput, SourceMaterializationStatus, SplitManifestStatus,
-    build_evoskill_replica_manifest,
+    ExactnessClass, ManifestBuildInput, MaterializationExactness, SourceMaterializationStatus,
+    SplitManifestStatus, build_evoskill_replica_manifest,
 };
 use parquet::arrow::ArrowWriter;
 
@@ -41,6 +42,80 @@ fn evoskill_manifest_records_paper_close_denominator_without_claiming_proof() {
             .blockers
             .iter()
             .any(|blocker| blocker.id == "officeqa_category_split_manifest")
+    );
+}
+
+#[test]
+fn manifest_declares_source_universe_without_confusing_substitutes_for_exact_splits() {
+    let root = tempfile::tempdir().unwrap();
+    write_officeqa_full_csv(root.path(), 246);
+    let sealqa = root
+        .path()
+        .join("tmp/replication/evoskill/sealqa/seal-0.parquet");
+    write_sealqa_parquet(&sealqa, 111);
+
+    let manifest = build_evoskill_replica_manifest(&ManifestBuildInput::new(root.path())).unwrap();
+
+    let officeqa = manifest
+        .source_universe
+        .iter()
+        .find(|entry| entry.dataset_id == "officeqa")
+        .expect("OfficeQA source universe entry is declared");
+    assert_eq!(officeqa.source_artifact_ids, ["officeqa_full_csv"]);
+    assert_eq!(officeqa.source_revision_ids, ["officeqa_repo"]);
+    assert_eq!(officeqa.paper_rows, Some(246));
+    assert_eq!(officeqa.materialized_rows, Some(246));
+    assert_eq!(
+        officeqa.source_row_fingerprint.as_deref().unwrap().len(),
+        64
+    );
+    assert_eq!(officeqa.split_ids.len(), 3);
+    assert!(
+        officeqa
+            .split_exactness
+            .iter()
+            .all(|exactness| *exactness == MaterializationExactness::PaperCloseSubstitute)
+    );
+    assert!(
+        officeqa
+            .blocker_ids
+            .contains(&"officeqa_exact_split_membership".to_owned())
+    );
+
+    let sealqa = manifest
+        .source_universe
+        .iter()
+        .find(|entry| entry.dataset_id == "sealqa")
+        .expect("SealQA source universe entry is declared");
+    assert_eq!(sealqa.source_artifact_ids, ["sealqa_parquet"]);
+    assert!(sealqa.source_revision_ids.is_empty());
+    assert_eq!(sealqa.paper_rows, Some(111));
+    assert_eq!(sealqa.materialized_rows, Some(111));
+    assert_eq!(
+        sealqa.split_ids,
+        ["sealqa_row_order_train_11_heldout_100".to_owned()]
+    );
+    assert_eq!(
+        sealqa.split_exactness,
+        [MaterializationExactness::PaperCloseSubstitute]
+    );
+    assert_eq!(sealqa.blocker_ids, ["sealqa_split_manifest".to_owned()]);
+
+    let browsecomp = manifest
+        .source_universe
+        .iter()
+        .find(|entry| entry.dataset_id == "browsecomp_transfer")
+        .expect("BrowseComp transfer blocker is declared in the source universe");
+    assert_eq!(
+        browsecomp.source_artifact_ids,
+        ["browsecomp_transfer_sample"]
+    );
+    assert!(browsecomp.source_revision_ids.is_empty());
+    assert_eq!(browsecomp.paper_rows, Some(128));
+    assert_eq!(browsecomp.materialized_rows, None);
+    assert_eq!(
+        browsecomp.blocker_ids,
+        ["browsecomp_transfer_sample".to_owned()]
     );
 }
 
@@ -85,6 +160,26 @@ fn source_artifacts_are_fingerprinted_without_certifying_missing_splits() {
         sealqa_materialization.source_status,
         SourceMaterializationStatus::Materialized
     );
+}
+
+fn write_officeqa_full_csv(root: &std::path::Path, rows: usize) {
+    let path = root.join("tmp/repros/officeqa/officeqa_full.csv");
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let mut csv = String::from("uid,question,answer,source_docs,source_files,difficulty\n");
+    for index in 0..rows {
+        let uid = format!("UID{:04}", index + 1);
+        let difficulty = if index < 113 { "easy" } else { "hard" };
+        writeln!(
+            csv,
+            "{uid},Question {}?,Answer {},https://example.test/doc{},treasury_{:04}.txt,{difficulty}",
+            index + 1,
+            index + 1,
+            index + 1,
+            index + 1
+        )
+        .unwrap();
+    }
+    fs::write(path, csv).unwrap();
 }
 
 fn write_sealqa_parquet(path: &std::path::Path, rows: usize) {
