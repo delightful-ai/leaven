@@ -489,6 +489,14 @@ pub struct ScorerFingerprintReport {
     pub fingerprint: String,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ScoreEvidenceKind {
+    RustScorerReplay,
+    ExactAnswerReplay,
+    ExternalJudgeRun,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ScoreResultManifestReport {
     pub relative_path: String,
@@ -527,6 +535,8 @@ pub struct FinalScoreSlot {
     pub expected_rows: Option<u64>,
     pub score: Option<f64>,
     pub score_evidence_id: Option<String>,
+    pub score_evidence_kind: Option<ScoreEvidenceKind>,
+    pub score_evidence_approval_id: Option<String>,
     pub score_evidence_artifact: Option<ScoreEvidenceArtifact>,
     pub status: FinalScoreStatus,
     pub blocker_ids: Vec<String>,
@@ -738,6 +748,8 @@ struct ScoreResultManifestEntry {
     scored_rows: u64,
     score: f64,
     resolved_blocker_ids: Vec<String>,
+    score_evidence_kind: ScoreEvidenceKind,
+    score_evidence_approval_id: Option<String>,
     evidence_id: String,
     evidence_artifact: ScoreEvidenceArtifact,
 }
@@ -1105,7 +1117,7 @@ pub fn build_evoskill_final_report(
     let proxy_rejection_gates = proxy_rejection_gates();
 
     Ok(EvoSkillFinalReport {
-        schema_version: 15,
+        schema_version: 16,
         exactness,
         manifest,
         loop_report,
@@ -3111,11 +3123,11 @@ fn validate_score_result_manifest(
     manifest_fingerprint: &ManifestFingerprintReport,
     scorer_fingerprint: &ScorerFingerprintReport,
 ) -> Result<ValidatedScoreResultManifest, ManifestError> {
-    if manifest.schema_version != 3 {
+    if manifest.schema_version != 4 {
         return Err(score_result_manifest_error(
             path,
             format!(
-                "expected schema_version 3, found {}",
+                "expected schema_version 4, found {}",
                 manifest.schema_version
             ),
         ));
@@ -3145,6 +3157,7 @@ fn validate_score_result_manifest(
         ));
     }
     let mut keys = BTreeSet::new();
+    let mut external_judge_rows = 0_u64;
     for entry in &manifest.entries {
         validate_score_result_entry_shape(root, path, entry)?;
         let key = score_result_entry_key(entry);
@@ -3154,6 +3167,18 @@ fn validate_score_result_manifest(
                 format!("duplicate score result entry for `{key}`"),
             ));
         }
+        if entry.score_evidence_kind == ScoreEvidenceKind::ExternalJudgeRun {
+            external_judge_rows = external_judge_rows.saturating_add(entry.scored_rows);
+        }
+    }
+    if external_judge_rows > manifest.cost.llm_calls {
+        return Err(score_result_manifest_error(
+            path,
+            format!(
+                "external judge score evidence covers {external_judge_rows} rows but cost reports only {} llm_calls",
+                manifest.cost.llm_calls
+            ),
+        ));
     }
     let entries = u64::try_from(manifest.entries.len()).expect("score result count fits in u64");
     Ok(ValidatedScoreResultManifest {
@@ -3207,7 +3232,71 @@ fn validate_score_result_entry_shape(
             ),
         ));
     }
+    validate_score_evidence_kind(path, entry)?;
     validate_score_evidence_artifact(root, path, entry)?;
+    Ok(())
+}
+
+fn validate_score_evidence_kind(
+    path: &Path,
+    entry: &ScoreResultManifestEntry,
+) -> Result<(), ManifestError> {
+    let key = score_result_entry_key(entry);
+    let allowed = match entry.dataset_id.as_str() {
+        "officeqa" => matches!(
+            entry.score_evidence_kind,
+            ScoreEvidenceKind::RustScorerReplay
+        ),
+        "sealqa" => matches!(
+            entry.score_evidence_kind,
+            ScoreEvidenceKind::ExternalJudgeRun
+        ),
+        "browsecomp_transfer" => matches!(
+            entry.score_evidence_kind,
+            ScoreEvidenceKind::ExactAnswerReplay | ScoreEvidenceKind::ExternalJudgeRun
+        ),
+        other => {
+            return Err(score_result_manifest_error(
+                path,
+                format!("score result `{key}` has unsupported dataset `{other}`"),
+            ));
+        }
+    };
+    if !allowed {
+        return Err(score_result_manifest_error(
+            path,
+            format!(
+                "score result `{key}` uses {:?} evidence for a dataset that requires a different scoring method",
+                entry.score_evidence_kind
+            ),
+        ));
+    }
+    match entry.score_evidence_kind {
+        ScoreEvidenceKind::ExternalJudgeRun => {
+            if entry
+                .score_evidence_approval_id
+                .as_deref()
+                .is_none_or(|approval_id| approval_id.trim().is_empty())
+            {
+                return Err(score_result_manifest_error(
+                    path,
+                    format!(
+                        "score result `{key}` external judge evidence must carry a nonempty approval id"
+                    ),
+                ));
+            }
+        }
+        ScoreEvidenceKind::RustScorerReplay | ScoreEvidenceKind::ExactAnswerReplay => {
+            if entry.score_evidence_approval_id.is_some() {
+                return Err(score_result_manifest_error(
+                    path,
+                    format!(
+                        "score result `{key}` non-judge replay evidence must not carry an approval id"
+                    ),
+                ));
+            }
+        }
+    }
     Ok(())
 }
 
@@ -3332,6 +3421,9 @@ fn apply_score_result_manifest(
         let slot = &mut slots[slot_index];
         slot.score = Some(entry.score);
         slot.score_evidence_id = Some(entry.evidence_id.clone());
+        slot.score_evidence_kind = Some(entry.score_evidence_kind);
+        slot.score_evidence_approval_id
+            .clone_from(&entry.score_evidence_approval_id);
         slot.score_evidence_artifact = Some(entry.evidence_artifact.clone());
         slot.status = FinalScoreStatus::Reported;
         slot.blocker_ids.clear();
@@ -3418,10 +3510,14 @@ fn validate_score_evidence_rows(
         ));
     }
 
-    if entry.dataset_id == "officeqa" {
+    if entry.dataset_id == "officeqa"
+        && entry.score_evidence_kind == ScoreEvidenceKind::RustScorerReplay
+    {
         validate_officeqa_score_evidence_rows(sources, sidecar_path, entry, &rows)?;
     }
-    if entry.dataset_id == "browsecomp_transfer" {
+    if entry.dataset_id == "browsecomp_transfer"
+        && entry.score_evidence_kind == ScoreEvidenceKind::ExactAnswerReplay
+    {
         validate_browsecomp_score_evidence_rows(sources, sidecar_path, entry, &rows)?;
     }
 
@@ -3933,6 +4029,8 @@ fn score_slots_for_role(
             expected_rows,
             score: None,
             score_evidence_id: None,
+            score_evidence_kind: None,
+            score_evidence_approval_id: None,
             score_evidence_artifact: None,
             status: if blocker_ids.is_empty() {
                 FinalScoreStatus::NotRun

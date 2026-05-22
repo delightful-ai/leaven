@@ -11,7 +11,7 @@ use p5_skill_paper_reproductions::evoskill::{
     DatasetMaterializationReport, EvoSkillFinalReport, ExactnessClass, FinalScoreSlot,
     FinalScoreStatus, LiveRunGateStatus, ManifestBuildInput, ManifestError,
     MaterializationExactness, PaperCloseGateStatus, PaperResultTargetStatus, ProxyRejectionStatus,
-    SourceBlockerStatus, SplitAcceptanceStatus, SplitMaterializationReport,
+    ScoreEvidenceKind, SourceBlockerStatus, SplitAcceptanceStatus, SplitMaterializationReport,
     build_evoskill_final_report, write_evoskill_local_source_pin_manifest,
     write_evoskill_paper_close_split_policy_manifest,
 };
@@ -273,7 +273,7 @@ fn final_report_imports_matching_score_result_sidecar_without_filling_other_slot
 
     let report = build_evoskill_final_report(&input).unwrap();
 
-    assert_eq!(report.schema_version, 15);
+    assert_eq!(report.schema_version, 16);
     let result_manifest = report
         .score_result_manifest
         .as_ref()
@@ -282,7 +282,7 @@ fn final_report_imports_matching_score_result_sidecar_without_filling_other_slot
         result_manifest.relative_path,
         "tmp/replication/evoskill/score_result_manifest.json"
     );
-    assert_eq!(result_manifest.schema_version, 3);
+    assert_eq!(result_manifest.schema_version, 4);
     assert_eq!(result_manifest.entries, 1);
     assert_eq!(
         result_manifest.cost.metric_calls,
@@ -301,10 +301,7 @@ fn final_report_imports_matching_score_result_sidecar_without_filling_other_slot
     );
     assert_eq!(reported.status, FinalScoreStatus::Reported);
     assert_eq!(reported.score, Some(1.0));
-    assert_eq!(
-        reported.score_evidence_id.as_deref(),
-        Some("unit-test-scored-output-import")
-    );
+    assert_reported_score_evidence(reported, ScoreEvidenceKind::RustScorerReplay, None);
     let evidence_artifact = reported
         .score_evidence_artifact
         .as_ref()
@@ -327,6 +324,8 @@ fn final_report_imports_matching_score_result_sidecar_without_filling_other_slot
     assert!(untouched.score.is_none());
     assert_eq!(untouched.score_evidence_id, None);
     assert_eq!(untouched.score_evidence_artifact, None);
+    assert_eq!(untouched.score_evidence_kind, None);
+    assert_eq!(untouched.score_evidence_approval_id, None);
     let sealqa = score_slot(
         &report,
         "sealqa",
@@ -492,10 +491,7 @@ fn final_report_imports_browsecomp_score_sidecar_after_recomputing_accuracy() {
     );
     assert_eq!(reported.status, FinalScoreStatus::Reported);
     assert_eq!(reported.score, Some(1.0));
-    assert_eq!(
-        reported.score_evidence_id.as_deref(),
-        Some("unit-test-scored-output-import")
-    );
+    assert_reported_score_evidence(reported, ScoreEvidenceKind::ExactAnswerReplay, None);
     let transfer = score_slot(
         &report,
         "browsecomp_transfer",
@@ -505,6 +501,95 @@ fn final_report_imports_browsecomp_score_sidecar_after_recomputing_accuracy() {
     );
     assert_eq!(transfer.status, FinalScoreStatus::NotRun);
     assert!(transfer.score.is_none());
+}
+
+#[test]
+fn final_report_imports_sealqa_judge_score_sidecar_with_approval_evidence() {
+    let root = tempfile::tempdir().unwrap();
+    write_denominator_ready_sources(root.path());
+    let input = ManifestBuildInput::new(root.path());
+    write_evoskill_local_source_pin_manifest(&input).unwrap();
+    write_evoskill_paper_close_split_policy_manifest(&input).unwrap();
+    let initial_report = build_evoskill_final_report(&input).unwrap();
+    let scored_slot = score_slot(
+        &initial_report,
+        "sealqa",
+        "sealqa_row_order_train_11_heldout_100",
+        "train",
+        "baseline",
+    )
+    .clone();
+    assert_eq!(scored_slot.status, FinalScoreStatus::Blocked);
+    assert_eq!(
+        scored_slot.blocker_ids,
+        ["sealqa_judge_scored_run".to_owned()]
+    );
+    write_score_result_manifest_with_evidence_kind(
+        root.path(),
+        &initial_report,
+        &scored_slot,
+        1.0,
+        ScoreEvidenceKind::ExternalJudgeRun,
+        Some("unit-test-approved-sealqa-judge-run"),
+    );
+
+    let report = build_evoskill_final_report(&input).unwrap();
+
+    let reported = score_slot(
+        &report,
+        "sealqa",
+        "sealqa_row_order_train_11_heldout_100",
+        "train",
+        "baseline",
+    );
+    assert_eq!(reported.status, FinalScoreStatus::Reported);
+    assert_eq!(reported.score, Some(1.0));
+    assert_reported_score_evidence(
+        reported,
+        ScoreEvidenceKind::ExternalJudgeRun,
+        Some("unit-test-approved-sealqa-judge-run"),
+    );
+    assert!(reported.blocker_ids.is_empty());
+    assert_eq!(report.cost.llm_calls, scored_slot.expected_rows.unwrap());
+}
+
+#[test]
+fn final_report_refuses_sealqa_judge_sidecar_without_approval_evidence() {
+    let root = tempfile::tempdir().unwrap();
+    write_denominator_ready_sources(root.path());
+    let input = ManifestBuildInput::new(root.path());
+    write_evoskill_local_source_pin_manifest(&input).unwrap();
+    write_evoskill_paper_close_split_policy_manifest(&input).unwrap();
+    let initial_report = build_evoskill_final_report(&input).unwrap();
+    let scored_slot = score_slot(
+        &initial_report,
+        "sealqa",
+        "sealqa_row_order_train_11_heldout_100",
+        "train",
+        "baseline",
+    )
+    .clone();
+    write_score_result_manifest_with_evidence_kind(
+        root.path(),
+        &initial_report,
+        &scored_slot,
+        1.0,
+        ScoreEvidenceKind::ExternalJudgeRun,
+        None,
+    );
+
+    let error = build_evoskill_final_report(&input).unwrap_err();
+
+    match error {
+        ManifestError::ScoreResultManifest { message, .. } => {
+            assert!(message.contains("external judge"));
+            assert!(message.contains("approval"));
+            assert!(
+                message.contains("sealqa|sealqa_row_order_train_11_heldout_100|train|baseline")
+            );
+        }
+        other => panic!("expected score result manifest error, got {other:?}"),
+    }
 }
 
 #[test]
@@ -689,7 +774,7 @@ fn assert_reported_target(
 
 fn assert_report_header(report: &EvoSkillFinalReport) {
     assert_eq!(report.exactness, ExactnessClass::BlockedBeforePaperClose);
-    assert_eq!(report.schema_version, 15);
+    assert_eq!(report.schema_version, 16);
     assert_eq!(report.score_result_manifest, None);
     assert_eq!(report.cost.llm_calls, 0);
     assert_eq!(report.cost.metric_calls, 0);
@@ -1113,6 +1198,8 @@ fn cli_writes_manifest_and_final_report_artifacts() {
     assert!(report.contains("\"role_source_id_fingerprint\""));
     assert!(report.contains("\"score_result_manifest\""));
     assert!(report.contains("\"score_evidence_id\""));
+    assert!(report.contains("\"score_evidence_kind\""));
+    assert!(report.contains("\"score_evidence_approval_id\""));
     assert!(report.contains("\"score_evidence_artifact\""));
     assert!(report.contains("\"blocked_before_paper_close\""));
 }
@@ -1308,6 +1395,22 @@ fn score_slot<'a>(
         })
 }
 
+fn assert_reported_score_evidence(
+    slot: &FinalScoreSlot,
+    expected_kind: ScoreEvidenceKind,
+    expected_approval_id: Option<&str>,
+) {
+    assert_eq!(
+        slot.score_evidence_id.as_deref(),
+        Some("unit-test-scored-output-import")
+    );
+    assert_eq!(slot.score_evidence_kind, Some(expected_kind));
+    assert_eq!(
+        slot.score_evidence_approval_id.as_deref(),
+        expected_approval_id
+    );
+}
+
 fn write_score_result_manifest(
     root: &std::path::Path,
     report: &EvoSkillFinalReport,
@@ -1332,7 +1435,39 @@ fn write_score_result_manifest_with_split_fingerprint(
     split_fingerprint: &str,
     score: f64,
 ) {
-    write_score_result_manifest_with_options(root, report, slot, split_fingerprint, score, None);
+    write_score_result_manifest_with_options(
+        root,
+        report,
+        slot,
+        split_fingerprint,
+        score,
+        None,
+        (
+            default_score_evidence_kind(slot),
+            default_score_evidence_approval_id(slot),
+        ),
+    );
+}
+
+fn write_score_result_manifest_with_evidence_kind(
+    root: &std::path::Path,
+    report: &EvoSkillFinalReport,
+    slot: &FinalScoreSlot,
+    score: f64,
+    evidence_kind: ScoreEvidenceKind,
+    approval_id: Option<&str>,
+) {
+    write_score_result_manifest_with_options(
+        root,
+        report,
+        slot,
+        slot.split_fingerprint
+            .as_deref()
+            .expect("materialized score slot carries split fingerprint"),
+        score,
+        None,
+        (evidence_kind, approval_id),
+    );
 }
 
 fn write_score_result_manifest_with_prediction_override(
@@ -1351,6 +1486,10 @@ fn write_score_result_manifest_with_prediction_override(
             .expect("materialized score slot carries split fingerprint"),
         score,
         Some(prediction),
+        (
+            default_score_evidence_kind(slot),
+            default_score_evidence_approval_id(slot),
+        ),
     );
 }
 
@@ -1361,7 +1500,9 @@ fn write_score_result_manifest_with_options(
     split_fingerprint: &str,
     score: f64,
     prediction_override: Option<&str>,
+    evidence: (ScoreEvidenceKind, Option<&str>),
 ) {
+    let (evidence_kind, approval_id) = evidence;
     let path = root.join("tmp/replication/evoskill/score_result_manifest.json");
     fs::create_dir_all(path.parent().unwrap()).unwrap();
     let expected_rows = slot.expected_rows.unwrap();
@@ -1387,12 +1528,17 @@ fn write_score_result_manifest_with_options(
     }
     fs::write(&evidence_path, evidence_body.as_bytes()).unwrap();
     let evidence_sha256 = sha256_bytes(evidence_body.as_bytes());
+    let llm_calls = if evidence_kind == ScoreEvidenceKind::ExternalJudgeRun {
+        expected_rows
+    } else {
+        0
+    };
     let manifest = serde_json::json!({
-        "schema_version": 3,
+        "schema_version": 4,
         "manifest_fingerprint": &report.manifest_fingerprint.fingerprint,
         "scorer_fingerprint": &report.scorer_fingerprint.fingerprint,
         "cost": {
-            "llm_calls": 0,
+            "llm_calls": llm_calls,
             "metric_calls": expected_rows,
             "prompt_tokens": 0,
             "completion_tokens": 0
@@ -1408,6 +1554,8 @@ fn write_score_result_manifest_with_options(
             "scored_rows": expected_rows,
             "score": score,
             "resolved_blocker_ids": &slot.blocker_ids,
+            "score_evidence_kind": evidence_kind,
+            "score_evidence_approval_id": approval_id,
             "evidence_id": "unit-test-scored-output-import",
             "evidence_artifact": {
                 "relative_path": evidence_relative_path,
@@ -1417,6 +1565,22 @@ fn write_score_result_manifest_with_options(
         }]
     });
     fs::write(path, serde_json::to_vec_pretty(&manifest).unwrap()).unwrap();
+}
+
+fn default_score_evidence_kind(slot: &FinalScoreSlot) -> ScoreEvidenceKind {
+    match slot.dataset_id.as_str() {
+        "officeqa" => ScoreEvidenceKind::RustScorerReplay,
+        "browsecomp_transfer" => ScoreEvidenceKind::ExactAnswerReplay,
+        "sealqa" => ScoreEvidenceKind::ExternalJudgeRun,
+        other => panic!("test helper has no score evidence kind for dataset {other}"),
+    }
+}
+
+fn default_score_evidence_approval_id(slot: &FinalScoreSlot) -> Option<&'static str> {
+    match slot.dataset_id.as_str() {
+        "sealqa" => Some("unit-test-approved-sealqa-judge-run"),
+        _ => None,
+    }
 }
 
 fn score_slot_source_ids(report: &EvoSkillFinalReport, slot: &FinalScoreSlot) -> Vec<String> {
@@ -1458,6 +1622,7 @@ fn score_artifact_prediction_for_source_id(slot: &FinalScoreSlot, source_id: &st
                 .expect("BrowseComp fixture source ids end in row numbers");
             format!("Browse answer {row_number}")
         }
+        "sealqa" => format!("SealQA judged prediction for {source_id}"),
         other => panic!("test helper has no score prediction for dataset {other}"),
     }
 }
