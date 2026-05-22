@@ -3299,12 +3299,15 @@ dependencies = [
  "leaven-artifact-git",
  "leaven-core",
  "leaven-engine",
+ "leaven-evidence",
  "leaven-gepa",
  "leaven-kernel",
+ "leaven-population",
  "leaven-surface",
  "leaven-workspace",
  "leaven-workspace-local",
  "serde",
+ "tempfile",
  "thiserror 2.0.18",
 ]
 

@@ -1,8 +1,8 @@
 # Leaven Agentic Trace Reflection Product Backend
 
 Date: 2026-05-21
-Status: implementation spec; active successor for the Git/repo portions of
-`agentic_reflection.md`.
+Status: implementation spec; GEPA/Git bridge slice landed as an advanced
+product-backend route.
 Governing spec: `docs/specs/initial_library.md`.
 Companions:
 `docs/specs/agentic_reflection.md`,

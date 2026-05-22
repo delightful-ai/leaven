@@ -99,6 +99,7 @@ inherits = "dev"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(coverage)"] }
 
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }

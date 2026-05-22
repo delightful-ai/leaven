@@ -23,7 +23,10 @@ thiserror = { workspace = true }
 
 [dev-dependencies]
 futures = { workspace = true }
+leaven-evidence = { workspace = true }
+leaven-population = { workspace = true }
 leaven-workspace-local = { workspace = true }
+tempfile = { workspace = true }
 
 [lints]
 workspace = true

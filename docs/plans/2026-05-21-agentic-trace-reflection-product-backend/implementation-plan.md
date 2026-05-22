@@ -23,42 +23,58 @@ workspace backend; it is the GEPA/EvoSkill-shaped product loop over
 
 ## Execution Slices
 
-1. **Bridge crate skeleton and topology** - started 2026-05-21
+1. **Bridge crate skeleton and topology** - done 2026-05-21
    Add `leaven-gepa-agentic-git` with local `AGENTS.md`, manifest entries,
    crate exports, and topology-contract updates. The crate owns only the bridge
    from GEPA reflection to Git-program agentic proposal.
 
-2. **Typed reflection input**
+2. **Typed reflection input** - done 2026-05-21
    Add `GitProgramGepaReflectionInput<Part>` carrying
    `GitProgramArtifact + ReflectRequest<Part>`. It must preserve request
    provenance and must not rebuild reflective examples.
 
-3. **Materializer, renderer, parser**
+3. **Materializer, renderer, parser** - done 2026-05-21
    Compose `GitProgramMaterializer` and `GitProgramReadback` with a renderer
    that gives the agent checked-out repo paths, selected part, examples, and a
    strict patch/bundle/commit output contract. Parser output is a
    `ProposalBatch` with `ProposalEffect::Change`.
 
-4. **GEPA reflector wrapper**
+4. **GEPA reflector wrapper** - done 2026-05-21
    Add `GepaGitProgramAgenticReflector` mirroring
    `GepaSkillBankAgenticReflector`: resolve parent through `RunContext`, feed
    the materializing `AgenticProposer`, then finalize through
    `RunContext::propose` and `apply_batch`.
 
-5. **No-spend product proof**
-   Test a fake agent over a local GitProgram fixture where the child revision
-   changes, proposal provenance is preserved, parent stays immutable, and GEPA
-   attempt/admission metadata names the child.
+5. **No-spend product proof** - done 2026-05-22
+   `crates/leaven-gepa-agentic-git/tests/git_reflection.rs` materializes a
+   local `GitProgramArtifact`, renders repo-aware GEPA reflection
+   instructions, applies an agent-style workspace edit, reads back a typed
+   `GitProgramChange`, records the proposal through `RunContext::propose`, and
+   admits the child with `apply_batch`. It asserts parent immutability, child
+   durable Git contents, proposal provenance, and run-event frontier updates.
 
-6. **P5-shaped fixture**
-   Add a tiny EvoSkill-shaped GitProgram run or extend P5 so it exercises the
-   bridge, reports actual frontier parent/child/admission truth, and clearly
-   remains a product-backend proof rather than OfficeQA/SealQA parity.
+6. **P5-shaped fixture** - done 2026-05-22
+   The same no-spend proof now wraps the GitProgram child in a tiny
+   EvoSkill-shaped `TopKFrontier`: the seed is selected as parent, the child is
+   scored and admitted, best-candidate/best-score state is reported, and
+   `PopulationUpdated` events are present. This remains a product-backend
+   proof, not OfficeQA/SealQA parity.
 
-7. **Docs and verification**
+7. **Docs and verification** - in progress 2026-05-22
    Update `docs/working-memory/skill-paper-replication.md`, run focused tests,
    run topology if crate inventory changed, run live Firkin only if backend
    code changed, then run `just check`.
+
+## Implementation Note
+
+The full `AgenticProposer<GitProgramArtifact>` wrapper compiles under LLVM, but
+the pinned nightly Cranelift dev backend ICEs in rustc's known-panics lint when
+the generic agentic future is monomorphized in the integration test. The
+default proof therefore exercises the stable product boundary directly:
+materializer + renderer + workspace edit + parser + `RunContext::propose` +
+`apply_batch` + frontier event reporting. Keep the wrapper code in place; do
+not count the LLVM-only wrapper test as the ordinary completion gate until the
+toolchain ICE is gone or the generic future shape is smaller.
 
 ## Stop Conditions
 

@@ -1,7 +1,7 @@
 # Skill Paper Replication Ledger
 
 Status: active.
-Updated: 2026-05-20.
+Updated: 2026-05-22.
 
 ## Authority
 
@@ -83,6 +83,13 @@ Current useful substrate:
   `SkillBankReflector: ArtifactReflector` impl, running through the generic
   `ReflectionWorkspace` in `leaven-agentic`. Governing spec:
   `docs/specs/typed_signature_adapter_contract.md`.
+- `leaven-gepa-agentic-git` bridges GEPA reflection to Git-program agentic
+  proposal: `ReflectRequest` is passed down without rebuilding examples, the
+  parent `GitProgramArtifact` is materialized into a workspace, provider-neutral
+  instructions name checked-out repo paths, readback yields a typed
+  `GitProgramChange`, and the deterministic no-spend proof records the batch
+  through `RunContext::propose`, applies it with `apply_batch`, and emits tiny
+  EvoSkill-shaped frontier/admission events.
 - `examples/p5_evoskill_iteration` proves one live Codex EvoSkill-shaped
   iteration over a tiny treasury-notation fixture. It can now run a no-spend
   `--inspect-cases` pass over the materialized OfficeQA `UID0001` sample and
@@ -116,9 +123,11 @@ Current known gaps:
   refs, restore a selected ref, and delete branch/tag refs.
   `crates/leaven-agentic-git` can materialize multi-repo `GitProgramArtifact`
   values into proposer workspaces and read back imported child commits or
-  explicit output patch/bundle proposals as typed artifact changes. EvoSkill
-  still needs run-loop integration for checkpointed program/frontier state,
-  paper score metadata, and graph admission.
+  explicit output patch/bundle proposals as typed artifact changes.
+  `crates/leaven-gepa-agentic-git` now proves the generic GEPA reflection bridge
+  and tiny frontier admission around that path. EvoSkill still needs
+  paper-run integration for checkpointed program/frontier state, paper score
+  metadata conventions, and OfficeQA/SealQA run surfaces.
 - The P5 EvoSkill path is not OfficeQA or SealQA. It can inspect one real
   OfficeQA sample and one real SealQA sample without live spend, but still lacks
   the paper datasets, paper splits, full frontier loop, feedback-history
@@ -265,6 +274,20 @@ Next attempt:
   useful evidence, but using them for replication now requires an explicit
   source-pin/archive decision and still does not provide EvoSkill's paper
   `category` / `pseudo_labels` split manifest.
+
+2026-05-22 product-backend bridge proof:
+
+- `crates/leaven-gepa-agentic-git` now has the first deterministic no-spend
+  GitProgram reflection proof: the parent repo is materialized, the rendered
+  instructions expose repo context and reflection brief, a workspace edit is
+  imported into durable Git storage as a typed `GitProgramChange`, the proposal
+  is recorded/applied through `RunContext`, and provenance preserves the
+  selected parent candidate.
+- The proof also wraps the child in a tiny EvoSkill-shaped top-k frontier:
+  seed parent selection, child score/admission, best-candidate/best-score
+  report, and `PopulationUpdated` events are asserted. This closes the generic
+  GitProgram product-backend denominator, not OfficeQA/SealQA/BrowseComp
+  parity.
 
 ### Trace2Skill (`arx_2603.25158`)
 

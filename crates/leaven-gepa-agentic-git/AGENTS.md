@@ -11,23 +11,23 @@ frontier admission.
 
 ## Status
 
-Explicit scaffold. The crate exists so the product-backend bridge has a real
-topology home before behavior is added. It must not be exported as an ordinary
-product route until it has a deterministic GEPA GitProgram reflection test that
-materializes a parent repo, reads back a typed `GitProgramChange`, and applies
-through `RunContext::propose` plus `apply_batch`.
+Behavior-bearing bridge scaffold. The crate has a deterministic GEPA
+GitProgram reflection test that materializes a parent repo, reads back a typed
+`GitProgramChange`, applies through `RunContext::propose` plus `apply_batch`,
+and records tiny EvoSkill-shaped frontier admission state. It remains an
+advanced bridge route, not an ordinary prelude/default-feature product route.
 
 ## Map
 
-- `input.rs` will own the typed bridge from `ReflectRequest + parent
+- `input.rs` owns the typed bridge from `ReflectRequest + parent
   GitProgramArtifact` into an agentic proposal input.
-- `materializer.rs` will compose `GitProgramMaterializer` with GEPA reflection
+- `materializer.rs` composes `GitProgramMaterializer` with GEPA reflection
   context files.
-- `renderer.rs` will render provider-neutral instructions for editing checked
+- `renderer.rs` renders provider-neutral instructions for editing checked
   out Git program repos.
-- `parser.rs` will read final workspace state, patches, or bundles back into a
+- `parser.rs` reads final workspace state, patches, or bundles back into a
   proposal batch.
-- `reflector.rs` will wrap `AgenticProposer` as a `GepaReflector`.
+- `reflector.rs` wraps `AgenticProposer` as a `GepaReflector`.
 
 ## Decision Cards
 

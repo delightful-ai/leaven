@@ -383,9 +383,12 @@ git-backed program identity into the EvoSkill run path:
   from durable bare stores into disposable proposer workspaces and reads dirty
   or committed workspace Git children plus explicit output patch/bundle
   proposals back as imported `GitProgramChange` values.
-- EvoSkill still requires paper score metadata conventions, checkpointed
-  program/frontier state, frontier membership decisions, graph admission through
-  `RunContext`, and integration with the paper run loop.
+- `crates/leaven-gepa-agentic-git` now proves the generic GEPA reflection bridge
+  for Git programs: materialize repo, render reflection instructions, read back
+  `GitProgramChange`, record/apply through `RunContext`, and assert tiny top-k
+  frontier admission state. EvoSkill still requires paper score metadata
+  conventions, checkpointed program/frontier state, and integration with the
+  paper run loop.
 - P5 currently uses Leaven skill-bank/materializer/checkpoint pieces, but does
   not model EvoSkill's git program artifact as a reusable Leaven artifact.
 
@@ -514,10 +517,12 @@ or split manifest.
    represent program/frontier refs, `leaven-workspace-git` can clone, project,
    fsck, import, capture, restore, and delete local branch/tag refs, and
    `leaven-agentic-git` can materialize/read back git-program workspaces and
-   explicit output patch/bundle proposals as typed artifact changes. Leaven
-   still lacks the EvoSkill run integration that turns those primitives into
-   checkpointed program/frontier state with paper score metadata and graph
-   admission. `leaven-population`
+   explicit output patch/bundle proposals as typed artifact changes.
+   `leaven-gepa-agentic-git` now proves the generic GEPA reflection bridge over
+   those primitives, including `RunContext` graph admission and tiny frontier
+   reporting. Leaven still lacks the EvoSkill run integration that turns those
+   primitives into checkpointed paper program/frontier state with paper score
+   metadata. `leaven-population`
    now provides `TopKFrontier` for fixed-capacity scalar validation admission
    and weakest-member eviction plus `TopKParentSelector` for checkpointable
    best/round-robin parent selection. P5 now persists frontier membership,
