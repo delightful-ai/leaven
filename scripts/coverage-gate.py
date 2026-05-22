@@ -28,8 +28,26 @@ MILESTONE_PACKAGES = [
     "trace2skill_spreadsheetbench",
 ]
 
-RUN_PACKAGES = [
-    "xtask",
+RUN_COMMANDS = [
+    [
+        "cargo",
+        "llvm-cov",
+        "run",
+        "--no-report",
+        *COVERAGE_PROFILE,
+        "-p",
+        "xtask",
+        "--",
+        "git-trust-bench",
+        "--iterations",
+        "1",
+        "--jobs",
+        "1",
+        "--case",
+        "coverage:2:8",
+        "--out",
+        "target/git-trust-lane/coverage-smoke.json",
+    ],
 ]
 
 TEST_SOURCE_RE = re.compile(r"(^|/)(tests|benches)/|(^|/)target/tests/")
@@ -60,7 +78,7 @@ def main() -> int:
             *COVERAGE_PROFILE,
             *exclude_args(),
         ],
-        *[run_package_command(package) for package in RUN_PACKAGES],
+        *RUN_COMMANDS,
     ]
     for command in commands:
         result = run(command)
@@ -136,10 +154,6 @@ def main() -> int:
 def run(command: list[str]) -> subprocess.CompletedProcess[bytes]:
     print(f"running coverage gate: {' '.join(command)}", flush=True)
     return subprocess.run(command, check=False)
-
-
-def run_package_command(package: str) -> list[str]:
-    return ["cargo", "llvm-cov", "run", "--no-report", *COVERAGE_PROFILE, "-p", package]
 
 
 def exclude_args() -> list[str]:
