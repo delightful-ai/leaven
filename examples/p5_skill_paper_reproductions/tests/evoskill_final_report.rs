@@ -199,6 +199,7 @@ fn final_report_uses_browsecomp_sample_as_unscored_transfer_denominator() {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn final_report_relabels_browsecomp_ablation_after_denominator_materializes() {
     let root = tempfile::tempdir().unwrap();
     write_officeqa_full_csv(root.path(), 246);
@@ -1774,6 +1775,141 @@ fn cli_refuses_officeqa_score_result_sidecar_for_blocked_split_slot() {
     );
 }
 
+#[test]
+fn cli_writes_sealqa_judge_score_result_sidecar_from_approved_rows() {
+    let root = tempfile::tempdir().unwrap();
+    write_denominator_ready_sources(root.path());
+    let input = ManifestBuildInput::new(root.path());
+    write_evoskill_local_source_pin_manifest(&input).unwrap();
+    write_evoskill_paper_close_split_policy_manifest(&input).unwrap();
+    let initial_report = build_evoskill_final_report(&input).unwrap();
+    let slot = score_slot(
+        &initial_report,
+        "sealqa",
+        "sealqa_row_order_train_11_heldout_100",
+        "train",
+        "baseline",
+    );
+    assert_eq!(slot.status, FinalScoreStatus::Blocked);
+    assert_eq!(slot.blocker_ids, ["sealqa_judge_scored_run".to_owned()]);
+    let rows_path = root
+        .path()
+        .join("tmp/replication/evoskill/judge/sealqa-train-baseline.jsonl");
+    write_sealqa_judge_rows(root.path(), &initial_report, slot, &rows_path, 1.0);
+
+    let manifest_path = root.path().join("out/replica-manifest.json");
+    let report_path = root.path().join("out/final-report.json");
+    let output = Command::new(env!("CARGO_BIN_EXE_p5_skill_paper_reproductions"))
+        .arg("--root")
+        .arg(root.path())
+        .arg("--out")
+        .arg(&manifest_path)
+        .arg("--final-report-out")
+        .arg(&report_path)
+        .arg("--write-sealqa-judge-score-result")
+        .arg("tmp/replication/evoskill/judge/sealqa-train-baseline.jsonl")
+        .arg("--sealqa-judge-approval-id")
+        .arg("unit-test-approved-sealqa-judge-run")
+        .output()
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let score_result_path = root
+        .path()
+        .join("tmp/replication/evoskill/score_result_manifest.json");
+    assert!(score_result_path.exists());
+    let report = fs::read_to_string(report_path).unwrap();
+    let report: EvoSkillFinalReport = serde_json::from_str(&report).unwrap();
+    let reported = score_slot(
+        &report,
+        "sealqa",
+        "sealqa_row_order_train_11_heldout_100",
+        "train",
+        "baseline",
+    );
+    assert_eq!(reported.status, FinalScoreStatus::Reported);
+    assert_eq!(reported.score, Some(1.0));
+    assert_eq!(
+        reported.score_evidence_kind,
+        Some(ScoreEvidenceKind::ExternalJudgeRun)
+    );
+    assert_eq!(
+        reported.score_evidence_approval_id.as_deref(),
+        Some("unit-test-approved-sealqa-judge-run")
+    );
+    assert!(reported.blocker_ids.is_empty());
+    let evidence_id = reported
+        .score_evidence_id
+        .as_deref()
+        .expect("SealQA writer records evidence id");
+    assert!(
+        evidence_id.starts_with("sealqa-external-judge-run-unit-test-approved-sealqa-judge-run")
+    );
+    let evidence_artifact = reported
+        .score_evidence_artifact
+        .as_ref()
+        .expect("CLI writer preserves checked score evidence artifact");
+    let evidence_body = fs::read_to_string(root.path().join(&evidence_artifact.relative_path))
+        .expect("score evidence artifact is readable");
+    assert!(evidence_body.contains("\"judge_template_fingerprint\""));
+    assert!(!evidence_body.contains("ground_truth"));
+    assert!(!evidence_body.contains("reference"));
+}
+
+#[test]
+fn cli_refuses_sealqa_judge_score_result_sidecar_without_approval_id() {
+    let root = tempfile::tempdir().unwrap();
+    write_denominator_ready_sources(root.path());
+    let input = ManifestBuildInput::new(root.path());
+    write_evoskill_local_source_pin_manifest(&input).unwrap();
+    write_evoskill_paper_close_split_policy_manifest(&input).unwrap();
+    let initial_report = build_evoskill_final_report(&input).unwrap();
+    let slot = score_slot(
+        &initial_report,
+        "sealqa",
+        "sealqa_row_order_train_11_heldout_100",
+        "train",
+        "baseline",
+    );
+    let rows_path = root
+        .path()
+        .join("tmp/replication/evoskill/judge/sealqa-train-baseline.jsonl");
+    write_sealqa_judge_rows(root.path(), &initial_report, slot, &rows_path, 1.0);
+
+    let output = Command::new(env!("CARGO_BIN_EXE_p5_skill_paper_reproductions"))
+        .arg("--root")
+        .arg(root.path())
+        .arg("--out")
+        .arg(root.path().join("out/replica-manifest.json"))
+        .arg("--write-sealqa-judge-score-result")
+        .arg("tmp/replication/evoskill/judge/sealqa-train-baseline.jsonl")
+        .output()
+        .unwrap();
+
+    assert!(
+        !output.status.success(),
+        "SealQA judge writer unexpectedly succeeded\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("approval id"),
+        "stderr:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        !root
+            .path()
+            .join("tmp/replication/evoskill/score_result_manifest.json")
+            .exists()
+    );
+}
+
 fn write_denominator_ready_sources(root: &std::path::Path) {
     write_officeqa_full_csv(root, 246);
     write_sealqa_parquet(root, 111);
@@ -1819,6 +1955,40 @@ fn write_officeqa_prediction_rows(
     let relative_path = path
         .strip_prefix(root)
         .expect("test prediction path lives below root");
+    let path = root.join(relative_path);
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(path, jsonl).unwrap();
+}
+
+fn write_sealqa_judge_rows(
+    root: &std::path::Path,
+    report: &EvoSkillFinalReport,
+    slot: &FinalScoreSlot,
+    path: &std::path::Path,
+    score: f64,
+) {
+    let judge_template_fingerprint = judge_template_fingerprint_for_dataset(report, "sealqa");
+    let mut jsonl = String::new();
+    for source_id in score_slot_source_ids(report, slot) {
+        writeln!(
+            jsonl,
+            "{}",
+            serde_json::json!({
+                "dataset_id": &slot.dataset_id,
+                "split_id": &slot.split_id,
+                "split_role": &slot.split_role,
+                "candidate_role": &slot.candidate_role,
+                "source_id": source_id,
+                "prediction": score_artifact_prediction_for_source_id(slot, &source_id),
+                "score": score,
+                "judge_template_fingerprint": judge_template_fingerprint
+            })
+        )
+        .unwrap();
+    }
+    let relative_path = path
+        .strip_prefix(root)
+        .expect("test judged-row path lives below root");
     let path = root.join(relative_path);
     fs::create_dir_all(path.parent().unwrap()).unwrap();
     fs::write(path, jsonl).unwrap();

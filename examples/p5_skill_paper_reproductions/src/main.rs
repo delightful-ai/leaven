@@ -6,6 +6,7 @@ use p5_skill_paper_reproductions::evoskill::{
     write_evoskill_browsecomp_public_transfer_sample, write_evoskill_local_source_pin_manifest,
     write_evoskill_officeqa_score_result_manifest,
     write_evoskill_paper_close_split_policy_manifest,
+    write_evoskill_sealqa_judge_score_result_manifest,
 };
 
 #[derive(Debug, Parser)]
@@ -28,9 +29,15 @@ struct Args {
     /// Derive the strict 128-row `BrowseComp` transfer sidecar from a local official public CSV.
     #[arg(long)]
     write_browsecomp_public_transfer_sample: Option<PathBuf>,
-    /// Score OfficeQA prediction JSONL rows with the Rust scorer and write the strict score sidecar.
+    /// Score `OfficeQA` prediction JSONL rows with the Rust scorer and write the strict score sidecar.
     #[arg(long)]
     write_officeqa_score_result: Option<PathBuf>,
+    /// Import approved `SealQA` external-judge JSONL rows and write the strict score sidecar.
+    #[arg(long)]
+    write_sealqa_judge_score_result: Option<PathBuf>,
+    /// Approval/provenance id for the imported `SealQA` external judge run.
+    #[arg(long)]
+    sealqa_judge_approval_id: Option<String>,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -47,6 +54,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     if let Some(path) = args.write_officeqa_score_result {
         write_evoskill_officeqa_score_result_manifest(&input, path)?;
+    }
+    if let Some(path) = args.write_sealqa_judge_score_result {
+        let approval_id = args
+            .sealqa_judge_approval_id
+            .as_deref()
+            .ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "SealQA judge score writer requires a nonempty approval id via --sealqa-judge-approval-id",
+                )
+            })?;
+        write_evoskill_sealqa_judge_score_result_manifest(&input, path, approval_id)?;
     }
     let manifest = build_evoskill_replica_manifest(&input)?;
     write_json(&args.out, &manifest)?;

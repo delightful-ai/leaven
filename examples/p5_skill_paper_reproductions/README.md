@@ -20,6 +20,7 @@ just evoskill-paper-pin-local-sources
 just evoskill-paper-accept-substitute-splits
 just evoskill-paper-browsecomp-public-sample tmp/replication/evoskill/browsecomp/public_browsecomp_test_set.csv
 just evoskill-paper-score-officeqa tmp/replication/evoskill/predictions/officeqa.jsonl
+just evoskill-paper-score-sealqa tmp/replication/evoskill/judge/sealqa.jsonl approved-run-id
 just evoskill-paper-final-report
 ```
 
@@ -97,6 +98,19 @@ or reference fields, writes schema-v5 `score_result_manifest.json`, and then
 regenerates the final report through the normal importer. This scores supplied
 prediction artifacts only; it does not run an agent or resolve missing split
 proof.
+
+`just evoskill-paper-score-sealqa <judged_rows.jsonl> <approval_id>` is the
+Rust no-spend import path for already-approved SealQA external judge outputs.
+Each row must be strict JSONL with `dataset_id`, `split_id`, `split_role`,
+`candidate_role`, `source_id`, `prediction`, `score`, and the
+`judge_template_fingerprint` used by the run. The writer refuses missing
+approval ids, non-SealQA rows, stale judge-template fingerprints, source/split
+blocked slots, duplicate or missing source ids, and out-of-range scores. It
+writes checked score-evidence JSONL, records LLM-call cost from the judged row
+count, writes schema-v5 `score_result_manifest.json`, and regenerates the final
+report through the normal importer. This imports approved score evidence only;
+it does not call a judge, approve spend, or make partial SealQA evidence clear
+the full `sealqa_judge_scored_run` blocker.
 
 The final report also carries first-class `exactness_gaps`. When local source
 pins, accepted substitute splits, and the BrowseComp substitute denominator make

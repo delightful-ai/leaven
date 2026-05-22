@@ -161,6 +161,15 @@ belong in their owning crates.
   slots, requires exact role coverage, recomputes row scores in Rust, and writes
   evidence rows without ground-truth/reference fields. It is not an agent run
   and must not be used to resolve missing split/source proof.
+  The `--write-sealqa-judge-score-result` CLI path, exposed as
+  `just evoskill-paper-score-sealqa <judged_rows.jsonl> <approval_id>`, writes
+  the same strict sidecar from already-approved SealQA external judge rows. It
+  requires an explicit approval id, current pinned judge-template fingerprints
+  on every row, finite `[0, 1]` scores, exact role coverage, and slots whose
+  only blocker is `sealqa_judge_scored_run`. It writes checked score-evidence
+  JSONL and reported LLM-call cost through the normal importer. It is an import
+  lane only; it does not run a judge, approve spend, resolve source/split
+  blockers, or make partial SealQA evidence prove the full scorer gate.
   It does not prove live provider behavior, validation-score values, or
   paper-close.
 - `just evoskill-paper-manifest` writes the current no-spend local manifest to
@@ -186,5 +195,10 @@ belong in their owning crates.
   score evidence JSONL from strict prediction rows, then rewrites the manifest
   and final report. It scores only already-unblocked materialized OfficeQA
   slots.
+- `just evoskill-paper-score-sealqa <judged_rows.jsonl> <approval_id>` writes
+  `tmp/replication/evoskill/score_result_manifest.json` plus checked SealQA
+  external judge score evidence JSONL from strict approved rows, then rewrites
+  the manifest and final report. It imports only already-approved judge outputs
+  for materialized SealQA slots whose only blocker is `sealqa_judge_scored_run`.
 - `just evoskill-paper-final-report` writes both the manifest and current
   no-spend final report truth surface under `target/evoskill-paper-close/`.

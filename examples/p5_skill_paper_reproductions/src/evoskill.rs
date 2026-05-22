@@ -795,6 +795,19 @@ struct OfficeQaPredictionRow {
     prediction: String,
 }
 
+#[derive(Clone, Debug, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SealQaJudgeScoreRow {
+    dataset_id: String,
+    split_id: String,
+    split_role: String,
+    candidate_role: String,
+    source_id: String,
+    prediction: String,
+    score: f64,
+    judge_template_fingerprint: String,
+}
+
 struct ValidatedScoreResultManifest {
     report: ScoreResultManifestReport,
     entries: Vec<ScoreResultManifestEntry>,
@@ -895,6 +908,15 @@ pub enum ManifestError {
     },
     #[error("invalid OfficeQA prediction rows `{path}`: {message}")]
     OfficeQaPrediction { path: PathBuf, message: String },
+    #[error("failed to parse SealQA judge score rows `{path}` line {line}: {source}")]
+    SealQaJudgeScoreJson {
+        path: PathBuf,
+        line: usize,
+        #[source]
+        source: serde_json::Error,
+    },
+    #[error("invalid SealQA judge score rows `{path}`: {message}")]
+    SealQaJudgeScore { path: PathBuf, message: String },
     #[error("failed to parse BrowseComp transfer sample `{path}` line {line}: {source}")]
     BrowseCompSampleJson {
         path: PathBuf,
@@ -1092,6 +1114,45 @@ pub fn write_evoskill_officeqa_score_result_manifest(
         &manifest_fingerprint,
         &scorer_fingerprint,
         predictions,
+    )?;
+    write_score_result_manifest_file(&path, &score_manifest)?;
+    let validated =
+        read_score_result_manifest(&input.root, &manifest_fingerprint, &scorer_fingerprint)?
+            .expect("score result manifest was just written");
+    apply_score_result_manifest(
+        &input.root,
+        &sources,
+        &manifest.scorer,
+        &mut slots,
+        &validated,
+    )?;
+    Ok(path)
+}
+
+pub fn write_evoskill_sealqa_judge_score_result_manifest(
+    input: &ManifestBuildInput,
+    judged_rows_path: impl AsRef<Path>,
+    approval_id: &str,
+) -> Result<PathBuf, ManifestError> {
+    let judged_rows_path = root_relative_input_path(&input.root, judged_rows_path.as_ref());
+    validate_sealqa_judge_approval_id(&judged_rows_path, approval_id)?;
+    let judged_rows = read_sealqa_judge_score_rows(&judged_rows_path)?;
+    let sources = materialize_evoskill_sources(input)?;
+    let manifest = build_evoskill_replica_manifest_from_sources(input, &sources)?;
+    let manifest_fingerprint = manifest_fingerprint_report(&manifest)?;
+    let scorer_fingerprint = scorer_fingerprint_report(&manifest.scorer);
+    let mut slots = final_score_slots(&manifest);
+    let path = input.root.join(SCORE_RESULT_MANIFEST_PATH);
+    let score_manifest = sealqa_judge_score_result_manifest_from_rows(
+        &input.root,
+        &path,
+        &sources,
+        &manifest.scorer,
+        &slots,
+        &manifest_fingerprint,
+        &scorer_fingerprint,
+        judged_rows,
+        approval_id,
     )?;
     write_score_result_manifest_file(&path, &score_manifest)?;
     let validated =
@@ -3217,6 +3278,37 @@ fn read_officeqa_prediction_rows(path: &Path) -> Result<Vec<OfficeQaPredictionRo
     Ok(rows)
 }
 
+fn read_sealqa_judge_score_rows(path: &Path) -> Result<Vec<SealQaJudgeScoreRow>, ManifestError> {
+    let body = fs::read_to_string(path).map_err(|source| ManifestError::Read {
+        path: path.to_owned(),
+        source,
+    })?;
+    let mut rows = Vec::new();
+    for (line_index, line) in body.lines().enumerate() {
+        if line.trim().is_empty() {
+            return Err(ManifestError::SealQaJudgeScore {
+                path: path.to_owned(),
+                message: format!("blank line {}", line_index + 1),
+            });
+        }
+        let row = serde_json::from_str::<SealQaJudgeScoreRow>(line).map_err(|source| {
+            ManifestError::SealQaJudgeScoreJson {
+                path: path.to_owned(),
+                line: line_index + 1,
+                source,
+            }
+        })?;
+        rows.push(row);
+    }
+    if rows.is_empty() {
+        return Err(ManifestError::SealQaJudgeScore {
+            path: path.to_owned(),
+            message: "judge score file must contain at least one row".to_owned(),
+        });
+    }
+    Ok(rows)
+}
+
 fn officeqa_score_result_manifest_from_predictions(
     root: &Path,
     sidecar_path: &Path,
@@ -3254,9 +3346,9 @@ fn officeqa_score_result_manifest_from_predictions(
             officeqa_score_evidence_rows(sidecar_path, &key, sources, &targets, slot, rows)?;
         let evidence_artifact =
             write_score_evidence_artifact(root, sidecar_path, &key, &evidence_rows)?;
-        let scored_rows =
-            u64::try_from(evidence_rows.len()).expect("score evidence row count fits in u64");
-        let score = evidence_rows.iter().map(|row| row.score).sum::<f64>() / scored_rows as f64;
+        let (scored_rows, scored_rows_f64) =
+            score_evidence_row_count(sidecar_path, &key, &evidence_rows)?;
+        let score = evidence_rows.iter().map(|row| row.score).sum::<f64>() / scored_rows_f64;
         metric_calls = metric_calls.saturating_add(scored_rows);
         entries.push(ScoreResultManifestEntry {
             dataset_id: slot.dataset_id.clone(),
@@ -3290,6 +3382,108 @@ fn officeqa_score_result_manifest_from_predictions(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
+fn sealqa_judge_score_result_manifest_from_rows(
+    root: &Path,
+    sidecar_path: &Path,
+    sources: &EvoSkillSourceMaterializations,
+    scorer: &ScorerManifest,
+    slots: &[FinalScoreSlot],
+    manifest_fingerprint: &ManifestFingerprintReport,
+    scorer_fingerprint: &ScorerFingerprintReport,
+    judged_rows: Vec<SealQaJudgeScoreRow>,
+    approval_id: &str,
+) -> Result<ScoreResultManifestFile, ManifestError> {
+    let expected_template_fingerprint =
+        sealqa_judge_template_fingerprint_from_scorer(sidecar_path, scorer, "sealqa")?;
+    let slots_by_key = slots
+        .iter()
+        .map(|slot| (final_score_slot_key(slot), slot))
+        .collect::<BTreeMap<_, _>>();
+    let mut grouped = BTreeMap::<String, Vec<SealQaJudgeScoreRow>>::new();
+    for row in judged_rows {
+        validate_sealqa_judge_score_row_shape(sidecar_path, &row)?;
+        grouped
+            .entry(sealqa_judge_score_slot_key(&row))
+            .or_default()
+            .push(row);
+    }
+
+    let mut llm_calls = 0_u64;
+    let mut entries = Vec::new();
+    for (key, rows) in grouped {
+        let slot = slots_by_key.get(&key).ok_or_else(|| {
+            score_result_manifest_error(
+                sidecar_path,
+                format!("SealQA judge rows target unknown score slot `{key}`"),
+            )
+        })?;
+        validate_sealqa_judge_score_writer_slot(sidecar_path, &key, slot)?;
+        let evidence_rows = sealqa_judge_score_evidence_rows(
+            sidecar_path,
+            &key,
+            sources,
+            slot,
+            rows,
+            &expected_template_fingerprint,
+        )?;
+        let evidence_id = sealqa_judge_score_evidence_id(sidecar_path, slot, approval_id)?;
+        let evidence_artifact = write_score_evidence_artifact_with_id(
+            root,
+            sidecar_path,
+            &evidence_id,
+            &evidence_rows,
+        )?;
+        let (scored_rows, scored_rows_f64) =
+            score_evidence_row_count(sidecar_path, &key, &evidence_rows)?;
+        let score = evidence_rows.iter().map(|row| row.score).sum::<f64>() / scored_rows_f64;
+        llm_calls = llm_calls.saturating_add(scored_rows);
+        entries.push(ScoreResultManifestEntry {
+            dataset_id: slot.dataset_id.clone(),
+            split_id: slot.split_id.clone(),
+            split_role: slot.split_role.clone(),
+            candidate_role: slot.candidate_role.clone(),
+            split_fingerprint: slot.split_fingerprint.clone(),
+            role_source_id_fingerprint: slot.role_source_id_fingerprint.clone(),
+            expected_rows: slot.expected_rows,
+            scored_rows,
+            score,
+            resolved_blocker_ids: slot.blocker_ids.clone(),
+            score_evidence_kind: ScoreEvidenceKind::ExternalJudgeRun,
+            score_evidence_approval_id: Some(approval_id.to_owned()),
+            evidence_id,
+            evidence_artifact,
+        });
+    }
+
+    Ok(ScoreResultManifestFile {
+        schema_version: 5,
+        manifest_fingerprint: manifest_fingerprint.fingerprint.clone(),
+        scorer_fingerprint: scorer_fingerprint.fingerprint.clone(),
+        cost: FinalReportCost {
+            llm_calls,
+            metric_calls: 0,
+            prompt_tokens: 0,
+            completion_tokens: 0,
+        },
+        entries,
+    })
+}
+
+fn score_evidence_row_count(
+    path: &Path,
+    key: &str,
+    rows: &[ScoreEvidenceRow],
+) -> Result<(u64, f64), ManifestError> {
+    let count = u32::try_from(rows.len()).map_err(|_| {
+        score_result_manifest_error(
+            path,
+            format!("score result `{key}` has too many rows to aggregate"),
+        )
+    })?;
+    Ok((u64::from(count), f64::from(count)))
+}
+
 fn validate_officeqa_prediction_row_shape(
     path: &Path,
     row: &OfficeQaPredictionRow,
@@ -3315,6 +3509,66 @@ fn validate_officeqa_prediction_row_shape(
                 message: format!("prediction row field `{field}` must not be empty"),
             });
         }
+    }
+    Ok(())
+}
+
+fn validate_sealqa_judge_approval_id(path: &Path, approval_id: &str) -> Result<(), ManifestError> {
+    if approval_id.trim().is_empty() {
+        return Err(ManifestError::SealQaJudgeScore {
+            path: path.to_owned(),
+            message: "approval id must not be empty".to_owned(),
+        });
+    }
+    if score_evidence_id_component(approval_id).is_empty() {
+        return Err(ManifestError::SealQaJudgeScore {
+            path: path.to_owned(),
+            message: "approval id must contain at least one ASCII alphanumeric character"
+                .to_owned(),
+        });
+    }
+    Ok(())
+}
+
+fn validate_sealqa_judge_score_row_shape(
+    path: &Path,
+    row: &SealQaJudgeScoreRow,
+) -> Result<(), ManifestError> {
+    if row.dataset_id != "sealqa" {
+        return Err(ManifestError::SealQaJudgeScore {
+            path: path.to_owned(),
+            message: format!(
+                "judge score row for `{}` is not supported by the SealQA judge writer",
+                row.dataset_id
+            ),
+        });
+    }
+    for (field, value) in [
+        ("split_id", &row.split_id),
+        ("split_role", &row.split_role),
+        ("candidate_role", &row.candidate_role),
+        ("source_id", &row.source_id),
+        ("prediction", &row.prediction),
+        (
+            "judge_template_fingerprint",
+            &row.judge_template_fingerprint,
+        ),
+    ] {
+        if value.trim().is_empty() {
+            return Err(ManifestError::SealQaJudgeScore {
+                path: path.to_owned(),
+                message: format!("judge score row field `{field}` must not be empty"),
+            });
+        }
+    }
+    if !(0.0..=1.0).contains(&row.score) || !row.score.is_finite() {
+        return Err(ManifestError::SealQaJudgeScore {
+            path: path.to_owned(),
+            message: format!(
+                "judge score row `{}` has non-finite or out-of-range score {}",
+                row.source_id, row.score
+            ),
+        });
     }
     Ok(())
 }
@@ -3373,6 +3627,56 @@ fn validate_officeqa_score_writer_slot(
         return Err(score_result_manifest_error(
             path,
             format!("OfficeQA score writer requires expected rows for `{key}`"),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_sealqa_judge_score_writer_slot(
+    path: &Path,
+    key: &str,
+    slot: &FinalScoreSlot,
+) -> Result<(), ManifestError> {
+    if slot.dataset_id != "sealqa" {
+        return Err(score_result_manifest_error(
+            path,
+            format!("SealQA judge score writer cannot report non-SealQA slot `{key}`"),
+        ));
+    }
+    for blocker in &slot.blocker_ids {
+        if blocker != "sealqa_judge_scored_run" {
+            return Err(score_result_manifest_error(
+                path,
+                format!(
+                    "SealQA judge score writer refuses slot `{key}` with non-score blocker `{blocker}`; resolve source/split blockers before importing judge evidence"
+                ),
+            ));
+        }
+    }
+    if !slot
+        .blocker_ids
+        .iter()
+        .any(|blocker| blocker == "sealqa_judge_scored_run")
+    {
+        return Err(score_result_manifest_error(
+            path,
+            format!(
+                "SealQA judge score writer requires slot `{key}` to be blocked by sealqa_judge_scored_run"
+            ),
+        ));
+    }
+    if slot.split_fingerprint.is_none() || slot.role_source_id_fingerprint.is_none() {
+        return Err(score_result_manifest_error(
+            path,
+            format!(
+                "SealQA judge score writer requires materialized split and role fingerprints for `{key}`"
+            ),
+        ));
+    }
+    if slot.expected_rows.is_none() {
+        return Err(score_result_manifest_error(
+            path,
+            format!("SealQA judge score writer requires expected rows for `{key}`"),
         ));
     }
     Ok(())
@@ -3458,33 +3762,119 @@ fn officeqa_score_evidence_rows(
     Ok(evidence_rows)
 }
 
+fn sealqa_judge_score_evidence_rows(
+    path: &Path,
+    key: &str,
+    sources: &EvoSkillSourceMaterializations,
+    slot: &FinalScoreSlot,
+    rows: Vec<SealQaJudgeScoreRow>,
+    expected_template_fingerprint: &str,
+) -> Result<Vec<ScoreEvidenceRow>, ManifestError> {
+    let expected_rows = slot.expected_rows.expect("validated expected rows");
+    let actual_rows = u64::try_from(rows.len()).expect("judge row count fits in u64");
+    if actual_rows != expected_rows {
+        return Err(score_result_manifest_error(
+            path,
+            format!(
+                "SealQA judge rows for `{key}` cover {actual_rows} rows, expected {expected_rows}"
+            ),
+        ));
+    }
+    let mut predictions = BTreeMap::new();
+    for row in rows {
+        if row.judge_template_fingerprint != expected_template_fingerprint {
+            return Err(score_result_manifest_error(
+                path,
+                format!(
+                    "SealQA judge row `{}` for `{key}` judge template fingerprint mismatch: expected `{expected_template_fingerprint}`, found `{}`",
+                    row.source_id, row.judge_template_fingerprint
+                ),
+            ));
+        }
+        let source_id = row.source_id.clone();
+        if predictions.insert(source_id.clone(), row).is_some() {
+            return Err(score_result_manifest_error(
+                path,
+                format!("SealQA judge rows for `{key}` repeat source id `{source_id}`"),
+            ));
+        }
+    }
+    let expected_source_ids = score_writer_slot_source_ids(sources, path, key, slot)?;
+    if u64::try_from(expected_source_ids.len()).expect("source id count fits in u64")
+        != expected_rows
+    {
+        return Err(score_result_manifest_error(
+            path,
+            format!("SealQA score slot `{key}` source-id manifest does not match expected rows"),
+        ));
+    }
+    let mut evidence_rows = Vec::with_capacity(expected_source_ids.len());
+    for source_id in expected_source_ids {
+        let row = predictions.get(&source_id).ok_or_else(|| {
+            score_result_manifest_error(
+                path,
+                format!("SealQA judge rows for `{key}` are missing source id `{source_id}`"),
+            )
+        })?;
+        evidence_rows.push(ScoreEvidenceRow {
+            source_id,
+            prediction: row.prediction.clone(),
+            score: row.score,
+            judge_template_fingerprint: Some(row.judge_template_fingerprint.clone()),
+        });
+    }
+    if let Some(extra) = predictions
+        .keys()
+        .find(|source_id| !evidence_rows.iter().any(|row| &row.source_id == *source_id))
+    {
+        return Err(score_result_manifest_error(
+            path,
+            format!(
+                "SealQA judge rows for `{key}` include source id `{extra}` outside the slot role"
+            ),
+        ));
+    }
+    Ok(evidence_rows)
+}
+
 fn officeqa_score_slot_source_ids(
     sources: &EvoSkillSourceMaterializations,
     path: &Path,
     key: &str,
     slot: &FinalScoreSlot,
 ) -> Result<Vec<String>, ManifestError> {
-    let officeqa = sources.officeqa.as_ref().ok_or_else(|| {
+    score_writer_slot_source_ids(sources, path, key, slot)
+}
+
+fn score_writer_slot_source_ids(
+    sources: &EvoSkillSourceMaterializations,
+    path: &Path,
+    key: &str,
+    slot: &FinalScoreSlot,
+) -> Result<Vec<String>, ManifestError> {
+    let report = score_result_source_report(sources, &slot.dataset_id).ok_or_else(|| {
         score_result_manifest_error(
             path,
-            "OfficeQA predictions require OfficeQA source rows".into(),
+            format!(
+                "score slot `{key}` requires {} source rows",
+                slot.dataset_id
+            ),
         )
     })?;
-    let split = officeqa
-        .report
+    let split = report
         .split_materializations
         .iter()
         .find(|split| split.id == slot.split_id)
         .ok_or_else(|| {
             score_result_manifest_error(
                 path,
-                format!("OfficeQA score slot `{key}` has no materialized split"),
+                format!("score slot `{key}` has no materialized split"),
             )
         })?;
     if split.split_fingerprint != slot.split_fingerprint {
         return Err(score_result_manifest_error(
             path,
-            format!("OfficeQA score slot `{key}` split fingerprint changed during scoring"),
+            format!("score slot `{key}` split fingerprint changed during scoring"),
         ));
     }
     let role = split
@@ -3494,13 +3884,13 @@ fn officeqa_score_slot_source_ids(
         .ok_or_else(|| {
             score_result_manifest_error(
                 path,
-                format!("OfficeQA score slot `{key}` has no materialized role"),
+                format!("score slot `{key}` has no materialized role"),
             )
         })?;
     if Some(&role.source_id_fingerprint) != slot.role_source_id_fingerprint.as_ref() {
         return Err(score_result_manifest_error(
             path,
-            format!("OfficeQA score slot `{key}` role fingerprint changed during scoring"),
+            format!("score slot `{key}` role fingerprint changed during scoring"),
         ));
     }
     Ok(role.source_ids.clone())
@@ -3513,6 +3903,15 @@ fn write_score_evidence_artifact(
     rows: &[ScoreEvidenceRow],
 ) -> Result<ScoreEvidenceArtifact, ManifestError> {
     let evidence_id = officeqa_score_evidence_id_from_key(key);
+    write_score_evidence_artifact_with_id(root, sidecar_path, &evidence_id, rows)
+}
+
+fn write_score_evidence_artifact_with_id(
+    root: &Path,
+    sidecar_path: &Path,
+    evidence_id: &str,
+    rows: &[ScoreEvidenceRow],
+) -> Result<ScoreEvidenceArtifact, ManifestError> {
     let relative_path = format!("tmp/replication/evoskill/score-evidence/{evidence_id}.jsonl");
     let path = root.join(&relative_path);
     if let Some(parent) = path.parent() {
@@ -3573,6 +3972,13 @@ fn officeqa_prediction_slot_key(row: &OfficeQaPredictionRow) -> String {
     )
 }
 
+fn sealqa_judge_score_slot_key(row: &SealQaJudgeScoreRow) -> String {
+    format!(
+        "{}|{}|{}|{}",
+        row.dataset_id, row.split_id, row.split_role, row.candidate_role
+    )
+}
+
 fn officeqa_score_evidence_id(slot: &FinalScoreSlot) -> String {
     officeqa_score_evidence_id_from_key(&final_score_slot_key(slot))
 }
@@ -3580,8 +3986,46 @@ fn officeqa_score_evidence_id(slot: &FinalScoreSlot) -> String {
 fn officeqa_score_evidence_id_from_key(key: &str) -> String {
     format!(
         "officeqa-rust-scorer-replay-{}",
-        key.replace('|', "-").replace('_', "-")
+        key.replace(['|', '_'], "-")
     )
+}
+
+fn sealqa_judge_score_evidence_id(
+    path: &Path,
+    slot: &FinalScoreSlot,
+    approval_id: &str,
+) -> Result<String, ManifestError> {
+    let approval = score_evidence_id_component(approval_id);
+    if approval.is_empty() {
+        return Err(ManifestError::SealQaJudgeScore {
+            path: path.to_owned(),
+            message: "approval id must contain at least one ASCII alphanumeric character"
+                .to_owned(),
+        });
+    }
+    Ok(format!(
+        "sealqa-external-judge-run-{approval}-{}",
+        final_score_slot_key(slot).replace(['|', '_'], "-")
+    ))
+}
+
+fn score_evidence_id_component(value: &str) -> String {
+    let mut component = String::new();
+    let mut previous_was_dash = false;
+    for byte in value.bytes() {
+        let next = if byte.is_ascii_alphanumeric() {
+            Some(byte.to_ascii_lowercase() as char)
+        } else if previous_was_dash {
+            None
+        } else {
+            Some('-')
+        };
+        if let Some(ch) = next {
+            previous_was_dash = ch == '-';
+            component.push(ch);
+        }
+    }
+    component.trim_matches('-').to_owned()
 }
 
 fn read_score_result_manifest(
@@ -4100,6 +4544,24 @@ fn validate_judge_template_fingerprint_evidence_rows(
         }
     }
     Ok(())
+}
+
+fn sealqa_judge_template_fingerprint_from_scorer(
+    sidecar_path: &Path,
+    scorer: &ScorerManifest,
+    dataset_id: &str,
+) -> Result<String, ManifestError> {
+    scorer
+        .judge_templates
+        .iter()
+        .find(|template| template.dataset_id == dataset_id)
+        .map(|template| template.fingerprint.clone())
+        .ok_or_else(|| {
+            score_result_manifest_error(
+                sidecar_path,
+                format!("SealQA judge writer has no pinned judge template for `{dataset_id}`"),
+            )
+        })
 }
 
 fn read_score_evidence_rows(

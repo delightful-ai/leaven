@@ -234,8 +234,15 @@ requires strict rows keyed by dataset/split role/candidate/source id, refuses
 blocked score slots, recomputes row scores with the EvoSkill scorer, writes
 score evidence JSONL without ground-truth/reference fields, and writes the
 strict score result manifest consumed by the final report. This does not run an
-agent and does not make substitute split membership paper-exact. The generic
-score sidecar importer also refuses source/split blocker-resolution claims, so
+agent and does not make substitute split membership paper-exact. Leaven also
+has a no-spend Rust writer for already-approved SealQA external judge rows:
+`just evoskill-paper-score-sealqa <judged_rows.jsonl> <approval_id>` requires
+strict rows keyed by dataset/split role/candidate/source id with prediction,
+score, and the row-level judge-template fingerprint used by the run. It refuses
+missing approval ids, stale judge-template fingerprints, source/split blocked
+slots, duplicate or missing source ids, and out-of-range scores before writing
+checked score evidence and the strict score result manifest. The generic score
+sidecar importer also refuses source/split blocker-resolution claims, so
 hand-authored score rows cannot clear missing OfficeQA category/exact split
 artifacts or SealQA split membership; only approved SealQA external-judge
 evidence can resolve the `sealqa_judge_scored_run` blocker.

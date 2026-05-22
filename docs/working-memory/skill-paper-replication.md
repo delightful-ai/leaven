@@ -1038,3 +1038,15 @@ gate. Complete approved `external_judge_run` evidence for every SealQA score
 slot clears that blocker and can prove the scorer gate, while the separate
 `live_run_spend_approval` gate remains blocked until an approved bounded live
 agent run exists.
+
+2026-05-22 update: SealQA approved judge outputs now have a Rust operator
+writer. `just evoskill-paper-score-sealqa <judged_rows.jsonl> <approval_id>`
+consumes strict SealQA JSONL rows keyed by dataset/split role/candidate/source
+id with prediction, score, and the row-level judge-template fingerprint used by
+the run. The writer requires a nonempty approval id, current pinned
+judge-template fingerprints, exact role coverage, finite `[0, 1]` scores, and
+slots whose only blocker is `sealqa_judge_scored_run`; it writes checked score
+evidence JSONL and the schema-v5 score result manifest through the normal
+importer. This is an import lane only: it does not run or approve a judge,
+resolve source/split blockers, or make partial SealQA rows prove the whole
+scorer gate.
