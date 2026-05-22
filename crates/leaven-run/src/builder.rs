@@ -1,26 +1,22 @@
 //! Optimize builder lowering into the engine.
 
 use std::{
-    collections::{BTreeMap, BTreeSet},
-    future::Future,
-    marker::PhantomData,
-    num::NonZeroUsize,
-    path::PathBuf,
+    collections::BTreeMap, future::Future, marker::PhantomData, num::NonZeroUsize, path::PathBuf,
     sync::Arc,
 };
 
 use futures::{FutureExt, future::BoxFuture};
 use leaven_core::{Artifact, OptimizationProblem, PartitionId};
 use leaven_engine::{CachePolicy, Callback, Optimizer, TrustPolicy};
-use leaven_eval::{Case, Dataset, DatasetSplits, NoTarget, SplitPolicy, SplitRole};
+use leaven_eval::{Case, Dataset, DatasetSplits, NoTarget};
 use leaven_evidence::CaseAssessmentEvidence;
-use leaven_kernel::{
-    Budget, BudgetSnapshot, CandidateId, CaseId, CheckpointId, Fingerprint, RunId,
-};
+use leaven_kernel::{Budget, BudgetSnapshot, CandidateId, CheckpointId, Fingerprint, RunId};
 use serde::{Serialize, de::DeserializeOwned};
 
 use self::{
+    cases::{build_case_plan, case_set_cases, cases_from_inputs},
     final_eval::{final_evaluation_inputs, run_final_evaluations},
+    order::BuilderOrder,
     resume::restore_optimizer_checkpoint,
 };
 use crate::{
@@ -28,8 +24,8 @@ use crate::{
     ScoreContext, ScoreError,
     compatibility::{
         DatasetCompatibility, RunCompatibilityManifest, RuntimeFingerprint, RuntimeKind,
-        ScoringEvaluatorIdentity, case_content_fingerprint, case_set_version,
-        compare_stored_manifest, store_fresh_manifest,
+        ScoringEvaluatorIdentity, case_content_fingerprint, compare_stored_manifest,
+        store_fresh_manifest,
     },
     evaluator::{ScoringEvaluator, default_parallelism},
     result::Optimized,
@@ -51,14 +47,10 @@ type Scorer<A, I, T, Out> = Arc<
         + Sync,
 >;
 
+mod cases;
 mod final_eval;
+mod order;
 mod resume;
-
-struct CasePlan<I, T> {
-    dataset: Dataset<Case<I, T>>,
-    splits: DatasetSplits,
-    case_set: leaven_engine::CaseSet<Case<I, T>>,
-}
 
 /// Problem type used by the public run builder.
 pub struct RunProblem<A, I, T = NoTarget> {
@@ -100,6 +92,7 @@ where
         callbacks: Vec::new(),
         store: StoreConfig::Source(StoreSource::DefaultDurable),
         run_id: RunId::new(),
+        order: BuilderOrder::default(),
     }
 }
 
@@ -126,6 +119,7 @@ where
     callbacks: Vec<Box<dyn Callback<RunProblem<A, I, T>>>>,
     store: StoreConfig<RunProblem<A, I, T>>,
     run_id: RunId,
+    order: BuilderOrder,
 }
 
 impl<A> OptimizeBuilder<A, (), NoTarget, (), ()>
@@ -156,6 +150,7 @@ where
             callbacks: Vec::new(),
             store: StoreConfig::Source(self.store.into_source()),
             run_id: self.run_id,
+            order: self.order,
         }
     }
 
@@ -199,7 +194,7 @@ where
         Fut::Output: IntoRunResult<NextOut>,
         NextOut: Clone + Send + Sync + 'static,
     {
-        assert!(self.scorer.is_none(), "runner after score");
+        let order = self.order.runner_after_score(self.scorer.is_some());
         OptimizeBuilder {
             seed: self.seed,
             train: self.train,
@@ -220,6 +215,7 @@ where
             callbacks: self.callbacks,
             store: self.store,
             run_id: self.run_id,
+            order,
         }
     }
 
@@ -280,6 +276,7 @@ where
             callbacks: self.callbacks,
             store: self.store,
             run_id: self.run_id,
+            order: self.order,
         }
     }
 
@@ -385,6 +382,7 @@ where
 {
     /// Runs the optimization.
     pub async fn run(mut self) -> Result<Optimized<A>, OptimizeError> {
+        self.order.check()?;
         let scorer = self.scorer.take().ok_or(OptimizeError::MissingScore)?;
         let budget = self.budget.take().ok_or(OptimizeError::MissingBudget)?;
         let metric_call_limit = budget.metric_calls;
@@ -910,127 +908,6 @@ fn ephemeral_runtime_fingerprint(runtime: RuntimeKind) -> Fingerprint {
     fingerprint.update(b"leaven-run.ephemeral-runtime.v1");
     fingerprint.update(runtime.as_str().as_bytes());
     fingerprint.finish()
-}
-
-fn cases_from_inputs<I>(start: usize, inputs: Vec<I>) -> Vec<Case<I, NoTarget>> {
-    inputs
-        .into_iter()
-        .enumerate()
-        .map(|(offset, input)| Case::input(CaseId::from_index(start + offset), input))
-        .collect()
-}
-
-fn build_case_plan<I, T>(
-    train: &[Case<I, T>],
-    validation: &[Case<I, T>],
-    test: &[Case<I, T>],
-    case_content: Fingerprint,
-) -> Result<CasePlan<I, T>, OptimizeError>
-where
-    I: Clone,
-    T: Clone,
-{
-    let all_cases = all_cases(train, validation, test);
-    let dataset = Dataset::from_cases(all_cases.clone())?;
-    let splits = dataset_splits(train, validation, test, case_content);
-    let case_set = case_set(all_cases, train.len(), validation.len(), test.len());
-    Ok(CasePlan {
-        dataset,
-        splits,
-        case_set,
-    })
-}
-
-fn all_cases<I: Clone, T: Clone>(
-    train: &[Case<I, T>],
-    validation: &[Case<I, T>],
-    test: &[Case<I, T>],
-) -> Vec<Case<I, T>> {
-    train
-        .iter()
-        .chain(validation)
-        .chain(test)
-        .cloned()
-        .collect()
-}
-
-fn case_set_cases<I: Clone, T: Clone>(
-    train: &[Case<I, T>],
-    validation: &[Case<I, T>],
-    test: &[Case<I, T>],
-) -> Vec<Case<I, T>> {
-    all_cases(train, validation, test)
-}
-
-fn case_set<I: Clone, T: Clone>(
-    cases: Vec<Case<I, T>>,
-    train: usize,
-    validation: usize,
-    test: usize,
-) -> leaven_engine::CaseSet<Case<I, T>> {
-    let train_ids = cases
-        .iter()
-        .take(train)
-        .map(|case| case.id)
-        .collect::<Vec<_>>();
-    let validation_ids = cases
-        .iter()
-        .skip(train)
-        .take(validation)
-        .map(|case| case.id)
-        .collect::<Vec<_>>();
-    let test_ids = cases
-        .iter()
-        .skip(train + validation)
-        .take(test)
-        .map(|case| case.id)
-        .collect::<Vec<_>>();
-    let entries = cases.into_iter().map(|case| (case.id, case));
-    leaven_engine::CaseSet::from_entries(entries)
-        .with_partition(PartitionId::from("TRAIN"), train_ids)
-        .with_partition(PartitionId::from("VALIDATION"), validation_ids)
-        .with_partition(PartitionId::from("TEST"), test_ids)
-}
-
-fn dataset_splits<I, T>(
-    train: &[Case<I, T>],
-    validation: &[Case<I, T>],
-    test: &[Case<I, T>],
-    case_content: Fingerprint,
-) -> DatasetSplits {
-    let known = train
-        .iter()
-        .chain(validation)
-        .chain(test)
-        .map(|case| case.id)
-        .collect::<BTreeSet<_>>();
-    let roles = BTreeMap::from([
-        (PartitionId::from("TRAIN"), SplitRole::Train),
-        (PartitionId::from("VALIDATION"), SplitRole::Validation),
-        (PartitionId::from("TEST"), SplitRole::Test),
-    ]);
-    let cases = BTreeMap::from([
-        (
-            PartitionId::from("TRAIN"),
-            train.iter().map(|case| case.id).collect(),
-        ),
-        (
-            PartitionId::from("VALIDATION"),
-            validation.iter().map(|case| case.id).collect(),
-        ),
-        (
-            PartitionId::from("TEST"),
-            test.iter().map(|case| case.id).collect(),
-        ),
-    ]);
-    DatasetSplits::new(
-        case_set_version(case_content),
-        roles,
-        cases,
-        &known,
-        SplitPolicy::DisjointRequired,
-    )
-    .expect("builder constructs disjoint split ids")
 }
 
 fn stop_reason_from_events<A, I, T>(

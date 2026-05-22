@@ -17,6 +17,14 @@ pub enum OptimizeError {
     /// The caller did not install a scoring function.
     #[error("score function is required")]
     MissingScore,
+    /// Builder methods were called in an order that would discard typed state.
+    #[error("invalid builder call order: `{operation}` cannot be called after `{after}`")]
+    InvalidBuilderOrder {
+        /// Operation that was called too late.
+        operation: &'static str,
+        /// Earlier operation that fixed incompatible builder state.
+        after: &'static str,
+    },
     /// Validation or test cases were supplied without train cases.
     #[error("validation/test cases require at least one train case")]
     HeldOutWithoutTrain,

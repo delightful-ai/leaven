@@ -774,16 +774,30 @@ fn run_builder_preserves_predeclared_scorer_fingerprint_across_runner_transition
 }
 
 #[test]
-#[should_panic(expected = "runner after score")]
 fn run_builder_refuses_runner_after_score_instead_of_silently_dropping_scorer() {
     // `.score` first against the default `Out = ()`; `.runner` then attempts
     // to switch `Out`, which would silently drop the typed scorer.
-    let _builder = optimize(TextArtifact(40))
-        .train_inputs(vec![TextCase(2)])
-        .score(|_ctx: ScoreContext<TextArtifact, TextCase>| async move {
-            Ok(Score::new(0.0, "ok").with_text_output(""))
-        })
-        .runner(|artifact, case| async move { text_runner(&artifact, &case) });
+    let error = block_on(
+        optimize(TextArtifact(40))
+            .train_inputs(vec![TextCase(2)])
+            .score(|_ctx: ScoreContext<TextArtifact, TextCase>| async move {
+                Ok(Score::new(0.0, "ok").with_text_output(""))
+            })
+            .runner(|artifact, case| async move { text_runner(&artifact, &case) })
+            .using(SeedBest::default())
+            .budget(Budget::metric_calls(1))
+            .ephemeral()
+            .run(),
+    )
+    .unwrap_err();
+
+    assert!(matches!(
+        error,
+        OptimizeError::InvalidBuilderOrder {
+            operation: "runner",
+            after: "score"
+        }
+    ));
 }
 
 #[test]

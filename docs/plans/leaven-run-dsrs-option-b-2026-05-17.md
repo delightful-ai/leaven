@@ -21,8 +21,9 @@
 > Default `Out` landed as `()` (not `String`) per
 > `docs/specs/case_visibility_and_target_isolation.md` §6. The String default
 > back-compat shim and the `TypeId`-based auto-render for `Out = String` were
-> removed. The "runner after score" type-changing ordering is a runtime panic
-> (`assert!`); a future type-state pass could promote it to a compile error.
+> removed. The "runner after score" type-changing ordering is an explicit
+> `OptimizeError::InvalidBuilderOrder` refusal before runtime work; a future
+> type-state pass could promote it to a compile error.
 >
 > **DSRs reality check.** As of 2026-05-20 DSRs went Option A
 > (`DSRs/crates/dsrs-leaven/src/evaluator.rs` implements
