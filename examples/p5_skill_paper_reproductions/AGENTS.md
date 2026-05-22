@@ -84,5 +84,10 @@ belong in their owning crates.
   does not prove live provider behavior, validation-set scores, or paper-close.
 - `just evoskill-paper-manifest` writes the current no-spend local manifest to
   `target/evoskill-paper-close/replica-manifest.json`.
+- `just evoskill-paper-pin-local-sources` writes
+  `tmp/replication/evoskill/source_pin_manifest.json` from the current local
+  source checkout identities and then rewrites the manifest. This chooses the
+  local-checkout source denominator only; it is not paper-release or
+  remote-current evidence.
 - `just evoskill-paper-final-report` writes both the manifest and current
   no-spend final report truth surface under `target/evoskill-paper-close/`.
