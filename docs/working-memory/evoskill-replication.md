@@ -615,15 +615,32 @@ trip that restores frontier, selector, sampler, candidates, and feedback state
 before continuing. This closes the no-spend full-loop mechanics item; it is not
 live OfficeQA/SealQA score evidence and does not resolve source/split blockers.
 
+## No-Spend Replica Manifest Source Universe
+
+Date: 2026-05-22.
+Provider/model spend: none.
+Cloud/GPU spend: none.
+
+The P5 replica manifest now declares a tested `source_universe` in schema v3.
+Each dataset entry links the paper row count to the source artifact ids,
+available source revision ids, materialized row count, source-row fingerprint,
+split ids, split exactness labels, and blockers. OfficeQA maps to the local
+OfficeQA checkout plus `officeqa_full_csv`; SealQA maps to the pinned parquet
+artifact with row-order substitute split ids; BrowseComp is present as an
+explicit missing transfer-sample artifact/blocker. This is manifest truth only:
+it does not resolve the source pin, exact OfficeQA/SealQA split membership,
+SealQA judge, BrowseComp sample, or live score blockers.
+
 ## No-Spend Final Report Truth Surface
 
 The reproduction package now emits a no-spend final report truth surface through
 `build_evoskill_final_report` and `just evoskill-paper-final-report`. The report
 embeds the current manifest, runs the no-spend OfficeQA substitute mechanics
-loop when the OfficeQA CSV is present, records the scorer fingerprint, emits
-baseline/optimized score slots for train, validation, and held-out test roles,
-records zero LLM/metric/token spend, copies blocker/errors, and records ablation
-statuses for skill-only, prompt-only, skill-merge, and BrowseComp transfer.
+loop when the OfficeQA CSV is present, records manifest and scorer fingerprints,
+emits baseline/optimized score slots for train, validation, and held-out test
+roles, records zero LLM/metric/token spend, copies blocker/errors, and records
+ablation statuses for skill-only, prompt-only, skill-merge, and BrowseComp
+transfer.
 
 This deliberately does not fill blocked metrics with zeroes or claim paper-close:
 OfficeQA score slots stay `blocked` until exact membership or an accepted

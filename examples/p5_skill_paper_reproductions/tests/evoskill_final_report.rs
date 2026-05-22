@@ -42,6 +42,11 @@ fn final_report_exposes_score_slots_costs_errors_and_gaps_without_fake_metrics()
         report.manifest.scorer.id,
         report.scorer_fingerprint.scorer_id
     );
+    assert_eq!(
+        report.manifest_fingerprint.schema_version,
+        report.manifest.schema_version
+    );
+    assert_eq!(report.manifest_fingerprint.fingerprint.len(), 64);
 
     let train_12_slots = report
         .score_slots

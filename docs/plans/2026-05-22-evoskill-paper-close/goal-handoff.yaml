@@ -54,7 +54,7 @@ misleading_proxy_proofs:
 
 acceptance_path:
   - id: replica_manifest
-    status: in_progress
+    status: proven
     requirement: >
       Durable manifest names source revisions, corpus fingerprints, model/provider
       pins, scorer version, split mode, frontier config, epoch schedule, and
@@ -63,6 +63,7 @@ acceptance_path:
       - examples/p5_skill_paper_reproductions/src/evoskill.rs
       - examples/p5_skill_paper_reproductions/tests/evoskill_manifest.rs
       - target/evoskill-paper-close/replica-manifest.json after running `just evoskill-paper-manifest`
+      - "Manifest schema v3 includes a tested source_universe mapping from dataset ids to source artifacts, source revisions when available, paper rows, materialized rows, source-row fingerprints, split ids, split exactness, and blockers. This proves the declared no-spend source universe only; unresolved paper source pin, exact split membership, and BrowseComp sample blockers remain explicit."
   - id: source_and_split_materialization
     status: proven
     requirement: >
@@ -113,7 +114,7 @@ acceptance_path:
       - examples/p5_skill_paper_reproductions/tests/evoskill_final_report.rs
       - "`cargo test -p p5_skill_paper_reproductions --test evoskill_final_report`"
       - "`just evoskill-paper-final-report` writes target/evoskill-paper-close/final-report.json"
-      - "Current report is a no-spend truth surface: it contains baseline/optimized train/validation/held-out score slots, exactness gaps, source/split/scorer fingerprints, zero costs, blockers, and ablation statuses, but blocked metrics remain missing rather than fake scores. It is still not live provider, validation-set score, or paper-close evidence."
+      - "Current report is a no-spend truth surface: it contains a manifest fingerprint, baseline/optimized train/validation/held-out score slots, exactness gaps, source/split/scorer fingerprints, zero costs, blockers, and ablation statuses, but blocked metrics remain missing rather than fake scores. It is still not live provider, validation-set score, or paper-close evidence."
 
 explicit_non_goals:
   - do not claim paper-exact when only paper-close is proven
