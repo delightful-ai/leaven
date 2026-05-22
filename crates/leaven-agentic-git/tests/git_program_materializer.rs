@@ -14,7 +14,7 @@ use leaven_artifact_git::{
     GitArtifactIdentityMode, GitObjectId, GitPath, GitProgramArtifact, GitProgramChange,
     GitProgramLayout, GitRepoArtifact, GitRepoChange, GitRevision, RepoKey, RepoRef,
 };
-use leaven_core::{Evidence, OptimizationProblem};
+use leaven_core::{Artifact, Evidence, OptimizationProblem};
 use leaven_engine::{BudgetLedger, Materializer, RunContext, RunGraph};
 use leaven_kernel::{Budget, RunId};
 use leaven_workspace::{
@@ -456,6 +456,77 @@ fn readback_returns_atomic_multi_repo_change_when_multiple_repos_move() {
 
         drop(view);
         workspace.cleanup().await.unwrap();
+    });
+}
+
+#[test]
+fn readback_children_rematerialize_every_multi_repo_intermediate() {
+    block_on(async {
+        let fixture = GitFixture::new();
+        let mut artifact = fixture.parent_artifact();
+
+        for step in 1..=3 {
+            let mut workspace = materialized_workspace(&fixture, &artifact).await;
+            let mut view = workspace.view();
+            let program_body = format!("program intermediate {step}\n");
+            let bench_body = format!("bench intermediate {step}\n");
+            view.write_file(
+                &workspace_path("repos/program/program.txt"),
+                program_body.as_bytes(),
+            )
+            .unwrap();
+            view.write_file(
+                &workspace_path("repos/bench/bench.txt"),
+                bench_body.as_bytes(),
+            )
+            .unwrap();
+
+            let change = GitProgramReadback::new(fixture.stores())
+                .read_back_change(&artifact, &mut view)
+                .unwrap()
+                .expect("dirty multi-repo intermediate should produce a change");
+            let GitProgramChange::AdvanceRepos { repo_changes } = &change else {
+                panic!("multi-repo intermediate should be imported atomically");
+            };
+            assert_eq!(repo_changes.len(), 2);
+            assert!(matches!(
+                repo_changes.get(&repo_key("program")),
+                Some(GitRepoChange::AdvanceTo {
+                    expected_parent,
+                    child
+                }) if expected_parent == artifact.repo(&repo_key("program")).unwrap().revision()
+                    && child != expected_parent
+            ));
+            assert!(matches!(
+                repo_changes.get(&repo_key("bench")),
+                Some(GitRepoChange::AdvanceTo {
+                    expected_parent,
+                    child
+                }) if expected_parent == artifact.repo(&repo_key("bench")).unwrap().revision()
+                    && child != expected_parent
+            ));
+
+            artifact = artifact.apply_change(&change).unwrap();
+            drop(view);
+            workspace.cleanup().await.unwrap();
+
+            let mut restored = materialized_workspace(&fixture, &artifact).await;
+            let restored_view = restored.view();
+            assert_eq!(
+                restored_view
+                    .read_file(&workspace_path("repos/program/program.txt"))
+                    .unwrap(),
+                program_body.as_bytes()
+            );
+            assert_eq!(
+                restored_view
+                    .read_file(&workspace_path("repos/bench/bench.txt"))
+                    .unwrap(),
+                bench_body.as_bytes()
+            );
+            drop(restored_view);
+            restored.cleanup().await.unwrap();
+        }
     });
 }
 
