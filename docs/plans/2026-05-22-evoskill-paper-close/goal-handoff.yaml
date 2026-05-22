@@ -142,6 +142,15 @@ explicit_non_goals:
   - do not spend provider credits or touch destructive source/dataset state without approval
 
 verification_notes:
+  - at: "2026-05-22T21:49:29Z"
+    command: "cargo test -p p5_skill_paper_reproductions paper_close_audit -- --nocapture && just evoskill-paper-closeout-audit"
+    status: audit_unit_tests_passed_closeout_audit_expected_failure
+    evidence:
+      - "the audit guard has focused unit coverage: paper_close_audit_names_approval_blocked_gates_without_fixture_build rejects paper-close candidates with approval-blocked paper_scorer/live_small_run gates, and paper_close_audit_accepts_only_fully_proven_gates accepts the fully proven case"
+      - "just evoskill-paper-closeout-audit regenerated target/evoskill-paper-close/replica-manifest.json and target/evoskill-paper-close/final-report.json, then exited 1 as expected"
+      - "audit refusal message reported exactness=paper_close_candidate, score_result_manifest=absent, paper_scorer=approval_blocked with sealqa_judge_scored_run plus live_run_spend_approval, and live_small_run=approval_blocked with live_run_spend_approval"
+      - "the audit guard avoids adding another multi-second fixture build to the final-report integration hot path; the operator CLI path is verified by the explicit just recipe"
+    caveat: "The closeout audit is a completion guard, not a proof of paper-close results; it must keep failing until approved provider execution, complete SealQA judged scoring, and imported real result evidence clear the approval blockers."
   - at: "2026-05-22T21:39:16Z"
     command: "just evoskill-paper-no-spend-packet"
     status: passed_no_spend_operator_packet
@@ -159,12 +168,12 @@ verification_notes:
       - "runner-input JSONL key-path audit found only source_id and input fields; answer, reference, target, score, prediction, label, and gold key paths were absent"
       - "live_run_request_manifest.json schema 1 has SHA-256 0cc8a75a9665c4f03c7886f6e355fe591bbf9898d9788f93888d7dc21ae3d2d8, 16876 bytes, max_generation_calls 1698, provider_calls_allowed false, judge_calls_allowed false, credential_probe_status not_probed_no_spend_default, spend_approval_status not_approved, and blocker live_run_spend_approval"
     caveat: "This proves answer-free runner input and bounded approval-packet materialization only; it does not run a provider, approve spend, call a judge, import predictions, import judged rows, or prove paper-close results."
-  - at: "2026-05-22T21:50:00Z"
+  - at: "2026-05-22T22:13:05Z"
     command: "ulimit -n 8192 && CARGO_BUILD_JOBS=8 just check"
     status: passed
     evidence:
       - "format, production line-count lint, workspace clippy, SLA suite, doctests, coverage gate, and git trust-lane coverage smokes completed successfully"
-      - "SLA suite inside just check: 889 nextest tests passed, doctests passed, script runtime 28.84s under the 30.00s floor"
+      - "SLA suite inside just check: 891 nextest tests passed, doctests passed, script runtime 28.62s under the 30.00s floor"
       - "coverage gate: line coverage 89.03% (21755/24436) against 89.01% floor; branch coverage 88.76% (1255/1414) against 87.31% floor"
     caveat: "`just check` is repo-health evidence only; it is explicitly rejected above as paper-close completion evidence."
   - at: "2026-05-22T21:35:00Z"

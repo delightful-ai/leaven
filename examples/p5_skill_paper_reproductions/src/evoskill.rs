@@ -1076,6 +1076,8 @@ pub enum ManifestError {
     },
     #[error("invalid live run request manifest `{path}`: {message}")]
     LiveRunRequest { path: PathBuf, message: String },
+    #[error("{message}")]
+    PaperCloseAudit { message: String },
     #[error("failed to parse runner output rows `{path}` line {line}: {source}")]
     RunnerOutputJson {
         path: PathBuf,
@@ -1768,6 +1770,69 @@ pub fn build_evoskill_final_report(
         ablations,
         proxy_rejection_gates,
     })
+}
+
+pub fn audit_evoskill_paper_close_report(
+    report: &EvoSkillFinalReport,
+) -> Result<(), ManifestError> {
+    audit_evoskill_paper_close_fields(
+        &report.exactness,
+        report.score_result_manifest.is_some(),
+        &report.paper_close_gates,
+    )
+}
+
+fn audit_evoskill_paper_close_fields(
+    exactness: &ExactnessClass,
+    has_score_result_manifest: bool,
+    paper_close_gates: &[PaperCloseGateReport],
+) -> Result<(), ManifestError> {
+    let unproven_gates = paper_close_gates
+        .iter()
+        .filter(|gate| gate.status != PaperCloseGateStatus::Proven)
+        .map(|gate| {
+            format!(
+                "{}={} blockers=[{}]",
+                gate.id,
+                paper_close_gate_status_name(&gate.status),
+                gate.blocker_ids.join(",")
+            )
+        })
+        .collect::<Vec<_>>();
+    if unproven_gates.is_empty() {
+        return Ok(());
+    }
+
+    let score_manifest_status = if has_score_result_manifest {
+        "present"
+    } else {
+        "absent"
+    };
+    Err(ManifestError::PaperCloseAudit {
+        message: format!(
+            "paper-close audit failed: exactness={} score_result_manifest={} unproven_gates={}",
+            exactness_class_name(exactness),
+            score_manifest_status,
+            unproven_gates.join("; ")
+        ),
+    })
+}
+
+fn exactness_class_name(exactness: &ExactnessClass) -> &'static str {
+    match exactness {
+        ExactnessClass::BlockedBeforePaperClose => "blocked_before_paper_close",
+        ExactnessClass::PaperCloseCandidate => "paper_close_candidate",
+        ExactnessClass::PaperClose => "paper_close",
+        ExactnessClass::PaperExact => "paper_exact",
+    }
+}
+
+fn paper_close_gate_status_name(status: &PaperCloseGateStatus) -> &'static str {
+    match status {
+        PaperCloseGateStatus::Proven => "proven",
+        PaperCloseGateStatus::SourceBlocked => "source_blocked",
+        PaperCloseGateStatus::ApprovalBlocked => "approval_blocked",
+    }
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -9099,6 +9164,59 @@ mod tests {
         assert!(message.contains("judge template fingerprint mismatch"));
         assert!(message.contains("stale-template-fingerprint"));
         assert!(message.contains("sealqa-template-fingerprint"));
+    }
+
+    #[test]
+    fn paper_close_audit_names_approval_blocked_gates_without_fixture_build() {
+        let gates = vec![
+            PaperCloseGateReport {
+                id: "replica_source_universe".to_owned(),
+                status: PaperCloseGateStatus::Proven,
+                blocker_ids: Vec::new(),
+                note: "unit proven gate".to_owned(),
+            },
+            PaperCloseGateReport {
+                id: "paper_scorer".to_owned(),
+                status: PaperCloseGateStatus::ApprovalBlocked,
+                blocker_ids: vec![
+                    "sealqa_judge_scored_run".to_owned(),
+                    "live_run_spend_approval".to_owned(),
+                ],
+                note: "unit approval blocker".to_owned(),
+            },
+            PaperCloseGateReport {
+                id: "live_small_run".to_owned(),
+                status: PaperCloseGateStatus::ApprovalBlocked,
+                blocker_ids: vec!["live_run_spend_approval".to_owned()],
+                note: "unit approval blocker".to_owned(),
+            },
+        ];
+
+        let error =
+            audit_evoskill_paper_close_fields(&ExactnessClass::PaperCloseCandidate, false, &gates)
+                .unwrap_err();
+
+        let message = error.to_string();
+        assert!(message.contains("paper-close audit failed"));
+        assert!(message.contains("exactness=paper_close_candidate"));
+        assert!(message.contains("score_result_manifest=absent"));
+        assert!(message.contains("paper_scorer=approval_blocked"));
+        assert!(message.contains("sealqa_judge_scored_run"));
+        assert!(message.contains("live_small_run=approval_blocked"));
+        assert!(message.contains("live_run_spend_approval"));
+        assert!(!message.contains("replica_source_universe"));
+    }
+
+    #[test]
+    fn paper_close_audit_accepts_only_fully_proven_gates() {
+        let gates = vec![PaperCloseGateReport {
+            id: "replica_source_universe".to_owned(),
+            status: PaperCloseGateStatus::Proven,
+            blocker_ids: Vec::new(),
+            note: "unit proven gate".to_owned(),
+        }];
+
+        audit_evoskill_paper_close_fields(&ExactnessClass::PaperClose, true, &gates).unwrap();
     }
 
     fn score_manifest_file(
