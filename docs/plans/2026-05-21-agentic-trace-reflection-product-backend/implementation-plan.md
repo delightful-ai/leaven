@@ -60,7 +60,7 @@ workspace backend; it is the GEPA/EvoSkill-shaped product loop over
    `PopulationUpdated` events are present. This remains a product-backend
    proof, not OfficeQA/SealQA parity.
 
-7. **Docs and verification** - in progress 2026-05-22
+7. **Docs and verification** - done 2026-05-22
    Update `docs/working-memory/skill-paper-replication.md`, run focused tests,
    run topology if crate inventory changed, run live Firkin only if backend
    code changed, then run `just check`.
@@ -75,6 +75,18 @@ materializer + renderer + workspace edit + parser + `RunContext::propose` +
 `apply_batch` + frontier event reporting. Keep the wrapper code in place; do
 not count the LLVM-only wrapper test as the ordinary completion gate until the
 toolchain ICE is gone or the generic future shape is smaller.
+
+## Verification Evidence
+
+- `cargo test -p leaven-gepa-agentic-git` passed with 4 default tests.
+- `cargo clippy -p leaven-gepa-agentic-git --all-targets -- -D warnings`
+  passed.
+- LLVM coverage profile ran the full wrapper test gated by `cfg(coverage)`.
+- `python3 scripts/coverage-gate.py --line-floor 89.01 --branch-floor 87.31`
+  passed with line coverage 89.12% and branch coverage 87.32%.
+- `PYTHONDONTWRITEBYTECODE=1 just check` passed warm after the cold run
+  rebuilt/listed too slowly for the outer SLA timer. The passing run included
+  fmt, line-count lint, clippy, 818 nextest tests, doctests, and coverage.
 
 ## Stop Conditions
 
