@@ -107,7 +107,7 @@ acceptance_path:
       - examples/p5_skill_paper_reproductions/src/evoskill.rs
       - examples/p5_skill_paper_reproductions/tests/evoskill_final_report.rs
       - "`cargo test -p p5_skill_paper_reproductions --test evoskill_final_report`"
-      - "Final report schema v4 carries a live_run_gate with status blocked_no_spend_approval, candidate runtime role/model, credential_probe_status not_probed_no_spend_default, spend_approval_status not_approved, and the live_run_spend_approval blocker. This is an explicit approval gate only; no provider call, credential probe, or live score evidence has happened."
+      - "Final report schema v5 carries a live_run_gate with status blocked_no_spend_approval, candidate runtime role/model, credential_probe_status not_probed_no_spend_default, spend_approval_status not_approved, and the live_run_spend_approval blocker. This is an explicit approval gate only; no provider call, credential probe, or live score evidence has happened."
   - id: final_report_truth
     status: proven
     requirement: >
@@ -119,7 +119,7 @@ acceptance_path:
       - examples/p5_skill_paper_reproductions/tests/evoskill_final_report.rs
       - "`cargo test -p p5_skill_paper_reproductions --test evoskill_final_report`"
       - "`just evoskill-paper-final-report` writes target/evoskill-paper-close/final-report.json"
-      - "Final report schema v4 is a no-spend truth surface: it contains a manifest fingerprint, baseline/optimized train/validation/held-out score slots, exactness gaps, source identity/status fields, scorer and judge-template fingerprints, zero costs, blockers, ablation statuses, and an explicit live-run approval gate. Each materialized score slot carries split exactness, split fingerprint, and role-level source-id fingerprint directly, so blocked score rows are auditable without joining back through code. Blocked metrics remain missing rather than fake scores, and SealQA slots explicitly carry the judge-scored-run blocker. It is still not live provider, validation-set score, or paper-close evidence."
+      - "Final report schema v5 is a no-spend truth surface: it contains a manifest fingerprint, baseline/optimized train/validation/held-out score slots, exactness gaps, source identity/status fields, scorer and judge-template fingerprints, zero costs, blockers, ablation statuses, an explicit live-run approval gate, and typed proxy_rejection_gates. Each materialized score slot carries split exactness, split fingerprint, and role-level source-id fingerprint directly, so blocked score rows are auditable without joining back through code. Blocked metrics remain missing rather than fake scores, SealQA slots explicitly carry the judge-scored-run blocker, and P5 fixtures, Git trust benchmarks, fake-runtime loops, single-sample inspection, and just check/topology are explicitly rejected as completion evidence. It is still not live provider, validation-set score, or paper-close evidence."
 
 explicit_non_goals:
   - do not claim paper-exact when only paper-close is proven

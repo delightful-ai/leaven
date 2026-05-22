@@ -339,7 +339,21 @@ pub struct EvoSkillFinalReport {
     pub cost: FinalReportCost,
     pub errors: Vec<FinalReportError>,
     pub ablations: Vec<AblationStatusReport>,
-    pub proxy_rejections: Vec<String>,
+    pub proxy_rejection_gates: Vec<ProxyRejectionGate>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ProxyRejectionGate {
+    pub id: String,
+    pub status: ProxyRejectionStatus,
+    pub proxy: String,
+    pub why_not: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProxyRejectionStatus {
+    RejectedAsCompletionEvidence,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -662,10 +676,10 @@ pub fn build_evoskill_final_report(
     let errors = final_report_errors(&manifest);
     let ablations = final_report_ablations(&manifest);
     let exactness = manifest.exactness.clone();
-    let proxy_rejections = manifest.proxy_rejections.clone();
+    let proxy_rejection_gates = proxy_rejection_gates();
 
     Ok(EvoSkillFinalReport {
-        schema_version: 4,
+        schema_version: 5,
         exactness,
         manifest,
         loop_report,
@@ -676,7 +690,7 @@ pub fn build_evoskill_final_report(
         cost: FinalReportCost::default(),
         errors,
         ablations,
-        proxy_rejections,
+        proxy_rejection_gates,
     })
 }
 
@@ -2320,14 +2334,49 @@ fn blockers() -> Vec<ReplicationBlocker> {
 }
 
 fn proxy_rejections() -> Vec<String> {
+    proxy_rejection_gates()
+        .into_iter()
+        .map(|gate| format!("{}: {}", gate.proxy, gate.why_not))
+        .collect()
+}
+
+fn proxy_rejection_gates() -> Vec<ProxyRejectionGate> {
     vec![
-        "P5 one-iteration fixture is product wiring evidence, not paper-close completion".to_owned(),
-        "Git trust benchmark proves substrate isolation/performance, not EvoSkill paper semantics"
-            .to_owned(),
-        "Fake runtime child admission is mechanics evidence, not live paper behavior".to_owned(),
-        "Single OfficeQA/SealQA sample inspection does not prove split construction or held-out reporting".to_owned(),
-        "just check/topology proves repo health only".to_owned(),
+        proxy_rejection_gate(
+            "p5_one_iteration_fixture",
+            "P5 one-iteration fixture completes",
+            "It is product wiring evidence, not OfficeQA/SealQA paper-close replication.",
+        ),
+        proxy_rejection_gate(
+            "git_trust_benchmark",
+            "Git materialization/readback trust benchmark passes",
+            "It proves substrate isolation and performance, not EvoSkill loop semantics or paper scores.",
+        ),
+        proxy_rejection_gate(
+            "fake_runtime_loop",
+            "Fake-runtime loop admits a child",
+            "It is useful mechanics evidence, not live agent behavior, validation scoring, or paper-denominator evidence.",
+        ),
+        proxy_rejection_gate(
+            "single_sample_inspection",
+            "One OfficeQA or SealQA sample can be inspected",
+            "It does not prove train/validation/test split construction, scorer distribution, or held-out reporting.",
+        ),
+        proxy_rejection_gate(
+            "just_check_repo_health",
+            "just check and topology tests pass",
+            "They prove repo health only, not paper-close reproduction.",
+        ),
     ]
+}
+
+fn proxy_rejection_gate(id: &str, proxy: &str, why_not: &str) -> ProxyRejectionGate {
+    ProxyRejectionGate {
+        id: id.to_owned(),
+        status: ProxyRejectionStatus::RejectedAsCompletionEvidence,
+        proxy: proxy.to_owned(),
+        why_not: why_not.to_owned(),
+    }
 }
 
 fn source_revision(root: &Path, id: &str, relative_path: &str) -> SourceRevision {
