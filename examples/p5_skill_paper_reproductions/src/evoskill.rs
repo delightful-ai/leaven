@@ -1,12 +1,21 @@
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::Read;
+use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use leaven_core::CaseSetVersion;
-use leaven_eval::{SourceRow, SourceRowManifest, SplitRole, StratifiedSplitBuilder};
-use leaven_kernel::{CaseId, Fingerprint};
+use leaven_artifact_git::{
+    GitArtifactIdentityMode, GitPath, GitProgramArtifact, GitProgramChange, GitProgramLayout,
+    GitRepoArtifact, GitRevision, RepoKey, RepoRef,
+};
+use leaven_core::{Artifact, CaseSetVersion};
+use leaven_eval::{
+    CategoryRoundRobinSampler, SourceRow, SourceRowManifest, SplitRole, StratifiedSplitBuilder,
+};
+use leaven_evidence::ScalarEvidence;
+use leaven_kernel::{AssessmentId, CandidateId, CaseId, Fingerprint};
+use leaven_population::{TopKFrontier, TopKParentSelector};
 use sha2::{Digest, Sha256};
 use smol_str::SmolStr;
 
@@ -16,6 +25,10 @@ const YEAR_START: f64 = 1900.0;
 const YEAR_END: f64 = 2100.0;
 const OFFICEQA_VALIDATION_ROWS: usize = 17;
 const OFFICEQA_TRAIN_SIZES: [usize; 3] = [12, 24, 36];
+const EVOSKILL_REPLICA_FRONTIER_SIZE: usize = 3;
+const EVOSKILL_REPLICA_TRAIN_ROWS: usize = 12;
+const EVOSKILL_REPLICA_RESUME_AFTER_ITERATION: u64 = 2;
+const REPLICA_CHILD_SCORES: [f64; 4] = [0.60, 0.20, 0.10, 0.80];
 
 #[derive(Clone, Debug)]
 pub struct ManifestBuildInput {
@@ -257,6 +270,59 @@ pub struct EvoSkillFailureFeedbackRow {
     pub feedback: String,
 }
 
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct EvoSkillReplicaLoopReport {
+    pub exactness: MaterializationExactness,
+    pub frontier_capacity: u64,
+    pub iterations: Vec<EvoSkillReplicaIterationReport>,
+    pub feedback_history_rows: u64,
+    pub final_frontier_members: Vec<CandidateId>,
+    pub final_best_score: Option<f64>,
+    pub checkpoint_resume: EvoSkillReplicaCheckpointResumeReport,
+    pub proxy_rejection: String,
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct EvoSkillReplicaIterationReport {
+    pub iteration: u64,
+    pub selected_parent: CandidateId,
+    pub train_sample_rows: u64,
+    pub feedback_rows_seen: u64,
+    pub new_feedback_rows: u64,
+    pub child: CandidateId,
+    pub parent_revision: String,
+    pub change_expected_parent: String,
+    pub child_revision: String,
+    pub child_score: f64,
+    pub admitted: bool,
+    pub frontier_members_after: Vec<CandidateId>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct EvoSkillReplicaCheckpointResumeReport {
+    pub after_iteration: u64,
+    pub frontier_before: Vec<CandidateId>,
+    pub frontier_after: Vec<CandidateId>,
+    pub parent_selector_cursor_before: usize,
+    pub parent_selector_cursor_after: usize,
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+struct EvoSkillReplicaLoopState {
+    frontier: TopKFrontier,
+    parent_selector: TopKParentSelector,
+    train_sampler: CategoryRoundRobinSampler,
+    candidates: Vec<EvoSkillReplicaCandidateState>,
+    feedback_history: Vec<EvoSkillFailureFeedbackRow>,
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+struct EvoSkillReplicaCandidateState {
+    id: CandidateId,
+    program: GitProgramArtifact,
+    score: f64,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum ManifestError {
     #[error("failed to read `{path}`: {source}")]
@@ -281,6 +347,28 @@ pub enum ManifestError {
         #[source]
         source: leaven_eval::DatasetSplitsError,
     },
+    #[error("failed to build Leaven sampler: {source}")]
+    Sampler {
+        #[source]
+        source: leaven_eval::SamplerError,
+    },
+    #[error("failed to build scalar evidence: {source}")]
+    Scalar {
+        #[source]
+        source: leaven_evidence::ScalarEvidenceError,
+    },
+    #[error("failed to update Git program artifact: {source}")]
+    Git {
+        #[source]
+        source: leaven_artifact_git::GitArtifactError,
+    },
+    #[error("failed to round-trip EvoSkill replica checkpoint: {source}")]
+    Checkpoint {
+        #[source]
+        source: serde_json::Error,
+    },
+    #[error("EvoSkill replica loop is blocked: {reason}")]
+    LoopBlocked { reason: String },
 }
 
 pub fn build_evoskill_replica_manifest(
@@ -444,16 +532,7 @@ fn officeqa_difficulty_split_report(
         });
     }
 
-    let test_rows = source_rows - train_rows - OFFICEQA_VALIDATION_ROWS;
-    let splits = StratifiedSplitBuilder::new(strata.clone())
-        .map_err(|source| ManifestError::Split { source })?
-        .role_count(SplitRole::Train, train_rows)
-        .role_count(SplitRole::Validation, OFFICEQA_VALIDATION_ROWS)
-        .role_count(SplitRole::Test, test_rows)
-        .build(CaseSetVersion(format!(
-            "officeqa-difficulty-substitute-v1-rows-{source_rows}-train-{train_rows}-val-{OFFICEQA_VALIDATION_ROWS}"
-        )))
-        .map_err(|source| ManifestError::Split { source })?;
+    let splits = officeqa_difficulty_splits(source_rows, strata, train_rows)?;
 
     Ok(SplitMaterializationReport {
         id,
@@ -468,6 +547,23 @@ fn officeqa_difficulty_split_report(
             "officeqa_exact_split_membership".to_owned(),
         ],
     })
+}
+
+fn officeqa_difficulty_splits(
+    source_rows: usize,
+    strata: &BTreeMap<SmolStr, Vec<CaseId>>,
+    train_rows: usize,
+) -> Result<leaven_eval::DatasetSplits, ManifestError> {
+    let test_rows = source_rows - train_rows - OFFICEQA_VALIDATION_ROWS;
+    StratifiedSplitBuilder::new(strata.clone())
+        .map_err(|source| ManifestError::Split { source })?
+        .role_count(SplitRole::Train, train_rows)
+        .role_count(SplitRole::Validation, OFFICEQA_VALIDATION_ROWS)
+        .role_count(SplitRole::Test, test_rows)
+        .build(CaseSetVersion(format!(
+            "officeqa-difficulty-substitute-v1-rows-{source_rows}-train-{train_rows}-val-{OFFICEQA_VALIDATION_ROWS}"
+        )))
+        .map_err(|source| ManifestError::Split { source })
 }
 
 fn split_len(splits: &leaven_eval::DatasetSplits, role: &SplitRole) -> u64 {
@@ -515,6 +611,273 @@ fn sealqa_materialization_report(
             "sealqa_split_manifest".to_owned(),
         ],
     })
+}
+
+pub fn run_evoskill_replica_mechanics(
+    input: &ManifestBuildInput,
+) -> Result<EvoSkillReplicaLoopReport, ManifestError> {
+    let officeqa =
+        materialize_officeqa_source(input)?.ok_or_else(|| ManifestError::LoopBlocked {
+            reason: "OfficeQA full CSV is required for the no-spend replica loop".to_owned(),
+        })?;
+    let mut state = initial_replica_loop_state(&officeqa)?;
+    let mut iterations = Vec::new();
+    let mut checkpoint_resume = None;
+
+    for (index, child_score) in REPLICA_CHILD_SCORES.into_iter().enumerate() {
+        let iteration = u64::try_from(index + 1).expect("iteration index fits in u64");
+        let report = run_replica_iteration(&mut state, &officeqa, iteration, child_score)?;
+        iterations.push(report);
+        if iteration == EVOSKILL_REPLICA_RESUME_AFTER_ITERATION {
+            checkpoint_resume = Some(round_trip_replica_checkpoint(&mut state, iteration)?);
+        }
+    }
+
+    Ok(EvoSkillReplicaLoopReport {
+        exactness: MaterializationExactness::PaperCloseSubstitute,
+        frontier_capacity: u64::try_from(EVOSKILL_REPLICA_FRONTIER_SIZE)
+            .expect("frontier capacity fits in u64"),
+        iterations,
+        feedback_history_rows: u64::try_from(state.feedback_history.len())
+            .expect("feedback count fits in u64"),
+        final_frontier_members: state.frontier.members().to_vec(),
+        final_best_score: state.frontier.best_score(),
+        checkpoint_resume: checkpoint_resume.expect("configured loop writes one checkpoint"),
+        proxy_rejection:
+            "fake runtime loop proves mechanics only; live OfficeQA/SealQA paper scores remain unproven"
+                .to_owned(),
+    })
+}
+
+fn initial_replica_loop_state(
+    officeqa: &OfficeQaSourceMaterialization,
+) -> Result<EvoSkillReplicaLoopState, ManifestError> {
+    let seed = CandidateId::new();
+    let seed_program = seed_git_program()?;
+    let mut frontier = TopKFrontier::new(
+        NonZeroUsize::new(EVOSKILL_REPLICA_FRONTIER_SIZE)
+            .expect("replica frontier capacity is non-zero"),
+    );
+    observe_replica_frontier(&mut frontier, seed, 0.30)?;
+    Ok(EvoSkillReplicaLoopState {
+        frontier,
+        parent_selector: TopKParentSelector::round_robin(),
+        train_sampler: officeqa_train_sampler(officeqa)?,
+        candidates: vec![EvoSkillReplicaCandidateState {
+            id: seed,
+            program: seed_program,
+            score: 0.30,
+        }],
+        feedback_history: Vec::new(),
+    })
+}
+
+fn run_replica_iteration(
+    state: &mut EvoSkillReplicaLoopState,
+    officeqa: &OfficeQaSourceMaterialization,
+    iteration: u64,
+    child_score: f64,
+) -> Result<EvoSkillReplicaIterationReport, ManifestError> {
+    let selected_parent = state
+        .parent_selector
+        .select(&state.frontier)
+        .ok_or_else(|| ManifestError::LoopBlocked {
+            reason: "replica frontier is empty; no parent can be selected".to_owned(),
+        })?;
+    let parent_program = candidate_program(&state.candidates, selected_parent)?;
+    let parent_revision = program_revision(&parent_program)?;
+    let sample = state.train_sampler.next_batch();
+    let feedback_rows_seen =
+        u64::try_from(state.feedback_history.len()).expect("feedback count fits in u64");
+    let attempts = feedback_attempts(officeqa, &sample, iteration);
+    let new_feedback = extract_evoskill_failure_feedback(attempts);
+    let new_feedback_rows = u64::try_from(new_feedback.len()).expect("feedback count fits in u64");
+    state.feedback_history.extend(new_feedback);
+
+    let child = CandidateId::new();
+    let child_revision = fake_commit(100 + iteration)?;
+    let expected_parent = parent_program_revision(&parent_program)?;
+    let change = GitProgramChange::AdvanceRepo {
+        repo: repo_key("program")?,
+        expected_parent: expected_parent.clone(),
+        child: child_revision.clone(),
+    };
+    let child_program = parent_program
+        .apply_change(&change)
+        .map_err(|source| ManifestError::Git { source })?;
+    observe_replica_frontier(&mut state.frontier, child, child_score)?;
+    let admitted = state.frontier.contains(child);
+    state.candidates.push(EvoSkillReplicaCandidateState {
+        id: child,
+        program: child_program,
+        score: child_score,
+    });
+
+    Ok(EvoSkillReplicaIterationReport {
+        iteration,
+        selected_parent,
+        train_sample_rows: u64::try_from(sample.len()).expect("sample count fits in u64"),
+        feedback_rows_seen,
+        new_feedback_rows,
+        child,
+        parent_revision,
+        change_expected_parent: revision_string(&expected_parent),
+        child_revision: revision_string(&child_revision),
+        child_score,
+        admitted,
+        frontier_members_after: state.frontier.members().to_vec(),
+    })
+}
+
+fn round_trip_replica_checkpoint(
+    state: &mut EvoSkillReplicaLoopState,
+    after_iteration: u64,
+) -> Result<EvoSkillReplicaCheckpointResumeReport, ManifestError> {
+    let frontier_before = state.frontier.members().to_vec();
+    let parent_selector_cursor_before = state.parent_selector.cursor();
+    let checkpoint =
+        serde_json::to_vec(state).map_err(|source| ManifestError::Checkpoint { source })?;
+    let restored = serde_json::from_slice::<EvoSkillReplicaLoopState>(&checkpoint)
+        .map_err(|source| ManifestError::Checkpoint { source })?;
+    let frontier_after = restored.frontier.members().to_vec();
+    let parent_selector_cursor_after = restored.parent_selector.cursor();
+    *state = restored;
+    Ok(EvoSkillReplicaCheckpointResumeReport {
+        after_iteration,
+        frontier_before,
+        frontier_after,
+        parent_selector_cursor_before,
+        parent_selector_cursor_after,
+    })
+}
+
+fn officeqa_train_sampler(
+    officeqa: &OfficeQaSourceMaterialization,
+) -> Result<CategoryRoundRobinSampler, ManifestError> {
+    let strata = officeqa_difficulty_strata(&officeqa.rows);
+    let splits =
+        officeqa_difficulty_splits(officeqa.rows.len(), &strata, EVOSKILL_REPLICA_TRAIN_ROWS)?;
+    let train_cases = splits
+        .cases(&SplitRole::Train.partition_id())
+        .ok_or_else(|| ManifestError::LoopBlocked {
+            reason: "difficulty substitute did not produce a train split".to_owned(),
+        })?;
+    let mut pools = BTreeMap::<SmolStr, Vec<CaseId>>::new();
+    for case in train_cases {
+        let row = officeqa_row(officeqa, *case)?;
+        pools
+            .entry(SmolStr::new(row.input().difficulty.as_str()))
+            .or_default()
+            .push(*case);
+    }
+    CategoryRoundRobinSampler::new(
+        pools,
+        NonZeroUsize::new(2).expect("replica categories per batch is non-zero"),
+        NonZeroUsize::new(1).expect("replica samples per category is non-zero"),
+    )
+    .map_err(|source| ManifestError::Sampler { source })
+}
+
+fn feedback_attempts(
+    officeqa: &OfficeQaSourceMaterialization,
+    sample: &[leaven_eval::CategorySample],
+    iteration: u64,
+) -> Vec<EvoSkillAnswerAttempt> {
+    sample
+        .iter()
+        .map(|sample| {
+            let row = officeqa_row(officeqa, sample.case)
+                .expect("sampler case ids come from the OfficeQA materialization");
+            EvoSkillAnswerAttempt {
+                source_id: row.source_id().to_owned(),
+                ground_truth: row.target().expect("OfficeQA rows are targeted").clone(),
+                prediction: format!("incorrect iteration {iteration} {}", sample.category),
+            }
+        })
+        .collect()
+}
+
+fn observe_replica_frontier(
+    frontier: &mut TopKFrontier,
+    candidate: CandidateId,
+    score: f64,
+) -> Result<(), ManifestError> {
+    let score = ScalarEvidence::new(score).map_err(|source| ManifestError::Scalar { source })?;
+    let _events = frontier.observe(candidate, AssessmentId::new(), score);
+    Ok(())
+}
+
+fn candidate_program(
+    candidates: &[EvoSkillReplicaCandidateState],
+    candidate: CandidateId,
+) -> Result<GitProgramArtifact, ManifestError> {
+    candidates
+        .iter()
+        .find(|state| state.id == candidate)
+        .map(|state| state.program.clone())
+        .ok_or_else(|| ManifestError::LoopBlocked {
+            reason: format!("selected parent candidate {candidate} is missing"),
+        })
+}
+
+fn officeqa_row(
+    officeqa: &OfficeQaSourceMaterialization,
+    case: CaseId,
+) -> Result<&SourceRow<OfficeQaInput, String>, ManifestError> {
+    officeqa
+        .rows
+        .rows()
+        .get(usize::try_from(case.0).expect("case id fits in usize"))
+        .ok_or_else(|| ManifestError::LoopBlocked {
+            reason: format!("OfficeQA case {case} is outside the materialized row universe"),
+        })
+}
+
+fn seed_git_program() -> Result<GitProgramArtifact, ManifestError> {
+    let program = repo_key("program")?;
+    GitProgramArtifact::new(
+        BTreeMap::from([(
+            program.clone(),
+            GitRepoArtifact::new(
+                RepoRef::global(program.clone()),
+                fake_commit(1)?,
+                None,
+                GitArtifactIdentityMode::Commit,
+            ),
+        )]),
+        GitProgramLayout::new(BTreeMap::from([(
+            program,
+            GitPath::new("repos/program").map_err(|source| ManifestError::Git { source })?,
+        )]))
+        .map_err(|source| ManifestError::Git { source })?,
+    )
+    .map_err(|source| ManifestError::Git { source })
+}
+
+fn parent_program_revision(program: &GitProgramArtifact) -> Result<GitRevision, ManifestError> {
+    let key = repo_key("program")?;
+    program
+        .repo(&key)
+        .map(|repo| repo.revision().clone())
+        .ok_or_else(|| ManifestError::LoopBlocked {
+            reason: "replica Git program is missing the program repo".to_owned(),
+        })
+}
+
+fn program_revision(program: &GitProgramArtifact) -> Result<String, ManifestError> {
+    parent_program_revision(program).map(|revision| revision_string(&revision))
+}
+
+fn revision_string(revision: &GitRevision) -> String {
+    revision.object_id().as_str().to_owned()
+}
+
+fn repo_key(value: &str) -> Result<RepoKey, ManifestError> {
+    RepoKey::new(value).map_err(|source| ManifestError::Git { source })
+}
+
+fn fake_commit(value: u64) -> Result<GitRevision, ManifestError> {
+    GitRevision::commit(format!("{value:040x}")).map_err(|source| ManifestError::Git { source })
 }
 
 fn missing_materialization_report(

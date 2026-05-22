@@ -15,8 +15,11 @@ clap = { workspace = true }
 csv = { workspace = true }
 hex = { workspace = true }
 leaven-core = { workspace = true }
+leaven-artifact-git = { workspace = true }
+leaven-evidence = { workspace = true }
 leaven-eval = { workspace = true }
 leaven-kernel = { workspace = true }
+leaven-population = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }

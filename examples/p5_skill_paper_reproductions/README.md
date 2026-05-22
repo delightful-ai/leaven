@@ -14,6 +14,7 @@ cargo test -p p5_skill_paper_reproductions --test evoskill_manifest
 cargo test -p p5_skill_paper_reproductions --test evoskill_materialization
 cargo test -p p5_skill_paper_reproductions --test evoskill_scorer
 cargo test -p p5_skill_paper_reproductions --test evoskill_feedback
+cargo test -p p5_skill_paper_reproductions --test evoskill_loop_mechanics
 just evoskill-paper-manifest
 ```
 

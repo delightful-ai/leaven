@@ -40,5 +40,11 @@ belong in their owning crates.
   train/validation/test substitute split fingerprints, and keeps missing paper
   category/exact split artifacts as blockers. It does not prove SealQA row
   extraction, exact OfficeQA paper membership, or live scores.
+- `cargo test -p p5_skill_paper_reproductions --test evoskill_loop_mechanics`
+  proves a no-spend multi-iteration mechanics loop over the OfficeQA substitute
+  split: train sampling, failure feedback history, round-robin parent
+  selection, typed `GitProgramArtifact` child lineage, top-k admission/ignore,
+  and checkpoint/resume. It does not prove agentic Git workspace readback or
+  live provider behavior.
 - `just evoskill-paper-manifest` writes the current no-spend local manifest to
   `target/evoskill-paper-close/replica-manifest.json`.
