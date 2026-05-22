@@ -51,6 +51,7 @@ const SPLIT_POLICY_MANIFEST_PATH: &str = "tmp/replication/evoskill/split_policy_
 const SCORE_RESULT_MANIFEST_PATH: &str = "tmp/replication/evoskill/score_result_manifest.json";
 const SEALQA_JUDGE_REQUEST_MANIFEST_PATH: &str =
     "tmp/replication/evoskill/sealqa_judge_request_manifest.json";
+const RUNNER_INPUT_MANIFEST_PATH: &str = "tmp/replication/evoskill/runner_input_manifest.json";
 const PAPER_DECLARED_SOURCE_ID_MANIFEST_METHOD: &str = "paper_declared_source_id_manifest";
 const BROWSECOMP_TRANSFER_ROWS: usize = 128;
 const BROWSECOMP_TRANSFER_ROWS_U64: u64 = 128;
@@ -804,6 +805,29 @@ struct SealQaJudgeRequestManifestEntry {
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
+struct RunnerInputManifestFile {
+    schema_version: u32,
+    manifest_fingerprint: String,
+    scorer_fingerprint: String,
+    entries: Vec<RunnerInputManifestEntry>,
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RunnerInputManifestEntry {
+    dataset_id: String,
+    split_id: String,
+    split_role: String,
+    candidate_role: String,
+    split_fingerprint: String,
+    role_source_id_fingerprint: String,
+    expected_rows: u64,
+    input_rows: u64,
+    input_artifact: ScoreEvidenceArtifact,
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 struct ScoreEvidenceRow {
     source_id: String,
     prediction: String,
@@ -851,6 +875,12 @@ struct SealQaJudgeRequestArtifactRow {
     source_id: String,
     prediction: String,
     request: SealQaJudgeRequest,
+}
+
+#[derive(Clone, Debug, serde::Serialize)]
+struct RunnerInputArtifactRow {
+    source_id: String,
+    input: serde_json::Value,
 }
 
 struct ValidatedScoreResultManifest {
@@ -973,6 +1003,14 @@ pub enum ManifestError {
     SealQaJudgeRequest { path: PathBuf, message: String },
     #[error("failed to serialize SealQA judge request manifest `{path}`: {source}")]
     SealQaJudgeRequestManifestSerialize {
+        path: PathBuf,
+        #[source]
+        source: serde_json::Error,
+    },
+    #[error("invalid runner input batch `{path}`: {message}")]
+    RunnerInputBatch { path: PathBuf, message: String },
+    #[error("failed to serialize runner input manifest `{path}`: {source}")]
+    RunnerInputManifestSerialize {
         path: PathBuf,
         #[source]
         source: serde_json::Error,
@@ -1296,6 +1334,38 @@ pub fn write_evoskill_sealqa_judge_request_batch(
         predictions,
     )?;
     write_sealqa_judge_request_manifest_file(&path, &request_manifest)?;
+    Ok(path)
+}
+
+pub fn write_evoskill_runner_input_batch(
+    input: &ManifestBuildInput,
+) -> Result<PathBuf, ManifestError> {
+    let sources = materialize_evoskill_sources(input)?;
+    let manifest = build_evoskill_replica_manifest_from_sources(input, &sources)?;
+    let manifest_fingerprint = manifest_fingerprint_report(&manifest)?;
+    let scorer_fingerprint = scorer_fingerprint_report(&manifest.scorer);
+    let mut slots = final_score_slots(&manifest);
+    if let Some(existing) =
+        read_score_result_manifest(&input.root, &manifest_fingerprint, &scorer_fingerprint)?
+    {
+        apply_score_result_manifest(
+            &input.root,
+            &sources,
+            &manifest.scorer,
+            &mut slots,
+            &existing,
+        )?;
+    }
+    let path = input.root.join(RUNNER_INPUT_MANIFEST_PATH);
+    let runner_manifest = runner_input_manifest_from_slots(
+        &input.root,
+        &path,
+        &sources,
+        &slots,
+        &manifest_fingerprint,
+        &scorer_fingerprint,
+    )?;
+    write_runner_input_manifest_file(&path, &runner_manifest)?;
     Ok(path)
 }
 
@@ -3812,6 +3882,70 @@ fn sealqa_judge_request_manifest_from_predictions(
     })
 }
 
+fn runner_input_manifest_from_slots(
+    root: &Path,
+    sidecar_path: &Path,
+    sources: &EvoSkillSourceMaterializations,
+    slots: &[FinalScoreSlot],
+    manifest_fingerprint: &ManifestFingerprintReport,
+    scorer_fingerprint: &ScorerFingerprintReport,
+) -> Result<RunnerInputManifestFile, ManifestError> {
+    let mut entries = Vec::new();
+    for slot in slots {
+        if !matches!(slot.dataset_id.as_str(), "officeqa" | "sealqa") {
+            continue;
+        }
+        if slot.status == FinalScoreStatus::Reported {
+            continue;
+        }
+        if runner_input_slot_has_source_or_split_blocker(slot) {
+            continue;
+        }
+        let key = final_score_slot_key(slot);
+        validate_runner_input_slot(sidecar_path, &key, slot)?;
+        let input_rows = runner_input_rows(sidecar_path, &key, sources, slot)?;
+        let input_artifact = write_runner_input_artifact(root, sidecar_path, &key, &input_rows)?;
+        let input_rows = u64::try_from(input_rows.len()).expect("runner input row count fits u64");
+        entries.push(RunnerInputManifestEntry {
+            dataset_id: slot.dataset_id.clone(),
+            split_id: slot.split_id.clone(),
+            split_role: slot.split_role.clone(),
+            candidate_role: slot.candidate_role.clone(),
+            split_fingerprint: slot
+                .split_fingerprint
+                .clone()
+                .expect("runner input slot validation requires split fingerprint"),
+            role_source_id_fingerprint: slot
+                .role_source_id_fingerprint
+                .clone()
+                .expect("runner input slot validation requires role fingerprint"),
+            expected_rows: slot
+                .expected_rows
+                .expect("runner input slot validation requires expected rows"),
+            input_rows,
+            input_artifact,
+        });
+    }
+    if entries.is_empty() {
+        return Err(runner_input_batch_error(
+            sidecar_path,
+            "no unreported OfficeQA or SealQA slots have materialized answer-free runner inputs",
+        ));
+    }
+    Ok(RunnerInputManifestFile {
+        schema_version: 1,
+        manifest_fingerprint: manifest_fingerprint.fingerprint.clone(),
+        scorer_fingerprint: scorer_fingerprint.fingerprint.clone(),
+        entries,
+    })
+}
+
+fn runner_input_slot_has_source_or_split_blocker(slot: &FinalScoreSlot) -> bool {
+    slot.blocker_ids
+        .iter()
+        .any(|blocker| blocker != "sealqa_judge_scored_run")
+}
+
 fn score_evidence_row_count(
     path: &Path,
     key: &str,
@@ -4130,6 +4264,141 @@ fn validate_sealqa_judge_request_writer_slot(
     Ok(())
 }
 
+fn validate_runner_input_slot(
+    path: &Path,
+    key: &str,
+    slot: &FinalScoreSlot,
+) -> Result<(), ManifestError> {
+    if !matches!(slot.dataset_id.as_str(), "officeqa" | "sealqa") {
+        return Err(runner_input_batch_error(
+            path,
+            format!("runner input writer cannot target unsupported slot `{key}`"),
+        ));
+    }
+    for blocker in &slot.blocker_ids {
+        if blocker != "sealqa_judge_scored_run" {
+            return Err(runner_input_batch_error(
+                path,
+                format!(
+                    "runner input writer refuses slot `{key}` with source/split blocker `{blocker}`"
+                ),
+            ));
+        }
+    }
+    if slot.split_fingerprint.is_none() || slot.role_source_id_fingerprint.is_none() {
+        return Err(runner_input_batch_error(
+            path,
+            format!(
+                "runner input writer requires materialized split and role fingerprints for `{key}`"
+            ),
+        ));
+    }
+    if slot.expected_rows.is_none() {
+        return Err(runner_input_batch_error(
+            path,
+            format!("runner input writer requires expected rows for `{key}`"),
+        ));
+    }
+    Ok(())
+}
+
+fn runner_input_rows(
+    path: &Path,
+    key: &str,
+    sources: &EvoSkillSourceMaterializations,
+    slot: &FinalScoreSlot,
+) -> Result<Vec<RunnerInputArtifactRow>, ManifestError> {
+    let source_ids = runner_input_slot_source_ids(sources, path, key, slot)?;
+    let mut rows = Vec::with_capacity(source_ids.len());
+    match slot.dataset_id.as_str() {
+        "officeqa" => {
+            let officeqa = sources.officeqa.as_ref().ok_or_else(|| {
+                runner_input_batch_error(
+                    path,
+                    "OfficeQA runner inputs require OfficeQA source rows",
+                )
+            })?;
+            let inputs = officeqa
+                .rows
+                .rows()
+                .iter()
+                .map(|row| (row.source_id().to_owned(), row.input().clone()))
+                .collect::<BTreeMap<_, _>>();
+            for source_id in source_ids {
+                let input = inputs.get(&source_id).ok_or_else(|| {
+                    runner_input_batch_error(
+                        path,
+                        format!(
+                            "OfficeQA runner input slot `{key}` references unknown source id `{source_id}`"
+                        ),
+                    )
+                })?;
+                rows.push(RunnerInputArtifactRow {
+                    source_id,
+                    input: serde_json::json!({
+                        "question": &input.question,
+                        "source_docs": &input.source_docs,
+                        "source_files": &input.source_files,
+                        "difficulty": &input.difficulty,
+                    }),
+                });
+            }
+        }
+        "sealqa" => {
+            let sealqa = sources.sealqa.as_ref().ok_or_else(|| {
+                runner_input_batch_error(path, "SealQA runner inputs require SealQA source rows")
+            })?;
+            let inputs = sealqa
+                .rows
+                .rows()
+                .iter()
+                .map(|row| (row.source_id().to_owned(), row.input().clone()))
+                .collect::<BTreeMap<_, _>>();
+            for source_id in source_ids {
+                let input = inputs.get(&source_id).ok_or_else(|| {
+                    runner_input_batch_error(
+                        path,
+                        format!(
+                            "SealQA runner input slot `{key}` references unknown source id `{source_id}`"
+                        ),
+                    )
+                })?;
+                rows.push(RunnerInputArtifactRow {
+                    source_id,
+                    input: serde_json::json!({
+                        "question": &input.question,
+                        "urls": &input.urls,
+                        "topic": &input.topic,
+                    }),
+                });
+            }
+        }
+        other => {
+            return Err(runner_input_batch_error(
+                path,
+                format!("unsupported runner input dataset `{other}` for slot `{key}`"),
+            ));
+        }
+    }
+    let expected_rows = usize::try_from(
+        slot.expected_rows
+            .expect("runner input slot validation requires expected rows"),
+    )
+    .map_err(|_| {
+        runner_input_batch_error(path, format!("runner input slot `{key}` has too many rows"))
+    })?;
+    if rows.len() != expected_rows {
+        return Err(runner_input_batch_error(
+            path,
+            format!(
+                "runner input slot `{key}` materialized {} rows, expected {expected_rows}",
+                rows.len()
+            ),
+        ));
+    }
+    Ok(rows)
+}
+
 fn officeqa_score_evidence_rows(
     path: &Path,
     key: &str,
@@ -4376,6 +4645,56 @@ fn officeqa_score_slot_source_ids(
     score_writer_slot_source_ids(sources, path, key, slot)
 }
 
+fn runner_input_slot_source_ids(
+    sources: &EvoSkillSourceMaterializations,
+    path: &Path,
+    key: &str,
+    slot: &FinalScoreSlot,
+) -> Result<Vec<String>, ManifestError> {
+    let report = score_result_source_report(sources, &slot.dataset_id).ok_or_else(|| {
+        runner_input_batch_error(
+            path,
+            format!(
+                "runner input slot `{key}` requires {} source rows",
+                slot.dataset_id
+            ),
+        )
+    })?;
+    let split = report
+        .split_materializations
+        .iter()
+        .find(|split| split.id == slot.split_id)
+        .ok_or_else(|| {
+            runner_input_batch_error(
+                path,
+                format!("runner input slot `{key}` has no materialized split"),
+            )
+        })?;
+    if split.split_fingerprint != slot.split_fingerprint {
+        return Err(runner_input_batch_error(
+            path,
+            format!("runner input slot `{key}` split fingerprint changed"),
+        ));
+    }
+    let role = split
+        .role_manifests
+        .iter()
+        .find(|role| role.role == slot.split_role)
+        .ok_or_else(|| {
+            runner_input_batch_error(
+                path,
+                format!("runner input slot `{key}` has no materialized role"),
+            )
+        })?;
+    if Some(&role.source_id_fingerprint) != slot.role_source_id_fingerprint.as_ref() {
+        return Err(runner_input_batch_error(
+            path,
+            format!("runner input slot `{key}` role fingerprint changed"),
+        ));
+    }
+    Ok(role.source_ids.clone())
+}
+
 fn score_writer_slot_source_ids(
     sources: &EvoSkillSourceMaterializations,
     path: &Path,
@@ -4511,6 +4830,44 @@ fn write_sealqa_judge_request_artifact(
     })
 }
 
+fn write_runner_input_artifact(
+    root: &Path,
+    sidecar_path: &Path,
+    key: &str,
+    rows: &[RunnerInputArtifactRow],
+) -> Result<ScoreEvidenceArtifact, ManifestError> {
+    let input_id = runner_input_artifact_id_from_key(key);
+    let relative_path = format!("tmp/replication/evoskill/runner-inputs/{input_id}.jsonl");
+    let path = root.join(&relative_path);
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|source| ManifestError::Write {
+            path: parent.to_owned(),
+            source,
+        })?;
+    }
+    let mut body = String::new();
+    for row in rows {
+        let line = serde_json::to_string(row).map_err(|source| {
+            ManifestError::RunnerInputManifestSerialize {
+                path: sidecar_path.to_owned(),
+                source,
+            }
+        })?;
+        body.push_str(&line);
+        body.push('\n');
+    }
+    fs::write(&path, body.as_bytes()).map_err(|source| ManifestError::Write {
+        path: path.clone(),
+        source,
+    })?;
+    let bytes = u64::try_from(body.len()).expect("runner input artifact size fits in u64");
+    Ok(ScoreEvidenceArtifact {
+        relative_path,
+        sha256: sha256_file(&path)?,
+        bytes,
+    })
+}
+
 fn write_score_result_manifest_file(
     path: &Path,
     manifest: &ScoreResultManifestFile,
@@ -4523,6 +4880,28 @@ fn write_score_result_manifest_file(
     }
     let bytes = serde_json::to_vec_pretty(manifest).map_err(|source| {
         ManifestError::ScoreResultManifestSerialize {
+            path: path.to_owned(),
+            source,
+        }
+    })?;
+    fs::write(path, bytes).map_err(|source| ManifestError::Write {
+        path: path.to_owned(),
+        source,
+    })
+}
+
+fn write_runner_input_manifest_file(
+    path: &Path,
+    manifest: &RunnerInputManifestFile,
+) -> Result<(), ManifestError> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|source| ManifestError::Write {
+            path: parent.to_owned(),
+            source,
+        })?;
+    }
+    let bytes = serde_json::to_vec_pretty(manifest).map_err(|source| {
+        ManifestError::RunnerInputManifestSerialize {
             path: path.to_owned(),
             source,
         }
@@ -4589,6 +4968,10 @@ fn officeqa_score_evidence_id_from_key(key: &str) -> String {
 
 fn sealqa_judge_request_artifact_id_from_key(key: &str) -> String {
     format!("sealqa-judge-requests-{}", key.replace(['|', '_'], "-"))
+}
+
+fn runner_input_artifact_id_from_key(key: &str) -> String {
+    format!("runner-inputs-{}", key.replace(['|', '_'], "-"))
 }
 
 fn sealqa_judge_score_evidence_id(
@@ -5532,6 +5915,13 @@ fn sealqa_judge_request_error(path: &Path, message: String) -> ManifestError {
     ManifestError::SealQaJudgeRequest {
         path: path.to_owned(),
         message,
+    }
+}
+
+fn runner_input_batch_error(path: &Path, message: impl Into<String>) -> ManifestError {
+    ManifestError::RunnerInputBatch {
+        path: path.to_owned(),
+        message: message.into(),
     }
 }
 

@@ -1177,6 +1177,16 @@ is scorer input, not runner input. This closes the hand-built-prompt gap before
 approved judge execution, but it does not run the judge, approve spend, or
 produce score evidence.
 
+OfficeQA/SealQA runner inputs now have a strict no-spend materialization lane.
+`just evoskill-paper-runner-inputs` writes
+`runner_input_manifest.json` plus per-slot JSONL for current unreported
+OfficeQA/SealQA slots whose source and split membership are materialized. The
+rows carry source ids and runner-visible inputs only; they omit answers,
+references, predictions, scores, and BrowseComp transfer rows. This closes the
+hand-authored-run-input gap before live execution, but it does not run the
+agent, import predictions, score outputs, call the SealQA judge, approve spend,
+or prove paper-close results.
+
 ## Final Report Exactness Gaps
 
 Date: 2026-05-22.

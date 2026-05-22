@@ -1070,3 +1070,14 @@ and pinned judge-template fingerprint. This prepares inputs for a future
 approved judge run only; it does not write score evidence, run a judge, clear
 `sealqa_judge_scored_run`, or expose these reference-bearing prompts to a
 runner.
+
+2026-05-22 update: OfficeQA/SealQA runner inputs now have a no-spend Rust
+materialization lane. `just evoskill-paper-runner-inputs` writes
+`tmp/replication/evoskill/runner_input_manifest.json` plus per-slot JSONL under
+`tmp/replication/evoskill/runner-inputs/` for current unreported OfficeQA and
+SealQA slots whose source and split membership are materialized. Each row
+contains only the source id and runner-visible input fields; targets,
+references, predictions, scores, and BrowseComp transfer rows are deliberately
+absent. This closes the hand-authored-run-input gap before live execution, but
+it does not run an agent, score outputs, call a judge, approve spend, or prove
+paper-close results.

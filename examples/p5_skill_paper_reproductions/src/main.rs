@@ -5,8 +5,8 @@ use p5_skill_paper_reproductions::evoskill::{
     ManifestBuildInput, build_evoskill_final_report, build_evoskill_replica_manifest,
     write_evoskill_browsecomp_public_transfer_sample, write_evoskill_local_source_pin_manifest,
     write_evoskill_officeqa_score_result_manifest,
-    write_evoskill_paper_close_split_policy_manifest, write_evoskill_sealqa_judge_request_batch,
-    write_evoskill_sealqa_judge_score_result_manifest,
+    write_evoskill_paper_close_split_policy_manifest, write_evoskill_runner_input_batch,
+    write_evoskill_sealqa_judge_request_batch, write_evoskill_sealqa_judge_score_result_manifest,
 };
 
 #[derive(Debug, Parser)]
@@ -38,6 +38,9 @@ struct Args {
     /// Materialize pinned `SealQA` judge request JSONL from strict prediction rows without scoring.
     #[arg(long)]
     write_sealqa_judge_request_batch: Option<PathBuf>,
+    /// Materialize answer-free `OfficeQA`/`SealQA` runner input JSONL for current runnable slots.
+    #[arg(long)]
+    write_runner_input_batch: bool,
     /// Approval/provenance id for the imported `SealQA` external judge run.
     #[arg(long)]
     sealqa_judge_approval_id: Option<String>,
@@ -72,6 +75,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     if let Some(path) = args.write_sealqa_judge_request_batch {
         write_evoskill_sealqa_judge_request_batch(&input, path)?;
+    }
+    if args.write_runner_input_batch {
+        write_evoskill_runner_input_batch(&input)?;
     }
     let manifest = build_evoskill_replica_manifest(&input)?;
     write_json(&args.out, &manifest)?;
