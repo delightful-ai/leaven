@@ -269,11 +269,11 @@ fn final_report_imports_matching_score_result_sidecar_without_filling_other_slot
         "baseline",
     )
     .clone();
-    write_score_result_manifest(root.path(), &initial_report, &scored_slot, 0.812);
+    write_score_result_manifest(root.path(), &initial_report, &scored_slot, 1.0);
 
     let report = build_evoskill_final_report(&input).unwrap();
 
-    assert_eq!(report.schema_version, 14);
+    assert_eq!(report.schema_version, 15);
     let result_manifest = report
         .score_result_manifest
         .as_ref()
@@ -282,6 +282,7 @@ fn final_report_imports_matching_score_result_sidecar_without_filling_other_slot
         result_manifest.relative_path,
         "tmp/replication/evoskill/score_result_manifest.json"
     );
+    assert_eq!(result_manifest.schema_version, 3);
     assert_eq!(result_manifest.entries, 1);
     assert_eq!(
         result_manifest.cost.metric_calls,
@@ -299,7 +300,7 @@ fn final_report_imports_matching_score_result_sidecar_without_filling_other_slot
         "baseline",
     );
     assert_eq!(reported.status, FinalScoreStatus::Reported);
-    assert_eq!(reported.score, Some(0.812));
+    assert_eq!(reported.score, Some(1.0));
     assert_eq!(
         reported.score_evidence_id.as_deref(),
         Some("unit-test-scored-output-import")
@@ -374,7 +375,7 @@ fn final_report_refuses_score_result_sidecar_with_stale_slot_fingerprint() {
         &initial_report,
         &scored_slot,
         "stale-split-fingerprint",
-        0.812,
+        1.0,
     );
 
     let error = build_evoskill_final_report(&input).unwrap_err();
@@ -406,7 +407,7 @@ fn final_report_refuses_score_result_sidecar_with_tampered_evidence_artifact() {
         "baseline",
     )
     .clone();
-    write_score_result_manifest(root.path(), &initial_report, &scored_slot, 0.812);
+    write_score_result_manifest(root.path(), &initial_report, &scored_slot, 1.0);
     fs::write(
         root.path()
             .join("tmp/replication/evoskill/score-evidence/unit-test-scored-output-import.jsonl"),
@@ -420,6 +421,43 @@ fn final_report_refuses_score_result_sidecar_with_tampered_evidence_artifact() {
         ManifestError::ScoreResultManifest { message, .. } => {
             assert!(message.contains("evidence artifact"));
             assert!(message.contains("sha256 mismatch") || message.contains("bytes"));
+        }
+        other => panic!("expected score result manifest error, got {other:?}"),
+    }
+}
+
+#[test]
+fn final_report_refuses_score_result_sidecar_when_officeqa_artifact_predictions_do_not_score() {
+    let root = tempfile::tempdir().unwrap();
+    write_denominator_ready_sources(root.path());
+    let input = ManifestBuildInput::new(root.path());
+    write_evoskill_local_source_pin_manifest(&input).unwrap();
+    write_evoskill_paper_close_split_policy_manifest(&input).unwrap();
+    let initial_report = build_evoskill_final_report(&input).unwrap();
+    let scored_slot = score_slot(
+        &initial_report,
+        "officeqa",
+        "officeqa_difficulty_train_12_val_17",
+        "train",
+        "baseline",
+    )
+    .clone();
+    write_score_result_manifest_with_prediction_override(
+        root.path(),
+        &initial_report,
+        &scored_slot,
+        "definitely not the gold answer",
+        1.0,
+    );
+
+    let error = build_evoskill_final_report(&input).unwrap_err();
+
+    match error {
+        ManifestError::ScoreResultManifest { message, .. } => {
+            assert!(message.contains("OfficeQA scorer"));
+            assert!(
+                message.contains("officeqa|officeqa_difficulty_train_12_val_17|train|baseline")
+            );
         }
         other => panic!("expected score result manifest error, got {other:?}"),
     }
@@ -570,7 +608,7 @@ fn assert_reported_target(
 
 fn assert_report_header(report: &EvoSkillFinalReport) {
     assert_eq!(report.exactness, ExactnessClass::BlockedBeforePaperClose);
-    assert_eq!(report.schema_version, 14);
+    assert_eq!(report.schema_version, 15);
     assert_eq!(report.score_result_manifest, None);
     assert_eq!(report.cost.llm_calls, 0);
     assert_eq!(report.cost.metric_calls, 0);
@@ -1213,6 +1251,36 @@ fn write_score_result_manifest_with_split_fingerprint(
     split_fingerprint: &str,
     score: f64,
 ) {
+    write_score_result_manifest_with_options(root, report, slot, split_fingerprint, score, None);
+}
+
+fn write_score_result_manifest_with_prediction_override(
+    root: &std::path::Path,
+    report: &EvoSkillFinalReport,
+    slot: &FinalScoreSlot,
+    prediction: &str,
+    score: f64,
+) {
+    write_score_result_manifest_with_options(
+        root,
+        report,
+        slot,
+        slot.split_fingerprint
+            .as_deref()
+            .expect("materialized score slot carries split fingerprint"),
+        score,
+        Some(prediction),
+    );
+}
+
+fn write_score_result_manifest_with_options(
+    root: &std::path::Path,
+    report: &EvoSkillFinalReport,
+    slot: &FinalScoreSlot,
+    split_fingerprint: &str,
+    score: f64,
+    prediction_override: Option<&str>,
+) {
     let path = root.join("tmp/replication/evoskill/score_result_manifest.json");
     fs::create_dir_all(path.parent().unwrap()).unwrap();
     let expected_rows = slot.expected_rows.unwrap();
@@ -1220,14 +1288,26 @@ fn write_score_result_manifest_with_split_fingerprint(
         "tmp/replication/evoskill/score-evidence/unit-test-scored-output-import.jsonl";
     let evidence_path = root.join(evidence_relative_path);
     fs::create_dir_all(evidence_path.parent().unwrap()).unwrap();
-    let evidence_body = format!(
-        "{{\"score_key\":\"{}|{}|{}|{}\",\"score\":{score},\"rows\":{expected_rows}}}\n",
-        slot.dataset_id, slot.split_id, slot.split_role, slot.candidate_role
-    );
+    let mut evidence_body = String::new();
+    for source_id in score_slot_source_ids(report, slot) {
+        let prediction = prediction_override
+            .map(str::to_owned)
+            .unwrap_or_else(|| officeqa_answer_for_source_id(&source_id));
+        writeln!(
+            evidence_body,
+            "{}",
+            serde_json::json!({
+                "source_id": source_id,
+                "prediction": prediction,
+                "score": score
+            })
+        )
+        .unwrap();
+    }
     fs::write(&evidence_path, evidence_body.as_bytes()).unwrap();
     let evidence_sha256 = sha256_bytes(evidence_body.as_bytes());
     let manifest = serde_json::json!({
-        "schema_version": 2,
+        "schema_version": 3,
         "manifest_fingerprint": &report.manifest_fingerprint.fingerprint,
         "scorer_fingerprint": &report.scorer_fingerprint.fingerprint,
         "cost": {
@@ -1256,6 +1336,36 @@ fn write_score_result_manifest_with_split_fingerprint(
         }]
     });
     fs::write(path, serde_json::to_vec_pretty(&manifest).unwrap()).unwrap();
+}
+
+fn score_slot_source_ids(report: &EvoSkillFinalReport, slot: &FinalScoreSlot) -> Vec<String> {
+    let materialization = report
+        .manifest
+        .source_materializations
+        .iter()
+        .find(|materialization| materialization.dataset_id == slot.dataset_id)
+        .expect("score slot dataset materialization exists");
+    let split = materialization
+        .split_materializations
+        .iter()
+        .find(|split| split.id == slot.split_id)
+        .expect("score slot split materialization exists");
+    split
+        .role_manifests
+        .iter()
+        .find(|role| role.role == slot.split_role)
+        .expect("score slot role materialization exists")
+        .source_ids
+        .clone()
+}
+
+fn officeqa_answer_for_source_id(source_id: &str) -> String {
+    let row_number = source_id
+        .strip_prefix("UID")
+        .expect("OfficeQA fixture source ids are UID-prefixed")
+        .parse::<usize>()
+        .expect("OfficeQA fixture source ids end in row numbers");
+    format!("Answer {row_number}")
 }
 
 fn sha256_bytes(bytes: &[u8]) -> String {

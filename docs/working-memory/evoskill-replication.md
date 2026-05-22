@@ -1078,9 +1078,9 @@ Date: 2026-05-22.
 Provider/model spend: none.
 Cloud/GPU spend: none.
 
-The P5 final report now declares schema v14 with optional
+The P5 final report now declares schema v15 with optional
 `tmp/replication/evoskill/score_result_manifest.json` ingestion. The sidecar is
-strict score evidence plumbing, not a live run: it must name schema version 2,
+strict score evidence plumbing, not a live run: it must name schema version 3,
 the current manifest fingerprint, the current scorer fingerprint, total cost,
 and one or more score entries keyed by dataset id, split id, split role, and
 candidate role.
@@ -1094,14 +1094,21 @@ ids, stale manifest/scorer fingerprints, stale split fingerprints, partial row
 coverage, and missing or tampered score evidence artifacts are rejected before
 any score is surfaced.
 
-Imported scores now preserve the sidecar entry `evidence_id` on the reported
-score slot as `score_evidence_id` and the checked artifact path/hash/byte count
-as `score_evidence_artifact`; unreported and blocked score slots keep both
-fields null. This makes score provenance report-visible instead of only
-validated during import. It binds reported scores to an artifact file, but it
-does not yet parse row-level score artifacts or recompute aggregate metrics from
-them.
+The evidence artifact is now strict JSONL. Each row must carry `source_id`,
+`prediction`, and `score`; the importer verifies exact role source-id
+membership, rejects duplicate or missing rows, validates finite `[0, 1]` row
+scores, and recomputes the aggregate before surfacing the entry's score. For
+OfficeQA, it also replays the Rust paper scorer from the materialized
+scorer-only targets and rejects row scores that do not match the scorer.
+
+Imported scores preserve the sidecar entry `evidence_id` on the reported score
+slot as `score_evidence_id` and the checked artifact path/hash/byte count as
+`score_evidence_artifact`; unreported and blocked score slots keep both fields
+null. This makes score provenance report-visible instead of only validated
+during import and removes the file-binding-only fake-proof gap for OfficeQA.
+It still does not approve spend, run the provider, execute the SealQA judge,
+run the transferred BrowseComp skill, or manufacture missing scores.
 
 This gives future approved live or judge runs a refusal-capable Rust path for
-entering the final report. It still does not approve spend, run the provider,
-execute the SealQA judge, or manufacture missing scores.
+entering the final report without converting opaque artifacts into paper-close
+claims.

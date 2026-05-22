@@ -97,7 +97,7 @@ belong in their owning crates.
   proves the current no-spend final report truth surface writes manifest and
   report artifacts, carries baseline/optimized train/validation/held-out score
   slots, exposes zero spend by default, blockers, ablation statuses, and
-  exactness gaps. It proves final report schema v14.
+  exactness gaps. It proves final report schema v15.
   Materialized score slots carry split exactness, split fingerprint, and
   role-level source-id fingerprint directly. Unreported slots carry a null
   `score_evidence_id` and null `score_evidence_artifact`; reported slots
@@ -120,11 +120,15 @@ belong in their owning crates.
   Optional `tmp/replication/evoskill/score_result_manifest.json` input can fill
   reported scores only after manifest/scorer/slot fingerprints, expected row
   counts, scored row counts, resolved slot blockers, a nonempty score evidence
-  id, and a readable evidence artifact with matching SHA-256 and byte count
-  match the current report. Stale result files or tampered evidence artifacts
-  fail the report build instead of becoming score evidence. This artifact check
-  binds the reported score to a file, but it does not yet parse row-level score
-  outputs or recompute the aggregate from that file.
+  id, and a readable strict JSONL evidence artifact with matching SHA-256 and
+  byte count match the current report. Schema-v3 evidence rows must exactly
+  cover the slot role source ids, cannot duplicate or omit rows, must carry
+  finite scores in `[0, 1]`, and must aggregate back to the reported score.
+  OfficeQA score rows are also recomputed with the Rust paper scorer from the
+  materialized hidden targets before import. Stale result files, tampered
+  evidence artifacts, fabricated aggregate rows, or OfficeQA predictions whose
+  scores do not match the scorer fail the report build instead of becoming
+  score evidence.
   It does not prove live provider behavior, validation-score values, or
   paper-close.
 - `just evoskill-paper-manifest` writes the current no-spend local manifest to
