@@ -776,6 +776,23 @@ reporting both paper-source candidates instead of choosing one silently.
 Nothing here produces a Leaven score or resolves OfficeQA split/source
 membership; it only makes future comparison targets explicit and auditable.
 
+## No-Spend Headline Paper Targets
+
+Date: 2026-05-22.
+Provider/model spend: none.
+Cloud/GPU spend: none.
+
+The P5 replica manifest now records the remaining EvoSkill headline comparison
+targets as typed `paper_result_targets`: SealQA baseline 26.6 percent and
+optimized 38.7 percent LLM-judge accuracy, plus BrowseComp transfer baseline
+43.5 percent and SealQA-skill transfer 48.8 percent accuracy. These targets are
+source-backed by the local paper text and travel in the final report beside the
+OfficeQA targets.
+
+This is target visibility only. It does not produce SealQA judge scores, locate
+the exact SealQA train/held-out split, locate the BrowseComp 128-example sample,
+or convert a blocked report into a paper-close score claim.
+
 ## No-Spend Source-Blocked Classification
 
 Date: 2026-05-22.
