@@ -3289,6 +3289,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "leaven-gepa-agentic-git"
+version = "0.0.0"
+dependencies = [
+ "futures",
+ "leaven-agent",
+ "leaven-agentic",
+ "leaven-agentic-git",
+ "leaven-artifact-git",
+ "leaven-core",
+ "leaven-engine",
+ "leaven-gepa",
+ "leaven-kernel",
+ "leaven-surface",
+ "leaven-workspace",
+ "leaven-workspace-local",
+ "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "leaven-gepa-agentic-skill"
 version = "0.0.0"
 dependencies = [

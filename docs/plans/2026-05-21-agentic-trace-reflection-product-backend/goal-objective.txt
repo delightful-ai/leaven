@@ -1,0 +1,21 @@
+Land Leaven's next product-backend slice: GEPA/EvoSkill-shaped agentic trace reflection over GitProgramArtifact, now that Git program materialization/readback and the signed Firkin product-pod proof exist.
+
+Use docs/specs/agentic_trace_reflection_product_backend.md as the governing spec and keep docs/plans/2026-05-21-agentic-trace-reflection-product-backend/implementation-plan.md as the execution checklist. Preserve both 1:1 denominators: Leaven product architecture must be faithful end to end, and EvoSkill paper parity must not be claimed from a tiny/proxy fixture.
+
+Hard boundaries:
+- Do not build another workspace backend or compatibility shim.
+- Do not mount host/durable bare stores into proposer workspaces.
+- Do not mutate graph state outside RunContext::propose plus apply_batch.
+- Do not count fake runtimes, local smokes, topology tests, or live Firkin alone as product completion.
+- Do not claim OfficeQA/SealQA/EvoSkill paper parity without exact datasets, splits, prompts, scorers, model/provider pins, epochs, held-out reports, and ablations.
+
+Execution:
+1. Reconcile live code/specs before editing.
+2. Add the GEPA/Git bridge, likely crates/leaven-gepa-agentic-git, mirroring the leaven-gepa-agentic-skill ownership pattern: typed input from GitProgramArtifact + ReflectRequest, materialization via GitProgramMaterializer, provider-neutral instructions, readback via GitProgramReadback, and proposal batches with ProposalEffect::Change.
+3. Prove a deterministic no-spend GEPA GitProgram reflection attempt: parent repo materialized, fake agent edits or emits patch/bundle, child revision imported, proposal provenance preserved, RunContext proposal/application creates the child, and GEPA attempt/admission metadata names parent/child/proposal/outcome.
+4. Thread missing trace/evidence/report/checkpoint facts only where existing GEPA events/state cannot represent them.
+5. Add or update a P5/EvoSkill-shaped no-spend scenario using the bridge, clearly labeled as product-backend proof, not OfficeQA/SealQA parity.
+6. Update docs/working-memory/skill-paper-replication.md with the new substrate state and remaining paper blockers.
+7. Commit coherent jj slices with rich messages after narrow tests.
+
+Verification: run focused crate/example tests, cargo test -p leaven --test topology_contract if crate inventory or exports change, the signed Firkin live script only if Firkin runtime code changes, then just check before claiming completion.

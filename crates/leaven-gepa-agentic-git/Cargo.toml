@@ -1,0 +1,29 @@
+[package]
+name = "leaven-gepa-agentic-git"
+description = "GEPA agentic reflection adapter for Git program artifacts."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+leaven-agent = { workspace = true }
+leaven-agentic = { workspace = true }
+leaven-agentic-git = { workspace = true }
+leaven-artifact-git = { workspace = true }
+leaven-core = { workspace = true }
+leaven-engine = { workspace = true }
+leaven-gepa = { workspace = true }
+leaven-kernel = { workspace = true }
+leaven-surface = { workspace = true }
+leaven-workspace = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+futures = { workspace = true }
+leaven-workspace-local = { workspace = true }
+
+[lints]
+workspace = true

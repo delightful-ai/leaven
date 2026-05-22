@@ -1,0 +1,38 @@
+objective_name: agentic_trace_reflection_product_backend
+created_at: "2026-05-21"
+status: ready_to_goal
+spec: docs/specs/agentic_trace_reflection_product_backend.md
+plan: docs/plans/2026-05-21-agentic-trace-reflection-product-backend/implementation-plan.md
+original_user_intent:
+  - find the current state after Git materialization and signed product proof
+  - write a durable spec
+  - set a maximum-3800-character goal
+  - plan and execute toward the product backend
+intent_preservation:
+  - treat the landed Git/Firkin backend as substrate, not the remaining task
+  - preserve both 1:1 denominators: Leaven product architecture and paper-faithful EvoSkill
+  - avoid counting P5, fake runtimes, or backend smokes as OfficeQA/SealQA parity
+designed_surface:
+  owning_spec: docs/specs/agentic_trace_reflection_product_backend.md
+  bridge_crate: crates/leaven-gepa-agentic-git
+  final_graph_path: RunContext::propose plus apply_batch
+  artifact: GitProgramArtifact
+  materializer: GitProgramMaterializer
+  readback: GitProgramReadback
+misleading_proxy_proofs:
+  - local workspace smoke without optimizer admission
+  - patch or bundle import without RunContext proposal/application
+  - fake agent output that never received repo contents
+  - live Firkin proof without GEPA reflection and frontier/admission state
+  - tiny EvoSkill fixture claimed as paper parity
+acceptance_path:
+  - deterministic GEPA GitProgram agentic reflection test
+  - proposal provenance and child revision assertions
+  - checkpoint/report evidence for parent, child, proposal, and admission
+  - P5-shaped no-spend scenario using the bridge
+  - focused tests, topology if crate inventory changes, then just check
+explicit_non_goals:
+  - no provider spend without approval
+  - no OfficeQA/SealQA full run claim in this slice
+  - no duplicate workspace/backend API
+  - no graph mutation outside RunContext

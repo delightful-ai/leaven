@@ -34,6 +34,11 @@ The top of the stack is:
   semantics, reference profiles, cache parity, Leaven abstraction deltas, and
   systematic fix order.
 - `gepa_aime_paper_parity.md`: implementation spec for the GEPA/AIME paper-parity path, including budget stopping, GEPA loop continuation, reflection, LM/provider/cache use, AIME runner/scorer/reporting, and the proof denominator for P8.
+- `agentic_trace_reflection_product_backend.md`: implementation spec for the
+  product-backend loop after Git/Firkin materialization proof: GEPA reflection
+  over `GitProgramArtifact`, agent workspace materialization, typed readback,
+  `RunContext` proposal/application, frontier admission, trace/evidence, and
+  P5/EvoSkill pressure without paper-parity overclaiming.
 - `agentic_reflection.md`: companion spec (pre-implementation roadmap) for
   agentic GEPA reflection — artifact materialization into agent workspaces, the
   converged agentic stage proposer, and the path to git/jj repo optimization.
