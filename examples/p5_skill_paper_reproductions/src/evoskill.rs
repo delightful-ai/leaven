@@ -71,6 +71,7 @@ pub struct EvoSkillReplicaManifest {
     pub exactness: ExactnessClass,
     pub source_revisions: Vec<SourceRevision>,
     pub artifacts: Vec<SourceArtifact>,
+    pub source_blockers: Vec<SourceBlockerReport>,
     pub datasets: Vec<DatasetRequirement>,
     pub source_universe: Vec<SourceUniverseEntry>,
     pub source_materializations: Vec<DatasetMaterializationReport>,
@@ -151,6 +152,24 @@ pub struct SourceArtifact {
     pub exists: bool,
     pub bytes: Option<u64>,
     pub sha256: Option<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct SourceBlockerReport {
+    pub blocker_id: String,
+    pub dataset_id: String,
+    pub status: SourceBlockerStatus,
+    pub required_for: Vec<String>,
+    pub local_path_candidates: Vec<String>,
+    pub note: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SourceBlockerStatus {
+    UnresolvedSourcePolicy,
+    MissingLocalArtifact,
+    MissingExactSplitManifest,
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -660,7 +679,7 @@ pub fn build_evoskill_replica_manifest(
     let source_universe = source_universe(&datasets, &source_materializations);
 
     Ok(EvoSkillReplicaManifest {
-        schema_version: 7,
+        schema_version: 8,
         paper: PaperTarget {
             id: "evoskill".to_owned(),
             arxiv_id: "2603.02766".to_owned(),
@@ -669,6 +688,7 @@ pub fn build_evoskill_replica_manifest(
         exactness: ExactnessClass::BlockedBeforePaperClose,
         source_revisions,
         artifacts,
+        source_blockers: source_blockers(),
         datasets,
         source_universe,
         source_materializations,
@@ -2187,6 +2207,86 @@ fn source_artifacts(root: &Path) -> Result<Vec<SourceArtifact>, ManifestError> {
             "tmp/replication/evoskill/browsecomp/transfer_sample.jsonl",
         )?,
     ])
+}
+
+fn source_blockers() -> Vec<SourceBlockerReport> {
+    vec![
+        source_blocker(
+            "source_pin",
+            "all",
+            SourceBlockerStatus::UnresolvedSourcePolicy,
+            &["paper_close_comparison_denominator"],
+            &[
+                "tmp/skill_opt_sources/arx_2603.02766/full_source.md",
+                "tmp/repros/evoskill",
+                "tmp/repros/officeqa",
+            ],
+            "paper-release, local-checkout, or remote-current source policy is not chosen",
+        ),
+        source_blocker(
+            "officeqa_category_split_manifest",
+            "officeqa",
+            SourceBlockerStatus::MissingLocalArtifact,
+            &["officeqa_train_validation_test_split"],
+            &[
+                "tmp/repros/evoskill/.dataset/new_runs_base/solved_dataset.csv",
+                "tmp/repros/evoskill/results/full_run_new_evolved_final_two.pkl",
+                "tmp/repros/evoskill/ablation_run_incorrect.csv",
+            ],
+            "paper references LLM-derived categories/pseudo-labels, but the local source tree only exposes difficulty labels",
+        ),
+        source_blocker(
+            "officeqa_exact_split_membership",
+            "officeqa",
+            SourceBlockerStatus::MissingExactSplitManifest,
+            &["officeqa_scored_train_validation_held_out_report"],
+            &[
+                "tmp/repros/evoskill/.dataset/new_runs_base/solved_dataset.csv",
+                "tmp/repros/evoskill/ablation_run_incorrect.csv",
+            ],
+            "difficulty-stratified substitute splits are auditable, but paper exact membership is absent",
+        ),
+        source_blocker(
+            "sealqa_split_manifest",
+            "sealqa",
+            SourceBlockerStatus::MissingExactSplitManifest,
+            &["sealqa_scored_train_held_out_report"],
+            &["tmp/replication/evoskill/sealqa/seal-0.parquet"],
+            "seal-0 rows are materialized from Parquet, but the exact 10 percent train versus held-out row ids are not present",
+        ),
+        source_blocker(
+            "browsecomp_transfer_sample",
+            "browsecomp_transfer",
+            SourceBlockerStatus::MissingLocalArtifact,
+            &["browsecomp_zero_shot_transfer_report"],
+            &[
+                "tmp/replication/evoskill/browsecomp/transfer_sample.jsonl",
+                "tmp/repros/evoskill/results/deep_cc_runs",
+            ],
+            "paper reports a 128-example stratified transfer sample, but no local sample or result source is present",
+        ),
+    ]
+}
+
+fn source_blocker(
+    blocker_id: &str,
+    dataset_id: &str,
+    status: SourceBlockerStatus,
+    required_for: &[&str],
+    local_path_candidates: &[&str],
+    note: &str,
+) -> SourceBlockerReport {
+    SourceBlockerReport {
+        blocker_id: blocker_id.to_owned(),
+        dataset_id: dataset_id.to_owned(),
+        status,
+        required_for: required_for.iter().map(ToString::to_string).collect(),
+        local_path_candidates: local_path_candidates
+            .iter()
+            .map(ToString::to_string)
+            .collect(),
+        note: note.to_owned(),
+    }
 }
 
 fn dataset_requirements() -> Vec<DatasetRequirement> {

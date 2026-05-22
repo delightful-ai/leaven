@@ -9,7 +9,7 @@ use arrow_schema::{DataType, Field, Schema};
 use p5_skill_paper_reproductions::evoskill::{
     DatasetMaterializationReport, EvoSkillFinalReport, ExactnessClass, FinalScoreSlot,
     FinalScoreStatus, LiveRunGateStatus, ManifestBuildInput, MaterializationExactness,
-    PaperResultTargetStatus, ProxyRejectionStatus, SplitMaterializationReport,
+    PaperResultTargetStatus, ProxyRejectionStatus, SourceBlockerStatus, SplitMaterializationReport,
     build_evoskill_final_report,
 };
 use parquet::arrow::ArrowWriter;
@@ -24,6 +24,7 @@ fn final_report_exposes_score_slots_costs_errors_and_gaps_without_fake_metrics()
 
     assert_report_header(&report);
     assert_live_run_gate_blocks_unapproved_spend(&report);
+    assert_source_blockers_are_report_visible(&report);
     assert_officeqa_paper_targets_report_ambiguity_without_blocking(&report);
     assert_proxy_rejection_gates(&report);
     let officeqa = officeqa_materialization(&report);
@@ -36,6 +37,22 @@ fn final_report_exposes_score_slots_costs_errors_and_gaps_without_fake_metrics()
             .iter()
             .any(|ablation| ablation.id == "skill_merge" && ablation.status == "blocked")
     );
+}
+
+fn assert_source_blockers_are_report_visible(report: &EvoSkillFinalReport) {
+    assert_eq!(report.manifest.source_blockers.len(), 5);
+    assert!(report.manifest.source_blockers.iter().any(|blocker| {
+        blocker.blocker_id == "officeqa_category_split_manifest"
+            && blocker.status == SourceBlockerStatus::MissingLocalArtifact
+            && blocker
+                .local_path_candidates
+                .iter()
+                .any(|path| path.ends_with("solved_dataset.csv"))
+    }));
+    assert!(report.manifest.source_blockers.iter().any(|blocker| {
+        blocker.blocker_id == "sealqa_split_manifest"
+            && blocker.status == SourceBlockerStatus::MissingExactSplitManifest
+    }));
 }
 
 fn assert_officeqa_paper_targets_report_ambiguity_without_blocking(report: &EvoSkillFinalReport) {
@@ -325,6 +342,7 @@ fn cli_writes_manifest_and_final_report_artifacts() {
     let report = fs::read_to_string(report_path).unwrap();
     assert!(report.contains("\"score_slots\""));
     assert!(report.contains("\"live_run_gate\""));
+    assert!(report.contains("\"source_blockers\""));
     assert!(report.contains("\"proxy_rejection_gates\""));
     assert!(report.contains("\"paper_result_targets\""));
     assert!(report.contains("\"role_source_id_fingerprint\""));

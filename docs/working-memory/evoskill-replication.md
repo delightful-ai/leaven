@@ -775,3 +775,21 @@ This closes the previous generic `officeqa_reported_result_target` blocker by
 reporting both paper-source candidates instead of choosing one silently.
 Nothing here produces a Leaven score or resolves OfficeQA split/source
 membership; it only makes future comparison targets explicit and auditable.
+
+## No-Spend Source-Blocked Classification
+
+Date: 2026-05-22.
+Provider/model spend: none.
+Cloud/GPU spend: none.
+
+The P5 replica manifest now declares schema v8 with typed `source_blockers`.
+Those entries classify the unresolved source policy, missing OfficeQA
+category/pseudo-label source, missing OfficeQA exact split membership, missing
+SealQA exact train/held-out membership, and absent BrowseComp transfer sample
+as source blockers with local path candidates and the report surface each one
+would unblock.
+
+This does not make the missing artifacts available and does not turn substitute
+splits into paper-close scores. It makes the closeout denominator sharper:
+future work can replace each source blocker with a pinned artifact or explicit
+access denial instead of treating the blocker list as loose prose.

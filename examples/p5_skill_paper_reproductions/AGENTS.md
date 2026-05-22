@@ -23,14 +23,17 @@ belong in their owning crates.
 ## Proof
 - `cargo test -p p5_skill_paper_reproductions --test evoskill_manifest`
   proves the EvoSkill replica manifest preserves the paper-close denominator
-  and rejects proxy completion claims. It also proves the schema v7
+  and rejects proxy completion claims. It also proves the schema v8
   `source_universe` links datasets to source artifact ids, available source
   revision ids, materialized row counts, source-row fingerprints, split ids,
   split exactness labels, source revision status fields, and blockers without
   treating local source identity or substitute splits as exact paper evidence.
   The manifest also records OfficeQA baseline and skill-merge paper result
   targets, including the 67.9 versus 68.1 exact-match ambiguity, as typed
-  `paper_result_targets` rather than a generic blocker.
+  `paper_result_targets` rather than a generic blocker. It also carries typed
+  `source_blockers` for unresolved source policy, missing OfficeQA category and
+  exact split artifacts, missing SealQA exact split membership, and absent
+  BrowseComp transfer source.
 - `cargo test -p p5_skill_paper_reproductions --test evoskill_scorer`
   proves the paper-specific Rust scorer laws for weighted multi-tolerance
   scoring, failure-threshold classification, unit normalization, incidental
@@ -65,12 +68,13 @@ belong in their owning crates.
   report artifacts, carries baseline/optimized train/validation/held-out score
   slots, exposes zero spend, blockers, ablation statuses, and exactness gaps.
   Materialized score slots carry split exactness, split fingerprint, and
-  role-level source-id fingerprint directly. The report also carries a
-  `live_run_gate` that blocks live execution until explicit provider spend and
-  credential approval, plus typed `proxy_rejection_gates` that reject known
-  scaffolds and repo-health checks as completion evidence. Blocked metrics stay
-  missing rather than fake zeros. It does not prove live provider behavior,
-  validation-set scores, or paper-close.
+  role-level source-id fingerprint directly. The embedded manifest carries
+  typed `source_blockers`. The report also carries a `live_run_gate` that
+  blocks live execution until explicit provider spend and credential approval,
+  plus typed `proxy_rejection_gates` that reject known scaffolds and repo-health
+  checks as completion evidence. Blocked metrics stay missing rather than fake
+  zeros. It does not prove live provider behavior, validation-set scores, or
+  paper-close.
 - `just evoskill-paper-manifest` writes the current no-spend local manifest to
   `target/evoskill-paper-close/replica-manifest.json`.
 - `just evoskill-paper-final-report` writes both the manifest and current

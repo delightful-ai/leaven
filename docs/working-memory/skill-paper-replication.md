@@ -290,6 +290,11 @@ Next attempt:
   checked-in table. This reports the ambiguity instead of leaving it as an
   `officeqa_reported_result_target` blocker; it does not create Leaven scores
   or resolve source/split membership.
+- P5 schema v8 adds typed `source_blockers`, so unresolved source policy,
+  missing OfficeQA category/exact split artifacts, missing SealQA exact split
+  membership, and absent BrowseComp transfer source are represented as
+  source-blocked denominator entries with local path candidates. This is still
+  not paper-close scoring evidence.
 
 2026-05-22 product-backend bridge proof:
 
