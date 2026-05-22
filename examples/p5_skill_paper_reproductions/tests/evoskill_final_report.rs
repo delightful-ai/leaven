@@ -9,10 +9,11 @@ use arrow_schema::{DataType, Field, Schema};
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
 use p5_skill_paper_reproductions::evoskill::{
     DatasetMaterializationReport, EvoSkillFinalReport, ExactnessClass, FinalScoreSlot,
-    FinalScoreStatus, LiveRunGateStatus, ManifestBuildInput, MaterializationExactness,
-    PaperCloseGateStatus, PaperResultTargetStatus, ProxyRejectionStatus, SourceBlockerStatus,
-    SplitAcceptanceStatus, SplitMaterializationReport, build_evoskill_final_report,
-    write_evoskill_local_source_pin_manifest, write_evoskill_paper_close_split_policy_manifest,
+    FinalScoreStatus, LiveRunGateStatus, ManifestBuildInput, ManifestError,
+    MaterializationExactness, PaperCloseGateStatus, PaperResultTargetStatus, ProxyRejectionStatus,
+    SourceBlockerStatus, SplitAcceptanceStatus, SplitMaterializationReport,
+    build_evoskill_final_report, write_evoskill_local_source_pin_manifest,
+    write_evoskill_paper_close_split_policy_manifest,
 };
 use parquet::arrow::ArrowWriter;
 use sha2::{Digest, Sha256};
@@ -252,6 +253,127 @@ fn final_report_relabels_browsecomp_ablation_after_denominator_materializes() {
     assert!(skill_merge.note.contains("declared denominator is ready"));
 }
 
+#[test]
+fn final_report_imports_matching_score_result_sidecar_without_filling_other_slots() {
+    let root = tempfile::tempdir().unwrap();
+    write_denominator_ready_sources(root.path());
+    let input = ManifestBuildInput::new(root.path());
+    write_evoskill_local_source_pin_manifest(&input).unwrap();
+    write_evoskill_paper_close_split_policy_manifest(&input).unwrap();
+    let initial_report = build_evoskill_final_report(&input).unwrap();
+    let scored_slot = score_slot(
+        &initial_report,
+        "officeqa",
+        "officeqa_difficulty_train_12_val_17",
+        "train",
+        "baseline",
+    )
+    .clone();
+    write_score_result_manifest(root.path(), &initial_report, &scored_slot, 0.812);
+
+    let report = build_evoskill_final_report(&input).unwrap();
+
+    assert_eq!(report.schema_version, 11);
+    let result_manifest = report
+        .score_result_manifest
+        .as_ref()
+        .expect("score result sidecar is reported");
+    assert_eq!(
+        result_manifest.relative_path,
+        "tmp/replication/evoskill/score_result_manifest.json"
+    );
+    assert_eq!(result_manifest.entries, 1);
+    assert_eq!(
+        result_manifest.cost.metric_calls,
+        scored_slot.expected_rows.unwrap()
+    );
+    assert_eq!(
+        result_manifest.manifest_fingerprint,
+        initial_report.manifest_fingerprint.fingerprint
+    );
+    let reported = score_slot(
+        &report,
+        "officeqa",
+        "officeqa_difficulty_train_12_val_17",
+        "train",
+        "baseline",
+    );
+    assert_eq!(reported.status, FinalScoreStatus::Reported);
+    assert_eq!(reported.score, Some(0.812));
+    assert!(reported.blocker_ids.is_empty());
+    let untouched = score_slot(
+        &report,
+        "officeqa",
+        "officeqa_difficulty_train_12_val_17",
+        "train",
+        "optimized",
+    );
+    assert_eq!(untouched.status, FinalScoreStatus::NotRun);
+    assert!(untouched.score.is_none());
+    let sealqa = score_slot(
+        &report,
+        "sealqa",
+        "sealqa_row_order_train_11_heldout_100",
+        "train",
+        "baseline",
+    );
+    assert_eq!(sealqa.status, FinalScoreStatus::Blocked);
+    assert!(
+        sealqa
+            .blocker_ids
+            .contains(&"sealqa_judge_scored_run".to_owned())
+    );
+    assert!(
+        report
+            .errors
+            .iter()
+            .any(|error| error.blocker_id == "sealqa_judge_scored_run")
+    );
+    assert!(
+        report
+            .errors
+            .iter()
+            .any(|error| error.blocker_id == "live_run_spend_approval")
+    );
+}
+
+#[test]
+fn final_report_refuses_score_result_sidecar_with_stale_slot_fingerprint() {
+    let root = tempfile::tempdir().unwrap();
+    write_denominator_ready_sources(root.path());
+    let input = ManifestBuildInput::new(root.path());
+    write_evoskill_local_source_pin_manifest(&input).unwrap();
+    write_evoskill_paper_close_split_policy_manifest(&input).unwrap();
+    let initial_report = build_evoskill_final_report(&input).unwrap();
+    let scored_slot = score_slot(
+        &initial_report,
+        "officeqa",
+        "officeqa_difficulty_train_12_val_17",
+        "train",
+        "baseline",
+    )
+    .clone();
+    write_score_result_manifest_with_split_fingerprint(
+        root.path(),
+        &initial_report,
+        &scored_slot,
+        "stale-split-fingerprint",
+        0.812,
+    );
+
+    let error = build_evoskill_final_report(&input).unwrap_err();
+
+    match error {
+        ManifestError::ScoreResultManifest { message, .. } => {
+            assert!(message.contains("split fingerprint"));
+            assert!(
+                message.contains("officeqa|officeqa_difficulty_train_12_val_17|train|baseline")
+            );
+        }
+        other => panic!("expected score result manifest error, got {other:?}"),
+    }
+}
+
 fn assert_paper_close_gates_separate_proof_from_blockers(report: &EvoSkillFinalReport) {
     assert_eq!(report.paper_close_gates.len(), 7);
     let gate = |id: &str| {
@@ -397,7 +519,8 @@ fn assert_reported_target(
 
 fn assert_report_header(report: &EvoSkillFinalReport) {
     assert_eq!(report.exactness, ExactnessClass::BlockedBeforePaperClose);
-    assert_eq!(report.schema_version, 10);
+    assert_eq!(report.schema_version, 11);
+    assert_eq!(report.score_result_manifest, None);
     assert_eq!(report.cost.llm_calls, 0);
     assert_eq!(report.cost.metric_calls, 0);
     assert_eq!(report.cost.prompt_tokens, 0);
@@ -798,6 +921,7 @@ fn cli_writes_manifest_and_final_report_artifacts() {
     assert!(report.contains("\"paper_result_targets\""));
     assert!(report.contains("\"paper_result_target_ids\""));
     assert!(report.contains("\"role_source_id_fingerprint\""));
+    assert!(report.contains("\"score_result_manifest\""));
     assert!(report.contains("\"blocked_before_paper_close\""));
 }
 
@@ -954,6 +1078,96 @@ fn cli_writes_browsecomp_public_sample_before_split_policy() {
         browsecomp["split_materializations"][0]["acceptance_status"],
         "accepted_paper_close_policy"
     );
+}
+
+fn write_denominator_ready_sources(root: &std::path::Path) {
+    write_officeqa_full_csv(root, 246);
+    write_sealqa_parquet(root, 111);
+    write_sealqa_judge_source(root);
+    write_browsecomp_transfer_sample(root, 128);
+    init_git_source(
+        &root.join("tmp/repros/evoskill"),
+        "https://github.com/sentient-agi/EvoSkill.git",
+    );
+    init_git_source(
+        &root.join("tmp/repros/officeqa"),
+        "https://github.com/databricks/officeqa.git",
+    );
+}
+
+fn score_slot<'a>(
+    report: &'a EvoSkillFinalReport,
+    dataset_id: &str,
+    split_id: &str,
+    split_role: &str,
+    candidate_role: &str,
+) -> &'a FinalScoreSlot {
+    report
+        .score_slots
+        .iter()
+        .find(|slot| {
+            slot.dataset_id == dataset_id
+                && slot.split_id == split_id
+                && slot.split_role == split_role
+                && slot.candidate_role == candidate_role
+        })
+        .unwrap_or_else(|| {
+            panic!("missing score slot {dataset_id}|{split_id}|{split_role}|{candidate_role}")
+        })
+}
+
+fn write_score_result_manifest(
+    root: &std::path::Path,
+    report: &EvoSkillFinalReport,
+    slot: &FinalScoreSlot,
+    score: f64,
+) {
+    write_score_result_manifest_with_split_fingerprint(
+        root,
+        report,
+        slot,
+        slot.split_fingerprint
+            .as_deref()
+            .expect("materialized score slot carries split fingerprint"),
+        score,
+    );
+}
+
+fn write_score_result_manifest_with_split_fingerprint(
+    root: &std::path::Path,
+    report: &EvoSkillFinalReport,
+    slot: &FinalScoreSlot,
+    split_fingerprint: &str,
+    score: f64,
+) {
+    let path = root.join("tmp/replication/evoskill/score_result_manifest.json");
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let expected_rows = slot.expected_rows.unwrap();
+    let manifest = serde_json::json!({
+        "schema_version": 1,
+        "manifest_fingerprint": &report.manifest_fingerprint.fingerprint,
+        "scorer_fingerprint": &report.scorer_fingerprint.fingerprint,
+        "cost": {
+            "llm_calls": 0,
+            "metric_calls": expected_rows,
+            "prompt_tokens": 0,
+            "completion_tokens": 0
+        },
+        "entries": [{
+            "dataset_id": &slot.dataset_id,
+            "split_id": &slot.split_id,
+            "split_role": &slot.split_role,
+            "candidate_role": &slot.candidate_role,
+            "split_fingerprint": split_fingerprint,
+            "role_source_id_fingerprint": &slot.role_source_id_fingerprint,
+            "expected_rows": expected_rows,
+            "scored_rows": expected_rows,
+            "score": score,
+            "resolved_blocker_ids": &slot.blocker_ids,
+            "evidence_id": "unit-test-scored-output-import"
+        }]
+    });
+    fs::write(path, serde_json::to_vec_pretty(&manifest).unwrap()).unwrap();
 }
 
 fn write_officeqa_full_csv(root: &std::path::Path, rows: usize) {
