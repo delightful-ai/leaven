@@ -52,6 +52,8 @@ const SCORE_RESULT_MANIFEST_PATH: &str = "tmp/replication/evoskill/score_result_
 const SEALQA_JUDGE_REQUEST_MANIFEST_PATH: &str =
     "tmp/replication/evoskill/sealqa_judge_request_manifest.json";
 const RUNNER_INPUT_MANIFEST_PATH: &str = "tmp/replication/evoskill/runner_input_manifest.json";
+const LIVE_RUN_REQUEST_MANIFEST_PATH: &str =
+    "tmp/replication/evoskill/live_run_request_manifest.json";
 const PAPER_DECLARED_SOURCE_ID_MANIFEST_METHOD: &str = "paper_declared_source_id_manifest";
 const BROWSECOMP_TRANSFER_ROWS: usize = 128;
 const BROWSECOMP_TRANSFER_ROWS_U64: u64 = 128;
@@ -828,6 +830,38 @@ struct RunnerInputManifestEntry {
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
+struct LiveRunRequestManifestFile {
+    schema_version: u32,
+    manifest_fingerprint: String,
+    scorer_fingerprint: String,
+    runtime_role: String,
+    candidate_model: String,
+    credential_probe_status: String,
+    spend_approval_status: String,
+    provider_calls_allowed: bool,
+    judge_calls_allowed: bool,
+    blocker_ids: Vec<String>,
+    runner_input_manifest: ScoreEvidenceArtifact,
+    max_generation_calls: u64,
+    entries: Vec<LiveRunRequestManifestEntry>,
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LiveRunRequestManifestEntry {
+    dataset_id: String,
+    split_id: String,
+    split_role: String,
+    candidate_role: String,
+    split_fingerprint: String,
+    role_source_id_fingerprint: String,
+    input_rows: u64,
+    requested_generation_calls: u64,
+    input_artifact: ScoreEvidenceArtifact,
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 struct ScoreEvidenceRow {
     source_id: String,
     prediction: String,
@@ -1034,6 +1068,14 @@ pub enum ManifestError {
         #[source]
         source: serde_json::Error,
     },
+    #[error("failed to serialize live run request manifest `{path}`: {source}")]
+    LiveRunRequestManifestSerialize {
+        path: PathBuf,
+        #[source]
+        source: serde_json::Error,
+    },
+    #[error("invalid live run request manifest `{path}`: {message}")]
+    LiveRunRequest { path: PathBuf, message: String },
     #[error("failed to parse runner output rows `{path}` line {line}: {source}")]
     RunnerOutputJson {
         path: PathBuf,
@@ -1480,6 +1522,91 @@ pub fn write_evoskill_runner_output_batch(
         written_paths.push(score_path);
     }
     Ok(written_paths)
+}
+
+pub fn write_evoskill_live_run_request_manifest(
+    input: &ManifestBuildInput,
+) -> Result<PathBuf, ManifestError> {
+    let manifest = build_evoskill_replica_manifest(input)?;
+    let manifest_fingerprint = manifest_fingerprint_report(&manifest)?;
+    let scorer_fingerprint = scorer_fingerprint_report(&manifest.scorer);
+    let runner_manifest =
+        read_runner_input_manifest(&input.root, &manifest_fingerprint, &scorer_fingerprint)?;
+    let live_run_gate = final_report_live_run_gate(&manifest);
+    let path = input.root.join(LIVE_RUN_REQUEST_MANIFEST_PATH);
+    let request = live_run_request_manifest(
+        &input.root,
+        &path,
+        &runner_manifest,
+        &manifest_fingerprint,
+        &scorer_fingerprint,
+        &live_run_gate,
+    )?;
+    write_live_run_request_manifest_file(&path, &request)?;
+    Ok(path)
+}
+
+fn live_run_request_manifest(
+    root: &Path,
+    path: &Path,
+    runner_manifest: &RunnerInputManifestFile,
+    manifest_fingerprint: &ManifestFingerprintReport,
+    scorer_fingerprint: &ScorerFingerprintReport,
+    live_run_gate: &LiveRunGateReport,
+) -> Result<LiveRunRequestManifestFile, ManifestError> {
+    let mut max_generation_calls = 0_u64;
+    let mut entries = Vec::new();
+    for entry in &runner_manifest.entries {
+        let source_ids = read_runner_input_artifact_source_ids(root, path, entry)?;
+        let source_id_count = u64::try_from(source_ids.len()).expect("source id count fits u64");
+        if source_id_count != entry.input_rows {
+            return Err(live_run_request_error(
+                path,
+                format!(
+                    "runner input entry `{}` artifact row count changed",
+                    runner_input_entry_key(entry)
+                ),
+            ));
+        }
+        max_generation_calls = max_generation_calls
+            .checked_add(entry.input_rows)
+            .ok_or_else(|| live_run_request_error(path, "live run request call count overflows"))?;
+        entries.push(LiveRunRequestManifestEntry {
+            dataset_id: entry.dataset_id.clone(),
+            split_id: entry.split_id.clone(),
+            split_role: entry.split_role.clone(),
+            candidate_role: entry.candidate_role.clone(),
+            split_fingerprint: entry.split_fingerprint.clone(),
+            role_source_id_fingerprint: entry.role_source_id_fingerprint.clone(),
+            input_rows: entry.input_rows,
+            requested_generation_calls: entry.input_rows,
+            input_artifact: entry.input_artifact.clone(),
+        });
+    }
+    if entries.is_empty() {
+        return Err(live_run_request_error(
+            path,
+            "live run request requires at least one runner input entry",
+        ));
+    }
+    Ok(LiveRunRequestManifestFile {
+        schema_version: 1,
+        manifest_fingerprint: manifest_fingerprint.fingerprint.clone(),
+        scorer_fingerprint: scorer_fingerprint.fingerprint.clone(),
+        runtime_role: live_run_gate.runtime_role.clone(),
+        candidate_model: live_run_gate
+            .candidate_model
+            .clone()
+            .ok_or_else(|| live_run_request_error(path, "live run request requires model pin"))?,
+        credential_probe_status: live_run_gate.credential_probe_status.clone(),
+        spend_approval_status: live_run_gate.spend_approval_status.clone(),
+        provider_calls_allowed: false,
+        judge_calls_allowed: false,
+        blocker_ids: live_run_gate.blocker_ids.clone(),
+        runner_input_manifest: file_artifact(root, RUNNER_INPUT_MANIFEST_PATH)?,
+        max_generation_calls,
+        entries,
+    })
 }
 
 fn split_runner_outputs_by_dataset(
@@ -5163,6 +5290,28 @@ fn write_runner_input_artifact(
     })
 }
 
+fn write_live_run_request_manifest_file(
+    path: &Path,
+    manifest: &LiveRunRequestManifestFile,
+) -> Result<(), ManifestError> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|source| ManifestError::Write {
+            path: parent.to_owned(),
+            source,
+        })?;
+    }
+    let bytes = serde_json::to_vec_pretty(manifest).map_err(|source| {
+        ManifestError::LiveRunRequestManifestSerialize {
+            path: path.to_owned(),
+            source,
+        }
+    })?;
+    fs::write(path, bytes).map_err(|source| ManifestError::Write {
+        path: path.to_owned(),
+        source,
+    })
+}
+
 fn write_score_result_manifest_file(
     path: &Path,
     manifest: &ScoreResultManifestFile,
@@ -5226,6 +5375,28 @@ fn write_sealqa_judge_request_manifest_file(
     fs::write(path, bytes).map_err(|source| ManifestError::Write {
         path: path.to_owned(),
         source,
+    })
+}
+
+fn file_artifact(root: &Path, relative_path: &str) -> Result<ScoreEvidenceArtifact, ManifestError> {
+    let path = root.join(relative_path);
+    let metadata = fs::metadata(&path).map_err(|source| ManifestError::Read {
+        path: path.clone(),
+        source,
+    })?;
+    if !metadata.is_file() {
+        return Err(ManifestError::Read {
+            path,
+            source: std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "artifact path is not a file",
+            ),
+        });
+    }
+    Ok(ScoreEvidenceArtifact {
+        relative_path: relative_path.to_owned(),
+        sha256: sha256_file(&path)?,
+        bytes: metadata.len(),
     })
 }
 
@@ -6525,6 +6696,13 @@ fn runner_input_batch_error(path: &Path, message: impl Into<String>) -> Manifest
 
 fn runner_output_error(path: &Path, message: impl Into<String>) -> ManifestError {
     ManifestError::RunnerOutput {
+        path: path.to_owned(),
+        message: message.into(),
+    }
+}
+
+fn live_run_request_error(path: &Path, message: impl Into<String>) -> ManifestError {
+    ManifestError::LiveRunRequest {
         path: path.to_owned(),
         message: message.into(),
     }

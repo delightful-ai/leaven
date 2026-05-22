@@ -3,8 +3,8 @@ use std::path::PathBuf;
 use clap::Parser;
 use p5_skill_paper_reproductions::evoskill::{
     ManifestBuildInput, build_evoskill_final_report, build_evoskill_replica_manifest,
-    write_evoskill_browsecomp_public_transfer_sample, write_evoskill_local_source_pin_manifest,
-    write_evoskill_officeqa_score_result_manifest,
+    write_evoskill_browsecomp_public_transfer_sample, write_evoskill_live_run_request_manifest,
+    write_evoskill_local_source_pin_manifest, write_evoskill_officeqa_score_result_manifest,
     write_evoskill_paper_close_split_policy_manifest, write_evoskill_runner_input_batch,
     write_evoskill_runner_output_batch, write_evoskill_sealqa_judge_request_batch,
     write_evoskill_sealqa_judge_score_result_manifest,
@@ -45,6 +45,9 @@ struct Args {
     /// Import runner prediction JSONL that is bound to the current runner input manifest.
     #[arg(long)]
     write_runner_output_batch: Option<PathBuf>,
+    /// Write a no-spend approval packet for a bounded live run over current runner inputs.
+    #[arg(long, action = clap::ArgAction::SetTrue)]
+    write_live_run_request: Option<bool>,
     /// Approval/provenance id for the imported `SealQA` external judge run.
     #[arg(long)]
     sealqa_judge_approval_id: Option<String>,
@@ -85,6 +88,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     if let Some(path) = args.write_runner_output_batch {
         write_evoskill_runner_output_batch(&input, path)?;
+    }
+    if args.write_live_run_request == Some(true) {
+        write_evoskill_live_run_request_manifest(&input)?;
     }
     let manifest = build_evoskill_replica_manifest(&input)?;
     write_json(&args.out, &manifest)?;

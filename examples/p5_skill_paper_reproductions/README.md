@@ -118,6 +118,14 @@ outputs with the Rust scorer, and materializes SealQA judge-request batches
 for future approved judging. This imports runner outputs only; it does not run
 an agent, call a judge, approve spend, or prove live/paper-close results.
 
+`just evoskill-paper-live-run-request` is the Rust no-spend approval-packet
+path for a bounded live run over the current runner inputs. It requires the
+current `runner_input_manifest.json`, validates its artifacts, and writes
+`live_run_request_manifest.json` with manifest/scorer fingerprints, runtime
+role, candidate model, blocker ids, input artifact hashes, and requested
+generation-call counts. It does not probe credentials, permit provider calls,
+call a judge, approve spend, or prove live/paper-close results.
+
 `just evoskill-paper-sealqa-judge-requests <predictions.jsonl>` is the Rust
 no-spend request-materialization path for future approved SealQA judge runs.
 Each input row is strict JSONL with `dataset_id`, `split_id`, `split_role`,
