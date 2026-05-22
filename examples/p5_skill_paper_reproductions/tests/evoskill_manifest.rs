@@ -8,9 +8,9 @@ use arrow_array::builder::{ListBuilder, StringBuilder};
 use arrow_array::{ArrayRef, RecordBatch, StringArray};
 use arrow_schema::{DataType, Field, Schema};
 use p5_skill_paper_reproductions::evoskill::{
-    ExactnessClass, ManifestBuildInput, MaterializationExactness, SourceMaterializationStatus,
-    SourcePaperReleaseStatus, SourceRemoteProbeStatus, SourceRevisionStatus, SplitManifestStatus,
-    build_evoskill_replica_manifest,
+    ExactnessClass, ManifestBuildInput, MaterializationExactness, PaperResultTargetStatus,
+    SourceMaterializationStatus, SourcePaperReleaseStatus, SourceRemoteProbeStatus,
+    SourceRevisionStatus, SplitManifestStatus, build_evoskill_replica_manifest,
 };
 use parquet::arrow::ArrowWriter;
 
@@ -27,6 +27,7 @@ fn evoskill_manifest_records_paper_close_denominator_without_claiming_proof() {
 
     let manifest = build_evoskill_replica_manifest(&ManifestBuildInput::new(root.path())).unwrap();
 
+    assert_eq!(manifest.schema_version, 7);
     assert_eq!(manifest.paper.arxiv_id, "2603.02766");
     assert_eq!(manifest.exactness, ExactnessClass::BlockedBeforePaperClose);
     assert_eq!(manifest.scorer.tolerances, [0.0, 0.01, 0.025, 0.05, 0.10]);
@@ -51,6 +52,43 @@ fn evoskill_manifest_records_paper_close_denominator_without_claiming_proof() {
             .iter()
             .any(|blocker| blocker.id == "live_run_spend_approval")
     );
+    assert!(
+        manifest
+            .blockers
+            .iter()
+            .all(|blocker| blocker.id != "officeqa_reported_result_target")
+    );
+    assert_paper_result_targets_report_the_officeqa_ambiguity(&manifest);
+}
+
+fn assert_paper_result_targets_report_the_officeqa_ambiguity(
+    manifest: &p5_skill_paper_reproductions::evoskill::EvoSkillReplicaManifest,
+) {
+    let baseline = manifest
+        .paper_result_targets
+        .iter()
+        .find(|target| target.id == "officeqa_baseline_exact_match_table")
+        .expect("baseline OfficeQA exact-match target is recorded");
+    assert_eq!(baseline.status, PaperResultTargetStatus::Reported);
+    assert_eq!(baseline.candidate_role, "baseline");
+    assert!((baseline.value_percent - 60.6).abs() < f64::EPSILON);
+
+    let skill_merge_targets = manifest
+        .paper_result_targets
+        .iter()
+        .filter(|target| target.candidate_role == "skill_merge")
+        .collect::<Vec<_>>();
+    assert_eq!(skill_merge_targets.len(), 2);
+    assert!(skill_merge_targets.iter().all(|target| {
+        target.status == PaperResultTargetStatus::AmbiguousCandidate
+            && target.ambiguity_group.as_deref() == Some("officeqa_skill_merge_exact_match")
+    }));
+    let mut values = skill_merge_targets
+        .iter()
+        .map(|target| target.value_percent)
+        .collect::<Vec<_>>();
+    values.sort_by(f64::total_cmp);
+    assert_eq!(values, [67.9, 68.1]);
 }
 
 #[test]
@@ -88,6 +126,11 @@ fn manifest_declares_source_universe_without_confusing_substitutes_for_exact_spl
         officeqa
             .blocker_ids
             .contains(&"officeqa_exact_split_membership".to_owned())
+    );
+    assert!(
+        !officeqa
+            .blocker_ids
+            .contains(&"officeqa_reported_result_target".to_owned())
     );
 
     let sealqa = manifest

@@ -282,6 +282,15 @@ Next attempt:
   train/held-out split manifest and LLM-as-judge scorer before it is a runnable
   paper-faithful replica input.
 
+2026-05-22 EvoSkill target-reporting update:
+
+- P5 schema v7 now carries OfficeQA paper result targets as typed manifest
+  data. It records baseline exact match at 60.6 percent and both skill-merge
+  exact-match candidates, 67.9 from prose/figure caption and 68.1 from the
+  checked-in table. This reports the ambiguity instead of leaving it as an
+  `officeqa_reported_result_target` blocker; it does not create Leaven scores
+  or resolve source/split membership.
+
 2026-05-22 product-backend bridge proof:
 
 - `crates/leaven-gepa-agentic-git` now has the first deterministic no-spend
