@@ -608,3 +608,19 @@ ignore, and weakest-member replacement behavior, and a serde checkpoint round
 trip that restores frontier, selector, sampler, candidates, and feedback state
 before continuing. This closes the no-spend full-loop mechanics item; it is not
 live OfficeQA/SealQA score evidence and does not resolve source/split blockers.
+
+## No-Spend Final Report Truth Surface
+
+The reproduction package now emits a no-spend final report truth surface through
+`build_evoskill_final_report` and `just evoskill-paper-final-report`. The report
+embeds the current manifest, runs the no-spend OfficeQA substitute mechanics
+loop when the OfficeQA CSV is present, records the scorer fingerprint, emits
+baseline/optimized score slots for train, validation, and held-out test roles,
+records zero LLM/metric/token spend, copies blocker/errors, and records ablation
+statuses for skill-only, prompt-only, skill-merge, and BrowseComp transfer.
+
+This deliberately does not fill blocked metrics with zeroes or claim paper-close:
+OfficeQA score slots stay `blocked` until exact membership or an accepted
+paper-close substitute can be used for a scored run, SealQA remains blocked on
+row extraction/split materialization, and live provider/model scores still need
+explicit approval and a real run.

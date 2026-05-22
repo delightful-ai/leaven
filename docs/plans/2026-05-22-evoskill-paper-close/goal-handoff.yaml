@@ -103,12 +103,17 @@ acceptance_path:
       remaining exactness gaps; no provider spend happens without approval.
     evidence: []
   - id: final_report_truth
-    status: pending
+    status: in_progress
     requirement: >
       Report contains baseline/optimized train, validation, held-out test,
       paper-close classification, source/split/scorer fingerprints, costs,
       errors, and ablation status.
-    evidence: []
+    evidence:
+      - examples/p5_skill_paper_reproductions/src/evoskill.rs
+      - examples/p5_skill_paper_reproductions/tests/evoskill_final_report.rs
+      - "`cargo test -p p5_skill_paper_reproductions --test evoskill_final_report`"
+      - "`just evoskill-paper-final-report` writes target/evoskill-paper-close/final-report.json"
+      - "Current report is a no-spend truth surface: it contains baseline/optimized train/validation/held-out score slots, exactness gaps, source/split/scorer fingerprints, zero costs, blockers, and ablation statuses, but blocked metrics remain missing rather than fake scores. It is still not live provider, validation-set score, or paper-close evidence."
 
 explicit_non_goals:
   - do not claim paper-exact when only paper-close is proven

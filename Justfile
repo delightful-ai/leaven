@@ -54,6 +54,9 @@ bench-git-trust +args:
 evoskill-paper-manifest *args:
     cargo run -p p5_skill_paper_reproductions -- --out target/evoskill-paper-close/replica-manifest.json {{args}}
 
+evoskill-paper-final-report *args:
+    cargo run -p p5_skill_paper_reproductions -- --out target/evoskill-paper-close/replica-manifest.json --final-report-out target/evoskill-paper-close/final-report.json {{args}}
+
 milestone-p0:
     cargo run -p p0_graph_skeleton
 

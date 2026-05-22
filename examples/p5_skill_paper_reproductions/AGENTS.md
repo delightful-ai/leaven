@@ -46,5 +46,13 @@ belong in their owning crates.
   selection, agentic Git materialize/readback of child proposals, typed
   `GitProgramArtifact` child lineage, top-k admission/ignore/replacement, and
   checkpoint/resume. It does not prove live provider behavior or paper scores.
+- `cargo test -p p5_skill_paper_reproductions --test evoskill_final_report`
+  proves the current no-spend final report truth surface writes manifest and
+  report artifacts, carries baseline/optimized train/validation/held-out score
+  slots, exposes zero spend, blockers, ablation statuses, and exactness gaps,
+  and leaves blocked metrics as missing scores rather than fake zeros. It does
+  not prove live provider behavior, validation-set scores, or paper-close.
 - `just evoskill-paper-manifest` writes the current no-spend local manifest to
   `target/evoskill-paper-close/replica-manifest.json`.
+- `just evoskill-paper-final-report` writes both the manifest and current
+  no-spend final report truth surface under `target/evoskill-paper-close/`.

@@ -231,6 +231,68 @@ pub struct ReplicationBlocker {
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct EvoSkillFinalReport {
+    pub schema_version: u32,
+    pub exactness: ExactnessClass,
+    pub manifest: EvoSkillReplicaManifest,
+    pub loop_report: Option<EvoSkillReplicaLoopReport>,
+    pub scorer_fingerprint: ScorerFingerprintReport,
+    pub score_slots: Vec<FinalScoreSlot>,
+    pub cost: FinalReportCost,
+    pub errors: Vec<FinalReportError>,
+    pub ablations: Vec<AblationStatusReport>,
+    pub proxy_rejections: Vec<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ScorerFingerprintReport {
+    pub scorer_id: String,
+    pub fingerprint: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FinalScoreStatus {
+    Reported,
+    NotRun,
+    Blocked,
+}
+
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct FinalScoreSlot {
+    pub dataset_id: String,
+    pub split_id: String,
+    pub split_role: String,
+    pub candidate_role: String,
+    pub expected_rows: Option<u64>,
+    pub score: Option<f64>,
+    pub status: FinalScoreStatus,
+    pub blocker_ids: Vec<String>,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct FinalReportCost {
+    pub llm_calls: u64,
+    pub metric_calls: u64,
+    pub prompt_tokens: u64,
+    pub completion_tokens: u64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct FinalReportError {
+    pub blocker_id: String,
+    pub message: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct AblationStatusReport {
+    pub id: String,
+    pub status: String,
+    pub blocker_ids: Vec<String>,
+    pub note: String,
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct EvoSkillScoreReport {
     pub weighted_score: f64,
     pub is_failure: bool,
@@ -434,6 +496,36 @@ pub fn build_evoskill_replica_manifest(
         model_pins: model_pins(),
         blockers: blockers(),
         proxy_rejections: proxy_rejections(),
+    })
+}
+
+pub fn build_evoskill_final_report(
+    input: &ManifestBuildInput,
+) -> Result<EvoSkillFinalReport, ManifestError> {
+    let manifest = build_evoskill_replica_manifest(input)?;
+    let loop_report = if has_materialized_officeqa(&manifest) {
+        Some(run_evoskill_replica_mechanics(input)?)
+    } else {
+        None
+    };
+    let scorer_fingerprint = scorer_fingerprint_report(&manifest.scorer);
+    let score_slots = final_score_slots(&manifest);
+    let errors = final_report_errors(&manifest);
+    let ablations = final_report_ablations(&manifest);
+    let exactness = manifest.exactness.clone();
+    let proxy_rejections = manifest.proxy_rejections.clone();
+
+    Ok(EvoSkillFinalReport {
+        schema_version: 1,
+        exactness,
+        manifest,
+        loop_report,
+        scorer_fingerprint,
+        score_slots,
+        cost: FinalReportCost::default(),
+        errors,
+        ablations,
+        proxy_rejections,
     })
 }
 
@@ -688,6 +780,191 @@ pub fn run_evoskill_replica_mechanics(
         checkpoint_resume: checkpoint_resume.expect("configured loop writes one checkpoint"),
         proxy_rejection: "no-spend agentic Git readback loop proves mechanics only; live OfficeQA/SealQA paper scores remain unproven".to_owned(),
     })
+}
+
+fn has_materialized_officeqa(manifest: &EvoSkillReplicaManifest) -> bool {
+    manifest
+        .source_materializations
+        .iter()
+        .any(|materialization| {
+            materialization.dataset_id == "officeqa"
+                && materialization.source_status == SourceMaterializationStatus::Materialized
+        })
+}
+
+fn scorer_fingerprint_report(scorer: &ScorerManifest) -> ScorerFingerprintReport {
+    let mut hasher = Sha256::new();
+    hasher.update(scorer.id.as_bytes());
+    hasher.update(b"\0");
+    for tolerance in &scorer.tolerances {
+        hasher.update(tolerance.to_be_bytes());
+    }
+    hasher.update(b"\0");
+    hasher.update(scorer.failure_threshold.to_be_bytes());
+    hasher.update(b"\0");
+    hasher.update(scorer.implementation_status.as_bytes());
+    ScorerFingerprintReport {
+        scorer_id: scorer.id.clone(),
+        fingerprint: hex::encode(hasher.finalize()),
+    }
+}
+
+fn final_score_slots(manifest: &EvoSkillReplicaManifest) -> Vec<FinalScoreSlot> {
+    let mut slots = Vec::new();
+    for materialization in &manifest.source_materializations {
+        if materialization.split_materializations.is_empty() {
+            slots.extend(dataset_placeholder_score_slots(manifest, materialization));
+            continue;
+        }
+        for split in &materialization.split_materializations {
+            slots.extend(split_score_slots(materialization, split));
+        }
+    }
+    slots
+}
+
+fn split_score_slots(
+    materialization: &DatasetMaterializationReport,
+    split: &SplitMaterializationReport,
+) -> Vec<FinalScoreSlot> {
+    let roles = [
+        ("train", Some(split.train_rows)),
+        ("validation", split.validation_rows),
+        ("held_out_test", split.test_rows),
+    ];
+    roles
+        .into_iter()
+        .filter_map(|(role, expected_rows)| {
+            expected_rows.map(|rows| {
+                score_slots_for_role(
+                    &materialization.dataset_id,
+                    &split.id,
+                    role,
+                    Some(rows),
+                    &split.blocker_ids,
+                )
+            })
+        })
+        .flatten()
+        .collect()
+}
+
+fn dataset_placeholder_score_slots(
+    manifest: &EvoSkillReplicaManifest,
+    materialization: &DatasetMaterializationReport,
+) -> Vec<FinalScoreSlot> {
+    let dataset = manifest
+        .datasets
+        .iter()
+        .find(|dataset| dataset.id == materialization.dataset_id);
+    let split_id = format!("{}_paper_split_unmaterialized", materialization.dataset_id);
+    let mut roles = Vec::new();
+    if let Some(dataset) = dataset {
+        let train_rows = dataset.train_sizes.first().copied();
+        roles.push(("train", train_rows));
+        if dataset.validation_rows.is_some() {
+            roles.push(("validation", dataset.validation_rows));
+        }
+        roles.push(("held_out_test", held_out_rows(dataset)));
+    } else {
+        roles.push(("train", None));
+        roles.push(("validation", None));
+        roles.push(("held_out_test", None));
+    }
+    roles
+        .into_iter()
+        .flat_map(|(role, expected_rows)| {
+            score_slots_for_role(
+                &materialization.dataset_id,
+                &split_id,
+                role,
+                expected_rows,
+                &materialization.blocker_ids,
+            )
+        })
+        .collect()
+}
+
+fn held_out_rows(dataset: &DatasetRequirement) -> Option<u64> {
+    let paper_rows = dataset.paper_rows?;
+    let train_rows = dataset.train_sizes.first().copied().unwrap_or_default();
+    let validation_rows = dataset.validation_rows.unwrap_or_default();
+    paper_rows.checked_sub(train_rows + validation_rows)
+}
+
+fn score_slots_for_role(
+    dataset_id: &str,
+    split_id: &str,
+    split_role: &str,
+    expected_rows: Option<u64>,
+    blocker_ids: &[String],
+) -> Vec<FinalScoreSlot> {
+    ["baseline", "optimized"]
+        .into_iter()
+        .map(|candidate_role| FinalScoreSlot {
+            dataset_id: dataset_id.to_owned(),
+            split_id: split_id.to_owned(),
+            split_role: split_role.to_owned(),
+            candidate_role: candidate_role.to_owned(),
+            expected_rows,
+            score: None,
+            status: if blocker_ids.is_empty() {
+                FinalScoreStatus::NotRun
+            } else {
+                FinalScoreStatus::Blocked
+            },
+            blocker_ids: blocker_ids.to_vec(),
+        })
+        .collect()
+}
+
+fn final_report_errors(manifest: &EvoSkillReplicaManifest) -> Vec<FinalReportError> {
+    manifest
+        .blockers
+        .iter()
+        .map(|blocker| FinalReportError {
+            blocker_id: blocker.id.clone(),
+            message: blocker.description.clone(),
+        })
+        .collect()
+}
+
+fn final_report_ablations(manifest: &EvoSkillReplicaManifest) -> Vec<AblationStatusReport> {
+    let all_blockers = manifest
+        .blockers
+        .iter()
+        .map(|blocker| blocker.id.clone())
+        .collect::<Vec<_>>();
+    vec![
+        AblationStatusReport {
+            id: "skill_only".to_owned(),
+            status: "blocked".to_owned(),
+            blocker_ids: all_blockers.clone(),
+            note: "requires paper split/source denominator and live scored run".to_owned(),
+        },
+        AblationStatusReport {
+            id: "prompt_only".to_owned(),
+            status: "blocked".to_owned(),
+            blocker_ids: all_blockers,
+            note: "requires paper split/source denominator and live scored run".to_owned(),
+        },
+        AblationStatusReport {
+            id: "skill_merge".to_owned(),
+            status: "blocked".to_owned(),
+            blocker_ids: vec![
+                "officeqa_exact_split_membership".to_owned(),
+                "officeqa_reported_result_target".to_owned(),
+            ],
+            note: "OfficeQA skill-merge reporting target is unresolved before paper-close"
+                .to_owned(),
+        },
+        AblationStatusReport {
+            id: "browsecomp_transfer".to_owned(),
+            status: "blocked".to_owned(),
+            blocker_ids: vec!["browsecomp_transfer_sample".to_owned()],
+            note: "BrowseComp transfer sample/result source is absent locally".to_owned(),
+        },
+    ]
 }
 
 fn initial_replica_loop_state(
