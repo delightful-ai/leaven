@@ -295,6 +295,10 @@ Next attempt:
   membership, and absent BrowseComp transfer source are represented as
   source-blocked denominator entries with local path candidates. This is still
   not paper-close scoring evidence.
+- P5 final report schema v6 adds typed `paper_close_gates`, separating proven
+  no-spend manifest/report/mechanics/proxy-closeout surfaces from
+  source-blocked source/split work and approval-blocked live/judge execution.
+  This is closeout audit evidence, not paper-close scoring evidence.
 
 2026-05-22 product-backend bridge proof:
 

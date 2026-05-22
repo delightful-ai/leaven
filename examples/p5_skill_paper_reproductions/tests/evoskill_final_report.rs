@@ -9,8 +9,8 @@ use arrow_schema::{DataType, Field, Schema};
 use p5_skill_paper_reproductions::evoskill::{
     DatasetMaterializationReport, EvoSkillFinalReport, ExactnessClass, FinalScoreSlot,
     FinalScoreStatus, LiveRunGateStatus, ManifestBuildInput, MaterializationExactness,
-    PaperResultTargetStatus, ProxyRejectionStatus, SourceBlockerStatus, SplitMaterializationReport,
-    build_evoskill_final_report,
+    PaperCloseGateStatus, PaperResultTargetStatus, ProxyRejectionStatus, SourceBlockerStatus,
+    SplitMaterializationReport, build_evoskill_final_report,
 };
 use parquet::arrow::ArrowWriter;
 
@@ -24,6 +24,7 @@ fn final_report_exposes_score_slots_costs_errors_and_gaps_without_fake_metrics()
 
     assert_report_header(&report);
     assert_live_run_gate_blocks_unapproved_spend(&report);
+    assert_paper_close_gates_separate_proof_from_blockers(&report);
     assert_source_blockers_are_report_visible(&report);
     assert_officeqa_paper_targets_report_ambiguity_without_blocking(&report);
     assert_proxy_rejection_gates(&report);
@@ -37,6 +38,58 @@ fn final_report_exposes_score_slots_costs_errors_and_gaps_without_fake_metrics()
             .iter()
             .any(|ablation| ablation.id == "skill_merge" && ablation.status == "blocked")
     );
+}
+
+fn assert_paper_close_gates_separate_proof_from_blockers(report: &EvoSkillFinalReport) {
+    assert_eq!(report.paper_close_gates.len(), 7);
+    let gate = |id: &str| {
+        report
+            .paper_close_gates
+            .iter()
+            .find(|gate| gate.id == id)
+            .unwrap_or_else(|| panic!("missing paper-close gate {id}"))
+    };
+
+    assert_eq!(
+        gate("replica_manifest").status,
+        PaperCloseGateStatus::Proven
+    );
+    assert_eq!(
+        gate("source_and_split_materialization").status,
+        PaperCloseGateStatus::SourceBlocked
+    );
+    assert!(
+        gate("source_and_split_materialization")
+            .blocker_ids
+            .contains(&"officeqa_exact_split_membership".to_owned())
+    );
+    assert_eq!(
+        gate("paper_scorer").status,
+        PaperCloseGateStatus::ApprovalBlocked
+    );
+    assert!(
+        gate("paper_scorer")
+            .blocker_ids
+            .contains(&"sealqa_judge_scored_run".to_owned())
+    );
+    assert_eq!(
+        gate("full_loop_mechanics").status,
+        PaperCloseGateStatus::Proven
+    );
+    assert!(
+        gate("full_loop_mechanics")
+            .note
+            .contains("mechanics evidence only")
+    );
+    assert_eq!(
+        gate("live_small_run").status,
+        PaperCloseGateStatus::ApprovalBlocked
+    );
+    assert_eq!(
+        gate("final_report_truth").status,
+        PaperCloseGateStatus::Proven
+    );
+    assert_eq!(gate("proxy_closeout").status, PaperCloseGateStatus::Proven);
 }
 
 fn assert_source_blockers_are_report_visible(report: &EvoSkillFinalReport) {
@@ -78,7 +131,7 @@ fn assert_officeqa_paper_targets_report_ambiguity_without_blocking(report: &EvoS
 
 fn assert_report_header(report: &EvoSkillFinalReport) {
     assert_eq!(report.exactness, ExactnessClass::BlockedBeforePaperClose);
-    assert_eq!(report.schema_version, 5);
+    assert_eq!(report.schema_version, 6);
     assert_eq!(report.cost.llm_calls, 0);
     assert_eq!(report.cost.metric_calls, 0);
     assert_eq!(report.cost.prompt_tokens, 0);
@@ -342,6 +395,7 @@ fn cli_writes_manifest_and_final_report_artifacts() {
     let report = fs::read_to_string(report_path).unwrap();
     assert!(report.contains("\"score_slots\""));
     assert!(report.contains("\"live_run_gate\""));
+    assert!(report.contains("\"paper_close_gates\""));
     assert!(report.contains("\"source_blockers\""));
     assert!(report.contains("\"proxy_rejection_gates\""));
     assert!(report.contains("\"paper_result_targets\""));

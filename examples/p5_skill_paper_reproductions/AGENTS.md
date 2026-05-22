@@ -69,12 +69,13 @@ belong in their owning crates.
   slots, exposes zero spend, blockers, ablation statuses, and exactness gaps.
   Materialized score slots carry split exactness, split fingerprint, and
   role-level source-id fingerprint directly. The embedded manifest carries
-  typed `source_blockers`. The report also carries a `live_run_gate` that
-  blocks live execution until explicit provider spend and credential approval,
-  plus typed `proxy_rejection_gates` that reject known scaffolds and repo-health
-  checks as completion evidence. Blocked metrics stay missing rather than fake
-  zeros. It does not prove live provider behavior, validation-set scores, or
-  paper-close.
+  typed `source_blockers`. The report also carries typed `paper_close_gates`
+  that separate proven no-spend surfaces from source-blocked and
+  approval-blocked gates, a `live_run_gate` that blocks live execution until
+  explicit provider spend and credential approval, plus typed
+  `proxy_rejection_gates` that reject known scaffolds and repo-health checks as
+  completion evidence. Blocked metrics stay missing rather than fake zeros. It
+  does not prove live provider behavior, validation-set scores, or paper-close.
 - `just evoskill-paper-manifest` writes the current no-spend local manifest to
   `target/evoskill-paper-close/replica-manifest.json`.
 - `just evoskill-paper-final-report` writes both the manifest and current
