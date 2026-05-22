@@ -290,11 +290,15 @@ Next attempt:
   checked-in table. This reports the ambiguity instead of leaving it as an
   `officeqa_reported_result_target` blocker; it does not create Leaven scores
   or resolve source/split membership.
-- P5 schema v8 adds typed `source_blockers`, so unresolved source policy,
+- P5 schema v8 added typed `source_blockers`, so unresolved source policy,
   missing OfficeQA category/exact split artifacts, missing SealQA exact split
   membership, and absent BrowseComp transfer source are represented as
   source-blocked denominator entries with local path candidates. This is still
   not paper-close scoring evidence.
+- P5 schema v9 hard-cuts those source blocker candidates from loose strings to
+  checked local path evidence: existence, file/dir shape, byte count, and
+  SHA-256 for files. This makes missing exact source artifacts auditable in the
+  manifest without treating substitute inputs as paper-close proof.
 - P5 final report schema v6 adds typed `paper_close_gates`, separating proven
   no-spend manifest/report/mechanics/proxy-closeout surfaces from
   source-blocked source/split work and approval-blocked live/judge execution.

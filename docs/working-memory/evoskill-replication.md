@@ -782,17 +782,34 @@ Date: 2026-05-22.
 Provider/model spend: none.
 Cloud/GPU spend: none.
 
-The P5 replica manifest now declares schema v8 with typed `source_blockers`.
+The P5 replica manifest first declared schema v8 with typed `source_blockers`.
 Those entries classify the unresolved source policy, missing OfficeQA
 category/pseudo-label source, missing OfficeQA exact split membership, missing
 SealQA exact train/held-out membership, and absent BrowseComp transfer sample
 as source blockers with local path candidates and the report surface each one
-would unblock.
+would unblock. Schema v9 later turned those candidate paths into checked
+candidate evidence.
 
 This does not make the missing artifacts available and does not turn substitute
 splits into paper-close scores. It makes the closeout denominator sharper:
 future work can replace each source blocker with a pinned artifact or explicit
 access denial instead of treating the blocker list as loose prose.
+
+## No-Spend Source-Blocker Candidate Evidence
+
+Date: 2026-05-22.
+Provider/model spend: none.
+Cloud/GPU spend: none.
+
+The P5 replica manifest now declares schema v9. `source_blockers` no longer
+carry loose candidate path strings; each local candidate is checked while the
+manifest is built and reports `exists`, file/dir shape, byte count, and SHA-256
+when the candidate is a file.
+
+This still does not unblock any missing paper source artifact. It makes the
+blocked denominator stronger: the manifest can show that exact OfficeQA split
+candidate paths are absent while the SealQA Parquet candidate exists and is
+fingerprinted, without converting that Parquet input into exact split evidence.
 
 ## No-Spend Paper-Close Gate Summary
 

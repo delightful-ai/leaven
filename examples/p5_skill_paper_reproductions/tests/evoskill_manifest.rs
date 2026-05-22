@@ -28,7 +28,7 @@ fn evoskill_manifest_records_paper_close_denominator_without_claiming_proof() {
 
     let manifest = build_evoskill_replica_manifest(&ManifestBuildInput::new(root.path())).unwrap();
 
-    assert_eq!(manifest.schema_version, 8);
+    assert_eq!(manifest.schema_version, 9);
     assert_eq!(manifest.paper.arxiv_id, "2603.02766");
     assert_eq!(manifest.exactness, ExactnessClass::BlockedBeforePaperClose);
     assert_eq!(manifest.scorer.tolerances, [0.0, 0.01, 0.025, 0.05, 0.10]);
@@ -125,7 +125,10 @@ fn assert_source_blockers_report_missing_paper_artifacts(
         officeqa_category
             .local_path_candidates
             .iter()
-            .any(|path| path.ends_with("solved_dataset.csv"))
+            .any(
+                |candidate| candidate.relative_path.ends_with("solved_dataset.csv")
+                    && !candidate.exists
+            )
     );
 
     let officeqa_split = blocker("officeqa_exact_split_membership");
@@ -269,6 +272,22 @@ fn source_artifacts_are_fingerprinted_without_certifying_missing_splits() {
         sealqa_materialization.source_status,
         SourceMaterializationStatus::Materialized
     );
+
+    let sealqa_blocker = manifest
+        .source_blockers
+        .iter()
+        .find(|blocker| blocker.blocker_id == "sealqa_split_manifest")
+        .expect("SealQA split blocker is recorded");
+    let sealqa_candidate = sealqa_blocker
+        .local_path_candidates
+        .iter()
+        .find(|candidate| candidate.relative_path.ends_with("seal-0.parquet"))
+        .expect("SealQA parquet candidate is recorded");
+    assert!(sealqa_candidate.exists);
+    assert!(sealqa_candidate.is_file);
+    assert!(!sealqa_candidate.is_dir);
+    assert!(sealqa_candidate.bytes.unwrap() > 20);
+    assert_eq!(sealqa_candidate.sha256.as_deref().unwrap().len(), 64);
 }
 
 #[test]
