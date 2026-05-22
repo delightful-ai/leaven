@@ -49,7 +49,7 @@ misleading_proxy_proofs:
     why_not: Useful mechanics proof, but not live agent behavior or paper scores.
   - proxy: One OfficeQA or SealQA sample can be inspected.
     why_not: It does not prove split construction, scorer distribution, or held-out reporting.
-  - proxy: `just check` passes.
+  - proxy: "`just check` passes."
     why_not: It proves repo health, not paper-close reproduction.
 
 acceptance_path:
@@ -140,3 +140,20 @@ explicit_non_goals:
   - do not bake EvoSkill policy into leaven-engine
   - do not expose hidden targets, exact answers, or held-out feedback to runners
   - do not spend provider credits or touch destructive source/dataset state without approval
+
+verification_notes:
+  - at: "2026-05-22T21:50:00Z"
+    command: "ulimit -n 8192 && CARGO_BUILD_JOBS=8 just check"
+    status: passed
+    evidence:
+      - "format, production line-count lint, workspace clippy, SLA suite, doctests, coverage gate, and git trust-lane coverage smokes completed successfully"
+      - "SLA suite inside just check: 889 nextest tests passed, doctests passed, script runtime 28.84s under the 30.00s floor"
+      - "coverage gate: line coverage 89.03% (21755/24436) against 89.01% floor; branch coverage 88.76% (1255/1414) against 87.31% floor"
+    caveat: "`just check` is repo-health evidence only; it is explicitly rejected above as paper-close completion evidence."
+  - at: "2026-05-22T21:35:00Z"
+    command: "python3 scripts/test-suite-sla.py --sla-seconds 30"
+    status: cold_discovery_sla_failure_then_warm_pass
+    evidence:
+      - "first broad run completed all 889 tests and doctests without failures but exceeded the SLA at 390.02s because nextest discovery/listing was cold and slow"
+      - "warm rerun completed the same suite and doctests in 28.62s under the 30.00s floor"
+    caveat: "This was a verification-path warmup artifact, not an EvoSkill paper-close proof or a source/split/scorer blocker."
