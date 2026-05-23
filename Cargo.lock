@@ -3726,6 +3726,7 @@ dependencies = [
  "leaven-eval",
  "leaven-evidence",
  "leaven-kernel",
+ "leaven-public-seam",
  "leaven-store",
  "leaven-store-file",
  "leaven-store-inline",

@@ -56,7 +56,9 @@ builder lowering and public examples deliberately adopt them.
 - `tests/scoring_evaluator.rs` proves runner/scorer evaluation shape,
   per-case granularity requirements, independent-request requirements,
   missing input errors, finite score refusal, cost reporting, context-scoped
-  reportable output, and pairwise/listwise judging output behavior.
+  reportable output, pairwise/listwise judging output behavior, and dev-only
+  projection of runtime-produced score outputs through the locked public-seam
+  owner.
 - `cargo nextest run -p leaven-run` proves the product-builder contract.
 - `cargo test -p leaven --test topology_contract` proves this crate still
   composes engine/eval/evidence/store without absorbing their ownership.

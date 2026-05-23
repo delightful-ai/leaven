@@ -1047,6 +1047,114 @@ fn judging_evaluator_rejects_report_output_from_another_candidate_group() {
     });
 }
 
+#[test]
+fn runtime_score_outputs_project_through_public_seam_for_all_assessment_shapes() {
+    block_on(async {
+        let package = leaven_public_seam::PublicSeamPackage::active_from_repo(workspace_root())
+            .expect("public seam package loads from workspace");
+        let (mut graph, mut budget, left) = graph_with_seed();
+        let (right, third) = {
+            let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
+            (
+                ctx.insert_seed(TextArtifact(50), 1).unwrap(),
+                ctx.insert_seed(TextArtifact(60), 2).unwrap(),
+            )
+        };
+        let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
+
+        let scorer = scoring_evaluator(|ctx| {
+            Score::new(ctx.output.output.parse::<f64>().unwrap(), "independent")
+                .with_output(ctx.report_text_output(ctx.output.output.clone()))
+        });
+        let independent = scorer
+            .evaluate(
+                request(
+                    ResolvedRequestKind::Independent {
+                        candidates: vec![left],
+                    },
+                    vec![CaseId::new(0)],
+                    AssessmentGranularity::PerCase,
+                ),
+                ctx.evaluation_context(StageId::from_evaluator(Evaluator::id(&scorer))),
+            )
+            .await
+            .unwrap();
+        let Assessment::Independent { evidence, .. } = &independent.value[0] else {
+            panic!("expected independent assessment");
+        };
+        assert_projected_public_output(&package, evidence, "42");
+
+        let judge = judging_evaluator(
+            |ctx: JudgeScoreContext<TextArtifact, i32, leaven_eval::NoTarget, String>| {
+                let rendered = ctx
+                    .outputs
+                    .iter()
+                    .map(|output| output.output.output.clone())
+                    .collect::<Vec<_>>()
+                    .join("|");
+                Score::new(1.0, "judged").with_output(ctx.report_text_output(rendered))
+            },
+        );
+        let pairwise = judge
+            .evaluate(
+                request(
+                    ResolvedRequestKind::Pairwise {
+                        left,
+                        right,
+                        order: PairOrder::Ordered,
+                    },
+                    vec![CaseId::new(0)],
+                    AssessmentGranularity::PerCase,
+                ),
+                ctx.evaluation_context(StageId::from_evaluator(Evaluator::id(&judge))),
+            )
+            .await
+            .unwrap();
+        let Assessment::Pairwise { evidence, .. } = &pairwise.value[0] else {
+            panic!("expected pairwise assessment");
+        };
+        assert_projected_public_output(&package, evidence, "42|52");
+
+        let listwise = judge
+            .evaluate(
+                request(
+                    ResolvedRequestKind::Listwise {
+                        candidates: vec![left, right, third],
+                    },
+                    vec![CaseId::new(0)],
+                    AssessmentGranularity::PerCase,
+                ),
+                ctx.evaluation_context(StageId::from_evaluator(Evaluator::id(&judge))),
+            )
+            .await
+            .unwrap();
+        let Assessment::Listwise { evidence, .. } = &listwise.value[0] else {
+            panic!("expected listwise assessment");
+        };
+        assert_projected_public_output(&package, evidence, "42|52|62");
+    });
+}
+
+fn assert_projected_public_output(
+    package: &leaven_public_seam::PublicSeamPackage,
+    evidence: &leaven_evidence::CaseAssessmentEvidence,
+    expected: &str,
+) {
+    assert_eq!(
+        package
+            .project_output_record(evidence.output(), None)
+            .unwrap()
+            .as_value(),
+        &serde_json::json!({
+            "kind": "text",
+            "summary": expected,
+            "value": expected,
+            "visibility": "public",
+            "data_classes": ["public"]
+        })
+    );
+}
+
 // Test helper. The scorer closure must produce a `Score` with context-scoped
 // reportable output already attached (`Score::with_output`) — same
 // contract as the production scorer path. Earlier revisions of this helper
@@ -1094,6 +1202,14 @@ fn judging_evaluator(
 
 fn input_case(index: usize, input: i32) -> Case<i32> {
     Case::input(CaseId::from_index(index), input)
+}
+
+fn workspace_root() -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(std::path::Path::parent)
+        .unwrap()
+        .to_path_buf()
 }
 
 fn request(
