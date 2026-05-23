@@ -6,9 +6,52 @@
     "stage_call_id": "sc_reflect_01",
     "base_revision": "rev_001",
     "parent": "cand_parent",
-    "examples": [],
-    "source_refs": [],
+    "examples": [
+      {
+        "case": "case_demo_visible",
+        "input": {
+          "text": ""
+        },
+        "output": {
+          "kind": "text",
+          "summary": "empty input rejected",
+          "value": "empty input rejected",
+          "visibility": "public",
+          "data_classes": [
+            "candidate.output"
+          ]
+        },
+        "score": {
+          "value": 0.25,
+          "output": {
+            "kind": "text",
+            "summary": "empty input rejected",
+            "value": "empty input rejected",
+            "visibility": "public",
+            "data_classes": [
+              "candidate.output"
+            ]
+          }
+        },
+        "feedback": "The candidate does not reject empty input.",
+        "side_info": {
+          "difficulty": "edge_case"
+        },
+        "source_refs": [
+          "cand_parent"
+        ],
+        "data_classes": [
+          "case.input",
+          "candidate.output"
+        ],
+        "evidence_visibility": "score_and_feedback"
+      }
+    ],
+    "source_refs": [
+      "cand_parent"
+    ],
     "target_safety": "target_safe_projection",
+    "query_policy_fingerprint": "fp_policy_sha256_demo",
     "capability_fingerprint": "fp_cap_sha256_demo"
   },
   "reflection_result": {
@@ -84,6 +127,10 @@
     "allowed_change_schemas": [
       "fp_schema_sha256_skill_patch"
     ],
+    "source_refs": [
+      "cand_parent"
+    ],
+    "query_policy_fingerprint": "fp_policy_sha256_demo",
     "capability_fingerprint": "fp_cap_sha256_demo"
   }
 }
