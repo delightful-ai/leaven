@@ -190,9 +190,10 @@ backpressure, or runtime watch support.
   capability and policy fingerprints, receipt timing, data classes, and closed
   `PlanError` values at the public-seam validation layer. It also rejects
   same-prefix `result_hash` values that do not bind the referenced query, call,
-  or write result value, and paid failed calls whose linked charge receipts are
-  missing, point elsewhere, or do not cover the failed call cost. It does not
-  prove an engine/run producer emits those envelopes.
+  `submit_assessments`, or generic write result value, and paid failed calls
+  whose linked charge receipts are missing, point elsewhere, or do not cover the
+  failed call cost. It does not prove an engine/run producer emits those
+  envelopes.
 - `tests/plan_result_replayability.rs` proves assessment batch result values
   preserve per-assessment replayability and that plan-level replayability is a
   roll-up summary, not a single boolean or override.

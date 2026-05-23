@@ -352,6 +352,22 @@ pub fn validate_plan_result_receipts(
         .get("receipts")
         .and_then(Value::as_array)
         .ok_or_else(|| invalid_plan("plan result receipts must be an array"))?;
+    match plan_document.mode_kind() {
+        "dry_run" => {
+            if receipts.is_empty() {
+                return Ok(());
+            }
+            return Err(invalid_plan(
+                "dry_run Plan Result must not carry operation receipts",
+            ));
+        }
+        "replay" => {
+            return Err(invalid_plan(
+                "replay mode receipts are supplied artifacts and cannot prove Plan IR preimages",
+            ));
+        }
+        _ => {}
+    }
     let receipts_by_op = receipts_by_op_var(receipts)?;
     let mut bindings = BTreeMap::new();
     let mut seen_receipt_ops = BTreeSet::new();
@@ -430,7 +446,9 @@ fn validate_let_receipt(
         }
         "graph_query" => {
             let Some(receipt) = receipts_by_op.get(name) else {
-                return Ok(());
+                return Err(invalid_plan(format!(
+                    "graph_query operation `{name}` must carry a query receipt"
+                )));
             };
             require_receipt_field(receipt, "kind", "query")?;
             let value = values.get(name).ok_or_else(|| {
@@ -483,7 +501,9 @@ fn validate_call_receipt(
     bindings: &mut BTreeMap<String, Value>,
 ) -> Result<(), PublicSeamError> {
     let Some(receipt) = receipts_by_op.get(name) else {
-        return Ok(());
+        return Err(invalid_plan(format!(
+            "call operation `{name}` must carry a call receipt"
+        )));
     };
     let call = op_object
         .get("call")
@@ -544,7 +564,9 @@ fn validate_write_receipt(
     bindings: &mut BTreeMap<String, Value>,
 ) -> Result<(), PublicSeamError> {
     let Some(receipt) = receipts_by_op.get(name) else {
-        return Ok(());
+        return Err(invalid_plan(format!(
+            "write operation `{name}` must carry a write receipt"
+        )));
     };
     let write = op_object
         .get("write")

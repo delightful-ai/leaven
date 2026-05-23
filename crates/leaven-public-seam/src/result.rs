@@ -487,7 +487,7 @@ fn result_hash_schema(
             "query" => Some("leaven.plan_query_result.v1"),
             "call" => Some("leaven.plan_call_result.v1"),
             "write" => match required_string(receipt.get("write_kind"), "receipt.write_kind")? {
-                "request_evaluation" | "submit_assessments" => None,
+                "request_evaluation" => None,
                 _ => Some("leaven.plan_write_result.v1"),
             },
             _ => None,

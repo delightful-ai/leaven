@@ -71,6 +71,14 @@ Audit-currency Plan-preimage follow-up:
 - `crates/leaven-public-seam/tests/plan_document.rs::plan_execution_result_rejects_receipt_hashes_unbound_from_plan_preimages` rejects same-prefix query op-hash, call request-hash, write request-hash, write result-hash, and tampered-plan preimage mismatches.
 - This is useful evidence for `ps1.receipts.audit_currency`, but the row remains pending until a follow-up adversarial review signs off the complete receipts tranche.
 
+Receipts-tranche adversarial review:
+
+- Sub-agent `019e5632-b3d5-7fe0-9f58-185752793859` reviewed tranche revset `yzrpzvol::owqmrpko` and blocked `ps1.receipts.audit_currency` and `ps1.receipts.failed_costs`.
+- Blocking findings: `validate_plan_result_receipts` did not require receipts for every preimage-verified Plan IR operation; `ps1.receipts.failed_costs` still lacks engine budget-ledger/runtime evidence; `submit_assessments` result hashes were skipped; replay-mode receipts are supplied artifacts rather than Plan-preimage-bound audit currency.
+- Follow-up resolution: `validate_plan_result_receipts` now requires query/call/write receipts on non-replay execution paths, rejects replay mode as preimage proof, rejects extra or missing `op_var` coverage, and `execute_plan_document` invokes the verifier for non-replay modes. `plan_execution_result_rejects_receipt_hashes_unbound_from_plan_preimages` now also covers missing write receipts, missing query receipts, and vanished failed paid call receipts/charges.
+- Follow-up resolution: `submit_assessments` is no longer skipped by `validate_result_hash_bindings`; `plan_result_rejects_submit_assessment_result_hashes_that_do_not_bind_values` rejects same-prefix `submit_assessments` result-hash mismatches.
+- Current status: `ps1.receipts.audit_currency` still remains pending until follow-up adversarial sign-off. `ps1.receipts.failed_costs` remains pending because engine budget-ledger/runtime evidence is still absent.
+
 Nested score-output data-class follow-up:
 
 - `crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_nested_score_output_data_class_gaps` now proves a result value containing assessment rows must include nested `score.output.data_classes` such as `candidate.output` in the value-level `data_classes`.
