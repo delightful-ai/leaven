@@ -62,6 +62,11 @@ public seam contracts. They prove grant-envelope authorization only; they are
 not aggregate budget ledgers, delegation engines, ACP permission handlers, or
 runtime effect executors.
 
+Crate-root export `CapabilityDelegation` is an advanced public seam contract.
+It proves semantic parent-child capability attenuation and lineage facts at the
+wire-document layer only; it is not a token minter, engine trust ledger,
+transport session, ACP permission handler, or runtime delegation workflow.
+
 ## Proof Anchors
 
 - `tests/contract_package.rs` proves active package authority, manifest
@@ -71,7 +76,9 @@ runtime effect executors.
   structured capability documents and reject bare, missing, expired, revoked,
   or binding-mismatched tokens. It also proves grant-envelope authorization and
   denials for action, resource, partition, case-field, schema, surface,
-  data-class, and per-grant limit constraints.
+  data-class, and per-grant limit constraints. Delegation tests prove valid
+  child capabilities record parent lineage and cannot widen action, resource,
+  budget, data-class, schema, expiry, binding, or delegation-policy authority.
 - `cargo test -p leaven-public-seam --test contract_package` is the focused
   proof for this crate.
 - `cargo test -p leaven --test topology_contract` must pass when this crate is
