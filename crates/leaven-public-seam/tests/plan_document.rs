@@ -1,4 +1,10 @@
-use leaven_public_seam::{PlanOperationKind, PublicSeamError, PublicSeamPackage};
+use std::collections::BTreeMap;
+
+use leaven_public_seam::{
+    PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanExecutionContext, PlanExecutionHost,
+    PlanLmCompleteOutcome, PlanLmCompleteRequest, PlanOperationKind, PublicSeamError,
+    PublicSeamPackage,
+};
 use serde_json::{Value, json};
 
 #[test]
@@ -58,6 +64,94 @@ fn plan_ir_family_rejects_unknown_core_call_write_and_escape_hatch_ops() {
     });
     let error = package.validate_plan_document(&escape_hatch).unwrap_err();
     assert!(matches!(error, PublicSeamError::ExampleValidation { .. }));
+}
+
+#[test]
+fn plan_ir_family_lowers_and_executes_let_call_write_through_public_seam_owner() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut plan = typed_let_call_write_plan();
+    plan["mode"] = json!({"kind": "execute"});
+    let mut host = RecordingPlanHost::default();
+
+    let report = package
+        .execute_plan_document(
+            &plan,
+            &PlanExecutionContext::new(
+                "fp_cap_sha256_planexec",
+                "fp_policy_sha256_planexec",
+                "rev_planexec_base",
+                "2026-05-23T12:00:00Z",
+                "2026-05-23T12:00:01Z",
+            ),
+            &mut host,
+        )
+        .unwrap();
+
+    assert_eq!(host.calls, vec!["completion"]);
+    assert_eq!(host.writes, vec!["status"]);
+    assert_eq!(
+        host.call_deps.get("prompt"),
+        Some(&json!("Say ok")),
+        "let binding must be lowered into the call host"
+    );
+    assert_eq!(
+        host.write_deps.get("completion"),
+        Some(&report.value()["values"]["completion"]),
+        "call result must be lowered into the write host"
+    );
+    assert_eq!(report.document().receipt_kinds(), &["call", "write"]);
+    assert_eq!(
+        report.value()["values"]["completion"]["kind"].as_str(),
+        Some("lm_response")
+    );
+    assert!(
+        report.value()["receipts"][0]["request_hash"]
+            .as_str()
+            .unwrap()
+            .starts_with("fp_request_sha256_")
+    );
+    assert_eq!(
+        report.value()["receipts"][1]["write_kind"].as_str(),
+        Some("emit_run_event")
+    );
+    assert_eq!(
+        report.value()["final_revision"].as_str(),
+        Some("rev_planexec_final")
+    );
+}
+
+#[test]
+fn plan_ir_family_execution_rejects_known_variants_outside_representative_harness() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut plan = typed_let_call_write_plan();
+    plan["mode"] = json!({"kind": "execute"});
+    plan["ops"][1]["call"] = json!({
+        "kind": "human_review",
+        "queue": "qa",
+        "prompt": "Review Say ok",
+        "input_classes": ["public"]
+    });
+    let mut host = RecordingPlanHost::default();
+
+    let error = package
+        .execute_plan_document(
+            &plan,
+            &PlanExecutionContext::new(
+                "fp_cap_sha256_planexec",
+                "fp_policy_sha256_planexec",
+                "rev_planexec_base",
+                "2026-05-23T12:00:00Z",
+                "2026-05-23T12:00:01Z",
+            ),
+            &mut host,
+        )
+        .unwrap_err();
+    assert!(
+        matches!(error, PublicSeamError::InvalidPlan { .. }),
+        "unexpected error: {error:?}"
+    );
+    assert!(host.calls.is_empty());
+    assert!(host.writes.is_empty());
 }
 
 #[test]
@@ -389,6 +483,53 @@ fn evidence_envelope() -> Value {
             "effect": []
         }
     })
+}
+
+#[derive(Default)]
+struct RecordingPlanHost {
+    calls: Vec<&'static str>,
+    writes: Vec<&'static str>,
+    call_deps: BTreeMap<String, Value>,
+    write_deps: BTreeMap<String, Value>,
+}
+
+impl PlanExecutionHost for RecordingPlanHost {
+    fn lm_complete(
+        &mut self,
+        request: PlanLmCompleteRequest<'_>,
+    ) -> Result<PlanLmCompleteOutcome, PublicSeamError> {
+        assert_eq!(request.name(), "completion");
+        assert_eq!(request.call()["kind"].as_str(), Some("lm_complete"));
+        self.calls.push("completion");
+        self.call_deps = request.deps().clone();
+        Ok(PlanLmCompleteOutcome::new(
+            json!({
+                "role": "assistant",
+                "content": [
+                    {
+                        "kind": "text",
+                        "text": "ok"
+                    }
+                ]
+            }),
+            "fp_runtime_sha256_planexec",
+        ))
+    }
+
+    fn emit_run_event(
+        &mut self,
+        request: PlanEmitRunEventRequest<'_>,
+    ) -> Result<PlanEmitRunEventOutcome, PublicSeamError> {
+        assert_eq!(request.name(), "status");
+        assert_eq!(request.write()["kind"].as_str(), Some("emit_run_event"));
+        assert_eq!(request.base_revision(), "rev_planexec_base");
+        self.writes.push("status");
+        self.write_deps = request.deps().clone();
+        Ok(PlanEmitRunEventOutcome::new(
+            "event_plan_ir_checked",
+            "rev_planexec_final",
+        ))
+    }
 }
 
 fn since_revision_event_diff_plan() -> Value {

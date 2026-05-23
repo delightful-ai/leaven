@@ -13,7 +13,11 @@ fn plan_result_preserves_nested_evidence_visibility_data_classes_and_receipts() 
     assert_eq!(result.receipt_count(), 3);
     assert!(result.value_data_classes().contains(&(
         "assessment_rows".to_owned(),
-        vec!["case.target".to_owned(), "public".to_owned()]
+        vec![
+            "candidate.output".to_owned(),
+            "case.target".to_owned(),
+            "public".to_owned()
+        ]
     )));
 }
 
@@ -37,6 +41,22 @@ fn plan_result_rejects_evidence_source_receipts_that_are_missing_or_wrong_kind()
     assert!(matches!(
         package
             .validate_plan_result_document(&wrong_effect_receipt_kind)
+            .unwrap_err(),
+        PublicSeamError::InvalidPlanResult { .. }
+    ));
+}
+
+#[test]
+fn plan_result_rejects_nested_score_output_data_class_gaps() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut missing_candidate_output = evidence_backed_result();
+    missing_candidate_output["values"]["assessment_rows"]["data_classes"] =
+        json!(["case.target", "public"]);
+
+    assert!(matches!(
+        package
+            .validate_plan_result_document(&missing_candidate_output)
             .unwrap_err(),
         PublicSeamError::InvalidPlanResult { .. }
     ));
@@ -72,7 +92,7 @@ fn evidence_backed_result() -> Value {
                     }
                 ],
                 "graph_revision": "rev_final",
-                "data_classes": ["case.target", "public"],
+                "data_classes": ["candidate.output", "case.target", "public"],
                 "replayability": "has_declared_external_effects"
             },
             "assessment_batch": {

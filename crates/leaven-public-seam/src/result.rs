@@ -202,7 +202,7 @@ fn validate_value_visibility(
     receipt_index: &BTreeMap<String, String>,
 ) -> Result<(), PublicSeamError> {
     let mut required = BTreeSet::new();
-    collect_score_output_data_classes(value, &mut required)?;
+    collect_score_output_data_classes_from_value(&Value::Object(value.clone()), &mut required)?;
     collect_evidence_data_classes_from_value(
         &Value::Object(value.clone()),
         receipt_index,
@@ -244,23 +244,36 @@ fn collect_workspace_listing_data_classes(
     Ok(())
 }
 
-fn collect_score_output_data_classes(
-    value: &serde_json::Map<String, Value>,
+fn collect_score_output_data_classes_from_value(
+    value: &Value,
     required: &mut BTreeSet<String>,
 ) -> Result<(), PublicSeamError> {
-    let Some(output) = value
-        .get("score")
-        .and_then(Value::as_object)
-        .and_then(|score| score.get("output"))
-        .and_then(Value::as_object)
-    else {
-        return Ok(());
-    };
-    required.extend(required_string_set(
-        output.get("data_classes"),
-        "score.output.data_classes",
-    )?);
-    Ok(())
+    match value {
+        Value::Object(object) => {
+            if let Some(output) = object
+                .get("score")
+                .and_then(Value::as_object)
+                .and_then(|score| score.get("output"))
+                .and_then(Value::as_object)
+            {
+                required.extend(required_string_set(
+                    output.get("data_classes"),
+                    "score.output.data_classes",
+                )?);
+            }
+            for value in object.values() {
+                collect_score_output_data_classes_from_value(value, required)?;
+            }
+            Ok(())
+        }
+        Value::Array(values) => {
+            for value in values {
+                collect_score_output_data_classes_from_value(value, required)?;
+            }
+            Ok(())
+        }
+        _ => Ok(()),
+    }
 }
 
 fn collect_evidence_data_classes_from_value(

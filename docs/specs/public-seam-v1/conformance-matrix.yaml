@@ -127,6 +127,18 @@ rows:
       are rejected before execution.
     fake_pass_rejected: Generated structs that round-trip JSON but are never executable.
     minimum_closeout_level: semantic_denial
+    positive_test_evidence:
+      - crates/leaven-public-seam/tests/plan_document.rs::plan_ir_family_accepts_typed_let_call_write_documents
+      - crates/leaven-public-seam/tests/plan_document.rs::plan_ir_family_lowers_and_executes_let_call_write_through_public_seam_owner
+    negative_test_evidence:
+      - crates/leaven-public-seam/tests/plan_document.rs::plan_ir_family_rejects_unknown_core_call_write_and_escape_hatch_ops
+      - crates/leaven-public-seam/tests/plan_document.rs::plan_ir_family_execution_rejects_known_variants_outside_representative_harness
+    implementation_evidence:
+      - crates/leaven-public-seam/src/plan.rs::PlanDocument
+      - crates/leaven-public-seam/src/plan_execution.rs::PlanExecutionHost
+      - crates/leaven-public-seam/src/plan_execution.rs::execute_plan
+      - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::execute_plan_document
+      - crates/leaven-public-seam/AGENTS.md
     status: pending
 
   - id: ps1.plan.pinned_dialects
@@ -486,9 +498,10 @@ rows:
     negative_test_evidence:
       - crates/leaven-public-seam/tests/plan_result.rs::plan_result_preserves_value_visibility_data_classes
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_evidence_source_receipts_that_are_missing_or_wrong_kind
+      - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_nested_score_output_data_class_gaps
     implementation_evidence:
       - crates/leaven-public-seam/src/result.rs::validate_value_visibility
-      - crates/leaven-public-seam/src/result.rs::collect_score_output_data_classes
+      - crates/leaven-public-seam/src/result.rs::collect_score_output_data_classes_from_value
       - crates/leaven-public-seam/src/result.rs::collect_evidence_data_classes_from_value
       - crates/leaven-public-seam/src/result.rs::collect_workspace_listing_data_classes
       - crates/leaven-public-seam/src/evidence.rs::EvidenceEnvelopeDocument
@@ -533,6 +546,21 @@ rows:
       whose receipt visibility conflicts with its value visibility, is rejected.
     fake_pass_rejected: Treating visibility as policy metadata that never reaches results.
     minimum_closeout_level: semantic_denial
+    positive_test_evidence:
+      - crates/leaven-public-seam/tests/evidence_envelope.rs::evidence_envelope_preserves_visibility_data_classes_and_receipts
+      - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_preserves_nested_evidence_visibility_data_classes_and_receipts
+    negative_test_evidence:
+      - crates/leaven-public-seam/tests/evidence_envelope.rs::evidence_envelope_rejects_target_derived_data_class_gaps
+      - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_evidence_source_receipts_that_are_missing_or_wrong_kind
+      - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_nested_score_output_data_class_gaps
+    implementation_evidence:
+      - crates/leaven-public-seam/src/evidence.rs::EvidenceEnvelopeDocument
+      - crates/leaven-public-seam/src/result.rs::validate_value_visibility
+      - crates/leaven-public-seam/src/result.rs::collect_score_output_data_classes_from_value
+      - crates/leaven-public-seam/src/result.rs::collect_evidence_data_classes_from_value
+      - crates/leaven-public-seam/src/result.rs::validate_evidence_source_receipts
+    review_evidence:
+      - docs/specs/public-seam-v1/reviews/2026-05-23-result-receipt-replay-review.md
     status: pending
 
   - id: ps1.stage.reflection_proposal_split
