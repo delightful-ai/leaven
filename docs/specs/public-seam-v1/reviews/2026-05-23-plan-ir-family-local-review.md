@@ -22,3 +22,36 @@ Residual limits:
 
 - This still does not sign off `ps1.plan.ir_family`.
 - The representative harness does not prove full Plan IR coverage, graph-query execution, cache/replay behavior, ACP delivery, provider runtime execution, or RunContext graph mutation authority.
+
+Fresh adversarial sub-agent sign-off:
+
+- Reviewer: sub-agent `019e55f8-5be2-7c42-8ae9-02f8f756c2f1`
+- Result: sign off. `ps1.plan.ir_family` may be marked proven.
+
+Positive proof accepted:
+
+- `crates/leaven-public-seam/tests/plan_document.rs::plan_ir_family_accepts_typed_let_call_write_documents` validates the typed Let/Call/Write document.
+- `crates/leaven-public-seam/tests/plan_document.rs::plan_ir_family_lowers_and_executes_let_call_write_through_public_seam_owner` executes literal Let -> `lm_complete` Call -> `emit_run_event` Write through `PublicSeamPackage::execute_plan_document`.
+
+Negative proof accepted:
+
+- `crates/leaven-public-seam/tests/plan_document.rs::plan_ir_family_rejects_unknown_core_call_write_and_escape_hatch_ops` rejects unknown core, call, write, and top-level escape-hatch operations before execution.
+- `crates/leaven-public-seam/tests/plan_document.rs::plan_ir_family_execution_rejects_dry_run_or_no_graph_write_fake_execution` rejects dry-run and no-graph-write fake execution before host calls.
+- `crates/leaven-public-seam/tests/plan_document.rs::plan_ir_family_execution_rejects_known_variants_outside_representative_harness` rejects schema-valid but unsupported known variants at the representative harness boundary.
+
+Fake-pass, topology, and public-maturity findings:
+
+- `PublicSeamPackage::execute_plan_document` validates the active Plan schema, lowers through the seam harness, then validates the produced Plan Result, so the proof is not a generated-struct round trip.
+- `PlanExecutionHost` is the explicit effect boundary; `leaven-public-seam` does not import engine graph internals or provider/runtime crates for this proof.
+- `crates/leaven-public-seam/AGENTS.md` limits the route to advanced public-seam validation/classification and representative lowering/execution. It does not claim ACP/session delivery, provider runtime execution, cache behavior, graph mutation authority, full Plan IR coverage, evaluator runtime production, or runtime revision-read enforcement.
+
+Fresh reviewer verification:
+
+- `CARGO_INCREMENTAL=0 cargo test -p leaven-public-seam --test plan_document`
+- `CARGO_INCREMENTAL=0 cargo test -p leaven-public-seam --test contract_package conformance_matrix_rows_are_unique_honest_and_reference_real_files -- --exact`
+- `CARGO_INCREMENTAL=0 cargo test -p leaven --test topology_contract`
+
+Residual non-blocking risks:
+
+- `ps1.plan.revision_modes` and `ps1.plan.execution_modes` remain pending.
+- This does not prove ACP/session/provider runtime behavior, cache/replay behavior, engine graph mutation, revision-mode runtime reads, or full execution coverage for every schema-valid Plan IR variant.

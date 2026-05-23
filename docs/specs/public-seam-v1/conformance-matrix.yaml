@@ -142,7 +142,7 @@ rows:
       - crates/leaven-public-seam/AGENTS.md
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-plan-ir-family-local-review.md
-    status: pending
+    status: proven
 
   - id: ps1.plan.pinned_dialects
     area: plan_ir
