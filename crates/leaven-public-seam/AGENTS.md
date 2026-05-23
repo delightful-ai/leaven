@@ -143,7 +143,11 @@ backpressure, or runtime watch support.
   for typed Let/Call/Write documents, explicit consistency-mode bases, and
   rejection of unknown core/call/write kinds, top-level escape-hatch plan
   operations, mismatched `since_revision` event-source bases, and schema-valid
-  placeholder `submit_assessments` score outputs before execution.
+  placeholder `submit_assessments` score outputs before execution. Its
+  `Score.output` checks require candidate/artifact data classes and a matching
+  `evidence.public.summary` projection; this rejects candidate-labeled schema
+  dummies but is still public-seam document validation, not runtime proof that a
+  scorer assessed the true candidate output.
 - `tests/plan_dialects.rs` proves pinned JSON Pointer, JSONPath, and strict
   Mustache dialects are parsed and replayed deterministically, and rejects
   unpinned path syntax, non-subset JSONPath filters/functions/scripts, non-
