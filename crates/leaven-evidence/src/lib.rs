@@ -49,6 +49,7 @@ pub mod listwise {
 pub mod mixed {
     pub struct MixedEvidence;
 }
+pub mod output;
 pub mod pairwise;
 pub mod rollout;
 pub mod scalar;
@@ -76,13 +77,16 @@ pub use command::{
     AgentPatchMergeTreeError, AgentPatchMergeTreeEvidence, AgentTrajectoryAnalysisKind,
     AgentTrajectoryAnalysisRecord, AgentTrajectoryCorpusError, AgentTrajectoryCorpusEvidence,
     AgentTrajectoryEvidence, AgentTrajectoryEvidenceInput, AgentTrajectoryOutcome, CommandEvidence,
-    CommandRecord, OutputRecord,
+    CommandRecord,
 };
 pub use diff::{DiffEvidence, RenderedDiff};
 pub use feedback::CaseAssessmentEvidence;
 pub use json::JsonEvidence;
 pub use listwise::{ListwiseRankingEvidence, RankingItem};
 pub use mixed::MixedEvidence;
+pub use output::{
+    DataClass, DataClassError, DataClassSet, OutputMetadata, OutputRecord, OutputVisibility,
+};
 pub use pairwise::{PairwiseJudgment, PairwiseJudgmentEvidence};
 pub use rollout::{PairedRolloutEvidence, PairedRolloutEvidenceError, RolloutGroupOutcome};
 pub use scalar::{ScalarEvidence, ScalarEvidenceError};
@@ -101,11 +105,11 @@ pub mod prelude {
         AgentTrajectoryAnalysisRecord, AgentTrajectoryCorpusError, AgentTrajectoryCorpusEvidence,
         AgentTrajectoryEvidence, AgentTrajectoryEvidenceInput, AgentTrajectoryOutcome, Attachment,
         AttachmentKind, AttributableEvidence, CaseAssessmentEvidence, CaseOutcome,
-        CasewiseEvidence, CommandEvidence, CommandRecord, DiffEvidence, Direction, JsonEvidence,
-        ListwiseRankingEvidence, MixedEvidence, OutputRecord, PairedRolloutEvidence,
-        PairwiseJudgmentEvidence, RolloutGroupOutcome, ScalarEvidence, ScalarEvidenceError,
-        ScoreVectorEvidence, SkillTrajectoryUseEvidence, SkillTrajectoryUseEvidenceError,
-        SkillUseConfidence, SkillUseEvent, SkillUseEvidence, SkillUseKind, SkillUseSource,
-        StringEvidence,
+        CasewiseEvidence, CommandEvidence, CommandRecord, DataClass, DataClassSet, DiffEvidence,
+        Direction, JsonEvidence, ListwiseRankingEvidence, MixedEvidence, OutputMetadata,
+        OutputRecord, OutputVisibility, PairedRolloutEvidence, PairwiseJudgmentEvidence,
+        RolloutGroupOutcome, ScalarEvidence, ScalarEvidenceError, ScoreVectorEvidence,
+        SkillTrajectoryUseEvidence, SkillTrajectoryUseEvidenceError, SkillUseConfidence,
+        SkillUseEvent, SkillUseEvidence, SkillUseKind, SkillUseSource, StringEvidence,
     };
 }

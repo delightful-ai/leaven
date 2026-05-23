@@ -228,7 +228,7 @@ fn imports_saved_map_patches_into_analyst_fanout_by_batch_index() {
     assert!(matches!(error.prompt(), OutputRecord::Inline { text, .. } if text == "error prompt"));
     assert!(matches!(error.status(), AgentAnalystCallStatus::Succeeded));
     assert!(
-        matches!(error.response(), Some(OutputRecord::BlobRef(reference)) if reference.key.ends_with("map_patches/patch_0002.json"))
+        matches!(error.response(), Some(OutputRecord::BlobRef { reference, .. }) if reference.key.ends_with("map_patches/patch_0002.json"))
     );
     let success = imported.by_call("success-14-1-2").unwrap();
     assert!(matches!(
@@ -236,7 +236,7 @@ fn imports_saved_map_patches_into_analyst_fanout_by_batch_index() {
         AgentAnalystCallStatus::Succeeded
     ));
     assert!(
-        matches!(success.response(), Some(OutputRecord::BlobRef(reference)) if reference.key.ends_with("map_patches/patch_0001.json"))
+        matches!(success.response(), Some(OutputRecord::BlobRef { reference, .. }) if reference.key.ends_with("map_patches/patch_0001.json"))
     );
 }
 
@@ -306,12 +306,12 @@ fn imports_saved_map_parse_failures_without_completing_unsaved_calls() {
     assert_eq!(failed.source_task_ids(), ["13-1"]);
     assert!(matches!(failed.prompt(), OutputRecord::Inline { text, .. } if text == "error prompt"));
     assert!(
-        matches!(failed.response(), Some(OutputRecord::BlobRef(reference)) if reference.key.ends_with("parse_failures_parallel/map/20260520_010203_000000_batch_0001_json_parse_failed.md"))
+        matches!(failed.response(), Some(OutputRecord::BlobRef { reference, .. }) if reference.key.ends_with("parse_failures_parallel/map/20260520_010203_000000_batch_0001_json_parse_failed.md"))
     );
     assert!(
         matches!(
             failed.status(),
-            AgentAnalystCallStatus::ParseFailed { reason, artifact: Some(OutputRecord::BlobRef(reference)) }
+            AgentAnalystCallStatus::ParseFailed { reason, artifact: Some(OutputRecord::BlobRef { reference, .. }) }
                 if reason == "upstream Trace2Skill map batch_0001 failed json-fence parsing"
                     && reference.key.ends_with("parse_failures_parallel/map/20260520_010203_000000_batch_0001_json_parse_failed.md")
         ),
@@ -324,7 +324,7 @@ fn imports_saved_map_parse_failures_without_completing_unsaved_calls() {
         AgentAnalystCallStatus::Succeeded
     ));
     assert!(
-        matches!(success.response(), Some(OutputRecord::BlobRef(reference)) if reference.key.ends_with("map_patches/patch_0001.json"))
+        matches!(success.response(), Some(OutputRecord::BlobRef { reference, .. }) if reference.key.ends_with("map_patches/patch_0001.json"))
     );
     assert!(matches!(
         imported.by_call("error-59902-3").unwrap().status(),
@@ -420,13 +420,13 @@ fn imports_saved_json_patch_merge_outputs_as_merge_tree_evidence() {
             if prevalence_note.contains("reconstructed accepted inputs")
     ));
     assert!(
-        matches!(merge.output_patch(), Some(OutputRecord::BlobRef(reference)) if reference.key.ends_with("merge_level_1/merged_0001.json"))
+        matches!(merge.output_patch(), Some(OutputRecord::BlobRef { reference, .. }) if reference.key.ends_with("merge_level_1/merged_0001.json"))
     );
     assert!(
-        matches!(evidence.final_node().output_patch(), Some(OutputRecord::BlobRef(reference)) if reference.key.ends_with("translated_final_patch.json"))
+        matches!(evidence.final_node().output_patch(), Some(OutputRecord::BlobRef { reference, .. }) if reference.key.ends_with("translated_final_patch.json"))
     );
     assert!(
-        matches!(evidence.final_diff(), Some(OutputRecord::BlobRef(reference)) if reference.key.ends_with("applied_diffs.patch"))
+        matches!(evidence.final_diff(), Some(OutputRecord::BlobRef { reference, .. }) if reference.key.ends_with("applied_diffs.patch"))
     );
     assert!(evidence.parse_failed_nodes().is_empty());
     assert_eq!(evidence.support_by_level().get(&0), Some(&2));

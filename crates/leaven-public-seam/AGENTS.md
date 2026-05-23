@@ -75,9 +75,9 @@ session lifecycle, authentication handshake, permission loop, or worker runtime.
 
 Crate-root exports for `PlanDocument` and `PlanOperationKind` are advanced
 public seam contracts. They prove active-schema Plan IR document validation and
-Let/Call/Write family classification only; they are not plan execution, lowering
-to engine operations, cache behavior, graph mutation authority, or runtime
-consistency enforcement.
+Let/Call/Write family classification plus wire-level consistency-mode base
+preservation only; they are not plan execution, lowering to engine operations,
+cache behavior, graph mutation authority, or runtime revision-read enforcement.
 
 Crate-root export `PinnedDialectEvaluator` is an advanced public seam contract.
 It proves deterministic parsing and replay for the V1 pinned wire
@@ -113,8 +113,10 @@ backpressure, or runtime watch support.
   and watch runtime requests. It also proves the deferred watch marker routes to
   a finite `since_revision` event-diff plan instead of watch runtime behavior.
 - `tests/plan_document.rs` proves schema-backed Plan IR document classification
-  for typed Let/Call/Write documents and rejection of unknown core, call, write,
-  and top-level escape-hatch plan operations before execution.
+  for typed Let/Call/Write documents, explicit consistency-mode bases, and
+  rejection of unknown core/call/write kinds, top-level escape-hatch plan
+  operations, and mismatched `since_revision` event-source bases before
+  execution.
 - `tests/plan_dialects.rs` proves pinned JSON Pointer, JSONPath, and strict
   Mustache dialects are parsed and replayed deterministically, and rejects
   unpinned path syntax, non-subset JSONPath filters/functions/scripts, non-

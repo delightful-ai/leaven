@@ -52,7 +52,7 @@ fn builds_training_corpus_from_upstream_results_and_logs_without_model_work() {
     );
     assert_eq!(trajectory.model_id(), "Qwen3.5-122B-A10B");
     assert!(
-        matches!(trajectory.transcript(), OutputRecord::BlobRef(reference) if reference.key.ends_with("cli_skill_preloaded_agent_13-1.md"))
+        matches!(trajectory.transcript(), OutputRecord::BlobRef { reference, .. } if reference.key.ends_with("cli_skill_preloaded_agent_13-1.md"))
     );
     assert_eq!(trajectory.analysis_records().len(), 1);
     assert_eq!(
@@ -60,7 +60,7 @@ fn builds_training_corpus_from_upstream_results_and_logs_without_model_work() {
         AgentTrajectoryAnalysisKind::Error
     );
     assert!(
-        matches!(trajectory.analysis_records()[0].payload(), OutputRecord::BlobRef(reference) if reference.key.ends_with("error_analysis_13-1.md"))
+        matches!(trajectory.analysis_records()[0].payload(), OutputRecord::BlobRef { reference, .. } if reference.key.ends_with("error_analysis_13-1.md"))
     );
     assert_eq!(train[0], CaseId::from_index(0));
 
@@ -219,7 +219,10 @@ fn write_upstream_run_fixture(root: &Path) -> UpstreamRunFixture {
 }
 
 fn inline_text(record: &OutputRecord) -> &str {
-    let OutputRecord::Inline { text, truncated } = record else {
+    let OutputRecord::Inline {
+        text, truncated, ..
+    } = record
+    else {
         panic!("expected inline prompt")
     };
     assert!(!truncated);

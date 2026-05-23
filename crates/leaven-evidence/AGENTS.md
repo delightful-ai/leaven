@@ -19,7 +19,10 @@ Evidence here is data a stage or evaluator can produce and another component can
 ## Current Public-Maturity Split
 - Behavior-bearing today: scalar scores, pairwise judgments, paired rollout
   rewards, casewise sparse containers, command/agent trajectory records,
-  attribution traits, and `CaseAssessmentEvidence` have local tests.
+  attribution traits, `OutputRecord`, and `CaseAssessmentEvidence` have local tests.
+  `OutputRecord` preserves inline/blob output payloads with explicit visibility
+  and data-class metadata; it is reusable evidence vocabulary, not a complete
+  public-seam evidence-envelope producer.
   `CaseAssessmentEvidence` preserves generated output, scalar score, and
   natural-language feedback; it is reusable evidence vocabulary, not the
   reflective mutation algorithm.
@@ -71,7 +74,10 @@ Evidence here is data a stage or evaluator can produce and another component can
   rewarded trajectory. Unknown telemetry stays absent; do not turn absence into
   a false "not used" event.
 - Use `OutputRecord::BlobRef` for large stdout/stderr, transcripts, and parsed
-  analyst payloads; `OutputRecord::Inline` is bounded display evidence.
+  analyst payloads; `OutputRecord::Inline` is bounded display evidence. Keep
+  `OutputRecord` visibility/data-class metadata monotonic with the value or
+  receipt that carries it; do not downgrade sensitive output by hiding it in a
+  public inline/blob wrapper.
 - Use `AgentTrajectoryCorpusEvidence` when a paper or runner must resume over a
   known task manifest. Duplicate manifest task ids are refused at construction,
   unknown task ids are refused at insertion, and repeated trajectories for a
@@ -104,9 +110,9 @@ Evidence here is data a stage or evaluator can produce and another component can
 
 ## Proof Anchors
 - `cargo nextest run -p leaven-evidence` proves scalar, pairwise, paired
-  rollout, casewise, command/trajectory, skill-use telemetry, analyst fan-out,
-  patch merge-tree, and attribution behavior. It does not currently prove every
-  root-re-exported evidence name.
+  rollout, casewise, command/trajectory, `OutputRecord` visibility/data-class,
+  skill-use telemetry, analyst fan-out, patch merge-tree, and attribution
+  behavior. It does not currently prove every root-re-exported evidence name.
 - `cargo nextest run -p leaven-preference --test scalar` proves scalar preference callers rely on `ScalarEvidence`'s finite-score contract.
 - `cargo nextest run -p leaven-population --test tournament` proves pairwise evidence feeds fitted population state outside this crate.
 - Before adding an evidence name to `leaven-std`, add a focused test in this

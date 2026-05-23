@@ -5166,7 +5166,9 @@ fn aime_reflection_side_info_example(
 fn output_record_text(output: &OutputRecord) -> String {
     match output {
         OutputRecord::Inline { text, .. } => text.clone(),
-        OutputRecord::BlobRef(reference) => format!("blob:{}:{}", reference.store, reference.key),
+        OutputRecord::BlobRef { reference, .. } => {
+            format!("blob:{}:{}", reference.store, reference.key)
+        }
     }
 }
 

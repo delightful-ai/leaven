@@ -8,6 +8,7 @@ pub struct PlanDocument {
     operation_kinds: Vec<PlanOperationKind>,
     return_names: Vec<String>,
     consistency_kind: String,
+    at_revision: Option<String>,
     since_revision: Option<String>,
     until_revision: Option<String>,
     events_since_revision_queries: usize,
@@ -33,6 +34,10 @@ impl PlanDocument {
             .and_then(Value::as_object)
             .ok_or_else(|| invalid_plan("plan `consistency` must carry a kind"))?;
         let consistency_kind = nested_kind(object.get("consistency"), "consistency")?.to_owned();
+        let at_revision = consistency
+            .get("revision")
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned);
         let since_revision = consistency
             .get("since")
             .and_then(Value::as_str)
@@ -49,6 +54,12 @@ impl PlanDocument {
             let operation_kind = match kind {
                 "let" => {
                     if let Some(expr) = op.as_object().and_then(|object| object.get("expr")) {
+                        validate_events_revision_sources(
+                            expr,
+                            &consistency_kind,
+                            since_revision.as_deref(),
+                            until_revision.as_deref(),
+                        )?;
                         events_since_revision_queries += count_events_since_revision_queries(
                             expr,
                             since_revision.as_deref(),
@@ -83,6 +94,7 @@ impl PlanDocument {
             operation_kinds,
             return_names: string_array(object.get("return"), "return")?,
             consistency_kind,
+            at_revision,
             since_revision,
             until_revision,
             events_since_revision_queries,
@@ -107,6 +119,11 @@ impl PlanDocument {
     /// Consistency mode discriminator.
     pub fn consistency_kind(&self) -> &str {
         &self.consistency_kind
+    }
+
+    /// Pinned graph revision for `at_revision` consistency.
+    pub fn at_revision(&self) -> Option<&str> {
+        self.at_revision.as_deref()
     }
 
     /// Base graph revision for `since_revision` consistency.
@@ -347,6 +364,72 @@ fn count_events_since_revision_queries(
             .unwrap_or(0),
         _ => 0,
     }
+}
+
+fn validate_events_revision_sources(
+    value: &Value,
+    consistency_kind: &str,
+    since_revision: Option<&str>,
+    until_revision: Option<&str>,
+) -> Result<(), PublicSeamError> {
+    let Some(object) = value.as_object() else {
+        return Ok(());
+    };
+    match object.get("kind").and_then(Value::as_str) {
+        Some("graph_query") => validate_graph_query_revision_source(
+            object,
+            consistency_kind,
+            since_revision,
+            until_revision,
+        ),
+        Some("project" | "filter") => object
+            .get("input")
+            .map(|input| {
+                validate_events_revision_sources(
+                    input,
+                    consistency_kind,
+                    since_revision,
+                    until_revision,
+                )
+            })
+            .unwrap_or(Ok(())),
+        _ => Ok(()),
+    }
+}
+
+fn validate_graph_query_revision_source(
+    object: &serde_json::Map<String, Value>,
+    consistency_kind: &str,
+    since_revision: Option<&str>,
+    until_revision: Option<&str>,
+) -> Result<(), PublicSeamError> {
+    let Some(source) = object.get("source").and_then(Value::as_object) else {
+        return Ok(());
+    };
+    if source.get("kind").and_then(Value::as_str) != Some("events") {
+        return Ok(());
+    }
+    if consistency_kind != "since_revision" {
+        return Ok(());
+    }
+    let Some(since_revision) = since_revision else {
+        return Err(invalid_plan(
+            "since_revision event queries must carry a plan base revision",
+        ));
+    };
+    if source.get("since_revision").and_then(Value::as_str) != Some(since_revision) {
+        return Err(invalid_plan(
+            "events source since_revision must match plan consistency base",
+        ));
+    }
+    if let Some(until_revision) = until_revision {
+        if source.get("until_revision").and_then(Value::as_str) != Some(until_revision) {
+            return Err(invalid_plan(
+                "events source until_revision must match plan consistency bound",
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn graph_query_matches_since_revision(

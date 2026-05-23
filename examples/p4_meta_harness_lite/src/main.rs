@@ -281,7 +281,7 @@ impl Optimizer<MetaHarnessProblem> for MetaHarnessOptimizer {
         assert!(!created_evidence.command().records().is_empty());
         assert!(matches!(
             created_evidence.trajectory().transcript(),
-            OutputRecord::BlobRef(_)
+            OutputRecord::BlobRef { reference: _, .. }
         ));
         emit_population_events(
             ctx,

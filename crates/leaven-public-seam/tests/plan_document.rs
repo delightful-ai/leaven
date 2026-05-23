@@ -60,6 +60,37 @@ fn plan_ir_family_rejects_unknown_core_call_write_and_escape_hatch_ops() {
     assert!(matches!(error, PublicSeamError::ExampleValidation { .. }));
 }
 
+#[test]
+fn plan_ir_revision_modes_preserve_explicit_bases() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut at_revision = typed_let_call_write_plan();
+    at_revision["consistency"] = json!({
+        "kind": "at_revision",
+        "revision": "rev_pinned"
+    });
+    let document = package.validate_plan_document(&at_revision).unwrap();
+    assert_eq!(document.consistency_kind(), "at_revision");
+    assert_eq!(document.at_revision(), Some("rev_pinned"));
+
+    let since_revision = package
+        .validate_plan_document(&since_revision_event_diff_plan())
+        .unwrap();
+    assert_eq!(since_revision.consistency_kind(), "since_revision");
+    assert_eq!(since_revision.since_revision(), Some("rev_base"));
+    assert_eq!(since_revision.until_revision(), Some("rev_tip"));
+    assert_eq!(since_revision.events_since_revision_queries(), 1);
+
+    let mut mismatched_source = since_revision_event_diff_plan();
+    mismatched_source["ops"][0]["expr"]["source"]["since_revision"] = json!("rev_other");
+    assert!(matches!(
+        package
+            .validate_plan_document(&mismatched_source)
+            .unwrap_err(),
+        PublicSeamError::InvalidPlan { .. }
+    ));
+}
+
 fn typed_let_call_write_plan() -> Value {
     json!({
         "schema_version": "leaven.plan.v1",
@@ -123,6 +154,45 @@ fn typed_let_call_write_plan() -> Value {
             }
         ],
         "return": ["status"],
+        "commit": {
+            "kind": "no_graph_writes"
+        }
+    })
+}
+
+fn since_revision_event_diff_plan() -> Value {
+    json!({
+        "schema_version": "leaven.plan.v1",
+        "plan_id": "planrevision001",
+        "consistency": {
+            "kind": "since_revision",
+            "since": "rev_base",
+            "until": "rev_tip"
+        },
+        "mode": {
+            "kind": "dry_run"
+        },
+        "ops": [
+            {
+                "kind": "let",
+                "name": "events",
+                "expr": {
+                    "kind": "graph_query",
+                    "source": {
+                        "kind": "events",
+                        "since_revision": "rev_base",
+                        "until_revision": "rev_tip"
+                    },
+                    "projection": {
+                        "kind": "ids"
+                    },
+                    "page": {
+                        "limit": 100
+                    }
+                }
+            }
+        ],
+        "return": ["events"],
         "commit": {
             "kind": "no_graph_writes"
         }
