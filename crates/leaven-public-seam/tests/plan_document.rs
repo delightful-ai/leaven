@@ -337,7 +337,7 @@ fn evaluator_target_reads_reject_unrequested_target_material() {
 }
 
 #[test]
-fn evaluator_target_reads_require_evaluator_capability_before_host_read() {
+fn evaluator_target_reads_reject_missing_evaluator_capability_before_host_read() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let plan = evaluator_target_case_query_plan();
 

@@ -1,5 +1,7 @@
 //! Public runner and scoring evidence shapes.
 
+use std::fmt;
+
 use leaven_eval::Case;
 use leaven_evidence::{CaseDataReadEvidence, DataClass, OutputRecord};
 use leaven_kernel::{BudgetSnapshot, CandidateId, CaseId, Cost};
@@ -545,12 +547,24 @@ impl CaseDataReadLog {
 }
 
 /// Case view passed to scoring closures.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct ScoreCase<I, T = leaven_eval::NoTarget> {
     id: CaseId,
     input: I,
     target: Option<T>,
     metadata: ScoreMetadataView,
+}
+
+impl<I: fmt::Debug, T> fmt::Debug for ScoreCase<I, T> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ScoreCase")
+            .field("id", &self.id)
+            .field("input", &self.input)
+            .field("target", &"<loaded through ScoreContext::load_target>")
+            .field("metadata", &self.metadata)
+            .finish()
+    }
 }
 
 impl<I, T> ScoreCase<I, T> {
