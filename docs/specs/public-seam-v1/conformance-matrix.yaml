@@ -345,14 +345,30 @@ rows:
       - docs/specs/public-seam-v1/notes/CONFORMANCE_TESTS_v0.3.md
     conformance_tests:
       - reject_delegated_token_widens_any_action_resource_budget_data_class_schema
-    owner_boundary: engine trust layer plus public-seam implementation owner
+    owner_boundary: public-seam semantic validation owner; engine trust layer remains runtime owner for minting, ledgers, ACP, and session behavior
     positive_proof: >
       Valid delegation narrows authority and records parent capability lineage.
     negative_proof: >
       Delegation attempts that widen any constrained dimension are rejected.
     fake_pass_rejected: Issuing fresh full-power child tokens from any valid parent.
     minimum_closeout_level: semantic_denial
-    status: pending
+    positive_test_evidence:
+      - crates/leaven-public-seam/tests/capability_document.rs::valid_delegation_narrows_authority_and_records_parent_lineage
+    negative_test_evidence:
+      - crates/leaven-public-seam/tests/capability_document.rs::delegation_rejects_widened_action_resource_budget_data_class_schema_expiry_and_binding
+    implementation_evidence:
+      - crates/leaven-public-seam/src/capability.rs::CapabilityDocument::validate_delegation
+      - crates/leaven-public-seam/src/capability.rs::CapabilityDelegation
+      - crates/leaven-public-seam/src/capability.rs::ensure_binding_attenuates
+      - crates/leaven-public-seam/src/capability.rs::ensure_budget_attenuates
+      - crates/leaven-public-seam/src/capability.rs::ensure_resource_attenuates
+      - crates/leaven-public-seam/src/capability.rs::ensure_constraints_attenuate
+      - crates/leaven-public-seam/src/capability.rs::ensure_grant_limits_attenuate
+      - crates/leaven-public-seam/src/capability.rs::ensure_delegation_policy_attenuates
+      - crates/leaven-public-seam/AGENTS.md
+    review_evidence:
+      - docs/specs/public-seam-v1/reviews/2026-05-23-capability-delegation-review.md
+    status: proven
 
   - id: ps1.capability.aggregate_budgets
     area: capability

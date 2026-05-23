@@ -7,8 +7,9 @@ mod matrix;
 mod package;
 
 pub use capability::{
-    AuthorizedGrant, CapabilityDenial, CapabilityDenialKind, CapabilityDocument, CapabilityError,
-    CapabilityGrantRequest, CapabilityLimitUsage, CapabilityRegistry,
+    AuthorizedGrant, CapabilityDelegation, CapabilityDenial, CapabilityDenialKind,
+    CapabilityDocument, CapabilityError, CapabilityGrantRequest, CapabilityLimitUsage,
+    CapabilityRegistry,
 };
 pub use error::PublicSeamError;
 pub use fingerprint::SchemaFingerprint;
