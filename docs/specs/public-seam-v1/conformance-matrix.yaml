@@ -613,8 +613,9 @@ rows:
       - reject_reflector_lm_call_input_classes_include_case_target
     owner_boundary: agentic/stage lowering plus public-seam implementation owner
     positive_proof: >
-      ReflectRequest construction uses target-safe examples and carries source
-      refs, read receipts, and data classes.
+      ReflectRequest construction uses target-safe examples with source refs and
+      query policy fingerprints, and ReflectionResult carries read receipts and
+      data classes.
     negative_proof: >
       Reflector case.target reads and reflector LM calls containing case.target
       data classes are denied.
