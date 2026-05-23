@@ -1,9 +1,10 @@
 use std::collections::BTreeMap;
 
 use leaven_public_seam::{
-    PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanExecutionContext, PlanExecutionHost,
-    PlanGraphQueryOutcome, PlanGraphQueryRequest, PlanGraphReadScope, PlanLmCompleteOutcome,
-    PlanLmCompleteRequest, PlanOperationKind, PublicSeamError, PublicSeamPackage,
+    PlanCaseQueryOutcome, PlanCaseQueryRequest, PlanEmitRunEventOutcome, PlanEmitRunEventRequest,
+    PlanExecutionContext, PlanExecutionHost, PlanGraphQueryOutcome, PlanGraphQueryRequest,
+    PlanGraphReadScope, PlanLmCompleteOutcome, PlanLmCompleteRequest, PlanOperationKind,
+    PublicSeamError, PublicSeamPackage,
 };
 use serde_json::{Value, json};
 
@@ -241,6 +242,89 @@ fn plan_execution_result_rejects_missing_operation_receipts() {
     );
 }
 
+#[test]
+fn evaluator_target_reads_execute_case_query_load_with_query_receipts() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let plan = evaluator_target_case_query_plan();
+    let context = plan_execution_context();
+    let mut host = RecordingPlanHost::default();
+
+    let report = package
+        .execute_plan_document(&plan, &context, &mut host)
+        .unwrap();
+    package
+        .validate_plan_execution_result(&plan, &context, report.value())
+        .unwrap();
+
+    assert_eq!(host.case_reads, vec!["target:case_1"]);
+    assert_eq!(
+        report.value()["values"]["target"]["kind"].as_str(),
+        Some("case_record")
+    );
+    assert_eq!(
+        report.value()["values"]["target"]["target"],
+        json!({"answer": "expected"})
+    );
+    assert_eq!(
+        report.value()["values"]["target"]["data_classes"],
+        json!(["case.target"])
+    );
+    assert_eq!(
+        report.value()["receipts"][0]["kind"].as_str(),
+        Some("query")
+    );
+    assert!(
+        report.value()["receipts"][0]["op_hash"]
+            .as_str()
+            .unwrap()
+            .starts_with("fp_query_sha256_")
+    );
+}
+
+#[test]
+fn evaluator_target_reads_reject_missing_or_unbound_case_query_receipts() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let plan = evaluator_target_case_query_plan();
+    let context = plan_execution_context();
+    let result = package
+        .execute_plan_document(&plan, &context, &mut RecordingPlanHost::default())
+        .unwrap()
+        .value()
+        .clone();
+
+    let mut missing_receipt = result.clone();
+    missing_receipt["receipts"] = json!([]);
+    assert_plan_execution_or_result_rejected(&package, &plan, &context, &missing_receipt);
+
+    let mut decorative_query_hash = result.clone();
+    decorative_query_hash["receipts"][0]["op_hash"] =
+        json!("fp_query_sha256_decorative_case_query");
+    assert_plan_execution_or_result_rejected(&package, &plan, &context, &decorative_query_hash);
+
+    let mut decorative_result_hash = result;
+    decorative_result_hash["receipts"][0]["result_hash"] =
+        json!("fp_result_sha256_decorative_case_query");
+    assert_plan_execution_or_result_rejected(&package, &plan, &context, &decorative_result_hash);
+}
+
+#[test]
+fn evaluator_target_reads_reject_unrequested_target_material() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut plan = evaluator_target_case_query_plan();
+    plan["ops"][0]["expr"]["query"]["include"] = json!(["input"]);
+
+    assert!(matches!(
+        package
+            .execute_plan_document(
+                &plan,
+                &plan_execution_context(),
+                &mut RecordingPlanHost::default()
+            )
+            .unwrap_err(),
+        PublicSeamError::InvalidPlan { .. }
+    ));
+}
+
 fn assert_plan_execution_result_rejected(
     package: &PublicSeamPackage,
     plan: &Value,
@@ -252,6 +336,20 @@ fn assert_plan_execution_result_rejected(
             .validate_plan_execution_result(plan, context, result)
             .unwrap_err(),
         PublicSeamError::InvalidPlan { .. }
+    ));
+}
+
+fn assert_plan_execution_or_result_rejected(
+    package: &PublicSeamPackage,
+    plan: &Value,
+    context: &PlanExecutionContext,
+    result: &Value,
+) {
+    assert!(matches!(
+        package
+            .validate_plan_execution_result(plan, context, result)
+            .unwrap_err(),
+        PublicSeamError::InvalidPlan { .. } | PublicSeamError::InvalidPlanResult { .. }
     ));
 }
 
@@ -778,6 +876,42 @@ fn latest_at_start_graph_query_plan() -> Value {
     plan
 }
 
+fn evaluator_target_case_query_plan() -> Value {
+    json!({
+        "schema_version": "leaven.plan.v1",
+        "plan_id": "planevaltarget001",
+        "consistency": {
+            "kind": "latest_at_start"
+        },
+        "mode": {
+            "kind": "execute"
+        },
+        "ops": [
+            {
+                "kind": "let",
+                "name": "target",
+                "expr": {
+                        "kind": "case_query",
+                        "query": {
+                            "kind": "load",
+                            "case": {
+                                "kind": "case",
+                                "run": "run_eval_target",
+                                "id": "case_1"
+                            },
+                            "include": ["target"],
+                            "projection_schema": "fp_schema_sha256_target_projection"
+                        }
+                }
+            }
+        ],
+        "return": ["target"],
+        "commit": {
+            "kind": "no_graph_writes"
+        }
+    })
+}
+
 fn at_revision_graph_query_plan() -> Value {
     let mut plan = since_revision_event_diff_plan();
     plan["plan_id"] = json!("planrevisionpinned001");
@@ -918,6 +1052,7 @@ fn evidence_envelope(summary: &'static str) -> Value {
 #[derive(Default)]
 struct RecordingPlanHost {
     graph_reads: Vec<String>,
+    case_reads: Vec<String>,
     calls: Vec<&'static str>,
     cached_calls: Vec<&'static str>,
     writes: Vec<&'static str>,
@@ -984,6 +1119,22 @@ impl PlanExecutionHost for RecordingPlanHost {
                 ))
             }
         }
+    }
+
+    fn case_query_load(
+        &mut self,
+        request: PlanCaseQueryRequest<'_>,
+    ) -> Result<PlanCaseQueryOutcome, PublicSeamError> {
+        assert_eq!(request.name(), "target");
+        assert_eq!(request.query()["kind"].as_str(), Some("load"));
+        assert_eq!(
+            request.query()["case"],
+            json!({"kind": "case", "run": "run_eval_target", "id": "case_1"})
+        );
+        self.case_reads.push("target:case_1".to_owned());
+        Ok(PlanCaseQueryOutcome::new("case_1", "rev_planexec_base")
+            .with_target(json!({"answer": "expected"}))
+            .with_data_classes(["case.target".to_owned()]))
     }
 
     fn lm_complete(

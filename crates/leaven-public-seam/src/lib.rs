@@ -44,9 +44,9 @@ pub use package::{
 };
 pub use plan::{PlanDocument, PlanOperationKind};
 pub use plan_execution::{
-    PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanExecutionContext, PlanExecutionHost,
-    PlanExecutionReport, PlanGraphQueryOutcome, PlanGraphQueryRequest, PlanGraphReadScope,
-    PlanLmCompleteOutcome, PlanLmCompleteRequest,
+    PlanCaseQueryOutcome, PlanCaseQueryRequest, PlanEmitRunEventOutcome, PlanEmitRunEventRequest,
+    PlanExecutionContext, PlanExecutionHost, PlanExecutionReport, PlanGraphQueryOutcome,
+    PlanGraphQueryRequest, PlanGraphReadScope, PlanLmCompleteOutcome, PlanLmCompleteRequest,
 };
 pub use proposal_authority::ProposalAuthorityReport;
 pub use result::{PlanResultDocument, Replayability};

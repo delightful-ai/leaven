@@ -3,8 +3,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde_json::{Map, Value, json};
 
 use super::{
-    PlanExecutionContext, dependency_values, graph_read_scope, graph_read_scope_value,
-    invalid_plan, nested_kind, object, prefixed_jcs_hash, required_string,
+    PlanExecutionContext, case_query_projection, dependency_values, graph_read_scope,
+    graph_read_scope_value, invalid_plan, nested_kind, object, prefixed_jcs_hash, required_string,
 };
 use crate::PublicSeamError;
 
@@ -120,53 +120,144 @@ fn validate_let_receipt(
             bindings.insert(name.to_owned(), value);
             Ok(())
         }
-        "graph_query" => {
-            let Some(receipt) = receipts_by_op.get(name) else {
-                return Err(invalid_plan(format!(
-                    "graph_query operation `{name}` must carry a query receipt"
-                )));
-            };
-            require_receipt_field(receipt, "kind", "query")?;
-            let value = values.get(name).ok_or_else(|| {
-                invalid_plan(format!(
-                    "query receipt for `{name}` must have a matching result value"
-                ))
-            })?;
-            let scope = graph_read_scope(plan_document, context)?;
-            let scope_value = graph_read_scope_value(scope);
-            let projection = object(expr, "graph_query")?
-                .get("projection")
-                .ok_or_else(|| invalid_plan("graph_query must carry projection"))?;
-            require_receipt_field(
-                receipt,
-                "op_hash",
-                &prefixed_jcs_hash(
-                    "fp_query_sha256_",
-                    &json!({
-                        "schema_version": "leaven.plan_query_op.v1",
-                        "name": name,
-                        "expr": expr,
-                        "scope": scope_value
-                    }),
-                )?,
-            )?;
-            require_receipt_field(
-                receipt,
-                "read_scope_fingerprint",
-                &prefixed_jcs_hash("fp_scope_sha256_", &scope_value)?,
-            )?;
-            require_receipt_field(
-                receipt,
-                "projection_fingerprint",
-                &prefixed_jcs_hash("fp_projection_sha256_", projection)?,
-            )?;
-            bindings.insert(name.to_owned(), value.clone());
-            Ok(())
+        "graph_query" => validate_graph_query_receipt(
+            expr,
+            name,
+            plan_document,
+            context,
+            values,
+            receipts_by_op,
+            bindings,
+        ),
+        "case_query" => {
+            validate_case_query_receipt(expr, name, context, values, receipts_by_op, bindings)
         }
         other => Err(invalid_plan(format!(
             "representative Plan IR receipt verifier does not inspect `{other}` let expressions"
         ))),
     }
+}
+
+fn validate_graph_query_receipt(
+    expr: &Value,
+    name: &str,
+    plan_document: &crate::PlanDocument,
+    context: &PlanExecutionContext,
+    values: &Map<String, Value>,
+    receipts_by_op: &BTreeMap<String, &Map<String, Value>>,
+    bindings: &mut BTreeMap<String, Value>,
+) -> Result<(), PublicSeamError> {
+    let Some(receipt) = receipts_by_op.get(name) else {
+        return Err(invalid_plan(format!(
+            "graph_query operation `{name}` must carry a query receipt"
+        )));
+    };
+    require_receipt_field(receipt, "kind", "query")?;
+    let value = values.get(name).ok_or_else(|| {
+        invalid_plan(format!(
+            "query receipt for `{name}` must have a matching result value"
+        ))
+    })?;
+    let scope = graph_read_scope(plan_document, context)?;
+    let scope_value = graph_read_scope_value(scope);
+    let projection = object(expr, "graph_query")?
+        .get("projection")
+        .ok_or_else(|| invalid_plan("graph_query must carry projection"))?;
+    require_receipt_field(
+        receipt,
+        "op_hash",
+        &prefixed_jcs_hash(
+            "fp_query_sha256_",
+            &json!({
+                "schema_version": "leaven.plan_query_op.v1",
+                "name": name,
+                "expr": expr,
+                "scope": scope_value
+            }),
+        )?,
+    )?;
+    require_receipt_field(
+        receipt,
+        "read_scope_fingerprint",
+        &prefixed_jcs_hash("fp_scope_sha256_", &scope_value)?,
+    )?;
+    require_receipt_field(
+        receipt,
+        "projection_fingerprint",
+        &prefixed_jcs_hash("fp_projection_sha256_", projection)?,
+    )?;
+    bindings.insert(name.to_owned(), value.clone());
+    Ok(())
+}
+
+fn validate_case_query_receipt(
+    expr: &Value,
+    name: &str,
+    context: &PlanExecutionContext,
+    values: &Map<String, Value>,
+    receipts_by_op: &BTreeMap<String, &Map<String, Value>>,
+    bindings: &mut BTreeMap<String, Value>,
+) -> Result<(), PublicSeamError> {
+    let Some(receipt) = receipts_by_op.get(name) else {
+        return Err(invalid_plan(format!(
+            "case_query operation `{name}` must carry a query receipt"
+        )));
+    };
+    require_receipt_field(receipt, "kind", "query")?;
+    let value = values.get(name).ok_or_else(|| {
+        invalid_plan(format!(
+            "case_query receipt for `{name}` must have a matching result value"
+        ))
+    })?;
+    let query = object(expr, "case_query")?
+        .get("query")
+        .ok_or_else(|| invalid_plan("case_query must carry query"))?;
+    if nested_kind(query, "case_query.query")? != "load" {
+        return Err(invalid_plan(
+            "representative Plan IR receipt verifier only inspects case_query.load",
+        ));
+    }
+    let scope = json!({
+        "kind": "case_query.load",
+        "base_revision": context.base_revision
+    });
+    require_receipt_field(
+        receipt,
+        "op_hash",
+        &prefixed_jcs_hash(
+            "fp_query_sha256_",
+            &json!({
+                "schema_version": "leaven.plan_query_op.v1",
+                "name": name,
+                "expr": expr,
+                "scope": scope
+            }),
+        )?,
+    )?;
+    require_receipt_field(
+        receipt,
+        "read_scope_fingerprint",
+        &prefixed_jcs_hash("fp_scope_sha256_", &scope)?,
+    )?;
+    require_receipt_field(
+        receipt,
+        "projection_fingerprint",
+        &prefixed_jcs_hash("fp_projection_sha256_", &case_query_projection(query)?)?,
+    )?;
+    require_receipt_field(
+        receipt,
+        "result_hash",
+        &prefixed_jcs_hash(
+            "fp_result_sha256_",
+            &json!({
+                "schema_version": "leaven.plan_query_result.v1",
+                "name": name,
+                "value": value
+            }),
+        )?,
+    )?;
+    bindings.insert(name.to_owned(), value.clone());
+    Ok(())
 }
 
 fn validate_call_receipt(
