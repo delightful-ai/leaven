@@ -79,13 +79,20 @@ Let/Call/Write family classification only; they are not plan execution, lowering
 to engine operations, cache behavior, graph mutation authority, or runtime
 consistency enforcement.
 
+Crate-root export `DeferredWatchReplacement` is an advanced public seam
+contract. It proves that the V1 deferred watch marker can route only to a finite
+`consistency.since_revision` event-diff Plan IR document; it is not watch
+subscription delivery, streaming, cursor acknowledgement, lifecycle,
+backpressure, or runtime watch support.
+
 ## Proof Anchors
 
 - `tests/contract_package.rs` proves active package authority, manifest
   inventory, schema compilation, schema fingerprinting, matrix row structure,
   notes-denominator mapping, fake-closeout rejection, deferred markers, and
   locked ACP-profile transport-scope refusal of MCP, legacy worker protocol,
-  and watch runtime requests.
+  and watch runtime requests. It also proves the deferred watch marker routes to
+  a finite `since_revision` event-diff plan instead of watch runtime behavior.
 - `tests/plan_document.rs` proves schema-backed Plan IR document classification
   for typed Let/Call/Write documents and rejection of unknown core, call, write,
   and top-level escape-hatch plan operations before execution.

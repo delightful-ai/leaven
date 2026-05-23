@@ -6,6 +6,7 @@ mod fingerprint;
 mod matrix;
 mod package;
 mod plan;
+mod watch;
 
 pub use capability::{
     AuthorizedGrant, CapabilityDelegation, CapabilityDenial, CapabilityDenialKind,
@@ -21,3 +22,4 @@ pub use package::{
     ValidationReport, WorkerTransportKind, WorkerTransportRequest,
 };
 pub use plan::{PlanDocument, PlanOperationKind};
+pub use watch::DeferredWatchReplacement;

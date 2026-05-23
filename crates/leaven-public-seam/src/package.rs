@@ -6,7 +6,9 @@ use jsonschema::{Retrieve, Uri};
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::{ConformanceMatrix, MatrixRowStatus, PlanDocument, PublicSeamError};
+use crate::{
+    ConformanceMatrix, DeferredWatchReplacement, MatrixRowStatus, PlanDocument, PublicSeamError,
+};
 
 const ACTIVE_PACKAGE_RELATIVE: &str = "docs/specs/public-seam-v1";
 const CAPABILITY_EXAMPLE: &str = "evaluator_capability.v0.3.example.json";
@@ -698,6 +700,17 @@ impl PublicSeamPackage {
     pub fn validate_plan_document(&self, value: &Value) -> Result<PlanDocument, PublicSeamError> {
         self.validate_arbitrary_value("leaven.plan.v1.schema.json", "/plan", value)?;
         PlanDocument::from_schema_valid_value(value)
+    }
+
+    /// Validates the V1 deferred-watch marker and its finite-diff Plan IR replacement.
+    pub fn validate_deferred_watch_replacement(
+        &self,
+        marker: &Value,
+        plan: &Value,
+    ) -> Result<DeferredWatchReplacement, PublicSeamError> {
+        self.validate_arbitrary_value("leaven.watch.v1.schema.json", "/watch", marker)?;
+        let plan = self.validate_plan_document(plan)?;
+        DeferredWatchReplacement::from_plan(plan)
     }
 
     fn inventory_for_manifest(

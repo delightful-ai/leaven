@@ -762,6 +762,8 @@ rows:
     spec_refs:
       - docs/specs/public-seam-v1/08_watch_deferred_v1.1.md
       - docs/specs/public-seam-v1/schemas/leaven.watch.v1.schema.json
+      - docs/specs/public-seam-v1/schemas/leaven.plan.v1.schema.json
+      - docs/specs/public-seam-v1/profiles/leaven_acp_profile_v1_v0.3.md
       - docs/specs/public-seam-v1/manifest.json
     owner_boundary: public-seam implementation owner
     positive_proof: >

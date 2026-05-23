@@ -327,6 +327,79 @@ fn deferred_watch_marker_routes_to_since_revision_plan_diff() {
             &finite_diff_plan,
         )
         .unwrap();
+    let replacement = package
+        .validate_deferred_watch_replacement(&marker, &finite_diff_plan)
+        .unwrap();
+    assert!(replacement.plan().is_since_revision_event_diff());
+    assert_eq!(replacement.plan().consistency_kind(), "since_revision");
+    assert_eq!(replacement.plan().since_revision(), Some("rev_base"));
+    assert_eq!(replacement.plan().until_revision(), Some("rev_tip"));
+    assert_eq!(replacement.plan().events_since_revision_queries(), 1);
+}
+
+#[test]
+fn deferred_watch_rejects_schema_valid_non_diff_replacements() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let marker = json!({
+        "schema_version": "leaven.watch.v1.deferred",
+        "use_instead": "leaven.plan.v1 consistency.since_revision"
+    });
+
+    let mut latest_at_start = finite_diff_plan();
+    latest_at_start["consistency"] = json!({
+        "kind": "latest_at_start"
+    });
+    assert!(matches!(
+        package
+            .validate_deferred_watch_replacement(&marker, &latest_at_start)
+            .unwrap_err(),
+        PublicSeamError::InvalidWatch { .. }
+    ));
+
+    let mut no_event_diff = finite_diff_plan();
+    no_event_diff["ops"][0]["expr"]["source"] = json!({
+        "kind": "candidate_set"
+    });
+    assert!(matches!(
+        package
+            .validate_deferred_watch_replacement(&marker, &no_event_diff)
+            .unwrap_err(),
+        PublicSeamError::InvalidWatch { .. }
+    ));
+
+    let mut at_revision = finite_diff_plan();
+    at_revision["consistency"] = json!({
+        "kind": "at_revision",
+        "revision": "rev_base"
+    });
+    assert!(matches!(
+        package
+            .validate_deferred_watch_replacement(&marker, &at_revision)
+            .unwrap_err(),
+        PublicSeamError::InvalidWatch { .. }
+    ));
+
+    let mut mismatched_base = finite_diff_plan();
+    mismatched_base["ops"][0]["expr"]["source"]["since_revision"] = json!("rev_other");
+    assert!(matches!(
+        package
+            .validate_deferred_watch_replacement(&marker, &mismatched_base)
+            .unwrap_err(),
+        PublicSeamError::InvalidWatch { .. }
+    ));
+
+    let mut missing_event_diff = finite_diff_plan();
+    missing_event_diff["ops"][0]["expr"] = json!({
+        "kind": "literal",
+        "value": [],
+        "data_classes": ["public"]
+    });
+    assert!(matches!(
+        package
+            .validate_deferred_watch_replacement(&marker, &missing_event_diff)
+            .unwrap_err(),
+        PublicSeamError::InvalidWatch { .. }
+    ));
 }
 
 #[test]
@@ -381,7 +454,9 @@ fn deferred_watch_rejects_runtime_subscription_and_success_claims() {
         "leaven/watch.start",
         "leaven/watch.subscribe",
         "leaven/watch.stream",
+        "leaven/watch.next",
         "leaven/watch.ack",
+        "leaven/watch.close",
     ] {
         assert!(matches!(
             scope
@@ -689,6 +764,45 @@ fn workspace_root() -> PathBuf {
         .and_then(Path::parent)
         .unwrap()
         .to_path_buf()
+}
+
+fn finite_diff_plan() -> Value {
+    json!({
+        "schema_version": "leaven.plan.v1",
+        "plan_id": "watchdiff001",
+        "consistency": {
+            "kind": "since_revision",
+            "since": "rev_base",
+            "until": "rev_tip"
+        },
+        "mode": {
+            "kind": "dry_run"
+        },
+        "ops": [
+            {
+                "kind": "let",
+                "name": "events",
+                "expr": {
+                    "kind": "graph_query",
+                    "source": {
+                        "kind": "events",
+                        "since_revision": "rev_base",
+                        "until_revision": "rev_tip"
+                    },
+                    "projection": {
+                        "kind": "ids"
+                    },
+                    "page": {
+                        "limit": 100
+                    }
+                }
+            }
+        ],
+        "return": ["events"],
+        "commit": {
+            "kind": "no_graph_writes"
+        }
+    })
 }
 
 fn copy_dir_all(from: impl AsRef<Path>, to: impl AsRef<Path>) -> std::io::Result<()> {
