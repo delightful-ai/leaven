@@ -98,6 +98,13 @@ source-receipt preservation plus target-derived data-class coverage at the
 wire-envelope layer only; it is not evaluator evidence production, redaction
 execution, receipt persistence, or data-class propagation through runtime stages.
 
+Crate-root exports for `PublicOutputRecord`, `OutputRecordDocument`, and
+`PublicBlobRef` are advanced public seam contracts. They prove reusable
+`leaven-evidence` output records can be projected into the locked
+`common.schema.json#/$defs/OutputRecord` wire shape with visibility,
+data-classes, and blob audit metadata. They are not proof that evaluator
+runtimes produce those records for every assessment shape.
+
 Crate-root export `DeferredWatchReplacement` is an advanced public seam
 contract. It proves that the V1 deferred watch marker can route only to a finite
 `consistency.since_revision` event-diff Plan IR document; it is not watch
@@ -127,6 +134,11 @@ backpressure, or runtime watch support.
   derived data classes, and read/effect/write source receipt refs at the public-
   seam validation layer. It does not prove evaluator/evidence runtime production
   or public PlanResult projection.
+- `tests/output_record.rs` proves reusable `leaven-evidence` output records
+  project into the locked public-seam OutputRecord wire shape with visibility,
+  data classes, non-placeholder inline output, and public blob audit metadata.
+  It does not prove evaluator runtime production or pairwise/listwise
+  assessment behavior.
 - `tests/plan_result.rs` proves active-schema Plan Result envelopes carry typed
   success and failure values, receipts, errors, charges, capability and policy
   fingerprints, receipt timing, data classes, and closed `PlanError` values at

@@ -6,6 +6,7 @@ mod error;
 mod evidence;
 mod fingerprint;
 mod matrix;
+mod output;
 mod package;
 mod plan;
 mod result;
@@ -21,6 +22,7 @@ pub use error::PublicSeamError;
 pub use evidence::EvidenceEnvelopeDocument;
 pub use fingerprint::SchemaFingerprint;
 pub use matrix::{ConformanceMatrix, ConformanceRow, MatrixRowStatus, MinimumCloseoutLevel};
+pub use output::{OutputRecordDocument, PublicBlobRef, PublicOutputRecord};
 pub use package::{
     AuthorizedWorkerTransport, ConformanceTestCase, ConformanceTestDenominator,
     ConformanceTestKind, ContractInventory, PublicSeamPackage, V1Scope, ValidatedExample,
