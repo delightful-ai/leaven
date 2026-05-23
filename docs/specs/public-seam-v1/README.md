@@ -5,6 +5,8 @@ This package is the locked public seam for Leaven v1.
 - `goal-readiness-gate.yaml` is the pre-goal correctness gate. Broad
   implementation goals for this seam must reference this package and code to the
   standards encoded here.
+- `conformance-matrix.yaml` turns the locked spec into checkable implementation
+  obligations. It is a coverage map over the specs, not a replacement for them.
 - `schemas/` contains designed JSON Schemas.
 - `profiles/` contains the Leaven ACP profile prose.
 - `examples/` contains concrete shape examples.

@@ -5,6 +5,7 @@ status: ready_for_goal_preparation
 authority:
   source_of_truth: docs/specs/public-seam-v1
   governing_manifest: docs/specs/public-seam-v1/manifest.json
+  conformance_matrix: docs/specs/public-seam-v1/conformance-matrix.yaml
   governing_read_order:
     - docs/specs/public-seam-v1/00_architecture_judgment_v0.3.md
     - docs/specs/public-seam-v1/01_plan_ir_spec_v0.3.md
@@ -79,6 +80,7 @@ goal_launch_gate:
   must_reference:
     - docs/specs/public-seam-v1/goal-readiness-gate.yaml
     - docs/specs/public-seam-v1/manifest.json
+    - docs/specs/public-seam-v1/conformance-matrix.yaml
     - docs/specs/public-seam-v1/schemas
     - docs/specs/public-seam-v1/notes/CONFORMANCE_TESTS_v0.3.md
   must_decide_before_coding:
@@ -103,12 +105,16 @@ misleading_proxy_proofs:
 acceptance_path:
   preflight:
     - Validate manifest JSON and every active schema path.
+    - Validate conformance-matrix row structure, uniqueness, and spec references.
     - Validate active examples against the relevant schemas.
+    - Map every implemented claim to at least one conformance matrix row.
     - Confirm manifest.mcp_status is honored by the proposed implementation scope.
     - Confirm manifest.watch_status is honored by the proposed implementation scope.
   implementation:
     - Add the owning Rust surface for the active contract JSONs.
-    - Add conformance tests that fail on the proxy proofs listed above.
+    - Add conformance tests for the matrix rows touched by the implementation.
+    - Add at least one negative proof for each touched semantic-denial row.
+    - Add tests that fail on the proxy proofs listed above.
     - Add route/maturity classification for any public exports, default features, or facade imports touched by the implementation.
     - Preserve hard cutover semantics; do not accept archived or downloaded drafts at runtime.
   completion:
