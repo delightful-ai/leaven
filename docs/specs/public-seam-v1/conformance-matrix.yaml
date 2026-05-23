@@ -557,7 +557,7 @@ rows:
       - crates/leaven-engine/tests/budget_laws.rs::budget_ledger_rejects_mixed_runtime_roles_and_delegated_work_beyond_aggregate_axes
     negative_test_evidence:
       - crates/leaven-public-seam/tests/capability_document.rs::aggregate_budget_ledger_rejects_role_and_concurrency_overruns
-      - crates/leaven-public-seam/tests/capability_document.rs::aggregate_budget_ledger_counts_role_spend_against_total_budget
+      - crates/leaven-public-seam/tests/capability_document.rs::aggregate_budget_ledger_rejects_role_spend_beyond_total_budget
       - crates/leaven-public-seam/tests/capability_document.rs::aggregate_budget_runtime_projection_rejects_role_concurrency_delegation_and_precision_bypasses
       - crates/leaven-engine/tests/budget_laws.rs::budget_ledger_rejects_mixed_runtime_roles_and_delegated_work_beyond_aggregate_axes
     implementation_evidence:
@@ -570,7 +570,8 @@ rows:
       - crates/leaven-public-seam/AGENTS.md
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-capability-aggregate-budgets-review.md
-    status: pending
+      - docs/specs/public-seam-v1/reviews/2026-05-23-capability-aggregate-budgets-follow-up-review.md
+    status: proven
 
   - id: ps1.visibility.data_class_propagation
     area: data_visibility

@@ -516,6 +516,7 @@ fn conformance_matrix_rows_are_unique_honest_and_reference_real_files() {
         BTreeSet::from([
             "ps1.authority.active_package_only",
             "ps1.authority.manifest_inventory",
+            "ps1.capability.aggregate_budgets",
             "ps1.capability.document_truth",
             "ps1.capability.delegation_attenuates",
             "ps1.capability.grant_enforcement",
