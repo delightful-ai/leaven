@@ -97,6 +97,13 @@ pub enum PublicSeamError {
         message: String,
     },
 
+    /// A schema-valid watch marker or replacement plan violates the deferred V1 watch contract.
+    #[error("invalid public seam deferred watch replacement: {message}")]
+    InvalidWatch {
+        /// Human-readable reason.
+        message: String,
+    },
+
     /// RFC 8785/JCS schema fingerprinting failed.
     #[error("schema fingerprinting failed: {message}")]
     Fingerprint {
