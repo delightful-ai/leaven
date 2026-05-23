@@ -152,19 +152,17 @@ Current limits after fourth block:
 - This note records the Mencius block and follow-up implementation, but it still does not sign off `ps1.evaluator.score_output`.
 - No matrix status should change for this row until a new adversarial sub-agent sign-off reviews this fourth follow-up.
 
-Final adversarial review:
+Fourth follow-up adversarial review:
 
-- Reviewer: Codex adversarial review in active goal continuation after the fourth follow-up.
-- Result: signed off. No blocking findings remained after inspecting the locked row/spec requirements, the current runtime and public-seam code, the matrix evidence, and focused tests.
+- Reviewer: sub-agent `019e551f-89f7-7f51-9fc2-723f491aa294`
+- Result: blocked. The row must remain pending.
 
-Final review findings:
+Fourth follow-up blocking findings:
 
-- The fourth follow-up rejects the fake pass named by the row: a nonblank schema-only dummy `Score.output` no longer passes the public-seam `submit_assessments` route unless it is data-classed as assessed candidate/artifact output, and runtime typed runner declarations cannot launder public-only output into successful score evidence.
-- Runtime positive proof now covers independent assessed output as both `candidate.output` and `candidate.artifact`, plus pairwise and listwise candidate-output group assessments.
-- Runtime negative proof covers missing output, blank placeholder output, same-context dummy output, mutable-context forgery, cross-context reuse, missing typed-runner reportable declarations, and public-only typed-runner declarations for independent and judging paths.
-- Public-seam Plan IR proof covers independent, pairwise, and listwise `submit_assessments` score-output shapes, rejects missing/blank/null/public-only dummy score outputs, and accepts the locked candidate-artifact wording.
+- A candidate-labeled dummy still passes the public-seam `submit_assessments` route: data classes prove classification, but not relation to the assessed candidate/artifact output.
+- Typed runtime runners can still declare `OutputRecord::candidate_inline("dummy")` and then score the same dummy; the runtime binding proves scorer consistency with the runner declaration, but not semantic truth of arbitrary typed runner declarations.
 
-Scope of sign-off:
+Current status:
 
-- `ps1.evaluator.score_output` is signed off for semantic-denial proof that successful evaluator scores carry the assessed reportable output and reject dummy/schema-only substitutes through the run/evaluator and public-seam owner paths.
-- This sign-off does not prove evaluator target reads, assessment request scope, replayability, ACP transport, provider runtimes, PlanResult production, or end-to-end external-worker execution; those neighboring rows remain pending.
+- `ps1.evaluator.score_output` remains pending. The current evidence proves many runtime and public-seam shape/denial facts, but the locked row's "actual output being assessed" and "unrelated output" requirements are not fully proven by data-class labels alone.
+- Do not mark this row proven until the seam has a real binding that makes candidate/artifact output relation checkable, or the locked spec/matrix wording is deliberately revised by the spec owner.
