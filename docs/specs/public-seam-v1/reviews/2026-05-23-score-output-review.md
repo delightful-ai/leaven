@@ -40,9 +40,10 @@ Follow-up implementation after block:
 - `crates/leaven-run/tests/scoring_evaluator.rs::scoring_evaluator_rejects_report_output_from_another_scoring_context` rejects reusing output from a different candidate/case scoring context.
 - `crates/leaven-run/tests/scoring_evaluator.rs::scoring_evaluator_rejects_empty_placeholder_report_output` rejects whitespace-only inline report output.
 - `leaven-evidence` now owns `OutputMetadata`, `OutputVisibility`, `DataClass`, and `DataClassSet`; `crates/leaven-evidence/tests/command.rs::output_record_preserves_visibility_and_data_classes` proves annotated output records preserve these facts.
-- This resolves only the cross-context unrelated-output fake pass, the local empty-placeholder negative, and the reusable evidence metadata primitive. It does not prove pairwise/listwise assessments or public-seam `OutputRecord` wire lowering.
+- `leaven-public-seam` now projects reusable output records into `common.schema.json#/$defs/OutputRecord`; `crates/leaven-public-seam/tests/output_record.rs` proves inline projection, blob metadata requirements, and schema rejection for missing visibility/data classes.
+- This resolves only the cross-context unrelated-output fake pass, the local empty-placeholder negative, the reusable evidence metadata primitive, and the public-seam wire projection. It does not prove pairwise/listwise assessments or runtime production.
 
 Limits:
 
 - This review does not sign off `ps1.evaluator.score_output`.
-- No matrix status should change for this row until pairwise/listwise behavior, public-seam `OutputRecord` wire lowering, executable positive/negative tests, and a follow-up adversarial sign-off exist.
+- No matrix status should change for this row until pairwise/listwise behavior, runtime production evidence, executable positive/negative tests, and a follow-up adversarial sign-off exist.

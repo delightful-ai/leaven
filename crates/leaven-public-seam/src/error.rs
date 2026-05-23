@@ -111,6 +111,13 @@ pub enum PublicSeamError {
         message: String,
     },
 
+    /// A schema-valid output record violates a public-seam semantic constraint.
+    #[error("invalid public seam output record: {message}")]
+    InvalidOutputRecord {
+        /// Human-readable reason.
+        message: String,
+    },
+
     /// A pinned public-seam mini-language rejected unsupported syntax.
     #[error("invalid public seam pinned dialect: {message}")]
     InvalidDialect {

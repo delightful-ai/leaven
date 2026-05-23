@@ -8,7 +8,8 @@ use serde_json::Value;
 
 use crate::{
     ConformanceMatrix, DeferredWatchReplacement, EvidenceEnvelopeDocument, MatrixRowStatus,
-    PinnedDialectEvaluator, PlanDocument, PlanResultDocument, PublicSeamError,
+    OutputRecordDocument, PinnedDialectEvaluator, PlanDocument, PlanResultDocument,
+    PublicSeamError,
 };
 
 const ACTIVE_PACKAGE_RELATIVE: &str = "docs/specs/public-seam-v1";
@@ -697,6 +698,48 @@ impl PublicSeamPackage {
         self.validate_value_against_schema(&self.root.join(schema), schema, pointer, value)
     }
 
+    /// Projects a reusable evidence output record through the public-seam wire shape.
+    ///
+    /// Blob-backed records must provide public blob identity and audit metadata.
+    pub fn project_output_record(
+        &self,
+        record: &leaven_evidence::OutputRecord,
+        blob: Option<&crate::PublicBlobRef>,
+    ) -> Result<OutputRecordDocument, PublicSeamError> {
+        let value = crate::output::output_record_wire_value(record, blob)?;
+        self.validate_output_record_value(&value)?;
+        OutputRecordDocument::from_schema_valid_value(value)
+    }
+
+    /// Validates an inline reusable evidence output record through the public-seam wire shape.
+    ///
+    /// Use [`Self::project_output_record`] for blob-backed records.
+    pub fn validate_output_record(
+        &self,
+        record: &leaven_evidence::OutputRecord,
+    ) -> Result<OutputRecordDocument, PublicSeamError> {
+        self.project_output_record(record, None)
+    }
+
+    /// Validates an arbitrary value against `common.schema.json#/$defs/OutputRecord`.
+    pub fn validate_output_record_value(
+        &self,
+        value: &Value,
+    ) -> Result<OutputRecordDocument, PublicSeamError> {
+        let schema = serde_json::json!({
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "$ref": "https://schemas.leaven.dev/v1/v0.3/common.schema.json#/$defs/OutputRecord"
+        });
+        self.validate_value_against_schema_value(
+            &self.root.join("schemas/common.schema.json"),
+            "common.schema.json#/$defs/OutputRecord",
+            "/output_record",
+            &schema,
+            value,
+        )?;
+        OutputRecordDocument::from_schema_valid_value(value.clone())
+    }
+
     /// Validates a Plan IR document through the active V1 schema and semantic seam checks.
     pub fn validate_plan_document(&self, value: &Value) -> Result<PlanDocument, PublicSeamError> {
         self.validate_arbitrary_value("leaven.plan.v1.schema.json", "/plan", value)?;
@@ -802,9 +845,20 @@ impl PublicSeamPackage {
         value: &Value,
     ) -> Result<(), PublicSeamError> {
         let schema_value = self.schema_json(schema)?;
+        self.validate_value_against_schema_value(example, schema, pointer, &schema_value, value)
+    }
+
+    fn validate_value_against_schema_value(
+        &self,
+        example: &Path,
+        schema: &str,
+        pointer: &str,
+        schema_value: &Value,
+        value: &Value,
+    ) -> Result<(), PublicSeamError> {
         let validator = jsonschema::draft202012::options()
             .with_retriever(self.schema_retriever()?)
-            .build(&schema_value)
+            .build(schema_value)
             .map_err(|error| PublicSeamError::InvalidSchema {
                 name: schema.to_owned(),
                 message: error.to_string(),
