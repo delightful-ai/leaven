@@ -305,14 +305,20 @@ rows:
       - crates/leaven-public-seam/tests/plan_result.rs::plan_result_rejects_receipts_without_audit_timing
     implementation_evidence:
       - crates/leaven-public-seam/src/result.rs::PlanResultDocument
+      - crates/leaven-public-seam/src/result.rs::PlanResultDocument::from_schema_valid_value
       - crates/leaven-public-seam/src/result.rs::inspect_values
       - crates/leaven-public-seam/src/result.rs::inspect_receipts
       - crates/leaven-public-seam/src/result.rs::validate_audit_currency_receipt
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_plan_result_document
+      - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::execute_plan_document
+      - crates/leaven-public-seam/src/plan_execution.rs::plan_result_value
+      - crates/leaven-public-seam/src/plan_execution.rs::record_lm_call_outcome
+      - crates/leaven-public-seam/src/plan_execution.rs::record_failed_lm_call
       - crates/leaven-public-seam/AGENTS.md
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-result-receipt-replay-review.md
-    status: pending
+      - docs/specs/public-seam-v1/reviews/2026-05-23-typed-envelope-follow-up-review.md
+    status: proven
 
   - id: ps1.receipts.audit_currency
     area: result_receipts
