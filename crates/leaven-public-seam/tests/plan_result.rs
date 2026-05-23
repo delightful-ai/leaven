@@ -117,6 +117,47 @@ fn plan_result_rejects_receipts_without_audit_timing() {
     ));
 }
 
+#[test]
+fn plan_result_rejects_decorative_or_wrong_kind_receipt_refs() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut missing_receipt = typed_success_result();
+    missing_receipt["values"]["rows"]["receipt"] = json!("qrec_missing");
+    assert!(matches!(
+        package
+            .validate_plan_result_document(&missing_receipt)
+            .unwrap_err(),
+        PublicSeamError::InvalidPlanResult { .. }
+    ));
+
+    let mut wrong_kind_receipt = typed_success_result();
+    wrong_kind_receipt["receipts"][0]["kind"] = json!("call");
+    wrong_kind_receipt["receipts"][0]["call_kind"] = json!("lm_complete");
+    wrong_kind_receipt["receipts"][0]["request_hash"] = json!("fp_request_sha256_rows");
+    wrong_kind_receipt["receipts"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("op_hash");
+    wrong_kind_receipt["receipts"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("graph_revision");
+    wrong_kind_receipt["receipts"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("read_scope_fingerprint");
+    wrong_kind_receipt["receipts"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("projection_fingerprint");
+    assert!(matches!(
+        package
+            .validate_plan_result_document(&wrong_kind_receipt)
+            .unwrap_err(),
+        PublicSeamError::InvalidPlanResult { .. }
+    ));
+}
+
 fn typed_success_result() -> Value {
     json!({
         "schema_version": "leaven.plan_result.v1",

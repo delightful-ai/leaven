@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::Value;
 
@@ -24,97 +24,24 @@ impl PlanResultDocument {
             .as_object()
             .ok_or_else(|| invalid_result("plan result must be an object"))?;
         let replayability_summary = required_replayability(object.get("replayability_summary"))?;
-        let plan_id = required_string(object.get("plan_id"), "plan_id")?.to_owned();
-        let base_revision =
-            required_string(object.get("base_revision"), "base_revision")?.to_owned();
-        let final_revision =
-            required_string(object.get("final_revision"), "final_revision")?.to_owned();
-        let values = object
-            .get("values")
-            .and_then(Value::as_object)
-            .ok_or_else(|| invalid_result("plan result values must be an object"))?;
-        let receipts = object
-            .get("receipts")
-            .and_then(Value::as_array)
-            .ok_or_else(|| invalid_result("plan result receipts must be an array"))?;
-        let mut value_kinds = Vec::with_capacity(values.len());
-        let mut value_replayability = Vec::with_capacity(values.len());
-        let mut assessment_batch_replayability = Vec::new();
-        let mut assessment_batch_ids = BTreeSet::new();
-        for value in values.values() {
-            let value_object = value
-                .as_object()
-                .ok_or_else(|| invalid_result("plan result value must be an object"))?;
-            value_kinds.push(required_string(value_object.get("kind"), "value.kind")?.to_owned());
-            value_replayability.push(required_replayability(value_object.get("replayability"))?);
-            let Some(batch) = value.as_object().filter(|object| {
-                object.get("kind").and_then(Value::as_str) == Some("assessment_batch_receipt")
-            }) else {
-                continue;
-            };
-            let batch_rollup =
-                inspect_assessment_batch(batch, &mut assessment_batch_replayability)?;
-            let value_replayability = required_replayability(batch.get("replayability"))?;
-            if value_replayability != batch_rollup {
-                return Err(invalid_result(
-                    "assessment batch replayability must roll up per-assessment replayability",
-                ));
-            }
-            assessment_batch_ids.extend(required_string_set(
-                batch.get("assessment_ids"),
-                "assessment_ids",
-            )?);
-        }
-        if !value_replayability.is_empty() && replayability_summary != rollup(value_replayability) {
-            return Err(invalid_result(
-                "plan replayability_summary must roll up result value replayability",
-            ));
-        }
-        if !assessment_batch_replayability.is_empty()
-            && replayability_summary
-                != rollup(assessment_batch_replayability.iter().map(|(_, r)| *r))
-        {
-            return Err(invalid_result(
-                "plan replayability_summary must roll up per-assessment replayability",
-            ));
-        }
-        let mut receipt_kinds = Vec::with_capacity(receipts.len());
-        for receipt in receipts {
-            let receipt = receipt
-                .as_object()
-                .ok_or_else(|| invalid_result("plan result receipt must be an object"))?;
-            receipt_kinds.push(required_string(receipt.get("kind"), "receipt.kind")?.to_owned());
-            required_string(receipt.get("started_at"), "receipt.started_at")?;
-            required_string(receipt.get("completed_at"), "receipt.completed_at")?;
-        }
-        let error_count = object
-            .get("errors")
-            .and_then(Value::as_array)
-            .ok_or_else(|| invalid_result("plan result errors must be an array"))?
-            .len();
-        let charge_count = object
-            .get("charges")
-            .and_then(Value::as_array)
-            .ok_or_else(|| invalid_result("plan result charges must be an array"))?
-            .len();
-        let submit_assessment_receipts = submit_assessment_receipts(receipts)?;
-        for receipt_assessments in submit_assessment_receipts {
-            if !receipt_assessments.is_subset(&assessment_batch_ids) {
-                return Err(invalid_result(
-                    "submit_assessments receipt must be backed by assessment batch per-assessment replayability",
-                ));
-            }
-        }
-        Ok(Self {
-            plan_id,
-            base_revision,
-            final_revision,
+        let parts = PlanResultParts::from_object(object)?;
+        let value_audit = inspect_values(
+            parts.values,
+            &receipt_index(parts.receipts)?,
             replayability_summary,
-            value_kinds,
+        )?;
+        let receipt_kinds = inspect_receipts(parts.receipts)?;
+        validate_submit_assessment_receipts(parts.receipts, &value_audit.assessment_batch_ids)?;
+        Ok(Self {
+            plan_id: parts.plan_id.to_owned(),
+            base_revision: parts.base_revision.to_owned(),
+            final_revision: parts.final_revision.to_owned(),
+            replayability_summary,
+            value_kinds: value_audit.value_kinds,
             receipt_kinds,
-            error_count,
-            charge_count,
-            assessment_batch_replayability,
+            error_count: parts.error_count,
+            charge_count: parts.charge_count,
+            assessment_batch_replayability: value_audit.assessment_batch_replayability,
         })
     }
 
@@ -174,6 +101,166 @@ impl PlanResultDocument {
     }
 }
 
+struct PlanResultParts<'a> {
+    plan_id: &'a str,
+    base_revision: &'a str,
+    final_revision: &'a str,
+    values: &'a serde_json::Map<String, Value>,
+    receipts: &'a [Value],
+    error_count: usize,
+    charge_count: usize,
+}
+
+impl<'a> PlanResultParts<'a> {
+    fn from_object(object: &'a serde_json::Map<String, Value>) -> Result<Self, PublicSeamError> {
+        Ok(Self {
+            plan_id: required_string(object.get("plan_id"), "plan_id")?,
+            base_revision: required_string(object.get("base_revision"), "base_revision")?,
+            final_revision: required_string(object.get("final_revision"), "final_revision")?,
+            values: object
+                .get("values")
+                .and_then(Value::as_object)
+                .ok_or_else(|| invalid_result("plan result values must be an object"))?,
+            receipts: object
+                .get("receipts")
+                .and_then(Value::as_array)
+                .map(Vec::as_slice)
+                .ok_or_else(|| invalid_result("plan result receipts must be an array"))?,
+            error_count: array_len(object, "errors")?,
+            charge_count: array_len(object, "charges")?,
+        })
+    }
+}
+
+struct ValueAudit {
+    value_kinds: Vec<String>,
+    assessment_batch_replayability: Vec<(String, Replayability)>,
+    assessment_batch_ids: BTreeSet<String>,
+}
+
+fn inspect_values(
+    values: &serde_json::Map<String, Value>,
+    receipt_index: &BTreeMap<String, String>,
+    replayability_summary: Replayability,
+) -> Result<ValueAudit, PublicSeamError> {
+    let mut value_kinds = Vec::with_capacity(values.len());
+    let mut value_replayability = Vec::with_capacity(values.len());
+    let mut assessment_batch_replayability = Vec::new();
+    let mut assessment_batch_ids = BTreeSet::new();
+    for value in values.values() {
+        let value_object = value
+            .as_object()
+            .ok_or_else(|| invalid_result("plan result value must be an object"))?;
+        let value_kind = inspect_value_receipt(value_object, receipt_index)?;
+        value_kinds.push(value_kind.to_owned());
+        value_replayability.push(required_replayability(value_object.get("replayability"))?);
+        if value_kind == "assessment_batch_receipt" {
+            inspect_assessment_batch_value(
+                value_object,
+                &mut assessment_batch_replayability,
+                &mut assessment_batch_ids,
+            )?;
+        }
+    }
+    validate_replayability_rollups(
+        replayability_summary,
+        &value_replayability,
+        &assessment_batch_replayability,
+    )?;
+    Ok(ValueAudit {
+        value_kinds,
+        assessment_batch_replayability,
+        assessment_batch_ids,
+    })
+}
+
+fn inspect_value_receipt<'a>(
+    value: &'a serde_json::Map<String, Value>,
+    receipt_index: &BTreeMap<String, String>,
+) -> Result<&'a str, PublicSeamError> {
+    let value_kind = required_string(value.get("kind"), "value.kind")?;
+    if let Some(receipt) = value.get("receipt") {
+        let receipt = receipt_id(receipt)?;
+        let Some(receipt_kind) = receipt_index.get(receipt) else {
+            return Err(invalid_result(format!(
+                "value references missing receipt `{receipt}`"
+            )));
+        };
+        if expected_receipt_kind(value_kind).is_some_and(|expected| receipt_kind != expected) {
+            return Err(invalid_result(format!(
+                "value kind `{value_kind}` cannot reference `{receipt_kind}` receipt"
+            )));
+        }
+    }
+    Ok(value_kind)
+}
+
+fn inspect_assessment_batch_value(
+    batch: &serde_json::Map<String, Value>,
+    replayability: &mut Vec<(String, Replayability)>,
+    assessment_batch_ids: &mut BTreeSet<String>,
+) -> Result<(), PublicSeamError> {
+    let batch_rollup = inspect_assessment_batch(batch, replayability)?;
+    let value_replayability = required_replayability(batch.get("replayability"))?;
+    if value_replayability != batch_rollup {
+        return Err(invalid_result(
+            "assessment batch replayability must roll up per-assessment replayability",
+        ));
+    }
+    assessment_batch_ids.extend(required_string_set(
+        batch.get("assessment_ids"),
+        "assessment_ids",
+    )?);
+    Ok(())
+}
+
+fn validate_replayability_rollups(
+    summary: Replayability,
+    value_replayability: &[Replayability],
+    assessment_replayability: &[(String, Replayability)],
+) -> Result<(), PublicSeamError> {
+    if !value_replayability.is_empty() && summary != rollup(value_replayability.iter().copied()) {
+        return Err(invalid_result(
+            "plan replayability_summary must roll up result value replayability",
+        ));
+    }
+    if !assessment_replayability.is_empty()
+        && summary != rollup(assessment_replayability.iter().map(|(_, r)| *r))
+    {
+        return Err(invalid_result(
+            "plan replayability_summary must roll up per-assessment replayability",
+        ));
+    }
+    Ok(())
+}
+
+fn inspect_receipts(receipts: &[Value]) -> Result<Vec<String>, PublicSeamError> {
+    let mut receipt_kinds = Vec::with_capacity(receipts.len());
+    for receipt in receipts {
+        let receipt = receipt
+            .as_object()
+            .ok_or_else(|| invalid_result("plan result receipt must be an object"))?;
+        receipt_kinds.push(required_string(receipt.get("kind"), "receipt.kind")?.to_owned());
+        required_string(receipt.get("started_at"), "receipt.started_at")?;
+        required_string(receipt.get("completed_at"), "receipt.completed_at")?;
+    }
+    Ok(receipt_kinds)
+}
+
+fn validate_submit_assessment_receipts(
+    receipts: &[Value],
+    assessment_batch_ids: &BTreeSet<String>,
+) -> Result<(), PublicSeamError> {
+    for receipt_assessments in submit_assessment_receipts(receipts)? {
+        if !receipt_assessments.is_subset(assessment_batch_ids) {
+            return Err(invalid_result(
+                "submit_assessments receipt must be backed by assessment batch per-assessment replayability",
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn submit_assessment_receipts(
     receipts: &[Value],
 ) -> Result<Vec<BTreeSet<String>>, PublicSeamError> {
@@ -192,6 +279,55 @@ fn submit_assessment_receipts(
         }
     }
     Ok(submit_assessments)
+}
+
+fn receipt_index(receipts: &[Value]) -> Result<BTreeMap<String, String>, PublicSeamError> {
+    let mut index = BTreeMap::new();
+    for receipt in receipts {
+        let receipt = receipt
+            .as_object()
+            .ok_or_else(|| invalid_result("plan result receipt must be an object"))?;
+        let id = receipt_id(
+            receipt
+                .get("receipt")
+                .ok_or_else(|| invalid_result("receipt must carry receipt id"))?,
+        )?
+        .to_owned();
+        let kind = required_string(receipt.get("kind"), "receipt.kind")?.to_owned();
+        if index.insert(id, kind).is_some() {
+            return Err(invalid_result("duplicate operation receipt id"));
+        }
+    }
+    Ok(index)
+}
+
+fn receipt_id(value: &Value) -> Result<&str, PublicSeamError> {
+    if let Some(receipt) = value.as_str() {
+        return Ok(receipt);
+    }
+    value
+        .as_object()
+        .and_then(|object| object.get("id"))
+        .and_then(Value::as_str)
+        .ok_or_else(|| invalid_result("receipt reference must carry a receipt id"))
+}
+
+fn expected_receipt_kind(value_kind: &str) -> Option<&'static str> {
+    match value_kind {
+        "graph_set" | "case_record" | "workspace_file" | "workspace_diff" | "workspace_listing" => {
+            Some("query")
+        }
+        "workspace_handle"
+        | "lm_response"
+        | "agent_session"
+        | "sandbox_exec_result"
+        | "human_review_result" => Some("call"),
+        "proposal_batch_receipt"
+        | "assessment_batch_receipt"
+        | "evaluation_request_receipt"
+        | "apply_receipt" => Some("write"),
+        _ => None,
+    }
 }
 
 /// Public-seam replayability order used for plan-level roll-up.
@@ -295,6 +431,17 @@ fn required_string_set(
         }
     }
     Ok(set)
+}
+
+fn array_len(
+    object: &serde_json::Map<String, Value>,
+    field: &str,
+) -> Result<usize, PublicSeamError> {
+    object
+        .get(field)
+        .and_then(Value::as_array)
+        .map(Vec::len)
+        .ok_or_else(|| invalid_result(format!("plan result {field} must be an array")))
 }
 
 fn invalid_result(message: impl Into<String>) -> PublicSeamError {
