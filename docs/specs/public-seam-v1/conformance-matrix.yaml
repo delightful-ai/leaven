@@ -921,6 +921,7 @@ rows:
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-score-output-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-23-score-output-candidate-binding-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-23-score-output-current-blocker-review.md
     status: pending
 
   - id: ps1.evaluator.assessment_scope
