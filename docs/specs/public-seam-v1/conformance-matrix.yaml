@@ -276,7 +276,9 @@ rows:
       - crates/leaven-engine/src/graph/storage.rs::RunGraph
       - crates/leaven-run/src/public_seam/proposal_write.rs::PublicProposalWriteReceiptContext::proposal_apply_plan_result
       - crates/leaven-run/AGENTS.md
-    status: pending
+    review_evidence:
+      - docs/specs/public-seam-v1/reviews/2026-05-23-runcontext-write-tranche-review.md
+    status: proven
 
   - id: ps1.result.typed_envelope
     area: result_receipts
@@ -359,7 +361,8 @@ rows:
       - crates/leaven-run/src/public_seam/assessment_write.rs::PublicAssessmentWriteReceiptContext::submit_assessments_plan_result
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-result-receipt-replay-review.md
-    status: pending
+      - docs/specs/public-seam-v1/reviews/2026-05-23-runcontext-write-tranche-review.md
+    status: proven
 
   - id: ps1.receipts.failed_costs
     area: result_receipts
@@ -417,7 +420,7 @@ rows:
       - crates/leaven-run/tests/public_seam.rs::runcontext_assessments_project_to_public_seam_submit_assessment_receipts
     negative_test_evidence:
       - crates/leaven-public-seam/tests/plan_result_replayability.rs::replayability_summary_cannot_hide_non_replayable_assessment
-      - crates/leaven-public-seam/tests/plan_result_replayability.rs::replayability_summary_rolls_up_all_result_values
+      - crates/leaven-public-seam/tests/plan_result_replayability.rs::replayability_summary_cannot_ignore_other_result_values
       - crates/leaven-run/tests/public_seam.rs::assessment_write_projection_rejects_global_bucket_assessment_ids
     implementation_evidence:
       - crates/leaven-public-seam/src/result.rs::inspect_assessment_batch_value
@@ -427,7 +430,8 @@ rows:
       - crates/leaven-run/src/public_seam/assessment_write.rs::PublicAssessmentWriteReceiptContext::submit_assessments_plan_result
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-result-receipt-replay-review.md
-    status: pending
+      - docs/specs/public-seam-v1/reviews/2026-05-23-runcontext-write-tranche-review.md
+    status: proven
 
   - id: ps1.capability.document_truth
     area: capability
@@ -753,7 +757,9 @@ rows:
       - crates/leaven-run/src/public_seam/proposal_write.rs::PublicProposalWriteReceiptContext::proposal_apply_plan_result
       - crates/leaven-run/AGENTS.md
       - crates/leaven-public-seam/AGENTS.md
-    status: pending
+    review_evidence:
+      - docs/specs/public-seam-v1/reviews/2026-05-23-runcontext-write-tranche-review.md
+    status: proven
 
   - id: ps1.evaluator.job_identity
     area: evaluator
@@ -901,8 +907,8 @@ rows:
       - crates/leaven-run/tests/public_seam.rs::runcontext_assessments_project_to_public_seam_submit_assessment_receipts
     negative_test_evidence:
       - crates/leaven-public-seam/tests/plan_document.rs::submit_assessments_rejects_missing_assessment_score_or_replayability
-      - crates/leaven-public-seam/tests/plan_result_replayability.rs::assessment_write_receipts_require_per_assessment_result_facts
-      - crates/leaven-public-seam/tests/plan_result_replayability.rs::assessment_write_receipts_must_match_assessment_batch_request_scope
+      - crates/leaven-public-seam/tests/plan_result_replayability.rs::assessment_write_receipts_reject_missing_per_assessment_result_facts
+      - crates/leaven-public-seam/tests/plan_result_replayability.rs::assessment_write_receipts_reject_mismatched_assessment_batch_request_scope
       - crates/leaven-run/tests/public_seam.rs::assessment_write_projection_rejects_global_bucket_assessment_ids
     implementation_evidence:
       - crates/leaven-engine/src/graph/storage.rs::AssessmentRecord
@@ -914,7 +920,8 @@ rows:
       - crates/leaven-run/AGENTS.md
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-assessment-scope-review.md
-    status: pending
+      - docs/specs/public-seam-v1/reviews/2026-05-23-runcontext-write-tranche-review.md
+    status: proven
 
   - id: ps1.acp.transport_profile
     area: acp
