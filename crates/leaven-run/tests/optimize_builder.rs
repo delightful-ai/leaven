@@ -973,7 +973,11 @@ fn run_builder_typed_output_uses_score_supplied_report_output() {
                     let runner_calls = Arc::clone(&runner_calls);
                     async move {
                         runner_calls.fetch_add(1, Ordering::SeqCst);
-                        RunOutput::typed(TypedPrediction(artifact.0 + case.input().0))
+                        let prediction = TypedPrediction(artifact.0 + case.input().0);
+                        RunOutput::typed(prediction).with_reportable_text(format!(
+                            "typed answer: {}",
+                            artifact.0 + case.input().0
+                        ))
                     }
                 }
             })

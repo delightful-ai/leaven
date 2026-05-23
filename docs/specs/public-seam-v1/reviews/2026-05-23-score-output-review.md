@@ -54,11 +54,28 @@ Follow-up blocking findings:
 
 - Same-context nonblank dummy output is still accepted. `ReportableOutput` scope and placeholder checks reject missing, blank, and cross-context output, but a scorer can still mint arbitrary nonblank text from the correct `ScoreContext` or `JudgeScoreContext`.
 
-Follow-up implementation after Goodall block:
+Follow-up implementation after second block:
 
 - `crates/leaven-run/tests/scoring_evaluator.rs::runtime_score_outputs_project_through_public_seam_for_all_assessment_shapes` now starts from runtime independent, pairwise, and listwise assessments and lowers their `CaseAssessmentEvidence.output()` values through `PublicSeamPackage::project_output_record(...)` into the locked `common.schema.json#/$defs/OutputRecord` wire shape.
+- `RunOutput::new(...)` now declares its string value as the assessed reportable output, and typed runners must explicitly declare the assessed rendering with `RunOutput::typed(...).with_reportable_output(...)` or `.with_reportable_text(...)`.
+- `ScoreContext::report_output(...)` and `JudgeScoreContext::report_output(...)` still mint context-bound `ReportableOutput` values, but evaluator lowering now rejects any reported record that does not exactly match the runner-declared assessed output.
+- `crates/leaven-run/tests/scoring_evaluator.rs::scoring_evaluator_rejects_same_context_dummy_report_output` and `::judging_evaluator_rejects_same_context_dummy_report_output` prove same-context dummy output is rejected for independent and judge paths.
+- `crates/leaven-run/tests/scoring_evaluator.rs::scoring_evaluator_rejects_typed_score_output_without_runner_declaration` proves typed outputs cannot be made reportable solely by scorer-side rendering.
+
+Fresh verification after second follow-up:
+
+- `cargo fmt --check`
+- `CARGO_INCREMENTAL=0 cargo test -p leaven-run --test scoring_evaluator`
+- `CARGO_INCREMENTAL=0 cargo test -p leaven-run --test optimize_builder run_builder_typed_output_uses_score_supplied_report_output -- --exact`
+- `CARGO_INCREMENTAL=0 cargo test -p leaven-run`
+- `CARGO_INCREMENTAL=0 cargo clippy -p leaven-run --tests -- -D warnings`
+- `cargo test -p leaven-public-seam --test output_record`
+- `cargo test -p leaven-public-seam --test plan_document submit_assessments -- --nocapture`
+- `CARGO_INCREMENTAL=0 cargo check -p p8_aime_gepa`
+- `CARGO_INCREMENTAL=0 cargo test -p leaven --test gepa_parity`
+- `cargo test -p leaven --test topology_contract`
 
 Limits:
 
 - This review does not sign off `ps1.evaluator.score_output`.
-- No matrix status should change for this row until same-context dummy/unrelated output is rejected and a follow-up adversarial sign-off is recorded.
+- No matrix status should change for this row until a follow-up adversarial sign-off is recorded against the current code and executable evidence.

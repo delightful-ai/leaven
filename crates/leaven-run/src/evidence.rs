@@ -8,9 +8,10 @@ use leaven_kernel::{BudgetSnapshot, CandidateId, CaseId, Cost};
 ///
 /// The default `Out = ()` matches `case_visibility_and_target_isolation.md` §6:
 /// runner output is opaque to Leaven by default. Domain runners declare their
-/// own typed `Out` (string, structured prediction, agent transcript), and the
-/// scorer renders that output into a context-scoped durable `ReportableOutput`
-/// via [`ScoreContext::report_output`] / [`ScoreContext::report_text_output`].
+/// own typed `Out` (string, structured prediction, agent transcript). The
+/// runner also declares the durable assessed output record; the scorer must
+/// report that declared record through [`ScoreContext::report_output`] /
+/// [`ScoreContext::report_text_output`].
 #[derive(Clone, Debug, Default)]
 pub struct RunOutput<Out = ()> {
     /// User-facing answer/output.
@@ -19,14 +20,17 @@ pub struct RunOutput<Out = ()> {
     pub cost: Cost,
     /// Runner trace lines associated with this successful output.
     pub trace: Vec<String>,
+    reportable_output: Option<OutputRecord>,
 }
 
 impl RunOutput<String> {
     /// Builds a generated string output.
     #[must_use]
     pub fn new(output: impl Into<String>) -> Self {
+        let output = output.into();
         Self {
-            output: output.into(),
+            reportable_output: Some(OutputRecord::inline(output.clone())),
+            output,
             cost: Cost::zero(),
             trace: Vec::new(),
         }
@@ -41,6 +45,7 @@ impl<Out> RunOutput<Out> {
             output,
             cost: Cost::zero(),
             trace: Vec::new(),
+            reportable_output: None,
         }
     }
 
@@ -56,6 +61,28 @@ impl<Out> RunOutput<Out> {
     pub fn with_trace(mut self, line: impl Into<String>) -> Self {
         self.trace.push(line.into());
         self
+    }
+
+    /// Attaches the reportable output record that downstream scores must carry.
+    ///
+    /// Typed runner outputs are opaque to Leaven. A runner that returns a typed
+    /// value must also declare the exact reportable rendering that scorers are
+    /// assessing; otherwise the evaluator refuses successful scores because it
+    /// cannot distinguish a meaningful `Score.output` from a dummy field.
+    #[must_use]
+    pub fn with_reportable_output(mut self, output: OutputRecord) -> Self {
+        self.reportable_output = Some(output);
+        self
+    }
+
+    /// Attaches an inline reportable text rendering for a typed runner output.
+    #[must_use]
+    pub fn with_reportable_text(self, output: impl Into<String>) -> Self {
+        self.with_reportable_output(OutputRecord::inline(output))
+    }
+
+    pub(crate) fn reportable_output(&self) -> Option<&OutputRecord> {
+        self.reportable_output.as_ref()
     }
 }
 
@@ -206,11 +233,20 @@ impl Score {
 pub struct ReportableOutput {
     record: OutputRecord,
     scope: ReportableOutputScope,
+    expected: Option<OutputRecord>,
 }
 
 impl ReportableOutput {
-    pub(crate) fn new(record: OutputRecord, scope: ReportableOutputScope) -> Self {
-        Self { record, scope }
+    pub(crate) fn new(
+        record: OutputRecord,
+        scope: ReportableOutputScope,
+        expected: Option<OutputRecord>,
+    ) -> Self {
+        Self {
+            record,
+            scope,
+            expected,
+        }
     }
 
     pub(crate) fn into_record(
@@ -222,6 +258,12 @@ impl ReportableOutput {
         }
         if is_placeholder_output(&self.record) {
             return Err(ReportableOutputError::Placeholder);
+        }
+        let Some(expected) = self.expected else {
+            return Err(ReportableOutputError::MissingAssessedOutput);
+        };
+        if self.record != expected {
+            return Err(ReportableOutputError::Unrelated);
         }
         Ok(self.record)
     }
@@ -258,6 +300,12 @@ pub enum ReportableOutputError {
     /// The output exists only as an empty inline placeholder.
     #[error("reportable output was an empty placeholder")]
     Placeholder,
+    /// The runner did not declare the assessed output record.
+    #[error("runner output did not declare reportable assessed output")]
+    MissingAssessedOutput,
+    /// The score reported output that was not the runner output being assessed.
+    #[error("reportable output did not match assessed output")]
+    Unrelated,
 }
 
 /// Failure returned by a user scoring function.
@@ -460,7 +508,11 @@ impl<A, I, T, Out> ScoreContext<A, I, T, Out> {
     /// Wraps a generated output record for this exact scoring context.
     #[must_use]
     pub fn report_output(&self, output: OutputRecord) -> ReportableOutput {
-        ReportableOutput::new(output, self.output_scope.clone())
+        ReportableOutput::new(
+            output,
+            self.output_scope.clone(),
+            self.output.reportable_output().cloned(),
+        )
     }
 
     /// Wraps inline generated output text for this exact scoring context.
@@ -487,6 +539,7 @@ mod tests {
         let output = super::ReportableOutput {
             record: OutputRecord::inline("left/right comparison"),
             scope: group.clone(),
+            expected: Some(OutputRecord::inline("left/right comparison")),
         };
 
         assert!(matches!(

@@ -5515,7 +5515,9 @@ async fn run_solver(
     };
     side_infos.insert(&prompt, case.id(), output.clone());
     let reasoning_trace = format!("reasoning: {}", output.reasoning);
-    Ok(RunOutput::typed(output).with_trace(reasoning_trace))
+    Ok(RunOutput::typed(output.clone())
+        .with_reportable_text(output.answer)
+        .with_trace(reasoning_trace))
 }
 
 async fn run_openai_solver<L>(
@@ -5538,7 +5540,8 @@ where
     side_infos.insert(prompt, case.id(), output.clone());
     let reasoning_trace = format!("reasoning: {}", output.reasoning);
     let raw_trace = format!("raw_response: {}", output.raw);
-    Ok(RunOutput::typed(output)
+    Ok(RunOutput::typed(output.clone())
+        .with_reportable_text(output.answer)
         .with_trace(reasoning_trace)
         .with_trace(raw_trace)
         .with_cost(cost))

@@ -87,18 +87,21 @@ builder lowering and public examples deliberately adopt them.
   declare their own typed `Out` (string answer, structured prediction, agent
   transcript) via `RunOutput::typed(...)` or `RunOutput::new(...)` (the latter
   is a `String`-only constructor that returns `RunOutput<String>`).
-- Output rendering is **always** scorer-local and explicit: every successful
-  score must call `Score::with_output(...)` with a `ReportableOutput` minted by
-  the current `ScoreContext` or `JudgeScoreContext` through `report_output(...)`
-  or `report_text_output(...)`. There is no auto-render for `Out = String` —
-  that was a back-compat shim and was removed. A `Score` without `output` set
-  fails the evaluator with `MissingReportableOutput` (cost from the runner and
-  scorer is preserved on the error). A `Score` with reportable output minted by
-  another scoring/judging context is rejected as unrelated evidence; a
-  whitespace-only inline report output is rejected as a placeholder. Reports,
-  evidence stores, and GEPA reflection consume the scorer-supplied
-  `OutputRecord`, not `Out` itself. Do not add `Out` to `RunProblem`,
-  `CaseAssessmentEvidence`, report payloads, or GEPA types.
+- Assessed output is runner-declared and scorer-carried: `RunOutput::new(...)`
+  declares its `String` as the reportable output, and typed runners must use
+  `RunOutput::typed(...).with_reportable_output(...)` or
+  `.with_reportable_text(...)` when the output is assessable. Every successful
+  score must then call `Score::with_output(...)` with a `ReportableOutput`
+  minted by the current `ScoreContext` or `JudgeScoreContext` through
+  `report_output(...)` or `report_text_output(...)`. A `Score` without `output`
+  set fails the evaluator with `MissingReportableOutput` (cost from the runner
+  and scorer is preserved on the error). A score output minted by another
+  scoring/judging context, a typed score output without a runner declaration, a
+  same-context dummy that differs from the runner-declared assessed output, or a
+  whitespace-only inline report output is rejected. Reports, evidence stores,
+  and GEPA reflection consume the declared-and-carried `OutputRecord`, not `Out`
+  itself. Do not add `Out` to `RunProblem`, `CaseAssessmentEvidence`, report
+  payloads, or GEPA types.
   Scoring is also async and fallible: `.score(...)` receives owned
   `ScoreContext` values, returns `Result<Score, ScoreError>`, and may attach
   scorer cost. Treat scalar comparison as the current selection contract, not as
