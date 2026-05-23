@@ -140,7 +140,7 @@ Repo-local design skills are rollout-scoped context. Read each applicable Leaven
 The skill descriptions own trigger routing. Do not duplicate their full routing table here.
 
 ## Verification Policy
-- The workspace pins nightly via `rust-toolchain.toml`. The `dev` profile keeps LLVM as the default backend with line-table debuginfo; local PR 2 measurements showed no meaningful wall-time win from Cranelift, and the pinned nightly ICEs when Cranelift, incremental compilation, and the parallel rustc frontend are combined. `.cargo/config.toml` still enables the parallel rustc frontend (`-Zthreads`).
+- The workspace pins nightly via `rust-toolchain.toml`. The `dev` profile keeps LLVM as the default backend with line-table debuginfo, disables Cargo incremental compilation, and uses many codegen units for local edit/compile/test loops; the pinned nightly ICEs when incremental compilation and the parallel rustc frontend are combined. `.cargo/config.toml` still enables the parallel rustc frontend (`-Zthreads`) for reliable hot-loop speed without per-command `CARGO_INCREMENTAL=0` wrappers.
 - `just test`: canonical full test suite; must finish in `<30s` and includes nextest workspace tests plus doctests.
 - `just check`: completion gate; runs formatting, production line-count lint, clippy, SLA-enforced tests, and line/branch coverage.
 - Use narrower commands only while iterating. Before claiming behavior is complete, run `just check` unless the user explicitly requested a narrower proof.

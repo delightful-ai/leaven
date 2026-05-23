@@ -88,13 +88,18 @@ debug = "line-tables-only"
 
 # Dev builds default to full debuginfo (=2), which is slow to emit and bloats
 # target/. Line tables keep backtraces useful while cutting build time + size.
+# Many codegen units favor local edit/compile/test loops over dev binary
+# quality; release builds keep their separate profile.
 #
 # Keep the default LLVM backend. Local measurement on the `leaven-run` test
 # binaries showed no meaningful wall-time win from Cranelift, and the pinned
-# nightly ICEs when Cranelift, incremental compilation, and the parallel rustc
-# frontend are combined.
+# nightly ICEs when incremental compilation and the parallel rustc frontend are
+# combined. Keep incremental off in the profile so clean local commands do not
+# need `CARGO_INCREMENTAL=0` wrappers.
 [profile.dev]
 debug = "line-tables-only"
+incremental = false
+codegen-units = 1024
 
 # Coverage profile: `scripts/coverage-gate.py` builds under `--profile coverage`.
 [profile.coverage]

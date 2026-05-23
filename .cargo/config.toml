@@ -1,5 +1,7 @@
 # Parallel rustc frontend: parallelizes the front-end (parse/typeck/borrowck)
 # of each crate, shortening the deep `kernel -> core -> engine -> run -> ...`
 # critical path. Nightly-only; the repo pins nightly via `rust-toolchain.toml`.
+# Sized to local performance cores; Cargo incremental stays disabled in
+# `profile.dev` because this nightly ICEs when both features are combined.
 [build]
-rustflags = ["-Zthreads=8"]
+rustflags = ["-Zthreads=12"]
