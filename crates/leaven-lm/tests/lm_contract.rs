@@ -2,8 +2,9 @@ use std::io;
 
 use leaven_kernel::{Cost, FiniteF64};
 use leaven_lm::{
-    JsonSchemaOutput, LmError, LmId, LmResponse, Message, Messages, ModelName, OutputMode,
-    ProviderHints, ProviderName, ReasoningEffort, Role, SamplingOptions, TokenUsage,
+    JsonSchemaOutput, LmError, LmId, LmResponse, LmTool, Message, MessageContentPart, Messages,
+    ModelName, OutputMode, ProviderHints, ProviderName, ReasoningEffort, Role, SamplingOptions,
+    TokenUsage,
 };
 
 #[test]
@@ -32,6 +33,29 @@ fn messages_preserve_multi_turn_order() {
     assert_eq!(messages.suffix_from(3).len(), 2);
     assert!(messages.suffix_from(99).is_empty());
     assert!(Messages::new().is_empty());
+}
+
+#[test]
+fn messages_preserve_developer_tool_roles_parts_and_tool_call_ids() {
+    let messages = Messages::new()
+        .with_developer("prefer exact JSON")
+        .with_message(Message::assistant("calling tool").with_tool_call_id("call_1"))
+        .with_tool_result("call_1", "{\"answer\":42}")
+        .with_message(Message::user("continue").with_name("case_user"));
+
+    let roles = messages.iter().map(Message::role).collect::<Vec<_>>();
+    assert_eq!(
+        roles,
+        vec![Role::Developer, Role::Assistant, Role::Tool, Role::User]
+    );
+    assert_eq!(messages.as_slice()[1].tool_call_id(), Some("call_1"));
+    assert_eq!(messages.as_slice()[2].tool_call_id(), Some("call_1"));
+    assert_eq!(messages.as_slice()[3].name(), Some("case_user"));
+    assert!(matches!(
+        messages.as_slice()[2].content_parts(),
+        [MessageContentPart::ToolResult { tool_call_id, content }]
+            if tool_call_id == "call_1" && content == "{\"answer\":42}"
+    ));
 }
 
 #[test]
@@ -92,6 +116,15 @@ fn request_builders_preserve_sampling_output_and_provider_hints() {
     .with_reasoning_effort(ReasoningEffort::High);
     let mut hints = ProviderHints::default();
     hints.metadata.insert("suite".to_owned(), "aime".to_owned());
+    hints
+        .values
+        .insert("reasoning:effort".to_owned(), serde_json::json!("high"));
+    let tool = LmTool {
+        name: "lookup".to_owned(),
+        description: Some("look up case-local facts".to_owned()),
+        input_schema: serde_json::json!({"type": "object"}),
+        requires_capability_action: Some("case.read".to_owned()),
+    };
 
     let request = leaven_lm::LmRequest::new("gpt-4.1-mini", Messages::from_user("solve"))
         .with_sampling(sampling.clone())
@@ -100,13 +133,26 @@ fn request_builders_preserve_sampling_output_and_provider_hints() {
             schema: serde_json::json!({"type": "object"}),
             strict: true,
         }))
+        .with_tools([tool.clone()])
         .with_provider_hints(hints.clone());
 
     assert_eq!(request.model.as_str(), "gpt-4.1-mini");
     assert_eq!(request.model.to_string(), "gpt-4.1-mini");
     assert_eq!(request.sampling, sampling);
     assert_eq!(request.provider_hints, hints);
+    assert_eq!(request.tools, vec![tool]);
     assert!(matches!(request.output, OutputMode::JsonSchema(_)));
+
+    let final_message = leaven_lm::LmRequest::new("gpt-4.1-mini", Messages::from_user("solve"))
+        .with_output(OutputMode::FinalMessage {
+            max_bytes: Some(4096),
+        });
+    assert!(matches!(
+        final_message.output,
+        OutputMode::FinalMessage {
+            max_bytes: Some(4096)
+        }
+    ));
 }
 
 #[test]
