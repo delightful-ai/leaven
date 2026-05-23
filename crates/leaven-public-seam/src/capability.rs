@@ -9,10 +9,12 @@ use serde_json::Value;
 
 mod budget;
 mod delegation;
+mod grant;
 mod registry;
 
 pub use budget::{CapabilityBudgetLedger, CapabilityBudgetReservation, CapabilityBudgetUsage};
 pub use delegation::CapabilityDelegation;
+pub use grant::{AuthorizedGrant, CapabilityLimitUsage};
 pub use registry::CapabilityRegistry;
 
 const ACTIVE_PACKAGE_RELATIVE: &str = "docs/specs/public-seam-v1";
@@ -436,7 +438,10 @@ pub struct CapabilityGrantRequest {
     partition: Option<String>,
     input_classes: BTreeSet<String>,
     purposes: BTreeSet<String>,
+    models: BTreeSet<String>,
     model_roles: BTreeSet<String>,
+    workspace_ops: BTreeSet<String>,
+    command: Option<String>,
     schemas: BTreeSet<String>,
     surface: Option<String>,
     limits: CapabilityLimitUsage,
@@ -486,10 +491,31 @@ impl CapabilityGrantRequest {
         self
     }
 
+    /// Adds a requested model id.
+    #[must_use]
+    pub fn with_model(mut self, model: impl Into<String>) -> Self {
+        self.models.insert(model.into());
+        self
+    }
+
     /// Adds a model role constraint.
     #[must_use]
     pub fn with_model_role(mut self, role: impl Into<String>) -> Self {
         self.model_roles.insert(role.into());
+        self
+    }
+
+    /// Adds a requested workspace operation.
+    #[must_use]
+    pub fn with_workspace_op(mut self, operation: impl Into<String>) -> Self {
+        self.workspace_ops.insert(operation.into());
+        self
+    }
+
+    /// Sets the command requested by an agent or sandbox operation.
+    #[must_use]
+    pub fn with_command(mut self, command: impl Into<String>) -> Self {
+        self.command = Some(command.into());
         self
     }
 
@@ -512,84 +538,6 @@ impl CapabilityGrantRequest {
     pub fn with_limits(mut self, limits: CapabilityLimitUsage) -> Self {
         self.limits = limits;
         self
-    }
-}
-
-/// Per-operation usage checked against grant limits.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct CapabilityLimitUsage {
-    /// Requested spend in USD micro-units.
-    pub usd_micro: Option<u64>,
-    /// Requested call count.
-    pub calls: Option<u64>,
-    /// Requested concurrent calls.
-    pub concurrent: Option<u64>,
-    /// Requested timeout in seconds.
-    pub timeout_s: Option<u64>,
-    /// Requested row count.
-    pub rows: Option<u64>,
-    /// Requested materialized bytes.
-    pub materialized_bytes: Option<u64>,
-}
-
-/// Authorized grant facts surfaced to later permission decisions.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct AuthorizedGrant {
-    capability_fingerprint: String,
-    policy_fingerprint: String,
-    grant_action: String,
-    max_usd_micro: Option<u64>,
-    max_calls: Option<u64>,
-    max_concurrent: Option<u64>,
-    timeout_s: Option<u64>,
-    max_rows: Option<u64>,
-    max_materialized_bytes: Option<u64>,
-}
-
-impl AuthorizedGrant {
-    /// Capability fingerprint attached to the authorization.
-    pub fn capability_fingerprint(&self) -> &str {
-        &self.capability_fingerprint
-    }
-
-    /// Policy fingerprint attached to the authorization.
-    pub fn policy_fingerprint(&self) -> &str {
-        &self.policy_fingerprint
-    }
-
-    /// Grant action that authorized the request.
-    pub fn grant_action(&self) -> &str {
-        &self.grant_action
-    }
-
-    /// Grant maximum spend in USD micro-units.
-    pub fn max_usd_micro(&self) -> Option<u64> {
-        self.max_usd_micro
-    }
-
-    /// Grant maximum call count.
-    pub fn max_calls(&self) -> Option<u64> {
-        self.max_calls
-    }
-
-    /// Grant maximum concurrent calls.
-    pub fn max_concurrent(&self) -> Option<u64> {
-        self.max_concurrent
-    }
-
-    /// Grant timeout in seconds.
-    pub fn timeout_s(&self) -> Option<u64> {
-        self.timeout_s
-    }
-
-    /// Grant maximum row count.
-    pub fn max_rows(&self) -> Option<u64> {
-        self.max_rows
-    }
-
-    /// Grant maximum materialized bytes.
-    pub fn max_materialized_bytes(&self) -> Option<u64> {
-        self.max_materialized_bytes
     }
 }
 
@@ -722,8 +670,26 @@ fn ensure_constraints(
     )?;
     ensure_allowed_set(
         grant,
+        "models",
+        &request.models,
+        CapabilityDenialKind::Resource,
+    )?;
+    ensure_allowed_set(
+        grant,
         "model_roles",
         &request.model_roles,
+        CapabilityDenialKind::Resource,
+    )?;
+    ensure_allowed_set(
+        grant,
+        "workspace_ops",
+        &request.workspace_ops,
+        CapabilityDenialKind::Resource,
+    )?;
+    ensure_optional_one(
+        grant,
+        "allowed_commands",
+        request.command.as_deref(),
         CapabilityDenialKind::Resource,
     )?;
     ensure_schema_constraint(grant, &request.schemas)?;

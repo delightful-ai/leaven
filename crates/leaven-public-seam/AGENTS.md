@@ -60,7 +60,10 @@ Crate-root exports for `CapabilityGrantRequest`, `CapabilityLimitUsage`,
 `AuthorizedGrant`, `CapabilityDenial`, and `CapabilityDenialKind` are advanced
 public seam contracts. They prove grant-envelope authorization only; they are
 not aggregate budget ledgers, delegation engines, ACP permission handlers, or
-runtime effect executors.
+runtime effect executors. Their request dimensions include action, resource
+selectors, case fields, partitions, data classes, purposes, model roles, model
+ids, workspace operations, allowed command names, schema fingerprints, surface
+fingerprints, and per-grant limits.
 
 Crate-root exports for `CapabilityBudgetLedger`, `CapabilityBudgetUsage`, and
 `CapabilityBudgetReservation` are advanced public seam contracts. They prove

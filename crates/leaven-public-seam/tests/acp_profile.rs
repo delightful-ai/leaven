@@ -16,7 +16,7 @@ fn acp_profile_validates_pinned_stdio_leaven_methods_and_bounded_updates() {
         &["stdio_jsonrpc".to_owned(), "unix_socket_jsonrpc".to_owned()]
     );
     assert_eq!(profile.default_max_inflight_updates(), 32);
-    assert_eq!(profile.extension_methods().len(), 4);
+    assert_eq!(profile.extension_methods().len(), 5);
     assert_eq!(
         profile
             .method("leaven/proposal.apply")
@@ -109,6 +109,7 @@ fn acp_permissions_use_capability_grants_and_return_planerror_redactions() {
         &capability,
         AcpPermissionRequest::new("leaven/lm.complete")
             .with_input_class("case.input")
+            .with_model("gpt-test")
             .with_resource("run", json!("run_demo")),
     );
     assert!(allowed.allowed());
@@ -121,6 +122,7 @@ fn acp_permissions_use_capability_grants_and_return_planerror_redactions() {
         AcpPermissionRequest::new("leaven/lm.complete")
             .with_input_class("case.input")
             .with_input_class("external.secret")
+            .with_model("gpt-test")
             .with_resource("run", json!("run_demo")),
     );
     assert!(!denied.allowed());
@@ -137,6 +139,60 @@ fn acp_permissions_use_capability_grants_and_return_planerror_redactions() {
     );
     assert!(!unknown.allowed());
     assert_eq!(unknown.error().unwrap()["code"], json!("extension_error"));
+}
+
+#[test]
+fn acp_permissions_deny_ungranted_models_workspace_ops_and_commands() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let profile = package
+        .validate_acp_profile_document(&acp_profile())
+        .unwrap();
+    let capability = CapabilityDocument::from_value(acp_capability()).unwrap();
+
+    let workspace_allowed = package.authorize_acp_permission(
+        &profile,
+        &capability,
+        AcpPermissionRequest::new("leaven/workspace.read_file")
+            .with_resource("workspace_ids", json!("ws_acp"))
+            .with_input_class("workspace.file")
+            .with_workspace_op("read_file"),
+    );
+    assert!(workspace_allowed.allowed());
+
+    let workspace_denied = package.authorize_acp_permission(
+        &profile,
+        &capability,
+        AcpPermissionRequest::new("leaven/workspace.read_file")
+            .with_resource("workspace_ids", json!("ws_acp"))
+            .with_input_class("workspace.file")
+            .with_workspace_op("git_diff"),
+    );
+    assert!(!workspace_denied.allowed());
+    assert_eq!(
+        workspace_denied.error().unwrap()["code"],
+        json!("capability_denied")
+    );
+
+    let model_denied = package.authorize_acp_permission(
+        &profile,
+        &capability,
+        AcpPermissionRequest::new("leaven/lm.complete")
+            .with_input_class("case.input")
+            .with_model("ungranted-model")
+            .with_resource("run", json!("run_demo")),
+    );
+    assert!(!model_denied.allowed());
+
+    let sandbox_denied = package.authorize_acp_permission(
+        &profile,
+        &capability,
+        AcpPermissionRequest::new("leaven/sandbox.exec")
+            .with_resource("workspace_ids", json!("ws_acp"))
+            .with_input_class("public")
+            .with_workspace_op("exec")
+            .with_command("python"),
+    );
+    assert!(!sandbox_denied.allowed());
 }
 
 #[test]
@@ -321,6 +377,7 @@ fn acp_profile() -> Value {
         "extension_methods": [
             extension_method("leaven/lm.complete", "lm.complete"),
             extension_method("leaven/agent.run", "agent.run"),
+            extension_method("leaven/sandbox.exec", "sandbox.exec"),
             extension_method("leaven/workspace.read_file", "workspace.read"),
             extension_method("leaven/proposal.apply", "proposal.apply_batch")
         ],
@@ -394,7 +451,29 @@ fn acp_capability() -> Value {
                 },
                 "constraints": {
                     "allowed_input_classes": ["case.input"],
-                    "forbidden_input_classes": ["external.secret"]
+                    "forbidden_input_classes": ["external.secret"],
+                    "models": ["gpt-test"]
+                }
+            },
+            {
+                "action": "workspace.read",
+                "resource": {
+                    "workspace_ids": ["ws_acp"]
+                },
+                "constraints": {
+                    "allowed_input_classes": ["workspace.file"],
+                    "workspace_ops": ["read_file"]
+                }
+            },
+            {
+                "action": "sandbox.exec",
+                "resource": {
+                    "workspace_ids": ["ws_acp"]
+                },
+                "constraints": {
+                    "allowed_input_classes": ["public"],
+                    "workspace_ops": ["exec"],
+                    "allowed_commands": ["cargo"]
                 }
             }
         ],

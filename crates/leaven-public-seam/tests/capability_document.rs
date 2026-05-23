@@ -378,6 +378,76 @@ fn grant_enforcement_rejects_timeout_and_row_limit_overruns() {
 }
 
 #[test]
+fn grant_enforcement_rejects_ungranted_models_workspace_ops_and_commands() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut value = enforcement_capability(&package);
+    value["grants"][1]["constraints"]["models"] = json!(["gpt-test"]);
+    value["grants"].as_array_mut().unwrap().push(json!({
+        "action": "workspace.read",
+        "resource": {
+            "workspace_ids": ["ws_acp"]
+        },
+        "constraints": {
+            "allowed_input_classes": ["workspace.file"],
+            "workspace_ops": ["read_file"]
+        }
+    }));
+    value["grants"].as_array_mut().unwrap().push(json!({
+        "action": "sandbox.exec",
+        "resource": {
+            "workspace_ids": ["ws_acp"]
+        },
+        "constraints": {
+            "allowed_input_classes": ["public"],
+            "workspace_ops": ["exec"],
+            "allowed_commands": ["cargo"]
+        }
+    }));
+    let document = CapabilityDocument::from_value(value).unwrap();
+
+    document
+        .authorize_grant(
+            CapabilityGrantRequest::for_action("workspace.read")
+                .with_resource("workspace_ids", json!("ws_acp"))
+                .with_input_class("workspace.file")
+                .with_workspace_op("read_file"),
+        )
+        .unwrap();
+
+    assert_denied(
+        document.authorize_grant(
+            CapabilityGrantRequest::for_action("lm.complete")
+                .with_resource("run", json!("run_demo"))
+                .with_resource("lm_pool", json!("trusted-grader"))
+                .with_purpose("evaluation_judge")
+                .with_model_role("grader")
+                .with_model("ungranted-model")
+                .with_input_class("case.input"),
+        ),
+        CapabilityDenialKind::Resource,
+    );
+    assert_denied(
+        document.authorize_grant(
+            CapabilityGrantRequest::for_action("workspace.read")
+                .with_resource("workspace_ids", json!("ws_acp"))
+                .with_input_class("workspace.file")
+                .with_workspace_op("git_diff"),
+        ),
+        CapabilityDenialKind::Resource,
+    );
+    assert_denied(
+        document.authorize_grant(
+            CapabilityGrantRequest::for_action("sandbox.exec")
+                .with_resource("workspace_ids", json!("ws_acp"))
+                .with_input_class("public")
+                .with_workspace_op("exec")
+                .with_command("python"),
+        ),
+        CapabilityDenialKind::Resource,
+    );
+}
+
+#[test]
 fn aggregate_budget_ledger_enforces_cross_grant_totals_and_roles() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let document = CapabilityDocument::from_value(example_capability(&package)).unwrap();
