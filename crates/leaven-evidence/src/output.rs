@@ -81,6 +81,12 @@ impl DataClassSet {
         Self::new([DataClass::public()])
     }
 
+    /// Public reportable candidate-output data-class set.
+    #[must_use]
+    pub fn public_candidate_output() -> Self {
+        Self::new([DataClass::candidate_output(), DataClass::public()])
+    }
+
     /// Returns the classes in stable order.
     pub fn iter(&self) -> impl Iterator<Item = &DataClass> {
         self.0.iter()
@@ -139,6 +145,15 @@ impl OutputMetadata {
         }
     }
 
+    /// Publicly visible candidate output metadata.
+    #[must_use]
+    pub fn public_candidate_output() -> Self {
+        Self {
+            visibility: OutputVisibility::Public,
+            data_classes: DataClassSet::public_candidate_output(),
+        }
+    }
+
     /// Builds output metadata from visibility and data classes.
     #[must_use]
     pub fn new(visibility: OutputVisibility, data_classes: DataClassSet) -> Self {
@@ -190,6 +205,16 @@ impl OutputRecord {
             text: text.into(),
             truncated: false,
             metadata: OutputMetadata::public(),
+        }
+    }
+
+    /// Builds an untruncated public candidate-output inline record.
+    #[must_use]
+    pub fn candidate_inline(text: impl Into<String>) -> Self {
+        Self::Inline {
+            text: text.into(),
+            truncated: false,
+            metadata: OutputMetadata::public_candidate_output(),
         }
     }
 

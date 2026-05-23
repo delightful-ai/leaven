@@ -21,8 +21,9 @@ Evidence here is data a stage or evaluator can produce and another component can
   rewards, casewise sparse containers, command/agent trajectory records,
   attribution traits, `OutputRecord`, and `CaseAssessmentEvidence` have local tests.
   `OutputRecord` preserves inline/blob output payloads with explicit visibility
-  and data-class metadata; it is reusable evidence vocabulary, not a complete
-  public-seam evidence-envelope producer.
+  and data-class metadata, including public candidate-output inline records for
+  runner/scorer assessed outputs; it is reusable evidence vocabulary, not a
+  complete public-seam evidence-envelope producer.
   `CaseAssessmentEvidence` preserves generated output, scalar score, and
   natural-language feedback; it is reusable evidence vocabulary, not the
   reflective mutation algorithm.
@@ -78,6 +79,10 @@ Evidence here is data a stage or evaluator can produce and another component can
   `OutputRecord` visibility/data-class metadata monotonic with the value or
   receipt that carries it; do not downgrade sensitive output by hiding it in a
   public inline/blob wrapper.
+- Use `OutputRecord::candidate_inline(...)` for public reportable candidate
+  outputs that cross the runner/scorer evidence path; it carries both `public`
+  and `candidate.output` data classes so public-seam projection does not erase
+  what kind of data was assessed.
 - Use `AgentTrajectoryCorpusEvidence` when a paper or runner must resume over a
   known task manifest. Duplicate manifest task ids are refused at construction,
   unknown task ids are refused at insertion, and repeated trajectories for a
