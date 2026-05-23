@@ -763,7 +763,23 @@ rows:
       provider shell-outs cannot enter ordinary public routes as product proof.
     fake_pass_rejected: Passing topology tests while exposing immature names through default imports.
     minimum_closeout_level: semantic_denial
-    status: pending
+    positive_test_evidence:
+      - crates/leaven-public-seam/tests/contract_package.rs::public_seam_routes_reject_ordinary_facade_leaks
+    negative_test_evidence:
+      - crates/leaven-public-seam/tests/contract_package.rs::public_seam_routes_reject_ordinary_facade_leaks
+    implementation_evidence:
+      - crates/leaven-public-seam/AGENTS.md
+      - crates/leaven/src/lib.rs
+      - crates/leaven/src/prelude.rs
+      - crates/leaven/src/extend.rs
+      - crates/leaven/src/plumbing.rs
+      - crates/leaven/Cargo.toml
+      - crates/leaven/tests/public_surface_contract.rs
+      - crates/leaven/tests/topology_contract.rs
+      - crates/leaven-public-seam/tests/contract_package.rs::public_seam_routes_reject_ordinary_facade_leaks
+    review_evidence:
+      - docs/specs/public-seam-v1/reviews/2026-05-23-public-route-maturity-review.md
+    status: proven
 
   - id: ps1.harness.negative_denominator
     area: proof_harness

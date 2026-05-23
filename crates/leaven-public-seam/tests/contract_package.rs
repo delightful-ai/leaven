@@ -1,4 +1,5 @@
 use std::collections::BTreeSet;
+use std::fs;
 use std::path::{Path, PathBuf};
 
 use leaven_public_seam::{MatrixRowStatus, PublicSeamError, PublicSeamPackage, SchemaFingerprint};
@@ -151,6 +152,7 @@ fn conformance_matrix_rows_are_unique_honest_and_reference_real_files() {
             "ps1.authority.manifest_inventory",
             "ps1.capability.document_truth",
             "ps1.harness.negative_denominator",
+            "ps1.public_routes.maturity_classified",
             "ps1.schema.fingerprints"
         ])
     );
@@ -173,6 +175,57 @@ fn conformance_matrix_rows_are_unique_honest_and_reference_real_files() {
 
     package.validate_matrix_references(&matrix).unwrap();
     package.audit_conformance_evidence(&matrix).unwrap();
+}
+
+#[test]
+fn public_seam_routes_reject_ordinary_facade_leaks() {
+    let root = workspace_root();
+    let package = PublicSeamPackage::active_from_repo(root.clone()).unwrap();
+    let matrix = package.conformance_matrix().unwrap();
+    let route_row = matrix
+        .rows
+        .iter()
+        .find(|row| row.id == "ps1.public_routes.maturity_classified")
+        .unwrap();
+    assert_eq!(route_row.status, MatrixRowStatus::Proven);
+
+    let public_seam_agents = fs::read_to_string(root.join("crates/leaven-public-seam/AGENTS.md"))
+        .expect("public seam AGENTS.md must classify public exports");
+    for phrase in [
+        "advanced public contract",
+        "CapabilityDocument",
+        "CapabilityRegistry",
+        "ConformanceRow",
+        "ConformanceTest",
+        "not routed through `leaven::prelude`",
+    ] {
+        assert!(
+            public_seam_agents.contains(phrase),
+            "public seam AGENTS.md must contain route maturity phrase `{phrase}`"
+        );
+    }
+
+    let umbrella_manifest = fs::read_to_string(root.join("crates/leaven/Cargo.toml")).unwrap();
+    assert!(
+        !umbrella_manifest.contains("leaven-public-seam"),
+        "public seam crate must not enter the ordinary umbrella dependency set"
+    );
+    for route in ["lib.rs", "prelude.rs", "extend.rs", "plumbing.rs"] {
+        let source = fs::read_to_string(root.join("crates/leaven/src").join(route)).unwrap();
+        for forbidden in [
+            "leaven_public_seam",
+            "public_seam",
+            "CapabilityDocument",
+            "CapabilityRegistry",
+            "ConformanceRow",
+            "ConformanceTest",
+        ] {
+            assert!(
+                !source.contains(forbidden),
+                "`{route}` must not expose immature public-seam name `{forbidden}`"
+            );
+        }
+    }
 }
 
 #[test]
