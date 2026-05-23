@@ -79,13 +79,16 @@ seam contracts. They prove locked V1 transport-scope selection and MCP/watch/
 legacy-worker exclusion only; they are not an ACP process implementation,
 session lifecycle, authentication handshake, permission loop, or worker runtime.
 
-Crate-root exports for `PlanDocument` and `PlanOperationKind` are advanced
-public seam contracts. They prove active-schema Plan IR document validation and
-Let/Call/Write family classification plus wire-level consistency-mode base
-preservation and `submit_assessments` score-output content/data-class checks
-only; they are not plan execution, lowering to engine operations, cache
-behavior, graph mutation authority, evaluator runtime production, or runtime
-revision-read enforcement.
+Crate-root exports for `PlanDocument`, `PlanOperationKind`,
+`PlanExecutionContext`, `PlanExecutionHost`, `PlanExecutionReport`,
+`PlanLmCompleteRequest`, `PlanLmCompleteOutcome`,
+`PlanEmitRunEventRequest`, and `PlanEmitRunEventOutcome` are advanced public
+seam contracts. They prove active-schema Plan IR document validation and
+Let/Call/Write family classification plus representative lowering/execution of
+literal Let, `lm_complete` Call, and `emit_run_event` Write into a validated
+Plan Result. They are not ACP delivery, provider runtime execution, cache
+behavior, graph mutation authority, full Plan IR coverage, evaluator runtime
+production, or runtime revision-read enforcement.
 
 Crate-root export `PinnedDialectEvaluator` is an advanced public seam contract.
 It proves deterministic parsing and replay for the V1 pinned wire
@@ -173,11 +176,12 @@ backpressure, or runtime watch support.
   preserve per-assessment replayability and that plan-level replayability is a
   roll-up summary, not a single boolean or override.
 - `tests/plan_result_evidence.rs` proves Plan Result values semantically inspect
-  nested `EvidenceEnvelope` payloads, require value data classes to cover
-  evidence projections, and reject evidence source receipt refs that are missing
-  or categorized as the wrong query/call/write receipt kind. It does not prove
-  evaluator evidence production, runtime receipt persistence, or full data-class
-  propagation across query/call/write execution.
+  nested `Score.output` and `EvidenceEnvelope` payloads, require value data
+  classes to cover score outputs and evidence projections, and reject evidence
+  source receipt refs that are missing or categorized as the wrong
+  query/call/write receipt kind. It does not prove evaluator evidence
+  production, runtime receipt persistence, or full data-class propagation across
+  query/call/write execution.
 - `tests/capability_document.rs` proves opaque token handles resolve to
   structured capability documents and reject bare, missing, expired, revoked,
   or binding-mismatched tokens. It also proves grant-envelope authorization and

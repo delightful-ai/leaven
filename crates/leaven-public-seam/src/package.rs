@@ -747,6 +747,23 @@ impl PublicSeamPackage {
         PlanDocument::from_schema_valid_value(value)
     }
 
+    /// Executes a representative Plan IR document through the advanced public-seam harness.
+    ///
+    /// This path validates the active V1 plan schema before lowering typed
+    /// Let/Call/Write operations, delegates effectful operations to `host`, and
+    /// validates the produced Plan Result through the active V1 result schema.
+    pub fn execute_plan_document<H: crate::PlanExecutionHost>(
+        &self,
+        value: &Value,
+        context: &crate::PlanExecutionContext,
+        host: &mut H,
+    ) -> Result<crate::PlanExecutionReport, PublicSeamError> {
+        self.validate_plan_document(value)?;
+        let result = crate::plan_execution::execute_plan(value, context, host)?;
+        let document = self.validate_plan_result_document(&result)?;
+        Ok(crate::PlanExecutionReport::new(result, document))
+    }
+
     /// Validates a Plan Result document through the active V1 schema and semantic seam checks.
     pub fn validate_plan_result_document(
         &self,

@@ -58,3 +58,9 @@ Current limits after fixture follow-up:
 
 - This still does not sign off `ps1.receipts.audit_currency`.
 - The row remains pending because the public-seam validator still proves supplied receipt shape/roles, not a runtime replay path that recomputes every operation hash from producer-owned preimages.
+
+Nested score-output data-class follow-up:
+
+- `crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_nested_score_output_data_class_gaps` now proves a result value containing assessment rows must include nested `score.output.data_classes` such as `candidate.output` in the value-level `data_classes`.
+- This is useful evidence for `ps1.visibility.data_class_propagation`, but it still does not sign off that row: monotonic data-class propagation through projections, templates, LM calls, agent runs, writes, receipts, and redaction reporting remains pending.
+- The same fixture is also useful prerequisite evidence for `ps1.evidence.visibility_receipts`, paired with `evidence_envelope_preserves_visibility_data_classes_and_receipts` and the source-receipt kind negatives. That row still remains pending because this validation layer does not prove runtime evidence production or persisted receipt visibility from the evaluator path.

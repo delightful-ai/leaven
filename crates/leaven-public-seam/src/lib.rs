@@ -10,6 +10,7 @@ mod matrix;
 mod output;
 mod package;
 mod plan;
+mod plan_execution;
 mod result;
 mod watch;
 
@@ -33,5 +34,9 @@ pub use package::{
     ValidationReport, WorkerTransportKind, WorkerTransportRequest,
 };
 pub use plan::{PlanDocument, PlanOperationKind};
+pub use plan_execution::{
+    PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanExecutionContext, PlanExecutionHost,
+    PlanExecutionReport, PlanLmCompleteOutcome, PlanLmCompleteRequest,
+};
 pub use result::{PlanResultDocument, Replayability};
 pub use watch::DeferredWatchReplacement;
