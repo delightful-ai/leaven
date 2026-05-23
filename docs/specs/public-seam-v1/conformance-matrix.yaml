@@ -533,6 +533,17 @@ rows:
       capability fingerprint are rejected.
     fake_pass_rejected: A test evaluator closure with no durable job identity.
     minimum_closeout_level: semantic_denial
+    positive_test_evidence:
+      - crates/leaven-public-seam/tests/evaluation_job.rs::evaluation_job_preserves_identity_for_all_request_shapes
+    negative_test_evidence:
+      - crates/leaven-public-seam/tests/evaluation_job.rs::evaluation_job_rejects_missing_identity_deadline_or_capability
+      - crates/leaven-public-seam/tests/evaluation_job.rs::evaluation_job_rejects_unresolved_case_sets_and_invalid_pairs
+    implementation_evidence:
+      - crates/leaven-public-seam/src/evaluation_job.rs::EvaluationJobDocument
+      - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_evaluation_job_document
+      - crates/leaven-public-seam/AGENTS.md
+    review_evidence:
+      - docs/specs/public-seam-v1/reviews/2026-05-23-evaluation-job-identity-review.md
     status: pending
 
   - id: ps1.evaluator.target_reads

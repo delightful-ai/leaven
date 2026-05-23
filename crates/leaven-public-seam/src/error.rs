@@ -111,6 +111,13 @@ pub enum PublicSeamError {
         message: String,
     },
 
+    /// A schema-valid evaluation job violates a public-seam semantic constraint.
+    #[error("invalid public seam evaluation job: {message}")]
+    InvalidEvaluationJob {
+        /// Human-readable reason.
+        message: String,
+    },
+
     /// A schema-valid output record violates a public-seam semantic constraint.
     #[error("invalid public seam output record: {message}")]
     InvalidOutputRecord {
