@@ -782,6 +782,34 @@ impl PublicSeamPackage {
         Ok(crate::PlanExecutionReport::new(result, document))
     }
 
+    /// Executes a Plan IR document after authorizing capability-scoped case reads.
+    pub fn execute_plan_document_with_capability<H: crate::PlanExecutionHost>(
+        &self,
+        value: &Value,
+        context: &crate::PlanExecutionContext,
+        capability: &crate::CapabilityDocument,
+        host: &mut H,
+    ) -> Result<crate::PlanExecutionReport, PublicSeamError> {
+        let plan_document = self.validate_plan_document(value)?;
+        let result = crate::plan_execution::execute_plan_with_capability(
+            value,
+            &plan_document,
+            context,
+            capability,
+            host,
+        )?;
+        let document = self.validate_plan_result_document(&result)?;
+        if plan_document.mode_kind() != "replay" {
+            crate::plan_execution::validate_plan_result_receipts(
+                value,
+                &plan_document,
+                context,
+                &result,
+            )?;
+        }
+        Ok(crate::PlanExecutionReport::new(result, document))
+    }
+
     /// Validates a Plan Result against the Plan IR receipt preimages owned by the seam harness.
     pub fn validate_plan_execution_result(
         &self,

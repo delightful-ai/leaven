@@ -4,16 +4,20 @@ use serde_json::{Map, Value, json};
 
 use crate::{PlanResultDocument, PublicSeamError};
 
+mod effects;
 mod queries;
 mod receipts;
 
+pub use effects::{
+    PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanLmCompleteOutcome, PlanLmCompleteRequest,
+};
 pub use queries::{
     PlanCaseQueryOutcome, PlanCaseQueryRequest, PlanGraphQueryOutcome, PlanGraphQueryRequest,
     PlanGraphReadScope,
 };
 use queries::{
-    case_query_include, case_query_projection, require_included_case_fields,
-    require_requested_case_field,
+    case_query_include, case_query_projection, plan_contains_case_query,
+    require_included_case_fields, require_requested_case_field, validate_case_query_authority,
 };
 pub use receipts::validate_plan_result_receipts;
 
@@ -25,6 +29,9 @@ pub struct PlanExecutionContext {
     base_revision: String,
     started_at: String,
     completed_at: String,
+    evaluation_run: Option<String>,
+    evaluation_request_id: Option<String>,
+    case_partition: Option<String>,
 }
 
 impl PlanExecutionContext {
@@ -42,7 +49,29 @@ impl PlanExecutionContext {
             base_revision: base_revision.into(),
             started_at: started_at.into(),
             completed_at: completed_at.into(),
+            evaluation_run: None,
+            evaluation_request_id: None,
+            case_partition: None,
         }
+    }
+
+    /// Adds evaluator request identity used for capability-authorized `case_query.load` reads.
+    #[must_use]
+    pub fn with_evaluation_request(
+        mut self,
+        run: impl Into<String>,
+        evaluation_request_id: impl Into<String>,
+    ) -> Self {
+        self.evaluation_run = Some(run.into());
+        self.evaluation_request_id = Some(evaluation_request_id.into());
+        self
+    }
+
+    /// Adds the resolved case partition used for capability-authorized case reads.
+    #[must_use]
+    pub fn with_case_partition(mut self, partition: impl Into<String>) -> Self {
+        self.case_partition = Some(partition.into());
+        self
     }
 }
 
@@ -125,141 +154,32 @@ pub trait PlanExecutionHost {
     }
 }
 
-/// Lowered `lm_complete` request passed to a [`PlanExecutionHost`].
-#[derive(Clone, Copy, Debug)]
-pub struct PlanLmCompleteRequest<'a> {
-    name: &'a str,
-    call: &'a Value,
-    deps: &'a BTreeMap<String, Value>,
-}
-
-impl<'a> PlanLmCompleteRequest<'a> {
-    /// Operation binding name.
-    pub const fn name(&self) -> &'a str {
-        self.name
-    }
-
-    /// Typed `lm_complete` call body from the Plan IR.
-    pub const fn call(&self) -> &'a Value {
-        self.call
-    }
-
-    /// Resolved dependency bindings visible to this call.
-    pub const fn deps(&self) -> &'a BTreeMap<String, Value> {
-        self.deps
-    }
-}
-
-/// Host outcome for a typed `lm_complete` call.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct PlanLmCompleteOutcome {
-    message: Value,
-    data_classes: Vec<String>,
-    replayability: String,
-    runtime_fingerprint: String,
-    error: Option<Value>,
-    cost: Option<Value>,
-}
-
-impl PlanLmCompleteOutcome {
-    /// Creates an LM response outcome.
-    pub fn new(message: Value, runtime_fingerprint: impl Into<String>) -> Self {
-        Self {
-            message,
-            data_classes: vec!["public".to_owned()],
-            replayability: "fully_managed".to_owned(),
-            runtime_fingerprint: runtime_fingerprint.into(),
-            error: None,
-            cost: None,
-        }
-    }
-
-    /// Creates a failed paid LM outcome that still emits audit and charge receipts.
-    pub fn failed_provider_error(
-        message: impl Into<String>,
-        runtime_fingerprint: impl Into<String>,
-        usd_micro: u64,
-    ) -> Self {
-        Self {
-            message: Value::Null,
-            data_classes: Vec::new(),
-            replayability: "has_declared_external_effects".to_owned(),
-            runtime_fingerprint: runtime_fingerprint.into(),
-            error: Some(json!({
-                "code": "provider_error",
-                "message": message.into(),
-                "retryable": true
-            })),
-            cost: Some(json!({
-                "usd_micro": usd_micro
-            })),
-        }
-    }
-
-    /// Overrides the data classes carried by the LM response value.
-    #[must_use]
-    pub fn with_data_classes(mut self, data_classes: impl IntoIterator<Item = String>) -> Self {
-        self.data_classes = data_classes.into_iter().collect();
-        self
-    }
-
-    /// Overrides the replayability classification carried by the LM response value.
-    #[must_use]
-    pub fn with_replayability(mut self, replayability: impl Into<String>) -> Self {
-        self.replayability = replayability.into();
-        self
-    }
-}
-
-/// Lowered `emit_run_event` request passed to a [`PlanExecutionHost`].
-#[derive(Clone, Copy, Debug)]
-pub struct PlanEmitRunEventRequest<'a> {
-    name: &'a str,
-    write: &'a Value,
-    deps: &'a BTreeMap<String, Value>,
-    base_revision: &'a str,
-}
-
-impl<'a> PlanEmitRunEventRequest<'a> {
-    /// Operation binding name.
-    pub const fn name(&self) -> &'a str {
-        self.name
-    }
-
-    /// Typed `emit_run_event` write body from the Plan IR.
-    pub const fn write(&self) -> &'a Value {
-        self.write
-    }
-
-    /// Resolved dependency bindings visible to this write.
-    pub const fn deps(&self) -> &'a BTreeMap<String, Value> {
-        self.deps
-    }
-
-    /// Base graph revision supplied by the public-seam execution context.
-    pub const fn base_revision(&self) -> &'a str {
-        self.base_revision
-    }
-}
-
-/// Host outcome for a typed `emit_run_event` write.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct PlanEmitRunEventOutcome {
-    event_id: String,
-    committed_revision: String,
-}
-
-impl PlanEmitRunEventOutcome {
-    /// Creates an emitted event outcome.
-    pub fn new(event_id: impl Into<String>, committed_revision: impl Into<String>) -> Self {
-        Self {
-            event_id: event_id.into(),
-            committed_revision: committed_revision.into(),
-        }
-    }
-}
-
 pub fn execute_plan<H: PlanExecutionHost>(
+    plan: &Value,
+    plan_document: &crate::PlanDocument,
+    context: &PlanExecutionContext,
+    host: &mut H,
+) -> Result<Value, PublicSeamError> {
+    if plan_contains_case_query(plan)? {
+        return Err(invalid_plan(
+            "case_query.load execution requires capability-authorized Plan execution",
+        ));
+    }
+    execute_authorized_plan(plan, plan_document, context, host)
+}
+
+pub fn execute_plan_with_capability<H: PlanExecutionHost>(
+    plan: &Value,
+    plan_document: &crate::PlanDocument,
+    context: &PlanExecutionContext,
+    capability: &crate::CapabilityDocument,
+    host: &mut H,
+) -> Result<Value, PublicSeamError> {
+    validate_case_query_authority(plan, context, capability)?;
+    execute_authorized_plan(plan, plan_document, context, host)
+}
+
+fn execute_authorized_plan<H: PlanExecutionHost>(
     plan: &Value,
     plan_document: &crate::PlanDocument,
     context: &PlanExecutionContext,

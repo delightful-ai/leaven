@@ -2,9 +2,9 @@ use std::collections::BTreeSet;
 
 use serde_json::{Value, json};
 
-use crate::PublicSeamError;
+use crate::{CapabilityDocument, CapabilityGrantRequest, PublicSeamError};
 
-use super::invalid_plan;
+use super::{PlanExecutionContext, invalid_plan, nested_kind, object};
 
 /// Lowered graph-read consistency scope for a Plan IR `graph_query`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -211,4 +211,112 @@ pub(super) fn case_query_projection(query: &Value) -> Result<Value, PublicSeamEr
             .ok_or_else(|| invalid_plan("case_query.load must carry include"))?,
         "projection_schema": query.get("projection_schema").cloned().unwrap_or(Value::Null)
     }))
+}
+
+pub(super) fn plan_contains_case_query(plan: &Value) -> Result<bool, PublicSeamError> {
+    for op in plan_ops(plan)? {
+        let Some(expr) = op.get("expr") else {
+            continue;
+        };
+        if nested_kind(expr, "expr")? == "case_query" {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+pub(super) fn validate_case_query_authority(
+    plan: &Value,
+    context: &PlanExecutionContext,
+    capability: &CapabilityDocument,
+) -> Result<(), PublicSeamError> {
+    if context.capability_fingerprint != capability.capability_fingerprint() {
+        return Err(invalid_plan(
+            "Plan execution context capability fingerprint does not match capability document",
+        ));
+    }
+    for op in plan_ops(plan)? {
+        let Some(expr) = op.get("expr") else {
+            continue;
+        };
+        if nested_kind(expr, "expr")? != "case_query" {
+            continue;
+        }
+        let query = object(expr, "case_query")?
+            .get("query")
+            .ok_or_else(|| invalid_plan("case_query must carry query"))?;
+        if nested_kind(query, "case_query.query")? != "load" {
+            return Err(invalid_plan(
+                "representative Plan IR harness only authorizes case_query.load",
+            ));
+        }
+        authorize_case_query_load(query, context, capability)?;
+    }
+    Ok(())
+}
+
+fn authorize_case_query_load(
+    query: &Value,
+    context: &PlanExecutionContext,
+    capability: &CapabilityDocument,
+) -> Result<(), PublicSeamError> {
+    let run = context
+        .evaluation_run
+        .as_deref()
+        .ok_or_else(|| invalid_plan("case_query.load authorization requires evaluation run"))?;
+    let evaluation_request_id = context.evaluation_request_id.as_deref().ok_or_else(|| {
+        invalid_plan("case_query.load authorization requires evaluation_request_id")
+    })?;
+    ensure_case_ref_run_matches_context(query, run)?;
+    let mut request = CapabilityGrantRequest::for_action("case.read")
+        .with_resource("run", json!(run))
+        .with_resource("evaluation_request_id", json!(evaluation_request_id));
+    if let Some(partition) = &context.case_partition {
+        request = request.with_partition(partition.clone());
+    }
+    for field in case_query_include(query)? {
+        request = request
+            .with_case_field(field)
+            .with_input_class(case_field_data_class(field));
+    }
+    capability
+        .authorize_grant(request)
+        .map_err(|denial| invalid_plan(format!("case_query.load denied: {denial}")))?;
+    Ok(())
+}
+
+fn ensure_case_ref_run_matches_context(
+    query: &Value,
+    expected_run: &str,
+) -> Result<(), PublicSeamError> {
+    let Some(case_run) = query
+        .get("case")
+        .and_then(Value::as_object)
+        .and_then(|case_ref| case_ref.get("run"))
+        .and_then(Value::as_str)
+    else {
+        return Ok(());
+    };
+    if case_run == expected_run {
+        Ok(())
+    } else {
+        Err(invalid_plan(
+            "case_query.load case ref run does not match evaluator context",
+        ))
+    }
+}
+
+fn case_field_data_class(field: &str) -> &'static str {
+    match field {
+        "input" => "case.input",
+        "target" => "case.target",
+        "metadata" => "case.metadata",
+        _ => "case.unknown",
+    }
+}
+
+fn plan_ops(plan: &Value) -> Result<&Vec<Value>, PublicSeamError> {
+    plan.get("ops")
+        .and_then(Value::as_array)
+        .ok_or_else(|| invalid_plan("plan ops must be an array"))
 }

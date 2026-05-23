@@ -103,7 +103,9 @@ active-schema Plan IR document validation and Let/Call/Write family
 classification plus representative lowering/execution of literal Let,
 `graph_query` reads, `case_query.load` reads, `lm_complete` Call, and
 `emit_run_event` Write into a validated Plan Result with query/call/write
-receipts. The
+receipts. The `PublicSeamPackage::execute_plan_document_with_capability` route
+requires capability-authorized evaluator request scope before a `case_query.load`
+host read can run. The
 `PublicSeamPackage::validate_plan_execution_result` route additionally proves
 representative query/call/write receipt hashes can be checked against the Plan
 IR and execution-context preimages instead of accepted as decorative ids. They
@@ -190,9 +192,9 @@ backpressure, or runtime watch support.
   dummies but is still public-seam document validation, not runtime proof that a
   scorer assessed the true candidate output. Its execution-result verifier
   checks representative query/call/write receipt hashes against Plan IR
-  preimages, including `case_query.load` target reads, and rejects same-prefix
-  mismatches, but it is not a general ACP replay service, evaluator runtime
-  target loader, or provider runtime audit log.
+  preimages, including capability-authorized `case_query.load` target reads, and
+  rejects same-prefix mismatches, but it is not a general ACP replay service,
+  evaluator runtime target loader, or provider runtime audit log.
 - `tests/call_authority.rs` proves schema-valid Call ops are checked against
   capability-granted input data classes and call-local forbidden data-class
   intersections before execution. It rejects `case.target` and other forbidden
