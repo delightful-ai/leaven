@@ -47,6 +47,16 @@ fn evidence_envelope_rejects_target_derived_data_class_gaps() {
             .unwrap_err(),
         PublicSeamError::InvalidEvidence { .. }
     ));
+
+    let mut missing_target_class = target_derived_envelope();
+    missing_target_class["data_classes"] = json!(["scorer.private"]);
+    missing_target_class["public"]["data_classes"] = json!(["scorer.private"]);
+    assert!(matches!(
+        package
+            .validate_evidence_envelope_document(&missing_target_class)
+            .unwrap_err(),
+        PublicSeamError::InvalidEvidence { .. }
+    ));
 }
 
 fn target_derived_envelope() -> Value {

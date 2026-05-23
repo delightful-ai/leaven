@@ -607,6 +607,7 @@ rows:
       - crates/leaven-public-seam/AGENTS.md
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-result-receipt-replay-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-23-evidence-visibility-current-blocker-review.md
     status: pending
 
   - id: ps1.visibility.reflector_target_safe
@@ -677,6 +678,7 @@ rows:
       - crates/leaven-public-seam/src/result.rs::validate_evidence_source_receipts
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-result-receipt-replay-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-23-evidence-visibility-current-blocker-review.md
     status: pending
 
   - id: ps1.stage.reflection_proposal_split

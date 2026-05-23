@@ -114,6 +114,14 @@ fn validate_target_derived_classes(
     private_data_classes: Option<&[String]>,
 ) -> Result<(), PublicSeamError> {
     let top_level = data_classes.iter().collect::<BTreeSet<_>>();
+    if !top_level
+        .iter()
+        .any(|data_class| data_class.starts_with("case.target"))
+    {
+        return Err(invalid_evidence(
+            "target-derived evidence data_classes must include case.target",
+        ));
+    }
     for data_class in public_data_classes
         .iter()
         .chain(private_data_classes.into_iter().flatten())
