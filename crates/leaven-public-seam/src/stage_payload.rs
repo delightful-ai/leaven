@@ -211,11 +211,22 @@ fn inspect_reflect_request(
     object: &serde_json::Map<String, Value>,
 ) -> Result<usize, PublicSeamError> {
     require_field(object, "capability_fingerprint")?;
+    require_field(object, "query_policy_fingerprint")?;
+    if required_string(object.get("target_safety"), "target_safety")? != "target_safe_projection" {
+        return Err(invalid_stage_payload(
+            "reflector request must declare target_safe_projection",
+        ));
+    }
+    require_non_empty_array(object.get("source_refs"), "source_refs")?;
     let examples = required_array(object.get("examples"), "examples")?;
     for example in examples {
         let example = example
             .as_object()
             .ok_or_else(|| invalid_stage_payload("reflective examples must be objects"))?;
+        require_non_empty_array(example.get("source_refs"), "examples.source_refs")?;
+        reject_target_leakage(example.get("input"), "reflector example input")?;
+        reject_target_leakage(example.get("side_info"), "reflector example side_info")?;
+        reject_target_leakage(example.get("score"), "reflector example score")?;
         for data_class in string_array(example.get("data_classes"), "examples.data_classes")? {
             if data_class == "case.target" {
                 return Err(invalid_stage_payload(
@@ -263,6 +274,8 @@ fn inspect_propose_request(
     object: &serde_json::Map<String, Value>,
 ) -> Result<(Vec<StageProposalEffect>, usize), PublicSeamError> {
     require_field(object, "capability_fingerprint")?;
+    require_field(object, "query_policy_fingerprint")?;
+    require_non_empty_array(object.get("source_refs"), "source_refs")?;
     let reflection = object
         .get("reflection_result")
         .ok_or_else(|| invalid_stage_payload("propose request must carry ReflectionResult"))?;
@@ -301,6 +314,7 @@ fn inspect_runner_request(object: &serde_json::Map<String, Value>) -> Result<(),
             "runner request must declare target_forbidden=true",
         ));
     }
+    reject_target_leakage(object.get("case_input"), "runner case_input")?;
     Ok(())
 }
 
@@ -335,6 +349,50 @@ fn require_field(
     object
         .get(field)
         .ok_or_else(|| invalid_stage_payload(format!("stage payload must carry `{field}`")))?;
+    Ok(())
+}
+
+fn require_non_empty_array(value: Option<&Value>, field: &str) -> Result<(), PublicSeamError> {
+    if required_array(value, field)?.is_empty() {
+        return Err(invalid_stage_payload(format!(
+            "stage payload field `{field}` must be non-empty"
+        )));
+    }
+    Ok(())
+}
+
+fn reject_target_leakage(value: Option<&Value>, context: &str) -> Result<(), PublicSeamError> {
+    let Some(value) = value else {
+        return Ok(());
+    };
+    reject_target_leakage_value(value, context)
+}
+
+fn reject_target_leakage_value(value: &Value, context: &str) -> Result<(), PublicSeamError> {
+    match value {
+        Value::Object(object) => {
+            for (key, nested) in object {
+                let key = key.to_ascii_lowercase();
+                if key == "target" || key == "case_target" || key == "expected_target" {
+                    return Err(invalid_stage_payload(format!(
+                        "{context} must not carry case.target material"
+                    )));
+                }
+                reject_target_leakage_value(nested, context)?;
+            }
+        }
+        Value::Array(items) => {
+            for item in items {
+                reject_target_leakage_value(item, context)?;
+            }
+        }
+        Value::String(text) if text == "case.target" => {
+            return Err(invalid_stage_payload(format!(
+                "{context} must not carry case.target material"
+            )));
+        }
+        _ => {}
+    }
     Ok(())
 }
 

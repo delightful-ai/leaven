@@ -87,6 +87,31 @@ fn reflect_request_rejects_case_target_projection() {
 }
 
 #[test]
+fn reflect_request_rejects_hidden_case_target_material() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut side_info_target = reflect_request();
+    side_info_target["examples"][0]["side_info"]["target"] = json!("secret answer");
+    assert!(matches!(
+        package
+            .validate_stage_payload_document(&side_info_target)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+
+    let mut prompt_target_marker = reflect_request();
+    prompt_target_marker["examples"][0]["input"] = json!({
+        "prompt": ["summarize", "case.target"]
+    });
+    assert!(matches!(
+        package
+            .validate_stage_payload_document(&prompt_target_marker)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+}
+
+#[test]
 fn reflection_result_requires_receipted_source_visible_evidence() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
 
@@ -113,6 +138,27 @@ fn reflection_result_requires_receipted_source_visible_evidence() {
 fn propose_request_requires_reflection_result_and_change_schema_authority() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
 
+    let mut missing_source_refs = propose_request();
+    missing_source_refs["source_refs"] = json!([]);
+    assert!(matches!(
+        package
+            .validate_stage_payload_document(&missing_source_refs)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+
+    let mut missing_query_policy = propose_request();
+    missing_query_policy
+        .as_object_mut()
+        .unwrap()
+        .remove("query_policy_fingerprint");
+    assert!(matches!(
+        package
+            .validate_stage_payload_document(&missing_query_policy)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+
     let mut missing_change_schema = propose_request();
     missing_change_schema["allowed_change_schemas"] = json!([]);
     assert!(matches!(
@@ -129,6 +175,32 @@ fn propose_request_requires_reflection_result_and_change_schema_authority() {
             .validate_stage_payload_document(&wrong_bridge)
             .unwrap_err(),
         PublicSeamError::ExampleValidation { .. } | PublicSeamError::InvalidStagePayload { .. }
+    ));
+}
+
+#[test]
+fn runner_request_rejects_case_target_material() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut hidden_target = runner_request();
+    hidden_target["case_input"]["target"] = json!("secret answer");
+    assert!(matches!(
+        package
+            .validate_stage_payload_document(&hidden_target)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+
+    let mut target_marker = runner_request();
+    target_marker["case_input"] = json!({
+        "question": "q",
+        "evidence": ["case.target"]
+    });
+    assert!(matches!(
+        package
+            .validate_stage_payload_document(&target_marker)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
     ));
 }
 
