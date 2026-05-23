@@ -106,7 +106,7 @@ impl PublicSeamPackage {
     /// Loads a package path, refusing anything other than the active V1 package.
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, PublicSeamError> {
         let root = path.as_ref().to_path_buf();
-        if !is_active_package_path(&root) {
+        if !is_active_package_path(&root) || !is_canonical_active_package(&root) {
             return Err(PublicSeamError::InactivePackage { path: root });
         }
         let manifest = read_manifest(&root.join("manifest.json"))?;
@@ -265,15 +265,35 @@ impl PublicSeamPackage {
     ) -> Result<(), PublicSeamError> {
         for row in &matrix.rows {
             for reference in &row.spec_refs {
-                let path = self.repo_root.join(reference);
-                if !path.exists() {
-                    return Err(PublicSeamError::InvalidMatrix {
-                        message: format!("row `{}` references missing `{reference}`", row.id),
-                    });
-                }
+                self.ensure_matrix_reference(&row.id, reference)?;
+            }
+            for reference in row
+                .implementation_evidence
+                .iter()
+                .chain(row.review_evidence.iter())
+            {
+                self.ensure_matrix_reference(&row.id, reference)?;
             }
         }
         Ok(())
+    }
+
+    fn ensure_matrix_reference(
+        &self,
+        row_id: &str,
+        reference: &str,
+    ) -> Result<(), PublicSeamError> {
+        let path_part = reference
+            .split_once("::")
+            .map_or(reference, |(path, _)| path);
+        let path = self.repo_root.join(path_part);
+        if path.exists() {
+            Ok(())
+        } else {
+            Err(PublicSeamError::InvalidMatrix {
+                message: format!("row `{row_id}` references missing `{reference}`"),
+            })
+        }
     }
 
     /// Returns the locked V1 scope, refusing manifest drift.
@@ -403,6 +423,27 @@ fn is_active_package_path(path: &Path) -> bool {
             .and_then(Path::file_name)
             .and_then(|name| name.to_str())
             == Some("docs")
+}
+
+fn is_canonical_active_package(path: &Path) -> bool {
+    let Ok(path) = path.canonicalize() else {
+        return false;
+    };
+    let Ok(active) = source_repo_root()
+        .join(ACTIVE_PACKAGE_RELATIVE)
+        .canonicalize()
+    else {
+        return false;
+    };
+    path == active
+}
+
+fn source_repo_root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(Path::parent)
+        .expect("leaven-public-seam lives under workspace/crates")
+        .to_path_buf()
 }
 
 fn read_manifest(path: &Path) -> Result<Manifest, PublicSeamError> {

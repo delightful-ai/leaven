@@ -49,7 +49,12 @@ rows:
       active manifest is deliberately revised in the same change.
     fake_pass_rejected: Loading whichever draft schema happens to validate.
     minimum_closeout_level: semantic_denial
-    status: pending
+    implementation_evidence:
+      - crates/leaven-public-seam/tests/contract_package.rs::active_package_loader_accepts_only_locked_public_seam_v1_package
+      - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::from_path
+    review_evidence:
+      - docs/specs/public-seam-v1/reviews/2026-05-23-initial-contract-owner-review.md
+    status: proven
 
   - id: ps1.authority.manifest_inventory
     area: authority
@@ -66,7 +71,12 @@ rows:
       Removing or renaming a listed contract file fails the inventory test.
     fake_pass_rejected: A hand-maintained test list that silently diverges from the manifest.
     minimum_closeout_level: structural_contract
-    status: pending
+    implementation_evidence:
+      - crates/leaven-public-seam/tests/contract_package.rs::manifest_inventory_drives_contract_file_loading
+      - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::inventory
+    review_evidence:
+      - docs/specs/public-seam-v1/reviews/2026-05-23-initial-contract-owner-review.md
+    status: proven
 
   - id: ps1.schema.fingerprints
     area: schema
@@ -85,7 +95,12 @@ rows:
       rejected.
     fake_pass_rejected: Accepting strings that look like fingerprints without computing them.
     minimum_closeout_level: semantic_denial
-    status: pending
+    implementation_evidence:
+      - crates/leaven-public-seam/tests/contract_package.rs::schema_fingerprints_use_jcs_sha256_not_pretty_printed_bytes
+      - crates/leaven-public-seam/src/fingerprint.rs::SchemaFingerprint::for_json_value
+    review_evidence:
+      - docs/specs/public-seam-v1/reviews/2026-05-23-initial-contract-owner-review.md
+    status: proven
 
   - id: ps1.plan.ir_family
     area: plan_ir

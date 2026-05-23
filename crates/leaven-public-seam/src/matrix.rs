@@ -30,6 +30,12 @@ pub struct ConformanceRow {
     pub area: String,
     /// Spec paths referenced by this row.
     pub spec_refs: Vec<String>,
+    /// Implementation evidence paths for proven rows.
+    #[serde(default)]
+    pub implementation_evidence: Vec<String>,
+    /// Review evidence paths for proven rows.
+    #[serde(default)]
+    pub review_evidence: Vec<String>,
     /// Current row status.
     pub status: MatrixRowStatus,
 }

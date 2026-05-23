@@ -22,6 +22,13 @@ fn active_package_loader_accepts_only_locked_public_seam_v1_package() {
     let archived = root.join("docs/specs/public-seam-v1-lock-draft.archived");
     let error = PublicSeamPackage::from_path(archived).unwrap_err();
     assert!(matches!(error, PublicSeamError::InactivePackage { .. }));
+
+    let copied_repo = tempfile::tempdir().unwrap();
+    let copied_package = copied_repo.path().join("docs/specs/public-seam-v1");
+    std::fs::create_dir_all(copied_package.parent().unwrap()).unwrap();
+    copy_dir_all(root.join("docs/specs/public-seam-v1"), &copied_package).unwrap();
+    let error = PublicSeamPackage::from_path(copied_package).unwrap_err();
+    assert!(matches!(error, PublicSeamError::InactivePackage { .. }));
 }
 
 #[test]
@@ -127,18 +134,24 @@ fn schema_fingerprints_use_jcs_sha256_not_pretty_printed_bytes() {
 }
 
 #[test]
-fn conformance_matrix_rows_are_unique_pending_and_reference_real_files() {
+fn conformance_matrix_rows_are_unique_honest_and_reference_real_files() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let matrix = package.conformance_matrix().unwrap();
 
     assert_eq!(matrix.rows.len(), 39);
-    assert!(
-        matrix
-            .rows
-            .iter()
-            .all(|row| row.status == MatrixRowStatus::Pending)
+    let proven = matrix
+        .proven_rows()
+        .into_iter()
+        .map(|row| row.id.as_str())
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        proven,
+        BTreeSet::from([
+            "ps1.authority.active_package_only",
+            "ps1.authority.manifest_inventory",
+            "ps1.schema.fingerprints"
+        ])
     );
-    assert!(matrix.proven_rows().is_empty());
 
     let ids = matrix
         .rows
@@ -148,6 +161,13 @@ fn conformance_matrix_rows_are_unique_pending_and_reference_real_files() {
     assert_eq!(ids.len(), matrix.rows.len());
     assert!(ids.contains("ps1.authority.active_package_only"));
     assert!(ids.contains("ps1.harness.negative_denominator"));
+    assert!(
+        matrix
+            .rows
+            .iter()
+            .filter(|row| row.status == MatrixRowStatus::Proven)
+            .all(|row| !row.implementation_evidence.is_empty() && !row.review_evidence.is_empty())
+    );
 
     package.validate_matrix_references(&matrix).unwrap();
 }
@@ -169,4 +189,19 @@ fn workspace_root() -> PathBuf {
         .and_then(Path::parent)
         .unwrap()
         .to_path_buf()
+}
+
+fn copy_dir_all(from: impl AsRef<Path>, to: impl AsRef<Path>) -> std::io::Result<()> {
+    std::fs::create_dir_all(&to)?;
+    for entry in std::fs::read_dir(from)? {
+        let entry = entry?;
+        let file_type = entry.file_type()?;
+        let target = to.as_ref().join(entry.file_name());
+        if file_type.is_dir() {
+            copy_dir_all(entry.path(), target)?;
+        } else {
+            std::fs::copy(entry.path(), target)?;
+        }
+    }
+    Ok(())
 }
