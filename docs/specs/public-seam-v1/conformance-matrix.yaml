@@ -832,6 +832,17 @@ rows:
       Target reads by non-evaluator roles or outside the evaluation request are denied.
     fake_pass_rejected: Passing targets directly into evaluator closures.
     minimum_closeout_level: semantic_denial
+    positive_test_evidence:
+      - crates/leaven-public-seam/tests/plan_document.rs::evaluator_target_reads_execute_case_query_load_with_query_receipts
+    negative_test_evidence:
+      - crates/leaven-public-seam/tests/plan_document.rs::evaluator_target_reads_reject_missing_or_unbound_case_query_receipts
+      - crates/leaven-public-seam/tests/plan_document.rs::evaluator_target_reads_reject_unrequested_target_material
+    implementation_evidence:
+      - crates/leaven-public-seam/src/plan_execution/queries.rs::PlanCaseQueryRequest
+      - crates/leaven-public-seam/src/plan_execution/queries.rs::PlanCaseQueryOutcome
+      - crates/leaven-public-seam/src/plan_execution.rs::execute_case_query_expr
+      - crates/leaven-public-seam/src/plan_execution/receipts.rs::validate_plan_result_receipts
+      - crates/leaven-public-seam/AGENTS.md
     status: pending
 
   - id: ps1.evaluator.score_output

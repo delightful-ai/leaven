@@ -4,8 +4,17 @@ use serde_json::{Map, Value, json};
 
 use crate::{PlanResultDocument, PublicSeamError};
 
+mod queries;
 mod receipts;
 
+pub use queries::{
+    PlanCaseQueryOutcome, PlanCaseQueryRequest, PlanGraphQueryOutcome, PlanGraphQueryRequest,
+    PlanGraphReadScope,
+};
+use queries::{
+    case_query_include, case_query_projection, require_included_case_fields,
+    require_requested_case_field,
+};
 pub use receipts::validate_plan_result_receipts;
 
 /// Execution metadata for the advanced public-seam Plan IR harness.
@@ -76,6 +85,17 @@ pub trait PlanExecutionHost {
         ))
     }
 
+    /// Executes a typed `case_query.load` read.
+    fn case_query_load(
+        &mut self,
+        request: PlanCaseQueryRequest<'_>,
+    ) -> Result<PlanCaseQueryOutcome, PublicSeamError> {
+        let _ = request;
+        Err(invalid_plan(
+            "Plan execution host does not provide case_query.load reads",
+        ))
+    }
+
     /// Executes a typed `lm_complete` call.
     fn lm_complete(
         &mut self,
@@ -102,80 +122,6 @@ pub trait PlanExecutionHost {
         Err(invalid_plan(format!(
             "replay mode could not load receipt `{receipt}`"
         )))
-    }
-}
-
-/// Lowered graph-read consistency scope for a Plan IR `graph_query`.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum PlanGraphReadScope<'a> {
-    /// Read from the graph revision captured when plan execution started.
-    LatestAtStart { revision: &'a str },
-    /// Read from an explicitly pinned graph revision.
-    AtRevision { revision: &'a str },
-    /// Read a finite graph-event diff over the declared revision interval.
-    SinceRevision {
-        since: &'a str,
-        until: Option<&'a str>,
-    },
-}
-
-/// Lowered `graph_query` request passed to a [`PlanExecutionHost`].
-#[derive(Clone, Copy, Debug)]
-pub struct PlanGraphQueryRequest<'a> {
-    name: &'a str,
-    expr: &'a Value,
-    scope: PlanGraphReadScope<'a>,
-}
-
-impl<'a> PlanGraphQueryRequest<'a> {
-    /// Operation binding name.
-    pub const fn name(&self) -> &'a str {
-        self.name
-    }
-
-    /// Typed `graph_query` expression body from the Plan IR.
-    pub const fn expr(&self) -> &'a Value {
-        self.expr
-    }
-
-    /// Consistency-derived graph read scope.
-    pub const fn scope(&self) -> PlanGraphReadScope<'a> {
-        self.scope
-    }
-}
-
-/// Host outcome for a typed `graph_query` read.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct PlanGraphQueryOutcome {
-    items: Vec<Value>,
-    graph_revision: String,
-    data_classes: Vec<String>,
-    next_cursor: Option<String>,
-}
-
-impl PlanGraphQueryOutcome {
-    /// Creates a graph-set outcome for a pure graph read.
-    pub fn new(items: impl IntoIterator<Item = Value>, graph_revision: impl Into<String>) -> Self {
-        Self {
-            items: items.into_iter().collect(),
-            graph_revision: graph_revision.into(),
-            data_classes: vec!["public".to_owned()],
-            next_cursor: None,
-        }
-    }
-
-    /// Overrides the data classes carried by the graph-set value.
-    #[must_use]
-    pub fn with_data_classes(mut self, data_classes: impl IntoIterator<Item = String>) -> Self {
-        self.data_classes = data_classes.into_iter().collect();
-        self
-    }
-
-    /// Adds the next cursor returned by the graph read.
-    #[must_use]
-    pub fn with_next_cursor(mut self, next_cursor: impl Into<String>) -> Self {
-        self.next_cursor = Some(next_cursor.into());
-        self
     }
 }
 
@@ -577,13 +523,12 @@ fn execute_let(
     if let Some(receipt) = evaluated.receipt {
         state.receipts.push(receipt);
     }
-    if evaluated
+    let value_kind = evaluated
         .value
         .as_object()
         .and_then(|object| object.get("kind"))
-        .and_then(Value::as_str)
-        == Some("graph_set")
-    {
+        .and_then(Value::as_str);
+    if matches!(value_kind, Some("graph_set" | "case_record")) {
         state.values.insert(name.clone(), evaluated.value.clone());
     }
     state.bindings.insert(name, evaluated.value);
@@ -883,6 +828,7 @@ fn evaluate_expr(
             receipt: None,
         }),
         "graph_query" => execute_graph_query_expr(expr, name, plan_document, context, host),
+        "case_query" => execute_case_query_expr(expr, name, context, host),
         other => Err(invalid_plan(format!(
             "representative Plan IR harness does not execute `{other}` let expressions"
         ))),
@@ -947,6 +893,86 @@ fn execute_graph_query_expr(
             "graph_revision": graph_revision,
             "read_scope_fingerprint": read_scope_fingerprint,
             "projection_fingerprint": projection_fingerprint,
+            "status": "succeeded"
+        })),
+    })
+}
+
+fn execute_case_query_expr(
+    expr: &Value,
+    name: &str,
+    context: &PlanExecutionContext,
+    host: &mut impl PlanExecutionHost,
+) -> Result<EvaluatedExpr, PublicSeamError> {
+    let query = object(expr, "case_query")?
+        .get("query")
+        .ok_or_else(|| invalid_plan("case_query must carry query"))?;
+    if nested_kind(query, "case_query.query")? != "load" {
+        return Err(invalid_plan(
+            "representative Plan IR harness only executes case_query.load",
+        ));
+    }
+    let include = case_query_include(query)?;
+    let outcome = host.case_query_load(PlanCaseQueryRequest { name, query })?;
+    let receipt_id = format!("qrec_{name}");
+    let mut value = json!({
+        "kind": "case_record",
+        "case": outcome.case,
+        "graph_revision": outcome.graph_revision,
+        "data_classes": outcome.data_classes,
+        "replayability": "pure_read",
+        "receipt": receipt_id
+    });
+    if let Some(input) = outcome.input {
+        require_requested_case_field(&include, "input")?;
+        value["input"] = input;
+    }
+    if let Some(target) = outcome.target {
+        require_requested_case_field(&include, "target")?;
+        value["target"] = target;
+    }
+    if let Some(metadata) = outcome.metadata {
+        require_requested_case_field(&include, "metadata")?;
+        value["metadata"] = metadata;
+    }
+    require_included_case_fields(&value, &include)?;
+    let op_hash = prefixed_jcs_hash(
+        "fp_query_sha256_",
+        &json!({
+            "schema_version": "leaven.plan_query_op.v1",
+            "name": name,
+            "expr": expr,
+            "scope": {
+                "kind": "case_query.load",
+                "base_revision": context.base_revision
+            }
+        }),
+    )?;
+    let result_hash = prefixed_jcs_hash(
+        "fp_result_sha256_",
+        &json!({
+            "schema_version": "leaven.plan_query_result.v1",
+            "name": name,
+            "value": value
+        }),
+    )?;
+    let graph_revision = required_string(value.get("graph_revision"), "graph_revision")?.to_owned();
+    Ok(EvaluatedExpr {
+        value,
+        receipt: Some(json!({
+            "kind": "query",
+            "receipt": receipt_id,
+            "op_var": name,
+            "started_at": context.started_at,
+            "completed_at": context.completed_at,
+            "op_hash": op_hash,
+            "result_hash": result_hash,
+            "graph_revision": graph_revision,
+            "read_scope_fingerprint": prefixed_jcs_hash("fp_scope_sha256_", &json!({
+                "kind": "case_query.load",
+                "base_revision": context.base_revision
+            }))?,
+            "projection_fingerprint": prefixed_jcs_hash("fp_projection_sha256_", &case_query_projection(query)?)?,
             "status": "succeeded"
         })),
     })
