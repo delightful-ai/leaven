@@ -1,10 +1,10 @@
-# The workspace builds on nightly: the dev profile selects the Cranelift
-# codegen backend and `.cargo/config.toml` enables the parallel rustc
-# frontend (`-Zthreads`). Both are nightly-only build-speed features.
+# The workspace builds on nightly so `.cargo/config.toml` can enable the
+# parallel rustc frontend (`-Zthreads`). Cargo incremental is disabled in the
+# dev profile because the pinned nightly ICEs when incremental and `-Zthreads`
+# are combined.
 [toolchain]
 channel = "nightly"
 components = [
-    "rustc-codegen-cranelift-preview",
     "rustfmt",
     "clippy",
     "llvm-tools",
