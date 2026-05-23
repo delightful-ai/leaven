@@ -87,7 +87,11 @@ and `PlanEmitRunEventOutcome` are advanced public seam contracts. They prove
 active-schema Plan IR document validation and Let/Call/Write family
 classification plus representative lowering/execution of literal Let,
 `graph_query` reads, `lm_complete` Call, and `emit_run_event` Write into a
-validated Plan Result with query/call/write receipts. They also prove the
+validated Plan Result with query/call/write receipts. The
+`PublicSeamPackage::validate_plan_execution_result` route additionally proves
+representative query/call/write receipt hashes can be checked against the Plan
+IR and execution-context preimages instead of accepted as decorative ids. They
+also prove the
 representative harness distinguishes `latest_at_start`, `at_revision`, and
 `since_revision` graph-read scopes plus `execute`, `dry_run`, `require_cached`,
 and `replay` mode side-effect surfaces: dry-run validates without host effects,
@@ -154,7 +158,10 @@ backpressure, or runtime watch support.
   `Score.output` checks require candidate/artifact data classes and a matching
   `evidence.public.summary` projection; this rejects candidate-labeled schema
   dummies but is still public-seam document validation, not runtime proof that a
-  scorer assessed the true candidate output.
+  scorer assessed the true candidate output. Its execution-result verifier
+  checks representative query/call/write receipt hashes against Plan IR
+  preimages and rejects same-prefix mismatches, but it is not a general ACP
+  replay service or provider runtime audit log.
 - `tests/plan_dialects.rs` proves pinned JSON Pointer, JSONPath, and strict
   Mustache dialects are parsed and replayed deterministically, and rejects
   unpinned path syntax, non-subset JSONPath filters/functions/scripts, non-

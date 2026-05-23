@@ -65,6 +65,12 @@ Audit-currency value-binding follow-up:
 - `crates/leaven-public-seam/tests/plan_result.rs::plan_result_rejects_same_prefix_result_hashes_that_do_not_bind_values` covers mismatched query, call, and write `result_hash` values that keep the `fp_result_sha256_` audit role prefix.
 - This is useful evidence for `ps1.receipts.audit_currency`, but the row remains pending until a follow-up adversarial review signs off the complete audit-currency proof, including whether request/op hashes are sufficiently producer-bound.
 
+Audit-currency Plan-preimage follow-up:
+
+- `crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_plan_execution_result` now validates an externally supplied Plan Result against the active Plan document and execution context, then `crates/leaven-public-seam/src/plan_execution.rs::validate_plan_result_receipts` recomputes representative query `op_hash`, call/write `request_hash`, write `result_hash`, read-scope fingerprints, and projection fingerprints from Plan IR preimages and result bindings.
+- `crates/leaven-public-seam/tests/plan_document.rs::plan_execution_result_rejects_receipt_hashes_unbound_from_plan_preimages` rejects same-prefix query op-hash, call request-hash, write request-hash, write result-hash, and tampered-plan preimage mismatches.
+- This is useful evidence for `ps1.receipts.audit_currency`, but the row remains pending until a follow-up adversarial review signs off the complete receipts tranche.
+
 Nested score-output data-class follow-up:
 
 - `crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_nested_score_output_data_class_gaps` now proves a result value containing assessment rows must include nested `score.output.data_classes` such as `candidate.output` in the value-level `data_classes`.
