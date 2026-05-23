@@ -614,6 +614,7 @@ rows:
       - crates/leaven-public-seam/src/plan.rs::PlanDocument::assessment_score_output_count
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-score-output-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-23-score-output-candidate-binding-review.md
     status: pending
 
   - id: ps1.evaluator.assessment_scope
