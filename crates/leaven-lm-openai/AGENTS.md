@@ -41,7 +41,7 @@ runtime fingerprint that excludes secrets.
 
 ## Proof Anchors
 - `crates/leaven-lm-openai/tests/openai_mapping.rs` proves request lowering,
-  continuation handling, prompt cache hint lowering, fingerprint behavior,
+  continuation handling, sampling stop sequence lowering, prompt cache hint lowering, fingerprint behavior,
   env-var loading, timeout/retry policy identity, transport errors, retryable
   statuses, and response parsing against local fixtures.
 - `docs/specs/lm_runtime_and_response_cache.md` section "OpenAI Provider

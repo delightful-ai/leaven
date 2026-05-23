@@ -35,6 +35,7 @@ impl LmCacheKey {
         struct KeyMaterial<'a> {
             provider: Fingerprint,
             model: &'a leaven_lm::ModelName,
+            model_role: &'a Option<leaven_lm::ModelRole>,
             messages: &'a leaven_lm::Messages,
             sampling: &'a leaven_lm::SamplingOptions,
             output: &'a leaven_lm::OutputMode,
@@ -44,6 +45,7 @@ impl LmCacheKey {
         let material = KeyMaterial {
             provider,
             model: &request.model,
+            model_role: &request.model_role,
             messages: &request.messages,
             sampling: &request.sampling,
             output: &request.output,

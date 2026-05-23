@@ -296,6 +296,11 @@ const SURFACE: &[(&str, Route, &str)] = &[
         "LM provider authors map to a model",
     ),
     (
+        "ModelRole",
+        Route::Extend,
+        "LM provider authors preserve policy/routing roles",
+    ),
+    (
         "OutputMode",
         Route::Extend,
         "LM provider authors shape the response",

@@ -361,6 +361,9 @@ fn lower_sampling(object: &mut Map<String, Value>, sampling: &SamplingOptions) {
     if let Some(seed) = sampling.seed {
         object.insert("seed".to_owned(), json!(seed));
     }
+    if !sampling.stop.is_empty() {
+        object.insert("stop".to_owned(), json!(sampling.stop));
+    }
     if let Some(effort) = sampling.reasoning_effort {
         object.insert(
             "reasoning".to_owned(),

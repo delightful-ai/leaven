@@ -62,4 +62,5 @@ macro_rules! string_id {
 
 string_id!(LmId);
 string_id!(ModelName);
+string_id!(ModelRole);
 string_id!(ProviderName);

@@ -111,7 +111,15 @@ active-schema Plan IR document validation and Let/Call/Write family
 classification plus representative lowering/execution of literal Let,
 `graph_query` reads, `case_query.load` reads, `lm_complete` Call, and
 `emit_run_event` Write into a validated Plan Result with query/call/write
-receipts. The `PublicSeamPackage::execute_plan_document_with_capability` route
+receipts. The `PlanLmCompleteRequest::to_lm_request` route lowers
+schema-valid `lm_complete` calls into provider-neutral `leaven-lm` vocabulary
+while preserving developer/user/tool messages, tool-result ids, tool
+definitions, model role, sampling stop sequences, provider hints, final-message
+output, and JSON-schema output; it rejects extension/multimodal content rather
+than silently downgrading it to text. It still requires a concrete model before
+provider execution and is not provider runtime execution, streaming, ACP
+delivery, or full `ps1.lm.contract` closeout. The
+`PublicSeamPackage::execute_plan_document_with_capability` route
 requires capability-authorized evaluator request scope before a `case_query.load`
 host read can run. The
 `PublicSeamPackage::validate_plan_execution_result` route additionally proves
@@ -203,6 +211,12 @@ backpressure, or runtime watch support.
   preimages, including capability-authorized `case_query.load` target reads, and
   rejects same-prefix mismatches, but it is not a general ACP replay service,
   evaluator runtime target loader, or provider runtime audit log.
+- `tests/plan_document.rs` also proves representative `lm_complete` lowering
+  into `leaven-lm::LmRequest`, including developer/user/tool messages,
+  tool-result ids, tools, model role, sampling stop sequences, provider hints,
+  final-message output, JSON-schema output, and extension-content refusal. This
+  is public-seam-to-neutral-vocabulary proof only; LM provider runtime and ACP
+  delivery rows remain pending until reviewed as their own tranche.
 - `tests/call_authority.rs` proves schema-valid Call ops are checked against
   capability-granted input data classes and call-local forbidden data-class
   intersections before execution. It rejects `case.target` and other forbidden

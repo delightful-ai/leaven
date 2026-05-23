@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use leaven_lm::{MessageContentPart, OutputMode, Role};
 use leaven_public_seam::{
     CapabilityDocument, PlanCaseQueryOutcome, PlanCaseQueryRequest, PlanEmitRunEventOutcome,
     PlanEmitRunEventRequest, PlanExecutionContext, PlanExecutionHost, PlanGraphQueryOutcome,
@@ -580,6 +581,75 @@ fn plan_ir_family_execution_rejects_known_variants_outside_representative_harnes
 }
 
 #[test]
+fn lm_complete_lowering_rejects_deferred_multimodal_or_extension_content() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut plan = typed_let_call_write_plan();
+    plan["mode"] = json!({"kind": "execute"});
+    plan["commit"] = json!({
+        "kind": "graph_writes_atomic",
+        "on_stale": "reject"
+    });
+    plan["ops"][1]["call"]["messages"][1]["content"] = json!([
+        {
+            "kind": "extension",
+            "namespace": "leaven.media",
+            "op": "image_input",
+            "schema_fingerprint": "fp_schema_sha256_imageinput",
+            "payload": {
+                "image": "blob://image"
+            }
+        }
+    ]);
+    let mut host = RecordingPlanHost::default();
+
+    let error = package
+        .execute_plan_document(&plan, &plan_execution_context(), &mut host)
+        .unwrap_err();
+
+    assert!(
+        error
+            .to_string()
+            .contains("supports text parts and tool_result tool messages only"),
+        "unexpected error: {error:?}"
+    );
+    assert!(host.calls.is_empty());
+    assert!(host.writes.is_empty());
+}
+
+#[test]
+fn lm_complete_lowering_preserves_json_schema_output_and_provider_hints() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut plan = typed_let_call_write_plan();
+    plan["mode"] = json!({"kind": "execute"});
+    plan["commit"] = json!({
+        "kind": "graph_writes_atomic",
+        "on_stale": "reject"
+    });
+    plan["ops"][1]["call"]["output"] = json!({
+        "kind": "json_schema",
+        "schema_fingerprint": "fp_schema_sha256_lmanswer",
+        "schema": {
+            "type": "object",
+            "properties": {
+                "answer": {
+                    "type": "string"
+                }
+            },
+            "required": ["answer"],
+            "additionalProperties": false
+        }
+    });
+    let mut host = RecordingPlanHost::default();
+
+    package
+        .execute_plan_document(&plan, &plan_execution_context(), &mut host)
+        .unwrap();
+
+    assert_eq!(host.calls, vec!["completion"]);
+    assert_eq!(host.writes, vec!["status"]);
+}
+
+#[test]
 fn plan_ir_revision_modes_preserve_explicit_bases() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
 
@@ -826,26 +896,7 @@ fn typed_let_call_write_plan() -> Value {
                 "name": "completion",
                 "deps": ["prompt"],
                 "idempotency_key": "plan-call-0001",
-                "call": {
-                    "kind": "lm_complete",
-                    "purpose": "test.plan_ir",
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": [
-                                {
-                                    "kind": "text",
-                                    "text": "Say ok"
-                                }
-                            ]
-                        }
-                    ],
-                    "output": {
-                        "kind": "final_message",
-                        "max_bytes": 1024
-                    },
-                    "input_classes": ["public"]
-                }
+                "call": lm_complete_call()
             },
             {
                 "kind": "write",
@@ -867,6 +918,71 @@ fn typed_let_call_write_plan() -> Value {
         "commit": {
             "kind": "no_graph_writes"
         }
+    })
+}
+
+fn lm_complete_call() -> Value {
+    json!({
+        "kind": "lm_complete",
+        "purpose": "test.plan_ir",
+        "model": "gpt-4.1-mini",
+        "model_role": "reflector",
+        "messages": [
+            {
+                "role": "developer",
+                "content": [
+                    {
+                        "kind": "text",
+                        "text": "Return only the final answer"
+                    }
+                ]
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "kind": "text",
+                        "text": "Say ok"
+                    }
+                ]
+            },
+            {
+                "role": "tool",
+                "tool_call_id": "call_lookup_1",
+                "content": [
+                    {
+                        "kind": "tool_result",
+                        "tool_call_id": "call_lookup_1",
+                        "content": "{\"hint\":\"ok\"}"
+                    }
+                ]
+            }
+        ],
+        "tools": [
+            {
+                "name": "lookup",
+                "description": "look up case facts",
+                "input_schema": {
+                    "type": "object"
+                },
+                "requires_capability_action": "case.read"
+            }
+        ],
+        "sampling": {
+            "temperature": 0.2,
+            "top_p": 0.9,
+            "max_output_tokens": 128,
+            "seed": 7,
+            "stop": ["DONE"]
+        },
+        "output": {
+            "kind": "final_message",
+            "max_bytes": 1024
+        },
+        "provider_hints": {
+            "cache:key": "planexec-stable"
+        },
+        "input_classes": ["public"]
     })
 }
 
@@ -1199,6 +1315,54 @@ impl PlanExecutionHost for RecordingPlanHost {
     ) -> Result<PlanLmCompleteOutcome, PublicSeamError> {
         assert_eq!(request.name(), "completion");
         assert_eq!(request.call()["kind"].as_str(), Some("lm_complete"));
+        let lm_request = request.to_lm_request()?;
+        assert_eq!(lm_request.model.as_str(), "gpt-4.1-mini");
+        assert_eq!(
+            lm_request
+                .model_role
+                .as_ref()
+                .map(leaven_lm::ModelRole::as_str),
+            Some("reflector")
+        );
+        assert_eq!(
+            lm_request
+                .messages
+                .iter()
+                .map(leaven_lm::Message::role)
+                .collect::<Vec<_>>(),
+            vec![Role::Developer, Role::User, Role::Tool]
+        );
+        assert!(matches!(
+            lm_request.messages.as_slice()[2].content_parts(),
+            [MessageContentPart::ToolResult {
+                tool_call_id,
+                content
+            }] if tool_call_id == "call_lookup_1" && content == "{\"hint\":\"ok\"}"
+        ));
+        assert_eq!(lm_request.tools[0].name, "lookup");
+        assert_eq!(lm_request.sampling.max_output_tokens, Some(128));
+        assert_eq!(lm_request.sampling.stop, vec!["DONE".to_owned()]);
+        assert_eq!(
+            lm_request.provider_hints.values.get("cache:key"),
+            Some(&json!("planexec-stable"))
+        );
+        match request.call()["output"]["kind"].as_str() {
+            Some("final_message") => assert!(matches!(
+                lm_request.output,
+                OutputMode::FinalMessage {
+                    max_bytes: Some(1024)
+                }
+            )),
+            Some("json_schema") => match lm_request.output {
+                OutputMode::JsonSchema(schema) => {
+                    assert_eq!(schema.name, "fp_schema_sha256_lmanswer");
+                    assert_eq!(schema.schema["required"], json!(["answer"]));
+                    assert!(schema.strict);
+                }
+                other => panic!("unexpected LM output mode: {other:?}"),
+            },
+            other => panic!("unexpected plan output kind: {other:?}"),
+        }
         self.calls.push("completion");
         self.call_deps = request.deps().clone();
         if self.fail_lm {

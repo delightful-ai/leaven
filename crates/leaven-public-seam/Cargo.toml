@@ -13,6 +13,7 @@ jcs-canonicalize.workspace = true
 jsonschema.workspace = true
 leaven-evidence = { workspace = true }
 leaven-kernel = { workspace = true }
+leaven-lm = { workspace = true }
 serde.workspace = true
 serde_json.workspace = true
 serde_yml.workspace = true

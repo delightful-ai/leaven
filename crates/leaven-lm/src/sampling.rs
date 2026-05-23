@@ -12,6 +12,8 @@ pub struct SamplingOptions {
     pub max_output_tokens: Option<u32>,
     /// Determinism seed, when supported by the provider/model.
     pub seed: Option<u64>,
+    /// Stop sequences requested by the caller.
+    pub stop: Vec<String>,
     /// Reasoning effort, when supported by the provider/model.
     pub reasoning_effort: Option<ReasoningEffort>,
 }

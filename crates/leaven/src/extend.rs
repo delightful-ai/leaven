@@ -120,6 +120,8 @@ pub use leaven_lm::Message;
 pub use leaven_lm::Messages;
 /// LM provider authors map `ModelName` onto a concrete provider model.
 pub use leaven_lm::ModelName;
+/// LM provider authors preserve public-seam model roles used for policy/routing.
+pub use leaven_lm::ModelRole;
 /// LM provider authors honor `OutputMode` to shape the requested response.
 pub use leaven_lm::OutputMode;
 /// LM provider authors read `ProviderHints` for provider-specific knobs.
