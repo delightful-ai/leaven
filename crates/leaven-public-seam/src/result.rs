@@ -467,6 +467,9 @@ fn validate_result_hash_bindings(
     receipts: &[Value],
     request_evaluation_policy: RequestEvaluationReceiptPolicy,
 ) -> Result<(), PublicSeamError> {
+    if request_evaluation_policy == RequestEvaluationReceiptPolicy::Reject {
+        reject_request_evaluation_receipts_without_context(receipts)?;
+    }
     let receipt_objects = receipt_object_index(receipts)?;
     for (name, value) in values {
         let Some(receipt_ref) = value.as_object().and_then(|object| object.get("receipt")) else {
@@ -498,6 +501,25 @@ fn validate_result_hash_bindings(
         if actual != expected {
             return Err(invalid_result(format!(
                 "{receipt_kind} receipt `{receipt_id}` result_hash does not bind its result value"
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn reject_request_evaluation_receipts_without_context(
+    receipts: &[Value],
+) -> Result<(), PublicSeamError> {
+    for receipt in receipts {
+        let receipt = receipt
+            .as_object()
+            .ok_or_else(|| invalid_result("plan result receipt must be an object"))?;
+        if receipt.get("kind").and_then(Value::as_str) == Some("write")
+            && receipt.get("write_kind").and_then(Value::as_str) == Some("request_evaluation")
+        {
+            let receipt_id = required_string(receipt.get("receipt"), "receipt.receipt")?;
+            return Err(invalid_result(format!(
+                "request_evaluation receipt `{receipt_id}` requires evaluation job context"
             )));
         }
     }
