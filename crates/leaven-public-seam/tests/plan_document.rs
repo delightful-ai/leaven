@@ -282,6 +282,11 @@ fn plan_ir_revision_modes_preserve_explicit_bases() {
     assert_eq!(since_revision.since_revision(), Some("rev_base"));
     assert_eq!(since_revision.until_revision(), Some("rev_tip"));
     assert_eq!(since_revision.events_since_revision_queries(), 1);
+}
+
+#[test]
+fn plan_revision_modes_reject_since_revision_fallback_to_latest() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
 
     let mut mismatched_source = since_revision_event_diff_plan();
     mismatched_source["ops"][0]["expr"]["source"]["since_revision"] = json!("rev_other");
