@@ -664,7 +664,21 @@ rows:
       archived MCP-over-ACP draft payload is refused as current contract.
     fake_pass_rejected: Renaming MCP concepts while preserving an MCP negotiation dependency.
     minimum_closeout_level: semantic_denial
-    status: pending
+    positive_test_evidence:
+      - crates/leaven-public-seam/tests/contract_package.rs::acp_profile_routes_callbacks_without_mcp_negotiation
+    negative_test_evidence:
+      - crates/leaven-public-seam/tests/contract_package.rs::acp_profile_rejects_mcp_bridge_legacy_worker_protocol_and_watch_runtime
+    implementation_evidence:
+      - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::acp_extension_methods
+      - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::from_path
+      - crates/leaven-public-seam/src/package.rs::V1Scope::authorize_worker_transport
+      - crates/leaven-public-seam/src/package.rs::WorkerTransportKind
+      - crates/leaven-public-seam/src/package.rs::WorkerTransportRequest
+      - crates/leaven-public-seam/src/package.rs::AuthorizedWorkerTransport
+      - crates/leaven-public-seam/AGENTS.md
+    review_evidence:
+      - docs/specs/public-seam-v1/reviews/2026-05-23-acp-no-mcp-review.md
+    status: proven
 
   - id: ps1.workspace.handles_lifecycle
     area: workspace
