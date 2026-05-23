@@ -30,6 +30,25 @@ fn plan_result_accepts_typed_success_and_failure_envelopes() {
 }
 
 #[test]
+fn plan_result_accepts_query_call_and_write_receipts_as_audit_currency() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let result = package
+        .validate_plan_result_document(&audit_currency_result())
+        .unwrap();
+
+    assert_eq!(result.receipt_count(), 3);
+    assert_eq!(result.receipt_kinds(), &["query", "call", "write"]);
+    assert!(result.value_kinds().contains(&"graph_set".to_owned()));
+    assert!(result.value_kinds().contains(&"agent_session".to_owned()));
+    assert!(
+        result
+            .value_kinds()
+            .contains(&"evaluation_request_receipt".to_owned())
+    );
+}
+
+#[test]
 fn plan_result_rejects_generic_or_untyped_result_payloads() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
 
@@ -153,6 +172,15 @@ fn plan_result_rejects_decorative_or_wrong_kind_receipt_refs() {
     assert!(matches!(
         package
             .validate_plan_result_document(&wrong_kind_receipt)
+            .unwrap_err(),
+        PublicSeamError::InvalidPlanResult { .. }
+    ));
+
+    let mut duplicate_receipt = audit_currency_result();
+    duplicate_receipt["receipts"][2]["receipt"] = json!("qrec_audit_rows");
+    assert!(matches!(
+        package
+            .validate_plan_result_document(&duplicate_receipt)
             .unwrap_err(),
         PublicSeamError::InvalidPlanResult { .. }
     ));
@@ -307,6 +335,92 @@ fn typed_success_result() -> Value {
                 "status": "succeeded",
                 "read_scope_fingerprint": "fp_scope_sha256_read",
                 "projection_fingerprint": "fp_projection_sha256_rows"
+            }
+        ],
+        "redactions": [],
+        "charges": [],
+        "errors": []
+    })
+}
+
+fn audit_currency_result() -> Value {
+    json!({
+        "schema_version": "leaven.plan_result.v1",
+        "plan_id": "result_audit_currency",
+        "capability_fingerprint": "fp_cap_sha256_auditcurrency",
+        "policy_fingerprint": "fp_policy_sha256_auditcurrency",
+        "base_revision": "rev_base",
+        "final_revision": "rev_final",
+        "replayability_summary": "fully_managed",
+        "values": {
+            "rows": {
+                "kind": "graph_set",
+                "items": [
+                    {
+                        "kind": "candidate_summary",
+                        "candidate": "cand_audit",
+                        "artifact_identity": "artifact_sha256_audit"
+                    }
+                ],
+                "graph_revision": "rev_base",
+                "data_classes": ["public"],
+                "replayability": "pure_read",
+                "receipt": "qrec_audit_rows"
+            },
+            "agent": {
+                "kind": "agent_session",
+                "status": "completed",
+                "graph_revision": "rev_base",
+                "data_classes": ["public"],
+                "replayability": "fully_managed",
+                "receipt": "agentrec_audit_agent"
+            },
+            "evaluation_request": {
+                "kind": "evaluation_request_receipt",
+                "evaluation_request_id": "evalreq_audit",
+                "status": "recorded",
+                "graph_revision": "rev_final",
+                "data_classes": ["public"],
+                "replayability": "fully_managed",
+                "receipt": "wrec_audit_evalreq"
+            }
+        },
+        "receipts": [
+            {
+                "kind": "query",
+                "receipt": "qrec_audit_rows",
+                "started_at": "2026-05-23T12:00:00Z",
+                "completed_at": "2026-05-23T12:00:01Z",
+                "op_hash": "fp_query_sha256_audit_rows",
+                "result_hash": "fp_result_sha256_audit_rows",
+                "graph_revision": "rev_base",
+                "status": "succeeded",
+                "read_scope_fingerprint": "fp_scope_sha256_audit_rows",
+                "projection_fingerprint": "fp_projection_sha256_audit_rows"
+            },
+            {
+                "kind": "call",
+                "receipt": "agentrec_audit_agent",
+                "started_at": "2026-05-23T12:00:01Z",
+                "completed_at": "2026-05-23T12:00:02Z",
+                "call_kind": "agent_run",
+                "request_hash": "fp_request_sha256_audit_agent",
+                "result_hash": "fp_result_sha256_audit_agent",
+                "runtime_fingerprint": "fp_runtime_sha256_audit_agent",
+                "status": "succeeded"
+            },
+            {
+                "kind": "write",
+                "receipt": "wrec_audit_evalreq",
+                "started_at": "2026-05-23T12:00:02Z",
+                "completed_at": "2026-05-23T12:00:03Z",
+                "write_kind": "request_evaluation",
+                "request_hash": "fp_request_sha256_audit_evalreq",
+                "result_hash": "fp_result_sha256_audit_evalreq",
+                "base_revision": "rev_base",
+                "committed_revision": "rev_final",
+                "status": "succeeded",
+                "evaluation_request_id": "evalreq_audit"
             }
         ],
         "redactions": [],

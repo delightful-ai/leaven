@@ -85,3 +85,25 @@ Current limits after receipt-binding follow-up:
 
 - This still is not an adversarial sign-off and does not mark `ps1.evaluator.job_identity` proven.
 - The row remains pending until a fresh adversarial review signs off that the job document plus request receipt evidence satisfies the row without spec drift, fake passes, missing negative tests, topology leaks, or public-maturity overclaiming.
+
+Fresh adversarial review after receipt-binding follow-up:
+
+- Reviewer: Codex adversarial review in active goal thread `019e5525-e070-7be3-adee-781067a24e84`
+- Result: signed off for `ps1.evaluator.job_identity` only.
+
+Findings reviewed:
+
+- Runtime proof now goes through real `RunContext::evaluate_with(...)` requests for independent, pairwise, and listwise shapes, then through `PublicEvaluationJobContext`, then through the `leaven-public-seam` validators. That proves the public owner route rather than a private fixture.
+- Request identity, candidate set, resolved case set, base revision, deadline, evaluator id, evaluator fingerprint, and capability fingerprint are present in the validated job and bound into the receipt request hash.
+- The Plan Result `evaluation_request_receipt` value and `request_evaluation` write receipt are validated against the job request id and base revision. During this review, the value-level `graph_revision` was found to be unchecked; that blocker was fixed by requiring it to match the job base revision and by extending `evaluation_request_receipt_rejects_decorative_or_unbound_hashes`.
+- Negative evidence rejects missing identity/deadline/capability, unresolved or cursor-only case sets, pairwise self-pairs including mixed ref shapes, unsupported `Both` granularity, decorative request hashes, mismatched receipt request id, mismatched receipt value revision, and missing Plan Result audit timing.
+- Topology and public maturity remain explicit: `leaven-public-seam` owns wire validation, `leaven-run` owns runtime lowering/projection, no ACP/MCP/process runtime is claimed, and neither route is in the ordinary prelude/facade path.
+
+Residual limits that do not block this row:
+
+- This does not prove ACP session delivery, provider execution, or durable receipt persistence outside the projected public-seam Plan Result document; those belong to other matrix rows.
+- The dispatch context supplies base revision, deadline, capability/policy fingerprints, and receipt timing. For this row, that is the leaven-run lowering contract under review; capability minting, aggregate budget spending, and ACP permission flow remain separate rows.
+
+Allowed matrix update:
+
+- `ps1.evaluator.job_identity` may move from `pending` to `proven` with the existing evidence list plus the receipt-binding tests.

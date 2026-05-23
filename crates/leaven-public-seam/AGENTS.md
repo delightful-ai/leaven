@@ -165,10 +165,10 @@ backpressure, or runtime watch support.
   It does not prove evaluator runtime production or pairwise/listwise
   assessment behavior.
 - `tests/plan_result.rs` proves active-schema Plan Result envelopes carry typed
-  success and failure values, receipts, errors, charges, capability and policy
-  fingerprints, receipt timing, data classes, and closed `PlanError` values at
-  the public-seam validation layer. It does not prove an engine/run producer
-  emits those envelopes.
+  success and failure values, query/call/write audit receipts, errors, charges,
+  capability and policy fingerprints, receipt timing, data classes, and closed
+  `PlanError` values at the public-seam validation layer. It does not prove an
+  engine/run producer emits those envelopes.
 - `tests/plan_result_replayability.rs` proves assessment batch result values
   preserve per-assessment replayability and that plan-level replayability is a
   roll-up summary, not a single boolean or override.
