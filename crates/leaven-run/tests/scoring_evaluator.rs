@@ -13,16 +13,17 @@ use leaven_core::{
     CaseSetVersion, EvaluationPurpose, EvaluationSet, PairOrder, ResolvedEvaluationRequest,
     ResolvedEvaluationSet, ResolvedRequestKind,
 };
-use leaven_engine::{BudgetLedger, CachePolicy, Evaluator, RunContext, RunGraph};
+use leaven_engine::{BudgetLedger, CachePolicy, Evaluator, RunContext, RunEvent, RunGraph};
 use leaven_eval::Case;
 use leaven_evidence::{DataClass, DataClassSet, OutputMetadata, OutputRecord, OutputVisibility};
 use leaven_kernel::{
-    Budget, CandidateId, CaseId, ContentId, Cost, EvaluatorId, Fingerprint,
+    Budget, CandidateId, CaseId, ContentId, Cost, EvaluationRequestId, EvaluatorId, Fingerprint,
     ResolvedEvaluationSetId, RunId, StageId, now,
 };
 use leaven_run::{
-    JudgeScoreContext, JudgingEvaluator, PublicEvaluationJobContext, RunCase, RunError, RunOutput,
-    RunProblem, RuntimeFingerprint, Score, ScoreContext, ScoreError, ScoringEvaluator,
+    JudgeScoreContext, JudgingEvaluator, PublicEvaluationJobContext, PublicFailedCallKind,
+    PublicFailedCallReceiptContext, PublicFailedCallReceiptProjectionError, RunCase, RunError,
+    RunOutput, RunProblem, RuntimeFingerprint, Score, ScoreContext, ScoreError, ScoringEvaluator,
     ScoringEvaluatorIdentity,
 };
 use leaven_store_inline::InlineEvidenceStore;
@@ -1883,6 +1884,239 @@ fn unsupported_runtime_evaluation_granularity_rejects_public_seam_job_projection
             .unwrap_err();
         assert!(error.to_string().contains("both"));
     });
+}
+
+#[test]
+fn failed_runtime_lm_cost_projects_to_public_seam_call_and_charge_receipts() {
+    block_on(async {
+        let package = leaven_public_seam::PublicSeamPackage::active_from_repo(workspace_root())
+            .expect("public seam package loads from workspace");
+        let (mut graph, mut budget, candidate) = graph_with_seed();
+        let case_set = public_job_case_set();
+        let store = public_job_store();
+        let evaluator = public_job_failing_lm_scoring_evaluator();
+        let request_id = {
+            let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget)
+                .with_case_set(&case_set)
+                .with_evidence_store(&store);
+            let err = ctx
+                .evaluate_with(
+                    &evaluator,
+                    leaven_core::EvaluationRequest::Independent {
+                        candidates: vec![candidate],
+                        set: EvaluationSet::All,
+                        granularity: AssessmentGranularity::PerCase,
+                        purpose: EvaluationPurpose::Validation,
+                    },
+                )
+                .await
+                .unwrap_err();
+            assert!(err.to_string().contains("scoring function failed"));
+            assert_eq!(ctx.budget().spent.llm_calls, 1);
+            assert_eq!(ctx.budget().spent.prompt_tokens, 11);
+            assert_eq!(ctx.budget().spent.completion_tokens, 3);
+            ctx.graph()
+                .events()
+                .filter_map(|event| match event {
+                    RunEvent::EvaluationRequested { request_id, .. } => Some(*request_id),
+                    _ => None,
+                })
+                .last()
+                .expect("failing evaluation still records the request")
+        };
+        let graph_view = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget)
+            .graph()
+            .events()
+            .cloned()
+            .collect::<Vec<_>>();
+        let charge_event = failed_paid_lm_charge_event(&graph_view);
+        let failure_event = failed_paid_lm_failure_event(&graph_view);
+        let receipt_context = failed_paid_lm_receipt_context();
+        let request = failed_paid_lm_request(request_id);
+        let result = receipt_context
+            .failed_paid_call_plan_result(
+                charge_event,
+                failure_event,
+                PublicFailedCallKind::LmComplete,
+                "runtime_lm_failure",
+                &request,
+                "fp_runtime_sha256_scoringlm",
+            )
+            .unwrap();
+
+        assert_failed_paid_lm_result(
+            &package,
+            &receipt_context,
+            &request,
+            result,
+            charge_event,
+            failure_event,
+        );
+    });
+}
+
+fn assert_failed_paid_lm_result(
+    package: &leaven_public_seam::PublicSeamPackage,
+    receipt_context: &PublicFailedCallReceiptContext,
+    request: &serde_json::Value,
+    result: serde_json::Value,
+    charge_event: &RunEvent,
+    failure_event: &RunEvent,
+) {
+    package.validate_plan_result_document(&result).unwrap();
+    assert_eq!(result["receipts"][0]["status"], "failed");
+    assert_eq!(result["receipts"][0]["cost"]["lm_calls"], 1);
+    assert_eq!(result["receipts"][0]["cost"]["input_tokens"], 11);
+    assert_eq!(result["receipts"][0]["cost"]["output_tokens"], 3);
+    assert_eq!(
+        result["charges"][0]["source_receipt"],
+        result["receipts"][0]["receipt"]
+    );
+
+    let mut partial_charge = result;
+    partial_charge["charges"][0]["cost"]["lm_calls"] = serde_json::json!(0);
+    assert!(
+        package
+            .validate_plan_result_document(&partial_charge)
+            .is_err()
+    );
+
+    let non_charge_error = receipt_context
+        .failed_paid_call_plan_result(
+            &RunEvent::OptimizationStarted {
+                run_id: RunId::new(),
+            },
+            failure_event,
+            PublicFailedCallKind::LmComplete,
+            "runtime_lm_failure",
+            request,
+            "fp_runtime_sha256_scoringlm",
+        )
+        .unwrap_err();
+    assert!(matches!(
+        non_charge_error,
+        PublicFailedCallReceiptProjectionError::NotBudgetChargeEvent
+    ));
+
+    let zero_charge_error = receipt_context
+        .failed_paid_call_plan_result(
+            &RunEvent::BudgetCharged {
+                stage: failed_paid_lm_stage(failure_event),
+                cost: Cost::zero(),
+                remaining: BudgetLedger::default().snapshot(),
+            },
+            failure_event,
+            PublicFailedCallKind::LmComplete,
+            "runtime_lm_failure",
+            request,
+            "fp_runtime_sha256_scoringlm",
+        )
+        .unwrap_err();
+    assert!(matches!(
+        zero_charge_error,
+        PublicFailedCallReceiptProjectionError::EmptyCost
+    ));
+
+    let missing_failure_error = receipt_context
+        .failed_paid_call_plan_result(
+            charge_event,
+            charge_event,
+            PublicFailedCallKind::LmComplete,
+            "runtime_lm_failure",
+            request,
+            "fp_runtime_sha256_scoringlm",
+        )
+        .unwrap_err();
+    assert!(matches!(
+        missing_failure_error,
+        PublicFailedCallReceiptProjectionError::NotFailureEvent
+    ));
+}
+
+fn public_job_failing_lm_scoring_evaluator()
+-> ScoringEvaluator<TextArtifact, i32, leaven_eval::NoTarget, String> {
+    ScoringEvaluator::new(
+        Arc::new(vec![input_case(0, 2), input_case(1, 3)]),
+        Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
+            async move { Ok(RunOutput::new((artifact.0 + *case.input()).to_string())) }.boxed()
+        }),
+        Arc::new(
+            |_ctx: ScoreContext<TextArtifact, i32, leaven_eval::NoTarget, String>| {
+                async move {
+                    Err(ScoreError::new("provider failed after spending budget")
+                        .with_cost(Cost::llm_calls(1).combine(&Cost::tokens(11, 3))))
+                }
+                .boxed()
+            },
+        ),
+        &identity("public-seam-failed-paid-lm"),
+    )
+}
+
+fn failed_paid_lm_charge_event(events: &[RunEvent]) -> &RunEvent {
+    events
+        .iter()
+        .find(|event| {
+            matches!(
+                event,
+                RunEvent::BudgetCharged {
+                    cost,
+                    ..
+                } if cost.llm_calls == 1
+                    && cost.prompt_tokens == 11
+                    && cost.completion_tokens == 3
+            )
+        })
+        .expect("failed paid evaluation emits an engine budget charge")
+}
+
+fn failed_paid_lm_failure_event(events: &[RunEvent]) -> &RunEvent {
+    events
+        .iter()
+        .find(|event| {
+            matches!(
+                event,
+                RunEvent::Error {
+                    stage: Some(StageId::Evaluator(_)),
+                    error,
+                    ..
+                } if error.message.contains("scoring function failed")
+            )
+        })
+        .expect("failed paid evaluation emits an engine error")
+}
+
+fn failed_paid_lm_stage(event: &RunEvent) -> StageId {
+    let RunEvent::Error {
+        stage: Some(stage), ..
+    } = event
+    else {
+        panic!("failed paid lm helper expects an engine error event");
+    };
+    stage.clone()
+}
+
+fn failed_paid_lm_receipt_context() -> PublicFailedCallReceiptContext {
+    PublicFailedCallReceiptContext::new(
+        "plan_runtime_failed_paid_lm",
+        "rev_runtime_base",
+        "fp_cap_sha256_runtimefailedlm",
+        "fp_policy_sha256_runtimefailedlm",
+    )
+    .with_timing(
+        "2026-05-23T12:10:00Z",
+        "2026-05-23T12:10:02Z",
+        "2026-05-23T12:10:02Z",
+    )
+}
+
+fn failed_paid_lm_request(request_id: EvaluationRequestId) -> serde_json::Value {
+    serde_json::json!({
+        "schema_version": "leaven.runtime_failed_call_request.v1",
+        "call_kind": "lm_complete",
+        "op_var": "runtime_lm_failure",
+        "evaluation_request_id": format!("evalreq_{}", request_id.as_uuid())
+    })
 }
 
 fn public_job_case_set() -> leaven_engine::CaseSet<Case<i32, leaven_eval::NoTarget>> {

@@ -23,7 +23,10 @@ pub use evidence::{
     ScoreError, ScoreMetadataView,
 };
 pub use leaven_engine::CachePolicy;
-pub use public_seam::{PublicEvaluationJobContext, PublicEvaluationJobProjectionError};
+pub use public_seam::{
+    PublicEvaluationJobContext, PublicEvaluationJobProjectionError, PublicFailedCallKind,
+    PublicFailedCallReceiptContext, PublicFailedCallReceiptProjectionError,
+};
 pub use result::{
     BestCandidate, EvaluationCacheBackend, EvaluationCacheBypassReason,
     EvaluationCacheBypassSummary, EvaluationCacheSummary, OptimizationStopReason, Optimized,
