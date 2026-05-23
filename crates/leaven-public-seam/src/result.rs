@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde_json::Value;
 
 use crate::PublicSeamError;
+use crate::evidence::EvidenceEnvelopeDocument;
 
 /// Schema-valid public-seam Plan Result classified by replayability facts.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -13,6 +14,7 @@ pub struct PlanResultDocument {
     replayability_summary: Replayability,
     value_kinds: Vec<String>,
     receipt_kinds: Vec<String>,
+    value_data_classes: Vec<(String, Vec<String>)>,
     error_count: usize,
     charge_count: usize,
     assessment_batch_replayability: Vec<(String, Replayability)>,
@@ -40,6 +42,7 @@ impl PlanResultDocument {
             replayability_summary,
             value_kinds: value_audit.value_kinds,
             receipt_kinds,
+            value_data_classes: value_audit.value_data_classes,
             error_count: parts.error_count,
             charge_count: parts.charge_count,
             assessment_batch_replayability: value_audit.assessment_batch_replayability,
@@ -96,6 +99,11 @@ impl PlanResultDocument {
         &self.receipt_kinds
     }
 
+    /// Data classes carried by each typed result value.
+    pub fn value_data_classes(&self) -> &[(String, Vec<String>)] {
+        &self.value_data_classes
+    }
+
     /// Per-assessment replayability carried by assessment batch result values.
     pub fn assessment_batch_replayability(&self) -> &[(String, Replayability)] {
         &self.assessment_batch_replayability
@@ -141,6 +149,7 @@ impl<'a> PlanResultParts<'a> {
 
 struct ValueAudit {
     value_kinds: Vec<String>,
+    value_data_classes: Vec<(String, Vec<String>)>,
     assessment_batch_replayability: Vec<(String, Replayability)>,
     assessment_batches: Vec<AssessmentBatchScope>,
 }
@@ -151,15 +160,19 @@ fn inspect_values(
     replayability_summary: Replayability,
 ) -> Result<ValueAudit, PublicSeamError> {
     let mut value_kinds = Vec::with_capacity(values.len());
+    let mut value_data_classes = Vec::with_capacity(values.len());
     let mut value_replayability = Vec::with_capacity(values.len());
     let mut assessment_batch_replayability = Vec::new();
     let mut assessment_batches = Vec::new();
-    for value in values.values() {
+    for (name, value) in values {
         let value_object = value
             .as_object()
             .ok_or_else(|| invalid_result("plan result value must be an object"))?;
         let value_kind = inspect_value_receipt(value_object, receipt_index)?;
+        let data_classes = optional_string_set(value_object.get("data_classes"), "data_classes")?;
+        validate_value_visibility(name, value_object, &data_classes)?;
         value_kinds.push(value_kind.to_owned());
+        value_data_classes.push((name.to_owned(), data_classes.into_iter().collect()));
         value_replayability.push(required_replayability(value_object.get("replayability"))?);
         if value_kind == "assessment_batch_receipt" {
             inspect_assessment_batch_value(
@@ -176,9 +189,97 @@ fn inspect_values(
     )?;
     Ok(ValueAudit {
         value_kinds,
+        value_data_classes,
         assessment_batch_replayability,
         assessment_batches,
     })
+}
+
+fn validate_value_visibility(
+    value_name: &str,
+    value: &serde_json::Map<String, Value>,
+    value_data_classes: &BTreeSet<String>,
+) -> Result<(), PublicSeamError> {
+    let mut required = BTreeSet::new();
+    collect_score_output_data_classes(value, &mut required)?;
+    collect_evidence_data_classes(value.get("evidence"), &mut required)?;
+    collect_workspace_listing_data_classes(value, &mut required)?;
+    for data_class in required {
+        if !value_data_classes.contains(&data_class) {
+            return Err(invalid_result(format!(
+                "result value `{value_name}` data_classes must cover nested evidence data class `{data_class}`"
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn collect_workspace_listing_data_classes(
+    value: &serde_json::Map<String, Value>,
+    required: &mut BTreeSet<String>,
+) -> Result<(), PublicSeamError> {
+    if value.get("kind").and_then(Value::as_str) != Some("workspace_listing") {
+        return Ok(());
+    }
+    let entries = value
+        .get("entries")
+        .and_then(Value::as_array)
+        .ok_or_else(|| invalid_result("workspace_listing entries must be an array"))?;
+    for entry in entries {
+        let entry = entry
+            .as_object()
+            .ok_or_else(|| invalid_result("workspace_listing entries must be objects"))?;
+        if let Some(data_classes) = entry.get("data_classes") {
+            required.extend(required_string_set(
+                Some(data_classes),
+                "workspace_listing.entries.data_classes",
+            )?);
+        }
+    }
+    Ok(())
+}
+
+fn collect_score_output_data_classes(
+    value: &serde_json::Map<String, Value>,
+    required: &mut BTreeSet<String>,
+) -> Result<(), PublicSeamError> {
+    let Some(output) = value
+        .get("score")
+        .and_then(Value::as_object)
+        .and_then(|score| score.get("output"))
+        .and_then(Value::as_object)
+    else {
+        return Ok(());
+    };
+    required.extend(required_string_set(
+        output.get("data_classes"),
+        "score.output.data_classes",
+    )?);
+    Ok(())
+}
+
+fn collect_evidence_data_classes(
+    evidence: Option<&Value>,
+    required: &mut BTreeSet<String>,
+) -> Result<(), PublicSeamError> {
+    let Some(evidence) = evidence else {
+        return Ok(());
+    };
+    if evidence
+        .as_object()
+        .and_then(|object| object.get("schema_version"))
+        .and_then(Value::as_str)
+        != Some("leaven.evidence_envelope.v1")
+    {
+        return Ok(());
+    }
+    let envelope = EvidenceEnvelopeDocument::from_schema_valid_value(evidence)?;
+    required.extend(envelope.data_classes().iter().cloned());
+    required.extend(envelope.public_data_classes().iter().cloned());
+    if let Some(private) = envelope.private_data_classes() {
+        required.extend(private.iter().cloned());
+    }
+    Ok(())
 }
 
 fn inspect_value_receipt<'a>(
@@ -531,6 +632,16 @@ fn required_string_set(
         }
     }
     Ok(set)
+}
+
+fn optional_string_set(
+    value: Option<&Value>,
+    field: &str,
+) -> Result<BTreeSet<String>, PublicSeamError> {
+    match value {
+        Some(value) => required_string_set(Some(value), field),
+        None => Ok(BTreeSet::new()),
+    }
 }
 
 fn array_len(

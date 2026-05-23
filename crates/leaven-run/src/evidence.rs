@@ -212,13 +212,19 @@ impl ReportableOutput {
     pub(crate) fn into_record(
         self,
         expected_scope: ReportableOutputScope,
-    ) -> Result<OutputRecord, ReportableOutputScopeError> {
-        if self.scope == expected_scope {
-            Ok(self.record)
-        } else {
-            Err(ReportableOutputScopeError)
+    ) -> Result<OutputRecord, ReportableOutputError> {
+        if self.scope != expected_scope {
+            return Err(ReportableOutputError::WrongScope);
         }
+        if is_placeholder_output(&self.record) {
+            return Err(ReportableOutputError::Placeholder);
+        }
+        Ok(self.record)
     }
+}
+
+fn is_placeholder_output(record: &OutputRecord) -> bool {
+    matches!(record, OutputRecord::Inline { text, .. } if text.trim().is_empty())
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -234,8 +240,14 @@ impl ReportableOutputScope {
 }
 
 #[derive(Debug, thiserror::Error)]
-#[error("reportable output came from another scoring context")]
-pub struct ReportableOutputScopeError;
+pub enum ReportableOutputError {
+    /// The output was minted for a different candidate/case scoring context.
+    #[error("reportable output came from another scoring context")]
+    WrongScope,
+    /// The output exists only as an empty inline placeholder.
+    #[error("reportable output was an empty placeholder")]
+    Placeholder,
+}
 
 /// Failure returned by a user scoring function.
 #[derive(Debug, thiserror::Error)]

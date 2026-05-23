@@ -272,11 +272,8 @@ where
     let generated_output = generated_output
         .into_record(output_scope)
         .map_err(|source| {
-            EvaluationError::with_cost_source(
-                "reportable output came from another scoring context",
-                cost.clone(),
-                source,
-            )
+            let message = source.to_string();
+            EvaluationError::with_cost_source(message, cost.clone(), source)
         })?;
     let trace = output
         .trace

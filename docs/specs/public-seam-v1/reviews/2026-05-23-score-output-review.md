@@ -38,9 +38,10 @@ Follow-up implementation after block:
 
 - `leaven-run` now requires `Score::with_output(...)` to receive a `ReportableOutput` minted by the active `ScoreContext`; `ScoreContext::report_output(...)` and `report_text_output(...)` are the only public construction path.
 - `crates/leaven-run/tests/scoring_evaluator.rs::scoring_evaluator_rejects_report_output_from_another_scoring_context` rejects reusing output from a different candidate/case scoring context.
-- This resolves only the cross-context unrelated-output fake pass. It does not prove pairwise/listwise assessments, null-placeholder rejection, or public-seam `OutputRecord` visibility/data-class integration.
+- `crates/leaven-run/tests/scoring_evaluator.rs::scoring_evaluator_rejects_empty_placeholder_report_output` rejects whitespace-only inline report output.
+- This resolves only the cross-context unrelated-output fake pass and the local empty-placeholder negative. It does not prove pairwise/listwise assessments or public-seam `OutputRecord` visibility/data-class integration.
 
 Limits:
 
 - This review does not sign off `ps1.evaluator.score_output`.
-- No matrix status should change for this row until pairwise/listwise behavior, unrelated-output rejection, null-placeholder rejection, public-seam `OutputRecord` integration, executable positive/negative tests, and a follow-up adversarial sign-off exist.
+- No matrix status should change for this row until pairwise/listwise behavior, public-seam `OutputRecord` integration, executable positive/negative tests, and a follow-up adversarial sign-off exist.

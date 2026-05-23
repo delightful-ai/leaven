@@ -184,6 +184,32 @@ fn plan_result_rejects_failed_call_costs_without_charge_receipts() {
     ));
 }
 
+#[test]
+fn plan_result_preserves_value_visibility_data_classes() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let result = package
+        .validate_plan_result_document(&workspace_listing_visibility_result())
+        .unwrap();
+
+    assert_eq!(
+        result.value_data_classes(),
+        &[(
+            "listing".to_owned(),
+            vec!["case.target".to_owned(), "public".to_owned()]
+        )]
+    );
+
+    let mut weaker_value = workspace_listing_visibility_result();
+    weaker_value["values"]["listing"]["data_classes"] = json!(["public"]);
+    assert!(matches!(
+        package
+            .validate_plan_result_document(&weaker_value)
+            .unwrap_err(),
+        PublicSeamError::InvalidPlanResult { .. }
+    ));
+}
+
 fn typed_success_result() -> Value {
     json!({
         "schema_version": "leaven.plan_result.v1",
@@ -222,6 +248,56 @@ fn typed_success_result() -> Value {
                 "status": "succeeded",
                 "read_scope_fingerprint": "fp_scope_sha256_read",
                 "projection_fingerprint": "fp_projection_sha256_rows"
+            }
+        ],
+        "redactions": [],
+        "charges": [],
+        "errors": []
+    })
+}
+
+fn workspace_listing_visibility_result() -> Value {
+    json!({
+        "schema_version": "leaven.plan_result.v1",
+        "plan_id": "result_listing_visibility",
+        "capability_fingerprint": "fp_cap_sha256_listingvisibility",
+        "policy_fingerprint": "fp_policy_sha256_listingvisibility",
+        "base_revision": "rev_base",
+        "final_revision": "rev_final",
+        "replayability_summary": "pure_read",
+        "values": {
+            "listing": {
+                "kind": "workspace_listing",
+                "entries": [
+                    {
+                        "path": "public.txt",
+                        "kind": "file",
+                        "data_classes": ["public"]
+                    },
+                    {
+                        "path": "target.txt",
+                        "kind": "file",
+                        "data_classes": ["case.target"]
+                    }
+                ],
+                "graph_revision": "rev_final",
+                "data_classes": ["case.target", "public"],
+                "replayability": "pure_read",
+                "receipt": "qrec_listing_visibility"
+            }
+        },
+        "receipts": [
+            {
+                "kind": "query",
+                "receipt": "qrec_listing_visibility",
+                "started_at": "2026-05-23T12:00:00Z",
+                "completed_at": "2026-05-23T12:00:01Z",
+                "op_hash": "fp_query_sha256_listingvisibility",
+                "result_hash": "fp_result_sha256_listingvisibility",
+                "graph_revision": "rev_base",
+                "status": "succeeded",
+                "read_scope_fingerprint": "fp_scope_sha256_listingvisibility",
+                "projection_fingerprint": "fp_projection_sha256_listingvisibility"
             }
         ],
         "redactions": [],

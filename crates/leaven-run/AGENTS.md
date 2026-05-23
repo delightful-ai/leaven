@@ -82,10 +82,11 @@ around engine graph mutation or a home for optimizer strategy state.
   was a back-compat shim and was removed. A `Score` without `output` set fails
   the evaluator with `MissingReportableOutput` (cost from the runner and scorer
   is preserved on the error). A `Score` with reportable output minted by another
-  scoring context is rejected as unrelated evidence. Reports, evidence stores,
-  and GEPA reflection consume the scorer-supplied `OutputRecord`, not `Out`
-  itself. Do not add `Out` to `RunProblem`, `CaseAssessmentEvidence`, report
-  payloads, or GEPA types.
+  scoring context is rejected as unrelated evidence; a whitespace-only inline
+  report output is rejected as a placeholder. Reports, evidence stores, and
+  GEPA reflection consume the scorer-supplied `OutputRecord`, not `Out` itself.
+  Do not add `Out` to `RunProblem`, `CaseAssessmentEvidence`, report payloads,
+  or GEPA types.
   Scoring is also async and fallible: `.score(...)` receives owned
   `ScoreContext` values, returns `Result<Score, ScoreError>`, and may attach
   scorer cost. Treat scalar comparison as the current selection contract, not as
