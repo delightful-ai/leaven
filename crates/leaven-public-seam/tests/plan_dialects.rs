@@ -664,6 +664,7 @@ fn assessment_arbitrary_values_with_prose_field_plan() -> Value {
                                 "schema_version": "leaven.evidence_envelope.v1",
                                 "target_derived": false,
                                 "public": {
+                                    "summary": "ok",
                                     "data_classes": ["public"]
                                 },
                                 "redaction_policy": {

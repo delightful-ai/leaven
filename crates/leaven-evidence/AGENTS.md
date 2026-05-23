@@ -82,7 +82,9 @@ Evidence here is data a stage or evaluator can produce and another component can
 - Use `OutputRecord::candidate_inline(...)` for public reportable candidate
   outputs that cross the runner/scorer evidence path; it carries both `public`
   and `candidate.output` data classes so public-seam projection does not erase
-  what kind of data was assessed. Use `DataClass::candidate_artifact()` when a
+  what kind of data was assessed. `leaven-run` still owns the proof that a
+  candidate-output record was derived through the runner/scorer path; a data
+  class alone is not origin proof. Use `DataClass::candidate_artifact()` when a
   score output is assessing the artifact itself rather than generated candidate
   output.
 - Use `AgentTrajectoryCorpusEvidence` when a paper or runner must resume over a
