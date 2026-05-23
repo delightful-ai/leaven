@@ -112,7 +112,7 @@ fn active_schemas_compile_and_examples_validate_against_manifest_targets() {
 }
 
 #[test]
-fn schema_fingerprints_use_jcs_sha256_not_pretty_printed_bytes() {
+fn schema_fingerprints_reject_pretty_printed_hashing_and_track_semantic_changes() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let common = package.schema_json("common.schema.json").unwrap();
     let pretty_common: Value =
@@ -149,6 +149,7 @@ fn conformance_matrix_rows_are_unique_honest_and_reference_real_files() {
         BTreeSet::from([
             "ps1.authority.active_package_only",
             "ps1.authority.manifest_inventory",
+            "ps1.harness.negative_denominator",
             "ps1.schema.fingerprints"
         ])
     );
@@ -170,6 +171,156 @@ fn conformance_matrix_rows_are_unique_honest_and_reference_real_files() {
     );
 
     package.validate_matrix_references(&matrix).unwrap();
+    package.audit_conformance_evidence(&matrix).unwrap();
+}
+
+#[test]
+fn conformance_evidence_audit_rejects_fake_closeout_for_denial_rows() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut matrix = package.conformance_matrix().unwrap();
+    let row = matrix
+        .rows
+        .iter_mut()
+        .find(|row| row.id == "ps1.schema.fingerprints")
+        .unwrap();
+
+    row.implementation_evidence = vec![
+        "docs/specs/public-seam-v1/schemas/common.schema.json".to_owned(),
+        "crates/leaven/tests/topology_contract.rs::leaven_dependency_edges_match_corrected_topology"
+            .to_owned(),
+    ];
+    row.positive_test_evidence.clear();
+    row.negative_test_evidence.clear();
+
+    let error = package.audit_conformance_evidence(&matrix).unwrap_err();
+    assert!(matches!(error, PublicSeamError::InvalidMatrix { .. }));
+    assert!(error.to_string().contains("ps1.schema.fingerprints"));
+    assert!(
+        error
+            .to_string()
+            .contains("schema/example/topology/matrix proof")
+    );
+}
+
+#[test]
+fn conformance_evidence_audit_rejects_happy_path_only_denial_rows() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut matrix = package.conformance_matrix().unwrap();
+    let row = matrix
+        .rows
+        .iter_mut()
+        .find(|row| row.id == "ps1.schema.fingerprints")
+        .unwrap();
+
+    row.negative_test_evidence.clear();
+
+    let error = package.audit_conformance_evidence(&matrix).unwrap_err();
+    assert!(matches!(error, PublicSeamError::InvalidMatrix { .. }));
+    assert!(error.to_string().contains("ps1.schema.fingerprints"));
+    assert!(error.to_string().contains("negative test evidence"));
+}
+
+#[test]
+fn conformance_evidence_audit_rejects_matrix_only_closeout_even_with_test_links() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut matrix = package.conformance_matrix().unwrap();
+    let row = matrix
+        .rows
+        .iter_mut()
+        .find(|row| row.id == "ps1.schema.fingerprints")
+        .unwrap();
+
+    row.implementation_evidence =
+        vec!["docs/specs/public-seam-v1/conformance-matrix.yaml".to_owned()];
+
+    let error = package.audit_conformance_evidence(&matrix).unwrap_err();
+    assert!(matches!(error, PublicSeamError::InvalidMatrix { .. }));
+    assert!(error.to_string().contains("ps1.schema.fingerprints"));
+    assert!(error.to_string().contains("matrix proof"));
+}
+
+#[test]
+fn conformance_evidence_audit_maps_every_note_case_to_matrix_rows() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let denominator = package.conformance_test_denominator().unwrap();
+
+    assert_eq!(denominator.cases.len(), 17);
+    assert!(
+        denominator
+            .cases
+            .iter()
+            .any(|case| { case.id == "reject_reflector_reads_case_target" && case.is_negative() })
+    );
+    assert!(denominator.cases.iter().any(|case| {
+        case.id == "accept_per_assessment_mixed_replayability_compute_plan_roll_up_summary"
+            && !case.is_negative()
+    }));
+
+    let mut matrix = package.conformance_matrix().unwrap();
+    matrix
+        .rows
+        .iter_mut()
+        .for_each(|row| row.conformance_tests.clear());
+    let error = package.audit_conformance_evidence(&matrix).unwrap_err();
+    assert!(matches!(error, PublicSeamError::InvalidMatrix { .. }));
+    assert!(
+        error
+            .to_string()
+            .contains("conformance test `reject_reflector_reads_case_target` is not mapped")
+    );
+}
+
+#[test]
+fn conformance_evidence_audit_rejects_weak_test_function_as_negative_evidence() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut matrix = package.conformance_matrix().unwrap();
+    let row = matrix
+        .rows
+        .iter_mut()
+        .find(|row| row.id == "ps1.schema.fingerprints")
+        .unwrap();
+
+    row.negative_test_evidence = vec![
+        "crates/leaven-public-seam/tests/contract_package.rs::active_schemas_compile_and_examples_validate_against_manifest_targets"
+            .to_owned(),
+    ];
+
+    let error = package.audit_conformance_evidence(&matrix).unwrap_err();
+    assert!(matches!(error, PublicSeamError::InvalidMatrix { .. }));
+    assert!(error.to_string().contains("ps1.schema.fingerprints"));
+    assert!(
+        error
+            .to_string()
+            .contains("does not look like denial evidence")
+    );
+}
+
+#[test]
+fn conformance_evidence_audit_requires_denial_evidence_for_integrated_surface_rows() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut matrix = package.conformance_matrix().unwrap();
+    let row = matrix
+        .rows
+        .iter_mut()
+        .find(|row| row.id == "ps1.acp.transport_profile")
+        .unwrap();
+
+    row.status = MatrixRowStatus::Proven;
+    row.implementation_evidence =
+        vec!["crates/leaven-public-seam/src/package.rs::PublicSeamPackage::v1_scope".to_owned()];
+    row.review_evidence = vec![
+        "docs/specs/public-seam-v1/reviews/2026-05-23-initial-contract-owner-review.md".to_owned(),
+    ];
+    row.positive_test_evidence = vec![
+        "crates/leaven-public-seam/tests/contract_package.rs::v1_scope_markers_refuse_mcp_watch_runtime_and_legacy_worker_protocol"
+            .to_owned(),
+    ];
+    row.negative_test_evidence.clear();
+
+    let error = package.audit_conformance_evidence(&matrix).unwrap_err();
+    assert!(matches!(error, PublicSeamError::InvalidMatrix { .. }));
+    assert!(error.to_string().contains("ps1.acp.transport_profile"));
+    assert!(error.to_string().contains("negative test evidence"));
 }
 
 #[test]

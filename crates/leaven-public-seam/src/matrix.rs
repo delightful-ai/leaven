@@ -28,16 +28,52 @@ pub struct ConformanceRow {
     pub id: String,
     /// Row area.
     pub area: String,
+    /// Human-readable requirement text.
+    pub requirement: String,
     /// Spec paths referenced by this row.
     pub spec_refs: Vec<String>,
+    /// Active conformance-test denominator ids assigned to this row.
+    #[serde(default)]
+    pub conformance_tests: Vec<String>,
+    /// Positive executable test evidence for proven rows.
+    #[serde(default)]
+    pub positive_test_evidence: Vec<String>,
+    /// Negative executable test evidence for proven semantic-denial rows.
+    #[serde(default)]
+    pub negative_test_evidence: Vec<String>,
     /// Implementation evidence paths for proven rows.
     #[serde(default)]
     pub implementation_evidence: Vec<String>,
     /// Review evidence paths for proven rows.
     #[serde(default)]
     pub review_evidence: Vec<String>,
+    /// Minimum closeout level required by the row.
+    pub minimum_closeout_level: MinimumCloseoutLevel,
+    /// The fake pass this row explicitly rejects.
+    pub fake_pass_rejected: String,
     /// Current row status.
     pub status: MatrixRowStatus,
+}
+
+/// Minimum proof level required to close a row.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum MinimumCloseoutLevel {
+    /// Schemas, examples, or generated types are sufficient only for explicitly shape-only rows.
+    ShapeOnly,
+    /// Public shape and round-trip vocabulary exist.
+    StructuralContract,
+    /// Forbidden behavior is rejected with typed evidence.
+    SemanticDenial,
+    /// The intended user-facing flow exercises the seam through the owning route.
+    IntegratedSurface,
+}
+
+impl MinimumCloseoutLevel {
+    /// Returns true when a proven row must carry positive and negative executable proof.
+    pub fn requires_denial_evidence(self) -> bool {
+        matches!(self, Self::SemanticDenial | Self::IntegratedSurface)
+    }
 }
 
 /// Allowed conformance row statuses.

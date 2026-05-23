@@ -17,7 +17,7 @@ before any conformance row can claim integrated behavior.
 - RFC 8785 JCS plus SHA-256 schema fingerprint values such as
   `fp_schema_sha256_*`.
 - Conformance-matrix row parsing, uniqueness checks, spec-reference checks,
-  and row evidence/status helpers.
+  notes-denominator parsing, and row evidence/status helpers.
 - V1 hard-cutover markers: MCP is not V1, `watch.v1` runtime behavior is
   deferred, and `worker_protocol.v1` is deprecated in favor of the ACP profile.
 
@@ -38,11 +38,15 @@ This crate is an advanced public contract for implementers of the external
 worker seam. It is not routed through `leaven::prelude`, default umbrella
 features, or examples as ordinary product proof in this initial slice.
 
+Crate-root exports for `ConformanceTest*`, `ConformanceRow`, and matrix/status
+types are advanced harness contracts. They are evidence plumbing for the locked
+package, not proof that the runtime rows they describe have product behavior.
+
 ## Proof Anchors
 
 - `tests/contract_package.rs` proves active package authority, manifest
   inventory, schema compilation, schema fingerprinting, matrix row structure,
-  and deferred markers.
+  notes-denominator mapping, fake-closeout rejection, and deferred markers.
 - `cargo test -p leaven-public-seam --test contract_package` is the focused
   proof for this crate.
 - `cargo test -p leaven --test topology_contract` must pass when this crate is

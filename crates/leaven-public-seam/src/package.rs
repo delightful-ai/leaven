@@ -6,7 +6,7 @@ use jsonschema::{Retrieve, Uri};
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::{ConformanceMatrix, PublicSeamError};
+use crate::{ConformanceMatrix, MatrixRowStatus, PublicSeamError};
 
 const ACTIVE_PACKAGE_RELATIVE: &str = "docs/specs/public-seam-v1";
 const CAPABILITY_EXAMPLE: &str = "evaluator_capability.v0.3.example.json";
@@ -71,6 +71,40 @@ pub struct ValidationReport {
     pub compiled_schemas: Vec<String>,
     /// Examples and nested example values validated against active schemas.
     pub validated_examples: Vec<ValidatedExample>,
+}
+
+/// Parsed executable conformance-test denominator from the active notes file.
+#[derive(Clone, Debug)]
+pub struct ConformanceTestDenominator {
+    /// Required accept/reject cases.
+    pub cases: Vec<ConformanceTestCase>,
+}
+
+/// One conformance-test denominator case.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ConformanceTestCase {
+    /// Stable generated id for the prose case.
+    pub id: String,
+    /// Whether this is an accept or reject case.
+    pub kind: ConformanceTestKind,
+    /// Source prose line.
+    pub text: String,
+}
+
+impl ConformanceTestCase {
+    /// Returns true when this case requires denial/negative proof.
+    pub fn is_negative(&self) -> bool {
+        self.kind == ConformanceTestKind::Reject
+    }
+}
+
+/// Conformance-test case polarity.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ConformanceTestKind {
+    /// A forbidden behavior must be rejected.
+    Reject,
+    /// An allowed behavior must be accepted.
+    Accept,
 }
 
 /// One validated example value.
@@ -258,6 +292,50 @@ impl PublicSeamPackage {
         Ok(matrix)
     }
 
+    /// Loads the active conformance-test denominator from the manifest notes.
+    pub fn conformance_test_denominator(
+        &self,
+    ) -> Result<ConformanceTestDenominator, PublicSeamError> {
+        let note = self
+            .manifest
+            .notes
+            .iter()
+            .find(|note| note.ends_with("CONFORMANCE_TESTS_v0.3.md"))
+            .ok_or_else(|| PublicSeamError::InvalidManifest {
+                message: "manifest does not list CONFORMANCE_TESTS_v0.3.md".to_owned(),
+            })?;
+        let mut path = self.root.join(note);
+        if !path.exists() {
+            path = self.root.join("notes").join(note);
+        }
+        let source = fs::read_to_string(&path).map_err(|source| PublicSeamError::Io {
+            path: path.clone(),
+            source,
+        })?;
+        let mut cases = Vec::new();
+        for line in source.lines() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            let (kind, text) = if let Some(rest) = line.strip_prefix("Reject ") {
+                (ConformanceTestKind::Reject, rest)
+            } else if let Some(rest) = line.strip_prefix("Accept ") {
+                (ConformanceTestKind::Accept, rest)
+            } else {
+                return Err(PublicSeamError::InvalidMatrix {
+                    message: format!("unrecognized conformance test line `{line}`"),
+                });
+            };
+            cases.push(ConformanceTestCase {
+                id: conformance_case_id(kind, text),
+                kind,
+                text: line.to_owned(),
+            });
+        }
+        Ok(ConformanceTestDenominator { cases })
+    }
+
     /// Checks that matrix spec references resolve in the repository.
     pub fn validate_matrix_references(
         &self,
@@ -278,6 +356,82 @@ impl PublicSeamPackage {
         Ok(())
     }
 
+    /// Audits proven row evidence so schema-only or topology-only closeouts cannot pass.
+    pub fn audit_conformance_evidence(
+        &self,
+        matrix: &ConformanceMatrix,
+    ) -> Result<(), PublicSeamError> {
+        self.validate_matrix_references(matrix)?;
+        let denominator = self.conformance_test_denominator()?;
+        let mut mapped_cases = BTreeSet::new();
+        for row in &matrix.rows {
+            for case_id in &row.conformance_tests {
+                mapped_cases.insert(case_id.as_str());
+            }
+        }
+        for case in &denominator.cases {
+            if !mapped_cases.contains(case.id.as_str()) {
+                return Err(PublicSeamError::InvalidMatrix {
+                    message: format!(
+                        "conformance test `{}` is not mapped to a matrix row",
+                        case.id
+                    ),
+                });
+            }
+        }
+        for row in &matrix.rows {
+            if row.status != MatrixRowStatus::Proven {
+                continue;
+            }
+            if row.implementation_evidence.is_empty() {
+                return Err(PublicSeamError::InvalidMatrix {
+                    message: format!("row `{}` is proven without implementation evidence", row.id),
+                });
+            }
+            if row.review_evidence.is_empty() {
+                return Err(PublicSeamError::InvalidMatrix {
+                    message: format!("row `{}` is proven without review evidence", row.id),
+                });
+            }
+            if row.fake_pass_rejected.trim().is_empty() {
+                return Err(PublicSeamError::InvalidMatrix {
+                    message: format!("row `{}` does not name the fake pass it rejects", row.id),
+                });
+            }
+            if evidence_is_only_known_fake_passes(&row.implementation_evidence) {
+                return Err(PublicSeamError::InvalidMatrix {
+                    message: format!(
+                        "row `{}` implementation evidence is only schema/example/topology/matrix proof",
+                        row.id
+                    ),
+                });
+            }
+            if row.minimum_closeout_level.requires_denial_evidence() {
+                if row.positive_test_evidence.is_empty() {
+                    return Err(PublicSeamError::InvalidMatrix {
+                        message: format!("row `{}` lacks positive test evidence", row.id),
+                    });
+                }
+                if row.negative_test_evidence.is_empty() {
+                    return Err(PublicSeamError::InvalidMatrix {
+                        message: format!("row `{}` lacks negative test evidence", row.id),
+                    });
+                }
+                for reference in row
+                    .positive_test_evidence
+                    .iter()
+                    .chain(row.negative_test_evidence.iter())
+                {
+                    self.ensure_test_reference(&row.id, reference)?;
+                }
+                for reference in &row.negative_test_evidence {
+                    Self::ensure_denial_test_reference(&row.id, reference)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
     fn ensure_matrix_reference(
         &self,
         row_id: &str,
@@ -292,6 +446,47 @@ impl PublicSeamPackage {
         } else {
             Err(PublicSeamError::InvalidMatrix {
                 message: format!("row `{row_id}` references missing `{reference}`"),
+            })
+        }
+    }
+
+    fn ensure_test_reference(&self, row_id: &str, reference: &str) -> Result<(), PublicSeamError> {
+        let (path_part, symbol) =
+            reference
+                .split_once("::")
+                .ok_or_else(|| PublicSeamError::InvalidMatrix {
+                    message: format!("row `{row_id}` test evidence `{reference}` has no symbol"),
+                })?;
+        let path = self.repo_root.join(path_part);
+        let source = fs::read_to_string(&path).map_err(|source| PublicSeamError::Io {
+            path: path.clone(),
+            source,
+        })?;
+        let symbol = symbol.rsplit("::").next().unwrap_or(symbol);
+        if source.contains(&format!("fn {symbol}(")) {
+            Ok(())
+        } else {
+            Err(PublicSeamError::InvalidMatrix {
+                message: format!("row `{row_id}` test evidence `{reference}` is missing"),
+            })
+        }
+    }
+
+    fn ensure_denial_test_reference(row_id: &str, reference: &str) -> Result<(), PublicSeamError> {
+        let (_, symbol) =
+            reference
+                .split_once("::")
+                .ok_or_else(|| PublicSeamError::InvalidMatrix {
+                    message: format!("row `{row_id}` test evidence `{reference}` has no symbol"),
+                })?;
+        let symbol = symbol.rsplit("::").next().unwrap_or(symbol);
+        if looks_like_denial_test(symbol) {
+            Ok(())
+        } else {
+            Err(PublicSeamError::InvalidMatrix {
+                message: format!(
+                    "row `{row_id}` negative test evidence `{reference}` does not look like denial evidence"
+                ),
             })
         }
     }
@@ -391,6 +586,64 @@ impl PublicSeamPackage {
                 message: error.to_string(),
             })
     }
+}
+
+fn evidence_is_only_known_fake_passes(references: &[String]) -> bool {
+    references.iter().all(|reference| {
+        let path = reference
+            .split_once("::")
+            .map_or(reference.as_str(), |(path, _)| path);
+        path.starts_with("docs/specs/public-seam-v1/schemas/")
+            || path.starts_with("docs/specs/public-seam-v1/examples/")
+            || path == "docs/specs/public-seam-v1/conformance-matrix.yaml"
+            || path == "crates/leaven/tests/topology_contract.rs"
+    })
+}
+
+fn conformance_case_id(kind: ConformanceTestKind, text: &str) -> String {
+    let prefix = match kind {
+        ConformanceTestKind::Reject => "reject",
+        ConformanceTestKind::Accept => "accept",
+    };
+    let mut words = Vec::new();
+    for raw in text.split(|character: char| !character.is_ascii_alphanumeric()) {
+        if raw.is_empty() {
+            continue;
+        }
+        let word = raw.to_ascii_lowercase();
+        if matches!(
+            word.as_str(),
+            "a" | "an" | "the" | "that" | "whose" | "with" | "without" | "and" | "or" | "of"
+        ) {
+            continue;
+        }
+        words.push(word);
+    }
+    format!("{prefix}_{}", words.join("_"))
+}
+
+fn looks_like_denial_test(symbol: &str) -> bool {
+    [
+        "reject",
+        "rejects",
+        "refuse",
+        "refuses",
+        "deny",
+        "denies",
+        "denial",
+        "invalid",
+        "missing",
+        "mismatch",
+        "outside",
+        "forbidden",
+        "cannot",
+        "fake",
+        "negative",
+        "only",
+        "not_",
+    ]
+    .iter()
+    .any(|term| symbol.contains(term))
 }
 
 #[derive(Clone, Debug)]
