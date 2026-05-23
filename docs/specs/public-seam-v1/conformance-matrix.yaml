@@ -132,6 +132,7 @@ rows:
       - crates/leaven-public-seam/tests/plan_document.rs::plan_ir_family_lowers_and_executes_let_call_write_through_public_seam_owner
     negative_test_evidence:
       - crates/leaven-public-seam/tests/plan_document.rs::plan_ir_family_rejects_unknown_core_call_write_and_escape_hatch_ops
+      - crates/leaven-public-seam/tests/plan_document.rs::plan_ir_family_execution_rejects_dry_run_or_no_graph_write_fake_execution
       - crates/leaven-public-seam/tests/plan_document.rs::plan_ir_family_execution_rejects_known_variants_outside_representative_harness
     implementation_evidence:
       - crates/leaven-public-seam/src/plan.rs::PlanDocument
@@ -139,6 +140,8 @@ rows:
       - crates/leaven-public-seam/src/plan_execution.rs::execute_plan
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::execute_plan_document
       - crates/leaven-public-seam/AGENTS.md
+    review_evidence:
+      - docs/specs/public-seam-v1/reviews/2026-05-23-plan-ir-family-local-review.md
     status: pending
 
   - id: ps1.plan.pinned_dialects
@@ -212,6 +215,13 @@ rows:
       live LM/agent/sandbox work.
     fake_pass_rejected: A mode enum that is serialized but ignored.
     minimum_closeout_level: semantic_denial
+    negative_test_evidence:
+      - crates/leaven-public-seam/tests/plan_document.rs::plan_ir_family_execution_rejects_dry_run_or_no_graph_write_fake_execution
+    implementation_evidence:
+      - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::execute_plan_document
+      - crates/leaven-public-seam/AGENTS.md
+    review_evidence:
+      - docs/specs/public-seam-v1/reviews/2026-05-23-plan-ir-family-local-review.md
     status: pending
 
   - id: ps1.graph.runcontext_mutation_only

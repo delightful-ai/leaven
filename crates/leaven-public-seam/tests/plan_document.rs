@@ -71,6 +71,10 @@ fn plan_ir_family_lowers_and_executes_let_call_write_through_public_seam_owner()
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let mut plan = typed_let_call_write_plan();
     plan["mode"] = json!({"kind": "execute"});
+    plan["commit"] = json!({
+        "kind": "graph_writes_atomic",
+        "on_stale": "reject"
+    });
     let mut host = RecordingPlanHost::default();
 
     let report = package
@@ -121,10 +125,61 @@ fn plan_ir_family_lowers_and_executes_let_call_write_through_public_seam_owner()
 }
 
 #[test]
+fn plan_ir_family_execution_rejects_dry_run_or_no_graph_write_fake_execution() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut host = RecordingPlanHost::default();
+
+    let dry_run = typed_let_call_write_plan();
+    assert!(matches!(
+        package
+            .execute_plan_document(
+                &dry_run,
+                &PlanExecutionContext::new(
+                    "fp_cap_sha256_planexec",
+                    "fp_policy_sha256_planexec",
+                    "rev_planexec_base",
+                    "2026-05-23T12:00:00Z",
+                    "2026-05-23T12:00:01Z",
+                ),
+                &mut host,
+            )
+            .unwrap_err(),
+        PublicSeamError::InvalidPlan { .. }
+    ));
+    assert!(host.calls.is_empty());
+    assert!(host.writes.is_empty());
+
+    let mut no_graph_write = typed_let_call_write_plan();
+    no_graph_write["mode"] = json!({"kind": "execute"});
+    assert!(matches!(
+        package
+            .execute_plan_document(
+                &no_graph_write,
+                &PlanExecutionContext::new(
+                    "fp_cap_sha256_planexec",
+                    "fp_policy_sha256_planexec",
+                    "rev_planexec_base",
+                    "2026-05-23T12:00:00Z",
+                    "2026-05-23T12:00:01Z",
+                ),
+                &mut host,
+            )
+            .unwrap_err(),
+        PublicSeamError::InvalidPlan { .. }
+    ));
+    assert!(host.calls.is_empty());
+    assert!(host.writes.is_empty());
+}
+
+#[test]
 fn plan_ir_family_execution_rejects_known_variants_outside_representative_harness() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let mut plan = typed_let_call_write_plan();
     plan["mode"] = json!({"kind": "execute"});
+    plan["commit"] = json!({
+        "kind": "graph_writes_atomic",
+        "on_stale": "reject"
+    });
     plan["ops"][1]["call"] = json!({
         "kind": "human_review",
         "queue": "qa",
@@ -387,7 +442,7 @@ fn submit_assessments_plan() -> Value {
                                 "case": "case_1"
                             },
                             "score": score_with_output("independent answer"),
-                            "evidence": evidence_envelope(),
+                            "evidence": evidence_envelope("independent answer"),
                             "replayability": "pure_read"
                         },
                         {
@@ -412,7 +467,7 @@ fn submit_assessments_plan() -> Value {
                             "preference": {
                                 "winner": "cand_a"
                             },
-                            "evidence": evidence_envelope(),
+                            "evidence": evidence_envelope("pairwise compared candidate outputs"),
                             "replayability": "pure_read"
                         },
                         {
@@ -436,7 +491,7 @@ fn submit_assessments_plan() -> Value {
                                 }
                             },
                             "ranking": ["cand_a", "cand_b", "cand_c"],
-                            "evidence": evidence_envelope(),
+                            "evidence": evidence_envelope("listwise ranked candidate outputs"),
                             "replayability": "pure_read"
                         }
                     ]
@@ -463,11 +518,12 @@ fn score_with_output(summary: &'static str) -> Value {
     })
 }
 
-fn evidence_envelope() -> Value {
+fn evidence_envelope(summary: &'static str) -> Value {
     json!({
         "schema_version": "leaven.evidence_envelope.v1",
         "target_derived": false,
         "public": {
+            "summary": summary,
             "data_classes": ["public"]
         },
         "redaction_policy": {
