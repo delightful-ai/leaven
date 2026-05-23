@@ -215,6 +215,7 @@ impl AcpPermissionDecision {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AcpExtensionResultDocument {
     method: String,
+    primary_kind: String,
     capability_fingerprint: String,
     receipt_count: usize,
     redaction_count: usize,
@@ -241,11 +242,28 @@ impl AcpExtensionResultDocument {
         if data_classes.is_empty() {
             return Err(invalid_acp("ACP extension result must carry data classes"));
         }
-        object
+        let primary = object
             .get("primary")
-            .ok_or_else(|| invalid_acp("ACP extension result must carry primary value"))?;
+            .and_then(Value::as_object)
+            .ok_or_else(|| invalid_acp("ACP extension result must carry primary object"))?;
+        let primary_kind = required_string(primary.get("kind"), "primary.kind")?.to_owned();
+        validate_primary_kind(&method, &primary_kind)?;
+        let primary_data_classes =
+            string_array(primary.get("data_classes"), "primary.data_classes")?;
+        for data_class in &primary_data_classes {
+            if !data_classes.contains(data_class) {
+                return Err(invalid_acp(format!(
+                    "ACP extension result data_classes must cover primary data class `{data_class}`"
+                )));
+            }
+        }
+        validate_receipts_for_method(&method, receipts)?;
+        if let Some(primary_receipt) = primary.get("receipt").and_then(Value::as_str) {
+            ensure_primary_receipt_is_carried(primary_receipt, receipts)?;
+        }
         Ok(Self {
             method,
+            primary_kind,
             capability_fingerprint: required_string(
                 object.get("capability_fingerprint"),
                 "capability_fingerprint",
@@ -260,6 +278,11 @@ impl AcpExtensionResultDocument {
     /// Extension method name.
     pub fn method(&self) -> &str {
         &self.method
+    }
+
+    /// Primary result value kind.
+    pub fn primary_kind(&self) -> &str {
+        &self.primary_kind
     }
 
     /// Capability fingerprint attached to the result.
@@ -369,6 +392,163 @@ fn extension_methods(value: Option<&Value>) -> Result<Vec<AcpExtensionMethod>, P
         });
     }
     Ok(output)
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ReceiptExpectation {
+    Query,
+    Call(&'static str),
+    Write(&'static str),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ExtensionResultContract {
+    primary_kinds: &'static [&'static str],
+    receipt: ReceiptExpectation,
+}
+
+fn extension_result_contract(method: &str) -> Result<ExtensionResultContract, PublicSeamError> {
+    const EXTENSION: &[&str] = &["extension"];
+    const WORKSPACE_READ: &[&str] = &[
+        "workspace_file",
+        "workspace_diff",
+        "workspace_listing",
+        "workspace_snapshot",
+        "extension",
+    ];
+    match method {
+        "leaven/graph.query"
+        | "leaven/case.load"
+        | "leaven/case.input"
+        | "leaven/case.target"
+        | "leaven/case.metadata" => Ok(ExtensionResultContract {
+            primary_kinds: EXTENSION,
+            receipt: ReceiptExpectation::Query,
+        }),
+        "leaven/workspace.materialize" => Ok(ExtensionResultContract {
+            primary_kinds: &["workspace_handle"],
+            receipt: ReceiptExpectation::Call("workspace_materialize"),
+        }),
+        "leaven/workspace.snapshot" => Ok(ExtensionResultContract {
+            primary_kinds: &["workspace_snapshot"],
+            receipt: ReceiptExpectation::Query,
+        }),
+        "leaven/workspace.list"
+        | "leaven/workspace.read_file"
+        | "leaven/workspace.stat"
+        | "leaven/workspace.digest"
+        | "leaven/workspace.git_log"
+        | "leaven/workspace.git_diff"
+        | "leaven/workspace.git_status"
+        | "leaven/workspace.capture_artifacts" => Ok(ExtensionResultContract {
+            primary_kinds: WORKSPACE_READ,
+            receipt: ReceiptExpectation::Query,
+        }),
+        "leaven/workspace.release" => Ok(ExtensionResultContract {
+            primary_kinds: EXTENSION,
+            receipt: ReceiptExpectation::Call("workspace_release"),
+        }),
+        "leaven/lm.complete" => Ok(ExtensionResultContract {
+            primary_kinds: &["lm_response"],
+            receipt: ReceiptExpectation::Call("lm_complete"),
+        }),
+        "leaven/agent.run" => Ok(ExtensionResultContract {
+            primary_kinds: &["agent_session"],
+            receipt: ReceiptExpectation::Call("agent_run"),
+        }),
+        "leaven/sandbox.exec" => Ok(ExtensionResultContract {
+            primary_kinds: &["sandbox_exec"],
+            receipt: ReceiptExpectation::Call("sandbox_exec"),
+        }),
+        "leaven/human.review" => Ok(ExtensionResultContract {
+            primary_kinds: EXTENSION,
+            receipt: ReceiptExpectation::Call("human_review"),
+        }),
+        "leaven/proposal.submit_batch" => Ok(ExtensionResultContract {
+            primary_kinds: &["proposal_batch_receipt"],
+            receipt: ReceiptExpectation::Write("submit_proposal_batch"),
+        }),
+        "leaven/proposal.apply" => Ok(ExtensionResultContract {
+            primary_kinds: &["apply_receipt"],
+            receipt: ReceiptExpectation::Write("apply_proposal_batch"),
+        }),
+        "leaven/assessment.submit" => Ok(ExtensionResultContract {
+            primary_kinds: &["assessment_batch_receipt"],
+            receipt: ReceiptExpectation::Write("submit_assessments"),
+        }),
+        "leaven/evaluation.request" => Ok(ExtensionResultContract {
+            primary_kinds: &["evaluation_request_receipt"],
+            receipt: ReceiptExpectation::Write("request_evaluation"),
+        }),
+        "leaven/event.emit" => Ok(ExtensionResultContract {
+            primary_kinds: EXTENSION,
+            receipt: ReceiptExpectation::Write("emit_run_event"),
+        }),
+        _ => Err(invalid_acp(format!(
+            "ACP extension result method `{method}` is not in the locked profile"
+        ))),
+    }
+}
+
+fn validate_primary_kind(method: &str, primary_kind: &str) -> Result<(), PublicSeamError> {
+    let contract = extension_result_contract(method)?;
+    if contract.primary_kinds.contains(&primary_kind) {
+        Ok(())
+    } else {
+        Err(invalid_acp(format!(
+            "ACP extension result method `{method}` cannot return primary kind `{primary_kind}`"
+        )))
+    }
+}
+
+fn validate_receipts_for_method(method: &str, receipts: &[Value]) -> Result<(), PublicSeamError> {
+    let contract = extension_result_contract(method)?;
+    if receipts
+        .iter()
+        .any(|receipt| receipt_matches(receipt, contract.receipt))
+    {
+        Ok(())
+    } else {
+        Err(invalid_acp(format!(
+            "ACP extension result method `{method}` is missing its expected receipt"
+        )))
+    }
+}
+
+fn receipt_matches(receipt: &Value, expectation: ReceiptExpectation) -> bool {
+    let Some(object) = receipt.as_object() else {
+        return false;
+    };
+    match expectation {
+        ReceiptExpectation::Query => object.get("kind").and_then(Value::as_str) == Some("query"),
+        ReceiptExpectation::Call(call_kind) => {
+            object.get("kind").and_then(Value::as_str) == Some("call")
+                && object.get("call_kind").and_then(Value::as_str) == Some(call_kind)
+        }
+        ReceiptExpectation::Write(write_kind) => {
+            object.get("kind").and_then(Value::as_str) == Some("write")
+                && object.get("write_kind").and_then(Value::as_str) == Some(write_kind)
+        }
+    }
+}
+
+fn ensure_primary_receipt_is_carried(
+    primary_receipt: &str,
+    receipts: &[Value],
+) -> Result<(), PublicSeamError> {
+    if receipts.iter().any(|receipt| {
+        receipt
+            .as_object()
+            .and_then(|object| object.get("receipt"))
+            .and_then(Value::as_str)
+            == Some(primary_receipt)
+    }) {
+        Ok(())
+    } else {
+        Err(invalid_acp(format!(
+            "ACP extension result primary receipt `{primary_receipt}` is not carried"
+        )))
+    }
 }
 
 fn required_action_for_method(method: &str) -> &'static str {

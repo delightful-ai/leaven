@@ -232,13 +232,17 @@ backpressure, or runtime watch support.
 - `tests/acp_profile.rs` proves locked Leaven ACP profile semantics for pinned
   ACP version, stdio-first transport preference, Leaven-only extension methods,
   capability-action mapping, bounded update declarations, programmatic
-  capability-grant permission decisions, `PlanError`/redaction denials, and
-  receipted extension-result envelopes. It rejects MCP/private-process
-  substitutes, unpinned/latest ACP versions, non-stdio-first transport drift,
-  human/always-grant permission substitutes, unbounded update declarations, and
-  bare method-specific result payloads. It does not prove ACP process startup,
-  engine-client/worker-agent runtime inversion, cancellation, progress updates,
-  backpressure behavior, provider calls, or worker lifecycle control.
+  capability-grant permission decisions, `PlanError`/redaction denials,
+  receipted extension-result envelopes, method-specific primary value families,
+  receipt-category binding, primary receipt binding, and monotonic result
+  data-class coverage. It rejects MCP/private-process substitutes,
+  unpinned/latest ACP versions, non-stdio-first transport drift,
+  human/always-grant permission substitutes, unbounded update declarations,
+  bare method-specific result payloads, cross-method payloads, wrong receipt
+  classes, unbound primary receipts, and result data-class gaps. It does not
+  prove ACP process startup, engine-client/worker-agent runtime inversion,
+  cancellation, progress updates, backpressure behavior, provider calls, or
+  worker lifecycle control.
 - `tests/plan_result.rs` proves active-schema Plan Result envelopes carry typed
   success and failure values, query/call/write audit receipts, errors, charges,
   capability and policy fingerprints, receipt timing, data classes, and closed
