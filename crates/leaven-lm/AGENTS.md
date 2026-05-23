@@ -1,19 +1,22 @@
 ## Boundary
 This crate owns provider-neutral language-model vocabulary: `Lm`, `LmRequest`,
-`Messages`, sampling, output mode, continuation, usage, and `LmError`.
+`Messages`, text/tool content parts, tool definitions, sampling, output mode,
+continuation, usage, and `LmError`.
 
 It is the contract optimizer and adapter code depend on when they need "an LM"
 without depending on OpenAI, Anthropic, local servers, cache stores, engine
 graph state, or GEPA rhythm.
 
 ## Map
-- Conversation truth is `Messages`; provider continuation tokens are optional
+- Conversation truth is `Messages`; it preserves system/developer/user/
+  assistant/tool roles, text parts, tool-result parts, tool-call ids, and
+  optional provider-visible names. Provider continuation tokens are optional
   transport hints in `LmContinuation`.
 - `LmRequest.model` is explicit request identity today. Provider crates may
   expose convenience constructors, but this neutral contract does not carry an
   ambient default model.
 - Provider-shaping but provider-neutral knobs live in `ProviderHints`,
-  `SamplingOptions`, and `OutputMode`.
+  `SamplingOptions`, `LmTool`, and `OutputMode`.
 - `TokenUsage` preserves provider accounting; `Metered<LmResponse>` carries the
   cost charged for the call.
 - `Lm::fingerprint()` is cache/replay identity for behavior-affecting runtime
@@ -32,9 +35,10 @@ graph state, or GEPA rhythm.
   but `leaven-lm` must not learn GEPA vocabulary.
 
 ## Proof Anchors
-- `crates/leaven-lm/tests/lm_contract.rs` proves message ordering, assistant
-  response validation, request defaults, identifier conversions, token-cost
-  mapping, and public error shapes.
+- `crates/leaven-lm/tests/lm_contract.rs` proves message ordering, developer/
+  tool role and content-part preservation, assistant response validation,
+  request defaults, tool definitions, provider hints, identifier conversions,
+  token-cost mapping, and public error shapes.
 - `docs/specs/lm_runtime_and_response_cache.md` owns the LM/cache/provider
   split; use it before changing request, response, continuation, or fingerprint
   semantics.

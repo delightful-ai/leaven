@@ -2,8 +2,8 @@ use std::{sync::Arc, time::Duration};
 
 use leaven_kernel::{Fingerprint, FingerprintBuilder, Metered};
 use leaven_lm::{
-    Lm, LmContinuation, LmError, LmId, LmRequest, LmResponse, Message, OutputMode, ProviderName,
-    ReasoningEffort, Role, SamplingOptions, TokenUsage,
+    Lm, LmContinuation, LmError, LmId, LmRequest, LmResponse, LmTool, Message, MessageContentPart,
+    OutputMode, ProviderName, ReasoningEffort, Role, SamplingOptions, TokenUsage,
 };
 use reqwest::{StatusCode, header::RETRY_AFTER};
 use serde_json::{Map, Value, json};
@@ -67,7 +67,7 @@ impl OpenAiLm {
             .messages
             .suffix_from(start)
             .iter()
-            .filter(|message| message.role() != Role::System)
+            .filter(|message| !matches!(message.role(), Role::System | Role::Developer))
             .map(openai_message)
             .collect::<Vec<_>>();
         object.insert("input".to_owned(), Value::Array(input));
@@ -95,6 +95,12 @@ impl OpenAiLm {
             object.insert(
                 "metadata".to_owned(),
                 json!(request.provider_hints.metadata),
+            );
+        }
+        if !request.tools.is_empty() {
+            object.insert(
+                "tools".to_owned(),
+                Value::Array(request.tools.iter().map(openai_tool).collect()),
             );
         }
 
@@ -274,7 +280,7 @@ fn openai_suffix_start(request: &LmRequest) -> Result<usize, LmError> {
 fn instructions(messages: &[Message]) -> Option<String> {
     let values = messages
         .iter()
-        .filter(|message| message.role() == Role::System)
+        .filter(|message| matches!(message.role(), Role::System | Role::Developer))
         .map(Message::content)
         .collect::<Vec<_>>();
     if values.is_empty() {
@@ -287,13 +293,59 @@ fn instructions(messages: &[Message]) -> Option<String> {
 fn openai_message(message: &Message) -> Value {
     let role = match message.role() {
         Role::System => "system",
+        Role::Developer => "developer",
         Role::User => "user",
         Role::Assistant => "assistant",
+        Role::Tool => {
+            return json!({
+                "type": "function_call_output",
+                "call_id": message.tool_call_id().unwrap_or_default(),
+                "output": message.content(),
+            });
+        }
     };
     json!({
         "role": role,
-        "content": message.content(),
+        "content": openai_message_content(message),
     })
+}
+
+fn openai_message_content(message: &Message) -> Value {
+    let parts = message.content_parts();
+    if let [MessageContentPart::Text { text }] = parts {
+        return Value::String(text.clone());
+    }
+    Value::Array(
+        parts
+            .iter()
+            .map(|part| match part {
+                MessageContentPart::Text { text } => {
+                    json!({ "type": "input_text", "text": text })
+                }
+                MessageContentPart::ToolResult {
+                    tool_call_id,
+                    content,
+                } => {
+                    json!({
+                        "type": "function_call_output",
+                        "call_id": tool_call_id,
+                        "output": content,
+                    })
+                }
+            })
+            .collect(),
+    )
+}
+
+fn openai_tool(tool: &LmTool) -> Value {
+    let mut object = Map::new();
+    object.insert("type".to_owned(), Value::String("function".to_owned()));
+    object.insert("name".to_owned(), Value::String(tool.name.clone()));
+    if let Some(description) = &tool.description {
+        object.insert("description".to_owned(), Value::String(description.clone()));
+    }
+    object.insert("parameters".to_owned(), tool.input_schema.clone());
+    Value::Object(object)
 }
 
 fn lower_sampling(object: &mut Map<String, Value>, sampling: &SamplingOptions) {
@@ -320,6 +372,9 @@ fn lower_sampling(object: &mut Map<String, Value>, sampling: &SamplingOptions) {
 fn lower_output(object: &mut Map<String, Value>, output: &OutputMode) {
     match output {
         OutputMode::Text => {}
+        OutputMode::FinalMessage { .. } => {
+            object.insert("text".to_owned(), json!({ "format": { "type": "text" } }));
+        }
         OutputMode::JsonObject => {
             object.insert(
                 "text".to_owned(),

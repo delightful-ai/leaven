@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::{Messages, ModelName, OutputMode, ProviderName, SamplingOptions};
 
@@ -26,6 +27,8 @@ pub struct LmRequest {
     pub sampling: SamplingOptions,
     /// Requested output shape.
     pub output: OutputMode,
+    /// Tool definitions made available to the model.
+    pub tools: Vec<LmTool>,
     /// Optional provider continuation state.
     pub continuation: Option<LmContinuation>,
     /// Provider transport hints.
@@ -40,6 +43,7 @@ impl LmRequest {
             messages,
             sampling: SamplingOptions::default(),
             output: OutputMode::Text,
+            tools: Vec::new(),
             continuation: None,
             provider_hints: ProviderHints::default(),
         }
@@ -56,6 +60,13 @@ impl LmRequest {
     #[must_use]
     pub fn with_output(mut self, output: OutputMode) -> Self {
         self.output = output;
+        self
+    }
+
+    /// Sets tool definitions.
+    #[must_use]
+    pub fn with_tools(mut self, tools: impl IntoIterator<Item = LmTool>) -> Self {
+        self.tools = tools.into_iter().collect();
         self
     }
 
@@ -83,4 +94,20 @@ pub struct ProviderHints {
     pub store: Option<bool>,
     /// Small provider metadata map.
     pub metadata: BTreeMap<String, String>,
+    /// Provider-specific hint values that are intentionally outside the
+    /// canonical prompt.
+    pub values: BTreeMap<String, Value>,
+}
+
+/// Provider-neutral tool definition for LM calls.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct LmTool {
+    /// Tool name visible to the model.
+    pub name: String,
+    /// Optional human-readable description.
+    pub description: Option<String>,
+    /// JSON schema for tool arguments.
+    pub input_schema: Value,
+    /// Optional public-seam capability action required before the tool may run.
+    pub requires_capability_action: Option<String>,
 }

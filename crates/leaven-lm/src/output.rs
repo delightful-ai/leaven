@@ -7,6 +7,11 @@ pub enum OutputMode {
     /// Plain text output.
     #[default]
     Text,
+    /// Final assistant message output with an optional size ceiling.
+    FinalMessage {
+        /// Optional maximum serialized message bytes.
+        max_bytes: Option<u64>,
+    },
     /// JSON object mode.
     JsonObject,
     /// JSON schema constrained output.

@@ -12,8 +12,8 @@ use std::time::Duration;
 
 use leaven_kernel::{Cost, FiniteF64};
 use leaven_lm::{
-    JsonSchemaOutput, Lm, LmContinuation, LmError, LmRequest, Messages, ModelName, OutputMode,
-    ProviderHints, ProviderName, ReasoningEffort, Role, SamplingOptions,
+    JsonSchemaOutput, Lm, LmContinuation, LmError, LmRequest, LmTool, Message, Messages, ModelName,
+    OutputMode, ProviderHints, ProviderName, ReasoningEffort, Role, SamplingOptions,
 };
 use leaven_lm_openai::{OpenAiConfig, OpenAiLm, OpenAiRetryPolicy, OpenAiThrottlePolicy};
 
@@ -66,6 +66,41 @@ fn openai_request_keeps_system_message_in_uncovered_continuation_suffix() {
     assert_eq!(wire["instructions"], "new instruction");
     assert_eq!(wire["input"][0]["role"], "user");
     assert_eq!(wire["input"][0]["content"], "new question");
+}
+
+#[test]
+fn openai_request_lowers_developer_tool_messages_tools_and_final_message_output() {
+    let lm = OpenAiLm::new(OpenAiConfig::new("test-key"));
+    let request = LmRequest::new(
+        ModelName::new("gpt-4.1-mini"),
+        Messages::new()
+            .with_system("system rules")
+            .with_developer("developer rules")
+            .with_user("question")
+            .with_message(Message::tool_result("call_1", "{\"ok\":true}")),
+    )
+    .with_tools([LmTool {
+        name: "lookup".to_owned(),
+        description: Some("look up case facts".to_owned()),
+        input_schema: serde_json::json!({"type": "object"}),
+        requires_capability_action: Some("case.read".to_owned()),
+    }])
+    .with_output(OutputMode::FinalMessage {
+        max_bytes: Some(4096),
+    });
+
+    let wire = lm.to_wire_request(&request).unwrap();
+
+    assert_eq!(wire["instructions"], "system rules\n\ndeveloper rules");
+    assert_eq!(wire["input"].as_array().unwrap().len(), 2);
+    assert_eq!(wire["input"][0]["role"], "user");
+    assert_eq!(wire["input"][1]["type"], "function_call_output");
+    assert_eq!(wire["input"][1]["call_id"], "call_1");
+    assert_eq!(wire["input"][1]["output"], "{\"ok\":true}");
+    assert_eq!(wire["tools"][0]["type"], "function");
+    assert_eq!(wire["tools"][0]["name"], "lookup");
+    assert_eq!(wire["tools"][0]["parameters"]["type"], "object");
+    assert_eq!(wire["text"]["format"]["type"], "text");
 }
 
 #[test]
@@ -206,6 +241,7 @@ fn openai_request_lowers_system_to_instructions_and_prompt_cache_key() {
         prompt_cache_key: Some("stable-suite".to_owned()),
         store: Some(false),
         metadata: Default::default(),
+        values: Default::default(),
     });
 
     let wire = lm.to_wire_request(&request).unwrap();
@@ -240,6 +276,7 @@ fn openai_request_lowers_sampling_metadata_and_output_modes() {
         prompt_cache_key: None,
         store: None,
         metadata,
+        values: Default::default(),
     });
 
     let wire = lm.to_wire_request(&request).unwrap();
