@@ -903,6 +903,16 @@ rows:
       seam while manifest.mcp_status is not_in_v1.
     fake_pass_rejected: Rust in-process trait calls labeled as ACP.
     minimum_closeout_level: integrated_surface
+    positive_test_evidence:
+      - crates/leaven-public-seam/tests/acp_profile.rs::acp_profile_validates_pinned_stdio_leaven_methods_and_bounded_updates
+    negative_test_evidence:
+      - crates/leaven-public-seam/tests/acp_profile.rs::acp_profile_rejects_mcp_latest_nonstdio_human_granting_and_unbounded_updates
+      - crates/leaven-public-seam/tests/contract_package.rs::acp_profile_rejects_mcp_bridge_legacy_worker_protocol_and_watch_runtime
+    implementation_evidence:
+      - crates/leaven-public-seam/src/acp_profile.rs::AcpProfileDocument
+      - crates/leaven-public-seam/src/acp_profile.rs::AcpExtensionMethod
+      - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_acp_profile_document
+      - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::v1_scope
     status: pending
 
   - id: ps1.acp.auth_permissions
@@ -923,6 +933,17 @@ rows:
       information without executing the requested operation.
     fake_pass_rejected: Prompting a human or always granting ACP permissions during tests.
     minimum_closeout_level: semantic_denial
+    positive_test_evidence:
+      - crates/leaven-public-seam/tests/acp_profile.rs::acp_permissions_use_capability_grants_and_return_planerror_redactions
+    negative_test_evidence:
+      - crates/leaven-public-seam/tests/acp_profile.rs::acp_profile_rejects_mcp_latest_nonstdio_human_granting_and_unbounded_updates
+      - crates/leaven-public-seam/tests/acp_profile.rs::acp_permissions_use_capability_grants_and_return_planerror_redactions
+    implementation_evidence:
+      - crates/leaven-public-seam/src/acp_profile.rs::AcpPermissionRequest
+      - crates/leaven-public-seam/src/acp_profile.rs::AcpPermissionDecision
+      - crates/leaven-public-seam/src/acp_profile.rs::authorize_permission
+      - crates/leaven-public-seam/src/capability.rs::CapabilityDocument::authorize_grant
+      - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::authorize_acp_permission
     status: pending
 
   - id: ps1.acp.extension_results
@@ -940,6 +961,13 @@ rows:
       fingerprint are rejected by contract tests.
     fake_pass_rejected: Returning bare method-specific payloads over ACP.
     minimum_closeout_level: integrated_surface
+    positive_test_evidence:
+      - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_require_receipts_capability_fingerprint_and_data_classes
+    negative_test_evidence:
+      - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_require_receipts_capability_fingerprint_and_data_classes
+    implementation_evidence:
+      - crates/leaven-public-seam/src/acp_profile.rs::AcpExtensionResultDocument
+      - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_acp_extension_result_document
     status: pending
 
   - id: ps1.acp.lifecycle_backpressure
@@ -956,6 +984,12 @@ rows:
       session cancellation.
     fake_pass_rejected: Fire-and-forget progress logs outside ACP lifecycle control.
     minimum_closeout_level: semantic_denial
+    positive_test_evidence:
+      - crates/leaven-public-seam/tests/acp_profile.rs::acp_profile_validates_pinned_stdio_leaven_methods_and_bounded_updates
+    negative_test_evidence:
+      - crates/leaven-public-seam/tests/acp_profile.rs::acp_profile_rejects_mcp_latest_nonstdio_human_granting_and_unbounded_updates
+    implementation_evidence:
+      - crates/leaven-public-seam/src/acp_profile.rs::AcpProfileDocument::default_max_inflight_updates
     status: pending
 
   - id: ps1.acp.no_mcp_v1
