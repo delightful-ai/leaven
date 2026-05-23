@@ -13,7 +13,7 @@ use leaven_evidence::{CaseAssessmentEvidence, OutputRecord, ScalarEvidence};
 use leaven_kernel::{BudgetSnapshot, Cost, EvaluationSetId, EvaluatorId, Fingerprint, Metered};
 
 use crate::compatibility::ScoringEvaluatorIdentity;
-use crate::evidence::ReportableOutputScope;
+use crate::evidence::{ReportableOutputDeclaration, ReportableOutputScope};
 use crate::{RunCase, RunError, RunOutput, RunProblem, Score, ScoreContext, ScoreError};
 
 type Runner<A, I, Out> = Arc<
@@ -100,7 +100,7 @@ pub struct JudgeScoreContext<A, I, T = NoTarget, Out = ()> {
     /// Point-in-time budget snapshot visible to the judge.
     pub budget: BudgetSnapshot,
     output_scope: ReportableOutputScope,
-    expected_output: Option<OutputRecord>,
+    expected_output: Option<ReportableOutputDeclaration>,
 }
 
 impl<A, I, T, Out> JudgeScoreContext<A, I, T, Out> {
@@ -109,7 +109,7 @@ impl<A, I, T, Out> JudgeScoreContext<A, I, T, Out> {
         outputs: Vec<JudgeCandidateOutput<A, Out>>,
         budget: BudgetSnapshot,
         output_scope: ReportableOutputScope,
-        expected_output: Option<OutputRecord>,
+        expected_output: Option<ReportableOutputDeclaration>,
     ) -> Self {
         Self {
             case,
@@ -572,16 +572,21 @@ where
     })
 }
 
-fn assessed_group_output<A, Out>(outputs: &[JudgeCandidateOutput<A, Out>]) -> Option<OutputRecord> {
+fn assessed_group_output<A, Out>(
+    outputs: &[JudgeCandidateOutput<A, Out>],
+) -> Option<ReportableOutputDeclaration> {
     let mut texts = Vec::with_capacity(outputs.len());
     let mut truncated = false;
     let mut metadata = None;
+    let mut explicit_candidate_output = false;
     for output in outputs {
+        let reportable = output.output.reportable_output()?;
+        explicit_candidate_output |= reportable.is_unbound_explicit_candidate_output();
         let OutputRecord::Inline {
             text,
             truncated: output_truncated,
             metadata: output_metadata,
-        } = output.output.reportable_output()?
+        } = reportable.record()
         else {
             return None;
         };
@@ -595,11 +600,16 @@ fn assessed_group_output<A, Out>(outputs: &[JudgeCandidateOutput<A, Out>]) -> Op
         truncated |= *output_truncated;
         texts.push(text.clone());
     }
-    Some(OutputRecord::Inline {
+    let record = OutputRecord::Inline {
         text: texts.join("|"),
         truncated,
         metadata: metadata.unwrap_or_else(leaven_evidence::OutputMetadata::public),
-    })
+    };
+    if explicit_candidate_output {
+        Some(ReportableOutputDeclaration::explicit(record))
+    } else {
+        Some(ReportableOutputDeclaration::derived(record))
+    }
 }
 
 fn evaluate_jobs<A, I, T, Out>(

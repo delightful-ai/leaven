@@ -1000,6 +1000,69 @@ fn scoring_evaluator_rejects_same_context_dummy_report_output() {
 }
 
 #[test]
+fn scoring_evaluator_rejects_typed_runner_candidate_labeled_dummy_declaration() {
+    #[derive(Clone, Debug)]
+    struct TypedPrediction(i32);
+
+    block_on(async {
+        let (mut graph, mut budget, candidate) = graph_with_seed();
+        let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
+        let evaluator = ScoringEvaluator::new(
+            Arc::new(vec![input_case(0, 2)]),
+            Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
+                async move {
+                    let answer = artifact.0 + *case.input();
+                    Ok(
+                        RunOutput::typed(TypedPrediction(answer)).with_reportable_output(
+                            OutputRecord::candidate_inline(
+                                "dummy output only present to satisfy schema",
+                            ),
+                        ),
+                    )
+                }
+                .boxed()
+            }),
+            Arc::new(
+                |ctx: ScoreContext<TextArtifact, i32, leaven_eval::NoTarget, TypedPrediction>| {
+                    async move {
+                        Ok(
+                            Score::new(f64::from(ctx.output.output.0), "typed").with_output(
+                                ctx.report_text_output(
+                                    "dummy output only present to satisfy schema",
+                                ),
+                            ),
+                        )
+                    }
+                    .boxed()
+                },
+            ),
+            &identity("typed-output-candidate-labeled-dummy-declaration-test"),
+        );
+
+        let error = evaluator
+            .evaluate(
+                request(
+                    ResolvedRequestKind::Independent {
+                        candidates: vec![candidate],
+                    },
+                    vec![CaseId::new(0)],
+                    AssessmentGranularity::PerCase,
+                ),
+                ctx.evaluation_context(StageId::from_evaluator(Evaluator::id(&evaluator))),
+            )
+            .await
+            .err()
+            .expect("typed candidate-output declaration must be derived from the typed output");
+
+        assert!(
+            error
+                .to_string()
+                .contains("runner output did not derive candidate output from typed output")
+        );
+    });
+}
+
+#[test]
 fn scoring_evaluator_rejects_mutated_context_dummy_report_output() {
     block_on(async {
         let (mut graph, mut budget, candidate) = graph_with_seed();
@@ -1361,6 +1424,83 @@ fn judging_evaluator_rejects_same_context_dummy_report_output() {
             error
                 .to_string()
                 .contains("reportable output did not match assessed output")
+        );
+    });
+}
+
+#[test]
+fn judging_evaluator_rejects_typed_runner_candidate_labeled_dummy_declaration() {
+    #[derive(Clone, Debug)]
+    struct TypedPrediction(i32);
+
+    block_on(async {
+        let (mut graph, mut budget, left) = graph_with_seed();
+        let right = {
+            let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
+            ctx.insert_seed(TextArtifact(50), 1).unwrap()
+        };
+        let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
+        let evaluator = JudgingEvaluator::new(
+            Arc::new(vec![input_case(0, 2)]),
+            Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
+                async move {
+                    let answer = artifact.0 + *case.input();
+                    Ok(
+                        RunOutput::typed(TypedPrediction(answer)).with_reportable_output(
+                            OutputRecord::candidate_inline(
+                                "dummy output only present to satisfy schema",
+                            ),
+                        ),
+                    )
+                }
+                .boxed()
+            }),
+            Arc::new(
+                |ctx: JudgeScoreContext<
+                    TextArtifact,
+                    i32,
+                    leaven_eval::NoTarget,
+                    TypedPrediction,
+                >| {
+                    async move {
+                        let rendered = ctx
+                            .outputs
+                            .iter()
+                            .map(|output| {
+                                let _ = output.output.output.0;
+                                "dummy output only present to satisfy schema"
+                            })
+                            .collect::<Vec<_>>()
+                            .join("|");
+                        Ok(Score::new(1.0, "judged").with_output(ctx.report_text_output(rendered)))
+                    }
+                    .boxed()
+                },
+            ),
+            &identity("judging-output-candidate-labeled-dummy-declaration-test"),
+        );
+
+        let error = evaluator
+            .evaluate(
+                request(
+                    ResolvedRequestKind::Pairwise {
+                        left,
+                        right,
+                        order: PairOrder::Ordered,
+                    },
+                    vec![CaseId::new(0)],
+                    AssessmentGranularity::PerCase,
+                ),
+                ctx.evaluation_context(StageId::from_evaluator(Evaluator::id(&evaluator))),
+            )
+            .await
+            .err()
+            .expect("typed candidate-output declarations must be derived from typed outputs");
+
+        assert!(
+            error
+                .to_string()
+                .contains("runner output did not derive candidate output from typed output")
         );
     });
 }
