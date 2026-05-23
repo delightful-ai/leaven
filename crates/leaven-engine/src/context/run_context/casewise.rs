@@ -146,17 +146,16 @@ impl<P: OptimizationProblem> RunContext<'_, P> {
                 granularity: request_granularity(&request),
                 purpose: request_purpose(&request),
             };
+            let evaluator_fingerprint = evaluator.fingerprint();
             let policy = evaluator.cache_policy(&resolved_request);
-            let cache_key = self.evaluation_cache_key(
-                evaluator.fingerprint(),
-                policy.clone(),
-                &resolved_request,
-            );
+            let cache_key =
+                self.evaluation_cache_key(evaluator_fingerprint, policy.clone(), &resolved_request);
             if let Some(assessment_ids) =
                 self.cached_assessment_ids(&policy, cache_key.as_ref().ok())
             {
                 let request_id = self.record_evaluation_request(
                     evaluator_id,
+                    evaluator_fingerprint,
                     request,
                     resolved_set,
                     candidate_count(&resolved_request),
@@ -216,11 +215,13 @@ impl<P: OptimizationProblem> RunContext<'_, P> {
             granularity: request_granularity(&request),
             purpose: request_purpose(&request),
         };
+        let evaluator_fingerprint = evaluator.fingerprint();
         let batch_policy = evaluator.cache_policy(&resolved_request);
         let batch_cache_key =
-            self.evaluation_cache_key(evaluator.fingerprint(), batch_policy, &resolved_request);
+            self.evaluation_cache_key(evaluator_fingerprint, batch_policy, &resolved_request);
         let request_id = self.record_evaluation_request(
             evaluator_id,
+            evaluator_fingerprint,
             request,
             resolved_set,
             candidate_count(&resolved_request),
