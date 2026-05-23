@@ -15,7 +15,7 @@ use leaven_core::{
 };
 use leaven_engine::{BudgetLedger, CachePolicy, Evaluator, RunContext, RunGraph};
 use leaven_eval::Case;
-use leaven_evidence::OutputRecord;
+use leaven_evidence::{DataClass, OutputRecord};
 use leaven_kernel::{
     Budget, CandidateId, CaseId, ContentId, Cost, EvaluatorId, Fingerprint,
     ResolvedEvaluationSetId, RunId, StageId, now,
@@ -225,10 +225,7 @@ fn scoring_evaluator_reports_per_candidate_cost_for_independent_batches() {
                 ..
             } if *case == CaseId::from_index(0)
         ));
-        assert_eq!(
-            evidence.output(),
-            &leaven_evidence::OutputRecord::inline("42")
-        );
+        assert_eq!(evidence.output(), &expected_candidate_output("42"));
         assert_eq!(evidence.feedback(), "ok");
         assert_eq!(
             evidence.trace(),
@@ -669,7 +666,7 @@ fn scoring_evaluator_preserves_typed_output_through_scoring_then_renders() {
             panic!("expected independent assessment");
         };
         assert!((evidence.score().score() - 42.0).abs() < f64::EPSILON);
-        assert_eq!(evidence.output(), &OutputRecord::inline("answer=42"));
+        assert_eq!(evidence.output(), &expected_candidate_output("answer=42"));
     });
 }
 
@@ -878,6 +875,53 @@ fn scoring_evaluator_rejects_same_context_dummy_report_output() {
 }
 
 #[test]
+fn scoring_evaluator_rejects_mutated_context_dummy_report_output() {
+    block_on(async {
+        let (mut graph, mut budget, candidate) = graph_with_seed();
+        let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
+        let evaluator = ScoringEvaluator::new(
+            Arc::new(vec![input_case(0, 2)]),
+            Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
+                async move { Ok(RunOutput::new((artifact.0 + *case.input()).to_string())) }.boxed()
+            }),
+            Arc::new(
+                |mut ctx: ScoreContext<TextArtifact, i32, leaven_eval::NoTarget, String>| {
+                    async move {
+                        ctx.output = RunOutput::new("dummy forged through mutable context");
+                        Ok(Score::new(0.0, "dummy").with_output(
+                            ctx.report_text_output("dummy forged through mutable context"),
+                        ))
+                    }
+                    .boxed()
+                },
+            ),
+            &identity("typed-output-mutated-context-dummy-output-test"),
+        );
+
+        let error = evaluator
+            .evaluate(
+                request(
+                    ResolvedRequestKind::Independent {
+                        candidates: vec![candidate],
+                    },
+                    vec![CaseId::new(0)],
+                    AssessmentGranularity::PerCase,
+                ),
+                ctx.evaluation_context(StageId::from_evaluator(Evaluator::id(&evaluator))),
+            )
+            .await
+            .err()
+            .expect("mutating scorer context must not update the assessed output");
+
+        assert!(
+            error
+                .to_string()
+                .contains("reportable output did not match assessed output")
+        );
+    });
+}
+
+#[test]
 fn scoring_evaluator_rejects_report_output_from_another_scoring_context() {
     use std::sync::Mutex;
 
@@ -994,7 +1038,7 @@ fn judging_evaluator_preserves_pairwise_and_listwise_report_outputs() {
             panic!("expected pairwise assessment");
         };
         assert_eq!((*pair_left, *pair_right), (left, right));
-        assert_eq!(evidence.output(), &OutputRecord::inline("42|52"));
+        assert_eq!(evidence.output(), &expected_candidate_output("42|52"));
 
         let listwise = evaluator
             .evaluate(
@@ -1018,7 +1062,7 @@ fn judging_evaluator_preserves_pairwise_and_listwise_report_outputs() {
             panic!("expected listwise assessment");
         };
         assert_eq!(candidates, &vec![left, right, third]);
-        assert_eq!(evidence.output(), &OutputRecord::inline("42|52|62"));
+        assert_eq!(evidence.output(), &expected_candidate_output("42|52|62"));
     });
 }
 
@@ -1297,9 +1341,19 @@ fn assert_projected_public_output(
             "summary": expected,
             "value": expected,
             "visibility": "public",
-            "data_classes": ["public"]
+            "data_classes": ["candidate.output", "public"]
         })
     );
+    assert!(
+        evidence
+            .output()
+            .data_classes()
+            .contains(&DataClass::candidate_output())
+    );
+}
+
+fn expected_candidate_output(output: impl Into<String>) -> OutputRecord {
+    OutputRecord::candidate_inline(output)
 }
 
 // Test helper. The scorer closure must produce a `Score` with context-scoped

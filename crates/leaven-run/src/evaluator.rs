@@ -784,9 +784,13 @@ mod tests {
             );
             assert_eq!(
                 outcome.evidence.output(),
-                &OutputRecord::inline("40:2|41:2")
+                &candidate_output_record("40:2|41:2")
             );
         });
+    }
+
+    fn candidate_output_record(output: impl Into<String>) -> OutputRecord {
+        OutputRecord::candidate_inline(output)
     }
 
     #[derive(Clone, Debug)]

@@ -29,7 +29,7 @@ impl RunOutput<String> {
     pub fn new(output: impl Into<String>) -> Self {
         let output = output.into();
         Self {
-            reportable_output: Some(OutputRecord::inline(output.clone())),
+            reportable_output: Some(candidate_output_record(output.clone())),
             output,
             cost: Cost::zero(),
             trace: Vec::new(),
@@ -78,7 +78,7 @@ impl<Out> RunOutput<Out> {
     /// Attaches an inline reportable text rendering for a typed runner output.
     #[must_use]
     pub fn with_reportable_text(self, output: impl Into<String>) -> Self {
-        self.with_reportable_output(OutputRecord::inline(output))
+        self.with_reportable_output(candidate_output_record(output))
     }
 
     pub(crate) fn reportable_output(&self) -> Option<&OutputRecord> {
@@ -262,15 +262,43 @@ impl ReportableOutput {
         let Some(expected) = self.expected else {
             return Err(ReportableOutputError::MissingAssessedOutput);
         };
-        if self.record != expected {
+        if !same_output_payload(&self.record, &expected) {
             return Err(ReportableOutputError::Unrelated);
         }
-        Ok(self.record)
+        Ok(expected)
     }
 }
 
 fn is_placeholder_output(record: &OutputRecord) -> bool {
     matches!(record, OutputRecord::Inline { text, .. } if text.trim().is_empty())
+}
+
+fn same_output_payload(reported: &OutputRecord, expected: &OutputRecord) -> bool {
+    match (reported, expected) {
+        (
+            OutputRecord::Inline {
+                text: reported,
+                truncated: reported_truncated,
+                ..
+            },
+            OutputRecord::Inline {
+                text: expected,
+                truncated: expected_truncated,
+                ..
+            },
+        ) => reported == expected && reported_truncated == expected_truncated,
+        (
+            OutputRecord::BlobRef {
+                reference: reported,
+                ..
+            },
+            OutputRecord::BlobRef {
+                reference: expected,
+                ..
+            },
+        ) => reported == expected,
+        _ => false,
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -486,6 +514,7 @@ pub struct ScoreContext<A, I, T = leaven_eval::NoTarget, Out = ()> {
     /// Point-in-time budget snapshot visible to the scorer.
     pub budget: BudgetSnapshot,
     output_scope: ReportableOutputScope,
+    expected_output: Option<OutputRecord>,
 }
 
 impl<A, I, T, Out> ScoreContext<A, I, T, Out> {
@@ -496,12 +525,14 @@ impl<A, I, T, Out> ScoreContext<A, I, T, Out> {
         budget: BudgetSnapshot,
         output_scope: ReportableOutputScope,
     ) -> Self {
+        let expected_output = output.reportable_output().cloned();
         Self {
             artifact,
             case,
             output,
             budget,
             output_scope,
+            expected_output,
         }
     }
 
@@ -511,7 +542,7 @@ impl<A, I, T, Out> ScoreContext<A, I, T, Out> {
         ReportableOutput::new(
             output,
             self.output_scope.clone(),
-            self.output.reportable_output().cloned(),
+            self.expected_output.clone(),
         )
     }
 
@@ -520,6 +551,10 @@ impl<A, I, T, Out> ScoreContext<A, I, T, Out> {
     pub fn report_text_output(&self, output: impl Into<String>) -> ReportableOutput {
         self.report_output(OutputRecord::inline(output))
     }
+}
+
+fn candidate_output_record(output: impl Into<String>) -> OutputRecord {
+    OutputRecord::candidate_inline(output)
 }
 
 #[cfg(test)]
