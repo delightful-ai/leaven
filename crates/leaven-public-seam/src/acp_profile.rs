@@ -44,6 +44,18 @@ impl AcpProfileDocument {
             "permission_model.denial",
         )?;
         let extension_methods = extension_methods(object.get("extension_methods"))?;
+        let advertised = extension_methods
+            .iter()
+            .map(|method| method.method.as_str())
+            .collect::<BTreeSet<_>>();
+        let locked = locked_extension_methods()
+            .into_iter()
+            .collect::<BTreeSet<_>>();
+        if advertised != locked {
+            return Err(invalid_acp(
+                "ACP profile must advertise exactly the locked Leaven V1 extension methods",
+            ));
+        }
         let flow_control = object
             .get("flow_control")
             .and_then(Value::as_object)
@@ -302,6 +314,52 @@ impl AcpExtensionResultDocument {
         })
     }
 
+    pub(crate) fn synthetic_plan_result(value: &Value) -> Result<Value, PublicSeamError> {
+        let object = value
+            .as_object()
+            .ok_or_else(|| invalid_acp("ACP extension result must be an object"))?;
+        let primary = object
+            .get("primary")
+            .ok_or_else(|| invalid_acp("ACP extension result must carry primary value"))?;
+        let primary_object = primary
+            .as_object()
+            .ok_or_else(|| invalid_acp("ACP extension primary must be an object"))?;
+        let graph_revision = primary_object
+            .get("graph_revision")
+            .and_then(Value::as_str)
+            .unwrap_or("rev_acp_extension_result");
+        let replayability = primary_object
+            .get("replayability")
+            .and_then(Value::as_str)
+            .unwrap_or("fully_managed");
+        Ok(json!({
+            "schema_version": "leaven.plan_result.v1",
+            "plan_id": "acp_extension_result",
+            "capability_fingerprint": required_string(
+                object.get("capability_fingerprint"),
+                "capability_fingerprint",
+            )?,
+            "policy_fingerprint": object
+                .get("policy_fingerprint")
+                .and_then(Value::as_str)
+                .unwrap_or("fp_policy_sha256_acp_extension"),
+            "base_revision": graph_revision,
+            "final_revision": graph_revision,
+            "replayability_summary": replayability,
+            "values": {
+                "primary": primary
+            },
+            "receipts": object
+                .get("receipts")
+                .ok_or_else(|| invalid_acp("ACP extension result must carry receipts"))?,
+            "redactions": object
+                .get("redactions")
+                .ok_or_else(|| invalid_acp("ACP extension result must carry redactions"))?,
+            "charges": [],
+            "errors": []
+        }))
+    }
+
     /// Extension method name.
     pub fn method(&self) -> &str {
         &self.method
@@ -405,7 +463,12 @@ fn extension_methods(value: Option<&Value>) -> Result<Vec<AcpExtensionMethod>, P
         }
         let required_action =
             required_string(entry.get("required_action"), "required_action")?.to_owned();
-        if required_action_for_method(&method) != required_action {
+        let Some(expected_action) = required_action_for_method(&method) else {
+            return Err(invalid_acp(format!(
+                "extension method `{method}` is not in the locked ACP profile"
+            )));
+        };
+        if expected_action != required_action {
             return Err(invalid_acp(format!(
                 "extension method `{method}` required_action does not match Leaven profile"
             )));
@@ -587,14 +650,44 @@ fn ensure_primary_receipt_is_carried(
     }
 }
 
-fn required_action_for_method(method: &str) -> &'static str {
+fn locked_extension_methods() -> [&'static str; 25] {
+    [
+        "leaven/graph.query",
+        "leaven/case.load",
+        "leaven/case.input",
+        "leaven/case.target",
+        "leaven/case.metadata",
+        "leaven/workspace.materialize",
+        "leaven/workspace.snapshot",
+        "leaven/workspace.list",
+        "leaven/workspace.read_file",
+        "leaven/workspace.stat",
+        "leaven/workspace.digest",
+        "leaven/workspace.git_log",
+        "leaven/workspace.git_diff",
+        "leaven/workspace.git_status",
+        "leaven/workspace.capture_artifacts",
+        "leaven/workspace.release",
+        "leaven/lm.complete",
+        "leaven/agent.run",
+        "leaven/sandbox.exec",
+        "leaven/human.review",
+        "leaven/proposal.submit_batch",
+        "leaven/proposal.apply",
+        "leaven/assessment.submit",
+        "leaven/evaluation.request",
+        "leaven/event.emit",
+    ]
+}
+
+fn required_action_for_method(method: &str) -> Option<&'static str> {
     match method {
-        "leaven/graph.query" => "graph.query",
+        "leaven/graph.query" => Some("graph.query"),
         "leaven/case.load"
         | "leaven/case.input"
         | "leaven/case.target"
-        | "leaven/case.metadata" => "case.read",
-        "leaven/workspace.materialize" => "workspace.materialize",
+        | "leaven/case.metadata" => Some("case.read"),
+        "leaven/workspace.materialize" => Some("workspace.materialize"),
         "leaven/workspace.snapshot"
         | "leaven/workspace.list"
         | "leaven/workspace.read_file"
@@ -603,18 +696,18 @@ fn required_action_for_method(method: &str) -> &'static str {
         | "leaven/workspace.git_log"
         | "leaven/workspace.git_diff"
         | "leaven/workspace.git_status"
-        | "leaven/workspace.capture_artifacts" => "workspace.read",
-        "leaven/workspace.release" => "workspace.release",
-        "leaven/lm.complete" => "lm.complete",
-        "leaven/agent.run" => "agent.run",
-        "leaven/sandbox.exec" => "sandbox.exec",
-        "leaven/human.review" => "human.review",
-        "leaven/proposal.submit_batch" => "proposal.submit_batch",
-        "leaven/proposal.apply" => "proposal.apply_batch",
-        "leaven/assessment.submit" => "assessment.submit",
-        "leaven/evaluation.request" => "evaluation.request",
-        "leaven/event.emit" => "event.emit",
-        _ => "extension.call",
+        | "leaven/workspace.capture_artifacts" => Some("workspace.read"),
+        "leaven/workspace.release" => Some("workspace.release"),
+        "leaven/lm.complete" => Some("lm.complete"),
+        "leaven/agent.run" => Some("agent.run"),
+        "leaven/sandbox.exec" => Some("sandbox.exec"),
+        "leaven/human.review" => Some("human.review"),
+        "leaven/proposal.submit_batch" => Some("proposal.submit_batch"),
+        "leaven/proposal.apply" => Some("proposal.apply_batch"),
+        "leaven/assessment.submit" => Some("assessment.submit"),
+        "leaven/evaluation.request" => Some("evaluation.request"),
+        "leaven/event.emit" => Some("event.emit"),
+        _ => None,
     }
 }
 

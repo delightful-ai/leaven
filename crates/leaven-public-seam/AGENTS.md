@@ -85,9 +85,10 @@ session lifecycle, authentication handshake, permission loop, or worker runtime.
 Crate-root exports for `AcpProfileDocument`, `AcpExtensionMethod`,
 `AcpPermissionRequest`, `AcpPermissionDecision`, and
 `AcpExtensionResultDocument` are advanced public seam contracts. They prove
-locked Leaven ACP profile semantics, programmatic permission decisions against
-capability grants, typed denial envelopes, and receipted extension-result
-envelopes at the wire-contract layer only. They are not an ACP process
+locked Leaven ACP profile semantics, including the exact V1 extension-method
+set; programmatic permission decisions against capability grants; typed denial
+envelopes; and schema-backed, hash-bound extension-result envelopes at the
+wire-contract layer only. They are not an ACP process
 implementation, session lifecycle, transport backpressure loop, engine-client
 runtime, worker-agent runtime, provider call, or graph mutation route.
 
@@ -236,13 +237,15 @@ backpressure, or runtime watch support.
   ACP version, stdio-first transport preference, Leaven-only extension methods,
   capability-action mapping, bounded update declarations, programmatic
   capability-grant permission decisions, `PlanError`/redaction denials,
-  receipted extension-result envelopes, method-specific primary value families,
-  receipt-category binding, primary receipt binding, and monotonic result
-  data-class coverage. It rejects MCP/private-process substitutes,
+  active-schema extension-result primary/receipt payloads, method-specific
+  primary value families, receipt-category binding, primary receipt binding,
+  JCS `result_hash` binding, and monotonic result data-class coverage. It
+  rejects MCP/private-process substitutes,
   unpinned/latest ACP versions, non-stdio-first transport drift,
   human/always-grant permission substitutes, unbounded update declarations,
   bare method-specific result payloads, cross-method payloads, wrong receipt
-  classes, unbound primary receipts, and result data-class gaps. It does not
+  classes, unschematized primary/receipt payloads, unbound or forged result
+  hashes, unbound primary receipts, and result data-class gaps. It does not
   prove ACP process startup, engine-client/worker-agent runtime inversion,
   cancellation, progress updates, backpressure behavior, provider calls, or
   worker lifecycle control.

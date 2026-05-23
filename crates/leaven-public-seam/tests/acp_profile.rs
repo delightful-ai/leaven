@@ -16,7 +16,10 @@ fn acp_profile_validates_pinned_stdio_leaven_methods_and_bounded_updates() {
         &["stdio_jsonrpc".to_owned(), "unix_socket_jsonrpc".to_owned()]
     );
     assert_eq!(profile.default_max_inflight_updates(), 32);
-    assert_eq!(profile.extension_methods().len(), 5);
+    assert_eq!(
+        profile.extension_methods().len(),
+        locked_profile_methods().len()
+    );
     assert_eq!(
         profile
             .method("leaven/proposal.apply")
@@ -50,6 +53,30 @@ fn acp_profile_rejects_mcp_latest_nonstdio_human_granting_and_unbounded_updates(
             .validate_acp_profile_document(&mcp_method)
             .unwrap_err(),
         PublicSeamError::ExampleValidation { .. } | PublicSeamError::InvalidScope { .. }
+    ));
+
+    let mut private_process = acp_profile();
+    private_process["extension_methods"]
+        .as_array_mut()
+        .unwrap()
+        .push(extension_method("leaven/private.process", "extension.call"));
+    assert!(matches!(
+        package
+            .validate_acp_profile_document(&private_process)
+            .unwrap_err(),
+        PublicSeamError::InvalidScope { .. }
+    ));
+
+    let mut missing_locked_method = acp_profile();
+    missing_locked_method["extension_methods"]
+        .as_array_mut()
+        .unwrap()
+        .pop();
+    assert!(matches!(
+        package
+            .validate_acp_profile_document(&missing_locked_method)
+            .unwrap_err(),
+        PublicSeamError::InvalidScope { .. }
     ));
 
     let mut latest = acp_profile();
@@ -214,7 +241,9 @@ fn acp_extension_results_require_receipts_capability_fingerprint_and_data_classe
         package
             .validate_acp_extension_result_document(&missing_receipts)
             .unwrap_err(),
-        PublicSeamError::InvalidScope { .. }
+        PublicSeamError::ExampleValidation { .. }
+            | PublicSeamError::InvalidPlanResult { .. }
+            | PublicSeamError::InvalidScope { .. }
     ));
 
     let mut missing_classes = extension_result();
@@ -223,7 +252,7 @@ fn acp_extension_results_require_receipts_capability_fingerprint_and_data_classe
         package
             .validate_acp_extension_result_document(&missing_classes)
             .unwrap_err(),
-        PublicSeamError::InvalidScope { .. }
+        PublicSeamError::ExampleValidation { .. } | PublicSeamError::InvalidScope { .. }
     ));
 
     let mut missing_capability = extension_result();
@@ -251,6 +280,18 @@ fn acp_extension_results_require_receipts_capability_fingerprint_and_data_classe
             .unwrap_err(),
         PublicSeamError::InvalidScope { .. }
     ));
+
+    let mut missing_schema_required_value = extension_result();
+    missing_schema_required_value["primary"]
+        .as_object_mut()
+        .unwrap()
+        .remove("message");
+    assert!(matches!(
+        package
+            .validate_acp_extension_result_document(&missing_schema_required_value)
+            .unwrap_err(),
+        PublicSeamError::ExampleValidation { .. } | PublicSeamError::InvalidPlanResult { .. }
+    ));
 }
 
 #[test]
@@ -261,7 +302,7 @@ fn acp_extension_results_bind_worker_methods_to_primary_kinds_and_receipts() {
         (
             "leaven/workspace.materialize",
             workspace_handle_primary(),
-            call_receipt("workspace_materialize", "wscall_materialize"),
+            call_receipt("workspace_materialize", "wrec_materialize"),
         ),
         (
             "leaven/workspace.read_file",
@@ -281,7 +322,7 @@ fn acp_extension_results_bind_worker_methods_to_primary_kinds_and_receipts() {
         (
             "leaven/sandbox.exec",
             sandbox_exec_primary(),
-            call_receipt("sandbox_exec", "sandboxrec_acp"),
+            call_receipt("sandbox_exec", "execrec_acp"),
         ),
     ] {
         let result = package
@@ -312,20 +353,24 @@ fn acp_extension_results_reject_cross_method_payloads_unbound_receipts_and_data_
         package
             .validate_acp_extension_result_document(&wrong_primary)
             .unwrap_err(),
-        PublicSeamError::InvalidScope { .. }
+        PublicSeamError::ExampleValidation { .. }
+            | PublicSeamError::InvalidPlanResult { .. }
+            | PublicSeamError::InvalidScope { .. }
     ));
 
     let wrong_receipt = extension_result_for(
         "leaven/sandbox.exec",
         &sandbox_exec_primary(),
-        &call_receipt("agent_run", "sandboxrec_acp"),
+        &call_receipt("agent_run", "execrec_acp"),
         &["public"],
     );
     assert!(matches!(
         package
             .validate_acp_extension_result_document(&wrong_receipt)
             .unwrap_err(),
-        PublicSeamError::InvalidScope { .. }
+        PublicSeamError::ExampleValidation { .. }
+            | PublicSeamError::InvalidPlanResult { .. }
+            | PublicSeamError::InvalidScope { .. }
     ));
 
     let mut unbound_receipt = extension_result_for(
@@ -339,7 +384,9 @@ fn acp_extension_results_reject_cross_method_payloads_unbound_receipts_and_data_
         package
             .validate_acp_extension_result_document(&unbound_receipt)
             .unwrap_err(),
-        PublicSeamError::InvalidScope { .. }
+        PublicSeamError::ExampleValidation { .. }
+            | PublicSeamError::InvalidPlanResult { .. }
+            | PublicSeamError::InvalidScope { .. }
     ));
 
     let data_class_gap = extension_result_for(
@@ -353,6 +400,16 @@ fn acp_extension_results_reject_cross_method_payloads_unbound_receipts_and_data_
             .validate_acp_extension_result_document(&data_class_gap)
             .unwrap_err(),
         PublicSeamError::InvalidScope { .. }
+    ));
+
+    let mut forged_same_kind_receipt = extension_result();
+    forged_same_kind_receipt["receipts"][0]["result_hash"] =
+        json!("fp_result_sha256_same_kind_unbound");
+    assert!(matches!(
+        package
+            .validate_acp_extension_result_document(&forged_same_kind_receipt)
+            .unwrap_err(),
+        PublicSeamError::InvalidPlanResult { .. }
     ));
 }
 
@@ -374,13 +431,7 @@ fn acp_profile() -> Value {
             "answer": "programmatic capability grant check",
             "denial": "PlanError + Redaction"
         },
-        "extension_methods": [
-            extension_method("leaven/lm.complete", "lm.complete"),
-            extension_method("leaven/agent.run", "agent.run"),
-            extension_method("leaven/sandbox.exec", "sandbox.exec"),
-            extension_method("leaven/workspace.read_file", "workspace.read"),
-            extension_method("leaven/proposal.apply", "proposal.apply_batch")
-        ],
+        "extension_methods": locked_profile_methods(),
         "flow_control": {
             "bounded_channel_required": true,
             "default_max_inflight_updates": 32,
@@ -388,6 +439,36 @@ fn acp_profile() -> Value {
             "heartbeat_ms": 1000
         }
     })
+}
+
+fn locked_profile_methods() -> Vec<Value> {
+    vec![
+        extension_method("leaven/graph.query", "graph.query"),
+        extension_method("leaven/case.load", "case.read"),
+        extension_method("leaven/case.input", "case.read"),
+        extension_method("leaven/case.target", "case.read"),
+        extension_method("leaven/case.metadata", "case.read"),
+        extension_method("leaven/workspace.materialize", "workspace.materialize"),
+        extension_method("leaven/workspace.snapshot", "workspace.read"),
+        extension_method("leaven/workspace.list", "workspace.read"),
+        extension_method("leaven/workspace.read_file", "workspace.read"),
+        extension_method("leaven/workspace.stat", "workspace.read"),
+        extension_method("leaven/workspace.digest", "workspace.read"),
+        extension_method("leaven/workspace.git_log", "workspace.read"),
+        extension_method("leaven/workspace.git_diff", "workspace.read"),
+        extension_method("leaven/workspace.git_status", "workspace.read"),
+        extension_method("leaven/workspace.capture_artifacts", "workspace.read"),
+        extension_method("leaven/workspace.release", "workspace.release"),
+        extension_method("leaven/lm.complete", "lm.complete"),
+        extension_method("leaven/agent.run", "agent.run"),
+        extension_method("leaven/sandbox.exec", "sandbox.exec"),
+        extension_method("leaven/human.review", "human.review"),
+        extension_method("leaven/proposal.submit_batch", "proposal.submit_batch"),
+        extension_method("leaven/proposal.apply", "proposal.apply_batch"),
+        extension_method("leaven/assessment.submit", "assessment.submit"),
+        extension_method("leaven/evaluation.request", "evaluation.request"),
+        extension_method("leaven/event.emit", "event.emit"),
+    ]
 }
 
 fn extension_method(method: &str, action: &str) -> Value {
@@ -501,14 +582,32 @@ fn extension_result_for(
     receipt: &Value,
     data_classes: &[&str],
 ) -> Value {
-    json!({
+    let mut result = json!({
         "method": method,
         "primary": primary,
         "receipts": [receipt],
         "redactions": [],
         "capability_fingerprint": "fp_cap_sha256_acp",
         "data_classes": data_classes
-    })
+    });
+    let schema_version = match result["receipts"][0]["kind"].as_str().unwrap() {
+        "query" => "leaven.plan_query_result.v1",
+        "call" => "leaven.plan_call_result.v1",
+        "write" => "leaven.plan_write_result.v1",
+        other => panic!("unexpected receipt kind {other}"),
+    };
+    let op_name = result["receipts"][0]["op_var"]
+        .as_str()
+        .unwrap_or("primary");
+    result["receipts"][0]["result_hash"] = json!(prefixed_jcs_hash(
+        "fp_result_sha256_",
+        &json!({
+            "schema_version": schema_version,
+            "name": op_name,
+            "value": result["primary"]
+        }),
+    ));
+    result
 }
 
 fn lm_response_primary() -> Value {
@@ -528,13 +627,13 @@ fn lm_response_primary() -> Value {
 fn workspace_handle_primary() -> Value {
     json!({
         "kind": "workspace_handle",
-        "workspace": "workspace_acp",
+        "workspace": "ws_acp",
         "lifetime": "stage_call",
         "released": false,
         "graph_revision": "rev_acp",
         "data_classes": ["workspace.file"],
         "replayability": "fully_managed",
-        "receipt": "wscall_materialize"
+        "receipt": "wrec_materialize"
     })
 }
 
@@ -569,7 +668,7 @@ fn sandbox_exec_primary() -> Value {
         "graph_revision": "rev_acp",
         "data_classes": ["public"],
         "replayability": "fully_managed",
-        "receipt": "sandboxrec_acp"
+        "receipt": "execrec_acp"
     })
 }
 
@@ -602,6 +701,13 @@ fn query_receipt(receipt: &str) -> Value {
         "read_scope_fingerprint": "fp_scope_sha256_acp",
         "projection_fingerprint": "fp_projection_sha256_acp"
     })
+}
+
+fn prefixed_jcs_hash(prefix: &str, value: &Value) -> String {
+    format!(
+        "{prefix}{}",
+        jcs_canonicalize::sha256_jcs_hex(value).unwrap()
+    )
 }
 
 fn workspace_root() -> std::path::PathBuf {

@@ -903,12 +903,11 @@ rows:
       seam while manifest.mcp_status is not_in_v1.
     fake_pass_rejected: Rust in-process trait calls labeled as ACP.
     minimum_closeout_level: integrated_surface
-    positive_test_evidence:
+    partial_contract_test_evidence:
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_profile_validates_pinned_stdio_leaven_methods_and_bounded_updates
-    negative_test_evidence:
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_profile_rejects_mcp_latest_nonstdio_human_granting_and_unbounded_updates
       - crates/leaven-public-seam/tests/contract_package.rs::acp_profile_rejects_mcp_bridge_legacy_worker_protocol_and_watch_runtime
-    implementation_evidence:
+    partial_contract_implementation_evidence:
       - crates/leaven-public-seam/src/acp_profile.rs::AcpProfileDocument
       - crates/leaven-public-seam/src/acp_profile.rs::AcpExtensionMethod
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_acp_profile_document
@@ -962,13 +961,12 @@ rows:
       fingerprint are rejected by contract tests.
     fake_pass_rejected: Returning bare method-specific payloads over ACP.
     minimum_closeout_level: integrated_surface
-    positive_test_evidence:
+    partial_contract_test_evidence:
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_require_receipts_capability_fingerprint_and_data_classes
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_bind_worker_methods_to_primary_kinds_and_receipts
-    negative_test_evidence:
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_require_receipts_capability_fingerprint_and_data_classes
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_reject_cross_method_payloads_unbound_receipts_and_data_class_gaps
-    implementation_evidence:
+    partial_contract_implementation_evidence:
       - crates/leaven-public-seam/src/acp_profile.rs::AcpExtensionResultDocument
       - crates/leaven-public-seam/src/acp_profile.rs::extension_result_contract
       - crates/leaven-public-seam/src/acp_profile.rs::validate_primary_kind
@@ -990,11 +988,10 @@ rows:
       session cancellation.
     fake_pass_rejected: Fire-and-forget progress logs outside ACP lifecycle control.
     minimum_closeout_level: semantic_denial
-    positive_test_evidence:
+    partial_contract_test_evidence:
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_profile_validates_pinned_stdio_leaven_methods_and_bounded_updates
-    negative_test_evidence:
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_profile_rejects_mcp_latest_nonstdio_human_granting_and_unbounded_updates
-    implementation_evidence:
+    partial_contract_implementation_evidence:
       - crates/leaven-public-seam/src/acp_profile.rs::AcpProfileDocument::default_max_inflight_updates
     status: pending
 
@@ -1048,14 +1045,13 @@ rows:
       workspace values cannot leak unlabeled data classes.
     fake_pass_rejected: Passing host filesystem paths as trusted workspace handles.
     minimum_closeout_level: semantic_denial
-    positive_test_evidence:
+    partial_contract_test_evidence:
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_bind_worker_methods_to_primary_kinds_and_receipts
-    negative_test_evidence:
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_reject_cross_method_payloads_unbound_receipts_and_data_class_gaps
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_permissions_use_capability_grants_and_return_planerror_redactions
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_permissions_deny_ungranted_models_workspace_ops_and_commands
       - crates/leaven-public-seam/tests/capability_document.rs::grant_enforcement_rejects_ungranted_models_workspace_ops_and_commands
-    implementation_evidence:
+    partial_contract_implementation_evidence:
       - crates/leaven-public-seam/src/acp_profile.rs::extension_result_contract
       - crates/leaven-public-seam/src/acp_profile.rs::validate_receipts_for_method
       - crates/leaven-public-seam/src/acp_profile.rs::AcpExtensionResultDocument
@@ -1080,14 +1076,13 @@ rows:
       marked deferred rather than silently downgraded.
     fake_pass_rejected: Shelling out to a provider-specific API with lost request metadata.
     minimum_closeout_level: semantic_denial
-    positive_test_evidence:
+    partial_contract_test_evidence:
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_bind_worker_methods_to_primary_kinds_and_receipts
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_permissions_use_capability_grants_and_return_planerror_redactions
-    negative_test_evidence:
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_reject_cross_method_payloads_unbound_receipts_and_data_class_gaps
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_permissions_deny_ungranted_models_workspace_ops_and_commands
       - crates/leaven-public-seam/tests/capability_document.rs::grant_enforcement_rejects_ungranted_models_workspace_ops_and_commands
-    implementation_evidence:
+    partial_contract_implementation_evidence:
       - crates/leaven-public-seam/src/acp_profile.rs::extension_result_contract
       - crates/leaven-public-seam/src/acp_profile.rs::validate_receipts_for_method
       - crates/leaven-public-seam/src/acp_profile.rs::AcpExtensionResultDocument
@@ -1112,13 +1107,12 @@ rows:
       ungranted surface fingerprint is rejected.
     fake_pass_rejected: Treating agent stdout as a proposal without receipts.
     minimum_closeout_level: semantic_denial
-    positive_test_evidence:
+    partial_contract_test_evidence:
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_bind_worker_methods_to_primary_kinds_and_receipts
       - crates/leaven-public-seam/tests/proposal_authority.rs::proposal_authority_accepts_effects_surfaces_schemas_and_apply_grants
-    negative_test_evidence:
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_reject_cross_method_payloads_unbound_receipts_and_data_class_gaps
       - crates/leaven-public-seam/tests/proposal_authority.rs::proposal_authority_rejects_submit_only_apply_and_ungranted_surface_or_effect
-    implementation_evidence:
+    partial_contract_implementation_evidence:
       - crates/leaven-public-seam/src/acp_profile.rs::extension_result_contract
       - crates/leaven-public-seam/src/acp_profile.rs::validate_receipts_for_method
       - crates/leaven-public-seam/src/acp_profile.rs::AcpExtensionResultDocument
@@ -1142,14 +1136,13 @@ rows:
       and execution policy before command execution.
     fake_pass_rejected: Running host shell commands and attaching logs afterward.
     minimum_closeout_level: semantic_denial
-    positive_test_evidence:
+    partial_contract_test_evidence:
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_bind_worker_methods_to_primary_kinds_and_receipts
-    negative_test_evidence:
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_reject_cross_method_payloads_unbound_receipts_and_data_class_gaps
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_permissions_use_capability_grants_and_return_planerror_redactions
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_permissions_deny_ungranted_models_workspace_ops_and_commands
       - crates/leaven-public-seam/tests/capability_document.rs::grant_enforcement_rejects_ungranted_models_workspace_ops_and_commands
-    implementation_evidence:
+    partial_contract_implementation_evidence:
       - crates/leaven-public-seam/src/acp_profile.rs::extension_result_contract
       - crates/leaven-public-seam/src/acp_profile.rs::validate_receipts_for_method
       - crates/leaven-public-seam/src/acp_profile.rs::AcpExtensionResultDocument
