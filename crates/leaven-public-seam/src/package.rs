@@ -13,6 +13,14 @@ use crate::{
     PublicSeamError,
 };
 
+mod support;
+
+use support::{
+    backtick_tokens, conformance_case_id, ensure_exists, evidence_is_only_known_fake_passes,
+    is_active_package_path, is_canonical_active_package, looks_like_denial_test, read_json,
+    read_manifest, read_yaml,
+};
+
 const ACTIVE_PACKAGE_RELATIVE: &str = "docs/specs/public-seam-v1";
 const CAPABILITY_EXAMPLE: &str = "evaluator_capability.v0.3.example.json";
 const REFLECT_PROPOSE_EXAMPLE: &str = "reflect_then_propose.example.json";
@@ -934,71 +942,6 @@ impl PublicSeamPackage {
     }
 }
 
-fn evidence_is_only_known_fake_passes(references: &[String]) -> bool {
-    references.iter().all(|reference| {
-        let path = reference
-            .split_once("::")
-            .map_or(reference.as_str(), |(path, _)| path);
-        path.starts_with("docs/specs/public-seam-v1/schemas/")
-            || path.starts_with("docs/specs/public-seam-v1/examples/")
-            || path == "docs/specs/public-seam-v1/conformance-matrix.yaml"
-            || path == "crates/leaven/tests/topology_contract.rs"
-    })
-}
-
-fn backtick_tokens(contents: &str) -> impl Iterator<Item = &str> {
-    contents
-        .split('`')
-        .enumerate()
-        .filter_map(|(index, token)| (index % 2 == 1).then_some(token))
-}
-
-fn conformance_case_id(kind: ConformanceTestKind, text: &str) -> String {
-    let prefix = match kind {
-        ConformanceTestKind::Reject => "reject",
-        ConformanceTestKind::Accept => "accept",
-    };
-    let mut words = Vec::new();
-    for raw in text.split(|character: char| !character.is_ascii_alphanumeric()) {
-        if raw.is_empty() {
-            continue;
-        }
-        let word = raw.to_ascii_lowercase();
-        if matches!(
-            word.as_str(),
-            "a" | "an" | "the" | "that" | "whose" | "with" | "without" | "and" | "or" | "of"
-        ) {
-            continue;
-        }
-        words.push(word);
-    }
-    format!("{prefix}_{}", words.join("_"))
-}
-
-fn looks_like_denial_test(symbol: &str) -> bool {
-    [
-        "reject",
-        "rejects",
-        "refuse",
-        "refuses",
-        "deny",
-        "denies",
-        "denial",
-        "invalid",
-        "missing",
-        "mismatch",
-        "outside",
-        "forbidden",
-        "cannot",
-        "fake",
-        "negative",
-        "only",
-        "not_",
-    ]
-    .iter()
-    .any(|term| symbol.contains(term))
-}
-
 #[derive(Clone, Debug)]
 struct SchemaRetriever {
     schemas: HashMap<String, Value>,
@@ -1013,89 +956,5 @@ impl Retrieve for SchemaRetriever {
             .get(uri.as_str())
             .cloned()
             .ok_or_else(|| format!("schema not found: {uri}").into())
-    }
-}
-
-fn is_active_package_path(path: &Path) -> bool {
-    path.file_name().and_then(|name| name.to_str()) == Some("public-seam-v1")
-        && path
-            .parent()
-            .and_then(Path::file_name)
-            .and_then(|name| name.to_str())
-            == Some("specs")
-        && path
-            .parent()
-            .and_then(Path::parent)
-            .and_then(Path::file_name)
-            .and_then(|name| name.to_str())
-            == Some("docs")
-}
-
-fn is_canonical_active_package(path: &Path) -> bool {
-    let Ok(path) = path.canonicalize() else {
-        return false;
-    };
-    let Ok(active) = source_repo_root()
-        .join(ACTIVE_PACKAGE_RELATIVE)
-        .canonicalize()
-    else {
-        return false;
-    };
-    path == active
-}
-
-fn source_repo_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .and_then(Path::parent)
-        .expect("leaven-public-seam lives under workspace/crates")
-        .to_path_buf()
-}
-
-fn read_manifest(path: &Path) -> Result<Manifest, PublicSeamError> {
-    read_json_value(path).and_then(|value| {
-        serde_json::from_value(value).map_err(|error| PublicSeamError::InvalidManifest {
-            message: error.to_string(),
-        })
-    })
-}
-
-fn read_json(path: impl AsRef<Path>) -> Result<Value, PublicSeamError> {
-    read_json_value(path.as_ref())
-}
-
-fn read_json_value(path: &Path) -> Result<Value, PublicSeamError> {
-    let text = read_to_string(path)?;
-    serde_json::from_str(&text).map_err(|source| PublicSeamError::Json {
-        path: path.to_path_buf(),
-        source,
-    })
-}
-
-fn read_yaml<T>(path: &Path) -> Result<T, PublicSeamError>
-where
-    T: for<'de> Deserialize<'de>,
-{
-    let text = read_to_string(path)?;
-    serde_yml::from_str(&text).map_err(|source| PublicSeamError::Yaml {
-        path: path.to_path_buf(),
-        source,
-    })
-}
-
-fn read_to_string(path: &Path) -> Result<String, PublicSeamError> {
-    fs::read_to_string(path).map_err(|source| PublicSeamError::Io {
-        path: path.to_path_buf(),
-        source,
-    })
-}
-
-fn ensure_exists(path: &Path) -> Result<(), PublicSeamError> {
-    if path.exists() {
-        Ok(())
-    } else {
-        Err(PublicSeamError::MissingContractFile {
-            path: path.to_path_buf(),
-        })
     }
 }
