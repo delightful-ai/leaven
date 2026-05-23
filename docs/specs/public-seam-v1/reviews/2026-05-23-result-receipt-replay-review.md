@@ -59,6 +59,12 @@ Current limits after fixture follow-up:
 - This still does not sign off `ps1.receipts.audit_currency`.
 - The row remains pending because the public-seam validator still proves supplied receipt shape/roles, not a runtime replay path that recomputes every operation hash from producer-owned preimages.
 
+Audit-currency value-binding follow-up:
+
+- `crates/leaven-public-seam/src/result.rs::validate_result_hash_bindings` now recomputes JCS/SHA-256 result hashes for typed values bound to query, call, and write receipts and rejects same-prefix hashes that do not match the value payload.
+- `crates/leaven-public-seam/tests/plan_result.rs::plan_result_rejects_same_prefix_result_hashes_that_do_not_bind_values` covers mismatched query, call, and write `result_hash` values that keep the `fp_result_sha256_` audit role prefix.
+- This is useful evidence for `ps1.receipts.audit_currency`, but the row remains pending until a follow-up adversarial review signs off the complete audit-currency proof, including whether request/op hashes are sufficiently producer-bound.
+
 Nested score-output data-class follow-up:
 
 - `crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_nested_score_output_data_class_gaps` now proves a result value containing assessment rows must include nested `score.output.data_classes` such as `candidate.output` in the value-level `data_classes`.

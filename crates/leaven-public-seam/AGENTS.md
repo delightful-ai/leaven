@@ -181,10 +181,11 @@ backpressure, or runtime watch support.
 - `tests/plan_result.rs` proves active-schema Plan Result envelopes carry typed
   success and failure values, query/call/write audit receipts, errors, charges,
   capability and policy fingerprints, receipt timing, data classes, and closed
-  `PlanError` values at the public-seam validation layer. It also rejects paid
-  failed calls whose linked charge receipts are missing, point elsewhere, or do
-  not cover the failed call cost. It does not prove an engine/run producer emits
-  those envelopes.
+  `PlanError` values at the public-seam validation layer. It also rejects
+  same-prefix `result_hash` values that do not bind the referenced query, call,
+  or write result value, and paid failed calls whose linked charge receipts are
+  missing, point elsewhere, or do not cover the failed call cost. It does not
+  prove an engine/run producer emits those envelopes.
 - `tests/plan_result_replayability.rs` proves assessment batch result values
   preserve per-assessment replayability and that plan-level replayability is a
   roll-up summary, not a single boolean or override.

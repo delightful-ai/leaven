@@ -63,7 +63,7 @@ fn plan_result_rejects_nested_score_output_data_class_gaps() {
 }
 
 fn evidence_backed_result() -> Value {
-    json!({
+    bind_result_hashes(json!({
         "schema_version": "leaven.plan_result.v1",
         "plan_id": "result_evidence001",
         "capability_fingerprint": "fp_cap_sha256_evidence",
@@ -155,7 +155,46 @@ fn evidence_backed_result() -> Value {
         "redactions": [],
         "charges": [],
         "errors": []
-    })
+    }))
+}
+
+fn bind_result_hashes(mut result: Value) -> Value {
+    let values = result["values"].as_object().unwrap().clone();
+    for receipt in result["receipts"].as_array_mut().unwrap() {
+        let receipt_id = receipt["receipt"].as_str().unwrap();
+        let Some((name, value)) = values.iter().find(|(_, value)| {
+            value
+                .as_object()
+                .and_then(|object| object.get("receipt"))
+                .and_then(Value::as_str)
+                == Some(receipt_id)
+        }) else {
+            continue;
+        };
+        let schema_version = match receipt["kind"].as_str().unwrap() {
+            "query" => "leaven.plan_query_result.v1",
+            "call" => "leaven.plan_call_result.v1",
+            "write" => "leaven.plan_write_result.v1",
+            other => panic!("unexpected receipt kind {other}"),
+        };
+        let op_name = receipt["op_var"].as_str().unwrap_or(name);
+        receipt["result_hash"] = json!(prefixed_jcs_hash(
+            "fp_result_sha256_",
+            &json!({
+                "schema_version": schema_version,
+                "name": op_name,
+                "value": value
+            }),
+        ));
+    }
+    result
+}
+
+fn prefixed_jcs_hash(prefix: &str, value: &Value) -> String {
+    format!(
+        "{prefix}{}",
+        jcs_canonicalize::sha256_jcs_hex(value).unwrap()
+    )
 }
 
 fn target_derived_evidence() -> Value {
