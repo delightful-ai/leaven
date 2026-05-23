@@ -62,6 +62,22 @@ fn plan_result_rejects_nested_score_output_data_class_gaps() {
     ));
 }
 
+#[test]
+fn plan_result_rejects_submit_assessment_result_hashes_that_do_not_bind_values() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut wrong_submit_assessments_hash = evidence_backed_result();
+    wrong_submit_assessments_hash["receipts"][2]["result_hash"] =
+        json!("fp_result_sha256_same_prefix_wrong_submit_assessments_value");
+
+    assert!(matches!(
+        package
+            .validate_plan_result_document(&wrong_submit_assessments_hash)
+            .unwrap_err(),
+        PublicSeamError::InvalidPlanResult { .. }
+    ));
+}
+
 fn evidence_backed_result() -> Value {
     bind_result_hashes(json!({
         "schema_version": "leaven.plan_result.v1",

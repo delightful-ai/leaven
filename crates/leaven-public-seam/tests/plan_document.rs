@@ -135,16 +135,12 @@ fn plan_execution_result_rejects_receipt_hashes_unbound_from_plan_preimages() {
         .clone();
     query_result["receipts"][0]["op_hash"] =
         json!("fp_query_sha256_same_prefix_wrong_query_preimage");
-    assert!(matches!(
-        package
-            .validate_plan_execution_result(
-                &latest_at_start_graph_query_plan(),
-                &context,
-                &query_result
-            )
-            .unwrap_err(),
-        PublicSeamError::InvalidPlan { .. }
-    ));
+    assert_plan_execution_result_rejected(
+        &package,
+        &latest_at_start_graph_query_plan(),
+        &context,
+        &query_result,
+    );
 
     let mut plan = typed_let_call_write_plan();
     plan["mode"] = json!({"kind": "execute"});
@@ -162,51 +158,98 @@ fn plan_execution_result_rejects_receipt_hashes_unbound_from_plan_preimages() {
     let mut wrong_call_request_hash = result.clone();
     wrong_call_request_hash["receipts"][0]["request_hash"] =
         json!("fp_request_sha256_same_prefix_wrong_call_preimage");
-    assert!(matches!(
-        package
-            .validate_plan_execution_result(&plan, &context, &wrong_call_request_hash)
-            .unwrap_err(),
-        PublicSeamError::InvalidPlan { .. }
-    ));
+    assert_plan_execution_result_rejected(&package, &plan, &context, &wrong_call_request_hash);
 
     let mut missing_call_op_var = result.clone();
     missing_call_op_var["receipts"][0]
         .as_object_mut()
         .unwrap()
         .remove("op_var");
-    assert!(matches!(
-        package
-            .validate_plan_execution_result(&plan, &context, &missing_call_op_var)
-            .unwrap_err(),
-        PublicSeamError::InvalidPlan { .. }
-    ));
+    assert_plan_execution_result_rejected(&package, &plan, &context, &missing_call_op_var);
 
     let mut wrong_write_request_hash = result.clone();
     wrong_write_request_hash["receipts"][1]["request_hash"] =
         json!("fp_request_sha256_same_prefix_wrong_write_preimage");
-    assert!(matches!(
-        package
-            .validate_plan_execution_result(&plan, &context, &wrong_write_request_hash)
-            .unwrap_err(),
-        PublicSeamError::InvalidPlan { .. }
-    ));
+    assert_plan_execution_result_rejected(&package, &plan, &context, &wrong_write_request_hash);
 
     let mut wrong_write_result_hash = result.clone();
     wrong_write_result_hash["receipts"][1]["result_hash"] =
         json!("fp_result_sha256_same_prefix_wrong_write_result");
-    assert!(matches!(
-        package
-            .validate_plan_execution_result(&plan, &context, &wrong_write_result_hash)
-            .unwrap_err(),
-        PublicSeamError::InvalidPlan { .. }
-    ));
+    assert_plan_execution_result_rejected(&package, &plan, &context, &wrong_write_result_hash);
 
     let mut tampered_plan = plan.clone();
     tampered_plan["ops"][1]["call"]["messages"][0]["content"][0]["text"] =
         json!("Say something else");
+    assert_plan_execution_result_rejected(&package, &tampered_plan, &context, &result);
+}
+
+#[test]
+fn plan_execution_result_rejects_missing_operation_receipts() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let context = plan_execution_context();
+
+    let mut plan = typed_let_call_write_plan();
+    plan["mode"] = json!({"kind": "execute"});
+    plan["commit"] = json!({
+        "kind": "graph_writes_atomic",
+        "on_stale": "reject"
+    });
+    let result = package
+        .execute_plan_document(&plan, &context, &mut RecordingPlanHost::default())
+        .unwrap()
+        .value()
+        .clone();
+
+    let mut missing_write_receipt = result;
+    missing_write_receipt["receipts"]
+        .as_array_mut()
+        .unwrap()
+        .remove(1);
+    assert_plan_execution_result_rejected(&package, &plan, &context, &missing_write_receipt);
+
+    let mut failed_host = RecordingPlanHost {
+        fail_lm: true,
+        ..RecordingPlanHost::default()
+    };
+    let failed_plan = execute_call_only_plan();
+    let mut failed_result = package
+        .execute_plan_document(&failed_plan, &context, &mut failed_host)
+        .unwrap()
+        .value()
+        .clone();
+    failed_result["receipts"] = json!([]);
+    failed_result["charges"] = json!([]);
+    failed_result["errors"] = json!([]);
+    assert_plan_execution_result_rejected(&package, &failed_plan, &context, &failed_result);
+
+    let mut missing_query_receipt = package
+        .execute_plan_document(
+            &latest_at_start_graph_query_plan(),
+            &context,
+            &mut RecordingPlanHost::default(),
+        )
+        .unwrap()
+        .value()
+        .clone();
+    missing_query_receipt["values"] = json!({});
+    missing_query_receipt["receipts"] = json!([]);
+    assert_plan_execution_result_rejected(
+        &package,
+        &latest_at_start_graph_query_plan(),
+        &context,
+        &missing_query_receipt,
+    );
+}
+
+fn assert_plan_execution_result_rejected(
+    package: &PublicSeamPackage,
+    plan: &Value,
+    context: &PlanExecutionContext,
+    result: &Value,
+) {
     assert!(matches!(
         package
-            .validate_plan_execution_result(&tampered_plan, &context, &result)
+            .validate_plan_execution_result(plan, context, result)
             .unwrap_err(),
         PublicSeamError::InvalidPlan { .. }
     ));

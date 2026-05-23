@@ -771,6 +771,14 @@ impl PublicSeamPackage {
         let plan_document = self.validate_plan_document(value)?;
         let result = crate::plan_execution::execute_plan(value, &plan_document, context, host)?;
         let document = self.validate_plan_result_document(&result)?;
+        if plan_document.mode_kind() != "replay" {
+            crate::plan_execution::validate_plan_result_receipts(
+                value,
+                &plan_document,
+                context,
+                &result,
+            )?;
+        }
         Ok(crate::PlanExecutionReport::new(result, document))
     }
 
