@@ -32,6 +32,7 @@ impl PlanResultDocument {
         )?;
         let receipt_kinds = inspect_receipts(parts.receipts)?;
         validate_submit_assessment_receipts(parts.receipts, &value_audit.assessment_batch_ids)?;
+        validate_failed_call_charges(parts.receipts, parts.charges)?;
         Ok(Self {
             plan_id: parts.plan_id.to_owned(),
             base_revision: parts.base_revision.to_owned(),
@@ -107,6 +108,7 @@ struct PlanResultParts<'a> {
     final_revision: &'a str,
     values: &'a serde_json::Map<String, Value>,
     receipts: &'a [Value],
+    charges: &'a [Value],
     error_count: usize,
     charge_count: usize,
 }
@@ -126,6 +128,11 @@ impl<'a> PlanResultParts<'a> {
                 .and_then(Value::as_array)
                 .map(Vec::as_slice)
                 .ok_or_else(|| invalid_result("plan result receipts must be an array"))?,
+            charges: object
+                .get("charges")
+                .and_then(Value::as_array)
+                .map(Vec::as_slice)
+                .ok_or_else(|| invalid_result("plan result charges must be an array"))?,
             error_count: array_len(object, "errors")?,
             charge_count: array_len(object, "charges")?,
         })
@@ -261,6 +268,46 @@ fn validate_submit_assessment_receipts(
     Ok(())
 }
 
+fn validate_failed_call_charges(
+    receipts: &[Value],
+    charges: &[Value],
+) -> Result<(), PublicSeamError> {
+    let charge_index = charge_index(charges)?;
+    for receipt in receipts {
+        let receipt = receipt
+            .as_object()
+            .ok_or_else(|| invalid_result("plan result receipt must be an object"))?;
+        if !is_failed_call_with_cost(receipt) {
+            continue;
+        }
+        let receipt_id = receipt_id(
+            receipt
+                .get("receipt")
+                .ok_or_else(|| invalid_result("call receipt must carry receipt id"))?,
+        )?;
+        let charge_receipts =
+            required_string_set(receipt.get("charge_receipts"), "charge_receipts")?;
+        if charge_receipts.is_empty() {
+            return Err(invalid_result(
+                "failed paid call must carry charge receipts",
+            ));
+        }
+        for charge in charge_receipts {
+            let Some(source) = charge_index.get(&charge) else {
+                return Err(invalid_result(format!(
+                    "failed paid call references missing charge receipt `{charge}`"
+                )));
+            };
+            if source != receipt_id {
+                return Err(invalid_result(format!(
+                    "charge receipt `{charge}` does not point back to call receipt `{receipt_id}`"
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
 fn submit_assessment_receipts(
     receipts: &[Value],
 ) -> Result<Vec<BTreeSet<String>>, PublicSeamError> {
@@ -279,6 +326,40 @@ fn submit_assessment_receipts(
         }
     }
     Ok(submit_assessments)
+}
+
+fn charge_index(charges: &[Value]) -> Result<BTreeMap<String, String>, PublicSeamError> {
+    let mut index = BTreeMap::new();
+    for charge in charges {
+        let charge = charge
+            .as_object()
+            .ok_or_else(|| invalid_result("charge receipt must be an object"))?;
+        let id = required_string(charge.get("receipt"), "charge.receipt")?.to_owned();
+        let source = receipt_id(
+            charge
+                .get("source_receipt")
+                .ok_or_else(|| invalid_result("charge receipt must carry source_receipt"))?,
+        )?
+        .to_owned();
+        if index.insert(id, source).is_some() {
+            return Err(invalid_result("duplicate charge receipt id"));
+        }
+    }
+    Ok(index)
+}
+
+fn is_failed_call_with_cost(receipt: &serde_json::Map<String, Value>) -> bool {
+    receipt.get("kind").and_then(Value::as_str) == Some("call")
+        && receipt.get("status").and_then(Value::as_str) == Some("failed")
+        && has_nonzero_cost(receipt.get("cost"))
+}
+
+fn has_nonzero_cost(cost: Option<&Value>) -> bool {
+    let Some(cost) = cost.and_then(Value::as_object) else {
+        return false;
+    };
+    cost.values()
+        .any(|value| value.as_i64().is_some_and(|n| n > 0))
 }
 
 fn receipt_index(receipts: &[Value]) -> Result<BTreeMap<String, String>, PublicSeamError> {
