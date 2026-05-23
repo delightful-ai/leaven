@@ -8,7 +8,7 @@ use serde_json::Value;
 
 use crate::{
     ConformanceMatrix, DeferredWatchReplacement, MatrixRowStatus, PinnedDialectEvaluator,
-    PlanDocument, PublicSeamError,
+    PlanDocument, PlanResultDocument, PublicSeamError,
 };
 
 const ACTIVE_PACKAGE_RELATIVE: &str = "docs/specs/public-seam-v1";
@@ -701,6 +701,15 @@ impl PublicSeamPackage {
     pub fn validate_plan_document(&self, value: &Value) -> Result<PlanDocument, PublicSeamError> {
         self.validate_arbitrary_value("leaven.plan.v1.schema.json", "/plan", value)?;
         PlanDocument::from_schema_valid_value(value)
+    }
+
+    /// Validates a Plan Result document through the active V1 schema and semantic seam checks.
+    pub fn validate_plan_result_document(
+        &self,
+        value: &Value,
+    ) -> Result<PlanResultDocument, PublicSeamError> {
+        self.validate_arbitrary_value("leaven.plan_result.v1.schema.json", "/plan_result", value)?;
+        PlanResultDocument::from_schema_valid_value(value)
     }
 
     /// Validates the V1 deferred-watch marker and its finite-diff Plan IR replacement.

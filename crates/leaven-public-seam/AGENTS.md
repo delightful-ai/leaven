@@ -85,6 +85,12 @@ mini-languages: RFC 6901 JSON Pointer, the Leaven RFC 9535 JSONPath subset, and
 `leaven.mustache.strict.v1`. It is not a full Plan IR executor, graph query
 engine, template-extension host, or authorization layer.
 
+Crate-root exports for `PlanResultDocument` and `Replayability` are advanced
+public seam contracts. They prove plan-result replayability roll-up and
+per-assessment replayability preservation at the wire-envelope layer only; they
+are not evaluator execution, runtime receipt production, graph mutation, or
+cache replay behavior.
+
 Crate-root export `DeferredWatchReplacement` is an advanced public seam
 contract. It proves that the V1 deferred watch marker can route only to a finite
 `consistency.since_revision` event-diff Plan IR document; it is not watch
@@ -107,6 +113,9 @@ backpressure, or runtime watch support.
   unpinned path syntax, non-subset JSONPath filters/functions/scripts, non-
   strict template dialects, partials, unescaped templates, delimiter changes,
   and custom-filter syntax.
+- `tests/plan_result_replayability.rs` proves assessment batch result values
+  preserve per-assessment replayability and that plan-level replayability is a
+  roll-up summary, not a single boolean or override.
 - `tests/capability_document.rs` proves opaque token handles resolve to
   structured capability documents and reject bare, missing, expired, revoked,
   or binding-mismatched tokens. It also proves grant-envelope authorization and
