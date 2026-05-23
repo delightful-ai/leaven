@@ -15,6 +15,7 @@ pub struct PlanDocument {
     pinned_pointer_count: usize,
     pinned_jsonpath_count: usize,
     strict_template_count: usize,
+    assessment_score_outputs: AssessmentScoreOutputUsage,
     mode_kind: String,
     commit_kind: String,
 }
@@ -48,6 +49,7 @@ impl PlanDocument {
             .map(ToOwned::to_owned);
         let mut events_since_revision_queries = 0;
         let mut dialect_usage = DialectUsage::default();
+        let mut assessment_score_outputs = AssessmentScoreOutputUsage::default();
         for op in ops {
             dialect_usage.inspect_value(op)?;
             let kind = required_string(op, "kind")?;
@@ -73,7 +75,12 @@ impl PlanDocument {
                     PlanOperationKind::Call
                 }
                 "write" => {
-                    ensure_nested_kind(op, "write", "write")?;
+                    let write = op
+                        .get("write")
+                        .ok_or_else(|| invalid_plan("write op is missing `write`"))?;
+                    if nested_kind(Some(write), "write")? == "submit_assessments" {
+                        assessment_score_outputs.inspect_submit_assessments(write)?;
+                    }
                     PlanOperationKind::Write
                 }
                 "extension" => {
@@ -101,6 +108,7 @@ impl PlanDocument {
             pinned_pointer_count: dialect_usage.pointers,
             pinned_jsonpath_count: dialect_usage.jsonpaths,
             strict_template_count: dialect_usage.templates,
+            assessment_score_outputs,
             mode_kind: nested_kind(object.get("mode"), "mode")?.to_owned(),
             commit_kind: nested_kind(object.get("commit"), "commit")?.to_owned(),
         })
@@ -156,6 +164,26 @@ impl PlanDocument {
         self.strict_template_count
     }
 
+    /// Number of assessment `Score.output` values semantically validated.
+    pub fn assessment_score_output_count(&self) -> usize {
+        self.assessment_score_outputs.total()
+    }
+
+    /// Number of independent assessment `Score.output` values semantically validated.
+    pub fn independent_assessment_score_output_count(&self) -> usize {
+        self.assessment_score_outputs.independent
+    }
+
+    /// Number of pairwise assessment `Score.output` values semantically validated.
+    pub fn pairwise_assessment_score_output_count(&self) -> usize {
+        self.assessment_score_outputs.pairwise
+    }
+
+    /// Number of listwise assessment `Score.output` values semantically validated.
+    pub fn listwise_assessment_score_output_count(&self) -> usize {
+        self.assessment_score_outputs.listwise
+    }
+
     /// Whether this plan is a finite event diff through `consistency.since_revision`.
     pub fn is_since_revision_event_diff(&self) -> bool {
         self.consistency_kind == "since_revision"
@@ -183,6 +211,85 @@ pub enum PlanOperationKind {
     Call,
     /// Staged graph mutation intent.
     Write,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+struct AssessmentScoreOutputUsage {
+    independent: usize,
+    pairwise: usize,
+    listwise: usize,
+}
+
+impl AssessmentScoreOutputUsage {
+    fn inspect_submit_assessments(&mut self, write: &Value) -> Result<(), PublicSeamError> {
+        let assessments = write
+            .as_object()
+            .and_then(|object| object.get("assessments"))
+            .and_then(Value::as_array)
+            .ok_or_else(|| invalid_plan("submit_assessments write must carry assessments"))?;
+        for assessment in assessments {
+            let object = assessment
+                .as_object()
+                .ok_or_else(|| invalid_plan("submit_assessments entries must be objects"))?;
+            let kind = object
+                .get("kind")
+                .and_then(Value::as_str)
+                .ok_or_else(|| invalid_plan("submit_assessments entries must carry kind"))?;
+            let output = object
+                .get("score")
+                .and_then(Value::as_object)
+                .and_then(|score| score.get("output"))
+                .and_then(Value::as_object)
+                .ok_or_else(|| {
+                    invalid_plan("submit_assessments score must carry a reportable output")
+                })?;
+            validate_score_output(output)?;
+            match kind {
+                "independent" => self.independent += 1,
+                "pairwise" => self.pairwise += 1,
+                "listwise" => self.listwise += 1,
+                other => return Err(invalid_plan(format!("unknown assessment kind `{other}`"))),
+            }
+        }
+        Ok(())
+    }
+
+    const fn total(&self) -> usize {
+        self.independent + self.pairwise + self.listwise
+    }
+}
+
+fn validate_score_output(output: &serde_json::Map<String, Value>) -> Result<(), PublicSeamError> {
+    if output
+        .get("summary")
+        .and_then(Value::as_str)
+        .is_some_and(|summary| !summary.trim().is_empty())
+    {
+        return Ok(());
+    }
+    match output.get("value") {
+        Some(Value::Null) => {
+            return Err(invalid_plan(
+                "submit_assessments Score.output value must not be null",
+            ));
+        }
+        Some(Value::String(text)) if text.trim().is_empty() => {}
+        Some(_) => return Ok(()),
+        None => {}
+    }
+    if output.get("blob_ref").is_some() {
+        return Ok(());
+    }
+    if output
+        .get("trace_refs")
+        .and_then(Value::as_array)
+        .is_some_and(|trace_refs| !trace_refs.is_empty())
+    {
+        return Ok(());
+    }
+    Err(invalid_plan(
+        "submit_assessments Score.output must carry reportable output content",
+    ))
 }
 
 #[derive(Default)]

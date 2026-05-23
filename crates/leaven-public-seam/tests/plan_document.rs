@@ -91,6 +91,59 @@ fn plan_ir_revision_modes_preserve_explicit_bases() {
     ));
 }
 
+#[test]
+fn submit_assessments_score_outputs_cover_all_assessment_shapes() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let document = package
+        .validate_plan_document(&submit_assessments_plan())
+        .unwrap();
+
+    assert_eq!(document.assessment_score_output_count(), 3);
+    assert_eq!(document.independent_assessment_score_output_count(), 1);
+    assert_eq!(document.pairwise_assessment_score_output_count(), 1);
+    assert_eq!(document.listwise_assessment_score_output_count(), 1);
+}
+
+#[test]
+fn submit_assessments_rejects_missing_or_placeholder_score_output() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut missing_output = submit_assessments_plan();
+    missing_output["ops"][0]["write"]["assessments"][0]["score"]
+        .as_object_mut()
+        .unwrap()
+        .remove("output");
+    assert!(matches!(
+        package.validate_plan_document(&missing_output).unwrap_err(),
+        PublicSeamError::ExampleValidation { .. }
+    ));
+
+    let mut blank_text = submit_assessments_plan();
+    blank_text["ops"][0]["write"]["assessments"][0]["score"]["output"] = json!({
+        "kind": "text",
+        "summary": "   ",
+        "visibility": "public",
+        "data_classes": ["public"]
+    });
+    assert!(matches!(
+        package.validate_plan_document(&blank_text).unwrap_err(),
+        PublicSeamError::InvalidPlan { .. }
+    ));
+
+    let mut null_json = submit_assessments_plan();
+    null_json["ops"][0]["write"]["assessments"][1]["score"]["output"] = json!({
+        "kind": "json",
+        "value": null,
+        "visibility": "public",
+        "data_classes": ["public"]
+    });
+    assert!(matches!(
+        package.validate_plan_document(&null_json).unwrap_err(),
+        PublicSeamError::InvalidPlan { .. }
+    ));
+}
+
 fn typed_let_call_write_plan() -> Value {
     json!({
         "schema_version": "leaven.plan.v1",
@@ -156,6 +209,130 @@ fn typed_let_call_write_plan() -> Value {
         "return": ["status"],
         "commit": {
             "kind": "no_graph_writes"
+        }
+    })
+}
+
+fn submit_assessments_plan() -> Value {
+    json!({
+        "schema_version": "leaven.plan.v1",
+        "plan_id": "planscoreoutput001",
+        "consistency": {
+            "kind": "latest_at_start"
+        },
+        "mode": {
+            "kind": "dry_run"
+        },
+        "ops": [
+            {
+                "kind": "write",
+                "name": "assessments",
+                "idempotency_key": "score-output-0001",
+                "write": {
+                    "kind": "submit_assessments",
+                    "evaluation_request_id": "evalreq_score_output",
+                    "assessments": [
+                        {
+                            "kind": "independent",
+                            "candidate": "cand_a",
+                            "target": {
+                                "case": "case_1"
+                            },
+                            "score": score_with_output("independent answer"),
+                            "evidence": evidence_envelope(),
+                            "replayability": "pure_read"
+                        },
+                        {
+                            "kind": "pairwise",
+                            "candidates": ["cand_a", "cand_b"],
+                            "target": {
+                                "case": "case_1"
+                            },
+                            "score": {
+                                "value": 0.5,
+                                "output": {
+                                    "kind": "json",
+                                    "value": {
+                                        "left": "answer a",
+                                        "right": "answer b"
+                                    },
+                                    "summary": "pairwise compared candidate outputs",
+                                    "visibility": "public",
+                                    "data_classes": ["candidate.output"]
+                                }
+                            },
+                            "preference": {
+                                "winner": "cand_a"
+                            },
+                            "evidence": evidence_envelope(),
+                            "replayability": "pure_read"
+                        },
+                        {
+                            "kind": "listwise",
+                            "candidates": ["cand_a", "cand_b", "cand_c"],
+                            "target": {
+                                "case": "case_1"
+                            },
+                            "score": {
+                                "value": 0.75,
+                                "output": {
+                                    "kind": "structured",
+                                    "value": [
+                                        {"candidate": "cand_a", "output": "answer a"},
+                                        {"candidate": "cand_b", "output": "answer b"},
+                                        {"candidate": "cand_c", "output": "answer c"}
+                                    ],
+                                    "summary": "listwise ranked candidate outputs",
+                                    "visibility": "public",
+                                    "data_classes": ["candidate.output"]
+                                }
+                            },
+                            "ranking": ["cand_a", "cand_b", "cand_c"],
+                            "evidence": evidence_envelope(),
+                            "replayability": "pure_read"
+                        }
+                    ]
+                }
+            }
+        ],
+        "return": ["assessments"],
+        "commit": {
+            "kind": "no_graph_writes"
+        }
+    })
+}
+
+fn score_with_output(summary: &'static str) -> Value {
+    json!({
+        "value": 1.0,
+        "output": {
+            "kind": "text",
+            "summary": summary,
+            "value": summary,
+            "visibility": "public",
+            "data_classes": ["candidate.output"]
+        }
+    })
+}
+
+fn evidence_envelope() -> Value {
+    json!({
+        "schema_version": "leaven.evidence_envelope.v1",
+        "target_derived": false,
+        "public": {
+            "data_classes": ["public"]
+        },
+        "redaction_policy": {
+            "optimizer": "score_only",
+            "reflector": "score_only",
+            "operator": "score_only"
+        },
+        "producer": {
+            "stage_call_id": "sc_score_output"
+        },
+        "source_receipts": {
+            "read": [],
+            "effect": []
         }
     })
 }
