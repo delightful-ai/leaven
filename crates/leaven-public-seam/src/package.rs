@@ -862,9 +862,10 @@ impl PublicSeamPackage {
         &self,
         profile: &crate::AcpProfileDocument,
         capability: &crate::CapabilityDocument,
+        session: &crate::AcpAuthenticatedSession,
         request: crate::AcpPermissionRequest,
     ) -> crate::AcpPermissionDecision {
-        crate::acp_profile::authorize_permission(profile, capability, request)
+        crate::acp_profile::authorize_permission(profile, capability, session, request)
     }
 
     /// Resolves ACP authenticate through the public-seam capability registry.

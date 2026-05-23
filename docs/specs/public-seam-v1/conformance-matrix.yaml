@@ -842,11 +842,16 @@ rows:
     minimum_closeout_level: semantic_denial
     positive_test_evidence:
       - crates/leaven-public-seam/tests/plan_document.rs::evaluator_target_reads_execute_case_query_load_with_query_receipts
+      - crates/leaven-run/tests/scoring_evaluator.rs::scoring_evaluator_hides_target_from_runner_and_loads_target_with_case_data_receipt
     negative_test_evidence:
       - crates/leaven-public-seam/tests/plan_document.rs::evaluator_target_reads_reject_missing_or_unbound_case_query_receipts
       - crates/leaven-public-seam/tests/plan_document.rs::evaluator_target_reads_reject_unrequested_target_material
       - crates/leaven-public-seam/tests/plan_document.rs::evaluator_target_reads_require_evaluator_capability_before_host_read
+      - crates/leaven-run/tests/scoring_evaluator.rs::scoring_evaluator_reports_per_candidate_cost_for_independent_batches
     implementation_evidence:
+      - crates/leaven-evidence/src/feedback.rs::CaseDataReadEvidence
+      - crates/leaven-run/src/evidence.rs::ScoreContext::load_target
+      - crates/leaven-run/src/evaluator.rs::JudgeScoreContext::load_target
       - crates/leaven-public-seam/src/plan_execution/queries.rs::PlanCaseQueryRequest
       - crates/leaven-public-seam/src/plan_execution/queries.rs::PlanCaseQueryOutcome
       - crates/leaven-public-seam/src/plan_execution/queries.rs::validate_case_query_authority
@@ -1018,8 +1023,11 @@ rows:
       - crates/leaven-public-seam/src/acp_profile.rs::authorize_permission
       - crates/leaven-public-seam/src/capability/registry.rs::CapabilityRegistry::resolve_opaque_for_new_operation
       - crates/leaven-public-seam/src/capability.rs::CapabilityDocument::authorize_grant
+      - docs/specs/public-seam-v1/schemas/leaven.acp_profile.v1.schema.json
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::authenticate_acp_session
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::authorize_acp_permission
+    review_evidence:
+      - docs/specs/public-seam-v1/reviews/2026-05-23-acp-auth-permissions-blocker-review.md
     status: pending
 
   - id: ps1.acp.extension_results

@@ -13,6 +13,7 @@ use leaven_evidence::{CaseAssessmentEvidence, OutputRecord, ScalarEvidence};
 use leaven_kernel::{BudgetSnapshot, Cost, EvaluationSetId, EvaluatorId, Fingerprint, Metered};
 
 use crate::compatibility::ScoringEvaluatorIdentity;
+use crate::evidence::CaseDataReadLog;
 use crate::evidence::{ReportableOutputDeclaration, ReportableOutputScope};
 use crate::{RunCase, RunError, RunOutput, RunProblem, Score, ScoreContext, ScoreError};
 
@@ -93,7 +94,7 @@ pub struct JudgeCandidateOutput<A, Out> {
 /// Scoring context for pairwise and listwise judging.
 #[derive(Clone, Debug)]
 pub struct JudgeScoreContext<A, I, T = NoTarget, Out = ()> {
-    /// Evaluation case with target-aware judge visibility.
+    /// Evaluation case visible to the judge.
     pub case: crate::ScoreCase<I, T>,
     /// Candidate outputs being judged together, in request order.
     pub outputs: Vec<JudgeCandidateOutput<A, Out>>,
@@ -101,6 +102,7 @@ pub struct JudgeScoreContext<A, I, T = NoTarget, Out = ()> {
     pub budget: BudgetSnapshot,
     output_scope: ReportableOutputScope,
     expected_output: Option<ReportableOutputDeclaration>,
+    case_data_reads: CaseDataReadLog,
 }
 
 impl<A, I, T, Out> JudgeScoreContext<A, I, T, Out> {
@@ -110,6 +112,7 @@ impl<A, I, T, Out> JudgeScoreContext<A, I, T, Out> {
         budget: BudgetSnapshot,
         output_scope: ReportableOutputScope,
         expected_output: Option<ReportableOutputDeclaration>,
+        case_data_reads: CaseDataReadLog,
     ) -> Self {
         Self {
             case,
@@ -117,7 +120,18 @@ impl<A, I, T, Out> JudgeScoreContext<A, I, T, Out> {
             budget,
             output_scope,
             expected_output,
+            case_data_reads,
         }
+    }
+
+    /// Loads the optional case target through the judge's audited case-data read path.
+    #[must_use]
+    pub fn load_target(&self) -> Option<&T> {
+        let target = self.case.target_material();
+        if target.is_some() {
+            self.case_data_reads.record_target_read(self.case.id());
+        }
+        target
     }
 
     /// Wraps a judged output record for this exact candidate-group/case context.
@@ -528,12 +542,14 @@ where
     }
     let output_scope = ReportableOutputScope::group(job.request_kind.candidates(), case_id);
     let expected_output = assessed_group_output(&outputs);
+    let case_data_reads = CaseDataReadLog::default();
     let mut score = scorer(JudgeScoreContext::new(
         crate::ScoreCase::from_case(&job.case),
         outputs,
         job.budget,
         output_scope.clone(),
         expected_output,
+        case_data_reads.clone(),
     ))
     .await
     .map_err(|source| {
@@ -561,13 +577,15 @@ where
             let message = source.to_string();
             EvaluationError::with_cost_source(message, cost.clone(), source)
         })?;
+    let case_data_reads = case_data_reads.snapshot();
     trace.extend(score.trace);
     Ok(JudgeEvaluationOutcome {
         case_index: job.case_index,
         case_id,
         request_kind: job.request_kind,
         evidence: CaseAssessmentEvidence::new(scalar, generated_output, score.feedback)
-            .with_trace(trace),
+            .with_trace(trace)
+            .with_case_data_reads(case_data_reads),
         cost,
     })
 }
@@ -662,12 +680,14 @@ where
             EvaluationError::with_cost_source("runner function failed", cost, source)
         })?;
     let output_scope = ReportableOutputScope::new(job.candidate, case_id);
+    let case_data_reads = CaseDataReadLog::default();
     let mut score = scorer(ScoreContext::new(
         job.artifact.clone(),
         score_case,
         output.clone(),
         job.budget.clone(),
         output_scope.clone(),
+        case_data_reads.clone(),
     ))
     .await
     .map_err(|source| {
@@ -695,6 +715,7 @@ where
             let message = source.to_string();
             EvaluationError::with_cost_source(message, cost.clone(), source)
         })?;
+    let case_data_reads = case_data_reads.snapshot();
     let trace = output
         .trace
         .into_iter()
@@ -705,7 +726,8 @@ where
         case_index: job.case_index,
         case_id,
         evidence: CaseAssessmentEvidence::new(scalar, generated_output, score.feedback)
-            .with_trace(trace),
+            .with_trace(trace)
+            .with_case_data_reads(case_data_reads),
         cost,
     })
 }

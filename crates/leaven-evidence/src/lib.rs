@@ -80,7 +80,7 @@ pub use command::{
     CommandRecord,
 };
 pub use diff::{DiffEvidence, RenderedDiff};
-pub use feedback::CaseAssessmentEvidence;
+pub use feedback::{CaseAssessmentEvidence, CaseDataReadEvidence};
 pub use json::JsonEvidence;
 pub use listwise::{ListwiseRankingEvidence, RankingItem};
 pub use mixed::MixedEvidence;

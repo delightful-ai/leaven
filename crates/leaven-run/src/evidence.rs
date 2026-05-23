@@ -1,7 +1,7 @@
 //! Public runner and scoring evidence shapes.
 
 use leaven_eval::Case;
-use leaven_evidence::{DataClass, OutputRecord};
+use leaven_evidence::{CaseDataReadEvidence, DataClass, OutputRecord};
 use leaven_kernel::{BudgetSnapshot, CandidateId, CaseId, Cost};
 
 /// Output produced by running one artifact on one case.
@@ -519,7 +519,32 @@ impl ScoreMetadataView {
     }
 }
 
-/// Target-aware case view passed to scoring closures.
+#[derive(Clone, Debug, Default)]
+pub struct CaseDataReadLog(std::sync::Arc<std::sync::Mutex<Vec<CaseDataReadEvidence>>>);
+
+impl CaseDataReadLog {
+    pub fn record_target_read(&self, case: CaseId) {
+        self.0
+            .lock()
+            .expect("case data read log lock was poisoned")
+            .push(CaseDataReadEvidence::new(
+                "case_query.load",
+                format!("qrec_case_{}_target", case.0),
+                case,
+                ["target"],
+                ["case.target"],
+            ));
+    }
+
+    pub fn snapshot(&self) -> Vec<CaseDataReadEvidence> {
+        self.0
+            .lock()
+            .expect("case data read log lock was poisoned")
+            .clone()
+    }
+}
+
+/// Case view passed to scoring closures.
 #[derive(Clone, Debug)]
 pub struct ScoreCase<I, T = leaven_eval::NoTarget> {
     id: CaseId,
@@ -554,9 +579,7 @@ impl<I, T> ScoreCase<I, T> {
         &self.input
     }
 
-    /// Optional reference target visible to the scorer.
-    #[must_use]
-    pub fn target(&self) -> Option<&T> {
+    pub(crate) fn target_material(&self) -> Option<&T> {
         self.target.as_ref()
     }
 
@@ -571,7 +594,7 @@ impl<I, T> ScoreCase<I, T> {
 pub struct ScoreContext<A, I, T = leaven_eval::NoTarget, Out = ()> {
     /// Artifact/candidate that was run.
     pub artifact: A,
-    /// Evaluation case with target-aware scorer visibility.
+    /// Evaluation case visible to the scorer.
     pub case: ScoreCase<I, T>,
     /// Runner output.
     pub output: RunOutput<Out>,
@@ -579,6 +602,7 @@ pub struct ScoreContext<A, I, T = leaven_eval::NoTarget, Out = ()> {
     pub budget: BudgetSnapshot,
     output_scope: ReportableOutputScope,
     expected_output: Option<ReportableOutputDeclaration>,
+    case_data_reads: CaseDataReadLog,
 }
 
 impl<A, I, T, Out> ScoreContext<A, I, T, Out> {
@@ -588,6 +612,7 @@ impl<A, I, T, Out> ScoreContext<A, I, T, Out> {
         output: RunOutput<Out>,
         budget: BudgetSnapshot,
         output_scope: ReportableOutputScope,
+        case_data_reads: CaseDataReadLog,
     ) -> Self {
         let expected_output = output.reportable_output().cloned();
         Self {
@@ -597,7 +622,22 @@ impl<A, I, T, Out> ScoreContext<A, I, T, Out> {
             budget,
             output_scope,
             expected_output,
+            case_data_reads,
         }
+    }
+
+    /// Loads the optional case target through the scorer's audited case-data read path.
+    ///
+    /// This is the scorer-side analogue of the public-seam `case_query.load`
+    /// target read: callers must make target access explicit, and the evaluator
+    /// attaches a target-read evidence record to the assessment.
+    #[must_use]
+    pub fn load_target(&self) -> Option<&T> {
+        let target = self.case.target_material();
+        if target.is_some() {
+            self.case_data_reads.record_target_read(self.case.id());
+        }
+        target
     }
 
     /// Wraps a generated output record for this exact scoring context.
