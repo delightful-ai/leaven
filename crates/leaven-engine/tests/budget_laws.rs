@@ -126,6 +126,90 @@ fn budget_ledger_enforces_aggregate_and_role_specific_custom_axes() {
 }
 
 #[test]
+fn budget_ledger_counts_mixed_runtime_roles_and_delegated_work_against_aggregate_axes() {
+    let mut ledger = BudgetLedger::new(
+        Budget::unlimited()
+            .with_axis_limit("usd_micro", 300_000.0)
+            .unwrap()
+            .with_axis_limit("lm.usd_micro", 100_000.0)
+            .unwrap()
+            .with_axis_limit("agent.usd_micro", 110_000.0)
+            .unwrap()
+            .with_axis_limit("sandbox.usd_micro", 70_000.0)
+            .unwrap()
+            .with_axis_limit("evaluator.usd_micro", 60_000.0)
+            .unwrap(),
+    );
+
+    for (stage, role, amount) in [
+        ("lm.complete", "lm", 80_000.0),
+        ("agent.run", "agent", 70_000.0),
+        ("sandbox.exec", "sandbox", 50_000.0),
+        ("evaluator.score", "evaluator", 40_000.0),
+        ("delegated.agent.run", "agent", 30_000.0),
+    ] {
+        ledger
+            .charge(
+                StageId::custom(stage),
+                usd_micro(amount).combine(&role_usd_micro(role, amount)),
+            )
+            .unwrap();
+    }
+
+    let snapshot = ledger.snapshot();
+    assert_eq!(
+        snapshot.spent.other.get("usd_micro").copied().unwrap(),
+        Amount::new(270_000.0).unwrap()
+    );
+    assert_eq!(
+        snapshot
+            .spent
+            .other
+            .get("agent.usd_micro")
+            .copied()
+            .unwrap(),
+        Amount::new(100_000.0).unwrap()
+    );
+    assert!(
+        snapshot
+            .stages
+            .contains_key(&StageId::custom("delegated.agent.run"))
+    );
+
+    let aggregate = ledger
+        .charge(
+            StageId::custom("human.review"),
+            usd_micro(31_000.0).combine(&role_usd_micro("human", 31_000.0)),
+        )
+        .unwrap_err();
+    assert_eq!(
+        aggregate.dimension,
+        BudgetDimension::Other("usd_micro".to_owned())
+    );
+    assert_eq!(
+        ledger
+            .snapshot()
+            .spent
+            .other
+            .get("usd_micro")
+            .copied()
+            .unwrap(),
+        Amount::new(270_000.0).unwrap()
+    );
+
+    let delegated_role = ledger
+        .charge(
+            StageId::custom("delegated.agent.run"),
+            usd_micro(1_000.0).combine(&role_usd_micro("agent", 11_000.0)),
+        )
+        .unwrap_err();
+    assert_eq!(
+        delegated_role.dimension,
+        BudgetDimension::Other("agent.usd_micro".to_owned())
+    );
+}
+
+#[test]
 fn budget_ledger_enforces_concurrent_call_reservations() {
     let mut ledger = BudgetLedger::new(Budget {
         concurrent_calls: Some(1),
