@@ -780,8 +780,8 @@ fn run_builder_refuses_runner_after_score_instead_of_silently_dropping_scorer() 
     let error = block_on(
         optimize(TextArtifact(40))
             .train_inputs(vec![TextCase(2)])
-            .score(|_ctx: ScoreContext<TextArtifact, TextCase>| async move {
-                Ok(Score::new(0.0, "ok").with_text_output(""))
+            .score(|ctx: ScoreContext<TextArtifact, TextCase>| async move {
+                Ok(Score::new(0.0, "ok").with_output(ctx.report_text_output("")))
             })
             .runner(|artifact, case| async move { text_runner(&artifact, &case) })
             .using(SeedBest::default())
@@ -820,7 +820,7 @@ fn run_builder_refuses_case_content_or_split_identity_mismatch() {
                         )),
                         "ok",
                     )
-                    .with_text_output(rendered))
+                    .with_output(ctx.report_text_output(rendered)))
                 },
             )
             .using(TargetSeedBest::default())
@@ -853,7 +853,7 @@ fn run_builder_refuses_case_content_or_split_identity_mismatch() {
                         )),
                         "ok",
                     )
-                    .with_text_output(rendered))
+                    .with_output(ctx.report_text_output(rendered)))
                 },
             )
             .using(TargetSeedBest::default())
@@ -984,8 +984,14 @@ fn run_builder_typed_output_uses_score_supplied_report_output() {
                     leaven_eval::NoTarget,
                     TypedPrediction,
                 >| async move {
-                    Ok(Score::new(f64::from(ctx.output.output.0), "typed")
-                        .with_text_output(format!("typed answer: {}", ctx.output.output.0)))
+                    Ok(
+                        Score::new(f64::from(ctx.output.output.0), "typed").with_output(
+                            ctx.report_text_output(format!(
+                                "typed answer: {}",
+                                ctx.output.output.0
+                            )),
+                        ),
+                    )
                 },
             )
             .using(SeedBest::default())
@@ -1564,7 +1570,7 @@ fn run_builder_preserves_case_envelope_ids_and_targets_score_only() {
                             f64::from(u8::from(rendered == target.0.to_string())),
                             "target checked",
                         )
-                        .with_text_output(rendered))
+                        .with_output(ctx.report_text_output(rendered)))
                     }
                 }
             })
@@ -2247,9 +2253,9 @@ fn text_runner(artifact: &TextArtifact, case: &RunCase<TextCase>) -> RunOutput<S
 async fn text_score(
     ctx: ScoreContext<TextArtifact, TextCase, leaven_eval::NoTarget, String>,
 ) -> Result<Score, ScoreError> {
-    let ScoreContext { case, output, .. } = ctx;
-    let value = output.output.parse::<f64>().unwrap();
-    Ok(Score::new(value, format!("case {}", case.input().0)).with_text_output(output.output))
+    let value = ctx.output.output.parse::<f64>().unwrap();
+    Ok(Score::new(value, format!("case {}", ctx.case.input().0))
+        .with_output(ctx.report_text_output(ctx.output.output.clone())))
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]

@@ -172,7 +172,7 @@ fn scoring_evaluator_reports_per_candidate_cost_for_independent_batches() {
                     async move {
                         let rendered = ctx.output.output.clone();
                         Ok(Score::new(rendered.parse::<f64>().unwrap(), "ok")
-                            .with_text_output(rendered)
+                            .with_output(ctx.report_text_output(rendered))
                             .with_trace("scorer accepted numeric output")
                             .with_cost(Cost::llm_calls(1)))
                     }
@@ -308,7 +308,7 @@ fn scoring_evaluator_hides_target_from_runner_and_passes_target_to_scorer() {
                                 f64::from(u8::from(rendered == target.answer.to_string())),
                                 "target checked",
                             )
-                            .with_text_output(rendered))
+                            .with_output(ctx.report_text_output(rendered)))
                         }
                         .boxed()
                     },
@@ -495,7 +495,7 @@ fn scoring_evaluator_passes_budget_snapshot_to_scorer() {
                         assert_eq!(ctx.budget.limit.metric_calls, Some(16));
                         let rendered = ctx.output.output.clone();
                         Ok(Score::new(rendered.parse::<f64>().unwrap(), "ok")
-                            .with_text_output(rendered))
+                            .with_output(ctx.report_text_output(rendered)))
                     }
                     .boxed()
                 },
@@ -560,7 +560,7 @@ fn scoring_evaluator_runs_case_jobs_with_bounded_parallelism_and_stable_order() 
                     async move {
                         let rendered = ctx.output.output.clone();
                         Ok(Score::new(rendered.parse::<f64>().unwrap(), "ok")
-                            .with_text_output(rendered))
+                            .with_output(ctx.report_text_output(rendered)))
                     }
                     .boxed()
                 },
@@ -636,7 +636,10 @@ fn scoring_evaluator_preserves_typed_output_through_scoring_then_renders() {
                         assert_eq!(ctx.output.output.rationale, "typed metadata");
                         Ok(
                             Score::new(f64::from(ctx.output.output.answer), "scored typed output")
-                                .with_text_output(format!("answer={}", ctx.output.output.answer)),
+                                .with_output(ctx.report_text_output(format!(
+                                    "answer={}",
+                                    ctx.output.output.answer
+                                ))),
                         )
                     }
                     .boxed()
@@ -723,8 +726,70 @@ fn scoring_evaluator_requires_reportable_output_for_typed_runner_outputs() {
     });
 }
 
-// Test helper. The scorer closure must produce a `Score` with reportable
-// output already attached (`Score::with_output` / `with_text_output`) — same
+#[test]
+fn scoring_evaluator_rejects_report_output_from_another_scoring_context() {
+    use std::sync::Mutex;
+
+    let stolen_output = Arc::new(Mutex::new(None));
+    block_on(async {
+        let (mut graph, mut budget, candidate) = graph_with_seed();
+        let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
+        let evaluator = ScoringEvaluator::new(
+            Arc::new(vec![input_case(0, 2), input_case(1, 3)]),
+            Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
+                async move { Ok(RunOutput::new((artifact.0 + *case.input()).to_string())) }.boxed()
+            }),
+            Arc::new({
+                let stolen_output = Arc::clone(&stolen_output);
+                move |ctx: ScoreContext<TextArtifact, i32, leaven_eval::NoTarget, String>| {
+                    let stolen_output = Arc::clone(&stolen_output);
+                    async move {
+                        let value = ctx.output.output.parse::<f64>().unwrap();
+                        if *ctx.case.input() == 2 {
+                            let report_output = ctx.report_text_output(ctx.output.output.clone());
+                            *stolen_output.lock().unwrap() = Some(report_output.clone());
+                            Ok(Score::new(value, "first case").with_output(report_output))
+                        } else {
+                            let report_output = stolen_output
+                                .lock()
+                                .unwrap()
+                                .clone()
+                                .expect("first case stores a report output");
+                            Ok(Score::new(value, "second case").with_output(report_output))
+                        }
+                    }
+                    .boxed()
+                }
+            }),
+            &identity("typed-output-context-scope-test"),
+        )
+        .with_parallelism(NonZeroUsize::new(1).unwrap());
+
+        let error = evaluator
+            .evaluate(
+                request(
+                    ResolvedRequestKind::Independent {
+                        candidates: vec![candidate],
+                    },
+                    vec![CaseId::new(0), CaseId::new(1)],
+                    AssessmentGranularity::PerCase,
+                ),
+                ctx.evaluation_context(StageId::from_evaluator(Evaluator::id(&evaluator))),
+            )
+            .await
+            .err()
+            .expect("output from another scoring context must fail evaluation");
+
+        assert!(
+            error
+                .to_string()
+                .contains("reportable output came from another scoring context")
+        );
+    });
+}
+
+// Test helper. The scorer closure must produce a `Score` with context-scoped
+// reportable output already attached (`Score::with_output`) — same
 // contract as the production scorer path. Earlier revisions of this helper
 // auto-filled the output, mirroring the back-compat shim that was removed
 // from production; that was reintroducing the smell the hard cutover deleted.

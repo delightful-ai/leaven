@@ -205,8 +205,12 @@ fn public_run_gepa_path_reflects_rendered_typed_output() {
                 } else {
                     0.2
                 };
-                Ok(Score::new(value, "typed score")
-                    .with_text_output(format!("rendered answer: {}", ctx.output.output.answer)))
+                Ok(Score::new(value, "typed score").with_output(
+                    ctx.report_text_output(format!(
+                        "rendered answer: {}",
+                        ctx.output.output.answer
+                    )),
+                ))
             },
         )
         .using(

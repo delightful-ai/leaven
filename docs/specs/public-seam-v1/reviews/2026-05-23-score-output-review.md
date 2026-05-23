@@ -34,6 +34,12 @@ Non-blocking evidence that exists:
 - Missing `Score.output` fails with charged cost.
 - The run builder path accepts score-supplied report output for typed runner output.
 
+Follow-up implementation after block:
+
+- `leaven-run` now requires `Score::with_output(...)` to receive a `ReportableOutput` minted by the active `ScoreContext`; `ScoreContext::report_output(...)` and `report_text_output(...)` are the only public construction path.
+- `crates/leaven-run/tests/scoring_evaluator.rs::scoring_evaluator_rejects_report_output_from_another_scoring_context` rejects reusing output from a different candidate/case scoring context.
+- This resolves only the cross-context unrelated-output fake pass. It does not prove pairwise/listwise assessments, null-placeholder rejection, or public-seam `OutputRecord` visibility/data-class integration.
+
 Limits:
 
 - This review does not sign off `ps1.evaluator.score_output`.
