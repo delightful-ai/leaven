@@ -104,6 +104,13 @@ pub enum PublicSeamError {
         message: String,
     },
 
+    /// A schema-valid evidence envelope violates a public-seam semantic constraint.
+    #[error("invalid public seam evidence envelope: {message}")]
+    InvalidEvidence {
+        /// Human-readable reason.
+        message: String,
+    },
+
     /// A pinned public-seam mini-language rejected unsupported syntax.
     #[error("invalid public seam pinned dialect: {message}")]
     InvalidDialect {
