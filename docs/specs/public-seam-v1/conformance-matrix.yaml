@@ -332,6 +332,7 @@ rows:
       - crates/leaven-public-seam/src/result.rs::inspect_value_receipt
       - crates/leaven-public-seam/src/result.rs::validate_audit_currency_receipt
       - crates/leaven-public-seam/src/result.rs::validate_result_hash_bindings
+      - crates/leaven-public-seam/src/result.rs::validate_submit_assessments_request_hash
       - crates/leaven-public-seam/src/result.rs::validate_evidence_source_receipts
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_plan_execution_result
       - crates/leaven-public-seam/src/plan_execution.rs::execute_plan

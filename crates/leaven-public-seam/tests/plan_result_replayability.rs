@@ -127,7 +127,7 @@ fn mixed_replayability_result<const N: usize>(
         })
         .collect::<Vec<_>>();
 
-    json!({
+    let mut result = json!({
         "schema_version": "leaven.plan_result.v1",
         "plan_id": "planresult_replayability",
         "capability_fingerprint": "fp_cap_sha256_replayability",
@@ -166,7 +166,28 @@ fn mixed_replayability_result<const N: usize>(
         "redactions": [],
         "charges": [],
         "errors": []
-    })
+    });
+    bind_submit_assessments_request_hash(&mut result);
+    result
+}
+
+fn bind_submit_assessments_request_hash(result: &mut Value) {
+    let receipt = &mut result["receipts"][0];
+    receipt["request_hash"] = json!(prefixed_jcs_hash(
+        "fp_request_sha256_",
+        &json!({
+            "schema_version": "leaven.submit_assessments_request.v1",
+            "evaluation_request_id": receipt["evaluation_request_id"],
+            "assessment_ids": receipt["assessment_ids"]
+        }),
+    ));
+}
+
+fn prefixed_jcs_hash(prefix: &str, value: &Value) -> String {
+    format!(
+        "{prefix}{}",
+        jcs_canonicalize::sha256_jcs_hex(value).unwrap()
+    )
 }
 
 fn workspace_root() -> std::path::PathBuf {
