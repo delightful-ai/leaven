@@ -1433,106 +1433,14 @@ fn judging_evaluator_rejects_report_output_from_another_candidate_group() {
 }
 
 #[test]
-fn runtime_score_outputs_project_through_public_seam_for_all_assessment_shapes() {
-    block_on(async {
-        let package = leaven_public_seam::PublicSeamPackage::active_from_repo(workspace_root())
-            .expect("public seam package loads from workspace");
-        let (mut graph, mut budget, left) = graph_with_seed();
-        let (right, third) = {
-            let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
-            (
-                ctx.insert_seed(TextArtifact(50), 1).unwrap(),
-                ctx.insert_seed(TextArtifact(60), 2).unwrap(),
-            )
-        };
-        let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
-
-        let scorer = scoring_evaluator(|ctx| {
-            Score::new(ctx.output.output.parse::<f64>().unwrap(), "independent")
-                .with_output(ctx.report_text_output(ctx.output.output.clone()))
-        });
-        let independent = scorer
-            .evaluate(
-                request(
-                    ResolvedRequestKind::Independent {
-                        candidates: vec![left],
-                    },
-                    vec![CaseId::new(0)],
-                    AssessmentGranularity::PerCase,
-                ),
-                ctx.evaluation_context(StageId::from_evaluator(Evaluator::id(&scorer))),
-            )
-            .await
-            .unwrap();
-        let Assessment::Independent { evidence, .. } = &independent.value[0] else {
-            panic!("expected independent assessment");
-        };
-        assert_projected_public_output(&package, evidence, "42");
-
-        let judge = judging_evaluator(
-            |ctx: JudgeScoreContext<TextArtifact, i32, leaven_eval::NoTarget, String>| {
-                let rendered = ctx
-                    .outputs
-                    .iter()
-                    .map(|output| output.output.output.clone())
-                    .collect::<Vec<_>>()
-                    .join("|");
-                Score::new(1.0, "judged").with_output(ctx.report_text_output(rendered))
-            },
-        );
-        let pairwise = judge
-            .evaluate(
-                request(
-                    ResolvedRequestKind::Pairwise {
-                        left,
-                        right,
-                        order: PairOrder::Ordered,
-                    },
-                    vec![CaseId::new(0)],
-                    AssessmentGranularity::PerCase,
-                ),
-                ctx.evaluation_context(StageId::from_evaluator(Evaluator::id(&judge))),
-            )
-            .await
-            .unwrap();
-        let Assessment::Pairwise { evidence, .. } = &pairwise.value[0] else {
-            panic!("expected pairwise assessment");
-        };
-        assert_projected_public_output(&package, evidence, "42|52");
-
-        let listwise = judge
-            .evaluate(
-                request(
-                    ResolvedRequestKind::Listwise {
-                        candidates: vec![left, right, third],
-                    },
-                    vec![CaseId::new(0)],
-                    AssessmentGranularity::PerCase,
-                ),
-                ctx.evaluation_context(StageId::from_evaluator(Evaluator::id(&judge))),
-            )
-            .await
-            .unwrap();
-        let Assessment::Listwise { evidence, .. } = &listwise.value[0] else {
-            panic!("expected listwise assessment");
-        };
-        assert_projected_public_output(&package, evidence, "42|52|62");
-    });
-}
-
-#[test]
-#[allow(clippy::too_many_lines)]
-fn runtime_evaluation_requests_project_to_public_seam_evaluation_jobs() {
+fn independent_runtime_evaluation_request_projects_to_public_seam_job() {
     block_on(async {
         let package = leaven_public_seam::PublicSeamPackage::active_from_repo(workspace_root())
             .expect("public seam package loads from workspace");
         let (mut graph, mut budget, candidate) = graph_with_seed();
-        let (right, third) = insert_public_job_candidates(&mut graph, &mut budget);
-        let case_set = two_case_set();
-        let store = InlineEvidenceStore::<leaven_evidence::CaseAssessmentEvidence>::new(
-            "public-seam-job-identity",
-        );
-        let evaluator = two_case_scoring_evaluator("public-seam-evaluation-job");
+        let case_set = public_job_case_set();
+        let store = public_job_store();
+        let evaluator = public_job_scoring_evaluator();
         let report = {
             let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget)
                 .with_case_set(&case_set)
@@ -1549,8 +1457,43 @@ fn runtime_evaluation_requests_project_to_public_seam_evaluation_jobs() {
             .await
             .unwrap()
         };
-        let judge = two_case_judging_evaluator("public-seam-evaluation-job-judge");
-        let pairwise_report = {
+
+        let ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
+        let graph_view = ctx.graph();
+        let public_job = public_job_context("sc_eval_runtime")
+            .evaluation_job_document(
+                &graph_view,
+                &graph_view
+                    .evaluation_request(report.request_id)
+                    .expect("runtime evaluation request is recorded"),
+            )
+            .unwrap();
+        let validated = package
+            .validate_evaluation_job_document(&public_job)
+            .unwrap();
+        assert_public_evaluation_job(
+            &validated,
+            &public_job,
+            leaven_public_seam::EvaluationJobKind::Independent,
+            1,
+        );
+    });
+}
+
+#[test]
+fn pairwise_runtime_evaluation_request_projects_to_public_seam_job() {
+    block_on(async {
+        let package = leaven_public_seam::PublicSeamPackage::active_from_repo(workspace_root())
+            .expect("public seam package loads from workspace");
+        let (mut graph, mut budget, candidate) = graph_with_seed();
+        let right = {
+            let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
+            ctx.insert_seed(TextArtifact(50), 1).unwrap()
+        };
+        let case_set = public_job_case_set();
+        let store = public_job_store();
+        let judge = public_job_judging_evaluator();
+        let report = {
             let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget)
                 .with_case_set(&case_set)
                 .with_evidence_store(&store);
@@ -1568,7 +1511,46 @@ fn runtime_evaluation_requests_project_to_public_seam_evaluation_jobs() {
             .await
             .unwrap()
         };
-        let listwise_report = {
+
+        let ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
+        let graph_view = ctx.graph();
+        let public_job = public_job_context("sc_eval_pairwise")
+            .evaluation_job_document(
+                &graph_view,
+                &graph_view
+                    .evaluation_request(report.request_id)
+                    .expect("runtime pairwise request is recorded"),
+            )
+            .unwrap();
+        let validated = package
+            .validate_evaluation_job_document(&public_job)
+            .unwrap();
+        assert_public_evaluation_job(
+            &validated,
+            &public_job,
+            leaven_public_seam::EvaluationJobKind::Pairwise,
+            2,
+        );
+    });
+}
+
+#[test]
+fn listwise_runtime_evaluation_request_projects_to_public_seam_job() {
+    block_on(async {
+        let package = leaven_public_seam::PublicSeamPackage::active_from_repo(workspace_root())
+            .expect("public seam package loads from workspace");
+        let (mut graph, mut budget, candidate) = graph_with_seed();
+        let (right, third) = {
+            let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
+            (
+                ctx.insert_seed(TextArtifact(50), 1).unwrap(),
+                ctx.insert_seed(TextArtifact(60), 2).unwrap(),
+            )
+        };
+        let case_set = public_job_case_set();
+        let store = public_job_store();
+        let judge = public_job_judging_evaluator();
+        let report = {
             let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget)
                 .with_case_set(&case_set)
                 .with_evidence_store(&store);
@@ -1587,37 +1569,20 @@ fn runtime_evaluation_requests_project_to_public_seam_evaluation_jobs() {
 
         let ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
         let graph_view = ctx.graph();
-        let validated = validate_runtime_job(
-            &package,
-            &graph_view,
-            report.request_id,
-            "sc_eval_runtime",
-            leaven_public_seam::EvaluationJobKind::Independent,
-            1,
-        );
-        assert_eq!(
-            validated.request_id(),
-            public_request_id(&graph_view, report.request_id).as_str()
-        );
-        assert_eq!(validated.base_revision(), "rev_runtime_base");
-        assert_eq!(
-            validated.capability_fingerprint(),
-            "fp_cap_sha256_runtimejob"
-        );
-
-        validate_runtime_job(
-            &package,
-            &graph_view,
-            pairwise_report.request_id,
-            "sc_eval_pairwise",
-            leaven_public_seam::EvaluationJobKind::Pairwise,
-            2,
-        );
-        validate_runtime_job(
-            &package,
-            &graph_view,
-            listwise_report.request_id,
-            "sc_eval_listwise",
+        let public_job = public_job_context("sc_eval_listwise")
+            .evaluation_job_document(
+                &graph_view,
+                &graph_view
+                    .evaluation_request(report.request_id)
+                    .expect("runtime listwise request is recorded"),
+            )
+            .unwrap();
+        let validated = package
+            .validate_evaluation_job_document(&public_job)
+            .unwrap();
+        assert_public_evaluation_job(
+            &validated,
+            &public_job,
             leaven_public_seam::EvaluationJobKind::Listwise,
             3,
         );
@@ -1625,14 +1590,12 @@ fn runtime_evaluation_requests_project_to_public_seam_evaluation_jobs() {
 }
 
 #[test]
-fn public_evaluation_job_projection_rejects_unrepresentable_granularity() {
+fn unsupported_runtime_evaluation_granularity_rejects_public_seam_job_projection() {
     block_on(async {
         let (mut graph, mut budget, candidate) = graph_with_seed();
-        let case_set = two_case_set();
-        let store = InlineEvidenceStore::<leaven_evidence::CaseAssessmentEvidence>::new(
-            "public-seam-job-granularity",
-        );
-        let evaluator = two_case_scoring_evaluator("public-seam-evaluation-job-both");
+        let case_set = public_job_case_set();
+        let store = public_job_store();
+        let evaluator = public_job_scoring_evaluator();
         let unsupported_request_id = {
             let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget)
                 .with_case_set(&case_set)
@@ -1650,8 +1613,16 @@ fn public_evaluation_job_projection_rejects_unrepresentable_granularity() {
                 .await
                 .unwrap_err();
             assert!(err.to_string().contains("per-case granularity"));
-            let graph_view = ctx.graph();
-            last_recorded_evaluation_request(&graph_view)
+            ctx.graph()
+                .events()
+                .filter_map(|event| match event {
+                    leaven_engine::RunEvent::EvaluationRequested { request_id, .. } => {
+                        Some(*request_id)
+                    }
+                    _ => None,
+                })
+                .last()
+                .expect("failed evaluation request is still recorded")
         };
         let ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
         let graph_view = ctx.graph();
@@ -1663,6 +1634,92 @@ fn public_evaluation_job_projection_rejects_unrepresentable_granularity() {
             .unwrap_err();
         assert!(error.to_string().contains("both"));
     });
+}
+
+fn public_job_case_set() -> leaven_engine::CaseSet<Case<i32, leaven_eval::NoTarget>> {
+    leaven_engine::CaseSet::new(vec![input_case(0, 2), input_case(1, 3)])
+}
+
+fn public_job_store() -> InlineEvidenceStore<leaven_evidence::CaseAssessmentEvidence> {
+    InlineEvidenceStore::new("public-seam-job-identity")
+}
+
+fn public_job_context(stage_call_id: &str) -> PublicEvaluationJobContext {
+    PublicEvaluationJobContext::new(
+        stage_call_id,
+        "rev_runtime_base",
+        "fp_cap_sha256_runtimejob",
+        "2026-05-23T13:00:00Z",
+    )
+}
+
+fn public_job_scoring_evaluator(
+) -> ScoringEvaluator<TextArtifact, i32, leaven_eval::NoTarget, String> {
+    ScoringEvaluator::new(
+        Arc::new(vec![input_case(0, 2), input_case(1, 3)]),
+        Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
+            async move { Ok(RunOutput::new((artifact.0 + *case.input()).to_string())) }.boxed()
+        }),
+        Arc::new(
+            |ctx: ScoreContext<TextArtifact, i32, leaven_eval::NoTarget, String>| {
+                let score = Score::new(ctx.output.output.parse::<f64>().unwrap(), "validation")
+                    .with_output(ctx.report_text_output(ctx.output.output.clone()));
+                async move { Ok(score) }.boxed()
+            },
+        ),
+        &identity("public-seam-evaluation-job"),
+    )
+}
+
+fn public_job_judging_evaluator(
+) -> JudgingEvaluator<TextArtifact, i32, leaven_eval::NoTarget, String> {
+    JudgingEvaluator::new(
+        Arc::new(vec![input_case(0, 2), input_case(1, 3)]),
+        Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
+            async move { Ok(RunOutput::new((artifact.0 + *case.input()).to_string())) }.boxed()
+        }),
+        Arc::new(
+            |ctx: JudgeScoreContext<TextArtifact, i32, leaven_eval::NoTarget, String>| {
+                let rendered = ctx
+                    .outputs
+                    .iter()
+                    .map(|output| output.output.output.clone())
+                    .collect::<Vec<_>>()
+                    .join("|");
+                let score = Score::new(1.0, "judged").with_output(ctx.report_text_output(rendered));
+                async move { Ok(score) }.boxed()
+            },
+        ),
+        &identity("public-seam-evaluation-job-judge"),
+    )
+}
+
+fn assert_public_evaluation_job(
+    validated: &leaven_public_seam::EvaluationJobDocument,
+    public_job: &serde_json::Value,
+    kind: leaven_public_seam::EvaluationJobKind,
+    candidate_count: usize,
+) {
+    assert_eq!(
+        validated.request_id(),
+        public_job["evaluation_request_id"].as_str().unwrap()
+    );
+    assert_eq!(validated.kind(), kind);
+    assert_eq!(validated.candidate_ids().len(), candidate_count);
+    assert_eq!(
+        validated.case_ids(),
+        &["case_0".to_owned(), "case_1".to_owned()]
+    );
+    assert_eq!(validated.case_count(), 2);
+    assert_eq!(validated.base_revision(), "rev_runtime_base");
+    assert_eq!(
+        validated.capability_fingerprint(),
+        "fp_cap_sha256_runtimejob"
+    );
+    assert_eq!(
+        public_job["resolved_set"]["partition_summary"]["resolved"],
+        2
+    );
 }
 
 fn two_case_scoring_evaluator(
@@ -1751,15 +1808,6 @@ where
     );
     assert_eq!(validated.case_count(), 2);
     validated
-}
-
-fn public_job_context(stage_call_id: &str) -> PublicEvaluationJobContext {
-    PublicEvaluationJobContext::new(
-        stage_call_id,
-        "rev_runtime_base",
-        "fp_cap_sha256_runtimejob",
-        "2026-05-23T13:00:00Z",
-    )
 }
 
 fn public_request_id<P>(
