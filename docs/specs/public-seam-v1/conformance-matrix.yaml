@@ -846,8 +846,7 @@ rows:
     negative_test_evidence:
       - crates/leaven-public-seam/tests/plan_document.rs::evaluator_target_reads_reject_missing_or_unbound_case_query_receipts
       - crates/leaven-public-seam/tests/plan_document.rs::evaluator_target_reads_reject_unrequested_target_material
-      - crates/leaven-public-seam/tests/plan_document.rs::evaluator_target_reads_require_evaluator_capability_before_host_read
-      - crates/leaven-run/tests/scoring_evaluator.rs::scoring_evaluator_reports_per_candidate_cost_for_independent_batches
+      - crates/leaven-public-seam/tests/plan_document.rs::evaluator_target_reads_reject_missing_evaluator_capability_before_host_read
     implementation_evidence:
       - crates/leaven-evidence/src/feedback.rs::CaseDataReadEvidence
       - crates/leaven-run/src/evidence.rs::ScoreContext::load_target
@@ -861,7 +860,9 @@ rows:
       - crates/leaven-public-seam/AGENTS.md
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-result-envelope-failed-cost-target-review.md
-    status: pending
+      - docs/specs/public-seam-v1/reviews/2026-05-23-acp-auth-target-follow-up-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-23-evaluator-target-read-follow-up-review.md
+    status: proven
 
   - id: ps1.evaluator.score_output
     area: evaluator
@@ -1012,7 +1013,6 @@ rows:
     negative_test_evidence:
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_profile_rejects_mcp_latest_nonstdio_human_granting_and_unbounded_updates
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_authenticate_rejects_unknown_expired_or_fingerprint_mismatched_tokens
-      - crates/leaven-public-seam/tests/acp_profile.rs::acp_permissions_use_capability_grants_and_return_planerror_redactions
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_permissions_deny_ungranted_models_workspace_ops_and_commands
     implementation_evidence:
       - crates/leaven-public-seam/src/acp_profile.rs::AcpAuthenticateRequest
@@ -1028,7 +1028,8 @@ rows:
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::authorize_acp_permission
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-acp-auth-permissions-blocker-review.md
-    status: pending
+      - docs/specs/public-seam-v1/reviews/2026-05-23-acp-auth-target-follow-up-review.md
+    status: proven
 
   - id: ps1.acp.extension_results
     area: acp

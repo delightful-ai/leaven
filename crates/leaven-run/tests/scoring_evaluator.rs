@@ -304,6 +304,9 @@ fn scoring_evaluator_hides_target_from_runner_and_loads_target_with_case_data_re
                             assert_eq!(ctx.case.id(), CaseId::new(700));
                             assert_eq!(ctx.case.input().addend, 2);
                             assert!(ctx.case.metadata().is_empty());
+                            let debug = format!("{:?}", ctx.case);
+                            assert!(debug.contains("load_target"));
+                            assert!(!debug.contains("42"));
                             let target = ctx.load_target().expect("target load succeeds");
                             *scorer_seen_target.lock().unwrap() = Some(target.answer);
                             let rendered = ctx.output.output.clone();
