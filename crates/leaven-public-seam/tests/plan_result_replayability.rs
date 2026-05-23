@@ -59,7 +59,6 @@ fn replayability_summary_cannot_hide_non_replayable_assessment() {
             .unwrap_err(),
         PublicSeamError::InvalidPlanResult { .. }
     ));
-
 }
 
 #[test]
