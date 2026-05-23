@@ -79,6 +79,15 @@ seam contracts. They prove locked V1 transport-scope selection and MCP/watch/
 legacy-worker exclusion only; they are not an ACP process implementation,
 session lifecycle, authentication handshake, permission loop, or worker runtime.
 
+Crate-root exports for `AcpProfileDocument`, `AcpExtensionMethod`,
+`AcpPermissionRequest`, `AcpPermissionDecision`, and
+`AcpExtensionResultDocument` are advanced public seam contracts. They prove
+locked Leaven ACP profile semantics, programmatic permission decisions against
+capability grants, typed denial envelopes, and receipted extension-result
+envelopes at the wire-contract layer only. They are not an ACP process
+implementation, session lifecycle, transport backpressure loop, engine-client
+runtime, worker-agent runtime, provider call, or graph mutation route.
+
 Crate-root exports for `PlanDocument`, `PlanOperationKind`,
 `PlanExecutionContext`, `PlanExecutionHost`, `PlanExecutionReport`,
 `PlanGraphReadScope`, `PlanGraphQueryRequest`, `PlanGraphQueryOutcome`,
@@ -220,6 +229,16 @@ backpressure, or runtime watch support.
   leakage, unreceipted reflection results, and change proposals without allowed
   change schema authority. It does not prove runtime stage lowering, ACP
   transport, provider calls, or proposal graph mutation.
+- `tests/acp_profile.rs` proves locked Leaven ACP profile semantics for pinned
+  ACP version, stdio-first transport preference, Leaven-only extension methods,
+  capability-action mapping, bounded update declarations, programmatic
+  capability-grant permission decisions, `PlanError`/redaction denials, and
+  receipted extension-result envelopes. It rejects MCP/private-process
+  substitutes, unpinned/latest ACP versions, non-stdio-first transport drift,
+  human/always-grant permission substitutes, unbounded update declarations, and
+  bare method-specific result payloads. It does not prove ACP process startup,
+  engine-client/worker-agent runtime inversion, cancellation, progress updates,
+  backpressure behavior, provider calls, or worker lifecycle control.
 - `tests/plan_result.rs` proves active-schema Plan Result envelopes carry typed
   success and failure values, query/call/write audit receipts, errors, charges,
   capability and policy fingerprints, receipt timing, data classes, and closed

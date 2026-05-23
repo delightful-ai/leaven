@@ -820,6 +820,33 @@ impl PublicSeamPackage {
         crate::call_authority::validate(plan, capability)
     }
 
+    /// Validates a Leaven ACP profile document through the active V1 schema and semantic checks.
+    pub fn validate_acp_profile_document(
+        &self,
+        value: &Value,
+    ) -> Result<crate::AcpProfileDocument, PublicSeamError> {
+        self.validate_arbitrary_value("leaven.acp_profile.v1.schema.json", "/acp_profile", value)?;
+        crate::AcpProfileDocument::from_schema_valid_value(value)
+    }
+
+    /// Answers an ACP permission request through programmatic capability grant checks.
+    pub fn authorize_acp_permission(
+        &self,
+        profile: &crate::AcpProfileDocument,
+        capability: &crate::CapabilityDocument,
+        request: crate::AcpPermissionRequest,
+    ) -> crate::AcpPermissionDecision {
+        crate::acp_profile::authorize_permission(profile, capability, request)
+    }
+
+    /// Validates a Leaven ACP extension result envelope.
+    pub fn validate_acp_extension_result_document(
+        &self,
+        value: &Value,
+    ) -> Result<crate::AcpExtensionResultDocument, PublicSeamError> {
+        crate::AcpExtensionResultDocument::from_value(value)
+    }
+
     /// Validates a Plan Result document through the active V1 schema and semantic seam checks.
     pub fn validate_plan_result_document(
         &self,
