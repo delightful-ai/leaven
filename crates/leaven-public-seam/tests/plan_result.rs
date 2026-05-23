@@ -57,6 +57,18 @@ fn plan_result_rejects_generic_or_untyped_result_payloads() {
         PublicSeamError::ExampleValidation { .. }
     ));
 
+    let mut missing_policy_fingerprint = typed_success_result();
+    missing_policy_fingerprint
+        .as_object_mut()
+        .unwrap()
+        .remove("policy_fingerprint");
+    assert!(matches!(
+        package
+            .validate_plan_result_document(&missing_policy_fingerprint)
+            .unwrap_err(),
+        PublicSeamError::ExampleValidation { .. }
+    ));
+
     let mut untyped_error = typed_failure_result();
     untyped_error["errors"] = json!(["provider exploded"]);
     assert!(matches!(

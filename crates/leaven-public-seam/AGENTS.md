@@ -86,10 +86,11 @@ mini-languages: RFC 6901 JSON Pointer, the Leaven RFC 9535 JSONPath subset, and
 engine, template-extension host, or authorization layer.
 
 Crate-root exports for `PlanResultDocument` and `Replayability` are advanced
-public seam contracts. They prove plan-result replayability roll-up and
-per-assessment replayability preservation at the wire-envelope layer only; they
-are not evaluator execution, runtime receipt production, graph mutation, or
-cache replay behavior.
+public seam contracts. They prove active-schema plan-result envelope validation,
+typed value/receipt/error/charge classification, operation receipt timing,
+closed `PlanError` shape, and replayability roll-up at the wire-envelope layer
+only; they are not plan-run production, evaluator execution, runtime receipt
+production, graph mutation, or cache replay behavior.
 
 Crate-root export `DeferredWatchReplacement` is an advanced public seam
 contract. It proves that the V1 deferred watch marker can route only to a finite
@@ -113,6 +114,11 @@ backpressure, or runtime watch support.
   unpinned path syntax, non-subset JSONPath filters/functions/scripts, non-
   strict template dialects, partials, unescaped templates, delimiter changes,
   and custom-filter syntax.
+- `tests/plan_result.rs` proves active-schema Plan Result envelopes carry typed
+  success and failure values, receipts, errors, charges, capability and policy
+  fingerprints, receipt timing, data classes, and closed `PlanError` values at
+  the public-seam validation layer. It does not prove an engine/run producer
+  emits those envelopes.
 - `tests/plan_result_replayability.rs` proves assessment batch result values
   preserve per-assessment replayability and that plan-level replayability is a
   roll-up summary, not a single boolean or override.
