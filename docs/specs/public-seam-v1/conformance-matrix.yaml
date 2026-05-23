@@ -553,13 +553,17 @@ rows:
     minimum_closeout_level: semantic_denial
     positive_test_evidence:
       - crates/leaven-public-seam/tests/capability_document.rs::aggregate_budget_ledger_enforces_cross_grant_totals_and_roles
-      - crates/leaven-engine/tests/budget_laws.rs::budget_ledger_counts_mixed_runtime_roles_and_delegated_work_against_aggregate_axes
+      - crates/leaven-public-seam/tests/capability_document.rs::aggregate_budget_runtime_projection_enforces_engine_cross_role_and_delegated_totals
+      - crates/leaven-engine/tests/budget_laws.rs::budget_ledger_rejects_mixed_runtime_roles_and_delegated_work_beyond_aggregate_axes
     negative_test_evidence:
       - crates/leaven-public-seam/tests/capability_document.rs::aggregate_budget_ledger_rejects_role_and_concurrency_overruns
       - crates/leaven-public-seam/tests/capability_document.rs::aggregate_budget_ledger_counts_role_spend_against_total_budget
-      - crates/leaven-engine/tests/budget_laws.rs::budget_ledger_counts_mixed_runtime_roles_and_delegated_work_against_aggregate_axes
+      - crates/leaven-public-seam/tests/capability_document.rs::aggregate_budget_runtime_projection_rejects_role_concurrency_and_unrepresentable_values
+      - crates/leaven-engine/tests/budget_laws.rs::budget_ledger_rejects_mixed_runtime_roles_and_delegated_work_beyond_aggregate_axes
     implementation_evidence:
       - crates/leaven-engine/src/budget.rs::BudgetLedger
+      - crates/leaven-public-seam/src/capability/budget.rs::CapabilityDocument::runtime_budget_limit
+      - crates/leaven-public-seam/src/capability/budget.rs::CapabilityBudgetUsage::runtime_cost
       - crates/leaven-public-seam/src/capability.rs::CapabilityBudgetLedger
       - crates/leaven-public-seam/src/capability.rs::CapabilityBudgetUsage
       - crates/leaven-public-seam/AGENTS.md

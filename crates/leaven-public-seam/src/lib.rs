@@ -24,9 +24,10 @@ pub use acp_profile::{
 };
 pub use call_authority::CallAuthorityReport;
 pub use capability::{
-    AuthorizedGrant, CapabilityBudgetLedger, CapabilityBudgetReservation, CapabilityBudgetUsage,
-    CapabilityDelegation, CapabilityDenial, CapabilityDenialKind, CapabilityDocument,
-    CapabilityError, CapabilityGrantRequest, CapabilityLimitUsage, CapabilityRegistry,
+    AuthorizedGrant, CapabilityBudgetLedger, CapabilityBudgetProjectionError,
+    CapabilityBudgetReservation, CapabilityBudgetUsage, CapabilityDelegation, CapabilityDenial,
+    CapabilityDenialKind, CapabilityDocument, CapabilityError, CapabilityGrantRequest,
+    CapabilityLimitUsage, CapabilityRegistry,
 };
 pub use dialect::PinnedDialectEvaluator;
 pub use error::PublicSeamError;

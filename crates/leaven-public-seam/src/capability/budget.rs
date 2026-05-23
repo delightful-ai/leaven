@@ -1,4 +1,18 @@
+use leaven_kernel::{AmountError, Budget, Cost};
+use thiserror::Error;
+
 use super::{AggregateBudgets, CapabilityDenial, CapabilityDenialKind, CapabilityDocument};
+
+const AXIS_USD_MICRO: &str = "usd_micro";
+const AXIS_LM_USD_MICRO: &str = "lm.usd_micro";
+const AXIS_AGENT_USD_MICRO: &str = "agent.usd_micro";
+const AXIS_HUMAN_USD_MICRO: &str = "human.usd_micro";
+const AXIS_SANDBOX_USD_MICRO: &str = "sandbox.usd_micro";
+const AXIS_EVALUATOR_USD_MICRO: &str = "evaluator.usd_micro";
+const AXIS_WALL_MS: &str = "wall_ms";
+const AXIS_PLAN_NODES: &str = "plan_nodes";
+const AXIS_MATERIALIZED_BYTES: &str = "materialized_bytes";
+const MAX_EXACT_F64_INTEGER: u64 = 9_007_199_254_740_992;
 
 /// Aggregate capability-budget usage checked across grants.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -79,6 +93,48 @@ impl CapabilityBudgetUsage {
         self
     }
 
+    /// Records wall-clock usage in milliseconds.
+    pub const fn wall_ms(amount: u64) -> Self {
+        Self {
+            wall_ms: amount,
+            ..Self::zero()
+        }
+    }
+
+    /// Records plan-node materialization usage.
+    pub const fn plan_nodes(count: u64) -> Self {
+        Self {
+            plan_nodes: count,
+            ..Self::zero()
+        }
+    }
+
+    /// Records materialized bytes.
+    pub const fn materialized_bytes(count: u64) -> Self {
+        Self {
+            materialized_bytes: count,
+            ..Self::zero()
+        }
+    }
+
+    /// Projects this public-seam usage reservation into runtime `Cost` axes.
+    ///
+    /// USD role spend is charged twice: once to the aggregate `usd_micro`
+    /// axis and once to the role-specific axis. The engine ledger therefore
+    /// enforces both aggregate and role ceilings from a single runtime charge.
+    pub fn runtime_cost(self) -> Result<Cost, CapabilityBudgetProjectionError> {
+        let mut cost = Cost::zero();
+        cost = add_runtime_axis(cost, AXIS_USD_MICRO, self.total_usd_micro()?)?;
+        cost = add_runtime_axis(cost, AXIS_LM_USD_MICRO, self.lm_usd_micro)?;
+        cost = add_runtime_axis(cost, AXIS_AGENT_USD_MICRO, self.agent_usd_micro)?;
+        cost = add_runtime_axis(cost, AXIS_HUMAN_USD_MICRO, self.human_usd_micro)?;
+        cost = add_runtime_axis(cost, AXIS_SANDBOX_USD_MICRO, self.sandbox_usd_micro)?;
+        cost = add_runtime_axis(cost, AXIS_EVALUATOR_USD_MICRO, self.evaluator_usd_micro)?;
+        cost = add_runtime_axis(cost, AXIS_WALL_MS, self.wall_ms)?;
+        cost = add_runtime_axis(cost, AXIS_PLAN_NODES, self.plan_nodes)?;
+        add_runtime_axis(cost, AXIS_MATERIALIZED_BYTES, self.materialized_bytes)
+    }
+
     const fn zero() -> Self {
         Self {
             other_usd_micro: 0,
@@ -106,6 +162,53 @@ impl CapabilityBudgetUsage {
             total = checked_usage_add("max_total_usd_micro", total, amount)?;
         }
         Ok(total)
+    }
+}
+
+impl CapabilityDocument {
+    /// Projects aggregate capability budgets into the engine budget primitive.
+    ///
+    /// This is a lowering helper only. Runtime spending must still be charged
+    /// through `leaven-engine::BudgetLedger` / `RunContext`; the public-seam
+    /// crate does not mutate or own runtime budget state.
+    pub fn runtime_budget_limit(&self) -> Result<Budget, CapabilityBudgetProjectionError> {
+        self.budgets.runtime_budget_limit()
+    }
+}
+
+/// Error returned when projecting public-seam capability budget values into
+/// kernel budget/cost primitives.
+#[derive(Clone, Debug, Error, PartialEq)]
+pub enum CapabilityBudgetProjectionError {
+    /// The public integer value cannot be represented exactly by the current
+    /// kernel continuous amount primitive.
+    #[error(
+        "capability budget `{axis}` value `{amount}` is too large for exact runtime projection"
+    )]
+    AmountNotExactlyRepresentable {
+        /// Budget or cost axis.
+        axis: &'static str,
+        /// Rejected integer amount.
+        amount: u64,
+    },
+    /// Kernel amount validation rejected the projected numeric value.
+    #[error("capability budget `{axis}` value `{amount}` is invalid for runtime projection")]
+    InvalidAmount {
+        /// Budget or cost axis.
+        axis: &'static str,
+        /// Rejected integer amount.
+        amount: u64,
+        /// Kernel validation error.
+        source: AmountError,
+    },
+    /// Summing role usage for the aggregate axis overflowed.
+    #[error("capability budget aggregate usage overflowed")]
+    UsageOverflow,
+}
+
+impl From<CapabilityDenial> for CapabilityBudgetProjectionError {
+    fn from(_: CapabilityDenial) -> Self {
+        Self::UsageOverflow
     }
 }
 
@@ -289,6 +392,70 @@ fn add_budget_usage(
             usage.materialized_bytes,
         )?,
     })
+}
+
+impl AggregateBudgets {
+    fn runtime_budget_limit(&self) -> Result<Budget, CapabilityBudgetProjectionError> {
+        let mut budget = Budget::unlimited();
+        budget.concurrent_calls = self.concurrent_calls;
+        budget = add_runtime_limit(budget, AXIS_USD_MICRO, self.total_usd_micro)?;
+        budget = add_runtime_limit(budget, AXIS_LM_USD_MICRO, self.lm_usd_micro)?;
+        budget = add_runtime_limit(budget, AXIS_AGENT_USD_MICRO, self.agent_usd_micro)?;
+        budget = add_runtime_limit(budget, AXIS_HUMAN_USD_MICRO, self.human_usd_micro)?;
+        budget = add_runtime_limit(budget, AXIS_WALL_MS, self.wall_ms)?;
+        budget = add_runtime_limit(budget, AXIS_PLAN_NODES, self.plan_nodes)?;
+        add_runtime_limit(budget, AXIS_MATERIALIZED_BYTES, self.materialized_bytes)
+    }
+}
+
+fn add_runtime_limit(
+    budget: Budget,
+    axis: &'static str,
+    limit: Option<u64>,
+) -> Result<Budget, CapabilityBudgetProjectionError> {
+    let Some(limit) = limit else {
+        return Ok(budget);
+    };
+    budget
+        .with_axis_limit(axis, exact_runtime_amount(axis, limit)?)
+        .map_err(|source| CapabilityBudgetProjectionError::InvalidAmount {
+            axis,
+            amount: limit,
+            source,
+        })
+}
+
+fn add_runtime_axis(
+    cost: Cost,
+    axis: &'static str,
+    amount: u64,
+) -> Result<Cost, CapabilityBudgetProjectionError> {
+    if amount == 0 {
+        return Ok(cost);
+    }
+    let axis_cost = Cost::custom(axis, exact_runtime_amount(axis, amount)?).map_err(|source| {
+        CapabilityBudgetProjectionError::InvalidAmount {
+            axis,
+            amount,
+            source,
+        }
+    })?;
+    Ok(cost.combine(&axis_cost))
+}
+
+fn exact_runtime_amount(
+    axis: &'static str,
+    amount: u64,
+) -> Result<f64, CapabilityBudgetProjectionError> {
+    if amount > MAX_EXACT_F64_INTEGER {
+        return Err(
+            CapabilityBudgetProjectionError::AmountNotExactlyRepresentable { axis, amount },
+        );
+    }
+    Ok(amount
+        .to_string()
+        .parse::<f64>()
+        .expect("u64 below the exact f64 integer bound parses as finite f64"))
 }
 
 fn checked_usage_add(

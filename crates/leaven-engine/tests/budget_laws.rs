@@ -126,7 +126,7 @@ fn budget_ledger_enforces_aggregate_and_role_specific_custom_axes() {
 }
 
 #[test]
-fn budget_ledger_counts_mixed_runtime_roles_and_delegated_work_against_aggregate_axes() {
+fn budget_ledger_rejects_mixed_runtime_roles_and_delegated_work_beyond_aggregate_axes() {
     let mut ledger = BudgetLedger::new(
         Budget::unlimited()
             .with_axis_limit("usd_micro", 300_000.0)

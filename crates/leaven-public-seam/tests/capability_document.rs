@@ -1,10 +1,12 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
+use leaven_engine::BudgetLedger;
+use leaven_kernel::{Amount, BudgetDimension, StageId};
 use leaven_public_seam::{
-    CapabilityBudgetLedger, CapabilityBudgetUsage, CapabilityDenialKind, CapabilityDocument,
-    CapabilityError, CapabilityGrantRequest, CapabilityLimitUsage, CapabilityRegistry,
-    PublicSeamPackage,
+    CapabilityBudgetLedger, CapabilityBudgetProjectionError, CapabilityBudgetUsage,
+    CapabilityDenialKind, CapabilityDocument, CapabilityError, CapabilityGrantRequest,
+    CapabilityLimitUsage, CapabilityRegistry, PublicSeamPackage,
 };
 use serde_json::{Value, json};
 
@@ -514,6 +516,119 @@ fn aggregate_budget_ledger_counts_role_spend_against_total_budget() {
         ledger.try_reserve(CapabilityBudgetUsage::evaluator_usd_micro(300_001)),
         CapabilityDenialKind::Limit,
     );
+}
+
+#[test]
+fn aggregate_budget_runtime_projection_enforces_engine_cross_role_and_delegated_totals() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let document = CapabilityDocument::from_value(example_capability(&package)).unwrap();
+    let mut ledger = BudgetLedger::new(document.runtime_budget_limit().unwrap());
+
+    for (stage, usage) in [
+        ("lm.complete", CapabilityBudgetUsage::lm_usd_micro(100_000)),
+        (
+            "sandbox.exec",
+            CapabilityBudgetUsage::sandbox_usd_micro(80_000),
+        ),
+        (
+            "evaluator.score",
+            CapabilityBudgetUsage::evaluator_usd_micro(60_000),
+        ),
+        (
+            "delegated.agent.run",
+            CapabilityBudgetUsage::agent_usd_micro(60_000),
+        ),
+    ] {
+        ledger
+            .charge(StageId::custom(stage), usage.runtime_cost().unwrap())
+            .unwrap();
+    }
+
+    let snapshot = ledger.snapshot();
+    assert_eq!(
+        snapshot.spent.other.get("usd_micro").copied().unwrap(),
+        Amount::new(300_000.0).unwrap()
+    );
+    assert_eq!(
+        snapshot
+            .spent
+            .other
+            .get("agent.usd_micro")
+            .copied()
+            .unwrap(),
+        Amount::new(60_000.0).unwrap()
+    );
+    assert!(
+        snapshot
+            .stages
+            .contains_key(&StageId::custom("delegated.agent.run"))
+    );
+
+    let aggregate = ledger
+        .charge(
+            StageId::custom("evaluator.score"),
+            CapabilityBudgetUsage::evaluator_usd_micro(1)
+                .runtime_cost()
+                .unwrap(),
+        )
+        .unwrap_err();
+    assert_eq!(
+        aggregate.dimension,
+        BudgetDimension::Other("usd_micro".to_owned())
+    );
+}
+
+#[test]
+fn aggregate_budget_runtime_projection_rejects_role_concurrency_and_unrepresentable_values() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut role_limited = example_capability(&package);
+    role_limited["budgets"]["max_total_usd_micro"] = json!(500_000);
+    let role_limited = CapabilityDocument::from_value(role_limited).unwrap();
+    let mut ledger = BudgetLedger::new(role_limited.runtime_budget_limit().unwrap());
+    ledger
+        .charge(
+            StageId::custom("lm.complete"),
+            CapabilityBudgetUsage::lm_usd_micro(140_000)
+                .runtime_cost()
+                .unwrap(),
+        )
+        .unwrap();
+    let role = ledger
+        .charge(
+            StageId::custom("lm.complete"),
+            CapabilityBudgetUsage::lm_usd_micro(10_001)
+                .runtime_cost()
+                .unwrap(),
+        )
+        .unwrap_err();
+    assert_eq!(
+        role.dimension,
+        BudgetDimension::Other("lm.usd_micro".to_owned())
+    );
+
+    let document = CapabilityDocument::from_value(example_capability(&package)).unwrap();
+    let mut ledger = BudgetLedger::new(document.runtime_budget_limit().unwrap());
+    for _ in 0..4 {
+        ledger
+            .begin_concurrent_call(StageId::custom("lm.complete"))
+            .unwrap();
+    }
+    let concurrent = ledger
+        .begin_concurrent_call(StageId::custom("delegated.agent.run"))
+        .unwrap_err();
+    assert_eq!(concurrent.dimension, BudgetDimension::ConcurrentCalls);
+
+    let too_large = CapabilityBudgetUsage::lm_usd_micro(9_007_199_254_740_993)
+        .runtime_cost()
+        .unwrap_err();
+    assert!(matches!(
+        too_large,
+        CapabilityBudgetProjectionError::AmountNotExactlyRepresentable {
+            axis: "usd_micro",
+            amount: 9_007_199_254_740_993
+        }
+    ));
 }
 
 #[test]
