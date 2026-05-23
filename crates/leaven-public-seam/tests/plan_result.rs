@@ -158,6 +158,32 @@ fn plan_result_rejects_decorative_or_wrong_kind_receipt_refs() {
     ));
 }
 
+#[test]
+fn plan_result_rejects_failed_call_costs_without_charge_receipts() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut missing_charge_id = typed_failure_result();
+    missing_charge_id["receipts"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("charge_receipts");
+    assert!(matches!(
+        package
+            .validate_plan_result_document(&missing_charge_id)
+            .unwrap_err(),
+        PublicSeamError::InvalidPlanResult { .. }
+    ));
+
+    let mut missing_charge_record = typed_failure_result();
+    missing_charge_record["charges"] = json!([]);
+    assert!(matches!(
+        package
+            .validate_plan_result_document(&missing_charge_record)
+            .unwrap_err(),
+        PublicSeamError::InvalidPlanResult { .. }
+    ));
+}
+
 fn typed_success_result() -> Value {
     json!({
         "schema_version": "leaven.plan_result.v1",
