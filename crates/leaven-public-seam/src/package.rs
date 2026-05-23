@@ -758,7 +758,26 @@ impl PublicSeamPackage {
         context: &crate::PlanExecutionContext,
         host: &mut H,
     ) -> Result<crate::PlanExecutionReport, PublicSeamError> {
-        self.validate_plan_document(value)?;
+        let plan_document = self.validate_plan_document(value)?;
+        if plan_document.mode_kind() != "execute" {
+            return Err(PublicSeamError::InvalidPlan {
+                message: format!(
+                    "Plan execution harness requires execute mode, got `{}`",
+                    plan_document.mode_kind()
+                ),
+            });
+        }
+        if plan_document.commit_kind() == "no_graph_writes"
+            && plan_document
+                .operation_kinds()
+                .contains(&crate::PlanOperationKind::Write)
+        {
+            return Err(PublicSeamError::InvalidPlan {
+                message:
+                    "Plan execution harness cannot execute write ops under no_graph_writes commit"
+                        .to_owned(),
+            });
+        }
         let result = crate::plan_execution::execute_plan(value, context, host)?;
         let document = self.validate_plan_result_document(&result)?;
         Ok(crate::PlanExecutionReport::new(result, document))
