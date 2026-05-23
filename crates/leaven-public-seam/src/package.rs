@@ -844,6 +844,13 @@ impl PublicSeamPackage {
         &self,
         value: &Value,
     ) -> Result<crate::AcpExtensionResultDocument, PublicSeamError> {
+        let synthetic = crate::AcpExtensionResultDocument::synthetic_plan_result(value)?;
+        self.validate_arbitrary_value(
+            "leaven.plan_result.v1.schema.json",
+            "/acp_extension_result",
+            &synthetic,
+        )?;
+        PlanResultDocument::from_schema_valid_value_allowing_request_evaluation(&synthetic)?;
         crate::AcpExtensionResultDocument::from_value(value)
     }
 
