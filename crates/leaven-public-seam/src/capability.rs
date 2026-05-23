@@ -161,6 +161,25 @@ impl CapabilityDocument {
         self.grants.iter().map(|grant| grant.action.as_str())
     }
 
+    /// Authorizes a requested operation against the document's grant envelope.
+    pub fn authorize_grant(
+        &self,
+        request: CapabilityGrantRequest,
+    ) -> Result<AuthorizedGrant, CapabilityDenial> {
+        let Some(grant) = self
+            .grants
+            .iter()
+            .find(|grant| grant.action == request.action)
+        else {
+            return Err(CapabilityDenial::new(
+                CapabilityDenialKind::Action,
+                request.action,
+            ));
+        };
+
+        grant.authorize(self, &request)
+    }
+
     fn validate(&self) -> Result<(), CapabilityError> {
         if self.schema_version != "leaven.capability.v1" {
             return Err(CapabilityError::InvalidDocument {
@@ -433,6 +452,561 @@ pub struct Grant {
     /// Optional per-grant limits.
     #[serde(default)]
     pub limits: Option<BTreeMap<String, Value>>,
+}
+
+impl Grant {
+    fn authorize(
+        &self,
+        document: &CapabilityDocument,
+        request: &CapabilityGrantRequest,
+    ) -> Result<AuthorizedGrant, CapabilityDenial> {
+        ensure_resource(self, request)?;
+        ensure_constraints(self, request)?;
+        ensure_limits(self, request)?;
+
+        Ok(AuthorizedGrant {
+            capability_fingerprint: document.capability_fingerprint.clone(),
+            policy_fingerprint: document.policy_fingerprint.clone(),
+            grant_action: self.action.clone(),
+            max_usd_micro: self.limit_value("max_usd_micro"),
+            max_calls: self.limit_value("max_calls"),
+            max_concurrent: self.limit_value("max_concurrent"),
+            timeout_s: self.limit_value("timeout_s"),
+            max_rows: self.limit_value("max_rows"),
+            max_materialized_bytes: self.limit_value("max_materialized_bytes"),
+        })
+    }
+
+    fn limit_value(&self, key: &str) -> Option<u64> {
+        self.limits
+            .as_ref()
+            .and_then(|limits| limits.get(key))
+            .and_then(Value::as_u64)
+    }
+}
+
+/// Requested operation dimensions checked against a capability grant.
+#[derive(Clone, Debug, Default)]
+pub struct CapabilityGrantRequest {
+    action: String,
+    resource: BTreeMap<String, Value>,
+    case_fields: BTreeSet<String>,
+    partition: Option<String>,
+    input_classes: BTreeSet<String>,
+    purposes: BTreeSet<String>,
+    model_roles: BTreeSet<String>,
+    schemas: BTreeSet<String>,
+    surface: Option<String>,
+    limits: CapabilityLimitUsage,
+}
+
+impl CapabilityGrantRequest {
+    /// Starts a request for a capability action.
+    pub fn for_action(action: impl Into<String>) -> Self {
+        Self {
+            action: action.into(),
+            ..Self::default()
+        }
+    }
+
+    /// Adds a resource selector value.
+    #[must_use]
+    pub fn with_resource(mut self, key: impl Into<String>, value: Value) -> Self {
+        self.resource.insert(key.into(), value);
+        self
+    }
+
+    /// Adds a requested case field.
+    #[must_use]
+    pub fn with_case_field(mut self, field: impl Into<String>) -> Self {
+        self.case_fields.insert(field.into());
+        self
+    }
+
+    /// Sets a requested data partition.
+    #[must_use]
+    pub fn with_partition(mut self, partition: impl Into<String>) -> Self {
+        self.partition = Some(partition.into());
+        self
+    }
+
+    /// Adds an input data class.
+    #[must_use]
+    pub fn with_input_class(mut self, data_class: impl Into<String>) -> Self {
+        self.input_classes.insert(data_class.into());
+        self
+    }
+
+    /// Adds a purpose constraint.
+    #[must_use]
+    pub fn with_purpose(mut self, purpose: impl Into<String>) -> Self {
+        self.purposes.insert(purpose.into());
+        self
+    }
+
+    /// Adds a model role constraint.
+    #[must_use]
+    pub fn with_model_role(mut self, role: impl Into<String>) -> Self {
+        self.model_roles.insert(role.into());
+        self
+    }
+
+    /// Adds a schema fingerprint used by the operation.
+    #[must_use]
+    pub fn with_schema(mut self, schema: impl Into<String>) -> Self {
+        self.schemas.insert(schema.into());
+        self
+    }
+
+    /// Sets the surface fingerprint used by the operation.
+    #[must_use]
+    pub fn with_surface(mut self, surface: impl Into<String>) -> Self {
+        self.surface = Some(surface.into());
+        self
+    }
+
+    /// Sets the requested limit usage for this operation.
+    #[must_use]
+    pub fn with_limits(mut self, limits: CapabilityLimitUsage) -> Self {
+        self.limits = limits;
+        self
+    }
+}
+
+/// Per-operation usage checked against grant limits.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct CapabilityLimitUsage {
+    /// Requested spend in USD micro-units.
+    pub usd_micro: Option<u64>,
+    /// Requested call count.
+    pub calls: Option<u64>,
+    /// Requested concurrent calls.
+    pub concurrent: Option<u64>,
+    /// Requested timeout in seconds.
+    pub timeout_s: Option<u64>,
+    /// Requested row count.
+    pub rows: Option<u64>,
+    /// Requested materialized bytes.
+    pub materialized_bytes: Option<u64>,
+}
+
+/// Authorized grant facts surfaced to later permission decisions.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AuthorizedGrant {
+    capability_fingerprint: String,
+    policy_fingerprint: String,
+    grant_action: String,
+    max_usd_micro: Option<u64>,
+    max_calls: Option<u64>,
+    max_concurrent: Option<u64>,
+    timeout_s: Option<u64>,
+    max_rows: Option<u64>,
+    max_materialized_bytes: Option<u64>,
+}
+
+impl AuthorizedGrant {
+    /// Capability fingerprint attached to the authorization.
+    pub fn capability_fingerprint(&self) -> &str {
+        &self.capability_fingerprint
+    }
+
+    /// Policy fingerprint attached to the authorization.
+    pub fn policy_fingerprint(&self) -> &str {
+        &self.policy_fingerprint
+    }
+
+    /// Grant action that authorized the request.
+    pub fn grant_action(&self) -> &str {
+        &self.grant_action
+    }
+
+    /// Grant maximum spend in USD micro-units.
+    pub fn max_usd_micro(&self) -> Option<u64> {
+        self.max_usd_micro
+    }
+
+    /// Grant maximum call count.
+    pub fn max_calls(&self) -> Option<u64> {
+        self.max_calls
+    }
+
+    /// Grant maximum concurrent calls.
+    pub fn max_concurrent(&self) -> Option<u64> {
+        self.max_concurrent
+    }
+
+    /// Grant timeout in seconds.
+    pub fn timeout_s(&self) -> Option<u64> {
+        self.timeout_s
+    }
+
+    /// Grant maximum row count.
+    pub fn max_rows(&self) -> Option<u64> {
+        self.max_rows
+    }
+
+    /// Grant maximum materialized bytes.
+    pub fn max_materialized_bytes(&self) -> Option<u64> {
+        self.max_materialized_bytes
+    }
+}
+
+/// Capability denial category.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CapabilityDenialKind {
+    /// No grant allows the action.
+    Action,
+    /// Resource selectors do not fit the grant.
+    Resource,
+    /// Requested partition is outside the grant.
+    Partition,
+    /// Requested case field is outside the grant or explicitly forbidden.
+    CaseField,
+    /// Requested schema fingerprint is outside the grant.
+    Schema,
+    /// Requested surface fingerprint is outside the grant.
+    Surface,
+    /// Data class is outside the grant or explicitly forbidden.
+    DataClass,
+    /// Requested usage exceeds grant limits.
+    Limit,
+}
+
+/// Typed capability denial with redaction facts.
+#[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
+#[error("capability denied by {kind:?}: {message}")]
+pub struct CapabilityDenial {
+    kind: CapabilityDenialKind,
+    message: String,
+    redactions: Vec<String>,
+}
+
+impl CapabilityDenial {
+    fn new(kind: CapabilityDenialKind, message: impl Into<String>) -> Self {
+        Self {
+            kind,
+            message: message.into(),
+            redactions: Vec::new(),
+        }
+    }
+
+    fn with_redactions(
+        kind: CapabilityDenialKind,
+        message: impl Into<String>,
+        redactions: Vec<String>,
+    ) -> Self {
+        Self {
+            kind,
+            message: message.into(),
+            redactions,
+        }
+    }
+
+    /// Denial category.
+    pub fn kind(&self) -> CapabilityDenialKind {
+        self.kind
+    }
+
+    /// Data classes redacted by the denial.
+    pub fn redactions(&self) -> &[String] {
+        &self.redactions
+    }
+}
+
+fn ensure_resource(
+    grant: &Grant,
+    request: &CapabilityGrantRequest,
+) -> Result<(), CapabilityDenial> {
+    for key in grant.resource.keys() {
+        if !request.resource.contains_key(key) {
+            return Err(CapabilityDenial::new(
+                CapabilityDenialKind::Resource,
+                format!("resource `{key}` is required by grant"),
+            ));
+        }
+    }
+    for (key, requested) in &request.resource {
+        let Some(allowed) = grant.resource.get(key) else {
+            return Err(CapabilityDenial::new(
+                CapabilityDenialKind::Resource,
+                format!("resource `{key}` is not granted"),
+            ));
+        };
+        if !value_allows(allowed, requested) {
+            return Err(CapabilityDenial::new(
+                CapabilityDenialKind::Resource,
+                format!("resource `{key}` does not match grant"),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn ensure_constraints(
+    grant: &Grant,
+    request: &CapabilityGrantRequest,
+) -> Result<(), CapabilityDenial> {
+    ensure_set_constraint(
+        grant,
+        "case_fields",
+        "forbidden_case_fields",
+        &request.case_fields,
+        CapabilityDenialKind::CaseField,
+    )?;
+    ensure_optional_one(
+        grant,
+        "partitions",
+        request.partition.as_deref(),
+        CapabilityDenialKind::Partition,
+    )?;
+    ensure_set_constraint(
+        grant,
+        "allowed_input_classes",
+        "forbidden_input_classes",
+        &request.input_classes,
+        CapabilityDenialKind::DataClass,
+    )?;
+    ensure_allowed_set(
+        grant,
+        "purposes",
+        &request.purposes,
+        CapabilityDenialKind::Resource,
+    )?;
+    ensure_allowed_set(
+        grant,
+        "model_roles",
+        &request.model_roles,
+        CapabilityDenialKind::Resource,
+    )?;
+    ensure_schema_constraint(grant, &request.schemas)?;
+    ensure_optional_one(
+        grant,
+        "allowed_surfaces",
+        request.surface.as_deref(),
+        CapabilityDenialKind::Surface,
+    )?;
+    Ok(())
+}
+
+fn ensure_set_constraint(
+    grant: &Grant,
+    allowed_key: &str,
+    forbidden_key: &str,
+    requested: &BTreeSet<String>,
+    kind: CapabilityDenialKind,
+) -> Result<(), CapabilityDenial> {
+    let forbidden = string_set(grant.constraints.get(forbidden_key));
+    let redactions = requested
+        .intersection(&forbidden)
+        .cloned()
+        .collect::<Vec<_>>();
+    if !redactions.is_empty() {
+        return Err(CapabilityDenial::with_redactions(
+            kind,
+            format!("request intersects `{forbidden_key}`"),
+            redactions,
+        ));
+    }
+    ensure_allowed_set(grant, allowed_key, requested, kind)
+}
+
+fn ensure_allowed_set(
+    grant: &Grant,
+    allowed_key: &str,
+    requested: &BTreeSet<String>,
+    kind: CapabilityDenialKind,
+) -> Result<(), CapabilityDenial> {
+    let allowed_value = grant.constraints.get(allowed_key);
+    let allowed = string_set(allowed_value);
+    if requested.is_empty() && allowed_value.is_some() && !allowed.is_empty() {
+        return Err(CapabilityDenial::new(
+            kind,
+            format!("request must declare `{allowed_key}`"),
+        ));
+    }
+    if requested.is_empty() {
+        return Ok(());
+    }
+    if requested.is_subset(&allowed) {
+        Ok(())
+    } else {
+        Err(CapabilityDenial::new(
+            kind,
+            format!("request is outside `{allowed_key}`"),
+        ))
+    }
+}
+
+fn ensure_allowed_one(
+    grant: &Grant,
+    allowed_key: &str,
+    requested: &str,
+    kind: CapabilityDenialKind,
+) -> Result<(), CapabilityDenial> {
+    let allowed = string_set(grant.constraints.get(allowed_key));
+    if allowed.contains(requested) {
+        Ok(())
+    } else {
+        Err(CapabilityDenial::new(
+            kind,
+            format!("`{requested}` is outside `{allowed_key}`"),
+        ))
+    }
+}
+
+fn ensure_optional_one(
+    grant: &Grant,
+    allowed_key: &str,
+    requested: Option<&str>,
+    kind: CapabilityDenialKind,
+) -> Result<(), CapabilityDenial> {
+    let allowed = string_set(grant.constraints.get(allowed_key));
+    match (requested, allowed.is_empty()) {
+        (None, true) => Ok(()),
+        (None, false) => Err(CapabilityDenial::new(
+            kind,
+            format!("request must declare `{allowed_key}`"),
+        )),
+        (Some(requested), _) => ensure_allowed_one(grant, allowed_key, requested, kind),
+    }
+}
+
+fn ensure_schema_constraint(
+    grant: &Grant,
+    requested: &BTreeSet<String>,
+) -> Result<(), CapabilityDenial> {
+    let mut allowed = string_set(grant.constraints.get("schemas"));
+    allowed.extend(string_set(grant.constraints.get("change_schemas")));
+    if requested.is_empty() && !allowed.is_empty() {
+        return Err(CapabilityDenial::new(
+            CapabilityDenialKind::Schema,
+            "request must declare schema fingerprints",
+        ));
+    }
+    if requested.is_empty() {
+        return Ok(());
+    }
+    if requested.is_subset(&allowed) {
+        Ok(())
+    } else {
+        Err(CapabilityDenial::new(
+            CapabilityDenialKind::Schema,
+            "request schema is outside grant",
+        ))
+    }
+}
+
+fn ensure_limits(grant: &Grant, request: &CapabilityGrantRequest) -> Result<(), CapabilityDenial> {
+    for key in [
+        "max_usd_micro",
+        "max_calls",
+        "max_concurrent",
+        "timeout_s",
+        "max_rows",
+        "max_materialized_bytes",
+    ] {
+        if grant.limit_value(key).is_some() && requested_limit(&request.limits, key).is_none() {
+            return Err(CapabilityDenial::new(
+                CapabilityDenialKind::Limit,
+                format!("request must declare `{key}` usage"),
+            ));
+        }
+    }
+    ensure_limit(
+        grant,
+        "max_usd_micro",
+        request.limits.usd_micro,
+        CapabilityDenialKind::Limit,
+    )?;
+    ensure_limit(
+        grant,
+        "max_calls",
+        request.limits.calls,
+        CapabilityDenialKind::Limit,
+    )?;
+    ensure_limit(
+        grant,
+        "max_concurrent",
+        request.limits.concurrent,
+        CapabilityDenialKind::Limit,
+    )?;
+    ensure_limit(
+        grant,
+        "timeout_s",
+        request.limits.timeout_s,
+        CapabilityDenialKind::Limit,
+    )?;
+    ensure_limit(
+        grant,
+        "max_rows",
+        request.limits.rows,
+        CapabilityDenialKind::Limit,
+    )?;
+    ensure_limit(
+        grant,
+        "max_materialized_bytes",
+        request.limits.materialized_bytes,
+        CapabilityDenialKind::Limit,
+    )
+}
+
+fn requested_limit(limits: &CapabilityLimitUsage, key: &str) -> Option<u64> {
+    match key {
+        "max_usd_micro" => limits.usd_micro,
+        "max_calls" => limits.calls,
+        "max_concurrent" => limits.concurrent,
+        "timeout_s" => limits.timeout_s,
+        "max_rows" => limits.rows,
+        "max_materialized_bytes" => limits.materialized_bytes,
+        _ => None,
+    }
+}
+
+fn ensure_limit(
+    grant: &Grant,
+    key: &str,
+    requested: Option<u64>,
+    kind: CapabilityDenialKind,
+) -> Result<(), CapabilityDenial> {
+    let Some(requested) = requested else {
+        return Ok(());
+    };
+    let Some(max) = grant.limit_value(key) else {
+        return Err(CapabilityDenial::new(
+            kind,
+            format!("grant has no `{key}` limit"),
+        ));
+    };
+    if requested <= max {
+        Ok(())
+    } else {
+        Err(CapabilityDenial::new(
+            kind,
+            format!("requested `{key}` exceeds grant limit"),
+        ))
+    }
+}
+
+fn value_allows(allowed: &Value, requested: &Value) -> bool {
+    match allowed {
+        Value::Array(values) => match requested {
+            Value::Array(requested_values) => requested_values
+                .iter()
+                .all(|value| values.iter().any(|allowed| allowed == value)),
+            _ => values.iter().any(|value| value == requested),
+        },
+        _ => allowed == requested,
+    }
+}
+
+fn string_set(value: Option<&Value>) -> BTreeSet<String> {
+    value
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .map(str::to_owned)
+        .collect()
 }
 
 #[derive(Clone, Debug, Deserialize)]

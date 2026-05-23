@@ -6,7 +6,10 @@ mod fingerprint;
 mod matrix;
 mod package;
 
-pub use capability::{CapabilityDocument, CapabilityError, CapabilityRegistry};
+pub use capability::{
+    AuthorizedGrant, CapabilityDenial, CapabilityDenialKind, CapabilityDocument, CapabilityError,
+    CapabilityGrantRequest, CapabilityLimitUsage, CapabilityRegistry,
+};
 pub use error::PublicSeamError;
 pub use fingerprint::SchemaFingerprint;
 pub use matrix::{ConformanceMatrix, ConformanceRow, MatrixRowStatus, MinimumCloseoutLevel};
