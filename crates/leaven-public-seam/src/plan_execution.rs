@@ -366,7 +366,7 @@ fn execute_effects<H: PlanExecutionHost>(
         execute_op(op, plan_document, context, host, &mut state, mode)?;
     }
 
-    Ok(plan_result_value(PlanResultValue {
+    Ok(plan_result_value(&PlanResultValue {
         plan_id,
         context,
         final_revision: &state.final_revision,
@@ -380,7 +380,7 @@ fn execute_effects<H: PlanExecutionHost>(
 
 fn dry_run_result(plan: &Value, context: &PlanExecutionContext) -> Result<Value, PublicSeamError> {
     let plan_id = required_string(object(plan, "plan")?.get("plan_id"), "plan_id")?;
-    Ok(plan_result_value(PlanResultValue {
+    Ok(plan_result_value(&PlanResultValue {
         plan_id,
         context,
         final_revision: &context.base_revision,
@@ -412,7 +412,7 @@ fn replay_result<H: PlanExecutionHost>(
         }
         receipts.push(receipt);
     }
-    Ok(plan_result_value(PlanResultValue {
+    Ok(plan_result_value(&PlanResultValue {
         plan_id,
         context,
         final_revision: &final_revision,
@@ -455,7 +455,7 @@ struct PlanResultValue<'a> {
     errors: &'a [Value],
 }
 
-fn plan_result_value(parts: PlanResultValue<'_>) -> Value {
+fn plan_result_value(parts: &PlanResultValue<'_>) -> Value {
     json!({
         "schema_version": "leaven.plan_result.v1",
         "plan_id": parts.plan_id,
@@ -635,7 +635,15 @@ fn execute_call<H: PlanExecutionHost>(
             "deps": dep_values
         }),
     )?;
-    record_lm_call_outcome(name, call_kind, outcome, cache, request_hash, context, state)
+    record_lm_call_outcome(
+        name,
+        call_kind,
+        outcome,
+        cache,
+        &request_hash,
+        context,
+        state,
+    )
 }
 
 fn record_lm_call_outcome(
@@ -643,7 +651,7 @@ fn record_lm_call_outcome(
     call_kind: &str,
     outcome: PlanLmCompleteOutcome,
     cache: Option<&str>,
-    request_hash: String,
+    request_hash: &str,
     context: &PlanExecutionContext,
     state: &mut ExecutionState,
 ) -> Result<(), PublicSeamError> {
@@ -652,13 +660,15 @@ fn record_lm_call_outcome(
         error["receipt"] = json!(receipt_id);
         error["op"] = json!(name);
         return record_failed_lm_call(
-            name,
-            call_kind,
-            outcome.runtime_fingerprint,
-            outcome.cost,
-            error,
-            request_hash,
-            context,
+            FailedLmCall {
+                name: &name,
+                call_kind,
+                runtime_fingerprint: &outcome.runtime_fingerprint,
+                cost: outcome.cost.as_ref(),
+                error,
+                request_hash,
+                context,
+            },
             state,
         );
     }
@@ -698,25 +708,29 @@ fn record_lm_call_outcome(
     Ok(())
 }
 
-fn record_failed_lm_call(
-    name: String,
-    call_kind: &str,
-    runtime_fingerprint: String,
-    cost: Option<Value>,
+struct FailedLmCall<'a> {
+    name: &'a str,
+    call_kind: &'a str,
+    runtime_fingerprint: &'a str,
+    cost: Option<&'a Value>,
     error: Value,
-    request_hash: String,
-    context: &PlanExecutionContext,
+    request_hash: &'a str,
+    context: &'a PlanExecutionContext,
+}
+
+fn record_failed_lm_call(
+    failure: FailedLmCall<'_>,
     state: &mut ExecutionState,
 ) -> Result<(), PublicSeamError> {
-    let receipt_id = format!("lmrec_{name}");
-    let charge_receipts = if let Some(cost) = cost.clone() {
-        let charge_id = format!("chargerec_{name}");
+    let receipt_id = format!("lmrec_{}", failure.name);
+    let charge_receipts = if let Some(cost) = failure.cost {
+        let charge_id = format!("chargerec_{}", failure.name);
         state.charges.push(json!({
             "receipt": charge_id,
             "source_receipt": receipt_id,
             "cost": cost,
             "ledger_scope": "plan",
-            "charged_at": context.completed_at
+            "charged_at": failure.context.completed_at
         }));
         vec![charge_id]
     } else {
@@ -726,28 +740,28 @@ fn record_failed_lm_call(
         "fp_result_sha256_",
         &json!({
             "schema_version": "leaven.plan_call_result.v1",
-            "name": name,
-            "error": error,
-            "cost": cost,
+            "name": failure.name,
+            "error": failure.error,
+            "cost": failure.cost,
             "charge_receipts": charge_receipts
         }),
     )?;
     state.receipts.push(json!({
         "kind": "call",
         "receipt": receipt_id,
-        "op_var": name,
-        "started_at": context.started_at,
-        "completed_at": context.completed_at,
-        "call_kind": call_kind,
-        "request_hash": request_hash,
+        "op_var": failure.name,
+        "started_at": failure.context.started_at,
+        "completed_at": failure.context.completed_at,
+        "call_kind": failure.call_kind,
+        "request_hash": failure.request_hash,
         "result_hash": result_hash,
-        "runtime_fingerprint": runtime_fingerprint,
+        "runtime_fingerprint": failure.runtime_fingerprint,
         "status": "failed",
-        "error": error.clone(),
-        "cost": cost,
+        "error": failure.error,
+        "cost": failure.cost,
         "charge_receipts": charge_receipts
     }));
-    state.errors.push(error);
+    state.errors.push(failure.error);
     Ok(())
 }
 
