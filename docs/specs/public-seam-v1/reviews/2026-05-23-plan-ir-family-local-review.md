@@ -55,3 +55,19 @@ Residual non-blocking risks:
 
 - `ps1.plan.revision_modes` and `ps1.plan.execution_modes` remain pending.
 - This does not prove ACP/session/provider runtime behavior, cache/replay behavior, engine graph mutation, revision-mode runtime reads, or full execution coverage for every schema-valid Plan IR variant.
+
+Execution-mode follow-up:
+
+- `execute_plan_document` now honors `dry_run`, `require_cached`, and `replay` in addition to `execute`.
+- `dry_run` validates and returns a schema-valid no-effect Plan Result without invoking call/write host effects.
+- `require_cached` asks only the cache-specific LM hook and rejects cache misses before live LM/provider work.
+- `replay` loads supplied receipts through the replay hook without invoking live call/write host effects.
+- `ps1.plan.execution_modes` remains pending until this broader mode behavior receives its own adversarial sign-off.
+
+Revision-mode follow-up:
+
+- `execute_plan_document` now lowers schema-valid `graph_query` Let expressions through a public seam graph-read host hook.
+- The graph-read request carries an explicit `PlanGraphReadScope` derived from `latest_at_start`, `at_revision`, or `since_revision` consistency.
+- Read-only graph-query execution returns schema-valid `graph_set` Plan Result values and preserves `final_revision == base_revision`.
+- `since_revision` event sources without the declared base revision are rejected during Plan document validation instead of falling back to latest.
+- `ps1.plan.revision_modes` remains pending until this broader revision behavior receives its own adversarial sign-off.

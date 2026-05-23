@@ -36,7 +36,8 @@ pub use package::{
 pub use plan::{PlanDocument, PlanOperationKind};
 pub use plan_execution::{
     PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanExecutionContext, PlanExecutionHost,
-    PlanExecutionReport, PlanLmCompleteOutcome, PlanLmCompleteRequest,
+    PlanExecutionReport, PlanGraphQueryOutcome, PlanGraphQueryRequest, PlanGraphReadScope,
+    PlanLmCompleteOutcome, PlanLmCompleteRequest,
 };
 pub use result::{PlanResultDocument, Replayability};
 pub use watch::DeferredWatchReplacement;

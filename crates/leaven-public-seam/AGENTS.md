@@ -81,14 +81,20 @@ session lifecycle, authentication handshake, permission loop, or worker runtime.
 
 Crate-root exports for `PlanDocument`, `PlanOperationKind`,
 `PlanExecutionContext`, `PlanExecutionHost`, `PlanExecutionReport`,
-`PlanLmCompleteRequest`, `PlanLmCompleteOutcome`,
-`PlanEmitRunEventRequest`, and `PlanEmitRunEventOutcome` are advanced public
-seam contracts. They prove active-schema Plan IR document validation and
-Let/Call/Write family classification plus representative lowering/execution of
-literal Let, `lm_complete` Call, and `emit_run_event` Write into a validated
-Plan Result. They are not ACP delivery, provider runtime execution, cache
-behavior, graph mutation authority, full Plan IR coverage, evaluator runtime
-production, or runtime revision-read enforcement.
+`PlanGraphReadScope`, `PlanGraphQueryRequest`, `PlanGraphQueryOutcome`,
+`PlanLmCompleteRequest`, `PlanLmCompleteOutcome`, `PlanEmitRunEventRequest`,
+and `PlanEmitRunEventOutcome` are advanced public seam contracts. They prove
+active-schema Plan IR document validation and Let/Call/Write family
+classification plus representative lowering/execution of literal Let,
+`graph_query` reads, `lm_complete` Call, and `emit_run_event` Write into a
+validated Plan Result. They also prove the representative harness distinguishes
+`latest_at_start`, `at_revision`, and `since_revision` graph-read scopes plus
+`execute`, `dry_run`, `require_cached`, and `replay` mode side-effect surfaces:
+dry-run validates without host effects, require-cached refuses cache misses
+without live provider calls, and replay loads supplied receipts without live
+call/write host effects. They are not ACP delivery, provider runtime execution,
+general cache backend behavior, graph mutation authority, full Plan IR
+coverage, evaluator runtime production, or engine RunGraph revision reads.
 
 Crate-root export `PinnedDialectEvaluator` is an advanced public seam contract.
 It proves deterministic parsing and replay for the V1 pinned wire

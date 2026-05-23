@@ -2,8 +2,8 @@ use std::collections::BTreeMap;
 
 use leaven_public_seam::{
     PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanExecutionContext, PlanExecutionHost,
-    PlanLmCompleteOutcome, PlanLmCompleteRequest, PlanOperationKind, PublicSeamError,
-    PublicSeamPackage,
+    PlanGraphQueryOutcome, PlanGraphQueryRequest, PlanGraphReadScope, PlanLmCompleteOutcome,
+    PlanLmCompleteRequest, PlanOperationKind, PublicSeamError, PublicSeamPackage,
 };
 use serde_json::{Value, json};
 
@@ -130,22 +130,19 @@ fn plan_ir_family_execution_rejects_dry_run_or_no_graph_write_fake_execution() {
     let mut host = RecordingPlanHost::default();
 
     let dry_run = typed_let_call_write_plan();
-    assert!(matches!(
-        package
-            .execute_plan_document(
-                &dry_run,
-                &PlanExecutionContext::new(
-                    "fp_cap_sha256_planexec",
-                    "fp_policy_sha256_planexec",
-                    "rev_planexec_base",
-                    "2026-05-23T12:00:00Z",
-                    "2026-05-23T12:00:01Z",
-                ),
-                &mut host,
-            )
-            .unwrap_err(),
-        PublicSeamError::InvalidPlan { .. }
-    ));
+    let dry_run_report = package
+        .execute_plan_document(&dry_run, &plan_execution_context(), &mut host)
+        .unwrap();
+    assert_eq!(dry_run_report.document().value_count(), 0);
+    assert_eq!(dry_run_report.document().receipt_count(), 0);
+    assert_eq!(
+        dry_run_report.document().base_revision(),
+        "rev_planexec_base"
+    );
+    assert_eq!(
+        dry_run_report.document().final_revision(),
+        "rev_planexec_base"
+    );
     assert!(host.calls.is_empty());
     assert!(host.writes.is_empty());
 
@@ -153,22 +150,88 @@ fn plan_ir_family_execution_rejects_dry_run_or_no_graph_write_fake_execution() {
     no_graph_write["mode"] = json!({"kind": "execute"});
     assert!(matches!(
         package
-            .execute_plan_document(
-                &no_graph_write,
-                &PlanExecutionContext::new(
-                    "fp_cap_sha256_planexec",
-                    "fp_policy_sha256_planexec",
-                    "rev_planexec_base",
-                    "2026-05-23T12:00:00Z",
-                    "2026-05-23T12:00:01Z",
-                ),
-                &mut host,
-            )
+            .execute_plan_document(&no_graph_write, &plan_execution_context(), &mut host,)
             .unwrap_err(),
         PublicSeamError::InvalidPlan { .. }
     ));
     assert!(host.calls.is_empty());
     assert!(host.writes.is_empty());
+}
+
+#[test]
+fn plan_execution_modes_require_cached_uses_cache_and_refuses_live_misses() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut miss = RecordingPlanHost::default();
+    let plan = require_cached_call_plan();
+
+    assert!(matches!(
+        package
+            .execute_plan_document(&plan, &plan_execution_context(), &mut miss)
+            .unwrap_err(),
+        PublicSeamError::InvalidPlan { .. }
+    ));
+    assert!(miss.calls.is_empty());
+    assert_eq!(miss.cached_calls, vec!["completion"]);
+
+    let mut hit = RecordingPlanHost {
+        cached_hit: true,
+        ..RecordingPlanHost::default()
+    };
+    let report = package
+        .execute_plan_document(&plan, &plan_execution_context(), &mut hit)
+        .unwrap();
+
+    assert!(hit.calls.is_empty());
+    assert_eq!(hit.cached_calls, vec!["completion"]);
+    assert_eq!(report.document().receipt_kinds(), &["call"]);
+    assert_eq!(
+        report.value()["values"]["completion"]["cache"].as_str(),
+        Some("hit")
+    );
+}
+
+#[test]
+fn plan_execution_modes_require_cached_rejects_agent_and_sandbox_live_work() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    for call in [agent_run_call(), sandbox_exec_call()] {
+        let plan = require_cached_external_call_plan(call);
+        let mut host = RecordingPlanHost::default();
+        assert!(matches!(
+            package
+                .execute_plan_document(&plan, &plan_execution_context(), &mut host)
+                .unwrap_err(),
+            PublicSeamError::InvalidPlan { .. }
+        ));
+        assert!(host.calls.is_empty());
+        assert!(host.cached_calls.is_empty());
+        assert!(host.writes.is_empty());
+    }
+}
+
+#[test]
+fn plan_execution_modes_replay_uses_receipts_without_live_host_effects() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut plan = typed_let_call_write_plan();
+    plan["mode"] = json!({
+        "kind": "replay",
+        "receipts": ["lmrec_completion", "wrec_status"]
+    });
+    let mut host = RecordingPlanHost::default();
+
+    let report = package
+        .execute_plan_document(&plan, &plan_execution_context(), &mut host)
+        .unwrap();
+
+    assert!(host.calls.is_empty());
+    assert!(host.writes.is_empty());
+    assert_eq!(
+        host.replayed_receipts,
+        vec!["lmrec_completion", "wrec_status"]
+    );
+    assert_eq!(report.document().value_count(), 0);
+    assert_eq!(report.document().receipt_kinds(), &["call", "write"]);
+    assert_eq!(report.document().final_revision(), "rev_planexec_final");
 }
 
 #[test]
@@ -189,17 +252,7 @@ fn plan_ir_family_execution_rejects_known_variants_outside_representative_harnes
     let mut host = RecordingPlanHost::default();
 
     let error = package
-        .execute_plan_document(
-            &plan,
-            &PlanExecutionContext::new(
-                "fp_cap_sha256_planexec",
-                "fp_policy_sha256_planexec",
-                "rev_planexec_base",
-                "2026-05-23T12:00:00Z",
-                "2026-05-23T12:00:01Z",
-            ),
-            &mut host,
-        )
+        .execute_plan_document(&plan, &plan_execution_context(), &mut host)
         .unwrap_err();
     assert!(
         matches!(error, PublicSeamError::InvalidPlan { .. }),
@@ -238,6 +291,78 @@ fn plan_ir_revision_modes_preserve_explicit_bases() {
             .unwrap_err(),
         PublicSeamError::InvalidPlan { .. }
     ));
+
+    let mut missing_source_base = since_revision_event_diff_plan();
+    missing_source_base["ops"][0]["expr"]["source"]
+        .as_object_mut()
+        .unwrap()
+        .remove("since_revision");
+    assert!(matches!(
+        package
+            .validate_plan_document(&missing_source_base)
+            .unwrap_err(),
+        PublicSeamError::InvalidPlan { .. }
+    ));
+}
+
+#[test]
+fn plan_revision_modes_execute_graph_queries_at_declared_scope() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut latest_host = RecordingPlanHost::default();
+    let latest_report = package
+        .execute_plan_document(
+            &latest_at_start_graph_query_plan(),
+            &plan_execution_context(),
+            &mut latest_host,
+        )
+        .unwrap();
+    assert_eq!(
+        latest_host.graph_reads,
+        vec!["latest_at_start:rev_planexec_base"]
+    );
+    assert_eq!(
+        latest_report.value()["values"]["events"]["graph_revision"].as_str(),
+        Some("rev_planexec_base")
+    );
+    assert_eq!(
+        latest_report.document().final_revision(),
+        "rev_planexec_base"
+    );
+
+    let mut at_host = RecordingPlanHost::default();
+    let at_report = package
+        .execute_plan_document(
+            &at_revision_graph_query_plan(),
+            &plan_execution_context(),
+            &mut at_host,
+        )
+        .unwrap();
+    assert_eq!(at_host.graph_reads, vec!["at_revision:rev_pinned"]);
+    assert_eq!(
+        at_report.value()["values"]["events"]["graph_revision"].as_str(),
+        Some("rev_pinned")
+    );
+    assert_eq!(at_report.document().final_revision(), "rev_planexec_base");
+
+    let mut since_host = RecordingPlanHost::default();
+    let mut since_plan = since_revision_event_diff_plan();
+    since_plan["mode"] = json!({"kind": "execute"});
+    let since_report = package
+        .execute_plan_document(&since_plan, &plan_execution_context(), &mut since_host)
+        .unwrap();
+    assert_eq!(
+        since_host.graph_reads,
+        vec!["since_revision:rev_base..rev_tip"]
+    );
+    assert_eq!(
+        since_report.value()["values"]["events"]["items"][0]["revision"].as_str(),
+        Some("rev_tip")
+    );
+    assert_eq!(
+        since_report.document().final_revision(),
+        "rev_planexec_base"
+    );
 }
 
 #[test]
@@ -416,6 +541,74 @@ fn typed_let_call_write_plan() -> Value {
     })
 }
 
+fn require_cached_call_plan() -> Value {
+    let mut plan = typed_let_call_write_plan();
+    plan["mode"] = json!({"kind": "require_cached"});
+    plan["ops"].as_array_mut().unwrap().pop();
+    plan["return"] = json!(["completion"]);
+    plan
+}
+
+fn require_cached_external_call_plan(call: Value) -> Value {
+    let mut plan = typed_let_call_write_plan();
+    plan["mode"] = json!({"kind": "require_cached"});
+    plan["ops"].as_array_mut().unwrap().pop();
+    plan["ops"][1]["call"] = call;
+    plan["return"] = json!(["completion"]);
+    plan
+}
+
+fn agent_run_call() -> Value {
+    json!({
+        "kind": "agent_run",
+        "runtime": "codex",
+        "workspace": "ws_planexec",
+        "instructions": {
+            "task": "Inspect the plan output."
+        },
+        "output": {
+            "kind": "final_message",
+            "max_bytes": 1024
+        },
+        "input_classes": ["public"]
+    })
+}
+
+fn sandbox_exec_call() -> Value {
+    json!({
+        "kind": "sandbox_exec",
+        "workspace": "ws_planexec",
+        "argv": ["true"],
+        "timeout_s": 1,
+        "output": {
+            "kind": "final_message",
+            "max_bytes": 1024
+        },
+        "input_classes": ["public"]
+    })
+}
+
+fn latest_at_start_graph_query_plan() -> Value {
+    let mut plan = since_revision_event_diff_plan();
+    plan["plan_id"] = json!("planrevisionlatest001");
+    plan["consistency"] = json!({"kind": "latest_at_start"});
+    plan["mode"] = json!({"kind": "execute"});
+    plan["ops"][0]["expr"]["source"] = json!({"kind": "events"});
+    plan
+}
+
+fn at_revision_graph_query_plan() -> Value {
+    let mut plan = since_revision_event_diff_plan();
+    plan["plan_id"] = json!("planrevisionpinned001");
+    plan["consistency"] = json!({
+        "kind": "at_revision",
+        "revision": "rev_pinned"
+    });
+    plan["mode"] = json!({"kind": "execute"});
+    plan["ops"][0]["expr"]["source"] = json!({"kind": "events"});
+    plan
+}
+
 fn submit_assessments_plan() -> Value {
     json!({
         "schema_version": "leaven.plan.v1",
@@ -543,13 +736,74 @@ fn evidence_envelope(summary: &'static str) -> Value {
 
 #[derive(Default)]
 struct RecordingPlanHost {
+    graph_reads: Vec<String>,
     calls: Vec<&'static str>,
+    cached_calls: Vec<&'static str>,
     writes: Vec<&'static str>,
+    replayed_receipts: Vec<String>,
     call_deps: BTreeMap<String, Value>,
     write_deps: BTreeMap<String, Value>,
+    cached_hit: bool,
 }
 
 impl PlanExecutionHost for RecordingPlanHost {
+    fn graph_query(
+        &mut self,
+        request: PlanGraphQueryRequest<'_>,
+    ) -> Result<PlanGraphQueryOutcome, PublicSeamError> {
+        assert_eq!(request.name(), "events");
+        assert_eq!(request.expr()["kind"].as_str(), Some("graph_query"));
+        match request.scope() {
+            PlanGraphReadScope::LatestAtStart { revision } => {
+                self.graph_reads.push(format!("latest_at_start:{revision}"));
+                Ok(PlanGraphQueryOutcome::new(
+                    [json!({
+                        "kind": "event_summary",
+                        "event_kind": "plan.started",
+                        "revision": revision,
+                        "payload": {
+                            "scope": "latest_at_start"
+                        }
+                    })],
+                    revision,
+                ))
+            }
+            PlanGraphReadScope::AtRevision { revision } => {
+                self.graph_reads.push(format!("at_revision:{revision}"));
+                Ok(PlanGraphQueryOutcome::new(
+                    [json!({
+                        "kind": "event_summary",
+                        "event_kind": "plan.pinned",
+                        "revision": revision,
+                        "payload": {
+                            "scope": "at_revision"
+                        }
+                    })],
+                    revision,
+                ))
+            }
+            PlanGraphReadScope::SinceRevision { since, until } => {
+                let graph_revision = until.unwrap_or(since);
+                self.graph_reads.push(format!(
+                    "since_revision:{since}..{}",
+                    until.unwrap_or("<latest>")
+                ));
+                Ok(PlanGraphQueryOutcome::new(
+                    [json!({
+                        "kind": "event_summary",
+                        "event_kind": "plan.changed",
+                        "revision": graph_revision,
+                        "payload": {
+                            "since": since,
+                            "until": until
+                        }
+                    })],
+                    graph_revision,
+                ))
+            }
+        }
+    }
+
     fn lm_complete(
         &mut self,
         request: PlanLmCompleteRequest<'_>,
@@ -572,6 +826,32 @@ impl PlanExecutionHost for RecordingPlanHost {
         ))
     }
 
+    fn cached_lm_complete(
+        &mut self,
+        request: PlanLmCompleteRequest<'_>,
+    ) -> Result<Option<PlanLmCompleteOutcome>, PublicSeamError> {
+        assert_eq!(request.name(), "completion");
+        assert_eq!(request.call()["kind"].as_str(), Some("lm_complete"));
+        self.cached_calls.push("completion");
+        self.call_deps = request.deps().clone();
+        if self.cached_hit {
+            Ok(Some(PlanLmCompleteOutcome::new(
+                json!({
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "kind": "text",
+                            "text": "cached ok"
+                        }
+                    ]
+                }),
+                "fp_runtime_sha256_planexec",
+            )))
+        } else {
+            Ok(None)
+        }
+    }
+
     fn emit_run_event(
         &mut self,
         request: PlanEmitRunEventRequest<'_>,
@@ -586,6 +866,51 @@ impl PlanExecutionHost for RecordingPlanHost {
             "rev_planexec_final",
         ))
     }
+
+    fn replay_receipt(&mut self, receipt: &str) -> Result<Value, PublicSeamError> {
+        self.replayed_receipts.push(receipt.to_owned());
+        match receipt {
+            "lmrec_completion" => Ok(json!({
+                "kind": "call",
+                "receipt": "lmrec_completion",
+                "op_var": "completion",
+                "started_at": "2026-05-23T12:00:00Z",
+                "completed_at": "2026-05-23T12:00:01Z",
+                "call_kind": "lm_complete",
+                "request_hash": "fp_request_sha256_replay_lm",
+                "result_hash": "fp_result_sha256_replay_lm",
+                "runtime_fingerprint": "fp_runtime_sha256_planexec",
+                "status": "succeeded"
+            })),
+            "wrec_status" => Ok(json!({
+                "kind": "write",
+                "receipt": "wrec_status",
+                "op_var": "status",
+                "started_at": "2026-05-23T12:00:01Z",
+                "completed_at": "2026-05-23T12:00:02Z",
+                "write_kind": "emit_run_event",
+                "request_hash": "fp_request_sha256_replay_write",
+                "result_hash": "fp_result_sha256_replay_write",
+                "base_revision": "rev_planexec_base",
+                "committed_revision": "rev_planexec_final",
+                "status": "succeeded",
+                "event_id": "event_plan_ir_checked"
+            })),
+            _ => Err(PublicSeamError::InvalidPlan {
+                message: format!("unexpected replay receipt `{receipt}`"),
+            }),
+        }
+    }
+}
+
+fn plan_execution_context() -> PlanExecutionContext {
+    PlanExecutionContext::new(
+        "fp_cap_sha256_planexec",
+        "fp_policy_sha256_planexec",
+        "rev_planexec_base",
+        "2026-05-23T12:00:00Z",
+        "2026-05-23T12:00:01Z",
+    )
 }
 
 fn since_revision_event_diff_plan() -> Value {
