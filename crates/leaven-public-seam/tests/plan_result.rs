@@ -159,6 +159,65 @@ fn plan_result_rejects_decorative_or_wrong_kind_receipt_refs() {
 }
 
 #[test]
+fn plan_result_rejects_decorative_audit_currency_receipts() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut missing_query_policy = typed_success_result();
+    missing_query_policy["receipts"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("read_scope_fingerprint");
+    assert!(matches!(
+        package
+            .validate_plan_result_document(&missing_query_policy)
+            .unwrap_err(),
+        PublicSeamError::InvalidPlanResult { .. }
+    ));
+
+    let mut missing_projection = typed_success_result();
+    missing_projection["receipts"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("projection_fingerprint");
+    assert!(matches!(
+        package
+            .validate_plan_result_document(&missing_projection)
+            .unwrap_err(),
+        PublicSeamError::InvalidPlanResult { .. }
+    ));
+
+    let mut wrong_query_hash_role = typed_success_result();
+    wrong_query_hash_role["receipts"][0]["op_hash"] = json!("fp_result_sha256_rows");
+    assert!(matches!(
+        package
+            .validate_plan_result_document(&wrong_query_hash_role)
+            .unwrap_err(),
+        PublicSeamError::InvalidPlanResult { .. }
+    ));
+
+    let mut missing_runtime = typed_failure_result();
+    missing_runtime["receipts"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("runtime_fingerprint");
+    assert!(matches!(
+        package
+            .validate_plan_result_document(&missing_runtime)
+            .unwrap_err(),
+        PublicSeamError::InvalidPlanResult { .. }
+    ));
+
+    let mut wrong_call_hash_role = typed_failure_result();
+    wrong_call_hash_role["receipts"][0]["result_hash"] = json!("fp_request_sha256_lm");
+    assert!(matches!(
+        package
+            .validate_plan_result_document(&wrong_call_hash_role)
+            .unwrap_err(),
+        PublicSeamError::InvalidPlanResult { .. }
+    ));
+}
+
+#[test]
 fn plan_result_rejects_failed_call_costs_without_charge_receipts() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
 

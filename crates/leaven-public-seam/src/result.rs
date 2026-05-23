@@ -390,11 +390,54 @@ fn inspect_receipts(receipts: &[Value]) -> Result<Vec<String>, PublicSeamError> 
         let receipt = receipt
             .as_object()
             .ok_or_else(|| invalid_result("plan result receipt must be an object"))?;
-        receipt_kinds.push(required_string(receipt.get("kind"), "receipt.kind")?.to_owned());
+        let kind = required_string(receipt.get("kind"), "receipt.kind")?;
+        receipt_kinds.push(kind.to_owned());
         required_string(receipt.get("started_at"), "receipt.started_at")?;
         required_string(receipt.get("completed_at"), "receipt.completed_at")?;
+        validate_audit_currency_receipt(kind, receipt)?;
     }
     Ok(receipt_kinds)
+}
+
+fn validate_audit_currency_receipt(
+    kind: &str,
+    receipt: &serde_json::Map<String, Value>,
+) -> Result<(), PublicSeamError> {
+    match kind {
+        "query" => {
+            required_hash_with_prefix(receipt, "op_hash", "fp_query_sha256_")?;
+            required_hash_with_prefix(receipt, "result_hash", "fp_result_sha256_")?;
+            required_string(receipt.get("graph_revision"), "receipt.graph_revision")?;
+            required_hash_with_prefix(receipt, "read_scope_fingerprint", "fp_scope_sha256_")?;
+            required_hash_with_prefix(receipt, "projection_fingerprint", "fp_projection_sha256_")?;
+        }
+        "call" => {
+            required_hash_with_prefix(receipt, "request_hash", "fp_request_sha256_")?;
+            required_hash_with_prefix(receipt, "result_hash", "fp_result_sha256_")?;
+            required_hash_with_prefix(receipt, "runtime_fingerprint", "fp_runtime_sha256_")?;
+        }
+        "write" => {
+            required_hash_with_prefix(receipt, "request_hash", "fp_request_sha256_")?;
+            required_hash_with_prefix(receipt, "result_hash", "fp_result_sha256_")?;
+            required_string(receipt.get("base_revision"), "receipt.base_revision")?;
+        }
+        other => return Err(invalid_result(format!("unknown receipt kind `{other}`"))),
+    }
+    Ok(())
+}
+
+fn required_hash_with_prefix(
+    object: &serde_json::Map<String, Value>,
+    field: &str,
+    prefix: &str,
+) -> Result<(), PublicSeamError> {
+    let hash = required_string(object.get(field), field)?;
+    if !hash.starts_with(prefix) {
+        return Err(invalid_result(format!(
+            "receipt {field} must use `{prefix}` audit hash role"
+        )));
+    }
+    Ok(())
 }
 
 fn validate_submit_assessment_receipts(

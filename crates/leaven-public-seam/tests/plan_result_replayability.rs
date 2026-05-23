@@ -154,7 +154,7 @@ fn mixed_replayability_result<const N: usize>(
                 "started_at": "2026-05-23T12:00:00Z",
                 "completed_at": "2026-05-23T12:00:01Z",
                 "write_kind": "submit_assessments",
-                "request_hash": "fp_req_sha256_replayability",
+                "request_hash": "fp_request_sha256_replayability",
                 "result_hash": "fp_result_sha256_replayability",
                 "base_revision": "rev_replayability_base",
                 "committed_revision": "rev_replayability_final",
