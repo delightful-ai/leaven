@@ -32,3 +32,21 @@ Not allowed:
 - Do not mark `ps1.evaluator.score_output` proven.
 - Do not claim that `Score.output.data_classes` alone proves the output is related to the assessed candidate.
 - Do not claim the dummy-output fake pass is fully rejected.
+
+Follow-up implementation after this block:
+
+- `crates/leaven-public-seam/tests/plan_document.rs::submit_assessments_rejects_missing_or_placeholder_score_output` now includes a candidate-labeled dummy `Score.output`; Plan IR validation requires `Score.output` to be projected by matching `evidence.public.summary`, so the candidate data-class label is no longer accepted by itself.
+- `crates/leaven-run/tests/scoring_evaluator.rs::scoring_evaluator_rejects_typed_runner_candidate_labeled_dummy_declaration` proves independent typed runners cannot use an explicit `OutputRecord::candidate_inline("dummy")` declaration as the assessed output.
+- `crates/leaven-run/tests/scoring_evaluator.rs::judging_evaluator_rejects_typed_runner_candidate_labeled_dummy_declaration` proves the same denial for pairwise/listwise judging.
+- `leaven-run` now tags runner reportable-output declarations internally as derived or explicit. Explicit `candidate.output` records are refused by evaluator lowering; string outputs and `with_reportable_text(...)` remain derived candidate-output declarations, and explicit `candidate.artifact` records remain allowed.
+
+Fresh verification after follow-up:
+
+- `cargo fmt --check`
+- `CARGO_INCREMENTAL=0 cargo test -p leaven-public-seam --test plan_document`
+- `CARGO_INCREMENTAL=0 cargo test -p leaven-run --test scoring_evaluator`
+
+Current limits after follow-up:
+
+- This follow-up rejects the concrete candidate-labeled dummy paths named above, but it still does not sign off `ps1.evaluator.score_output`.
+- The row remains pending until a fresh adversarial review decides whether the remaining typed-output declaration authority and public-seam evidence-summary projection are strong enough for the locked row wording.

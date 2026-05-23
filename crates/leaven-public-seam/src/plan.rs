@@ -243,7 +243,7 @@ impl AssessmentScoreOutputUsage {
                 .ok_or_else(|| {
                     invalid_plan("submit_assessments score must carry a reportable output")
                 })?;
-            validate_score_output(output)?;
+            validate_score_output(object, output)?;
             match kind {
                 "independent" => self.independent += 1,
                 "pairwise" => self.pairwise += 1,
@@ -259,7 +259,10 @@ impl AssessmentScoreOutputUsage {
     }
 }
 
-fn validate_score_output(output: &serde_json::Map<String, Value>) -> Result<(), PublicSeamError> {
+fn validate_score_output(
+    assessment: &serde_json::Map<String, Value>,
+    output: &serde_json::Map<String, Value>,
+) -> Result<(), PublicSeamError> {
     let data_classes = output
         .get("data_classes")
         .and_then(Value::as_array)
@@ -275,11 +278,12 @@ fn validate_score_output(output: &serde_json::Map<String, Value>) -> Result<(), 
             "submit_assessments Score.output must carry candidate.output or candidate.artifact data class",
         ));
     }
-    if output
+    let summary = output
         .get("summary")
         .and_then(Value::as_str)
-        .is_some_and(|summary| !summary.trim().is_empty())
-    {
+        .filter(|summary| !summary.trim().is_empty());
+    if let Some(summary) = summary {
+        validate_score_output_evidence_projection(assessment, summary)?;
         return Ok(());
     }
     match output.get("value") {
@@ -289,22 +293,55 @@ fn validate_score_output(output: &serde_json::Map<String, Value>) -> Result<(), 
             ));
         }
         Some(Value::String(text)) if text.trim().is_empty() => {}
-        Some(_) => return Ok(()),
+        Some(Value::String(text)) => {
+            validate_score_output_evidence_projection(assessment, text)?;
+            return Ok(());
+        }
+        Some(_) => {
+            return Err(invalid_plan(
+                "submit_assessments Score.output must carry a non-empty summary for structured output projection",
+            ));
+        }
         None => {}
     }
-    if output.get("blob_ref").is_some() {
-        return Ok(());
-    }
-    if output
-        .get("trace_refs")
-        .and_then(Value::as_array)
-        .is_some_and(|trace_refs| !trace_refs.is_empty())
+    if output.get("blob_ref").is_some()
+        || output
+            .get("trace_refs")
+            .and_then(Value::as_array)
+            .is_some_and(|trace_refs| !trace_refs.is_empty())
     {
-        return Ok(());
+        return Err(invalid_plan(
+            "submit_assessments Score.output blob or trace output must carry a public evidence summary projection",
+        ));
     }
     Err(invalid_plan(
         "submit_assessments Score.output must carry reportable output content",
     ))
+}
+
+fn validate_score_output_evidence_projection(
+    assessment: &serde_json::Map<String, Value>,
+    expected_summary: &str,
+) -> Result<(), PublicSeamError> {
+    let evidence_summary = assessment
+        .get("evidence")
+        .and_then(Value::as_object)
+        .and_then(|evidence| evidence.get("public"))
+        .and_then(Value::as_object)
+        .and_then(|public| public.get("summary"))
+        .and_then(Value::as_str)
+        .ok_or_else(|| {
+            invalid_plan(
+                "submit_assessments Score.output must be projected by evidence.public.summary",
+            )
+        })?;
+    if evidence_summary == expected_summary {
+        Ok(())
+    } else {
+        Err(invalid_plan(
+            "submit_assessments Score.output must match evidence.public.summary",
+        ))
+    }
 }
 
 #[derive(Default)]

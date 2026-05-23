@@ -20,7 +20,7 @@ pub struct RunOutput<Out = ()> {
     pub cost: Cost,
     /// Runner trace lines associated with this successful output.
     pub trace: Vec<String>,
-    reportable_output: Option<OutputRecord>,
+    reportable_output: Option<ReportableOutputDeclaration>,
 }
 
 impl RunOutput<String> {
@@ -29,7 +29,9 @@ impl RunOutput<String> {
     pub fn new(output: impl Into<String>) -> Self {
         let output = output.into();
         Self {
-            reportable_output: Some(candidate_output_record(output.clone())),
+            reportable_output: Some(ReportableOutputDeclaration::derived(
+                candidate_output_record(output.clone()),
+            )),
             output,
             cost: Cost::zero(),
             trace: Vec::new(),
@@ -71,17 +73,21 @@ impl<Out> RunOutput<Out> {
     /// cannot distinguish a meaningful `Score.output` from a dummy field.
     #[must_use]
     pub fn with_reportable_output(mut self, output: OutputRecord) -> Self {
-        self.reportable_output = Some(output);
+        self.reportable_output = Some(ReportableOutputDeclaration::explicit(output));
         self
     }
 
     /// Attaches an inline reportable text rendering for a typed runner output.
     #[must_use]
     pub fn with_reportable_text(self, output: impl Into<String>) -> Self {
-        self.with_reportable_output(candidate_output_record(output))
+        let mut this = self;
+        this.reportable_output = Some(ReportableOutputDeclaration::derived(
+            candidate_output_record(output),
+        ));
+        this
     }
 
-    pub(crate) fn reportable_output(&self) -> Option<&OutputRecord> {
+    pub(crate) fn reportable_output(&self) -> Option<&ReportableOutputDeclaration> {
         self.reportable_output.as_ref()
     }
 }
@@ -233,14 +239,14 @@ impl Score {
 pub struct ReportableOutput {
     record: OutputRecord,
     scope: ReportableOutputScope,
-    expected: Option<OutputRecord>,
+    expected: Option<ReportableOutputDeclaration>,
 }
 
 impl ReportableOutput {
     pub(crate) fn new(
         record: OutputRecord,
         scope: ReportableOutputScope,
-        expected: Option<OutputRecord>,
+        expected: Option<ReportableOutputDeclaration>,
     ) -> Self {
         Self {
             record,
@@ -262,14 +268,57 @@ impl ReportableOutput {
         let Some(expected) = self.expected else {
             return Err(ReportableOutputError::MissingAssessedOutput);
         };
-        if !is_assessed_candidate_or_artifact_output(&expected) {
+        if expected.is_unbound_explicit_candidate_output() {
+            return Err(ReportableOutputError::UnboundCandidateOutput);
+        }
+        if !is_assessed_candidate_or_artifact_output(&expected.record) {
             return Err(ReportableOutputError::MissingAssessedDataClass);
         }
-        if !same_output_payload(&self.record, &expected) {
+        if !same_output_payload(&self.record, &expected.record) {
             return Err(ReportableOutputError::Unrelated);
         }
-        Ok(expected)
+        Ok(expected.record)
     }
+}
+
+#[derive(Clone, Debug)]
+pub struct ReportableOutputDeclaration {
+    record: OutputRecord,
+    origin: ReportableOutputOrigin,
+}
+
+impl ReportableOutputDeclaration {
+    pub(crate) fn derived(record: OutputRecord) -> Self {
+        Self {
+            record,
+            origin: ReportableOutputOrigin::DerivedFromRunnerOutput,
+        }
+    }
+
+    pub(crate) fn explicit(record: OutputRecord) -> Self {
+        Self {
+            record,
+            origin: ReportableOutputOrigin::ExplicitRecord,
+        }
+    }
+
+    pub(crate) fn record(&self) -> &OutputRecord {
+        &self.record
+    }
+
+    pub(crate) fn is_unbound_explicit_candidate_output(&self) -> bool {
+        self.origin == ReportableOutputOrigin::ExplicitRecord
+            && self
+                .record
+                .data_classes()
+                .contains(&DataClass::candidate_output())
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ReportableOutputOrigin {
+    DerivedFromRunnerOutput,
+    ExplicitRecord,
 }
 
 fn is_placeholder_output(record: &OutputRecord) -> bool {
@@ -343,6 +392,9 @@ pub enum ReportableOutputError {
     /// The runner-declared output is not classified as assessed candidate/artifact output.
     #[error("runner output did not declare candidate or artifact assessed output")]
     MissingAssessedDataClass,
+    /// The runner explicitly declared candidate-output data without a typed-output binding.
+    #[error("runner output did not derive candidate output from typed output")]
+    UnboundCandidateOutput,
     /// The score reported output that was not the runner output being assessed.
     #[error("reportable output did not match assessed output")]
     Unrelated,
@@ -526,7 +578,7 @@ pub struct ScoreContext<A, I, T = leaven_eval::NoTarget, Out = ()> {
     /// Point-in-time budget snapshot visible to the scorer.
     pub budget: BudgetSnapshot,
     output_scope: ReportableOutputScope,
-    expected_output: Option<OutputRecord>,
+    expected_output: Option<ReportableOutputDeclaration>,
 }
 
 impl<A, I, T, Out> ScoreContext<A, I, T, Out> {
@@ -574,7 +626,7 @@ mod tests {
     use leaven_evidence::OutputRecord;
     use leaven_kernel::{CandidateId, CaseId};
 
-    use super::{ReportableOutputError, ReportableOutputScope};
+    use super::{ReportableOutputDeclaration, ReportableOutputError, ReportableOutputScope};
 
     #[test]
     fn grouped_reportable_output_scopes_do_not_match_single_candidate_scopes() {
@@ -586,7 +638,9 @@ mod tests {
         let output = super::ReportableOutput {
             record: OutputRecord::candidate_inline("left/right comparison"),
             scope: group.clone(),
-            expected: Some(OutputRecord::candidate_inline("left/right comparison")),
+            expected: Some(ReportableOutputDeclaration::derived(
+                OutputRecord::candidate_inline("left/right comparison"),
+            )),
         };
 
         assert!(matches!(
