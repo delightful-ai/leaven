@@ -3,13 +3,14 @@
 This crate owns the locked V1 public seam wire contract for external-language
 workers: manifest inventory, active schema/profile loading, contract
 fingerprints, conformance-matrix harness data, and deferred-marker enforcement.
-It also owns the wire-level capability document shape and opaque-token
-resolution guardrails needed before runtime owners enforce grants.
+It also owns the wire-level capability document shape, opaque-token resolution
+guardrails, and grant-envelope authorization checks needed before runtime
+owners spend budgets or execute effects.
 
 It is not a worker runtime, graph mutation layer, provider adapter, or schema
-code generator. Grant enforcement, budget spending, data-class propagation, and
-runtime behavior must land in the owning engine, agent, workspace, LM,
-evaluator, or run crates and be exercised through this seam before any
+code generator. Aggregate budget spending, data-class propagation across
+results, and runtime behavior must land in the owning engine, agent, workspace,
+LM, evaluator, or run crates and be exercised through this seam before any
 conformance row can claim integrated behavior.
 
 ## Route Here
@@ -20,6 +21,8 @@ conformance row can claim integrated behavior.
 - Capability documents resolved from opaque handles, including subject
   fingerprint, binding, expiry, revocation, renewal, grants, and aggregate
   budget truth.
+- Grant-envelope authorization for action, resource selectors, case fields,
+  partitions, schemas, surface fingerprints, data classes, and per-grant limits.
 - RFC 8785 JCS plus SHA-256 schema fingerprint values such as
   `fp_schema_sha256_*`.
 - Conformance-matrix row parsing, uniqueness checks, spec-reference checks,
@@ -50,8 +53,14 @@ package, not proof that the runtime rows they describe have product behavior.
 
 Crate-root exports for `CapabilityDocument`, `CapabilityRegistry`, and
 `CapabilityError` are advanced public seam contracts. They prove token-to-
-document authority resolution only; they are not ordinary grant enforcement,
-ACP authentication, or budget-ledger product routes.
+document authority resolution only; they are not ACP authentication or
+budget-ledger product routes.
+
+Crate-root exports for `CapabilityGrantRequest`, `CapabilityLimitUsage`,
+`AuthorizedGrant`, `CapabilityDenial`, and `CapabilityDenialKind` are advanced
+public seam contracts. They prove grant-envelope authorization only; they are
+not aggregate budget ledgers, delegation engines, ACP permission handlers, or
+runtime effect executors.
 
 ## Proof Anchors
 
@@ -60,7 +69,9 @@ ACP authentication, or budget-ledger product routes.
   notes-denominator mapping, fake-closeout rejection, and deferred markers.
 - `tests/capability_document.rs` proves opaque token handles resolve to
   structured capability documents and reject bare, missing, expired, revoked,
-  or binding-mismatched tokens.
+  or binding-mismatched tokens. It also proves grant-envelope authorization and
+  denials for action, resource, partition, case-field, schema, surface,
+  data-class, and per-grant limit constraints.
 - `cargo test -p leaven-public-seam --test contract_package` is the focused
   proof for this crate.
 - `cargo test -p leaven --test topology_contract` must pass when this crate is
