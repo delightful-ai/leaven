@@ -79,6 +79,13 @@ Receipts-tranche adversarial review:
 - Follow-up resolution: `submit_assessments` is no longer skipped by `validate_result_hash_bindings`; `plan_result_rejects_submit_assessment_result_hashes_that_do_not_bind_values` rejects same-prefix `submit_assessments` result-hash mismatches.
 - Current status: `ps1.receipts.audit_currency` still remains pending until follow-up adversarial sign-off. `ps1.receipts.failed_costs` remains pending because engine budget-ledger/runtime evidence is still absent.
 
+Request-evaluation follow-up review:
+
+- Sub-agent `019e5632-b3d5-7fe0-9f58-185752793859` re-reviewed `ps1.receipts.audit_currency` at `vkpwzpmn` and still blocked sign-off because generic Plan Result validation skipped `request_evaluation` result hashes while the matrix row claimed write receipts generally.
+- Follow-up resolution: `PublicSeamPackage::validate_plan_result_document` now rejects `request_evaluation` receipt/value pairs without an evaluation job context; `PublicSeamPackage::validate_evaluation_request_receipt_document` uses the context-aware Plan Result path and then verifies the evaluation-job request/result hashes through `EvaluationRequestReceiptDocument::from_plan_result`.
+- `evaluation_request_receipt_binds_job_candidate_and_case_identity` proves the dedicated route accepts the context-bound request-evaluation receipt, and `evaluation_request_receipt_rejects_decorative_or_unbound_hashes` rejects decorative request and result hashes.
+- Current status: `ps1.receipts.audit_currency` still remains pending until this request-evaluation fix receives adversarial follow-up sign-off.
+
 Nested score-output data-class follow-up:
 
 - `crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_nested_score_output_data_class_gaps` now proves a result value containing assessment rows must include nested `score.output.data_classes` such as `candidate.output` in the value-level `data_classes`.

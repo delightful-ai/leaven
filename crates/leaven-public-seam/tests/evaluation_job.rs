@@ -241,6 +241,11 @@ fn evaluation_request_receipt_binds_job_candidate_and_case_identity() {
         .unwrap();
     let result = evaluation_request_receipt_result(&job);
 
+    assert!(matches!(
+        package.validate_plan_result_document(&result).unwrap_err(),
+        PublicSeamError::InvalidPlanResult { .. }
+    ));
+
     let receipt = package
         .validate_evaluation_request_receipt_document(&job, &result)
         .unwrap();
@@ -278,6 +283,15 @@ fn evaluation_request_receipt_rejects_decorative_or_unbound_hashes() {
     assert!(matches!(
         package
             .validate_evaluation_request_receipt_document(&job, &decorative_hash)
+            .unwrap_err(),
+        PublicSeamError::InvalidEvaluationJob { .. }
+    ));
+
+    let mut decorative_result_hash = evaluation_request_receipt_result(&job);
+    decorative_result_hash["receipts"][0]["result_hash"] = json!("fp_result_sha256_decorative");
+    assert!(matches!(
+        package
+            .validate_evaluation_request_receipt_document(&job, &decorative_result_hash)
             .unwrap_err(),
         PublicSeamError::InvalidEvaluationJob { .. }
     ));

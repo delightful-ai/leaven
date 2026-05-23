@@ -22,12 +22,28 @@ pub struct PlanResultDocument {
 
 impl PlanResultDocument {
     pub(crate) fn from_schema_valid_value(value: &Value) -> Result<Self, PublicSeamError> {
+        Self::from_schema_valid_value_with_policy(value, RequestEvaluationReceiptPolicy::Reject)
+    }
+
+    pub(crate) fn from_schema_valid_value_allowing_request_evaluation(
+        value: &Value,
+    ) -> Result<Self, PublicSeamError> {
+        Self::from_schema_valid_value_with_policy(
+            value,
+            RequestEvaluationReceiptPolicy::AllowDedicatedValidation,
+        )
+    }
+
+    fn from_schema_valid_value_with_policy(
+        value: &Value,
+        request_evaluation_policy: RequestEvaluationReceiptPolicy,
+    ) -> Result<Self, PublicSeamError> {
         let object = value
             .as_object()
             .ok_or_else(|| invalid_result("plan result must be an object"))?;
         let replayability_summary = required_replayability(object.get("replayability_summary"))?;
         let parts = PlanResultParts::from_object(object)?;
-        validate_result_hash_bindings(parts.values, parts.receipts)?;
+        validate_result_hash_bindings(parts.values, parts.receipts, request_evaluation_policy)?;
         let value_audit = inspect_values(
             parts.values,
             &receipt_index(parts.receipts)?,
@@ -109,6 +125,12 @@ impl PlanResultDocument {
     pub fn assessment_batch_replayability(&self) -> &[(String, Replayability)] {
         &self.assessment_batch_replayability
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RequestEvaluationReceiptPolicy {
+    Reject,
+    AllowDedicatedValidation,
 }
 
 struct PlanResultParts<'a> {
@@ -443,6 +465,7 @@ fn validate_audit_currency_receipt(
 fn validate_result_hash_bindings(
     values: &serde_json::Map<String, Value>,
     receipts: &[Value],
+    request_evaluation_policy: RequestEvaluationReceiptPolicy,
 ) -> Result<(), PublicSeamError> {
     let receipt_objects = receipt_object_index(receipts)?;
     for (name, value) in values {
@@ -458,7 +481,9 @@ fn validate_result_hash_bindings(
             .get("op_var")
             .and_then(Value::as_str)
             .unwrap_or(name);
-        let Some(schema_version) = result_hash_schema(receipt)? else {
+        let Some(schema_version) =
+            result_hash_schema(receipt, receipt_id, request_evaluation_policy)?
+        else {
             continue;
         };
         let expected = prefixed_jcs_hash(
@@ -481,13 +506,25 @@ fn validate_result_hash_bindings(
 
 fn result_hash_schema(
     receipt: &serde_json::Map<String, Value>,
+    receipt_id: &str,
+    request_evaluation_policy: RequestEvaluationReceiptPolicy,
 ) -> Result<Option<&'static str>, PublicSeamError> {
     Ok(
         match required_string(receipt.get("kind"), "receipt.kind")? {
             "query" => Some("leaven.plan_query_result.v1"),
             "call" => Some("leaven.plan_call_result.v1"),
             "write" => match required_string(receipt.get("write_kind"), "receipt.write_kind")? {
-                "request_evaluation" => None,
+                "request_evaluation"
+                    if request_evaluation_policy
+                        == RequestEvaluationReceiptPolicy::AllowDedicatedValidation =>
+                {
+                    None
+                }
+                "request_evaluation" => {
+                    return Err(invalid_result(format!(
+                        "request_evaluation receipt `{receipt_id}` requires evaluation job context"
+                    )));
+                }
                 _ => Some("leaven.plan_write_result.v1"),
             },
             _ => None,
