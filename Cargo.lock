@@ -3721,6 +3721,7 @@ name = "leaven-run"
 version = "0.0.0"
 dependencies = [
  "futures",
+ "jcs-canonicalize",
  "leaven-core",
  "leaven-engine",
  "leaven-eval",

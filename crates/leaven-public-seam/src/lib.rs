@@ -20,7 +20,9 @@ pub use capability::{
 };
 pub use dialect::PinnedDialectEvaluator;
 pub use error::PublicSeamError;
-pub use evaluation_job::{EvaluationJobDocument, EvaluationJobKind};
+pub use evaluation_job::{
+    EvaluationJobDocument, EvaluationJobKind, EvaluationRequestReceiptDocument,
+};
 pub use evidence::EvidenceEnvelopeDocument;
 pub use fingerprint::SchemaFingerprint;
 pub use matrix::{ConformanceMatrix, ConformanceRow, MatrixRowStatus, MinimumCloseoutLevel};

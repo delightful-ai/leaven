@@ -106,12 +106,14 @@ source-receipt preservation plus target-derived data-class coverage at the
 wire-envelope layer only; it is not evaluator evidence production, redaction
 execution, receipt persistence, or data-class propagation through runtime stages.
 
-Crate-root exports for `EvaluationJobDocument` and `EvaluationJobKind` are
-advanced public seam contracts. They prove active-schema evaluation-job document
-validation plus semantic identity checks for request id, candidate/case set,
-base revision, deadline, evaluator id/fingerprint, capability fingerprint, and
-request shape. They are not proof that the runtime evaluator path emits those
-jobs or request receipts.
+Crate-root exports for `EvaluationJobDocument`, `EvaluationJobKind`, and
+`EvaluationRequestReceiptDocument` are advanced public seam contracts. They
+prove active-schema evaluation-job document validation plus semantic identity
+checks for request id, candidate/case set, base revision, deadline, evaluator
+id/fingerprint, capability fingerprint, request shape, and Plan Result
+`request_evaluation` receipt binding. They are not proof that the runtime
+evaluator path fully emits those jobs or receipts without the `leaven-run`
+projection path.
 
 Crate-root exports for `PublicOutputRecord`, `OutputRecordDocument`, and
 `PublicBlobRef` are advanced public seam contracts. They prove reusable
@@ -151,10 +153,12 @@ backpressure, or runtime watch support.
   or public PlanResult projection.
 - `tests/evaluation_job.rs` proves active-schema EvaluationJob values preserve
   evaluator/request/candidate/case/revision/deadline/capability identity for
-  independent, pairwise, and listwise shapes, and rejects missing deadline,
+  independent, pairwise, and listwise shapes, rejects missing deadline,
   evaluator fingerprint, capability fingerprint, unresolved case sets, and
-  self-pairs. It does not prove the runtime evaluator creates those jobs or
-  emits evaluation request receipts.
+  self-pairs, and validates `request_evaluation` Plan Result receipts against
+  the job's candidate/case identity and audit hashes. It does not prove the
+  runtime evaluator creates those jobs or emits evaluation request receipts
+  unless paired with the `leaven-run` runtime projection tests.
 - `tests/output_record.rs` proves reusable `leaven-evidence` output records
   project into the locked public-seam OutputRecord wire shape with visibility,
   data classes, non-placeholder inline output, and public blob audit metadata.
