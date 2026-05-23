@@ -21,10 +21,11 @@ use leaven_kernel::{
     ResolvedEvaluationSetId, RunId, StageId, now,
 };
 use leaven_run::{
-    JudgeScoreContext, JudgingEvaluator, RunCase, RunError, RunOutput, RunProblem,
-    RuntimeFingerprint, Score, ScoreContext, ScoreError, ScoringEvaluator,
+    JudgeScoreContext, JudgingEvaluator, PublicEvaluationJobContext, RunCase, RunError, RunOutput,
+    RunProblem, RuntimeFingerprint, Score, ScoreContext, ScoreError, ScoringEvaluator,
     ScoringEvaluatorIdentity,
 };
+use leaven_store_inline::InlineEvidenceStore;
 
 const TEST_RUNNER_FINGERPRINT: Fingerprint = Fingerprint::from_bytes([7; 32]);
 const TEST_SCORER_FINGERPRINT: Fingerprint = Fingerprint::from_bytes([8; 32]);
@@ -1516,6 +1517,65 @@ fn runtime_score_outputs_project_through_public_seam_for_all_assessment_shapes()
             panic!("expected listwise assessment");
         };
         assert_projected_public_output(&package, evidence, "42|52|62");
+    });
+}
+
+#[test]
+fn runtime_evaluation_requests_project_to_public_seam_evaluation_jobs() {
+    block_on(async {
+        let package = leaven_public_seam::PublicSeamPackage::active_from_repo(workspace_root())
+            .expect("public seam package loads from workspace");
+        let (mut graph, mut budget, candidate) = graph_with_seed();
+        let case_set = leaven_engine::CaseSet::new(vec![input_case(0, 2), input_case(1, 3)]);
+        let store = InlineEvidenceStore::<leaven_evidence::CaseAssessmentEvidence>::new(
+            "public-seam-job-identity",
+        );
+        let evaluator = scoring_evaluator(|ctx| {
+            Score::new(ctx.output.output.parse::<f64>().unwrap(), "validation")
+                .with_output(ctx.report_text_output(ctx.output.output.clone()))
+        });
+        let report = {
+            let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget)
+                .with_case_set(&case_set)
+                .with_evidence_store(&store);
+            ctx.evaluate_with(
+                &evaluator,
+                leaven_core::EvaluationRequest::Independent {
+                    candidates: vec![candidate],
+                    set: EvaluationSet::All,
+                    granularity: AssessmentGranularity::PerCase,
+                    purpose: EvaluationPurpose::Validation,
+                },
+            )
+            .await
+            .unwrap()
+        };
+
+        let ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
+        let graph_view = ctx.graph();
+        let request = graph_view
+            .evaluation_request(report.request_id)
+            .expect("runtime evaluation request is recorded");
+        let public_job = PublicEvaluationJobContext::new(
+            "sc_eval_runtime",
+            "rev_runtime_base",
+            "fp_cap_sha256_runtimejob",
+            "2026-05-23T13:00:00Z",
+        )
+        .evaluation_job_document(&graph_view, &request)
+        .unwrap();
+        let validated = package
+            .validate_evaluation_job_document(&public_job)
+            .unwrap();
+
+        assert_eq!(validated.request_id(), public_job["evaluation_request_id"]);
+        assert_eq!(validated.kind(), leaven_public_seam::EvaluationJobKind::Independent);
+        assert_eq!(validated.candidate_ids().len(), 1);
+        assert_eq!(validated.case_ids(), &["case_0".to_owned(), "case_1".to_owned()]);
+        assert_eq!(validated.case_count(), 2);
+        assert_eq!(validated.base_revision(), "rev_runtime_base");
+        assert_eq!(validated.capability_fingerprint(), "fp_cap_sha256_runtimejob");
+        assert_eq!(public_job["resolved_set"]["partition_summary"]["resolved"], 2);
     });
 }
 
