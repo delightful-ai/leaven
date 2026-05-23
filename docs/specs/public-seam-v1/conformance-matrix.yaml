@@ -49,6 +49,10 @@ rows:
       active manifest is deliberately revised in the same change.
     fake_pass_rejected: Loading whichever draft schema happens to validate.
     minimum_closeout_level: semantic_denial
+    positive_test_evidence:
+      - crates/leaven-public-seam/tests/contract_package.rs::active_package_loader_accepts_only_locked_public_seam_v1_package
+    negative_test_evidence:
+      - crates/leaven-public-seam/tests/contract_package.rs::active_package_loader_accepts_only_locked_public_seam_v1_package
     implementation_evidence:
       - crates/leaven-public-seam/tests/contract_package.rs::active_package_loader_accepts_only_locked_public_seam_v1_package
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::from_path
@@ -95,8 +99,12 @@ rows:
       rejected.
     fake_pass_rejected: Accepting strings that look like fingerprints without computing them.
     minimum_closeout_level: semantic_denial
+    positive_test_evidence:
+      - crates/leaven-public-seam/tests/contract_package.rs::schema_fingerprints_reject_pretty_printed_hashing_and_track_semantic_changes
+    negative_test_evidence:
+      - crates/leaven-public-seam/tests/contract_package.rs::schema_fingerprints_reject_pretty_printed_hashing_and_track_semantic_changes
     implementation_evidence:
-      - crates/leaven-public-seam/tests/contract_package.rs::schema_fingerprints_use_jcs_sha256_not_pretty_printed_bytes
+      - crates/leaven-public-seam/tests/contract_package.rs::schema_fingerprints_reject_pretty_printed_hashing_and_track_semantic_changes
       - crates/leaven-public-seam/src/fingerprint.rs::SchemaFingerprint::for_json_value
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-initial-contract-owner-review.md
@@ -108,6 +116,8 @@ rows:
     spec_refs:
       - docs/specs/public-seam-v1/01_plan_ir_spec_v0.3.md
       - docs/specs/public-seam-v1/schemas/leaven.plan.v1.schema.json
+    conformance_tests:
+      - reject_unknown_core_kind_values
     owner_boundary: public-seam implementation owner; cold algebra must not absorb transport/runtime details
     positive_proof: >
       Contract tests deserialize, validate, lower, and execute representative
@@ -126,6 +136,10 @@ rows:
       - docs/specs/public-seam-v1/01_plan_ir_spec_v0.3.md
       - docs/specs/public-seam-v1/schemas/common.schema.json
       - docs/specs/public-seam-v1/schemas/leaven.plan.v1.schema.json
+    conformance_tests:
+      - reject_graph_query_unpinned_path_syntax
+      - reject_template_dialects_other_than_leaven_mustache_strict_v1
+      - reject_extraction_dialects_outside_leaven_jsonpath_subset
     owner_boundary: public-seam implementation owner
     positive_proof: >
       Valid pinned pointer, extraction, and template operations are parsed and
@@ -144,6 +158,8 @@ rows:
       - docs/specs/public-seam-v1/01_plan_ir_spec_v0.3.md
       - docs/specs/public-seam-v1/schemas/leaven.plan.v1.schema.json
       - docs/specs/public-seam-v1/08_watch_deferred_v1.1.md
+    conformance_tests:
+      - accept_final_revision_base_revision_for_read_only_plans
     owner_boundary: engine/run context plus public-seam implementation owner
     positive_proof: >
       Query tests show each consistency mode reads the intended graph revision
@@ -246,6 +262,8 @@ rows:
     spec_refs:
       - docs/specs/public-seam-v1/03_result_receipts_spec_v0.3.md
       - docs/specs/public-seam-v1/schemas/leaven.plan_result.v1.schema.json
+    conformance_tests:
+      - accept_per_assessment_mixed_replayability_compute_plan_roll_up_summary
     owner_boundary: evaluator/run result layer plus public-seam implementation owner
     positive_proof: >
       Mixed replayable and non-replayable assessments produce per-assessment
@@ -299,6 +317,8 @@ rows:
       - docs/specs/public-seam-v1/02_capability_spec_v0.3.md
       - docs/specs/public-seam-v1/schemas/leaven.capability.v1.schema.json
       - docs/specs/public-seam-v1/notes/CONFORMANCE_TESTS_v0.3.md
+    conformance_tests:
+      - reject_delegated_token_widens_any_action_resource_budget_data_class_schema
     owner_boundary: engine trust layer plus public-seam implementation owner
     positive_proof: >
       Valid delegation narrows authority and records parent capability lineage.
@@ -332,6 +352,8 @@ rows:
       - docs/specs/public-seam-v1/00_architecture_judgment_v0.3.md
       - docs/specs/public-seam-v1/02_capability_spec_v0.3.md
       - docs/specs/public-seam-v1/schemas/common.schema.json
+    conformance_tests:
+      - reject_call_data_classes_intersect_forbidden_input_classes
     owner_boundary: engine trust layer, evidence layer, public-seam implementation owner
     positive_proof: >
       Query, call, and write values carry accumulated data classes through
@@ -349,6 +371,9 @@ rows:
     spec_refs:
       - docs/specs/public-seam-v1/04_stage_payloads_spec_v0.3.md
       - docs/specs/public-seam-v1/notes/CONFORMANCE_TESTS_v0.3.md
+    conformance_tests:
+      - reject_reflector_reads_case_target
+      - reject_reflector_lm_call_input_classes_include_case_target
     owner_boundary: agentic/stage lowering plus public-seam implementation owner
     positive_proof: >
       ReflectRequest construction uses target-safe examples and carries source
@@ -366,6 +391,8 @@ rows:
     spec_refs:
       - docs/specs/public-seam-v1/00_architecture_judgment_v0.3.md
       - docs/specs/public-seam-v1/schemas/leaven.evidence_envelope.v1.schema.json
+    conformance_tests:
+      - reject_evidence_envelope_target_derived_true_no_data_classes
     owner_boundary: crates/leaven-evidence plus public-seam implementation owner
     positive_proof: >
       Evidence envelopes preserve visibility, data classes, source values, and
@@ -419,6 +446,9 @@ rows:
       - docs/specs/public-seam-v1/01_plan_ir_spec_v0.3.md
       - docs/specs/public-seam-v1/04_stage_payloads_spec_v0.3.md
       - docs/specs/public-seam-v1/schemas/leaven.plan.v1.schema.json
+    conformance_tests:
+      - reject_proposal_write_applies_proposals_from_submit_only_token
+      - reject_proposal_change_against_ungranted_surface_fingerprint
     owner_boundary: core/surface/engine plus public-seam implementation owner
     positive_proof: >
       Valid create, change, change_from_workspace_diff, and
@@ -436,6 +466,8 @@ rows:
     spec_refs:
       - docs/specs/public-seam-v1/05_evaluator_spec_v0.3.md
       - docs/specs/public-seam-v1/schemas/leaven.evaluation_job.v1.schema.json
+    conformance_tests:
+      - reject_explicit_case_sets_have_not_been_partition_resolved
     owner_boundary: leaven-run/evaluator lowering plus public-seam implementation owner
     positive_proof: >
       Requesting an evaluation creates a schema-valid evaluation job and
@@ -471,6 +503,8 @@ rows:
       - docs/specs/public-seam-v1/05_evaluator_spec_v0.3.md
       - docs/specs/public-seam-v1/schemas/common.schema.json
       - docs/specs/public-seam-v1/schemas/leaven.evidence_envelope.v1.schema.json
+    conformance_tests:
+      - reject_evaluator_assessment_missing_score_output
     owner_boundary: leaven-run/evaluator result layer plus public-seam implementation owner
     positive_proof: >
       Independent, pairwise, and listwise assessments produce Score values whose
@@ -489,6 +523,8 @@ rows:
       - docs/specs/public-seam-v1/05_evaluator_spec_v0.3.md
       - docs/specs/public-seam-v1/schemas/leaven.plan.v1.schema.json
       - docs/specs/public-seam-v1/schemas/leaven.plan_result.v1.schema.json
+    conformance_tests:
+      - reject_evaluator_assessment_outside_its_evaluation_request
     owner_boundary: evaluator/run result layer plus public-seam implementation owner
     positive_proof: >
       Valid assessments attach to the expected evaluation request, candidates,
@@ -524,6 +560,8 @@ rows:
       - docs/specs/public-seam-v1/profiles/leaven_acp_profile_v1_v0.3.md
       - docs/specs/public-seam-v1/schemas/leaven.capability.v1.schema.json
       - docs/specs/public-seam-v1/schemas/common.schema.json
+    conformance_tests:
+      - accept_acp_permission_denials_typed_planerror_redactions
     owner_boundary: agent/worker transport plus engine trust layer
     positive_proof: >
       Allowed ACP extension calls succeed after authenticate and include
@@ -732,4 +770,20 @@ rows:
       happy-path smoke fails the harness or handoff review.
     fake_pass_rejected: Treating the matrix itself as proof that implementation satisfies the spec.
     minimum_closeout_level: semantic_denial
-    status: pending
+    positive_test_evidence:
+      - crates/leaven-public-seam/tests/contract_package.rs::conformance_evidence_audit_maps_every_note_case_to_matrix_rows
+      - crates/leaven-public-seam/tests/contract_package.rs::conformance_matrix_rows_are_unique_honest_and_reference_real_files
+    negative_test_evidence:
+      - crates/leaven-public-seam/tests/contract_package.rs::conformance_evidence_audit_rejects_fake_closeout_for_denial_rows
+      - crates/leaven-public-seam/tests/contract_package.rs::conformance_evidence_audit_rejects_happy_path_only_denial_rows
+      - crates/leaven-public-seam/tests/contract_package.rs::conformance_evidence_audit_rejects_matrix_only_closeout_even_with_test_links
+      - crates/leaven-public-seam/tests/contract_package.rs::conformance_evidence_audit_rejects_weak_test_function_as_negative_evidence
+      - crates/leaven-public-seam/tests/contract_package.rs::conformance_evidence_audit_requires_denial_evidence_for_integrated_surface_rows
+    implementation_evidence:
+      - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::conformance_test_denominator
+      - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::audit_conformance_evidence
+      - crates/leaven-public-seam/src/matrix.rs::ConformanceRow
+      - docs/specs/public-seam-v1/conformance-matrix.yaml
+    review_evidence:
+      - docs/specs/public-seam-v1/reviews/2026-05-23-negative-denominator-review.md
+    status: proven

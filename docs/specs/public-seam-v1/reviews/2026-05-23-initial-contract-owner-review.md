@@ -25,7 +25,7 @@ Reviewer: adversarial sub-agent `019e540b-5557-75f3-b285-9961b0e0d3a2`.
   - Negative proof: a manifest-listed missing schema fails inventory loading.
 
 - `ps1.schema.fingerprints`
-  - Evidence: `schema_fingerprints_use_jcs_sha256_not_pretty_printed_bytes`.
+  - Evidence: `schema_fingerprints_reject_pretty_printed_hashing_and_track_semantic_changes`.
   - Positive proof: schema fingerprints use `fp_schema_sha256_` plus a 64-byte hex SHA-256 digest.
   - Negative proof: pretty formatting is stable while semantic JSON changes alter the fingerprint.
 
