@@ -19,8 +19,8 @@ mod stage_payload;
 mod watch;
 
 pub use acp_profile::{
-    AcpExtensionMethod, AcpExtensionResultDocument, AcpPermissionDecision, AcpPermissionRequest,
-    AcpProfileDocument,
+    AcpAuthenticateRequest, AcpAuthenticatedSession, AcpExtensionMethod,
+    AcpExtensionResultDocument, AcpPermissionDecision, AcpPermissionRequest, AcpProfileDocument,
 };
 pub use call_authority::CallAuthorityReport;
 pub use capability::{

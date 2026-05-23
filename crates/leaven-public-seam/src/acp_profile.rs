@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{Value, json};
 
-use crate::{CapabilityDocument, CapabilityGrantRequest, PublicSeamError};
+use crate::{CapabilityDocument, CapabilityGrantRequest, CapabilityRegistry, PublicSeamError};
 
 /// Schema-valid Leaven ACP profile document with V1 semantic checks.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -152,6 +152,63 @@ pub struct AcpPermissionRequest {
     command: Option<String>,
     schemas: BTreeSet<String>,
     surface: Option<String>,
+}
+
+/// ACP authenticate request that resolves a bearer token into a capability document.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AcpAuthenticateRequest {
+    token_id: String,
+    now: String,
+    expected_capability_fingerprint: Option<String>,
+}
+
+impl AcpAuthenticateRequest {
+    /// Creates an authenticate request from an opaque public-seam token handle.
+    pub fn opaque(token_id: impl Into<String>, now: impl Into<String>) -> Self {
+        Self {
+            token_id: token_id.into(),
+            now: now.into(),
+            expected_capability_fingerprint: None,
+        }
+    }
+
+    /// Adds the capability fingerprint supplied through the ACP transport binding.
+    #[must_use]
+    pub fn with_expected_capability_fingerprint(mut self, fingerprint: impl Into<String>) -> Self {
+        self.expected_capability_fingerprint = Some(fingerprint.into());
+        self
+    }
+}
+
+/// Resolved ACP authentication state.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AcpAuthenticatedSession {
+    capability_fingerprint: String,
+    policy_fingerprint: String,
+    subject_fingerprint: String,
+    jti: String,
+}
+
+impl AcpAuthenticatedSession {
+    /// Capability fingerprint resolved by `authenticate`.
+    pub fn capability_fingerprint(&self) -> &str {
+        &self.capability_fingerprint
+    }
+
+    /// Policy fingerprint carried by the resolved capability.
+    pub fn policy_fingerprint(&self) -> &str {
+        &self.policy_fingerprint
+    }
+
+    /// Subject fingerprint carried by the resolved capability.
+    pub fn subject_fingerprint(&self) -> &str {
+        &self.subject_fingerprint
+    }
+
+    /// JWT id of the resolved capability document.
+    pub fn jti(&self) -> &str {
+        &self.jti
+    }
 }
 
 impl AcpPermissionRequest {
@@ -440,6 +497,34 @@ pub fn authorize_permission(
             denial.redactions().to_vec(),
         ),
     }
+}
+
+pub fn authenticate(
+    profile: &AcpProfileDocument,
+    registry: &CapabilityRegistry,
+    request: AcpAuthenticateRequest,
+) -> Result<AcpAuthenticatedSession, PublicSeamError> {
+    if profile.pinned_acp_version().trim().is_empty() {
+        return Err(invalid_acp(
+            "ACP profile must be validated before authenticate",
+        ));
+    }
+    let document = registry
+        .resolve_opaque_for_new_operation(&request.token_id, &request.now)
+        .map_err(|error| invalid_acp(format!("ACP authenticate failed: {error}")))?;
+    if let Some(expected) = request.expected_capability_fingerprint {
+        if expected != document.capability_fingerprint() {
+            return Err(invalid_acp(
+                "ACP authenticate capability fingerprint binding mismatch",
+            ));
+        }
+    }
+    Ok(AcpAuthenticatedSession {
+        capability_fingerprint: document.capability_fingerprint().to_owned(),
+        policy_fingerprint: document.policy_fingerprint().to_owned(),
+        subject_fingerprint: document.subject_fingerprint().to_owned(),
+        jti: document.jti().to_owned(),
+    })
 }
 
 fn extension_methods(value: Option<&Value>) -> Result<Vec<AcpExtensionMethod>, PublicSeamError> {
