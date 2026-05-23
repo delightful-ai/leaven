@@ -125,6 +125,13 @@ pub enum PublicSeamError {
         message: String,
     },
 
+    /// A schema-valid stage payload violates a public-seam semantic constraint.
+    #[error("invalid public seam stage payload: {message}")]
+    InvalidStagePayload {
+        /// Human-readable reason.
+        message: String,
+    },
+
     /// A pinned public-seam mini-language rejected unsupported syntax.
     #[error("invalid public seam pinned dialect: {message}")]
     InvalidDialect {

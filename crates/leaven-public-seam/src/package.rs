@@ -10,7 +10,7 @@ use crate::{
     ConformanceMatrix, DeferredWatchReplacement, EvaluationJobDocument,
     EvaluationRequestReceiptDocument, EvidenceEnvelopeDocument, MatrixRowStatus,
     OutputRecordDocument, PinnedDialectEvaluator, PlanDocument, PlanResultDocument,
-    PublicSeamError,
+    PublicSeamError, StagePayloadDocument,
 };
 
 mod support;
@@ -844,6 +844,19 @@ impl PublicSeamPackage {
         self.validate_arbitrary_value("leaven.plan_result.v1.schema.json", "/plan_result", value)?;
         PlanResultDocument::from_schema_valid_value_allowing_request_evaluation(value)?;
         EvaluationRequestReceiptDocument::from_plan_result(job, value)
+    }
+
+    /// Validates a stage payload through the active V1 schema and semantic seam checks.
+    pub fn validate_stage_payload_document(
+        &self,
+        value: &Value,
+    ) -> Result<StagePayloadDocument, PublicSeamError> {
+        self.validate_arbitrary_value(
+            "leaven.stage_payloads.v1.schema.json",
+            "/stage_payload",
+            value,
+        )?;
+        StagePayloadDocument::from_schema_valid_value(value)
     }
 
     /// Validates the V1 deferred-watch marker and its finite-diff Plan IR replacement.
