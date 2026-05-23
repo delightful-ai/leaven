@@ -147,6 +147,7 @@ fn acp_extension_results_require_receipts_capability_fingerprint_and_data_classe
         .unwrap();
 
     assert_eq!(result.method(), "leaven/lm.complete");
+    assert_eq!(result.primary_kind(), "lm_response");
     assert_eq!(result.capability_fingerprint(), "fp_cap_sha256_acp");
     assert_eq!(result.receipt_count(), 1);
     assert_eq!(result.data_classes(), &["completion.raw".to_owned()]);
@@ -191,6 +192,109 @@ fn acp_extension_results_require_receipts_capability_fingerprint_and_data_classe
     assert!(matches!(
         package
             .validate_acp_extension_result_document(&bare_payload)
+            .unwrap_err(),
+        PublicSeamError::InvalidScope { .. }
+    ));
+}
+
+#[test]
+fn acp_extension_results_bind_worker_methods_to_primary_kinds_and_receipts() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    for (method, primary, receipt) in [
+        (
+            "leaven/workspace.materialize",
+            workspace_handle_primary(),
+            call_receipt("workspace_materialize", "wscall_materialize"),
+        ),
+        (
+            "leaven/workspace.read_file",
+            workspace_file_primary(),
+            query_receipt("qrec_workspace_file"),
+        ),
+        (
+            "leaven/lm.complete",
+            lm_response_primary(),
+            call_receipt("lm_complete", "lmrec_acp"),
+        ),
+        (
+            "leaven/agent.run",
+            agent_session_primary(),
+            call_receipt("agent_run", "agentrec_acp"),
+        ),
+        (
+            "leaven/sandbox.exec",
+            sandbox_exec_primary(),
+            call_receipt("sandbox_exec", "sandboxrec_acp"),
+        ),
+    ] {
+        let result = package
+            .validate_acp_extension_result_document(&extension_result_for(
+                method,
+                &primary,
+                &receipt,
+                &["workspace.file", "completion.raw", "public"],
+            ))
+            .unwrap();
+
+        assert_eq!(result.method(), method);
+        assert_eq!(result.receipt_count(), 1);
+    }
+}
+
+#[test]
+fn acp_extension_results_reject_cross_method_payloads_unbound_receipts_and_data_class_gaps() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let wrong_primary = extension_result_for(
+        "leaven/lm.complete",
+        &agent_session_primary(),
+        &call_receipt("lm_complete", "lmrec_acp"),
+        &["public"],
+    );
+    assert!(matches!(
+        package
+            .validate_acp_extension_result_document(&wrong_primary)
+            .unwrap_err(),
+        PublicSeamError::InvalidScope { .. }
+    ));
+
+    let wrong_receipt = extension_result_for(
+        "leaven/sandbox.exec",
+        &sandbox_exec_primary(),
+        &call_receipt("agent_run", "sandboxrec_acp"),
+        &["public"],
+    );
+    assert!(matches!(
+        package
+            .validate_acp_extension_result_document(&wrong_receipt)
+            .unwrap_err(),
+        PublicSeamError::InvalidScope { .. }
+    ));
+
+    let mut unbound_receipt = extension_result_for(
+        "leaven/agent.run",
+        &agent_session_primary(),
+        &call_receipt("agent_run", "other_agentrec"),
+        &["public"],
+    );
+    unbound_receipt["primary"]["receipt"] = json!("agentrec_acp");
+    assert!(matches!(
+        package
+            .validate_acp_extension_result_document(&unbound_receipt)
+            .unwrap_err(),
+        PublicSeamError::InvalidScope { .. }
+    ));
+
+    let data_class_gap = extension_result_for(
+        "leaven/workspace.read_file",
+        &workspace_file_primary(),
+        &query_receipt("qrec_workspace_file"),
+        &["public"],
+    );
+    assert!(matches!(
+        package
+            .validate_acp_extension_result_document(&data_class_gap)
             .unwrap_err(),
         PublicSeamError::InvalidScope { .. }
     ));
@@ -304,32 +408,120 @@ fn acp_capability() -> Value {
 }
 
 fn extension_result() -> Value {
+    extension_result_for(
+        "leaven/lm.complete",
+        &lm_response_primary(),
+        &call_receipt("lm_complete", "lmrec_acp"),
+        &["completion.raw"],
+    )
+}
+
+fn extension_result_for(
+    method: &str,
+    primary: &Value,
+    receipt: &Value,
+    data_classes: &[&str],
+) -> Value {
     json!({
-        "method": "leaven/lm.complete",
-        "primary": {
-            "kind": "lm_response",
-            "message": {
-                "role": "assistant",
-                "content": [{"kind": "text", "text": "ok"}]
-            }
-        },
-        "receipts": [
-            {
-                "kind": "call",
-                "receipt": "lmrec_acp",
-                "op_var": "lm",
-                "started_at": "2026-05-23T00:00:00Z",
-                "completed_at": "2026-05-23T00:00:01Z",
-                "call_kind": "lm_complete",
-                "request_hash": "fp_request_sha256_acp",
-                "result_hash": "fp_result_sha256_acp",
-                "runtime_fingerprint": "fp_runtime_sha256_acp",
-                "status": "succeeded"
-            }
-        ],
+        "method": method,
+        "primary": primary,
+        "receipts": [receipt],
         "redactions": [],
         "capability_fingerprint": "fp_cap_sha256_acp",
-        "data_classes": ["completion.raw"]
+        "data_classes": data_classes
+    })
+}
+
+fn lm_response_primary() -> Value {
+    json!({
+        "kind": "lm_response",
+        "message": {
+            "role": "assistant",
+            "content": [{"kind": "text", "text": "ok"}]
+        },
+        "graph_revision": "rev_acp",
+        "data_classes": ["completion.raw"],
+        "replayability": "fully_managed",
+        "receipt": "lmrec_acp"
+    })
+}
+
+fn workspace_handle_primary() -> Value {
+    json!({
+        "kind": "workspace_handle",
+        "workspace": "workspace_acp",
+        "lifetime": "stage_call",
+        "released": false,
+        "graph_revision": "rev_acp",
+        "data_classes": ["workspace.file"],
+        "replayability": "fully_managed",
+        "receipt": "wscall_materialize"
+    })
+}
+
+fn workspace_file_primary() -> Value {
+    json!({
+        "kind": "workspace_file",
+        "path": "src/lib.rs",
+        "content": "pub fn demo() {}",
+        "graph_revision": "rev_acp",
+        "data_classes": ["workspace.file"],
+        "replayability": "pure_read",
+        "receipt": "qrec_workspace_file"
+    })
+}
+
+fn agent_session_primary() -> Value {
+    json!({
+        "kind": "agent_session",
+        "status": "completed",
+        "graph_revision": "rev_acp",
+        "data_classes": ["public"],
+        "replayability": "fully_managed",
+        "receipt": "agentrec_acp"
+    })
+}
+
+fn sandbox_exec_primary() -> Value {
+    json!({
+        "kind": "sandbox_exec",
+        "status": "completed",
+        "exit_code": 0,
+        "graph_revision": "rev_acp",
+        "data_classes": ["public"],
+        "replayability": "fully_managed",
+        "receipt": "sandboxrec_acp"
+    })
+}
+
+fn call_receipt(call_kind: &str, receipt: &str) -> Value {
+    json!({
+        "kind": "call",
+        "receipt": receipt,
+        "op_var": "worker_call",
+        "started_at": "2026-05-23T00:00:00Z",
+        "completed_at": "2026-05-23T00:00:01Z",
+        "call_kind": call_kind,
+        "request_hash": "fp_request_sha256_acp",
+        "result_hash": "fp_result_sha256_acp",
+        "runtime_fingerprint": "fp_runtime_sha256_acp",
+        "status": "succeeded"
+    })
+}
+
+fn query_receipt(receipt: &str) -> Value {
+    json!({
+        "kind": "query",
+        "receipt": receipt,
+        "op_var": "workspace_read",
+        "started_at": "2026-05-23T00:00:00Z",
+        "completed_at": "2026-05-23T00:00:01Z",
+        "op_hash": "fp_query_sha256_acp",
+        "result_hash": "fp_result_sha256_acp",
+        "graph_revision": "rev_acp",
+        "status": "succeeded",
+        "read_scope_fingerprint": "fp_scope_sha256_acp",
+        "projection_fingerprint": "fp_projection_sha256_acp"
     })
 }
 
