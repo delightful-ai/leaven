@@ -61,4 +61,15 @@ Fresh verification after adversarial block follow-up:
 Current limits after adversarial block follow-up:
 
 - This still is not an adversarial sign-off and does not mark `ps1.evaluator.job_identity` proven.
-- The row remains pending because runtime evaluation lowering still does not produce the full public-seam `EvaluationJob` document or an evaluation request receipt through the public seam owner.
+- The row remains pending because runtime evaluation lowering still does not produce an evaluation request receipt through the public seam owner.
+
+Runtime projection follow-up:
+
+- `leaven-run` now exports advanced public `PublicEvaluationJobContext` lowering from an engine `EvaluationRequestView` into a schema-valid `leaven.evaluation_job.v1` document for validation by `leaven-public-seam`.
+- `crates/leaven-run/tests/scoring_evaluator.rs::runtime_evaluation_requests_project_to_public_seam_evaluation_jobs` proves real `RunContext::evaluate_with(...)` independent, pairwise, and listwise requests project request id, candidate ids, resolved case ids, base revision, deadline, evaluator id/fingerprint, and capability fingerprint through the locked public-seam validator.
+- The same test rejects `AssessmentGranularity::Both`, which has no locked V1 evaluation-job wire representation.
+
+Current limits after runtime projection follow-up:
+
+- This still is not an adversarial sign-off and does not mark `ps1.evaluator.job_identity` proven.
+- The row remains pending because the positive proof also requires an evaluation request receipt bound to the candidate and case sets; this slice projects the job document but does not yet emit or validate that receipt.

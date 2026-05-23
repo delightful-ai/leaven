@@ -5,6 +5,7 @@ pub(crate) mod compatibility;
 mod error;
 mod evaluator;
 mod evidence;
+mod public_seam;
 mod result;
 pub(crate) mod run_report;
 pub(crate) mod run_store;
@@ -22,6 +23,7 @@ pub use evidence::{
     ScoreError, ScoreMetadataView,
 };
 pub use leaven_engine::CachePolicy;
+pub use public_seam::{PublicEvaluationJobContext, PublicEvaluationJobProjectionError};
 pub use result::{
     BestCandidate, EvaluationCacheBackend, EvaluationCacheBypassReason,
     EvaluationCacheBypassSummary, EvaluationCacheSummary, OptimizationStopReason, Optimized,
