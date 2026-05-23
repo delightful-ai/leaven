@@ -202,14 +202,16 @@ rows:
       - crates/leaven-public-seam/tests/plan_document.rs::plan_ir_revision_modes_preserve_explicit_bases
       - crates/leaven-public-seam/tests/plan_document.rs::plan_revision_modes_execute_graph_queries_at_declared_scope
     negative_test_evidence:
-      - crates/leaven-public-seam/tests/plan_document.rs::plan_ir_revision_modes_preserve_explicit_bases
+      - crates/leaven-public-seam/tests/plan_document.rs::plan_revision_modes_reject_since_revision_fallback_to_latest
     implementation_evidence:
       - crates/leaven-public-seam/src/plan.rs::PlanDocument
       - crates/leaven-public-seam/src/plan_execution.rs::PlanExecutionHost
       - crates/leaven-public-seam/src/plan_execution.rs::PlanGraphReadScope
       - crates/leaven-public-seam/src/plan_execution.rs::execute_plan
       - crates/leaven-public-seam/AGENTS.md
-    status: pending
+    review_evidence:
+      - docs/specs/public-seam-v1/reviews/2026-05-23-plan-execution-revision-tranche-review.md
+    status: proven
 
   - id: ps1.plan.execution_modes
     area: plan_ir
@@ -236,13 +238,14 @@ rows:
       - crates/leaven-public-seam/tests/plan_document.rs::plan_ir_family_execution_rejects_dry_run_or_no_graph_write_fake_execution
       - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_modes_require_cached_uses_cache_and_refuses_live_misses
       - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_modes_require_cached_rejects_agent_and_sandbox_live_work
-      - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_modes_replay_uses_receipts_without_live_host_effects
     implementation_evidence:
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::execute_plan_document
       - crates/leaven-public-seam/src/plan_execution.rs::PlanExecutionHost
       - crates/leaven-public-seam/src/plan_execution.rs::execute_plan
       - crates/leaven-public-seam/AGENTS.md
-    status: pending
+    review_evidence:
+      - docs/specs/public-seam-v1/reviews/2026-05-23-plan-execution-revision-tranche-review.md
+    status: proven
 
   - id: ps1.graph.runcontext_mutation_only
     area: graph_mutation
