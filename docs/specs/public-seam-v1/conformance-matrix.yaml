@@ -774,7 +774,20 @@ rows:
       are rejected from V1 scope.
     fake_pass_rejected: Leaving a watch placeholder and claiming watch support.
     minimum_closeout_level: semantic_denial
-    status: pending
+    positive_test_evidence:
+      - crates/leaven-public-seam/tests/contract_package.rs::deferred_watch_marker_routes_to_since_revision_plan_diff
+    negative_test_evidence:
+      - crates/leaven-public-seam/tests/contract_package.rs::deferred_watch_rejects_schema_valid_non_diff_replacements
+      - crates/leaven-public-seam/tests/contract_package.rs::deferred_watch_rejects_runtime_subscription_and_success_claims
+    implementation_evidence:
+      - crates/leaven-public-seam/src/watch.rs::DeferredWatchReplacement
+      - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_deferred_watch_replacement
+      - crates/leaven-public-seam/src/plan.rs::PlanDocument::is_since_revision_event_diff
+      - crates/leaven-public-seam/src/package.rs::V1Scope::authorize_worker_transport
+      - crates/leaven-public-seam/AGENTS.md
+    review_evidence:
+      - docs/specs/public-seam-v1/reviews/2026-05-23-watch-deferred-review.md
+    status: proven
 
   - id: ps1.worker_protocol.deprecated
     area: deferred
