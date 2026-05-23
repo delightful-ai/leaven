@@ -12,6 +12,8 @@ pub struct EvaluationJobDocument {
     base_revision: String,
     deadline_at: String,
     resolved_set_id: String,
+    case_ids: Vec<String>,
+    candidate_ids: Vec<String>,
     case_count: u64,
     candidate_count: usize,
     pair_count: usize,
@@ -43,35 +45,44 @@ impl EvaluationJobDocument {
             .ok_or_else(|| invalid_evaluation_job("resolved_set.case_count must be an integer"))?;
         validate_resolved_case_set(resolved_set, case_count)?;
         let kind_name = required_string(kind.get("kind"), "kind.kind")?;
-        let (kind, candidate_count, pair_count) = match kind_name {
-            "independent" => (
-                EvaluationJobKind::Independent,
-                required_array(kind.get("candidates"), "kind.candidates")?.len(),
-                0,
-            ),
+        let (kind, candidate_ids, pair_count) = match kind_name {
+            "independent" => {
+                let candidates = required_array(kind.get("candidates"), "kind.candidates")?
+                    .iter()
+                    .map(candidate_id)
+                    .collect::<Result<Vec<_>, _>>()?;
+                (EvaluationJobKind::Independent, candidates, 0)
+            }
             "pairwise" => {
                 let pairs = required_array(kind.get("pairs"), "kind.pairs")?;
+                let mut candidates = Vec::with_capacity(pairs.len().saturating_mul(2));
                 for pair in pairs {
                     let pair = pair.as_object().ok_or_else(|| {
                         invalid_evaluation_job("pairwise job pairs must be objects")
                     })?;
-                    if pair.get("left") == pair.get("right") {
+                    let left = candidate_id(pair.get("left").ok_or_else(|| {
+                        invalid_evaluation_job("pairwise job pair must carry left candidate")
+                    })?)?;
+                    let right = candidate_id(pair.get("right").ok_or_else(|| {
+                        invalid_evaluation_job("pairwise job pair must carry right candidate")
+                    })?)?;
+                    if left == right {
                         return Err(invalid_evaluation_job(
                             "pairwise job pairs must compare distinct candidates",
                         ));
                     }
+                    candidates.push(left);
+                    candidates.push(right);
                 }
-                (
-                    EvaluationJobKind::Pairwise,
-                    pairs.len().saturating_mul(2),
-                    pairs.len(),
-                )
+                (EvaluationJobKind::Pairwise, candidates, pairs.len())
             }
-            "listwise" => (
-                EvaluationJobKind::Listwise,
-                required_array(kind.get("candidates"), "kind.candidates")?.len(),
-                0,
-            ),
+            "listwise" => {
+                let candidates = required_array(kind.get("candidates"), "kind.candidates")?
+                    .iter()
+                    .map(candidate_id)
+                    .collect::<Result<Vec<_>, _>>()?;
+                (EvaluationJobKind::Listwise, candidates, 0)
+            }
             other => {
                 return Err(invalid_evaluation_job(format!(
                     "unknown evaluation job kind `{other}`"
@@ -96,8 +107,10 @@ impl EvaluationJobDocument {
                 .to_owned(),
             deadline_at,
             resolved_set_id: required_string(resolved_set.get("id"), "resolved_set.id")?.to_owned(),
+            case_ids: case_ids(resolved_set)?,
+            candidate_count: candidate_ids.len(),
+            candidate_ids,
             case_count,
-            candidate_count,
             pair_count,
             kind,
         })
@@ -136,6 +149,16 @@ impl EvaluationJobDocument {
     /// Resolved case-set id.
     pub fn resolved_set_id(&self) -> &str {
         &self.resolved_set_id
+    }
+
+    /// Case ids in the resolved case set.
+    pub fn case_ids(&self) -> &[String] {
+        &self.case_ids
+    }
+
+    /// Candidate ids carried by this job in request order.
+    pub fn candidate_ids(&self) -> &[String] {
+        &self.candidate_ids
     }
 
     /// Number of cases in the resolved set.
@@ -181,14 +204,59 @@ fn validate_resolved_case_set(
                 "resolved_set.case_count must match explicit case_ids length",
             ));
         }
+        if resolved_set
+            .get("case_set_version")
+            .and_then(Value::as_str)
+            .is_none_or(|version| version.trim().is_empty())
+        {
+            return Err(invalid_evaluation_job(
+                "resolved_set explicit case_ids must carry case_set_version",
+            ));
+        }
+        if resolved_set
+            .get("partition_summary")
+            .and_then(Value::as_object)
+            .is_none_or(serde_json::Map::is_empty)
+        {
+            return Err(invalid_evaluation_job(
+                "resolved_set explicit case_ids must carry partition_summary",
+            ));
+        }
         return Ok(());
     }
-    if case_count > 0 && resolved_set.get("case_cursor").is_none() {
+    if case_count > 0 {
         return Err(invalid_evaluation_job(
-            "resolved_set with cases must carry explicit case_ids or a case_cursor",
+            "resolved_set with cases must carry partition-resolved explicit case_ids",
         ));
     }
     Ok(())
+}
+
+fn case_ids(resolved_set: &serde_json::Map<String, Value>) -> Result<Vec<String>, PublicSeamError> {
+    required_array(resolved_set.get("case_ids"), "resolved_set.case_ids")?
+        .iter()
+        .map(case_id)
+        .collect()
+}
+
+fn candidate_id(value: &Value) -> Result<String, PublicSeamError> {
+    match value {
+        Value::String(id) if !id.trim().is_empty() => Ok(id.to_owned()),
+        Value::Object(object) => required_string(object.get("id"), "candidate.id").map(str::to_owned),
+        _ => Err(invalid_evaluation_job(
+            "evaluation job candidate ref must carry an id",
+        )),
+    }
+}
+
+fn case_id(value: &Value) -> Result<String, PublicSeamError> {
+    match value {
+        Value::String(id) if !id.trim().is_empty() => Ok(id.to_owned()),
+        Value::Object(object) => required_string(object.get("id"), "case.id").map(str::to_owned),
+        _ => Err(invalid_evaluation_job(
+            "evaluation job case ref must carry an id",
+        )),
+    }
 }
 
 fn required_array<'a>(
