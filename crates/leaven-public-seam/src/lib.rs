@@ -14,9 +14,9 @@ mod result;
 mod watch;
 
 pub use capability::{
-    AuthorizedGrant, CapabilityDelegation, CapabilityDenial, CapabilityDenialKind,
-    CapabilityDocument, CapabilityError, CapabilityGrantRequest, CapabilityLimitUsage,
-    CapabilityRegistry,
+    AuthorizedGrant, CapabilityBudgetLedger, CapabilityBudgetReservation, CapabilityBudgetUsage,
+    CapabilityDelegation, CapabilityDenial, CapabilityDenialKind, CapabilityDocument,
+    CapabilityError, CapabilityGrantRequest, CapabilityLimitUsage, CapabilityRegistry,
 };
 pub use dialect::PinnedDialectEvaluator;
 pub use error::PublicSeamError;

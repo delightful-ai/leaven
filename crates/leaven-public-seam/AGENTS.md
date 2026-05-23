@@ -62,6 +62,12 @@ public seam contracts. They prove grant-envelope authorization only; they are
 not aggregate budget ledgers, delegation engines, ACP permission handlers, or
 runtime effect executors.
 
+Crate-root exports for `CapabilityBudgetLedger`, `CapabilityBudgetUsage`, and
+`CapabilityBudgetReservation` are advanced public seam contracts. They prove
+aggregate capability-budget accounting against the locked capability document
+only; they are not the engine budget ledger, ACP session accounting, provider
+runtime metering, or durable spend persistence.
+
 Crate-root export `CapabilityDelegation` is an advanced public seam contract.
 It proves semantic parent-child capability attenuation and lineage facts at the
 wire-document layer only; it is not a token minter, engine trust ledger,
@@ -172,9 +178,11 @@ backpressure, or runtime watch support.
   structured capability documents and reject bare, missing, expired, revoked,
   or binding-mismatched tokens. It also proves grant-envelope authorization and
   denials for action, resource, partition, case-field, schema, surface,
-  data-class, and per-grant limit constraints. Delegation tests prove valid
-  child capabilities record parent lineage and cannot widen action, resource,
-  budget, data-class, schema, expiry, binding, or delegation-policy authority.
+  data-class, and per-grant limit constraints. Aggregate budget tests prove
+  cross-grant total, role-specific, and concurrent-call limits against the
+  public capability document. Delegation tests prove valid child capabilities
+  record parent lineage and cannot widen action, resource, budget, data-class,
+  schema, expiry, binding, or delegation-policy authority.
 - `cargo test -p leaven-public-seam --test contract_package` is the focused
   proof for this crate.
 - `cargo test -p leaven --test topology_contract` must pass when this crate is

@@ -235,6 +235,20 @@ rows:
       error strings are rejected at the public seam.
     fake_pass_rejected: Logging errors while returning a generic JSON blob.
     minimum_closeout_level: semantic_denial
+    positive_test_evidence:
+      - crates/leaven-public-seam/tests/plan_result.rs::plan_result_accepts_typed_success_and_failure_envelopes
+    negative_test_evidence:
+      - crates/leaven-public-seam/tests/plan_result.rs::plan_result_rejects_generic_or_untyped_result_payloads
+      - crates/leaven-public-seam/tests/plan_result.rs::plan_result_rejects_receipts_without_audit_timing
+    implementation_evidence:
+      - crates/leaven-public-seam/src/result.rs::PlanResultDocument
+      - crates/leaven-public-seam/src/result.rs::inspect_values
+      - crates/leaven-public-seam/src/result.rs::inspect_receipts
+      - crates/leaven-public-seam/src/result.rs::validate_audit_currency_receipt
+      - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_plan_result_document
+      - crates/leaven-public-seam/AGENTS.md
+    review_evidence:
+      - docs/specs/public-seam-v1/reviews/2026-05-23-result-receipt-replay-review.md
     status: pending
 
   - id: ps1.receipts.audit_currency
@@ -252,6 +266,19 @@ rows:
       wrong operation kind fails validation or replay.
     fake_pass_rejected: Receipt ids that are only decorative log correlation ids.
     minimum_closeout_level: semantic_denial
+    positive_test_evidence:
+      - crates/leaven-public-seam/tests/plan_result.rs::plan_result_accepts_typed_success_and_failure_envelopes
+    negative_test_evidence:
+      - crates/leaven-public-seam/tests/plan_result.rs::plan_result_rejects_decorative_or_wrong_kind_receipt_refs
+      - crates/leaven-public-seam/tests/plan_result.rs::plan_result_rejects_decorative_audit_currency_receipts
+      - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_evidence_source_receipts_that_are_missing_or_wrong_kind
+    implementation_evidence:
+      - crates/leaven-public-seam/src/result.rs::receipt_index
+      - crates/leaven-public-seam/src/result.rs::inspect_value_receipt
+      - crates/leaven-public-seam/src/result.rs::validate_audit_currency_receipt
+      - crates/leaven-public-seam/src/result.rs::validate_evidence_source_receipts
+    review_evidence:
+      - docs/specs/public-seam-v1/reviews/2026-05-23-result-receipt-replay-review.md
     status: pending
 
   - id: ps1.receipts.failed_costs
@@ -268,6 +295,16 @@ rows:
       The same failure cannot disappear from cost totals or replay provenance.
     fake_pass_rejected: Counting only successful calls as receipted work.
     minimum_closeout_level: semantic_denial
+    positive_test_evidence:
+      - crates/leaven-public-seam/tests/plan_result.rs::plan_result_accepts_typed_success_and_failure_envelopes
+    negative_test_evidence:
+      - crates/leaven-public-seam/tests/plan_result.rs::plan_result_rejects_failed_call_costs_without_charge_receipts
+    implementation_evidence:
+      - crates/leaven-public-seam/src/result.rs::validate_failed_call_charges
+      - crates/leaven-public-seam/src/result.rs::charge_index
+      - crates/leaven-public-seam/src/result.rs::is_failed_call_with_cost
+    review_evidence:
+      - docs/specs/public-seam-v1/reviews/2026-05-23-result-receipt-replay-review.md
     status: pending
 
   - id: ps1.replay.per_assessment
@@ -286,6 +323,18 @@ rows:
       A plan-level replayable flag cannot hide one non-replayable assessment.
     fake_pass_rejected: A single boolean replayability result for the whole plan.
     minimum_closeout_level: semantic_denial
+    positive_test_evidence:
+      - crates/leaven-public-seam/tests/plan_result_replayability.rs::per_assessment_replayability_rolls_up_from_each_assessment
+    negative_test_evidence:
+      - crates/leaven-public-seam/tests/plan_result_replayability.rs::replayability_summary_cannot_hide_non_replayable_assessment
+      - crates/leaven-public-seam/tests/plan_result_replayability.rs::replayability_summary_rolls_up_all_result_values
+    implementation_evidence:
+      - crates/leaven-public-seam/src/result.rs::inspect_assessment_batch_value
+      - crates/leaven-public-seam/src/result.rs::validate_replayability_rollups
+      - crates/leaven-public-seam/src/result.rs::rollup
+      - crates/leaven-public-seam/src/result.rs::Replayability
+    review_evidence:
+      - docs/specs/public-seam-v1/reviews/2026-05-23-result-receipt-replay-review.md
     status: pending
 
   - id: ps1.capability.document_truth
@@ -399,6 +448,17 @@ rows:
       bypass concurrency limits.
     fake_pass_rejected: Per-call max checks with no aggregate accounting.
     minimum_closeout_level: semantic_denial
+    positive_test_evidence:
+      - crates/leaven-public-seam/tests/capability_document.rs::aggregate_budget_ledger_enforces_cross_grant_totals_and_roles
+    negative_test_evidence:
+      - crates/leaven-public-seam/tests/capability_document.rs::aggregate_budget_ledger_rejects_role_and_concurrency_overruns
+      - crates/leaven-public-seam/tests/capability_document.rs::aggregate_budget_ledger_counts_role_spend_against_total_budget
+    implementation_evidence:
+      - crates/leaven-public-seam/src/capability.rs::CapabilityBudgetLedger
+      - crates/leaven-public-seam/src/capability.rs::CapabilityBudgetUsage
+      - crates/leaven-public-seam/AGENTS.md
+    review_evidence:
+      - docs/specs/public-seam-v1/reviews/2026-05-23-capability-aggregate-budgets-review.md
     status: pending
 
   - id: ps1.visibility.data_class_propagation
@@ -419,6 +479,20 @@ rows:
       execution and reports redactions.
     fake_pass_rejected: Checking data classes only at initial case read.
     minimum_closeout_level: semantic_denial
+    positive_test_evidence:
+      - crates/leaven-public-seam/tests/plan_result.rs::plan_result_preserves_value_visibility_data_classes
+      - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_preserves_nested_evidence_visibility_data_classes_and_receipts
+    negative_test_evidence:
+      - crates/leaven-public-seam/tests/plan_result.rs::plan_result_preserves_value_visibility_data_classes
+      - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_evidence_source_receipts_that_are_missing_or_wrong_kind
+    implementation_evidence:
+      - crates/leaven-public-seam/src/result.rs::validate_value_visibility
+      - crates/leaven-public-seam/src/result.rs::collect_score_output_data_classes
+      - crates/leaven-public-seam/src/result.rs::collect_evidence_data_classes_from_value
+      - crates/leaven-public-seam/src/result.rs::collect_workspace_listing_data_classes
+      - crates/leaven-public-seam/src/evidence.rs::EvidenceEnvelopeDocument
+    review_evidence:
+      - docs/specs/public-seam-v1/reviews/2026-05-23-result-receipt-replay-review.md
     status: pending
 
   - id: ps1.visibility.reflector_target_safe
@@ -535,6 +609,7 @@ rows:
     minimum_closeout_level: semantic_denial
     positive_test_evidence:
       - crates/leaven-engine/tests/context_services.rs::evaluation_requests_record_evaluator_fingerprint_as_runtime_job_identity
+      - crates/leaven-run/tests/scoring_evaluator.rs::runtime_evaluation_requests_project_to_public_seam_evaluation_jobs
       - crates/leaven-public-seam/tests/evaluation_job.rs::evaluation_job_preserves_identity_for_all_request_shapes
     negative_test_evidence:
       - crates/leaven-public-seam/tests/evaluation_job.rs::evaluation_job_rejects_missing_identity_deadline_or_capability
@@ -544,6 +619,8 @@ rows:
       - crates/leaven-engine/src/graph/view.rs::EvaluationRequestView::evaluator_fingerprint
       - crates/leaven-engine/src/context/run_context.rs::RunContext::evaluate_with
       - crates/leaven-engine/AGENTS.md
+      - crates/leaven-run/src/public_seam.rs::PublicEvaluationJobContext
+      - crates/leaven-run/AGENTS.md
       - crates/leaven-public-seam/src/evaluation_job.rs::EvaluationJobDocument
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_evaluation_job_document
       - crates/leaven-public-seam/AGENTS.md

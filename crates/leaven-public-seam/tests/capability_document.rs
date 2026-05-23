@@ -2,8 +2,9 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use leaven_public_seam::{
-    CapabilityDenialKind, CapabilityDocument, CapabilityError, CapabilityGrantRequest,
-    CapabilityLimitUsage, CapabilityRegistry, PublicSeamPackage,
+    CapabilityBudgetLedger, CapabilityBudgetUsage, CapabilityDenialKind, CapabilityDocument,
+    CapabilityError, CapabilityGrantRequest, CapabilityLimitUsage, CapabilityRegistry,
+    PublicSeamPackage,
 };
 use serde_json::{Value, json};
 
@@ -374,6 +375,75 @@ fn grant_enforcement_rejects_timeout_and_row_limit_overruns() {
             CapabilityDenialKind::Limit,
         );
     }
+}
+
+#[test]
+fn aggregate_budget_ledger_enforces_cross_grant_totals_and_roles() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let document = CapabilityDocument::from_value(example_capability(&package)).unwrap();
+    let mut ledger = CapabilityBudgetLedger::new(&document);
+
+    ledger
+        .try_reserve(CapabilityBudgetUsage::lm_usd_micro(100_000))
+        .unwrap();
+    ledger
+        .try_reserve(CapabilityBudgetUsage::agent_usd_micro(120_000))
+        .unwrap();
+    ledger
+        .try_reserve(CapabilityBudgetUsage::evaluator_usd_micro(80_000))
+        .unwrap();
+
+    assert_eq!(ledger.spent_total_usd_micro(), 300_000);
+    assert_eq!(ledger.spent_lm_usd_micro(), 100_000);
+    assert_eq!(ledger.spent_agent_usd_micro(), 120_000);
+
+    assert_denied(
+        ledger.try_reserve(CapabilityBudgetUsage::evaluator_usd_micro(1)),
+        CapabilityDenialKind::Limit,
+    );
+}
+
+#[test]
+fn aggregate_budget_ledger_rejects_role_and_concurrency_overruns() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let document = CapabilityDocument::from_value(example_capability(&package)).unwrap();
+    let mut ledger = CapabilityBudgetLedger::new(&document);
+
+    ledger
+        .try_reserve(CapabilityBudgetUsage::lm_usd_micro(140_000))
+        .unwrap();
+    assert_denied(
+        ledger.try_reserve(CapabilityBudgetUsage::lm_usd_micro(10_001)),
+        CapabilityDenialKind::Limit,
+    );
+
+    let first = ledger
+        .try_reserve(CapabilityBudgetUsage::concurrent_calls(2))
+        .unwrap();
+    let second = ledger
+        .try_reserve(CapabilityBudgetUsage::concurrent_calls(2))
+        .unwrap();
+    assert_denied(
+        ledger.try_reserve(CapabilityBudgetUsage::concurrent_calls(1)),
+        CapabilityDenialKind::Limit,
+    );
+    ledger.release(first);
+    ledger
+        .try_reserve(CapabilityBudgetUsage::concurrent_calls(1))
+        .unwrap();
+    ledger.release(second);
+}
+
+#[test]
+fn aggregate_budget_ledger_counts_role_spend_against_total_budget() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let document = CapabilityDocument::from_value(example_capability(&package)).unwrap();
+    let mut ledger = CapabilityBudgetLedger::new(&document);
+
+    assert_denied(
+        ledger.try_reserve(CapabilityBudgetUsage::evaluator_usd_micro(300_001)),
+        CapabilityDenialKind::Limit,
+    );
 }
 
 #[test]
