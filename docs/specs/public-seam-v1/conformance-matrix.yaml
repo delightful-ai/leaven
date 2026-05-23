@@ -1227,11 +1227,18 @@ rows:
     fake_pass_rejected: Treating agent stdout as a proposal without receipts.
     minimum_closeout_level: semantic_denial
     partial_contract_test_evidence:
+      - crates/leaven-public-seam/tests/plan_document.rs::agent_run_and_sandbox_exec_lower_to_owned_runtime_primitives_and_emit_receipts
+      - crates/leaven-public-seam/tests/plan_document.rs::agent_run_lowering_rejects_schema_valid_json_schema_output_until_owned
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_bind_worker_methods_to_primary_kinds_and_receipts
       - crates/leaven-public-seam/tests/proposal_authority.rs::proposal_authority_accepts_effects_surfaces_schemas_and_apply_grants
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_reject_cross_method_payloads_unbound_receipts_and_data_class_gaps
       - crates/leaven-public-seam/tests/proposal_authority.rs::proposal_authority_rejects_submit_only_apply_and_ungranted_surface_or_effect
     partial_contract_implementation_evidence:
+      - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanAgentRunRequest::to_agent_run_request
+      - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanAgentRunOutcome
+      - crates/leaven-public-seam/src/plan_execution.rs::record_agent_call_outcome
+      - crates/leaven-agent/src/session.rs::AgentRunRequest
+      - crates/leaven-agent/src/session.rs::AgentSession
       - crates/leaven-public-seam/src/acp_profile.rs::extension_result_contract
       - crates/leaven-public-seam/src/acp_profile.rs::validate_receipts_for_method
       - crates/leaven-public-seam/src/acp_profile.rs::AcpExtensionResultDocument
@@ -1256,12 +1263,19 @@ rows:
     fake_pass_rejected: Running host shell commands and attaching logs afterward.
     minimum_closeout_level: semantic_denial
     partial_contract_test_evidence:
+      - crates/leaven-public-seam/tests/plan_document.rs::agent_run_and_sandbox_exec_lower_to_owned_runtime_primitives_and_emit_receipts
+      - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_modes_require_cached_rejects_agent_and_sandbox_live_work
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_bind_worker_methods_to_primary_kinds_and_receipts
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_reject_cross_method_payloads_unbound_receipts_and_data_class_gaps
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_permissions_use_capability_grants_and_return_planerror_redactions
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_permissions_deny_ungranted_models_workspace_ops_and_commands
       - crates/leaven-public-seam/tests/capability_document.rs::grant_enforcement_rejects_ungranted_models_workspace_ops_and_commands
     partial_contract_implementation_evidence:
+      - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanSandboxExecRequest::to_workspace_command
+      - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanSandboxExecOutcome
+      - crates/leaven-public-seam/src/plan_execution.rs::record_sandbox_call_outcome
+      - crates/leaven-workspace/src/command.rs::Command
+      - crates/leaven-workspace/src/command.rs::CommandLimits
       - crates/leaven-public-seam/src/acp_profile.rs::extension_result_contract
       - crates/leaven-public-seam/src/acp_profile.rs::validate_receipts_for_method
       - crates/leaven-public-seam/src/acp_profile.rs::AcpExtensionResultDocument

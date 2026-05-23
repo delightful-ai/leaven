@@ -9,7 +9,8 @@ mod queries;
 mod receipts;
 
 pub use effects::{
-    PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanLmCompleteOutcome, PlanLmCompleteRequest,
+    PlanAgentRunOutcome, PlanAgentRunRequest, PlanEmitRunEventOutcome, PlanEmitRunEventRequest,
+    PlanLmCompleteOutcome, PlanLmCompleteRequest, PlanSandboxExecOutcome, PlanSandboxExecRequest,
 };
 pub use queries::{
     PlanCaseQueryOutcome, PlanCaseQueryRequest, PlanGraphQueryOutcome, PlanGraphQueryRequest,
@@ -138,6 +139,28 @@ pub trait PlanExecutionHost {
     ) -> Result<Option<PlanLmCompleteOutcome>, PublicSeamError> {
         let _ = request;
         Ok(None)
+    }
+
+    /// Executes a typed `agent_run` call.
+    fn agent_run(
+        &mut self,
+        request: PlanAgentRunRequest<'_>,
+    ) -> Result<PlanAgentRunOutcome, PublicSeamError> {
+        let _ = request;
+        Err(invalid_plan(
+            "Plan execution host does not provide agent_run calls",
+        ))
+    }
+
+    /// Executes a typed `sandbox_exec` call.
+    fn sandbox_exec(
+        &mut self,
+        request: PlanSandboxExecRequest<'_>,
+    ) -> Result<PlanSandboxExecOutcome, PublicSeamError> {
+        let _ = request;
+        Err(invalid_plan(
+            "Plan execution host does not provide sandbox_exec calls",
+        ))
     }
 
     /// Executes a typed `emit_run_event` write.
@@ -468,32 +491,6 @@ fn execute_call<H: PlanExecutionHost>(
         .get("call")
         .ok_or_else(|| invalid_plan("call op must carry call"))?;
     let call_kind = nested_kind(call, "call")?;
-    if call_kind != "lm_complete" {
-        if mode == EffectMode::RequireCached {
-            return Err(invalid_plan(format!(
-                "require_cached mode cannot prove cached execution for `{call_kind}` calls"
-            )));
-        }
-        return Err(invalid_plan(format!(
-            "representative Plan IR harness does not execute `{call_kind}` calls"
-        )));
-    }
-    let request = PlanLmCompleteRequest {
-        name: &name,
-        call,
-        deps: dep_values,
-    };
-    let (outcome, cache) = match mode {
-        EffectMode::Live => (host.lm_complete(request)?, None),
-        EffectMode::RequireCached => {
-            let outcome = host.cached_lm_complete(request)?.ok_or_else(|| {
-                invalid_plan(format!(
-                    "require_cached mode refused cache miss for `{name}` lm_complete call"
-                ))
-            })?;
-            (outcome, Some("hit"))
-        }
-    };
     let request_hash = prefixed_jcs_hash(
         "fp_request_sha256_",
         &json!({
@@ -504,15 +501,64 @@ fn execute_call<H: PlanExecutionHost>(
             "deps": dep_values
         }),
     )?;
-    record_lm_call_outcome(
-        name,
-        call_kind,
-        outcome,
-        cache,
-        &request_hash,
-        context,
-        state,
-    )
+    match call_kind {
+        "lm_complete" => {
+            let request = PlanLmCompleteRequest {
+                name: &name,
+                call,
+                deps: dep_values,
+            };
+            let (outcome, cache) = match mode {
+                EffectMode::Live => (host.lm_complete(request)?, None),
+                EffectMode::RequireCached => {
+                    let outcome = host.cached_lm_complete(request)?.ok_or_else(|| {
+                        invalid_plan(format!(
+                            "require_cached mode refused cache miss for `{name}` lm_complete call"
+                        ))
+                    })?;
+                    (outcome, Some("hit"))
+                }
+            };
+            record_lm_call_outcome(
+                name,
+                call_kind,
+                outcome,
+                cache,
+                &request_hash,
+                context,
+                state,
+            )
+        }
+        "agent_run" => {
+            if mode == EffectMode::RequireCached {
+                return Err(invalid_plan(
+                    "require_cached mode cannot prove cached execution for `agent_run` calls",
+                ));
+            }
+            let outcome = host.agent_run(PlanAgentRunRequest {
+                name: &name,
+                call,
+                deps: dep_values,
+            })?;
+            record_agent_call_outcome(name, outcome, &request_hash, context, state)
+        }
+        "sandbox_exec" => {
+            if mode == EffectMode::RequireCached {
+                return Err(invalid_plan(
+                    "require_cached mode cannot prove cached execution for `sandbox_exec` calls",
+                ));
+            }
+            let outcome = host.sandbox_exec(PlanSandboxExecRequest {
+                name: &name,
+                call,
+                deps: dep_values,
+            })?;
+            record_sandbox_call_outcome(name, outcome, &request_hash, context, state)
+        }
+        _ => Err(invalid_plan(format!(
+            "representative Plan IR harness does not execute `{call_kind}` calls"
+        ))),
+    }
 }
 
 fn record_lm_call_outcome(
@@ -570,6 +616,116 @@ fn record_lm_call_outcome(
         "request_hash": request_hash,
         "result_hash": result_hash,
         "runtime_fingerprint": outcome.runtime_fingerprint,
+        "status": "succeeded"
+    }));
+    state.values.insert(name.clone(), value.clone());
+    state.bindings.insert(name, value);
+    Ok(())
+}
+
+fn record_agent_call_outcome(
+    name: String,
+    outcome: PlanAgentRunOutcome,
+    request_hash: &str,
+    context: &PlanExecutionContext,
+    state: &mut ExecutionState,
+) -> Result<(), PublicSeamError> {
+    let receipt_id = format!("agentrec_{name}");
+    let runtime_fingerprint = outcome.runtime_fingerprint.clone();
+    let mut value = json!({
+        "kind": "agent_session",
+        "status": outcome.status,
+        "graph_revision": context.base_revision,
+        "data_classes": outcome.data_classes,
+        "replayability": outcome.replayability,
+        "receipt": receipt_id,
+        "commands": outcome.commands
+    });
+    if let Some(transcript_ref) = outcome.transcript_ref {
+        value["transcript_ref"] = transcript_ref;
+    }
+    if let Some(cost) = outcome.cost {
+        value["cost"] = cost;
+    }
+    record_successful_external_call(
+        name,
+        "agent_run",
+        value,
+        &runtime_fingerprint,
+        request_hash,
+        context,
+        state,
+    )
+}
+
+fn record_sandbox_call_outcome(
+    name: String,
+    outcome: PlanSandboxExecOutcome,
+    request_hash: &str,
+    context: &PlanExecutionContext,
+    state: &mut ExecutionState,
+) -> Result<(), PublicSeamError> {
+    let receipt_id = format!("execrec_{name}");
+    let runtime_fingerprint = outcome.runtime_fingerprint.clone();
+    let mut value = json!({
+        "kind": "sandbox_exec",
+        "status": outcome.status,
+        "graph_revision": context.base_revision,
+        "data_classes": outcome.data_classes,
+        "replayability": outcome.replayability,
+        "receipt": receipt_id,
+        "files": outcome.files
+    });
+    if let Some(exit_code) = outcome.exit_code {
+        value["exit_code"] = json!(exit_code);
+    }
+    if let Some(stdout_ref) = outcome.stdout_ref {
+        value["stdout_ref"] = stdout_ref;
+    }
+    if let Some(stderr_ref) = outcome.stderr_ref {
+        value["stderr_ref"] = stderr_ref;
+    }
+    if let Some(cost) = outcome.cost {
+        value["cost"] = cost;
+    }
+    record_successful_external_call(
+        name,
+        "sandbox_exec",
+        value,
+        &runtime_fingerprint,
+        request_hash,
+        context,
+        state,
+    )
+}
+
+fn record_successful_external_call(
+    name: String,
+    call_kind: &str,
+    value: Value,
+    runtime_fingerprint: &str,
+    request_hash: &str,
+    context: &PlanExecutionContext,
+    state: &mut ExecutionState,
+) -> Result<(), PublicSeamError> {
+    let result_hash = prefixed_jcs_hash(
+        "fp_result_sha256_",
+        &json!({
+            "schema_version": "leaven.plan_call_result.v1",
+            "name": name,
+            "value": value
+        }),
+    )?;
+    state.receipts.push(json!({
+        "kind": "call",
+        "receipt": value["receipt"],
+        "op_var": name,
+        "started_at": context.started_at,
+        "completed_at": context.completed_at,
+        "call_kind": call_kind,
+        "request_hash": request_hash,
+        "result_hash": result_hash,
+        "runtime_fingerprint": runtime_fingerprint,
         "status": "succeeded"
     }));
     state.values.insert(name.clone(), value.clone());
