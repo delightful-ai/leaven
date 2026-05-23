@@ -67,7 +67,7 @@ Audit-currency value-binding follow-up:
 
 Audit-currency Plan-preimage follow-up:
 
-- `crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_plan_execution_result` now validates an externally supplied Plan Result against the active Plan document and execution context, then `crates/leaven-public-seam/src/plan_execution.rs::validate_plan_result_receipts` recomputes representative query `op_hash`, call/write `request_hash`, write `result_hash`, read-scope fingerprints, and projection fingerprints from Plan IR preimages and result bindings.
+- `crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_plan_execution_result` now validates an externally supplied Plan Result against the active Plan document and execution context, then `crates/leaven-public-seam/src/plan_execution/receipts.rs::validate_plan_result_receipts` recomputes representative query `op_hash`, call/write `request_hash`, write `result_hash`, read-scope fingerprints, and projection fingerprints from Plan IR preimages and result bindings.
 - `crates/leaven-public-seam/tests/plan_document.rs::plan_execution_result_rejects_receipt_hashes_unbound_from_plan_preimages` rejects same-prefix query op-hash, call request-hash, write request-hash, write result-hash, and tampered-plan preimage mismatches.
 - This is useful evidence for `ps1.receipts.audit_currency`, but the row remains pending until a follow-up adversarial review signs off the complete receipts tranche.
 
