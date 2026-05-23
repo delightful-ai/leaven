@@ -93,6 +93,13 @@ Request-evaluation extra-receipt follow-up review:
 - `evaluation_request_receipt_rejects_decorative_or_unbound_hashes` now also rejects an extra decorative `request_evaluation` value/receipt pair with same-prefix hashes.
 - Current status: `ps1.receipts.audit_currency` still remains pending until this extra-receipt fix receives adversarial follow-up sign-off.
 
+Submit-assessments request-hash follow-up review:
+
+- Sub-agent `019e5632-b3d5-7fe0-9f58-185752793859` re-reviewed `ps1.receipts.audit_currency` at `rqlzuyom` and still blocked sign-off because generic Plan Result validation bound `submit_assessments` result hashes and scope but only prefix-checked the `request_hash`.
+- Follow-up resolution: `validate_submit_assessments_request_hash` now recomputes the `submit_assessments` request hash from the evaluation request id and assessment ids carried by the write receipt.
+- `plan_result_rejects_submit_assessment_result_hashes_that_do_not_bind_values` now rejects both same-prefix `submit_assessments` request-hash scope mismatches and result-hash value mismatches.
+- Current status: `ps1.receipts.audit_currency` still remains pending until this submit-assessments request-hash fix receives adversarial follow-up sign-off.
+
 Nested score-output data-class follow-up:
 
 - `crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_nested_score_output_data_class_gaps` now proves a result value containing assessment rows must include nested `score.output.data_classes` such as `candidate.output` in the value-level `data_classes`.

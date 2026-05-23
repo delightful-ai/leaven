@@ -66,6 +66,16 @@ fn plan_result_rejects_nested_score_output_data_class_gaps() {
 fn plan_result_rejects_submit_assessment_result_hashes_that_do_not_bind_values() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
 
+    let mut wrong_submit_assessments_request_hash = evidence_backed_result();
+    wrong_submit_assessments_request_hash["receipts"][2]["request_hash"] =
+        json!("fp_request_sha256_same_prefix_wrong_submit_assessments_scope");
+    assert!(matches!(
+        package
+            .validate_plan_result_document(&wrong_submit_assessments_request_hash)
+            .unwrap_err(),
+        PublicSeamError::InvalidPlanResult { .. }
+    ));
+
     let mut wrong_submit_assessments_hash = evidence_backed_result();
     wrong_submit_assessments_hash["receipts"][2]["result_hash"] =
         json!("fp_result_sha256_same_prefix_wrong_submit_assessments_value");
@@ -177,6 +187,18 @@ fn evidence_backed_result() -> Value {
 fn bind_result_hashes(mut result: Value) -> Value {
     let values = result["values"].as_object().unwrap().clone();
     for receipt in result["receipts"].as_array_mut().unwrap() {
+        if receipt["kind"].as_str() == Some("write")
+            && receipt["write_kind"].as_str() == Some("submit_assessments")
+        {
+            receipt["request_hash"] = json!(prefixed_jcs_hash(
+                "fp_request_sha256_",
+                &json!({
+                    "schema_version": "leaven.submit_assessments_request.v1",
+                    "evaluation_request_id": receipt["evaluation_request_id"],
+                    "assessment_ids": receipt["assessment_ids"]
+                }),
+            ));
+        }
         let receipt_id = receipt["receipt"].as_str().unwrap();
         let Some((name, value)) = values.iter().find(|(_, value)| {
             value

@@ -456,8 +456,33 @@ fn validate_audit_currency_receipt(
             required_hash_with_prefix(receipt, "request_hash", "fp_request_sha256_")?;
             required_hash_with_prefix(receipt, "result_hash", "fp_result_sha256_")?;
             required_string(receipt.get("base_revision"), "receipt.base_revision")?;
+            if receipt.get("write_kind").and_then(Value::as_str) == Some("submit_assessments") {
+                validate_submit_assessments_request_hash(receipt)?;
+            }
         }
         other => return Err(invalid_result(format!("unknown receipt kind `{other}`"))),
+    }
+    Ok(())
+}
+
+fn validate_submit_assessments_request_hash(
+    receipt: &serde_json::Map<String, Value>,
+) -> Result<(), PublicSeamError> {
+    let expected = prefixed_jcs_hash(
+        "fp_request_sha256_",
+        &json!({
+            "schema_version": "leaven.submit_assessments_request.v1",
+            "evaluation_request_id": required_string(receipt.get("evaluation_request_id"), "evaluation_request_id")?,
+            "assessment_ids": required_string_set(receipt.get("assessment_ids"), "assessment_ids")?
+                .into_iter()
+                .collect::<Vec<_>>()
+        }),
+    )?;
+    let actual = required_string(receipt.get("request_hash"), "request_hash")?;
+    if actual != expected {
+        return Err(invalid_result(
+            "submit_assessments receipt request_hash does not bind its assessment scope",
+        ));
     }
     Ok(())
 }
