@@ -7,7 +7,8 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use crate::{
-    ConformanceMatrix, DeferredWatchReplacement, MatrixRowStatus, PlanDocument, PublicSeamError,
+    ConformanceMatrix, DeferredWatchReplacement, MatrixRowStatus, PinnedDialectEvaluator,
+    PlanDocument, PublicSeamError,
 };
 
 const ACTIVE_PACKAGE_RELATIVE: &str = "docs/specs/public-seam-v1";
@@ -711,6 +712,11 @@ impl PublicSeamPackage {
         self.validate_arbitrary_value("leaven.watch.v1.schema.json", "/watch", marker)?;
         let plan = self.validate_plan_document(plan)?;
         DeferredWatchReplacement::from_plan(plan)
+    }
+
+    /// Returns the evaluator for pinned public-seam replay mini-languages.
+    pub fn pinned_dialects(&self) -> PinnedDialectEvaluator {
+        PinnedDialectEvaluator
     }
 
     fn inventory_for_manifest(
