@@ -1,5 +1,6 @@
 use leaven_public_seam::{
-    AcpPermissionRequest, CapabilityDocument, PublicSeamError, PublicSeamPackage,
+    AcpAuthenticateRequest, AcpPermissionRequest, CapabilityDocument, CapabilityRegistry,
+    PublicSeamError, PublicSeamPackage,
 };
 use serde_json::{Value, json};
 
@@ -130,6 +131,19 @@ fn acp_permissions_use_capability_grants_and_return_planerror_redactions() {
         .validate_acp_profile_document(&acp_profile())
         .unwrap();
     let capability = CapabilityDocument::from_value(acp_capability()).unwrap();
+    let mut registry = CapabilityRegistry::default();
+    registry.insert(capability.clone()).unwrap();
+
+    let authenticated = package
+        .authenticate_acp_session(
+            &profile,
+            &registry,
+            AcpAuthenticateRequest::opaque("ltok_acp", "2026-05-23T00:10:00Z")
+                .with_expected_capability_fingerprint("fp_cap_sha256_acp"),
+        )
+        .unwrap();
+    assert_eq!(authenticated.capability_fingerprint(), "fp_cap_sha256_acp");
+    assert_eq!(authenticated.policy_fingerprint(), "fp_policy_sha256_acp");
 
     let allowed = package.authorize_acp_permission(
         &profile,
@@ -166,6 +180,51 @@ fn acp_permissions_use_capability_grants_and_return_planerror_redactions() {
     );
     assert!(!unknown.allowed());
     assert_eq!(unknown.error().unwrap()["code"], json!("extension_error"));
+}
+
+#[test]
+fn acp_authenticate_rejects_unknown_expired_or_fingerprint_mismatched_tokens() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let profile = package
+        .validate_acp_profile_document(&acp_profile())
+        .unwrap();
+    let capability = CapabilityDocument::from_value(acp_capability()).unwrap();
+    let mut registry = CapabilityRegistry::default();
+    registry.insert(capability).unwrap();
+
+    assert!(matches!(
+        package
+            .authenticate_acp_session(
+                &profile,
+                &registry,
+                AcpAuthenticateRequest::opaque("ltok_missing", "2026-05-23T00:10:00Z")
+            )
+            .unwrap_err(),
+        PublicSeamError::InvalidScope { .. }
+    ));
+
+    assert!(matches!(
+        package
+            .authenticate_acp_session(
+                &profile,
+                &registry,
+                AcpAuthenticateRequest::opaque("ltok_acp", "2026-05-23T00:21:00Z")
+            )
+            .unwrap_err(),
+        PublicSeamError::InvalidScope { .. }
+    ));
+
+    assert!(matches!(
+        package
+            .authenticate_acp_session(
+                &profile,
+                &registry,
+                AcpAuthenticateRequest::opaque("ltok_acp", "2026-05-23T00:10:00Z")
+                    .with_expected_capability_fingerprint("fp_cap_sha256_other")
+            )
+            .unwrap_err(),
+        PublicSeamError::InvalidScope { .. }
+    ));
 }
 
 #[test]

@@ -1006,13 +1006,19 @@ rows:
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_permissions_use_capability_grants_and_return_planerror_redactions
     negative_test_evidence:
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_profile_rejects_mcp_latest_nonstdio_human_granting_and_unbounded_updates
+      - crates/leaven-public-seam/tests/acp_profile.rs::acp_authenticate_rejects_unknown_expired_or_fingerprint_mismatched_tokens
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_permissions_use_capability_grants_and_return_planerror_redactions
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_permissions_deny_ungranted_models_workspace_ops_and_commands
     implementation_evidence:
+      - crates/leaven-public-seam/src/acp_profile.rs::AcpAuthenticateRequest
+      - crates/leaven-public-seam/src/acp_profile.rs::AcpAuthenticatedSession
+      - crates/leaven-public-seam/src/acp_profile.rs::authenticate
       - crates/leaven-public-seam/src/acp_profile.rs::AcpPermissionRequest
       - crates/leaven-public-seam/src/acp_profile.rs::AcpPermissionDecision
       - crates/leaven-public-seam/src/acp_profile.rs::authorize_permission
+      - crates/leaven-public-seam/src/capability/registry.rs::CapabilityRegistry::resolve_opaque_for_new_operation
       - crates/leaven-public-seam/src/capability.rs::CapabilityDocument::authorize_grant
+      - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::authenticate_acp_session
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::authorize_acp_permission
     status: pending
 

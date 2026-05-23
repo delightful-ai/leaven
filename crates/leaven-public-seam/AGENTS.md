@@ -83,12 +83,14 @@ legacy-worker exclusion only; they are not an ACP process implementation,
 session lifecycle, authentication handshake, permission loop, or worker runtime.
 
 Crate-root exports for `AcpProfileDocument`, `AcpExtensionMethod`,
-`AcpPermissionRequest`, `AcpPermissionDecision`, and
-`AcpExtensionResultDocument` are advanced public seam contracts. They prove
-locked Leaven ACP profile semantics, including the exact V1 extension-method
-set; programmatic permission decisions against capability grants; typed denial
-envelopes; and schema-backed, hash-bound extension-result envelopes at the
-wire-contract layer only. They are not an ACP process
+`AcpAuthenticateRequest`, `AcpAuthenticatedSession`, `AcpPermissionRequest`,
+`AcpPermissionDecision`, and `AcpExtensionResultDocument` are advanced public
+seam contracts. They prove locked Leaven ACP profile semantics, including the
+exact V1 extension-method set; authenticate resolution from opaque capability
+tokens through the capability registry; programmatic permission decisions
+against capability grants; typed denial envelopes; and schema-backed,
+hash-bound extension-result envelopes at the wire-contract layer only. They are
+not an ACP process
 implementation, session lifecycle, transport backpressure loop, engine-client
 runtime, worker-agent runtime, provider call, or graph mutation route.
 

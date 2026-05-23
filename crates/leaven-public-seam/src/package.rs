@@ -867,6 +867,16 @@ impl PublicSeamPackage {
         crate::acp_profile::authorize_permission(profile, capability, request)
     }
 
+    /// Resolves ACP authenticate through the public-seam capability registry.
+    pub fn authenticate_acp_session(
+        &self,
+        profile: &crate::AcpProfileDocument,
+        registry: &crate::CapabilityRegistry,
+        request: crate::AcpAuthenticateRequest,
+    ) -> Result<crate::AcpAuthenticatedSession, PublicSeamError> {
+        crate::acp_profile::authenticate(profile, registry, request)
+    }
+
     /// Validates a Leaven ACP extension result envelope.
     pub fn validate_acp_extension_result_document(
         &self,
