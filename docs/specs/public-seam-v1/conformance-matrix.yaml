@@ -336,7 +336,7 @@ rows:
       - crates/leaven-public-seam/src/result.rs::validate_evidence_source_receipts
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_plan_execution_result
       - crates/leaven-public-seam/src/plan_execution.rs::execute_plan
-      - crates/leaven-public-seam/src/plan_execution.rs::validate_plan_result_receipts
+      - crates/leaven-public-seam/src/plan_execution/receipts.rs::validate_plan_result_receipts
       - crates/leaven-public-seam/src/plan_execution.rs::PlanGraphQueryRequest
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_evaluation_request_receipt_document
       - crates/leaven-public-seam/src/evaluation_job.rs::EvaluationRequestReceiptDocument::from_plan_result
