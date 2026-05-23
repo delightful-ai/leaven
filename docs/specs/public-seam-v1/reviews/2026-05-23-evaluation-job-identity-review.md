@@ -51,6 +51,13 @@ Implementation after block:
 - `crates/leaven-public-seam/tests/evaluation_job.rs::evaluation_job_rejects_missing_identity_deadline_or_capability` now covers missing request id, base revision, and evaluator id.
 - `crates/leaven-public-seam/tests/evaluation_job.rs::evaluation_job_rejects_unresolved_case_sets_and_invalid_pairs` now covers mixed-ref self-pairs, cursor-only fake resolution, and missing partition-resolution fields.
 
+Fresh verification after adversarial block follow-up:
+
+- `cargo fmt --check`
+- `CARGO_INCREMENTAL=0 cargo test -p leaven-public-seam --test evaluation_job`
+- `CARGO_INCREMENTAL=0 cargo test -p leaven-public-seam --test contract_package conformance_matrix_rows_are_unique_honest_and_reference_real_files -- --exact`
+- `CARGO_INCREMENTAL=0 cargo clippy -p leaven-public-seam --tests -- -D warnings`
+
 Current limits after adversarial block follow-up:
 
 - This still is not an adversarial sign-off and does not mark `ps1.evaluator.job_identity` proven.
