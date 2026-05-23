@@ -177,9 +177,12 @@ backpressure, or runtime watch support.
   independent, pairwise, and listwise shapes, rejects missing deadline,
   evaluator fingerprint, capability fingerprint, unresolved case sets, and
   self-pairs, and validates `request_evaluation` Plan Result receipts against
-  the job's candidate/case identity and audit hashes. It does not prove the
-  runtime evaluator creates those jobs or emits evaluation request receipts
-  unless paired with the `leaven-run` runtime projection tests.
+  the job's candidate/case identity and audit hashes. Generic Plan Result
+  validation rejects `request_evaluation` receipts without this job context so
+  decorative request-evaluation hashes do not pass through the ordinary result
+  route. It does not prove the runtime evaluator creates those jobs or emits
+  evaluation request receipts unless paired with the `leaven-run` runtime
+  projection tests.
 - `tests/output_record.rs` proves reusable `leaven-evidence` output records
   project into the locked public-seam OutputRecord wire shape with visibility,
   data classes, non-placeholder inline output, and public blob audit metadata.

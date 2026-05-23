@@ -841,7 +841,8 @@ impl PublicSeamPackage {
         job: &EvaluationJobDocument,
         value: &Value,
     ) -> Result<EvaluationRequestReceiptDocument, PublicSeamError> {
-        self.validate_plan_result_document(value)?;
+        self.validate_arbitrary_value("leaven.plan_result.v1.schema.json", "/plan_result", value)?;
+        PlanResultDocument::from_schema_valid_value_allowing_request_evaluation(value)?;
         EvaluationRequestReceiptDocument::from_plan_result(job, value)
     }
 
