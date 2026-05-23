@@ -225,6 +225,8 @@ fn inspect_reflect_request(
             .ok_or_else(|| invalid_stage_payload("reflective examples must be objects"))?;
         require_non_empty_array(example.get("source_refs"), "examples.source_refs")?;
         reject_target_leakage(example.get("input"), "reflector example input")?;
+        reject_target_leakage(example.get("output"), "reflector example output")?;
+        reject_target_leakage(example.get("feedback"), "reflector example feedback")?;
         reject_target_leakage(example.get("side_info"), "reflector example side_info")?;
         reject_target_leakage(example.get("score"), "reflector example score")?;
         for data_class in string_array(example.get("data_classes"), "examples.data_classes")? {

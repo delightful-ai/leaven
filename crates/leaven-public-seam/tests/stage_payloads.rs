@@ -115,6 +115,25 @@ fn reflect_request_rejects_hidden_case_target_material() {
             .unwrap_err(),
         PublicSeamError::InvalidStagePayload { .. }
     ));
+
+    let mut output_target_marker = reflect_request();
+    output_target_marker["examples"][0]["output"] = json!("materialized case.target answer");
+    assert!(matches!(
+        package
+            .validate_stage_payload_document(&output_target_marker)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+
+    let mut feedback_target_marker = reflect_request();
+    feedback_target_marker["examples"][0]["feedback"] =
+        json!("reflection feedback names case.target material");
+    assert!(matches!(
+        package
+            .validate_stage_payload_document(&feedback_target_marker)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
 }
 
 #[test]
