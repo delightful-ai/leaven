@@ -262,6 +262,20 @@ rows:
       mutate RunGraph directly or bypass RunContext validation.
     fake_pass_rejected: Public seam code importing graph internals for convenience.
     minimum_closeout_level: semantic_denial
+    positive_test_evidence:
+      - crates/leaven-engine/tests/graph_surface.rs::create_proposal_creates_candidate_without_causal_parent
+      - crates/leaven-engine/tests/graph_surface.rs::change_proposal_creates_causal_edge
+      - crates/leaven-run/tests/public_seam.rs::runcontext_proposal_writes_project_to_public_seam_receipts
+    negative_test_evidence:
+      - crates/leaven-engine/tests/graph_surface.rs::graph_snapshot_restore_rejects_proposal_batch_inconsistencies
+      - crates/leaven-run/tests/public_seam.rs::proposal_write_projection_rejects_receipts_not_backed_by_runcontext_graph_truth
+    implementation_evidence:
+      - crates/leaven-engine/src/context/run_context.rs::RunContext::record_proposal_batch
+      - crates/leaven-engine/src/context/run_context.rs::RunContext::apply_batch
+      - crates/leaven-engine/src/context/run_context.rs::RunContext::apply_proposal
+      - crates/leaven-engine/src/graph/storage.rs::RunGraph
+      - crates/leaven-run/src/public_seam/proposal_write.rs::PublicProposalWriteReceiptContext::proposal_apply_plan_result
+      - crates/leaven-run/AGENTS.md
     status: pending
 
   - id: ps1.result.typed_envelope
@@ -719,15 +733,19 @@ rows:
     minimum_closeout_level: semantic_denial
     positive_test_evidence:
       - crates/leaven-public-seam/tests/proposal_authority.rs::proposal_authority_accepts_effects_surfaces_schemas_and_apply_grants
+      - crates/leaven-run/tests/public_seam.rs::runcontext_proposal_writes_project_to_public_seam_receipts
     negative_test_evidence:
       - crates/leaven-public-seam/tests/proposal_authority.rs::proposal_authority_rejects_submit_only_apply_and_ungranted_surface_or_effect
       - crates/leaven-public-seam/tests/proposal_authority.rs::proposal_authority_rejects_schema_valid_change_without_granted_schema
+      - crates/leaven-run/tests/public_seam.rs::proposal_write_projection_rejects_receipts_not_backed_by_runcontext_graph_truth
     implementation_evidence:
       - crates/leaven-public-seam/src/proposal_authority.rs::ProposalAuthorityReport
       - crates/leaven-public-seam/src/proposal_authority.rs::validate
       - crates/leaven-public-seam/src/proposal_authority.rs::validate_submit_proposal_batch
       - crates/leaven-public-seam/src/proposal_authority.rs::validate_apply_proposal_batch
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_proposal_authority_document
+      - crates/leaven-run/src/public_seam/proposal_write.rs::PublicProposalWriteReceiptContext::proposal_apply_plan_result
+      - crates/leaven-run/AGENTS.md
       - crates/leaven-public-seam/AGENTS.md
     status: pending
 
