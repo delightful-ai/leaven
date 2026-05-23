@@ -281,6 +281,7 @@ rows:
     fake_pass_rejected: Logging errors while returning a generic JSON blob.
     minimum_closeout_level: semantic_denial
     positive_test_evidence:
+      - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_produces_failed_paid_lm_call_and_charge_receipts
       - crates/leaven-public-seam/tests/plan_result.rs::plan_result_accepts_typed_success_and_failure_envelopes
     negative_test_evidence:
       - crates/leaven-public-seam/tests/plan_result.rs::plan_result_rejects_generic_or_untyped_result_payloads
@@ -353,6 +354,8 @@ rows:
       - crates/leaven-public-seam/src/result.rs::validate_failed_call_charges
       - crates/leaven-public-seam/src/result.rs::charge_index
       - crates/leaven-public-seam/src/result.rs::is_failed_call_with_cost
+      - crates/leaven-public-seam/src/plan_execution.rs::PlanLmCompleteOutcome
+      - crates/leaven-public-seam/src/plan_execution.rs::execute_plan
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-result-receipt-replay-review.md
     status: pending

@@ -235,6 +235,38 @@ fn plan_execution_modes_replay_uses_receipts_without_live_host_effects() {
 }
 
 #[test]
+fn plan_execution_produces_failed_paid_lm_call_and_charge_receipts() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let plan = execute_call_only_plan();
+    let mut host = RecordingPlanHost {
+        fail_lm: true,
+        ..RecordingPlanHost::default()
+    };
+
+    let report = package
+        .execute_plan_document(&plan, &plan_execution_context(), &mut host)
+        .unwrap();
+
+    assert_eq!(host.calls, vec!["completion"]);
+    assert_eq!(report.document().value_count(), 0);
+    assert_eq!(report.document().receipt_kinds(), &["call"]);
+    assert_eq!(report.document().charge_count(), 1);
+    assert_eq!(report.document().error_count(), 1);
+    assert_eq!(
+        report.value()["receipts"][0]["status"].as_str(),
+        Some("failed")
+    );
+    assert_eq!(
+        report.value()["receipts"][0]["charge_receipts"][0].as_str(),
+        Some("chargerec_completion")
+    );
+    assert_eq!(
+        report.value()["charges"][0]["source_receipt"].as_str(),
+        Some("lmrec_completion")
+    );
+}
+
+#[test]
 fn plan_ir_family_execution_rejects_known_variants_outside_representative_harness() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let mut plan = typed_let_call_write_plan();
@@ -561,6 +593,12 @@ fn require_cached_call_plan() -> Value {
     plan
 }
 
+fn execute_call_only_plan() -> Value {
+    let mut plan = require_cached_call_plan();
+    plan["mode"] = json!({"kind": "execute"});
+    plan
+}
+
 fn require_cached_external_call_plan(call: Value) -> Value {
     let mut plan = typed_let_call_write_plan();
     plan["mode"] = json!({"kind": "require_cached"});
@@ -756,6 +794,7 @@ struct RecordingPlanHost {
     call_deps: BTreeMap<String, Value>,
     write_deps: BTreeMap<String, Value>,
     cached_hit: bool,
+    fail_lm: bool,
 }
 
 impl PlanExecutionHost for RecordingPlanHost {
@@ -824,6 +863,13 @@ impl PlanExecutionHost for RecordingPlanHost {
         assert_eq!(request.call()["kind"].as_str(), Some("lm_complete"));
         self.calls.push("completion");
         self.call_deps = request.deps().clone();
+        if self.fail_lm {
+            return Ok(PlanLmCompleteOutcome::failed_provider_error(
+                "provider failed after spending budget",
+                "fp_runtime_sha256_planexec",
+                100,
+            ));
+        }
         Ok(PlanLmCompleteOutcome::new(
             json!({
                 "role": "assistant",

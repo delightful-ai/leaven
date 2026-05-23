@@ -497,15 +497,24 @@ fn validate_failed_call_charges(
                 "failed paid call must carry charge receipts",
             ));
         }
+        let mut covered_cost = BTreeMap::new();
         for charge in charge_receipts {
-            let Some(source) = charge_index.get(&charge) else {
+            let Some(charge_record) = charge_index.get(&charge) else {
                 return Err(invalid_result(format!(
                     "failed paid call references missing charge receipt `{charge}`"
                 )));
             };
-            if source != receipt_id {
+            if charge_record.source_receipt != receipt_id {
                 return Err(invalid_result(format!(
                     "charge receipt `{charge}` does not point back to call receipt `{receipt_id}`"
+                )));
+            }
+            merge_costs(&mut covered_cost, &charge_record.cost);
+        }
+        for (field, amount) in numeric_costs(receipt.get("cost")) {
+            if covered_cost.get(&field).copied().unwrap_or(0) < amount {
+                return Err(invalid_result(format!(
+                    "charge receipts do not cover failed call cost `{field}`"
                 )));
             }
         }
@@ -549,7 +558,13 @@ fn assessment_batch_scope(
     })
 }
 
-fn charge_index(charges: &[Value]) -> Result<BTreeMap<String, String>, PublicSeamError> {
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct ChargeRecord {
+    source_receipt: String,
+    cost: Value,
+}
+
+fn charge_index(charges: &[Value]) -> Result<BTreeMap<String, ChargeRecord>, PublicSeamError> {
     let mut index = BTreeMap::new();
     for charge in charges {
         let charge = charge
@@ -562,11 +577,43 @@ fn charge_index(charges: &[Value]) -> Result<BTreeMap<String, String>, PublicSea
                 .ok_or_else(|| invalid_result("charge receipt must carry source_receipt"))?,
         )?
         .to_owned();
-        if index.insert(id, source).is_some() {
+        let cost = charge
+            .get("cost")
+            .cloned()
+            .ok_or_else(|| invalid_result("charge receipt must carry cost"))?;
+        if index
+            .insert(
+                id,
+                ChargeRecord {
+                    source_receipt: source,
+                    cost,
+                },
+            )
+            .is_some()
+        {
             return Err(invalid_result("duplicate charge receipt id"));
         }
     }
     Ok(index)
+}
+
+fn merge_costs(total: &mut BTreeMap<String, u64>, cost: &Value) {
+    for (field, amount) in numeric_costs(Some(cost)) {
+        *total.entry(field).or_default() += amount;
+    }
+}
+
+fn numeric_costs(cost: Option<&Value>) -> BTreeMap<String, u64> {
+    let Some(cost) = cost.and_then(Value::as_object) else {
+        return BTreeMap::new();
+    };
+    let mut fields = BTreeMap::new();
+    for (field, value) in cost {
+        if let Some(amount) = value.as_u64() {
+            fields.insert(field.clone(), amount);
+        }
+    }
+    fields
 }
 
 fn is_failed_call_with_cost(receipt: &serde_json::Map<String, Value>) -> bool {
