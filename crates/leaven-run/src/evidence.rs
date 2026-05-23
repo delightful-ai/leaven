@@ -1,7 +1,7 @@
 //! Public runner and scoring evidence shapes.
 
 use leaven_eval::Case;
-use leaven_evidence::OutputRecord;
+use leaven_evidence::{DataClass, OutputRecord};
 use leaven_kernel::{BudgetSnapshot, CandidateId, CaseId, Cost};
 
 /// Output produced by running one artifact on one case.
@@ -262,6 +262,9 @@ impl ReportableOutput {
         let Some(expected) = self.expected else {
             return Err(ReportableOutputError::MissingAssessedOutput);
         };
+        if !is_assessed_candidate_or_artifact_output(&expected) {
+            return Err(ReportableOutputError::MissingAssessedDataClass);
+        }
         if !same_output_payload(&self.record, &expected) {
             return Err(ReportableOutputError::Unrelated);
         }
@@ -271,6 +274,12 @@ impl ReportableOutput {
 
 fn is_placeholder_output(record: &OutputRecord) -> bool {
     matches!(record, OutputRecord::Inline { text, .. } if text.trim().is_empty())
+}
+
+fn is_assessed_candidate_or_artifact_output(record: &OutputRecord) -> bool {
+    let classes = record.data_classes();
+    classes.contains(&DataClass::candidate_output())
+        || classes.contains(&DataClass::candidate_artifact())
 }
 
 fn same_output_payload(reported: &OutputRecord, expected: &OutputRecord) -> bool {
@@ -331,6 +340,9 @@ pub enum ReportableOutputError {
     /// The runner did not declare the assessed output record.
     #[error("runner output did not declare reportable assessed output")]
     MissingAssessedOutput,
+    /// The runner-declared output is not classified as assessed candidate/artifact output.
+    #[error("runner output did not declare candidate or artifact assessed output")]
+    MissingAssessedDataClass,
     /// The score reported output that was not the runner output being assessed.
     #[error("reportable output did not match assessed output")]
     Unrelated,
@@ -572,9 +584,9 @@ mod tests {
         let group = ReportableOutputScope::group(vec![left, right], case);
         let single = ReportableOutputScope::new(left, case);
         let output = super::ReportableOutput {
-            record: OutputRecord::inline("left/right comparison"),
+            record: OutputRecord::candidate_inline("left/right comparison"),
             scope: group.clone(),
-            expected: Some(OutputRecord::inline("left/right comparison")),
+            expected: Some(OutputRecord::candidate_inline("left/right comparison")),
         };
 
         assert!(matches!(

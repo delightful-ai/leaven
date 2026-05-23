@@ -113,3 +113,27 @@ Current limits:
 
 - This note records the resolved blockers and local verification, but it still does not sign off `ps1.evaluator.score_output`.
 - No matrix status should change for this row until a new adversarial sub-agent sign-off reviews this third follow-up.
+
+Third follow-up adversarial review:
+
+- Reviewer: Codex adversarial review in active goal thread `019e5514-64a2-7400-9e65-72edc8546967`
+- Result: blocked. The row must remain pending.
+
+Third follow-up blocking findings:
+
+- The public-seam `submit_assessments` Plan IR path still accepted a nonblank schema-only dummy `Score.output`; validation required shape/nonempty output but did not require candidate/artifact output semantics.
+- Typed runner declarations could still use `RunOutput::typed(...).with_reportable_output(...)` with a public-only output record; the runtime proof showed scorer binding to a runner declaration, but not that arbitrary typed declarations carried candidate/artifact output semantics.
+
+Implementation after fourth block:
+
+- `submit_assessments` plan validation now requires each `Score.output.data_classes` set to include `candidate.output` or `candidate.artifact`, so a nonblank public-only dummy is rejected by the public-seam Plan IR route.
+- `ReportableOutput::into_record(...)` now rejects runner-declared reportable outputs that do not carry `candidate.output` or `candidate.artifact`.
+- `crates/leaven-public-seam/tests/plan_document.rs::submit_assessments_rejects_missing_or_placeholder_score_output` now covers nonblank public-only dummy output.
+- `crates/leaven-public-seam/tests/plan_document.rs::submit_assessments_accepts_candidate_artifact_score_output_class` proves the public seam does not narrow the locked candidate/artifact wording to candidate-output only.
+- `crates/leaven-run/tests/scoring_evaluator.rs::scoring_evaluator_rejects_typed_runner_declaration_without_assessed_data_class` proves independent typed runner declarations cannot launder public-only reportable output into successful score evidence.
+- `crates/leaven-run/tests/scoring_evaluator.rs::judging_evaluator_rejects_typed_runner_declaration_without_assessed_data_class` proves the same denial for pairwise/listwise judging.
+
+Current limits after fourth block:
+
+- This note records the Mencius block and follow-up implementation, but it still does not sign off `ps1.evaluator.score_output`.
+- No matrix status should change for this row until a new adversarial sub-agent sign-off reviews this fourth follow-up.

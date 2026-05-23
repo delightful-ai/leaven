@@ -66,6 +66,10 @@ fn candidate_inline_output_carries_public_candidate_output_classes() {
             .contains(&DataClass::candidate_output())
     );
     assert!(output.data_classes().contains(&DataClass::public()));
+    assert_eq!(
+        DataClass::candidate_artifact().as_str(),
+        "candidate.artifact"
+    );
 }
 
 #[test]

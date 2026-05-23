@@ -76,10 +76,10 @@ session lifecycle, authentication handshake, permission loop, or worker runtime.
 Crate-root exports for `PlanDocument` and `PlanOperationKind` are advanced
 public seam contracts. They prove active-schema Plan IR document validation and
 Let/Call/Write family classification plus wire-level consistency-mode base
-preservation and `submit_assessments` score-output content checks only; they are
-not plan execution, lowering to engine operations, cache behavior, graph
-mutation authority, evaluator runtime production, or runtime revision-read
-enforcement.
+preservation and `submit_assessments` score-output content/data-class checks
+only; they are not plan execution, lowering to engine operations, cache
+behavior, graph mutation authority, evaluator runtime production, or runtime
+revision-read enforcement.
 
 Crate-root export `PinnedDialectEvaluator` is an advanced public seam contract.
 It proves deterministic parsing and replay for the V1 pinned wire

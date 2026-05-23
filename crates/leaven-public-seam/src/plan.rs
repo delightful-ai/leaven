@@ -260,6 +260,21 @@ impl AssessmentScoreOutputUsage {
 }
 
 fn validate_score_output(output: &serde_json::Map<String, Value>) -> Result<(), PublicSeamError> {
+    let data_classes = output
+        .get("data_classes")
+        .and_then(Value::as_array)
+        .ok_or_else(|| invalid_plan("submit_assessments Score.output must carry data_classes"))?;
+    let carries_assessed_output = data_classes.iter().any(|class| {
+        matches!(
+            class.as_str(),
+            Some("candidate.output" | "candidate.artifact")
+        )
+    });
+    if !carries_assessed_output {
+        return Err(invalid_plan(
+            "submit_assessments Score.output must carry candidate.output or candidate.artifact data class",
+        ));
+    }
     if output
         .get("summary")
         .and_then(Value::as_str)

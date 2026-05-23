@@ -37,6 +37,12 @@ impl DataClass {
         Self("candidate.output".to_owned())
     }
 
+    /// Candidate artifact data.
+    #[must_use]
+    pub fn candidate_artifact() -> Self {
+        Self("candidate.artifact".to_owned())
+    }
+
     /// Case target data.
     #[must_use]
     pub fn case_target() -> Self {
