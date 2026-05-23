@@ -816,7 +816,7 @@ fn run_builder_refuses_case_content_or_split_identity_mismatch() {
                     let rendered = ctx.output.output.clone();
                     Ok(Score::new(
                         f64::from(u8::from(
-                            rendered == ctx.case.target().unwrap().0.to_string(),
+                            rendered == ctx.load_target().unwrap().0.to_string(),
                         )),
                         "ok",
                     )
@@ -849,7 +849,7 @@ fn run_builder_refuses_case_content_or_split_identity_mismatch() {
                     let rendered = ctx.output.output.clone();
                     Ok(Score::new(
                         f64::from(u8::from(
-                            rendered == ctx.case.target().unwrap().0.to_string(),
+                            rendered == ctx.load_target().unwrap().0.to_string(),
                         )),
                         "ok",
                     )
@@ -1567,7 +1567,7 @@ fn run_builder_preserves_case_envelope_ids_and_targets_score_only() {
                 move |ctx: ScoreContext<TextArtifact, TextCase, TextTarget, String>| {
                     let scorer_seen_target = Arc::clone(&scorer_seen_target);
                     async move {
-                        let target = ctx.case.target().expect("target is scorer-visible");
+                        let target = ctx.load_target().expect("target load succeeds");
                         *scorer_seen_target.lock().unwrap() = Some(target.0);
                         let rendered = ctx.output.output.clone();
                         Ok(Score::new(

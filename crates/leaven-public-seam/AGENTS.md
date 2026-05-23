@@ -87,8 +87,9 @@ Crate-root exports for `AcpProfileDocument`, `AcpExtensionMethod`,
 `AcpPermissionDecision`, and `AcpExtensionResultDocument` are advanced public
 seam contracts. They prove locked Leaven ACP profile semantics, including the
 exact V1 extension-method set; authenticate resolution from opaque capability
-tokens through the capability registry; programmatic permission decisions
-against capability grants; typed denial envelopes; and schema-backed,
+tokens through the capability registry; authenticated-session binding for
+programmatic permission decisions against capability grants; typed denial
+envelopes; and schema-backed,
 hash-bound extension-result envelopes at the wire-contract layer only. They are
 not an ACP process
 implementation, session lifecycle, transport backpressure loop, engine-client
@@ -243,7 +244,8 @@ backpressure, or runtime watch support.
 - `tests/acp_profile.rs` proves locked Leaven ACP profile semantics for pinned
   ACP version, stdio-first transport preference, Leaven-only extension methods,
   capability-action mapping, bounded update declarations, programmatic
-  capability-grant permission decisions, `PlanError`/redaction denials,
+  capability-grant permission decisions bound to authenticated sessions,
+  `PlanError`/redaction denials,
   active-schema extension-result primary/receipt payloads, method-specific
   primary value families, receipt-category binding, primary receipt binding,
   JCS `result_hash` binding, and monotonic result data-class coverage. It

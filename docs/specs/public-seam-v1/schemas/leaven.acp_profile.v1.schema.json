@@ -57,6 +57,7 @@
       "required": [
         "token_env",
         "endpoint_env",
+        "fingerprint_env",
         "http_header",
         "authenticate_maps_to"
       ],

@@ -2,7 +2,10 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{Value, json};
 
-use crate::{CapabilityDocument, CapabilityGrantRequest, CapabilityRegistry, PublicSeamError};
+use crate::{
+    CapabilityDocument, CapabilityGrantRequest, CapabilityLimitUsage, CapabilityRegistry,
+    PublicSeamError,
+};
 
 /// Schema-valid Leaven ACP profile document with V1 semantic checks.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -146,12 +149,17 @@ impl AcpExtensionMethod {
 pub struct AcpPermissionRequest {
     method: String,
     resource: BTreeMap<String, Value>,
+    case_fields: BTreeSet<String>,
+    partition: Option<String>,
     input_classes: BTreeSet<String>,
+    purposes: BTreeSet<String>,
     models: BTreeSet<String>,
+    model_roles: BTreeSet<String>,
     workspace_ops: BTreeSet<String>,
     command: Option<String>,
     schemas: BTreeSet<String>,
     surface: Option<String>,
+    limits: CapabilityLimitUsage,
 }
 
 /// ACP authenticate request that resolves a bearer token into a capability document.
@@ -159,24 +167,21 @@ pub struct AcpPermissionRequest {
 pub struct AcpAuthenticateRequest {
     token_id: String,
     now: String,
-    expected_capability_fingerprint: Option<String>,
+    expected_capability_fingerprint: String,
 }
 
 impl AcpAuthenticateRequest {
     /// Creates an authenticate request from an opaque public-seam token handle.
-    pub fn opaque(token_id: impl Into<String>, now: impl Into<String>) -> Self {
+    pub fn opaque(
+        token_id: impl Into<String>,
+        now: impl Into<String>,
+        expected_capability_fingerprint: impl Into<String>,
+    ) -> Self {
         Self {
             token_id: token_id.into(),
             now: now.into(),
-            expected_capability_fingerprint: None,
+            expected_capability_fingerprint: expected_capability_fingerprint.into(),
         }
-    }
-
-    /// Adds the capability fingerprint supplied through the ACP transport binding.
-    #[must_use]
-    pub fn with_expected_capability_fingerprint(mut self, fingerprint: impl Into<String>) -> Self {
-        self.expected_capability_fingerprint = Some(fingerprint.into());
-        self
     }
 }
 
@@ -217,12 +222,17 @@ impl AcpPermissionRequest {
         Self {
             method: method.into(),
             resource: BTreeMap::new(),
+            case_fields: BTreeSet::new(),
+            partition: None,
             input_classes: BTreeSet::new(),
+            purposes: BTreeSet::new(),
             models: BTreeSet::new(),
+            model_roles: BTreeSet::new(),
             workspace_ops: BTreeSet::new(),
             command: None,
             schemas: BTreeSet::new(),
             surface: None,
+            limits: CapabilityLimitUsage::default(),
         }
     }
 
@@ -233,6 +243,20 @@ impl AcpPermissionRequest {
         self
     }
 
+    /// Adds a requested case field.
+    #[must_use]
+    pub fn with_case_field(mut self, field: impl Into<String>) -> Self {
+        self.case_fields.insert(field.into());
+        self
+    }
+
+    /// Adds a requested case partition.
+    #[must_use]
+    pub fn with_partition(mut self, partition: impl Into<String>) -> Self {
+        self.partition = Some(partition.into());
+        self
+    }
+
     /// Adds an input data class to the permission request.
     #[must_use]
     pub fn with_input_class(mut self, data_class: impl Into<String>) -> Self {
@@ -240,10 +264,24 @@ impl AcpPermissionRequest {
         self
     }
 
+    /// Adds a requested operation purpose.
+    #[must_use]
+    pub fn with_purpose(mut self, purpose: impl Into<String>) -> Self {
+        self.purposes.insert(purpose.into());
+        self
+    }
+
     /// Adds a requested model id.
     #[must_use]
     pub fn with_model(mut self, model: impl Into<String>) -> Self {
         self.models.insert(model.into());
+        self
+    }
+
+    /// Adds a requested model role.
+    #[must_use]
+    pub fn with_model_role(mut self, role: impl Into<String>) -> Self {
+        self.model_roles.insert(role.into());
         self
     }
 
@@ -272,6 +310,13 @@ impl AcpPermissionRequest {
     #[must_use]
     pub fn with_surface(mut self, surface: impl Into<String>) -> Self {
         self.surface = Some(surface.into());
+        self
+    }
+
+    /// Adds per-operation usage checked against grant limits.
+    #[must_use]
+    pub fn with_limits(mut self, limits: CapabilityLimitUsage) -> Self {
+        self.limits = limits;
         self
     }
 }
@@ -451,8 +496,17 @@ impl AcpExtensionResultDocument {
 pub fn authorize_permission(
     profile: &AcpProfileDocument,
     capability: &CapabilityDocument,
+    session: &AcpAuthenticatedSession,
     request: AcpPermissionRequest,
 ) -> AcpPermissionDecision {
+    if session.capability_fingerprint() != capability.capability_fingerprint() {
+        return denied(
+            session.capability_fingerprint(),
+            "capability_denied",
+            "ACP permission capability does not match authenticated session",
+            Vec::new(),
+        );
+    }
     let Some(method) = profile.method(&request.method) else {
         return denied(
             capability.capability_fingerprint(),
@@ -465,11 +519,23 @@ pub fn authorize_permission(
     for (key, value) in request.resource {
         grant = grant.with_resource(key, value);
     }
+    for field in request.case_fields {
+        grant = grant.with_case_field(field);
+    }
+    if let Some(partition) = request.partition {
+        grant = grant.with_partition(partition);
+    }
     for data_class in request.input_classes {
         grant = grant.with_input_class(data_class);
     }
+    for purpose in request.purposes {
+        grant = grant.with_purpose(purpose);
+    }
     for model in request.models {
         grant = grant.with_model(model);
+    }
+    for model_role in request.model_roles {
+        grant = grant.with_model_role(model_role);
     }
     for workspace_op in request.workspace_ops {
         grant = grant.with_workspace_op(workspace_op);
@@ -483,6 +549,7 @@ pub fn authorize_permission(
     if let Some(surface) = request.surface {
         grant = grant.with_surface(surface);
     }
+    grant = grant.with_limits(request.limits);
     match capability.authorize_grant(grant) {
         Ok(authorized) => AcpPermissionDecision {
             allowed: true,
@@ -504,20 +571,23 @@ pub fn authenticate(
     registry: &CapabilityRegistry,
     request: AcpAuthenticateRequest,
 ) -> Result<AcpAuthenticatedSession, PublicSeamError> {
+    let AcpAuthenticateRequest {
+        token_id,
+        now,
+        expected_capability_fingerprint,
+    } = request;
     if profile.pinned_acp_version().trim().is_empty() {
         return Err(invalid_acp(
             "ACP profile must be validated before authenticate",
         ));
     }
     let document = registry
-        .resolve_opaque_for_new_operation(&request.token_id, &request.now)
+        .resolve_opaque_for_new_operation(&token_id, &now)
         .map_err(|error| invalid_acp(format!("ACP authenticate failed: {error}")))?;
-    if let Some(expected) = request.expected_capability_fingerprint {
-        if expected != document.capability_fingerprint() {
-            return Err(invalid_acp(
-                "ACP authenticate capability fingerprint binding mismatch",
-            ));
-        }
+    if expected_capability_fingerprint != document.capability_fingerprint() {
+        return Err(invalid_acp(
+            "ACP authenticate capability fingerprint binding mismatch",
+        ));
     }
     Ok(AcpAuthenticatedSession {
         capability_fingerprint: document.capability_fingerprint().to_owned(),

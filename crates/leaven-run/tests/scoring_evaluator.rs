@@ -15,7 +15,9 @@ use leaven_core::{
 };
 use leaven_engine::{BudgetLedger, CachePolicy, Evaluator, RunContext, RunEvent, RunGraph};
 use leaven_eval::Case;
-use leaven_evidence::{DataClass, DataClassSet, OutputMetadata, OutputRecord, OutputVisibility};
+use leaven_evidence::{
+    CaseAssessmentEvidence, DataClass, DataClassSet, OutputMetadata, OutputRecord, OutputVisibility,
+};
 use leaven_kernel::{
     Budget, CandidateId, CaseId, ContentId, Cost, EvaluationRequestId, EvaluatorId, Fingerprint,
     ResolvedEvaluationSetId, RunId, StageId, now,
@@ -229,6 +231,7 @@ fn scoring_evaluator_reports_per_candidate_cost_for_independent_batches() {
         ));
         assert_eq!(evidence.output(), &expected_candidate_output("42"));
         assert_eq!(evidence.feedback(), "ok");
+        assert!(evidence.case_data_reads().is_empty());
         assert_eq!(
             evidence.trace(),
             &[
@@ -240,7 +243,7 @@ fn scoring_evaluator_reports_per_candidate_cost_for_independent_batches() {
 }
 
 #[test]
-fn scoring_evaluator_hides_target_from_runner_and_passes_target_to_scorer() {
+fn scoring_evaluator_hides_target_from_runner_and_loads_target_with_case_data_receipt() {
     #[derive(Clone, Debug, Eq, PartialEq)]
     struct PromptInput {
         addend: i32,
@@ -301,7 +304,7 @@ fn scoring_evaluator_hides_target_from_runner_and_passes_target_to_scorer() {
                             assert_eq!(ctx.case.id(), CaseId::new(700));
                             assert_eq!(ctx.case.input().addend, 2);
                             assert!(ctx.case.metadata().is_empty());
-                            let target = ctx.case.target().expect("target is scorer-visible");
+                            let target = ctx.load_target().expect("target load succeeds");
                             *scorer_seen_target.lock().unwrap() = Some(target.answer);
                             let rendered = ctx.output.output.clone();
                             Ok(Score::new(
@@ -340,7 +343,18 @@ fn scoring_evaluator_hides_target_from_runner_and_passes_target_to_scorer() {
             panic!("expected one independent assessment");
         };
         assert_eq!(evidence.feedback(), "target checked");
+        assert_one_target_case_data_read(evidence);
     });
+}
+
+fn assert_one_target_case_data_read(evidence: &CaseAssessmentEvidence) {
+    assert_eq!(evidence.case_data_reads().len(), 1);
+    assert_eq!(evidence.case_data_reads()[0].operation(), "case_query.load");
+    assert_eq!(evidence.case_data_reads()[0].fields(), &["target"]);
+    assert_eq!(
+        evidence.case_data_reads()[0].data_classes(),
+        &["case.target"]
+    );
 }
 
 #[test]

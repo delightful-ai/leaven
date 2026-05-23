@@ -138,8 +138,7 @@ fn acp_permissions_use_capability_grants_and_return_planerror_redactions() {
         .authenticate_acp_session(
             &profile,
             &registry,
-            AcpAuthenticateRequest::opaque("ltok_acp", "2026-05-23T00:10:00Z")
-                .with_expected_capability_fingerprint("fp_cap_sha256_acp"),
+            AcpAuthenticateRequest::opaque("ltok_acp", "2026-05-23T00:10:00Z", "fp_cap_sha256_acp"),
         )
         .unwrap();
     assert_eq!(authenticated.capability_fingerprint(), "fp_cap_sha256_acp");
@@ -148,6 +147,7 @@ fn acp_permissions_use_capability_grants_and_return_planerror_redactions() {
     let allowed = package.authorize_acp_permission(
         &profile,
         &capability,
+        &authenticated,
         AcpPermissionRequest::new("leaven/lm.complete")
             .with_input_class("case.input")
             .with_model("gpt-test")
@@ -160,6 +160,7 @@ fn acp_permissions_use_capability_grants_and_return_planerror_redactions() {
     let denied = package.authorize_acp_permission(
         &profile,
         &capability,
+        &authenticated,
         AcpPermissionRequest::new("leaven/lm.complete")
             .with_input_class("case.input")
             .with_input_class("external.secret")
@@ -176,10 +177,31 @@ fn acp_permissions_use_capability_grants_and_return_planerror_redactions() {
     let unknown = package.authorize_acp_permission(
         &profile,
         &capability,
+        &authenticated,
         AcpPermissionRequest::new("leaven/unknown.extension"),
     );
     assert!(!unknown.allowed());
     assert_eq!(unknown.error().unwrap()["code"], json!("extension_error"));
+
+    let other_capability = CapabilityDocument::from_value({
+        let mut value = acp_capability();
+        value["capability_fingerprint"] = json!("fp_cap_sha256_other");
+        value["jti"] = json!("jti_acp_other");
+        value["token_binding"]["token_id"] = json!("ltok_other");
+        value
+    })
+    .unwrap();
+    let bypass = package.authorize_acp_permission(
+        &profile,
+        &other_capability,
+        &authenticated,
+        AcpPermissionRequest::new("leaven/lm.complete")
+            .with_input_class("case.input")
+            .with_model("gpt-test")
+            .with_resource("run", json!("run_demo")),
+    );
+    assert!(!bypass.allowed());
+    assert_eq!(bypass.error().unwrap()["code"], json!("capability_denied"));
 }
 
 #[test]
@@ -197,7 +219,11 @@ fn acp_authenticate_rejects_unknown_expired_or_fingerprint_mismatched_tokens() {
             .authenticate_acp_session(
                 &profile,
                 &registry,
-                AcpAuthenticateRequest::opaque("ltok_missing", "2026-05-23T00:10:00Z")
+                AcpAuthenticateRequest::opaque(
+                    "ltok_missing",
+                    "2026-05-23T00:10:00Z",
+                    "fp_cap_sha256_acp"
+                )
             )
             .unwrap_err(),
         PublicSeamError::InvalidScope { .. }
@@ -208,7 +234,11 @@ fn acp_authenticate_rejects_unknown_expired_or_fingerprint_mismatched_tokens() {
             .authenticate_acp_session(
                 &profile,
                 &registry,
-                AcpAuthenticateRequest::opaque("ltok_acp", "2026-05-23T00:21:00Z")
+                AcpAuthenticateRequest::opaque(
+                    "ltok_acp",
+                    "2026-05-23T00:21:00Z",
+                    "fp_cap_sha256_acp"
+                )
             )
             .unwrap_err(),
         PublicSeamError::InvalidScope { .. }
@@ -219,8 +249,11 @@ fn acp_authenticate_rejects_unknown_expired_or_fingerprint_mismatched_tokens() {
             .authenticate_acp_session(
                 &profile,
                 &registry,
-                AcpAuthenticateRequest::opaque("ltok_acp", "2026-05-23T00:10:00Z")
-                    .with_expected_capability_fingerprint("fp_cap_sha256_other")
+                AcpAuthenticateRequest::opaque(
+                    "ltok_acp",
+                    "2026-05-23T00:10:00Z",
+                    "fp_cap_sha256_other"
+                )
             )
             .unwrap_err(),
         PublicSeamError::InvalidScope { .. }
@@ -234,10 +267,20 @@ fn acp_permissions_deny_ungranted_models_workspace_ops_and_commands() {
         .validate_acp_profile_document(&acp_profile())
         .unwrap();
     let capability = CapabilityDocument::from_value(acp_capability()).unwrap();
+    let mut registry = CapabilityRegistry::default();
+    registry.insert(capability.clone()).unwrap();
+    let authenticated = package
+        .authenticate_acp_session(
+            &profile,
+            &registry,
+            AcpAuthenticateRequest::opaque("ltok_acp", "2026-05-23T00:10:00Z", "fp_cap_sha256_acp"),
+        )
+        .unwrap();
 
     let workspace_allowed = package.authorize_acp_permission(
         &profile,
         &capability,
+        &authenticated,
         AcpPermissionRequest::new("leaven/workspace.read_file")
             .with_resource("workspace_ids", json!("ws_acp"))
             .with_input_class("workspace.file")
@@ -248,6 +291,7 @@ fn acp_permissions_deny_ungranted_models_workspace_ops_and_commands() {
     let workspace_denied = package.authorize_acp_permission(
         &profile,
         &capability,
+        &authenticated,
         AcpPermissionRequest::new("leaven/workspace.read_file")
             .with_resource("workspace_ids", json!("ws_acp"))
             .with_input_class("workspace.file")
@@ -262,16 +306,22 @@ fn acp_permissions_deny_ungranted_models_workspace_ops_and_commands() {
     let model_denied = package.authorize_acp_permission(
         &profile,
         &capability,
+        &authenticated,
         AcpPermissionRequest::new("leaven/lm.complete")
             .with_input_class("case.input")
             .with_model("ungranted-model")
             .with_resource("run", json!("run_demo")),
     );
     assert!(!model_denied.allowed());
+    assert_eq!(
+        model_denied.error().unwrap()["code"],
+        json!("capability_denied")
+    );
 
     let sandbox_denied = package.authorize_acp_permission(
         &profile,
         &capability,
+        &authenticated,
         AcpPermissionRequest::new("leaven/sandbox.exec")
             .with_resource("workspace_ids", json!("ws_acp"))
             .with_input_class("public")
@@ -279,6 +329,40 @@ fn acp_permissions_deny_ungranted_models_workspace_ops_and_commands() {
             .with_command("python"),
     );
     assert!(!sandbox_denied.allowed());
+    assert_eq!(
+        sandbox_denied.error().unwrap()["code"],
+        json!("capability_denied")
+    );
+
+    let case_target_allowed = package.authorize_acp_permission(
+        &profile,
+        &capability,
+        &authenticated,
+        AcpPermissionRequest::new("leaven/case.target")
+            .with_resource("run", json!("run_demo"))
+            .with_resource("evaluation_request_id", json!("evalreq_acp"))
+            .with_case_field("target")
+            .with_partition("validation")
+            .with_input_class("case.target"),
+    );
+    assert!(case_target_allowed.allowed());
+
+    let case_target_wrong_partition = package.authorize_acp_permission(
+        &profile,
+        &capability,
+        &authenticated,
+        AcpPermissionRequest::new("leaven/case.target")
+            .with_resource("run", json!("run_demo"))
+            .with_resource("evaluation_request_id", json!("evalreq_acp"))
+            .with_case_field("target")
+            .with_partition("train")
+            .with_input_class("case.target"),
+    );
+    assert!(!case_target_wrong_partition.allowed());
+    assert_eq!(
+        case_target_wrong_partition.error().unwrap()["code"],
+        json!("capability_denied")
+    );
 }
 
 #[test]
@@ -593,6 +677,18 @@ fn acp_capability() -> Value {
                     "allowed_input_classes": ["case.input"],
                     "forbidden_input_classes": ["external.secret"],
                     "models": ["gpt-test"]
+                }
+            },
+            {
+                "action": "case.read",
+                "resource": {
+                    "run": "run_demo",
+                    "evaluation_request_id": "evalreq_acp"
+                },
+                "constraints": {
+                    "case_fields": ["target"],
+                    "partitions": ["validation"],
+                    "allowed_input_classes": ["case.target"]
                 }
             },
             {

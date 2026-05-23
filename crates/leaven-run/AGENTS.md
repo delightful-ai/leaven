@@ -146,10 +146,14 @@ persistence beyond the projected public-seam document.
   That is the structural target/metadata isolation boundary: do not add target,
   metadata, or raw case envelope access to the ordinary runner signature.
 - `ScoreContext` exposes a budget snapshot and `ScoreCase<I, T>` with case id,
-  input, optional target, and an empty scorer metadata projection. It still does
-  not expose the full spec target: score-on-error, generic output views, score
-  history, or selected scorer metadata projection. Do not describe this slice as
-  complete GEPA-style scorer context until those gaps are closed.
+  input, and an empty scorer metadata projection. Scorers and judges read
+  targets only through `ScoreContext::load_target(...)` /
+  `JudgeScoreContext::load_target(...)`, which records case-data read evidence
+  for the assessment. Do not reintroduce a direct `ScoreCase::target(...)`
+  accessor; public-seam target access must stay explicit and auditable. This
+  still does not expose the full spec target: score-on-error, generic output
+  views, score history, or selected scorer metadata projection. Do not describe
+  this slice as complete GEPA-style scorer context until those gaps are closed.
 - The builder's canonical `.train` / `.validation` / `.test` path now accepts
   `leaven_eval::Case<I, T>` envelopes and preserves caller-provided case IDs in
   datasets, scoring evidence, and reports. `.train_inputs`,
