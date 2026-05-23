@@ -15,7 +15,7 @@ use leaven_core::{
 };
 use leaven_engine::{BudgetLedger, CachePolicy, Evaluator, RunContext, RunGraph};
 use leaven_eval::Case;
-use leaven_evidence::{DataClass, OutputRecord};
+use leaven_evidence::{DataClass, DataClassSet, OutputMetadata, OutputRecord, OutputVisibility};
 use leaven_kernel::{
     Budget, CandidateId, CaseId, ContentId, Cost, EvaluatorId, Fingerprint,
     ResolvedEvaluationSetId, RunId, StageId, now,
@@ -671,7 +671,75 @@ fn scoring_evaluator_preserves_typed_output_through_scoring_then_renders() {
 }
 
 #[test]
-fn scoring_evaluator_requires_reportable_output_for_typed_runner_outputs() {
+fn scoring_evaluator_preserves_candidate_artifact_reportable_output() {
+    #[derive(Clone, Debug)]
+    struct TypedPrediction(i32);
+
+    block_on(async {
+        let (mut graph, mut budget, candidate) = graph_with_seed();
+        let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
+        let evaluator = ScoringEvaluator::new(
+            Arc::new(vec![input_case(0, 2)]),
+            Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
+                async move {
+                    let answer = artifact.0 + *case.input();
+                    Ok(
+                        RunOutput::typed(TypedPrediction(answer)).with_reportable_output(
+                            candidate_artifact_output(format!("artifact answer={answer}")),
+                        ),
+                    )
+                }
+                .boxed()
+            }),
+            Arc::new(
+                |ctx: ScoreContext<TextArtifact, i32, leaven_eval::NoTarget, TypedPrediction>| {
+                    async move {
+                        Ok(
+                            Score::new(f64::from(ctx.output.output.0), "artifact output")
+                                .with_output(ctx.report_text_output(format!(
+                                    "artifact answer={}",
+                                    ctx.output.output.0
+                                ))),
+                        )
+                    }
+                    .boxed()
+                },
+            ),
+            &identity("typed-output-candidate-artifact-score-output-test"),
+        );
+
+        let metered = evaluator
+            .evaluate(
+                request(
+                    ResolvedRequestKind::Independent {
+                        candidates: vec![candidate],
+                    },
+                    vec![CaseId::new(0)],
+                    AssessmentGranularity::PerCase,
+                ),
+                ctx.evaluation_context(StageId::from_evaluator(Evaluator::id(&evaluator))),
+            )
+            .await
+            .unwrap();
+
+        let Assessment::Independent { evidence, .. } = &metered.value[0] else {
+            panic!("expected independent assessment");
+        };
+        assert_eq!(
+            evidence.output(),
+            &candidate_artifact_output("artifact answer=42")
+        );
+        assert!(
+            evidence
+                .output()
+                .data_classes()
+                .contains(&DataClass::candidate_artifact())
+        );
+    });
+}
+
+#[test]
+fn scoring_evaluator_rejects_missing_reportable_output_for_typed_runner_outputs() {
     #[derive(Clone, Debug)]
     struct TypedPrediction(i32);
 
@@ -1123,7 +1191,7 @@ fn judging_evaluator_preserves_pairwise_and_listwise_report_outputs() {
 }
 
 #[test]
-fn judging_evaluator_requires_group_scoped_reportable_output() {
+fn judging_evaluator_rejects_missing_or_placeholder_group_scoped_reportable_output() {
     block_on(async {
         let (mut graph, mut budget, left) = graph_with_seed();
         let right = {
@@ -1479,6 +1547,13 @@ fn assert_projected_public_output(
 
 fn expected_candidate_output(output: impl Into<String>) -> OutputRecord {
     OutputRecord::candidate_inline(output)
+}
+
+fn candidate_artifact_output(output: impl Into<String>) -> OutputRecord {
+    OutputRecord::inline(output).with_metadata(OutputMetadata::new(
+        OutputVisibility::Public,
+        DataClassSet::new([DataClass::candidate_artifact(), DataClass::public()]),
+    ))
 }
 
 // Test helper. The scorer closure must produce a `Score` with context-scoped

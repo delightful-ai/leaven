@@ -520,6 +520,7 @@ fn conformance_matrix_rows_are_unique_honest_and_reference_real_files() {
             "ps1.capability.delegation_attenuates",
             "ps1.capability.grant_enforcement",
             "ps1.acp.no_mcp_v1",
+            "ps1.evaluator.score_output",
             "ps1.harness.negative_denominator",
             "ps1.plan.pinned_dialects",
             "ps1.public_routes.maturity_classified",

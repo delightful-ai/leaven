@@ -151,3 +151,20 @@ Current limits after fourth block:
 
 - This note records the Mencius block and follow-up implementation, but it still does not sign off `ps1.evaluator.score_output`.
 - No matrix status should change for this row until a new adversarial sub-agent sign-off reviews this fourth follow-up.
+
+Final adversarial review:
+
+- Reviewer: Codex adversarial review in active goal continuation after the fourth follow-up.
+- Result: signed off. No blocking findings remained after inspecting the locked row/spec requirements, the current runtime and public-seam code, the matrix evidence, and focused tests.
+
+Final review findings:
+
+- The fourth follow-up rejects the fake pass named by the row: a nonblank schema-only dummy `Score.output` no longer passes the public-seam `submit_assessments` route unless it is data-classed as assessed candidate/artifact output, and runtime typed runner declarations cannot launder public-only output into successful score evidence.
+- Runtime positive proof now covers independent assessed output as both `candidate.output` and `candidate.artifact`, plus pairwise and listwise candidate-output group assessments.
+- Runtime negative proof covers missing output, blank placeholder output, same-context dummy output, mutable-context forgery, cross-context reuse, missing typed-runner reportable declarations, and public-only typed-runner declarations for independent and judging paths.
+- Public-seam Plan IR proof covers independent, pairwise, and listwise `submit_assessments` score-output shapes, rejects missing/blank/null/public-only dummy score outputs, and accepts the locked candidate-artifact wording.
+
+Scope of sign-off:
+
+- `ps1.evaluator.score_output` is signed off for semantic-denial proof that successful evaluator scores carry the assessed reportable output and reject dummy/schema-only substitutes through the run/evaluator and public-seam owner paths.
+- This sign-off does not prove evaluator target reads, assessment request scope, replayability, ACP transport, provider runtimes, PlanResult production, or end-to-end external-worker execution; those neighboring rows remain pending.
