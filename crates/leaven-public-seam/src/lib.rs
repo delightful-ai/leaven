@@ -11,6 +11,7 @@ mod output;
 mod package;
 mod plan;
 mod plan_execution;
+mod proposal_authority;
 mod result;
 mod stage_payload;
 mod watch;
@@ -40,6 +41,7 @@ pub use plan_execution::{
     PlanExecutionReport, PlanGraphQueryOutcome, PlanGraphQueryRequest, PlanGraphReadScope,
     PlanLmCompleteOutcome, PlanLmCompleteRequest,
 };
+pub use proposal_authority::ProposalAuthorityReport;
 pub use result::{PlanResultDocument, Replayability};
 pub use stage_payload::{StagePayloadDocument, StagePayloadRole, StageProposalEffect};
 pub use watch::DeferredWatchReplacement;
