@@ -195,6 +195,84 @@ fn acp_profile_rejects_mcp_bridge_legacy_worker_protocol_and_watch_runtime() {
 }
 
 #[test]
+fn deprecated_worker_protocol_marker_routes_to_acp_profile() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let marker = json!({
+        "schema_version": "leaven.worker_protocol.v1.deprecated",
+        "replacement": "leaven.acp_profile.v1"
+    });
+
+    package
+        .compile_schema_value(
+            "leaven.worker_protocol.v1.schema.json",
+            &package
+                .schema_json("leaven.worker_protocol.v1.schema.json")
+                .unwrap(),
+        )
+        .unwrap();
+    package
+        .validate_arbitrary_value("leaven.worker_protocol.v1.schema.json", "/marker", &marker)
+        .unwrap();
+
+    let scope = package.v1_scope().unwrap();
+    let authorized = scope
+        .authorize_worker_transport(WorkerTransportRequest::acp_profile(
+            package.acp_extension_methods().unwrap(),
+        ))
+        .unwrap();
+    assert_eq!(authorized.worker_transport(), "acp_profile");
+}
+
+#[test]
+fn deprecated_worker_protocol_rejects_runtime_protocol_and_revival_claims() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let scope = package.v1_scope().unwrap();
+
+    assert!(
+        package
+            .acp_extension_methods()
+            .unwrap()
+            .iter()
+            .all(|method| !method.contains("worker_protocol"))
+    );
+
+    assert!(matches!(
+        scope
+            .authorize_worker_transport(WorkerTransportRequest::new(
+                WorkerTransportKind::LegacyWorkerProtocol,
+                ["leaven/worker_protocol.run"]
+            ))
+            .unwrap_err(),
+        PublicSeamError::InvalidScope { .. }
+    ));
+
+    assert!(matches!(
+        scope
+            .authorize_worker_transport(WorkerTransportRequest::new(
+                WorkerTransportKind::AcpProfile,
+                ["leaven/worker_protocol.run"]
+            ))
+            .unwrap_err(),
+        PublicSeamError::InvalidScope { .. }
+    ));
+
+    let revived_marker = json!({
+        "schema_version": "leaven.worker_protocol.v1",
+        "replacement": "leaven.worker_protocol.v1"
+    });
+    assert!(matches!(
+        package
+            .validate_arbitrary_value(
+                "leaven.worker_protocol.v1.schema.json",
+                "/revived",
+                &revived_marker
+            )
+            .unwrap_err(),
+        PublicSeamError::ExampleValidation { .. }
+    ));
+}
+
+#[test]
 fn schema_fingerprints_reject_pretty_printed_hashing_and_track_semantic_changes() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let common = package.schema_json("common.schema.json").unwrap();
@@ -238,7 +316,8 @@ fn conformance_matrix_rows_are_unique_honest_and_reference_real_files() {
             "ps1.acp.no_mcp_v1",
             "ps1.harness.negative_denominator",
             "ps1.public_routes.maturity_classified",
-            "ps1.schema.fingerprints"
+            "ps1.schema.fingerprints",
+            "ps1.worker_protocol.deprecated"
         ])
     );
 

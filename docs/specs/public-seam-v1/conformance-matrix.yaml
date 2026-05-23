@@ -790,7 +790,20 @@ rows:
       V1 product behavior.
     fake_pass_rejected: Reviving the deprecated worker protocol because the marker schema exists.
     minimum_closeout_level: semantic_denial
-    status: pending
+    positive_test_evidence:
+      - crates/leaven-public-seam/tests/contract_package.rs::deprecated_worker_protocol_marker_routes_to_acp_profile
+    negative_test_evidence:
+      - crates/leaven-public-seam/tests/contract_package.rs::deprecated_worker_protocol_rejects_runtime_protocol_and_revival_claims
+    implementation_evidence:
+      - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_arbitrary_value
+      - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::v1_scope
+      - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::acp_extension_methods
+      - crates/leaven-public-seam/src/package.rs::V1Scope::authorize_worker_transport
+      - crates/leaven-public-seam/src/package.rs::WorkerTransportKind
+      - crates/leaven-public-seam/AGENTS.md
+    review_evidence:
+      - docs/specs/public-seam-v1/reviews/2026-05-23-worker-protocol-deprecated-review.md
+    status: proven
 
   - id: ps1.public_routes.maturity_classified
     area: public_maturity
