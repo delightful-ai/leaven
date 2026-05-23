@@ -41,11 +41,7 @@ fn plan_result_accepts_query_call_and_write_receipts_as_audit_currency() {
     assert_eq!(result.receipt_kinds(), &["query", "call", "write"]);
     assert!(result.value_kinds().contains(&"graph_set".to_owned()));
     assert!(result.value_kinds().contains(&"agent_session".to_owned()));
-    assert!(
-        result
-            .value_kinds()
-            .contains(&"evaluation_request_receipt".to_owned())
-    );
+    assert!(result.value_kinds().contains(&"apply_receipt".to_owned()));
 }
 
 #[test]
@@ -246,6 +242,41 @@ fn plan_result_rejects_decorative_audit_currency_receipts() {
 }
 
 #[test]
+fn plan_result_rejects_same_prefix_result_hashes_that_do_not_bind_values() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut wrong_query_result_hash = audit_currency_result();
+    wrong_query_result_hash["receipts"][0]["result_hash"] =
+        json!("fp_result_sha256_same_prefix_wrong_query_value");
+    assert!(matches!(
+        package
+            .validate_plan_result_document(&wrong_query_result_hash)
+            .unwrap_err(),
+        PublicSeamError::InvalidPlanResult { .. }
+    ));
+
+    let mut wrong_call_result_hash = audit_currency_result();
+    wrong_call_result_hash["receipts"][1]["result_hash"] =
+        json!("fp_result_sha256_same_prefix_wrong_call_value");
+    assert!(matches!(
+        package
+            .validate_plan_result_document(&wrong_call_result_hash)
+            .unwrap_err(),
+        PublicSeamError::InvalidPlanResult { .. }
+    ));
+
+    let mut wrong_write_result_hash = audit_currency_result();
+    wrong_write_result_hash["receipts"][2]["result_hash"] =
+        json!("fp_result_sha256_same_prefix_wrong_write_value");
+    assert!(matches!(
+        package
+            .validate_plan_result_document(&wrong_write_result_hash)
+            .unwrap_err(),
+        PublicSeamError::InvalidPlanResult { .. }
+    ));
+}
+
+#[test]
 fn plan_result_rejects_failed_call_costs_without_charge_receipts() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
 
@@ -316,7 +347,7 @@ fn plan_result_preserves_value_visibility_data_classes() {
 }
 
 fn typed_success_result() -> Value {
-    json!({
+    bind_result_hashes(json!({
         "schema_version": "leaven.plan_result.v1",
         "plan_id": "result001",
         "capability_fingerprint": "fp_cap_sha256_resultcap",
@@ -358,11 +389,11 @@ fn typed_success_result() -> Value {
         "redactions": [],
         "charges": [],
         "errors": []
-    })
+    }))
 }
 
 fn audit_currency_result() -> Value {
-    json!({
+    bind_result_hashes(json!({
         "schema_version": "leaven.plan_result.v1",
         "plan_id": "result_audit_currency",
         "capability_fingerprint": "fp_cap_sha256_auditcurrency",
@@ -393,14 +424,14 @@ fn audit_currency_result() -> Value {
                 "replayability": "fully_managed",
                 "receipt": "agentrec_audit_agent"
             },
-            "evaluation_request": {
-                "kind": "evaluation_request_receipt",
-                "evaluation_request_id": "evalreq_audit",
-                "status": "recorded",
+            "apply": {
+                "kind": "apply_receipt",
+                "created_candidates": ["cand_audit_result"],
+                "status": "committed",
                 "graph_revision": "rev_final",
                 "data_classes": ["public"],
                 "replayability": "fully_managed",
-                "receipt": "wrec_audit_evalreq"
+                "receipt": "wrec_audit_apply"
             }
         },
         "receipts": [
@@ -429,26 +460,27 @@ fn audit_currency_result() -> Value {
             },
             {
                 "kind": "write",
-                "receipt": "wrec_audit_evalreq",
+                "receipt": "wrec_audit_apply",
+                "op_var": "apply",
                 "started_at": "2026-05-23T12:00:02Z",
                 "completed_at": "2026-05-23T12:00:03Z",
-                "write_kind": "request_evaluation",
-                "request_hash": "fp_request_sha256_audit_evalreq",
-                "result_hash": "fp_result_sha256_audit_evalreq",
+                "write_kind": "apply_proposal_batch",
+                "request_hash": "fp_request_sha256_audit_apply",
+                "result_hash": "fp_result_sha256_audit_apply",
                 "base_revision": "rev_base",
                 "committed_revision": "rev_final",
                 "status": "succeeded",
-                "evaluation_request_id": "evalreq_audit"
+                "created_candidates": ["cand_audit_result"]
             }
         ],
         "redactions": [],
         "charges": [],
         "errors": []
-    })
+    }))
 }
 
 fn workspace_listing_visibility_result() -> Value {
-    json!({
+    bind_result_hashes(json!({
         "schema_version": "leaven.plan_result.v1",
         "plan_id": "result_listing_visibility",
         "capability_fingerprint": "fp_cap_sha256_listingvisibility",
@@ -494,7 +526,46 @@ fn workspace_listing_visibility_result() -> Value {
         "redactions": [],
         "charges": [],
         "errors": []
-    })
+    }))
+}
+
+fn bind_result_hashes(mut result: Value) -> Value {
+    let values = result["values"].as_object().unwrap().clone();
+    for receipt in result["receipts"].as_array_mut().unwrap() {
+        let receipt_id = receipt["receipt"].as_str().unwrap();
+        let Some((name, value)) = values.iter().find(|(_, value)| {
+            value
+                .as_object()
+                .and_then(|object| object.get("receipt"))
+                .and_then(Value::as_str)
+                == Some(receipt_id)
+        }) else {
+            continue;
+        };
+        let schema_version = match receipt["kind"].as_str().unwrap() {
+            "query" => "leaven.plan_query_result.v1",
+            "call" => "leaven.plan_call_result.v1",
+            "write" => "leaven.plan_write_result.v1",
+            other => panic!("unexpected receipt kind {other}"),
+        };
+        let op_name = receipt["op_var"].as_str().unwrap_or(name);
+        receipt["result_hash"] = json!(prefixed_jcs_hash(
+            "fp_result_sha256_",
+            &json!({
+                "schema_version": schema_version,
+                "name": op_name,
+                "value": value
+            }),
+        ));
+    }
+    result
+}
+
+fn prefixed_jcs_hash(prefix: &str, value: &Value) -> String {
+    format!(
+        "{prefix}{}",
+        jcs_canonicalize::sha256_jcs_hex(value).unwrap()
+    )
 }
 
 fn typed_failure_result() -> Value {

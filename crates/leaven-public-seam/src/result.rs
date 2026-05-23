@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use crate::PublicSeamError;
 use crate::evidence::EvidenceEnvelopeDocument;
@@ -27,6 +27,7 @@ impl PlanResultDocument {
             .ok_or_else(|| invalid_result("plan result must be an object"))?;
         let replayability_summary = required_replayability(object.get("replayability_summary"))?;
         let parts = PlanResultParts::from_object(object)?;
+        validate_result_hash_bindings(parts.values, parts.receipts)?;
         let value_audit = inspect_values(
             parts.values,
             &receipt_index(parts.receipts)?,
@@ -439,6 +440,61 @@ fn validate_audit_currency_receipt(
     Ok(())
 }
 
+fn validate_result_hash_bindings(
+    values: &serde_json::Map<String, Value>,
+    receipts: &[Value],
+) -> Result<(), PublicSeamError> {
+    let receipt_objects = receipt_object_index(receipts)?;
+    for (name, value) in values {
+        let Some(receipt_ref) = value.as_object().and_then(|object| object.get("receipt")) else {
+            continue;
+        };
+        let receipt_id = receipt_id(receipt_ref)?;
+        let Some(receipt) = receipt_objects.get(receipt_id) else {
+            continue;
+        };
+        let receipt_kind = required_string(receipt.get("kind"), "receipt.kind")?;
+        let op_name = receipt
+            .get("op_var")
+            .and_then(Value::as_str)
+            .unwrap_or(name);
+        let Some(schema_version) = result_hash_schema(receipt)? else {
+            continue;
+        };
+        let expected = prefixed_jcs_hash(
+            "fp_result_sha256_",
+            &json!({
+                "schema_version": schema_version,
+                "name": op_name,
+                "value": value
+            }),
+        )?;
+        let actual = required_string(receipt.get("result_hash"), "receipt.result_hash")?;
+        if actual != expected {
+            return Err(invalid_result(format!(
+                "{receipt_kind} receipt `{receipt_id}` result_hash does not bind its result value"
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn result_hash_schema(
+    receipt: &serde_json::Map<String, Value>,
+) -> Result<Option<&'static str>, PublicSeamError> {
+    Ok(
+        match required_string(receipt.get("kind"), "receipt.kind")? {
+            "query" => Some("leaven.plan_query_result.v1"),
+            "call" => Some("leaven.plan_call_result.v1"),
+            "write" => match required_string(receipt.get("write_kind"), "receipt.write_kind")? {
+                "request_evaluation" | "submit_assessments" => None,
+                _ => Some("leaven.plan_write_result.v1"),
+            },
+            _ => None,
+        },
+    )
+}
+
 fn required_hash_with_prefix(
     object: &serde_json::Map<String, Value>,
     field: &str,
@@ -650,6 +706,27 @@ fn receipt_index(receipts: &[Value]) -> Result<BTreeMap<String, String>, PublicS
     Ok(index)
 }
 
+fn receipt_object_index(
+    receipts: &[Value],
+) -> Result<BTreeMap<String, &serde_json::Map<String, Value>>, PublicSeamError> {
+    let mut index = BTreeMap::new();
+    for receipt in receipts {
+        let receipt = receipt
+            .as_object()
+            .ok_or_else(|| invalid_result("plan result receipt must be an object"))?;
+        let id = receipt_id(
+            receipt
+                .get("receipt")
+                .ok_or_else(|| invalid_result("receipt must carry receipt id"))?,
+        )?
+        .to_owned();
+        if index.insert(id, receipt).is_some() {
+            return Err(invalid_result("duplicate operation receipt id"));
+        }
+    }
+    Ok(index)
+}
+
 fn receipt_id(value: &Value) -> Result<&str, PublicSeamError> {
     if let Some(receipt) = value.as_str() {
         return Ok(receipt);
@@ -807,4 +884,10 @@ fn invalid_result(message: impl Into<String>) -> PublicSeamError {
     PublicSeamError::InvalidPlanResult {
         message: message.into(),
     }
+}
+
+fn prefixed_jcs_hash(prefix: &str, value: &Value) -> Result<String, PublicSeamError> {
+    let digest = jcs_canonicalize::sha256_jcs_hex(value)
+        .map_err(|error| invalid_result(format!("plan result hash failed: {error}")))?;
+    Ok(format!("{prefix}{digest}"))
 }
