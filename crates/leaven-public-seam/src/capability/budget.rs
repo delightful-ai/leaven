@@ -12,7 +12,7 @@ const AXIS_EVALUATOR_USD_MICRO: &str = "evaluator.usd_micro";
 const AXIS_WALL_MS: &str = "wall_ms";
 const AXIS_PLAN_NODES: &str = "plan_nodes";
 const AXIS_MATERIALIZED_BYTES: &str = "materialized_bytes";
-const MAX_EXACT_F64_INTEGER: u64 = 9_007_199_254_740_992;
+const MAX_SAFE_RUNTIME_INTEGER: u64 = 9_007_199_254_740_991;
 
 /// Aggregate capability-budget usage checked across grants.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -124,7 +124,12 @@ impl CapabilityBudgetUsage {
     /// enforces both aggregate and role ceilings from a single runtime charge.
     pub fn runtime_cost(self) -> Result<Cost, CapabilityBudgetProjectionError> {
         let mut cost = Cost::zero();
-        cost = add_runtime_axis(cost, AXIS_USD_MICRO, self.total_usd_micro()?)?;
+        cost = add_runtime_axis(
+            cost,
+            AXIS_USD_MICRO,
+            self.total_usd_micro()
+                .map_err(|_| CapabilityBudgetProjectionError::UsageOverflow)?,
+        )?;
         cost = add_runtime_axis(cost, AXIS_LM_USD_MICRO, self.lm_usd_micro)?;
         cost = add_runtime_axis(cost, AXIS_AGENT_USD_MICRO, self.agent_usd_micro)?;
         cost = add_runtime_axis(cost, AXIS_HUMAN_USD_MICRO, self.human_usd_micro)?;
@@ -174,6 +179,23 @@ impl CapabilityDocument {
     pub fn runtime_budget_limit(&self) -> Result<Budget, CapabilityBudgetProjectionError> {
         self.budgets.runtime_budget_limit()
     }
+
+    /// Projects a delegated child operation into runtime `Cost` after proving
+    /// the child capability is attenuated from this parent.
+    ///
+    /// Callers must charge the returned cost against the parent's/shared
+    /// engine `BudgetLedger`. This helper binds the child authority check to
+    /// the runtime cost projection so delegated work does not get its own
+    /// independent aggregate budget by accident.
+    pub fn delegated_runtime_cost(
+        &self,
+        child: &Self,
+        usage: CapabilityBudgetUsage,
+    ) -> Result<Cost, CapabilityBudgetProjectionError> {
+        self.validate_delegation(child)
+            .map_err(CapabilityBudgetProjectionError::CapabilityDenied)?;
+        usage.runtime_cost()
+    }
 }
 
 /// Error returned when projecting public-seam capability budget values into
@@ -204,12 +226,9 @@ pub enum CapabilityBudgetProjectionError {
     /// Summing role usage for the aggregate axis overflowed.
     #[error("capability budget aggregate usage overflowed")]
     UsageOverflow,
-}
-
-impl From<CapabilityDenial> for CapabilityBudgetProjectionError {
-    fn from(_: CapabilityDenial) -> Self {
-        Self::UsageOverflow
-    }
+    /// Capability delegation or authority validation failed before projection.
+    #[error(transparent)]
+    CapabilityDenied(#[from] CapabilityDenial),
 }
 
 /// Aggregate capability budget ledger.
@@ -447,7 +466,7 @@ fn exact_runtime_amount(
     axis: &'static str,
     amount: u64,
 ) -> Result<f64, CapabilityBudgetProjectionError> {
-    if amount > MAX_EXACT_F64_INTEGER {
+    if amount > MAX_SAFE_RUNTIME_INTEGER {
         return Err(
             CapabilityBudgetProjectionError::AmountNotExactlyRepresentable { axis, amount },
         );
