@@ -18,8 +18,8 @@ pub use compatibility::{
 pub use error::OptimizeError;
 pub use evaluator::ScoringEvaluator;
 pub use evidence::{
-    IntoRunResult, RunCase, RunError, RunOutput, Score, ScoreCase, ScoreContext, ScoreError,
-    ScoreMetadataView,
+    IntoRunResult, ReportableOutput, RunCase, RunError, RunOutput, Score, ScoreCase, ScoreContext,
+    ScoreError, ScoreMetadataView,
 };
 pub use leaven_engine::CachePolicy;
 pub use result::{
@@ -38,9 +38,9 @@ pub mod prelude {
         BestCandidate, CachePolicy, EvaluationCacheBackend, EvaluationCacheBypassReason,
         EvaluationCacheBypassSummary, EvaluationCacheSummary, IntoOptimizeStore,
         OptimizationStopReason, OptimizeBuilder, OptimizeError, OptimizeStore, Optimized,
-        RunCacheSummary, RunCase, RunCompatibilitySummary, RunError, RunEventSummary,
-        RunNotResumableReason, RunOutput, RunProblem, RunReportPaths, RunResumability, RunStorage,
-        Score, ScoreCase, ScoreContext, ScoreError, ScoreMetadataView, StandardRunSummary,
-        default_local_run_dir, optimize,
+        ReportableOutput, RunCacheSummary, RunCase, RunCompatibilitySummary, RunError,
+        RunEventSummary, RunNotResumableReason, RunOutput, RunProblem, RunReportPaths,
+        RunResumability, RunStorage, Score, ScoreCase, ScoreContext, ScoreError, ScoreMetadataView,
+        StandardRunSummary, default_local_run_dir, optimize,
     };
 }

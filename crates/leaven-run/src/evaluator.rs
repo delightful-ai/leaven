@@ -13,6 +13,7 @@ use leaven_evidence::{CaseAssessmentEvidence, ScalarEvidence};
 use leaven_kernel::{BudgetSnapshot, Cost, EvaluationSetId, EvaluatorId, Fingerprint, Metered};
 
 use crate::compatibility::ScoringEvaluatorIdentity;
+use crate::evidence::ReportableOutputScope;
 use crate::{RunCase, RunError, RunOutput, RunProblem, Score, ScoreContext, ScoreError};
 
 type Runner<A, I, Out> = Arc<
@@ -128,6 +129,7 @@ where
                 jobs.push(EvaluationJob {
                     candidate_index,
                     case_index,
+                    candidate,
                     artifact: artifact.clone(),
                     case: case.clone(),
                     budget: budget.clone(),
@@ -176,6 +178,7 @@ where
 struct EvaluationJob<A, I, T> {
     candidate_index: usize,
     case_index: usize,
+    candidate: leaven_kernel::CandidateId,
     artifact: A,
     case: Case<I, T>,
     budget: BudgetSnapshot,
@@ -238,12 +241,14 @@ where
             let cost = source.cost().clone();
             EvaluationError::with_cost_source("runner function failed", cost, source)
         })?;
-    let mut score = scorer(ScoreContext {
-        artifact: job.artifact.clone(),
-        case: score_case,
-        output: output.clone(),
-        budget: job.budget.clone(),
-    })
+    let output_scope = ReportableOutputScope::new(job.candidate, case_id);
+    let mut score = scorer(ScoreContext::new(
+        job.artifact.clone(),
+        score_case,
+        output.clone(),
+        job.budget.clone(),
+        output_scope,
+    ))
     .await
     .map_err(|source| {
         let cost = Cost::metric_calls(1)
@@ -264,6 +269,15 @@ where
             MissingReportableOutput,
         )
     })?;
+    let generated_output = generated_output
+        .into_record(output_scope)
+        .map_err(|source| {
+            EvaluationError::with_cost_source(
+                "reportable output came from another scoring context",
+                cost.clone(),
+                source,
+            )
+        })?;
     let trace = output
         .trace
         .into_iter()
@@ -282,9 +296,9 @@ where
 #[derive(Debug, thiserror::Error)]
 #[error(
     "scorer returned `Score` without supplying reportable output; \
-     every successful score must call `Score::with_output(...)` or \
-     `Score::with_text_output(...)` so reports, evidence stores, and GEPA \
-     reflection see a durable rendering of the runner's typed output"
+     every successful score must call `Score::with_output(...)` with a \
+     `ScoreContext`-minted reportable output so reports, evidence stores, and \
+     GEPA reflection see a durable rendering of the runner's typed output"
 )]
 struct MissingReportableOutput;
 

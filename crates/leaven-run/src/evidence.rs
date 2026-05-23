@@ -2,15 +2,15 @@
 
 use leaven_eval::Case;
 use leaven_evidence::OutputRecord;
-use leaven_kernel::{BudgetSnapshot, CaseId, Cost};
+use leaven_kernel::{BudgetSnapshot, CandidateId, CaseId, Cost};
 
 /// Output produced by running one artifact on one case.
 ///
 /// The default `Out = ()` matches `case_visibility_and_target_isolation.md` §6:
 /// runner output is opaque to Leaven by default. Domain runners declare their
 /// own typed `Out` (string, structured prediction, agent transcript), and the
-/// scorer renders that output into a durable `OutputRecord` via
-/// `Score::with_output` / `Score::with_text_output`.
+/// scorer renders that output into a context-scoped durable `ReportableOutput`
+/// via [`ScoreContext::report_output`] / [`ScoreContext::report_text_output`].
 #[derive(Clone, Debug, Default)]
 pub struct RunOutput<Out = ()> {
     /// User-facing answer/output.
@@ -158,10 +158,8 @@ pub struct Score {
     pub cost: Cost,
     /// Scorer trace lines associated with this successful score.
     pub trace: Vec<String>,
-    /// Reportable generated output. Required: every successful score must
-    /// call `with_output` / `with_text_output` so reports, evidence stores,
-    /// and reflection see a durable rendering of the runner's typed output.
-    pub output: Option<OutputRecord>,
+    /// Reportable generated output minted by the current scoring context.
+    pub output: Option<ReportableOutput>,
 }
 
 impl Score {
@@ -191,19 +189,53 @@ impl Score {
         self
     }
 
-    /// Supplies the generated output that should appear in reports and feedback.
+    /// Supplies the context-scoped generated output for reports and feedback.
     #[must_use]
-    pub fn with_output(mut self, output: OutputRecord) -> Self {
+    pub fn with_output(mut self, output: ReportableOutput) -> Self {
         self.output = Some(output);
         self
     }
+}
 
-    /// Supplies inline generated output text for reports and feedback.
-    #[must_use]
-    pub fn with_text_output(self, output: impl Into<String>) -> Self {
-        self.with_output(OutputRecord::inline(output))
+/// Reportable score output minted from one scoring context.
+///
+/// The private scope prevents a scorer from satisfying the output contract with
+/// a reusable placeholder. The evaluator unwraps it only when it belongs to the
+/// candidate/case context currently being assessed.
+#[derive(Clone, Debug)]
+pub struct ReportableOutput {
+    record: OutputRecord,
+    scope: ReportableOutputScope,
+}
+
+impl ReportableOutput {
+    pub(crate) fn into_record(
+        self,
+        expected_scope: ReportableOutputScope,
+    ) -> Result<OutputRecord, ReportableOutputScopeError> {
+        if self.scope == expected_scope {
+            Ok(self.record)
+        } else {
+            Err(ReportableOutputScopeError)
+        }
     }
 }
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ReportableOutputScope {
+    candidate: CandidateId,
+    case: CaseId,
+}
+
+impl ReportableOutputScope {
+    pub(crate) const fn new(candidate: CandidateId, case: CaseId) -> Self {
+        Self { candidate, case }
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("reportable output came from another scoring context")]
+pub struct ReportableOutputScopeError;
 
 /// Failure returned by a user scoring function.
 #[derive(Debug, thiserror::Error)]
@@ -382,4 +414,38 @@ pub struct ScoreContext<A, I, T = leaven_eval::NoTarget, Out = ()> {
     pub output: RunOutput<Out>,
     /// Point-in-time budget snapshot visible to the scorer.
     pub budget: BudgetSnapshot,
+    output_scope: ReportableOutputScope,
+}
+
+impl<A, I, T, Out> ScoreContext<A, I, T, Out> {
+    pub(crate) const fn new(
+        artifact: A,
+        case: ScoreCase<I, T>,
+        output: RunOutput<Out>,
+        budget: BudgetSnapshot,
+        output_scope: ReportableOutputScope,
+    ) -> Self {
+        Self {
+            artifact,
+            case,
+            output,
+            budget,
+            output_scope,
+        }
+    }
+
+    /// Wraps a generated output record for this exact scoring context.
+    #[must_use]
+    pub fn report_output(&self, output: OutputRecord) -> ReportableOutput {
+        ReportableOutput {
+            record: output,
+            scope: self.output_scope,
+        }
+    }
+
+    /// Wraps inline generated output text for this exact scoring context.
+    #[must_use]
+    pub fn report_text_output(&self, output: impl Into<String>) -> ReportableOutput {
+        self.report_output(OutputRecord::inline(output))
+    }
 }

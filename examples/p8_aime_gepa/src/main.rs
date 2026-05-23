@@ -5786,7 +5786,8 @@ async fn score_answer(
         .target()
         .ok_or_else(|| ScoreError::new("AIME scorer requires a target answer"))?;
     let (score, feedback) = aime_score_feedback(target, &ctx.output.output.answer);
-    Ok(Score::new(score, feedback).with_text_output(ctx.output.output.answer))
+    Ok(Score::new(score, feedback)
+        .with_output(ctx.report_text_output(ctx.output.output.answer.clone())))
 }
 
 fn input_needs_modular(input: &AimeInput) -> bool {

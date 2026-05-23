@@ -15,9 +15,10 @@ around engine graph mutation or a home for optimizer strategy state.
   `.leaven/runs/<run-id>/` directory, `.run_dir(path)` is the user-facing
   durable override/resume handle, and `.ephemeral()` is the explicit
   throwaway path.
-- `RunProblem`, `RunCase`, `RunOutput`, `Score`, `ScoreCase`, `ScoreContext`,
-  `ScoringEvaluator`, `OptimizeStore`, and `IntoOptimizeStore` belong here when
-  they serve the high-level optimize workflow.
+- `RunProblem`, `RunCase`, `RunOutput`, `ReportableOutput`, `Score`,
+  `ScoreCase`, `ScoreContext`, `ScoringEvaluator`, `OptimizeStore`, and
+  `IntoOptimizeStore` belong here when they serve the high-level optimize
+  workflow.
 - Default evidence-only and durable store composition belongs here when it is
   product wiring over store capabilities, not a new backend.
 - The current lowering stack is local product glue: builder input vectors become
@@ -75,13 +76,16 @@ around engine graph mutation or a home for optimizer strategy state.
   transcript) via `RunOutput::typed(...)` or `RunOutput::new(...)` (the latter
   is a `String`-only constructor that returns `RunOutput<String>`).
 - Output rendering is **always** scorer-local and explicit: every successful
-  score must call `Score::with_output(...)` or `Score::with_text_output(...)`.
-  There is no auto-render for `Out = String` — that was a back-compat shim and
-  was removed. A `Score` without `output` set fails the evaluator with
-  `MissingReportableOutput` (cost from the runner and scorer is preserved on
-  the error). Reports, evidence stores, and GEPA reflection consume the
-  scorer-supplied `OutputRecord`, not `Out` itself. Do not add `Out` to
-  `RunProblem`, `CaseAssessmentEvidence`, report payloads, or GEPA types.
+  score must call `Score::with_output(...)` with a `ReportableOutput` minted by
+  the current `ScoreContext` through `report_output(...)` or
+  `report_text_output(...)`. There is no auto-render for `Out = String` — that
+  was a back-compat shim and was removed. A `Score` without `output` set fails
+  the evaluator with `MissingReportableOutput` (cost from the runner and scorer
+  is preserved on the error). A `Score` with reportable output minted by another
+  scoring context is rejected as unrelated evidence. Reports, evidence stores,
+  and GEPA reflection consume the scorer-supplied `OutputRecord`, not `Out`
+  itself. Do not add `Out` to `RunProblem`, `CaseAssessmentEvidence`, report
+  payloads, or GEPA types.
   Scoring is also async and fallible: `.score(...)` receives owned
   `ScoreContext` values, returns `Result<Score, ScoreError>`, and may attach
   scorer cost. Treat scalar comparison as the current selection contract, not as
