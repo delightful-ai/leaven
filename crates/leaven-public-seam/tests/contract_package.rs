@@ -273,6 +273,130 @@ fn deprecated_worker_protocol_rejects_runtime_protocol_and_revival_claims() {
 }
 
 #[test]
+fn deferred_watch_marker_routes_to_since_revision_plan_diff() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let marker = json!({
+        "schema_version": "leaven.watch.v1.deferred",
+        "use_instead": "leaven.plan.v1 consistency.since_revision"
+    });
+
+    package
+        .validate_arbitrary_value("leaven.watch.v1.schema.json", "/marker", &marker)
+        .unwrap();
+
+    let finite_diff_plan = json!({
+        "schema_version": "leaven.plan.v1",
+        "plan_id": "watchdiff001",
+        "consistency": {
+            "kind": "since_revision",
+            "since": "rev_base",
+            "until": "rev_tip"
+        },
+        "mode": {
+            "kind": "dry_run"
+        },
+        "ops": [
+            {
+                "kind": "let",
+                "name": "events",
+                "expr": {
+                    "kind": "graph_query",
+                    "source": {
+                        "kind": "events",
+                        "since_revision": "rev_base",
+                        "until_revision": "rev_tip"
+                    },
+                    "projection": {
+                        "kind": "ids"
+                    },
+                    "page": {
+                        "limit": 100
+                    }
+                }
+            }
+        ],
+        "return": ["events"],
+        "commit": {
+            "kind": "no_graph_writes"
+        }
+    });
+    package
+        .validate_arbitrary_value(
+            "leaven.plan.v1.schema.json",
+            "/finite_diff_plan",
+            &finite_diff_plan,
+        )
+        .unwrap();
+}
+
+#[test]
+fn deferred_watch_rejects_runtime_subscription_and_success_claims() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let scope = package.v1_scope().unwrap();
+
+    assert!(
+        package
+            .acp_extension_methods()
+            .unwrap()
+            .iter()
+            .all(|method| !method.contains("watch"))
+    );
+
+    let watch_runtime_request = json!({
+        "schema_version": "leaven.watch.v1",
+        "watch_id": "watch_runtime",
+        "source": {
+            "kind": "events",
+            "since_revision": "rev_base"
+        }
+    });
+    assert!(matches!(
+        package
+            .validate_arbitrary_value(
+                "leaven.watch.v1.schema.json",
+                "/watch_runtime_request",
+                &watch_runtime_request
+            )
+            .unwrap_err(),
+        PublicSeamError::ExampleValidation { .. }
+    ));
+
+    let watch_success_claim = json!({
+        "schema_version": "leaven.watch.v1.deferred",
+        "use_instead": "leaven.plan.v1 consistency.since_revision",
+        "status": "supported"
+    });
+    assert!(matches!(
+        package
+            .validate_arbitrary_value(
+                "leaven.watch.v1.schema.json",
+                "/watch_success_claim",
+                &watch_success_claim
+            )
+            .unwrap_err(),
+        PublicSeamError::ExampleValidation { .. }
+    ));
+
+    assert!(matches!(
+        scope
+            .authorize_worker_transport(WorkerTransportRequest::new(
+                WorkerTransportKind::AcpProfile,
+                ["leaven/watch.start"]
+            ))
+            .unwrap_err(),
+        PublicSeamError::InvalidScope { .. }
+    ));
+
+    let mut watch_runtime =
+        WorkerTransportRequest::new(WorkerTransportKind::AcpProfile, ["leaven/graph.query"]);
+    watch_runtime.enable_watch_runtime();
+    assert!(matches!(
+        scope.authorize_worker_transport(watch_runtime).unwrap_err(),
+        PublicSeamError::InvalidScope { .. }
+    ));
+}
+
+#[test]
 fn schema_fingerprints_reject_pretty_printed_hashing_and_track_semantic_changes() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let common = package.schema_json("common.schema.json").unwrap();
