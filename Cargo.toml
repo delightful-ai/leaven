@@ -39,6 +39,7 @@ members = [
     "crates/leaven-mipro",
     "crates/leaven-population",
     "crates/leaven-preference",
+    "crates/leaven-public-seam",
     "crates/leaven-python",
     "crates/leaven-render",
     "crates/leaven-run",
@@ -167,6 +168,7 @@ leaven-lm-openai = { path = "crates/leaven-lm-openai", version = "0.0.0" }
 leaven-mipro = { path = "crates/leaven-mipro", version = "0.0.0" }
 leaven-population = { path = "crates/leaven-population", version = "0.0.0" }
 leaven-preference = { path = "crates/leaven-preference", version = "0.0.0" }
+leaven-public-seam = { path = "crates/leaven-public-seam", version = "0.0.0" }
 leaven-python = { path = "crates/leaven-python", version = "0.0.0" }
 leaven-render = { path = "crates/leaven-render", version = "0.0.0" }
 leaven-run = { path = "crates/leaven-run", version = "0.0.0" }
@@ -196,6 +198,7 @@ base64 = "0.22"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["raw_value"] }
 serde_yml = "0.0.12"
+jsonschema = { version = "0.46.5", default-features = false }
 csv = "1"
 rusqlite = { version = "0.39.0", features = ["bundled"] }
 calamine = "0.35.0"
@@ -212,6 +215,7 @@ smol_str = { version = "0.3", features = ["serde"] }
 sha2 = "0.10"
 hex = "0.4"
 blake3 = "1"
+jcs-canonicalize = "0.2.1"
 
 # ordered maps
 indexmap = { version = "2", features = ["serde"] }

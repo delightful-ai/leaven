@@ -12,6 +12,11 @@ Root `AGENTS.md` owns the full routing map. This file adds local crate-family ru
 - Evaluation adapters: `leaven-eval-parquet` may depend on format libraries to lower physical files into `leaven-eval` source-row contracts. It stays out of engine execution, product defaults, split policy, and paper-specific semantics.
 - Standard vocabulary: `leaven-artifacts`, `leaven-artifact-*`, `leaven-evidence`, `leaven-preference`, `leaven-population`, `leaven-render`, and `leaven-std` own reusable vocabulary, implementations, and reserved public names at their boundaries. Leaf files own current maturity status.
 - Runtime adapters: `leaven-lm*`, `leaven-agent*`, `leaven-agentic*`, and `leaven-workspace-*` keep provider/backend details out of cold and engine crates. Provider crates lower to neutral traits; they do not own optimizer rhythm.
+- Public seam: `leaven-public-seam` owns the locked V1 external-language worker
+  wire contract, active contract package loading, schema/profile inventory,
+  schema fingerprints, matrix harness data, and deferred-marker enforcement. It
+  must not absorb worker runtime, provider lowering, graph mutation, or
+  generated-struct-only proof.
 - Optimizers: `leaven-gepa`, `leaven-mipro`, `leaven-textgrad`, and `leaven-trace` own strategy state and search rhythm when behavior is real. Several are scaffold/reserved today; read leaf maturity warnings before using public names as proof. Do not move optimizer-specific policy into `leaven-engine`.
 - Edge/domain adapters: current workspace adapters are `leaven-cuda` and `leaven-python`; they bridge domains without changing the core topology.
 - `leaven-dsrs` is a quarantined orphan directory, not a workspace crate. Do not treat it as an edge-adapter precedent until it has a manifest, `src/lib.rs`, topology coverage, and a local boundary file that says what it owns.

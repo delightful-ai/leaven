@@ -1,0 +1,23 @@
+[package]
+name = "leaven-public-seam"
+description = "Locked V1 public seam contract owner for external-language workers."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+jcs-canonicalize.workspace = true
+jsonschema.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yml.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+expect-test.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true
