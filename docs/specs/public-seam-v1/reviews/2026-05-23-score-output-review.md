@@ -82,7 +82,7 @@ Limits:
 
 Second follow-up adversarial review:
 
-- Reviewer: sub-agent `019e550a-a531-7cb2-b691-e4a1c5b93b79`
+- Reviewer: Codex parent-thread adversarial review for active goal `019e550a-a531-7cb2-b691-e4a1c5b93b79`
 - Result: blocked. The row must remain pending.
 
 Second follow-up blocking findings:
@@ -94,24 +94,22 @@ Implementation after third block:
 
 - `ScoreContext` now freezes the runner-declared reportable output in a private `expected_output` field during context construction; `ScoreContext::report_output(...)` uses the frozen declaration rather than the public mutable `output` field.
 - `ReportableOutput::into_record(...)` now returns the runner-declared `OutputRecord` after the scorer-reported payload matches it, so scorer-side default metadata cannot erase the runner's visibility and data-class facts.
-- `RunOutput::new(...)` and `RunOutput::typed(...).with_reportable_text(...)` now declare public `candidate.output` reportable output metadata.
+- `leaven-evidence::OutputRecord::candidate_inline(...)` owns the reusable public candidate-output metadata primitive, and `RunOutput::new(...)` plus `RunOutput::typed(...).with_reportable_text(...)` now use it to declare public `candidate.output` reportable output metadata.
 - `crates/leaven-run/tests/scoring_evaluator.rs::scoring_evaluator_rejects_mutated_context_dummy_report_output` proves the mutable-context forgery is rejected.
 - `crates/leaven-run/tests/scoring_evaluator.rs::runtime_score_outputs_project_through_public_seam_for_all_assessment_shapes` now asserts runtime-projected independent, pairwise, and listwise score outputs carry `candidate.output` data classes through the locked public-seam `OutputRecord` projection.
 
 Fresh verification after third follow-up:
 
 - `cargo fmt --check`
+- `CARGO_INCREMENTAL=0 cargo test -p leaven-evidence`
 - `CARGO_INCREMENTAL=0 cargo test -p leaven-run --test scoring_evaluator`
 - `CARGO_INCREMENTAL=0 cargo test -p leaven-run`
-- `CARGO_INCREMENTAL=0 cargo clippy -p leaven-run --tests -- -D warnings`
-- `CARGO_INCREMENTAL=0 cargo test -p leaven-public-seam --test output_record`
-- `CARGO_INCREMENTAL=0 cargo test -p leaven-public-seam --test plan_document submit_assessments`
 - `CARGO_INCREMENTAL=0 cargo test -p leaven-public-seam`
+- `CARGO_INCREMENTAL=0 cargo clippy -p leaven-evidence -p leaven-run --tests -- -D warnings`
 - `CARGO_INCREMENTAL=0 cargo test -p leaven --test gepa_parity`
 - `CARGO_INCREMENTAL=0 cargo test -p leaven --test topology_contract`
-- `CARGO_INCREMENTAL=0 cargo check -p p8_aime_gepa`
 
 Current limits:
 
 - This note records the resolved blockers and local verification, but it still does not sign off `ps1.evaluator.score_output`.
-- No matrix status should change for this row until a new adversarial sign-off reviews this third follow-up.
+- No matrix status should change for this row until a new adversarial sub-agent sign-off reviews this third follow-up.
