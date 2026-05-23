@@ -309,6 +309,8 @@ rows:
     fake_pass_rejected: Receipt ids that are only decorative log correlation ids.
     minimum_closeout_level: semantic_denial
     positive_test_evidence:
+      - crates/leaven-public-seam/tests/plan_document.rs::plan_revision_modes_execute_graph_queries_at_declared_scope
+      - crates/leaven-public-seam/tests/plan_document.rs::plan_ir_family_lowers_and_executes_let_call_write_through_public_seam_owner
       - crates/leaven-public-seam/tests/plan_result.rs::plan_result_accepts_typed_success_and_failure_envelopes
       - crates/leaven-public-seam/tests/plan_result.rs::plan_result_accepts_query_call_and_write_receipts_as_audit_currency
     negative_test_evidence:
@@ -320,6 +322,8 @@ rows:
       - crates/leaven-public-seam/src/result.rs::inspect_value_receipt
       - crates/leaven-public-seam/src/result.rs::validate_audit_currency_receipt
       - crates/leaven-public-seam/src/result.rs::validate_evidence_source_receipts
+      - crates/leaven-public-seam/src/plan_execution.rs::execute_plan
+      - crates/leaven-public-seam/src/plan_execution.rs::PlanGraphQueryRequest
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-result-receipt-replay-review.md
     status: pending

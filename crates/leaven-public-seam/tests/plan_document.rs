@@ -325,6 +325,11 @@ fn plan_revision_modes_execute_graph_queries_at_declared_scope() {
         latest_report.value()["values"]["events"]["graph_revision"].as_str(),
         Some("rev_planexec_base")
     );
+    assert_eq!(latest_report.document().receipt_kinds(), &["query"]);
+    assert_eq!(
+        latest_report.value()["values"]["events"]["receipt"].as_str(),
+        Some("qrec_events")
+    );
     assert_eq!(
         latest_report.document().final_revision(),
         "rev_planexec_base"
@@ -343,6 +348,7 @@ fn plan_revision_modes_execute_graph_queries_at_declared_scope() {
         at_report.value()["values"]["events"]["graph_revision"].as_str(),
         Some("rev_pinned")
     );
+    assert_eq!(at_report.document().receipt_kinds(), &["query"]);
     assert_eq!(at_report.document().final_revision(), "rev_planexec_base");
 
     let mut since_host = RecordingPlanHost::default();
@@ -359,6 +365,7 @@ fn plan_revision_modes_execute_graph_queries_at_declared_scope() {
         since_report.value()["values"]["events"]["items"][0]["revision"].as_str(),
         Some("rev_tip")
     );
+    assert_eq!(since_report.document().receipt_kinds(), &["query"]);
     assert_eq!(
         since_report.document().final_revision(),
         "rev_planexec_base"
