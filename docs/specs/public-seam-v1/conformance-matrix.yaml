@@ -641,6 +641,8 @@ rows:
       - crates/leaven-public-seam/src/stage_payload.rs::reject_target_leakage
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_stage_payload_document
       - crates/leaven-public-seam/AGENTS.md
+    review_evidence:
+      - docs/specs/public-seam-v1/reviews/2026-05-23-stage-payload-current-blocker-review.md
     status: pending
 
   - id: ps1.evidence.visibility_receipts
@@ -704,6 +706,8 @@ rows:
       - crates/leaven-public-seam/src/stage_payload.rs::inspect_reflection_result
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_stage_payload_document
       - crates/leaven-public-seam/AGENTS.md
+    review_evidence:
+      - docs/specs/public-seam-v1/reviews/2026-05-23-stage-payload-current-blocker-review.md
     status: pending
 
   - id: ps1.stage.payload_receipts
@@ -739,6 +743,8 @@ rows:
       - crates/leaven-public-seam/src/stage_payload.rs::reject_target_leakage
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_stage_payload_document
       - crates/leaven-public-seam/AGENTS.md
+    review_evidence:
+      - docs/specs/public-seam-v1/reviews/2026-05-23-stage-payload-current-blocker-review.md
     status: pending
 
   - id: ps1.proposal.surface_authority
