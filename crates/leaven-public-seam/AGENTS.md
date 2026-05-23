@@ -136,6 +136,16 @@ Crate-root exports for `PublicOutputRecord`, `OutputRecordDocument`, and
 data-classes, and blob audit metadata. They are not proof that evaluator
 runtimes produce those records for every assessment shape.
 
+Crate-root exports for `StagePayloadDocument`, `StagePayloadRole`, and
+`StageProposalEffect` are advanced public seam contracts. They prove
+active-schema stage-payload validation for role-specific reflector,
+reflection-result, proposer, runner, scorer, judge, callback, and adapter
+payloads, including target-safe reflector examples, receipted reflection
+results, proposal reflection/result separation, allowed change schema
+declarations, output contexts, and payload-schema fingerprints. They are not an
+agent runtime, LM prompt renderer, ACP delivery path, proposal application
+engine, or proof that every optimizer/runtime producer emits these payloads.
+
 Crate-root export `DeferredWatchReplacement` is an advanced public seam
 contract. It proves that the V1 deferred watch marker can route only to a finite
 `consistency.since_revision` event-diff Plan IR document; it is not watch
@@ -188,6 +198,12 @@ backpressure, or runtime watch support.
   data classes, non-placeholder inline output, and public blob audit metadata.
   It does not prove evaluator runtime production or pairwise/listwise
   assessment behavior.
+- `tests/stage_payloads.rs` proves active-schema stage payloads have a semantic
+  owner for reflector, reflection result, proposer, runner, scorer, judge,
+  callback, and adapter roles. It rejects reflector `case.target` data-class
+  leakage, unreceipted reflection results, and change proposals without allowed
+  change schema authority. It does not prove runtime stage lowering, ACP
+  transport, provider calls, or proposal graph mutation.
 - `tests/plan_result.rs` proves active-schema Plan Result envelopes carry typed
   success and failure values, query/call/write audit receipts, errors, charges,
   capability and policy fingerprints, receipt timing, data classes, and closed

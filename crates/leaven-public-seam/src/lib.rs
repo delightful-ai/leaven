@@ -12,6 +12,7 @@ mod package;
 mod plan;
 mod plan_execution;
 mod result;
+mod stage_payload;
 mod watch;
 
 pub use capability::{
@@ -40,4 +41,5 @@ pub use plan_execution::{
     PlanLmCompleteOutcome, PlanLmCompleteRequest,
 };
 pub use result::{PlanResultDocument, Replayability};
+pub use stage_payload::{StagePayloadDocument, StagePayloadRole, StageProposalEffect};
 pub use watch::DeferredWatchReplacement;
