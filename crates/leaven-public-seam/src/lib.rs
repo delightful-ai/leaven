@@ -1,5 +1,6 @@
 //! Locked V1 public seam contract owner for external-language workers.
 
+mod call_authority;
 mod capability;
 mod dialect;
 mod error;
@@ -16,6 +17,7 @@ mod result;
 mod stage_payload;
 mod watch;
 
+pub use call_authority::CallAuthorityReport;
 pub use capability::{
     AuthorizedGrant, CapabilityBudgetLedger, CapabilityBudgetReservation, CapabilityBudgetUsage,
     CapabilityDelegation, CapabilityDenial, CapabilityDenialKind, CapabilityDocument,
