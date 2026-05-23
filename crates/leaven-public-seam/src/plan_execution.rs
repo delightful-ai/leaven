@@ -207,6 +207,8 @@ pub struct PlanLmCompleteOutcome {
     data_classes: Vec<String>,
     replayability: String,
     runtime_fingerprint: String,
+    error: Option<Value>,
+    cost: Option<Value>,
 }
 
 impl PlanLmCompleteOutcome {
@@ -217,6 +219,30 @@ impl PlanLmCompleteOutcome {
             data_classes: vec!["public".to_owned()],
             replayability: "fully_managed".to_owned(),
             runtime_fingerprint: runtime_fingerprint.into(),
+            error: None,
+            cost: None,
+        }
+    }
+
+    /// Creates a failed paid LM outcome that still emits audit and charge receipts.
+    pub fn failed_provider_error(
+        message: impl Into<String>,
+        runtime_fingerprint: impl Into<String>,
+        usd_micro: u64,
+    ) -> Self {
+        Self {
+            message: Value::Null,
+            data_classes: Vec::new(),
+            replayability: "has_declared_external_effects".to_owned(),
+            runtime_fingerprint: runtime_fingerprint.into(),
+            error: Some(json!({
+                "code": "provider_error",
+                "message": message.into(),
+                "retryable": true
+            })),
+            cost: Some(json!({
+                "usd_micro": usd_micro
+            })),
         }
     }
 
@@ -340,26 +366,30 @@ fn execute_effects<H: PlanExecutionHost>(
         execute_op(op, plan_document, context, host, &mut state, mode)?;
     }
 
-    Ok(plan_result_value(
+    Ok(plan_result_value(PlanResultValue {
         plan_id,
         context,
-        &state.final_revision,
-        replayability_summary(&state.values, &state.receipts),
-        &state.values,
-        &state.receipts,
-    ))
+        final_revision: &state.final_revision,
+        replayability_summary: replayability_summary(&state.values, &state.receipts),
+        values: &state.values,
+        receipts: &state.receipts,
+        charges: &state.charges,
+        errors: &state.errors,
+    }))
 }
 
 fn dry_run_result(plan: &Value, context: &PlanExecutionContext) -> Result<Value, PublicSeamError> {
     let plan_id = required_string(object(plan, "plan")?.get("plan_id"), "plan_id")?;
-    Ok(plan_result_value(
+    Ok(plan_result_value(PlanResultValue {
         plan_id,
         context,
-        &context.base_revision,
-        "pure_read",
-        &Map::new(),
-        &[],
-    ))
+        final_revision: &context.base_revision,
+        replayability_summary: "pure_read",
+        values: &Map::new(),
+        receipts: &[],
+        charges: &[],
+        errors: &[],
+    }))
 }
 
 fn replay_result<H: PlanExecutionHost>(
@@ -382,14 +412,16 @@ fn replay_result<H: PlanExecutionHost>(
         }
         receipts.push(receipt);
     }
-    Ok(plan_result_value(
+    Ok(plan_result_value(PlanResultValue {
         plan_id,
         context,
-        &final_revision,
-        "fully_managed",
-        &Map::new(),
-        &receipts,
-    ))
+        final_revision: &final_revision,
+        replayability_summary: "fully_managed",
+        values: &Map::new(),
+        receipts: &receipts,
+        charges: &[],
+        errors: &[],
+    }))
 }
 
 fn replay_receipt_refs(plan: &Map<String, Value>) -> Result<Vec<&str>, PublicSeamError> {
@@ -412,27 +444,31 @@ fn replay_receipt_refs(plan: &Map<String, Value>) -> Result<Vec<&str>, PublicSea
         .collect()
 }
 
-fn plan_result_value(
-    plan_id: &str,
-    context: &PlanExecutionContext,
-    final_revision: &str,
-    replayability_summary: &str,
-    values: &Map<String, Value>,
-    receipts: &[Value],
-) -> Value {
+struct PlanResultValue<'a> {
+    plan_id: &'a str,
+    context: &'a PlanExecutionContext,
+    final_revision: &'a str,
+    replayability_summary: &'a str,
+    values: &'a Map<String, Value>,
+    receipts: &'a [Value],
+    charges: &'a [Value],
+    errors: &'a [Value],
+}
+
+fn plan_result_value(parts: PlanResultValue<'_>) -> Value {
     json!({
         "schema_version": "leaven.plan_result.v1",
-        "plan_id": plan_id,
-        "capability_fingerprint": context.capability_fingerprint,
-        "policy_fingerprint": context.policy_fingerprint,
-        "base_revision": context.base_revision,
-        "final_revision": final_revision,
-        "replayability_summary": replayability_summary,
-        "values": values,
-        "receipts": receipts,
+        "plan_id": parts.plan_id,
+        "capability_fingerprint": parts.context.capability_fingerprint,
+        "policy_fingerprint": parts.context.policy_fingerprint,
+        "base_revision": parts.context.base_revision,
+        "final_revision": parts.final_revision,
+        "replayability_summary": parts.replayability_summary,
+        "values": parts.values,
+        "receipts": parts.receipts,
         "redactions": [],
-        "charges": [],
-        "errors": []
+        "charges": parts.charges,
+        "errors": parts.errors
     })
 }
 
@@ -483,6 +519,8 @@ struct ExecutionState {
     bindings: BTreeMap<String, Value>,
     values: Map<String, Value>,
     receipts: Vec<Value>,
+    charges: Vec<Value>,
+    errors: Vec<Value>,
     final_revision: String,
 }
 
@@ -492,6 +530,8 @@ impl ExecutionState {
             bindings: BTreeMap::new(),
             values: Map::new(),
             receipts: Vec::new(),
+            charges: Vec::new(),
+            errors: Vec::new(),
             final_revision: base_revision.to_owned(),
         }
     }
@@ -585,7 +625,43 @@ fn execute_call<H: PlanExecutionHost>(
             (outcome, Some("hit"))
         }
     };
+    let request_hash = prefixed_jcs_hash(
+        "fp_request_sha256_",
+        &json!({
+            "schema_version": "leaven.plan_call_request.v1",
+            "name": name,
+            "kind": call_kind,
+            "call": call,
+            "deps": dep_values
+        }),
+    )?;
+    record_lm_call_outcome(name, call_kind, outcome, cache, request_hash, context, state)
+}
+
+fn record_lm_call_outcome(
+    name: String,
+    call_kind: &str,
+    outcome: PlanLmCompleteOutcome,
+    cache: Option<&str>,
+    request_hash: String,
+    context: &PlanExecutionContext,
+    state: &mut ExecutionState,
+) -> Result<(), PublicSeamError> {
     let receipt_id = format!("lmrec_{name}");
+    if let Some(mut error) = outcome.error {
+        error["receipt"] = json!(receipt_id);
+        error["op"] = json!(name);
+        return record_failed_lm_call(
+            name,
+            call_kind,
+            outcome.runtime_fingerprint,
+            outcome.cost,
+            error,
+            request_hash,
+            context,
+            state,
+        );
+    }
     let mut value = json!({
         "kind": "lm_response",
         "message": outcome.message,
@@ -597,16 +673,6 @@ fn execute_call<H: PlanExecutionHost>(
     if let Some(cache) = cache {
         value["cache"] = json!(cache);
     }
-    let request_hash = prefixed_jcs_hash(
-        "fp_request_sha256_",
-        &json!({
-            "schema_version": "leaven.plan_call_request.v1",
-            "name": name,
-            "kind": call_kind,
-            "call": call,
-            "deps": dep_values
-        }),
-    )?;
     let result_hash = prefixed_jcs_hash(
         "fp_result_sha256_",
         &json!({
@@ -629,6 +695,59 @@ fn execute_call<H: PlanExecutionHost>(
     }));
     state.values.insert(name.clone(), value.clone());
     state.bindings.insert(name, value);
+    Ok(())
+}
+
+fn record_failed_lm_call(
+    name: String,
+    call_kind: &str,
+    runtime_fingerprint: String,
+    cost: Option<Value>,
+    error: Value,
+    request_hash: String,
+    context: &PlanExecutionContext,
+    state: &mut ExecutionState,
+) -> Result<(), PublicSeamError> {
+    let receipt_id = format!("lmrec_{name}");
+    let charge_receipts = if let Some(cost) = cost.clone() {
+        let charge_id = format!("chargerec_{name}");
+        state.charges.push(json!({
+            "receipt": charge_id,
+            "source_receipt": receipt_id,
+            "cost": cost,
+            "ledger_scope": "plan",
+            "charged_at": context.completed_at
+        }));
+        vec![charge_id]
+    } else {
+        Vec::new()
+    };
+    let result_hash = prefixed_jcs_hash(
+        "fp_result_sha256_",
+        &json!({
+            "schema_version": "leaven.plan_call_result.v1",
+            "name": name,
+            "error": error,
+            "cost": cost,
+            "charge_receipts": charge_receipts
+        }),
+    )?;
+    state.receipts.push(json!({
+        "kind": "call",
+        "receipt": receipt_id,
+        "op_var": name,
+        "started_at": context.started_at,
+        "completed_at": context.completed_at,
+        "call_kind": call_kind,
+        "request_hash": request_hash,
+        "result_hash": result_hash,
+        "runtime_fingerprint": runtime_fingerprint,
+        "status": "failed",
+        "error": error.clone(),
+        "cost": cost,
+        "charge_receipts": charge_receipts
+    }));
+    state.errors.push(error);
     Ok(())
 }
 

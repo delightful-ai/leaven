@@ -278,6 +278,15 @@ fn plan_result_rejects_failed_call_costs_without_charge_receipts() {
             .unwrap_err(),
         PublicSeamError::InvalidPlanResult { .. }
     ));
+
+    let mut partial_charge = typed_failure_result();
+    partial_charge["charges"][0]["cost"]["usd_micro"] = json!(1);
+    assert!(matches!(
+        package
+            .validate_plan_result_document(&partial_charge)
+            .unwrap_err(),
+        PublicSeamError::InvalidPlanResult { .. }
+    ));
 }
 
 #[test]
