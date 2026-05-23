@@ -1,0 +1,720 @@
+matrix_name: public-seam-v1-conformance-matrix
+created_at: 2026-05-23
+status: pre_goal_denominator
+source_of_truth: docs/specs/public-seam-v1
+purpose: >
+  Convert the locked public seam specs into implementation obligations that are
+  hard to satisfy with shape checks, canned examples, topology success, or goal
+  prose. The specs remain the correctness standard; this matrix says what must
+  be proven from them.
+
+matrix_rules:
+  - A row is not proven by schema compilation unless the row says shape_only.
+  - A row is not proven by active examples unless the row says fixture_only.
+  - A row touching authorization, data visibility, mutation, receipts, costs, or replay must include a negative proof.
+  - A row touching public exports, default features, or facades must include route maturity classification.
+  - A row touching worker behavior must prove ACP profile behavior, not a private Rust-only shortcut.
+  - A row touching archived or downloaded drafts must prove hard cutover to this package.
+
+proof_levels:
+  shape_only: JSON Schema, examples, or generated types prove only syntactic acceptance.
+  structural_contract: Public Rust/API shape exists and round-trips the locked contract vocabulary.
+  semantic_denial: The implementation rejects forbidden behavior and returns typed errors/redactions/receipts.
+  integrated_surface: The intended worker or user-facing flow exercises the seam through the owning public route.
+
+row_status_values:
+  pending: No implementation proof yet.
+  in_progress: Implementation or verification is underway.
+  proven: Evidence exists and is linked from the row.
+  blocked: Cannot be proven without a missing decision or dependency.
+  dropped: Removed from V1 scope by a spec or manifest revision.
+
+rows:
+  - id: ps1.authority.active_package_only
+    area: authority
+    requirement: >
+      The active docs/specs/public-seam-v1 package is the only V1 correctness
+      standard; archived repo drafts and downloaded zips are provenance only.
+    spec_refs:
+      - docs/specs/public-seam-v1/README.md
+      - docs/specs/public-seam-v1/manifest.json
+      - docs/specs/public-seam-v1/goal-readiness-gate.yaml
+    owner_boundary: docs/specs plus the eventual public-seam implementation owner
+    positive_proof: >
+      Runtime/spec loading resolves schemas, manifest facts, and conformance
+      requirements only from docs/specs/public-seam-v1 or embedded artifacts
+      generated from that package.
+    negative_proof: >
+      Older archived or downloaded payload variants are rejected unless the
+      active manifest is deliberately revised in the same change.
+    fake_pass_rejected: Loading whichever draft schema happens to validate.
+    minimum_closeout_level: semantic_denial
+    status: pending
+
+  - id: ps1.authority.manifest_inventory
+    area: authority
+    requirement: >
+      The manifest is the discoverable inventory for active schemas, profile,
+      statuses, goal gate, and conformance matrix.
+    spec_refs:
+      - docs/specs/public-seam-v1/manifest.json
+    owner_boundary: public-seam implementation owner
+    positive_proof: >
+      A contract-inventory test loads manifest.json and checks every listed
+      schema/profile/gate/matrix path exists and is used by the harness.
+    negative_proof: >
+      Removing or renaming a listed contract file fails the inventory test.
+    fake_pass_rejected: A hand-maintained test list that silently diverges from the manifest.
+    minimum_closeout_level: structural_contract
+    status: pending
+
+  - id: ps1.schema.fingerprints
+    area: schema
+    requirement: Schema fingerprints use RFC 8785 JCS plus SHA-256.
+    spec_refs:
+      - docs/specs/public-seam-v1/manifest.json
+      - docs/specs/public-seam-v1/schemas/common.schema.json
+    owner_boundary: public-seam implementation owner with kernel/core fingerprint primitives
+    positive_proof: >
+      Canonicalization tests compute schema fingerprints from JSON values using
+      RFC 8785 JCS and SHA-256, and compare them to expected fp_schema_sha256
+      forms.
+    negative_proof: >
+      Whitespace changes keep the fingerprint stable, while semantically
+      different JSON changes the fingerprint; ad hoc pretty-printed hashing is
+      rejected.
+    fake_pass_rejected: Accepting strings that look like fingerprints without computing them.
+    minimum_closeout_level: semantic_denial
+    status: pending
+
+  - id: ps1.plan.ir_family
+    area: plan_ir
+    requirement: Plan IR is the locked Let/Call/Write value family with typed query, call, and write variants.
+    spec_refs:
+      - docs/specs/public-seam-v1/01_plan_ir_spec_v0.3.md
+      - docs/specs/public-seam-v1/schemas/leaven.plan.v1.schema.json
+    owner_boundary: public-seam implementation owner; cold algebra must not absorb transport/runtime details
+    positive_proof: >
+      Contract tests deserialize, validate, lower, and execute representative
+      let/call/write plans through the owning seam surface.
+    negative_proof: >
+      Unknown core kinds, unknown write kinds, and untyped escape-hatch payloads
+      are rejected before execution.
+    fake_pass_rejected: Generated structs that round-trip JSON but are never executable.
+    minimum_closeout_level: semantic_denial
+    status: pending
+
+  - id: ps1.plan.pinned_dialects
+    area: plan_ir
+    requirement: Field paths, extraction, and templates are pinned to JSON Pointer, Leaven JSONPath subset, and leaven.mustache.strict.v1.
+    spec_refs:
+      - docs/specs/public-seam-v1/01_plan_ir_spec_v0.3.md
+      - docs/specs/public-seam-v1/schemas/common.schema.json
+      - docs/specs/public-seam-v1/schemas/leaven.plan.v1.schema.json
+    owner_boundary: public-seam implementation owner
+    positive_proof: >
+      Valid pinned pointer, extraction, and template operations are parsed and
+      replayed with deterministic results.
+    negative_proof: >
+      Unpinned path syntax, non-Leaven JSONPath dialects, and non-strict
+      Mustache dialects are rejected with typed PlanError.
+    fake_pass_rejected: Treating path/template strings as opaque user prose.
+    minimum_closeout_level: semantic_denial
+    status: pending
+
+  - id: ps1.plan.revision_modes
+    area: plan_ir
+    requirement: Plans honor latest_at_start, at_revision, and since_revision consistency modes.
+    spec_refs:
+      - docs/specs/public-seam-v1/01_plan_ir_spec_v0.3.md
+      - docs/specs/public-seam-v1/schemas/leaven.plan.v1.schema.json
+      - docs/specs/public-seam-v1/08_watch_deferred_v1.1.md
+    owner_boundary: engine/run context plus public-seam implementation owner
+    positive_proof: >
+      Query tests show each consistency mode reads the intended graph revision
+      or finite diff set.
+    negative_proof: >
+      A since_revision request without a valid base revision is rejected instead
+      of falling back to latest.
+    fake_pass_rejected: Always reading the current graph and labeling it consistent.
+    minimum_closeout_level: semantic_denial
+    status: pending
+
+  - id: ps1.plan.execution_modes
+    area: plan_ir
+    requirement: execute, dry_run, require_cached, and replay modes have distinct side-effect behavior.
+    spec_refs:
+      - docs/specs/public-seam-v1/01_plan_ir_spec_v0.3.md
+      - docs/specs/public-seam-v1/schemas/leaven.plan.v1.schema.json
+    owner_boundary: engine/run context plus public-seam implementation owner
+    positive_proof: >
+      Mode tests prove execute may call/write, dry_run validates without graph
+      mutation, require_cached refuses cache misses, and replay uses receipts.
+    negative_proof: >
+      A dry_run write cannot mutate RunGraph, and require_cached cannot perform
+      live LM/agent/sandbox work.
+    fake_pass_rejected: A mode enum that is serialized but ignored.
+    minimum_closeout_level: semantic_denial
+    status: pending
+
+  - id: ps1.graph.runcontext_mutation_only
+    area: graph_mutation
+    requirement: RunContext is the only graph mutation authority across the public seam.
+    spec_refs:
+      - docs/specs/public-seam-v1/00_architecture_judgment_v0.3.md
+      - docs/specs/public-seam-v1/01_plan_ir_spec_v0.3.md
+    owner_boundary: crates/leaven-engine plus public-seam implementation owner
+    positive_proof: >
+      Proposal and assessment writes enter the graph through RunContext and emit
+      write receipts tied to graph revisions.
+    negative_proof: >
+      Worker callbacks, deserialized plan writes, and adapter helpers cannot
+      mutate RunGraph directly or bypass RunContext validation.
+    fake_pass_rejected: Public seam code importing graph internals for convenience.
+    minimum_closeout_level: semantic_denial
+    status: pending
+
+  - id: ps1.result.typed_envelope
+    area: result_receipts
+    requirement: Plan results carry typed values, typed receipts, started_at/completed_at, capability/policy fingerprints, data classes, and closed PlanError.
+    spec_refs:
+      - docs/specs/public-seam-v1/03_result_receipts_spec_v0.3.md
+      - docs/specs/public-seam-v1/schemas/leaven.plan_result.v1.schema.json
+      - docs/specs/public-seam-v1/schemas/common.schema.json
+    owner_boundary: public-seam implementation owner with kernel/core error vocabulary
+    positive_proof: >
+      Success and failure plan runs produce schema-valid PlanResult values with
+      typed values, receipts, timing, fingerprints, data classes, and errors.
+    negative_proof: >
+      Unknown error kinds, missing timing, missing fingerprints, and untyped
+      error strings are rejected at the public seam.
+    fake_pass_rejected: Logging errors while returning a generic JSON blob.
+    minimum_closeout_level: semantic_denial
+    status: pending
+
+  - id: ps1.receipts.audit_currency
+    area: result_receipts
+    requirement: Query, call, and write receipts are audit currency, not log decoration.
+    spec_refs:
+      - docs/specs/public-seam-v1/03_result_receipts_spec_v0.3.md
+      - docs/specs/public-seam-v1/schemas/leaven.plan_result.v1.schema.json
+    owner_boundary: engine/run context plus public-seam implementation owner
+    positive_proof: >
+      Receipts include operation kind, request/op hash, result hash, status,
+      policy fingerprints, and revision or runtime binding as applicable.
+    negative_proof: >
+      A result value that references a missing receipt, mismatched hash, or
+      wrong operation kind fails validation or replay.
+    fake_pass_rejected: Receipt ids that are only decorative log correlation ids.
+    minimum_closeout_level: semantic_denial
+    status: pending
+
+  - id: ps1.receipts.failed_costs
+    area: result_receipts
+    requirement: Failed calls that spend money still produce call and charge receipts.
+    spec_refs:
+      - docs/specs/public-seam-v1/03_result_receipts_spec_v0.3.md
+      - docs/specs/public-seam-v1/schemas/leaven.plan_result.v1.schema.json
+    owner_boundary: engine budget/cost ledger plus public-seam implementation owner
+    positive_proof: >
+      A controlled failing LM/agent/sandbox call that incurs cost returns a
+      failed call receipt and charge receipt.
+    negative_proof: >
+      The same failure cannot disappear from cost totals or replay provenance.
+    fake_pass_rejected: Counting only successful calls as receipted work.
+    minimum_closeout_level: semantic_denial
+    status: pending
+
+  - id: ps1.replay.per_assessment
+    area: replayability
+    requirement: Assessment batches carry per-assessment replayability and plan-level replayability is only a roll-up.
+    spec_refs:
+      - docs/specs/public-seam-v1/03_result_receipts_spec_v0.3.md
+      - docs/specs/public-seam-v1/schemas/leaven.plan_result.v1.schema.json
+    owner_boundary: evaluator/run result layer plus public-seam implementation owner
+    positive_proof: >
+      Mixed replayable and non-replayable assessments produce per-assessment
+      statuses and a correct plan-level summary.
+    negative_proof: >
+      A plan-level replayable flag cannot hide one non-replayable assessment.
+    fake_pass_rejected: A single boolean replayability result for the whole plan.
+    minimum_closeout_level: semantic_denial
+    status: pending
+
+  - id: ps1.capability.document_truth
+    area: capability
+    requirement: A capability token resolves to structured audit truth with jti, subject fingerprint, binding, expiry, renewal, revocation, grants, delegation, and budgets.
+    spec_refs:
+      - docs/specs/public-seam-v1/00_architecture_judgment_v0.3.md
+      - docs/specs/public-seam-v1/02_capability_spec_v0.3.md
+      - docs/specs/public-seam-v1/schemas/leaven.capability.v1.schema.json
+    owner_boundary: engine trust/budget layer plus public-seam implementation owner
+    positive_proof: >
+      Authentication resolves an opaque or signed token into the schema-valid
+      capability document used for all later permission decisions.
+    negative_proof: >
+      A bare token string, missing subject fingerprint, expired token, revoked
+      token, or binding mismatch is denied before the call executes.
+    fake_pass_rejected: Passing token strings around as authorization facts.
+    minimum_closeout_level: semantic_denial
+    status: pending
+
+  - id: ps1.capability.grant_enforcement
+    area: capability
+    requirement: Capability grants enforce action, resource, case fields, partitions, schemas, surface fingerprints, data classes, and limits.
+    spec_refs:
+      - docs/specs/public-seam-v1/02_capability_spec_v0.3.md
+      - docs/specs/public-seam-v1/schemas/leaven.capability.v1.schema.json
+      - docs/specs/public-seam-v1/examples/evaluator_capability.v0.3.example.json
+    owner_boundary: engine trust layer plus public-seam implementation owner
+    positive_proof: >
+      Allowed calls succeed only inside their grant envelope and return the
+      relevant capability fingerprint.
+    negative_proof: >
+      Calls outside action, resource, partition, case-field, schema, data-class,
+      or limit constraints return typed denials and redactions.
+    fake_pass_rejected: Checking only that a token exists.
+    minimum_closeout_level: semantic_denial
+    status: pending
+
+  - id: ps1.capability.delegation_attenuates
+    area: capability
+    requirement: Delegated tokens cannot widen action, resource, budget, data class, schema, expiry, or binding authority.
+    spec_refs:
+      - docs/specs/public-seam-v1/02_capability_spec_v0.3.md
+      - docs/specs/public-seam-v1/schemas/leaven.capability.v1.schema.json
+      - docs/specs/public-seam-v1/notes/CONFORMANCE_TESTS_v0.3.md
+    owner_boundary: engine trust layer plus public-seam implementation owner
+    positive_proof: >
+      Valid delegation narrows authority and records parent capability lineage.
+    negative_proof: >
+      Delegation attempts that widen any constrained dimension are rejected.
+    fake_pass_rejected: Issuing fresh full-power child tokens from any valid parent.
+    minimum_closeout_level: semantic_denial
+    status: pending
+
+  - id: ps1.capability.aggregate_budgets
+    area: capability
+    requirement: Aggregate budgets and concurrent-call limits are enforced across LM, agent, sandbox, evaluator, and delegated work.
+    spec_refs:
+      - docs/specs/public-seam-v1/02_capability_spec_v0.3.md
+      - docs/specs/public-seam-v1/schemas/leaven.capability.v1.schema.json
+    owner_boundary: engine budget ledger plus public-seam implementation owner
+    positive_proof: >
+      Budget tests spend across multiple call types and show aggregate totals,
+      role-specific totals, and concurrency limits being enforced.
+    negative_proof: >
+      Delegated or nested calls cannot exceed the parent's aggregate budget or
+      bypass concurrency limits.
+    fake_pass_rejected: Per-call max checks with no aggregate accounting.
+    minimum_closeout_level: semantic_denial
+    status: pending
+
+  - id: ps1.visibility.data_class_propagation
+    area: data_visibility
+    requirement: Data classes propagate monotonically by default and forbidden intersections deny calls.
+    spec_refs:
+      - docs/specs/public-seam-v1/00_architecture_judgment_v0.3.md
+      - docs/specs/public-seam-v1/02_capability_spec_v0.3.md
+      - docs/specs/public-seam-v1/schemas/common.schema.json
+    owner_boundary: engine trust layer, evidence layer, public-seam implementation owner
+    positive_proof: >
+      Query, call, and write values carry accumulated data classes through
+      projections, templates, LM calls, agent runs, evidence, and receipts.
+    negative_proof: >
+      A call whose input classes intersect forbidden classes is denied before
+      execution and reports redactions.
+    fake_pass_rejected: Checking data classes only at initial case read.
+    minimum_closeout_level: semantic_denial
+    status: pending
+
+  - id: ps1.visibility.reflector_target_safe
+    area: data_visibility
+    requirement: Reflectors receive target-safe projections and cannot read case.target directly or through LM prompts.
+    spec_refs:
+      - docs/specs/public-seam-v1/04_stage_payloads_spec_v0.3.md
+      - docs/specs/public-seam-v1/notes/CONFORMANCE_TESTS_v0.3.md
+    owner_boundary: agentic/stage lowering plus public-seam implementation owner
+    positive_proof: >
+      ReflectRequest construction uses target-safe examples and carries source
+      refs, read receipts, and data classes.
+    negative_proof: >
+      Reflector case.target reads and reflector LM calls containing case.target
+      data classes are denied.
+    fake_pass_rejected: Hiding targets in side_info or prompt text after projection.
+    minimum_closeout_level: semantic_denial
+    status: pending
+
+  - id: ps1.evidence.visibility_receipts
+    area: evidence
+    requirement: Evidence visibility lives in values and receipts, and target-derived evidence carries data classes.
+    spec_refs:
+      - docs/specs/public-seam-v1/00_architecture_judgment_v0.3.md
+      - docs/specs/public-seam-v1/schemas/leaven.evidence_envelope.v1.schema.json
+    owner_boundary: crates/leaven-evidence plus public-seam implementation owner
+    positive_proof: >
+      Evidence envelopes preserve visibility, data classes, source values, and
+      receipt refs through public result projection.
+    negative_proof: >
+      A target_derived envelope with missing data classes, or an evidence value
+      whose receipt visibility conflicts with its value visibility, is rejected.
+    fake_pass_rejected: Treating visibility as policy metadata that never reaches results.
+    minimum_closeout_level: semantic_denial
+    status: pending
+
+  - id: ps1.stage.reflection_proposal_split
+    area: stage_payloads
+    requirement: Reflection and proposal are separate stages; ProposeRequest consumes ReflectionResult instead of merging diagnosis and mutation.
+    spec_refs:
+      - docs/specs/public-seam-v1/00_architecture_judgment_v0.3.md
+      - docs/specs/public-seam-v1/04_stage_payloads_spec_v0.3.md
+      - docs/specs/public-seam-v1/examples/reflect_then_propose.example.json
+    owner_boundary: agentic/stage lowering plus public-seam implementation owner
+    positive_proof: >
+      ReflectRequest, ReflectionResult, and ProposeRequest each validate and
+      lower through distinct types and execution steps.
+    negative_proof: >
+      A proposer payload that embeds unreceipted diagnosis or mutates graph
+      without a ReflectionResult is rejected.
+    fake_pass_rejected: One generic agent prompt that both critiques and writes.
+    minimum_closeout_level: semantic_denial
+    status: pending
+
+  - id: ps1.stage.payload_receipts
+    area: stage_payloads
+    requirement: Stage payloads carry source refs, read receipts, capability fingerprints, query policy fingerprints, data classes, and allowed effects/schemas where applicable.
+    spec_refs:
+      - docs/specs/public-seam-v1/04_stage_payloads_spec_v0.3.md
+      - docs/specs/public-seam-v1/schemas/leaven.stage_payloads.v1.schema.json
+    owner_boundary: agentic/stage lowering plus public-seam implementation owner
+    positive_proof: >
+      Representative reflector, proposer, runner, scorer, judge, callback, and
+      adapter payloads round-trip with all required provenance and capability fields.
+    negative_proof: >
+      Missing payload schema fingerprints, missing required receipts, or effects
+      outside allowed_effects are rejected.
+    fake_pass_rejected: Payload enums with no provenance or policy binding.
+    minimum_closeout_level: semantic_denial
+    status: pending
+
+  - id: ps1.proposal.surface_authority
+    area: proposal
+    requirement: Proposal changes are limited to granted surface fingerprints, allowed schemas, allowed effects, and declared causal inputs.
+    spec_refs:
+      - docs/specs/public-seam-v1/01_plan_ir_spec_v0.3.md
+      - docs/specs/public-seam-v1/04_stage_payloads_spec_v0.3.md
+      - docs/specs/public-seam-v1/schemas/leaven.plan.v1.schema.json
+    owner_boundary: core/surface/engine plus public-seam implementation owner
+    positive_proof: >
+      Valid create, change, change_from_workspace_diff, and
+      change_from_agent_session writes preserve causal inputs and surface authority.
+    negative_proof: >
+      Submit-only tokens cannot apply proposals, and changes against ungranted
+      surface fingerprints or schemas are denied.
+    fake_pass_rejected: Accepting arbitrary JSON patches from an agent session.
+    minimum_closeout_level: semantic_denial
+    status: pending
+
+  - id: ps1.evaluator.job_identity
+    area: evaluator
+    requirement: Evaluator jobs carry request identity, candidate set, case set, base revision, deadline, evaluator ID, and capability fingerprint.
+    spec_refs:
+      - docs/specs/public-seam-v1/05_evaluator_spec_v0.3.md
+      - docs/specs/public-seam-v1/schemas/leaven.evaluation_job.v1.schema.json
+    owner_boundary: leaven-run/evaluator lowering plus public-seam implementation owner
+    positive_proof: >
+      Requesting an evaluation creates a schema-valid evaluation job and
+      evaluation request receipt bound to the candidate and case sets.
+    negative_proof: >
+      Jobs missing identity, base revision, evaluator fingerprint, deadline, or
+      capability fingerprint are rejected.
+    fake_pass_rejected: A test evaluator closure with no durable job identity.
+    minimum_closeout_level: semantic_denial
+    status: pending
+
+  - id: ps1.evaluator.target_reads
+    area: evaluator
+    requirement: Evaluator target reads go through case_query.load under evaluator capability and are receipted.
+    spec_refs:
+      - docs/specs/public-seam-v1/05_evaluator_spec_v0.3.md
+      - docs/specs/public-seam-v1/02_capability_spec_v0.3.md
+    owner_boundary: evaluator/run lowering plus public-seam implementation owner
+    positive_proof: >
+      Trusted evaluator target reads succeed only through granted case_query.load
+      and emit query receipts with data classes.
+    negative_proof: >
+      Target reads by non-evaluator roles or outside the evaluation request are denied.
+    fake_pass_rejected: Passing targets directly into evaluator closures.
+    minimum_closeout_level: semantic_denial
+    status: pending
+
+  - id: ps1.evaluator.score_output
+    area: evaluator
+    requirement: Every successful score carries Score.output as the reportable output being assessed.
+    spec_refs:
+      - docs/specs/public-seam-v1/01_plan_ir_spec_v0.3.md
+      - docs/specs/public-seam-v1/05_evaluator_spec_v0.3.md
+      - docs/specs/public-seam-v1/schemas/common.schema.json
+      - docs/specs/public-seam-v1/schemas/leaven.evidence_envelope.v1.schema.json
+    owner_boundary: leaven-run/evaluator result layer plus public-seam implementation owner
+    positive_proof: >
+      Independent, pairwise, and listwise assessments produce Score values whose
+      output is the candidate or artifact output actually assessed and reported.
+    negative_proof: >
+      Missing output, null placeholder output, or output that is unrelated to
+      the assessed candidate is rejected or fails contract tests.
+    fake_pass_rejected: Adding a dummy output field solely to satisfy schema validation.
+    minimum_closeout_level: semantic_denial
+    status: pending
+
+  - id: ps1.evaluator.assessment_scope
+    area: evaluator
+    requirement: Assessments must belong to their evaluation request and carry replayability.
+    spec_refs:
+      - docs/specs/public-seam-v1/05_evaluator_spec_v0.3.md
+      - docs/specs/public-seam-v1/schemas/leaven.plan.v1.schema.json
+      - docs/specs/public-seam-v1/schemas/leaven.plan_result.v1.schema.json
+    owner_boundary: evaluator/run result layer plus public-seam implementation owner
+    positive_proof: >
+      Valid assessments attach to the expected evaluation request, candidates,
+      cases, scores, evidence, and replayability statuses.
+    negative_proof: >
+      Assessments outside the request, missing Score.output, or missing
+      per-assessment replayability are denied.
+    fake_pass_rejected: Writing assessment rows into a global bucket by id only.
+    minimum_closeout_level: semantic_denial
+    status: pending
+
+  - id: ps1.acp.transport_profile
+    area: acp
+    requirement: ACP is the worker lifecycle protocol; the engine is ACP client and the worker is ACP agent.
+    spec_refs:
+      - docs/specs/public-seam-v1/00_architecture_judgment_v0.3.md
+      - docs/specs/public-seam-v1/profiles/leaven_acp_profile_v1_v0.3.md
+    owner_boundary: agent/worker transport implementation owner
+    positive_proof: >
+      A worker session starts through the ACP profile with the documented
+      engine-client/worker-agent inversion and pinned ACP version.
+    negative_proof: >
+      A private process protocol or MCP bridge cannot satisfy the public worker
+      seam while manifest.mcp_status is not_in_v1.
+    fake_pass_rejected: Rust in-process trait calls labeled as ACP.
+    minimum_closeout_level: integrated_surface
+    status: pending
+
+  - id: ps1.acp.auth_permissions
+    area: acp
+    requirement: ACP authenticate resolves capability documents, and ACP permission requests are answered by grants with PlanError and redaction denials.
+    spec_refs:
+      - docs/specs/public-seam-v1/profiles/leaven_acp_profile_v1_v0.3.md
+      - docs/specs/public-seam-v1/schemas/leaven.capability.v1.schema.json
+      - docs/specs/public-seam-v1/schemas/common.schema.json
+    owner_boundary: agent/worker transport plus engine trust layer
+    positive_proof: >
+      Allowed ACP extension calls succeed after authenticate and include
+      capability fingerprint in results.
+    negative_proof: >
+      Denied permission requests return closed PlanError values and redaction
+      information without executing the requested operation.
+    fake_pass_rejected: Prompting a human or always granting ACP permissions during tests.
+    minimum_closeout_level: semantic_denial
+    status: pending
+
+  - id: ps1.acp.extension_results
+    area: acp
+    requirement: Leaven ACP extension method results return primary values plus receipts, redactions, capability fingerprint, and data classes.
+    spec_refs:
+      - docs/specs/public-seam-v1/profiles/leaven_acp_profile_v1_v0.3.md
+      - docs/specs/public-seam-v1/schemas/leaven.plan_result.v1.schema.json
+    owner_boundary: agent/worker transport plus public-seam implementation owner
+    positive_proof: >
+      Graph, case, workspace, LM, agent, sandbox, human review, proposal, and
+      assessment extension results carry the full result envelope fields.
+    negative_proof: >
+      Extension results missing receipts, data classes, redactions, or capability
+      fingerprint are rejected by contract tests.
+    fake_pass_rejected: Returning bare method-specific payloads over ACP.
+    minimum_closeout_level: integrated_surface
+    status: pending
+
+  - id: ps1.acp.lifecycle_backpressure
+    area: acp
+    requirement: Cancellation uses ACP session cancellation, progress uses ACP updates, and updates are bounded.
+    spec_refs:
+      - docs/specs/public-seam-v1/profiles/leaven_acp_profile_v1_v0.3.md
+    owner_boundary: agent/worker transport implementation owner
+    positive_proof: >
+      Cancellation stops in-flight worker activity and records receipts/errors;
+      progress events flow through bounded ACP update queues.
+    negative_proof: >
+      A blocked or overproducing worker cannot grow unbounded queues or ignore
+      session cancellation.
+    fake_pass_rejected: Fire-and-forget progress logs outside ACP lifecycle control.
+    minimum_closeout_level: semantic_denial
+    status: pending
+
+  - id: ps1.acp.no_mcp_v1
+    area: acp
+    requirement: There is no MCP-over-ACP layer in V1.
+    spec_refs:
+      - docs/specs/public-seam-v1/manifest.json
+      - docs/specs/public-seam-v1/profiles/leaven_acp_profile_v1_v0.3.md
+      - docs/specs/public-seam-v1/goal-readiness-gate.yaml
+    owner_boundary: agent/worker transport implementation owner
+    positive_proof: >
+      Worker callbacks route through Leaven ACP extension methods without
+      requiring MCP objects, MCP tool definitions, or MCP negotiation.
+    negative_proof: >
+      Enabling an MCP bridge is impossible in V1 default/product paths and any
+      archived MCP-over-ACP draft payload is refused as current contract.
+    fake_pass_rejected: Renaming MCP concepts while preserving an MCP negotiation dependency.
+    minimum_closeout_level: semantic_denial
+    status: pending
+
+  - id: ps1.workspace.handles_lifecycle
+    area: workspace
+    requirement: Workspace handles, materialization, release calls, git_status, git_diff, artifacts, and snapshots are first-class public seam values.
+    spec_refs:
+      - docs/specs/public-seam-v1/01_plan_ir_spec_v0.3.md
+      - docs/specs/public-seam-v1/manifest.json
+      - docs/specs/public-seam-v1/schemas/leaven.plan.v1.schema.json
+      - docs/specs/public-seam-v1/schemas/leaven.plan_result.v1.schema.json
+    owner_boundary: workspace substrate plus public-seam implementation owner
+    positive_proof: >
+      Workspace materialize/read/list/stat/digest/git_status/git_diff/capture
+      and release operations produce typed values, receipts, data classes, and
+      lifecycle state.
+    negative_proof: >
+      Released or ungranted workspace handles cannot be read or mutated, and
+      workspace values cannot leak unlabeled data classes.
+    fake_pass_rejected: Passing host filesystem paths as trusted workspace handles.
+    minimum_closeout_level: semantic_denial
+    status: pending
+
+  - id: ps1.lm.contract
+    area: lm
+    requirement: LM calls support text, tools, tool_call_id, sampling, provider_hints, final_message, and json_schema outputs; multimodal and streaming are deferred.
+    spec_refs:
+      - docs/specs/public-seam-v1/manifest.json
+      - docs/specs/public-seam-v1/schemas/leaven.plan.v1.schema.json
+      - docs/specs/public-seam-v1/schemas/leaven.plan_result.v1.schema.json
+    owner_boundary: leaven-lm plus public-seam implementation owner
+    positive_proof: >
+      LM complete calls lower to provider-neutral LM requests and return typed
+      LM responses with output contract and receipt/cost binding.
+    negative_proof: >
+      Unsupported multimodal or streaming requests are rejected or explicitly
+      marked deferred rather than silently downgraded.
+    fake_pass_rejected: Shelling out to a provider-specific API with lost request metadata.
+    minimum_closeout_level: semantic_denial
+    status: pending
+
+  - id: ps1.agent.contract
+    area: agent
+    requirement: Agent runs return session receipts, transcript refs, command refs, outputs, costs, policy fingerprints, and can feed ChangeFromAgentSession.
+    spec_refs:
+      - docs/specs/public-seam-v1/01_plan_ir_spec_v0.3.md
+      - docs/specs/public-seam-v1/schemas/leaven.plan.v1.schema.json
+      - docs/specs/public-seam-v1/schemas/leaven.plan_result.v1.schema.json
+    owner_boundary: leaven-agent/leaven-agentic plus public-seam implementation owner
+    positive_proof: >
+      Agent-run tests return an AgentSession value with transcript, commands,
+      outputs, costs, policy fingerprints, data classes, and receipts; proposal
+      changes can cite the session receipt.
+    negative_proof: >
+      A ChangeFromAgentSession without a matching agent session receipt or
+      ungranted surface fingerprint is rejected.
+    fake_pass_rejected: Treating agent stdout as a proposal without receipts.
+    minimum_closeout_level: semantic_denial
+    status: pending
+
+  - id: ps1.sandbox.exec_streaming
+    area: sandbox
+    requirement: Sandbox exec is receipted, data-class labeled, policy-bound, and follows the spec's streaming policy.
+    spec_refs:
+      - docs/specs/public-seam-v1/01_plan_ir_spec_v0.3.md
+      - docs/specs/public-seam-v1/05_evaluator_spec_v0.3.md
+      - docs/specs/public-seam-v1/schemas/leaven.plan.v1.schema.json
+      - docs/specs/public-seam-v1/schemas/leaven.plan_result.v1.schema.json
+    owner_boundary: workspace/sandbox substrate plus public-seam implementation owner
+    positive_proof: >
+      Sandbox exec returns typed stdout/stderr/status/artifacts with receipts,
+      costs, policy fingerprints, and data classes.
+    negative_proof: >
+      Disallowed subprocess/network/filesystem behavior is denied by capability
+      and execution policy before command execution.
+    fake_pass_rejected: Running host shell commands and attaching logs afterward.
+    minimum_closeout_level: semantic_denial
+    status: pending
+
+  - id: ps1.watch.deferred
+    area: deferred
+    requirement: watch.v1 is deferred to v1.1; V1 uses finite diff queries via consistency.since_revision.
+    spec_refs:
+      - docs/specs/public-seam-v1/08_watch_deferred_v1.1.md
+      - docs/specs/public-seam-v1/schemas/leaven.watch.v1.schema.json
+      - docs/specs/public-seam-v1/manifest.json
+    owner_boundary: public-seam implementation owner
+    positive_proof: >
+      The active watch schema is only a deferred marker and finite diff behavior
+      is exercised through plan consistency.since_revision.
+    negative_proof: >
+      Runtime watch subscriptions, streaming watch APIs, or watch success claims
+      are rejected from V1 scope.
+    fake_pass_rejected: Leaving a watch placeholder and claiming watch support.
+    minimum_closeout_level: semantic_denial
+    status: pending
+
+  - id: ps1.worker_protocol.deprecated
+    area: deferred
+    requirement: worker_protocol.v1 is deprecated and replaced by the ACP profile.
+    spec_refs:
+      - docs/specs/public-seam-v1/manifest.json
+      - docs/specs/public-seam-v1/schemas/leaven.worker_protocol.v1.schema.json
+      - docs/specs/public-seam-v1/profiles/leaven_acp_profile_v1_v0.3.md
+    owner_boundary: agent/worker transport implementation owner
+    positive_proof: >
+      Compatibility markers point to leaven.acp_profile.v1 and product worker
+      paths use ACP extension methods.
+    negative_proof: >
+      New worker-protocol runtime behavior cannot be implemented or exposed as
+      V1 product behavior.
+    fake_pass_rejected: Reviving the deprecated worker protocol because the marker schema exists.
+    minimum_closeout_level: semantic_denial
+    status: pending
+
+  - id: ps1.public_routes.maturity_classified
+    area: public_maturity
+    requirement: Any public export, default feature, facade, example, or prelude touched by implementation is classified by route maturity.
+    spec_refs:
+      - AGENTS.md
+      - docs/specs/AGENTS.md
+      - docs/specs/public-seam-v1/goal-readiness-gate.yaml
+    owner_boundary: affected crate AGENTS plus topology contract
+    positive_proof: >
+      Public routes are classified as ordinary public contract, advanced public
+      contract, test-support public, explicit scaffold, or private fixture.
+    negative_proof: >
+      Scaffold crates, fixed fixtures, fake runtimes, compile-only examples, or
+      provider shell-outs cannot enter ordinary public routes as product proof.
+    fake_pass_rejected: Passing topology tests while exposing immature names through default imports.
+    minimum_closeout_level: semantic_denial
+    status: pending
+
+  - id: ps1.harness.negative_denominator
+    area: proof_harness
+    requirement: The conformance harness includes negative semantic tests for every touched denial row.
+    spec_refs:
+      - docs/specs/public-seam-v1/conformance-matrix.yaml
+      - docs/specs/public-seam-v1/notes/CONFORMANCE_TESTS_v0.3.md
+      - docs/testing/README.md
+    owner_boundary: public-seam implementation owner plus repo test harness
+    positive_proof: >
+      Implementation closeout lists touched matrix rows and links focused tests
+      that prove both allowed and denied behavior.
+    negative_proof: >
+      A closeout that cites only schema validation, examples, topology, or a
+      happy-path smoke fails the harness or handoff review.
+    fake_pass_rejected: Treating the matrix itself as proof that implementation satisfies the spec.
+    minimum_closeout_level: semantic_denial
+    status: pending

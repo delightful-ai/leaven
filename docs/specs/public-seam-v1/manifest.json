@@ -3,6 +3,7 @@
   "version": "1.0",
   "status": "locked",
   "goal_gate": "goal-readiness-gate.yaml",
+  "conformance_matrix": "conformance-matrix.yaml",
   "schemas": [
     "common.schema.json",
     "leaven.plan.v1.schema.json",
