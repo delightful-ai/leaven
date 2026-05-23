@@ -413,7 +413,9 @@ fn report_score(
 fn output_record_text(output: &OutputRecord) -> String {
     match output {
         OutputRecord::Inline { text, .. } => text.clone(),
-        OutputRecord::BlobRef(reference) => format!("blob:{}:{}", reference.store, reference.key),
+        OutputRecord::BlobRef { reference, .. } => {
+            format!("blob:{}:{}", reference.store, reference.key)
+        }
     }
 }
 
@@ -926,7 +928,7 @@ mod tests {
             },
             &CaseAssessmentEvidence::new(
                 ScalarEvidence::new(0.25).unwrap(),
-                OutputRecord::BlobRef(leaven_kernel::BlobRef {
+                OutputRecord::blob(leaven_kernel::BlobRef {
                     store: "blob-store".to_owned(),
                     key: "answer.txt".to_owned(),
                 }),

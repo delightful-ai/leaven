@@ -7,7 +7,7 @@ use leaven_evidence::{
     AgentPatchMergeTreeError, AgentPatchMergeTreeEvidence, AgentTrajectoryAnalysisKind,
     AgentTrajectoryAnalysisRecord, AgentTrajectoryCorpusError, AgentTrajectoryCorpusEvidence,
     AgentTrajectoryEvidence, AgentTrajectoryEvidenceInput, AgentTrajectoryOutcome, CommandEvidence,
-    CommandRecord, OutputRecord,
+    CommandRecord, DataClass, DataClassSet, OutputMetadata, OutputRecord, OutputVisibility,
 };
 use leaven_kernel::{AgentSessionId, BlobRef, CaseId, FingerprintBuilder};
 
@@ -37,8 +37,22 @@ fn command_output_can_be_blob_backed() {
 
     assert_eq!(
         OutputRecord::blob(reference.clone()),
-        OutputRecord::BlobRef(reference)
+        OutputRecord::blob(reference)
     );
+}
+
+#[test]
+fn output_record_preserves_visibility_and_data_classes() {
+    let output = OutputRecord::inline("private notes").with_metadata(OutputMetadata::new(
+        OutputVisibility::EvaluatorOnly,
+        DataClassSet::new([DataClass::case_target(), DataClass::transcript_raw()]),
+    ));
+
+    assert_eq!(output.visibility(), OutputVisibility::EvaluatorOnly);
+    assert!(output.data_classes().contains(&DataClass::case_target()));
+    assert!(output.data_classes().contains(&DataClass::transcript_raw()));
+    assert!(DataClass::new("x.partner.safe").is_ok());
+    assert!(DataClass::new("partner.safe").is_err());
 }
 
 #[test]
@@ -336,7 +350,7 @@ fn patch_merge_tree_records_levels_decisions_parse_failures_and_final_diff() {
     assert_eq!(tree.parse_failed_nodes()[0].node_id(), "merge-l1-bad-json");
     assert!(matches!(
         tree.final_diff(),
-        Some(OutputRecord::BlobRef(reference)) if reference.key == "diffs/final.patch"
+        Some(OutputRecord::BlobRef { reference, .. }) if reference.key == "diffs/final.patch"
     ));
 }
 

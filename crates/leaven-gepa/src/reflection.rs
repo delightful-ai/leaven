@@ -631,7 +631,9 @@ impl ReflectionProjection for CaseAssessmentEvidence {
 fn output_record_text(output: &OutputRecord) -> String {
     match output {
         OutputRecord::Inline { text, .. } => text.clone(),
-        OutputRecord::BlobRef(reference) => format!("blob:{}:{}", reference.store, reference.key),
+        OutputRecord::BlobRef { reference, .. } => {
+            format!("blob:{}:{}", reference.store, reference.key)
+        }
     }
 }
 
@@ -1161,7 +1163,7 @@ mod tests {
             .expect_err("missing side-info placeholder");
         assert!(missing.to_string().contains("<side_info>"));
 
-        let blob = OutputRecord::BlobRef(BlobRef {
+        let blob = OutputRecord::blob(BlobRef {
             store: "file".to_owned(),
             key: "outputs/1".to_owned(),
         });

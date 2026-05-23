@@ -1,0 +1,280 @@
+//! Reportable output records with visibility and data-class facts.
+
+use std::collections::BTreeSet;
+
+use leaven_kernel::BlobRef;
+use serde::{Deserialize, Serialize};
+
+/// Public-seam data class carried by output or evidence.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct DataClass(String);
+
+impl DataClass {
+    /// Builds a validated data-class label.
+    ///
+    /// Known labels match the locked public-seam vocabulary. Extension labels
+    /// must use the `x.` namespace and contain only stable identifier
+    /// characters.
+    pub fn new(label: impl Into<String>) -> Result<Self, DataClassError> {
+        let label = label.into();
+        if is_known_data_class(&label) || is_extension_data_class(&label) {
+            Ok(Self(label))
+        } else {
+            Err(DataClassError { label })
+        }
+    }
+
+    /// Public data that can appear in ordinary reports.
+    #[must_use]
+    pub fn public() -> Self {
+        Self("public".to_owned())
+    }
+
+    /// Candidate output data.
+    #[must_use]
+    pub fn candidate_output() -> Self {
+        Self("candidate.output".to_owned())
+    }
+
+    /// Case target data.
+    #[must_use]
+    pub fn case_target() -> Self {
+        Self("case.target".to_owned())
+    }
+
+    /// Raw transcript data.
+    #[must_use]
+    pub fn transcript_raw() -> Self {
+        Self("transcript.raw".to_owned())
+    }
+
+    /// Returns the wire label.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+/// Invalid public-seam data-class label.
+#[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
+#[error("invalid data class `{label}`")]
+pub struct DataClassError {
+    label: String,
+}
+
+/// Unique set of data classes.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct DataClassSet(BTreeSet<DataClass>);
+
+impl DataClassSet {
+    /// Builds a data-class set from validated labels.
+    #[must_use]
+    pub fn new(classes: impl IntoIterator<Item = DataClass>) -> Self {
+        Self(classes.into_iter().collect())
+    }
+
+    /// Public-only data-class set.
+    #[must_use]
+    pub fn public() -> Self {
+        Self::new([DataClass::public()])
+    }
+
+    /// Returns the classes in stable order.
+    pub fn iter(&self) -> impl Iterator<Item = &DataClass> {
+        self.0.iter()
+    }
+
+    /// Whether this set contains a class.
+    #[must_use]
+    pub fn contains(&self, class: &DataClass) -> bool {
+        self.0.contains(class)
+    }
+}
+
+impl IntoIterator for DataClassSet {
+    type Item = DataClass;
+    type IntoIter = std::collections::btree_set::IntoIter<DataClass>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+/// Visibility attached to reportable output.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OutputVisibility {
+    /// Visible in public reports.
+    Public,
+    /// Visible to optimizer stages.
+    OptimizerVisible,
+    /// Visible to reflector stages.
+    ReflectorVisible,
+    /// Visible only to evaluator/scorer code.
+    EvaluatorOnly,
+    /// Visible only to the operator.
+    OperatorOnly,
+    /// Private output.
+    Private,
+    /// Output content was redacted.
+    Redacted,
+}
+
+/// Visibility and data-class metadata for an output record.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct OutputMetadata {
+    visibility: OutputVisibility,
+    data_classes: DataClassSet,
+}
+
+impl OutputMetadata {
+    /// Public output metadata.
+    #[must_use]
+    pub fn public() -> Self {
+        Self {
+            visibility: OutputVisibility::Public,
+            data_classes: DataClassSet::public(),
+        }
+    }
+
+    /// Builds output metadata from visibility and data classes.
+    #[must_use]
+    pub fn new(visibility: OutputVisibility, data_classes: DataClassSet) -> Self {
+        Self {
+            visibility,
+            data_classes,
+        }
+    }
+
+    /// Output visibility.
+    #[must_use]
+    pub const fn visibility(&self) -> OutputVisibility {
+        self.visibility
+    }
+
+    /// Output data classes.
+    #[must_use]
+    pub const fn data_classes(&self) -> &DataClassSet {
+        &self.data_classes
+    }
+}
+
+/// Command or report output carried inline or by external blob reference.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum OutputRecord {
+    /// Bounded inline output text.
+    Inline {
+        /// Captured output snippet.
+        text: String,
+        /// Whether the full output was truncated to this snippet.
+        truncated: bool,
+        /// Visibility and data-class facts.
+        metadata: OutputMetadata,
+    },
+    /// Output stored outside the graph.
+    BlobRef {
+        /// Blob reference.
+        reference: BlobRef,
+        /// Visibility and data-class facts.
+        metadata: OutputMetadata,
+    },
+}
+
+impl OutputRecord {
+    /// Builds an untruncated public inline output record.
+    #[must_use]
+    pub fn inline(text: impl Into<String>) -> Self {
+        Self::Inline {
+            text: text.into(),
+            truncated: false,
+            metadata: OutputMetadata::public(),
+        }
+    }
+
+    /// Builds a truncated public inline output record.
+    #[must_use]
+    pub fn truncated(text: impl Into<String>) -> Self {
+        Self::Inline {
+            text: text.into(),
+            truncated: true,
+            metadata: OutputMetadata::public(),
+        }
+    }
+
+    /// Builds a public blob-backed output record.
+    #[must_use]
+    pub fn blob(reference: BlobRef) -> Self {
+        Self::BlobRef {
+            reference,
+            metadata: OutputMetadata::public(),
+        }
+    }
+
+    /// Replaces the output metadata.
+    #[must_use]
+    pub fn with_metadata(mut self, metadata: OutputMetadata) -> Self {
+        match &mut self {
+            Self::Inline {
+                metadata: current, ..
+            }
+            | Self::BlobRef {
+                metadata: current, ..
+            } => *current = metadata,
+        }
+        self
+    }
+
+    /// Output metadata.
+    #[must_use]
+    pub const fn metadata(&self) -> &OutputMetadata {
+        match self {
+            Self::Inline { metadata, .. } | Self::BlobRef { metadata, .. } => metadata,
+        }
+    }
+
+    /// Output visibility.
+    #[must_use]
+    pub const fn visibility(&self) -> OutputVisibility {
+        self.metadata().visibility()
+    }
+
+    /// Output data classes.
+    #[must_use]
+    pub const fn data_classes(&self) -> &DataClassSet {
+        self.metadata().data_classes()
+    }
+}
+
+fn is_known_data_class(label: &str) -> bool {
+    matches!(
+        label,
+        "public"
+            | "case.input"
+            | "case.target"
+            | "case.metadata"
+            | "candidate.output"
+            | "candidate.artifact"
+            | "workspace.file"
+            | "workspace.secret"
+            | "scorer.private"
+            | "evaluator.private"
+            | "optimizer.visible"
+            | "prompt.raw"
+            | "completion.raw"
+            | "transcript.raw"
+            | "human.review"
+            | "external.secret"
+    )
+}
+
+fn is_extension_data_class(label: &str) -> bool {
+    let Some(rest) = label.strip_prefix("x.") else {
+        return false;
+    };
+    !rest.is_empty()
+        && rest
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | ':' | '-'))
+}

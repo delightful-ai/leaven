@@ -732,7 +732,14 @@ impl PublicSeamPackage {
         plan: &Value,
     ) -> Result<DeferredWatchReplacement, PublicSeamError> {
         self.validate_arbitrary_value("leaven.watch.v1.schema.json", "/watch", marker)?;
-        let plan = self.validate_plan_document(plan)?;
+        let plan = self
+            .validate_plan_document(plan)
+            .map_err(|error| match error {
+                PublicSeamError::InvalidPlan { message } => {
+                    PublicSeamError::InvalidWatch { message }
+                }
+                other => other,
+            })?;
         DeferredWatchReplacement::from_plan(plan)
     }
 

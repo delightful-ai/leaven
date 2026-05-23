@@ -6,48 +6,10 @@ use std::{
 };
 
 use leaven_core::Evidence;
-use leaven_kernel::{AgentSessionId, BlobRef, CaseId, Fingerprint};
+use leaven_kernel::{AgentSessionId, CaseId, Fingerprint};
 use serde::{Deserialize, Serialize};
 
-/// Command output carried inline or by external blob reference.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub enum OutputRecord {
-    /// Bounded inline output text.
-    Inline {
-        /// Captured output snippet.
-        text: String,
-        /// Whether the full output was truncated to this snippet.
-        truncated: bool,
-    },
-    /// Output stored outside the graph.
-    BlobRef(BlobRef),
-}
-
-impl OutputRecord {
-    /// Build an untruncated inline output record.
-    #[must_use]
-    pub fn inline(text: impl Into<String>) -> Self {
-        Self::Inline {
-            text: text.into(),
-            truncated: false,
-        }
-    }
-
-    /// Build a truncated inline output record.
-    #[must_use]
-    pub fn truncated(text: impl Into<String>) -> Self {
-        Self::Inline {
-            text: text.into(),
-            truncated: true,
-        }
-    }
-
-    /// Build a blob-backed output record.
-    #[must_use]
-    pub const fn blob(reference: BlobRef) -> Self {
-        Self::BlobRef(reference)
-    }
-}
+use crate::OutputRecord;
 
 /// One command execution record.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
