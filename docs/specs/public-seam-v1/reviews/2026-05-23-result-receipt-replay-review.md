@@ -111,3 +111,9 @@ Failed-cost follow-up:
 - `crates/leaven-public-seam/tests/plan_document.rs::plan_execution_produces_failed_paid_lm_call_and_charge_receipts` now proves the public-seam execution harness can produce a failed paid `lm_complete` call receipt, a linked charge receipt, and a typed `PlanError`.
 - `crates/leaven-public-seam/tests/plan_result.rs::plan_result_rejects_failed_call_costs_without_charge_receipts` now also rejects linked charge receipts whose cost is smaller than the failed call cost.
 - This is useful evidence for `ps1.receipts.failed_costs`, but the row remains pending until the follow-up receives its own adversarial sign-off.
+
+Failed-cost engine-ledger follow-up:
+
+- `crates/leaven-run/src/public_seam.rs::PublicFailedCallReceiptContext::failed_paid_call_plan_result` now projects only a matched engine `RunEvent::BudgetCharged` plus `RunEvent::Error` pair into a failed public-seam call receipt and matching charge receipt. Zero-cost, non-budget, non-error, or stage-mismatched events are rejected before a Plan Result is produced.
+- `crates/leaven-run/tests/scoring_evaluator.rs::failed_runtime_lm_cost_projects_to_public_seam_call_and_charge_receipts` drives a controlled scorer-side provider failure through `RunContext::evaluate_with`, confirms the engine budget ledger charged the failed evaluation, validates the projected failed `lm_complete` call/charge receipt through `leaven-public-seam`, and rejects missing failure provenance plus a partial charge mutation.
+- This narrows the prior blocker by adding engine budget-ledger evidence, but `ps1.receipts.failed_costs` remains pending until an adversarial reviewer signs off that this runtime projection is sufficient for the row rather than only scaffolding evidence.

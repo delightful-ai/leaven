@@ -359,12 +359,17 @@ rows:
     fake_pass_rejected: Counting only successful calls as receipted work.
     minimum_closeout_level: semantic_denial
     positive_test_evidence:
+      - crates/leaven-run/tests/scoring_evaluator.rs::failed_runtime_lm_cost_projects_to_public_seam_call_and_charge_receipts
       - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_produces_failed_paid_lm_call_and_charge_receipts
       - crates/leaven-public-seam/tests/plan_result.rs::plan_result_accepts_typed_success_and_failure_envelopes
     negative_test_evidence:
+      - crates/leaven-run/tests/scoring_evaluator.rs::failed_runtime_lm_cost_projects_to_public_seam_call_and_charge_receipts
       - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_result_rejects_missing_operation_receipts
       - crates/leaven-public-seam/tests/plan_result.rs::plan_result_rejects_failed_call_costs_without_charge_receipts
     implementation_evidence:
+      - crates/leaven-engine/src/context/run_context.rs::RunContext::charge_failed_evaluation_cost
+      - crates/leaven-run/src/public_seam.rs::PublicFailedCallReceiptContext
+      - crates/leaven-run/src/public_seam.rs::PublicFailedCallReceiptContext::failed_paid_call_plan_result
       - crates/leaven-public-seam/src/result.rs::validate_failed_call_charges
       - crates/leaven-public-seam/src/result.rs::charge_index
       - crates/leaven-public-seam/src/result.rs::is_failed_call_with_cost
