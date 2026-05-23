@@ -546,10 +546,13 @@ rows:
     minimum_closeout_level: semantic_denial
     positive_test_evidence:
       - crates/leaven-public-seam/tests/capability_document.rs::aggregate_budget_ledger_enforces_cross_grant_totals_and_roles
+      - crates/leaven-engine/tests/budget_laws.rs::budget_ledger_counts_mixed_runtime_roles_and_delegated_work_against_aggregate_axes
     negative_test_evidence:
       - crates/leaven-public-seam/tests/capability_document.rs::aggregate_budget_ledger_rejects_role_and_concurrency_overruns
       - crates/leaven-public-seam/tests/capability_document.rs::aggregate_budget_ledger_counts_role_spend_against_total_budget
+      - crates/leaven-engine/tests/budget_laws.rs::budget_ledger_counts_mixed_runtime_roles_and_delegated_work_against_aggregate_axes
     implementation_evidence:
+      - crates/leaven-engine/src/budget.rs::BudgetLedger
       - crates/leaven-public-seam/src/capability.rs::CapabilityBudgetLedger
       - crates/leaven-public-seam/src/capability.rs::CapabilityBudgetUsage
       - crates/leaven-public-seam/AGENTS.md
