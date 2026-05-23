@@ -68,8 +68,9 @@ fingerprints, and per-grant limits.
 Crate-root exports for `CapabilityBudgetLedger`, `CapabilityBudgetUsage`, and
 `CapabilityBudgetReservation` are advanced public seam contracts. They prove
 aggregate capability-budget accounting against the locked capability document
-only; they are not the engine budget ledger, ACP session accounting, provider
-runtime metering, or durable spend persistence.
+and can lower aggregate limits/usages into `leaven-kernel` `Budget`/`Cost`
+primitives for the engine ledger. They are not the engine budget ledger, ACP
+session accounting, provider runtime metering, or durable spend persistence.
 
 Crate-root export `CapabilityDelegation` is an advanced public seam contract.
 It proves semantic parent-child capability attenuation and lineage facts at the

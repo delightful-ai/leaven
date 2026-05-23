@@ -3684,6 +3684,7 @@ dependencies = [
  "expect-test",
  "jcs-canonicalize",
  "jsonschema",
+ "leaven-engine",
  "leaven-evidence",
  "leaven-kernel",
  "serde",

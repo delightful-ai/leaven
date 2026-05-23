@@ -12,7 +12,10 @@ mod delegation;
 mod grant;
 mod registry;
 
-pub use budget::{CapabilityBudgetLedger, CapabilityBudgetReservation, CapabilityBudgetUsage};
+pub use budget::{
+    CapabilityBudgetLedger, CapabilityBudgetProjectionError, CapabilityBudgetReservation,
+    CapabilityBudgetUsage,
+};
 pub use delegation::CapabilityDelegation;
 pub use grant::{AuthorizedGrant, CapabilityLimitUsage};
 pub use registry::CapabilityRegistry;
