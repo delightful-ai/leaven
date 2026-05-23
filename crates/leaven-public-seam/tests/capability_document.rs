@@ -507,7 +507,7 @@ fn aggregate_budget_ledger_rejects_role_and_concurrency_overruns() {
 }
 
 #[test]
-fn aggregate_budget_ledger_counts_role_spend_against_total_budget() {
+fn aggregate_budget_ledger_rejects_role_spend_beyond_total_budget() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let document = CapabilityDocument::from_value(example_capability(&package)).unwrap();
     let mut ledger = CapabilityBudgetLedger::new(&document);
