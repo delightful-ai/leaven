@@ -133,6 +133,20 @@ Implementation after fourth block:
 - `crates/leaven-run/tests/scoring_evaluator.rs::scoring_evaluator_rejects_typed_runner_declaration_without_assessed_data_class` proves independent typed runner declarations cannot launder public-only reportable output into successful score evidence.
 - `crates/leaven-run/tests/scoring_evaluator.rs::judging_evaluator_rejects_typed_runner_declaration_without_assessed_data_class` proves the same denial for pairwise/listwise judging.
 
+Fresh verification after fourth follow-up:
+
+- `cargo fmt --check`
+- `CARGO_INCREMENTAL=0 cargo test -p leaven-run --test scoring_evaluator`
+- `CARGO_INCREMENTAL=0 cargo test -p leaven-public-seam --test plan_document submit_assessments`
+- `CARGO_INCREMENTAL=0 cargo test -p leaven-public-seam --test contract_package conformance_matrix_rows_are_unique_honest_and_reference_real_files -- --exact`
+- `CARGO_INCREMENTAL=0 cargo test -p leaven-run`
+- `CARGO_INCREMENTAL=0 cargo test -p leaven-public-seam`
+- `CARGO_INCREMENTAL=0 cargo clippy -p leaven-evidence -p leaven-run -p leaven-public-seam --tests -- -D warnings`
+- `CARGO_INCREMENTAL=0 cargo test -p leaven-evidence`
+- `CARGO_INCREMENTAL=0 cargo test -p leaven --test gepa_parity`
+- `CARGO_INCREMENTAL=0 cargo check -p p8_aime_gepa`
+- `CARGO_INCREMENTAL=0 cargo test -p leaven --test topology_contract`
+
 Current limits after fourth block:
 
 - This note records the Mencius block and follow-up implementation, but it still does not sign off `ps1.evaluator.score_output`.
