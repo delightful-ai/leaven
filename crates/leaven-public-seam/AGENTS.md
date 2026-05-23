@@ -73,6 +73,12 @@ seam contracts. They prove locked V1 transport-scope selection and MCP/watch/
 legacy-worker exclusion only; they are not an ACP process implementation,
 session lifecycle, authentication handshake, permission loop, or worker runtime.
 
+Crate-root exports for `PlanDocument` and `PlanOperationKind` are advanced
+public seam contracts. They prove active-schema Plan IR document validation and
+Let/Call/Write family classification only; they are not plan execution, lowering
+to engine operations, cache behavior, graph mutation authority, or runtime
+consistency enforcement.
+
 ## Proof Anchors
 
 - `tests/contract_package.rs` proves active package authority, manifest
@@ -80,6 +86,9 @@ session lifecycle, authentication handshake, permission loop, or worker runtime.
   notes-denominator mapping, fake-closeout rejection, deferred markers, and
   locked ACP-profile transport-scope refusal of MCP, legacy worker protocol,
   and watch runtime requests.
+- `tests/plan_document.rs` proves schema-backed Plan IR document classification
+  for typed Let/Call/Write documents and rejection of unknown core, call, write,
+  and top-level escape-hatch plan operations before execution.
 - `tests/capability_document.rs` proves opaque token handles resolve to
   structured capability documents and reject bare, missing, expired, revoked,
   or binding-mismatched tokens. It also proves grant-envelope authorization and

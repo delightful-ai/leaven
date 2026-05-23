@@ -377,15 +377,22 @@ fn deferred_watch_rejects_runtime_subscription_and_success_claims() {
         PublicSeamError::ExampleValidation { .. }
     ));
 
-    assert!(matches!(
-        scope
-            .authorize_worker_transport(WorkerTransportRequest::new(
-                WorkerTransportKind::AcpProfile,
-                ["leaven/watch.start"]
-            ))
-            .unwrap_err(),
-        PublicSeamError::InvalidScope { .. }
-    ));
+    for method in [
+        "leaven/watch.start",
+        "leaven/watch.subscribe",
+        "leaven/watch.stream",
+        "leaven/watch.ack",
+    ] {
+        assert!(matches!(
+            scope
+                .authorize_worker_transport(WorkerTransportRequest::new(
+                    WorkerTransportKind::AcpProfile,
+                    [method]
+                ))
+                .unwrap_err(),
+            PublicSeamError::InvalidScope { .. }
+        ));
+    }
 
     let mut watch_runtime =
         WorkerTransportRequest::new(WorkerTransportKind::AcpProfile, ["leaven/graph.query"]);

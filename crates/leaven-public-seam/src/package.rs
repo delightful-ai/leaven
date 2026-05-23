@@ -6,7 +6,7 @@ use jsonschema::{Retrieve, Uri};
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::{ConformanceMatrix, MatrixRowStatus, PublicSeamError};
+use crate::{ConformanceMatrix, MatrixRowStatus, PlanDocument, PublicSeamError};
 
 const ACTIVE_PACKAGE_RELATIVE: &str = "docs/specs/public-seam-v1";
 const CAPABILITY_EXAMPLE: &str = "evaluator_capability.v0.3.example.json";
@@ -692,6 +692,12 @@ impl PublicSeamPackage {
         value: &Value,
     ) -> Result<(), PublicSeamError> {
         self.validate_value_against_schema(&self.root.join(schema), schema, pointer, value)
+    }
+
+    /// Validates a Plan IR document through the active V1 schema and semantic seam checks.
+    pub fn validate_plan_document(&self, value: &Value) -> Result<PlanDocument, PublicSeamError> {
+        self.validate_arbitrary_value("leaven.plan.v1.schema.json", "/plan", value)?;
+        PlanDocument::from_schema_valid_value(value)
     }
 
     fn inventory_for_manifest(
