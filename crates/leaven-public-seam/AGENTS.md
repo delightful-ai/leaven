@@ -92,6 +92,12 @@ closed `PlanError` shape, and replayability roll-up at the wire-envelope layer
 only; they are not plan-run production, evaluator execution, runtime receipt
 production, graph mutation, or cache replay behavior.
 
+Crate-root export `EvidenceEnvelopeDocument` is an advanced public seam
+contract. It proves active-schema evidence-envelope visibility, data-class, and
+source-receipt preservation plus target-derived data-class coverage at the
+wire-envelope layer only; it is not evaluator evidence production, redaction
+execution, receipt persistence, or data-class propagation through runtime stages.
+
 Crate-root export `DeferredWatchReplacement` is an advanced public seam
 contract. It proves that the V1 deferred watch marker can route only to a finite
 `consistency.since_revision` event-diff Plan IR document; it is not watch
@@ -114,6 +120,11 @@ backpressure, or runtime watch support.
   unpinned path syntax, non-subset JSONPath filters/functions/scripts, non-
   strict template dialects, partials, unescaped templates, delimiter changes,
   and custom-filter syntax.
+- `tests/evidence_envelope.rs` proves active-schema EvidenceEnvelope values
+  preserve visibility projections, projection data classes, top-level target-
+  derived data classes, and read/effect/write source receipt refs at the public-
+  seam validation layer. It does not prove evaluator/evidence runtime production
+  or public PlanResult projection.
 - `tests/plan_result.rs` proves active-schema Plan Result envelopes carry typed
   success and failure values, receipts, errors, charges, capability and policy
   fingerprints, receipt timing, data classes, and closed `PlanError` values at

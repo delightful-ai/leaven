@@ -3,6 +3,7 @@
 mod capability;
 mod dialect;
 mod error;
+mod evidence;
 mod fingerprint;
 mod matrix;
 mod package;
@@ -17,6 +18,7 @@ pub use capability::{
 };
 pub use dialect::PinnedDialectEvaluator;
 pub use error::PublicSeamError;
+pub use evidence::EvidenceEnvelopeDocument;
 pub use fingerprint::SchemaFingerprint;
 pub use matrix::{ConformanceMatrix, ConformanceRow, MatrixRowStatus, MinimumCloseoutLevel};
 pub use package::{
