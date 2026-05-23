@@ -269,6 +269,15 @@ fn plan_result_rejects_failed_call_costs_without_charge_receipts() {
             .unwrap_err(),
         PublicSeamError::InvalidPlanResult { .. }
     ));
+
+    let mut wrong_charge_source = typed_failure_result();
+    wrong_charge_source["charges"][0]["source_receipt"] = json!("lmrec_other");
+    assert!(matches!(
+        package
+            .validate_plan_result_document(&wrong_charge_source)
+            .unwrap_err(),
+        PublicSeamError::InvalidPlanResult { .. }
+    ));
 }
 
 #[test]
