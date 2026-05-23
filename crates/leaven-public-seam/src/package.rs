@@ -684,6 +684,16 @@ impl PublicSeamPackage {
         Ok(methods.into_iter().collect())
     }
 
+    /// Validates an arbitrary value against one active package schema.
+    pub fn validate_arbitrary_value(
+        &self,
+        schema: &str,
+        pointer: &str,
+        value: &Value,
+    ) -> Result<(), PublicSeamError> {
+        self.validate_value_against_schema(&self.root.join(schema), schema, pointer, value)
+    }
+
     fn inventory_for_manifest(
         &self,
         manifest: &Manifest,
