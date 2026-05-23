@@ -290,7 +290,18 @@ rows:
       token, or binding mismatch is denied before the call executes.
     fake_pass_rejected: Passing token strings around as authorization facts.
     minimum_closeout_level: semantic_denial
-    status: pending
+    positive_test_evidence:
+      - crates/leaven-public-seam/tests/capability_document.rs::opaque_token_resolves_to_structured_capability_document
+    negative_test_evidence:
+      - crates/leaven-public-seam/tests/capability_document.rs::capability_resolution_rejects_bare_missing_expired_revoked_and_mismatched_tokens
+      - crates/leaven-public-seam/tests/capability_document.rs::capability_documents_must_satisfy_locked_schema_not_partial_struct_shape
+    implementation_evidence:
+      - crates/leaven-public-seam/src/capability.rs::CapabilityDocument::from_value
+      - crates/leaven-public-seam/src/capability.rs::CapabilityRegistry::resolve_opaque_for_new_operation
+      - crates/leaven-public-seam/src/capability.rs::Grant
+    review_evidence:
+      - docs/specs/public-seam-v1/reviews/2026-05-23-capability-document-review.md
+    status: proven
 
   - id: ps1.capability.grant_enforcement
     area: capability

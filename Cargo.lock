@@ -3680,6 +3680,7 @@ dependencies = [
 name = "leaven-public-seam"
 version = "0.0.0"
 dependencies = [
+ "chrono",
  "expect-test",
  "jcs-canonicalize",
  "jsonschema",
