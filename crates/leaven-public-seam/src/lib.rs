@@ -7,6 +7,7 @@ mod fingerprint;
 mod matrix;
 mod package;
 mod plan;
+mod result;
 mod watch;
 
 pub use capability::{
@@ -24,4 +25,5 @@ pub use package::{
     ValidationReport, WorkerTransportKind, WorkerTransportRequest,
 };
 pub use plan::{PlanDocument, PlanOperationKind};
+pub use result::{PlanResultDocument, Replayability};
 pub use watch::DeferredWatchReplacement;

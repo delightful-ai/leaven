@@ -97,6 +97,13 @@ pub enum PublicSeamError {
         message: String,
     },
 
+    /// A schema-valid plan result violates a public-seam semantic constraint.
+    #[error("invalid public seam plan result: {message}")]
+    InvalidPlanResult {
+        /// Human-readable reason.
+        message: String,
+    },
+
     /// A pinned public-seam mini-language rejected unsupported syntax.
     #[error("invalid public seam pinned dialect: {message}")]
     InvalidDialect {
