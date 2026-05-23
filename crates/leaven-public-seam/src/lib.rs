@@ -5,6 +5,7 @@ mod error;
 mod fingerprint;
 mod matrix;
 mod package;
+mod plan;
 
 pub use capability::{
     AuthorizedGrant, CapabilityDelegation, CapabilityDenial, CapabilityDenialKind,
@@ -19,3 +20,4 @@ pub use package::{
     ConformanceTestKind, ContractInventory, PublicSeamPackage, V1Scope, ValidatedExample,
     ValidationReport, WorkerTransportKind, WorkerTransportRequest,
 };
+pub use plan::{PlanDocument, PlanOperationKind};

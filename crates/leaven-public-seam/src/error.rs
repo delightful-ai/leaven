@@ -90,6 +90,13 @@ pub enum PublicSeamError {
         message: String,
     },
 
+    /// A schema-valid plan violates a public-seam semantic constraint.
+    #[error("invalid public seam plan: {message}")]
+    InvalidPlan {
+        /// Human-readable reason.
+        message: String,
+    },
+
     /// RFC 8785/JCS schema fingerprinting failed.
     #[error("schema fingerprinting failed: {message}")]
     Fingerprint {
