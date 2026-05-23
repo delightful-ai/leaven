@@ -7,7 +7,7 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use crate::{
-    ConformanceMatrix, DeferredWatchReplacement, EvaluationJobDocument,
+    CallAuthorityReport, ConformanceMatrix, DeferredWatchReplacement, EvaluationJobDocument,
     EvaluationRequestReceiptDocument, EvidenceEnvelopeDocument, MatrixRowStatus,
     OutputRecordDocument, PinnedDialectEvaluator, PlanDocument, PlanResultDocument,
     ProposalAuthorityReport, PublicSeamError, StagePayloadDocument,
@@ -808,6 +808,16 @@ impl PublicSeamPackage {
     ) -> Result<ProposalAuthorityReport, PublicSeamError> {
         self.validate_plan_document(plan)?;
         crate::proposal_authority::validate(plan, capability)
+    }
+
+    /// Validates plan call input data classes against declared and capability-level denials.
+    pub fn validate_call_authority_document(
+        &self,
+        plan: &Value,
+        capability: &crate::CapabilityDocument,
+    ) -> Result<CallAuthorityReport, PublicSeamError> {
+        self.validate_plan_document(plan)?;
+        crate::call_authority::validate(plan, capability)
     }
 
     /// Validates a Plan Result document through the active V1 schema and semantic seam checks.

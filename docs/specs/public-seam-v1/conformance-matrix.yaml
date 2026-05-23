@@ -552,18 +552,25 @@ rows:
     fake_pass_rejected: Checking data classes only at initial case read.
     minimum_closeout_level: semantic_denial
     positive_test_evidence:
+      - crates/leaven-public-seam/tests/call_authority.rs::call_authority_accepts_lm_agent_and_sandbox_input_classes
       - crates/leaven-public-seam/tests/plan_result.rs::plan_result_preserves_value_visibility_data_classes
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_preserves_nested_evidence_visibility_data_classes_and_receipts
     negative_test_evidence:
+      - crates/leaven-public-seam/tests/call_authority.rs::call_authority_rejects_forbidden_input_classes_before_execution
+      - crates/leaven-public-seam/tests/call_authority.rs::call_authority_rejects_declared_forbidden_intersections_even_when_grant_allows
       - crates/leaven-public-seam/tests/plan_result.rs::plan_result_preserves_value_visibility_data_classes
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_evidence_source_receipts_that_are_missing_or_wrong_kind
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_nested_score_output_data_class_gaps
     implementation_evidence:
+      - crates/leaven-public-seam/src/call_authority.rs::CallAuthorityReport
+      - crates/leaven-public-seam/src/call_authority.rs::validate
+      - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_call_authority_document
       - crates/leaven-public-seam/src/result.rs::validate_value_visibility
       - crates/leaven-public-seam/src/result.rs::collect_score_output_data_classes_from_value
       - crates/leaven-public-seam/src/result.rs::collect_evidence_data_classes_from_value
       - crates/leaven-public-seam/src/result.rs::collect_workspace_listing_data_classes
       - crates/leaven-public-seam/src/evidence.rs::EvidenceEnvelopeDocument
+      - crates/leaven-public-seam/AGENTS.md
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-result-receipt-replay-review.md
     status: pending

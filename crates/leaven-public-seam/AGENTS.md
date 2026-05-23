@@ -83,9 +83,9 @@ Crate-root exports for `PlanDocument`, `PlanOperationKind`,
 `PlanExecutionContext`, `PlanExecutionHost`, `PlanExecutionReport`,
 `PlanGraphReadScope`, `PlanGraphQueryRequest`, `PlanGraphQueryOutcome`,
 `PlanLmCompleteRequest`, `PlanLmCompleteOutcome`, `PlanEmitRunEventRequest`,
-`PlanEmitRunEventOutcome`, and `ProposalAuthorityReport` are advanced public
-seam contracts. They prove active-schema Plan IR document validation and
-Let/Call/Write family
+`PlanEmitRunEventOutcome`, `CallAuthorityReport`, and
+`ProposalAuthorityReport` are advanced public seam contracts. They prove
+active-schema Plan IR document validation and Let/Call/Write family
 classification plus representative lowering/execution of literal Let,
 `graph_query` reads, `lm_complete` Call, and `emit_run_event` Write into a
 validated Plan Result with query/call/write receipts. The
@@ -97,10 +97,12 @@ representative harness distinguishes `latest_at_start`, `at_revision`, and
 `since_revision` graph-read scopes plus `execute`, `dry_run`, `require_cached`,
 and `replay` mode side-effect surfaces: dry-run validates without host effects,
 require-cached refuses cache misses without live provider calls, and replay
-loads supplied receipts without live call/write host effects. The proposal
-authority route checks `submit_proposal_batch` and `apply_proposal_batch`
-writes against capability-granted effects, surfaces, schemas, and apply
-permission. They are not ACP delivery, provider runtime execution, general cache
+loads supplied receipts without live call/write host effects. The call-authority
+route checks plan Call `input_classes` against call-local and
+capability-declared forbidden classes before execution. The proposal authority
+route checks `submit_proposal_batch` and `apply_proposal_batch` writes against
+capability-granted effects, surfaces, schemas, and apply permission. They are
+not ACP delivery, provider runtime execution, general cache
 backend behavior, graph mutation authority, full Plan IR coverage, evaluator
 runtime production, or engine RunGraph revision reads.
 
@@ -175,6 +177,11 @@ backpressure, or runtime watch support.
   checks representative query/call/write receipt hashes against Plan IR
   preimages and rejects same-prefix mismatches, but it is not a general ACP
   replay service or provider runtime audit log.
+- `tests/call_authority.rs` proves schema-valid Call ops are checked against
+  capability-granted input data classes and call-local forbidden data-class
+  intersections before execution. It rejects `case.target` and other forbidden
+  classes even when the Plan IR schema itself accepts the call shape. It does
+  not execute LM, agent, sandbox, or human-review runtimes.
 - `tests/proposal_authority.rs` proves schema-valid proposal writes are checked
   against capability-granted proposal effects, change schemas, surface
   fingerprints, and apply permission. It rejects submit-only apply attempts,
