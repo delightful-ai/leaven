@@ -1,11 +1,22 @@
-use leaven_core::{Artifact, ArtifactIdentity, Proposal, ProposalBatch, ProposalBatchSemantics};
-use leaven_engine::{ApplyOutcome, BudgetLedger, ProposalBatchReport, RunContext, RunGraph};
+use futures::executor::block_on;
+use leaven_core::{
+    Artifact, ArtifactIdentity, Assessment, AssessmentGranularity, AssessmentTarget,
+    EvaluationPurpose, EvaluationRequest, EvaluationSet, Evidence, OptimizationProblem, Proposal,
+    ProposalBatch, ProposalBatchSemantics, ResolvedEvaluationRequest,
+};
+use leaven_engine::{
+    ApplyOutcome, BudgetLedger, CaseSet, EvaluationContext, EvaluationError, Evaluator,
+    ProposalBatchReport, RunContext, RunGraph,
+};
 use leaven_kernel::{
-    Budget, CandidateId, ContentId, Cost, MetadataBag, ProposalBatchId, RunId, StageId,
+    AssessmentId, Budget, CandidateId, ContentId, Cost, EvaluatorId, Fingerprint, MetadataBag,
+    Metered, ProposalBatchId, ProposalId, RunId, StageId,
 };
 use leaven_run::{
+    PublicAssessmentWriteReceiptContext, PublicAssessmentWriteReceiptProjectionError,
     PublicProposalWriteReceiptContext, PublicProposalWriteReceiptProjectionError, RunProblem,
 };
+use leaven_store_inline::InlineEvidenceStore;
 
 #[test]
 fn runcontext_proposal_writes_project_to_public_seam_receipts() {
@@ -62,6 +73,46 @@ fn proposal_write_projection_rejects_receipts_not_backed_by_runcontext_graph_tru
         PublicProposalWriteReceiptProjectionError::CreatedCandidateNotGraphBacked
     ));
 
+    let mut wrong_outcome_proposal = apply_report.clone();
+    wrong_outcome_proposal.outcomes[0].proposal_id = ProposalId::new();
+    let wrong_outcome = context
+        .proposal_apply_plan_result(&graph_view, &batch_report, &wrong_outcome_proposal)
+        .unwrap_err();
+    assert!(matches!(
+        wrong_outcome,
+        PublicProposalWriteReceiptProjectionError::ApplyOutcomeMismatch
+    ));
+
+    let mut empty_apply = apply_report.clone();
+    empty_apply.outcomes.clear();
+    let empty_apply = context
+        .proposal_apply_plan_result(&graph_view, &batch_report, &empty_apply)
+        .unwrap_err();
+    assert!(matches!(
+        empty_apply,
+        PublicProposalWriteReceiptProjectionError::EmptyApplyBatch
+    ));
+
+    let mut partial_apply = apply_report.clone();
+    partial_apply.outcomes.pop();
+    let partial_apply = context
+        .proposal_apply_plan_result(&graph_view, &batch_report, &partial_apply)
+        .unwrap_err();
+    assert!(matches!(
+        partial_apply,
+        PublicProposalWriteReceiptProjectionError::ApplyOutcomeSetMismatch
+    ));
+
+    let mut duplicate_apply = apply_report.clone();
+    duplicate_apply.outcomes[1] = duplicate_apply.outcomes[0].clone();
+    let duplicate_apply = context
+        .proposal_apply_plan_result(&graph_view, &batch_report, &duplicate_apply)
+        .unwrap_err();
+    assert!(matches!(
+        duplicate_apply,
+        PublicProposalWriteReceiptProjectionError::ApplyOutcomeSetMismatch
+    ));
+
     let missing_timing = PublicProposalWriteReceiptContext::new(
         "plan_proposal_apply",
         "rev_proposal_base",
@@ -77,6 +128,108 @@ fn proposal_write_projection_rejects_receipts_not_backed_by_runcontext_graph_tru
     ));
 }
 
+#[test]
+fn runcontext_assessments_project_to_public_seam_submit_assessment_receipts() {
+    block_on(async {
+        let package = leaven_public_seam::PublicSeamPackage::active_from_repo(workspace_root())
+            .expect("public seam package loads from workspace");
+        let (mut graph, mut budget, candidates) = graph_with_eval_seeds();
+        let case_set = CaseSet::new(vec!["case"]);
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
+            .with_case_set(&case_set)
+            .with_evidence_store(&store);
+        let mut report = ctx
+            .evaluate_with(&OneAssessmentEvaluator, independent_request(candidates))
+            .await
+            .unwrap();
+        report.assessment_ids.reverse();
+        let graph_view = ctx.graph();
+        let result = assessment_receipt_context()
+            .submit_assessments_plan_result(&graph_view, &report)
+            .expect("RunContext-backed assessments project");
+
+        let document = package
+            .validate_plan_result_document(&result)
+            .expect("projected assessment write receipt validates through public seam owner");
+        assert!(
+            document
+                .value_kinds()
+                .contains(&"assessment_batch_receipt".to_owned())
+        );
+        assert_eq!(result["receipts"][0]["write_kind"], "submit_assessments");
+        assert_eq!(
+            result["values"]["assessment_batch"]["per_assessment"][0]["replayability"],
+            "fully_managed"
+        );
+        assert_eq!(
+            result["values"]["assessment_batch"]["assessment_ids"]
+                .as_array()
+                .unwrap()
+                .len(),
+            2
+        );
+    });
+}
+
+#[test]
+fn assessment_write_projection_rejects_global_bucket_assessment_ids() {
+    block_on(async {
+        let (mut graph, mut budget, candidate) = graph_with_eval_seed();
+        let case_set = CaseSet::new(vec!["case"]);
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
+            .with_case_set(&case_set)
+            .with_evidence_store(&store);
+        let first = ctx
+            .evaluate_with(
+                &OneAssessmentEvaluator,
+                independent_request(vec![candidate]),
+            )
+            .await
+            .unwrap();
+        let second = ctx
+            .evaluate_with(
+                &OneAssessmentEvaluator,
+                independent_request(vec![candidate]),
+            )
+            .await
+            .unwrap();
+        let graph_view = ctx.graph();
+        let context = assessment_receipt_context();
+
+        let mut forged = first.clone();
+        forged.assessment_ids[0] = AssessmentId::new();
+        let missing_assessment = context
+            .submit_assessments_plan_result(&graph_view, &forged)
+            .unwrap_err();
+        assert!(matches!(
+            missing_assessment,
+            PublicAssessmentWriteReceiptProjectionError::AssessmentNotInGraph
+        ));
+
+        let mut mismatched = second;
+        mismatched.assessment_ids = first.assessment_ids;
+        let request_mismatch = context
+            .submit_assessments_plan_result(&graph_view, &mismatched)
+            .unwrap_err();
+        assert!(matches!(
+            request_mismatch,
+            PublicAssessmentWriteReceiptProjectionError::AssessmentRequestMismatch
+        ));
+
+        let mut empty = mismatched;
+        empty.assessment_ids.clear();
+        let empty_batch = context
+            .submit_assessments_plan_result(&graph_view, &empty)
+            .unwrap_err();
+        assert!(matches!(
+            empty_batch,
+            PublicAssessmentWriteReceiptProjectionError::EmptyAssessmentBatch
+        ));
+    });
+}
+
 fn graph_with_applied_proposal() -> (
     RunGraph<RunProblem<TextArtifact, ()>>,
     BudgetLedger,
@@ -87,12 +240,14 @@ fn graph_with_applied_proposal() -> (
     let mut budget = BudgetLedger::new(Budget::unlimited());
     let mut ctx = RunContext::<RunProblem<TextArtifact, ()>>::new(&mut graph, &mut budget);
     let seed = ctx.insert_seed(TextArtifact(1), 0).unwrap();
-    let proposal = Proposal::mutate(seed, 2).build();
     let batch_report = ctx
         .record_proposal_batch(
             StageId::custom("public-seam-test"),
             ProposalBatch {
-                proposals: vec![proposal],
+                proposals: vec![
+                    Proposal::mutate(seed, 2).build(),
+                    Proposal::mutate(seed, 3).build(),
+                ],
                 semantics: ProposalBatchSemantics::Alternatives,
                 metadata: MetadataBag::new(),
             },
@@ -114,6 +269,49 @@ fn proposal_receipt_context() -> PublicProposalWriteReceiptContext {
     )
     .with_submit_timing("2026-05-23T12:00:00Z", "2026-05-23T12:00:01Z")
     .with_apply_timing("2026-05-23T12:00:01Z", "2026-05-23T12:00:02Z")
+}
+
+fn assessment_receipt_context() -> PublicAssessmentWriteReceiptContext {
+    PublicAssessmentWriteReceiptContext::new(
+        "plan_assessment_submit",
+        "rev_assessment_base",
+        "rev_assessment_final",
+        "fp_cap_sha256_assessment",
+        "fp_policy_sha256_assessment",
+    )
+    .with_timing("2026-05-23T12:00:00Z", "2026-05-23T12:00:01Z")
+}
+
+fn graph_with_eval_seed() -> (RunGraph<TestProblem>, BudgetLedger, CandidateId) {
+    let mut graph = RunGraph::<TestProblem>::new(RunId::new());
+    let mut budget = BudgetLedger::new(Budget::unlimited());
+    let candidate = {
+        let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+        ctx.insert_seed(TextArtifact(1), 0).unwrap()
+    };
+    (graph, budget, candidate)
+}
+
+fn graph_with_eval_seeds() -> (RunGraph<TestProblem>, BudgetLedger, Vec<CandidateId>) {
+    let mut graph = RunGraph::<TestProblem>::new(RunId::new());
+    let mut budget = BudgetLedger::new(Budget::unlimited());
+    let candidates = {
+        let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+        vec![
+            ctx.insert_seed(TextArtifact(1), 0).unwrap(),
+            ctx.insert_seed(TextArtifact(2), 1).unwrap(),
+        ]
+    };
+    (graph, budget, candidates)
+}
+
+fn independent_request(candidates: Vec<CandidateId>) -> EvaluationRequest {
+    EvaluationRequest::Independent {
+        candidates,
+        set: EvaluationSet::All,
+        granularity: AssessmentGranularity::PerCase,
+        purpose: EvaluationPurpose::Validation,
+    }
 }
 
 fn workspace_root() -> std::path::PathBuf {
@@ -150,5 +348,54 @@ impl Artifact for TextArtifact {
 
     fn apply_change(&self, change: &Self::Change) -> Result<Self, Self::ApplyError> {
         Ok(Self(*change))
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct TestEvidence;
+
+impl Evidence for TestEvidence {}
+
+struct TestProblem;
+
+impl OptimizationProblem for TestProblem {
+    type Artifact = TextArtifact;
+    type Case = &'static str;
+    type Evidence = TestEvidence;
+    type ProposalAnnotations = ();
+}
+
+struct OneAssessmentEvaluator;
+
+impl Evaluator<TestProblem> for OneAssessmentEvaluator {
+    fn id(&self) -> EvaluatorId {
+        EvaluatorId::PRIMARY
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        Fingerprint::from_bytes([31; 32])
+    }
+
+    async fn evaluate(
+        &self,
+        request: ResolvedEvaluationRequest,
+        _ctx: EvaluationContext<'_, TestProblem>,
+    ) -> Result<Metered<Vec<Assessment<TestProblem>>>, EvaluationError> {
+        let leaven_core::ResolvedRequestKind::Independent { candidates } = request.kind else {
+            return Err(EvaluationError::Message("unsupported request".to_owned()));
+        };
+        Ok(Metered::new(
+            candidates
+                .into_iter()
+                .map(|candidate| Assessment::Independent {
+                    candidate,
+                    target: AssessmentTarget::Unscoped,
+                    evidence: TestEvidence,
+                    cost: Cost::zero(),
+                    metadata: MetadataBag::new(),
+                })
+                .collect(),
+            Cost::zero(),
+        ))
     }
 }

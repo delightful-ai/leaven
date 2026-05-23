@@ -24,6 +24,7 @@ pub use evidence::{
 };
 pub use leaven_engine::CachePolicy;
 pub use public_seam::{
+    PublicAssessmentWriteReceiptContext, PublicAssessmentWriteReceiptProjectionError,
     PublicEvaluationJobContext, PublicEvaluationJobProjectionError, PublicFailedCallKind,
     PublicFailedCallReceiptContext, PublicFailedCallReceiptProjectionError,
     PublicProposalWriteReceiptContext, PublicProposalWriteReceiptProjectionError,
