@@ -518,6 +518,11 @@ impl EvaluationRequestView<'_> {
     }
 
     #[must_use]
+    pub fn evaluator_fingerprint(&self) -> leaven_kernel::Fingerprint {
+        self.record.evaluator_fingerprint
+    }
+
+    #[must_use]
     pub fn request(&self) -> &EvaluationRequest {
         &self.record.request
     }

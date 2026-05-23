@@ -446,11 +446,13 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
             granularity: request_granularity(&request),
             purpose: request_purpose(&request),
         };
+        let evaluator_fingerprint = evaluator.fingerprint();
         let policy = evaluator.cache_policy(&resolved_request);
         let cache_key =
-            self.evaluation_cache_key(evaluator.fingerprint(), policy.clone(), &resolved_request);
+            self.evaluation_cache_key(evaluator_fingerprint, policy.clone(), &resolved_request);
         let request_id = self.record_evaluation_request(
             &evaluator_id,
+            evaluator_fingerprint,
             request,
             resolved_set.clone(),
             candidate_count(&resolved_request),
@@ -508,11 +510,13 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
             granularity: request_granularity(&request),
             purpose: request_purpose(&request),
         };
+        let evaluator_fingerprint = evaluator.fingerprint();
         let policy = evaluator.cache_policy(&resolved_request);
         let cache_key =
-            self.evaluation_cache_key(evaluator.fingerprint(), policy.clone(), &resolved_request);
+            self.evaluation_cache_key(evaluator_fingerprint, policy.clone(), &resolved_request);
         let request_id = self.record_evaluation_request(
             &evaluator_id,
+            evaluator_fingerprint,
             request,
             resolved_set.clone(),
             candidate_count(&resolved_request),
@@ -652,13 +656,17 @@ impl<'a, P: OptimizationProblem> RunContext<'a, P> {
     fn record_evaluation_request(
         &mut self,
         evaluator: &EvaluatorId,
+        evaluator_fingerprint: leaven_kernel::Fingerprint,
         request: EvaluationRequest,
         resolved_set: leaven_core::ResolvedEvaluationSet,
         candidate_count: usize,
     ) -> EvaluationRequestId {
-        let request_id =
-            self.graph
-                .record_evaluation_request(evaluator.clone(), request, resolved_set);
+        let request_id = self.graph.record_evaluation_request(
+            evaluator.clone(),
+            evaluator_fingerprint,
+            request,
+            resolved_set,
+        );
         self.emit(RunEvent::EvaluationRequested {
             request_id,
             evaluator: evaluator.clone(),

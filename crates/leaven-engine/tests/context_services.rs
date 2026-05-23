@@ -264,6 +264,10 @@ fn evaluate_with_resolves_sets_stores_evidence_and_emits_events() {
             report.assessment_ids
         );
         assert_eq!(*request.evaluator(), EvaluatorId::PRIMARY);
+        assert_eq!(
+            request.evaluator_fingerprint(),
+            Fingerprint::from_bytes([7; 32])
+        );
         assert_eq!(request.id(), report.request_id);
         assert!(matches!(
             request.request(),
@@ -299,6 +303,74 @@ fn evaluate_with_resolves_sets_stores_evidence_and_emits_events() {
                 ..
             }
         )));
+    });
+}
+
+#[test]
+fn evaluation_requests_record_evaluator_fingerprint_as_runtime_job_identity() {
+    block_on(async {
+        let (mut graph, mut budget) = graph_and_budget();
+        let case_set = CaseSet::new(vec!["case"]);
+        let store = InlineEvidenceStore::<TestEvidence>::new("inline");
+        let candidate = {
+            let mut seed_ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+            seed_ctx
+                .insert_seed(TextArtifact("abc".to_owned()), 0)
+                .unwrap()
+        };
+        let first = CountingEvaluator::new(CachePolicy::Never);
+        let second = FingerprintedEvaluator {
+            fingerprint: Fingerprint::from_bytes([19; 32]),
+        };
+
+        let first_report = {
+            let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
+                .with_case_set(&case_set)
+                .with_evidence_store(&store);
+            ctx.evaluate_with(&first, independent_request(candidate))
+                .await
+                .unwrap()
+        };
+        let second_report = {
+            let mut ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget)
+                .with_case_set(&case_set)
+                .with_evidence_store(&store);
+            ctx.evaluate_with(&second, independent_request(candidate))
+                .await
+                .unwrap()
+        };
+
+        let ctx = RunContext::<TestProblem>::new(&mut graph, &mut budget);
+        let first_request = ctx
+            .graph()
+            .evaluation_request(first_report.request_id)
+            .expect("first evaluation request is graph-visible");
+        let second_request = ctx
+            .graph()
+            .evaluation_request(second_report.request_id)
+            .expect("second evaluation request is graph-visible");
+
+        assert_eq!(first_request.evaluator(), second_request.evaluator());
+        assert_eq!(
+            first_request.evaluator_fingerprint(),
+            Fingerprint::from_bytes([7; 32])
+        );
+        assert_eq!(
+            second_request.evaluator_fingerprint(),
+            Fingerprint::from_bytes([19; 32])
+        );
+        assert_ne!(
+            first_request.evaluator_fingerprint(),
+            second_request.evaluator_fingerprint()
+        );
+        assert_eq!(
+            first_request.resolved_set().case_ids,
+            vec![CaseId::from_index(0)]
+        );
+        assert_eq!(
+            second_request.resolved_set().case_ids,
+            vec![CaseId::from_index(0)]
+        );
     });
 }
 
@@ -1546,6 +1618,43 @@ impl Evaluator<TestProblem> for CostedFailingEvaluator {
             "evaluation failed after judge call",
             Cost::llm_calls(2),
             StaticTestError("judge backend offline"),
+        ))
+    }
+}
+
+struct FingerprintedEvaluator {
+    fingerprint: Fingerprint,
+}
+
+impl Evaluator<TestProblem> for FingerprintedEvaluator {
+    fn id(&self) -> EvaluatorId {
+        EvaluatorId::PRIMARY
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        self.fingerprint
+    }
+
+    async fn evaluate(
+        &self,
+        request: ResolvedEvaluationRequest,
+        _ctx: EvaluationContext<'_, TestProblem>,
+    ) -> Result<Metered<Vec<Assessment<TestProblem>>>, EvaluationError> {
+        let leaven_core::ResolvedRequestKind::Independent { candidates } = request.kind else {
+            return Err(EvaluationError::Message("expected independent".to_owned()));
+        };
+        Ok(Metered::new(
+            candidates
+                .into_iter()
+                .map(|candidate| Assessment::Independent {
+                    candidate,
+                    target: AssessmentTarget::Unscoped,
+                    evidence: TestEvidence { score: 4.0 },
+                    cost: Cost::metric_calls(1),
+                    metadata: MetadataBag::new(),
+                })
+                .collect(),
+            Cost::metric_calls(1),
         ))
     }
 }

@@ -8,8 +8,8 @@ use leaven_core::{
 };
 use leaven_kernel::{
     ApplyAttemptId, AssessmentId, CandidateId, ErrorKind, ErrorRecord, EvaluationRequestId,
-    EvaluatorId, EvidenceRef, IterationId, MetadataBag, ProposalBatchId, ProposalId, RunId,
-    StageId, Timestamp, now,
+    EvaluatorId, EvidenceRef, Fingerprint, IterationId, MetadataBag, ProposalBatchId, ProposalId,
+    RunId, StageId, Timestamp, now,
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -124,6 +124,7 @@ pub enum AssessmentRecordTarget {
 pub struct EvaluationRequestRecord {
     pub id: EvaluationRequestId,
     pub evaluator: EvaluatorId,
+    pub evaluator_fingerprint: Fingerprint,
     pub request: EvaluationRequest,
     pub resolved_set: ResolvedEvaluationSet,
     pub created_at: Timestamp,
@@ -663,6 +664,7 @@ impl<P: OptimizationProblem> RunGraph<P> {
     pub(crate) fn record_evaluation_request(
         &mut self,
         evaluator: EvaluatorId,
+        evaluator_fingerprint: Fingerprint,
         request: EvaluationRequest,
         resolved_set: ResolvedEvaluationSet,
     ) -> EvaluationRequestId {
@@ -672,6 +674,7 @@ impl<P: OptimizationProblem> RunGraph<P> {
             EvaluationRequestRecord {
                 id,
                 evaluator,
+                evaluator_fingerprint,
                 request,
                 resolved_set,
                 created_at: now(),
