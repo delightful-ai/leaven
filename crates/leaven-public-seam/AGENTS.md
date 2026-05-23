@@ -79,6 +79,12 @@ Let/Call/Write family classification only; they are not plan execution, lowering
 to engine operations, cache behavior, graph mutation authority, or runtime
 consistency enforcement.
 
+Crate-root export `PinnedDialectEvaluator` is an advanced public seam contract.
+It proves deterministic parsing and replay for the V1 pinned wire
+mini-languages: RFC 6901 JSON Pointer, the Leaven RFC 9535 JSONPath subset, and
+`leaven.mustache.strict.v1`. It is not a full Plan IR executor, graph query
+engine, template-extension host, or authorization layer.
+
 Crate-root export `DeferredWatchReplacement` is an advanced public seam
 contract. It proves that the V1 deferred watch marker can route only to a finite
 `consistency.since_revision` event-diff Plan IR document; it is not watch
@@ -96,6 +102,11 @@ backpressure, or runtime watch support.
 - `tests/plan_document.rs` proves schema-backed Plan IR document classification
   for typed Let/Call/Write documents and rejection of unknown core, call, write,
   and top-level escape-hatch plan operations before execution.
+- `tests/plan_dialects.rs` proves pinned JSON Pointer, JSONPath, and strict
+  Mustache dialects are parsed and replayed deterministically, and rejects
+  unpinned path syntax, non-subset JSONPath filters/functions/scripts, non-
+  strict template dialects, partials, unescaped templates, delimiter changes,
+  and custom-filter syntax.
 - `tests/capability_document.rs` proves opaque token handles resolve to
   structured capability documents and reject bare, missing, expired, revoked,
   or binding-mismatched tokens. It also proves grant-envelope authorization and

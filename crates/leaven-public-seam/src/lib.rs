@@ -1,6 +1,7 @@
 //! Locked V1 public seam contract owner for external-language workers.
 
 mod capability;
+mod dialect;
 mod error;
 mod fingerprint;
 mod matrix;
@@ -13,6 +14,7 @@ pub use capability::{
     CapabilityDocument, CapabilityError, CapabilityGrantRequest, CapabilityLimitUsage,
     CapabilityRegistry,
 };
+pub use dialect::PinnedDialectEvaluator;
 pub use error::PublicSeamError;
 pub use fingerprint::SchemaFingerprint;
 pub use matrix::{ConformanceMatrix, ConformanceRow, MatrixRowStatus, MinimumCloseoutLevel};

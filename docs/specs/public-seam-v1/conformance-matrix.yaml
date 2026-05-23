@@ -149,7 +149,21 @@ rows:
       Mustache dialects are rejected with typed PlanError.
     fake_pass_rejected: Treating path/template strings as opaque user prose.
     minimum_closeout_level: semantic_denial
-    status: pending
+    positive_test_evidence:
+      - crates/leaven-public-seam/tests/plan_dialects.rs::pinned_dialects_replay_pointer_jsonpath_and_template_deterministically
+      - crates/leaven-public-seam/tests/plan_dialects.rs::pinned_dialects_do_not_inspect_arbitrary_json_data_slots
+    negative_test_evidence:
+      - crates/leaven-public-seam/tests/plan_dialects.rs::pinned_dialects_reject_unpinned_or_executable_syntax
+    implementation_evidence:
+      - crates/leaven-public-seam/src/dialect.rs::PinnedDialectEvaluator
+      - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::pinned_dialects
+      - crates/leaven-public-seam/src/plan.rs::PlanDocument::pinned_pointer_count
+      - crates/leaven-public-seam/src/plan.rs::PlanDocument::pinned_jsonpath_count
+      - crates/leaven-public-seam/src/plan.rs::PlanDocument::strict_template_count
+      - crates/leaven-public-seam/AGENTS.md
+    review_evidence:
+      - docs/specs/public-seam-v1/reviews/2026-05-23-plan-pinned-dialects-review.md
+    status: proven
 
   - id: ps1.plan.revision_modes
     area: plan_ir
