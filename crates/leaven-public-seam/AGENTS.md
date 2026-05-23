@@ -104,8 +104,9 @@ Crate-root exports for `PlanDocument`, `PlanOperationKind`,
 `PlanExecutionContext`, `PlanExecutionHost`, `PlanExecutionReport`,
 `PlanGraphReadScope`, `PlanGraphQueryRequest`, `PlanGraphQueryOutcome`,
 `PlanCaseQueryRequest`, `PlanCaseQueryOutcome`, `PlanLmCompleteRequest`,
-`PlanLmCompleteOutcome`, `PlanEmitRunEventRequest`, `PlanEmitRunEventOutcome`,
-`CallAuthorityReport`, and
+`PlanLmCompleteOutcome`, `PlanAgentRunRequest`, `PlanAgentRunOutcome`,
+`PlanSandboxExecRequest`, `PlanSandboxExecOutcome`,
+`PlanEmitRunEventRequest`, `PlanEmitRunEventOutcome`, `CallAuthorityReport`, and
 `ProposalAuthorityReport` are advanced public seam contracts. They prove
 active-schema Plan IR document validation and Let/Call/Write family
 classification plus representative lowering/execution of literal Let,
@@ -118,7 +119,14 @@ definitions, model role, sampling stop sequences, provider hints, final-message
 output, and JSON-schema output; it rejects extension/multimodal content rather
 than silently downgrading it to text. It still requires a concrete model before
 provider execution and is not provider runtime execution, streaming, ACP
-delivery, or full `ps1.lm.contract` closeout. The
+delivery, or full `ps1.lm.contract` closeout. The `PlanAgentRunRequest` and
+`PlanSandboxExecRequest` routes lower schema-valid `agent_run` and
+`sandbox_exec` calls into provider-neutral `leaven-agent::AgentRunRequest` and
+backend-neutral `leaven-workspace::Command` primitives, and the representative
+harness can emit typed `agent_session` and `sandbox_exec` Plan Result values
+with call receipts. These routes are not agent provider execution, sandbox
+backend execution, ACP delivery, proposal parsing, streaming delivery, or full
+agent/sandbox row closeout. The
 `PublicSeamPackage::execute_plan_document_with_capability` route
 requires capability-authorized evaluator request scope before a `case_query.load`
 host read can run. The
@@ -217,6 +225,13 @@ backpressure, or runtime watch support.
   final-message output, JSON-schema output, and extension-content refusal. This
   is public-seam-to-neutral-vocabulary proof only; LM provider runtime and ACP
   delivery rows remain pending until reviewed as their own tranche.
+- `tests/plan_document.rs` also proves representative `agent_run` and
+  `sandbox_exec` lowering into `leaven-agent` and `leaven-workspace` primitives
+  plus typed Plan Result receipt/value emission for those calls. It records the
+  current honest gap where schema-valid agent `json_schema` output is refused
+  until `leaven-agent` owns a structured-output primitive. This is public-seam
+  harness proof only; provider runtime, sandbox backend execution, streaming
+  delivery, and proposal parsing remain pending.
 - `tests/call_authority.rs` proves schema-valid Call ops are checked against
   capability-granted input data classes and call-local forbidden data-class
   intersections before execution. It rejects `case.target` and other forbidden

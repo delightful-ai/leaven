@@ -393,7 +393,13 @@ const EXPECTED_DEPENDENCIES: &[(&str, &[&str])] = &[
     ),
     (
         "leaven-public-seam",
-        &["leaven-evidence", "leaven-kernel", "leaven-lm"],
+        &[
+            "leaven-agent",
+            "leaven-evidence",
+            "leaven-kernel",
+            "leaven-lm",
+            "leaven-workspace",
+        ],
     ),
     (
         "leaven-python",

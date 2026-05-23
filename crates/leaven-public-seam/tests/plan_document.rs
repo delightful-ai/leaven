@@ -2,10 +2,11 @@ use std::collections::BTreeMap;
 
 use leaven_lm::{MessageContentPart, OutputMode, Role};
 use leaven_public_seam::{
-    CapabilityDocument, PlanCaseQueryOutcome, PlanCaseQueryRequest, PlanEmitRunEventOutcome,
-    PlanEmitRunEventRequest, PlanExecutionContext, PlanExecutionHost, PlanGraphQueryOutcome,
-    PlanGraphQueryRequest, PlanGraphReadScope, PlanLmCompleteOutcome, PlanLmCompleteRequest,
-    PlanOperationKind, PublicSeamError, PublicSeamPackage,
+    CapabilityDocument, PlanAgentRunOutcome, PlanAgentRunRequest, PlanCaseQueryOutcome,
+    PlanCaseQueryRequest, PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanExecutionContext,
+    PlanExecutionHost, PlanGraphQueryOutcome, PlanGraphQueryRequest, PlanGraphReadScope,
+    PlanLmCompleteOutcome, PlanLmCompleteRequest, PlanOperationKind, PlanSandboxExecOutcome,
+    PlanSandboxExecRequest, PublicSeamError, PublicSeamPackage,
 };
 use serde_json::{Value, json};
 
@@ -493,6 +494,75 @@ fn plan_execution_modes_require_cached_rejects_agent_and_sandbox_live_work() {
         assert!(host.cached_calls.is_empty());
         assert!(host.writes.is_empty());
     }
+}
+
+#[test]
+fn agent_run_and_sandbox_exec_lower_to_owned_runtime_primitives_and_emit_receipts() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut agent_host = RecordingPlanHost::default();
+    let agent_report = package
+        .execute_plan_document(
+            &execute_external_call_plan(agent_run_call()),
+            &plan_execution_context(),
+            &mut agent_host,
+        )
+        .unwrap();
+    assert_eq!(agent_host.calls, vec!["agent"]);
+    assert_eq!(agent_report.document().receipt_kinds(), &["call"]);
+    assert_eq!(
+        agent_report.value()["values"]["completion"]["kind"].as_str(),
+        Some("agent_session")
+    );
+    assert_eq!(
+        agent_report.value()["receipts"][0]["receipt"].as_str(),
+        Some("agentrec_completion")
+    );
+
+    let mut sandbox_host = RecordingPlanHost::default();
+    let sandbox_report = package
+        .execute_plan_document(
+            &execute_external_call_plan(sandbox_exec_call()),
+            &plan_execution_context(),
+            &mut sandbox_host,
+        )
+        .unwrap();
+    assert_eq!(sandbox_host.calls, vec!["sandbox"]);
+    assert_eq!(sandbox_report.document().receipt_kinds(), &["call"]);
+    assert_eq!(
+        sandbox_report.value()["values"]["completion"]["kind"].as_str(),
+        Some("sandbox_exec")
+    );
+    assert_eq!(
+        sandbox_report.value()["receipts"][0]["receipt"].as_str(),
+        Some("execrec_completion")
+    );
+}
+
+#[test]
+fn agent_run_lowering_rejects_schema_valid_json_schema_output_until_owned() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut plan = execute_external_call_plan(agent_run_call());
+    plan["ops"][1]["call"]["output"] = json!({
+        "kind": "json_schema",
+        "schema_fingerprint": "fp_schema_sha256_agentoutput",
+        "schema": {
+            "type": "object"
+        }
+    });
+    let mut host = RecordingPlanHost::default();
+
+    let error = package
+        .execute_plan_document(&plan, &plan_execution_context(), &mut host)
+        .unwrap_err();
+
+    assert!(
+        error
+            .to_string()
+            .contains("needs an owned leaven-agent structured-output primitive"),
+        "unexpected error: {error:?}"
+    );
+    assert!(host.calls.is_empty());
 }
 
 #[test]
@@ -1009,17 +1079,33 @@ fn require_cached_external_call_plan(call: Value) -> Value {
     plan
 }
 
+fn execute_external_call_plan(call: Value) -> Value {
+    let mut plan = require_cached_external_call_plan(call);
+    plan["mode"] = json!({"kind": "execute"});
+    plan
+}
+
 fn agent_run_call() -> Value {
     json!({
         "kind": "agent_run",
         "runtime": "codex",
         "workspace": "ws_planexec",
         "instructions": {
+            "system": "Stay within the workspace.",
             "task": "Inspect the plan output."
+        },
+        "tool_policy": {
+            "allow_shell": false,
+            "allowed_tools": ["read_file"]
         },
         "output": {
             "kind": "final_message",
             "max_bytes": 1024
+        },
+        "limits": {
+            "timeout_s": 30,
+            "max_turns": 4,
+            "max_usd_micro": 1000
         },
         "input_classes": ["public"]
     })
@@ -1029,12 +1115,17 @@ fn sandbox_exec_call() -> Value {
     json!({
         "kind": "sandbox_exec",
         "workspace": "ws_planexec",
-        "argv": ["true"],
+        "argv": ["python", "-c", "print('ok')"],
+        "cwd": "work",
+        "env": {
+            "LEAVEN_CASE": "case_1"
+        },
         "timeout_s": 1,
         "output": {
             "kind": "final_message",
             "max_bytes": 1024
         },
+        "stream_policy": "buffer",
         "input_classes": ["public"]
     })
 }
@@ -1412,6 +1503,67 @@ impl PlanExecutionHost for RecordingPlanHost {
         }
     }
 
+    fn agent_run(
+        &mut self,
+        request: PlanAgentRunRequest<'_>,
+    ) -> Result<PlanAgentRunOutcome, PublicSeamError> {
+        assert_eq!(request.name(), "completion");
+        assert_eq!(request.call()["kind"].as_str(), Some("agent_run"));
+        let agent_request = request.to_agent_run_request()?;
+        assert_eq!(
+            agent_request.instructions.system.as_deref(),
+            Some("Stay within the workspace.")
+        );
+        assert_eq!(agent_request.instructions.task, "Inspect the plan output.");
+        assert_eq!(agent_request.cwd.as_str(), "");
+        assert!(!agent_request.tool_policy.allow_shell);
+        assert_eq!(agent_request.tool_policy.allowed_tools, vec!["read_file"]);
+        assert_eq!(agent_request.limits.max_turns, Some(4));
+        assert!(matches!(
+            agent_request.output_contract,
+            leaven_agent::OutputContract::FinalMessage
+        ));
+        self.calls.push("agent");
+        Ok(PlanAgentRunOutcome::completed("fp_runtime_sha256_agent")
+            .with_transcript_ref(blob_ref("blob_agent_transcript"))
+            .with_commands([json!({
+                "argv": ["codex"],
+                "status": "completed",
+                "receipt": "agentrec_completion"
+            })])
+            .with_cost(json!({"usd_micro": 1000})))
+    }
+
+    fn sandbox_exec(
+        &mut self,
+        request: PlanSandboxExecRequest<'_>,
+    ) -> Result<PlanSandboxExecOutcome, PublicSeamError> {
+        assert_eq!(request.name(), "completion");
+        assert_eq!(request.call()["kind"].as_str(), Some("sandbox_exec"));
+        assert_eq!(request.stream_policy(), "buffer");
+        let command = request.to_workspace_command()?;
+        assert_eq!(command.program, "python");
+        assert_eq!(command.args, vec!["-c", "print('ok')"]);
+        assert_eq!(
+            command
+                .cwd
+                .as_ref()
+                .map(leaven_workspace::WorkspacePath::as_str),
+            Some("work")
+        );
+        assert_eq!(command.env["LEAVEN_CASE"], "case_1");
+        assert_eq!(command.limits.timeout.unwrap().as_secs(), 1);
+        self.calls.push("sandbox");
+        Ok(
+            PlanSandboxExecOutcome::completed("fp_runtime_sha256_sandbox")
+                .with_stream_refs(
+                    blob_ref("blob_sandbox_stdout"),
+                    blob_ref("blob_sandbox_stderr"),
+                )
+                .with_cost(json!({"usd_micro": 10})),
+        )
+    }
+
     fn emit_run_event(
         &mut self,
         request: PlanEmitRunEventRequest<'_>,
@@ -1501,6 +1653,16 @@ fn evaluator_capability_value(package: &PublicSeamPackage) -> Value {
         .join("examples")
         .join("evaluator_capability.v0.3.example.json");
     serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
+}
+
+fn blob_ref(id: &'static str) -> Value {
+    json!({
+        "kind": "blob_ref",
+        "id": id,
+        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "bytes": 12,
+        "data_classes": ["public"]
+    })
 }
 
 fn since_revision_event_diff_plan() -> Value {

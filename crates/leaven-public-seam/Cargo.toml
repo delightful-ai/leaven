@@ -12,8 +12,10 @@ chrono.workspace = true
 jcs-canonicalize.workspace = true
 jsonschema.workspace = true
 leaven-evidence = { workspace = true }
+leaven-agent = { workspace = true }
 leaven-kernel = { workspace = true }
 leaven-lm = { workspace = true }
+leaven-workspace = { workspace = true }
 serde.workspace = true
 serde_json.workspace = true
 serde_yml.workspace = true
