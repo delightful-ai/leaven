@@ -25,6 +25,14 @@ fn evaluation_job_preserves_identity_for_all_request_shapes() {
     assert_eq!(independent.base_revision(), "rev_base");
     assert_eq!(independent.deadline_at(), "2026-05-23T13:00:00Z");
     assert_eq!(independent.resolved_set_id(), "rset_eval");
+    assert_eq!(
+        independent.case_ids(),
+        &["case_1".to_owned(), "case_2".to_owned()]
+    );
+    assert_eq!(
+        independent.candidate_ids(),
+        &["cand_a".to_owned(), "cand_b".to_owned()]
+    );
     assert_eq!(independent.case_count(), 2);
     assert_eq!(independent.candidate_count(), 2);
     assert_eq!(independent.pair_count(), 0);
@@ -36,6 +44,10 @@ fn evaluation_job_preserves_identity_for_all_request_shapes() {
         })))
         .unwrap();
     assert_eq!(pairwise.kind(), EvaluationJobKind::Pairwise);
+    assert_eq!(
+        pairwise.candidate_ids(),
+        &["cand_a".to_owned(), "cand_b".to_owned()]
+    );
     assert_eq!(pairwise.candidate_count(), 2);
     assert_eq!(pairwise.pair_count(), 1);
 
@@ -46,6 +58,14 @@ fn evaluation_job_preserves_identity_for_all_request_shapes() {
         })))
         .unwrap();
     assert_eq!(listwise.kind(), EvaluationJobKind::Listwise);
+    assert_eq!(
+        listwise.candidate_ids(),
+        &[
+            "cand_a".to_owned(),
+            "cand_b".to_owned(),
+            "cand_c".to_owned()
+        ]
+    );
     assert_eq!(listwise.candidate_count(), 3);
 }
 
@@ -97,6 +117,24 @@ fn evaluation_job_rejects_missing_identity_deadline_or_capability() {
             .unwrap_err(),
         PublicSeamError::ExampleValidation { .. }
     ));
+
+    for field in ["evaluation_request_id", "base_revision", "evaluator_id"] {
+        let mut missing = evaluation_job(&json!({
+            "kind": "independent",
+            "candidates": ["cand_a"]
+        }));
+        missing.as_object_mut().unwrap().remove(field);
+        assert!(
+            matches!(
+                package
+                    .validate_evaluation_job_document(&missing)
+                    .unwrap_err(),
+                PublicSeamError::ExampleValidation { .. }
+                    | PublicSeamError::InvalidEvaluationJob { .. }
+            ),
+            "missing {field} should fail"
+        );
+    }
 }
 
 #[test]
@@ -130,6 +168,42 @@ fn evaluation_job_rejects_unresolved_case_sets_and_invalid_pairs() {
         PublicSeamError::InvalidEvaluationJob { .. }
     ));
 
+    let mut cursor_only = evaluation_job(&json!({
+        "kind": "independent",
+        "candidates": ["cand_a"]
+    }));
+    cursor_only["resolved_set"]
+        .as_object_mut()
+        .unwrap()
+        .remove("case_ids");
+    cursor_only["resolved_set"]["case_cursor"] = json!("cur_cases");
+    assert!(matches!(
+        package
+            .validate_evaluation_job_document(&cursor_only)
+            .unwrap_err(),
+        PublicSeamError::InvalidEvaluationJob { .. }
+    ));
+
+    for field in ["case_set_version", "partition_summary"] {
+        let mut under_resolved = evaluation_job(&json!({
+            "kind": "independent",
+            "candidates": ["cand_a"]
+        }));
+        under_resolved["resolved_set"]
+            .as_object_mut()
+            .unwrap()
+            .remove(field);
+        assert!(
+            matches!(
+                package
+                    .validate_evaluation_job_document(&under_resolved)
+                    .unwrap_err(),
+                PublicSeamError::InvalidEvaluationJob { .. }
+            ),
+            "missing {field} should fail"
+        );
+    }
+
     let same_candidate_pair = evaluation_job(&json!({
         "kind": "pairwise",
         "pairs": [{"left": "cand_a", "right": "cand_a"}]
@@ -137,6 +211,20 @@ fn evaluation_job_rejects_unresolved_case_sets_and_invalid_pairs() {
     assert!(matches!(
         package
             .validate_evaluation_job_document(&same_candidate_pair)
+            .unwrap_err(),
+        PublicSeamError::InvalidEvaluationJob { .. }
+    ));
+
+    let same_candidate_pair_mixed_ref_shapes = evaluation_job(&json!({
+        "kind": "pairwise",
+        "pairs": [{
+            "left": "cand_a",
+            "right": {"kind": "candidate", "id": "cand_a"}
+        }]
+    }));
+    assert!(matches!(
+        package
+            .validate_evaluation_job_document(&same_candidate_pair_mixed_ref_shapes)
             .unwrap_err(),
         PublicSeamError::InvalidEvaluationJob { .. }
     ));

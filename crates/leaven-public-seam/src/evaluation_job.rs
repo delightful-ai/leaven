@@ -242,7 +242,9 @@ fn case_ids(resolved_set: &serde_json::Map<String, Value>) -> Result<Vec<String>
 fn candidate_id(value: &Value) -> Result<String, PublicSeamError> {
     match value {
         Value::String(id) if !id.trim().is_empty() => Ok(id.to_owned()),
-        Value::Object(object) => required_string(object.get("id"), "candidate.id").map(str::to_owned),
+        Value::Object(object) => {
+            required_string(object.get("id"), "candidate.id").map(str::to_owned)
+        }
         _ => Err(invalid_evaluation_job(
             "evaluation job candidate ref must carry an id",
         )),
