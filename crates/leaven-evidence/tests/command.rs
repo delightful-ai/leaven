@@ -56,6 +56,19 @@ fn output_record_preserves_visibility_and_data_classes() {
 }
 
 #[test]
+fn candidate_inline_output_carries_public_candidate_output_classes() {
+    let output = OutputRecord::candidate_inline("answer 42");
+
+    assert_eq!(output.visibility(), OutputVisibility::Public);
+    assert!(
+        output
+            .data_classes()
+            .contains(&DataClass::candidate_output())
+    );
+    assert!(output.data_classes().contains(&DataClass::public()));
+}
+
+#[test]
 fn agent_trajectory_groups_transcript_and_commands() {
     let command = CommandRecord::new(
         "pytest",
