@@ -268,6 +268,7 @@ rows:
     minimum_closeout_level: semantic_denial
     positive_test_evidence:
       - crates/leaven-public-seam/tests/plan_result.rs::plan_result_accepts_typed_success_and_failure_envelopes
+      - crates/leaven-public-seam/tests/plan_result.rs::plan_result_accepts_query_call_and_write_receipts_as_audit_currency
     negative_test_evidence:
       - crates/leaven-public-seam/tests/plan_result.rs::plan_result_rejects_decorative_or_wrong_kind_receipt_refs
       - crates/leaven-public-seam/tests/plan_result.rs::plan_result_rejects_decorative_audit_currency_receipts
@@ -634,7 +635,7 @@ rows:
       - crates/leaven-public-seam/AGENTS.md
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-evaluation-job-identity-review.md
-    status: pending
+    status: proven
 
   - id: ps1.evaluator.target_reads
     area: evaluator

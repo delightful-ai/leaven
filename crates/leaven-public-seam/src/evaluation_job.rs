@@ -376,6 +376,7 @@ fn validate_receipt_matches_job(
     receipt: &serde_json::Map<String, Value>,
 ) -> Result<(), PublicSeamError> {
     require_field_value(value, "status", "recorded")?;
+    require_field_value(value, "graph_revision", job.base_revision())?;
     require_field_value(receipt, "kind", "write")?;
     require_field_value(receipt, "write_kind", "request_evaluation")?;
     require_field_value(receipt, "status", "succeeded")?;

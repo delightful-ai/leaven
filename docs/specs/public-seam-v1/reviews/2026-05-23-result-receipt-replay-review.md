@@ -48,3 +48,13 @@ Limits:
 - This review does not sign off any reviewed row.
 - Public-seam validation evidence is useful prerequisite evidence, but it is not runtime/public-owner production proof.
 - No matrix status should change for these rows until producer/runtime evidence, executable positive and negative tests matching each row, and a follow-up adversarial sign-off exist.
+
+Audit-currency fixture follow-up:
+
+- `crates/leaven-public-seam/tests/plan_result.rs::plan_result_accepts_query_call_and_write_receipts_as_audit_currency` now validates one Plan Result carrying query, call, and write receipts referenced by typed result values.
+- `crates/leaven-public-seam/tests/plan_result.rs::plan_result_rejects_decorative_or_wrong_kind_receipt_refs` also rejects duplicate operation receipt ids, so receipt ids cannot act as ambiguous log-correlation decoration.
+
+Current limits after fixture follow-up:
+
+- This still does not sign off `ps1.receipts.audit_currency`.
+- The row remains pending because the public-seam validator still proves supplied receipt shape/roles, not a runtime replay path that recomputes every operation hash from producer-owned preimages.

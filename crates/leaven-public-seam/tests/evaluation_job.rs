@@ -282,6 +282,15 @@ fn evaluation_request_receipt_rejects_decorative_or_unbound_hashes() {
         PublicSeamError::InvalidEvaluationJob { .. }
     ));
 
+    let mut wrong_value_revision = evaluation_request_receipt_result(&job);
+    wrong_value_revision["values"]["evaluation_request"]["graph_revision"] = json!("rev_other");
+    assert!(matches!(
+        package
+            .validate_evaluation_request_receipt_document(&job, &wrong_value_revision)
+            .unwrap_err(),
+        PublicSeamError::InvalidEvaluationJob { .. }
+    ));
+
     let mut missing_audit_timing = evaluation_request_receipt_result(&job);
     missing_audit_timing["receipts"][0]
         .as_object_mut()
