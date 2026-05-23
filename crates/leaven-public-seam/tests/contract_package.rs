@@ -2,7 +2,10 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use leaven_public_seam::{MatrixRowStatus, PublicSeamError, PublicSeamPackage, SchemaFingerprint};
+use leaven_public_seam::{
+    MatrixRowStatus, PublicSeamError, PublicSeamPackage, SchemaFingerprint, WorkerTransportKind,
+    WorkerTransportRequest,
+};
 use serde_json::{Value, json};
 
 #[test]
@@ -113,6 +116,85 @@ fn active_schemas_compile_and_examples_validate_against_manifest_targets() {
 }
 
 #[test]
+fn acp_profile_routes_callbacks_without_mcp_negotiation() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let methods = package.acp_extension_methods().unwrap();
+    let scope = package.v1_scope().unwrap();
+
+    assert!(methods.contains(&"leaven/graph.query".to_owned()));
+    assert!(methods.contains(&"leaven/lm.complete".to_owned()));
+    assert!(methods.contains(&"leaven/proposal.submit_batch".to_owned()));
+    assert!(methods.iter().all(|method| method.starts_with("leaven/")));
+    assert!(methods.iter().all(|method| !method.contains("mcp")));
+
+    let authorized = scope
+        .authorize_worker_transport(WorkerTransportRequest::acp_profile(methods))
+        .unwrap();
+    assert_eq!(authorized.worker_transport(), "acp_profile");
+    assert!(
+        authorized
+            .extension_methods()
+            .contains(&"leaven/lm.complete")
+    );
+}
+
+#[test]
+fn acp_profile_rejects_mcp_bridge_legacy_worker_protocol_and_watch_runtime() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let scope = package.v1_scope().unwrap();
+
+    assert!(matches!(
+        scope
+            .authorize_worker_transport(WorkerTransportRequest::new(
+                WorkerTransportKind::McpOverAcp,
+                ["mcp/tools/list"]
+            ))
+            .unwrap_err(),
+        PublicSeamError::InvalidScope { .. }
+    ));
+
+    assert!(matches!(
+        scope
+            .authorize_worker_transport(WorkerTransportRequest::new(
+                WorkerTransportKind::LegacyWorkerProtocol,
+                ["leaven/lm.complete"]
+            ))
+            .unwrap_err(),
+        PublicSeamError::InvalidScope { .. }
+    ));
+
+    let mut mcp_method =
+        WorkerTransportRequest::new(WorkerTransportKind::AcpProfile, ["leaven/lm.complete"]);
+    mcp_method.add_extension_method("mcp/tools/call");
+    assert!(matches!(
+        scope.authorize_worker_transport(mcp_method).unwrap_err(),
+        PublicSeamError::InvalidScope { .. }
+    ));
+
+    assert!(matches!(
+        scope
+            .authorize_worker_transport(WorkerTransportRequest::new(
+                WorkerTransportKind::AcpProfile,
+                ["leaven/tools.list"]
+            ))
+            .unwrap_err(),
+        PublicSeamError::InvalidScope { .. }
+    ));
+
+    let mut watch_runtime =
+        WorkerTransportRequest::new(WorkerTransportKind::AcpProfile, ["leaven/lm.complete"]);
+    watch_runtime.enable_watch_runtime();
+    assert!(matches!(
+        scope.authorize_worker_transport(watch_runtime).unwrap_err(),
+        PublicSeamError::InvalidScope { .. }
+    ));
+
+    let archived = workspace_root().join("docs/specs/public-seam-v1-lock-draft.archived");
+    let error = PublicSeamPackage::from_path(archived).unwrap_err();
+    assert!(matches!(error, PublicSeamError::InactivePackage { .. }));
+}
+
+#[test]
 fn schema_fingerprints_reject_pretty_printed_hashing_and_track_semantic_changes() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let common = package.schema_json("common.schema.json").unwrap();
@@ -153,6 +235,7 @@ fn conformance_matrix_rows_are_unique_honest_and_reference_real_files() {
             "ps1.capability.document_truth",
             "ps1.capability.delegation_attenuates",
             "ps1.capability.grant_enforcement",
+            "ps1.acp.no_mcp_v1",
             "ps1.harness.negative_denominator",
             "ps1.public_routes.maturity_classified",
             "ps1.schema.fingerprints"

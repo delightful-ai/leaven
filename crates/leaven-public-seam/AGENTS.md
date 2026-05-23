@@ -67,11 +67,19 @@ It proves semantic parent-child capability attenuation and lineage facts at the
 wire-document layer only; it is not a token minter, engine trust ledger,
 transport session, ACP permission handler, or runtime delegation workflow.
 
+Crate-root exports for `V1Scope`, `WorkerTransportKind`,
+`WorkerTransportRequest`, and `AuthorizedWorkerTransport` are advanced public
+seam contracts. They prove locked V1 transport-scope selection and MCP/watch/
+legacy-worker exclusion only; they are not an ACP process implementation,
+session lifecycle, authentication handshake, permission loop, or worker runtime.
+
 ## Proof Anchors
 
 - `tests/contract_package.rs` proves active package authority, manifest
   inventory, schema compilation, schema fingerprinting, matrix row structure,
-  notes-denominator mapping, fake-closeout rejection, and deferred markers.
+  notes-denominator mapping, fake-closeout rejection, deferred markers, and
+  locked ACP-profile transport-scope refusal of MCP, legacy worker protocol,
+  and watch runtime requests.
 - `tests/capability_document.rs` proves opaque token handles resolve to
   structured capability documents and reject bare, missing, expired, revoked,
   or binding-mismatched tokens. It also proves grant-envelope authorization and
