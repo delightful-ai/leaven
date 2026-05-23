@@ -171,6 +171,33 @@ fn submit_assessments_rejects_missing_or_placeholder_score_output() {
     ));
 }
 
+#[test]
+fn submit_assessments_rejects_missing_assessment_score_or_replayability() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut missing_score = submit_assessments_plan();
+    missing_score["ops"][0]["write"]["assessments"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("score");
+    assert!(matches!(
+        package.validate_plan_document(&missing_score).unwrap_err(),
+        PublicSeamError::ExampleValidation { .. }
+    ));
+
+    let mut missing_replayability = submit_assessments_plan();
+    missing_replayability["ops"][0]["write"]["assessments"][1]
+        .as_object_mut()
+        .unwrap()
+        .remove("replayability");
+    assert!(matches!(
+        package
+            .validate_plan_document(&missing_replayability)
+            .unwrap_err(),
+        PublicSeamError::ExampleValidation { .. }
+    ));
+}
+
 fn typed_let_call_write_plan() -> Value {
     json!({
         "schema_version": "leaven.plan.v1",

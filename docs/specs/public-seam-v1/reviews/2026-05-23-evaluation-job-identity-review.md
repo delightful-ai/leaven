@@ -19,3 +19,13 @@ Current limits:
 
 - This is not an adversarial sign-off and does not mark `ps1.evaluator.job_identity` proven.
 - The row remains pending because this slice proves the public document seam only; it does not yet prove that requesting an evaluation through runtime lowering creates these schema-valid jobs or emits evaluation request receipts bound to the candidate and case sets.
+
+Follow-up runtime evidence:
+
+- `leaven-engine` now records the evaluator fingerprint on each durable `EvaluationRequestRecord` and exposes it through `EvaluationRequestView::evaluator_fingerprint(...)`.
+- `crates/leaven-engine/tests/context_services.rs::evaluation_requests_record_evaluator_fingerprint_as_runtime_job_identity` proves two runtime evaluator requests with the same evaluator id but different evaluator fingerprints leave distinct request records with their resolved case-set identity intact.
+
+Current limits after runtime follow-up:
+
+- This still is not an adversarial sign-off and does not mark `ps1.evaluator.job_identity` proven.
+- The row remains pending because runtime evaluation records still do not carry the full public-seam EvaluationJob document: base revision, deadline, and capability fingerprint are not yet produced by the engine/run lowering path, and no evaluation request receipt is emitted through the public seam owner.

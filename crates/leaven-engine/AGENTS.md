@@ -21,6 +21,11 @@ must not reach into graph storage to make progress.
 - Runtime policy shared by all optimizers: trust/read scopes, case-set
   resolution, cache keys/status, persistence envelopes, reports, and stop/error
   event shapes belong here.
+- Evaluation request records own runtime evaluator identity facts that are true
+  inside the engine, including evaluator id, evaluator fingerprint, request
+  shape, and resolved case-set identity. Public-seam job documents that add base
+  revision, deadline, capability fingerprint, or worker transport facts must be
+  produced by the appropriate seam/lowering owner instead of faked here.
 
 ## Route Away
 - Cold proposal/evaluation/artifact/evidence/preference vocabulary belongs in
@@ -43,6 +48,11 @@ must not reach into graph storage to make progress.
 - `tests/context_services.rs` is the fastest broad check for finalizing context
   services: evaluation requests, evidence storage, cache status, callbacks,
   trust refusals, and budget/event side effects.
+- `tests/context_services.rs::evaluation_requests_record_evaluator_fingerprint_as_runtime_job_identity`
+  proves `RunContext` records evaluator fingerprints on evaluation request
+  records even when the evaluator ID is unchanged. It is not public-seam job
+  closeout by itself; deadline, capability fingerprint, base revision, and
+  public job projection still need their owning primitives.
 - `tests/stage_trait_contracts.rs` proves static and dynamic stage trait
   contracts without moving strategy state into engine internals. It still uses
   raw stage contexts as dispatch fixtures; do not cite it alone as proof of the
