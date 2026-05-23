@@ -727,6 +727,51 @@ fn scoring_evaluator_requires_reportable_output_for_typed_runner_outputs() {
 }
 
 #[test]
+fn scoring_evaluator_rejects_empty_placeholder_report_output() {
+    block_on(async {
+        let (mut graph, mut budget, candidate) = graph_with_seed();
+        let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
+        let evaluator = ScoringEvaluator::new(
+            Arc::new(vec![input_case(0, 2)]),
+            Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
+                async move { Ok(RunOutput::new((artifact.0 + *case.input()).to_string())) }.boxed()
+            }),
+            Arc::new(
+                |ctx: ScoreContext<TextArtifact, i32, leaven_eval::NoTarget, String>| {
+                    async move {
+                        Ok(Score::new(ctx.output.output.parse::<f64>().unwrap(), "ok")
+                            .with_output(ctx.report_text_output("   ")))
+                    }
+                    .boxed()
+                },
+            ),
+            &identity("typed-output-placeholder-output-test"),
+        );
+
+        let error = evaluator
+            .evaluate(
+                request(
+                    ResolvedRequestKind::Independent {
+                        candidates: vec![candidate],
+                    },
+                    vec![CaseId::new(0)],
+                    AssessmentGranularity::PerCase,
+                ),
+                ctx.evaluation_context(StageId::from_evaluator(Evaluator::id(&evaluator))),
+            )
+            .await
+            .err()
+            .expect("placeholder report output should fail evaluation");
+
+        assert!(
+            error
+                .to_string()
+                .contains("reportable output was an empty placeholder")
+        );
+    });
+}
+
+#[test]
 fn scoring_evaluator_rejects_report_output_from_another_scoring_context() {
     use std::sync::Mutex;
 
