@@ -755,11 +755,13 @@ impl PublicSeamPackage {
         PlanDocument::from_schema_valid_value(value)
     }
 
-    /// Executes a representative Plan IR document through the advanced public-seam harness.
+    /// Runs a representative Plan IR document through the advanced public-seam harness.
     ///
-    /// This path validates the active V1 plan schema before lowering typed
-    /// Let/Call/Write operations, delegates effectful operations to `host`, and
-    /// validates the produced Plan Result through the active V1 result schema.
+    /// This path validates the active V1 plan schema before honoring the
+    /// declared execution mode, lowering typed Let/Call/Write operations when
+    /// effects are allowed, delegating graph reads, effectful operations, or
+    /// replay lookups to `host`, and validating the produced Plan Result
+    /// through the active V1 result schema.
     pub fn execute_plan_document<H: crate::PlanExecutionHost>(
         &self,
         value: &Value,
@@ -767,26 +769,7 @@ impl PublicSeamPackage {
         host: &mut H,
     ) -> Result<crate::PlanExecutionReport, PublicSeamError> {
         let plan_document = self.validate_plan_document(value)?;
-        if plan_document.mode_kind() != "execute" {
-            return Err(PublicSeamError::InvalidPlan {
-                message: format!(
-                    "Plan execution harness requires execute mode, got `{}`",
-                    plan_document.mode_kind()
-                ),
-            });
-        }
-        if plan_document.commit_kind() == "no_graph_writes"
-            && plan_document
-                .operation_kinds()
-                .contains(&crate::PlanOperationKind::Write)
-        {
-            return Err(PublicSeamError::InvalidPlan {
-                message:
-                    "Plan execution harness cannot execute write ops under no_graph_writes commit"
-                        .to_owned(),
-            });
-        }
-        let result = crate::plan_execution::execute_plan(value, context, host)?;
+        let result = crate::plan_execution::execute_plan(value, &plan_document, context, host)?;
         let document = self.validate_plan_result_document(&result)?;
         Ok(crate::PlanExecutionReport::new(result, document))
     }
