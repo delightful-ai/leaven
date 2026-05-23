@@ -531,6 +531,7 @@ fn conformance_matrix_rows_are_unique_honest_and_reference_real_files() {
             "ps1.proposal.surface_authority",
             "ps1.public_routes.maturity_classified",
             "ps1.receipts.audit_currency",
+            "ps1.receipts.failed_costs",
             "ps1.replay.per_assessment",
             "ps1.schema.fingerprints",
             "ps1.watch.deferred",

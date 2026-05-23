@@ -1,10 +1,10 @@
 use std::collections::BTreeMap;
 
 use leaven_public_seam::{
-    PlanCaseQueryOutcome, PlanCaseQueryRequest, PlanEmitRunEventOutcome, PlanEmitRunEventRequest,
-    PlanExecutionContext, PlanExecutionHost, PlanGraphQueryOutcome, PlanGraphQueryRequest,
-    PlanGraphReadScope, PlanLmCompleteOutcome, PlanLmCompleteRequest, PlanOperationKind,
-    PublicSeamError, PublicSeamPackage,
+    CapabilityDocument, PlanCaseQueryOutcome, PlanCaseQueryRequest, PlanEmitRunEventOutcome,
+    PlanEmitRunEventRequest, PlanExecutionContext, PlanExecutionHost, PlanGraphQueryOutcome,
+    PlanGraphQueryRequest, PlanGraphReadScope, PlanLmCompleteOutcome, PlanLmCompleteRequest,
+    PlanOperationKind, PublicSeamError, PublicSeamPackage,
 };
 use serde_json::{Value, json};
 
@@ -246,11 +246,16 @@ fn plan_execution_result_rejects_missing_operation_receipts() {
 fn evaluator_target_reads_execute_case_query_load_with_query_receipts() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let plan = evaluator_target_case_query_plan();
-    let context = plan_execution_context();
+    let context = evaluator_plan_execution_context();
     let mut host = RecordingPlanHost::default();
 
     let report = package
-        .execute_plan_document(&plan, &context, &mut host)
+        .execute_plan_document_with_capability(
+            &plan,
+            &context,
+            &evaluator_capability(&package),
+            &mut host,
+        )
         .unwrap();
     package
         .validate_plan_execution_result(&plan, &context, report.value())
@@ -285,9 +290,14 @@ fn evaluator_target_reads_execute_case_query_load_with_query_receipts() {
 fn evaluator_target_reads_reject_missing_or_unbound_case_query_receipts() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let plan = evaluator_target_case_query_plan();
-    let context = plan_execution_context();
+    let context = evaluator_plan_execution_context();
     let result = package
-        .execute_plan_document(&plan, &context, &mut RecordingPlanHost::default())
+        .execute_plan_document_with_capability(
+            &plan,
+            &context,
+            &evaluator_capability(&package),
+            &mut RecordingPlanHost::default(),
+        )
         .unwrap()
         .value()
         .clone();
@@ -315,14 +325,60 @@ fn evaluator_target_reads_reject_unrequested_target_material() {
 
     assert!(matches!(
         package
-            .execute_plan_document(
+            .execute_plan_document_with_capability(
                 &plan,
-                &plan_execution_context(),
+                &evaluator_plan_execution_context(),
+                &evaluator_capability(&package),
                 &mut RecordingPlanHost::default()
             )
             .unwrap_err(),
         PublicSeamError::InvalidPlan { .. }
     ));
+}
+
+#[test]
+fn evaluator_target_reads_require_evaluator_capability_before_host_read() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let plan = evaluator_target_case_query_plan();
+
+    let mut bare_host = RecordingPlanHost::default();
+    assert!(matches!(
+        package
+            .execute_plan_document(&plan, &evaluator_plan_execution_context(), &mut bare_host)
+            .unwrap_err(),
+        PublicSeamError::InvalidPlan { .. }
+    ));
+    assert!(bare_host.case_reads.is_empty());
+
+    let mut denied_host = RecordingPlanHost::default();
+    assert!(matches!(
+        package
+            .execute_plan_document_with_capability(
+                &plan,
+                &evaluator_plan_execution_context(),
+                &target_denied_evaluator_capability(&package),
+                &mut denied_host
+            )
+            .unwrap_err(),
+        PublicSeamError::InvalidPlan { .. }
+    ));
+    assert!(denied_host.case_reads.is_empty());
+
+    let wrong_context =
+        evaluator_plan_execution_context().with_evaluation_request("run_other", "evalreq_01");
+    let mut wrong_run_host = RecordingPlanHost::default();
+    assert!(matches!(
+        package
+            .execute_plan_document_with_capability(
+                &plan,
+                &wrong_context,
+                &evaluator_capability(&package),
+                &mut wrong_run_host
+            )
+            .unwrap_err(),
+        PublicSeamError::InvalidPlan { .. }
+    ));
+    assert!(wrong_run_host.case_reads.is_empty());
 }
 
 fn assert_plan_execution_result_rejected(
@@ -896,7 +952,7 @@ fn evaluator_target_case_query_plan() -> Value {
                             "kind": "load",
                             "case": {
                                 "kind": "case",
-                                "run": "run_eval_target",
+                                "run": "run_demo",
                                 "id": "case_1"
                             },
                             "include": ["target"],
@@ -1129,7 +1185,7 @@ impl PlanExecutionHost for RecordingPlanHost {
         assert_eq!(request.query()["kind"].as_str(), Some("load"));
         assert_eq!(
             request.query()["case"],
-            json!({"kind": "case", "run": "run_eval_target", "id": "case_1"})
+            json!({"kind": "case", "run": "run_demo", "id": "case_1"})
         );
         self.case_reads.push("target:case_1".to_owned());
         Ok(PlanCaseQueryOutcome::new("case_1", "rev_planexec_base")
@@ -1251,6 +1307,36 @@ fn plan_execution_context() -> PlanExecutionContext {
         "2026-05-23T12:00:00Z",
         "2026-05-23T12:00:01Z",
     )
+}
+
+fn evaluator_plan_execution_context() -> PlanExecutionContext {
+    PlanExecutionContext::new(
+        "fp_cap_sha256_eval01",
+        "fp_policy_sha256_01",
+        "rev_planexec_base",
+        "2026-05-23T12:00:00Z",
+        "2026-05-23T12:00:01Z",
+    )
+    .with_evaluation_request("run_demo", "evalreq_01")
+    .with_case_partition("validation")
+}
+
+fn evaluator_capability(package: &PublicSeamPackage) -> CapabilityDocument {
+    CapabilityDocument::from_value(evaluator_capability_value(package)).unwrap()
+}
+
+fn target_denied_evaluator_capability(package: &PublicSeamPackage) -> CapabilityDocument {
+    let mut value = evaluator_capability_value(package);
+    value["grants"][0]["constraints"]["case_fields"] = json!(["input", "metadata"]);
+    CapabilityDocument::from_value(value).unwrap()
+}
+
+fn evaluator_capability_value(package: &PublicSeamPackage) -> Value {
+    let path = package
+        .root()
+        .join("examples")
+        .join("evaluator_capability.v0.3.example.json");
+    serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
 }
 
 fn since_revision_event_diff_plan() -> Value {
