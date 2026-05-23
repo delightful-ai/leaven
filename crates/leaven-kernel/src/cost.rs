@@ -260,6 +260,20 @@ impl Cost {
         })
     }
 
+    /// Returns a cost charging one caller-defined axis.
+    ///
+    /// # Errors
+    ///
+    /// Forwards [`AmountError`] when `amount` is NaN, infinite, or negative.
+    pub fn custom(axis: impl Into<String>, amount: f64) -> Result<Self, AmountError> {
+        let mut other = BTreeMap::new();
+        other.insert(axis.into(), Amount::new(amount)?);
+        Ok(Self {
+            other,
+            ..Self::default()
+        })
+    }
+
     /// Sums two costs axis-wise, saturating continuous axes at `f64::MAX`.
     ///
     /// Integer axes (`metric_calls`, `llm_calls`, token counts) wrap on
@@ -347,6 +361,10 @@ pub struct Budget {
     pub llm_calls: Option<u64>,
     /// Optional seconds limit.
     pub seconds: Option<Amount>,
+    /// Optional concurrent-call reservation limit.
+    pub concurrent_calls: Option<u64>,
+    /// Optional caller-defined axis limits keyed by cost axis name.
+    pub other: BTreeMap<String, Amount>,
 }
 
 impl Budget {
@@ -378,6 +396,20 @@ impl Budget {
             ..Self::default()
         })
     }
+
+    /// Sets a caller-defined axis limit.
+    ///
+    /// # Errors
+    ///
+    /// Forwards [`AmountError`] when `amount` is NaN, infinite, or negative.
+    pub fn with_axis_limit(
+        mut self,
+        axis: impl Into<String>,
+        amount: f64,
+    ) -> Result<Self, AmountError> {
+        self.other.insert(axis.into(), Amount::new(amount)?);
+        Ok(self)
+    }
 }
 
 /// Authoritative point-in-time view of run spending.
@@ -394,6 +426,8 @@ pub struct BudgetSnapshot {
     pub limit: Budget,
     /// Cost spent by stage.
     pub stages: BTreeMap<StageId, Cost>,
+    /// In-flight calls currently reserving concurrency capacity.
+    pub in_flight_calls: u64,
 }
 
 /// Which axis tripped a [`BudgetExceeded`] refusal.
@@ -401,7 +435,7 @@ pub struct BudgetSnapshot {
 /// `BudgetDimension` is a deliberately small enum because [`Budget`]
 /// itself only caps three axes today. Extending the budget to cap
 /// caller-defined axes will require extending this enum.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum BudgetDimension {
     /// Metric call limit.
     MetricCalls,
@@ -409,6 +443,10 @@ pub enum BudgetDimension {
     LlmCalls,
     /// Seconds limit.
     Seconds,
+    /// Concurrent-call reservation limit.
+    ConcurrentCalls,
+    /// Caller-defined cost axis.
+    Other(String),
 }
 
 /// Refusal returned when charging a cost would exceed the budget.
