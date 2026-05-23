@@ -230,6 +230,71 @@ fn evaluation_job_rejects_unresolved_case_sets_and_invalid_pairs() {
     ));
 }
 
+#[test]
+fn evaluation_request_receipt_binds_job_candidate_and_case_identity() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let job = package
+        .validate_evaluation_job_document(&evaluation_job(&json!({
+            "kind": "independent",
+            "candidates": ["cand_a", "cand_b"]
+        })))
+        .unwrap();
+    let result = evaluation_request_receipt_result(&job);
+
+    let receipt = package
+        .validate_evaluation_request_receipt_document(&job, &result)
+        .unwrap();
+
+    assert_eq!(receipt.request_id(), job.request_id());
+    assert_eq!(receipt.receipt_id(), "wrec_evalreq");
+    assert_eq!(receipt.base_revision(), job.base_revision());
+    assert_eq!(receipt.candidate_ids(), job.candidate_ids());
+    assert_eq!(receipt.case_ids(), job.case_ids());
+    assert!(receipt.request_hash().starts_with("fp_request_sha256_"));
+    assert!(receipt.result_hash().starts_with("fp_result_sha256_"));
+}
+
+#[test]
+fn evaluation_request_receipt_rejects_decorative_or_unbound_hashes() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let job = package
+        .validate_evaluation_job_document(&evaluation_job(&json!({
+            "kind": "independent",
+            "candidates": ["cand_a", "cand_b"]
+        })))
+        .unwrap();
+
+    let mut wrong_request_id = evaluation_request_receipt_result(&job);
+    wrong_request_id["receipts"][0]["evaluation_request_id"] = json!("evalreq_other");
+    assert!(matches!(
+        package
+            .validate_evaluation_request_receipt_document(&job, &wrong_request_id)
+            .unwrap_err(),
+        PublicSeamError::InvalidEvaluationJob { .. }
+    ));
+
+    let mut decorative_hash = evaluation_request_receipt_result(&job);
+    decorative_hash["receipts"][0]["request_hash"] = json!("fp_request_sha256_decorative");
+    assert!(matches!(
+        package
+            .validate_evaluation_request_receipt_document(&job, &decorative_hash)
+            .unwrap_err(),
+        PublicSeamError::InvalidEvaluationJob { .. }
+    ));
+
+    let mut missing_audit_timing = evaluation_request_receipt_result(&job);
+    missing_audit_timing["receipts"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("started_at");
+    assert!(matches!(
+        package
+            .validate_evaluation_request_receipt_document(&job, &missing_audit_timing)
+            .unwrap_err(),
+        PublicSeamError::InvalidPlanResult { .. }
+    ));
+}
+
 fn evaluation_job(kind: &Value) -> Value {
     json!({
         "schema_version": "leaven.evaluation_job.v1",
@@ -256,6 +321,96 @@ fn evaluation_job(kind: &Value) -> Value {
         "evaluator_fingerprint": "fp_runtime_sha256_evaluator",
         "target_egress_policy_ref": "fp_policy_sha256_targets"
     })
+}
+
+fn evaluation_request_receipt_result(job: &leaven_public_seam::EvaluationJobDocument) -> Value {
+    json!({
+        "schema_version": "leaven.plan_result.v1",
+        "plan_id": "result_evalreq",
+        "capability_fingerprint": job.capability_fingerprint(),
+        "policy_fingerprint": "fp_policy_sha256_evalreq",
+        "base_revision": job.base_revision(),
+        "final_revision": job.base_revision(),
+        "replayability_summary": "fully_managed",
+        "values": {
+            "evaluation_request": {
+                "kind": "evaluation_request_receipt",
+                "receipt": "wrec_evalreq",
+                "evaluation_request_id": job.request_id(),
+                "status": "recorded",
+                "graph_revision": job.base_revision(),
+                "data_classes": ["public"],
+                "replayability": "fully_managed"
+            }
+        },
+        "receipts": [
+            {
+                "kind": "write",
+                "write_kind": "request_evaluation",
+                "receipt": "wrec_evalreq",
+                "started_at": "2026-05-23T12:00:00Z",
+                "completed_at": "2026-05-23T12:00:01Z",
+                "request_hash": evaluation_request_hash(job),
+                "result_hash": evaluation_request_result_hash(job),
+                "base_revision": job.base_revision(),
+                "committed_revision": job.base_revision(),
+                "status": "succeeded",
+                "evaluation_request_id": job.request_id()
+            }
+        ],
+        "redactions": [],
+        "charges": [],
+        "errors": []
+    })
+}
+
+fn evaluation_request_hash(job: &leaven_public_seam::EvaluationJobDocument) -> String {
+    fingerprint(
+        "fp_request_sha256_",
+        &json!({
+            "schema_version": "leaven.evaluation_request_identity.v1",
+            "evaluation_request_id": job.request_id(),
+            "kind": evaluation_job_kind(job.kind()),
+            "candidate_ids": job.candidate_ids(),
+            "resolved_set_id": job.resolved_set_id(),
+            "case_ids": job.case_ids(),
+            "case_count": job.case_count(),
+            "base_revision": job.base_revision(),
+            "deadline_at": job.deadline_at(),
+            "evaluator_id": job.evaluator_id(),
+            "evaluator_fingerprint": job.evaluator_fingerprint(),
+            "capability_fingerprint": job.capability_fingerprint()
+        }),
+    )
+}
+
+fn evaluation_request_result_hash(job: &leaven_public_seam::EvaluationJobDocument) -> String {
+    fingerprint(
+        "fp_result_sha256_",
+        &json!({
+            "schema_version": "leaven.evaluation_request_receipt_result.v1",
+            "evaluation_request_id": job.request_id(),
+            "status": "recorded",
+            "resolved_set_id": job.resolved_set_id(),
+            "case_ids": job.case_ids(),
+            "candidate_ids": job.candidate_ids()
+        }),
+    )
+}
+
+fn fingerprint(prefix: &str, value: &Value) -> String {
+    format!(
+        "{prefix}{}",
+        jcs_canonicalize::sha256_jcs_hex(value).unwrap()
+    )
+}
+
+fn evaluation_job_kind(kind: leaven_public_seam::EvaluationJobKind) -> &'static str {
+    match kind {
+        leaven_public_seam::EvaluationJobKind::Independent => "independent",
+        leaven_public_seam::EvaluationJobKind::Pairwise => "pairwise",
+        leaven_public_seam::EvaluationJobKind::Listwise => "listwise",
+    }
 }
 
 fn workspace_root() -> std::path::PathBuf {

@@ -52,9 +52,11 @@ builder lowering and public examples deliberately adopt them.
 Crate-root exports for `PublicEvaluationJobContext` and
 `PublicEvaluationJobProjectionError` are advanced public seam-lowering
 contracts. They project engine-recorded evaluation request identity into the
-locked public evaluation-job wire shape for validation by `leaven-public-seam`;
+locked public evaluation-job wire shape and its `request_evaluation` Plan
+Result receipt for validation by `leaven-public-seam`;
 they are not in `leaven_run::prelude`, not ACP dispatch, not capability minting,
-and not proof that evaluation request receipts are fully emitted.
+and not proof of ACP session delivery or durable receipt persistence beyond the
+projected public-seam document.
 
 ## Proof Anchors
 - `tests/optimize_builder.rs` proves required budget policy, held-out case
@@ -64,7 +66,8 @@ and not proof that evaluation request receipts are fully emitted.
   per-case granularity requirements, independent-request requirements,
   missing input errors, finite score refusal, cost reporting, context-scoped
   reportable output, pairwise/listwise judging output behavior, runtime
-  evaluation-request projection into locked public-seam evaluation jobs, and
+  evaluation-request projection into locked public-seam evaluation jobs plus
+  `request_evaluation` Plan Result receipts, and
   projection of runtime-produced score outputs through the locked public-seam
   owner.
 - `cargo nextest run -p leaven-run` proves the product-builder contract.

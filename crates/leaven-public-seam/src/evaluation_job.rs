@@ -180,6 +180,10 @@ impl EvaluationJobDocument {
     pub const fn kind(&self) -> EvaluationJobKind {
         self.kind
     }
+
+    fn kind_name(&self) -> &'static str {
+        self.kind.as_str()
+    }
 }
 
 /// Evaluation job request shape.
@@ -191,6 +195,95 @@ pub enum EvaluationJobKind {
     Pairwise,
     /// Listwise candidate ranking.
     Listwise,
+}
+
+impl EvaluationJobKind {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::Independent => "independent",
+            Self::Pairwise => "pairwise",
+            Self::Listwise => "listwise",
+        }
+    }
+}
+
+/// Plan-result evaluation-request receipt bound to a validated evaluation job.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EvaluationRequestReceiptDocument {
+    request_id: String,
+    receipt_id: String,
+    base_revision: String,
+    request_hash: String,
+    result_hash: String,
+    candidate_ids: Vec<String>,
+    case_ids: Vec<String>,
+}
+
+impl EvaluationRequestReceiptDocument {
+    pub(crate) fn from_plan_result(
+        job: &EvaluationJobDocument,
+        result: &Value,
+    ) -> Result<Self, PublicSeamError> {
+        let result = result
+            .as_object()
+            .ok_or_else(|| invalid_evaluation_job("plan result must be an object"))?;
+        let values = result
+            .get("values")
+            .and_then(Value::as_object)
+            .ok_or_else(|| invalid_evaluation_job("plan result values must be an object"))?;
+        let receipts = result
+            .get("receipts")
+            .and_then(Value::as_array)
+            .ok_or_else(|| invalid_evaluation_job("plan result receipts must be an array"))?;
+        let value = matching_evaluation_request_value(values, job.request_id())?;
+        let receipt_id = required_string(value.get("receipt"), "evaluation_request.receipt")?;
+        let receipt = matching_evaluation_request_receipt(receipts, receipt_id)?;
+        validate_receipt_matches_job(job, value, receipt)?;
+        Ok(Self {
+            request_id: job.request_id.clone(),
+            receipt_id: receipt_id.to_owned(),
+            base_revision: job.base_revision.clone(),
+            request_hash: required_string(receipt.get("request_hash"), "request_hash")?.to_owned(),
+            result_hash: required_string(receipt.get("result_hash"), "result_hash")?.to_owned(),
+            candidate_ids: job.candidate_ids.clone(),
+            case_ids: job.case_ids.clone(),
+        })
+    }
+
+    /// Evaluation request id bound to this receipt.
+    pub fn request_id(&self) -> &str {
+        &self.request_id
+    }
+
+    /// Operation receipt id for the `request_evaluation` write.
+    pub fn receipt_id(&self) -> &str {
+        &self.receipt_id
+    }
+
+    /// Graph revision used as the request write base.
+    pub fn base_revision(&self) -> &str {
+        &self.base_revision
+    }
+
+    /// Hash of the request identity, including candidate and case-set bindings.
+    pub fn request_hash(&self) -> &str {
+        &self.request_hash
+    }
+
+    /// Hash of the recorded request result.
+    pub fn result_hash(&self) -> &str {
+        &self.result_hash
+    }
+
+    /// Candidate ids bound into the receipted request hash.
+    pub fn candidate_ids(&self) -> &[String] {
+        &self.candidate_ids
+    }
+
+    /// Case ids bound into the receipted request hash.
+    pub fn case_ids(&self) -> &[String] {
+        &self.case_ids
+    }
 }
 
 fn validate_resolved_case_set(
@@ -228,6 +321,131 @@ fn validate_resolved_case_set(
         return Err(invalid_evaluation_job(
             "resolved_set with cases must carry partition-resolved explicit case_ids",
         ));
+    }
+    Ok(())
+}
+
+fn matching_evaluation_request_value<'a>(
+    values: &'a serde_json::Map<String, Value>,
+    request_id: &str,
+) -> Result<&'a serde_json::Map<String, Value>, PublicSeamError> {
+    let mut matched = None;
+    for value in values.values() {
+        let value = value
+            .as_object()
+            .ok_or_else(|| invalid_evaluation_job("plan result value must be an object"))?;
+        if value.get("kind").and_then(Value::as_str) == Some("evaluation_request_receipt")
+            && value.get("evaluation_request_id").and_then(Value::as_str) == Some(request_id)
+            && matched.replace(value).is_some()
+        {
+            return Err(invalid_evaluation_job(
+                "plan result carries multiple matching evaluation request values",
+            ));
+        }
+    }
+    matched.ok_or_else(|| {
+        invalid_evaluation_job("plan result lacks evaluation request value for job request id")
+    })
+}
+
+fn matching_evaluation_request_receipt<'a>(
+    receipts: &'a [Value],
+    receipt_id: &str,
+) -> Result<&'a serde_json::Map<String, Value>, PublicSeamError> {
+    let mut matched = None;
+    for receipt in receipts {
+        let receipt = receipt
+            .as_object()
+            .ok_or_else(|| invalid_evaluation_job("plan result receipt must be an object"))?;
+        if receipt.get("receipt").and_then(Value::as_str) == Some(receipt_id)
+            && matched.replace(receipt).is_some()
+        {
+            return Err(invalid_evaluation_job(
+                "plan result carries duplicate evaluation request receipt ids",
+            ));
+        }
+    }
+    matched.ok_or_else(|| {
+        invalid_evaluation_job("plan result lacks write receipt for evaluation request value")
+    })
+}
+
+fn validate_receipt_matches_job(
+    job: &EvaluationJobDocument,
+    value: &serde_json::Map<String, Value>,
+    receipt: &serde_json::Map<String, Value>,
+) -> Result<(), PublicSeamError> {
+    require_field_value(value, "status", "recorded")?;
+    require_field_value(receipt, "kind", "write")?;
+    require_field_value(receipt, "write_kind", "request_evaluation")?;
+    require_field_value(receipt, "status", "succeeded")?;
+    require_field_value(receipt, "evaluation_request_id", job.request_id())?;
+    require_field_value(receipt, "base_revision", job.base_revision())?;
+    if let Some(committed) = receipt.get("committed_revision").and_then(Value::as_str)
+        && committed != job.base_revision()
+    {
+        return Err(invalid_evaluation_job(
+            "evaluation request receipt committed_revision must match job base_revision",
+        ));
+    }
+    let expected_request_hash = evaluation_request_hash(job)?;
+    let expected_result_hash = evaluation_request_result_hash(job)?;
+    require_field_value(receipt, "request_hash", &expected_request_hash)?;
+    require_field_value(receipt, "result_hash", &expected_result_hash)?;
+    Ok(())
+}
+
+fn evaluation_request_hash(job: &EvaluationJobDocument) -> Result<String, PublicSeamError> {
+    prefixed_jcs_hash(
+        "fp_request_sha256_",
+        &serde_json::json!({
+            "schema_version": "leaven.evaluation_request_identity.v1",
+            "evaluation_request_id": job.request_id(),
+            "kind": job.kind_name(),
+            "candidate_ids": job.candidate_ids(),
+            "resolved_set_id": job.resolved_set_id(),
+            "case_ids": job.case_ids(),
+            "case_count": job.case_count(),
+            "base_revision": job.base_revision(),
+            "deadline_at": job.deadline_at(),
+            "evaluator_id": job.evaluator_id(),
+            "evaluator_fingerprint": job.evaluator_fingerprint(),
+            "capability_fingerprint": job.capability_fingerprint()
+        }),
+    )
+}
+
+fn evaluation_request_result_hash(job: &EvaluationJobDocument) -> Result<String, PublicSeamError> {
+    prefixed_jcs_hash(
+        "fp_result_sha256_",
+        &serde_json::json!({
+            "schema_version": "leaven.evaluation_request_receipt_result.v1",
+            "evaluation_request_id": job.request_id(),
+            "status": "recorded",
+            "resolved_set_id": job.resolved_set_id(),
+            "case_ids": job.case_ids(),
+            "candidate_ids": job.candidate_ids()
+        }),
+    )
+}
+
+fn prefixed_jcs_hash(prefix: &str, value: &Value) -> Result<String, PublicSeamError> {
+    let digest = jcs_canonicalize::sha256_jcs_hex(value).map_err(|error| {
+        invalid_evaluation_job(format!("evaluation request receipt hash failed: {error}"))
+    })?;
+    Ok(format!("{prefix}{digest}"))
+}
+
+fn require_field_value(
+    object: &serde_json::Map<String, Value>,
+    field: &str,
+    expected: &str,
+) -> Result<(), PublicSeamError> {
+    let actual = required_string(object.get(field), field)?;
+    if actual != expected {
+        return Err(invalid_evaluation_job(format!(
+            "evaluation request receipt {field} must be `{expected}`"
+        )));
     }
     Ok(())
 }

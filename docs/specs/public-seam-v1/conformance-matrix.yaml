@@ -609,20 +609,28 @@ rows:
     minimum_closeout_level: semantic_denial
     positive_test_evidence:
       - crates/leaven-engine/tests/context_services.rs::evaluation_requests_record_evaluator_fingerprint_as_runtime_job_identity
-      - crates/leaven-run/tests/scoring_evaluator.rs::runtime_evaluation_requests_project_to_public_seam_evaluation_jobs
+      - crates/leaven-run/tests/scoring_evaluator.rs::independent_runtime_evaluation_request_projects_to_public_seam_job
+      - crates/leaven-run/tests/scoring_evaluator.rs::pairwise_runtime_evaluation_request_projects_to_public_seam_job
+      - crates/leaven-run/tests/scoring_evaluator.rs::listwise_runtime_evaluation_request_projects_to_public_seam_job
       - crates/leaven-public-seam/tests/evaluation_job.rs::evaluation_job_preserves_identity_for_all_request_shapes
+      - crates/leaven-public-seam/tests/evaluation_job.rs::evaluation_request_receipt_binds_job_candidate_and_case_identity
     negative_test_evidence:
+      - crates/leaven-run/tests/scoring_evaluator.rs::unsupported_runtime_evaluation_granularity_rejects_public_seam_job_projection
       - crates/leaven-public-seam/tests/evaluation_job.rs::evaluation_job_rejects_missing_identity_deadline_or_capability
       - crates/leaven-public-seam/tests/evaluation_job.rs::evaluation_job_rejects_unresolved_case_sets_and_invalid_pairs
+      - crates/leaven-public-seam/tests/evaluation_job.rs::evaluation_request_receipt_rejects_decorative_or_unbound_hashes
     implementation_evidence:
       - crates/leaven-engine/src/graph/storage.rs::EvaluationRequestRecord
       - crates/leaven-engine/src/graph/view.rs::EvaluationRequestView::evaluator_fingerprint
       - crates/leaven-engine/src/context/run_context.rs::RunContext::evaluate_with
       - crates/leaven-engine/AGENTS.md
       - crates/leaven-run/src/public_seam.rs::PublicEvaluationJobContext
+      - crates/leaven-run/src/public_seam.rs::PublicEvaluationJobContext::evaluation_request_receipt_plan_result
       - crates/leaven-run/AGENTS.md
       - crates/leaven-public-seam/src/evaluation_job.rs::EvaluationJobDocument
+      - crates/leaven-public-seam/src/evaluation_job.rs::EvaluationRequestReceiptDocument
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_evaluation_job_document
+      - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_evaluation_request_receipt_document
       - crates/leaven-public-seam/AGENTS.md
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-evaluation-job-identity-review.md

@@ -66,10 +66,22 @@ Current limits after adversarial block follow-up:
 Runtime projection follow-up:
 
 - `leaven-run` now exports advanced public `PublicEvaluationJobContext` lowering from an engine `EvaluationRequestView` into a schema-valid `leaven.evaluation_job.v1` document for validation by `leaven-public-seam`.
-- `crates/leaven-run/tests/scoring_evaluator.rs::runtime_evaluation_requests_project_to_public_seam_evaluation_jobs` proves real `RunContext::evaluate_with(...)` independent, pairwise, and listwise requests project request id, candidate ids, resolved case ids, base revision, deadline, evaluator id/fingerprint, and capability fingerprint through the locked public-seam validator.
-- The same test rejects `AssessmentGranularity::Both`, which has no locked V1 evaluation-job wire representation.
+- `crates/leaven-run/tests/scoring_evaluator.rs::independent_runtime_evaluation_request_projects_to_public_seam_job`, `::pairwise_runtime_evaluation_request_projects_to_public_seam_job`, and `::listwise_runtime_evaluation_request_projects_to_public_seam_job` prove real `RunContext::evaluate_with(...)` requests project request id, candidate ids, resolved case ids, base revision, deadline, evaluator id/fingerprint, and capability fingerprint through the locked public-seam validator.
+- `crates/leaven-run/tests/scoring_evaluator.rs::unsupported_runtime_evaluation_granularity_rejects_public_seam_job_projection` rejects `AssessmentGranularity::Both`, which has no locked V1 evaluation-job wire representation.
 
 Current limits after runtime projection follow-up:
 
 - This still is not an adversarial sign-off and does not mark `ps1.evaluator.job_identity` proven.
 - The row remains pending because the positive proof also requires an evaluation request receipt bound to the candidate and case sets; this slice projects the job document but does not yet emit or validate that receipt.
+
+Receipt-binding follow-up:
+
+- `EvaluationRequestReceiptDocument` now validates a Plan Result `evaluation_request_receipt` value and matching `request_evaluation` write receipt against a validated `EvaluationJobDocument`.
+- The receipt validation requires matching request id, base revision, write kind/status, Plan Result audit timing through `validate_plan_result_document(...)`, and JCS/SHA-256 request/result hashes derived from the job's request id, candidate ids, resolved case ids, base revision, deadline, evaluator id/fingerprint, and capability fingerprint.
+- `PublicEvaluationJobContext::evaluation_request_receipt_plan_result(...)` now projects runtime-produced evaluation jobs into the locked Plan Result receipt shape, and the independent/pairwise/listwise runtime tests validate those receipts through `leaven-public-seam`.
+- `crates/leaven-public-seam/tests/evaluation_job.rs::evaluation_request_receipt_rejects_decorative_or_unbound_hashes` rejects a receipt with the right id but an unbound decorative request hash, plus a receipt missing Plan Result audit timing.
+
+Current limits after receipt-binding follow-up:
+
+- This still is not an adversarial sign-off and does not mark `ps1.evaluator.job_identity` proven.
+- The row remains pending until a fresh adversarial review signs off that the job document plus request receipt evidence satisfies the row without spec drift, fake passes, missing negative tests, topology leaks, or public-maturity overclaiming.
