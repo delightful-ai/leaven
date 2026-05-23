@@ -332,6 +332,7 @@ rows:
       - crates/leaven-public-seam/tests/evaluation_job.rs::evaluation_request_receipt_binds_job_candidate_and_case_identity
       - crates/leaven-public-seam/tests/plan_result.rs::plan_result_accepts_typed_success_and_failure_envelopes
       - crates/leaven-public-seam/tests/plan_result.rs::plan_result_accepts_query_call_and_write_receipts_as_audit_currency
+      - crates/leaven-run/tests/public_seam.rs::runcontext_assessments_project_to_public_seam_submit_assessment_receipts
     negative_test_evidence:
       - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_result_rejects_receipt_hashes_unbound_from_plan_preimages
       - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_result_rejects_missing_operation_receipts
@@ -341,6 +342,7 @@ rows:
       - crates/leaven-public-seam/tests/evaluation_job.rs::evaluation_request_receipt_rejects_decorative_or_unbound_hashes
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_evidence_source_receipts_that_are_missing_or_wrong_kind
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_submit_assessment_result_hashes_that_do_not_bind_values
+      - crates/leaven-run/tests/public_seam.rs::assessment_write_projection_rejects_global_bucket_assessment_ids
     implementation_evidence:
       - crates/leaven-public-seam/src/result.rs::receipt_index
       - crates/leaven-public-seam/src/result.rs::inspect_value_receipt
@@ -354,6 +356,7 @@ rows:
       - crates/leaven-public-seam/src/plan_execution.rs::PlanGraphQueryRequest
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_evaluation_request_receipt_document
       - crates/leaven-public-seam/src/evaluation_job.rs::EvaluationRequestReceiptDocument::from_plan_result
+      - crates/leaven-run/src/public_seam/assessment_write.rs::PublicAssessmentWriteReceiptContext::submit_assessments_plan_result
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-result-receipt-replay-review.md
     status: pending
@@ -411,14 +414,17 @@ rows:
     minimum_closeout_level: semantic_denial
     positive_test_evidence:
       - crates/leaven-public-seam/tests/plan_result_replayability.rs::per_assessment_replayability_rolls_up_from_each_assessment
+      - crates/leaven-run/tests/public_seam.rs::runcontext_assessments_project_to_public_seam_submit_assessment_receipts
     negative_test_evidence:
       - crates/leaven-public-seam/tests/plan_result_replayability.rs::replayability_summary_cannot_hide_non_replayable_assessment
       - crates/leaven-public-seam/tests/plan_result_replayability.rs::replayability_summary_rolls_up_all_result_values
+      - crates/leaven-run/tests/public_seam.rs::assessment_write_projection_rejects_global_bucket_assessment_ids
     implementation_evidence:
       - crates/leaven-public-seam/src/result.rs::inspect_assessment_batch_value
       - crates/leaven-public-seam/src/result.rs::validate_replayability_rollups
       - crates/leaven-public-seam/src/result.rs::rollup
       - crates/leaven-public-seam/src/result.rs::Replayability
+      - crates/leaven-run/src/public_seam/assessment_write.rs::PublicAssessmentWriteReceiptContext::submit_assessments_plan_result
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-result-receipt-replay-review.md
     status: pending
@@ -892,16 +898,20 @@ rows:
       - crates/leaven-engine/tests/context_services.rs::evaluate_with_resolves_sets_stores_evidence_and_emits_events
       - crates/leaven-engine/tests/context_services.rs::pairwise_and_listwise_evaluations_record_non_independent_targets
       - crates/leaven-public-seam/tests/plan_result_replayability.rs::per_assessment_replayability_rolls_up_from_each_assessment
+      - crates/leaven-run/tests/public_seam.rs::runcontext_assessments_project_to_public_seam_submit_assessment_receipts
     negative_test_evidence:
       - crates/leaven-public-seam/tests/plan_document.rs::submit_assessments_rejects_missing_assessment_score_or_replayability
       - crates/leaven-public-seam/tests/plan_result_replayability.rs::assessment_write_receipts_require_per_assessment_result_facts
       - crates/leaven-public-seam/tests/plan_result_replayability.rs::assessment_write_receipts_must_match_assessment_batch_request_scope
+      - crates/leaven-run/tests/public_seam.rs::assessment_write_projection_rejects_global_bucket_assessment_ids
     implementation_evidence:
       - crates/leaven-engine/src/graph/storage.rs::AssessmentRecord
       - crates/leaven-engine/src/context/run_context.rs::RunContext::evaluate_with
       - crates/leaven-public-seam/src/result.rs::validate_submit_assessment_receipts
       - crates/leaven-public-seam/src/result.rs::inspect_assessment_batch_value
       - crates/leaven-public-seam/src/plan.rs::AssessmentScoreOutputUsage::inspect_submit_assessments
+      - crates/leaven-run/src/public_seam/assessment_write.rs::PublicAssessmentWriteReceiptContext::submit_assessments_plan_result
+      - crates/leaven-run/AGENTS.md
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-assessment-scope-review.md
     status: pending

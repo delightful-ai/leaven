@@ -10,8 +10,12 @@ use leaven_kernel::{
 use serde_json::{Map, Value, json};
 use thiserror::Error;
 
+mod assessment_write;
 mod proposal_write;
 
+pub use assessment_write::{
+    PublicAssessmentWriteReceiptContext, PublicAssessmentWriteReceiptProjectionError,
+};
 pub use proposal_write::{
     PublicProposalWriteReceiptContext, PublicProposalWriteReceiptProjectionError,
 };

@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use leaven_core::OptimizationProblem;
 use leaven_engine::{ApplyOutcome, ApplyReport, ProposalBatchReport, RunGraphView};
 use leaven_kernel::{CandidateId, ProposalBatchId, ProposalId};
@@ -228,6 +230,15 @@ pub enum PublicProposalWriteReceiptProjectionError {
     /// The apply report contains a failed proposal application.
     #[error("proposal apply projection requires committed RunContext apply outcomes")]
     ApplyFailed,
+    /// The apply report did not include any proposal outcomes.
+    #[error("proposal apply projection requires at least one apply outcome")]
+    EmptyApplyBatch,
+    /// The apply report candidate/proposal pair does not match graph truth.
+    #[error("proposal apply projection outcome does not match graph-created candidate")]
+    ApplyOutcomeMismatch,
+    /// The apply report outcome set does not exactly cover the proposal batch.
+    #[error("proposal apply projection outcome set must exactly match the proposal batch")]
+    ApplyOutcomeSetMismatch,
     /// A created candidate was not graph-backed by a proposal from the batch.
     #[error("proposal apply projection requires graph-backed created candidates")]
     CreatedCandidateNotGraphBacked,
@@ -273,8 +284,19 @@ fn created_candidates<P>(
 where
     P: OptimizationProblem,
 {
+    if apply.outcomes.is_empty() {
+        return Err(PublicProposalWriteReceiptProjectionError::EmptyApplyBatch);
+    }
+    if apply.outcomes.len() != batch.proposal_ids.len() {
+        return Err(PublicProposalWriteReceiptProjectionError::ApplyOutcomeSetMismatch);
+    }
+    let expected = batch.proposal_ids.iter().copied().collect::<BTreeSet<_>>();
+    let mut seen = BTreeSet::new();
     let mut created = Vec::with_capacity(apply.outcomes.len());
     for outcome in &apply.outcomes {
+        if !seen.insert(outcome.proposal_id) {
+            return Err(PublicProposalWriteReceiptProjectionError::ApplyOutcomeSetMismatch);
+        }
         match &outcome.outcome {
             ApplyOutcome::Success { candidate_id } => {
                 let proposal = graph.proposal_that_created(*candidate_id).ok_or(
@@ -285,12 +307,18 @@ where
                         PublicProposalWriteReceiptProjectionError::CreatedCandidateNotGraphBacked,
                     );
                 }
+                if proposal.id() != outcome.proposal_id {
+                    return Err(PublicProposalWriteReceiptProjectionError::ApplyOutcomeMismatch);
+                }
                 created.push(candidate_ref(*candidate_id));
             }
             ApplyOutcome::Failure { .. } => {
                 return Err(PublicProposalWriteReceiptProjectionError::ApplyFailed);
             }
         }
+    }
+    if seen != expected {
+        return Err(PublicProposalWriteReceiptProjectionError::ApplyOutcomeSetMismatch);
     }
     Ok(created)
 }

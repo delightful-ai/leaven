@@ -55,17 +55,20 @@ contracts. Crate-root exports for `PublicFailedCallKind`,
 `PublicFailedCallReceiptContext`, and
 `PublicFailedCallReceiptProjectionError` are also advanced public
 seam-lowering contracts. Crate-root exports for
+`PublicAssessmentWriteReceiptContext`,
+`PublicAssessmentWriteReceiptProjectionError`,
 `PublicProposalWriteReceiptContext` and
 `PublicProposalWriteReceiptProjectionError` are advanced public seam-lowering
-contracts for projecting engine `RunContext` proposal-batch submission and
-application reports into locked Plan Result write receipts. They project
+contracts for projecting engine `RunContext` assessment submission,
+proposal-batch submission, and proposal application reports into locked Plan
+Result write receipts. They project
 engine-recorded evaluation request identity, `request_evaluation` Plan Result
 receipts, engine `RunContext` budget-charge/error event pairs, and graph-backed
-proposal write reports into locked public-seam wire documents for validation by
-`leaven-public-seam`; they are not in `leaven_run::prelude`, not ACP dispatch,
-not capability minting, not provider execution, not graph mutation authority,
-and not proof of ACP session delivery or durable receipt persistence beyond the
-projected public-seam document.
+assessment/proposal write reports into locked public-seam wire documents for
+validation by `leaven-public-seam`; they are not in `leaven_run::prelude`, not
+ACP dispatch, not capability minting, not provider execution, not graph
+mutation authority, and not proof of ACP session delivery or durable receipt
+persistence beyond the projected public-seam document.
 
 ## Proof Anchors
 - `tests/optimize_builder.rs` proves required budget policy, held-out case
@@ -81,9 +84,10 @@ projected public-seam document.
   locked failed call/charge receipts, and
   projection of runtime-produced score outputs through the locked public-seam
   owner.
-- `tests/public_seam.rs` proves engine `RunContext` proposal submission and
-  application reports lower into locked public-seam proposal/apply write
-  receipts only when the batch and created candidates are backed by graph truth.
+- `tests/public_seam.rs` proves engine `RunContext` assessment submission,
+  proposal submission, and proposal application reports lower into locked
+  public-seam write receipts only when the request, assessment batch, proposal
+  batch, and created candidates are backed by graph truth.
 - `cargo nextest run -p leaven-run` proves the product-builder contract.
 - `cargo test -p leaven --test topology_contract` proves this crate still
   composes engine/eval/evidence/store without absorbing their ownership.
