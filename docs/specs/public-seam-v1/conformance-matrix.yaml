@@ -640,6 +640,22 @@ rows:
       per-assessment replayability are denied.
     fake_pass_rejected: Writing assessment rows into a global bucket by id only.
     minimum_closeout_level: semantic_denial
+    positive_test_evidence:
+      - crates/leaven-engine/tests/context_services.rs::evaluate_with_resolves_sets_stores_evidence_and_emits_events
+      - crates/leaven-engine/tests/context_services.rs::pairwise_and_listwise_evaluations_record_non_independent_targets
+      - crates/leaven-public-seam/tests/plan_result_replayability.rs::per_assessment_replayability_rolls_up_from_each_assessment
+    negative_test_evidence:
+      - crates/leaven-public-seam/tests/plan_document.rs::submit_assessments_rejects_missing_assessment_score_or_replayability
+      - crates/leaven-public-seam/tests/plan_result_replayability.rs::assessment_write_receipts_require_per_assessment_result_facts
+      - crates/leaven-public-seam/tests/plan_result_replayability.rs::assessment_write_receipts_must_match_assessment_batch_request_scope
+    implementation_evidence:
+      - crates/leaven-engine/src/graph/storage.rs::AssessmentRecord
+      - crates/leaven-engine/src/context/run_context.rs::RunContext::evaluate_with
+      - crates/leaven-public-seam/src/result.rs::validate_submit_assessment_receipts
+      - crates/leaven-public-seam/src/result.rs::inspect_assessment_batch_value
+      - crates/leaven-public-seam/src/plan.rs::AssessmentScoreOutputUsage::inspect_submit_assessments
+    review_evidence:
+      - docs/specs/public-seam-v1/reviews/2026-05-23-assessment-scope-review.md
     status: pending
 
   - id: ps1.acp.transport_profile
