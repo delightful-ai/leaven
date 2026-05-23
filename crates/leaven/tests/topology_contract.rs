@@ -39,6 +39,7 @@ const EXPECTED_WORKSPACE_MEMBERS: &[&str] = &[
     "crates/leaven-mipro",
     "crates/leaven-population",
     "crates/leaven-preference",
+    "crates/leaven-public-seam",
     "crates/leaven-python",
     "crates/leaven-render",
     "crates/leaven-run",
@@ -111,6 +112,7 @@ const EXPECTED_CRATES: &[&str] = &[
     "leaven-mipro",
     "leaven-population",
     "leaven-preference",
+    "leaven-public-seam",
     "leaven-python",
     "leaven-render",
     "leaven-run",
@@ -389,6 +391,7 @@ const EXPECTED_DEPENDENCIES: &[(&str, &[&str])] = &[
             "leaven-kernel",
         ],
     ),
+    ("leaven-public-seam", &[]),
     (
         "leaven-python",
         &["leaven-core", "leaven-engine", "leaven-kernel"],
