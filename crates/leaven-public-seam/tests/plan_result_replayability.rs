@@ -80,6 +80,18 @@ fn assessment_write_receipts_require_per_assessment_result_facts() {
 }
 
 #[test]
+fn assessment_write_receipts_must_match_assessment_batch_request_scope() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut result = mixed_replayability_result("pure_read", [("assess_replay_1", "pure_read")]);
+    result["receipts"][0]["evaluation_request_id"] = json!("evalreq_other");
+
+    assert!(matches!(
+        package.validate_plan_result_document(&result).unwrap_err(),
+        PublicSeamError::InvalidPlanResult { .. }
+    ));
+}
+
+#[test]
 fn replayability_summary_rolls_up_all_result_values() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let mut result = mixed_replayability_result("pure_read", [("assess_replay_1", "pure_read")]);

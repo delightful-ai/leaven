@@ -31,7 +31,7 @@ impl PlanResultDocument {
             replayability_summary,
         )?;
         let receipt_kinds = inspect_receipts(parts.receipts)?;
-        validate_submit_assessment_receipts(parts.receipts, &value_audit.assessment_batch_ids)?;
+        validate_submit_assessment_receipts(parts.receipts, &value_audit.assessment_batches)?;
         validate_failed_call_charges(parts.receipts, parts.charges)?;
         Ok(Self {
             plan_id: parts.plan_id.to_owned(),
@@ -142,7 +142,7 @@ impl<'a> PlanResultParts<'a> {
 struct ValueAudit {
     value_kinds: Vec<String>,
     assessment_batch_replayability: Vec<(String, Replayability)>,
-    assessment_batch_ids: BTreeSet<String>,
+    assessment_batches: Vec<AssessmentBatchScope>,
 }
 
 fn inspect_values(
@@ -153,7 +153,7 @@ fn inspect_values(
     let mut value_kinds = Vec::with_capacity(values.len());
     let mut value_replayability = Vec::with_capacity(values.len());
     let mut assessment_batch_replayability = Vec::new();
-    let mut assessment_batch_ids = BTreeSet::new();
+    let mut assessment_batches = Vec::new();
     for value in values.values() {
         let value_object = value
             .as_object()
@@ -165,7 +165,7 @@ fn inspect_values(
             inspect_assessment_batch_value(
                 value_object,
                 &mut assessment_batch_replayability,
-                &mut assessment_batch_ids,
+                &mut assessment_batches,
             )?;
         }
     }
@@ -177,7 +177,7 @@ fn inspect_values(
     Ok(ValueAudit {
         value_kinds,
         assessment_batch_replayability,
-        assessment_batch_ids,
+        assessment_batches,
     })
 }
 
@@ -205,7 +205,7 @@ fn inspect_value_receipt<'a>(
 fn inspect_assessment_batch_value(
     batch: &serde_json::Map<String, Value>,
     replayability: &mut Vec<(String, Replayability)>,
-    assessment_batch_ids: &mut BTreeSet<String>,
+    assessment_batches: &mut Vec<AssessmentBatchScope>,
 ) -> Result<(), PublicSeamError> {
     let batch_rollup = inspect_assessment_batch(batch, replayability)?;
     let value_replayability = required_replayability(batch.get("replayability"))?;
@@ -214,10 +214,7 @@ fn inspect_assessment_batch_value(
             "assessment batch replayability must roll up per-assessment replayability",
         ));
     }
-    assessment_batch_ids.extend(required_string_set(
-        batch.get("assessment_ids"),
-        "assessment_ids",
-    )?);
+    assessment_batches.push(assessment_batch_scope(batch)?);
     Ok(())
 }
 
@@ -256,12 +253,18 @@ fn inspect_receipts(receipts: &[Value]) -> Result<Vec<String>, PublicSeamError> 
 
 fn validate_submit_assessment_receipts(
     receipts: &[Value],
-    assessment_batch_ids: &BTreeSet<String>,
+    assessment_batches: &[AssessmentBatchScope],
 ) -> Result<(), PublicSeamError> {
-    for receipt_assessments in submit_assessment_receipts(receipts)? {
-        if !receipt_assessments.is_subset(assessment_batch_ids) {
+    for receipt_scope in submit_assessment_receipts(receipts)? {
+        let backed_by_batch = assessment_batches.iter().any(|batch| {
+            batch.evaluation_request_id == receipt_scope.evaluation_request_id
+                && receipt_scope
+                    .assessment_ids
+                    .is_subset(&batch.assessment_ids)
+        });
+        if !backed_by_batch {
             return Err(invalid_result(
-                "submit_assessments receipt must be backed by assessment batch per-assessment replayability",
+                "submit_assessments receipt must be backed by matching assessment batch per-assessment replayability",
             ));
         }
     }
@@ -310,7 +313,7 @@ fn validate_failed_call_charges(
 
 fn submit_assessment_receipts(
     receipts: &[Value],
-) -> Result<Vec<BTreeSet<String>>, PublicSeamError> {
+) -> Result<Vec<AssessmentBatchScope>, PublicSeamError> {
     let mut submit_assessments = Vec::new();
     for receipt in receipts {
         let receipt = receipt
@@ -319,13 +322,29 @@ fn submit_assessment_receipts(
         if receipt.get("kind").and_then(Value::as_str) == Some("write")
             && receipt.get("write_kind").and_then(Value::as_str) == Some("submit_assessments")
         {
-            submit_assessments.push(required_string_set(
-                receipt.get("assessment_ids"),
-                "assessment_ids",
-            )?);
+            submit_assessments.push(assessment_batch_scope(receipt)?);
         }
     }
     Ok(submit_assessments)
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct AssessmentBatchScope {
+    evaluation_request_id: String,
+    assessment_ids: BTreeSet<String>,
+}
+
+fn assessment_batch_scope(
+    object: &serde_json::Map<String, Value>,
+) -> Result<AssessmentBatchScope, PublicSeamError> {
+    Ok(AssessmentBatchScope {
+        evaluation_request_id: required_string(
+            object.get("evaluation_request_id"),
+            "evaluation_request_id",
+        )?
+        .to_owned(),
+        assessment_ids: required_string_set(object.get("assessment_ids"), "assessment_ids")?,
+    })
 }
 
 fn charge_index(charges: &[Value]) -> Result<BTreeMap<String, String>, PublicSeamError> {
