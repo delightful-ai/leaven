@@ -29,3 +29,29 @@ Current limits after runtime follow-up:
 
 - This still is not an adversarial sign-off and does not mark `ps1.evaluator.job_identity` proven.
 - The row remains pending because runtime evaluation records still do not carry the full public-seam EvaluationJob document: base revision, deadline, and capability fingerprint are not yet produced by the engine/run lowering path, and no evaluation request receipt is emitted through the public seam owner.
+
+Adversarial review:
+
+- Reviewer: sub-agent `019e5525-e070-7be3-adee-781067a24e84`
+- Result: blocked. The row must remain pending.
+
+Blocking findings:
+
+- The public-seam evidence validates caller-supplied `EvaluationJob` JSON but does not prove that runtime evaluation lowering creates schema-valid public jobs or evaluation request receipts.
+- `EvaluationJobDocument` preserved only counts and a resolved-set id, not the candidate ids or case ids needed to prove candidate/case-set binding.
+- Pairwise self-pair denial compared raw JSON values, so alternate `CandidateRef` spellings for the same candidate could bypass the denial.
+- Explicit case sets were accepted without `case_set_version` and `partition_summary`, and cursor-only sets could pass as resolved.
+- Missing-identity negatives did not cover `evaluation_request_id`, `base_revision`, or `evaluator_id`.
+
+Implementation after block:
+
+- `EvaluationJobDocument` now preserves normalized case ids and candidate ids in addition to counts.
+- Pairwise self-pair validation now compares normalized candidate ids across string and object `CandidateRef` spellings.
+- Nonempty resolved sets now require explicit `case_ids`, `case_set_version`, and `partition_summary`; cursor-only sets no longer pass as partition-resolved.
+- `crates/leaven-public-seam/tests/evaluation_job.rs::evaluation_job_rejects_missing_identity_deadline_or_capability` now covers missing request id, base revision, and evaluator id.
+- `crates/leaven-public-seam/tests/evaluation_job.rs::evaluation_job_rejects_unresolved_case_sets_and_invalid_pairs` now covers mixed-ref self-pairs, cursor-only fake resolution, and missing partition-resolution fields.
+
+Current limits after adversarial block follow-up:
+
+- This still is not an adversarial sign-off and does not mark `ps1.evaluator.job_identity` proven.
+- The row remains pending because runtime evaluation lowering still does not produce the full public-seam `EvaluationJob` document or an evaluation request receipt through the public seam owner.
