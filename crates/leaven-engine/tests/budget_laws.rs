@@ -5,12 +5,21 @@ mod support;
 
 use support::{TestProblem, graph_and_budget};
 
+fn usd_micro(amount: f64) -> Cost {
+    Cost::custom("usd_micro", amount).unwrap()
+}
+
+fn role_usd_micro(role: &str, amount: f64) -> Cost {
+    Cost::custom(format!("{role}.usd_micro"), amount).unwrap()
+}
+
 #[test]
 fn budget_ledger_charges_each_supported_axis() {
     let mut ledger = BudgetLedger::new(Budget {
         metric_calls: Some(2),
         llm_calls: Some(2),
         seconds: Some(Amount::new(2.0).unwrap()),
+        ..Budget::unlimited()
     });
 
     ledger
@@ -35,6 +44,7 @@ fn budget_ledger_refuses_each_supported_axis_without_charging() {
         metric_calls: Some(0),
         llm_calls: Some(0),
         seconds: Some(Amount::zero()),
+        ..Budget::unlimited()
     });
 
     let metric = ledger
@@ -51,6 +61,94 @@ fn budget_ledger_refuses_each_supported_axis_without_charging() {
     assert_eq!(llm.dimension, BudgetDimension::LlmCalls);
     assert_eq!(seconds.dimension, BudgetDimension::Seconds);
     assert!(ledger.snapshot().spent.is_zero());
+}
+
+#[test]
+fn budget_ledger_enforces_aggregate_and_role_specific_custom_axes() {
+    let mut ledger = BudgetLedger::new(
+        Budget::unlimited()
+            .with_axis_limit("usd_micro", 100_000.0)
+            .unwrap()
+            .with_axis_limit("lm.usd_micro", 80_000.0)
+            .unwrap()
+            .with_axis_limit("agent.usd_micro", 80_000.0)
+            .unwrap(),
+    );
+
+    ledger
+        .charge(
+            StageId::custom("lm.complete"),
+            usd_micro(70_000.0).combine(&role_usd_micro("lm", 70_000.0)),
+        )
+        .unwrap();
+
+    let aggregate = ledger
+        .charge(
+            StageId::custom("agent.run"),
+            usd_micro(40_000.0).combine(&role_usd_micro("agent", 40_000.0)),
+        )
+        .unwrap_err();
+
+    assert_eq!(
+        aggregate.dimension,
+        BudgetDimension::Other("usd_micro".to_owned())
+    );
+    assert_eq!(
+        ledger
+            .snapshot()
+            .spent
+            .other
+            .get("usd_micro")
+            .copied()
+            .unwrap(),
+        Amount::new(70_000.0).unwrap()
+    );
+
+    let mut ledger = BudgetLedger::new(
+        Budget::unlimited()
+            .with_axis_limit("usd_micro", 200_000.0)
+            .unwrap()
+            .with_axis_limit("lm.usd_micro", 80_000.0)
+            .unwrap(),
+    );
+    let role = ledger
+        .charge(
+            StageId::custom("lm.complete"),
+            usd_micro(90_000.0).combine(&role_usd_micro("lm", 90_000.0)),
+        )
+        .unwrap_err();
+
+    assert_eq!(
+        role.dimension,
+        BudgetDimension::Other("lm.usd_micro".to_owned())
+    );
+    assert!(ledger.snapshot().spent.is_zero());
+}
+
+#[test]
+fn budget_ledger_enforces_concurrent_call_reservations() {
+    let mut ledger = BudgetLedger::new(Budget {
+        concurrent_calls: Some(1),
+        ..Budget::unlimited()
+    });
+
+    let first = ledger
+        .begin_concurrent_call(StageId::custom("lm.complete"))
+        .unwrap();
+    assert_eq!(first.in_flight_calls, 1);
+
+    let refused = ledger
+        .begin_concurrent_call(StageId::custom("agent.run"))
+        .unwrap_err();
+    assert_eq!(refused.dimension, BudgetDimension::ConcurrentCalls);
+    assert_eq!(ledger.snapshot().in_flight_calls, 1);
+
+    ledger.end_concurrent_call();
+    assert_eq!(ledger.snapshot().in_flight_calls, 0);
+    ledger
+        .begin_concurrent_call(StageId::custom("sandbox.exec"))
+        .unwrap();
+    assert_eq!(ledger.snapshot().in_flight_calls, 1);
 }
 
 #[test]

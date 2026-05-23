@@ -9,6 +9,7 @@ pub struct BudgetLedger {
     limit: Budget,
     spent: Cost,
     stages: BTreeMap<StageId, Cost>,
+    in_flight_calls: u64,
 }
 
 impl BudgetLedger {
@@ -18,6 +19,7 @@ impl BudgetLedger {
             limit,
             spent: Cost::zero(),
             stages: BTreeMap::new(),
+            in_flight_calls: 0,
         }
     }
 
@@ -27,6 +29,7 @@ impl BudgetLedger {
             limit: snapshot.limit,
             spent: snapshot.spent,
             stages: snapshot.stages,
+            in_flight_calls: snapshot.in_flight_calls,
         }
     }
 
@@ -36,6 +39,7 @@ impl BudgetLedger {
             spent: self.spent.clone(),
             limit: self.limit.clone(),
             stages: self.stages.clone(),
+            in_flight_calls: self.in_flight_calls,
         }
     }
 
@@ -75,6 +79,17 @@ impl BudgetLedger {
                 });
             }
         }
+        for (axis, limit) in &self.limit.other {
+            let projected_amount = projected.other.get(axis).copied().unwrap_or_default();
+            if projected_amount > *limit {
+                return Err(BudgetExceeded {
+                    stage,
+                    requested: Box::new(cost),
+                    snapshot: Box::new(self.snapshot()),
+                    dimension: BudgetDimension::Other(axis.clone()),
+                });
+            }
+        }
 
         self.spent = projected;
         self.stages
@@ -82,6 +97,29 @@ impl BudgetLedger {
             .and_modify(|spent| *spent = spent.clone().combine(&cost))
             .or_insert(cost);
         Ok(self.snapshot())
+    }
+
+    pub fn begin_concurrent_call(
+        &mut self,
+        stage: StageId,
+    ) -> Result<BudgetSnapshot, BudgetExceeded> {
+        let projected = self.in_flight_calls.saturating_add(1);
+        if let Some(limit) = self.limit.concurrent_calls {
+            if projected > limit {
+                return Err(BudgetExceeded {
+                    stage,
+                    requested: Box::new(Cost::zero()),
+                    snapshot: Box::new(self.snapshot()),
+                    dimension: BudgetDimension::ConcurrentCalls,
+                });
+            }
+        }
+        self.in_flight_calls = projected;
+        Ok(self.snapshot())
+    }
+
+    pub fn end_concurrent_call(&mut self) {
+        self.in_flight_calls = self.in_flight_calls.saturating_sub(1);
     }
 }
 
@@ -108,6 +146,14 @@ impl<'a> BudgetHandle<'a> {
 
     pub fn charge(&mut self, cost: Cost) -> Result<BudgetSnapshot, BudgetExceeded> {
         self.ledger.charge(self.stage.clone(), cost)
+    }
+
+    pub fn begin_concurrent_call(&mut self) -> Result<BudgetSnapshot, BudgetExceeded> {
+        self.ledger.begin_concurrent_call(self.stage.clone())
+    }
+
+    pub fn end_concurrent_call(&mut self) {
+        self.ledger.end_concurrent_call();
     }
 
     #[must_use]
