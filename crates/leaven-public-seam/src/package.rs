@@ -7,9 +7,9 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use crate::{
-    ConformanceMatrix, DeferredWatchReplacement, EvidenceEnvelopeDocument, MatrixRowStatus,
-    OutputRecordDocument, PinnedDialectEvaluator, PlanDocument, PlanResultDocument,
-    PublicSeamError,
+    ConformanceMatrix, DeferredWatchReplacement, EvaluationJobDocument, EvidenceEnvelopeDocument,
+    MatrixRowStatus, OutputRecordDocument, PinnedDialectEvaluator, PlanDocument,
+    PlanResultDocument, PublicSeamError,
 };
 
 const ACTIVE_PACKAGE_RELATIVE: &str = "docs/specs/public-seam-v1";
@@ -766,6 +766,19 @@ impl PublicSeamPackage {
             value,
         )?;
         EvidenceEnvelopeDocument::from_schema_valid_value(value)
+    }
+
+    /// Validates an Evaluation Job document through the active V1 schema and semantic seam checks.
+    pub fn validate_evaluation_job_document(
+        &self,
+        value: &Value,
+    ) -> Result<EvaluationJobDocument, PublicSeamError> {
+        self.validate_arbitrary_value(
+            "leaven.evaluation_job.v1.schema.json",
+            "/evaluation_job",
+            value,
+        )?;
+        EvaluationJobDocument::from_schema_valid_value(value)
     }
 
     /// Validates the V1 deferred-watch marker and its finite-diff Plan IR replacement.

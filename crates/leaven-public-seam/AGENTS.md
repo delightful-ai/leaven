@@ -100,6 +100,13 @@ source-receipt preservation plus target-derived data-class coverage at the
 wire-envelope layer only; it is not evaluator evidence production, redaction
 execution, receipt persistence, or data-class propagation through runtime stages.
 
+Crate-root exports for `EvaluationJobDocument` and `EvaluationJobKind` are
+advanced public seam contracts. They prove active-schema evaluation-job document
+validation plus semantic identity checks for request id, candidate/case set,
+base revision, deadline, evaluator id/fingerprint, capability fingerprint, and
+request shape. They are not proof that the runtime evaluator path emits those
+jobs or request receipts.
+
 Crate-root exports for `PublicOutputRecord`, `OutputRecordDocument`, and
 `PublicBlobRef` are advanced public seam contracts. They prove reusable
 `leaven-evidence` output records can be projected into the locked
@@ -136,6 +143,12 @@ backpressure, or runtime watch support.
   derived data classes, and read/effect/write source receipt refs at the public-
   seam validation layer. It does not prove evaluator/evidence runtime production
   or public PlanResult projection.
+- `tests/evaluation_job.rs` proves active-schema EvaluationJob values preserve
+  evaluator/request/candidate/case/revision/deadline/capability identity for
+  independent, pairwise, and listwise shapes, and rejects missing deadline,
+  evaluator fingerprint, capability fingerprint, unresolved case sets, and
+  self-pairs. It does not prove the runtime evaluator creates those jobs or
+  emits evaluation request receipts.
 - `tests/output_record.rs` proves reusable `leaven-evidence` output records
   project into the locked public-seam OutputRecord wire shape with visibility,
   data classes, non-placeholder inline output, and public blob audit metadata.
