@@ -372,8 +372,7 @@ fn reject_target_leakage_value(value: &Value, context: &str) -> Result<(), Publi
     match value {
         Value::Object(object) => {
             for (key, nested) in object {
-                let key = key.to_ascii_lowercase();
-                if key == "target" || key == "case_target" || key == "expected_target" {
+                if contains_case_target_marker(key) {
                     return Err(invalid_stage_payload(format!(
                         "{context} must not carry case.target material"
                     )));
@@ -386,7 +385,7 @@ fn reject_target_leakage_value(value: &Value, context: &str) -> Result<(), Publi
                 reject_target_leakage_value(item, context)?;
             }
         }
-        Value::String(text) if text == "case.target" => {
+        Value::String(text) if contains_case_target_marker(text) => {
             return Err(invalid_stage_payload(format!(
                 "{context} must not carry case.target material"
             )));
@@ -394,6 +393,10 @@ fn reject_target_leakage_value(value: &Value, context: &str) -> Result<(), Publi
         _ => {}
     }
     Ok(())
+}
+
+fn contains_case_target_marker(text: &str) -> bool {
+    text.to_ascii_lowercase().contains("case.target")
 }
 
 fn required_string<'a>(value: Option<&'a Value>, field: &str) -> Result<&'a str, PublicSeamError> {

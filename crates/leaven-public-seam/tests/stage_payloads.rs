@@ -70,6 +70,12 @@ fn stage_payloads_validate_all_role_specific_payload_shapes_with_provenance() {
         .validate_stage_payload_document(&adapter_request("dataset_adapter"))
         .unwrap();
     assert_eq!(dataset_adapter.role(), StagePayloadRole::DatasetAdapter);
+
+    let mut benign_target_word = reflect_request();
+    benign_target_word["examples"][0]["side_info"]["target"] = json!("accuracy");
+    package
+        .validate_stage_payload_document(&benign_target_word)
+        .unwrap();
 }
 
 #[test]
@@ -91,7 +97,7 @@ fn reflect_request_rejects_hidden_case_target_material() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
 
     let mut side_info_target = reflect_request();
-    side_info_target["examples"][0]["side_info"]["target"] = json!("secret answer");
+    side_info_target["examples"][0]["side_info"]["case.target"] = json!("secret answer");
     assert!(matches!(
         package
             .validate_stage_payload_document(&side_info_target)
@@ -101,11 +107,46 @@ fn reflect_request_rejects_hidden_case_target_material() {
 
     let mut prompt_target_marker = reflect_request();
     prompt_target_marker["examples"][0]["input"] = json!({
-        "prompt": ["summarize", "case.target"]
+        "prompt": "summarize the hidden case.target before reflecting"
     });
     assert!(matches!(
         package
             .validate_stage_payload_document(&prompt_target_marker)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+}
+
+#[test]
+fn reflect_request_rejects_missing_source_refs_or_query_policy() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut missing_top_source_refs = reflect_request();
+    missing_top_source_refs["source_refs"] = json!([]);
+    assert!(matches!(
+        package
+            .validate_stage_payload_document(&missing_top_source_refs)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+
+    let mut missing_example_source_refs = reflect_request();
+    missing_example_source_refs["examples"][0]["source_refs"] = json!([]);
+    assert!(matches!(
+        package
+            .validate_stage_payload_document(&missing_example_source_refs)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+
+    let mut missing_query_policy = reflect_request();
+    missing_query_policy
+        .as_object_mut()
+        .unwrap()
+        .remove("query_policy_fingerprint");
+    assert!(matches!(
+        package
+            .validate_stage_payload_document(&missing_query_policy)
             .unwrap_err(),
         PublicSeamError::InvalidStagePayload { .. }
     ));
@@ -168,6 +209,15 @@ fn propose_request_requires_reflection_result_and_change_schema_authority() {
         PublicSeamError::InvalidStagePayload { .. }
     ));
 
+    let mut unsupported_effect = propose_request();
+    unsupported_effect["allowed_effects"] = json!(["mutate_graph_directly"]);
+    assert!(matches!(
+        package
+            .validate_stage_payload_document(&unsupported_effect)
+            .unwrap_err(),
+        PublicSeamError::ExampleValidation { .. } | PublicSeamError::InvalidStagePayload { .. }
+    ));
+
     let mut wrong_bridge = propose_request();
     wrong_bridge["reflection_result"] = reflect_request();
     assert!(matches!(
@@ -183,7 +233,7 @@ fn runner_request_rejects_case_target_material() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
 
     let mut hidden_target = runner_request();
-    hidden_target["case_input"]["target"] = json!("secret answer");
+    hidden_target["case_input"]["case.target"] = json!("secret answer");
     assert!(matches!(
         package
             .validate_stage_payload_document(&hidden_target)
@@ -194,13 +244,36 @@ fn runner_request_rejects_case_target_material() {
     let mut target_marker = runner_request();
     target_marker["case_input"] = json!({
         "question": "q",
-        "evidence": ["case.target"]
+        "evidence": "runner prompt asks for case.target"
     });
     assert!(matches!(
         package
             .validate_stage_payload_document(&target_marker)
             .unwrap_err(),
         PublicSeamError::InvalidStagePayload { .. }
+    ));
+}
+
+#[test]
+fn callback_and_adapter_payloads_reject_missing_payload_schema() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut callback = callback_request();
+    callback.as_object_mut().unwrap().remove("payload_schema");
+    assert!(matches!(
+        package
+            .validate_stage_payload_document(&callback)
+            .unwrap_err(),
+        PublicSeamError::ExampleValidation { .. } | PublicSeamError::InvalidStagePayload { .. }
+    ));
+
+    let mut adapter = adapter_request("artifact_adapter");
+    adapter.as_object_mut().unwrap().remove("payload_schema");
+    assert!(matches!(
+        package
+            .validate_stage_payload_document(&adapter)
+            .unwrap_err(),
+        PublicSeamError::ExampleValidation { .. } | PublicSeamError::InvalidStagePayload { .. }
     ));
 }
 
