@@ -76,19 +76,13 @@ fn plan_ir_family_lowers_and_executes_let_call_write_through_public_seam_owner()
         "on_stale": "reject"
     });
     let mut host = RecordingPlanHost::default();
+    let context = plan_execution_context();
 
     let report = package
-        .execute_plan_document(
-            &plan,
-            &PlanExecutionContext::new(
-                "fp_cap_sha256_planexec",
-                "fp_policy_sha256_planexec",
-                "rev_planexec_base",
-                "2026-05-23T12:00:00Z",
-                "2026-05-23T12:00:01Z",
-            ),
-            &mut host,
-        )
+        .execute_plan_document(&plan, &context, &mut host)
+        .unwrap();
+    package
+        .validate_plan_execution_result(&plan, &context, report.value())
         .unwrap();
 
     assert_eq!(host.calls, vec!["completion"]);
@@ -122,6 +116,100 @@ fn plan_ir_family_lowers_and_executes_let_call_write_through_public_seam_owner()
         report.value()["final_revision"].as_str(),
         Some("rev_planexec_final")
     );
+}
+
+#[test]
+fn plan_execution_result_rejects_receipt_hashes_unbound_from_plan_preimages() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let context = plan_execution_context();
+
+    let mut query_host = RecordingPlanHost::default();
+    let mut query_result = package
+        .execute_plan_document(
+            &latest_at_start_graph_query_plan(),
+            &context,
+            &mut query_host,
+        )
+        .unwrap()
+        .value()
+        .clone();
+    query_result["receipts"][0]["op_hash"] =
+        json!("fp_query_sha256_same_prefix_wrong_query_preimage");
+    assert!(matches!(
+        package
+            .validate_plan_execution_result(
+                &latest_at_start_graph_query_plan(),
+                &context,
+                &query_result
+            )
+            .unwrap_err(),
+        PublicSeamError::InvalidPlan { .. }
+    ));
+
+    let mut plan = typed_let_call_write_plan();
+    plan["mode"] = json!({"kind": "execute"});
+    plan["commit"] = json!({
+        "kind": "graph_writes_atomic",
+        "on_stale": "reject"
+    });
+    let mut host = RecordingPlanHost::default();
+    let result = package
+        .execute_plan_document(&plan, &context, &mut host)
+        .unwrap()
+        .value()
+        .clone();
+
+    let mut wrong_call_request_hash = result.clone();
+    wrong_call_request_hash["receipts"][0]["request_hash"] =
+        json!("fp_request_sha256_same_prefix_wrong_call_preimage");
+    assert!(matches!(
+        package
+            .validate_plan_execution_result(&plan, &context, &wrong_call_request_hash)
+            .unwrap_err(),
+        PublicSeamError::InvalidPlan { .. }
+    ));
+
+    let mut missing_call_op_var = result.clone();
+    missing_call_op_var["receipts"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("op_var");
+    assert!(matches!(
+        package
+            .validate_plan_execution_result(&plan, &context, &missing_call_op_var)
+            .unwrap_err(),
+        PublicSeamError::InvalidPlan { .. }
+    ));
+
+    let mut wrong_write_request_hash = result.clone();
+    wrong_write_request_hash["receipts"][1]["request_hash"] =
+        json!("fp_request_sha256_same_prefix_wrong_write_preimage");
+    assert!(matches!(
+        package
+            .validate_plan_execution_result(&plan, &context, &wrong_write_request_hash)
+            .unwrap_err(),
+        PublicSeamError::InvalidPlan { .. }
+    ));
+
+    let mut wrong_write_result_hash = result.clone();
+    wrong_write_result_hash["receipts"][1]["result_hash"] =
+        json!("fp_result_sha256_same_prefix_wrong_write_result");
+    assert!(matches!(
+        package
+            .validate_plan_execution_result(&plan, &context, &wrong_write_result_hash)
+            .unwrap_err(),
+        PublicSeamError::InvalidPlan { .. }
+    ));
+
+    let mut tampered_plan = plan.clone();
+    tampered_plan["ops"][1]["call"]["messages"][0]["content"][0]["text"] =
+        json!("Say something else");
+    assert!(matches!(
+        package
+            .validate_plan_execution_result(&tampered_plan, &context, &result)
+            .unwrap_err(),
+        PublicSeamError::InvalidPlan { .. }
+    ));
 }
 
 #[test]

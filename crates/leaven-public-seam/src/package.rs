@@ -774,6 +774,24 @@ impl PublicSeamPackage {
         Ok(crate::PlanExecutionReport::new(result, document))
     }
 
+    /// Validates a Plan Result against the Plan IR receipt preimages owned by the seam harness.
+    pub fn validate_plan_execution_result(
+        &self,
+        plan: &Value,
+        context: &crate::PlanExecutionContext,
+        result: &Value,
+    ) -> Result<PlanResultDocument, PublicSeamError> {
+        let plan_document = self.validate_plan_document(plan)?;
+        let result_document = self.validate_plan_result_document(result)?;
+        crate::plan_execution::validate_plan_result_receipts(
+            plan,
+            &plan_document,
+            context,
+            result,
+        )?;
+        Ok(result_document)
+    }
+
     /// Validates a Plan Result document through the active V1 schema and semantic seam checks.
     pub fn validate_plan_result_document(
         &self,
