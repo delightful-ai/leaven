@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{Messages, ModelName, OutputMode, ProviderName, SamplingOptions};
+use crate::{Messages, ModelName, ModelRole, OutputMode, ProviderName, SamplingOptions};
 
 /// Provider transport state for efficient follow-up turns.
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
@@ -21,6 +21,8 @@ pub struct LmContinuation {
 pub struct LmRequest {
     /// Target model name.
     pub model: ModelName,
+    /// Capability/policy role used to choose or authorize a model.
+    pub model_role: Option<ModelRole>,
     /// Canonical multi-turn text conversation.
     pub messages: Messages,
     /// Sampling and model-control options.
@@ -40,6 +42,7 @@ impl LmRequest {
     pub fn new(model: impl Into<ModelName>, messages: Messages) -> Self {
         Self {
             model: model.into(),
+            model_role: None,
             messages,
             sampling: SamplingOptions::default(),
             output: OutputMode::Text,
@@ -47,6 +50,13 @@ impl LmRequest {
             continuation: None,
             provider_hints: ProviderHints::default(),
         }
+    }
+
+    /// Sets the capability/policy role used to choose or authorize the model.
+    #[must_use]
+    pub fn with_model_role(mut self, role: impl Into<ModelRole>) -> Self {
+        self.model_role = Some(role.into());
+        self
     }
 
     /// Sets sampling options.

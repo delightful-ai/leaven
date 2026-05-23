@@ -16,6 +16,7 @@ use leaven_lm::{
     OutputMode, ProviderHints, ProviderName, ReasoningEffort, Role, SamplingOptions,
 };
 use leaven_lm_openai::{OpenAiConfig, OpenAiLm, OpenAiRetryPolicy, OpenAiThrottlePolicy};
+use serde_json::json;
 
 type FixtureHeaders = &'static [(&'static str, &'static str)];
 type FixtureResponse = (&'static str, FixtureHeaders, &'static str);
@@ -269,6 +270,7 @@ fn openai_request_lowers_sampling_metadata_and_output_modes() {
         top_p: Some(FiniteF64::new(0.95).unwrap()),
         max_output_tokens: Some(64),
         seed: Some(7),
+        stop: vec!["DONE".to_owned()],
         reasoning_effort: Some(ReasoningEffort::Medium),
     })
     .with_output(OutputMode::JsonObject)
@@ -286,6 +288,7 @@ fn openai_request_lowers_sampling_metadata_and_output_modes() {
     assert_eq!(wire["top_p"], 0.95);
     assert_eq!(wire["max_output_tokens"], 64);
     assert_eq!(wire["seed"], 7);
+    assert_eq!(wire["stop"], json!(["DONE"]));
     assert_eq!(wire["reasoning"]["effort"], "medium");
     assert_eq!(wire["text"]["format"]["type"], "json_object");
     assert_eq!(wire["metadata"]["split"], "train");

@@ -1,7 +1,7 @@
 ## Boundary
 This crate owns provider-neutral language-model vocabulary: `Lm`, `LmRequest`,
-`Messages`, text/tool content parts, tool definitions, sampling, output mode,
-continuation, usage, and `LmError`.
+`Messages`, text/tool content parts, tool definitions, model roles, sampling,
+output mode, continuation, usage, and `LmError`.
 
 It is the contract optimizer and adapter code depend on when they need "an LM"
 without depending on OpenAI, Anthropic, local servers, cache stores, engine
@@ -12,9 +12,10 @@ graph state, or GEPA rhythm.
   assistant/tool roles, text parts, tool-result parts, tool-call ids, and
   optional provider-visible names. Provider continuation tokens are optional
   transport hints in `LmContinuation`.
-- `LmRequest.model` is explicit request identity today. Provider crates may
-  expose convenience constructors, but this neutral contract does not carry an
-  ambient default model.
+- `LmRequest.model` is explicit request identity today. `LmRequest.model_role`
+  preserves public-seam policy/routing intent alongside that concrete model;
+  it is not an ambient default model and must not be silently substituted for
+  provider wire model identity.
 - Provider-shaping but provider-neutral knobs live in `ProviderHints`,
   `SamplingOptions`, `LmTool`, and `OutputMode`.
 - `TokenUsage` preserves provider accounting; `Metered<LmResponse>` carries the
@@ -37,8 +38,9 @@ graph state, or GEPA rhythm.
 ## Proof Anchors
 - `crates/leaven-lm/tests/lm_contract.rs` proves message ordering, developer/
   tool role and content-part preservation, assistant response validation,
-  request defaults, tool definitions, provider hints, identifier conversions,
-  token-cost mapping, and public error shapes.
+  request defaults, model-role preservation, tool definitions, provider hints,
+  sampling stop sequences, identifier conversions, token-cost mapping, and
+  public error shapes.
 - `docs/specs/lm_runtime_and_response_cache.md` owns the LM/cache/provider
   split; use it before changing request, response, continuation, or fingerprint
   semantics.

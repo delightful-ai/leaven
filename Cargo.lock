@@ -3687,6 +3687,7 @@ dependencies = [
  "leaven-engine",
  "leaven-evidence",
  "leaven-kernel",
+ "leaven-lm",
  "serde",
  "serde_json",
  "serde_yml",

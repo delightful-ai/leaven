@@ -110,6 +110,7 @@ fn request_builders_preserve_sampling_output_and_provider_hints() {
     let sampling = SamplingOptions {
         temperature: Some(FiniteF64::new(0.2).unwrap()),
         top_p: Some(FiniteF64::new(0.9).unwrap()),
+        stop: vec!["DONE".to_owned()],
         ..SamplingOptions::default()
     }
     .with_max_output_tokens(128)
@@ -128,6 +129,7 @@ fn request_builders_preserve_sampling_output_and_provider_hints() {
 
     let request = leaven_lm::LmRequest::new("gpt-4.1-mini", Messages::from_user("solve"))
         .with_sampling(sampling.clone())
+        .with_model_role("reflector")
         .with_output(OutputMode::JsonSchema(JsonSchemaOutput {
             name: "answer".to_owned(),
             schema: serde_json::json!({"type": "object"}),
@@ -138,6 +140,13 @@ fn request_builders_preserve_sampling_output_and_provider_hints() {
 
     assert_eq!(request.model.as_str(), "gpt-4.1-mini");
     assert_eq!(request.model.to_string(), "gpt-4.1-mini");
+    assert_eq!(
+        request
+            .model_role
+            .as_ref()
+            .map(leaven_lm::ModelRole::as_str),
+        Some("reflector")
+    );
     assert_eq!(request.sampling, sampling);
     assert_eq!(request.provider_hints, hints);
     assert_eq!(request.tools, vec![tool]);

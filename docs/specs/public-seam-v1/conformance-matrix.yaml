@@ -1177,12 +1177,31 @@ rows:
     fake_pass_rejected: Shelling out to a provider-specific API with lost request metadata.
     minimum_closeout_level: semantic_denial
     partial_contract_test_evidence:
+      - crates/leaven-public-seam/tests/plan_document.rs::plan_ir_family_lowers_and_executes_let_call_write_through_public_seam_owner
+      - crates/leaven-public-seam/tests/plan_document.rs::lm_complete_lowering_preserves_json_schema_output_and_provider_hints
+      - crates/leaven-public-seam/tests/plan_document.rs::lm_complete_lowering_rejects_deferred_multimodal_or_extension_content
+      - crates/leaven-lm/tests/lm_contract.rs::request_builders_preserve_sampling_output_and_provider_hints
+      - crates/leaven-lm-openai/tests/openai_mapping.rs::openai_request_lowers_developer_tool_messages_tools_and_final_message_output
+      - crates/leaven-lm-openai/tests/openai_mapping.rs::openai_request_lowers_sampling_metadata_and_output_modes
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_bind_worker_methods_to_primary_kinds_and_receipts
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_permissions_use_capability_grants_and_return_planerror_redactions
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_reject_cross_method_payloads_unbound_receipts_and_data_class_gaps
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_permissions_deny_ungranted_models_workspace_ops_and_commands
       - crates/leaven-public-seam/tests/capability_document.rs::grant_enforcement_rejects_ungranted_models_workspace_ops_and_commands
     partial_contract_implementation_evidence:
+      - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanLmCompleteRequest::to_lm_request
+      - crates/leaven-public-seam/src/plan_execution/effects.rs::lower_lm_messages
+      - crates/leaven-public-seam/src/plan_execution/effects.rs::lower_lm_tools
+      - crates/leaven-public-seam/src/plan_execution/effects.rs::lower_lm_sampling
+      - crates/leaven-public-seam/src/plan_execution/effects.rs::lower_lm_output
+      - crates/leaven-public-seam/src/plan_execution/effects.rs::lower_provider_hints
+      - crates/leaven-lm/src/request.rs::LmRequest
+      - crates/leaven-lm/src/message.rs::MessageContentPart
+      - crates/leaven-lm/src/model.rs::ModelRole
+      - crates/leaven-lm/src/request.rs::LmTool
+      - crates/leaven-lm/src/sampling.rs::SamplingOptions
+      - crates/leaven-lm/src/output.rs::OutputMode
+      - crates/leaven-lm-openai/src/client.rs::OpenAiLm::to_wire_request
       - crates/leaven-public-seam/src/acp_profile.rs::extension_result_contract
       - crates/leaven-public-seam/src/acp_profile.rs::validate_receipts_for_method
       - crates/leaven-public-seam/src/acp_profile.rs::AcpExtensionResultDocument

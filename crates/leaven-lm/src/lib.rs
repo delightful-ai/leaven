@@ -11,7 +11,7 @@ mod usage;
 
 pub use error::{InvalidLmResponse, LmError};
 pub use message::{Message, MessageContentPart, Messages, Role};
-pub use model::{Lm, LmId, ModelName, ProviderName};
+pub use model::{Lm, LmId, ModelName, ModelRole, ProviderName};
 pub use output::{JsonSchemaOutput, OutputMode};
 pub use request::{LmContinuation, LmRequest, LmTool, ProviderHints};
 pub use response::LmResponse;
@@ -21,7 +21,8 @@ pub use usage::TokenUsage;
 pub mod prelude {
     pub use crate::{
         InvalidLmResponse, JsonSchemaOutput, Lm, LmContinuation, LmError, LmId, LmRequest,
-        LmResponse, LmTool, Message, MessageContentPart, Messages, ModelName, OutputMode,
-        ProviderHints, ProviderName, ReasoningEffort, Role, SamplingOptions, TokenUsage,
+        LmResponse, LmTool, Message, MessageContentPart, Messages, ModelName, ModelRole,
+        OutputMode, ProviderHints, ProviderName, ReasoningEffort, Role, SamplingOptions,
+        TokenUsage,
     };
 }
