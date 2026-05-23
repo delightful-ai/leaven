@@ -201,7 +201,7 @@ impl Score {
 ///
 /// The private scope prevents a scorer from satisfying the output contract with
 /// a reusable placeholder. The evaluator unwraps it only when it belongs to the
-/// candidate/case context currently being assessed.
+/// candidate/case or candidate-group/case context currently being assessed.
 #[derive(Clone, Debug)]
 pub struct ReportableOutput {
     record: OutputRecord,
@@ -209,11 +209,15 @@ pub struct ReportableOutput {
 }
 
 impl ReportableOutput {
+    pub(crate) fn new(record: OutputRecord, scope: ReportableOutputScope) -> Self {
+        Self { record, scope }
+    }
+
     pub(crate) fn into_record(
         self,
-        expected_scope: ReportableOutputScope,
+        expected_scope: &ReportableOutputScope,
     ) -> Result<OutputRecord, ReportableOutputError> {
-        if self.scope != expected_scope {
+        if self.scope != *expected_scope {
             return Err(ReportableOutputError::WrongScope);
         }
         if is_placeholder_output(&self.record) {
@@ -227,15 +231,22 @@ fn is_placeholder_output(record: &OutputRecord) -> bool {
     matches!(record, OutputRecord::Inline { text, .. } if text.trim().is_empty())
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ReportableOutputScope {
-    candidate: CandidateId,
+    candidates: Vec<CandidateId>,
     case: CaseId,
 }
 
 impl ReportableOutputScope {
-    pub(crate) const fn new(candidate: CandidateId, case: CaseId) -> Self {
-        Self { candidate, case }
+    pub(crate) fn new(candidate: CandidateId, case: CaseId) -> Self {
+        Self {
+            candidates: vec![candidate],
+            case,
+        }
+    }
+
+    pub(crate) fn group(candidates: Vec<CandidateId>, case: CaseId) -> Self {
+        Self { candidates, case }
     }
 }
 
@@ -430,7 +441,7 @@ pub struct ScoreContext<A, I, T = leaven_eval::NoTarget, Out = ()> {
 }
 
 impl<A, I, T, Out> ScoreContext<A, I, T, Out> {
-    pub(crate) const fn new(
+    pub(crate) fn new(
         artifact: A,
         case: ScoreCase<I, T>,
         output: RunOutput<Out>,
@@ -449,15 +460,39 @@ impl<A, I, T, Out> ScoreContext<A, I, T, Out> {
     /// Wraps a generated output record for this exact scoring context.
     #[must_use]
     pub fn report_output(&self, output: OutputRecord) -> ReportableOutput {
-        ReportableOutput {
-            record: output,
-            scope: self.output_scope,
-        }
+        ReportableOutput::new(output, self.output_scope.clone())
     }
 
     /// Wraps inline generated output text for this exact scoring context.
     #[must_use]
     pub fn report_text_output(&self, output: impl Into<String>) -> ReportableOutput {
         self.report_output(OutputRecord::inline(output))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use leaven_evidence::OutputRecord;
+    use leaven_kernel::{CandidateId, CaseId};
+
+    use super::{ReportableOutputError, ReportableOutputScope};
+
+    #[test]
+    fn grouped_reportable_output_scopes_do_not_match_single_candidate_scopes() {
+        let case = CaseId::new(1);
+        let left = CandidateId::new();
+        let right = CandidateId::new();
+        let group = ReportableOutputScope::group(vec![left, right], case);
+        let single = ReportableOutputScope::new(left, case);
+        let output = super::ReportableOutput {
+            record: OutputRecord::inline("left/right comparison"),
+            scope: group.clone(),
+        };
+
+        assert!(matches!(
+            output.clone().into_record(&single),
+            Err(ReportableOutputError::WrongScope)
+        ));
+        assert!(output.into_record(&group).is_ok());
     }
 }

@@ -16,9 +16,10 @@ around engine graph mutation or a home for optimizer strategy state.
   durable override/resume handle, and `.ephemeral()` is the explicit
   throwaway path.
 - `RunProblem`, `RunCase`, `RunOutput`, `ReportableOutput`, `Score`,
-  `ScoreCase`, `ScoreContext`, `ScoringEvaluator`, `OptimizeStore`, and
-  `IntoOptimizeStore` belong here when they serve the high-level optimize
-  workflow.
+  `ScoreCase`, `ScoreContext`, `ScoringEvaluator`, `JudgeCandidateOutput`,
+  `JudgeScoreContext`, `JudgingEvaluator`, `OptimizeStore`, and
+  `IntoOptimizeStore` belong here when they serve the high-level optimize or
+  evaluator-lowering workflow.
 - Default evidence-only and durable store composition belongs here when it is
   product wiring over store capabilities, not a new backend.
 - The current lowering stack is local product glue: builder input vectors become
@@ -40,13 +41,22 @@ around engine graph mutation or a home for optimizer strategy state.
 - Optimizer implementations and strategy state belong in optimizer crates.
   This crate accepts an optimizer; it does not own search policy.
 
+## Public Maturity
+
+Crate-root exports for `JudgeCandidateOutput`, `JudgeScoreContext`, and
+`JudgingEvaluator` are advanced public run/evaluator contracts for pairwise and
+listwise output-scoring proof. They are not in `leaven_run::prelude`, not wired
+through `optimize(seed)`, and not an ordinary builder default route until the
+builder lowering and public examples deliberately adopt them.
+
 ## Proof Anchors
 - `tests/optimize_builder.rs` proves required budget policy, held-out case
   rejection, callbacks, supplied store capabilities, no-best error mapping,
   default durable local storage, explicit ephemeral mode, and `run_dir` resume.
 - `tests/scoring_evaluator.rs` proves runner/scorer evaluation shape,
   per-case granularity requirements, independent-request requirements,
-  missing input errors, finite score refusal, and cost reporting.
+  missing input errors, finite score refusal, cost reporting, context-scoped
+  reportable output, and pairwise/listwise judging output behavior.
 - `cargo nextest run -p leaven-run` proves the product-builder contract.
 - `cargo test -p leaven --test topology_contract` proves this crate still
   composes engine/eval/evidence/store without absorbing their ownership.
@@ -77,16 +87,16 @@ around engine graph mutation or a home for optimizer strategy state.
   is a `String`-only constructor that returns `RunOutput<String>`).
 - Output rendering is **always** scorer-local and explicit: every successful
   score must call `Score::with_output(...)` with a `ReportableOutput` minted by
-  the current `ScoreContext` through `report_output(...)` or
-  `report_text_output(...)`. There is no auto-render for `Out = String` — that
-  was a back-compat shim and was removed. A `Score` without `output` set fails
-  the evaluator with `MissingReportableOutput` (cost from the runner and scorer
-  is preserved on the error). A `Score` with reportable output minted by another
-  scoring context is rejected as unrelated evidence; a whitespace-only inline
-  report output is rejected as a placeholder. Reports, evidence stores, and
-  GEPA reflection consume the scorer-supplied `OutputRecord`, not `Out` itself.
-  Do not add `Out` to `RunProblem`, `CaseAssessmentEvidence`, report payloads,
-  or GEPA types.
+  the current `ScoreContext` or `JudgeScoreContext` through `report_output(...)`
+  or `report_text_output(...)`. There is no auto-render for `Out = String` —
+  that was a back-compat shim and was removed. A `Score` without `output` set
+  fails the evaluator with `MissingReportableOutput` (cost from the runner and
+  scorer is preserved on the error). A `Score` with reportable output minted by
+  another scoring/judging context is rejected as unrelated evidence; a
+  whitespace-only inline report output is rejected as a placeholder. Reports,
+  evidence stores, and GEPA reflection consume the scorer-supplied
+  `OutputRecord`, not `Out` itself. Do not add `Out` to `RunProblem`,
+  `CaseAssessmentEvidence`, report payloads, or GEPA types.
   Scoring is also async and fallible: `.score(...)` receives owned
   `ScoreContext` values, returns `Result<Score, ScoreError>`, and may attach
   scorer cost. Treat scalar comparison as the current selection contract, not as

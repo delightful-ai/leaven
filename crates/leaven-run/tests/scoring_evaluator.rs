@@ -21,8 +21,9 @@ use leaven_kernel::{
     ResolvedEvaluationSetId, RunId, StageId, now,
 };
 use leaven_run::{
-    RunCase, RunError, RunOutput, RunProblem, RuntimeFingerprint, Score, ScoreContext, ScoreError,
-    ScoringEvaluator, ScoringEvaluatorIdentity,
+    JudgeScoreContext, JudgingEvaluator, RunCase, RunError, RunOutput, RunProblem,
+    RuntimeFingerprint, Score, ScoreContext, ScoreError, ScoringEvaluator,
+    ScoringEvaluatorIdentity,
 };
 
 const TEST_RUNNER_FINGERPRINT: Fingerprint = Fingerprint::from_bytes([7; 32]);
@@ -833,6 +834,219 @@ fn scoring_evaluator_rejects_report_output_from_another_scoring_context() {
     });
 }
 
+#[test]
+fn judging_evaluator_preserves_pairwise_and_listwise_report_outputs() {
+    block_on(async {
+        let (mut graph, mut budget, left) = graph_with_seed();
+        let (right, third) = {
+            let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
+            (
+                ctx.insert_seed(TextArtifact(50), 1).unwrap(),
+                ctx.insert_seed(TextArtifact(60), 2).unwrap(),
+            )
+        };
+        let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
+        let evaluator = judging_evaluator(
+            |ctx: JudgeScoreContext<TextArtifact, i32, leaven_eval::NoTarget, String>| {
+                let rendered = ctx
+                    .outputs
+                    .iter()
+                    .map(|output| output.output.output.clone())
+                    .collect::<Vec<_>>()
+                    .join("|");
+                let score = match ctx.outputs.len() {
+                    2 => 2.0,
+                    3 => 3.0,
+                    _ => panic!("unexpected judged output count"),
+                };
+                Score::new(score, "judged candidate outputs")
+                    .with_output(ctx.report_text_output(rendered))
+            },
+        );
+
+        let pairwise = evaluator
+            .evaluate(
+                request(
+                    ResolvedRequestKind::Pairwise {
+                        left,
+                        right,
+                        order: PairOrder::Ordered,
+                    },
+                    vec![CaseId::new(0)],
+                    AssessmentGranularity::PerCase,
+                ),
+                ctx.evaluation_context(StageId::from_evaluator(Evaluator::id(&evaluator))),
+            )
+            .await
+            .unwrap();
+        let Assessment::Pairwise {
+            left: pair_left,
+            right: pair_right,
+            evidence,
+            ..
+        } = &pairwise.value[0]
+        else {
+            panic!("expected pairwise assessment");
+        };
+        assert_eq!((*pair_left, *pair_right), (left, right));
+        assert_eq!(evidence.output(), &OutputRecord::inline("42|52"));
+
+        let listwise = evaluator
+            .evaluate(
+                request(
+                    ResolvedRequestKind::Listwise {
+                        candidates: vec![left, right, third],
+                    },
+                    vec![CaseId::new(0)],
+                    AssessmentGranularity::PerCase,
+                ),
+                ctx.evaluation_context(StageId::from_evaluator(Evaluator::id(&evaluator))),
+            )
+            .await
+            .unwrap();
+        let Assessment::Listwise {
+            candidates,
+            evidence,
+            ..
+        } = &listwise.value[0]
+        else {
+            panic!("expected listwise assessment");
+        };
+        assert_eq!(candidates, &vec![left, right, third]);
+        assert_eq!(evidence.output(), &OutputRecord::inline("42|52|62"));
+    });
+}
+
+#[test]
+fn judging_evaluator_requires_group_scoped_reportable_output() {
+    block_on(async {
+        let (mut graph, mut budget, left) = graph_with_seed();
+        let right = {
+            let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
+            ctx.insert_seed(TextArtifact(50), 1).unwrap()
+        };
+        let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
+        let missing_output = judging_evaluator(
+            |_ctx: JudgeScoreContext<TextArtifact, i32, leaven_eval::NoTarget, String>| {
+                Score::new(1.0, "missing output")
+            },
+        );
+        let error = missing_output
+            .evaluate(
+                request(
+                    ResolvedRequestKind::Pairwise {
+                        left,
+                        right,
+                        order: PairOrder::Ordered,
+                    },
+                    vec![CaseId::new(0)],
+                    AssessmentGranularity::PerCase,
+                ),
+                ctx.evaluation_context(StageId::from_evaluator(Evaluator::id(&missing_output))),
+            )
+            .await
+            .err()
+            .expect("missing judge output should fail");
+        assert!(
+            error
+                .to_string()
+                .contains("score did not provide reportable output")
+        );
+
+        let placeholder_output = judging_evaluator(
+            |ctx: JudgeScoreContext<TextArtifact, i32, leaven_eval::NoTarget, String>| {
+                Score::new(1.0, "placeholder").with_output(ctx.report_text_output(" \n\t "))
+            },
+        );
+        let error = placeholder_output
+            .evaluate(
+                request(
+                    ResolvedRequestKind::Listwise {
+                        candidates: vec![left, right],
+                    },
+                    vec![CaseId::new(0)],
+                    AssessmentGranularity::PerCase,
+                ),
+                ctx.evaluation_context(StageId::from_evaluator(Evaluator::id(&placeholder_output))),
+            )
+            .await
+            .err()
+            .expect("placeholder judge output should fail");
+        assert!(
+            error
+                .to_string()
+                .contains("reportable output was an empty placeholder")
+        );
+    });
+}
+
+#[test]
+fn judging_evaluator_rejects_report_output_from_another_candidate_group() {
+    use std::sync::Mutex;
+
+    let stolen_output = Arc::new(Mutex::new(None::<leaven_run::ReportableOutput>));
+    block_on(async {
+        let (mut graph, mut budget, left) = graph_with_seed();
+        let right = {
+            let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
+            ctx.insert_seed(TextArtifact(50), 1).unwrap()
+        };
+        let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
+        let evaluator = JudgingEvaluator::new(
+            Arc::new(vec![input_case(0, 2), input_case(1, 3)]),
+            Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
+                async move { Ok(RunOutput::new((artifact.0 + *case.input()).to_string())) }.boxed()
+            }),
+            Arc::new({
+                let stolen_output = Arc::clone(&stolen_output);
+                move |ctx: JudgeScoreContext<TextArtifact, i32, leaven_eval::NoTarget, String>| {
+                    let stolen_output = Arc::clone(&stolen_output);
+                    async move {
+                        if *ctx.case.input() == 2 {
+                            let report_output = ctx.report_text_output("first pair");
+                            *stolen_output.lock().unwrap() = Some(report_output.clone());
+                            Ok(Score::new(1.0, "first pair").with_output(report_output))
+                        } else {
+                            let report_output = stolen_output
+                                .lock()
+                                .unwrap()
+                                .clone()
+                                .expect("first pair stores a report output");
+                            Ok(Score::new(1.0, "second pair").with_output(report_output))
+                        }
+                    }
+                    .boxed()
+                }
+            }),
+            &identity("judging-output-scope-test"),
+        )
+        .with_parallelism(NonZeroUsize::new(1).unwrap());
+
+        let error = evaluator
+            .evaluate(
+                request(
+                    ResolvedRequestKind::Pairwise {
+                        left,
+                        right,
+                        order: PairOrder::Ordered,
+                    },
+                    vec![CaseId::new(0), CaseId::new(1)],
+                    AssessmentGranularity::PerCase,
+                ),
+                ctx.evaluation_context(StageId::from_evaluator(Evaluator::id(&evaluator))),
+            )
+            .await
+            .err()
+            .expect("output from another candidate-group context must fail evaluation");
+
+        assert!(
+            error
+                .to_string()
+                .contains("reportable output came from another scoring context")
+        );
+    });
+}
+
 // Test helper. The scorer closure must produce a `Score` with context-scoped
 // reportable output already attached (`Score::with_output`) — same
 // contract as the production scorer path. Earlier revisions of this helper
@@ -855,6 +1069,26 @@ fn scoring_evaluator(
             async move { Ok(score) }.boxed()
         }),
         &identity("scoring-evaluator-test"),
+    )
+}
+
+fn judging_evaluator(
+    scorer: impl Fn(JudgeScoreContext<TextArtifact, i32, leaven_eval::NoTarget, String>) -> Score
+    + Send
+    + Sync
+    + 'static,
+) -> JudgingEvaluator<TextArtifact, i32, leaven_eval::NoTarget, String> {
+    let scorer = Arc::new(scorer);
+    JudgingEvaluator::new(
+        Arc::new(vec![input_case(0, 2)]),
+        Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
+            async move { Ok(RunOutput::new((artifact.0 + *case.input()).to_string())) }.boxed()
+        }),
+        Arc::new(move |ctx| {
+            let score = scorer(ctx);
+            async move { Ok(score) }.boxed()
+        }),
+        &identity("judging-evaluator-test"),
     )
 }
 
