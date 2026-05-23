@@ -710,6 +710,18 @@ rows:
       surface fingerprints or schemas are denied.
     fake_pass_rejected: Accepting arbitrary JSON patches from an agent session.
     minimum_closeout_level: semantic_denial
+    positive_test_evidence:
+      - crates/leaven-public-seam/tests/proposal_authority.rs::proposal_authority_accepts_effects_surfaces_schemas_and_apply_grants
+    negative_test_evidence:
+      - crates/leaven-public-seam/tests/proposal_authority.rs::proposal_authority_rejects_submit_only_apply_and_ungranted_surface_or_effect
+      - crates/leaven-public-seam/tests/proposal_authority.rs::proposal_authority_rejects_schema_valid_change_without_granted_schema
+    implementation_evidence:
+      - crates/leaven-public-seam/src/proposal_authority.rs::ProposalAuthorityReport
+      - crates/leaven-public-seam/src/proposal_authority.rs::validate
+      - crates/leaven-public-seam/src/proposal_authority.rs::validate_submit_proposal_batch
+      - crates/leaven-public-seam/src/proposal_authority.rs::validate_apply_proposal_batch
+      - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_proposal_authority_document
+      - crates/leaven-public-seam/AGENTS.md
     status: pending
 
   - id: ps1.evaluator.job_identity

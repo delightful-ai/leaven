@@ -10,7 +10,7 @@ use crate::{
     ConformanceMatrix, DeferredWatchReplacement, EvaluationJobDocument,
     EvaluationRequestReceiptDocument, EvidenceEnvelopeDocument, MatrixRowStatus,
     OutputRecordDocument, PinnedDialectEvaluator, PlanDocument, PlanResultDocument,
-    PublicSeamError, StagePayloadDocument,
+    ProposalAuthorityReport, PublicSeamError, StagePayloadDocument,
 };
 
 mod support;
@@ -798,6 +798,16 @@ impl PublicSeamPackage {
             result,
         )?;
         Ok(result_document)
+    }
+
+    /// Validates proposal writes against a capability document's effect, schema, surface, and apply authority.
+    pub fn validate_proposal_authority_document(
+        &self,
+        plan: &Value,
+        capability: &crate::CapabilityDocument,
+    ) -> Result<ProposalAuthorityReport, PublicSeamError> {
+        self.validate_plan_document(plan)?;
+        crate::proposal_authority::validate(plan, capability)
     }
 
     /// Validates a Plan Result document through the active V1 schema and semantic seam checks.
