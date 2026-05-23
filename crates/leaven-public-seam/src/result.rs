@@ -170,7 +170,7 @@ fn inspect_values(
             .ok_or_else(|| invalid_result("plan result value must be an object"))?;
         let value_kind = inspect_value_receipt(value_object, receipt_index)?;
         let data_classes = optional_string_set(value_object.get("data_classes"), "data_classes")?;
-        validate_value_visibility(name, value_object, &data_classes)?;
+        validate_value_visibility(name, value_object, &data_classes, receipt_index)?;
         value_kinds.push(value_kind.to_owned());
         value_data_classes.push((name.to_owned(), data_classes.into_iter().collect()));
         value_replayability.push(required_replayability(value_object.get("replayability"))?);
@@ -199,10 +199,15 @@ fn validate_value_visibility(
     value_name: &str,
     value: &serde_json::Map<String, Value>,
     value_data_classes: &BTreeSet<String>,
+    receipt_index: &BTreeMap<String, String>,
 ) -> Result<(), PublicSeamError> {
     let mut required = BTreeSet::new();
     collect_score_output_data_classes(value, &mut required)?;
-    collect_evidence_data_classes(value.get("evidence"), &mut required)?;
+    collect_evidence_data_classes_from_value(
+        &Value::Object(value.clone()),
+        receipt_index,
+        &mut required,
+    )?;
     collect_workspace_listing_data_classes(value, &mut required)?;
     for data_class in required {
         if !value_data_classes.contains(&data_class) {
@@ -258,26 +263,66 @@ fn collect_score_output_data_classes(
     Ok(())
 }
 
-fn collect_evidence_data_classes(
-    evidence: Option<&Value>,
+fn collect_evidence_data_classes_from_value(
+    value: &Value,
+    receipt_index: &BTreeMap<String, String>,
     required: &mut BTreeSet<String>,
 ) -> Result<(), PublicSeamError> {
-    let Some(evidence) = evidence else {
-        return Ok(());
-    };
-    if evidence
-        .as_object()
-        .and_then(|object| object.get("schema_version"))
-        .and_then(Value::as_str)
-        != Some("leaven.evidence_envelope.v1")
-    {
-        return Ok(());
+    match value {
+        Value::Object(object)
+            if object.get("schema_version").and_then(Value::as_str)
+                == Some("leaven.evidence_envelope.v1") =>
+        {
+            let envelope = EvidenceEnvelopeDocument::from_schema_valid_value(value)?;
+            required.extend(envelope.data_classes().iter().cloned());
+            required.extend(envelope.public_data_classes().iter().cloned());
+            if let Some(private) = envelope.private_data_classes() {
+                required.extend(private.iter().cloned());
+            }
+            validate_evidence_source_receipts(&envelope, receipt_index)
+        }
+        Value::Object(object) => {
+            for value in object.values() {
+                collect_evidence_data_classes_from_value(value, receipt_index, required)?;
+            }
+            Ok(())
+        }
+        Value::Array(values) => {
+            for value in values {
+                collect_evidence_data_classes_from_value(value, receipt_index, required)?;
+            }
+            Ok(())
+        }
+        _ => Ok(()),
     }
-    let envelope = EvidenceEnvelopeDocument::from_schema_valid_value(evidence)?;
-    required.extend(envelope.data_classes().iter().cloned());
-    required.extend(envelope.public_data_classes().iter().cloned());
-    if let Some(private) = envelope.private_data_classes() {
-        required.extend(private.iter().cloned());
+}
+
+fn validate_evidence_source_receipts(
+    envelope: &EvidenceEnvelopeDocument,
+    receipt_index: &BTreeMap<String, String>,
+) -> Result<(), PublicSeamError> {
+    validate_evidence_receipts(envelope.read_receipts(), receipt_index, "query", "read")?;
+    validate_evidence_receipts(envelope.effect_receipts(), receipt_index, "call", "effect")?;
+    validate_evidence_receipts(envelope.write_receipts(), receipt_index, "write", "write")
+}
+
+fn validate_evidence_receipts(
+    receipts: &[String],
+    receipt_index: &BTreeMap<String, String>,
+    expected_kind: &str,
+    receipt_role: &str,
+) -> Result<(), PublicSeamError> {
+    for receipt in receipts {
+        let Some(kind) = receipt_index.get(receipt) else {
+            return Err(invalid_result(format!(
+                "evidence {receipt_role} receipt `{receipt}` is missing from plan result receipts"
+            )));
+        };
+        if kind != expected_kind {
+            return Err(invalid_result(format!(
+                "evidence {receipt_role} receipt `{receipt}` references `{kind}` receipt, expected `{expected_kind}`"
+            )));
+        }
     }
     Ok(())
 }
