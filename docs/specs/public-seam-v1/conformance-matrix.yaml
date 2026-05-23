@@ -938,6 +938,7 @@ rows:
     negative_test_evidence:
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_profile_rejects_mcp_latest_nonstdio_human_granting_and_unbounded_updates
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_permissions_use_capability_grants_and_return_planerror_redactions
+      - crates/leaven-public-seam/tests/acp_profile.rs::acp_permissions_deny_ungranted_models_workspace_ops_and_commands
     implementation_evidence:
       - crates/leaven-public-seam/src/acp_profile.rs::AcpPermissionRequest
       - crates/leaven-public-seam/src/acp_profile.rs::AcpPermissionDecision
@@ -1052,11 +1053,15 @@ rows:
     negative_test_evidence:
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_reject_cross_method_payloads_unbound_receipts_and_data_class_gaps
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_permissions_use_capability_grants_and_return_planerror_redactions
+      - crates/leaven-public-seam/tests/acp_profile.rs::acp_permissions_deny_ungranted_models_workspace_ops_and_commands
+      - crates/leaven-public-seam/tests/capability_document.rs::grant_enforcement_rejects_ungranted_models_workspace_ops_and_commands
     implementation_evidence:
       - crates/leaven-public-seam/src/acp_profile.rs::extension_result_contract
       - crates/leaven-public-seam/src/acp_profile.rs::validate_receipts_for_method
       - crates/leaven-public-seam/src/acp_profile.rs::AcpExtensionResultDocument
+      - crates/leaven-public-seam/src/acp_profile.rs::AcpPermissionRequest
       - crates/leaven-public-seam/src/capability.rs::CapabilityDocument::authorize_grant
+      - crates/leaven-public-seam/src/capability.rs::CapabilityGrantRequest
     status: pending
 
   - id: ps1.lm.contract
@@ -1080,11 +1085,14 @@ rows:
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_permissions_use_capability_grants_and_return_planerror_redactions
     negative_test_evidence:
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_reject_cross_method_payloads_unbound_receipts_and_data_class_gaps
+      - crates/leaven-public-seam/tests/acp_profile.rs::acp_permissions_deny_ungranted_models_workspace_ops_and_commands
+      - crates/leaven-public-seam/tests/capability_document.rs::grant_enforcement_rejects_ungranted_models_workspace_ops_and_commands
     implementation_evidence:
       - crates/leaven-public-seam/src/acp_profile.rs::extension_result_contract
       - crates/leaven-public-seam/src/acp_profile.rs::validate_receipts_for_method
       - crates/leaven-public-seam/src/acp_profile.rs::AcpExtensionResultDocument
       - crates/leaven-public-seam/src/acp_profile.rs::AcpPermissionRequest
+      - crates/leaven-public-seam/src/capability.rs::CapabilityGrantRequest
     status: pending
 
   - id: ps1.agent.contract
@@ -1139,11 +1147,15 @@ rows:
     negative_test_evidence:
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_reject_cross_method_payloads_unbound_receipts_and_data_class_gaps
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_permissions_use_capability_grants_and_return_planerror_redactions
+      - crates/leaven-public-seam/tests/acp_profile.rs::acp_permissions_deny_ungranted_models_workspace_ops_and_commands
+      - crates/leaven-public-seam/tests/capability_document.rs::grant_enforcement_rejects_ungranted_models_workspace_ops_and_commands
     implementation_evidence:
       - crates/leaven-public-seam/src/acp_profile.rs::extension_result_contract
       - crates/leaven-public-seam/src/acp_profile.rs::validate_receipts_for_method
       - crates/leaven-public-seam/src/acp_profile.rs::AcpExtensionResultDocument
+      - crates/leaven-public-seam/src/acp_profile.rs::AcpPermissionRequest
       - crates/leaven-public-seam/src/capability.rs::CapabilityDocument::authorize_grant
+      - crates/leaven-public-seam/src/capability.rs::CapabilityGrantRequest
     status: pending
 
   - id: ps1.watch.deferred

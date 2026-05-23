@@ -135,6 +135,9 @@ pub struct AcpPermissionRequest {
     method: String,
     resource: BTreeMap<String, Value>,
     input_classes: BTreeSet<String>,
+    models: BTreeSet<String>,
+    workspace_ops: BTreeSet<String>,
+    command: Option<String>,
     schemas: BTreeSet<String>,
     surface: Option<String>,
 }
@@ -146,6 +149,9 @@ impl AcpPermissionRequest {
             method: method.into(),
             resource: BTreeMap::new(),
             input_classes: BTreeSet::new(),
+            models: BTreeSet::new(),
+            workspace_ops: BTreeSet::new(),
+            command: None,
             schemas: BTreeSet::new(),
             surface: None,
         }
@@ -162,6 +168,27 @@ impl AcpPermissionRequest {
     #[must_use]
     pub fn with_input_class(mut self, data_class: impl Into<String>) -> Self {
         self.input_classes.insert(data_class.into());
+        self
+    }
+
+    /// Adds a requested model id.
+    #[must_use]
+    pub fn with_model(mut self, model: impl Into<String>) -> Self {
+        self.models.insert(model.into());
+        self
+    }
+
+    /// Adds a requested workspace operation.
+    #[must_use]
+    pub fn with_workspace_op(mut self, operation: impl Into<String>) -> Self {
+        self.workspace_ops.insert(operation.into());
+        self
+    }
+
+    /// Sets the command requested by an agent or sandbox operation.
+    #[must_use]
+    pub fn with_command(mut self, command: impl Into<String>) -> Self {
+        self.command = Some(command.into());
         self
     }
 
@@ -325,6 +352,15 @@ pub fn authorize_permission(
     }
     for data_class in request.input_classes {
         grant = grant.with_input_class(data_class);
+    }
+    for model in request.models {
+        grant = grant.with_model(model);
+    }
+    for workspace_op in request.workspace_ops {
+        grant = grant.with_workspace_op(workspace_op);
+    }
+    if let Some(command) = request.command {
+        grant = grant.with_command(command);
     }
     for schema in request.schemas {
         grant = grant.with_schema(schema);
