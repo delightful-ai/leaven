@@ -86,6 +86,13 @@ Request-evaluation follow-up review:
 - `evaluation_request_receipt_binds_job_candidate_and_case_identity` proves the dedicated route accepts the context-bound request-evaluation receipt, and `evaluation_request_receipt_rejects_decorative_or_unbound_hashes` rejects decorative request and result hashes.
 - Current status: `ps1.receipts.audit_currency` still remains pending until this request-evaluation fix receives adversarial follow-up sign-off.
 
+Request-evaluation extra-receipt follow-up review:
+
+- Sub-agent `019e5632-b3d5-7fe0-9f58-185752793859` re-reviewed `ps1.receipts.audit_currency` at `ykwwkvwy` and still blocked sign-off because the context-aware request-evaluation path validated only the matching job receipt while allowing extra decorative `request_evaluation` receipts/values.
+- Follow-up resolution: generic Plan Result validation now rejects any context-free `request_evaluation` receipt, including unreferenced receipts. The evaluation-job route now rejects unexpected extra `evaluation_request_receipt` values and unexpected extra `request_evaluation` write receipts before validating the single job-bound receipt.
+- `evaluation_request_receipt_rejects_decorative_or_unbound_hashes` now also rejects an extra decorative `request_evaluation` value/receipt pair with same-prefix hashes.
+- Current status: `ps1.receipts.audit_currency` still remains pending until this extra-receipt fix receives adversarial follow-up sign-off.
+
 Nested score-output data-class follow-up:
 
 - `crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_nested_score_output_data_class_gaps` now proves a result value containing assessment rows must include nested `score.output.data_classes` such as `candidate.output` in the value-level `data_classes`.

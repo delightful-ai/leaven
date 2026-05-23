@@ -334,13 +334,17 @@ fn matching_evaluation_request_value<'a>(
         let value = value
             .as_object()
             .ok_or_else(|| invalid_evaluation_job("plan result value must be an object"))?;
-        if value.get("kind").and_then(Value::as_str) == Some("evaluation_request_receipt")
-            && value.get("evaluation_request_id").and_then(Value::as_str) == Some(request_id)
-            && matched.replace(value).is_some()
-        {
-            return Err(invalid_evaluation_job(
-                "plan result carries multiple matching evaluation request values",
-            ));
+        if value.get("kind").and_then(Value::as_str) == Some("evaluation_request_receipt") {
+            if value.get("evaluation_request_id").and_then(Value::as_str) != Some(request_id) {
+                return Err(invalid_evaluation_job(
+                    "plan result carries unexpected evaluation request value",
+                ));
+            }
+            if matched.replace(value).is_some() {
+                return Err(invalid_evaluation_job(
+                    "plan result carries multiple matching evaluation request values",
+                ));
+            }
         }
     }
     matched.ok_or_else(|| {
@@ -357,12 +361,20 @@ fn matching_evaluation_request_receipt<'a>(
         let receipt = receipt
             .as_object()
             .ok_or_else(|| invalid_evaluation_job("plan result receipt must be an object"))?;
-        if receipt.get("receipt").and_then(Value::as_str) == Some(receipt_id)
-            && matched.replace(receipt).is_some()
-        {
-            return Err(invalid_evaluation_job(
-                "plan result carries duplicate evaluation request receipt ids",
-            ));
+        let is_evaluation_request_receipt = receipt.get("kind").and_then(Value::as_str)
+            == Some("write")
+            && receipt.get("write_kind").and_then(Value::as_str) == Some("request_evaluation");
+        if is_evaluation_request_receipt {
+            if receipt.get("receipt").and_then(Value::as_str) != Some(receipt_id) {
+                return Err(invalid_evaluation_job(
+                    "plan result carries unexpected evaluation request receipt",
+                ));
+            }
+            if matched.replace(receipt).is_some() {
+                return Err(invalid_evaluation_job(
+                    "plan result carries duplicate evaluation request receipt ids",
+                ));
+            }
         }
     }
     matched.ok_or_else(|| {

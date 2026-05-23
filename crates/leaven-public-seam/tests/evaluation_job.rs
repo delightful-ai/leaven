@@ -296,6 +296,39 @@ fn evaluation_request_receipt_rejects_decorative_or_unbound_hashes() {
         PublicSeamError::InvalidEvaluationJob { .. }
     ));
 
+    let mut extra_decorative_receipt = evaluation_request_receipt_result(&job);
+    extra_decorative_receipt["values"]["extra_evaluation_request"] = json!({
+        "kind": "evaluation_request_receipt",
+        "receipt": "wrec_extra_evalreq",
+        "evaluation_request_id": "evalreq_extra",
+        "status": "recorded",
+        "graph_revision": job.base_revision(),
+        "data_classes": ["public"],
+        "replayability": "fully_managed"
+    });
+    extra_decorative_receipt["receipts"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({
+            "kind": "write",
+            "write_kind": "request_evaluation",
+            "receipt": "wrec_extra_evalreq",
+            "started_at": "2026-05-23T12:00:00Z",
+            "completed_at": "2026-05-23T12:00:01Z",
+            "request_hash": "fp_request_sha256_decorative_extra",
+            "result_hash": "fp_result_sha256_decorative_extra",
+            "base_revision": job.base_revision(),
+            "committed_revision": job.base_revision(),
+            "status": "succeeded",
+            "evaluation_request_id": "evalreq_extra"
+        }));
+    assert!(matches!(
+        package
+            .validate_evaluation_request_receipt_document(&job, &extra_decorative_receipt)
+            .unwrap_err(),
+        PublicSeamError::InvalidEvaluationJob { .. }
+    ));
+
     let mut wrong_value_revision = evaluation_request_receipt_result(&job);
     wrong_value_revision["values"]["evaluation_request"]["graph_revision"] = json!("rev_other");
     assert!(matches!(
