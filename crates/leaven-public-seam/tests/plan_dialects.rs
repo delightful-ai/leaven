@@ -651,7 +651,7 @@ fn assessment_arbitrary_values_with_prose_field_plan() -> Value {
                                     "kind": "text",
                                     "summary": "ok",
                                     "visibility": "public",
-                                    "data_classes": ["public"]
+                                    "data_classes": ["candidate.output", "public"]
                                 }
                             },
                             "preference": {

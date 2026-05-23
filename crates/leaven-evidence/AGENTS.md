@@ -82,7 +82,9 @@ Evidence here is data a stage or evaluator can produce and another component can
 - Use `OutputRecord::candidate_inline(...)` for public reportable candidate
   outputs that cross the runner/scorer evidence path; it carries both `public`
   and `candidate.output` data classes so public-seam projection does not erase
-  what kind of data was assessed.
+  what kind of data was assessed. Use `DataClass::candidate_artifact()` when a
+  score output is assessing the artifact itself rather than generated candidate
+  output.
 - Use `AgentTrajectoryCorpusEvidence` when a paper or runner must resume over a
   known task manifest. Duplicate manifest task ids are refused at construction,
   unknown task ids are refused at insertion, and repeated trajectories for a

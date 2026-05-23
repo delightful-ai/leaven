@@ -106,6 +106,18 @@ fn submit_assessments_score_outputs_cover_all_assessment_shapes() {
 }
 
 #[test]
+fn submit_assessments_accepts_candidate_artifact_score_output_class() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut document = submit_assessments_plan();
+    document["ops"][0]["write"]["assessments"][0]["score"]["output"]["data_classes"] =
+        json!(["candidate.artifact", "public"]);
+
+    let document = package.validate_plan_document(&document).unwrap();
+
+    assert_eq!(document.assessment_score_output_count(), 3);
+}
+
+#[test]
 fn submit_assessments_rejects_missing_or_placeholder_score_output() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
 
@@ -140,6 +152,21 @@ fn submit_assessments_rejects_missing_or_placeholder_score_output() {
     });
     assert!(matches!(
         package.validate_plan_document(&null_json).unwrap_err(),
+        PublicSeamError::InvalidPlan { .. }
+    ));
+
+    let mut non_candidate_dummy = submit_assessments_plan();
+    non_candidate_dummy["ops"][0]["write"]["assessments"][0]["score"]["output"] = json!({
+        "kind": "text",
+        "summary": "dummy output only present to satisfy schema",
+        "value": "dummy output only present to satisfy schema",
+        "visibility": "public",
+        "data_classes": ["public"]
+    });
+    assert!(matches!(
+        package
+            .validate_plan_document(&non_candidate_dummy)
+            .unwrap_err(),
         PublicSeamError::InvalidPlan { .. }
     ));
 }

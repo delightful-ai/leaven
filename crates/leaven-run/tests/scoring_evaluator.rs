@@ -828,6 +828,62 @@ fn scoring_evaluator_rejects_typed_score_output_without_runner_declaration() {
 }
 
 #[test]
+fn scoring_evaluator_rejects_typed_runner_declaration_without_assessed_data_class() {
+    #[derive(Clone, Debug)]
+    struct TypedPrediction(i32);
+
+    block_on(async {
+        let (mut graph, mut budget, candidate) = graph_with_seed();
+        let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
+        let evaluator = ScoringEvaluator::new(
+            Arc::new(vec![input_case(0, 2)]),
+            Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
+                async move {
+                    let answer = artifact.0 + *case.input();
+                    Ok(RunOutput::typed(TypedPrediction(answer))
+                        .with_reportable_output(OutputRecord::inline(format!("answer={answer}"))))
+                }
+                .boxed()
+            }),
+            Arc::new(
+                |ctx: ScoreContext<TextArtifact, i32, leaven_eval::NoTarget, TypedPrediction>| {
+                    async move {
+                        Ok(
+                            Score::new(f64::from(ctx.output.output.0), "typed").with_output(
+                                ctx.report_text_output(format!("answer={}", ctx.output.output.0)),
+                            ),
+                        )
+                    }
+                    .boxed()
+                },
+            ),
+            &identity("typed-output-public-only-runner-declaration-test"),
+        );
+
+        let error = evaluator
+            .evaluate(
+                request(
+                    ResolvedRequestKind::Independent {
+                        candidates: vec![candidate],
+                    },
+                    vec![CaseId::new(0)],
+                    AssessmentGranularity::PerCase,
+                ),
+                ctx.evaluation_context(StageId::from_evaluator(Evaluator::id(&evaluator))),
+            )
+            .await
+            .err()
+            .expect("typed reportable output must carry candidate/artifact data class");
+
+        assert!(
+            error
+                .to_string()
+                .contains("runner output did not declare candidate or artifact assessed output")
+        );
+    });
+}
+
+#[test]
 fn scoring_evaluator_rejects_same_context_dummy_report_output() {
     block_on(async {
         let (mut graph, mut budget, candidate) = graph_with_seed();
@@ -1125,6 +1181,75 @@ fn judging_evaluator_requires_group_scoped_reportable_output() {
             error
                 .to_string()
                 .contains("reportable output was an empty placeholder")
+        );
+    });
+}
+
+#[test]
+fn judging_evaluator_rejects_typed_runner_declaration_without_assessed_data_class() {
+    #[derive(Clone, Debug)]
+    struct TypedPrediction(i32);
+
+    block_on(async {
+        let (mut graph, mut budget, left) = graph_with_seed();
+        let right = {
+            let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
+            ctx.insert_seed(TextArtifact(50), 1).unwrap()
+        };
+        let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
+        let evaluator = JudgingEvaluator::new(
+            Arc::new(vec![input_case(0, 2)]),
+            Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
+                async move {
+                    let answer = artifact.0 + *case.input();
+                    Ok(RunOutput::typed(TypedPrediction(answer))
+                        .with_reportable_output(OutputRecord::inline(answer.to_string())))
+                }
+                .boxed()
+            }),
+            Arc::new(
+                |ctx: JudgeScoreContext<
+                    TextArtifact,
+                    i32,
+                    leaven_eval::NoTarget,
+                    TypedPrediction,
+                >| {
+                    async move {
+                        let rendered = ctx
+                            .outputs
+                            .iter()
+                            .map(|output| output.output.output.0.to_string())
+                            .collect::<Vec<_>>()
+                            .join("|");
+                        Ok(Score::new(1.0, "judged").with_output(ctx.report_text_output(rendered)))
+                    }
+                    .boxed()
+                },
+            ),
+            &identity("judging-output-public-only-runner-declaration-test"),
+        );
+
+        let error = evaluator
+            .evaluate(
+                request(
+                    ResolvedRequestKind::Pairwise {
+                        left,
+                        right,
+                        order: PairOrder::Ordered,
+                    },
+                    vec![CaseId::new(0)],
+                    AssessmentGranularity::PerCase,
+                ),
+                ctx.evaluation_context(StageId::from_evaluator(Evaluator::id(&evaluator))),
+            )
+            .await
+            .err()
+            .expect("typed group reportable output must carry candidate/artifact data class");
+
+        assert!(
+            error
+                .to_string()
+                .contains("runner output did not declare candidate or artifact assessed output")
         );
     });
 }

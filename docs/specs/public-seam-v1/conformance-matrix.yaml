@@ -575,14 +575,17 @@ rows:
       - crates/leaven-run/tests/scoring_evaluator.rs::judging_evaluator_preserves_pairwise_and_listwise_report_outputs
       - crates/leaven-run/tests/optimize_builder.rs::run_builder_typed_output_uses_score_supplied_report_output
       - crates/leaven-public-seam/tests/plan_document.rs::submit_assessments_score_outputs_cover_all_assessment_shapes
+      - crates/leaven-public-seam/tests/plan_document.rs::submit_assessments_accepts_candidate_artifact_score_output_class
     negative_test_evidence:
       - crates/leaven-run/tests/scoring_evaluator.rs::scoring_evaluator_requires_reportable_output_for_typed_runner_outputs
       - crates/leaven-run/tests/scoring_evaluator.rs::scoring_evaluator_rejects_empty_placeholder_report_output
       - crates/leaven-run/tests/scoring_evaluator.rs::scoring_evaluator_rejects_typed_score_output_without_runner_declaration
+      - crates/leaven-run/tests/scoring_evaluator.rs::scoring_evaluator_rejects_typed_runner_declaration_without_assessed_data_class
       - crates/leaven-run/tests/scoring_evaluator.rs::scoring_evaluator_rejects_same_context_dummy_report_output
       - crates/leaven-run/tests/scoring_evaluator.rs::scoring_evaluator_rejects_mutated_context_dummy_report_output
       - crates/leaven-run/tests/scoring_evaluator.rs::scoring_evaluator_rejects_report_output_from_another_scoring_context
       - crates/leaven-run/tests/scoring_evaluator.rs::judging_evaluator_requires_group_scoped_reportable_output
+      - crates/leaven-run/tests/scoring_evaluator.rs::judging_evaluator_rejects_typed_runner_declaration_without_assessed_data_class
       - crates/leaven-run/tests/scoring_evaluator.rs::judging_evaluator_rejects_same_context_dummy_report_output
       - crates/leaven-run/tests/scoring_evaluator.rs::judging_evaluator_rejects_report_output_from_another_candidate_group
       - crates/leaven-public-seam/tests/plan_document.rs::submit_assessments_rejects_missing_or_placeholder_score_output
