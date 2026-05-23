@@ -437,7 +437,18 @@ fn plan_result_value(
 }
 
 fn replayability_summary(values: &Map<String, Value>, receipts: &[Value]) -> &'static str {
-    let mut rank = usize::from(!receipts.is_empty());
+    let mut rank = receipts
+        .iter()
+        .filter_map(|receipt| {
+            receipt
+                .as_object()
+                .and_then(|object| object.get("kind"))
+                .and_then(Value::as_str)
+        })
+        .filter(|kind| *kind != "query")
+        .map(|_| 1)
+        .max()
+        .unwrap_or(0);
     for value in values.values() {
         rank = rank.max(
             value
@@ -518,16 +529,20 @@ fn execute_let(
     let expr = op_object
         .get("expr")
         .ok_or_else(|| invalid_plan("let op must carry expr"))?;
-    let value = evaluate_expr(expr, &name, plan_document, context, host)?;
-    if value
+    let evaluated = evaluate_expr(expr, &name, plan_document, context, host)?;
+    if let Some(receipt) = evaluated.receipt {
+        state.receipts.push(receipt);
+    }
+    if evaluated
+        .value
         .as_object()
         .and_then(|object| object.get("kind"))
         .and_then(Value::as_str)
         == Some("graph_set")
     {
-        state.values.insert(name.clone(), value.clone());
+        state.values.insert(name.clone(), evaluated.value.clone());
     }
-    state.bindings.insert(name, value);
+    state.bindings.insert(name, evaluated.value);
     Ok(())
 }
 
@@ -709,19 +724,27 @@ fn dependency_values(
     Ok(deps)
 }
 
+struct EvaluatedExpr {
+    value: Value,
+    receipt: Option<Value>,
+}
+
 fn evaluate_expr(
     expr: &Value,
     name: &str,
     plan_document: &crate::PlanDocument,
     context: &PlanExecutionContext,
     host: &mut impl PlanExecutionHost,
-) -> Result<Value, PublicSeamError> {
+) -> Result<EvaluatedExpr, PublicSeamError> {
     let object = object(expr, "expr")?;
     match required_string(object.get("kind"), "expr.kind")? {
-        "literal" => object
-            .get("value")
-            .cloned()
-            .ok_or_else(|| invalid_plan("literal expr must carry value")),
+        "literal" => Ok(EvaluatedExpr {
+            value: object
+                .get("value")
+                .cloned()
+                .ok_or_else(|| invalid_plan("literal expr must carry value"))?,
+            receipt: None,
+        }),
         "graph_query" => execute_graph_query_expr(expr, name, plan_document, context, host),
         other => Err(invalid_plan(format!(
             "representative Plan IR harness does not execute `{other}` let expressions"
@@ -735,23 +758,61 @@ fn execute_graph_query_expr(
     plan_document: &crate::PlanDocument,
     context: &PlanExecutionContext,
     host: &mut impl PlanExecutionHost,
-) -> Result<Value, PublicSeamError> {
-    let outcome = host.graph_query(PlanGraphQueryRequest {
-        name,
-        expr,
-        scope: graph_read_scope(plan_document, context)?,
-    })?;
+) -> Result<EvaluatedExpr, PublicSeamError> {
+    let scope = graph_read_scope(plan_document, context)?;
+    let outcome = host.graph_query(PlanGraphQueryRequest { name, expr, scope })?;
+    let receipt_id = format!("qrec_{name}");
     let mut value = json!({
         "kind": "graph_set",
         "items": outcome.items,
         "graph_revision": outcome.graph_revision,
         "data_classes": outcome.data_classes,
-        "replayability": "pure_read"
+        "replayability": "pure_read",
+        "receipt": receipt_id
     });
     if let Some(next_cursor) = outcome.next_cursor {
         value["next_cursor"] = json!(next_cursor);
     }
-    Ok(value)
+    let scope_value = graph_read_scope_value(scope);
+    let projection = object(expr, "graph_query")?
+        .get("projection")
+        .ok_or_else(|| invalid_plan("graph_query must carry projection"))?;
+    let op_hash = prefixed_jcs_hash(
+        "fp_query_sha256_",
+        &json!({
+            "schema_version": "leaven.plan_query_op.v1",
+            "name": name,
+            "expr": expr,
+            "scope": scope_value
+        }),
+    )?;
+    let result_hash = prefixed_jcs_hash(
+        "fp_result_sha256_",
+        &json!({
+            "schema_version": "leaven.plan_query_result.v1",
+            "name": name,
+            "value": value
+        }),
+    )?;
+    let read_scope_fingerprint = prefixed_jcs_hash("fp_scope_sha256_", &scope_value)?;
+    let projection_fingerprint = prefixed_jcs_hash("fp_projection_sha256_", projection)?;
+    let graph_revision = required_string(value.get("graph_revision"), "graph_revision")?.to_owned();
+    Ok(EvaluatedExpr {
+        value,
+        receipt: Some(json!({
+            "kind": "query",
+            "receipt": receipt_id,
+            "op_var": name,
+            "started_at": context.started_at,
+            "completed_at": context.completed_at,
+            "op_hash": op_hash,
+            "result_hash": result_hash,
+            "graph_revision": graph_revision,
+            "read_scope_fingerprint": read_scope_fingerprint,
+            "projection_fingerprint": projection_fingerprint,
+            "status": "succeeded"
+        })),
+    })
 }
 
 fn graph_read_scope<'a>(
@@ -780,6 +841,24 @@ fn graph_read_scope<'a>(
         other => Err(invalid_plan(format!(
             "unknown Plan consistency mode `{other}`"
         ))),
+    }
+}
+
+fn graph_read_scope_value(scope: PlanGraphReadScope<'_>) -> Value {
+    match scope {
+        PlanGraphReadScope::LatestAtStart { revision } => json!({
+            "kind": "latest_at_start",
+            "revision": revision
+        }),
+        PlanGraphReadScope::AtRevision { revision } => json!({
+            "kind": "at_revision",
+            "revision": revision
+        }),
+        PlanGraphReadScope::SinceRevision { since, until } => json!({
+            "kind": "since_revision",
+            "since": since,
+            "until": until
+        }),
     }
 }
 
