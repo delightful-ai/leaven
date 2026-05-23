@@ -623,10 +623,12 @@ fn scoring_evaluator_preserves_typed_output_through_scoring_then_renders() {
             Arc::new(vec![input_case(0, 2)]),
             Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
                 async move {
-                    Ok(RunOutput::typed(TypedPrediction {
+                    let prediction = TypedPrediction {
                         answer: artifact.0 + *case.input(),
                         rationale: "typed metadata".to_owned(),
-                    }))
+                    };
+                    Ok(RunOutput::typed(prediction)
+                        .with_reportable_text(format!("answer={}", artifact.0 + *case.input())))
                 }
                 .boxed()
             }),
@@ -768,6 +770,109 @@ fn scoring_evaluator_rejects_empty_placeholder_report_output() {
             error
                 .to_string()
                 .contains("reportable output was an empty placeholder")
+        );
+    });
+}
+
+#[test]
+fn scoring_evaluator_rejects_typed_score_output_without_runner_declaration() {
+    #[derive(Clone, Debug)]
+    struct TypedPrediction(i32);
+
+    block_on(async {
+        let (mut graph, mut budget, candidate) = graph_with_seed();
+        let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
+        let evaluator = ScoringEvaluator::new(
+            Arc::new(vec![input_case(0, 2)]),
+            Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
+                async move {
+                    Ok(RunOutput::typed(TypedPrediction(
+                        artifact.0 + *case.input(),
+                    )))
+                }
+                .boxed()
+            }),
+            Arc::new(
+                |ctx: ScoreContext<TextArtifact, i32, leaven_eval::NoTarget, TypedPrediction>| {
+                    async move {
+                        Ok(
+                            Score::new(f64::from(ctx.output.output.0), "typed").with_output(
+                                ctx.report_text_output(format!("answer={}", ctx.output.output.0)),
+                            ),
+                        )
+                    }
+                    .boxed()
+                },
+            ),
+            &identity("typed-output-missing-runner-declaration-test"),
+        );
+
+        let error = evaluator
+            .evaluate(
+                request(
+                    ResolvedRequestKind::Independent {
+                        candidates: vec![candidate],
+                    },
+                    vec![CaseId::new(0)],
+                    AssessmentGranularity::PerCase,
+                ),
+                ctx.evaluation_context(StageId::from_evaluator(Evaluator::id(&evaluator))),
+            )
+            .await
+            .err()
+            .expect("typed score output without runner declaration must fail evaluation");
+
+        assert!(
+            error
+                .to_string()
+                .contains("runner output did not declare reportable assessed output")
+        );
+    });
+}
+
+#[test]
+fn scoring_evaluator_rejects_same_context_dummy_report_output() {
+    block_on(async {
+        let (mut graph, mut budget, candidate) = graph_with_seed();
+        let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
+        let evaluator = ScoringEvaluator::new(
+            Arc::new(vec![input_case(0, 2)]),
+            Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
+                async move { Ok(RunOutput::new((artifact.0 + *case.input()).to_string())) }.boxed()
+            }),
+            Arc::new(
+                |ctx: ScoreContext<TextArtifact, i32, leaven_eval::NoTarget, String>| {
+                    async move {
+                        Ok(
+                            Score::new(ctx.output.output.parse::<f64>().unwrap(), "dummy")
+                                .with_output(ctx.report_text_output("dummy but same context")),
+                        )
+                    }
+                    .boxed()
+                },
+            ),
+            &identity("typed-output-dummy-output-test"),
+        );
+
+        let error = evaluator
+            .evaluate(
+                request(
+                    ResolvedRequestKind::Independent {
+                        candidates: vec![candidate],
+                    },
+                    vec![CaseId::new(0)],
+                    AssessmentGranularity::PerCase,
+                ),
+                ctx.evaluation_context(StageId::from_evaluator(Evaluator::id(&evaluator))),
+            )
+            .await
+            .err()
+            .expect("dummy report output should fail evaluation");
+
+        assert!(
+            error
+                .to_string()
+                .contains("reportable output did not match assessed output")
         );
     });
 }
@@ -981,6 +1086,48 @@ fn judging_evaluator_requires_group_scoped_reportable_output() {
 }
 
 #[test]
+fn judging_evaluator_rejects_same_context_dummy_report_output() {
+    block_on(async {
+        let (mut graph, mut budget, left) = graph_with_seed();
+        let right = {
+            let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
+            ctx.insert_seed(TextArtifact(50), 1).unwrap()
+        };
+        let mut ctx = RunContext::<RunProblem<TextArtifact, i32>>::new(&mut graph, &mut budget);
+        let evaluator = judging_evaluator(
+            |ctx: JudgeScoreContext<TextArtifact, i32, leaven_eval::NoTarget, String>| {
+                assert_eq!(ctx.outputs.len(), 2);
+                Score::new(1.0, "dummy")
+                    .with_output(ctx.report_text_output("dummy but same candidate group"))
+            },
+        );
+
+        let error = evaluator
+            .evaluate(
+                request(
+                    ResolvedRequestKind::Pairwise {
+                        left,
+                        right,
+                        order: PairOrder::Ordered,
+                    },
+                    vec![CaseId::new(0)],
+                    AssessmentGranularity::PerCase,
+                ),
+                ctx.evaluation_context(StageId::from_evaluator(Evaluator::id(&evaluator))),
+            )
+            .await
+            .err()
+            .expect("dummy judge output should fail");
+
+        assert!(
+            error
+                .to_string()
+                .contains("reportable output did not match assessed output")
+        );
+    });
+}
+
+#[test]
 fn judging_evaluator_rejects_report_output_from_another_candidate_group() {
     use std::sync::Mutex;
 
@@ -1003,7 +1150,7 @@ fn judging_evaluator_rejects_report_output_from_another_candidate_group() {
                     let stolen_output = Arc::clone(&stolen_output);
                     async move {
                         if *ctx.case.input() == 2 {
-                            let report_output = ctx.report_text_output("first pair");
+                            let report_output = ctx.report_text_output("42|52");
                             *stolen_output.lock().unwrap() = Some(report_output.clone());
                             Ok(Score::new(1.0, "first pair").with_output(report_output))
                         } else {

@@ -191,10 +191,12 @@ fn public_run_gepa_path_reflects_rendered_typed_output() {
                     .get("answer")
                     .expect("answer part exists")
                     .clone();
-                Ok(RunOutput::typed(TypedAnswer {
+                let answer = TypedAnswer {
                     answer,
                     private_reasoning: format!("typed reasoning for {}", case.input()),
-                }))
+                };
+                Ok(RunOutput::typed(answer.clone())
+                    .with_reportable_text(format!("rendered answer: {}", answer.answer)))
             },
         )
         .score(

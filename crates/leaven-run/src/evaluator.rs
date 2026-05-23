@@ -9,7 +9,7 @@ use leaven_core::{
 };
 use leaven_engine::{CachePolicy, EvaluationContext, EvaluationError, Evaluator};
 use leaven_eval::{Case, NoTarget};
-use leaven_evidence::{CaseAssessmentEvidence, ScalarEvidence};
+use leaven_evidence::{CaseAssessmentEvidence, OutputRecord, ScalarEvidence};
 use leaven_kernel::{BudgetSnapshot, Cost, EvaluationSetId, EvaluatorId, Fingerprint, Metered};
 
 use crate::compatibility::ScoringEvaluatorIdentity;
@@ -100,6 +100,7 @@ pub struct JudgeScoreContext<A, I, T = NoTarget, Out = ()> {
     /// Point-in-time budget snapshot visible to the judge.
     pub budget: BudgetSnapshot,
     output_scope: ReportableOutputScope,
+    expected_output: Option<OutputRecord>,
 }
 
 impl<A, I, T, Out> JudgeScoreContext<A, I, T, Out> {
@@ -108,19 +109,25 @@ impl<A, I, T, Out> JudgeScoreContext<A, I, T, Out> {
         outputs: Vec<JudgeCandidateOutput<A, Out>>,
         budget: BudgetSnapshot,
         output_scope: ReportableOutputScope,
+        expected_output: Option<OutputRecord>,
     ) -> Self {
         Self {
             case,
             outputs,
             budget,
             output_scope,
+            expected_output,
         }
     }
 
     /// Wraps a judged output record for this exact candidate-group/case context.
     #[must_use]
     pub fn report_output(&self, output: leaven_evidence::OutputRecord) -> crate::ReportableOutput {
-        crate::ReportableOutput::new(output, self.output_scope.clone())
+        crate::ReportableOutput::new(
+            output,
+            self.output_scope.clone(),
+            self.expected_output.clone(),
+        )
     }
 
     /// Wraps inline judged output text for this exact candidate-group/case context.
@@ -520,11 +527,13 @@ where
         });
     }
     let output_scope = ReportableOutputScope::group(job.request_kind.candidates(), case_id);
+    let expected_output = assessed_group_output(&outputs);
     let mut score = scorer(JudgeScoreContext::new(
         crate::ScoreCase::from_case(&job.case),
         outputs,
         job.budget,
         output_scope.clone(),
+        expected_output,
     ))
     .await
     .map_err(|source| {
@@ -560,6 +569,36 @@ where
         evidence: CaseAssessmentEvidence::new(scalar, generated_output, score.feedback)
             .with_trace(trace),
         cost,
+    })
+}
+
+fn assessed_group_output<A, Out>(outputs: &[JudgeCandidateOutput<A, Out>]) -> Option<OutputRecord> {
+    let mut texts = Vec::with_capacity(outputs.len());
+    let mut truncated = false;
+    let mut metadata = None;
+    for output in outputs {
+        let OutputRecord::Inline {
+            text,
+            truncated: output_truncated,
+            metadata: output_metadata,
+        } = output.output.reportable_output()?
+        else {
+            return None;
+        };
+        if let Some(metadata) = &metadata {
+            if metadata != output_metadata {
+                return None;
+            }
+        } else {
+            metadata = Some(output_metadata.clone());
+        }
+        truncated |= *output_truncated;
+        texts.push(text.clone());
+    }
+    Some(OutputRecord::Inline {
+        text: texts.join("|"),
+        truncated,
+        metadata: metadata.unwrap_or_else(leaven_evidence::OutputMetadata::public),
     })
 }
 
@@ -708,7 +747,7 @@ mod tests {
                         async move {
                             assert_eq!(ctx.outputs.len(), 2);
                             let report = ctx.report_text_output(format!(
-                                "{} vs {}",
+                                "{}|{}",
                                 ctx.outputs[0].output.output, ctx.outputs[1].output.output
                             ));
                             Ok(Score::new(1.0, "left wins")
@@ -745,7 +784,7 @@ mod tests {
             );
             assert_eq!(
                 outcome.evidence.output(),
-                &OutputRecord::inline("40:2 vs 41:2")
+                &OutputRecord::inline("40:2|41:2")
             );
         });
     }
