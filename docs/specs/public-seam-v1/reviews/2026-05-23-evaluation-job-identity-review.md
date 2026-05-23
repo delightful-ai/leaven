@@ -107,3 +107,15 @@ Residual limits that do not block this row:
 Allowed matrix update:
 
 - `ps1.evaluator.job_identity` may move from `pending` to `proven` with the existing evidence list plus the receipt-binding tests.
+
+Supplemental adversarial confirmation:
+
+- Reviewer: sub-agent `019e554a-11da-7630-882c-9dacfb3482da`
+- Result: sign off. No blocking findings.
+- Fresh checks run by reviewer:
+  - `CARGO_INCREMENTAL=0 cargo test -p leaven-public-seam --test evaluation_job`
+  - `CARGO_INCREMENTAL=0 cargo test -p leaven-run --test scoring_evaluator public_seam_job`
+  - `CARGO_INCREMENTAL=0 cargo test -p leaven-engine --test context_services evaluation_requests_record_evaluator_fingerprint_as_runtime_job_identity -- --exact`
+  - `CARGO_INCREMENTAL=0 cargo test -p leaven-public-seam --test contract_package conformance_matrix_rows_are_unique_honest_and_reference_real_files -- --exact`
+  - `CARGO_INCREMENTAL=0 cargo test -p leaven --test topology_contract`
+- Supplemental finding: the proven row remains limited to engine record -> `leaven-run` public seam projection -> `leaven-public-seam` validation. It does not claim ACP session delivery, provider execution, capability minting, permission enforcement, watch behavior, MCP-over-ACP, or ordinary prelude product maturity.
