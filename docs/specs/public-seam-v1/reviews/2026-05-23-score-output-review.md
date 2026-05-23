@@ -53,9 +53,12 @@ Follow-up adversarial review:
 Follow-up blocking findings:
 
 - Same-context nonblank dummy output is still accepted. `ReportableOutput` scope and placeholder checks reject missing, blank, and cross-context output, but a scorer can still mint arbitrary nonblank text from the correct `ScoreContext` or `JudgeScoreContext`.
-- Runtime production and public-seam wire projection are still adjacent. `leaven-run` produces runtime `CaseAssessmentEvidence.output()` values and `leaven-public-seam` separately projects reusable `OutputRecord` values, but there is no executable conformance test that starts from runtime independent, pairwise, and listwise assessments and lowers those outputs through the public seam into the locked `Score.output` wire shape.
+
+Follow-up implementation after Goodall block:
+
+- `crates/leaven-run/tests/scoring_evaluator.rs::runtime_score_outputs_project_through_public_seam_for_all_assessment_shapes` now starts from runtime independent, pairwise, and listwise assessments and lowers their `CaseAssessmentEvidence.output()` values through `PublicSeamPackage::project_output_record(...)` into the locked `common.schema.json#/$defs/OutputRecord` wire shape.
 
 Limits:
 
 - This review does not sign off `ps1.evaluator.score_output`.
-- No matrix status should change for this row until same-context dummy/unrelated output is rejected, runtime-produced independent/pairwise/listwise assessment outputs are projected through the public seam, fresh verification evidence exists, and a follow-up adversarial sign-off is recorded.
+- No matrix status should change for this row until same-context dummy/unrelated output is rejected and a follow-up adversarial sign-off is recorded.
