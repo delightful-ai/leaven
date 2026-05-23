@@ -42,9 +42,10 @@ Follow-up implementation after block:
 - `leaven-evidence` now owns `OutputMetadata`, `OutputVisibility`, `DataClass`, and `DataClassSet`; `crates/leaven-evidence/tests/command.rs::output_record_preserves_visibility_and_data_classes` proves annotated output records preserve these facts.
 - `leaven-public-seam` now projects reusable output records into `common.schema.json#/$defs/OutputRecord`; `crates/leaven-public-seam/tests/output_record.rs` proves inline projection, blob metadata requirements, and schema rejection for missing visibility/data classes.
 - `leaven-public-seam` now semantically validates `submit_assessments` Plan IR score outputs across independent, pairwise, and listwise assessment items; `crates/leaven-public-seam/tests/plan_document.rs` rejects missing schema output, blank text output, and null JSON output.
-- This resolves only the cross-context unrelated-output fake pass, the local empty-placeholder negative, the reusable evidence metadata primitive, public-seam wire projection, and public-seam Plan IR score-output placeholder denial. It does not prove pairwise/listwise evaluator runtime production.
+- `leaven-run` now has `JudgingEvaluator` runtime production evidence for pairwise and listwise requests; `crates/leaven-run/tests/scoring_evaluator.rs` proves pairwise/listwise report outputs are preserved and rejects missing, placeholder, and cross-context group outputs.
+- This resolves the earlier implementation gaps, but the row still needs fresh full verification and adversarial sign-off before any matrix status change.
 
 Limits:
 
 - This review does not sign off `ps1.evaluator.score_output`.
-- No matrix status should change for this row until pairwise/listwise runtime production behavior, executable positive/negative tests, and a follow-up adversarial sign-off exist.
+- No matrix status should change for this row until fresh verification evidence and a follow-up adversarial sign-off are recorded.

@@ -16,7 +16,7 @@ pub use compatibility::{
     ScoringEvaluatorIdentity,
 };
 pub use error::OptimizeError;
-pub use evaluator::ScoringEvaluator;
+pub use evaluator::{JudgeCandidateOutput, JudgeScoreContext, JudgingEvaluator, ScoringEvaluator};
 pub use evidence::{
     IntoRunResult, ReportableOutput, RunCase, RunError, RunOutput, Score, ScoreCase, ScoreContext,
     ScoreError, ScoreMetadataView,
