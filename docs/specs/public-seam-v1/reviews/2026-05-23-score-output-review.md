@@ -45,7 +45,17 @@ Follow-up implementation after block:
 - `leaven-run` now has `JudgingEvaluator` runtime production evidence for pairwise and listwise requests; `crates/leaven-run/tests/scoring_evaluator.rs` proves pairwise/listwise report outputs are preserved and rejects missing, placeholder, and cross-context group outputs.
 - This resolves the earlier implementation gaps, but the row still needs fresh full verification and adversarial sign-off before any matrix status change.
 
+Follow-up adversarial review:
+
+- Reviewer: sub-agent `019e54fa-c9ca-7520-9d19-a1038f1795ab`
+- Result: blocked. The row must remain pending.
+
+Follow-up blocking findings:
+
+- Same-context nonblank dummy output is still accepted. `ReportableOutput` scope and placeholder checks reject missing, blank, and cross-context output, but a scorer can still mint arbitrary nonblank text from the correct `ScoreContext` or `JudgeScoreContext`.
+- Runtime production and public-seam wire projection are still adjacent. `leaven-run` produces runtime `CaseAssessmentEvidence.output()` values and `leaven-public-seam` separately projects reusable `OutputRecord` values, but there is no executable conformance test that starts from runtime independent, pairwise, and listwise assessments and lowers those outputs through the public seam into the locked `Score.output` wire shape.
+
 Limits:
 
 - This review does not sign off `ps1.evaluator.score_output`.
-- No matrix status should change for this row until fresh verification evidence and a follow-up adversarial sign-off are recorded.
+- No matrix status should change for this row until same-context dummy/unrelated output is rejected, runtime-produced independent/pairwise/listwise assessment outputs are projected through the public seam, fresh verification evidence exists, and a follow-up adversarial sign-off is recorded.
