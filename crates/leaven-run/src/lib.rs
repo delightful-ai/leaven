@@ -26,6 +26,7 @@ pub use leaven_engine::CachePolicy;
 pub use public_seam::{
     PublicEvaluationJobContext, PublicEvaluationJobProjectionError, PublicFailedCallKind,
     PublicFailedCallReceiptContext, PublicFailedCallReceiptProjectionError,
+    PublicProposalWriteReceiptContext, PublicProposalWriteReceiptProjectionError,
 };
 pub use result::{
     BestCandidate, EvaluationCacheBackend, EvaluationCacheBypassReason,

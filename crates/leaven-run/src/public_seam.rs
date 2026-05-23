@@ -10,6 +10,12 @@ use leaven_kernel::{
 use serde_json::{Map, Value, json};
 use thiserror::Error;
 
+mod proposal_write;
+
+pub use proposal_write::{
+    PublicProposalWriteReceiptContext, PublicProposalWriteReceiptProjectionError,
+};
+
 /// Public-seam fields supplied by the external-worker dispatch layer.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PublicEvaluationJobContext {
