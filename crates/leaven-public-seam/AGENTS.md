@@ -487,8 +487,9 @@ backpressure, or runtime watch support.
   into `leaven-lm::LmRequest`, including developer/user/tool messages,
   tool-result ids, tools, model role, sampling stop sequences, provider hints,
   final-message output, JSON-schema output, and extension-content refusal. This
-  is public-seam-to-neutral-vocabulary proof only; LM provider runtime and ACP
-  delivery rows remain pending until reviewed as their own tranche.
+  is the V1 public-seam LM contract proof cited by the matrix. Concrete LM
+  provider calls and provider-specific streaming/multimodal behavior remain
+  outside this crate and outside the V1 default public route.
 - `tests/plan_document.rs` also proves representative `agent_run` and
   `sandbox_exec` lowering into `leaven-agent` and `leaven-workspace` primitives
   plus typed Plan Result receipt/value emission for those calls. Both routes
@@ -502,24 +503,26 @@ backpressure, or runtime watch support.
   capability document, while the capability route checks workspace ids, input
   classes, schema/surface grants, execution policy, subprocess permissions, and
   command grants before host execution.
-  This is public-seam harness proof only; provider runtime, sandbox backend
-  execution, streaming delivery, and proposal parsing remain pending.
+  This is the V1 public-seam agent/sandbox contract proof cited by the matrix.
+  Concrete provider adapters, sandbox backends, and proposal parsers remain
+  separate owner routes rather than hidden requirements for this crate.
 - `tests/plan_document.rs` also proves representative `workspace_materialize`
   and `workspace_release` lowering, typed `workspace_handle` value emission,
   materialize host-result checks for path-shaped workspace ids and lifetime
   substitution, provenance tracking that rejects literal forged handles and
   reuse after release, release lifecycle state, call receipts, and refusal of
-  unmaterialized or host-path workspace substitutes. This is public-seam
-  lifecycle proof only; concrete workspace backend execution and full
-  artifact/snapshot behavior remain pending.
+  unmaterialized or host-path workspace substitutes. This is the V1 public-seam
+  workspace lifecycle proof cited by the matrix. Concrete workspace backend
+  execution and richer artifact/snapshot product behavior remain separate
+  workspace-backend owner routes.
 - `tests/workspace_query_contract.rs` proves finite workspace-query reads can
   execute through the public seam into `leaven-workspace::WorkspaceView` for
   read_file, list, stat, sha256/blake3 digest, snapshot, and requested-path
   capture-artifact listing. It also proves read/capture byte bounds, list entry
   bounds, and refusal of git_log/git_diff/git_status by the generic helper
-  instead of faking Git preimage truth. This is finite substrate proof only;
-  concrete Git workspace behavior and richer artifact bundle capture remain
-  host/back-end owned and pending.
+  instead of faking Git preimage truth. This is the finite V1 public-seam query
+  proof. Concrete Git workspace behavior and richer artifact bundle capture
+  remain host/back-end owned route-away work.
 - `tests/call_authority.rs` proves schema-valid Call ops are checked against
   capability-granted input data classes and call-local forbidden data-class
   intersections before execution. It rejects `case.target` and other forbidden
