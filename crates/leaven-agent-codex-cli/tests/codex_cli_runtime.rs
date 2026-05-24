@@ -261,7 +261,10 @@ exit 9
                 &mut view,
                 AgentRunRequest::new(
                     AgentInstructions::task("nonzero"),
-                    OutputContract::WorkspaceDiff { roots: vec![] },
+                    OutputContract::WorkspaceDiff {
+                        roots: vec![],
+                        surface_fingerprint: None,
+                    },
                 ),
                 AgentRunContext::new(AgentSessionId::new(), &BudgetSnapshot::default()),
             )
