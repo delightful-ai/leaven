@@ -661,6 +661,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-stage-evidence-typed-data-class-follow-up-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-evidence-stage-current-tranche-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-stage-workspace-result-kind-follow-up-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-public-seam-tranche-plato-review.md
     status: pending
 
   - id: ps1.visibility.reflector_target_safe
@@ -878,6 +879,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-stage-evidence-provenance-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-stage-evidence-typed-data-class-follow-up-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-evidence-stage-current-tranche-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-public-seam-tranche-plato-review.md
     status: pending
 
   - id: ps1.proposal.surface_authority
@@ -1620,6 +1622,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-costful-primary-receipt-follow-up-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-external-effect-policy-current-tranche-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-score-lm-agent-json-schema-partial-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-public-seam-tranche-plato-review.md
     status: pending
 
   - id: ps1.sandbox.exec_streaming
@@ -1704,6 +1707,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-costful-primary-receipt-follow-up-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-external-effect-policy-current-tranche-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-sandbox-workspace-score-follow-up-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-public-seam-tranche-plato-review.md
     status: pending
 
   - id: ps1.watch.deferred
