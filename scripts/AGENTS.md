@@ -4,7 +4,7 @@ This subtree holds repository scripts with local side effects. Scripts are part 
 Current scripts:
 - `lint-line-count.py`: enforces production Rust source size limits.
 - `test-suite-sla.py`: runs nextest plus doctests and enforces the `<30s` suite SLA.
-- `coverage-gate.py`: runs coverage over default workspace tests plus a tiny `xtask git-trust-bench` smoke with its focused trust-test preflight, then enforces line and branch floors over production/source behavior. It excludes milestone packages from the default coverage lane and excludes test harness files and `#[cfg(test)] mod ...` blocks from the denominator after execution.
+- `coverage-gate.py`: runs coverage over default workspace tests plus a tiny `xtask git-trust-bench` smoke with its focused trust-test preflight, then enforces line and branch floors over production/source behavior. It excludes milestone packages from the default coverage lane and excludes test harness files and `#[cfg(test)] mod ...` blocks from the denominator after execution. Its `--package`, `--test`, `--skip-clean`, `--skip-smoke`, and `--skip-report` flags are an explicit developer feedback lane, not the canonical coverage gate; `--skip-clean` still clears stale profraw files while preserving compiled artifacts.
 - `p8-gepa-debug-sqlite.py`: exports an existing P8 `reports/p8-aime.json` file, and optionally an upstream GEPA `gepa_state.bin`, into local SQLite tables for optimizer debugging. It does not call providers, fetch datasets, or mutate source.
 - `ensure_leaven_workspace.sh`: guard for paper-lane shell examples that must run from the main `/Users/darin/src/personal/leaven` jj workspace. It performs no network or provider work.
 
@@ -24,7 +24,7 @@ Current scripts:
   do: state which packages it runs and which live paths it deliberately avoids
   preserve: coverage as denominator/execution proof, not product-maturity proof
   avoid: using coverage to bless P8 reflection, LM/cache roles, or live-provider paths
-  verify: run `python3 scripts/coverage-gate.py --line-floor 0 --branch-floor 0` for script behavior, then `just coverage` when feasible
+  verify: run a targeted `just coverage-fast --package <crate>` for feedback-mode behavior, then `python3 scripts/coverage-gate.py --line-floor 0 --branch-floor 0` for canonical script behavior, then `just coverage` when feasible
 
 - when: changing `test-suite-sla.py`
   do: keep nextest plus doctests in one timed default lane

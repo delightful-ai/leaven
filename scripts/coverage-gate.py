@@ -88,26 +88,77 @@ def main() -> int:
         default="target/llvm-cov/coverage-summary.json",
         help="where to write the llvm-cov JSON summary",
     )
+    parser.add_argument(
+        "--package",
+        action="append",
+        default=[],
+        help=(
+            "run coverage for one workspace package; repeat for a targeted "
+            "developer feedback lane"
+        ),
+    )
+    parser.add_argument(
+        "--test",
+        action="append",
+        default=[],
+        help=(
+            "run one integration test target inside the selected package set; "
+            "repeat for a narrower coverage feedback lane"
+        ),
+    )
+    parser.add_argument(
+        "--skip-clean",
+        action="store_true",
+        help=(
+            "reuse compiled llvm-cov artifacts but clear stale profraw files "
+            "for faster local feedback"
+        ),
+    )
+    parser.add_argument(
+        "--skip-smoke",
+        action="store_true",
+        help="skip the xtask git-trust smoke binaries for targeted feedback",
+    )
+    parser.add_argument(
+        "--skip-report",
+        action="store_true",
+        help=(
+            "run the selected coverage-instrumented tests without generating "
+            "lcov/json summaries or enforcing floors"
+        ),
+    )
     args = parser.parse_args()
+    packages = validate_package_args(args.package)
+    tests = validate_test_args(args.test, packages)
     output_path = Path(args.output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    commands = [
-        ["cargo", "llvm-cov", "clean", "--workspace"],
+    commands = []
+    if args.skip_clean:
+        commands.append(["cargo", "llvm-cov", "clean", "--profraw-only"])
+    else:
+        commands.append(["cargo", "llvm-cov", "clean", "--workspace"])
+    commands.extend(
         [
-            "cargo",
-            "llvm-cov",
-            "--workspace",
-            "--no-report",
-            "--branch",
-            *COVERAGE_PROFILE,
-            *exclude_args(),
-        ],
-        *RUN_COMMANDS,
-    ]
+            [
+                "cargo",
+                "llvm-cov",
+                *coverage_scope_args(packages),
+                *test_scope_args(tests),
+                "--no-report",
+                "--branch",
+                *COVERAGE_PROFILE,
+                *exclude_args(packages),
+            ],
+            *([] if args.skip_smoke else RUN_COMMANDS),
+        ]
+    )
     for command in commands:
         result = run(command)
         if result.returncode != 0:
             return result.returncode
+    if args.skip_report:
+        print("coverage report skipped by --skip-report")
+        return 0
 
     lcov_path = output_path.with_suffix(".lcov")
     lcov_command = [
@@ -180,10 +231,46 @@ def run(command: list[str]) -> subprocess.CompletedProcess[bytes]:
     return subprocess.run(command, check=False)
 
 
-def exclude_args() -> list[str]:
+def exclude_args(packages: list[str]) -> list[str]:
+    if packages:
+        return []
     args: list[str] = []
     for package in MILESTONE_PACKAGES:
         args.extend(["--exclude", package])
+    return args
+
+
+def validate_package_args(packages: list[str]) -> list[str]:
+    if not packages:
+        return []
+    blocked = sorted(set(packages).intersection(MILESTONE_PACKAGES))
+    if blocked:
+        raise SystemExit(
+            "error: targeted coverage does not run non-default milestone packages: "
+            + ", ".join(blocked)
+        )
+    return packages
+
+
+def validate_test_args(tests: list[str], packages: list[str]) -> list[str]:
+    if tests and not packages:
+        raise SystemExit("error: --test requires at least one --package")
+    return tests
+
+
+def coverage_scope_args(packages: list[str]) -> list[str]:
+    if not packages:
+        return ["--workspace"]
+    args: list[str] = []
+    for package in packages:
+        args.extend(["-p", package])
+    return args
+
+
+def test_scope_args(tests: list[str]) -> list[str]:
+    args: list[str] = []
+    for test in tests:
+        args.extend(["--test", test])
     return args
 
 

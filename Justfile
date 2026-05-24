@@ -126,4 +126,10 @@ milestone-examples: milestone-p0 milestone-p1 milestone-p2 milestone-p3 mileston
 coverage:
     python3 scripts/coverage-gate.py --line-floor {{coverage_line_floor}} --branch-floor {{coverage_branch_floor}}
 
+coverage-fast +args:
+    python3 scripts/coverage-gate.py --line-floor 0 --branch-floor 0 --skip-clean --skip-smoke {{args}}
+
+coverage-smoke-fast +args:
+    python3 scripts/coverage-gate.py --line-floor 0 --branch-floor 0 --skip-clean --skip-smoke --skip-report {{args}}
+
 check: lint test coverage

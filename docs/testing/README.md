@@ -24,6 +24,8 @@ just test
 just test-one <nextest selector>
 just test-stress 20 <nextest selector>
 just coverage
+just coverage-fast --package <crate>
+just coverage-smoke-fast --package <crate> --test <integration-test-name>
 just milestone-p0
 just milestone-p1
 just milestone-p2
@@ -83,6 +85,19 @@ default suite is back under the SLA.
 Coverage is a ratchet. Raise `coverage_line_floor` and
 `coverage_branch_floor` in the root `Justfile` when coverage improves; do not
 lower either floor to land weaker tests.
+
+For hot-loop coverage feedback, use `just coverage-fast --package <crate>` and
+repeat `--package` for a small touched set. Add `--test <integration-test-name>`
+when the changed proof is confined to one or two integration test targets. This
+lane clears stale profraw files, reuses compiled `cargo-llvm-cov` artifacts,
+and skips the `xtask` git-trust smoke binaries, so it is only an iteration aid.
+It refuses non-default milestone packages and does not replace `just coverage`
+or `just check` as completion evidence.
+
+When the only question is whether the touched tests still pass under coverage
+instrumentation, use `just coverage-smoke-fast --package <crate> --test
+<integration-test-name>`. It skips report generation entirely and therefore
+does not produce or enforce line/branch percentages.
 
 The v0.2.1b topology cutover adds many spec-listed crate skeletons whose job is
 to enforce dependency direction before their behavior lands. The default
