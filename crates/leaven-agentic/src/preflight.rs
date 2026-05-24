@@ -466,6 +466,14 @@ fn check_output_contract(report: &mut AgentRunPreflightReport, contract: &Output
                 );
             }
         }
+        OutputContract::JsonSchema {
+            schema_fingerprint, ..
+        } => {
+            report.ok(
+                "output-contract",
+                format!("final assistant message constrained by `{schema_fingerprint}`"),
+            );
+        }
         OutputContract::FinalMessage => {
             report.ok("output-contract", "final assistant message required");
         }

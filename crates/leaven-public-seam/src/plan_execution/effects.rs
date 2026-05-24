@@ -188,9 +188,14 @@ fn lower_agent_output_contract(
         Some("workspace_diff") => Ok(OutputContract::WorkspaceDiff {
             roots: vec![WorkspacePath::root()],
         }),
-        Some("json_schema") => Err(invalid_call(
-            "agent_run json_schema output needs an owned leaven-agent structured-output primitive",
-        )),
+        Some("json_schema") => Ok(OutputContract::JsonSchema {
+            schema_fingerprint: object
+                .get("schema_fingerprint")
+                .and_then(Value::as_str)
+                .ok_or_else(|| invalid_call("json_schema output must carry schema_fingerprint"))?
+                .to_owned(),
+            schema: object.get("schema").cloned().unwrap_or(Value::Null),
+        }),
         Some(other) => Err(invalid_call(format!(
             "unsupported agent_run output contract `{other}`"
         ))),

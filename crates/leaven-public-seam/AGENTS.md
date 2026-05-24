@@ -227,9 +227,9 @@ backpressure, or runtime watch support.
   delivery rows remain pending until reviewed as their own tranche.
 - `tests/plan_document.rs` also proves representative `agent_run` and
   `sandbox_exec` lowering into `leaven-agent` and `leaven-workspace` primitives
-  plus typed Plan Result receipt/value emission for those calls. It records the
-  current honest gap where schema-valid agent `json_schema` output is refused
-  until `leaven-agent` owns a structured-output primitive. This is public-seam
+  plus typed Plan Result receipt/value emission for those calls. Agent lowering
+  preserves schema-valid `json_schema` output through the owning
+  `leaven-agent::OutputContract::JsonSchema` primitive. This is public-seam
   harness proof only; provider runtime, sandbox backend execution, streaming
   delivery, and proposal parsing remain pending.
 - `tests/call_authority.rs` proves schema-valid Call ops are checked against

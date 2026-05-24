@@ -423,6 +423,14 @@ fn preflight_checks_output_contract_shape_without_running_runtime() {
         .check();
     assert!(!final_message.has_errors());
 
+    let structured_final_message = AgentRunPreflight::new()
+        .output_contract(&OutputContract::JsonSchema {
+            schema_fingerprint: "fp_schema_sha256_agentout".to_owned(),
+            schema: serde_json::json!({"type": "object"}),
+        })
+        .check();
+    assert!(!structured_final_message.has_errors());
+
     let diff_roots = AgentRunPreflight::new()
         .output_contract(&OutputContract::WorkspaceDiff {
             roots: vec![WorkspacePath::new("skills").unwrap()],

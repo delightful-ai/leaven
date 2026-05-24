@@ -540,7 +540,7 @@ fn agent_run_and_sandbox_exec_lower_to_owned_runtime_primitives_and_emit_receipt
 }
 
 #[test]
-fn agent_run_lowering_rejects_schema_valid_json_schema_output_until_owned() {
+fn agent_run_lowering_preserves_json_schema_output_contract() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let mut plan = execute_external_call_plan(agent_run_call());
     plan["ops"][1]["call"]["output"] = json!({
@@ -552,17 +552,11 @@ fn agent_run_lowering_rejects_schema_valid_json_schema_output_until_owned() {
     });
     let mut host = RecordingPlanHost::default();
 
-    let error = package
+    package
         .execute_plan_document(&plan, &plan_execution_context(), &mut host)
-        .unwrap_err();
+        .unwrap();
 
-    assert!(
-        error
-            .to_string()
-            .contains("needs an owned leaven-agent structured-output primitive"),
-        "unexpected error: {error:?}"
-    );
-    assert!(host.calls.is_empty());
+    assert_eq!(host.calls, vec!["agent"]);
 }
 
 #[test]
@@ -1519,10 +1513,23 @@ impl PlanExecutionHost for RecordingPlanHost {
         assert!(!agent_request.tool_policy.allow_shell);
         assert_eq!(agent_request.tool_policy.allowed_tools, vec!["read_file"]);
         assert_eq!(agent_request.limits.max_turns, Some(4));
-        assert!(matches!(
-            agent_request.output_contract,
-            leaven_agent::OutputContract::FinalMessage
-        ));
+        match request.call()["output"]["kind"].as_str() {
+            Some("final_message") => assert!(matches!(
+                agent_request.output_contract,
+                leaven_agent::OutputContract::FinalMessage
+            )),
+            Some("json_schema") => match agent_request.output_contract {
+                leaven_agent::OutputContract::JsonSchema {
+                    schema_fingerprint,
+                    schema,
+                } => {
+                    assert_eq!(schema_fingerprint, "fp_schema_sha256_agentoutput");
+                    assert_eq!(schema["type"], "object");
+                }
+                other => panic!("unexpected agent output contract: {other:?}"),
+            },
+            other => panic!("unexpected agent output kind: {other:?}"),
+        }
         self.calls.push("agent");
         Ok(PlanAgentRunOutcome::completed("fp_runtime_sha256_agent")
             .with_transcript_ref(blob_ref("blob_agent_transcript"))
