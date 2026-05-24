@@ -657,6 +657,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-stage-evidence-provenance-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-stage-evidence-typed-data-class-follow-up-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-evidence-stage-current-tranche-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-acp-stage-workspace-result-kind-follow-up-review.md
     status: pending
 
   - id: ps1.visibility.reflector_target_safe
@@ -706,6 +707,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-stage-evidence-typed-data-class-follow-up-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-stage-receipt-ref-follow-up-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-evidence-stage-current-tranche-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-acp-stage-workspace-result-kind-follow-up-review.md
     status: pending
 
   - id: ps1.evidence.visibility_receipts
@@ -809,6 +811,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-stage-evidence-provenance-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-stage-evidence-typed-data-class-follow-up-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-evidence-stage-current-tranche-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-acp-stage-workspace-result-kind-follow-up-review.md
     status: pending
 
   - id: ps1.stage.payload_receipts
@@ -1233,6 +1236,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-agent-sandbox-acp-audit-follow-up-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-agent-sandbox-receipt-stream-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-costful-primary-receipt-follow-up-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-acp-stage-workspace-result-kind-follow-up-review.md
     status: pending
 
   - id: ps1.acp.lifecycle_backpressure
@@ -1383,6 +1387,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-23-workspace-handle-provenance-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-workspace-query-op-specific-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-workspace-lifecycle-replay-partial-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-acp-stage-workspace-result-kind-follow-up-review.md
     status: pending
 
   - id: ps1.lm.contract
