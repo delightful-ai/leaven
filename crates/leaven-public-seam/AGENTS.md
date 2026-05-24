@@ -43,12 +43,13 @@ behavior.
   schema fingerprints are public-seam wire identifiers, not cache behavior
   fingerprints.
 - Graph mutation remains private to `leaven-engine` through `RunContext`.
-- ACP process/session behavior belongs in a hot worker transport owner, not in
-  this crate. The current route note is
-  `docs/plans/2026-05-24-public-seam-v1-acp-transport-route.md`: use the
-  official `agentclientprotocol/rust-sdk` as transport substrate only, keep the
-  Leaven `leaven/*` method/result contract here, and prove transport behavior
-  with black-box subprocess tests before promoting ACP rows.
+- ACP process/session behavior belongs in `leaven-acp`, not in this crate. The
+  current route note is
+  `docs/plans/2026-05-24-public-seam-v1-acp-transport-route.md`: keep the
+  Leaven `leaven/*` method/result contract here, prove transport behavior with
+  black-box subprocess tests before promoting ACP rows, and migrate the hot
+  transport substrate to the official `agentclientprotocol/rust-sdk` only after
+  external dependency approval.
 - Provider/runtime lowering belongs in `leaven-lm*`, `leaven-agent*`, and
   workspace crates.
 

@@ -3195,6 +3195,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "leaven-acp"
+version = "0.0.0"
+dependencies = [
+ "jcs-canonicalize",
+ "leaven-public-seam",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "leaven-agent"
 version = "0.0.0"
 dependencies = [

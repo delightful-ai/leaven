@@ -1,0 +1,20 @@
+[package]
+name = "leaven-acp"
+description = "Hot ACP stdio transport owner for the locked Leaven public seam."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+leaven-public-seam = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+jcs-canonicalize = { workspace = true }
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

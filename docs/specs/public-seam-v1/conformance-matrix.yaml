@@ -1326,16 +1326,24 @@ rows:
       seam while manifest.mcp_status is not_in_v1.
     fake_pass_rejected: Rust in-process trait calls labeled as ACP.
     minimum_closeout_level: integrated_surface
-    partial_contract_test_evidence:
+    positive_test_evidence:
+      - crates/leaven-acp/tests/stdio_session_contract.rs::stdio_session_starts_worker_process_with_profile_roles_and_env
+      - crates/leaven-acp/tests/stdio_session_contract.rs::stdio_session_carries_extension_result_envelopes_for_all_v1_method_families
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_profile_validates_pinned_stdio_leaven_methods_and_bounded_updates
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_stdio_worker_launch_uses_profile_env_and_redacts_bearer_artifacts
-      - crates/leaven-public-seam/tests/acp_profile.rs::acp_stdio_worker_launch_rejects_missing_required_launch_facts
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_worker_session_uses_engine_client_worker_agent_inversion_and_bounded_updates
+    negative_test_evidence:
+      - crates/leaven-acp/tests/stdio_session_contract.rs::stdio_session_rejects_private_mcp_or_bare_process_protocols
+      - crates/leaven-acp/tests/stdio_session_contract.rs::stdio_session_rejects_cross_method_and_semantic_result_fakes_from_worker_process
+      - crates/leaven-public-seam/tests/acp_profile.rs::acp_stdio_worker_launch_rejects_missing_required_launch_facts
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_profile_rejects_mcp_latest_nonstdio_human_granting_and_unbounded_updates
       - crates/leaven-public-seam/tests/contract_package.rs::acp_profile_rejects_mcp_bridge_legacy_worker_protocol_and_watch_runtime
-      - crates/leaven-public-seam/tests/acp_profile.rs::acp_jsonrpc_requests_and_responses_bind_plan_ir_and_extension_results
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_jsonrpc_rejects_in_process_or_cross_method_fakes
-    partial_contract_implementation_evidence:
+    implementation_evidence:
+      - crates/leaven-acp/src/stdio.rs::AcpProcessCommand
+      - crates/leaven-acp/src/stdio.rs::AcpStdioProcessSession
+      - crates/leaven-acp/src/stdio.rs::AcpStdioProcessSession::spawn
+      - crates/leaven-acp/src/stdio.rs::AcpStdioProcessSession::call_extension
       - crates/leaven-public-seam/src/acp_profile.rs::AcpProfileDocument
       - crates/leaven-public-seam/src/acp_profile.rs::AcpBackpressure
       - crates/leaven-public-seam/src/acp_profile.rs::AcpExtensionMethod
@@ -1350,15 +1358,14 @@ rows:
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_acp_jsonrpc_response_document
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::v1_scope
     review_evidence:
+      - docs/specs/public-seam-v1/reviews/2026-05-24-acp-stdio-transport-heisenberg-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-lifecycle-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-lifecycle-state-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-backpressure-strategy-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-stdio-launch-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-stage-evidence-jsonrpc-handoff-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-blocked-acp-status-review.md
-    blocked_on:
-      - A production ACP process/session transport owner must execute JSON-RPC over stdio and prove the engine-client/worker-agent lifecycle through the public route; the current evidence is wire-contract validation only.
-    status: blocked
+    status: proven
 
   - id: ps1.acp.auth_permissions
     area: acp
@@ -1416,19 +1423,25 @@ rows:
       fingerprint are rejected by contract tests.
     fake_pass_rejected: Returning bare method-specific payloads over ACP.
     minimum_closeout_level: integrated_surface
-    partial_contract_test_evidence:
+    positive_test_evidence:
+      - crates/leaven-acp/tests/stdio_session_contract.rs::stdio_session_carries_extension_result_envelopes_for_all_v1_method_families
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_require_receipts_capability_fingerprint_and_data_classes
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_bind_worker_methods_to_primary_kinds_and_receipts
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_reject_lm_cost_audit_gaps
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_preserve_agent_and_sandbox_blob_ref_data_classes
+      - crates/leaven-public-seam/tests/acp_profile.rs::acp_jsonrpc_requests_and_responses_bind_plan_ir_and_extension_results
+    negative_test_evidence:
+      - crates/leaven-acp/tests/stdio_session_contract.rs::stdio_session_rejects_private_mcp_or_bare_process_protocols
+      - crates/leaven-acp/tests/stdio_session_contract.rs::stdio_session_rejects_cross_method_and_semantic_result_fakes_from_worker_process
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_reject_agent_audit_gaps
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_reject_sandbox_audit_gaps
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_reject_cross_method_payloads_unbound_receipts_and_data_class_gaps
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_reject_agent_and_sandbox_blob_ref_data_class_gaps
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_reject_forged_result_hashes_for_extension_and_receiptless_primaries
-      - crates/leaven-public-seam/tests/acp_profile.rs::acp_jsonrpc_requests_and_responses_bind_plan_ir_and_extension_results
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_jsonrpc_rejects_in_process_or_cross_method_fakes
-    partial_contract_implementation_evidence:
+    implementation_evidence:
+      - crates/leaven-acp/src/stdio.rs::AcpStdioProcessSession::call_extension
+      - crates/leaven-acp/src/stdio.rs::AcpStdioProcessSession::read_message
       - crates/leaven-public-seam/src/acp_profile/extension_result.rs::AcpExtensionResultDocument
       - crates/leaven-public-seam/src/acp_profile/extension_result.rs::AcpExtensionResultDocument::synthetic_plan_result
       - crates/leaven-public-seam/src/acp_profile/extension_result.rs::extension_result_contract
@@ -1443,6 +1456,7 @@ rows:
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_acp_extension_result_document
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_acp_jsonrpc_response_document
     review_evidence:
+      - docs/specs/public-seam-v1/reviews/2026-05-24-acp-stdio-transport-heisenberg-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-23-acp-workspace-partial-follow-up-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-value-visibility-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-agent-sandbox-acp-audit-follow-up-review.md
@@ -1451,9 +1465,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-stage-workspace-result-kind-follow-up-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-stage-evidence-jsonrpc-handoff-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-blocked-acp-status-review.md
-    blocked_on:
-      - A production ACP process/session transport owner must carry extension-result envelopes over the ACP route for all V1 method families; the current evidence rejects bare payloads at the wire-contract layer only.
-    status: blocked
+    status: proven
 
   - id: ps1.acp.lifecycle_backpressure
     area: acp
@@ -1469,14 +1481,27 @@ rows:
       session cancellation.
     fake_pass_rejected: Fire-and-forget progress logs outside ACP lifecycle control.
     minimum_closeout_level: semantic_denial
-    partial_contract_test_evidence:
+    positive_test_evidence:
+      - crates/leaven-acp/tests/stdio_session_contract.rs::stdio_session_cancellation_interrupts_in_flight_extension_call_and_worker_observes_cancel
+      - crates/leaven-acp/tests/stdio_session_contract.rs::stdio_session_progress_updates_are_lifecycle_control_without_response_side_effects
+      - crates/leaven-acp/tests/stdio_session_contract.rs::stdio_session_backpressure_disconnects_live_overproducer
+      - crates/leaven-acp/tests/stdio_session_contract.rs::stdio_session_cancellation_reaches_live_worker_and_stops_later_calls
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_profile_validates_pinned_stdio_leaven_methods_and_bounded_updates
-      - crates/leaven-public-seam/tests/acp_profile.rs::acp_profile_rejects_mcp_latest_nonstdio_human_granting_and_unbounded_updates
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_worker_session_uses_engine_client_worker_agent_inversion_and_bounded_updates
-      - crates/leaven-public-seam/tests/acp_profile.rs::acp_lifecycle_rejects_unbounded_or_overproducing_progress_queues
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_lifecycle_applies_profile_backpressure_strategies
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_lifecycle_cancellation_requires_receipts_and_closed_plan_errors
-    partial_contract_implementation_evidence:
+    negative_test_evidence:
+      - crates/leaven-acp/tests/stdio_session_contract.rs::stdio_session_rejects_extension_response_after_recorded_cancellation
+      - crates/leaven-acp/tests/stdio_session_contract.rs::stdio_session_rejects_progress_overflow_for_default_pause_worker_queue
+      - crates/leaven-public-seam/tests/acp_profile.rs::acp_profile_rejects_mcp_latest_nonstdio_human_granting_and_unbounded_updates
+      - crates/leaven-public-seam/tests/acp_profile.rs::acp_lifecycle_rejects_unbounded_or_overproducing_progress_queues
+    implementation_evidence:
+      - crates/leaven-acp/src/stdio.rs::AcpStdioCancellationHandle
+      - crates/leaven-acp/src/stdio.rs::AcpStdioProcessSession::call_extension
+      - crates/leaven-acp/src/stdio.rs::AcpStdioProcessSession::cancel_with_error
+      - crates/leaven-acp/src/stdio.rs::AcpStdioProcessSession::read_next_session_update
+      - crates/leaven-acp/src/stdio.rs::AcpStdioProcessSession::handle_session_update
+      - crates/leaven-acp/src/stdio.rs::AcpStdioProcessSession::cancellation_snapshot
       - crates/leaven-public-seam/src/acp_profile.rs::AcpProfileDocument::default_max_inflight_updates
       - crates/leaven-public-seam/src/acp_profile.rs::AcpProfileDocument::backpressure
       - crates/leaven-public-seam/src/acp_profile.rs::AcpBackpressure
@@ -1493,13 +1518,12 @@ rows:
       - crates/leaven-public-seam/src/acp_profile/lifecycle.rs::AcpProgressPriority
       - crates/leaven-public-seam/src/acp_profile/lifecycle.rs::AcpProgressDisposition
     review_evidence:
+      - docs/specs/public-seam-v1/reviews/2026-05-24-acp-stdio-transport-heisenberg-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-lifecycle-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-backpressure-strategy-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-evidence-stage-current-tranche-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-blocked-acp-status-review.md
-    blocked_on:
-      - A production ACP process/session transport owner must bind cancellation and bounded progress queues to live worker activity; the current evidence proves profile-derived lifecycle vocabulary only.
-    status: blocked
+    status: proven
 
   - id: ps1.acp.no_mcp_v1
     area: acp

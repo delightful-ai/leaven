@@ -10,6 +10,7 @@ from pathlib import Path
 import re
 import signal
 import subprocess
+import sys
 import time
 
 
@@ -20,22 +21,23 @@ MILESTONE_PACKAGES = [
     "p3_gepa_parity",
     "p4_meta_harness_lite",
     "p5_evoskill_iteration",
+    "p5_skill_paper_reproductions",
     "p6_optimizer_policy_self_opt",
     "p7_self_optimization_kernel",
     "p8_aime_gepa",
     "trace2skill_spreadsheetbench",
 ]
 
-NEXTTEST_COMMAND = (
-    "nextest workspace suite",
-    [
-        "cargo",
-        "nextest",
-        "run",
-        "--workspace",
-        *[arg for package in MILESTONE_PACKAGES for arg in ("--exclude", package)],
-    ],
-)
+WORKSPACE_TEST_BUILD_COMMAND = [
+    "cargo",
+    "test",
+    "--no-run",
+    "--message-format=json",
+    "--workspace",
+    *[arg for package in MILESTONE_PACKAGES for arg in ("--exclude", package)],
+    "--lib",
+    "--tests",
+]
 
 NON_RUST_FENCE_LANGUAGES = {
     "console",
@@ -121,13 +123,168 @@ def workspace_doctest_commands(workspace_root: Path) -> list[tuple[str, list[str
 
 
 def test_commands(workspace_root: Path) -> list[tuple[str, list[str]]]:
-    commands = [NEXTTEST_COMMAND]
-    doctests = workspace_doctest_commands(workspace_root)
-    if doctests:
-        commands.extend(doctests)
-    else:
-        print("skipping workspace doctests: no Rust doctest fences found", flush=True)
-    return commands
+    return workspace_doctest_commands(workspace_root)
+
+
+def workspace_package_roots(workspace_root: Path) -> dict[str, Path]:
+    metadata = subprocess.run(
+        ["cargo", "metadata", "--no-deps", "--format-version", "1"],
+        cwd=workspace_root,
+        check=False,
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+    if metadata.returncode != 0:
+        raise SystemExit(metadata.returncode)
+    payload = json.loads(metadata.stdout)
+    return {
+        package["id"]: Path(package["manifest_path"]).parent
+        for package in payload["packages"]
+    }
+
+
+def rust_target_libdir(workspace_root: Path) -> Path:
+    result = subprocess.run(
+        ["rustc", "--print", "target-libdir"],
+        cwd=workspace_root,
+        check=False,
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise SystemExit(result.returncode)
+    return Path(result.stdout.strip())
+
+
+def discover_workspace_test_binaries(
+    workspace_root: Path, deadline: float
+) -> list[tuple[str, Path, Path]]:
+    remaining = deadline - time.perf_counter()
+    if remaining <= 0:
+        print("error: no SLA time remains before building workspace tests", flush=True)
+        raise SystemExit(1)
+
+    print(
+        "building workspace libtest binaries: " + " ".join(WORKSPACE_TEST_BUILD_COMMAND),
+        flush=True,
+    )
+    try:
+        build = subprocess.run(
+            WORKSPACE_TEST_BUILD_COMMAND,
+            cwd=workspace_root,
+            check=False,
+            stdout=subprocess.PIPE,
+            text=True,
+            timeout=remaining,
+        )
+    except subprocess.TimeoutExpired:
+        print(
+            f"error: workspace test build exceeded remaining suite SLA ({remaining:.2f}s)",
+            flush=True,
+        )
+        raise SystemExit(1) from None
+    if build.returncode != 0:
+        raise SystemExit(build.returncode)
+
+    package_roots = workspace_package_roots(workspace_root)
+    binaries: list[tuple[str, Path, Path]] = []
+    for line in build.stdout.splitlines():
+        try:
+            message = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if message.get("reason") != "compiler-artifact":
+            continue
+        executable = message.get("executable")
+        profile = message.get("profile", {})
+        if not executable or not profile.get("test"):
+            continue
+        package_id = message["package_id"]
+        target_name = message["target"]["name"]
+        binaries.append((target_name, Path(executable), package_roots[package_id]))
+    return binaries
+
+
+def test_binary_env(workspace_root: Path, binaries: list[tuple[str, Path, Path]]) -> dict[str, str]:
+    env = os.environ.copy()
+    library_paths = [str(rust_target_libdir(workspace_root))]
+    library_paths.extend(str(executable.parent) for _, executable, _ in binaries)
+    deduped_paths = list(dict.fromkeys(library_paths))
+    joined = os.pathsep.join(deduped_paths)
+    env["DYLD_FALLBACK_LIBRARY_PATH"] = joined
+    env["DYLD_LIBRARY_PATH"] = joined
+    return env
+
+
+def terminate_process_group(process: subprocess.Popen[str]) -> None:
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+
+
+def run_workspace_test_binaries(workspace_root: Path, deadline: float) -> int:
+    binaries = discover_workspace_test_binaries(workspace_root, deadline)
+    if not binaries:
+        print("skipping workspace libtest binaries: no test binaries found", flush=True)
+        return 0
+
+    env = test_binary_env(workspace_root, binaries)
+    jobs = max(1, int(os.environ.get("LEAVEN_TEST_BINARY_JOBS", "8")))
+    print(
+        f"running workspace libtest binaries: {len(binaries)} binaries, {jobs} jobs",
+        flush=True,
+    )
+    queued = list(binaries)
+    running: list[tuple[subprocess.Popen[str], str, float]] = []
+    completed = 0
+    while queued or running:
+        while queued and len(running) < jobs:
+            target_name, executable, package_root = queued.pop(0)
+            process = subprocess.Popen(
+                [str(executable)],
+                cwd=package_root,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                text=True,
+                start_new_session=True,
+                env=env,
+            )
+            running.append((process, target_name, time.perf_counter()))
+
+        remaining = deadline - time.perf_counter()
+        if remaining <= 0:
+            print(
+                "error: workspace libtest binaries exceeded suite SLA "
+                f"after {completed}/{len(binaries)} binaries; "
+                f"{len(running)} running and {len(queued)} queued",
+                flush=True,
+            )
+            for process, _, _ in running:
+                terminate_process_group(process)
+            return 1
+
+        for item in list(running):
+            process, target_name, started = item
+            returncode = process.poll()
+            if returncode is None:
+                continue
+            _, stderr = process.communicate()
+            running.remove(item)
+            completed += 1
+            if returncode != 0:
+                elapsed = time.perf_counter() - started
+                sys.stderr.write(stderr)
+                print(
+                    f"error: test binary {target_name} failed with exit code "
+                    f"{returncode} after {elapsed:.2f}s",
+                    flush=True,
+                )
+                for other, _, _ in running:
+                    terminate_process_group(other)
+                return returncode
+        time.sleep(0.01)
+    return 0
 
 
 def run_with_deadline(label: str, command: list[str], cwd: Path, deadline: float) -> int:
@@ -175,6 +332,11 @@ def main() -> int:
     started = time.perf_counter()
     deadline = started + args.sla_seconds
     workspace_root = Path.cwd()
+
+    returncode = run_workspace_test_binaries(workspace_root, deadline)
+    if returncode != 0:
+        return returncode
+
     for label, command in test_commands(workspace_root):
         print(f"running {label}: {' '.join(command)}", flush=True)
         returncode = run_with_deadline(label, command, workspace_root, deadline)
