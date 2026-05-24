@@ -130,16 +130,18 @@ receipts. The `PlanLmCompleteRequest::to_lm_request` route lowers
 schema-valid `lm_complete` calls into provider-neutral `leaven-lm` vocabulary
 while preserving developer/user/tool messages, tool-result ids, tool
 definitions, model role, sampling stop sequences, provider hints, final-message
-output, and JSON-schema output. JSON-schema LM outputs must return a parsed
-Plan Result payload, and successful call-result validation requires an
-`lm_complete` result to be an `lm_response` value carrying the matching call
-receipt, matching value/receipt cost, and an assistant-authored text final
-response. Result-side tool metadata, tool results, extension content, and
-oversized `final_message` text are rejected by the seam instead of being
-accepted as generic schema-valid `LmMessage` values. Request-side
-extension/multimodal content is rejected rather than silently downgraded to
-text. It still requires a concrete model before
-provider execution and is not provider runtime execution, streaming, ACP
+output, and JSON-schema output. `PlanLmCompleteOutcome::from_lm_response`
+projects provider-neutral `leaven_lm::LmResponse` plus metered `leaven-kernel`
+cost into the Plan Result outcome shape without requiring hosts to hand-write
+LM response JSON. JSON-schema LM outputs must return a parsed Plan Result
+payload, and successful call-result validation requires an `lm_complete` result
+to be an `lm_response` value carrying the matching call receipt, matching
+value/receipt cost, and an assistant-authored text final response. Result-side
+tool metadata, tool results, extension content, and oversized `final_message`
+text are rejected by the seam instead of being accepted as generic schema-valid
+`LmMessage` values. Request-side extension/multimodal content is rejected
+rather than silently downgraded to text. It still requires a concrete model
+before provider execution and is not provider runtime execution, streaming, ACP
 delivery, or full `ps1.lm.contract` closeout. The `PlanAgentRunRequest` and
 `PlanSandboxExecRequest` routes lower schema-valid `agent_run` and
 `sandbox_exec` calls into provider-neutral `leaven-agent::AgentRunRequest` and
