@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use serde_json::Value;
 
 use crate::PublicSeamError;
@@ -269,6 +271,7 @@ fn inspect_reflection_result(
             "reflection_result must carry data classes",
         ));
     }
+    validate_reflection_diagnosis_sources(object)?;
     Ok(())
 }
 
@@ -278,15 +281,22 @@ fn inspect_propose_request(
     require_field(object, "capability_fingerprint")?;
     require_field(object, "query_policy_fingerprint")?;
     require_non_empty_array(object.get("source_refs"), "source_refs")?;
-    let reflection = object
+    let reflection_value = object
         .get("reflection_result")
         .ok_or_else(|| invalid_stage_payload("propose request must carry ReflectionResult"))?;
-    let reflection = StagePayloadDocument::from_schema_valid_value(reflection)?;
+    let reflection = StagePayloadDocument::from_schema_valid_value(reflection_value)?;
     if reflection.role() != StagePayloadRole::ReflectionResult {
         return Err(invalid_stage_payload(
             "propose request must consume a ReflectionResult payload",
         ));
     }
+    let reflection_source_refs = string_set(
+        reflection_value
+            .as_object()
+            .and_then(|object| object.get("source_refs")),
+        "reflection_result.source_refs",
+    )?;
+    require_reflection_source_refs(object, reflection_source_refs)?;
     let effects = required_array(object.get("allowed_effects"), "allowed_effects")?
         .iter()
         .map(|effect| {
@@ -308,6 +318,56 @@ fn inspect_propose_request(
         ));
     }
     Ok((effects, change_schema_count))
+}
+
+fn validate_reflection_diagnosis_sources(
+    object: &serde_json::Map<String, Value>,
+) -> Result<(), PublicSeamError> {
+    let failure_modes = array_len(object.get("failure_modes"), "failure_modes")?;
+    let surface_suggestions = array_len(object.get("surface_suggestions"), "surface_suggestions")?;
+    if failure_modes + surface_suggestions == 0 {
+        return Err(invalid_stage_payload(
+            "reflection_result must carry source-backed diagnosis",
+        ));
+    }
+    require_nested_source_refs(object.get("failure_modes"), "failure_modes")?;
+    require_nested_source_refs(object.get("surface_suggestions"), "surface_suggestions")?;
+    Ok(())
+}
+
+fn require_nested_source_refs(value: Option<&Value>, field: &str) -> Result<(), PublicSeamError> {
+    let Some(value) = value else {
+        return Ok(());
+    };
+    let items = value.as_array().ok_or_else(|| {
+        invalid_stage_payload(format!("stage payload field `{field}` must be an array"))
+    })?;
+    for item in items {
+        let item = item.as_object().ok_or_else(|| {
+            invalid_stage_payload(format!(
+                "stage payload field `{field}` entries must be objects"
+            ))
+        })?;
+        if item.get("source_refs").is_some() {
+            require_non_empty_array(item.get("source_refs"), &format!("{field}.source_refs"))?;
+        }
+    }
+    Ok(())
+}
+
+fn require_reflection_source_refs(
+    propose: &serde_json::Map<String, Value>,
+    reflection_source_refs: BTreeSet<String>,
+) -> Result<(), PublicSeamError> {
+    let propose_source_refs = string_set(propose.get("source_refs"), "source_refs")?;
+    for source_ref in reflection_source_refs {
+        if !propose_source_refs.contains(&source_ref) {
+            return Err(invalid_stage_payload(format!(
+                "propose request source_refs must preserve reflection source ref `{source_ref}`"
+            )));
+        }
+    }
+    Ok(())
 }
 
 fn inspect_runner_request(object: &serde_json::Map<String, Value>) -> Result<(), PublicSeamError> {
@@ -455,6 +515,10 @@ fn string_array(value: Option<&Value>, field: &str) -> Result<Vec<String>, Publi
                 .collect()
         },
     )
+}
+
+fn string_set(value: Option<&Value>, field: &str) -> Result<BTreeSet<String>, PublicSeamError> {
+    Ok(string_array(value, field)?.into_iter().collect())
 }
 
 fn invalid_stage_payload(message: impl Into<String>) -> PublicSeamError {

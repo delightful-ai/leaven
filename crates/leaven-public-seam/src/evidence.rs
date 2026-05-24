@@ -45,30 +45,37 @@ impl EvidenceEnvelopeDocument {
             .get("source_receipts")
             .and_then(Value::as_object)
             .ok_or_else(|| invalid_evidence("source_receipts must be an object"))?;
+        let read_receipts =
+            required_string_vec(source_receipts.get("read"), "source_receipts.read")?;
+        let effect_receipts =
+            required_string_vec(source_receipts.get("effect"), "source_receipts.effect")?;
+        let write_receipts =
+            optional_string_vec(source_receipts.get("write"), "source_receipts.write")?;
         if target_derived {
             validate_target_derived_classes(
                 &data_classes,
                 &public_data_classes,
                 private_data_classes.as_deref(),
             )?;
+            if read_receipts.is_empty() {
+                return Err(invalid_evidence(
+                    "target-derived evidence must carry read receipts",
+                ));
+            }
+        }
+        if read_receipts.is_empty() && effect_receipts.is_empty() && write_receipts.is_empty() {
+            return Err(invalid_evidence(
+                "evidence source_receipts must carry at least one receipt",
+            ));
         }
         Ok(Self {
             target_derived,
             data_classes,
             public_data_classes,
             private_data_classes,
-            read_receipts: required_string_vec(
-                source_receipts.get("read"),
-                "source_receipts.read",
-            )?,
-            effect_receipts: required_string_vec(
-                source_receipts.get("effect"),
-                "source_receipts.effect",
-            )?,
-            write_receipts: optional_string_vec(
-                source_receipts.get("write"),
-                "source_receipts.write",
-            )?,
+            read_receipts,
+            effect_receipts,
+            write_receipts,
         })
     }
 
