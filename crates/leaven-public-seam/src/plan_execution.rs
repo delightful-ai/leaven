@@ -8,6 +8,7 @@ mod effects;
 mod queries;
 mod receipts;
 
+use effects::LiveWorkspaceHandle;
 pub use effects::{
     PlanAgentRunOutcome, PlanAgentRunRequest, PlanEmitRunEventOutcome, PlanEmitRunEventRequest,
     PlanLmCompleteOutcome, PlanLmCompleteRequest, PlanSandboxExecOutcome, PlanSandboxExecRequest,
@@ -22,6 +23,7 @@ use queries::{
     case_query_include, case_query_projection, plan_contains_case_query,
     require_included_case_fields, require_requested_case_field, validate_case_query_authority,
     workspace_query_expected_value_kind, workspace_query_projection, workspace_query_request,
+    workspace_query_request_from_values,
 };
 pub use receipts::validate_plan_result_receipts;
 
@@ -446,6 +448,7 @@ fn replayability_rank(replayability: &str) -> usize {
 
 struct ExecutionState {
     bindings: BTreeMap<String, Value>,
+    live_workspaces: BTreeMap<String, LiveWorkspaceHandle>,
     values: Map<String, Value>,
     receipts: Vec<Value>,
     charges: Vec<Value>,
@@ -457,6 +460,7 @@ impl ExecutionState {
     fn new(base_revision: &str) -> Self {
         Self {
             bindings: BTreeMap::new(),
+            live_workspaces: BTreeMap::new(),
             values: Map::new(),
             receipts: Vec::new(),
             charges: Vec::new(),
@@ -476,19 +480,11 @@ fn execute_op<H: PlanExecutionHost>(
 ) -> Result<(), PublicSeamError> {
     let op_object = object(op, "plan op")?;
     let name = required_string(op_object.get("name"), "op.name")?.to_owned();
-    let dep_values = dependency_values(op_object, &state.bindings)?;
+    let deps = resolved_dependency_values(op_object, state)?;
     match required_string(op_object.get("kind"), "op.kind")? {
-        "let" => execute_let(
-            op_object,
-            name,
-            &dep_values,
-            plan_document,
-            context,
-            host,
-            state,
-        ),
-        "call" => execute_call(op_object, name, &dep_values, context, host, state, mode),
-        "write" => execute_write(op_object, name, &dep_values, context, host, state),
+        "let" => execute_let(op_object, name, &deps, plan_document, context, host, state),
+        "call" => execute_call(op_object, name, &deps, context, host, state, mode),
+        "write" => execute_write(op_object, name, &deps.values, context, host, state),
         other => Err(invalid_plan(format!(
             "unknown plan operation kind `{other}`"
         ))),
@@ -498,7 +494,7 @@ fn execute_op<H: PlanExecutionHost>(
 fn execute_let(
     op_object: &Map<String, Value>,
     name: String,
-    dep_values: &BTreeMap<String, Value>,
+    deps: &ResolvedDependencies,
     plan_document: &crate::PlanDocument,
     context: &PlanExecutionContext,
     host: &mut impl PlanExecutionHost,
@@ -507,7 +503,7 @@ fn execute_let(
     let expr = op_object
         .get("expr")
         .ok_or_else(|| invalid_plan("let op must carry expr"))?;
-    let evaluated = evaluate_expr(expr, &name, dep_values, plan_document, context, host)?;
+    let evaluated = evaluate_expr(expr, &name, deps, plan_document, context, host)?;
     if let Some(receipt) = evaluated.receipt {
         state.receipts.push(receipt);
     }
@@ -536,7 +532,7 @@ fn execute_let(
 fn execute_call<H: PlanExecutionHost>(
     op_object: &Map<String, Value>,
     name: String,
-    dep_values: &BTreeMap<String, Value>,
+    deps: &ResolvedDependencies,
     context: &PlanExecutionContext,
     host: &mut H,
     state: &mut ExecutionState,
@@ -553,7 +549,7 @@ fn execute_call<H: PlanExecutionHost>(
             "name": name,
             "kind": call_kind,
             "call": call,
-            "deps": dep_values
+            "deps": deps.values
         }),
     )?;
     match call_kind {
@@ -561,7 +557,7 @@ fn execute_call<H: PlanExecutionHost>(
             let request = PlanLmCompleteRequest {
                 name: &name,
                 call,
-                deps: dep_values,
+                deps: &deps.values,
             };
             let (outcome, cache) = match mode {
                 EffectMode::Live => (host.lm_complete(request)?, None),
@@ -590,7 +586,7 @@ fn execute_call<H: PlanExecutionHost>(
                     "require_cached mode cannot prove cached execution for `agent_run` calls",
                 ));
             }
-            execute_agent_run_call(host, name, call, dep_values, &request_hash, context, state)
+            execute_agent_run_call(host, name, call, deps, &request_hash, context, state)
         }
         "sandbox_exec" => {
             if mode == EffectMode::RequireCached {
@@ -598,7 +594,7 @@ fn execute_call<H: PlanExecutionHost>(
                     "require_cached mode cannot prove cached execution for `sandbox_exec` calls",
                 ));
             }
-            execute_sandbox_exec_call(host, name, call, dep_values, &request_hash, context, state)
+            execute_sandbox_exec_call(host, name, call, deps, &request_hash, context, state)
         }
         "workspace_materialize" => {
             if mode == EffectMode::RequireCached {
@@ -610,7 +606,7 @@ fn execute_call<H: PlanExecutionHost>(
                 host,
                 name,
                 call,
-                dep_values,
+                deps,
                 &request_hash,
                 context,
                 state,
@@ -619,15 +615,9 @@ fn execute_call<H: PlanExecutionHost>(
         "workspace_release" if mode == EffectMode::RequireCached => Err(invalid_plan(
             "require_cached mode cannot prove cached execution for `workspace_release` calls",
         )),
-        "workspace_release" => execute_workspace_release_call(
-            host,
-            name,
-            call,
-            dep_values,
-            &request_hash,
-            context,
-            state,
-        ),
+        "workspace_release" => {
+            execute_workspace_release_call(host, name, call, deps, &request_hash, context, state)
+        }
         _ => Err(invalid_plan(format!(
             "representative Plan IR harness does not execute `{call_kind}` calls"
         ))),
@@ -638,7 +628,7 @@ fn execute_agent_run_call<H: PlanExecutionHost>(
     host: &mut H,
     name: String,
     call: &Value,
-    dep_values: &BTreeMap<String, Value>,
+    deps: &ResolvedDependencies,
     request_hash: &str,
     context: &PlanExecutionContext,
     state: &mut ExecutionState,
@@ -646,7 +636,8 @@ fn execute_agent_run_call<H: PlanExecutionHost>(
     let request = PlanAgentRunRequest {
         name: &name,
         call,
-        deps: dep_values,
+        deps: &deps.values,
+        live_workspaces: &deps.live_workspaces,
     };
     request.live_workspace()?;
     let outcome = host.agent_run(request)?;
@@ -657,7 +648,7 @@ fn execute_sandbox_exec_call<H: PlanExecutionHost>(
     host: &mut H,
     name: String,
     call: &Value,
-    dep_values: &BTreeMap<String, Value>,
+    deps: &ResolvedDependencies,
     request_hash: &str,
     context: &PlanExecutionContext,
     state: &mut ExecutionState,
@@ -665,7 +656,8 @@ fn execute_sandbox_exec_call<H: PlanExecutionHost>(
     let request = PlanSandboxExecRequest {
         name: &name,
         call,
-        deps: dep_values,
+        deps: &deps.values,
+        live_workspaces: &deps.live_workspaces,
     };
     request.live_workspace()?;
     let outcome = host.sandbox_exec(request)?;
@@ -676,7 +668,7 @@ fn execute_workspace_materialize_call<H: PlanExecutionHost>(
     host: &mut H,
     name: String,
     call: &Value,
-    dep_values: &BTreeMap<String, Value>,
+    deps: &ResolvedDependencies,
     request_hash: &str,
     context: &PlanExecutionContext,
     state: &mut ExecutionState,
@@ -684,7 +676,7 @@ fn execute_workspace_materialize_call<H: PlanExecutionHost>(
     let request = PlanWorkspaceMaterializeRequest {
         name: &name,
         call,
-        deps: dep_values,
+        deps: &deps.values,
     };
     let lifetime = request.lifetime()?.to_owned();
     let outcome = host.workspace_materialize(request)?;
@@ -707,7 +699,7 @@ fn execute_workspace_release_call<H: PlanExecutionHost>(
     host: &mut H,
     name: String,
     call: &Value,
-    dep_values: &BTreeMap<String, Value>,
+    deps: &ResolvedDependencies,
     request_hash: &str,
     context: &PlanExecutionContext,
     state: &mut ExecutionState,
@@ -715,14 +707,22 @@ fn execute_workspace_release_call<H: PlanExecutionHost>(
     let request = PlanWorkspaceReleaseRequest {
         name: &name,
         call,
-        deps: dep_values,
+        deps: &deps.values,
+        live_workspaces: &deps.live_workspaces,
     };
     let workspace = request.live_workspace()?.to_owned();
+    let lifetime = request.live_workspace_lifetime()?.to_owned();
     let outcome = host.workspace_release(request)?;
     if outcome.workspace != workspace {
         return Err(invalid_plan(format!(
             "workspace_release host returned workspace `{}` for requested workspace `{workspace}`",
             outcome.workspace
+        )));
+    }
+    if outcome.lifetime != lifetime {
+        return Err(invalid_plan(format!(
+            "workspace_release host returned lifetime `{}` for live workspace lifetime `{lifetime}`",
+            outcome.lifetime
         )));
     }
     record_workspace_release_outcome(name, outcome, request_hash, context, state)
@@ -890,6 +890,10 @@ fn record_workspace_materialize_outcome(
         runtime_fingerprint,
     } = outcome;
     let receipt_id = format!("wrec_{name}");
+    state.live_workspaces.insert(
+        name.clone(),
+        LiveWorkspaceHandle::live(workspace.clone(), lifetime.clone()),
+    );
     let value = json!({
         "kind": "workspace_handle",
         "workspace": workspace,
@@ -924,6 +928,15 @@ fn record_workspace_release_outcome(
         runtime_fingerprint,
     } = outcome;
     let receipt_id = format!("wrec_{name}");
+    for handle in state.live_workspaces.values_mut() {
+        if handle.workspace() == workspace {
+            handle.release();
+        }
+    }
+    state.live_workspaces.insert(
+        name.clone(),
+        LiveWorkspaceHandle::released(workspace.clone(), lifetime.clone()),
+    );
     let value = json!({
         "kind": "workspace_handle",
         "workspace": workspace,
@@ -1105,6 +1118,11 @@ fn execute_write<H: PlanExecutionHost>(
     Ok(())
 }
 
+struct ResolvedDependencies {
+    values: BTreeMap<String, Value>,
+    live_workspaces: BTreeMap<String, LiveWorkspaceHandle>,
+}
+
 fn dependency_values(
     op: &Map<String, Value>,
     bindings: &BTreeMap<String, Value>,
@@ -1128,6 +1146,40 @@ fn dependency_values(
     Ok(deps)
 }
 
+fn resolved_dependency_values(
+    op: &Map<String, Value>,
+    state: &ExecutionState,
+) -> Result<ResolvedDependencies, PublicSeamError> {
+    let mut values = BTreeMap::new();
+    let mut live_workspaces = BTreeMap::new();
+    let Some(raw) = op.get("deps") else {
+        return Ok(ResolvedDependencies {
+            values,
+            live_workspaces,
+        });
+    };
+    let raw = raw
+        .as_array()
+        .ok_or_else(|| invalid_plan("op deps must be an array"))?;
+    for dep in raw {
+        let dep = dep
+            .as_str()
+            .ok_or_else(|| invalid_plan("op deps must be binding names"))?;
+        let value = state
+            .bindings
+            .get(dep)
+            .ok_or_else(|| invalid_plan(format!("op references unknown dependency `{dep}`")))?;
+        values.insert(dep.to_owned(), value.clone());
+        if let Some(handle) = state.live_workspaces.get(dep) {
+            live_workspaces.insert(dep.to_owned(), handle.clone());
+        }
+    }
+    Ok(ResolvedDependencies {
+        values,
+        live_workspaces,
+    })
+}
+
 struct EvaluatedExpr {
     value: Value,
     receipt: Option<Value>,
@@ -1136,7 +1188,7 @@ struct EvaluatedExpr {
 fn evaluate_expr(
     expr: &Value,
     name: &str,
-    dep_values: &BTreeMap<String, Value>,
+    deps: &ResolvedDependencies,
     plan_document: &crate::PlanDocument,
     context: &PlanExecutionContext,
     host: &mut impl PlanExecutionHost,
@@ -1152,7 +1204,7 @@ fn evaluate_expr(
         }),
         "graph_query" => execute_graph_query_expr(expr, name, plan_document, context, host),
         "case_query" => execute_case_query_expr(expr, name, context, host),
-        "workspace_query" => execute_workspace_query_expr(expr, name, dep_values, context, host),
+        "workspace_query" => execute_workspace_query_expr(expr, name, deps, context, host),
         other => Err(invalid_plan(format!(
             "representative Plan IR harness does not execute `{other}` let expressions"
         ))),
@@ -1305,11 +1357,11 @@ fn execute_case_query_expr(
 fn execute_workspace_query_expr(
     expr: &Value,
     name: &str,
-    dep_values: &BTreeMap<String, Value>,
+    deps: &ResolvedDependencies,
     context: &PlanExecutionContext,
     host: &mut impl PlanExecutionHost,
 ) -> Result<EvaluatedExpr, PublicSeamError> {
-    let request = workspace_query_request(name, expr, dep_values)?;
+    let request = workspace_query_request(name, expr, &deps.values, &deps.live_workspaces)?;
     let expected_kind = workspace_query_expected_value_kind(request)?;
     let expected_data_classes = request.expected_data_classes()?;
     let outcome = host.workspace_query(request)?;
