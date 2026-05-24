@@ -178,7 +178,8 @@ and cost matched by the call receipt. `sandbox_exec` with
 sandbox results must carry
 `exit_code`, must carry cost matched by the call receipt, and may carry captured
 output-file blob refs only at safe relative workspace paths after the host binds
-declared bytes and SHA-256 to the captured file bytes. Agent transcript
+declared bytes and SHA-256 to file bytes captured on the provider-neutral
+`leaven-workspace::CommandOutput`. Agent transcript
 blob refs and sandbox stdout/stderr/file blob refs are monotonically projected
 into the top-level Plan Result value `data_classes` by the seam-owned outcome
 builders, and forged results that drop those nested classes are rejected by

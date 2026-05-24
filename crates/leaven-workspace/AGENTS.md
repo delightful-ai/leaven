@@ -14,7 +14,8 @@ provider protocols, or concrete host/container mechanics.
   `WorkspaceBackend`, and `with_workspace`. Views scope paths; cleanup is
   explicit and consumes the workspace.
 - `src/command.rs`: backend-neutral command request/output vocabulary:
-  program, args, cwd, env, stdin, limits, user, exit status, captured bytes, and
+  program, args, cwd, env, stdin, limits, user, exit status, captured
+  stdout/stderr bytes, captured output-file bytes keyed by workspace path, and
   truncation flags.
 - `src/factory.rs`, `src/config.rs`, and `src/policy.rs`: allocation boundary
   and coarse filesystem/network policy vocabulary.

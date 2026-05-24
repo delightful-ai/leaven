@@ -605,6 +605,7 @@ impl WorkspaceBackend for TestBackend {
             status: ExitStatus { code: Some(0) },
             stdout: CapturedOutput::new(b"ok".to_vec(), None),
             stderr: CapturedOutput::empty(),
+            output_files: BTreeMap::new(),
             duration: std::time::Duration::ZERO,
         })
     }

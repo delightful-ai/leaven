@@ -946,6 +946,7 @@ impl WorkspaceBackend for TestWorkspaceBackend {
             status: ExitStatus { code: Some(0) },
             stdout: CapturedOutput::empty(),
             stderr: CapturedOutput::empty(),
+            output_files: std::collections::BTreeMap::new(),
             duration: std::time::Duration::ZERO,
         })
     }

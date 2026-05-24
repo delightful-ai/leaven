@@ -5,7 +5,7 @@ use leaven_public_seam::{
     PlanWorkspaceMaterializeOutcome, PlanWorkspaceMaterializeRequest, PublicSeamError,
     PublicSeamPackage,
 };
-use leaven_workspace::{CapturedOutput, CommandOutput, ExitStatus};
+use leaven_workspace::{CapturedOutput, CommandOutput, ExitStatus, WorkspacePath};
 use serde_json::{Value, json};
 
 #[test]
@@ -41,6 +41,10 @@ fn sandbox_exec_can_project_provider_neutral_command_output_into_plan_result() {
     assert_eq!(completion["exit_code"], 7);
     assert_eq!(completion["stdout_ref"]["id"], "blob_sandbox_stdout");
     assert_eq!(completion["stderr_ref"]["id"], "blob_sandbox_stderr");
+    assert_eq!(
+        completion["files"]["reports/out.txt"]["id"],
+        "blob_sandbox_file"
+    );
     assert_eq!(
         completion["data_classes"],
         json!(["public", "transcript.raw", "workspace.file"])
@@ -150,6 +154,67 @@ fn sandbox_exec_output_file_refs_must_bind_captured_bytes() {
     );
 }
 
+#[test]
+fn sandbox_exec_command_output_projection_requires_captured_output_file_refs() {
+    let missing_ref = PlanSandboxExecOutcome::from_command_output(
+        Metered::new(
+            command_output_with_file(b"artifact\n", false),
+            Cost::custom("sandbox_calls", 1.0).unwrap(),
+        ),
+        Fingerprint::from_bytes([88; 32]),
+        stdout_ref(),
+        stderr_ref(),
+    );
+    let error = missing_ref.expect_err("captured output files need blob refs");
+    assert!(
+        error
+            .to_string()
+            .contains("sandbox output file `reports/out.txt` is missing a blob ref"),
+        "unexpected error: {error:?}"
+    );
+
+    let extra_ref = PlanSandboxExecOutcome::from_command_output_with_file_refs(
+        Metered::new(
+            CommandOutput::new(
+                ExitStatus { code: Some(0) },
+                CapturedOutput::new(b"ok\n".to_vec(), None),
+                CapturedOutput::empty(),
+                std::time::Duration::from_millis(10),
+            ),
+            Cost::custom("sandbox_calls", 1.0).unwrap(),
+        ),
+        Fingerprint::from_bytes([88; 32]),
+        stdout_ref(),
+        stderr_ref(),
+        [(workspace_file_path(), sandbox_file_ref())],
+    );
+    let error = extra_ref.expect_err("uncaptured output file refs are not allowed");
+    assert!(
+        error.to_string().contains(
+            "sandbox output file `reports/out.txt` blob ref does not match a captured command output file"
+        ),
+        "unexpected error: {error:?}"
+    );
+
+    let truncated = PlanSandboxExecOutcome::from_command_output_with_file_refs(
+        Metered::new(
+            command_output_with_file(b"artifact\n", true),
+            Cost::custom("sandbox_calls", 1.0).unwrap(),
+        ),
+        Fingerprint::from_bytes([88; 32]),
+        stdout_ref(),
+        stderr_ref(),
+        [(workspace_file_path(), sandbox_file_ref())],
+    );
+    let error = truncated.expect_err("truncated output files cannot be bound as complete blobs");
+    assert!(
+        error.to_string().contains(
+            "sandbox output file `reports/out.txt` capture is truncated and cannot be bound to a blob ref"
+        ),
+        "unexpected error: {error:?}"
+    );
+}
+
 struct SandboxHost {
     status: ExitStatus,
     corrupt_stdout_ref: bool,
@@ -205,24 +270,15 @@ impl PlanExecutionHost for SandboxHost {
                 &["transcript.raw"],
             )
         };
-        PlanSandboxExecOutcome::from_command_output(
+        PlanSandboxExecOutcome::from_command_output_with_file_refs(
             Metered::new(
-                CommandOutput {
-                    status: self.status,
-                    stdout: CapturedOutput::new(b"ok\n".to_vec(), None),
-                    stderr: CapturedOutput::empty(),
-                    duration: std::time::Duration::from_millis(10),
-                },
+                command_output_with_status_and_file(self.status, b"artifact\n", false),
                 Cost::custom("sandbox_calls", 1.0).unwrap(),
             ),
             Fingerprint::from_bytes([88; 32]),
             stdout_ref,
-            blob_ref(
-                "blob_sandbox_stderr",
-                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-                0,
-                &["workspace.file"],
-            ),
+            stderr_ref(),
+            [(workspace_file_path(), sandbox_file_ref())],
         )
     }
 
@@ -312,6 +368,61 @@ fn blob_ref(id: &'static str, sha256: &'static str, bytes: u64, data_classes: &[
         "bytes": bytes,
         "data_classes": data_classes
     })
+}
+
+fn stdout_ref() -> Value {
+    blob_ref(
+        "blob_sandbox_stdout",
+        "dc51b8c96c2d745df3bd5590d990230a482fd247123599548e0632fdbf97fc22",
+        3,
+        &["transcript.raw"],
+    )
+}
+
+fn stderr_ref() -> Value {
+    blob_ref(
+        "blob_sandbox_stderr",
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        0,
+        &["workspace.file"],
+    )
+}
+
+fn sandbox_file_ref() -> Value {
+    blob_ref(
+        "blob_sandbox_file",
+        "5b3513f580c8397212ff2c8f459c199efc0c90e4354a5f3533adf0a3fff3a530",
+        9,
+        &["workspace.file"],
+    )
+}
+
+fn workspace_file_path() -> WorkspacePath {
+    WorkspacePath::new("reports/out.txt").unwrap()
+}
+
+fn command_output_with_file(bytes: &[u8], truncated: bool) -> CommandOutput {
+    command_output_with_status_and_file(ExitStatus { code: Some(0) }, bytes, truncated)
+}
+
+fn command_output_with_status_and_file(
+    status: ExitStatus,
+    bytes: &[u8],
+    truncated: bool,
+) -> CommandOutput {
+    CommandOutput::new(
+        status,
+        CapturedOutput::new(b"ok\n".to_vec(), None),
+        CapturedOutput::empty(),
+        std::time::Duration::from_millis(10),
+    )
+    .with_output_file(
+        workspace_file_path(),
+        CapturedOutput {
+            bytes: bytes.to_vec(),
+            truncated,
+        },
+    )
 }
 
 fn plan_execution_context() -> PlanExecutionContext {
