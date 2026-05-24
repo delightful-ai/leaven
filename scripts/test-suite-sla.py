@@ -213,6 +213,7 @@ def test_binary_env(workspace_root: Path, binaries: list[tuple[str, Path, Path]]
     joined = os.pathsep.join(deduped_paths)
     env["DYLD_FALLBACK_LIBRARY_PATH"] = joined
     env["DYLD_LIBRARY_PATH"] = joined
+    env.setdefault("RUST_TEST_THREADS", "1")
     return env
 
 

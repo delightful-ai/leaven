@@ -73,7 +73,7 @@ The canonical full test suite has a hard wall-clock SLA:
 just test must finish in <30s
 ```
 
-`just test` enforces this directly. The SLA covers the nextest workspace suite
+`just test` enforces this directly. The SLA covers workspace libtest binaries
 and workspace doctests for library/tool packages that contain Rust doctest
 fences. Milestone examples stay out of the default SLA and run through explicit
 `just milestone-*` recipes. Empty doctest harnesses are skipped because they
@@ -81,6 +81,10 @@ prove no examples while adding process-startup cost. If the suite crosses the
 line, do not add a second slow lane; reduce fixture cost, property-test case
 count, setup work, doctest harness fan-out, or assertion altitude until the
 default suite is back under the SLA.
+
+The SLA runner executes many libtest binaries concurrently and sets
+`RUST_TEST_THREADS=1` inside each binary. This keeps parallelism at the suite
+level and avoids nested libtest fanout dominating small integration binaries.
 
 Coverage is a ratchet. Raise `coverage_line_floor` and
 `coverage_branch_floor` in the root `Justfile` when coverage improves; do not
