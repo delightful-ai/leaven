@@ -522,6 +522,113 @@ fn acp_profile_rejects_mcp_latest_nonstdio_human_granting_and_unbounded_updates(
 }
 
 #[test]
+fn acp_jsonrpc_requests_and_responses_bind_plan_ir_and_extension_results() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let profile = package
+        .validate_acp_profile_document(&acp_profile())
+        .unwrap();
+
+    let request_value = json!({
+        "jsonrpc": "2.0",
+        "id": "req-lm-001",
+        "method": "leaven/lm.complete",
+        "params": acp_plan_params()
+    });
+    let request = package
+        .validate_acp_jsonrpc_request_document(&profile, &request_value)
+        .unwrap();
+    assert_eq!(request.id(), "req-lm-001");
+    assert_eq!(request.method(), "leaven/lm.complete");
+
+    let response_value = json!({
+        "jsonrpc": "2.0",
+        "id": "req-lm-001",
+        "result": extension_result()
+    });
+    let response = package
+        .validate_acp_jsonrpc_response_document(&request, &response_value)
+        .unwrap();
+    assert_eq!(response.id(), "req-lm-001");
+    assert_eq!(response.method(), "leaven/lm.complete");
+    assert_eq!(response.primary_kind(), "lm_response");
+}
+
+#[test]
+fn acp_jsonrpc_rejects_in_process_or_cross_method_fakes() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let profile = package
+        .validate_acp_profile_document(&acp_profile())
+        .unwrap();
+
+    let mut private_method = json!({
+        "jsonrpc": "2.0",
+        "id": "req-private-001",
+        "method": "private/run_lm",
+        "params": acp_plan_params()
+    });
+    assert!(matches!(
+        package.validate_acp_jsonrpc_request_document(&profile, &private_method),
+        Err(PublicSeamError::InvalidScope { .. })
+    ));
+
+    private_method["method"] = json!("leaven/mcp.bridge");
+    assert!(matches!(
+        package.validate_acp_jsonrpc_request_document(&profile, &private_method),
+        Err(PublicSeamError::InvalidScope { .. })
+    ));
+
+    let bare_in_process_payload = json!({
+        "jsonrpc": "2.0",
+        "id": "req-bare-001",
+        "method": "leaven/lm.complete",
+        "params": {
+            "message": {
+                "role": "assistant",
+                "content": [{"kind": "text", "text": "ok"}]
+            }
+        }
+    });
+    assert!(matches!(
+        package.validate_acp_jsonrpc_request_document(&profile, &bare_in_process_payload),
+        Err(PublicSeamError::ExampleValidation { .. } | PublicSeamError::InvalidPlan { .. })
+    ));
+
+    let agent_request_value = json!({
+        "jsonrpc": "2.0",
+        "id": "req-agent-001",
+        "method": "leaven/agent.run",
+        "params": acp_plan_params()
+    });
+    let agent_request = package
+        .validate_acp_jsonrpc_request_document(&profile, &agent_request_value)
+        .unwrap();
+    let lm_response = json!({
+        "jsonrpc": "2.0",
+        "id": "req-agent-001",
+        "result": extension_result()
+    });
+    assert!(matches!(
+        package.validate_acp_jsonrpc_response_document(&agent_request, &lm_response),
+        Err(PublicSeamError::InvalidScope { .. })
+    ));
+
+    let mismatched_id = json!({
+        "jsonrpc": "2.0",
+        "id": "other-request",
+        "result": extension_result_for(
+            "leaven/agent.run",
+            &agent_session_primary(),
+            &call_receipt("agent_run", "agentrec_acp"),
+            &["public", "transcript.raw"]
+        )
+    });
+    assert!(matches!(
+        package.validate_acp_jsonrpc_response_document(&agent_request, &mismatched_id),
+        Err(PublicSeamError::InvalidScope { .. })
+    ));
+}
+
+#[test]
 fn acp_permissions_use_capability_grants_and_return_planerror_redactions() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let profile = package
@@ -1416,6 +1523,34 @@ fn acp_profile() -> Value {
             "default_max_inflight_updates": 32,
             "backpressure": "pause_worker",
             "heartbeat_ms": 1000
+        }
+    })
+}
+
+fn acp_plan_params() -> Value {
+    json!({
+        "schema_version": "leaven.plan.v1",
+        "plan_id": "plan_acp_jsonrpc",
+        "consistency": {
+            "kind": "latest_at_start"
+        },
+        "mode": {
+            "kind": "dry_run"
+        },
+        "ops": [
+            {
+                "kind": "let",
+                "name": "input",
+                "expr": {
+                    "kind": "literal",
+                    "value": "hello",
+                    "data_classes": ["public"]
+                }
+            }
+        ],
+        "return": ["input"],
+        "commit": {
+            "kind": "no_graph_writes"
         }
     })
 }
