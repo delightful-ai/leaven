@@ -1295,6 +1295,7 @@ rows:
       - crates/leaven-public-seam/tests/plan_document.rs::plan_ir_family_lowers_and_executes_let_call_write_through_public_seam_owner
       - crates/leaven-public-seam/tests/plan_document.rs::lm_complete_lowering_preserves_json_schema_output_and_provider_hints
       - crates/leaven-public-seam/tests/plan_document.rs::lm_complete_lowering_rejects_deferred_multimodal_or_extension_content
+      - crates/leaven-public-seam/tests/plan_document.rs::lm_complete_rejects_schema_valid_non_final_or_oversized_responses
       - crates/leaven-public-seam/tests/plan_document.rs::call_results_reject_missing_receipts_and_wrong_kinds_even_with_valid_hashes
       - crates/leaven-lm/tests/lm_contract.rs::request_builders_preserve_sampling_output_and_provider_hints
       - crates/leaven-lm-openai/tests/openai_mapping.rs::openai_request_lowers_developer_tool_messages_tools_and_final_message_output
@@ -1317,6 +1318,7 @@ rows:
       - crates/leaven-public-seam/src/plan_execution.rs::validate_json_schema_output_payload
       - crates/leaven-public-seam/src/fingerprint.rs::SchemaFingerprint::for_json_value
       - crates/leaven-public-seam/src/plan_execution/receipts.rs::validate_successful_call_result_value
+      - crates/leaven-public-seam/src/plan_execution/receipts.rs::validate_lm_response_value
       - crates/leaven-public-seam/src/plan_execution/receipts.rs::validate_structured_output_value
       - crates/leaven-lm/src/request.rs::LmRequest
       - crates/leaven-lm/src/message.rs::MessageContentPart
@@ -1333,6 +1335,7 @@ rows:
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-24-effect-call-authority-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-structured-output-evaluator-authority-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-lm-result-contract-partial-review.md
     status: pending
 
   - id: ps1.agent.contract

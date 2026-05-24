@@ -2136,6 +2136,159 @@ fn lm_complete_lowering_rejects_deferred_multimodal_or_extension_content() {
 }
 
 #[test]
+fn lm_complete_rejects_schema_valid_non_final_or_oversized_responses() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    assert_lm_live_response_fakes_rejected(&package);
+    assert_lm_forged_response_fakes_rejected(&package);
+}
+
+fn assert_lm_live_response_fakes_rejected(package: &PublicSeamPackage) {
+    for (lm_response, expected) in [
+        (
+            LmResponseFixture::WrongRole,
+            "lm_complete result message role `user` must be assistant",
+        ),
+        (
+            LmResponseFixture::ToolResult,
+            "lm_complete result content kind `tool_result` is not a V1 final response",
+        ),
+        (
+            LmResponseFixture::ExtensionContent,
+            "lm_complete result content kind `extension` is not a V1 final response",
+        ),
+        (
+            LmResponseFixture::ToolMetadata,
+            "lm_complete result message must not carry tool_call_id or name",
+        ),
+        (
+            LmResponseFixture::NamedMetadata,
+            "lm_complete result message must not carry tool_call_id or name",
+        ),
+        (
+            LmResponseFixture::OversizedFinal,
+            "lm_complete final_message result exceeds max_bytes 2",
+        ),
+    ] {
+        let mut plan = typed_let_call_write_plan();
+        plan["mode"] = json!({"kind": "execute"});
+        plan["commit"] = json!({
+            "kind": "graph_writes_atomic",
+            "on_stale": "reject"
+        });
+        if matches!(lm_response, LmResponseFixture::OversizedFinal) {
+            plan["ops"][1]["call"]["output"]["max_bytes"] = json!(2);
+        }
+        let mut host = RecordingPlanHost {
+            lm_response,
+            ..RecordingPlanHost::default()
+        };
+        let error = package
+            .execute_plan_document(&plan, &plan_execution_context(), &mut host)
+            .unwrap_err();
+        assert!(
+            error.to_string().contains(expected),
+            "unexpected error for {lm_response:?}: {error:?}"
+        );
+    }
+}
+
+fn assert_lm_forged_response_fakes_rejected(package: &PublicSeamPackage) {
+    let mut plan = typed_let_call_write_plan();
+    plan["mode"] = json!({"kind": "execute"});
+    plan["commit"] = json!({
+        "kind": "graph_writes_atomic",
+        "on_stale": "reject"
+    });
+    let report = package
+        .execute_plan_document(
+            &plan,
+            &plan_execution_context(),
+            &mut RecordingPlanHost::default(),
+        )
+        .unwrap();
+    let mut forged = report.value().clone();
+    forged["values"]["completion"]["message"]["role"] = json!("tool");
+    rebind_call_result_hash(&mut forged, 0, "completion");
+    assert_plan_execution_result_rejected(package, &plan, &plan_execution_context(), &forged);
+
+    let mut forged_tool_result = report.value().clone();
+    forged_tool_result["values"]["completion"]["message"]["content"] = json!([
+        {
+            "kind": "tool_result",
+            "tool_call_id": "call_lookup_1",
+            "content": "{\"hint\":\"ok\"}"
+        }
+    ]);
+    rebind_call_result_hash(&mut forged_tool_result, 0, "completion");
+    assert_plan_execution_result_rejected(
+        package,
+        &plan,
+        &plan_execution_context(),
+        &forged_tool_result,
+    );
+
+    let mut forged_extension = report.value().clone();
+    forged_extension["values"]["completion"]["message"]["content"] = json!([
+        {
+            "kind": "extension",
+            "namespace": "leaven.media",
+            "op": "image_output",
+            "schema_fingerprint": "fp_schema_sha256_imageoutput",
+            "payload": {
+                "image": "blob://image"
+            }
+        }
+    ]);
+    rebind_call_result_hash(&mut forged_extension, 0, "completion");
+    assert_plan_execution_result_rejected(
+        package,
+        &plan,
+        &plan_execution_context(),
+        &forged_extension,
+    );
+
+    let mut forged_tool_metadata = report.value().clone();
+    forged_tool_metadata["values"]["completion"]["message"]["tool_call_id"] =
+        json!("call_lookup_1");
+    rebind_call_result_hash(&mut forged_tool_metadata, 0, "completion");
+    assert_plan_execution_result_rejected(
+        package,
+        &plan,
+        &plan_execution_context(),
+        &forged_tool_metadata,
+    );
+
+    let mut forged_name_metadata = report.value().clone();
+    forged_name_metadata["values"]["completion"]["message"]["name"] = json!("assistant_alias");
+    rebind_call_result_hash(&mut forged_name_metadata, 0, "completion");
+    assert_plan_execution_result_rejected(
+        package,
+        &plan,
+        &plan_execution_context(),
+        &forged_name_metadata,
+    );
+
+    let mut max_bytes_plan = plan.clone();
+    max_bytes_plan["ops"][1]["call"]["output"]["max_bytes"] = json!(2);
+    let max_bytes_report = package
+        .execute_plan_document(
+            &max_bytes_plan,
+            &plan_execution_context(),
+            &mut RecordingPlanHost::default(),
+        )
+        .unwrap();
+    let mut forged_oversized = max_bytes_report.value().clone();
+    forged_oversized["values"]["completion"]["message"]["content"][0]["text"] = json!("too long");
+    rebind_call_result_hash(&mut forged_oversized, 0, "completion");
+    assert_plan_execution_result_rejected(
+        package,
+        &max_bytes_plan,
+        &plan_execution_context(),
+        &forged_oversized,
+    );
+}
+
+#[test]
 fn lm_complete_lowering_preserves_json_schema_output_and_provider_hints() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let mut plan = typed_let_call_write_plan();
@@ -3232,6 +3385,7 @@ struct RecordingPlanHost {
     cached_hit: bool,
     fail_lm: bool,
     structured_parsed: StructuredParsedFixture,
+    lm_response: LmResponseFixture,
     agent_audit: AgentAuditFixture,
     sandbox_stream: SandboxStreamFixture,
 }
@@ -3242,6 +3396,96 @@ enum StructuredParsedFixture {
     Valid,
     Omit,
     Invalid,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+enum LmResponseFixture {
+    #[default]
+    FinalText,
+    WrongRole,
+    ToolResult,
+    ExtensionContent,
+    ToolMetadata,
+    NamedMetadata,
+    OversizedFinal,
+}
+
+impl LmResponseFixture {
+    fn message(self) -> Value {
+        match self {
+            Self::FinalText => json!({
+                "role": "assistant",
+                "content": [
+                    {
+                        "kind": "text",
+                        "text": "ok"
+                    }
+                ]
+            }),
+            Self::WrongRole => json!({
+                "role": "user",
+                "content": [
+                    {
+                        "kind": "text",
+                        "text": "ok"
+                    }
+                ]
+            }),
+            Self::ToolResult => json!({
+                "role": "assistant",
+                "content": [
+                    {
+                        "kind": "tool_result",
+                        "tool_call_id": "call_lookup_1",
+                        "content": "{\"hint\":\"ok\"}"
+                    }
+                ]
+            }),
+            Self::ExtensionContent => json!({
+                "role": "assistant",
+                "content": [
+                    {
+                        "kind": "extension",
+                        "namespace": "leaven.media",
+                        "op": "image_output",
+                        "schema_fingerprint": "fp_schema_sha256_imageoutput",
+                        "payload": {
+                            "image": "blob://image"
+                        }
+                    }
+                ]
+            }),
+            Self::ToolMetadata => json!({
+                "role": "assistant",
+                "tool_call_id": "call_lookup_1",
+                "content": [
+                    {
+                        "kind": "text",
+                        "text": "ok"
+                    }
+                ]
+            }),
+            Self::NamedMetadata => json!({
+                "role": "assistant",
+                "name": "assistant_alias",
+                "content": [
+                    {
+                        "kind": "text",
+                        "text": "ok"
+                    }
+                ]
+            }),
+            Self::OversizedFinal => json!({
+                "role": "assistant",
+                "content": [
+                    {
+                        "kind": "text",
+                        "text": "too long"
+                    }
+                ]
+            }),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -3410,8 +3654,8 @@ impl PlanExecutionHost for RecordingPlanHost {
             Some("final_message") => assert!(matches!(
                 lm_request.output,
                 OutputMode::FinalMessage {
-                    max_bytes: Some(1024)
-                }
+                    max_bytes
+                } if max_bytes == request.call()["output"]["max_bytes"].as_u64()
             )),
             Some("json_schema") => match lm_request.output {
                 OutputMode::JsonSchema(schema) => {
@@ -3437,18 +3681,8 @@ impl PlanExecutionHost for RecordingPlanHost {
                 100,
             ));
         }
-        let mut outcome = PlanLmCompleteOutcome::new(
-            json!({
-                "role": "assistant",
-                "content": [
-                    {
-                        "kind": "text",
-                        "text": "ok"
-                    }
-                ]
-            }),
-            "fp_runtime_sha256_planexec",
-        );
+        let mut outcome =
+            PlanLmCompleteOutcome::new(self.lm_response.message(), "fp_runtime_sha256_planexec");
         if request.call()["output"]["kind"].as_str() == Some("json_schema") {
             match self.structured_parsed {
                 StructuredParsedFixture::Valid => {
