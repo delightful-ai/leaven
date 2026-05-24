@@ -138,7 +138,7 @@ fn plan_execution_with_capability_checks_call_authority_before_host_effects() {
         .execute_plan_document_with_capability(
             &plan,
             &plan_execution_context(),
-            &call_execution_capability(&["public"], &[]),
+            &call_execution_capability(&["public"], &[], true),
             &mut allowed_host,
         )
         .unwrap();
@@ -152,7 +152,7 @@ fn plan_execution_with_capability_checks_call_authority_before_host_effects() {
         .execute_plan_document_with_capability(
             &denied_plan,
             &plan_execution_context(),
-            &call_execution_capability(&["public"], &["case.target"]),
+            &call_execution_capability(&["public"], &["case.target"], true),
             &mut denied_host,
         )
         .unwrap_err();
@@ -162,6 +162,62 @@ fn plan_execution_with_capability_checks_call_authority_before_host_effects() {
     );
     assert!(denied_host.calls.is_empty());
     assert!(denied_host.writes.is_empty());
+
+    let mut write_denied_host = RecordingPlanHost::default();
+    let error = package
+        .execute_plan_document_with_capability(
+            &typed_let_call_write_execute_plan(),
+            &plan_execution_context(),
+            &call_execution_capability(&["public"], &[], false),
+            &mut write_denied_host,
+        )
+        .unwrap_err();
+    assert!(
+        error.to_string().contains("event emit denied"),
+        "unexpected error: {error:?}"
+    );
+    assert!(write_denied_host.calls.is_empty());
+    assert!(write_denied_host.writes.is_empty());
+}
+
+#[test]
+fn plan_execution_with_capability_allows_workspace_lifecycle_calls() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut plan = workspace_materialize_release_plan();
+    plan["ops"][1]["call"]["workspace"] = json!({
+        "kind": "workspace",
+        "run": "run_demo",
+        "id": "ws_planexec_materialized"
+    });
+
+    let mut host = RecordingPlanHost::default();
+    package
+        .execute_plan_document_with_capability(
+            &plan,
+            &plan_execution_context(),
+            &workspace_lifecycle_capability(true),
+            &mut host,
+        )
+        .unwrap();
+    assert_eq!(
+        host.calls,
+        vec!["workspace_materialize", "workspace_release"]
+    );
+
+    let mut denied_host = RecordingPlanHost::default();
+    let error = package
+        .execute_plan_document_with_capability(
+            &plan,
+            &plan_execution_context(),
+            &workspace_lifecycle_capability(false),
+            &mut denied_host,
+        )
+        .unwrap_err();
+    assert!(
+        error.to_string().contains("workspace_release"),
+        "unexpected error: {error:?}"
+    );
+    assert!(denied_host.calls.is_empty());
 }
 
 #[test]
@@ -2032,6 +2088,16 @@ fn require_cached_call_plan() -> Value {
     plan
 }
 
+fn typed_let_call_write_execute_plan() -> Value {
+    let mut plan = typed_let_call_write_plan();
+    plan["mode"] = json!({"kind": "execute"});
+    plan["commit"] = json!({
+        "kind": "graph_writes_atomic",
+        "on_stale": "reject"
+    });
+    plan
+}
+
 fn execute_call_only_plan() -> Value {
     let mut plan = require_cached_call_plan();
     plan["mode"] = json!({"kind": "execute"});
@@ -3290,8 +3356,59 @@ fn target_denied_evaluator_capability(package: &PublicSeamPackage) -> Capability
     CapabilityDocument::from_value(value).unwrap()
 }
 
-fn call_execution_capability(allowed: &[&str], forbidden: &[&str]) -> CapabilityDocument {
-    CapabilityDocument::from_value(json!({
+fn call_execution_capability(
+    allowed: &[&str],
+    forbidden: &[&str],
+    include_event_emit: bool,
+) -> CapabilityDocument {
+    let grants = vec![json!({
+        "action": "lm.complete",
+        "resource": {},
+        "constraints": {
+            "allowed_input_classes": allowed,
+            "forbidden_input_classes": forbidden,
+            "purposes": ["test.plan_ir"],
+            "models": ["gpt-4.1-mini"],
+            "model_roles": ["reflector"]
+        }
+    })];
+    let mut value = base_execution_capability(&grants);
+    if include_event_emit {
+        value["grants"].as_array_mut().unwrap().push(json!({
+            "action": "event.emit",
+            "resource": {},
+            "constraints": {}
+        }));
+    }
+    CapabilityDocument::from_value(value).unwrap()
+}
+
+fn workspace_lifecycle_capability(include_release: bool) -> CapabilityDocument {
+    let mut grants = vec![json!({
+        "action": "workspace.materialize",
+        "resource": {
+            "candidate_ids": ["cand_planexec"]
+        },
+        "constraints": {
+            "workspace_ops": ["materialize"]
+        }
+    })];
+    if include_release {
+        grants.push(json!({
+            "action": "workspace.release",
+            "resource": {
+                "workspace_ids": ["ws_planexec_materialized"]
+            },
+            "constraints": {
+                "workspace_ops": ["release"]
+            }
+        }));
+    }
+    CapabilityDocument::from_value(base_execution_capability(&grants)).unwrap()
+}
+
+fn base_execution_capability(grants: &[Value]) -> Value {
+    json!({
         "schema_version": "leaven.capability.v1",
         "jti": "jti_planexec_call_authority",
         "capability_fingerprint": "fp_cap_sha256_planexec",
@@ -3325,18 +3442,7 @@ fn call_execution_capability(allowed: &[&str], forbidden: &[&str]) -> Capability
             "max_extensions": 2,
             "max_total_lifetime_s": 3600
         },
-        "grants": [
-            {
-                "action": "lm.complete",
-                "resource": {},
-                "constraints": {
-                    "allowed_input_classes": allowed,
-                    "forbidden_input_classes": forbidden,
-                    "purposes": ["test.plan_ir"],
-                    "model_roles": ["reflector"]
-                }
-            }
-        ],
+        "grants": grants,
         "budgets": {},
         "execution_policy": {
             "profile": "managed_sandbox",
@@ -3351,8 +3457,7 @@ fn call_execution_capability(allowed: &[&str], forbidden: &[&str]) -> Capability
             "must_attenuate": true,
             "allowed_actions": []
         }
-    }))
-    .unwrap()
+    })
 }
 
 fn evaluator_capability_value(package: &PublicSeamPackage) -> Value {

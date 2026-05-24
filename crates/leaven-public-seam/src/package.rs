@@ -791,7 +791,7 @@ impl PublicSeamPackage {
         host: &mut H,
     ) -> Result<crate::PlanExecutionReport, PublicSeamError> {
         let plan_document = self.validate_plan_document(value)?;
-        crate::call_authority::validate(value, capability)?;
+        crate::execution_authority::validate(value, capability)?;
         let result = crate::plan_execution::execute_plan_with_capability(
             value,
             &plan_document,

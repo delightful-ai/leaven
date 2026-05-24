@@ -7,6 +7,7 @@ mod dialect;
 mod error;
 mod evaluation_job;
 mod evidence;
+mod execution_authority;
 mod fingerprint;
 mod matrix;
 mod output;

@@ -1,8 +1,13 @@
 use std::collections::BTreeSet;
 
-use serde_json::Value;
+use serde_json::{Value, json};
 
-use crate::{CapabilityDocument, CapabilityGrantRequest, PublicSeamError};
+use crate::{
+    CapabilityDocument, CapabilityGrantRequest, PublicSeamError,
+    execution_authority::{
+        invalid_authority, limit_usage, output_authority, required_string, workspace_ref_id,
+    },
+};
 
 /// Semantic call-authority facts validated from a Plan IR document.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -81,14 +86,7 @@ pub fn validate(
             report.checked_input_classes.insert(data_class.clone());
             request = request.with_input_class(data_class.clone());
         }
-        if call_kind == "lm_complete" {
-            if let Some(purpose) = call.get("purpose").and_then(Value::as_str) {
-                request = request.with_purpose(purpose);
-            }
-            if let Some(model_role) = call.get("model_role").and_then(Value::as_str) {
-                request = request.with_model_role(model_role);
-            }
-        }
+        request = add_call_dimensions(request, call_kind, call)?;
         capability
             .authorize_grant(request)
             .map_err(|denial| invalid_authority(format!("call `{call_kind}` denied: {denial}")))?;
@@ -108,6 +106,8 @@ fn action_for_call(call_kind: &str) -> Result<&'static str, PublicSeamError> {
         "lm_complete" => Ok("lm.complete"),
         "agent_run" => Ok("agent.run"),
         "sandbox_exec" => Ok("sandbox.exec"),
+        "workspace_materialize" => Ok("workspace.materialize"),
+        "workspace_release" => Ok("workspace.release"),
         "human_review" => Ok("human.review"),
         other => Err(invalid_authority(format!(
             "call kind `{other}` has no V1 capability action mapping"
@@ -115,10 +115,72 @@ fn action_for_call(call_kind: &str) -> Result<&'static str, PublicSeamError> {
     }
 }
 
-fn required_string<'a>(value: Option<&'a Value>, field: &str) -> Result<&'a str, PublicSeamError> {
-    value
-        .and_then(Value::as_str)
-        .ok_or_else(|| invalid_authority(format!("call authority field `{field}` is required")))
+fn add_call_dimensions(
+    request: CapabilityGrantRequest,
+    call_kind: &str,
+    call: &serde_json::Map<String, Value>,
+) -> Result<CapabilityGrantRequest, PublicSeamError> {
+    let mut request = output_authority(request, call.get("output"))?;
+    match call_kind {
+        "lm_complete" => {
+            if let Some(purpose) = call.get("purpose").and_then(Value::as_str) {
+                request = request.with_purpose(purpose);
+            }
+            if let Some(model) = call.get("model").and_then(Value::as_str) {
+                request = request.with_model(model);
+            }
+            if let Some(model_role) = call.get("model_role").and_then(Value::as_str) {
+                request = request.with_model_role(model_role);
+            }
+        }
+        "agent_run" => {
+            if let Some(workspace) = call.get("workspace") {
+                request = request.with_resource(
+                    "workspace_ids",
+                    json!(workspace_ref_id(Some(workspace), "agent_run")?),
+                );
+            }
+            if let Some(limits) = call.get("limits").and_then(Value::as_object) {
+                request = request.with_limits(limit_usage(limits));
+            }
+        }
+        "sandbox_exec" => {
+            request = request
+                .with_resource(
+                    "workspace_ids",
+                    json!(workspace_ref_id(call.get("workspace"), "sandbox_exec")?),
+                )
+                .with_workspace_op("exec");
+            if let Some(command) = call
+                .get("argv")
+                .and_then(Value::as_array)
+                .and_then(|argv| argv.first())
+                .and_then(Value::as_str)
+            {
+                request = request.with_command(command);
+            }
+            request = request.with_limits(limit_usage(call));
+        }
+        "workspace_materialize" => {
+            if let Some(candidate) = call.get("candidate") {
+                request = request.with_resource("candidate_ids", candidate.clone());
+            }
+            request = request.with_workspace_op("materialize");
+        }
+        "workspace_release" => {
+            request = request
+                .with_resource(
+                    "workspace_ids",
+                    json!(workspace_ref_id(
+                        call.get("workspace"),
+                        "workspace_release"
+                    )?),
+                )
+                .with_workspace_op("release");
+        }
+        _ => {}
+    }
+    Ok(request)
 }
 
 fn string_set(value: Option<&Value>, field: &str) -> Result<BTreeSet<String>, PublicSeamError> {
@@ -137,10 +199,4 @@ fn string_set(value: Option<&Value>, field: &str) -> Result<BTreeSet<String>, Pu
                 .collect()
         },
     )
-}
-
-fn invalid_authority(message: impl Into<String>) -> PublicSeamError {
-    PublicSeamError::InvalidPlan {
-        message: message.into(),
-    }
 }
