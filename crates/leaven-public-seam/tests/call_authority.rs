@@ -131,6 +131,35 @@ fn call_authority_rejects_sandbox_exec_outside_workspace_execution_policy() {
     );
 }
 
+#[test]
+fn call_authority_checks_agent_allowed_commands_against_grants() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut allowed_plan = call_authority_plan();
+    allowed_plan["ops"][1]["call"]["tool_policy"] = json!({
+        "allow_shell": false,
+        "allowed_tools": ["read_file"],
+        "allowed_commands": ["python"],
+        "network": "deny"
+    });
+    let mut allowed_capability = call_capability();
+    allowed_capability["grants"][1]["constraints"]["allowed_commands"] = json!(["python"]);
+    let capability = CapabilityDocument::from_value(allowed_capability).unwrap();
+    package
+        .validate_call_authority_document(&allowed_plan, &capability)
+        .unwrap();
+
+    let mut denied_plan = allowed_plan;
+    denied_plan["ops"][1]["call"]["tool_policy"]["allowed_commands"] = json!(["python", "bash"]);
+    let error = package
+        .validate_call_authority_document(&denied_plan, &capability)
+        .unwrap_err();
+    assert!(
+        error.to_string().contains("allowed_commands"),
+        "unexpected error: {error:?}"
+    );
+}
+
 fn call_authority_plan() -> Value {
     json!({
         "schema_version": "leaven.plan.v1",
