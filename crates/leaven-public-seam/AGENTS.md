@@ -220,10 +220,20 @@ still not provider/runtime proof for structured output enforcement outside the
 public-seam harness.
 The proposal authority
 route checks `submit_proposal_batch` and `apply_proposal_batch` writes against
-capability-granted effects, surfaces, schemas, and apply permission. They are
-not ACP delivery, provider runtime execution, general cache
-backend behavior, graph mutation authority, full Plan IR coverage, evaluator
-runtime production, or engine RunGraph revision reads.
+capability-granted effects, surfaces, schemas, and apply permission.
+`change_from_agent_session` effects must cite the same agent session receipt in
+the effect and proposal `read_receipts`, so an agent-shaped change cannot pass
+as a receipted proposal with only decorative stdout or omitted session
+provenance. This is still a Plan IR authority check, not proof that the agent
+runtime produced the session. These checks are not ACP delivery, provider
+runtime execution, general cache backend behavior, graph mutation authority,
+full Plan IR coverage, evaluator runtime production, or engine RunGraph
+revision reads.
+The sandbox execution route treats completed stdout/stderr blob refs as audit
+facts, not optional decoration: live host outcomes, replayed Plan Results, and
+ACP extension results must preserve them. This is still public-seam harness
+validation, not a claim that a production sandbox runtime or streaming
+transport has shipped.
 
 Crate-root export `PinnedDialectEvaluator` is an advanced public seam contract.
 It proves deterministic parsing and replay for the V1 pinned wire

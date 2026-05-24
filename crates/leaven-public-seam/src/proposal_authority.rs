@@ -83,6 +83,9 @@ fn validate_submit_proposal_batch(
         .and_then(Value::as_array)
         .ok_or_else(|| invalid_authority("submit_proposal_batch must carry proposals"))?;
     for proposal in proposals {
+        let proposal = proposal
+            .as_object()
+            .ok_or_else(|| invalid_authority("proposal must be an object"))?;
         let effect = proposal
             .get("effect")
             .and_then(Value::as_object)
@@ -108,6 +111,7 @@ fn validate_submit_proposal_batch(
             }
             "change_from_agent_session" => {
                 report.agent_session_effects += 1;
+                validate_agent_session_effect_receipts(proposal, effect)?;
                 request = add_change_authority(request, effect)?;
             }
             other => {
@@ -121,6 +125,29 @@ fn validate_submit_proposal_batch(
             .map_err(|denial| invalid_authority(format!("proposal submit denied: {denial}")))?;
     }
     Ok(())
+}
+
+fn validate_agent_session_effect_receipts(
+    proposal: &serde_json::Map<String, Value>,
+    effect: &serde_json::Map<String, Value>,
+) -> Result<(), PublicSeamError> {
+    let agent_receipt = required_string(effect.get("agent_receipt"), "effect.agent_receipt")?;
+    let read_receipts = proposal
+        .get("read_receipts")
+        .and_then(Value::as_array)
+        .ok_or_else(|| {
+            invalid_authority("change_from_agent_session proposal must carry read_receipts")
+        })?;
+    if read_receipts
+        .iter()
+        .any(|receipt| receipt.as_str() == Some(agent_receipt))
+    {
+        Ok(())
+    } else {
+        Err(invalid_authority(format!(
+            "change_from_agent_session agent_receipt `{agent_receipt}` must appear in read_receipts"
+        )))
+    }
 }
 
 fn add_change_authority(

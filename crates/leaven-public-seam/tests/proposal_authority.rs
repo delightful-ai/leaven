@@ -74,6 +74,34 @@ fn proposal_authority_rejects_schema_valid_change_without_granted_schema() {
     ));
 }
 
+#[test]
+fn proposal_authority_rejects_agent_session_effect_without_matching_receipt() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let capability = CapabilityDocument::from_value(proposal_capability()).unwrap();
+
+    let mut missing_receipts = proposal_authority_plan();
+    missing_receipts["ops"][0]["write"]["proposals"][2]
+        .as_object_mut()
+        .unwrap()
+        .remove("read_receipts");
+    assert!(matches!(
+        package
+            .validate_proposal_authority_document(&missing_receipts, &capability)
+            .unwrap_err(),
+        PublicSeamError::InvalidPlan { .. }
+    ));
+
+    let mut mismatched_receipt = proposal_authority_plan();
+    mismatched_receipt["ops"][0]["write"]["proposals"][2]["read_receipts"] =
+        json!(["agentrec_other_session"]);
+    assert!(matches!(
+        package
+            .validate_proposal_authority_document(&mismatched_receipt, &capability)
+            .unwrap_err(),
+        PublicSeamError::InvalidPlan { .. }
+    ));
+}
+
 fn proposal_authority_plan() -> Value {
     json!({
         "schema_version": "leaven.plan.v1",
