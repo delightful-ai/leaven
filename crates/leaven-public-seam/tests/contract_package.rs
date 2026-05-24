@@ -181,6 +181,36 @@ fn acp_profile_rejects_mcp_bridge_legacy_worker_protocol_and_watch_runtime() {
         PublicSeamError::InvalidScope { .. }
     ));
 
+    assert!(matches!(
+        scope
+            .authorize_worker_transport(WorkerTransportRequest::new(
+                WorkerTransportKind::AcpProfile,
+                [] as [&str; 0]
+            ))
+            .unwrap_err(),
+        PublicSeamError::InvalidScope { .. }
+    ));
+
+    assert!(matches!(
+        scope
+            .authorize_worker_transport(WorkerTransportRequest::new(
+                WorkerTransportKind::AcpProfile,
+                ["private/lm.complete"]
+            ))
+            .unwrap_err(),
+        PublicSeamError::InvalidScope { .. }
+    ));
+
+    assert!(matches!(
+        scope
+            .authorize_worker_transport(WorkerTransportRequest::new(
+                WorkerTransportKind::AcpProfile,
+                ["leaven/not-mcp-but-mentions-mcp"]
+            ))
+            .unwrap_err(),
+        PublicSeamError::InvalidScope { .. }
+    ));
+
     let mut watch_runtime =
         WorkerTransportRequest::new(WorkerTransportKind::AcpProfile, ["leaven/lm.complete"]);
     watch_runtime.enable_watch_runtime();
