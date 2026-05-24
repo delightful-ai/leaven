@@ -799,21 +799,7 @@ fn acp_extension_results_reject_agent_audit_gaps() {
         );
     }
 
-    let mut missing_primary_receipt = agent_session_primary();
-    missing_primary_receipt
-        .as_object_mut()
-        .unwrap()
-        .remove("receipt");
-    let error = package
-        .validate_acp_extension_result_document(&extension_result_for(
-            "leaven/agent.run",
-            &missing_primary_receipt,
-            &call_receipt("agent_run", "agentrec_acp"),
-            &["public", "transcript.raw"],
-        ))
-        .unwrap_err();
-    assert!(error.to_string().contains("primary.receipt"));
-
+    assert_acp_agent_extension_rejects_missing_primary_receipt(&package);
     let mut mismatched_primary_receipt = agent_session_primary();
     mismatched_primary_receipt["receipt"] = json!("agentrec_other");
     let mut mismatched_result = extension_result_for(
@@ -833,6 +819,46 @@ fn acp_extension_results_reject_agent_audit_gaps() {
         error
             .to_string()
             .contains("does not match expected receipt")
+    );
+
+    assert_acp_agent_extension_rejects_missing_receipt_cost(&package);
+}
+
+fn assert_acp_agent_extension_rejects_missing_primary_receipt(package: &PublicSeamPackage) {
+    let mut missing_primary_receipt = agent_session_primary();
+    missing_primary_receipt
+        .as_object_mut()
+        .unwrap()
+        .remove("receipt");
+    let error = package
+        .validate_acp_extension_result_document(&extension_result_for(
+            "leaven/agent.run",
+            &missing_primary_receipt,
+            &call_receipt("agent_run", "agentrec_acp"),
+            &["public", "transcript.raw"],
+        ))
+        .unwrap_err();
+    assert!(error.to_string().contains("primary.receipt"));
+}
+
+fn assert_acp_agent_extension_rejects_missing_receipt_cost(package: &PublicSeamPackage) {
+    let mut missing_receipt_cost = extension_result_for(
+        "leaven/agent.run",
+        &agent_session_primary(),
+        &call_receipt("agent_run", "agentrec_acp"),
+        &["public", "transcript.raw"],
+    );
+    missing_receipt_cost["receipts"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("cost");
+    let error = package
+        .validate_acp_extension_result_document(&missing_receipt_cost)
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("agent_run primary cost must match call receipt cost")
     );
 }
 
@@ -907,6 +933,22 @@ fn acp_extension_results_reject_sandbox_audit_gaps() {
         error
             .to_string()
             .contains("does not match expected receipt")
+    );
+
+    let mut mismatched_receipt_cost = extension_result_for(
+        "leaven/sandbox.exec",
+        &sandbox_exec_primary(),
+        &call_receipt("sandbox_exec", "execrec_acp"),
+        &["public"],
+    );
+    mismatched_receipt_cost["receipts"][0]["cost"] = json!({"usd_micro": 1});
+    let error = package
+        .validate_acp_extension_result_document(&mismatched_receipt_cost)
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("sandbox_exec primary cost must match call receipt cost")
     );
 }
 
@@ -1640,7 +1682,7 @@ fn evaluation_request_primary() -> Value {
 }
 
 fn call_receipt(call_kind: &str, receipt: &str) -> Value {
-    json!({
+    let mut value = json!({
         "kind": "call",
         "receipt": receipt,
         "op_var": "worker_call",
@@ -1651,7 +1693,13 @@ fn call_receipt(call_kind: &str, receipt: &str) -> Value {
         "result_hash": "fp_result_sha256_acp",
         "runtime_fingerprint": "fp_runtime_sha256_acp",
         "status": "succeeded"
-    })
+    });
+    match call_kind {
+        "agent_run" => value["cost"] = json!({"usd_micro": 1000, "agent_calls": 1}),
+        "sandbox_exec" => value["cost"] = json!({"usd_micro": 10, "sandbox_calls": 1}),
+        _ => {}
+    }
+    value
 }
 
 fn write_receipt(write_kind: &str, receipt: &str) -> Value {

@@ -100,7 +100,10 @@ envelopes; locked Plan IR/Plan Result schema binding for profile methods; and
 schema-backed, hash-bound extension-result envelopes at the wire-contract layer
 only. Generic ACP `extension` primaries are checked against the locked schema
 branch and ACP envelope fields, while concrete PlanResult value kinds still run
-the full PlanResult semantic validator. They are not an ACP process
+the full PlanResult semantic validator. Agent and sandbox ACP extension
+primaries additionally bind their cost object to the carried call receipt cost,
+so ACP envelopes cannot shrink or omit cost provenance while retaining a
+hash-bound primary. They are not an ACP process
 implementation, engine-client runtime, worker-agent runtime, provider call, or
 graph mutation route.
 
