@@ -60,6 +60,7 @@ fn agentic_proposer_materializes_skill_bank_and_parses_workspace_mutation() {
                     SkillBankProposalInput::new(parent),
                     OutputContract::WorkspaceDiff {
                         roots: vec![WorkspacePath::root()],
+                        surface_fingerprint: None,
                     },
                 ),
             )
@@ -128,6 +129,7 @@ fn agentic_proposer_supports_nested_skill_layouts() {
                     SkillBankProposalInput::new(parent),
                     OutputContract::WorkspaceDiff {
                         roots: vec![WorkspacePath::new(".agents/skills").unwrap()],
+                        surface_fingerprint: None,
                     },
                 ),
             )
@@ -165,6 +167,7 @@ fn skill_bank_materializer_exposes_layout_and_rejects_missing_parent() {
                     SkillBankProposalInput::new(missing_parent),
                     OutputContract::WorkspaceDiff {
                         roots: vec![WorkspacePath::new(".agents/skills").unwrap()],
+                        surface_fingerprint: None,
                     },
                 ),
             )
@@ -226,6 +229,7 @@ fn skill_bank_materializer_clears_stale_executable_bits() {
                     SkillBankProposalInput::new(parent),
                     OutputContract::WorkspaceDiff {
                         roots: vec![WorkspacePath::root()],
+                        surface_fingerprint: None,
                     },
                 ),
             )
@@ -270,6 +274,7 @@ fn agentic_skill_parser_rejects_invalid_mutated_skill_md() {
                     SkillBankProposalInput::new(parent),
                     OutputContract::WorkspaceDiff {
                         roots: vec![WorkspacePath::root()],
+                        surface_fingerprint: None,
                     },
                 ),
             )
@@ -371,6 +376,7 @@ fn agentic_skill_parser_rejects_unchanged_workspace() {
                     SkillBankProposalInput::new(parent),
                     OutputContract::WorkspaceDiff {
                         roots: vec![WorkspacePath::root()],
+                        surface_fingerprint: None,
                     },
                 ),
             )
@@ -1643,6 +1649,7 @@ async fn propose_with_actions(
             SkillBankProposalInput::new(parent),
             OutputContract::WorkspaceDiff {
                 roots: vec![WorkspacePath::root()],
+                surface_fingerprint: None,
             },
         ),
     )

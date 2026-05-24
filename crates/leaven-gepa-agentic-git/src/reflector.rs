@@ -94,6 +94,7 @@ where
                     input,
                     OutputContract::WorkspaceDiff {
                         roots: vec![WorkspacePath::root()],
+                        surface_fingerprint: None,
                     },
                 ),
             )
