@@ -606,7 +606,7 @@ rows:
       execution and reports redactions.
     fake_pass_rejected: Checking data classes only at initial case read.
     minimum_closeout_level: semantic_denial
-    partial_contract_test_evidence:
+    positive_test_evidence:
       - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_with_capability_checks_call_authority_before_host_effects
       - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_with_capability_allows_workspace_lifecycle_calls
       - crates/leaven-public-seam/tests/call_authority.rs::call_authority_accepts_lm_agent_and_sandbox_input_classes
@@ -615,8 +615,13 @@ rows:
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_preserves_nested_evidence_visibility_data_classes_and_receipts
       - crates/leaven-public-seam/tests/agent_contract.rs::agent_run_can_project_provider_neutral_agent_session_into_plan_result
       - crates/leaven-public-seam/tests/plan_document.rs::sandbox_exec_outcome_propagates_stream_and_file_blob_data_classes
-      - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_with_capability_checks_call_authority_before_host_effects
-      - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_with_capability_allows_workspace_lifecycle_calls
+      - crates/leaven-public-seam/tests/plan_document.rs::write_receipts_bind_literal_dependency_data_classes_without_rewriting_values
+      - crates/leaven-public-seam/tests/plan_document.rs::capability_execution_ignores_domain_json_data_classes_inside_dependencies
+      - crates/leaven-run/tests/public_seam.rs::runcontext_assessment_evidence_visibility_projects_to_public_seam_plan_result
+      - crates/leaven-public-seam/tests/plan_document.rs::submit_assessments_accepts_evidence_source_receipts_without_duplicate_assessment_declarations
+      - crates/leaven-public-seam/tests/plan_result.rs::plan_result_accepts_assessment_summary_with_score_output_and_evidence_envelope
+      - crates/leaven-public-seam/tests/plan_result.rs::plan_result_accepts_assessment_summary_structured_or_numeric_score_output_values
+    negative_test_evidence:
       - crates/leaven-public-seam/tests/call_authority.rs::call_authority_rejects_forbidden_input_classes_before_execution
       - crates/leaven-public-seam/tests/call_authority.rs::call_authority_rejects_declared_forbidden_intersections_even_when_grant_allows
       - crates/leaven-public-seam/tests/call_authority.rs::call_authority_rejects_reflector_lm_call_input_classes_include_case_target
@@ -626,24 +631,17 @@ rows:
       - crates/leaven-public-seam/tests/plan_document.rs::capability_execution_denies_calls_that_drop_nested_graph_row_data_classes
       - crates/leaven-public-seam/tests/plan_document.rs::capability_execution_denies_calls_that_drop_literal_expr_data_classes
       - crates/leaven-public-seam/tests/plan_document.rs::capability_execution_denies_calls_that_drop_workspace_listing_entry_data_classes
-      - crates/leaven-public-seam/tests/plan_document.rs::write_receipts_bind_literal_dependency_data_classes_without_rewriting_values
-      - crates/leaven-public-seam/tests/plan_document.rs::capability_execution_ignores_domain_json_data_classes_inside_dependencies
       - crates/leaven-public-seam/tests/evidence_envelope.rs::evidence_envelope_rejects_source_receipt_family_mismatches
-      - crates/leaven-public-seam/tests/plan_result.rs::plan_result_preserves_value_visibility_data_classes
       - crates/leaven-public-seam/tests/plan_result.rs::plan_result_rejects_value_trace_and_blob_ref_data_class_gaps
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_evidence_source_receipts_that_are_missing_or_wrong_kind
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_nested_score_output_data_class_gaps
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_nested_score_blob_ref_data_class_gaps
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_nested_trace_ref_data_class_gaps
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_nested_evidence_hidden_target_derivation_flag
-      - crates/leaven-public-seam/tests/plan_document.rs::submit_assessments_accepts_evidence_source_receipts_without_duplicate_assessment_declarations
+      - crates/leaven-run/tests/public_seam.rs::assessment_plan_result_with_evidence_rejects_synthetic_source_receipts
       - crates/leaven-public-seam/tests/plan_document.rs::submit_assessments_rejects_schema_valid_but_semantically_invalid_evidence
-      - crates/leaven-public-seam/tests/plan_result.rs::plan_result_accepts_assessment_summary_with_score_output_and_evidence_envelope
-      - crates/leaven-public-seam/tests/plan_result.rs::plan_result_accepts_assessment_summary_structured_or_numeric_score_output_values
       - crates/leaven-public-seam/tests/plan_result.rs::plan_result_rejects_assessment_summary_without_score_output_or_evidence_truth
-      - crates/leaven-public-seam/tests/agent_contract.rs::agent_run_can_project_provider_neutral_agent_session_into_plan_result
-      - crates/leaven-public-seam/tests/plan_document.rs::sandbox_exec_outcome_propagates_stream_and_file_blob_data_classes
-    partial_contract_implementation_evidence:
+    implementation_evidence:
       - crates/leaven-public-seam/src/call_authority.rs::CallAuthorityReport
       - crates/leaven-public-seam/src/call_authority.rs::CallAuthorityError
       - crates/leaven-public-seam/src/call_authority.rs::CallAuthorityDenial
@@ -703,7 +701,8 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-data-class-dependency-carriers-linnaeus-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-call-authority-redaction-denials-cicero-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-call-authority-execution-redaction-error-kepler-review.md
-    status: pending
+      - docs/specs/public-seam-v1/reviews/2026-05-24-data-class-propagation-bernoulli-review.md
+    status: proven
 
   - id: ps1.visibility.reflector_target_safe
     area: data_visibility
@@ -835,6 +834,7 @@ rows:
       - crates/leaven-public-seam/src/result.rs::validate_assessment_summary
       - crates/leaven-public-seam/src/result.rs::validate_optional_assessment_summary_evidence_projection
       - crates/leaven-run/src/public_seam/assessment_write.rs::PublicAssessmentWriteReceiptContext::submit_assessments_plan_result_with_evidence
+      - crates/leaven-run/src/public_seam/assessment_write.rs::PublicAssessmentWriteReceiptProjectionError::MissingEvidenceSourceReceipts
       - crates/leaven-run/src/public_seam/assessment_write.rs::assessment_evidence_envelope
       - crates/leaven-run/src/public_seam/assessment_write.rs::evidence_query_receipts
       - crates/leaven-run/src/public_seam/assessment_write.rs::evidence_source_read_receipts

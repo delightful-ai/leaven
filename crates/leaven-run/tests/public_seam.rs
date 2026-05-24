@@ -11,8 +11,8 @@ use leaven_engine::{
     Evaluator, ProposalBatchReport, RunContext, RunGraph,
 };
 use leaven_evidence::{
-    CandidateAssessmentOutput, CaseAssessmentEvidence, DataClassSet, OutputBlobAudit,
-    OutputMetadata, OutputRecord, OutputVisibility, ScalarEvidence,
+    CandidateAssessmentOutput, CaseAssessmentEvidence, CaseDataReadEvidence, DataClassSet,
+    OutputBlobAudit, OutputMetadata, OutputRecord, OutputVisibility, ScalarEvidence,
 };
 use leaven_kernel::{
     AssessmentId, Budget, CandidateId, CaseId, ContentId, Cost, EvaluatorId, Fingerprint,
@@ -287,7 +287,7 @@ fn runcontext_assessment_evidence_visibility_projects_to_public_seam_plan_result
             serde_json::json!(true)
         );
 
-        let mut missing_receipt_visibility = result;
+        let mut missing_receipt_visibility = result.clone();
         missing_receipt_visibility["receipts"][0]
             .as_object_mut()
             .unwrap()
@@ -299,6 +299,19 @@ fn runcontext_assessment_evidence_visibility_projects_to_public_seam_plan_result
             error
                 .to_string()
                 .contains("must carry receipt trace data classes"),
+            "{error}"
+        );
+
+        let mut missing_target_receipt_visibility = result;
+        missing_target_receipt_visibility["receipts"][0]["trace_refs"][0]["data_classes"] =
+            serde_json::json!(["public"]);
+        let error = package
+            .validate_plan_result_document(&missing_target_receipt_visibility)
+            .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("must carry case.target receipt trace data class"),
             "{error}"
         );
     });
@@ -584,6 +597,35 @@ fn assessment_score_output_plan_projection_rejects_missing_stored_evidence() {
         assert!(matches!(
             missing_evidence,
             PublicAssessmentWriteReceiptProjectionError::EvidenceLoad { .. }
+        ));
+    });
+}
+
+#[test]
+fn assessment_plan_result_with_evidence_rejects_synthetic_source_receipts() {
+    block_on(async {
+        let (mut graph, mut budget, candidate) = graph_with_run_eval_seed();
+        let case_set = CaseSet::new(vec![leaven_eval::Case::input(CaseId::new(0), "case")]);
+        let store = InlineEvidenceStore::<CaseAssessmentEvidence>::new("inline");
+        let mut ctx =
+            RunContext::<RunProblem<TextArtifact, &'static str>>::new(&mut graph, &mut budget)
+                .with_case_set(&case_set)
+                .with_evidence_store(&store);
+        let report = ctx
+            .evaluate_with(
+                &UnreceiptedScoreOutputEvaluator,
+                independent_request(vec![candidate]),
+            )
+            .await
+            .unwrap();
+        let graph_view = ctx.graph();
+
+        let error = assessment_receipt_context()
+            .submit_assessments_plan_result_with_evidence(&graph_view, &store, &report)
+            .unwrap_err();
+        assert!(matches!(
+            error,
+            PublicAssessmentWriteReceiptProjectionError::MissingEvidenceSourceReceipts
         ));
     });
 }
@@ -1003,6 +1045,55 @@ impl Evaluator<RunProblem<TextArtifact, &'static str>> for ScoreOutputEvaluator 
                         score,
                         OutputRecord::candidate_inline("candidate-output"),
                         "ok",
+                    )
+                    .with_case_data_reads([CaseDataReadEvidence::new(
+                        "case_query.load",
+                        "qrec_case_0_input",
+                        CaseId::new(0),
+                        ["input"],
+                        ["case.input"],
+                    )]),
+                    cost: Cost::zero(),
+                    metadata: MetadataBag::new(),
+                })
+                .collect(),
+            Cost::zero(),
+        ))
+    }
+}
+
+struct UnreceiptedScoreOutputEvaluator;
+
+impl Evaluator<RunProblem<TextArtifact, &'static str>> for UnreceiptedScoreOutputEvaluator {
+    fn id(&self) -> EvaluatorId {
+        EvaluatorId::PRIMARY
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        Fingerprint::from_bytes([49; 32])
+    }
+
+    async fn evaluate(
+        &self,
+        request: ResolvedEvaluationRequest,
+        _ctx: EvaluationContext<'_, RunProblem<TextArtifact, &'static str>>,
+    ) -> Result<Metered<Vec<Assessment<RunProblem<TextArtifact, &'static str>>>>, EvaluationError>
+    {
+        let leaven_core::ResolvedRequestKind::Independent { candidates } = request.kind else {
+            return Err(EvaluationError::Message("unsupported request".to_owned()));
+        };
+        let score = ScalarEvidence::new(1.0)
+            .map_err(|error| EvaluationError::Message(error.to_string()))?;
+        Ok(Metered::new(
+            candidates
+                .into_iter()
+                .map(|candidate| Assessment::Independent {
+                    candidate,
+                    target: AssessmentTarget::Unscoped,
+                    evidence: CaseAssessmentEvidence::new(
+                        score,
+                        OutputRecord::candidate_inline("candidate-output"),
+                        "ok",
                     ),
                     cost: Cost::zero(),
                     metadata: MetadataBag::new(),
@@ -1304,7 +1395,17 @@ fn case_assessment_evidence(
 ) -> Result<CaseAssessmentEvidence, EvaluationError> {
     let score =
         ScalarEvidence::new(1.0).map_err(|error| EvaluationError::Message(error.to_string()))?;
-    Ok(CaseAssessmentEvidence::new(score, output, "ok"))
+    Ok(
+        CaseAssessmentEvidence::new(score, output, "ok").with_case_data_reads([
+            CaseDataReadEvidence::new(
+                "case_query.load",
+                "qrec_case_0_input",
+                CaseId::new(0),
+                ["input"],
+                ["case.input"],
+            ),
+        ]),
+    )
 }
 
 fn candidate_artifact_output(text: impl Into<String>) -> OutputRecord {
