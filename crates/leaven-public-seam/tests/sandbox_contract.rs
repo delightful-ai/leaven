@@ -71,8 +71,31 @@ fn sandbox_exec_command_output_projection_preserves_missing_exit_for_validation(
     assert_eq!(host.commands.len(), 1);
 }
 
+#[test]
+fn sandbox_exec_command_output_projection_rejects_unbound_stream_blob_refs() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut host = SandboxHost::new(ExitStatus { code: Some(0) }).with_corrupt_stdout_ref();
+
+    let error = package
+        .execute_plan_document(
+            &sandbox_workspace_plan(),
+            &plan_execution_context(),
+            &mut host,
+        )
+        .unwrap_err();
+
+    assert!(
+        error
+            .to_string()
+            .contains("sandbox stdout blob ref bytes `12` do not match captured output bytes `3`"),
+        "unexpected error: {error:?}"
+    );
+    assert_eq!(host.commands.len(), 1);
+}
+
 struct SandboxHost {
     status: ExitStatus,
+    corrupt_stdout_ref: bool,
     calls: Vec<&'static str>,
     commands: Vec<leaven_workspace::Command>,
 }
@@ -81,9 +104,15 @@ impl SandboxHost {
     fn new(status: ExitStatus) -> Self {
         Self {
             status,
+            corrupt_stdout_ref: false,
             calls: Vec::new(),
             commands: Vec::new(),
         }
+    }
+
+    fn with_corrupt_stdout_ref(mut self) -> Self {
+        self.corrupt_stdout_ref = true;
+        self
     }
 }
 
@@ -104,7 +133,22 @@ impl PlanExecutionHost for SandboxHost {
         let command = request.to_workspace_command()?;
         self.commands.push(command);
         self.calls.push("sandbox");
-        Ok(PlanSandboxExecOutcome::from_command_output(
+        let stdout_ref = if self.corrupt_stdout_ref {
+            blob_ref(
+                "blob_sandbox_stdout",
+                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                12,
+                &["transcript.raw"],
+            )
+        } else {
+            blob_ref(
+                "blob_sandbox_stdout",
+                "dc51b8c96c2d745df3bd5590d990230a482fd247123599548e0632fdbf97fc22",
+                3,
+                &["transcript.raw"],
+            )
+        };
+        PlanSandboxExecOutcome::from_command_output(
             Metered::new(
                 CommandOutput {
                     status: self.status,
@@ -115,9 +159,14 @@ impl PlanExecutionHost for SandboxHost {
                 Cost::custom("sandbox_calls", 1.0).unwrap(),
             ),
             Fingerprint::from_bytes([88; 32]),
-            blob_ref("blob_sandbox_stdout", &["transcript.raw"]),
-            blob_ref("blob_sandbox_stderr", &["workspace.file"]),
-        ))
+            stdout_ref,
+            blob_ref(
+                "blob_sandbox_stderr",
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                0,
+                &["workspace.file"],
+            ),
+        )
     }
 
     fn workspace_materialize(
@@ -198,12 +247,12 @@ fn sandbox_workspace_plan() -> Value {
     })
 }
 
-fn blob_ref(id: &'static str, data_classes: &[&str]) -> Value {
+fn blob_ref(id: &'static str, sha256: &'static str, bytes: u64, data_classes: &[&str]) -> Value {
     json!({
         "kind": "blob_ref",
         "id": id,
-        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-        "bytes": 12,
+        "sha256": sha256,
+        "bytes": bytes,
         "data_classes": data_classes
     })
 }

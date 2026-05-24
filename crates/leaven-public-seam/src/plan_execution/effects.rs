@@ -10,6 +10,7 @@ use leaven_lm::{
 };
 use leaven_workspace::{Command, CommandLimits, CommandOutput, WorkspacePath};
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 
 use crate::PublicSeamError;
 
@@ -628,6 +629,10 @@ impl LiveWorkspaceHandle {
 
     pub(super) fn release(&mut self) {
         self.released = true;
+    }
+
+    pub(super) fn satisfies_workspace(&self, requested: &WorkspaceRefFacts) -> bool {
+        self.workspace.satisfies_request(requested)
     }
 
     pub(super) fn workspace(&self) -> &str {
@@ -1333,22 +1338,23 @@ impl PlanSandboxExecOutcome {
     }
 
     /// Creates a sandbox outcome from provider-neutral workspace command output.
-    #[must_use]
     pub fn from_command_output(
         output: leaven_kernel::Metered<CommandOutput>,
         runtime_fingerprint: leaven_kernel::Fingerprint,
         stdout_ref: Value,
         stderr_ref: Value,
-    ) -> Self {
+    ) -> Result<Self, PublicSeamError> {
         let leaven_kernel::Metered { value, cost } = output;
+        validate_stream_blob_ref(&stdout_ref, &value.stdout.bytes, "sandbox stdout")?;
+        validate_stream_blob_ref(&stderr_ref, &value.stderr.bytes, "sandbox stderr")?;
         let mut outcome = Self::completed(format!(
             "fp_runtime_sha256_{}",
             fingerprint_hex(runtime_fingerprint)
         ));
         outcome.exit_code = value.status.code.map(i64::from);
-        outcome
+        Ok(outcome
             .with_stream_refs(stdout_ref, stderr_ref)
-            .with_cost(cost_value(&cost))
+            .with_cost(cost_value(&cost)))
     }
 
     /// Attaches stdout and stderr blob references.
@@ -1375,6 +1381,45 @@ impl PlanSandboxExecOutcome {
         self.cost = Some(cost);
         self
     }
+}
+
+fn validate_stream_blob_ref(
+    blob_ref: &Value,
+    bytes: &[u8],
+    stream: &str,
+) -> Result<(), PublicSeamError> {
+    let object = blob_ref
+        .as_object()
+        .ok_or_else(|| invalid_call(format!("{stream} blob ref must be an object")))?;
+    let declared_bytes = object
+        .get("bytes")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| invalid_call(format!("{stream} blob ref must carry bytes")))?;
+    let actual_bytes = u64::try_from(bytes.len()).map_err(|_| {
+        invalid_call(format!(
+            "{stream} captured output is too large for public byte audit"
+        ))
+    })?;
+    if declared_bytes != actual_bytes {
+        return Err(invalid_call(format!(
+            "{stream} blob ref bytes `{declared_bytes}` do not match captured output bytes `{actual_bytes}`"
+        )));
+    }
+    let declared_sha = object
+        .get("sha256")
+        .and_then(Value::as_str)
+        .ok_or_else(|| invalid_call(format!("{stream} blob ref must carry sha256")))?;
+    let actual_sha = lower_hex_sha256(bytes);
+    if declared_sha != actual_sha {
+        return Err(invalid_call(format!(
+            "{stream} blob ref sha256 does not match captured output"
+        )));
+    }
+    Ok(())
+}
+
+fn lower_hex_sha256(bytes: &[u8]) -> String {
+    format!("{:x}", Sha256::digest(bytes))
 }
 
 /// Host outcome for a typed `workspace_materialize` call.

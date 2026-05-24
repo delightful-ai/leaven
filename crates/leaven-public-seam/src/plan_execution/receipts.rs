@@ -989,7 +989,7 @@ fn update_call_workspace_provenance(
                 ));
             }
             for handle in state.live_workspaces.values_mut() {
-                if handle.workspace() == workspace.id() {
+                if handle.satisfies_workspace(&workspace) {
                     handle.release();
                 }
             }
