@@ -696,11 +696,31 @@ fn source_ref_set(value: Option<&Value>, field: &str) -> Result<BTreeSet<String>
 }
 
 fn source_ref_key(value: &Value) -> Result<String, PublicSeamError> {
+    if let Some(candidate) = candidate_ref_key(value)? {
+        return Ok(candidate);
+    }
     jcs_canonicalize::sha256_jcs_hex(value).map_err(|error| {
         invalid_stage_payload(format!(
             "stage payload source ref is not JCS canonicalizable: {error}"
         ))
     })
+}
+
+fn candidate_ref_key(value: &Value) -> Result<Option<String>, PublicSeamError> {
+    if let Some(candidate) = value
+        .as_str()
+        .filter(|candidate| candidate.starts_with("cand_"))
+    {
+        return Ok(Some(format!("candidate:{candidate}")));
+    }
+    let Some(object) = value.as_object() else {
+        return Ok(None);
+    };
+    if object.get("kind").and_then(Value::as_str) != Some("candidate") {
+        return Ok(None);
+    }
+    let id = required_string(object.get("id"), "candidate ref id")?;
+    Ok(Some(format!("candidate:{id}")))
 }
 
 fn receipt_ref_ids(value: Option<&Value>, field: &str) -> Result<Vec<String>, PublicSeamError> {

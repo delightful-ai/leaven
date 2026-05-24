@@ -697,6 +697,7 @@ rows:
       - crates/leaven-public-seam/src/stage_payload.rs::reject_target_leakage
       - crates/leaven-public-seam/src/stage_payload.rs::require_output_record_data_class_coverage
       - crates/leaven-public-seam/src/stage_payload.rs::validate_reflection_diagnosis_sources
+      - crates/leaven-public-seam/src/stage_payload.rs::candidate_ref_key
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_stage_payload_document
       - crates/leaven-public-seam/AGENTS.md
     review_evidence:
@@ -799,6 +800,7 @@ rows:
       - crates/leaven-public-seam/src/stage_payload.rs::require_parent_source_ref
       - crates/leaven-public-seam/src/stage_payload.rs::require_reflection_source_refs
       - crates/leaven-public-seam/src/stage_payload.rs::source_ref_set
+      - crates/leaven-public-seam/src/stage_payload.rs::candidate_ref_key
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_stage_payload_document
       - crates/leaven-public-seam/AGENTS.md
     review_evidence:
@@ -849,6 +851,7 @@ rows:
       - crates/leaven-public-seam/src/stage_payload.rs::require_reflection_source_refs
       - crates/leaven-public-seam/src/stage_payload.rs::require_output_record_data_class_coverage
       - crates/leaven-public-seam/src/stage_payload.rs::source_ref_set
+      - crates/leaven-public-seam/src/stage_payload.rs::candidate_ref_key
       - crates/leaven-public-seam/src/stage_payload.rs::inspect_runner_request
       - crates/leaven-public-seam/src/stage_payload.rs::inspect_schema_bound_payload
       - crates/leaven-public-seam/src/stage_payload.rs::require_non_empty_array
