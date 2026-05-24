@@ -185,6 +185,7 @@ fn command_output(
         status: output.status,
         stdout: limit_output(output.stdout, max_stdout_bytes),
         stderr: limit_output(output.stderr, max_stderr_bytes),
+        output_files: std::collections::BTreeMap::new(),
         duration: output.duration,
     }
 }

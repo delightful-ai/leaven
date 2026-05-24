@@ -880,6 +880,28 @@ impl PlanSandboxExecOutcome {
         stdout_ref: Value,
         stderr_ref: Value,
     ) -> Result<Self, PublicSeamError> {
+        Self::from_command_output_with_file_refs(
+            output,
+            runtime_fingerprint,
+            stdout_ref,
+            stderr_ref,
+            std::iter::empty::<(WorkspacePath, Value)>(),
+        )
+    }
+
+    /// Creates a sandbox outcome from command output plus blob refs for captured files.
+    ///
+    /// Every file captured by the backend-neutral command output must have a
+    /// matching blob ref, and every supplied file blob ref must correspond to a
+    /// captured workspace file. This keeps file artifacts bound to the command
+    /// result instead of letting hosts attach unrelated blobs after execution.
+    pub fn from_command_output_with_file_refs(
+        output: leaven_kernel::Metered<CommandOutput>,
+        runtime_fingerprint: leaven_kernel::Fingerprint,
+        stdout_ref: Value,
+        stderr_ref: Value,
+        file_refs: impl IntoIterator<Item = (WorkspacePath, Value)>,
+    ) -> Result<Self, PublicSeamError> {
         let leaven_kernel::Metered { value, cost } = output;
         validate_stream_blob_ref(&stdout_ref, &value.stdout.bytes, "sandbox stdout")?;
         validate_stream_blob_ref(&stderr_ref, &value.stderr.bytes, "sandbox stderr")?;
@@ -888,9 +910,42 @@ impl PlanSandboxExecOutcome {
             fingerprint_hex(runtime_fingerprint)
         ));
         outcome.exit_code = value.status.code.map(i64::from);
-        Ok(outcome
-            .with_stream_refs(stdout_ref, stderr_ref)
-            .with_cost(cost_value(&cost)))
+        outcome = outcome.with_stream_refs(stdout_ref, stderr_ref);
+
+        let mut file_refs_by_path = BTreeMap::new();
+        for (path, blob_ref) in file_refs {
+            if file_refs_by_path.insert(path.clone(), blob_ref).is_some() {
+                return Err(invalid_call(format!(
+                    "sandbox output file `{}` has duplicate blob refs",
+                    path.as_str()
+                )));
+            }
+        }
+        for path in file_refs_by_path.keys() {
+            if !value.output_files.contains_key(path) {
+                return Err(invalid_call(format!(
+                    "sandbox output file `{}` blob ref does not match a captured command output file",
+                    path.as_str()
+                )));
+            }
+        }
+        for (path, captured) in &value.output_files {
+            if captured.truncated {
+                return Err(invalid_call(format!(
+                    "sandbox output file `{}` capture is truncated and cannot be bound to a blob ref",
+                    path.as_str()
+                )));
+            }
+            let blob_ref = file_refs_by_path.get(path).ok_or_else(|| {
+                invalid_call(format!(
+                    "sandbox output file `{}` is missing a blob ref",
+                    path.as_str()
+                ))
+            })?;
+            outcome = outcome.with_file_ref(path.as_str(), blob_ref.clone(), &captured.bytes)?;
+        }
+
+        Ok(outcome.with_cost(cost_value(&cost)))
     }
 
     /// Attaches stdout and stderr blob references.

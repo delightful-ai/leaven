@@ -386,6 +386,7 @@ fn agent_session_round_trips_for_durable_evidence() {
                 truncated: true,
             },
             stderr: CapturedOutput::empty(),
+            output_files: BTreeMap::new(),
             duration: std::time::Duration::from_millis(42),
         },
     });
@@ -500,6 +501,7 @@ impl WorkspaceBackend for MemoryBackend {
             status: ExitStatus { code: Some(0) },
             stdout: CapturedOutput::new(b"compiled".to_vec(), None),
             stderr: CapturedOutput::empty(),
+            output_files: BTreeMap::new(),
             duration: std::time::Duration::ZERO,
         })
     }

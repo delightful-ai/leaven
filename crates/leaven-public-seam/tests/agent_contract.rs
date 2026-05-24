@@ -229,6 +229,7 @@ fn scripted_agent_session(program: &str) -> Metered<AgentSession> {
             status: ExitStatus { code: Some(0) },
             stdout: CapturedOutput::empty(),
             stderr: CapturedOutput::empty(),
+            output_files: std::collections::BTreeMap::new(),
             duration: std::time::Duration::from_millis(10),
         },
     });

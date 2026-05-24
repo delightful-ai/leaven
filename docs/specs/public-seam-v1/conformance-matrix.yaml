@@ -1697,6 +1697,7 @@ rows:
       - crates/leaven-public-seam/tests/sandbox_contract.rs::sandbox_exec_can_project_provider_neutral_command_output_into_plan_result
       - crates/leaven-public-seam/tests/sandbox_contract.rs::sandbox_exec_command_output_projection_rejects_unbound_stream_blob_refs
       - crates/leaven-public-seam/tests/sandbox_contract.rs::sandbox_exec_output_file_refs_must_bind_captured_bytes
+      - crates/leaven-public-seam/tests/sandbox_contract.rs::sandbox_exec_command_output_projection_requires_captured_output_file_refs
       - crates/leaven-public-seam/tests/sandbox_contract.rs::sandbox_exec_command_output_projection_preserves_missing_exit_for_validation
       - crates/leaven-public-seam/tests/plan_document.rs::call_results_reject_missing_receipts_and_wrong_kinds_even_with_valid_hashes
       - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_modes_require_cached_rejects_agent_and_sandbox_live_work
@@ -1729,6 +1730,7 @@ rows:
       - crates/leaven-public-seam/src/plan_execution/receipts.rs::validate_external_call_cost_binding
       - crates/leaven-workspace/src/command.rs::Command
       - crates/leaven-workspace/src/command.rs::CommandLimits
+      - crates/leaven-workspace/src/command.rs::CommandOutput::output_files
       - crates/leaven-public-seam/src/acp_profile/extension_result.rs::extension_result_contract
       - crates/leaven-public-seam/src/acp_profile/extension_result.rs::validate_receipts_for_method
       - crates/leaven-public-seam/src/acp_profile/extension_result.rs::validate_effect_primary_audit

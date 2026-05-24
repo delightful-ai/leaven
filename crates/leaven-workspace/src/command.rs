@@ -57,7 +57,32 @@ pub struct CommandOutput {
     pub status: ExitStatus,
     pub stdout: CapturedOutput,
     pub stderr: CapturedOutput,
+    pub output_files: BTreeMap<WorkspacePath, CapturedOutput>,
     pub duration: Duration,
+}
+
+impl CommandOutput {
+    #[must_use]
+    pub fn new(
+        status: ExitStatus,
+        stdout: CapturedOutput,
+        stderr: CapturedOutput,
+        duration: Duration,
+    ) -> Self {
+        Self {
+            status,
+            stdout,
+            stderr,
+            output_files: BTreeMap::new(),
+            duration,
+        }
+    }
+
+    #[must_use]
+    pub fn with_output_file(mut self, path: WorkspacePath, output: CapturedOutput) -> Self {
+        self.output_files.insert(path, output);
+        self
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

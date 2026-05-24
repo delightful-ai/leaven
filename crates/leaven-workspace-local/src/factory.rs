@@ -136,6 +136,7 @@ impl WorkspaceBackend for LocalWorkspaceBackend {
             },
             stdout: CapturedOutput::new(output.stdout, command.limits.max_stdout_bytes),
             stderr: CapturedOutput::new(output.stderr, command.limits.max_stderr_bytes),
+            output_files: std::collections::BTreeMap::new(),
             duration: start.elapsed(),
         })
     }
