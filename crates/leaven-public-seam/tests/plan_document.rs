@@ -791,6 +791,37 @@ fn capability_execution_denies_calls_that_drop_dependency_data_classes() {
 }
 
 #[test]
+fn capability_execution_ignores_domain_json_data_classes_inside_dependencies() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut plan = typed_let_call_write_plan();
+    plan["mode"] = json!({"kind": "execute"});
+    plan["ops"][0]["expr"]["value"] = json!({
+        "question": "Say ok",
+        "payload": {
+            "data_classes": ["external.secret"]
+        }
+    });
+    plan["ops"].as_array_mut().unwrap().pop();
+    plan["return"] = json!(["completion"]);
+    let mut host = RecordingPlanHost::default();
+
+    package
+        .execute_plan_document_with_capability(
+            &plan,
+            &plan_execution_context(),
+            &call_execution_capability(&["public"], &["external.secret"], false),
+            &mut host,
+        )
+        .unwrap();
+
+    assert_eq!(host.calls, vec!["completion"]);
+    assert_eq!(
+        host.call_deps["prompt"]["payload"]["data_classes"],
+        json!(["external.secret"])
+    );
+}
+
+#[test]
 fn evaluator_target_reads_reject_missing_or_unbound_case_query_receipts() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let plan = evaluator_target_case_query_plan();

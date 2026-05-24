@@ -237,7 +237,10 @@ static Plan IR gate. Before any capability-scoped call reaches the host, the
 seam collects `data_classes` from resolved dependency values, requires the call
 to declare those classes in `input_classes`, and authorizes the effective union
 against the capability grant. A call may not drop `case.target` or another
-forbidden dependency class by relabeling only its own declared inputs.
+forbidden dependency class by relabeling only its own declared inputs. The
+collector is limited to recognized seam wire metadata carriers and nested
+blob/trace/reference fields; arbitrary application JSON fields named
+`data_classes` are domain payload, not authorization metadata.
 
 The
 `PublicSeamPackage::validate_plan_execution_result` route additionally proves
@@ -463,9 +466,11 @@ backpressure, or runtime watch support.
   mismatched embedded reflection results, mismatched run/capability facts, and
   change proposals without allowed change schema authority. It also rejects
   public-only scorer and judge outputs that satisfy schema shape but do not
-  declare candidate/artifact output provenance. It does not prove runtime stage
-  lowering, ACP transport, provider calls, proposal graph mutation, or
-  independent output-identity truth for arbitrary stage JSON.
+  declare candidate/artifact output provenance, plus scorer and judge outputs
+  whose nested blob or trace data classes are not covered by the enclosing
+  output record. It does not prove runtime stage lowering, ACP transport,
+  provider calls, proposal graph mutation, or independent output-identity truth
+  for arbitrary stage JSON.
 - `tests/acp_profile.rs` proves locked Leaven ACP profile semantics for pinned
   ACP version, stdio-first transport preference, Leaven-only extension methods,
   capability-action mapping, locked Plan IR/Plan Result schema bindings,

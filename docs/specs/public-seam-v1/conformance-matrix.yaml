@@ -615,6 +615,7 @@ rows:
       - crates/leaven-public-seam/tests/call_authority.rs::call_authority_rejects_declared_forbidden_intersections_even_when_grant_allows
       - crates/leaven-public-seam/tests/call_authority.rs::call_authority_rejects_reflector_lm_call_input_classes_include_case_target
       - crates/leaven-public-seam/tests/plan_document.rs::capability_execution_denies_calls_that_drop_dependency_data_classes
+      - crates/leaven-public-seam/tests/plan_document.rs::capability_execution_ignores_domain_json_data_classes_inside_dependencies
       - crates/leaven-public-seam/tests/evidence_envelope.rs::evidence_envelope_rejects_source_receipt_family_mismatches
       - crates/leaven-public-seam/tests/plan_result.rs::plan_result_preserves_value_visibility_data_classes
       - crates/leaven-public-seam/tests/plan_result.rs::plan_result_rejects_value_trace_and_blob_ref_data_class_gaps
@@ -629,6 +630,7 @@ rows:
       - crates/leaven-public-seam/src/call_authority.rs::CallAuthorityReport
       - crates/leaven-public-seam/src/call_authority.rs::validate
       - crates/leaven-public-seam/src/call_authority.rs::validate_call_with_dependency_classes
+      - crates/leaven-public-seam/src/call_authority.rs::collect_data_classes
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_call_authority_document
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::execute_plan_document_with_capability
       - crates/leaven-public-seam/src/execution_authority.rs::validate
@@ -847,6 +849,7 @@ rows:
       - crates/leaven-public-seam/tests/stage_payloads.rs::propose_request_requires_reflection_result_and_change_schema_authority
       - crates/leaven-public-seam/tests/stage_payloads.rs::propose_request_rejects_reflection_source_ref_drop
       - crates/leaven-public-seam/tests/stage_payloads.rs::stage_score_contexts_reject_public_only_assessed_outputs
+      - crates/leaven-public-seam/tests/stage_payloads.rs::score_and_judge_contexts_reject_nested_output_data_class_gaps
       - crates/leaven-public-seam/tests/stage_payloads.rs::runner_request_rejects_case_target_material
       - crates/leaven-public-seam/tests/stage_payloads.rs::callback_and_adapter_payloads_reject_missing_payload_schema
     partial_contract_implementation_evidence:

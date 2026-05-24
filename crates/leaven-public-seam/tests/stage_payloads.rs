@@ -497,6 +497,58 @@ fn stage_score_contexts_reject_public_only_assessed_outputs() {
 }
 
 #[test]
+fn score_and_judge_contexts_reject_nested_output_data_class_gaps() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut scorer_blob_gap = score_context();
+    scorer_blob_gap["output"]["blob_ref"] = json!({
+        "kind": "blob_ref",
+        "id": "blob_scorer_output",
+        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "bytes": 32,
+        "data_classes": ["external.secret"]
+    });
+    assert!(matches!(
+        package
+            .validate_stage_payload_document(&scorer_blob_gap)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+
+    let mut scorer_trace_gap = score_context();
+    scorer_trace_gap["output"]["trace_refs"] = json!([
+        {
+            "kind": "runner_trace",
+            "id": "trace_scorer_output",
+            "visibility": "redacted_completion",
+            "data_classes": ["completion.raw"]
+        }
+    ]);
+    assert!(matches!(
+        package
+            .validate_stage_payload_document(&scorer_trace_gap)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+
+    let mut judge_trace_gap = judge_context();
+    judge_trace_gap["outputs"][0]["trace_refs"] = json!([
+        {
+            "kind": "runner_trace",
+            "id": "trace_judge_output",
+            "visibility": "redacted_completion",
+            "data_classes": ["completion.raw"]
+        }
+    ]);
+    assert!(matches!(
+        package
+            .validate_stage_payload_document(&judge_trace_gap)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+}
+
+#[test]
 fn propose_request_requires_reflection_result_and_change_schema_authority() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
 

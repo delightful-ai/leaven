@@ -729,6 +729,18 @@ fn inspect_score_context(object: &serde_json::Map<String, Value>) -> Result<(), 
             ));
         }
     }
+    let output_classes = string_array(
+        object
+            .get("output")
+            .and_then(|output| output.get("data_classes")),
+        "output.data_classes",
+    )?;
+    require_output_record_data_class_coverage(
+        &output_classes,
+        object.get("output"),
+        "score context output data_classes",
+        "score output nested data class",
+    )?;
     Ok(())
 }
 
@@ -741,6 +753,13 @@ fn inspect_judge_context(object: &serde_json::Map<String, Value>) -> Result<(), 
     }
     for output in required_array(object.get("outputs"), "outputs")? {
         require_assessed_output_data_class(Some(output), "judge context output")?;
+        let output_classes = string_array(output.get("data_classes"), "outputs.data_classes")?;
+        require_output_record_data_class_coverage(
+            &output_classes,
+            Some(output),
+            "judge context output data_classes",
+            "judge output nested data class",
+        )?;
     }
     Ok(())
 }
