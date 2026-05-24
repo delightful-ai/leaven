@@ -846,6 +846,7 @@ rows:
       - crates/leaven-public-seam/tests/stage_payloads.rs::reflect_request_rejects_parent_source_or_surface_context_gaps
       - crates/leaven-public-seam/tests/stage_payloads.rs::propose_request_requires_reflection_result_and_change_schema_authority
       - crates/leaven-public-seam/tests/stage_payloads.rs::propose_request_rejects_reflection_source_ref_drop
+      - crates/leaven-public-seam/tests/stage_payloads.rs::stage_score_contexts_reject_public_only_assessed_outputs
       - crates/leaven-public-seam/tests/stage_payloads.rs::runner_request_rejects_case_target_material
       - crates/leaven-public-seam/tests/stage_payloads.rs::callback_and_adapter_payloads_reject_missing_payload_schema
     partial_contract_implementation_evidence:
@@ -857,6 +858,7 @@ rows:
       - crates/leaven-public-seam/src/stage_payload.rs::require_reflect_surface_context
       - crates/leaven-public-seam/src/stage_payload.rs::require_read_receipt_refs
       - crates/leaven-public-seam/src/stage_payload.rs::validate_reflection_diagnosis_sources
+      - crates/leaven-public-seam/src/stage_payload.rs::require_assessed_output_data_class
       - crates/leaven-public-seam/src/stage_payload.rs::inspect_propose_request
       - crates/leaven-public-seam/src/stage_payload.rs::require_reflection_source_refs
       - crates/leaven-public-seam/src/stage_payload.rs::require_output_record_data_class_coverage
