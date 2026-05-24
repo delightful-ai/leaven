@@ -675,12 +675,15 @@ fn workspace_query_reads_require_live_handles_and_emit_query_receipts() {
         vec![
             "workspace_materialize",
             "workspace_read_file",
-            "workspace_list"
+            "workspace_list",
+            "workspace_snapshot",
+            "workspace_git_diff",
+            "workspace_capture_artifacts"
         ]
     );
     assert_eq!(
         report.document().receipt_kinds(),
-        &["call", "query", "query"]
+        &["call", "query", "query", "query", "query", "query"]
     );
     assert_eq!(
         report.value()["values"]["file"]["kind"].as_str(),
@@ -699,6 +702,18 @@ fn workspace_query_reads_require_live_handles_and_emit_query_receipts() {
     assert_eq!(
         report.value()["values"]["listing"]["entries"][0]["data_classes"][0].as_str(),
         Some("candidate.artifact")
+    );
+    assert_eq!(
+        report.value()["values"]["snapshot"]["kind"].as_str(),
+        Some("workspace_snapshot")
+    );
+    assert_eq!(
+        report.value()["values"]["diff"]["kind"].as_str(),
+        Some("workspace_diff")
+    );
+    assert_eq!(
+        report.value()["values"]["captured"]["kind"].as_str(),
+        Some("workspace_listing")
     );
 }
 
@@ -1377,56 +1392,90 @@ fn workspace_materialize_query_plan() -> Value {
             "kind": "execute"
         },
         "ops": [
-            {
-                "kind": "call",
-                "name": "workspace",
-                "idempotency_key": "plan-workspace-query-0001",
-                "call": {
-                    "kind": "workspace_materialize",
-                    "candidate": "cand_planexec",
-                    "surface": "program",
-                    "mode": "copy_on_write",
-                    "lifetime": "manual_release"
-                }
-            },
-            {
-                "kind": "let",
-                "name": "file",
-                "deps": ["workspace"],
-                "expr": {
-                    "kind": "workspace_query",
-                    "workspace": {
+            workspace_materialize_call_op("plan-workspace-query-0001"),
+            workspace_query_let_op(
+                "file",
+                json!({
                         "kind": "workspace",
                         "run": "run_demo",
                         "id": "ws_planexec_materialized"
-                    },
-                    "op": {
-                        "kind": "read_file",
-                        "path": "README.md",
-                        "expected_data_classes": ["candidate.artifact"]
-                    }
-                }
-            },
-            {
-                "kind": "let",
-                "name": "listing",
-                "deps": ["workspace"],
-                "expr": {
-                    "kind": "workspace_query",
-                    "workspace": "ws_planexec_materialized",
-                    "op": {
-                        "kind": "list",
-                        "path": ".",
-                        "recursive": false,
-                        "max_entries": 10
-                    }
-                }
-            }
+                }),
+                json!({
+                    "kind": "read_file",
+                    "path": "README.md",
+                    "expected_data_classes": ["candidate.artifact"]
+                }),
+            ),
+            workspace_query_let_op(
+                "listing",
+                json!("ws_planexec_materialized"),
+                json!({
+                    "kind": "list",
+                    "path": ".",
+                    "recursive": false,
+                    "max_entries": 10
+                }),
+            ),
+            workspace_query_let_op(
+                "snapshot",
+                json!("ws_planexec_materialized"),
+                json!({"kind": "snapshot"}),
+            ),
+            workspace_query_let_op(
+                "diff",
+                json!("ws_planexec_materialized"),
+                json!({
+                    "kind": "git_diff",
+                    "against": "seed",
+                    "max_bytes": 4096
+                }),
+            ),
+            workspace_query_let_op(
+                "captured",
+                json!("ws_planexec_materialized"),
+                json!({
+                    "kind": "capture_artifacts",
+                    "paths": ["README.md"],
+                    "max_bytes": 4096
+                }),
+            )
         ],
-        "return": ["workspace", "file", "listing"],
+        "return": ["workspace", "file", "listing", "snapshot", "diff", "captured"],
         "commit": {
             "kind": "graph_writes_atomic",
             "on_stale": "reject"
+        }
+    })
+}
+
+fn workspace_materialize_call_op(idempotency_key: &str) -> Value {
+    json!({
+        "kind": "call",
+        "name": "workspace",
+        "idempotency_key": idempotency_key,
+        "call": {
+            "kind": "workspace_materialize",
+            "candidate": "cand_planexec",
+            "surface": "program",
+            "mode": "copy_on_write",
+            "lifetime": "manual_release"
+        }
+    })
+}
+
+fn workspace_query_let_op(
+    name: &str,
+    workspace: impl serde::Serialize,
+    op: impl serde::Serialize,
+) -> Value {
+    json!({
+        "kind": "let",
+        "name": name,
+        "deps": ["workspace"],
+        "expr": {
+            "kind": "workspace_query",
+            "workspace": workspace,
+            "op": op
         }
     })
 }
@@ -2028,6 +2077,47 @@ impl PlanExecutionHost for RecordingPlanHost {
             ("listing", "list") => {
                 assert_eq!(request.path()?, Some("."));
                 self.calls.push("workspace_list");
+                Ok(PlanWorkspaceQueryOutcome::new(
+                    json!({
+                        "kind": "workspace_listing",
+                        "entries": [
+                            {
+                                "path": "README.md",
+                                "kind": "file",
+                                "bytes": 14,
+                                "data_classes": ["candidate.artifact"]
+                            }
+                        ]
+                    }),
+                    "rev_planexec_base",
+                )
+                .with_data_classes(["candidate.artifact".to_owned(), "public".to_owned()]))
+            }
+            ("snapshot", "snapshot") => {
+                self.calls.push("workspace_snapshot");
+                Ok(PlanWorkspaceQueryOutcome::new(
+                    json!({
+                        "kind": "workspace_snapshot",
+                        "workspace": "ws_planexec_materialized",
+                        "digest": "sha256:planexec"
+                    }),
+                    "rev_planexec_base",
+                )
+                .with_data_classes(["candidate.artifact".to_owned(), "public".to_owned()]))
+            }
+            ("diff", "git_diff") => {
+                self.calls.push("workspace_git_diff");
+                Ok(PlanWorkspaceQueryOutcome::new(
+                    json!({
+                        "kind": "workspace_diff",
+                        "text": "diff --git a/README.md b/README.md"
+                    }),
+                    "rev_planexec_base",
+                )
+                .with_data_classes(["candidate.artifact".to_owned(), "public".to_owned()]))
+            }
+            ("captured", "capture_artifacts") => {
+                self.calls.push("workspace_capture_artifacts");
                 Ok(PlanWorkspaceQueryOutcome::new(
                     json!({
                         "kind": "workspace_listing",
