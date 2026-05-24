@@ -220,10 +220,26 @@ fn parse_source_receipts(
         .get("source_receipts")
         .and_then(Value::as_object)
         .ok_or_else(|| invalid_evidence("source_receipts must be an object"))?;
+    let read = required_receipt_ref_vec(source_receipts.get("read"), "source_receipts.read")?;
+    let effect = required_receipt_ref_vec(source_receipts.get("effect"), "source_receipts.effect")?;
+    let write = optional_receipt_ref_vec(source_receipts.get("write"), "source_receipts.write")?;
+    require_receipt_family(&read, "source_receipts.read", is_read_receipt_id, "read")?;
+    require_receipt_family(
+        &effect,
+        "source_receipts.effect",
+        is_effect_receipt_id,
+        "effect",
+    )?;
+    require_receipt_family(
+        &write,
+        "source_receipts.write",
+        is_write_receipt_id,
+        "write",
+    )?;
     Ok(SourceReceipts {
-        read: required_receipt_ref_vec(source_receipts.get("read"), "source_receipts.read")?,
-        effect: required_receipt_ref_vec(source_receipts.get("effect"), "source_receipts.effect")?,
-        write: optional_receipt_ref_vec(source_receipts.get("write"), "source_receipts.write")?,
+        read,
+        effect,
+        write,
     })
 }
 
@@ -396,6 +412,22 @@ fn receipt_ref_vec(values: &[Value], field: &str) -> Result<Vec<String>, PublicS
         .collect()
 }
 
+fn require_receipt_family(
+    receipts: &[String],
+    field: &str,
+    predicate: impl Fn(&str) -> bool,
+    family: &str,
+) -> Result<(), PublicSeamError> {
+    for receipt in receipts {
+        if !predicate(receipt) {
+            return Err(invalid_evidence(format!(
+                "{field} must contain {family} receipt refs, got `{receipt}`"
+            )));
+        }
+    }
+    Ok(())
+}
+
 fn receipt_ref_id(value: &Value, field: &str) -> Result<String, PublicSeamError> {
     if let Some(id) = value.as_str() {
         return Ok(id.to_owned());
@@ -413,6 +445,23 @@ fn receipt_ref_id(value: &Value, field: &str) -> Result<String, PublicSeamError>
         .and_then(Value::as_str)
         .map(ToOwned::to_owned)
         .ok_or_else(|| invalid_evidence(format!("{field} receipt ref object must carry id")))
+}
+
+fn is_read_receipt_id(receipt: &str) -> bool {
+    receipt.starts_with("qrec_")
+        || receipt.starts_with("caseread_")
+        || receipt.starts_with("wsread_")
+}
+
+fn is_effect_receipt_id(receipt: &str) -> bool {
+    receipt.starts_with("lmrec_")
+        || receipt.starts_with("agentrec_")
+        || receipt.starts_with("execrec_")
+        || receipt.starts_with("humanrec_")
+}
+
+fn is_write_receipt_id(receipt: &str) -> bool {
+    receipt.starts_with("wrec_")
 }
 
 fn string_vec(values: &[Value], field: &str) -> Result<Vec<String>, PublicSeamError> {
