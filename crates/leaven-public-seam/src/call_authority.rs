@@ -81,6 +81,7 @@ pub fn validate(
                 "reflector lm_complete calls must not carry case.target input classes",
             ));
         }
+        validate_execution_policy(capability, call_kind, call)?;
         let mut request = CapabilityGrantRequest::for_action(action_for_call(call_kind)?);
         for data_class in &input_classes {
             report.checked_input_classes.insert(data_class.clone());
@@ -99,6 +100,87 @@ pub fn validate(
         }
     }
     Ok(report)
+}
+
+fn validate_execution_policy(
+    capability: &CapabilityDocument,
+    call_kind: &str,
+    call: &serde_json::Map<String, Value>,
+) -> Result<(), PublicSeamError> {
+    match call_kind {
+        "agent_run" => validate_agent_execution_policy(capability, call),
+        "sandbox_exec" => validate_sandbox_execution_policy(capability),
+        _ => Ok(()),
+    }
+}
+
+fn validate_agent_execution_policy(
+    capability: &CapabilityDocument,
+    call: &serde_json::Map<String, Value>,
+) -> Result<(), PublicSeamError> {
+    let Some(policy) = call.get("tool_policy").and_then(Value::as_object) else {
+        return Ok(());
+    };
+    if policy
+        .get("allow_shell")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+        && capability.execution_policy_subprocess() != "allow"
+    {
+        return Err(invalid_authority(
+            "agent_run allow_shell denied by execution_policy.subprocess",
+        ));
+    }
+    if let Some(network) = policy.get("network").and_then(Value::as_str) {
+        validate_network_request(capability.execution_policy_network(), network)?;
+    }
+    Ok(())
+}
+
+fn validate_sandbox_execution_policy(
+    capability: &CapabilityDocument,
+) -> Result<(), PublicSeamError> {
+    if capability.execution_policy_subprocess() == "deny" {
+        return Err(invalid_authority(
+            "sandbox_exec denied by execution_policy.subprocess",
+        ));
+    }
+    if capability.execution_policy_filesystem() != "workspace_handles_only" {
+        return Err(invalid_authority(
+            "sandbox_exec requires workspace_handles_only execution_policy.filesystem",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_network_request(allowed: &str, requested: &str) -> Result<(), PublicSeamError> {
+    let allowed_rank = network_rank(allowed).ok_or_else(|| {
+        invalid_authority(format!(
+            "capability execution_policy.network `{allowed}` is not in the V1 policy lattice"
+        ))
+    })?;
+    let requested_rank = network_rank(requested).ok_or_else(|| {
+        invalid_authority(format!(
+            "agent_run network policy `{requested}` is not in the V1 policy lattice"
+        ))
+    })?;
+    if requested_rank <= allowed_rank {
+        Ok(())
+    } else {
+        Err(invalid_authority(format!(
+            "agent_run network policy `{requested}` exceeds execution_policy.network `{allowed}`"
+        )))
+    }
+}
+
+const fn network_rank(policy: &str) -> Option<u8> {
+    match policy.as_bytes() {
+        b"deny" => Some(0),
+        b"leaven_endpoint_only" => Some(1),
+        b"allowlist" => Some(2),
+        b"unrestricted" => Some(3),
+        _ => None,
+    }
 }
 
 fn action_for_call(call_kind: &str) -> Result<&'static str, PublicSeamError> {

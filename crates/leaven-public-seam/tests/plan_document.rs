@@ -221,6 +221,34 @@ fn plan_execution_with_capability_allows_workspace_lifecycle_calls() {
 }
 
 #[test]
+fn plan_execution_with_capability_denies_sandbox_policy_before_host_effects() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut capability = sandbox_exec_capability_value();
+    capability["execution_policy"]["subprocess"] = json!("deny");
+    let capability = CapabilityDocument::from_value(capability).unwrap();
+
+    let mut host = RecordingPlanHost::default();
+    let error = package
+        .execute_plan_document_with_capability(
+            &sandbox_exec_workspace_plan(),
+            &plan_execution_context(),
+            &capability,
+            &mut host,
+        )
+        .unwrap_err();
+
+    assert!(
+        error
+            .to_string()
+            .contains("sandbox_exec denied by execution_policy.subprocess"),
+        "unexpected error: {error:?}"
+    );
+    assert!(host.calls.is_empty());
+    assert!(host.cached_calls.is_empty());
+    assert!(host.writes.is_empty());
+}
+
+#[test]
 fn plan_execution_with_capability_gates_evaluator_writes_before_host_effects() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
 
@@ -4818,6 +4846,34 @@ fn workspace_lifecycle_capability(include_release: bool) -> CapabilityDocument {
         }));
     }
     CapabilityDocument::from_value(base_execution_capability(&grants)).unwrap()
+}
+
+fn sandbox_exec_capability_value() -> Value {
+    base_execution_capability(&[
+        json!({
+            "action": "workspace.materialize",
+            "resource": {
+                "candidate_ids": ["cand_planexec"]
+            },
+            "constraints": {
+                "workspace_ops": ["materialize"]
+            }
+        }),
+        json!({
+            "action": "sandbox.exec",
+            "resource": {
+                "workspace_ids": ["ws_planexec_materialized"]
+            },
+            "constraints": {
+                "allowed_input_classes": ["public"],
+                "workspace_ops": ["exec"],
+                "allowed_commands": ["python"]
+            },
+            "limits": {
+                "timeout_s": 1
+            }
+        }),
+    ])
 }
 
 fn assessment_submit_capability(
