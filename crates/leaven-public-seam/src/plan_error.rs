@@ -30,6 +30,7 @@ pub fn plan_error_receipt_id(error: &Map<String, Value>) -> Result<&str, String>
 
 pub fn receipt_ref_id<'a>(value: &'a Value, field: &str) -> Result<&'a str, String> {
     if let Some(receipt) = value.as_str() {
+        require_receipt_id(receipt, field)?;
         return Ok(receipt);
     }
     let object = value
@@ -38,7 +39,9 @@ pub fn receipt_ref_id<'a>(value: &'a Value, field: &str) -> Result<&'a str, Stri
     if object.get("kind").and_then(Value::as_str) != Some("receipt") {
         return Err(format!("{field} object must have kind `receipt`"));
     }
-    required_string(object.get("id"), &format!("{field} id"))
+    let receipt = required_string(object.get("id"), &format!("{field} id"))?;
+    require_receipt_id(receipt, field)?;
+    Ok(receipt)
 }
 
 pub fn is_closed_plan_error_code(code: &str) -> bool {
@@ -74,4 +77,36 @@ fn required_string<'a>(value: Option<&'a Value>, field: &str) -> Result<&'a str,
     value
         .and_then(Value::as_str)
         .ok_or_else(|| format!("{field} must be a string"))
+}
+
+fn require_receipt_id(receipt: &str, field: &str) -> Result<(), String> {
+    if is_locked_receipt_id(receipt) {
+        return Ok(());
+    }
+    Err(format!(
+        "{field} must match the locked public-seam ReceiptId grammar"
+    ))
+}
+
+fn is_locked_receipt_id(receipt: &str) -> bool {
+    let Some((prefix, suffix)) = receipt.split_once('_') else {
+        return false;
+    };
+    matches!(
+        prefix,
+        "qrec"
+            | "caseread"
+            | "wsread"
+            | "lmrec"
+            | "agentrec"
+            | "execrec"
+            | "humanrec"
+            | "wrec"
+            | "chargerec"
+            | "valrec"
+            | "watchrec"
+    ) && !suffix.is_empty()
+        && suffix
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'.' | b':' | b'-'))
 }

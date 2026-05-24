@@ -618,7 +618,7 @@ impl AcpSessionLifecycle {
                 )),
                 AcpBackpressure::Disconnect => {
                     let reason = "ACP session disconnected after update overflow";
-                    let receipt = format!("acprec_disconnect_{}", self.next_sequence);
+                    let receipt = format!("valrec_acp_disconnect_{}", self.next_sequence);
                     let error = cancellation_plan_error(&receipt, "cancelled", reason);
                     let cancellation = self.cancel_with_error(reason, receipt, error)?;
                     Ok(AcpProgressDisposition::Disconnected(

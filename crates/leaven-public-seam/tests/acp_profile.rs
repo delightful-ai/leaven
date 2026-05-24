@@ -191,16 +191,16 @@ fn acp_worker_session_uses_engine_client_worker_agent_inversion_and_bounded_upda
         .lifecycle_mut()
         .cancel_with_error(
             "operator cancelled",
-            "acprec_operator_cancel",
-            plan_error("acprec_operator_cancel", "cancelled", "operator cancelled"),
+            "valrec_operator_cancel",
+            plan_error("valrec_operator_cancel", "cancelled", "operator cancelled"),
         )
         .unwrap();
     assert_eq!(cancellation.reason(), "operator cancelled");
-    assert_eq!(cancellation.receipt(), "acprec_operator_cancel");
+    assert_eq!(cancellation.receipt(), "valrec_operator_cancel");
     assert_eq!(cancellation.error()["code"], json!("cancelled"));
     assert_eq!(
         cancellation.error()["receipt"],
-        json!("acprec_operator_cancel")
+        json!("valrec_operator_cancel")
     );
     assert_eq!(session.lifecycle().state(), AcpSessionState::Cancelled);
     assert!(session.lifecycle().is_cancelled());
@@ -209,8 +209,8 @@ fn acp_worker_session_uses_engine_client_worker_agent_inversion_and_bounded_upda
             .lifecycle_mut()
             .cancel_with_error(
                 "ignored duplicate",
-                "acprec_duplicate_cancel",
-                plan_error("acprec_duplicate_cancel", "cancelled", "ignored duplicate"),
+                "valrec_duplicate_cancel",
+                plan_error("valrec_duplicate_cancel", "cancelled", "ignored duplicate"),
             )
             .unwrap()
             .reason(),
@@ -236,23 +236,28 @@ fn acp_lifecycle_cancellation_requires_receipts_and_closed_plan_errors() {
     for (receipt, error, expected) in [
         (
             "",
-            plan_error("acprec_cancel", "cancelled", "operator cancelled"),
+            plan_error("valrec_cancel", "cancelled", "operator cancelled"),
             "ACP cancellation receipt must be non-empty",
         ),
         (
-            "acprec_cancel",
+            "valrec_cancel",
             json!({"code": "cancelled"}),
             "ACP cancellation error must carry message",
         ),
         (
-            "acprec_cancel",
-            plan_error("acprec_other", "cancelled", "operator cancelled"),
+            "valrec_cancel",
+            plan_error("valrec_other", "cancelled", "operator cancelled"),
             "ACP cancellation error receipt must match cancellation receipt",
         ),
         (
-            "acprec_cancel",
-            plan_error("acprec_cancel", "not_a_closed_code", "operator cancelled"),
+            "valrec_cancel",
+            plan_error("valrec_cancel", "not_a_closed_code", "operator cancelled"),
             "ACP cancellation error code must be a closed PlanError code",
+        ),
+        (
+            "acprec_cancel",
+            plan_error("acprec_cancel", "cancelled", "operator cancelled"),
+            "ReceiptId grammar",
         ),
     ] {
         let error = lifecycle
@@ -268,11 +273,11 @@ fn acp_lifecycle_cancellation_requires_receipts_and_closed_plan_errors() {
     let cancellation = lifecycle
         .cancel_with_error(
             "operator cancelled",
-            "acprec_cancel",
-            plan_error("acprec_cancel", "cancelled", "operator cancelled"),
+            "valrec_cancel",
+            plan_error("valrec_cancel", "cancelled", "operator cancelled"),
         )
         .unwrap();
-    assert_eq!(cancellation.receipt(), "acprec_cancel");
+    assert_eq!(cancellation.receipt(), "valrec_cancel");
     assert_eq!(cancellation.error()["code"], json!("cancelled"));
     assert_eq!(cancellation.error()["message"], json!("operator cancelled"));
 
@@ -280,22 +285,22 @@ fn acp_lifecycle_cancellation_requires_receipts_and_closed_plan_errors() {
     let cancellation = object_ref_lifecycle
         .cancel_with_error(
             "operator cancelled",
-            "acprec_object_cancel",
+            "valrec_object_cancel",
             json!({
                 "code": "cancelled",
                 "message": "operator cancelled",
                 "receipt": {
                     "kind": "receipt",
-                    "id": "acprec_object_cancel",
+                    "id": "valrec_object_cancel",
                     "fingerprint": "fp_receipt_sha256_cancel"
                 }
             }),
         )
         .unwrap();
-    assert_eq!(cancellation.receipt(), "acprec_object_cancel");
+    assert_eq!(cancellation.receipt(), "valrec_object_cancel");
     assert_eq!(
         cancellation.error()["receipt"]["id"],
-        json!("acprec_object_cancel")
+        json!("valrec_object_cancel")
     );
 }
 
@@ -380,11 +385,11 @@ fn acp_lifecycle_applies_profile_backpressure_strategies() {
     ));
     assert_eq!(disconnect_lifecycle.state(), AcpSessionState::Cancelled);
     let cancellation = disconnect_lifecycle.cancellation().unwrap();
-    assert_eq!(cancellation.receipt(), "acprec_disconnect_1");
+    assert_eq!(cancellation.receipt(), "valrec_acp_disconnect_1");
     assert_eq!(cancellation.error()["code"], json!("cancelled"));
     assert_eq!(
         cancellation.error()["receipt"],
-        json!("acprec_disconnect_1")
+        json!("valrec_acp_disconnect_1")
     );
 
     let mut enqueue_disconnect = AcpSessionLifecycle::from_profile(&disconnect_profile).unwrap();
