@@ -4,7 +4,8 @@ use leaven_core::Evidence;
 use leaven_kernel::CaseId;
 use serde::{Deserialize, Serialize};
 
-use crate::{OutputRecord, ScalarEvidence};
+use crate::{DataClass, OutputRecord, ScalarEvidence};
+use leaven_kernel::CandidateId;
 
 /// Audited case-data materialization used while producing an assessment.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -72,6 +73,8 @@ pub struct CaseAssessmentEvidence {
     score: ScalarEvidence,
     output: OutputRecord,
     feedback: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    candidate_outputs: Vec<CandidateAssessmentOutput>,
     trace: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     case_data_reads: Vec<CaseDataReadEvidence>,
@@ -85,9 +88,20 @@ impl CaseAssessmentEvidence {
             score,
             output,
             feedback: feedback.into(),
+            candidate_outputs: Vec::new(),
             trace: Vec::new(),
             case_data_reads: Vec::new(),
         }
+    }
+
+    /// Attaches the candidate-bound outputs assessed by a pairwise/listwise score.
+    #[must_use]
+    pub fn with_candidate_outputs(
+        mut self,
+        outputs: impl IntoIterator<Item = CandidateAssessmentOutput>,
+    ) -> Self {
+        self.candidate_outputs = outputs.into_iter().collect();
+        self
     }
 
     /// Attaches trace lines associated with this case assessment.
@@ -125,6 +139,12 @@ impl CaseAssessmentEvidence {
         &self.feedback
     }
 
+    /// Candidate-bound output records assessed by pairwise/listwise scores.
+    #[must_use]
+    pub fn candidate_outputs(&self) -> &[CandidateAssessmentOutput] {
+        &self.candidate_outputs
+    }
+
     /// Trace lines attached to the runner/scorer assessment.
     #[must_use]
     pub fn trace(&self) -> &[String] {
@@ -139,3 +159,52 @@ impl CaseAssessmentEvidence {
 }
 
 impl Evidence for CaseAssessmentEvidence {}
+
+/// Candidate-bound output assessed by a pairwise/listwise evaluator.
+#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+pub struct CandidateAssessmentOutput {
+    candidate: CandidateId,
+    output: OutputRecord,
+}
+
+impl CandidateAssessmentOutput {
+    /// Builds a candidate-bound assessed output.
+    pub fn new(
+        candidate: CandidateId,
+        output: OutputRecord,
+    ) -> Result<Self, CandidateAssessmentOutputError> {
+        let data_classes = output.data_classes();
+        if !data_classes.contains(&DataClass::candidate_output())
+            && !data_classes.contains(&DataClass::candidate_artifact())
+        {
+            return Err(CandidateAssessmentOutputError::MissingAssessedDataClass);
+        }
+        if matches!(&output, OutputRecord::Inline { text, .. } if text.trim().is_empty()) {
+            return Err(CandidateAssessmentOutputError::EmptyInlineOutput);
+        }
+        Ok(Self { candidate, output })
+    }
+
+    /// Candidate whose output was assessed.
+    #[must_use]
+    pub const fn candidate(&self) -> CandidateId {
+        self.candidate
+    }
+
+    /// Output record bound to the candidate.
+    #[must_use]
+    pub const fn output(&self) -> &OutputRecord {
+        &self.output
+    }
+}
+
+/// Invalid candidate-bound assessed output.
+#[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
+pub enum CandidateAssessmentOutputError {
+    /// The output did not carry candidate output/artifact data.
+    #[error("candidate assessment output must carry candidate.output or candidate.artifact")]
+    MissingAssessedDataClass,
+    /// Inline candidate output was empty.
+    #[error("candidate assessment output must not be an empty inline placeholder")]
+    EmptyInlineOutput,
+}

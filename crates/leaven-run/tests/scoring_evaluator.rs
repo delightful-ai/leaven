@@ -1863,6 +1863,9 @@ fn runtime_score_outputs_project_through_public_seam_for_all_assessment_shapes()
             panic!("expected pairwise assessment");
         };
         assert_projected_public_output(&package, evidence, "42|52");
+        assert_eq!(evidence.candidate_outputs().len(), 2);
+        assert_eq!(evidence.candidate_outputs()[0].candidate(), left);
+        assert_eq!(evidence.candidate_outputs()[1].candidate(), right);
 
         let listwise = judge
             .evaluate(
@@ -1881,6 +1884,8 @@ fn runtime_score_outputs_project_through_public_seam_for_all_assessment_shapes()
             panic!("expected listwise assessment");
         };
         assert_projected_public_output(&package, evidence, "42|52|62");
+        assert_eq!(evidence.candidate_outputs().len(), 3);
+        assert_eq!(evidence.candidate_outputs()[2].candidate(), third);
     });
 }
 

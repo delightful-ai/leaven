@@ -9,7 +9,9 @@ use leaven_core::{
 };
 use leaven_engine::{CachePolicy, EvaluationContext, EvaluationError, Evaluator};
 use leaven_eval::{Case, NoTarget};
-use leaven_evidence::{CaseAssessmentEvidence, OutputRecord, ScalarEvidence};
+use leaven_evidence::{
+    CandidateAssessmentOutput, CaseAssessmentEvidence, OutputRecord, ScalarEvidence,
+};
 use leaven_kernel::{BudgetSnapshot, Cost, EvaluationSetId, EvaluatorId, Fingerprint, Metered};
 
 use crate::compatibility::ScoringEvaluatorIdentity;
@@ -541,6 +543,7 @@ where
         });
     }
     let output_scope = ReportableOutputScope::group(job.request_kind.candidates(), case_id);
+    let candidate_outputs = assessed_candidate_outputs(&outputs)?;
     let expected_output = assessed_group_output(&outputs);
     let case_data_reads = CaseDataReadLog::default();
     let mut score = scorer(JudgeScoreContext::new(
@@ -584,10 +587,28 @@ where
         case_id,
         request_kind: job.request_kind,
         evidence: CaseAssessmentEvidence::new(scalar, generated_output, score.feedback)
+            .with_candidate_outputs(candidate_outputs)
             .with_trace(trace)
             .with_case_data_reads(case_data_reads),
         cost,
     })
+}
+
+fn assessed_candidate_outputs<A, Out>(
+    outputs: &[JudgeCandidateOutput<A, Out>],
+) -> Result<Vec<CandidateAssessmentOutput>, EvaluationError> {
+    outputs
+        .iter()
+        .map(|output| {
+            let reportable = output.output.reportable_output().ok_or_else(|| {
+                EvaluationError::Message(
+                    "runner output did not declare reportable assessed output".to_owned(),
+                )
+            })?;
+            CandidateAssessmentOutput::new(output.candidate, reportable.record().clone())
+                .map_err(|error| EvaluationError::Message(error.to_string()))
+        })
+        .collect()
 }
 
 fn assessed_group_output<A, Out>(

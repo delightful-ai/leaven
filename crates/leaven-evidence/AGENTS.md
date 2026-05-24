@@ -24,8 +24,9 @@ Evidence here is data a stage or evaluator can produce and another component can
   and data-class metadata, including public candidate-output inline records for
   runner/scorer assessed outputs; it is reusable evidence vocabulary, not a
   complete public-seam evidence-envelope producer.
-  `CaseAssessmentEvidence` preserves generated output, scalar score, and
-  natural-language feedback; it is reusable evidence vocabulary, not the
+  `CaseAssessmentEvidence` preserves generated output, scalar score,
+  natural-language feedback, and optional candidate-bound assessed outputs for
+  pairwise/listwise scoring; it is reusable evidence vocabulary, not the
   reflective mutation algorithm.
 - `AgentTrajectoryEvidence` is the reusable one-session trajectory envelope:
   runtime session id, optional Leaven case id, upstream task id, typed
@@ -58,8 +59,10 @@ Evidence here is data a stage or evaluator can produce and another component can
   Do not cite them as standard evidence until they carry fields, constructors,
   and tests.
 - `CaseAssessmentEvidence` is the reusable scored case-output shape for the
-  runner/scorer path: generated output, scalar score, and natural-language
-  feedback. It is still evidence data, not the reflective mutation algorithm.
+  runner/scorer path: generated output, scalar score, natural-language
+  feedback, and candidate-bound assessed outputs when a group judgment needs
+  to preserve which concrete candidate outputs were compared. It is still
+  evidence data, not the reflective mutation algorithm.
 
 ## Local Helper Stack
 - Use `ScalarEvidence::new` for any score crossing crate boundaries; downstream

@@ -80,7 +80,10 @@ pub use command::{
     CommandRecord,
 };
 pub use diff::{DiffEvidence, RenderedDiff};
-pub use feedback::{CaseAssessmentEvidence, CaseDataReadEvidence};
+pub use feedback::{
+    CandidateAssessmentOutput, CandidateAssessmentOutputError, CaseAssessmentEvidence,
+    CaseDataReadEvidence,
+};
 pub use json::JsonEvidence;
 pub use listwise::{ListwiseRankingEvidence, RankingItem};
 pub use mixed::MixedEvidence;
@@ -104,12 +107,13 @@ pub mod prelude {
         AgentPatchMergeTreeError, AgentPatchMergeTreeEvidence, AgentTrajectoryAnalysisKind,
         AgentTrajectoryAnalysisRecord, AgentTrajectoryCorpusError, AgentTrajectoryCorpusEvidence,
         AgentTrajectoryEvidence, AgentTrajectoryEvidenceInput, AgentTrajectoryOutcome, Attachment,
-        AttachmentKind, AttributableEvidence, CaseAssessmentEvidence, CaseOutcome,
-        CasewiseEvidence, CommandEvidence, CommandRecord, DataClass, DataClassSet, DiffEvidence,
-        Direction, JsonEvidence, ListwiseRankingEvidence, MixedEvidence, OutputMetadata,
-        OutputRecord, OutputVisibility, PairedRolloutEvidence, PairwiseJudgmentEvidence,
-        RolloutGroupOutcome, ScalarEvidence, ScalarEvidenceError, ScoreVectorEvidence,
-        SkillTrajectoryUseEvidence, SkillTrajectoryUseEvidenceError, SkillUseConfidence,
-        SkillUseEvent, SkillUseEvidence, SkillUseKind, SkillUseSource, StringEvidence,
+        AttachmentKind, AttributableEvidence, CandidateAssessmentOutput,
+        CandidateAssessmentOutputError, CaseAssessmentEvidence, CaseOutcome, CasewiseEvidence,
+        CommandEvidence, CommandRecord, DataClass, DataClassSet, DiffEvidence, Direction,
+        JsonEvidence, ListwiseRankingEvidence, MixedEvidence, OutputMetadata, OutputRecord,
+        OutputVisibility, PairedRolloutEvidence, PairwiseJudgmentEvidence, RolloutGroupOutcome,
+        ScalarEvidence, ScalarEvidenceError, ScoreVectorEvidence, SkillTrajectoryUseEvidence,
+        SkillTrajectoryUseEvidenceError, SkillUseConfidence, SkillUseEvent, SkillUseEvidence,
+        SkillUseKind, SkillUseSource, StringEvidence,
     };
 }

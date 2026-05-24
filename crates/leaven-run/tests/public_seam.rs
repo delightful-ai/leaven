@@ -9,8 +9,8 @@ use leaven_engine::{
     ProposalBatchReport, RunContext, RunGraph,
 };
 use leaven_evidence::{
-    CaseAssessmentEvidence, DataClass, DataClassSet, OutputMetadata, OutputRecord,
-    OutputVisibility, ScalarEvidence,
+    CandidateAssessmentOutput, CaseAssessmentEvidence, DataClass, DataClassSet, OutputMetadata,
+    OutputRecord, OutputVisibility, ScalarEvidence,
 };
 use leaven_kernel::{
     AssessmentId, Budget, CandidateId, CaseId, ContentId, Cost, EvaluatorId, Fingerprint,
@@ -252,6 +252,77 @@ fn runcontext_assessment_artifact_score_outputs_project_to_public_seam_submit_as
 }
 
 #[test]
+fn runcontext_pairwise_and_listwise_score_outputs_project_to_public_seam_submit_assessments_plan() {
+    block_on(async {
+        let package = leaven_public_seam::PublicSeamPackage::active_from_repo(workspace_root())
+            .expect("public seam package loads from workspace");
+        let (mut graph, mut budget, candidates) = graph_with_run_eval_seeds();
+        let case_set = CaseSet::new(vec![leaven_eval::Case::input(CaseId::new(0), "case")]);
+        let store = InlineEvidenceStore::<CaseAssessmentEvidence>::new("inline");
+        let mut ctx =
+            RunContext::<RunProblem<TextArtifact, &'static str>>::new(&mut graph, &mut budget)
+                .with_case_set(&case_set)
+                .with_evidence_store(&store);
+        let pairwise = ctx
+            .evaluate_with(
+                &PairwiseScoreOutputEvaluator,
+                independent_request(candidates[..2].to_vec()),
+            )
+            .await
+            .unwrap();
+        let listwise = ctx
+            .evaluate_with(
+                &ListwiseScoreOutputEvaluator,
+                independent_request(candidates.clone()),
+            )
+            .await
+            .unwrap();
+        let graph_view = ctx.graph();
+
+        let pairwise_plan = assessment_receipt_context()
+            .submit_assessments_plan_document(&graph_view, &store, &pairwise)
+            .expect("pairwise RunContext assessment evidence projects to Plan IR");
+        let pairwise_document = package
+            .validate_plan_document(&pairwise_plan)
+            .expect("projected pairwise submit_assessments Plan IR validates");
+        assert_eq!(
+            pairwise_document.pairwise_assessment_score_output_count(),
+            1
+        );
+        assert_eq!(
+            pairwise_plan["ops"][0]["write"]["assessments"][0]["score"]["output"]["value"][0]["candidate"],
+            json_candidate_ref(candidates[0])
+        );
+        assert_eq!(
+            pairwise_plan["ops"][0]["write"]["assessments"][0]["score"]["output"]["value"][0]["output"],
+            "left-output"
+        );
+
+        let listwise_plan = assessment_receipt_context()
+            .submit_assessments_plan_document(&graph_view, &store, &listwise)
+            .expect("listwise RunContext assessment evidence projects to Plan IR");
+        let listwise_document = package
+            .validate_plan_document(&listwise_plan)
+            .expect("projected listwise submit_assessments Plan IR validates");
+        assert_eq!(
+            listwise_document.listwise_assessment_score_output_count(),
+            1
+        );
+        assert_eq!(
+            listwise_plan["ops"][0]["write"]["assessments"][0]["score"]["output"]["value"]
+                .as_array()
+                .unwrap()
+                .len(),
+            3
+        );
+        assert_eq!(
+            listwise_plan["ops"][0]["write"]["assessments"][0]["score"]["output"]["value"][2]["output"],
+            "third-output"
+        );
+    });
+}
+
+#[test]
 fn assessment_score_output_plan_projection_rejects_missing_stored_evidence() {
     block_on(async {
         let (mut graph, mut budget, candidate) = graph_with_run_eval_seed();
@@ -290,8 +361,8 @@ fn assessment_score_output_plan_projection_rejects_unsupported_shapes_and_output
                 .with_evidence_store(&store);
         let pairwise = ctx
             .evaluate_with(
-                &PairwiseScoreOutputEvaluator,
-                independent_request(candidates),
+                &PairwiseMissingCandidateOutputEvaluator,
+                independent_request(candidates[..2].to_vec()),
             )
             .await
             .unwrap();
@@ -301,7 +372,7 @@ fn assessment_score_output_plan_projection_rejects_unsupported_shapes_and_output
             .unwrap_err();
         assert!(matches!(
             unsupported_shape,
-            PublicAssessmentWriteReceiptProjectionError::UnsupportedAssessmentShape
+            PublicAssessmentWriteReceiptProjectionError::UnsupportedScoreOutput
         ));
     });
 
@@ -517,6 +588,7 @@ fn graph_with_run_eval_seeds() -> (
         vec![
             ctx.insert_seed(TextArtifact(1), 0).unwrap(),
             ctx.insert_seed(TextArtifact(2), 1).unwrap(),
+            ctx.insert_seed(TextArtifact(3), 2).unwrap(),
         ]
     };
     (graph, budget, candidates)
@@ -732,7 +804,95 @@ impl Evaluator<RunProblem<TextArtifact, &'static str>> for PairwiseScoreOutputEv
                 right: *right,
                 target: AssessmentTarget::Unscoped,
                 evidence: case_assessment_evidence(OutputRecord::candidate_inline(
-                    "candidate-output",
+                    "left-output|right-output",
+                ))?
+                .with_candidate_outputs(candidate_outputs([
+                    (*left, "left-output"),
+                    (*right, "right-output"),
+                ])?),
+                cost: Cost::zero(),
+                metadata: MetadataBag::new(),
+            }],
+            Cost::zero(),
+        ))
+    }
+}
+
+struct ListwiseScoreOutputEvaluator;
+
+impl Evaluator<RunProblem<TextArtifact, &'static str>> for ListwiseScoreOutputEvaluator {
+    fn id(&self) -> EvaluatorId {
+        EvaluatorId::PRIMARY
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        Fingerprint::from_bytes([46; 32])
+    }
+
+    async fn evaluate(
+        &self,
+        request: ResolvedEvaluationRequest,
+        _ctx: EvaluationContext<'_, RunProblem<TextArtifact, &'static str>>,
+    ) -> Result<Metered<Vec<Assessment<RunProblem<TextArtifact, &'static str>>>>, EvaluationError>
+    {
+        let leaven_core::ResolvedRequestKind::Independent { candidates } = request.kind else {
+            return Err(EvaluationError::Message("unsupported request".to_owned()));
+        };
+        let [left, right, third] = candidates.as_slice() else {
+            return Err(EvaluationError::Message(
+                "expected three candidates".to_owned(),
+            ));
+        };
+        Ok(Metered::new(
+            vec![Assessment::Listwise {
+                candidates: candidates.clone(),
+                target: AssessmentTarget::Unscoped,
+                evidence: case_assessment_evidence(OutputRecord::candidate_inline(
+                    "left-output|right-output|third-output",
+                ))?
+                .with_candidate_outputs(candidate_outputs([
+                    (*left, "left-output"),
+                    (*right, "right-output"),
+                    (*third, "third-output"),
+                ])?),
+                cost: Cost::zero(),
+                metadata: MetadataBag::new(),
+            }],
+            Cost::zero(),
+        ))
+    }
+}
+
+struct PairwiseMissingCandidateOutputEvaluator;
+
+impl Evaluator<RunProblem<TextArtifact, &'static str>> for PairwiseMissingCandidateOutputEvaluator {
+    fn id(&self) -> EvaluatorId {
+        EvaluatorId::PRIMARY
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        Fingerprint::from_bytes([47; 32])
+    }
+
+    async fn evaluate(
+        &self,
+        request: ResolvedEvaluationRequest,
+        _ctx: EvaluationContext<'_, RunProblem<TextArtifact, &'static str>>,
+    ) -> Result<Metered<Vec<Assessment<RunProblem<TextArtifact, &'static str>>>>, EvaluationError>
+    {
+        let leaven_core::ResolvedRequestKind::Independent { candidates } = request.kind else {
+            return Err(EvaluationError::Message("unsupported request".to_owned()));
+        };
+        let [left, right] = candidates.as_slice() else {
+            return Err(EvaluationError::Message("expected pair".to_owned()));
+        };
+        Ok(Metered::new(
+            vec![Assessment::Pairwise {
+                left: *left,
+                right: *right,
+                target: AssessmentTarget::Unscoped,
+                evidence: case_assessment_evidence(OutputRecord::candidate_inline(
+                    "left-output|right-output",
                 ))?,
                 cost: Cost::zero(),
                 metadata: MetadataBag::new(),
@@ -836,4 +996,16 @@ fn candidate_artifact_output(text: impl Into<String>) -> OutputRecord {
         OutputVisibility::Public,
         DataClassSet::new([DataClass::candidate_artifact(), DataClass::public()]),
     ))
+}
+
+fn candidate_outputs<const N: usize>(
+    outputs: [(CandidateId, &'static str); N],
+) -> Result<Vec<CandidateAssessmentOutput>, EvaluationError> {
+    outputs
+        .into_iter()
+        .map(|(candidate, output)| {
+            CandidateAssessmentOutput::new(candidate, OutputRecord::candidate_inline(output))
+                .map_err(|error| EvaluationError::Message(error.to_string()))
+        })
+        .collect()
 }
