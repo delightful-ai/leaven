@@ -93,6 +93,45 @@ fn sandbox_exec_command_output_projection_rejects_unbound_stream_blob_refs() {
     assert_eq!(host.commands.len(), 1);
 }
 
+#[test]
+fn sandbox_exec_output_file_refs_must_bind_captured_bytes() {
+    let bad_bytes = PlanSandboxExecOutcome::completed("fp_runtime_sha256_sandbox").with_file_ref(
+        "out.txt",
+        blob_ref(
+            "blob_sandbox_file",
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            11,
+            &["workspace.file"],
+        ),
+        b"actual file\n",
+    );
+    let error = bad_bytes.expect_err("file refs must bind to captured bytes");
+    assert!(
+        error
+            .to_string()
+            .contains("sandbox output file `out.txt` blob ref bytes `11` do not match captured output bytes `12`"),
+        "unexpected error: {error:?}"
+    );
+
+    let bad_path = PlanSandboxExecOutcome::completed("fp_runtime_sha256_sandbox").with_file_ref(
+        "../secret.txt",
+        blob_ref(
+            "blob_sandbox_file",
+            "ef29ded6f5ae80d89a838d37e01ed3efaade7a2994aff87d1100697554b7327b",
+            12,
+            &["workspace.file"],
+        ),
+        b"actual file\n",
+    );
+    let error = bad_path.expect_err("file refs must stay under workspace paths");
+    assert!(
+        error
+            .to_string()
+            .contains("sandbox output file path must be relative workspace path"),
+        "unexpected error: {error:?}"
+    );
+}
+
 struct SandboxHost {
     status: ExitStatus,
     corrupt_stdout_ref: bool,

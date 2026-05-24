@@ -176,7 +176,8 @@ whose receipt is bound to the enclosing session receipt, and cost matched by
 the call receipt. `sandbox_exec` with `stream_policy: blob_refs_only` must
 return stdout/stderr blob refs; completed sandbox results must carry
 `exit_code`, must carry cost matched by the call receipt, and may carry captured
-output-file blob refs only at safe relative workspace paths. Agent transcript
+output-file blob refs only at safe relative workspace paths after the host binds
+declared bytes and SHA-256 to the captured file bytes. Agent transcript
 blob refs and sandbox stdout/stderr/file blob refs are monotonically projected
 into the top-level Plan Result value `data_classes` by the seam-owned outcome
 builders, and forged results that drop those nested classes are rejected by
@@ -266,6 +267,12 @@ facts, not optional decoration: live host outcomes, replayed Plan Results, and
 ACP extension results must preserve them. This is still public-seam harness
 validation, not a claim that a production sandbox runtime or streaming
 transport has shipped.
+
+Captured sandbox output-file refs are host-supplied but byte-bound at the seam:
+`PlanSandboxExecOutcome::with_file_ref` requires the captured bytes and rejects
+SHA-256, byte-count, or workspace-path mismatches before the value can be
+recorded. Replayed foreign Plan Results can still validate only the locked wire
+facts they carry; production file capture remains a sandbox backend concern.
 
 Crate-root export `PinnedDialectEvaluator` is an advanced public seam contract.
 It proves deterministic parsing and replay for the V1 pinned wire

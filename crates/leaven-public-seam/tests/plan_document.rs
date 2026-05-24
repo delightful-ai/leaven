@@ -2144,19 +2144,19 @@ fn sandbox_exec_rejects_schema_valid_results_without_audit_facts() {
     for (sandbox_stream, expected) in [
         (
             SandboxStreamFixture::AbsoluteFilePath,
-            "sandbox_exec result file path must be relative workspace path",
+            "sandbox output file path must be relative workspace path",
         ),
         (
             SandboxStreamFixture::ParentFilePath,
-            "sandbox_exec result file path must be relative workspace path",
+            "sandbox output file path must be relative workspace path",
         ),
         (
             SandboxStreamFixture::EmptyFilePath,
-            "sandbox_exec result file path must be relative workspace path",
+            "sandbox output file path must be relative workspace path",
         ),
         (
             SandboxStreamFixture::EmptyComponentFilePath,
-            "sandbox_exec result file path must be relative workspace path",
+            "sandbox output file path must be relative workspace path",
         ),
         (
             SandboxStreamFixture::MissingCost,
@@ -4331,19 +4331,35 @@ impl PlanExecutionHost for RecordingPlanHost {
         assert_eq!(command.limits.timeout.unwrap().as_secs(), 1);
         self.calls.push("sandbox");
         let mut outcome = PlanSandboxExecOutcome::completed("fp_runtime_sha256_sandbox")
-            .with_file_ref("out.txt", self.sandbox_blob_ref("blob_sandbox_output_file"));
+            .with_file_ref(
+                "out.txt",
+                self.sandbox_blob_ref("blob_sandbox_output_file"),
+                b"sandbox file",
+            )?;
         match self.sandbox_stream {
             SandboxStreamFixture::AbsoluteFilePath => {
-                outcome = outcome.with_file_ref("/tmp/secret.txt", blob_ref("blob_sandbox_secret"));
+                outcome = outcome.with_file_ref(
+                    "/tmp/secret.txt",
+                    blob_ref("blob_sandbox_secret"),
+                    b"secret",
+                )?;
             }
             SandboxStreamFixture::ParentFilePath => {
-                outcome = outcome.with_file_ref("../secret.txt", blob_ref("blob_sandbox_secret"));
+                outcome = outcome.with_file_ref(
+                    "../secret.txt",
+                    blob_ref("blob_sandbox_secret"),
+                    b"secret",
+                )?;
             }
             SandboxStreamFixture::EmptyFilePath => {
-                outcome = outcome.with_file_ref("", blob_ref("blob_sandbox_secret"));
+                outcome = outcome.with_file_ref("", blob_ref("blob_sandbox_secret"), b"secret")?;
             }
             SandboxStreamFixture::EmptyComponentFilePath => {
-                outcome = outcome.with_file_ref("out//secret.txt", blob_ref("blob_sandbox_secret"));
+                outcome = outcome.with_file_ref(
+                    "out//secret.txt",
+                    blob_ref("blob_sandbox_secret"),
+                    b"secret",
+                )?;
             }
             _ => {}
         }
@@ -4526,6 +4542,21 @@ impl PlanExecutionHost for RecordingPlanHost {
 
 impl RecordingPlanHost {
     fn sandbox_blob_ref(&self, id: &'static str) -> Value {
+        if id == "blob_sandbox_output_file" {
+            return blob_ref_with_hash_and_data_classes(
+                id,
+                "21e919af86c8fc1c44863d251f1bf9a492c0ee668796f528bd4cc372d3ea93ab",
+                12,
+                if matches!(
+                    self.sandbox_stream,
+                    SandboxStreamFixture::NonPublicBlobDataClasses
+                ) {
+                    &["workspace.file"][..]
+                } else {
+                    &["public"][..]
+                },
+            );
+        }
         if matches!(
             self.sandbox_stream,
             SandboxStreamFixture::NonPublicBlobDataClasses
@@ -5027,11 +5058,25 @@ fn blob_ref(id: &'static str) -> Value {
 }
 
 fn blob_ref_with_data_classes(id: &'static str, data_classes: &[&str]) -> Value {
+    blob_ref_with_hash_and_data_classes(
+        id,
+        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        12,
+        data_classes,
+    )
+}
+
+fn blob_ref_with_hash_and_data_classes(
+    id: &'static str,
+    sha256: &'static str,
+    bytes: u64,
+    data_classes: &[&str],
+) -> Value {
     json!({
         "kind": "blob_ref",
         "id": id,
-        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-        "bytes": 12,
+        "sha256": sha256,
+        "bytes": bytes,
         "data_classes": data_classes
     })
 }

@@ -903,12 +903,27 @@ impl PlanSandboxExecOutcome {
         self
     }
 
-    /// Attaches a captured output file blob reference.
-    #[must_use]
-    pub fn with_file_ref(mut self, path: impl Into<String>, blob_ref: Value) -> Self {
+    /// Attaches a captured output file blob reference after binding its byte audit.
+    pub fn with_file_ref(
+        mut self,
+        path: impl Into<String>,
+        blob_ref: Value,
+        bytes: impl AsRef<[u8]>,
+    ) -> Result<Self, PublicSeamError> {
+        let path = path.into();
+        WorkspacePath::new(&path).map_err(|error| {
+            invalid_call(format!(
+                "sandbox output file path must be relative workspace path: {error}"
+            ))
+        })?;
+        validate_stream_blob_ref(
+            &blob_ref,
+            bytes.as_ref(),
+            &format!("sandbox output file `{path}`"),
+        )?;
         extend_data_classes_from_blob_ref(&mut self.data_classes, &blob_ref);
-        self.files.insert(path.into(), blob_ref);
-        self
+        self.files.insert(path, blob_ref);
+        Ok(self)
     }
 
     /// Attaches a cost object.
