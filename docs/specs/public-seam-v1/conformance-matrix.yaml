@@ -1086,6 +1086,8 @@ rows:
       - crates/leaven-public-seam/src/acp_profile.rs::validate_primary_kind
       - crates/leaven-public-seam/src/acp_profile.rs::validate_receipts_for_method
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_acp_extension_result_document
+    review_evidence:
+      - docs/specs/public-seam-v1/reviews/2026-05-23-acp-workspace-partial-follow-up-review.md
     status: pending
 
   - id: ps1.acp.lifecycle_backpressure
@@ -1196,6 +1198,7 @@ rows:
       - crates/leaven-public-seam/src/capability.rs::CapabilityDocument::authorize_grant
       - crates/leaven-public-seam/src/capability.rs::CapabilityGrantRequest
     review_evidence:
+      - docs/specs/public-seam-v1/reviews/2026-05-23-acp-workspace-partial-follow-up-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-23-workspace-query-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-23-workspace-handle-provenance-review.md
     status: pending
