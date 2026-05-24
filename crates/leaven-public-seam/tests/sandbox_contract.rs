@@ -34,6 +34,8 @@ fn sandbox_exec_can_project_provider_neutral_command_output_into_plan_result() {
     );
     assert_eq!(command.env["LEAVEN_CASE"], "case_1");
     assert_eq!(command.limits.timeout.unwrap().as_secs(), 1);
+    assert_eq!(command.output_files, vec![workspace_file_path()]);
+    assert_eq!(command.limits.max_output_file_bytes, Some(4096));
 
     let completion = &report.value()["values"]["completion"];
     assert_eq!(completion["kind"], "sandbox_exec");
@@ -98,60 +100,123 @@ fn sandbox_exec_command_output_projection_rejects_unbound_stream_blob_refs() {
 }
 
 #[test]
-fn sandbox_exec_output_file_refs_must_bind_captured_bytes() {
-    let bad_bytes = PlanSandboxExecOutcome::completed("fp_runtime_sha256_sandbox").with_file_ref(
-        "out.txt",
-        blob_ref(
-            "blob_sandbox_file",
-            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-            11,
-            &["workspace.file"],
+fn sandbox_exec_rejects_captured_file_refs_outside_output_contract() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut host = SandboxHost::new(ExitStatus { code: Some(0) }).with_wrong_output_path();
+
+    let error = package
+        .execute_plan_document(
+            &sandbox_workspace_plan(),
+            &plan_execution_context(),
+            &mut host,
+        )
+        .unwrap_err();
+
+    assert!(
+        error.to_string().contains(
+            "sandbox_exec output file refs must match output contract paths; missing=[\"reports/out.txt\"] extra=[\"reports/other.txt\"]"
         ),
-        b"actual file\n",
+        "unexpected error: {error:?}"
+    );
+    assert_eq!(host.commands.len(), 1);
+}
+
+#[test]
+fn sandbox_exec_output_file_refs_must_bind_captured_bytes() {
+    let bad_bytes = PlanSandboxExecOutcome::from_command_output_with_file_refs(
+        Metered::new(
+            command_output_with_file(b"actual file\n", false),
+            Cost::custom("sandbox_calls", 1.0).unwrap(),
+        ),
+        Fingerprint::from_bytes([88; 32]),
+        stdout_ref(),
+        stderr_ref(),
+        [(
+            workspace_file_path(),
+            blob_ref(
+                "blob_sandbox_file",
+                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                11,
+                &["workspace.file"],
+            ),
+        )],
     );
     let error = bad_bytes.expect_err("file refs must bind to captured bytes");
     assert!(
         error
             .to_string()
-            .contains("sandbox output file `out.txt` blob ref bytes `11` do not match captured output bytes `12`"),
+            .contains("sandbox output file `reports/out.txt` blob ref bytes `11` do not match captured output bytes `12`"),
         "unexpected error: {error:?}"
     );
 
-    let bad_sha = PlanSandboxExecOutcome::completed("fp_runtime_sha256_sandbox").with_file_ref(
-        "out.txt",
-        blob_ref(
-            "blob_sandbox_file",
-            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-            12,
-            &["workspace.file"],
+    let bad_sha = PlanSandboxExecOutcome::from_command_output_with_file_refs(
+        Metered::new(
+            command_output_with_file(b"actual file\n", false),
+            Cost::custom("sandbox_calls", 1.0).unwrap(),
         ),
-        b"actual file\n",
+        Fingerprint::from_bytes([88; 32]),
+        stdout_ref(),
+        stderr_ref(),
+        [(
+            workspace_file_path(),
+            blob_ref(
+                "blob_sandbox_file",
+                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                12,
+                &["workspace.file"],
+            ),
+        )],
     );
     let error = bad_sha.expect_err("file refs must bind sha256 to captured bytes");
     assert!(
         error.to_string().contains(
-            "sandbox output file `out.txt` blob ref sha256 does not match captured output"
+            "sandbox output file `reports/out.txt` blob ref sha256 does not match captured output"
         ),
         "unexpected error: {error:?}"
     );
 
-    let bad_path = PlanSandboxExecOutcome::completed("fp_runtime_sha256_sandbox").with_file_ref(
-        "../secret.txt",
-        blob_ref(
-            "blob_sandbox_file",
-            "ef29ded6f5ae80d89a838d37e01ed3efaade7a2994aff87d1100697554b7327b",
-            12,
-            &["workspace.file"],
+    let duplicate_ref = PlanSandboxExecOutcome::from_command_output_with_file_refs(
+        Metered::new(
+            command_output_with_file(b"artifact\n", false),
+            Cost::custom("sandbox_calls", 1.0).unwrap(),
         ),
-        b"actual file\n",
+        Fingerprint::from_bytes([88; 32]),
+        stdout_ref(),
+        stderr_ref(),
+        [
+            (workspace_file_path(), sandbox_file_ref()),
+            (workspace_file_path(), sandbox_file_ref()),
+        ],
     );
-    let error = bad_path.expect_err("file refs must stay under workspace paths");
+    let error = duplicate_ref.expect_err("duplicate file refs must be rejected");
     assert!(
         error
             .to_string()
-            .contains("sandbox output file path must be relative workspace path"),
+            .contains("sandbox output file `reports/out.txt` has duplicate blob refs"),
         "unexpected error: {error:?}"
     );
+}
+
+#[test]
+fn sandbox_exec_rejects_unsafe_output_contract_paths_before_host_execution() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    for path in ["/tmp/secret.txt", "../secret.txt", "", "out//secret.txt"] {
+        let mut plan = sandbox_workspace_plan();
+        plan["ops"][1]["call"]["output"]["paths"] = json!([path]);
+        let mut host = SandboxHost::new(ExitStatus { code: Some(0) });
+
+        let error = package
+            .execute_plan_document(&plan, &plan_execution_context(), &mut host)
+            .unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("files output path: workspace path"),
+            "unexpected error for {path}: {error:?}"
+        );
+        assert_eq!(host.calls, vec!["workspace_materialize"]);
+    }
 }
 
 #[test]
@@ -218,6 +283,7 @@ fn sandbox_exec_command_output_projection_requires_captured_output_file_refs() {
 struct SandboxHost {
     status: ExitStatus,
     corrupt_stdout_ref: bool,
+    wrong_output_path: bool,
     calls: Vec<&'static str>,
     commands: Vec<leaven_workspace::Command>,
 }
@@ -227,6 +293,7 @@ impl SandboxHost {
         Self {
             status,
             corrupt_stdout_ref: false,
+            wrong_output_path: false,
             calls: Vec::new(),
             commands: Vec::new(),
         }
@@ -234,6 +301,11 @@ impl SandboxHost {
 
     fn with_corrupt_stdout_ref(mut self) -> Self {
         self.corrupt_stdout_ref = true;
+        self
+    }
+
+    fn with_wrong_output_path(mut self) -> Self {
+        self.wrong_output_path = true;
         self
     }
 }
@@ -270,15 +342,33 @@ impl PlanExecutionHost for SandboxHost {
                 &["transcript.raw"],
             )
         };
+        let (output_path, file_ref) = if self.wrong_output_path {
+            (
+                WorkspacePath::new("reports/other.txt").unwrap(),
+                blob_ref(
+                    "blob_sandbox_file",
+                    "5b3513f580c8397212ff2c8f459c199efc0c90e4354a5f3533adf0a3fff3a530",
+                    9,
+                    &["workspace.file"],
+                ),
+            )
+        } else {
+            (workspace_file_path(), sandbox_file_ref())
+        };
         PlanSandboxExecOutcome::from_command_output_with_file_refs(
             Metered::new(
-                command_output_with_status_and_file(self.status, b"artifact\n", false),
+                command_output_with_status_and_file(
+                    self.status,
+                    output_path.clone(),
+                    b"artifact\n",
+                    false,
+                ),
                 Cost::custom("sandbox_calls", 1.0).unwrap(),
             ),
             Fingerprint::from_bytes([88; 32]),
             stdout_ref,
             stderr_ref(),
-            [(workspace_file_path(), sandbox_file_ref())],
+            [(output_path, file_ref)],
         )
     }
 
@@ -345,7 +435,8 @@ fn sandbox_workspace_plan() -> Value {
                     "timeout_s": 1,
                     "output": {
                         "kind": "files",
-                        "paths": ["out.txt"]
+                        "paths": ["reports/out.txt"],
+                        "max_bytes": 4096
                     },
                     "stream_policy": "blob_refs_only",
                     "input_classes": ["public"]
@@ -402,11 +493,17 @@ fn workspace_file_path() -> WorkspacePath {
 }
 
 fn command_output_with_file(bytes: &[u8], truncated: bool) -> CommandOutput {
-    command_output_with_status_and_file(ExitStatus { code: Some(0) }, bytes, truncated)
+    command_output_with_status_and_file(
+        ExitStatus { code: Some(0) },
+        workspace_file_path(),
+        bytes,
+        truncated,
+    )
 }
 
 fn command_output_with_status_and_file(
     status: ExitStatus,
+    path: WorkspacePath,
     bytes: &[u8],
     truncated: bool,
 ) -> CommandOutput {
@@ -417,7 +514,7 @@ fn command_output_with_status_and_file(
         std::time::Duration::from_millis(10),
     )
     .with_output_file(
-        workspace_file_path(),
+        path,
         CapturedOutput {
             bytes: bytes.to_vec(),
             truncated,

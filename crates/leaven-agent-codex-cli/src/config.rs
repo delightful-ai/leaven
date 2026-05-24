@@ -61,6 +61,7 @@ impl CodexCliConfig {
                     timeout: self.timeout,
                     max_stdout_bytes: Some(4 * 1024 * 1024),
                     max_stderr_bytes: Some(4 * 1024 * 1024),
+                    max_output_file_bytes: None,
                 },
                 user: None,
             },

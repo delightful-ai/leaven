@@ -137,8 +137,10 @@ impl WorkspaceBackend for GitWorkspaceBackend {
                 .map_err(|err| WorkspaceError::Command(err.to_string()))?;
         }
 
+        let output_files = command.output_files.clone();
+        let max_output_file_bytes = command.limits.max_output_file_bytes;
         let output = wait_for_output(child, command.limits.timeout, &command.program, start)?;
-        Ok(CommandOutput {
+        let mut command_output = CommandOutput {
             status: ExitStatus {
                 code: output.status.code(),
             },
@@ -146,7 +148,15 @@ impl WorkspaceBackend for GitWorkspaceBackend {
             stderr: CapturedOutput::new(output.stderr, command.limits.max_stderr_bytes),
             output_files: std::collections::BTreeMap::new(),
             duration: start.elapsed(),
-        })
+        };
+        for path in output_files {
+            let bytes = std::fs::read(self.host_path(&path))
+                .map_err(|err| WorkspaceError::Io(err.to_string()))?;
+            command_output
+                .output_files
+                .insert(path, CapturedOutput::new(bytes, max_output_file_bytes));
+        }
+        Ok(command_output)
     }
 
     fn cleanup(self: Box<Self>) -> BoxFuture<'static, Result<(), WorkspaceError>> {

@@ -138,6 +138,8 @@ fn merge_limits(template: &CommandLimits, request: &leaven_agent::AgentLimits) -
     if let Some(max_output_bytes) = request.max_output_bytes {
         limits.max_stdout_bytes = min_option(limits.max_stdout_bytes, Some(max_output_bytes));
         limits.max_stderr_bytes = min_option(limits.max_stderr_bytes, Some(max_output_bytes));
+        limits.max_output_file_bytes =
+            min_option(limits.max_output_file_bytes, Some(max_output_bytes));
     }
     limits
 }

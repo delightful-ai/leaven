@@ -14,6 +14,7 @@ pub struct Command {
     pub cwd: Option<WorkspacePath>,
     pub env: BTreeMap<String, String>,
     pub stdin: CommandStdin,
+    pub output_files: Vec<WorkspacePath>,
     pub limits: CommandLimits,
     pub user: Option<CommandUser>,
 }
@@ -27,6 +28,7 @@ impl Command {
             cwd: None,
             env: BTreeMap::new(),
             stdin: CommandStdin::Empty,
+            output_files: Vec::new(),
             limits: CommandLimits::default(),
             user: None,
         }
@@ -44,6 +46,7 @@ pub struct CommandLimits {
     pub timeout: Option<Duration>,
     pub max_stdout_bytes: Option<u64>,
     pub max_stderr_bytes: Option<u64>,
+    pub max_output_file_bytes: Option<u64>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

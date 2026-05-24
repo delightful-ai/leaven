@@ -331,6 +331,7 @@ fn command_template_renders_task_arg_and_request_limits_without_overwriting_temp
             timeout: Some(Duration::from_secs(10)),
             max_stdout_bytes: Some(128),
             max_stderr_bytes: None,
+            max_output_file_bytes: None,
         },
         user: None,
     };

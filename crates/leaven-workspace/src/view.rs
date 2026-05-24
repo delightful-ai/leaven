@@ -107,7 +107,18 @@ impl<'a> WorkspaceView<'a> {
             None if self.prefix.as_str().is_empty() => None,
             None => Some(self.prefix.clone()),
         };
-        self.backend.lock().run_command(command)
+        command.output_files = command
+            .output_files
+            .iter()
+            .map(|path| self.scoped(path))
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut output = self.backend.lock().run_command(command)?;
+        output.output_files = output
+            .output_files
+            .into_iter()
+            .map(|(path, output)| Ok((self.unscoped(path)?, output)))
+            .collect::<Result<_, WorkspaceError>>()?;
+        Ok(output)
     }
 
     fn scoped(&self, path: &WorkspacePath) -> Result<WorkspacePath, WorkspaceError> {

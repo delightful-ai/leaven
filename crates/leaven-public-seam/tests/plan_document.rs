@@ -1429,7 +1429,7 @@ fn sandbox_exec_outcome_propagates_stream_and_file_blob_data_classes() {
 
     assert_eq!(
         report.value()["values"]["completion"]["data_classes"],
-        json!(["public", "workspace.file", "transcript.raw"])
+        json!(["public", "transcript.raw", "workspace.file"])
     );
 
     let mut missing_stream_class = report.value().clone();
@@ -2255,32 +2255,9 @@ fn agent_run_rejects_schema_valid_sessions_without_audit_facts() {
 #[test]
 fn sandbox_exec_rejects_schema_valid_results_without_audit_facts() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
-    for (sandbox_stream, expected) in [
-        (
-            SandboxStreamFixture::AbsoluteFilePath,
-            "sandbox output file path must be relative workspace path",
-        ),
-        (
-            SandboxStreamFixture::ParentFilePath,
-            "sandbox output file path must be relative workspace path",
-        ),
-        (
-            SandboxStreamFixture::EmptyFilePath,
-            "sandbox output file path must be relative workspace path",
-        ),
-        (
-            SandboxStreamFixture::EmptyComponentFilePath,
-            "sandbox output file path must be relative workspace path",
-        ),
-        (
-            SandboxStreamFixture::MissingCost,
-            "sandbox_exec result value must carry cost",
-        ),
-        (
-            SandboxStreamFixture::MissingStreamRefs,
-            "completed sandbox_exec result value must carry stdout_ref and stderr_ref",
-        ),
-    ] {
+    {
+        let sandbox_stream = SandboxStreamFixture::MissingStreamRefs;
+        let expected = "completed sandbox_exec result value must carry stdout_ref and stderr_ref";
         let mut host = RecordingPlanHost {
             sandbox_stream,
             ..RecordingPlanHost::default()
@@ -3720,7 +3697,8 @@ fn sandbox_exec_call() -> Value {
         },
         "timeout_s": 1,
         "output": {
-            "kind": "final_message",
+            "kind": "files",
+            "paths": ["out.txt"],
             "max_bytes": 1024
         },
         "stream_policy": "buffer",
@@ -4144,11 +4122,6 @@ enum SandboxStreamFixture {
     Buffered,
     BlobRefsOnly,
     MissingBlobRefs,
-    AbsoluteFilePath,
-    ParentFilePath,
-    EmptyFilePath,
-    EmptyComponentFilePath,
-    MissingCost,
     MissingStreamRefs,
     NonPublicBlobDataClasses,
 }
@@ -4156,28 +4129,14 @@ enum SandboxStreamFixture {
 impl SandboxStreamFixture {
     fn expected_policy(self) -> &'static str {
         match self {
-            Self::Buffered
-            | Self::AbsoluteFilePath
-            | Self::ParentFilePath
-            | Self::EmptyFilePath
-            | Self::EmptyComponentFilePath
-            | Self::MissingCost
-            | Self::MissingStreamRefs
-            | Self::NonPublicBlobDataClasses => "buffer",
+            Self::Buffered | Self::MissingStreamRefs | Self::NonPublicBlobDataClasses => "buffer",
             Self::BlobRefsOnly | Self::MissingBlobRefs => "blob_refs_only",
         }
     }
 
     fn includes_stream_refs(self) -> bool {
         match self {
-            Self::Buffered
-            | Self::BlobRefsOnly
-            | Self::AbsoluteFilePath
-            | Self::ParentFilePath
-            | Self::EmptyFilePath
-            | Self::EmptyComponentFilePath
-            | Self::MissingCost
-            | Self::NonPublicBlobDataClasses => true,
+            Self::Buffered | Self::BlobRefsOnly | Self::NonPublicBlobDataClasses => true,
             Self::MissingBlobRefs | Self::MissingStreamRefs => false,
         }
     }
@@ -4510,50 +4469,46 @@ impl PlanExecutionHost for RecordingPlanHost {
         );
         assert_eq!(command.env["LEAVEN_CASE"], "case_1");
         assert_eq!(command.limits.timeout.unwrap().as_secs(), 1);
+        assert_eq!(
+            command
+                .output_files
+                .iter()
+                .map(leaven_workspace::WorkspacePath::as_str)
+                .collect::<Vec<_>>(),
+            vec!["out.txt"]
+        );
+        assert_eq!(command.limits.max_output_file_bytes, Some(1024));
         self.calls.push("sandbox");
-        let mut outcome = PlanSandboxExecOutcome::completed("fp_runtime_sha256_sandbox")
-            .with_file_ref(
-                "out.txt",
-                self.sandbox_blob_ref("blob_sandbox_output_file"),
-                b"sandbox file",
-            )?;
-        match self.sandbox_stream {
-            SandboxStreamFixture::AbsoluteFilePath => {
-                outcome = outcome.with_file_ref(
-                    "/tmp/secret.txt",
-                    blob_ref("blob_sandbox_secret"),
-                    b"secret",
-                )?;
-            }
-            SandboxStreamFixture::ParentFilePath => {
-                outcome = outcome.with_file_ref(
-                    "../secret.txt",
-                    blob_ref("blob_sandbox_secret"),
-                    b"secret",
-                )?;
-            }
-            SandboxStreamFixture::EmptyFilePath => {
-                outcome = outcome.with_file_ref("", blob_ref("blob_sandbox_secret"), b"secret")?;
-            }
-            SandboxStreamFixture::EmptyComponentFilePath => {
-                outcome = outcome.with_file_ref(
-                    "out//secret.txt",
-                    blob_ref("blob_sandbox_secret"),
-                    b"secret",
-                )?;
-            }
-            _ => {}
-        }
-        if !matches!(self.sandbox_stream, SandboxStreamFixture::MissingCost) {
-            outcome = outcome.with_cost(json!({"usd_micro": 10}));
-        }
-        if self.sandbox_stream.includes_stream_refs() {
-            outcome = outcome.with_stream_refs(
-                self.sandbox_blob_ref("blob_sandbox_stdout"),
-                self.sandbox_blob_ref("blob_sandbox_stderr"),
+        if !self.sandbox_stream.includes_stream_refs() {
+            return Ok(
+                PlanSandboxExecOutcome::completed("fp_runtime_sha256_sandbox")
+                    .with_cost(json!({"usd_micro": 10})),
             );
         }
-        Ok(outcome)
+        let output_path = leaven_workspace::WorkspacePath::new("out.txt").unwrap();
+        let command_output = leaven_workspace::CommandOutput::new(
+            leaven_workspace::ExitStatus { code: Some(0) },
+            leaven_workspace::CapturedOutput::new(b"stdout".to_vec(), None),
+            leaven_workspace::CapturedOutput::new(b"stderr".to_vec(), None),
+            std::time::Duration::from_millis(10),
+        )
+        .with_output_file(
+            output_path.clone(),
+            leaven_workspace::CapturedOutput::new(b"sandbox file".to_vec(), None),
+        );
+        PlanSandboxExecOutcome::from_command_output_with_file_refs(
+            leaven_kernel::Metered::new(
+                command_output,
+                leaven_kernel::Cost::custom("usd_micro", 10.0).unwrap(),
+            ),
+            leaven_kernel::Fingerprint::from_bytes([0x5a; 32]),
+            self.sandbox_blob_ref("blob_sandbox_stdout"),
+            self.sandbox_blob_ref("blob_sandbox_stderr"),
+            [(
+                output_path,
+                self.sandbox_blob_ref("blob_sandbox_output_file"),
+            )],
+        )
     }
 
     fn workspace_materialize(
@@ -4733,6 +4688,36 @@ impl RecordingPlanHost {
                     SandboxStreamFixture::NonPublicBlobDataClasses
                 ) {
                     &["workspace.file"][..]
+                } else {
+                    &["public"][..]
+                },
+            );
+        }
+        if id == "blob_sandbox_stdout" {
+            return blob_ref_with_hash_and_data_classes(
+                id,
+                "63d42d26156fcc761e57da4128e9881d5bdf3bf933f0f6e9c93d6e26b9b90ae7",
+                6,
+                if matches!(
+                    self.sandbox_stream,
+                    SandboxStreamFixture::NonPublicBlobDataClasses
+                ) {
+                    &["transcript.raw"][..]
+                } else {
+                    &["public"][..]
+                },
+            );
+        }
+        if id == "blob_sandbox_stderr" {
+            return blob_ref_with_hash_and_data_classes(
+                id,
+                "7e6b710b765404cccbad9eedcff7615fc37b269d6db12cd81a58be541d93083c",
+                6,
+                if matches!(
+                    self.sandbox_stream,
+                    SandboxStreamFixture::NonPublicBlobDataClasses
+                ) {
+                    &["transcript.raw"][..]
                 } else {
                     &["public"][..]
                 },

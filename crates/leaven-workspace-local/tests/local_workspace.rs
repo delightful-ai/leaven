@@ -104,6 +104,7 @@ fn local_workspace_runs_commands_inside_scoped_workspace_paths() {
                 cwd: Some(WorkspacePath::new("work").unwrap()),
                 env: BTreeMap::new(),
                 stdin: CommandStdin::Empty,
+                output_files: Vec::new(),
                 limits: CommandLimits::default(),
                 user: None,
             })
@@ -141,6 +142,7 @@ fn local_workspace_passes_env_and_stdin_to_commands() {
                 cwd: None,
                 env: BTreeMap::from([("LEAVEN_TEST_VALUE".to_owned(), "from-env".to_owned())]),
                 stdin: CommandStdin::Bytes(b"from-stdin".to_vec()),
+                output_files: Vec::new(),
                 limits: CommandLimits::default(),
                 user: None,
             })
@@ -176,10 +178,12 @@ fn local_workspace_truncates_stdout_and_stderr_independently() {
                 cwd: None,
                 env: BTreeMap::new(),
                 stdin: CommandStdin::Empty,
+                output_files: Vec::new(),
                 limits: CommandLimits {
                     timeout: None,
                     max_stdout_bytes: Some(6),
                     max_stderr_bytes: Some(6),
+                    max_output_file_bytes: None,
                 },
                 user: None,
             })
@@ -190,6 +194,74 @@ fn local_workspace_truncates_stdout_and_stderr_independently() {
         assert!(output.stdout.truncated);
         assert_eq!(output.stderr.bytes, b"stderr");
         assert!(output.stderr.truncated);
+
+        drop(view);
+        workspace.cleanup().await.unwrap();
+        remove_dir(&parent);
+    });
+}
+
+#[test]
+fn local_workspace_captures_requested_output_files() {
+    futures::executor::block_on(async {
+        let parent = temp_parent("local-command-output-files");
+        let factory = LocalWorkspaceFactory::new(&parent);
+        let mut workspace = factory.allocate(WorkspaceConfig::default()).await.unwrap();
+        let mut view = workspace.view();
+
+        let mut command = Command::new("sh");
+        command.args = vec![
+            "-c".to_owned(),
+            "mkdir -p reports && printf artifact-long > reports/out.txt".to_owned(),
+        ];
+        command.output_files = vec![WorkspacePath::new("reports/out.txt").unwrap()];
+        command.limits.max_output_file_bytes = Some(8);
+        let output = view.run_command(command).unwrap();
+
+        let captured = output
+            .output_files
+            .get(&WorkspacePath::new("reports/out.txt").unwrap())
+            .unwrap();
+        assert_eq!(captured.bytes, b"artifact");
+        assert!(captured.truncated);
+
+        drop(view);
+        workspace.cleanup().await.unwrap();
+        remove_dir(&parent);
+    });
+}
+
+#[test]
+fn local_workspace_subdir_views_return_captured_files_in_view_coordinates() {
+    futures::executor::block_on(async {
+        let parent = temp_parent("local-command-output-files-subdir");
+        let factory = LocalWorkspaceFactory::new(&parent);
+        let mut workspace = factory.allocate(WorkspaceConfig::default()).await.unwrap();
+        let mut view = workspace
+            .view()
+            .subdir(WorkspacePath::new("candidate").unwrap())
+            .unwrap();
+        view.write_file(&WorkspacePath::new("seed.txt").unwrap(), b"seed")
+            .unwrap();
+
+        let mut command = Command::new("sh");
+        command.args = vec![
+            "-c".to_owned(),
+            "mkdir -p reports && printf artifact > reports/out.txt".to_owned(),
+        ];
+        command.output_files = vec![WorkspacePath::new("reports/out.txt").unwrap()];
+        let output = view.run_command(command).unwrap();
+
+        assert!(
+            output
+                .output_files
+                .contains_key(&WorkspacePath::new("reports/out.txt").unwrap())
+        );
+        assert!(
+            !output
+                .output_files
+                .contains_key(&WorkspacePath::new("candidate/reports/out.txt").unwrap())
+        );
 
         drop(view);
         workspace.cleanup().await.unwrap();
@@ -212,6 +284,7 @@ fn local_workspace_refuses_command_user_instead_of_ignoring_it() {
                 cwd: None,
                 env: BTreeMap::new(),
                 stdin: CommandStdin::Empty,
+                output_files: Vec::new(),
                 limits: CommandLimits::default(),
                 user: Some(CommandUser::Name("nobody".to_owned())),
             })
@@ -245,10 +318,12 @@ fn local_workspace_times_out_commands_without_hanging() {
                 cwd: None,
                 env: BTreeMap::new(),
                 stdin: CommandStdin::Empty,
+                output_files: Vec::new(),
                 limits: CommandLimits {
                     timeout: Some(Duration::from_millis(50)),
                     max_stdout_bytes: None,
                     max_stderr_bytes: None,
+                    max_output_file_bytes: None,
                 },
                 user: None,
             })
