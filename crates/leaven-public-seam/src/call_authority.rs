@@ -102,6 +102,97 @@ pub fn validate(
     Ok(report)
 }
 
+pub fn validate_call_with_dependency_classes(
+    call_kind: &str,
+    call: &Value,
+    deps: &std::collections::BTreeMap<String, Value>,
+    capability: &CapabilityDocument,
+) -> Result<(), PublicSeamError> {
+    let call = call
+        .as_object()
+        .ok_or_else(|| invalid_authority("call must be an object"))?;
+    let declares_input_classes = call.contains_key("input_classes");
+    let declared_input_classes = string_set(call.get("input_classes"), "input_classes")?;
+    let dependency_input_classes = dependency_data_classes(deps)?;
+    if declares_input_classes {
+        for data_class in &dependency_input_classes {
+            if !declared_input_classes.contains(data_class) {
+                return Err(invalid_authority(format!(
+                    "call `{call_kind}` omitted dependency data class `{data_class}` from input_classes"
+                )));
+            }
+        }
+    }
+    let effective_input_classes = if declares_input_classes {
+        declared_input_classes
+            .union(&dependency_input_classes)
+            .cloned()
+            .collect::<BTreeSet<_>>()
+    } else {
+        declared_input_classes
+    };
+    let forbidden = string_set(
+        call.get("forbidden_input_classes"),
+        "forbidden_input_classes",
+    )?;
+    if let Some(data_class) = effective_input_classes.intersection(&forbidden).next() {
+        return Err(invalid_authority(format!(
+            "call `{call_kind}` input class `{data_class}` intersects declared forbidden_input_classes"
+        )));
+    }
+    if call_kind == "lm_complete"
+        && capability.subject_stage_role() == Some("reflector")
+        && effective_input_classes.contains("case.target")
+    {
+        return Err(invalid_authority(
+            "reflector lm_complete calls must not carry case.target input classes",
+        ));
+    }
+    validate_execution_policy(capability, call_kind, call)?;
+    let mut request = CapabilityGrantRequest::for_action(action_for_call(call_kind)?);
+    for data_class in &effective_input_classes {
+        request = request.with_input_class(data_class.clone());
+    }
+    request = add_call_dimensions(request, call_kind, call)?;
+    capability
+        .authorize_grant(request)
+        .map_err(|denial| invalid_authority(format!("call `{call_kind}` denied: {denial}")))?;
+    Ok(())
+}
+
+fn dependency_data_classes(
+    deps: &std::collections::BTreeMap<String, Value>,
+) -> Result<BTreeSet<String>, PublicSeamError> {
+    let mut classes = BTreeSet::new();
+    for value in deps.values() {
+        collect_data_classes(value, &mut classes)?;
+    }
+    Ok(classes)
+}
+
+fn collect_data_classes(
+    value: &Value,
+    classes: &mut BTreeSet<String>,
+) -> Result<(), PublicSeamError> {
+    match value {
+        Value::Object(object) => {
+            if let Some(data_classes) = object.get("data_classes") {
+                classes.extend(string_set(Some(data_classes), "data_classes")?);
+            }
+            for value in object.values() {
+                collect_data_classes(value, classes)?;
+            }
+        }
+        Value::Array(values) => {
+            for value in values {
+                collect_data_classes(value, classes)?;
+            }
+        }
+        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {}
+    }
+    Ok(())
+}
+
 fn validate_execution_policy(
     capability: &CapabilityDocument,
     call_kind: &str,

@@ -230,6 +230,15 @@ checks Plan call/write authority against the supplied capability before host
 effects can run, including workspace lifecycle calls and `emit_run_event`
 writes, and requires capability-authorized evaluator request scope before a
 `case_query.load` host read can run. The
+
+Capability-authorized plan execution is a dynamic data-class gate as well as a
+static Plan IR gate. Before any capability-scoped call reaches the host, the
+seam collects `data_classes` from resolved dependency values, requires the call
+to declare those classes in `input_classes`, and authorizes the effective union
+against the capability grant. A call may not drop `case.target` or another
+forbidden dependency class by relabeling only its own declared inputs.
+
+The
 `PublicSeamPackage::validate_plan_execution_result` route additionally proves
 representative query/call/write receipt hashes can be checked against the Plan
 IR and execution-context preimages instead of accepted as decorative ids, and

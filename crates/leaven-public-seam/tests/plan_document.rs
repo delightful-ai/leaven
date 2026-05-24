@@ -716,6 +716,81 @@ fn evaluator_target_reads_execute_case_query_load_with_query_receipts() {
 }
 
 #[test]
+fn capability_execution_denies_calls_that_drop_dependency_data_classes() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut plan = evaluator_target_case_query_plan();
+    plan["ops"].as_array_mut().unwrap().push(json!({
+        "kind": "call",
+        "name": "completion",
+        "deps": ["target"],
+        "idempotency_key": "target-drop-0001",
+        "call": {
+            "kind": "lm_complete",
+            "purpose": "test.plan_ir",
+            "model": "gpt-4.1-mini",
+            "model_role": "reflector",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [{"kind": "text", "text": "summarize"}]
+                }
+            ],
+            "output": {"kind": "final_message"},
+            "input_classes": ["public"]
+        }
+    }));
+    plan["return"] = json!(["completion"]);
+    let capability = CapabilityDocument::from_value(base_execution_capability(&[
+        json!({
+            "action": "case.read",
+            "resource": {
+                "run": "run_demo",
+                "evaluation_request_id": "evalreq_01"
+            },
+            "constraints": {
+                "case_fields": ["target"],
+                "partitions": ["validation"],
+                "allowed_input_classes": ["case.target"],
+                "forbidden_input_classes": []
+            }
+        }),
+        json!({
+            "action": "lm.complete",
+            "resource": {},
+            "constraints": {
+                "allowed_input_classes": ["public"],
+                "forbidden_input_classes": ["case.target"],
+                "purposes": ["test.plan_ir"],
+                "models": ["gpt-4.1-mini"],
+                "model_roles": ["reflector"]
+            }
+        }),
+    ]))
+    .unwrap();
+    let mut host = RecordingPlanHost::default();
+
+    let error = package
+        .execute_plan_document_with_capability(
+            &plan,
+            &plan_execution_context()
+                .with_evaluation_request("run_demo", "evalreq_01")
+                .with_case_partition("validation"),
+            &capability,
+            &mut host,
+        )
+        .unwrap_err();
+
+    assert!(
+        error
+            .to_string()
+            .contains("call `lm_complete` omitted dependency data class `case.target`"),
+        "unexpected error: {error:?}"
+    );
+    assert_eq!(host.case_reads, vec!["target:case_1"]);
+    assert!(host.calls.is_empty());
+}
+
+#[test]
 fn evaluator_target_reads_reject_missing_or_unbound_case_query_receipts() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let plan = evaluator_target_case_query_plan();
