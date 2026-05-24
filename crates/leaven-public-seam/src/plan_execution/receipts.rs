@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use leaven_workspace::WorkspacePath;
 use serde_json::{Map, Value, json};
 
 use super::{
@@ -496,6 +497,8 @@ fn validate_successful_call_result_value(
     require_receipt_field(value, "receipt", receipt_id)?;
     validate_structured_output_value(call_kind, call, value)?;
     validate_sandbox_stream_value(call, value)?;
+    validate_agent_session_value(call_kind, value, receipt_id)?;
+    validate_sandbox_exec_value(call_kind, value)?;
     Ok(())
 }
 
@@ -547,6 +550,75 @@ fn validate_sandbox_stream_value(
         return Err(invalid_plan(
             "sandbox_exec blob_refs_only result value must carry stdout_ref and stderr_ref",
         ));
+    }
+    Ok(())
+}
+
+fn validate_agent_session_value(
+    call_kind: &str,
+    value: &Map<String, Value>,
+    receipt_id: &str,
+) -> Result<(), PublicSeamError> {
+    if call_kind != "agent_run" {
+        return Ok(());
+    }
+    if value.get("transcript_ref").is_none() {
+        return Err(invalid_plan(
+            "agent_run result value must carry transcript_ref",
+        ));
+    }
+    let commands = value
+        .get("commands")
+        .and_then(Value::as_array)
+        .ok_or_else(|| invalid_plan("agent_run result value must carry commands"))?;
+    if commands.is_empty() {
+        return Err(invalid_plan(
+            "agent_run result value must carry at least one command record",
+        ));
+    }
+    for command in commands {
+        let command = object(command, "agent_run command record")?;
+        let command_receipt = required_string(command.get("receipt"), "agent_run command receipt")?;
+        if command_receipt != receipt_id {
+            return Err(invalid_plan(format!(
+                "agent_run command record receipt `{command_receipt}` does not match session receipt `{receipt_id}`"
+            )));
+        }
+    }
+    if value.get("cost").is_none() {
+        return Err(invalid_plan("agent_run result value must carry cost"));
+    }
+    Ok(())
+}
+
+fn validate_sandbox_exec_value(
+    call_kind: &str,
+    value: &Map<String, Value>,
+) -> Result<(), PublicSeamError> {
+    if call_kind != "sandbox_exec" {
+        return Ok(());
+    }
+    if value.get("cost").is_none() {
+        return Err(invalid_plan("sandbox_exec result value must carry cost"));
+    }
+    if required_string(value.get("status"), "sandbox_exec status")? == "completed"
+        && value.get("exit_code").and_then(Value::as_i64).is_none()
+    {
+        return Err(invalid_plan(
+            "completed sandbox_exec result value must carry exit_code",
+        ));
+    }
+    if let Some(files) = value.get("files") {
+        let files = files
+            .as_object()
+            .ok_or_else(|| invalid_plan("sandbox_exec result files must be an object"))?;
+        for path in files.keys() {
+            WorkspacePath::new(path).map_err(|error| {
+                invalid_plan(format!(
+                    "sandbox_exec result file path must be relative workspace path: {error}"
+                ))
+            })?;
+        }
     }
     Ok(())
 }
