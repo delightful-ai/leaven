@@ -885,6 +885,99 @@ fn reflect_propose_handoff_rejects_missing_or_forged_stage_receipts() {
 }
 
 #[test]
+fn reflect_propose_submission_binds_proposal_effects_to_cited_handoff() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let submission = package
+        .validate_reflect_propose_submission_document(
+            &reflect_propose_handoff(),
+            &reflect_propose_submission_plan(),
+        )
+        .unwrap();
+
+    assert_eq!(
+        submission.handoff().propose_stage_receipt(),
+        "stagerec_propose_stagepayload"
+    );
+    assert_eq!(submission.submit_batches(), 1);
+    assert_eq!(submission.proposal_count(), 1);
+    assert_eq!(submission.change_effects(), 1);
+    assert_eq!(submission.stage_provenance_links(), 1);
+}
+
+#[test]
+fn reflect_propose_submission_rejects_mutation_without_cited_handoff() {
+    let mut missing_stage_provenance = reflect_propose_submission_plan();
+    missing_stage_provenance["ops"][0]["write"]["proposals"][0]["informed_by"] = json!({
+        "kind": "literal",
+        "value": ["qrec_stagepayload_lineage"]
+    });
+    assert_reflect_propose_submission_rejected(
+        &reflect_propose_handoff(),
+        &missing_stage_provenance,
+    );
+
+    let mut nested_stage_provenance = reflect_propose_submission_plan();
+    nested_stage_provenance["ops"][0]["write"]["proposals"][0]["informed_by"] = json!({
+        "kind": "literal",
+        "value": [{"receipt": "stagerec_propose_stagepayload"}]
+    });
+    assert_reflect_propose_submission_rejected(
+        &reflect_propose_handoff(),
+        &nested_stage_provenance,
+    );
+
+    let mut missing_reflection_read_receipt = reflect_propose_submission_plan();
+    missing_reflection_read_receipt["ops"][0]["write"]["proposals"][0]["read_receipts"] =
+        json!(["qrec_other_lineage"]);
+    assert_reflect_propose_submission_rejected(
+        &reflect_propose_handoff(),
+        &missing_reflection_read_receipt,
+    );
+
+    let mut missing_causal_parent = reflect_propose_submission_plan();
+    missing_causal_parent["ops"][0]["write"]["proposals"][0]["causal"]["inputs"] =
+        json!(["cand_other"]);
+    assert_reflect_propose_submission_rejected(&reflect_propose_handoff(), &missing_causal_parent);
+
+    let mut effect_outside_allowed = reflect_propose_submission_plan();
+    effect_outside_allowed["ops"][0]["write"]["proposals"][0]["effect"] = create_effect();
+    assert_reflect_propose_submission_rejected(&reflect_propose_handoff(), &effect_outside_allowed);
+
+    let mut schema_outside_allowed = reflect_propose_submission_plan();
+    schema_outside_allowed["ops"][0]["write"]["proposals"][0]["effect"]["change_schema"] =
+        json!("fp_schema_sha256_other");
+    assert_reflect_propose_submission_rejected(&reflect_propose_handoff(), &schema_outside_allowed);
+
+    let mut wrong_surface = reflect_propose_submission_plan();
+    wrong_surface["ops"][0]["write"]["proposals"][0]["effect"]["surface_fingerprint"] =
+        json!("fp_surface_sha256_other");
+    assert_reflect_propose_submission_rejected(&reflect_propose_handoff(), &wrong_surface);
+
+    let mut wrong_parent = reflect_propose_submission_plan();
+    wrong_parent["ops"][0]["write"]["proposals"][0]["effect"]["target"] = json!("cand_other");
+    assert_reflect_propose_submission_rejected(&reflect_propose_handoff(), &wrong_parent);
+
+    let mut agent_session_allowed = reflect_propose_handoff();
+    agent_session_allowed["propose_request"]["allowed_effects"] =
+        json!(["change", "change_from_agent_session"]);
+    let mut missing_agent_read_receipt = reflect_propose_submission_plan();
+    missing_agent_read_receipt["ops"][0]["write"]["proposals"][0]["effect"] =
+        agent_session_effect();
+    assert_reflect_propose_submission_rejected(&agent_session_allowed, &missing_agent_read_receipt);
+}
+
+fn assert_reflect_propose_submission_rejected(handoff: &Value, proposal_plan: &Value) {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    assert!(matches!(
+        package
+            .validate_reflect_propose_submission_document(handoff, proposal_plan)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+}
+
+#[test]
 fn runner_request_rejects_case_target_material() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
 
@@ -1008,6 +1101,83 @@ fn stage_payload_fingerprint(value: &Value) -> String {
         "fp_stage_payload_sha256_{}",
         jcs_canonicalize::sha256_jcs_hex(value).unwrap()
     )
+}
+
+fn reflect_propose_submission_plan() -> Value {
+    json!({
+        "schema_version": "leaven.plan.v1",
+        "plan_id": "stageproposal0001",
+        "consistency": {
+            "kind": "latest_at_start"
+        },
+        "mode": {
+            "kind": "dry_run"
+        },
+        "ops": [
+            {
+                "kind": "write",
+                "name": "proposal_batch",
+                "idempotency_key": "stage-proposal-0001",
+                "write": {
+                    "kind": "submit_proposal_batch",
+                    "semantics": "sequence",
+                    "proposals": [
+                        {
+                            "effect": {
+                                "kind": "change",
+                                "target": "cand_stagepayload_parent",
+                                "surface_fingerprint": "fp_surface_sha256_stagepayload",
+                                "change_schema": "fp_schema_sha256_stagepatch",
+                                "change": {
+                                    "kind": "literal",
+                                    "value": {"patch": "add empty-input guard"}
+                                }
+                            },
+                            "causal": {
+                                "inputs": ["cand_stagepayload_parent"]
+                            },
+                            "informed_by": {
+                                "kind": "literal",
+                                "value": [
+                                    "stagerec_propose_stagepayload",
+                                    "qrec_stagepayload_lineage"
+                                ]
+                            },
+                            "read_receipts": ["qrec_stagepayload_lineage"]
+                        }
+                    ]
+                }
+            }
+        ],
+        "return": ["proposal_batch"],
+        "commit": {
+            "kind": "graph_writes_atomic",
+            "on_stale": "reject"
+        }
+    })
+}
+
+fn create_effect() -> Value {
+    json!({
+        "kind": "create",
+        "artifact_type": "answer",
+        "artifact_schema": "fp_schema_sha256_stagepatch",
+        "artifact": {
+            "kind": "literal",
+            "value": {"created": true}
+        }
+    })
+}
+
+fn agent_session_effect() -> Value {
+    json!({
+        "kind": "change_from_agent_session",
+        "target": "cand_stagepayload_parent",
+        "agent_receipt": "agentrec_stagepayload_session",
+        "parser": "leaven.agent.patch.v1",
+        "surface_fingerprint": "fp_surface_sha256_stagepayload",
+        "change_schema": "fp_schema_sha256_stagepatch"
+    })
 }
 
 fn reflect_request() -> Value {

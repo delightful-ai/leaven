@@ -38,6 +38,19 @@ pub struct ReflectProposeHandoffDocument {
     reflection_source_ref_count: usize,
 }
 
+/// Validated proposal submission citing a separate reflect/propose handoff.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ReflectProposeSubmissionDocument {
+    handoff: ReflectProposeHandoffDocument,
+    submit_batches: usize,
+    proposal_count: usize,
+    create_effects: usize,
+    change_effects: usize,
+    workspace_diff_effects: usize,
+    agent_session_effects: usize,
+    stage_provenance_links: usize,
+}
+
 impl ReflectProposeHandoffDocument {
     pub(crate) fn from_schema_valid_values(
         handoff: &Value,
@@ -196,6 +209,114 @@ impl ReflectProposeHandoffDocument {
     /// Number of source refs carried by the consumed `ReflectionResult`.
     pub const fn reflection_source_ref_count(&self) -> usize {
         self.reflection_source_ref_count
+    }
+}
+
+impl ReflectProposeSubmissionDocument {
+    pub(crate) fn from_valid_handoff_and_plan(
+        handoff: ReflectProposeHandoffDocument,
+        handoff_value: &Value,
+        plan: &Value,
+    ) -> Result<Self, PublicSeamError> {
+        let propose = handoff_value
+            .pointer("/propose_request")
+            .and_then(Value::as_object)
+            .ok_or_else(|| {
+                invalid_stage_payload("reflect/propose submission must carry /propose_request")
+            })?;
+        let allowed_effects = required_array(propose.get("allowed_effects"), "allowed_effects")?
+            .iter()
+            .map(|effect| {
+                required_string(Some(effect), "allowed_effects")
+                    .and_then(StageProposalEffect::parse)
+            })
+            .collect::<Result<BTreeSet<_>, _>>()?;
+        let allowed_change_schemas = string_set(
+            propose.get("allowed_change_schemas"),
+            "allowed_change_schemas",
+        )?;
+        let reflection_read_receipts = receipt_ref_ids(
+            propose
+                .get("reflection_result")
+                .and_then(|reflection| reflection.as_object())
+                .and_then(|reflection| reflection.get("read_receipts")),
+            "reflection_result.read_receipts",
+        )?;
+
+        let mut document = Self {
+            handoff,
+            submit_batches: 0,
+            proposal_count: 0,
+            create_effects: 0,
+            change_effects: 0,
+            workspace_diff_effects: 0,
+            agent_session_effects: 0,
+            stage_provenance_links: 0,
+        };
+        let ops = plan.get("ops").and_then(Value::as_array).ok_or_else(|| {
+            invalid_stage_payload("proposal submission plan ops must be an array")
+        })?;
+        for op in ops {
+            let Some(write) = op.get("write").and_then(Value::as_object) else {
+                continue;
+            };
+            if required_string(write.get("kind"), "write.kind")? == "submit_proposal_batch" {
+                document.submit_batches += 1;
+                validate_submit_proposal_batch_for_handoff(
+                    write,
+                    &allowed_effects,
+                    &allowed_change_schemas,
+                    &reflection_read_receipts,
+                    &mut document,
+                )?;
+            }
+        }
+        if document.submit_batches == 0 {
+            return Err(invalid_stage_payload(
+                "reflect/propose submission must carry a submit_proposal_batch write",
+            ));
+        }
+        Ok(document)
+    }
+
+    /// Validated reflect/propose handoff cited by this proposal submission.
+    pub const fn handoff(&self) -> &ReflectProposeHandoffDocument {
+        &self.handoff
+    }
+
+    /// Number of `submit_proposal_batch` writes checked.
+    pub const fn submit_batches(&self) -> usize {
+        self.submit_batches
+    }
+
+    /// Number of proposals checked.
+    pub const fn proposal_count(&self) -> usize {
+        self.proposal_count
+    }
+
+    /// Number of `create` proposal effects checked.
+    pub const fn create_effects(&self) -> usize {
+        self.create_effects
+    }
+
+    /// Number of `change` proposal effects checked.
+    pub const fn change_effects(&self) -> usize {
+        self.change_effects
+    }
+
+    /// Number of `change_from_workspace_diff` proposal effects checked.
+    pub const fn workspace_diff_effects(&self) -> usize {
+        self.workspace_diff_effects
+    }
+
+    /// Number of `change_from_agent_session` proposal effects checked.
+    pub const fn agent_session_effects(&self) -> usize {
+        self.agent_session_effects
+    }
+
+    /// Number of proposals that cite the proposer stage receipt in `informed_by`.
+    pub const fn stage_provenance_links(&self) -> usize {
+        self.stage_provenance_links
     }
 }
 
@@ -393,6 +514,27 @@ impl StageProposalEffect {
             Self::Change | Self::ChangeFromWorkspaceDiff | Self::ChangeFromAgentSession
         )
     }
+
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::Create => "create",
+            Self::Change => "change",
+            Self::ChangeFromWorkspaceDiff => "change_from_workspace_diff",
+            Self::ChangeFromAgentSession => "change_from_agent_session",
+        }
+    }
+}
+
+impl Ord for StageProposalEffect {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.as_str().cmp(other.as_str())
+    }
+}
+
+impl PartialOrd for StageProposalEffect {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 fn inspect_reflect_request(
@@ -546,6 +688,161 @@ fn inspect_propose_request(
         ));
     }
     Ok((effects, change_schema_count))
+}
+
+fn validate_submit_proposal_batch_for_handoff(
+    write: &serde_json::Map<String, Value>,
+    allowed_effects: &BTreeSet<StageProposalEffect>,
+    allowed_change_schemas: &BTreeSet<String>,
+    reflection_read_receipts: &[String],
+    document: &mut ReflectProposeSubmissionDocument,
+) -> Result<(), PublicSeamError> {
+    let proposals = write
+        .get("proposals")
+        .and_then(Value::as_array)
+        .ok_or_else(|| invalid_stage_payload("submit_proposal_batch must carry proposals"))?;
+    for proposal in proposals {
+        let proposal = proposal
+            .as_object()
+            .ok_or_else(|| invalid_stage_payload("proposal submission entries must be objects"))?;
+        let effect = proposal
+            .get("effect")
+            .and_then(Value::as_object)
+            .ok_or_else(|| invalid_stage_payload("proposal submission must carry effect"))?;
+        let effect_kind =
+            StageProposalEffect::parse(required_string(effect.get("kind"), "effect.kind")?)?;
+        if !allowed_effects.contains(&effect_kind) {
+            return Err(invalid_stage_payload(format!(
+                "proposal effect `{}` is outside ProposeRequest.allowed_effects",
+                effect_kind.as_str()
+            )));
+        }
+        validate_proposal_stage_provenance(proposal, document.handoff.propose_stage_receipt())?;
+        validate_proposal_reflection_read_receipts(proposal, reflection_read_receipts)?;
+        validate_proposal_causal_parent(proposal, document.handoff.parent())?;
+        document.stage_provenance_links += 1;
+        document.proposal_count += 1;
+        match effect_kind {
+            StageProposalEffect::Create => document.create_effects += 1,
+            StageProposalEffect::Change => {
+                document.change_effects += 1;
+                validate_change_effect_for_handoff(effect, allowed_change_schemas, document)?;
+            }
+            StageProposalEffect::ChangeFromWorkspaceDiff => {
+                document.workspace_diff_effects += 1;
+                validate_change_effect_for_handoff(effect, allowed_change_schemas, document)?;
+            }
+            StageProposalEffect::ChangeFromAgentSession => {
+                document.agent_session_effects += 1;
+                validate_agent_session_proposal_receipt(proposal, effect)?;
+                validate_change_effect_for_handoff(effect, allowed_change_schemas, document)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_change_effect_for_handoff(
+    effect: &serde_json::Map<String, Value>,
+    allowed_change_schemas: &BTreeSet<String>,
+    document: &ReflectProposeSubmissionDocument,
+) -> Result<(), PublicSeamError> {
+    let target = effect
+        .get("target")
+        .ok_or_else(|| invalid_stage_payload("change proposal effect must carry target"))?;
+    let target = source_ref_key(target)?;
+    if target != document.handoff.parent() {
+        return Err(invalid_stage_payload(
+            "change proposal target must match the reflected parent candidate",
+        ));
+    }
+    if required_string(
+        effect.get("surface_fingerprint"),
+        "effect.surface_fingerprint",
+    )? != document.handoff.surface_fingerprint()
+    {
+        return Err(invalid_stage_payload(
+            "change proposal surface must match the ProposeRequest surface fingerprint",
+        ));
+    }
+    let change_schema = required_string(effect.get("change_schema"), "effect.change_schema")?;
+    if !allowed_change_schemas.contains(change_schema) {
+        return Err(invalid_stage_payload(format!(
+            "proposal change_schema `{change_schema}` is outside ProposeRequest.allowed_change_schemas"
+        )));
+    }
+    Ok(())
+}
+
+fn validate_proposal_stage_provenance(
+    proposal: &serde_json::Map<String, Value>,
+    propose_stage_receipt: &str,
+) -> Result<(), PublicSeamError> {
+    let informed_by = proposal.get("informed_by").ok_or_else(|| {
+        invalid_stage_payload("proposal submission must carry informed_by stage provenance")
+    })?;
+    if literal_expr_array_contains_string(informed_by, propose_stage_receipt) {
+        Ok(())
+    } else {
+        Err(invalid_stage_payload(
+            "proposal submission informed_by must cite the proposer stage receipt",
+        ))
+    }
+}
+
+fn validate_proposal_reflection_read_receipts(
+    proposal: &serde_json::Map<String, Value>,
+    reflection_read_receipts: &[String],
+) -> Result<(), PublicSeamError> {
+    let proposal_read_receipts = receipt_ref_ids(proposal.get("read_receipts"), "read_receipts")?;
+    for receipt in reflection_read_receipts {
+        if !proposal_read_receipts.contains(receipt) {
+            return Err(invalid_stage_payload(format!(
+                "proposal read_receipts must preserve reflection read receipt `{receipt}`"
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn validate_proposal_causal_parent(
+    proposal: &serde_json::Map<String, Value>,
+    parent: &str,
+) -> Result<(), PublicSeamError> {
+    let causal_inputs = proposal
+        .get("causal")
+        .and_then(|causal| causal.as_object())
+        .and_then(|causal| causal.get("inputs"))
+        .and_then(Value::as_array)
+        .ok_or_else(|| invalid_stage_payload("proposal causal.inputs must be an array"))?;
+    for input in causal_inputs {
+        if source_ref_key(input)? == parent {
+            return Ok(());
+        }
+    }
+    Err(invalid_stage_payload(
+        "proposal causal.inputs must include the reflected parent candidate",
+    ))
+}
+
+fn validate_agent_session_proposal_receipt(
+    proposal: &serde_json::Map<String, Value>,
+    effect: &serde_json::Map<String, Value>,
+) -> Result<(), PublicSeamError> {
+    let agent_receipt = receipt_ref_id(
+        effect.get("agent_receipt").ok_or_else(|| {
+            invalid_stage_payload("agent-session proposal must carry agent_receipt")
+        })?,
+        "effect.agent_receipt",
+    )?;
+    let read_receipts = receipt_ref_ids(proposal.get("read_receipts"), "read_receipts")?;
+    if read_receipts.contains(&agent_receipt) {
+        Ok(())
+    } else {
+        Err(invalid_stage_payload(format!(
+            "agent-session proposal read_receipts must include agent receipt `{agent_receipt}`"
+        )))
+    }
 }
 
 fn require_parent_source_ref(
@@ -1118,6 +1415,23 @@ fn string_array(value: Option<&Value>, field: &str) -> Result<Vec<String>, Publi
                 .collect()
         },
     )
+}
+
+fn string_set(value: Option<&Value>, field: &str) -> Result<BTreeSet<String>, PublicSeamError> {
+    string_array(value, field).map(|values| values.into_iter().collect())
+}
+
+fn literal_expr_array_contains_string(value: &Value, needle: &str) -> bool {
+    let Some(object) = value.as_object() else {
+        return false;
+    };
+    if object.get("kind").and_then(Value::as_str) != Some("literal") {
+        return false;
+    }
+    object
+        .get("value")
+        .and_then(Value::as_array)
+        .is_some_and(|values| values.iter().any(|value| value.as_str() == Some(needle)))
 }
 
 fn source_ref_set(value: Option<&Value>, field: &str) -> Result<BTreeSet<String>, PublicSeamError> {

@@ -61,6 +61,7 @@ pub use plan_execution::{
 pub use proposal_authority::ProposalAuthorityReport;
 pub use result::{PlanResultDocument, Replayability};
 pub use stage_payload::{
-    ReflectProposeHandoffDocument, StagePayloadDocument, StagePayloadRole, StageProposalEffect,
+    ReflectProposeHandoffDocument, ReflectProposeSubmissionDocument, StagePayloadDocument,
+    StagePayloadRole, StageProposalEffect,
 };
 pub use watch::DeferredWatchReplacement;
