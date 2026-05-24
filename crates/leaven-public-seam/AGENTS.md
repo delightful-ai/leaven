@@ -131,9 +131,10 @@ backend execution, ACP delivery, proposal parsing, streaming delivery, or full
 agent/sandbox row closeout. The `PlanWorkspaceMaterializeRequest` and
 `PlanWorkspaceReleaseRequest` routes lower schema-valid workspace lifecycle
 calls into typed public-seam requests and emit `workspace_handle` Plan Result
-values with call receipts; they reject schema-valid unmaterialized release
-attempts through the host path instead of accepting made-up or host filesystem
-paths as workspace handles. They are not workspace backend execution, file
+values with call receipts; `workspace_release` validates the requested
+WorkspaceRef against live `workspace_handle` dependency values before the host
+can perform release, rejects already released handles, and still refuses host
+filesystem paths as workspace handles. They are not workspace backend execution, file
 read/list/stat/digest/git operations, artifact capture, snapshot production, or
 full workspace row closeout. The
 `PublicSeamPackage::execute_plan_document_with_capability` route

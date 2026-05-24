@@ -127,6 +127,7 @@ impl ReflectionWorkspace {
                         cwd: self.layout.mutable_root.clone(),
                         output_contract: OutputContract::WorkspaceDiff {
                             roots: vec![self.layout.mutable_root.clone()],
+                            surface_fingerprint: None,
                         },
                         env: Default::default(),
                         tool_policy: Default::default(),

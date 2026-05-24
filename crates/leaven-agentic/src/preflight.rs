@@ -477,17 +477,26 @@ fn check_output_contract(report: &mut AgentRunPreflightReport, contract: &Output
         OutputContract::FinalMessage => {
             report.ok("output-contract", "final assistant message required");
         }
-        OutputContract::WorkspaceDiff { roots } => {
+        OutputContract::WorkspaceDiff {
+            roots,
+            surface_fingerprint,
+        } => {
             if roots.is_empty() {
                 report.warn(
                     "output-contract",
                     "workspace-diff contract has no explicit roots",
                 );
             } else {
-                report.ok(
-                    "output-contract",
-                    format!("workspace diff over {} root(s)", roots.len()),
+                let detail = surface_fingerprint.as_ref().map_or_else(
+                    || format!("workspace diff over {} root(s)", roots.len()),
+                    |fingerprint| {
+                        format!(
+                            "workspace diff over {} root(s) for `{fingerprint}`",
+                            roots.len()
+                        )
+                    },
                 );
+                report.ok("output-contract", detail);
             }
         }
     }

@@ -543,14 +543,16 @@ fn agent_run_and_sandbox_exec_lower_to_owned_runtime_primitives_and_emit_receipt
 #[test]
 fn workspace_materialize_and_release_emit_typed_handles_and_receipts() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut plan = workspace_materialize_release_plan();
+    plan["ops"][1]["call"]["workspace"] = json!({
+        "kind": "workspace",
+        "run": "run_demo",
+        "id": "ws_planexec_materialized"
+    });
     let mut host = RecordingPlanHost::default();
 
     let report = package
-        .execute_plan_document(
-            &workspace_materialize_release_plan(),
-            &plan_execution_context(),
-            &mut host,
-        )
+        .execute_plan_document(&plan, &plan_execution_context(), &mut host)
         .unwrap();
 
     assert_eq!(
@@ -590,6 +592,7 @@ fn workspace_release_rejects_unmaterialized_handles_and_host_path_substitutes() 
     let error = package
         .execute_plan_document(&unmaterialized, &plan_execution_context(), &mut host)
         .unwrap_err();
+    assert_eq!(host.calls, vec!["workspace_materialize"]);
     assert!(
         error
             .to_string()
@@ -605,6 +608,34 @@ fn workspace_release_rejects_unmaterialized_handles_and_host_path_substitutes() 
             .expect_err("host paths are not WorkspaceRef values"),
         PublicSeamError::ExampleValidation { .. }
     ));
+
+    let mut released = workspace_materialize_release_plan();
+    released["ops"].as_array_mut().unwrap().push(json!({
+        "kind": "call",
+        "name": "release_again",
+        "deps": ["release"],
+        "idempotency_key": "plan-workspace-0003",
+        "call": {
+            "kind": "workspace_release",
+            "workspace": "ws_planexec_materialized",
+            "force": false
+        }
+    }));
+    released["return"] = json!(["workspace", "release", "release_again"]);
+    let mut host = RecordingPlanHost::default();
+    let error = package
+        .execute_plan_document(&released, &plan_execution_context(), &mut host)
+        .unwrap_err();
+    assert_eq!(
+        host.calls,
+        vec!["workspace_materialize", "workspace_release"]
+    );
+    assert!(
+        error
+            .to_string()
+            .contains("workspace_release refused already released workspace"),
+        "unexpected error: {error:?}"
+    );
 }
 
 #[test]
@@ -617,6 +648,24 @@ fn agent_run_lowering_preserves_json_schema_output_contract() {
         "schema": {
             "type": "object"
         }
+    });
+    let mut host = RecordingPlanHost::default();
+
+    package
+        .execute_plan_document(&plan, &plan_execution_context(), &mut host)
+        .unwrap();
+
+    assert_eq!(host.calls, vec!["agent"]);
+}
+
+#[test]
+fn agent_run_lowering_preserves_workspace_diff_surface_fingerprint() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut plan = execute_external_call_plan(agent_run_call());
+    plan["ops"][1]["call"]["output"] = json!({
+        "kind": "workspace_diff",
+        "surface_fingerprint": "fp_surface_sha256_agentdiff",
+        "max_bytes": 4096
     });
     let mut host = RecordingPlanHost::default();
 
@@ -1637,6 +1686,22 @@ impl PlanExecutionHost for RecordingPlanHost {
                 } => {
                     assert_eq!(schema_fingerprint, "fp_schema_sha256_agentoutput");
                     assert_eq!(schema["type"], "object");
+                }
+                other => panic!("unexpected agent output contract: {other:?}"),
+            },
+            Some("workspace_diff") => match agent_request.output_contract {
+                leaven_agent::OutputContract::WorkspaceDiff {
+                    roots,
+                    surface_fingerprint,
+                } => {
+                    assert_eq!(
+                        roots.first().map(leaven_workspace::WorkspacePath::as_str),
+                        Some("")
+                    );
+                    assert_eq!(
+                        surface_fingerprint.as_deref(),
+                        Some("fp_surface_sha256_agentdiff")
+                    );
                 }
                 other => panic!("unexpected agent output contract: {other:?}"),
             },
