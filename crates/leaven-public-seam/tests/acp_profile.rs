@@ -1186,7 +1186,9 @@ fn acp_extension_results_reject_agent_audit_gaps() {
             agent_session_primary_with_command(json!({
                 "argv": ["codex"],
                 "status": "completed",
-                "receipt": "agentrec_other"
+                "receipt": "agentrec_other",
+                "stdout_ref": acp_blob_ref("blob_agent_stdout", &["transcript.raw"]),
+                "stderr_ref": acp_blob_ref("blob_agent_stderr", &["transcript.raw"])
             })),
             "agent_run command record receipt",
         ),
@@ -2041,7 +2043,9 @@ fn agent_session_primary() -> Value {
         "commands": [{
             "argv": ["codex"],
             "status": "completed",
-            "receipt": "agentrec_acp"
+            "receipt": "agentrec_acp",
+            "stdout_ref": acp_blob_ref("blob_agent_stdout", &["transcript.raw"]),
+            "stderr_ref": acp_blob_ref("blob_agent_stderr", &["transcript.raw"])
         }],
         "cost": {"usd_micro": 1000, "agent_calls": 1},
         "graph_revision": "rev_acp",

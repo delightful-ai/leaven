@@ -50,12 +50,13 @@ pub use package::{
 };
 pub use plan::{PlanDocument, PlanOperationKind};
 pub use plan_execution::{
-    PlanAgentRunOutcome, PlanAgentRunRequest, PlanCaseQueryOutcome, PlanCaseQueryRequest,
-    PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanExecutionContext, PlanExecutionHost,
-    PlanExecutionReport, PlanGraphQueryOutcome, PlanGraphQueryRequest, PlanGraphReadScope,
-    PlanLmCompleteOutcome, PlanLmCompleteRequest, PlanSandboxExecOutcome, PlanSandboxExecRequest,
-    PlanWorkspaceMaterializeOutcome, PlanWorkspaceMaterializeRequest, PlanWorkspaceQueryOutcome,
-    PlanWorkspaceQueryRequest, PlanWorkspaceReleaseOutcome, PlanWorkspaceReleaseRequest,
+    AgentCommandOutputRefs, PlanAgentRunOutcome, PlanAgentRunRequest, PlanCaseQueryOutcome,
+    PlanCaseQueryRequest, PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanExecutionContext,
+    PlanExecutionHost, PlanExecutionReport, PlanGraphQueryOutcome, PlanGraphQueryRequest,
+    PlanGraphReadScope, PlanLmCompleteOutcome, PlanLmCompleteRequest, PlanSandboxExecOutcome,
+    PlanSandboxExecRequest, PlanWorkspaceMaterializeOutcome, PlanWorkspaceMaterializeRequest,
+    PlanWorkspaceQueryOutcome, PlanWorkspaceQueryRequest, PlanWorkspaceReleaseOutcome,
+    PlanWorkspaceReleaseRequest,
 };
 pub use proposal_authority::ProposalAuthorityReport;
 pub use result::{PlanResultDocument, Replayability};

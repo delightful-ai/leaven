@@ -13,10 +13,10 @@ mod result_value;
 
 use effects::LiveWorkspaceHandle;
 pub use effects::{
-    PlanAgentRunOutcome, PlanAgentRunRequest, PlanEmitRunEventOutcome, PlanEmitRunEventRequest,
-    PlanLmCompleteOutcome, PlanLmCompleteRequest, PlanSandboxExecOutcome, PlanSandboxExecRequest,
-    PlanWorkspaceMaterializeOutcome, PlanWorkspaceMaterializeRequest, PlanWorkspaceReleaseOutcome,
-    PlanWorkspaceReleaseRequest,
+    AgentCommandOutputRefs, PlanAgentRunOutcome, PlanAgentRunRequest, PlanEmitRunEventOutcome,
+    PlanEmitRunEventRequest, PlanLmCompleteOutcome, PlanLmCompleteRequest, PlanSandboxExecOutcome,
+    PlanSandboxExecRequest, PlanWorkspaceMaterializeOutcome, PlanWorkspaceMaterializeRequest,
+    PlanWorkspaceReleaseOutcome, PlanWorkspaceReleaseRequest,
 };
 use evaluate::{EvaluatedExpr, ResolvedDependencies, evaluate_expr, resolved_dependency_values};
 pub use queries::{

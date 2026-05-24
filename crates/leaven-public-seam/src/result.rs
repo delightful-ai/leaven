@@ -410,6 +410,38 @@ fn collect_value_blob_ref_data_classes(
             )?;
         }
     }
+    if let Some(commands) = value.get("commands") {
+        let commands = commands
+            .as_array()
+            .ok_or_else(|| invalid_result("value.commands must be an array"))?;
+        for (index, command) in commands.iter().enumerate() {
+            let command = command
+                .as_object()
+                .ok_or_else(|| invalid_result("value.commands entries must be objects"))?;
+            collect_optional_blob_ref_data_classes(
+                command.get("stdout_ref"),
+                &format!("value.commands[{index}].stdout_ref"),
+                required,
+            )?;
+            collect_optional_blob_ref_data_classes(
+                command.get("stderr_ref"),
+                &format!("value.commands[{index}].stderr_ref"),
+                required,
+            )?;
+            if let Some(files) = command.get("files") {
+                let files = files.as_object().ok_or_else(|| {
+                    invalid_result(format!("value.commands[{index}].files must be an object"))
+                })?;
+                for (path, blob_ref) in files {
+                    collect_optional_blob_ref_data_classes(
+                        Some(blob_ref),
+                        &format!("value.commands[{index}].files[{path}]"),
+                        required,
+                    )?;
+                }
+            }
+        }
+    }
     Ok(())
 }
 

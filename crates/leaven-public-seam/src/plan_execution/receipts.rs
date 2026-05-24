@@ -814,6 +814,59 @@ fn validate_agent_command_record(command: &Map<String, Value>) -> Result<(), Pub
             "agent_run command status `{status}` is not a V1 command status"
         )));
     }
+    validate_agent_command_blob_ref(command.get("stdout_ref"), "stdout_ref")?;
+    validate_agent_command_blob_ref(command.get("stderr_ref"), "stderr_ref")?;
+    if let Some(files) = command.get("files") {
+        let files = files
+            .as_object()
+            .ok_or_else(|| invalid_plan("agent_run command files must be an object"))?;
+        for (path, blob_ref) in files {
+            WorkspacePath::new(path).map_err(|error| {
+                invalid_plan(format!(
+                    "agent_run command file path must be relative workspace path: {error}"
+                ))
+            })?;
+            validate_agent_command_blob_ref(Some(blob_ref), "files")?;
+        }
+    }
+    Ok(())
+}
+
+fn validate_agent_command_blob_ref(
+    blob_ref: Option<&Value>,
+    field: &str,
+) -> Result<(), PublicSeamError> {
+    let object = blob_ref
+        .and_then(Value::as_object)
+        .ok_or_else(|| invalid_plan(format!("agent_run command record must carry {field}")))?;
+    if object.get("kind").and_then(Value::as_str) != Some("blob_ref") {
+        return Err(invalid_plan(format!(
+            "agent_run command {field} must be a blob_ref"
+        )));
+    }
+    required_string(object.get("id"), "agent_run command blob_ref id")?;
+    let sha = required_string(object.get("sha256"), "agent_run command blob_ref sha256")?;
+    if sha.len() != 64 || !sha.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err(invalid_plan(
+            "agent_run command blob_ref sha256 must be 64 hex characters",
+        ));
+    }
+    object
+        .get("bytes")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| invalid_plan("agent_run command blob_ref must carry bytes"))?;
+    let data_classes = object
+        .get("data_classes")
+        .and_then(Value::as_array)
+        .ok_or_else(|| invalid_plan("agent_run command blob_ref must carry data_classes"))?;
+    if data_classes.is_empty() {
+        return Err(invalid_plan(
+            "agent_run command blob_ref data_classes must not be empty",
+        ));
+    }
+    for data_class in data_classes {
+        required_string(Some(data_class), "agent_run command blob_ref data_classes")?;
+    }
     Ok(())
 }
 

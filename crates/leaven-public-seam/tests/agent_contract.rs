@@ -1,13 +1,14 @@
 use leaven_agent::{AgentSession, CommandRecord};
 use leaven_kernel::{AgentSessionId, Cost, Fingerprint, Metered};
 use leaven_public_seam::{
-    PlanAgentRunOutcome, PlanAgentRunRequest, PlanEmitRunEventOutcome, PlanEmitRunEventRequest,
-    PlanExecutionContext, PlanExecutionHost, PlanLmCompleteOutcome, PlanLmCompleteRequest,
-    PlanWorkspaceMaterializeOutcome, PlanWorkspaceMaterializeRequest, PublicSeamError,
-    PublicSeamPackage, SchemaFingerprint,
+    AgentCommandOutputRefs, PlanAgentRunOutcome, PlanAgentRunRequest, PlanEmitRunEventOutcome,
+    PlanEmitRunEventRequest, PlanExecutionContext, PlanExecutionHost, PlanLmCompleteOutcome,
+    PlanLmCompleteRequest, PlanWorkspaceMaterializeOutcome, PlanWorkspaceMaterializeRequest,
+    PublicSeamError, PublicSeamPackage, SchemaFingerprint,
 };
-use leaven_workspace::{CapturedOutput, Command, CommandOutput, ExitStatus};
+use leaven_workspace::{CapturedOutput, Command, CommandOutput, ExitStatus, WorkspacePath};
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 
 #[test]
 fn agent_run_can_project_provider_neutral_agent_session_into_plan_result() {
@@ -32,13 +33,21 @@ fn agent_run_can_project_provider_neutral_agent_session_into_plan_result() {
     assert_eq!(session["kind"], "agent_session");
     assert_eq!(session["status"], "completed");
     assert_eq!(session["transcript_ref"]["id"], "blob_agent_transcript");
-    assert_eq!(session["data_classes"], json!(["public", "transcript.raw"]));
+    assert_eq!(
+        session["data_classes"],
+        json!(["public", "transcript.raw", "workspace.file"])
+    );
     assert_eq!(
         session["commands"][0],
         json!({
             "argv": ["codex", "exec", "--json"],
             "status": "completed",
-            "receipt": "agentrec_completion"
+            "receipt": "agentrec_completion",
+            "stdout_ref": blob_ref_for_bytes("blob_agent_command_stdout", b"agent stdout", &["transcript.raw"]),
+            "stderr_ref": blob_ref_for_bytes("blob_agent_command_stderr", b"agent stderr", &["transcript.raw"]),
+            "files": {
+                "reports/agent.json": blob_ref_for_bytes("blob_agent_command_report", br#"{"ok":true}"#, &["workspace.file"])
+            }
         })
     );
     assert_eq!(session["cost"], json!({"lm_calls": 1}));
@@ -101,6 +110,73 @@ fn agent_session_projection_preserves_invalid_command_argv_for_validation() {
 }
 
 #[test]
+fn agent_session_command_output_refs_must_bind_captured_bytes_and_files() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    for (session, fixture, expected) in [
+        (
+            scripted_agent_session("codex"),
+            CommandOutputRefsFixture::MissingRefSet,
+            "agent session has 1 commands but 0 command output ref sets",
+        ),
+        (
+            scripted_agent_session("codex"),
+            CommandOutputRefsFixture::WrongStdoutHash,
+            "agent command 0 stdout blob ref sha256 does not match captured output",
+        ),
+        (
+            scripted_agent_session("codex"),
+            CommandOutputRefsFixture::WrongStdoutBytes,
+            "agent command 0 stdout blob ref bytes `99` do not match captured output bytes `12`",
+        ),
+        (
+            scripted_agent_session("codex"),
+            CommandOutputRefsFixture::WrongStderrHash,
+            "agent command 0 stderr blob ref sha256 does not match captured output",
+        ),
+        (
+            scripted_agent_session("codex"),
+            CommandOutputRefsFixture::MissingOutputFile,
+            "agent command 0 output file `reports/agent.json` is missing a blob ref",
+        ),
+        (
+            scripted_agent_session("codex"),
+            CommandOutputRefsFixture::ExtraOutputFile,
+            "agent command 0 output file `reports/extra.json` blob ref does not match a captured command output file",
+        ),
+        (
+            scripted_agent_session("codex"),
+            CommandOutputRefsFixture::WrongFileHash,
+            "agent command 0 output file `reports/agent.json` blob ref sha256 does not match captured output",
+        ),
+        (
+            scripted_agent_session_with("codex", CommandCaptureFixture::TruncatedStdout),
+            CommandOutputRefsFixture::Valid,
+            "agent command 0 stdout capture is truncated and cannot be bound to a blob ref",
+        ),
+        (
+            scripted_agent_session_with("codex", CommandCaptureFixture::TruncatedStderr),
+            CommandOutputRefsFixture::Valid,
+            "agent command 0 stderr capture is truncated and cannot be bound to a blob ref",
+        ),
+    ] {
+        let mut host = AgentSessionHost::new(session).with_command_output_refs(fixture);
+
+        let error = package
+            .execute_plan_document(
+                &agent_run_workspace_plan(),
+                &plan_execution_context(),
+                &mut host,
+            )
+            .unwrap_err();
+
+        assert!(
+            error.to_string().contains(expected),
+            "unexpected error for {fixture:?}: {error:?}"
+        );
+    }
+}
+
+#[test]
 fn agent_run_json_schema_executes_through_provider_neutral_agent_contract() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let mut host =
@@ -148,6 +224,7 @@ fn agent_run_json_schema_rejects_invalid_parsed_provider_payload() {
 struct AgentSessionHost {
     session: Metered<AgentSession>,
     parsed: Option<Value>,
+    command_output_refs: CommandOutputRefsFixture,
     calls: Vec<&'static str>,
     agent_requests: Vec<leaven_agent::AgentRunRequest>,
 }
@@ -157,6 +234,7 @@ impl AgentSessionHost {
         Self {
             session,
             parsed: None,
+            command_output_refs: CommandOutputRefsFixture::Valid,
             calls: Vec::new(),
             agent_requests: Vec::new(),
         }
@@ -166,6 +244,30 @@ impl AgentSessionHost {
         self.parsed = Some(parsed);
         self
     }
+
+    fn with_command_output_refs(mut self, fixture: CommandOutputRefsFixture) -> Self {
+        self.command_output_refs = fixture;
+        self
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+enum CommandOutputRefsFixture {
+    Valid,
+    MissingRefSet,
+    WrongStdoutHash,
+    WrongStdoutBytes,
+    WrongStderrHash,
+    MissingOutputFile,
+    ExtraOutputFile,
+    WrongFileHash,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum CommandCaptureFixture {
+    Valid,
+    TruncatedStdout,
+    TruncatedStderr,
 }
 
 impl PlanExecutionHost for AgentSessionHost {
@@ -185,12 +287,13 @@ impl PlanExecutionHost for AgentSessionHost {
         assert_eq!(request.live_workspace()?, "ws_planexec_materialized");
         self.agent_requests.push(request.to_agent_run_request()?);
         self.calls.push("agent");
-        let mut outcome = PlanAgentRunOutcome::from_agent_session(
+        let mut outcome = PlanAgentRunOutcome::from_agent_session_with_command_output_refs(
             self.session.clone(),
             Fingerprint::from_bytes([77; 32]),
             blob_ref("blob_agent_transcript"),
             "agentrec_completion",
-        );
+            command_output_refs(self.command_output_refs),
+        )?;
         if let Some(parsed) = self.parsed.clone() {
             outcome = outcome.with_parsed(parsed);
         }
@@ -220,20 +323,97 @@ impl PlanExecutionHost for AgentSessionHost {
 }
 
 fn scripted_agent_session(program: &str) -> Metered<AgentSession> {
+    scripted_agent_session_with(program, CommandCaptureFixture::Valid)
+}
+
+fn scripted_agent_session_with(
+    program: &str,
+    fixture: CommandCaptureFixture,
+) -> Metered<AgentSession> {
     let mut session = AgentSession::succeeded(AgentSessionId::new());
     let mut command = Command::new(program);
     command.args = vec!["exec".to_owned(), "--json".to_owned()];
+    let output_files = std::collections::BTreeMap::from([(
+        WorkspacePath::new("reports/agent.json").unwrap(),
+        CapturedOutput::new(br#"{"ok":true}"#.to_vec(), None),
+    )]);
     session.commands.push(CommandRecord {
         command,
         output: CommandOutput {
             status: ExitStatus { code: Some(0) },
-            stdout: CapturedOutput::empty(),
-            stderr: CapturedOutput::empty(),
-            output_files: std::collections::BTreeMap::new(),
+            stdout: CapturedOutput::new(
+                b"agent stdout".to_vec(),
+                matches!(fixture, CommandCaptureFixture::TruncatedStdout).then_some(5),
+            ),
+            stderr: CapturedOutput::new(
+                b"agent stderr".to_vec(),
+                matches!(fixture, CommandCaptureFixture::TruncatedStderr).then_some(5),
+            ),
+            output_files,
             duration: std::time::Duration::from_millis(10),
         },
     });
     Metered::new(session, Cost::llm_calls(1))
+}
+
+fn command_output_refs(fixture: CommandOutputRefsFixture) -> Vec<AgentCommandOutputRefs> {
+    if matches!(fixture, CommandOutputRefsFixture::MissingRefSet) {
+        return Vec::new();
+    }
+    let stdout_ref = match fixture {
+        CommandOutputRefsFixture::WrongStdoutHash => json!({
+            "kind": "blob_ref",
+            "id": "blob_agent_command_stdout",
+            "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+            "bytes": 12,
+            "data_classes": ["transcript.raw"]
+        }),
+        CommandOutputRefsFixture::WrongStdoutBytes => json!({
+            "kind": "blob_ref",
+            "id": "blob_agent_command_stdout",
+            "sha256": format!("{:x}", Sha256::digest(b"agent stdout")),
+            "bytes": 99,
+            "data_classes": ["transcript.raw"]
+        }),
+        _ => blob_ref_for_bytes(
+            "blob_agent_command_stdout",
+            b"agent stdout",
+            &["transcript.raw"],
+        ),
+    };
+    let stderr_ref = match fixture {
+        CommandOutputRefsFixture::WrongStderrHash => json!({
+            "kind": "blob_ref",
+            "id": "blob_agent_command_stderr",
+            "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+            "bytes": 12,
+            "data_classes": ["transcript.raw"]
+        }),
+        _ => blob_ref_for_bytes(
+            "blob_agent_command_stderr",
+            b"agent stderr",
+            &["transcript.raw"],
+        ),
+    };
+    let mut refs = AgentCommandOutputRefs::new(stdout_ref, stderr_ref);
+    if !matches!(fixture, CommandOutputRefsFixture::MissingOutputFile) {
+        refs = refs.with_output_file(
+            WorkspacePath::new(match fixture {
+                CommandOutputRefsFixture::ExtraOutputFile => "reports/extra.json",
+                _ => "reports/agent.json",
+            })
+            .unwrap(),
+            blob_ref_for_bytes(
+                "blob_agent_command_report",
+                match fixture {
+                    CommandOutputRefsFixture::WrongFileHash => b"{\"no\":true}" as &[u8],
+                    _ => br#"{"ok":true}"#,
+                },
+                &["workspace.file"],
+            ),
+        );
+    }
+    vec![refs]
 }
 
 fn agent_run_workspace_plan() -> Value {
@@ -316,12 +496,16 @@ fn agent_run_json_schema_plan() -> Value {
 }
 
 fn blob_ref(id: &'static str) -> Value {
+    blob_ref_for_bytes(id, b"transcript", &["transcript.raw"])
+}
+
+fn blob_ref_for_bytes(id: &'static str, bytes: &[u8], data_classes: &[&str]) -> Value {
     json!({
         "kind": "blob_ref",
         "id": id,
-        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-        "bytes": 12,
-        "data_classes": ["transcript.raw"]
+        "sha256": format!("{:x}", Sha256::digest(bytes)),
+        "bytes": bytes.len(),
+        "data_classes": data_classes
     })
 }
 

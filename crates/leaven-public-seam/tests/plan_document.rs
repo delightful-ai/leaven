@@ -2,13 +2,13 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use leaven_lm::{MessageContentPart, OutputMode, Role};
 use leaven_public_seam::{
-    CapabilityDocument, PlanAgentRunOutcome, PlanAgentRunRequest, PlanCaseQueryOutcome,
-    PlanCaseQueryRequest, PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanExecutionContext,
-    PlanExecutionHost, PlanGraphQueryOutcome, PlanGraphQueryRequest, PlanGraphReadScope,
-    PlanLmCompleteOutcome, PlanLmCompleteRequest, PlanOperationKind, PlanSandboxExecOutcome,
-    PlanSandboxExecRequest, PlanWorkspaceMaterializeOutcome, PlanWorkspaceMaterializeRequest,
-    PlanWorkspaceQueryOutcome, PlanWorkspaceQueryRequest, PlanWorkspaceReleaseOutcome,
-    PlanWorkspaceReleaseRequest, PublicSeamError, PublicSeamPackage,
+    AgentCommandOutputRefs, CapabilityDocument, PlanAgentRunOutcome, PlanAgentRunRequest,
+    PlanCaseQueryOutcome, PlanCaseQueryRequest, PlanEmitRunEventOutcome, PlanEmitRunEventRequest,
+    PlanExecutionContext, PlanExecutionHost, PlanGraphQueryOutcome, PlanGraphQueryRequest,
+    PlanGraphReadScope, PlanLmCompleteOutcome, PlanLmCompleteRequest, PlanOperationKind,
+    PlanSandboxExecOutcome, PlanSandboxExecRequest, PlanWorkspaceMaterializeOutcome,
+    PlanWorkspaceMaterializeRequest, PlanWorkspaceQueryOutcome, PlanWorkspaceQueryRequest,
+    PlanWorkspaceReleaseOutcome, PlanWorkspaceReleaseRequest, PublicSeamError, PublicSeamPackage,
 };
 use serde_json::{Value, json};
 
@@ -2192,6 +2192,7 @@ fn agent_run_lowering_preserves_workspace_diff_surface_fingerprint() {
 #[test]
 fn agent_run_rejects_schema_valid_sessions_without_audit_facts() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let plan = agent_run_workspace_plan(&agent_run_call());
     for (agent_audit, expected) in [
         (
             AgentAuditFixture::MissingTranscript,
@@ -2226,6 +2227,18 @@ fn agent_run_rejects_schema_valid_sessions_without_audit_facts() {
             "agent_run command status `success` is not a V1 command status",
         ),
         (
+            AgentAuditFixture::MissingCommandStdoutRef,
+            "agent_run command record must carry stdout_ref",
+        ),
+        (
+            AgentAuditFixture::MissingCommandStderrRef,
+            "agent_run command record must carry stderr_ref",
+        ),
+        (
+            AgentAuditFixture::InvalidCommandOutputRef,
+            "agent_run command stdout_ref must be a blob_ref",
+        ),
+        (
             AgentAuditFixture::ForgedCommandReceipt,
             "agent_run command record receipt",
         ),
@@ -2234,16 +2247,18 @@ fn agent_run_rejects_schema_valid_sessions_without_audit_facts() {
             "agent_run result value must carry cost",
         ),
     ] {
-        let mut host = RecordingPlanHost {
-            agent_audit,
-            ..RecordingPlanHost::default()
-        };
-        let error = package
+        let mut result = package
             .execute_plan_document(
-                &agent_run_workspace_plan(&agent_run_call()),
+                &plan,
                 &plan_execution_context(),
-                &mut host,
+                &mut RecordingPlanHost::default(),
             )
+            .unwrap()
+            .value()
+            .clone();
+        apply_agent_audit_fixture(&mut result, agent_audit);
+        let error = package
+            .validate_plan_execution_result(&plan, &plan_execution_context(), &result)
             .unwrap_err();
         assert!(
             error.to_string().contains(expected),
@@ -3945,7 +3960,6 @@ struct RecordingPlanHost {
     omit_lm_cost: bool,
     structured_parsed: StructuredParsedFixture,
     lm_response: LmResponseFixture,
-    agent_audit: AgentAuditFixture,
     sandbox_stream: SandboxStreamFixture,
 }
 
@@ -4048,7 +4062,7 @@ impl LmResponseFixture {
 }
 
 fn agent_command_fixture(agent_audit: AgentAuditFixture) -> Value {
-    match agent_audit {
+    let mut command = match agent_audit {
         AgentAuditFixture::MissingCommandReceipt => json!({
             "argv": ["codex"],
             "status": "completed"
@@ -4086,7 +4100,95 @@ fn agent_command_fixture(agent_audit: AgentAuditFixture) -> Value {
             "status": "completed",
             "receipt": "agentrec_completion"
         }),
+    };
+    if !matches!(
+        agent_audit,
+        AgentAuditFixture::MissingCommandArgv
+            | AgentAuditFixture::EmptyCommandArgv
+            | AgentAuditFixture::NonStringCommandArgv
+            | AgentAuditFixture::MissingCommandStatus
+            | AgentAuditFixture::InvalidCommandStatus
+    ) {
+        command["stdout_ref"] = agent_command_blob_ref("blob_agent_stdout");
+        command["stderr_ref"] = agent_command_blob_ref("blob_agent_stderr");
     }
+    match agent_audit {
+        AgentAuditFixture::MissingCommandStdoutRef => {
+            command.as_object_mut().unwrap().remove("stdout_ref");
+        }
+        AgentAuditFixture::MissingCommandStderrRef => {
+            command.as_object_mut().unwrap().remove("stderr_ref");
+        }
+        AgentAuditFixture::InvalidCommandOutputRef => {
+            command["stdout_ref"] = json!({"kind": "not_blob_ref"});
+        }
+        _ => {}
+    }
+    command
+}
+
+fn apply_agent_audit_fixture(result: &mut Value, agent_audit: AgentAuditFixture) {
+    match agent_audit {
+        AgentAuditFixture::MissingTranscript => {
+            result["values"]["completion"]
+                .as_object_mut()
+                .unwrap()
+                .remove("transcript_ref");
+        }
+        AgentAuditFixture::MissingCommands => {
+            result["values"]["completion"]["commands"] = json!([]);
+        }
+        AgentAuditFixture::MissingCost => {
+            result["values"]["completion"]
+                .as_object_mut()
+                .unwrap()
+                .remove("cost");
+            result["receipts"][1]
+                .as_object_mut()
+                .unwrap()
+                .remove("cost");
+        }
+        other => {
+            result["values"]["completion"]["commands"] = json!([agent_command_fixture(other)]);
+        }
+    }
+    rebind_call_result_hash(result, 1, "completion");
+}
+
+fn agent_command_blob_ref(id: &'static str) -> Value {
+    json!({
+        "kind": "blob_ref",
+        "id": id,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0,
+        "data_classes": ["transcript.raw"]
+    })
+}
+
+fn agent_session() -> leaven_kernel::Metered<leaven_agent::AgentSession> {
+    let mut session = leaven_agent::AgentSession::succeeded(leaven_kernel::AgentSessionId::new());
+    let mut command = leaven_workspace::Command::new("codex");
+    command.args = vec!["exec".to_owned(), "--json".to_owned()];
+    session.commands.push(leaven_agent::CommandRecord {
+        command,
+        output: leaven_workspace::CommandOutput::new(
+            leaven_workspace::ExitStatus { code: Some(0) },
+            leaven_workspace::CapturedOutput::empty(),
+            leaven_workspace::CapturedOutput::empty(),
+            std::time::Duration::from_millis(10),
+        ),
+    });
+    leaven_kernel::Metered::new(
+        session,
+        leaven_kernel::Cost::custom("usd_micro", 1000.0).unwrap(),
+    )
+}
+
+fn agent_command_output_refs() -> AgentCommandOutputRefs {
+    AgentCommandOutputRefs::new(
+        agent_command_blob_ref("blob_agent_stdout"),
+        agent_command_blob_ref("blob_agent_stderr"),
+    )
 }
 
 fn string_array_field(object: Option<&serde_json::Map<String, Value>>, field: &str) -> Vec<String> {
@@ -4112,6 +4214,9 @@ enum AgentAuditFixture {
     NonStringCommandArgv,
     MissingCommandStatus,
     InvalidCommandStatus,
+    MissingCommandStdoutRef,
+    MissingCommandStderrRef,
+    InvalidCommandOutputRef,
     ForgedCommandReceipt,
     MissingCost,
 }
@@ -4418,16 +4523,13 @@ impl PlanExecutionHost for RecordingPlanHost {
             other => panic!("unexpected agent output kind: {other:?}"),
         }
         self.calls.push("agent");
-        let mut outcome = PlanAgentRunOutcome::completed("fp_runtime_sha256_agent");
-        if !matches!(self.agent_audit, AgentAuditFixture::MissingTranscript) {
-            outcome = outcome.with_transcript_ref(blob_ref("blob_agent_transcript"));
-        }
-        if !matches!(self.agent_audit, AgentAuditFixture::MissingCommands) {
-            outcome = outcome.with_commands([agent_command_fixture(self.agent_audit)]);
-        }
-        if !matches!(self.agent_audit, AgentAuditFixture::MissingCost) {
-            outcome = outcome.with_cost(json!({"usd_micro": 1000}));
-        }
+        let mut outcome = PlanAgentRunOutcome::from_agent_session_with_command_output_refs(
+            agent_session(),
+            leaven_kernel::Fingerprint::from_bytes([0xa7; 32]),
+            blob_ref("blob_agent_transcript"),
+            "agentrec_completion",
+            [agent_command_output_refs()],
+        )?;
         if request.call()["output"]["kind"].as_str() == Some("json_schema") {
             match self.structured_parsed {
                 StructuredParsedFixture::Valid => {
