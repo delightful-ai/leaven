@@ -22,6 +22,10 @@ fn stage_payloads_validate_all_role_specific_payload_shapes_with_provenance() {
         .unwrap();
     assert_eq!(reflection.role(), StagePayloadRole::ReflectionResult);
     assert_eq!(reflection.read_receipt_count(), 1);
+    assert_eq!(
+        reflection.read_receipts(),
+        &["qrec_stagepayload_lineage".to_owned()]
+    );
     assert_eq!(reflection.data_classes(), &["optimizer.visible".to_owned()]);
 
     let propose = package
@@ -79,7 +83,7 @@ fn stage_payloads_validate_all_role_specific_payload_shapes_with_provenance() {
 }
 
 #[test]
-fn stage_payloads_preserve_object_form_info_refs() {
+fn stage_payloads_preserve_object_form_info_and_receipt_refs() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
 
     let mut reflect = reflect_request();
@@ -91,9 +95,14 @@ fn stage_payloads_preserve_object_form_info_refs() {
     reflection["source_refs"] = json!([object_form_candidate_ref()]);
     reflection["failure_modes"][0]["source_refs"] = json!([object_form_candidate_ref()]);
     reflection["surface_suggestions"][0]["source_refs"] = json!([object_form_candidate_ref()]);
-    package
+    reflection["read_receipts"] = json!([object_form_receipt_ref("qrec_stagepayload_lineage")]);
+    let reflection_document = package
         .validate_stage_payload_document(&reflection)
         .unwrap();
+    assert_eq!(
+        reflection_document.read_receipts(),
+        &["qrec_stagepayload_lineage".to_owned()]
+    );
 
     let mut propose = propose_request();
     propose["source_refs"] = json!([object_form_candidate_ref()]);
@@ -281,6 +290,25 @@ fn reflection_result_requires_receipted_source_visible_evidence() {
     assert!(matches!(
         package
             .validate_stage_payload_document(&missing_receipt)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+
+    let mut effect_receipt_in_read_slot = reflection_result();
+    effect_receipt_in_read_slot["read_receipts"] = json!(["lmrec_stagepayload"]);
+    assert!(matches!(
+        package
+            .validate_stage_payload_document(&effect_receipt_in_read_slot)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+
+    let mut object_form_effect_receipt_in_read_slot = reflection_result();
+    object_form_effect_receipt_in_read_slot["read_receipts"] =
+        json!([object_form_receipt_ref("agentrec_stagepayload")]);
+    assert!(matches!(
+        package
+            .validate_stage_payload_document(&object_form_effect_receipt_in_read_slot)
             .unwrap_err(),
         PublicSeamError::InvalidStagePayload { .. }
     ));
@@ -706,6 +734,14 @@ fn object_form_candidate_ref() -> Value {
         "kind": "candidate",
         "run": "run_stagepayload",
         "id": "cand_stagepayload_parent"
+    })
+}
+
+fn object_form_receipt_ref(id: &str) -> Value {
+    json!({
+        "kind": "receipt",
+        "id": id,
+        "fingerprint": "fp_receipt_sha256_stagepayload"
     })
 }
 

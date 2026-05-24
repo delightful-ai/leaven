@@ -669,7 +669,7 @@ rows:
     positive_test_evidence:
       - crates/leaven-public-seam/tests/stage_payloads.rs::stage_payloads_validate_all_role_specific_payload_shapes_with_provenance
       - crates/leaven-public-seam/tests/stage_payloads.rs::active_reflect_then_propose_example_validates_through_semantic_stage_payloads
-      - crates/leaven-public-seam/tests/stage_payloads.rs::stage_payloads_preserve_object_form_info_refs
+      - crates/leaven-public-seam/tests/stage_payloads.rs::stage_payloads_preserve_object_form_info_and_receipt_refs
     negative_test_evidence:
       - crates/leaven-public-seam/tests/call_authority.rs::call_authority_rejects_reflector_lm_call_input_classes_include_case_target
       - crates/leaven-public-seam/tests/stage_payloads.rs::reflect_request_rejects_case_target_projection
@@ -688,6 +688,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-23-stage-payload-current-blocker-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-stage-evidence-provenance-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-stage-evidence-typed-data-class-follow-up-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-stage-receipt-ref-follow-up-review.md
     status: pending
 
   - id: ps1.evidence.visibility_receipts
@@ -768,7 +769,7 @@ rows:
     positive_test_evidence:
       - crates/leaven-public-seam/tests/stage_payloads.rs::stage_payloads_validate_all_role_specific_payload_shapes_with_provenance
       - crates/leaven-public-seam/tests/stage_payloads.rs::active_reflect_then_propose_example_validates_through_semantic_stage_payloads
-      - crates/leaven-public-seam/tests/stage_payloads.rs::stage_payloads_preserve_object_form_info_refs
+      - crates/leaven-public-seam/tests/stage_payloads.rs::stage_payloads_preserve_object_form_info_and_receipt_refs
     negative_test_evidence:
       - crates/leaven-public-seam/tests/stage_payloads.rs::propose_request_requires_reflection_result_and_change_schema_authority
       - crates/leaven-public-seam/tests/stage_payloads.rs::propose_request_rejects_reflection_source_ref_drop
@@ -805,7 +806,7 @@ rows:
     positive_test_evidence:
       - crates/leaven-public-seam/tests/stage_payloads.rs::stage_payloads_validate_all_role_specific_payload_shapes_with_provenance
       - crates/leaven-public-seam/tests/stage_payloads.rs::active_reflect_then_propose_example_validates_through_semantic_stage_payloads
-      - crates/leaven-public-seam/tests/stage_payloads.rs::stage_payloads_preserve_object_form_info_refs
+      - crates/leaven-public-seam/tests/stage_payloads.rs::stage_payloads_preserve_object_form_info_and_receipt_refs
     negative_test_evidence:
       - crates/leaven-public-seam/tests/stage_payloads.rs::reflection_result_requires_receipted_source_visible_evidence
       - crates/leaven-public-seam/tests/stage_payloads.rs::reflection_result_rejects_unproven_diagnosis_without_sources
@@ -817,6 +818,8 @@ rows:
       - crates/leaven-public-seam/src/stage_payload.rs::StagePayloadDocument
       - crates/leaven-public-seam/src/stage_payload.rs::inspect_reflect_request
       - crates/leaven-public-seam/src/stage_payload.rs::inspect_reflection_result
+      - crates/leaven-public-seam/src/stage_payload.rs::receipt_ref_id
+      - crates/leaven-public-seam/src/stage_payload.rs::require_read_receipt_refs
       - crates/leaven-public-seam/src/stage_payload.rs::validate_reflection_diagnosis_sources
       - crates/leaven-public-seam/src/stage_payload.rs::inspect_propose_request
       - crates/leaven-public-seam/src/stage_payload.rs::require_reflection_source_refs
