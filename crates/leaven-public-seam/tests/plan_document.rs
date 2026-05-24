@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use leaven_lm::{MessageContentPart, OutputMode, Role};
 use leaven_public_seam::{
@@ -6,7 +6,8 @@ use leaven_public_seam::{
     PlanCaseQueryRequest, PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanExecutionContext,
     PlanExecutionHost, PlanGraphQueryOutcome, PlanGraphQueryRequest, PlanGraphReadScope,
     PlanLmCompleteOutcome, PlanLmCompleteRequest, PlanOperationKind, PlanSandboxExecOutcome,
-    PlanSandboxExecRequest, PublicSeamError, PublicSeamPackage,
+    PlanSandboxExecRequest, PlanWorkspaceMaterializeOutcome, PlanWorkspaceMaterializeRequest,
+    PlanWorkspaceReleaseOutcome, PlanWorkspaceReleaseRequest, PublicSeamError, PublicSeamPackage,
 };
 use serde_json::{Value, json};
 
@@ -537,6 +538,73 @@ fn agent_run_and_sandbox_exec_lower_to_owned_runtime_primitives_and_emit_receipt
         sandbox_report.value()["receipts"][0]["receipt"].as_str(),
         Some("execrec_completion")
     );
+}
+
+#[test]
+fn workspace_materialize_and_release_emit_typed_handles_and_receipts() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut host = RecordingPlanHost::default();
+
+    let report = package
+        .execute_plan_document(
+            &workspace_materialize_release_plan(),
+            &plan_execution_context(),
+            &mut host,
+        )
+        .unwrap();
+
+    assert_eq!(
+        host.calls,
+        vec!["workspace_materialize", "workspace_release"]
+    );
+    assert_eq!(report.document().receipt_kinds(), &["call", "call"]);
+    assert_eq!(
+        report.value()["values"]["workspace"]["kind"].as_str(),
+        Some("workspace_handle")
+    );
+    assert_eq!(
+        report.value()["values"]["workspace"]["released"].as_bool(),
+        Some(false)
+    );
+    assert_eq!(
+        report.value()["values"]["release"]["released"].as_bool(),
+        Some(true)
+    );
+    assert_eq!(
+        report.value()["receipts"][0]["call_kind"].as_str(),
+        Some("workspace_materialize")
+    );
+    assert_eq!(
+        report.value()["receipts"][1]["call_kind"].as_str(),
+        Some("workspace_release")
+    );
+}
+
+#[test]
+fn workspace_release_rejects_unmaterialized_handles_and_host_path_substitutes() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut unmaterialized = workspace_materialize_release_plan();
+    unmaterialized["ops"][1]["call"]["workspace"] = json!("ws_unmaterialized");
+    let mut host = RecordingPlanHost::default();
+
+    let error = package
+        .execute_plan_document(&unmaterialized, &plan_execution_context(), &mut host)
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("workspace_release refused unmaterialized workspace"),
+        "unexpected error: {error:?}"
+    );
+
+    let mut host_path = workspace_materialize_release_plan();
+    host_path["ops"][1]["call"]["workspace"] = json!("/tmp/leaven-workspace");
+    assert!(matches!(
+        package
+            .validate_plan_document(&host_path)
+            .expect_err("host paths are not WorkspaceRef values"),
+        PublicSeamError::ExampleValidation { .. }
+    ));
 }
 
 #[test]
@@ -1079,6 +1147,49 @@ fn execute_external_call_plan(call: Value) -> Value {
     plan
 }
 
+fn workspace_materialize_release_plan() -> Value {
+    json!({
+        "schema_version": "leaven.plan.v1",
+        "plan_id": "planworkspace001",
+        "consistency": {
+            "kind": "latest_at_start"
+        },
+        "mode": {
+            "kind": "execute"
+        },
+        "ops": [
+            {
+                "kind": "call",
+                "name": "workspace",
+                "idempotency_key": "plan-workspace-0001",
+                "call": {
+                    "kind": "workspace_materialize",
+                    "candidate": "cand_planexec",
+                    "surface": "program",
+                    "mode": "copy_on_write",
+                    "lifetime": "manual_release"
+                }
+            },
+            {
+                "kind": "call",
+                "name": "release",
+                "deps": ["workspace"],
+                "idempotency_key": "plan-workspace-0002",
+                "call": {
+                    "kind": "workspace_release",
+                    "workspace": "ws_planexec_materialized",
+                    "force": false
+                }
+            }
+        ],
+        "return": ["workspace", "release"],
+        "commit": {
+            "kind": "graph_writes_atomic",
+            "on_stale": "reject"
+        }
+    })
+}
+
 fn agent_run_call() -> Value {
     json!({
         "kind": "agent_run",
@@ -1316,6 +1427,7 @@ struct RecordingPlanHost {
     replayed_receipts: Vec<String>,
     call_deps: BTreeMap<String, Value>,
     write_deps: BTreeMap<String, Value>,
+    workspaces: BTreeSet<String>,
     cached_hit: bool,
     fail_lm: bool,
 }
@@ -1569,6 +1681,56 @@ impl PlanExecutionHost for RecordingPlanHost {
                 )
                 .with_cost(json!({"usd_micro": 10})),
         )
+    }
+
+    fn workspace_materialize(
+        &mut self,
+        request: PlanWorkspaceMaterializeRequest<'_>,
+    ) -> Result<PlanWorkspaceMaterializeOutcome, PublicSeamError> {
+        assert_eq!(request.name(), "workspace");
+        assert_eq!(
+            request.call()["kind"].as_str(),
+            Some("workspace_materialize")
+        );
+        assert_eq!(request.candidate()?, "cand_planexec");
+        assert_eq!(request.surface(), Some("program"));
+        assert_eq!(request.mode()?, "copy_on_write");
+        assert_eq!(request.lifetime()?, "manual_release");
+        self.calls.push("workspace_materialize");
+        self.workspaces
+            .insert("ws_planexec_materialized".to_owned());
+        Ok(PlanWorkspaceMaterializeOutcome::new(
+            "ws_planexec_materialized",
+            "manual_release",
+            "fp_runtime_sha256_workspace",
+        ))
+    }
+
+    fn workspace_release(
+        &mut self,
+        request: PlanWorkspaceReleaseRequest<'_>,
+    ) -> Result<PlanWorkspaceReleaseOutcome, PublicSeamError> {
+        assert_eq!(request.name(), "release");
+        assert_eq!(request.call()["kind"].as_str(), Some("workspace_release"));
+        assert!(!request.force());
+        let workspace = request.workspace()?;
+        if !self.workspaces.remove(workspace) {
+            return Err(PublicSeamError::InvalidPlan {
+                message: format!(
+                    "workspace_release refused unmaterialized workspace `{workspace}`"
+                ),
+            });
+        }
+        assert_eq!(
+            request.deps()["workspace"]["workspace"].as_str(),
+            Some(workspace)
+        );
+        self.calls.push("workspace_release");
+        Ok(PlanWorkspaceReleaseOutcome::new(
+            workspace,
+            "manual_release",
+            "fp_runtime_sha256_workspace",
+        ))
     }
 
     fn emit_run_event(
