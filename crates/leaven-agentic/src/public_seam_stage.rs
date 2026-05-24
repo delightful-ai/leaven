@@ -142,6 +142,9 @@ impl ReflectRequestPayload {
         if examples.is_empty() {
             return Err(PublicStagePayloadError::EmptyField { field: "examples" });
         }
+        for example in &examples {
+            reject_case_target_material(example, "examples")?;
+        }
         let part_label = non_empty(part_label.into(), "part_label")?;
         let mut object = Map::new();
         object.insert(

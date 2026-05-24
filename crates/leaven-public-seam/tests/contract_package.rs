@@ -541,6 +541,7 @@ fn conformance_matrix_rows_are_unique_honest_and_reference_real_files() {
             "ps1.schema.fingerprints",
             "ps1.stage.reflection_proposal_split",
             "ps1.stage.payload_receipts",
+            "ps1.visibility.reflector_target_safe",
             "ps1.watch.deferred",
             "ps1.worker_protocol.deprecated"
         ])
