@@ -405,7 +405,7 @@ rows:
       - crates/leaven-public-seam/src/result.rs::validate_failed_call_charges
       - crates/leaven-public-seam/src/result.rs::charge_index
       - crates/leaven-public-seam/src/result.rs::is_failed_call_with_cost
-      - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanLmCompleteOutcome
+      - crates/leaven-public-seam/src/plan_execution/effects/lm.rs::PlanLmCompleteOutcome
       - crates/leaven-public-seam/src/plan_execution.rs::execute_plan
       - crates/leaven-public-seam/src/plan_execution/receipts.rs::validate_failed_call_receipt
       - crates/leaven-public-seam/src/plan_error.rs::validate_closed_plan_error
@@ -1477,15 +1477,15 @@ rows:
       - crates/leaven-public-seam/tests/lm_contract.rs::lm_complete_rejects_tool_result_message_id_drift_before_provider_call
       - crates/leaven-public-seam/tests/lm_contract.rs::lm_complete_rejects_typed_provider_hint_shape_drift_before_provider_call
     partial_contract_implementation_evidence:
-      - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanLmCompleteRequest::to_lm_request
-      - crates/leaven-public-seam/src/plan_execution/effects.rs::lower_lm_messages
-      - crates/leaven-public-seam/src/plan_execution/effects.rs::lower_lm_tools
-      - crates/leaven-public-seam/src/plan_execution/effects.rs::lower_lm_sampling
-      - crates/leaven-public-seam/src/plan_execution/effects.rs::lower_lm_output
-      - crates/leaven-public-seam/src/plan_execution/effects.rs::lower_provider_hints
-      - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanLmCompleteOutcome::from_lm_response
-      - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanLmCompleteOutcome::with_parsed
-      - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanLmCompleteOutcome::with_cost
+      - crates/leaven-public-seam/src/plan_execution/effects/lm.rs::PlanLmCompleteRequest::to_lm_request
+      - crates/leaven-public-seam/src/plan_execution/effects/lm.rs::lower_lm_messages
+      - crates/leaven-public-seam/src/plan_execution/effects/lm.rs::lower_lm_tools
+      - crates/leaven-public-seam/src/plan_execution/effects/lm.rs::lower_lm_sampling
+      - crates/leaven-public-seam/src/plan_execution/effects/lm.rs::lower_lm_output
+      - crates/leaven-public-seam/src/plan_execution/effects/lm.rs::lower_provider_hints
+      - crates/leaven-public-seam/src/plan_execution/effects/lm.rs::PlanLmCompleteOutcome::from_lm_response
+      - crates/leaven-public-seam/src/plan_execution/effects/lm.rs::PlanLmCompleteOutcome::with_parsed
+      - crates/leaven-public-seam/src/plan_execution/effects/lm.rs::PlanLmCompleteOutcome::with_cost
       - crates/leaven-public-seam/src/plan_execution.rs::validate_structured_output_contract
       - crates/leaven-public-seam/src/plan_execution.rs::validate_structured_output_outcome
       - crates/leaven-public-seam/src/plan_execution.rs::validate_json_schema_output_payload
