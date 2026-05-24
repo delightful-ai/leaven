@@ -790,6 +790,20 @@ impl PlanLmCompleteOutcome {
         }
     }
 
+    /// Creates an LM response outcome from the provider-neutral LM trait result.
+    #[must_use]
+    pub fn from_lm_response(
+        response: leaven_kernel::Metered<leaven_lm::LmResponse>,
+        runtime_fingerprint: leaven_kernel::Fingerprint,
+    ) -> Self {
+        let leaven_kernel::Metered { value, cost } = response;
+        Self::new(
+            lm_message_value(&value.assistant),
+            format!("fp_runtime_sha256_{}", fingerprint_hex(runtime_fingerprint)),
+        )
+        .with_cost(lm_cost_value(&cost))
+    }
+
     /// Creates a failed paid LM outcome that still emits audit and charge receipts.
     pub fn failed_provider_error(
         message: impl Into<String>,
@@ -840,6 +854,86 @@ impl PlanLmCompleteOutcome {
         self.cost = Some(cost);
         self
     }
+}
+
+fn lm_message_value(message: &leaven_lm::Message) -> Value {
+    let mut object = serde_json::Map::new();
+    object.insert("role".to_owned(), json!(lm_role_value(message.role())));
+    object.insert(
+        "content".to_owned(),
+        Value::Array(
+            message
+                .content_parts()
+                .iter()
+                .map(lm_content_part_value)
+                .collect(),
+        ),
+    );
+    if let Some(tool_call_id) = message.tool_call_id() {
+        object.insert("tool_call_id".to_owned(), json!(tool_call_id));
+    }
+    if let Some(name) = message.name() {
+        object.insert("name".to_owned(), json!(name));
+    }
+    Value::Object(object)
+}
+
+fn lm_role_value(role: leaven_lm::Role) -> &'static str {
+    match role {
+        leaven_lm::Role::System => "system",
+        leaven_lm::Role::Developer => "developer",
+        leaven_lm::Role::User => "user",
+        leaven_lm::Role::Assistant => "assistant",
+        leaven_lm::Role::Tool => "tool",
+    }
+}
+
+fn lm_content_part_value(part: &leaven_lm::MessageContentPart) -> Value {
+    match part {
+        leaven_lm::MessageContentPart::Text { text } => {
+            json!({
+                "kind": "text",
+                "text": text
+            })
+        }
+        leaven_lm::MessageContentPart::ToolResult {
+            tool_call_id,
+            content,
+        } => {
+            json!({
+                "kind": "tool_result",
+                "tool_call_id": tool_call_id,
+                "content": content
+            })
+        }
+    }
+}
+
+fn lm_cost_value(cost: &leaven_kernel::Cost) -> Value {
+    let mut object = serde_json::Map::new();
+    if cost.prompt_tokens > 0 {
+        object.insert("input_tokens".to_owned(), json!(cost.prompt_tokens));
+    }
+    if cost.completion_tokens > 0 {
+        object.insert("output_tokens".to_owned(), json!(cost.completion_tokens));
+    }
+    if cost.llm_calls > 0 {
+        object.insert("lm_calls".to_owned(), json!(cost.llm_calls));
+    }
+    if cost.metric_calls > 0 {
+        object.insert("metric_calls".to_owned(), json!(cost.metric_calls));
+    }
+    Value::Object(object)
+}
+
+fn fingerprint_hex(fingerprint: leaven_kernel::Fingerprint) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut output = String::with_capacity(64);
+    for byte in fingerprint.0 {
+        output.push(HEX[usize::from(byte >> 4)] as char);
+        output.push(HEX[usize::from(byte & 0x0f)] as char);
+    }
+    output
 }
 
 /// Host outcome for a typed `agent_run` call.

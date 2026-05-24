@@ -3682,6 +3682,7 @@ version = "0.0.0"
 dependencies = [
  "chrono",
  "expect-test",
+ "futures",
  "jcs-canonicalize",
  "jsonschema",
  "leaven-agent",
