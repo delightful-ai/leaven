@@ -588,6 +588,18 @@ fn test_prefixed_jcs_hash(prefix: &str, value: &Value) -> String {
     )
 }
 
+fn rebind_call_result_hash(result: &mut Value, receipt_index: usize, name: &str) {
+    let value = result["values"][name].clone();
+    result["receipts"][receipt_index]["result_hash"] = json!(test_prefixed_jcs_hash(
+        "fp_result_sha256_",
+        &json!({
+            "schema_version": "leaven.plan_call_result.v1",
+            "name": name,
+            "value": value
+        }),
+    ));
+}
+
 #[test]
 fn plan_ir_family_execution_rejects_dry_run_or_no_graph_write_fake_execution() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
@@ -714,6 +726,45 @@ fn agent_run_and_sandbox_exec_lower_to_owned_runtime_primitives_and_emit_receipt
         sandbox_report.value()["receipts"][1]["receipt"].as_str(),
         Some("execrec_completion")
     );
+    assert_eq!(
+        sandbox_report.value()["values"]["completion"]["files"]["out.txt"]["kind"].as_str(),
+        Some("blob_ref")
+    );
+}
+
+#[test]
+fn call_results_reject_missing_receipts_and_wrong_kinds_even_with_valid_hashes() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let context = plan_execution_context();
+    let plan = execute_call_only_plan();
+    let mut result = package
+        .execute_plan_document(&plan, &context, &mut RecordingPlanHost::default())
+        .unwrap()
+        .value()
+        .clone();
+
+    result["values"]["completion"]
+        .as_object_mut()
+        .unwrap()
+        .remove("receipt");
+    rebind_call_result_hash(&mut result, 0, "completion");
+    assert_plan_execution_result_rejected(&package, &plan, &context, &result);
+
+    let mut wrong_kind = package
+        .execute_plan_document(&plan, &context, &mut RecordingPlanHost::default())
+        .unwrap()
+        .value()
+        .clone();
+    wrong_kind["values"]["completion"] = json!({
+        "kind": "agent_session",
+        "status": "completed",
+        "graph_revision": "rev_planexec_base",
+        "data_classes": ["public"],
+        "replayability": "fully_managed",
+        "receipt": "lmrec_completion"
+    });
+    rebind_call_result_hash(&mut wrong_kind, 0, "completion");
+    assert_plan_execution_result_rejected(&package, &plan, &context, &wrong_kind);
 }
 
 #[test]
@@ -818,6 +869,51 @@ fn sandbox_exec_rejects_unmaterialized_released_and_host_path_workspaces() {
             .expect_err("host paths are not WorkspaceRef values"),
         PublicSeamError::ExampleValidation { .. }
     ));
+}
+
+#[test]
+fn sandbox_exec_blob_refs_only_requires_stream_blob_refs() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut plan = sandbox_exec_workspace_plan();
+    plan["ops"][1]["call"]["stream_policy"] = json!("blob_refs_only");
+
+    let mut host = RecordingPlanHost {
+        sandbox_stream: SandboxStreamFixture::BlobRefsOnly,
+        ..RecordingPlanHost::default()
+    };
+    let report = package
+        .execute_plan_document(&plan, &plan_execution_context(), &mut host)
+        .unwrap();
+    assert_eq!(
+        report.value()["values"]["completion"]["stdout_ref"]["kind"].as_str(),
+        Some("blob_ref")
+    );
+    assert_eq!(
+        report.value()["values"]["completion"]["stderr_ref"]["kind"].as_str(),
+        Some("blob_ref")
+    );
+
+    let mut missing_refs_host = RecordingPlanHost {
+        sandbox_stream: SandboxStreamFixture::MissingBlobRefs,
+        ..RecordingPlanHost::default()
+    };
+    let error = package
+        .execute_plan_document(&plan, &plan_execution_context(), &mut missing_refs_host)
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("blob_refs_only stream policy requires stdout_ref and stderr_ref"),
+        "unexpected error: {error:?}"
+    );
+
+    let mut forged = report.value().clone();
+    forged["values"]["completion"]
+        .as_object_mut()
+        .unwrap()
+        .remove("stdout_ref");
+    rebind_call_result_hash(&mut forged, 1, "completion");
+    assert_plan_execution_result_rejected(&package, &plan, &plan_execution_context(), &forged);
 }
 
 #[test]
@@ -1318,11 +1414,37 @@ fn agent_run_lowering_preserves_json_schema_output_contract() {
     let plan = agent_run_workspace_plan(&call);
     let mut host = RecordingPlanHost::default();
 
-    package
+    let report = package
         .execute_plan_document(&plan, &plan_execution_context(), &mut host)
         .unwrap();
 
     assert_eq!(host.calls, vec!["workspace_materialize", "agent"]);
+    assert_eq!(
+        report.value()["values"]["completion"]["parsed"],
+        json!({"status": "ok"})
+    );
+
+    let mut missing_parsed_host = RecordingPlanHost {
+        omit_structured_parsed: true,
+        ..RecordingPlanHost::default()
+    };
+    let error = package
+        .execute_plan_document(&plan, &plan_execution_context(), &mut missing_parsed_host)
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("agent_run json_schema output must return parsed result payload"),
+        "unexpected error: {error:?}"
+    );
+
+    let mut forged = report.value().clone();
+    forged["values"]["completion"]
+        .as_object_mut()
+        .unwrap()
+        .remove("parsed");
+    rebind_call_result_hash(&mut forged, 1, "completion");
+    assert_plan_execution_result_rejected(&package, &plan, &plan_execution_context(), &forged);
 }
 
 #[test]
@@ -1490,12 +1612,38 @@ fn lm_complete_lowering_preserves_json_schema_output_and_provider_hints() {
     });
     let mut host = RecordingPlanHost::default();
 
-    package
+    let report = package
         .execute_plan_document(&plan, &plan_execution_context(), &mut host)
         .unwrap();
 
     assert_eq!(host.calls, vec!["completion"]);
     assert_eq!(host.writes, vec!["status"]);
+    assert_eq!(
+        report.value()["values"]["completion"]["parsed"],
+        json!({"answer": "ok"})
+    );
+
+    let mut missing_parsed_host = RecordingPlanHost {
+        omit_structured_parsed: true,
+        ..RecordingPlanHost::default()
+    };
+    let error = package
+        .execute_plan_document(&plan, &plan_execution_context(), &mut missing_parsed_host)
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("lm_complete json_schema output must return parsed result payload"),
+        "unexpected error: {error:?}"
+    );
+
+    let mut forged = report.value().clone();
+    forged["values"]["completion"]
+        .as_object_mut()
+        .unwrap()
+        .remove("parsed");
+    rebind_call_result_hash(&mut forged, 0, "completion");
+    assert_plan_execution_result_rejected(&package, &plan, &plan_execution_context(), &forged);
 }
 
 #[test]
@@ -2405,6 +2553,32 @@ struct RecordingPlanHost {
     workspaces: BTreeSet<String>,
     cached_hit: bool,
     fail_lm: bool,
+    omit_structured_parsed: bool,
+    sandbox_stream: SandboxStreamFixture,
+}
+
+#[derive(Clone, Copy, Default)]
+enum SandboxStreamFixture {
+    #[default]
+    Buffered,
+    BlobRefsOnly,
+    MissingBlobRefs,
+}
+
+impl SandboxStreamFixture {
+    fn expected_policy(self) -> &'static str {
+        match self {
+            Self::Buffered => "buffer",
+            Self::BlobRefsOnly | Self::MissingBlobRefs => "blob_refs_only",
+        }
+    }
+
+    fn includes_stream_refs(self) -> bool {
+        match self {
+            Self::Buffered | Self::BlobRefsOnly => true,
+            Self::MissingBlobRefs => false,
+        }
+    }
 }
 
 impl PlanExecutionHost for RecordingPlanHost {
@@ -2544,7 +2718,7 @@ impl PlanExecutionHost for RecordingPlanHost {
                 100,
             ));
         }
-        Ok(PlanLmCompleteOutcome::new(
+        let mut outcome = PlanLmCompleteOutcome::new(
             json!({
                 "role": "assistant",
                 "content": [
@@ -2555,7 +2729,13 @@ impl PlanExecutionHost for RecordingPlanHost {
                 ]
             }),
             "fp_runtime_sha256_planexec",
-        ))
+        );
+        if request.call()["output"]["kind"].as_str() == Some("json_schema")
+            && !self.omit_structured_parsed
+        {
+            outcome = outcome.with_parsed(json!({"answer": "ok"}));
+        }
+        Ok(outcome)
     }
 
     fn cached_lm_complete(
@@ -2567,7 +2747,7 @@ impl PlanExecutionHost for RecordingPlanHost {
         self.cached_calls.push("completion");
         self.call_deps = request.deps().clone();
         if self.cached_hit {
-            Ok(Some(PlanLmCompleteOutcome::new(
+            let mut outcome = PlanLmCompleteOutcome::new(
                 json!({
                     "role": "assistant",
                     "content": [
@@ -2578,7 +2758,13 @@ impl PlanExecutionHost for RecordingPlanHost {
                     ]
                 }),
                 "fp_runtime_sha256_planexec",
-            )))
+            );
+            if request.call()["output"]["kind"].as_str() == Some("json_schema")
+                && !self.omit_structured_parsed
+            {
+                outcome = outcome.with_parsed(json!({"answer": "cached ok"}));
+            }
+            Ok(Some(outcome))
         } else {
             Ok(None)
         }
@@ -2639,14 +2825,20 @@ impl PlanExecutionHost for RecordingPlanHost {
             other => panic!("unexpected agent output kind: {other:?}"),
         }
         self.calls.push("agent");
-        Ok(PlanAgentRunOutcome::completed("fp_runtime_sha256_agent")
+        let mut outcome = PlanAgentRunOutcome::completed("fp_runtime_sha256_agent")
             .with_transcript_ref(blob_ref("blob_agent_transcript"))
             .with_commands([json!({
                 "argv": ["codex"],
                 "status": "completed",
                 "receipt": "agentrec_completion"
             })])
-            .with_cost(json!({"usd_micro": 1000})))
+            .with_cost(json!({"usd_micro": 1000}));
+        if request.call()["output"]["kind"].as_str() == Some("json_schema")
+            && !self.omit_structured_parsed
+        {
+            outcome = outcome.with_parsed(json!({"status": "ok"}));
+        }
+        Ok(outcome)
     }
 
     fn sandbox_exec(
@@ -2660,7 +2852,10 @@ impl PlanExecutionHost for RecordingPlanHost {
             request.deps()["workspace"]["workspace"].as_str(),
             Some("ws_planexec_materialized")
         );
-        assert_eq!(request.stream_policy(), "buffer");
+        assert_eq!(
+            request.stream_policy(),
+            self.sandbox_stream.expected_policy()
+        );
         let command = request.to_workspace_command()?;
         assert_eq!(command.program, "python");
         assert_eq!(command.args, vec!["-c", "print('ok')"]);
@@ -2674,14 +2869,16 @@ impl PlanExecutionHost for RecordingPlanHost {
         assert_eq!(command.env["LEAVEN_CASE"], "case_1");
         assert_eq!(command.limits.timeout.unwrap().as_secs(), 1);
         self.calls.push("sandbox");
-        Ok(
-            PlanSandboxExecOutcome::completed("fp_runtime_sha256_sandbox")
-                .with_stream_refs(
-                    blob_ref("blob_sandbox_stdout"),
-                    blob_ref("blob_sandbox_stderr"),
-                )
-                .with_cost(json!({"usd_micro": 10})),
-        )
+        let mut outcome = PlanSandboxExecOutcome::completed("fp_runtime_sha256_sandbox")
+            .with_file_ref("out.txt", blob_ref("blob_sandbox_output_file"))
+            .with_cost(json!({"usd_micro": 10}));
+        if self.sandbox_stream.includes_stream_refs() {
+            outcome = outcome.with_stream_refs(
+                blob_ref("blob_sandbox_stdout"),
+                blob_ref("blob_sandbox_stderr"),
+            );
+        }
+        Ok(outcome)
     }
 
     fn workspace_materialize(

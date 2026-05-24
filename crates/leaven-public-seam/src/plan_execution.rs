@@ -570,6 +570,7 @@ fn execute_call<H: PlanExecutionHost>(
                     (outcome, Some("hit"))
                 }
             };
+            validate_structured_output_outcome(call, outcome.parsed.is_some(), "lm_complete")?;
             record_lm_call_outcome(
                 name,
                 call_kind,
@@ -641,6 +642,7 @@ fn execute_agent_run_call<H: PlanExecutionHost>(
     };
     request.live_workspace()?;
     let outcome = host.agent_run(request)?;
+    validate_structured_output_outcome(call, outcome.parsed.is_some(), "agent_run")?;
     record_agent_call_outcome(name, outcome, request_hash, context, state)
 }
 
@@ -661,7 +663,46 @@ fn execute_sandbox_exec_call<H: PlanExecutionHost>(
     };
     request.live_workspace()?;
     let outcome = host.sandbox_exec(request)?;
+    validate_sandbox_stream_outcome(call, &outcome)?;
     record_sandbox_call_outcome(name, outcome, request_hash, context, state)
+}
+
+fn validate_structured_output_outcome(
+    call: &Value,
+    has_parsed: bool,
+    call_kind: &str,
+) -> Result<(), PublicSeamError> {
+    if call
+        .get("output")
+        .and_then(Value::as_object)
+        .and_then(|output| output.get("kind"))
+        .and_then(Value::as_str)
+        == Some("json_schema")
+        && !has_parsed
+    {
+        return Err(invalid_plan(format!(
+            "{call_kind} json_schema output must return parsed result payload"
+        )));
+    }
+    Ok(())
+}
+
+fn validate_sandbox_stream_outcome(
+    call: &Value,
+    outcome: &PlanSandboxExecOutcome,
+) -> Result<(), PublicSeamError> {
+    if call
+        .get("stream_policy")
+        .and_then(Value::as_str)
+        .unwrap_or("buffer")
+        == "blob_refs_only"
+        && (outcome.stdout_ref.is_none() || outcome.stderr_ref.is_none())
+    {
+        return Err(invalid_plan(
+            "sandbox_exec blob_refs_only stream policy requires stdout_ref and stderr_ref",
+        ));
+    }
+    Ok(())
 }
 
 fn execute_workspace_materialize_call<H: PlanExecutionHost>(
@@ -774,6 +815,9 @@ fn record_lm_call_outcome(
     if let Some(cache) = cache {
         value["cache"] = json!(cache);
     }
+    if let Some(parsed) = outcome.parsed {
+        value["parsed"] = parsed;
+    }
     let result_hash = prefixed_jcs_hash(
         "fp_result_sha256_",
         &json!({
@@ -817,6 +861,9 @@ fn record_agent_call_outcome(
         "receipt": receipt_id,
         "commands": outcome.commands
     });
+    if let Some(parsed) = outcome.parsed {
+        value["parsed"] = parsed;
+    }
     if let Some(transcript_ref) = outcome.transcript_ref {
         value["transcript_ref"] = transcript_ref;
     }
