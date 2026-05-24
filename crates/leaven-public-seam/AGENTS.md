@@ -308,19 +308,21 @@ Crate-root exports for `PublicOutputRecord`, `OutputRecordDocument`, and
 data-classes, and blob audit metadata. They are not proof that evaluator
 runtimes produce those records for every assessment shape.
 
-Crate-root exports for `StagePayloadDocument`, `StagePayloadRole`, and
-`StageProposalEffect` are advanced public seam contracts. They prove
-active-schema stage-payload validation for role-specific reflector,
+Crate-root exports for `StagePayloadDocument`, `ReflectProposeHandoffDocument`,
+`StagePayloadRole`, and `StageProposalEffect` are advanced public seam
+contracts. They prove active-schema stage-payload validation for role-specific reflector,
 reflection-result, proposer, runner, scorer, judge, callback, and adapter
 payloads, including non-empty target-safe reflector examples whose source refs
 and nested score-output data classes are carried by the request, receipted
 reflection results whose top-level source refs and required nested diagnosis
 source refs back the diagnosis, proposal/reflection separation that preserves
-reflection source refs, allowed change schema declarations, target-aware scorer
-context binding to the scored case, output contexts, and payload-schema
-fingerprints. They are not an agent runtime, LM prompt renderer, ACP delivery
-path, proposal application engine, or proof that every optimizer/runtime
-producer emits these payloads.
+reflection source refs, active reflect-then-propose handoff binding with
+distinct reflector/proposer stage call ids, exact `ReflectionResult`
+consumption, shared run/revision/parent/surface/capability/query-policy facts,
+allowed change schema declarations, target-aware scorer context binding to the
+scored case, output contexts, and payload-schema fingerprints. They are not an
+agent runtime, LM prompt renderer, ACP delivery path, proposal application
+engine, or proof that every optimizer/runtime producer emits these payloads.
 
 Crate-root export `DeferredWatchReplacement` is an advanced public seam
 contract. It proves that the V1 deferred watch marker can route only to a finite
@@ -424,9 +426,11 @@ backpressure, or runtime watch support.
   are not carried by the request, reflector example data-class gaps for nested
   score outputs, unreceipted or diagnosis-free reflection results, diagnosis
   entries without carried source refs, dropped reflection source refs in
-  proposer payloads, and change proposals without allowed change schema
-  authority. It does not prove runtime stage lowering, ACP transport, provider
-  calls, or proposal graph mutation.
+  proposer payloads, one-stage reflect/propose handoff substitutions, stale or
+  mismatched embedded reflection results, mismatched run/capability facts, and
+  change proposals without allowed change schema authority. It does not prove
+  runtime stage lowering, ACP transport, provider calls, or proposal graph
+  mutation.
 - `tests/acp_profile.rs` proves locked Leaven ACP profile semantics for pinned
   ACP version, stdio-first transport preference, Leaven-only extension methods,
   capability-action mapping, locked Plan IR/Plan Result schema bindings,

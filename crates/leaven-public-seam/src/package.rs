@@ -10,7 +10,7 @@ use crate::{
     CallAuthorityReport, ConformanceMatrix, DeferredWatchReplacement, EvaluationJobDocument,
     EvaluationRequestReceiptDocument, EvidenceEnvelopeDocument, MatrixRowStatus,
     OutputRecordDocument, PinnedDialectEvaluator, PlanDocument, PlanResultDocument,
-    ProposalAuthorityReport, PublicSeamError, StagePayloadDocument,
+    ProposalAuthorityReport, PublicSeamError, ReflectProposeHandoffDocument, StagePayloadDocument,
 };
 
 mod support;
@@ -416,6 +416,7 @@ impl PublicSeamPackage {
                 pointer: pointer.to_owned(),
             });
         }
+        self.validate_reflect_propose_handoff_document(&reflect_value)?;
 
         debug_assert_eq!(inventory.schema_paths.len(), compiled_schemas.len());
         Ok(ValidationReport {
@@ -992,6 +993,44 @@ impl PublicSeamPackage {
             value,
         )?;
         StagePayloadDocument::from_schema_valid_value(value)
+    }
+
+    /// Validates a reflect-then-propose handoff through active V1 stage schemas and semantic checks.
+    pub fn validate_reflect_propose_handoff_document(
+        &self,
+        value: &Value,
+    ) -> Result<ReflectProposeHandoffDocument, PublicSeamError> {
+        let reflect = value.pointer("/reflect_request").ok_or_else(|| {
+            PublicSeamError::InvalidStagePayload {
+                message: "reflect/propose handoff must carry /reflect_request".to_owned(),
+            }
+        })?;
+        let reflection = value.pointer("/reflection_result").ok_or_else(|| {
+            PublicSeamError::InvalidStagePayload {
+                message: "reflect/propose handoff must carry /reflection_result".to_owned(),
+            }
+        })?;
+        let propose = value.pointer("/propose_request").ok_or_else(|| {
+            PublicSeamError::InvalidStagePayload {
+                message: "reflect/propose handoff must carry /propose_request".to_owned(),
+            }
+        })?;
+        self.validate_arbitrary_value(
+            "leaven.stage_payloads.v1.schema.json",
+            "/reflect_request",
+            reflect,
+        )?;
+        self.validate_arbitrary_value(
+            "leaven.stage_payloads.v1.schema.json",
+            "/reflection_result",
+            reflection,
+        )?;
+        self.validate_arbitrary_value(
+            "leaven.stage_payloads.v1.schema.json",
+            "/propose_request",
+            propose,
+        )?;
+        ReflectProposeHandoffDocument::from_schema_valid_values(reflect, reflection, propose)
     }
 
     /// Validates the V1 deferred-watch marker and its finite-diff Plan IR replacement.

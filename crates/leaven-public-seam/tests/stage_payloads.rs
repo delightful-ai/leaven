@@ -565,6 +565,93 @@ fn propose_request_rejects_reflection_source_ref_drop() {
 }
 
 #[test]
+fn reflect_propose_handoff_binds_distinct_stage_calls_and_exact_reflection_result() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let handoff = package
+        .validate_reflect_propose_handoff_document(&reflect_propose_handoff())
+        .unwrap();
+    assert_eq!(handoff.run(), "run_stagepayload");
+    assert_eq!(handoff.reflect_stage_call_id(), "sc_reflect_stagepayload");
+    assert_eq!(handoff.propose_stage_call_id(), "sc_propose_stagepayload");
+    assert_eq!(handoff.base_revision(), "rev_stagepayload_base");
+    assert_eq!(handoff.parent(), "candidate:cand_stagepayload_parent");
+    assert_eq!(
+        handoff.surface_fingerprint(),
+        "fp_surface_sha256_stagepayload"
+    );
+    assert_eq!(
+        handoff.capability_fingerprint(),
+        "fp_cap_sha256_stagepayload"
+    );
+    assert_eq!(
+        handoff.query_policy_fingerprint(),
+        "fp_policy_sha256_stagepayload"
+    );
+    assert_eq!(handoff.reflection_source_ref_count(), 1);
+}
+
+#[test]
+fn reflect_propose_handoff_rejects_single_prompt_and_stale_reflection_fakes() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut same_stage_call = reflect_propose_handoff();
+    same_stage_call["propose_request"]["stage_call_id"] = json!("sc_reflect_stagepayload");
+    assert!(matches!(
+        package
+            .validate_reflect_propose_handoff_document(&same_stage_call)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+
+    let mut stale_embedded_reflection = reflect_propose_handoff();
+    stale_embedded_reflection["propose_request"]["reflection_result"]["summary"] =
+        json!("A stale summary from a different reflection.");
+    assert!(matches!(
+        package
+            .validate_reflect_propose_handoff_document(&stale_embedded_reflection)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+
+    let mut mismatched_run = reflect_propose_handoff();
+    mismatched_run["propose_request"]["run"] = json!("run_other");
+    assert!(matches!(
+        package
+            .validate_reflect_propose_handoff_document(&mismatched_run)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+
+    let mut mismatched_capability = reflect_propose_handoff();
+    mismatched_capability["propose_request"]["capability_fingerprint"] =
+        json!("fp_cap_sha256_other");
+    assert!(matches!(
+        package
+            .validate_reflect_propose_handoff_document(&mismatched_capability)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+
+    let mut uncovered_reflection_source = reflect_propose_handoff();
+    uncovered_reflection_source["reflection_result"]["source_refs"] = json!(["cand_unrelated"]);
+    uncovered_reflection_source["reflection_result"]["failure_modes"][0]["source_refs"] =
+        json!(["cand_unrelated"]);
+    uncovered_reflection_source["reflection_result"]["surface_suggestions"][0]["source_refs"] =
+        json!(["cand_unrelated"]);
+    uncovered_reflection_source["propose_request"]["reflection_result"] =
+        uncovered_reflection_source["reflection_result"].clone();
+    uncovered_reflection_source["propose_request"]["source_refs"] =
+        json!(["cand_stagepayload_parent", "cand_unrelated"]);
+    assert!(matches!(
+        package
+            .validate_reflect_propose_handoff_document(&uncovered_reflection_source)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+}
+
+#[test]
 fn runner_request_rejects_case_target_material() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
 
@@ -634,6 +721,19 @@ fn active_reflect_then_propose_example_validates_through_semantic_stage_payloads
     package
         .validate_stage_payload_document(&example["propose_request"])
         .unwrap();
+    let handoff = package
+        .validate_reflect_propose_handoff_document(&example)
+        .unwrap();
+    assert_eq!(handoff.reflect_stage_call_id(), "sc_reflect_01");
+    assert_eq!(handoff.propose_stage_call_id(), "sc_propose_01");
+}
+
+fn reflect_propose_handoff() -> Value {
+    json!({
+        "reflect_request": reflect_request(),
+        "reflection_result": reflection_result(),
+        "propose_request": propose_request()
+    })
 }
 
 fn reflect_request() -> Value {
