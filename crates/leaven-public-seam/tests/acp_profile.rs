@@ -1413,6 +1413,8 @@ fn acp_extension_results_reject_cross_method_payloads_unbound_receipts_and_data_
             | PublicSeamError::InvalidScope { .. }
     ));
 
+    assert_workspace_release_extension_result_negatives(&package);
+
     let mut unbound_primary = agent_session_primary();
     unbound_primary["receipt"] = json!("agentrec_acp");
     let unbound_receipt = extension_result_for(
@@ -1459,6 +1461,39 @@ fn acp_extension_results_reject_cross_method_payloads_unbound_receipts_and_data_
             .unwrap_err(),
         PublicSeamError::ExampleValidation { .. }
     ));
+}
+
+fn assert_workspace_release_extension_result_negatives(package: &PublicSeamPackage) {
+    let wrong_release_primary = extension_result_for(
+        "leaven/workspace.release",
+        &extension_primary("workspace.release"),
+        &call_receipt("workspace_release", "wrec_release"),
+        &["workspace.file"],
+    );
+    assert!(matches!(
+        package
+            .validate_acp_extension_result_document(&wrong_release_primary)
+            .unwrap_err(),
+        PublicSeamError::ExampleValidation { .. }
+            | PublicSeamError::InvalidPlanResult { .. }
+            | PublicSeamError::InvalidScope { .. }
+    ));
+
+    let mut unreleased_primary = workspace_handle_primary();
+    unreleased_primary["receipt"] = json!("wrec_release");
+    let unreleased_release_primary = extension_result_for(
+        "leaven/workspace.release",
+        &unreleased_primary,
+        &call_receipt("workspace_release", "wrec_release"),
+        &["workspace.file"],
+    );
+    let error = package
+        .validate_acp_extension_result_document(&unreleased_release_primary)
+        .unwrap_err();
+    assert!(
+        error.to_string().contains("released workspace_handle"),
+        "unexpected release primary error: {error:?}"
+    );
 }
 
 #[test]
@@ -1715,7 +1750,7 @@ fn workspace_extension_result_cases() -> Vec<(&'static str, Value, Value)> {
         ),
         (
             "leaven/workspace.release",
-            extension_primary("workspace.release"),
+            released_workspace_handle_primary(),
             call_receipt("workspace_release", "wrec_release"),
         ),
     ]
@@ -1990,6 +2025,13 @@ fn workspace_handle_primary() -> Value {
         "replayability": "fully_managed",
         "receipt": "wrec_materialize"
     })
+}
+
+fn released_workspace_handle_primary() -> Value {
+    let mut primary = workspace_handle_primary();
+    primary["released"] = json!(true);
+    primary["receipt"] = json!("wrec_release");
+    primary
 }
 
 fn workspace_snapshot_primary() -> Value {

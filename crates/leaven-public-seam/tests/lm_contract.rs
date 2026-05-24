@@ -145,6 +145,50 @@ fn lm_complete_json_schema_rejects_invalid_parsed_provider_payload() {
 }
 
 #[test]
+fn lm_complete_json_schema_rejects_non_json_provider_text_in_public_seam_adapter() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let lm = Arc::new(ScriptedLm::new(scripted_response(Message::assistant(
+        "not json",
+    ))));
+    let mut host = LmTraitHost::new(Arc::clone(&lm));
+
+    let error = package
+        .execute_plan_document(&lm_json_schema_plan(), &plan_execution_context(), &mut host)
+        .unwrap_err();
+
+    assert!(
+        error
+            .to_string()
+            .contains("lm_complete json_schema response was not JSON"),
+        "unexpected error: {error:?}"
+    );
+    assert_eq!(lm.recorded_requests.lock().unwrap().len(), 1);
+}
+
+#[test]
+fn lm_complete_provider_trait_error_is_not_success_receipted_by_host_json() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let lm = Arc::new(FailingLm::new(LmError::provider(
+        "scripted",
+        Some(503),
+        "transient failure",
+    )));
+    let mut host = LmTraitHost::new(Arc::clone(&lm));
+
+    let error = package
+        .execute_plan_document(&lm_plan(), &plan_execution_context(), &mut host)
+        .unwrap_err();
+
+    assert!(
+        error
+            .to_string()
+            .contains("scripted lm provider failed with status 503"),
+        "unexpected error: {error:?}"
+    );
+    assert_eq!(lm.recorded_requests.lock().unwrap().len(), 1);
+}
+
+#[test]
 fn lm_complete_rejects_tool_result_message_id_drift_before_provider_call() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let lm = Arc::new(ScriptedLm::new(scripted_response(Message::assistant(
@@ -206,38 +250,25 @@ fn lm_complete_rejects_typed_provider_hint_shape_drift_before_provider_call() {
     }
 }
 
-struct LmTraitHost {
-    lm: Arc<ScriptedLm>,
+struct LmTraitHost<L> {
+    lm: Arc<L>,
 }
 
-impl LmTraitHost {
-    fn new(lm: Arc<ScriptedLm>) -> Self {
+impl<L> LmTraitHost<L> {
+    fn new(lm: Arc<L>) -> Self {
         Self { lm }
     }
 }
 
-impl PlanExecutionHost for LmTraitHost {
+impl<L> PlanExecutionHost for LmTraitHost<L>
+where
+    L: Lm,
+{
     fn lm_complete(
         &mut self,
         request: PlanLmCompleteRequest<'_>,
     ) -> Result<PlanLmCompleteOutcome, PublicSeamError> {
-        let lm_request = request.lm_request().clone();
-        let expects_json_schema = matches!(lm_request.output, OutputMode::JsonSchema(_));
-        let response = block_on(self.lm.complete(lm_request)).map_err(|error| {
-            PublicSeamError::InvalidPlan {
-                message: error.to_string(),
-            }
-        })?;
-        let parsed = if expects_json_schema {
-            Some(parsed_lm_json_schema_payload(&response.value.assistant)?)
-        } else {
-            None
-        };
-        let mut outcome = PlanLmCompleteOutcome::from_lm_response(response, self.lm.fingerprint());
-        if expects_json_schema {
-            outcome = outcome.with_parsed(parsed.expect("parsed payload exists"));
-        }
-        Ok(outcome)
+        block_on(request.execute_with_lm(self.lm.as_ref()))
     }
 
     fn emit_run_event(
@@ -248,17 +279,6 @@ impl PlanExecutionHost for LmTraitHost {
             message: format!("unexpected write `{}`", request.name()),
         })
     }
-}
-
-fn parsed_lm_json_schema_payload(message: &Message) -> Result<Value, PublicSeamError> {
-    let [MessageContentPart::Text { text }] = message.content_parts() else {
-        return Err(PublicSeamError::InvalidPlan {
-            message: "lm_complete json_schema response must carry assistant text".to_owned(),
-        });
-    };
-    serde_json::from_str(text).map_err(|error| PublicSeamError::InvalidPlan {
-        message: format!("lm_complete json_schema response was not JSON: {error}"),
-    })
 }
 
 struct ScriptedLm {
@@ -287,6 +307,40 @@ impl Lm for ScriptedLm {
     async fn complete(&self, request: LmRequest) -> Result<Metered<LmResponse>, LmError> {
         self.recorded_requests.lock().unwrap().push(request);
         Ok(self.response.clone())
+    }
+}
+
+struct FailingLm {
+    error: Mutex<Option<LmError>>,
+    recorded_requests: Mutex<Vec<LmRequest>>,
+}
+
+impl FailingLm {
+    fn new(error: LmError) -> Self {
+        Self {
+            error: Mutex::new(Some(error)),
+            recorded_requests: Mutex::new(Vec::new()),
+        }
+    }
+}
+
+impl Lm for FailingLm {
+    fn id(&self) -> LmId {
+        LmId::new("failing")
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        Fingerprint::from_bytes([43; 32])
+    }
+
+    async fn complete(&self, request: LmRequest) -> Result<Metered<LmResponse>, LmError> {
+        self.recorded_requests.lock().unwrap().push(request);
+        Err(self
+            .error
+            .lock()
+            .unwrap()
+            .take()
+            .unwrap_or_else(|| LmError::invalid_request("scripted failure already consumed")))
     }
 }
 

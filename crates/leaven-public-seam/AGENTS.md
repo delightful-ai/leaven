@@ -169,6 +169,12 @@ provider hints, final-message output, and JSON-schema output.
 projects provider-neutral `leaven_lm::LmResponse` plus metered `leaven-kernel`
 cost into the Plan Result outcome shape; successful LM outcomes are not
 publicly constructible from hand-written response JSON or ad hoc cost fields.
+`PlanLmCompleteRequest::execute_with_lm` is the seam-owned adapter from a
+lowered Plan IR request into an `impl leaven_lm::Lm`: hosts provide the LM
+capability, while this crate preserves the lowered request, runtime
+fingerprint, metered cost, and JSON-schema parsed payload behavior. It is not a
+provider-specific client, live network execution proof, ACP delivery proof, or
+streaming runtime.
 JSON-schema LM outputs must return a parsed Plan Result
 payload, and successful call-result validation requires an `lm_complete` result
 to be an `lm_response` value carrying the matching call receipt, matching
@@ -235,23 +241,25 @@ explicitly bind the same live handle as released.
 `PlanWorkspaceQueryRequest` routes representative schema-valid
 `workspace_query` reads through typed host requests, requires a live
 materialization-proven `workspace_handle` dependency before the host can read,
-rejects absolute/traversal-shaped workspace paths at the seam, and emits typed
+rejects absolute/traversal-shaped workspace paths at the seam, and, when a
+capability document is supplied, authorizes `workspace.read` by workspace id,
+workspace operation, and data class before any host read can run. It emits typed
 `workspace_file`, `workspace_listing`, `workspace_snapshot`, or `workspace_diff`
 values with query receipts. `stat` projects as a `workspace_listing`, `digest`
-as a `workspace_snapshot`, and `git_log` as a `workspace_diff` because the
+as a `workspace_snapshot`, and Git queries as `workspace_diff` because the
 locked result schema has those workspace-read value families rather than
 separate stat/digest/log value kinds. Within that broad family mapping, `stat`
-still binds the result to the requested path and `digest` still binds the
-result to the requested algorithm and workspace id; the locked result schema
-does not carry the digest request path, so digest path-level backend truth
-remains pending. `read_file` binds the returned file value to the requested path
-and requires content or a blob ref. `list` results must stay under the requested
-path, `snapshot` results must bind the requested workspace and carry a digest,
-`git_log`/`git_diff`/`git_status` results must carry text or a blob ref inside
-the locked `workspace_diff` value family, and `capture_artifacts` requests must
-name at least one safe relative path with results corresponding to requested
-paths. `git_log` remains a broad `workspace_diff`-family projection, not a
-parsed commit-log surface.
+binds the result to the requested path; `digest` binds the result to the
+requested algorithm, workspace id, and requested path through a
+`source_refs.external` value; `git_log`, `git_diff`, and `git_status` bind their
+request-specific controls through `source_refs.external` values while still
+requiring text or a blob ref inside the locked `workspace_diff` family.
+`read_file` binds the returned file value to the requested path and requires
+content or a blob ref. `list` results must stay under the requested path,
+`snapshot` results must bind the requested workspace and carry a digest, and
+`capture_artifacts` requests must name at least one safe relative path with
+results corresponding to requested paths. Git queries remain broad
+`workspace_diff`-family projections, not parsed Git surfaces.
 `PlanWorkspaceQueryRequest::execute_on_workspace_view` can execute finite
 read/list/stat/sha256-digest/blake3-digest/snapshot/requested-path
 capture-artifact listing reads through `leaven-workspace::WorkspaceView`, giving

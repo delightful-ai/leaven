@@ -25,7 +25,8 @@ pub use queries::{
 };
 use queries::{
     case_query_include, case_query_projection, plan_contains_case_query,
-    require_included_case_fields, require_requested_case_field, validate_case_query_authority,
+    plan_contains_workspace_query, require_included_case_fields, require_requested_case_field,
+    validate_case_query_authority, validate_workspace_query_authority,
     validate_workspace_query_value_shape, workspace_query_expected_value_kind,
     workspace_query_projection, workspace_query_request, workspace_query_request_from_values,
 };
@@ -231,6 +232,11 @@ pub fn execute_plan<H: PlanExecutionHost>(
             "case_query.load execution requires capability-authorized Plan execution",
         ));
     }
+    if plan_contains_workspace_query(plan)? {
+        return Err(invalid_plan(
+            "workspace_query execution requires capability-authorized Plan execution",
+        ));
+    }
     execute_authorized_plan(plan, plan_document, context, host, None)
 }
 
@@ -242,6 +248,7 @@ pub fn execute_plan_with_capability<H: PlanExecutionHost>(
     host: &mut H,
 ) -> Result<Value, PublicSeamError> {
     validate_case_query_authority(plan, context, capability)?;
+    validate_workspace_query_authority(plan, context, capability)?;
     execute_authorized_plan(plan, plan_document, context, host, Some(capability))
 }
 

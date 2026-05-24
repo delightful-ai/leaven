@@ -529,6 +529,7 @@ fn conformance_matrix_rows_are_unique_honest_and_reference_real_files() {
             "ps1.evidence.visibility_receipts",
             "ps1.graph.runcontext_mutation_only",
             "ps1.harness.negative_denominator",
+            "ps1.lm.contract",
             "ps1.plan.ir_family",
             "ps1.plan.execution_modes",
             "ps1.plan.pinned_dialects",
@@ -545,7 +546,8 @@ fn conformance_matrix_rows_are_unique_honest_and_reference_real_files() {
             "ps1.visibility.data_class_propagation",
             "ps1.visibility.reflector_target_safe",
             "ps1.watch.deferred",
-            "ps1.worker_protocol.deprecated"
+            "ps1.worker_protocol.deprecated",
+            "ps1.workspace.handles_lifecycle"
         ])
     );
 
@@ -655,7 +657,7 @@ fn conformance_matrix_reference_check_rejects_stale_pending_test_symbols() {
     let row = matrix
         .rows
         .iter_mut()
-        .find(|row| row.id == "ps1.workspace.handles_lifecycle")
+        .find(|row| row.id == "ps1.agent.contract")
         .unwrap();
     assert_eq!(row.status, MatrixRowStatus::Pending);
     row.positive_test_evidence = vec![
@@ -666,11 +668,7 @@ fn conformance_matrix_reference_check_rejects_stale_pending_test_symbols() {
     let error = package.validate_matrix_references(&matrix).unwrap_err();
 
     assert!(matches!(error, PublicSeamError::InvalidMatrix { .. }));
-    assert!(
-        error
-            .to_string()
-            .contains("ps1.workspace.handles_lifecycle")
-    );
+    assert!(error.to_string().contains("ps1.agent.contract"));
     assert!(
         error
             .to_string()
@@ -685,7 +683,7 @@ fn conformance_evidence_audit_rejects_pending_rows_with_closeout_evidence_fields
     let row = matrix
         .rows
         .iter_mut()
-        .find(|row| row.id == "ps1.workspace.handles_lifecycle")
+        .find(|row| row.id == "ps1.agent.contract")
         .unwrap();
     assert_eq!(row.status, MatrixRowStatus::Pending);
     row.positive_test_evidence = vec![
@@ -696,11 +694,7 @@ fn conformance_evidence_audit_rejects_pending_rows_with_closeout_evidence_fields
     let error = package.audit_conformance_evidence(&matrix).unwrap_err();
 
     assert!(matches!(error, PublicSeamError::InvalidMatrix { .. }));
-    assert!(
-        error
-            .to_string()
-            .contains("ps1.workspace.handles_lifecycle")
-    );
+    assert!(error.to_string().contains("ps1.agent.contract"));
     assert!(error.to_string().contains("partial_contract evidence"));
 }
 
@@ -742,7 +736,7 @@ fn conformance_evidence_audit_rejects_stale_blocked_on_for_non_blocked_rows() {
     let row = matrix
         .rows
         .iter_mut()
-        .find(|row| row.id == "ps1.workspace.handles_lifecycle")
+        .find(|row| row.id == "ps1.agent.contract")
         .unwrap();
     assert_eq!(row.status, MatrixRowStatus::Pending);
     row.blocked_on = vec!["stale prerequisite".to_owned()];
@@ -750,11 +744,7 @@ fn conformance_evidence_audit_rejects_stale_blocked_on_for_non_blocked_rows() {
     let error = package.audit_conformance_evidence(&matrix).unwrap_err();
 
     assert!(matches!(error, PublicSeamError::InvalidMatrix { .. }));
-    assert!(
-        error
-            .to_string()
-            .contains("ps1.workspace.handles_lifecycle")
-    );
+    assert!(error.to_string().contains("ps1.agent.contract"));
     assert!(
         error
             .to_string()

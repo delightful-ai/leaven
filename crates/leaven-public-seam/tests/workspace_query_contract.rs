@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, path::Path};
 
 use futures::future::BoxFuture;
 use leaven_public_seam::{
-    PlanExecutionHost, PlanLmCompleteOutcome, PlanLmCompleteRequest,
+    CapabilityDocument, PlanExecutionHost, PlanLmCompleteOutcome, PlanLmCompleteRequest,
     PlanWorkspaceMaterializeOutcome, PlanWorkspaceMaterializeRequest, PlanWorkspaceQueryOutcome,
     PlanWorkspaceQueryRequest, PublicSeamError, PublicSeamPackage,
 };
@@ -17,9 +17,10 @@ fn workspace_query_executes_finite_reads_through_workspace_view() {
     let mut host = WorkspaceQueryHost::new();
 
     let report = package
-        .execute_plan_document(
+        .execute_plan_document_with_capability(
             &workspace_query_plan(),
             &plan_execution_context(),
+            &workspace_query_capability(),
             &mut host,
         )
         .unwrap();
@@ -68,7 +69,7 @@ fn workspace_query_executes_finite_reads_through_workspace_view() {
 }
 
 #[test]
-fn workspace_query_view_helper_enforces_bounded_controls() {
+fn workspace_query_view_helper_rejects_unbounded_controls() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
 
     for (name, op, expected) in [
@@ -101,7 +102,12 @@ fn workspace_query_view_helper_enforces_bounded_controls() {
         plan["return"] = json!([name]);
 
         let error = package
-            .execute_plan_document(&plan, &plan_execution_context(), &mut host)
+            .execute_plan_document_with_capability(
+                &plan,
+                &plan_execution_context(),
+                &workspace_query_capability(),
+                &mut host,
+            )
             .unwrap_err();
         assert!(
             error.to_string().contains(expected),
@@ -139,7 +145,12 @@ fn workspace_query_view_helper_rejects_git_queries_as_host_owned() {
         plan["return"] = json!([name]);
 
         let error = package
-            .execute_plan_document(&plan, &plan_execution_context(), &mut host)
+            .execute_plan_document_with_capability(
+                &plan,
+                &plan_execution_context(),
+                &workspace_query_capability(),
+                &mut host,
+            )
             .unwrap_err();
         assert!(
             error.to_string().contains(expected),
@@ -334,6 +345,90 @@ fn plan_execution_context() -> leaven_public_seam::PlanExecutionContext {
         "2026-05-24T12:00:00Z",
         "2026-05-24T12:00:01Z",
     )
+}
+
+fn workspace_query_capability() -> CapabilityDocument {
+    CapabilityDocument::from_value(json!({
+        "schema_version": "leaven.capability.v1",
+        "jti": "jti_workspacequery",
+        "capability_fingerprint": "fp_cap_sha256_workspacequery",
+        "policy_fingerprint": "fp_policy_sha256_workspacequery",
+        "subject_fingerprint": "fp_subject_sha256_workspacequery",
+        "issuer": {
+            "kind": "run_engine",
+            "id": "engine_local"
+        },
+        "subject": {
+            "kind": "stage_call",
+            "run": "run_workspacequery",
+            "stage_call_id": "sc_workspacequery",
+            "role": "runner"
+        },
+        "audience": ["leaven.acp.worker"],
+        "issued_at": "2026-05-24T00:00:00Z",
+        "expires_at": "2026-05-24T00:20:00Z",
+        "expiry_behavior": "drain_inflight_no_new_ops",
+        "token_binding": {
+            "kind": "opaque_lookup",
+            "token_id": "ltok_workspacequery"
+        },
+        "revocation": {
+            "mode": "issuer_epoch",
+            "revocation_epoch": 7,
+            "check": "on_every_request"
+        },
+        "renewal": {
+            "mode": "renew_before_expiry",
+            "max_extensions": 2,
+            "max_total_lifetime_s": 3600
+        },
+        "grants": [
+            {
+                "action": "workspace.materialize",
+                "resource": {
+                    "candidate_ids": ["cand_workspacequery"]
+                },
+                "constraints": {
+                    "workspace_ops": ["materialize"]
+                }
+            },
+            {
+                "action": "workspace.read",
+                "resource": {
+                    "workspace_ids": ["ws_workspace_query_contract"]
+                },
+                "constraints": {
+                    "allowed_input_classes": ["candidate.artifact"],
+                    "workspace_ops": [
+                        "read_file",
+                        "list",
+                        "stat",
+                        "digest",
+                        "snapshot",
+                        "git_log",
+                        "git_diff",
+                        "git_status",
+                        "capture_artifacts"
+                    ]
+                }
+            }
+        ],
+        "budgets": {},
+        "execution_policy": {
+            "profile": "managed_sandbox",
+            "network": "leaven_endpoint_only",
+            "subprocess": "deny_except_sandbox_exec",
+            "filesystem": "workspace_handles_only",
+            "byo_effects": "forbidden"
+        },
+        "delegation": {
+            "may_delegate": false,
+            "max_depth": 0,
+            "must_attenuate": true,
+            "allowed_actions": []
+        }
+    }))
+    .unwrap()
 }
 
 fn workspace_root() -> &'static std::path::Path {
