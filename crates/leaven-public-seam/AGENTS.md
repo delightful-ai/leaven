@@ -287,10 +287,13 @@ receipt so target-derived facts cannot pass as unreceipted policy metadata.
 Evidence that carries `case.target` data classes must declare
 `target_derived=true`, so a false target-derived flag cannot hide target
 material in public, private, trace, or top-level data-class projections.
-Private `payload_ref` blob data classes must be covered by the private
-projection data classes before the envelope can pass. This is not evaluator
-evidence production, redaction execution, receipt persistence, or data-class
-propagation through runtime stages.
+When non-target evidence declares top-level `data_classes`, that declaration
+must still cover public, private, and trace projection classes, so declared
+envelope classes cannot shrink the visible propagation set. Private
+`payload_ref` blob data classes must be covered by the private projection data
+classes before the envelope can pass. This is not evaluator evidence
+production, redaction execution, receipt persistence, or data-class propagation
+through runtime stages.
 
 Crate-root exports for `EvaluationJobDocument`, `EvaluationJobKind`, and
 `EvaluationRequestReceiptDocument` are advanced public seam contracts. They
@@ -400,9 +403,10 @@ backpressure, or runtime watch support.
   seam validation layer. It rejects target-derived evidence without a read
   receipt, evidence with no source receipts, and envelopes that carry
   `case.target` data classes while claiming `target_derived=false`, as well as
-  private payload-ref data classes not covered by the private projection or
-  top-level target-derived classes. It does not prove evaluator/evidence
-  runtime production or public PlanResult projection.
+  private payload-ref data classes not covered by the private projection,
+  top-level target-derived class gaps, and declared non-target top-level class
+  sets that drop public/private/trace projection classes. It does not prove
+  evaluator/evidence runtime production or public PlanResult projection.
 - `tests/evaluation_job.rs` proves active-schema EvaluationJob values preserve
   evaluator/request/candidate/case/revision/deadline/capability identity for
   independent, pairwise, and listwise shapes, rejects missing deadline,
