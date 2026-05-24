@@ -4,7 +4,7 @@ use leaven_public_seam::{
     PlanAgentRunOutcome, PlanAgentRunRequest, PlanEmitRunEventOutcome, PlanEmitRunEventRequest,
     PlanExecutionContext, PlanExecutionHost, PlanLmCompleteOutcome, PlanLmCompleteRequest,
     PlanWorkspaceMaterializeOutcome, PlanWorkspaceMaterializeRequest, PublicSeamError,
-    PublicSeamPackage,
+    PublicSeamPackage, SchemaFingerprint,
 };
 use leaven_workspace::{CapturedOutput, Command, CommandOutput, ExitStatus};
 use serde_json::{Value, json};
@@ -100,8 +100,54 @@ fn agent_session_projection_preserves_invalid_command_argv_for_validation() {
     );
 }
 
+#[test]
+fn agent_run_json_schema_executes_through_provider_neutral_agent_contract() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut host =
+        AgentSessionHost::new(scripted_agent_session("codex")).with_parsed(json!({"answer": "ok"}));
+    let plan = agent_run_json_schema_plan();
+
+    let report = package
+        .execute_plan_document(&plan, &plan_execution_context(), &mut host)
+        .unwrap();
+
+    let request = host.agent_requests.first().unwrap();
+    assert!(matches!(
+        request.output_contract,
+        leaven_agent::OutputContract::JsonSchema { .. }
+    ));
+    assert_eq!(
+        report.value()["values"]["completion"]["parsed"],
+        json!({"answer": "ok"})
+    );
+}
+
+#[test]
+fn agent_run_json_schema_rejects_invalid_parsed_provider_payload() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut host =
+        AgentSessionHost::new(scripted_agent_session("codex")).with_parsed(json!({"answer": 42}));
+
+    let error = package
+        .execute_plan_document(
+            &agent_run_json_schema_plan(),
+            &plan_execution_context(),
+            &mut host,
+        )
+        .unwrap_err();
+
+    assert!(
+        error
+            .to_string()
+            .contains("agent_run parsed result payload failed json_schema output contract"),
+        "unexpected error: {error:?}"
+    );
+    assert_eq!(host.agent_requests.len(), 1);
+}
+
 struct AgentSessionHost {
     session: Metered<AgentSession>,
+    parsed: Option<Value>,
     calls: Vec<&'static str>,
     agent_requests: Vec<leaven_agent::AgentRunRequest>,
 }
@@ -110,9 +156,15 @@ impl AgentSessionHost {
     fn new(session: Metered<AgentSession>) -> Self {
         Self {
             session,
+            parsed: None,
             calls: Vec::new(),
             agent_requests: Vec::new(),
         }
+    }
+
+    fn with_parsed(mut self, parsed: Value) -> Self {
+        self.parsed = Some(parsed);
+        self
     }
 }
 
@@ -133,12 +185,16 @@ impl PlanExecutionHost for AgentSessionHost {
         assert_eq!(request.live_workspace()?, "ws_planexec_materialized");
         self.agent_requests.push(request.to_agent_run_request()?);
         self.calls.push("agent");
-        Ok(PlanAgentRunOutcome::from_agent_session(
+        let mut outcome = PlanAgentRunOutcome::from_agent_session(
             self.session.clone(),
             Fingerprint::from_bytes([77; 32]),
             blob_ref("blob_agent_transcript"),
             "agentrec_completion",
-        ))
+        );
+        if let Some(parsed) = self.parsed.clone() {
+            outcome = outcome.with_parsed(parsed);
+        }
+        Ok(outcome)
     }
 
     fn workspace_materialize(
@@ -238,6 +294,24 @@ fn agent_run_workspace_plan() -> Value {
             "on_stale": "reject"
         }
     })
+}
+
+fn agent_run_json_schema_plan() -> Value {
+    let mut plan = agent_run_workspace_plan();
+    let schema = json!({
+        "type": "object",
+        "required": ["answer"],
+        "properties": {
+            "answer": {"type": "string"}
+        },
+        "additionalProperties": false
+    });
+    plan["ops"][1]["call"]["output"] = json!({
+        "kind": "json_schema",
+        "schema": schema,
+        "schema_fingerprint": SchemaFingerprint::for_json_value(&schema).unwrap().as_str()
+    });
+    plan
 }
 
 fn blob_ref(id: &'static str) -> Value {

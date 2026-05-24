@@ -1528,6 +1528,7 @@ rows:
       - crates/leaven-public-seam/tests/plan_document.rs::agent_run_lowering_preserves_workspace_diff_surface_fingerprint
       - crates/leaven-public-seam/tests/plan_document.rs::agent_run_rejects_schema_valid_sessions_without_audit_facts
       - crates/leaven-public-seam/tests/agent_contract.rs::agent_run_can_project_provider_neutral_agent_session_into_plan_result
+      - crates/leaven-public-seam/tests/agent_contract.rs::agent_run_json_schema_executes_through_provider_neutral_agent_contract
       - crates/leaven-public-seam/tests/plan_document.rs::call_results_reject_missing_receipts_and_wrong_kinds_even_with_valid_hashes
       - crates/leaven-public-seam/tests/proposal_authority.rs::proposal_authority_rejects_agent_session_effect_without_matching_receipt
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_bind_worker_methods_to_primary_kinds_and_receipts
@@ -1538,6 +1539,7 @@ rows:
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_reject_agent_and_sandbox_blob_ref_data_class_gaps
       - crates/leaven-public-seam/tests/proposal_authority.rs::proposal_authority_rejects_submit_only_apply_and_ungranted_surface_or_effect
       - crates/leaven-public-seam/tests/agent_contract.rs::agent_session_projection_preserves_invalid_command_argv_for_validation
+      - crates/leaven-public-seam/tests/agent_contract.rs::agent_run_json_schema_rejects_invalid_parsed_provider_payload
       - crates/leaven-public-seam/tests/call_authority.rs::call_authority_rejects_agent_shell_or_network_beyond_execution_policy
       - crates/leaven-public-seam/tests/call_authority.rs::call_authority_checks_agent_allowed_commands_against_grants
       - crates/leaven-public-seam/tests/plan_document.rs::agent_run_lowering_defaults_missing_tool_policy_to_no_shell
