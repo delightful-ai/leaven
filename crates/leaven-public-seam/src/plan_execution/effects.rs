@@ -372,8 +372,9 @@ fn lower_agent_tool_policy(
         allow_shell: object
             .get("allow_shell")
             .and_then(Value::as_bool)
-            .unwrap_or(true),
+            .unwrap_or(false),
         allowed_tools: Vec::new(),
+        allowed_commands: Vec::new(),
     };
     if let Some(tools) = object.get("allowed_tools").and_then(Value::as_array) {
         policy.allowed_tools = tools
@@ -383,6 +384,17 @@ fn lower_agent_tool_policy(
                     .as_str()
                     .map(str::to_owned)
                     .ok_or_else(|| invalid_call("agent_run allowed_tools must be strings"))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+    }
+    if let Some(commands) = object.get("allowed_commands").and_then(Value::as_array) {
+        policy.allowed_commands = commands
+            .iter()
+            .map(|value| {
+                value
+                    .as_str()
+                    .map(str::to_owned)
+                    .ok_or_else(|| invalid_call("agent_run allowed_commands must be strings"))
             })
             .collect::<Result<Vec<_>, _>>()?;
     }

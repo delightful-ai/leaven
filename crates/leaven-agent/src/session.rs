@@ -88,19 +88,11 @@ pub struct JsonSchemaRef {
     pub schema: String,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 pub struct AgentToolPolicy {
     pub allow_shell: bool,
     pub allowed_tools: Vec<String>,
-}
-
-impl Default for AgentToolPolicy {
-    fn default() -> Self {
-        Self {
-            allow_shell: true,
-            allowed_tools: Vec::new(),
-        }
-    }
+    pub allowed_commands: Vec<String>,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]

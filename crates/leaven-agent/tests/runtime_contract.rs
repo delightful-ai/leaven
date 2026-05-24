@@ -6,8 +6,8 @@ use futures::future::{BoxFuture, FutureExt};
 use leaven_agent::{
     AgentInstructions, AgentRunContext, AgentRunRequest, AgentRuntime, AgentRuntimeCapabilities,
     AgentRuntimeError, AgentSession, AgentSessionArtifact, AgentSessionArtifactKind,
-    CancellationRef, FakeAgentAction, FakeAgentRuntime, OutputContract, RawProviderEvent,
-    TranscriptEvent, TranscriptRole, WorkspaceAccessMode,
+    AgentToolPolicy, CancellationRef, FakeAgentAction, FakeAgentRuntime, OutputContract,
+    RawProviderEvent, TranscriptEvent, TranscriptRole, WorkspaceAccessMode,
 };
 use leaven_kernel::{AgentRuntimeId, AgentSessionId, BudgetSnapshot, Cost, Fingerprint};
 use leaven_workspace::{
@@ -169,6 +169,15 @@ fn runtime_trait_default_capabilities_are_backend_neutral() {
     let runtime = DefaultCapabilitiesRuntime;
 
     assert_eq!(runtime.capabilities(), AgentRuntimeCapabilities::default());
+}
+
+#[test]
+fn agent_tool_policy_defaults_to_no_shell_or_commands() {
+    let policy = AgentToolPolicy::default();
+
+    assert!(!policy.allow_shell);
+    assert!(policy.allowed_tools.is_empty());
+    assert!(policy.allowed_commands.is_empty());
 }
 
 #[test]

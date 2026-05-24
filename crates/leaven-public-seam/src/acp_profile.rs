@@ -1419,7 +1419,7 @@ fn validate_effect_primary_audit(
         }
         "leaven/agent.run" => {
             validate_effect_primary_receipt(primary, expected_receipt_id)?;
-            validate_agent_session_value("agent_run", primary, expected_receipt_id)?;
+            validate_agent_session_value("agent_run", None, primary, expected_receipt_id)?;
             validate_effect_primary_cost("agent_run", primary, expected_receipt)
         }
         "leaven/sandbox.exec" => {

@@ -73,7 +73,8 @@ GEPA, skill banks, run graphs, or optimizer rhythm.
   artifacts. It preserves the public seam `surface_fingerprint` when one is
   supplied, then states what kind of output the runtime should leave for a
   stage-owned parser.
-- `AgentToolPolicy` is request vocabulary. This crate does not enforce shell or
-  tool allowlists; provider leaves or stages must translate/reject them honestly.
+- `AgentToolPolicy` is request vocabulary. It defaults to no shell access and
+  no command allow-list. This crate does not enforce shell, command, or tool
+  allowlists; provider leaves or stages must translate/reject them honestly.
 - Returning `Metered<AgentSession>` reports cost to the caller. This crate does
   not mutate the engine budget ledger directly.
