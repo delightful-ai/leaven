@@ -45,7 +45,7 @@ impl EvidenceEnvelopeDocument {
             &source_receipts.effect,
             &source_receipts.write,
         )?;
-        if !data_classes.is_empty() {
+        if object.contains_key("data_classes") {
             validate_declared_data_classes_cover_projection(
                 &data_classes,
                 &projection.public,

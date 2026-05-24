@@ -1101,6 +1101,11 @@ impl AcpJsonRpcRequestDocument {
                 "ACP JSON-RPC request must not carry response result or error fields",
             ));
         }
+        require_jsonrpc_members(
+            object,
+            &["jsonrpc", "id", "method", "params"],
+            "ACP JSON-RPC request",
+        )?;
         let id = jsonrpc_id(object.get("id"))?;
         let method = required_string(object.get("method"), "method")?.to_owned();
         if profile.method(&method).is_none() {
@@ -1148,6 +1153,11 @@ impl AcpJsonRpcResponseDocument {
                 "ACP JSON-RPC response must not carry request method or params fields",
             ));
         }
+        require_jsonrpc_members(
+            object,
+            &["jsonrpc", "id", "result"],
+            "ACP JSON-RPC response",
+        )?;
         let id = jsonrpc_id(object.get("id"))?;
         if id != request.id() {
             return Err(invalid_acp(
@@ -1770,6 +1780,21 @@ fn require_jsonrpc_2(object: &serde_json::Map<String, Value>) -> Result<(), Publ
             "ACP JSON-RPC envelope must declare jsonrpc 2.0",
         )),
     }
+}
+
+fn require_jsonrpc_members(
+    object: &serde_json::Map<String, Value>,
+    allowed: &[&str],
+    context: &str,
+) -> Result<(), PublicSeamError> {
+    for key in object.keys() {
+        if !allowed.contains(&key.as_str()) {
+            return Err(invalid_acp(format!(
+                "{context} must not carry extra top-level field `{key}`"
+            )));
+        }
+    }
+    Ok(())
 }
 
 fn jsonrpc_id(value: Option<&Value>) -> Result<String, PublicSeamError> {

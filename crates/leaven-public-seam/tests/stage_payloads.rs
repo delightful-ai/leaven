@@ -623,12 +623,51 @@ fn reflect_propose_handoff_rejects_single_prompt_and_stale_reflection_fakes() {
         PublicSeamError::InvalidStagePayload { .. }
     ));
 
+    let mut mismatched_base_revision = reflect_propose_handoff();
+    mismatched_base_revision["propose_request"]["base_revision"] = json!("rev_other");
+    assert!(matches!(
+        package
+            .validate_reflect_propose_handoff_document(&mismatched_base_revision)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+
+    let mut mismatched_parent = reflect_propose_handoff();
+    mismatched_parent["propose_request"]["parent"] = json!("cand_other");
+    mismatched_parent["propose_request"]["source_refs"] =
+        json!(["cand_stagepayload_parent", "cand_other"]);
+    assert!(matches!(
+        package
+            .validate_reflect_propose_handoff_document(&mismatched_parent)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+
+    let mut mismatched_surface = reflect_propose_handoff();
+    mismatched_surface["propose_request"]["surface_fingerprint"] = json!("fp_surface_sha256_other");
+    assert!(matches!(
+        package
+            .validate_reflect_propose_handoff_document(&mismatched_surface)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+
     let mut mismatched_capability = reflect_propose_handoff();
     mismatched_capability["propose_request"]["capability_fingerprint"] =
         json!("fp_cap_sha256_other");
     assert!(matches!(
         package
             .validate_reflect_propose_handoff_document(&mismatched_capability)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+
+    let mut mismatched_query_policy = reflect_propose_handoff();
+    mismatched_query_policy["propose_request"]["query_policy_fingerprint"] =
+        json!("fp_policy_sha256_other");
+    assert!(matches!(
+        package
+            .validate_reflect_propose_handoff_document(&mismatched_query_policy)
             .unwrap_err(),
         PublicSeamError::InvalidStagePayload { .. }
     ));

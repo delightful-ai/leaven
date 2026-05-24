@@ -146,6 +146,15 @@ fn evidence_envelope_rejects_declared_non_target_data_class_gaps() {
             .unwrap_err(),
         PublicSeamError::InvalidEvidence { .. }
     ));
+
+    let mut explicit_empty_declaration = non_target_envelope();
+    explicit_empty_declaration["data_classes"] = json!([]);
+    assert!(matches!(
+        package
+            .validate_evidence_envelope_document(&explicit_empty_declaration)
+            .unwrap_err(),
+        PublicSeamError::InvalidEvidence { .. }
+    ));
 }
 
 #[test]

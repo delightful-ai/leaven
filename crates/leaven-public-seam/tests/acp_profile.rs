@@ -593,6 +593,23 @@ fn acp_jsonrpc_rejects_in_process_or_cross_method_fakes() {
         Err(PublicSeamError::ExampleValidation { .. } | PublicSeamError::InvalidPlan { .. })
     ));
 
+    let smuggled_in_process_payload = json!({
+        "jsonrpc": "2.0",
+        "id": "req-smuggled-001",
+        "method": "leaven/lm.complete",
+        "params": acp_plan_params(),
+        "private_process_payload": {
+            "message": {
+                "role": "assistant",
+                "content": [{"kind": "text", "text": "ok"}]
+            }
+        }
+    });
+    assert!(matches!(
+        package.validate_acp_jsonrpc_request_document(&profile, &smuggled_in_process_payload),
+        Err(PublicSeamError::InvalidScope { .. })
+    ));
+
     let agent_request_value = json!({
         "jsonrpc": "2.0",
         "id": "req-agent-001",
@@ -609,6 +626,24 @@ fn acp_jsonrpc_rejects_in_process_or_cross_method_fakes() {
     });
     assert!(matches!(
         package.validate_acp_jsonrpc_response_document(&agent_request, &lm_response),
+        Err(PublicSeamError::InvalidScope { .. })
+    ));
+
+    let smuggled_response = json!({
+        "jsonrpc": "2.0",
+        "id": "req-agent-001",
+        "result": extension_result_for(
+            "leaven/agent.run",
+            &agent_session_primary(),
+            &call_receipt("agent_run", "agentrec_acp"),
+            &["public", "transcript.raw"]
+        ),
+        "private_process_payload": {
+            "stdout": "proposal patch without ACP receipt binding"
+        }
+    });
+    assert!(matches!(
+        package.validate_acp_jsonrpc_response_document(&agent_request, &smuggled_response),
         Err(PublicSeamError::InvalidScope { .. })
     ));
 
