@@ -165,8 +165,9 @@ not a parsed commit-log surface.
 It is not workspace backend execution and still leaves full artifact/snapshot
 backend proof pending, so it is not full workspace row closeout. The
 `PublicSeamPackage::execute_plan_document_with_capability` route
-checks Plan call authority against the supplied capability before host effects
-can run and requires capability-authorized evaluator request scope before a
+checks Plan call/write authority against the supplied capability before host
+effects can run, including workspace lifecycle calls and `emit_run_event`
+writes, and requires capability-authorized evaluator request scope before a
 `case_query.load` host read can run. The
 `PublicSeamPackage::validate_plan_execution_result` route additionally proves
 representative query/call/write receipt hashes can be checked against the Plan

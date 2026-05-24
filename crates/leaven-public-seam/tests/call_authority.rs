@@ -148,8 +148,7 @@ fn call_capability() -> Value {
             &["workspace.file", "public"],
             &["case.target", "external.secret"]
         ),
-        call_grant(
-            "sandbox.exec",
+        sandbox_call_grant(
             &["workspace.file", "public"],
             &["case.target", "external.secret"]
         )
@@ -171,7 +170,7 @@ fn call_capability_allowing_target() -> Value {
             }
         },
         call_grant("agent.run", &["workspace.file", "public"], &[]),
-        call_grant("sandbox.exec", &["workspace.file", "public"], &[])
+        sandbox_call_grant(&["workspace.file", "public"], &[])
     ]);
     value
 }
@@ -183,6 +182,24 @@ fn call_grant(action: &str, allowed: &[&str], forbidden: &[&str]) -> Value {
         "constraints": {
             "allowed_input_classes": allowed,
             "forbidden_input_classes": forbidden
+        }
+    })
+}
+
+fn sandbox_call_grant(allowed: &[&str], forbidden: &[&str]) -> Value {
+    json!({
+        "action": "sandbox.exec",
+        "resource": {
+            "workspace_ids": ["ws_call_authority"]
+        },
+        "constraints": {
+            "allowed_input_classes": allowed,
+            "forbidden_input_classes": forbidden,
+            "workspace_ops": ["exec"],
+            "allowed_commands": ["cargo"]
+        },
+        "limits": {
+            "timeout_s": 30
         }
     })
 }

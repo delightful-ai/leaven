@@ -593,11 +593,13 @@ rows:
     minimum_closeout_level: semantic_denial
     positive_test_evidence:
       - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_with_capability_checks_call_authority_before_host_effects
+      - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_with_capability_allows_workspace_lifecycle_calls
       - crates/leaven-public-seam/tests/call_authority.rs::call_authority_accepts_lm_agent_and_sandbox_input_classes
       - crates/leaven-public-seam/tests/plan_result.rs::plan_result_preserves_value_visibility_data_classes
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_preserves_nested_evidence_visibility_data_classes_and_receipts
     negative_test_evidence:
       - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_with_capability_checks_call_authority_before_host_effects
+      - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_with_capability_allows_workspace_lifecycle_calls
       - crates/leaven-public-seam/tests/call_authority.rs::call_authority_rejects_forbidden_input_classes_before_execution
       - crates/leaven-public-seam/tests/call_authority.rs::call_authority_rejects_declared_forbidden_intersections_even_when_grant_allows
       - crates/leaven-public-seam/tests/call_authority.rs::call_authority_rejects_reflector_lm_call_input_classes_include_case_target
@@ -609,6 +611,7 @@ rows:
       - crates/leaven-public-seam/src/call_authority.rs::validate
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_call_authority_document
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::execute_plan_document_with_capability
+      - crates/leaven-public-seam/src/execution_authority.rs::validate
       - crates/leaven-public-seam/src/result.rs::validate_value_visibility
       - crates/leaven-public-seam/src/result.rs::collect_score_output_data_classes_from_value
       - crates/leaven-public-seam/src/result.rs::collect_evidence_data_classes_from_value
@@ -618,6 +621,7 @@ rows:
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-result-receipt-replay-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-23-evidence-visibility-current-blocker-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-effect-call-authority-partial-review.md
     status: pending
 
   - id: ps1.visibility.reflector_target_safe
@@ -1258,6 +1262,8 @@ rows:
       - crates/leaven-public-seam/src/acp_profile.rs::AcpExtensionResultDocument
       - crates/leaven-public-seam/src/acp_profile.rs::AcpPermissionRequest
       - crates/leaven-public-seam/src/capability.rs::CapabilityGrantRequest
+    review_evidence:
+      - docs/specs/public-seam-v1/reviews/2026-05-24-effect-call-authority-partial-review.md
     status: pending
 
   - id: ps1.agent.contract
@@ -1307,6 +1313,7 @@ rows:
       - crates/leaven-public-seam/src/proposal_authority.rs::ProposalAuthorityReport
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-workspace-handle-provenance-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-effect-call-authority-partial-review.md
     status: pending
 
   - id: ps1.sandbox.exec_streaming
@@ -1358,6 +1365,7 @@ rows:
       - crates/leaven-public-seam/src/capability.rs::CapabilityGrantRequest
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-workspace-handle-provenance-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-effect-call-authority-partial-review.md
     status: pending
 
   - id: ps1.watch.deferred
