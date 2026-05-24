@@ -596,10 +596,13 @@ fn assessed_group_output<A, Out>(
     let mut texts = Vec::with_capacity(outputs.len());
     let mut truncated = false;
     let mut metadata = None;
-    let mut explicit_candidate_output = false;
+    let mut unbound_explicit_assessed_output = false;
+    let mut bound_explicit_candidate_artifact = false;
     for output in outputs {
         let reportable = output.output.reportable_output()?;
-        explicit_candidate_output |= reportable.is_unbound_explicit_candidate_output();
+        unbound_explicit_assessed_output |= reportable.is_unbound_explicit_candidate_output()
+            || reportable.is_unbound_explicit_candidate_artifact();
+        bound_explicit_candidate_artifact |= reportable.is_bound_explicit_candidate_artifact();
         let OutputRecord::Inline {
             text,
             truncated: output_truncated,
@@ -623,8 +626,12 @@ fn assessed_group_output<A, Out>(
         truncated,
         metadata: metadata.unwrap_or_else(leaven_evidence::OutputMetadata::public),
     };
-    if explicit_candidate_output {
+    if unbound_explicit_assessed_output {
         Some(ReportableOutputDeclaration::explicit(record))
+    } else if bound_explicit_candidate_artifact {
+        Some(ReportableOutputDeclaration::explicit_candidate_artifact(
+            record,
+        ))
     } else {
         Some(ReportableOutputDeclaration::derived(record))
     }

@@ -266,10 +266,13 @@ backpressure, or runtime watch support.
   rejection of unknown core/call/write kinds, top-level escape-hatch plan
   operations, mismatched `since_revision` event-source bases, and schema-valid
   placeholder `submit_assessments` score outputs before execution. Its
-  `Score.output` checks require candidate/artifact data classes and a matching
-  `evidence.public.summary` projection; this rejects candidate-labeled schema
-  dummies but is still public-seam document validation, not runtime proof that a
-  scorer assessed the true candidate output. Its execution-result verifier
+  `Score.output` checks require candidate/artifact data classes, a matching
+  `evidence.public.summary` projection, and, when an inline `value` is present,
+  a candidate-bound value matching the assessment's `candidate` / `candidates`
+  field. This rejects unbound and mismatched-candidate schema dummies, but it is
+  still self-declared public-seam document validation, not proof that the value
+  is the actual candidate/artifact output assessed, and not provider or ACP
+  runtime proof. Its execution-result verifier
   checks representative query/call/write receipt hashes against Plan IR
   preimages, including capability-authorized `case_query.load` target reads, and
   rejects same-prefix mismatches, but it is not a general ACP replay service,

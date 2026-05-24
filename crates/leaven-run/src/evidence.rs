@@ -67,15 +67,29 @@ impl<Out> RunOutput<Out> {
         self
     }
 
-    /// Attaches the reportable output record that downstream scores must carry.
+    /// Attaches an explicit non-candidate reportable output declaration.
     ///
     /// Typed runner outputs are opaque to Leaven. A runner that returns a typed
-    /// value must also declare the exact reportable rendering that scorers are
+    /// value must declare the exact reportable rendering that scorers are
     /// assessing; otherwise the evaluator refuses successful scores because it
     /// cannot distinguish a meaningful `Score.output` from a dummy field.
+    /// Use [`Self::with_reportable_text`] for candidate outputs derived from
+    /// the typed output, or [`Self::with_reportable_artifact_output`] when the
+    /// score intentionally assesses the artifact itself. Generic explicit
+    /// `candidate.output` and `candidate.artifact` records are rejected during
+    /// evaluator lowering.
     #[must_use]
     pub fn with_reportable_output(mut self, output: OutputRecord) -> Self {
         self.reportable_output = Some(ReportableOutputDeclaration::explicit(output));
+        self
+    }
+
+    /// Attaches a candidate-artifact reportable rendering for scores that assess the artifact.
+    #[must_use]
+    pub fn with_reportable_artifact_output(mut self, output: OutputRecord) -> Self {
+        self.reportable_output = Some(ReportableOutputDeclaration::explicit_candidate_artifact(
+            output,
+        ));
         self
     }
 
@@ -273,6 +287,9 @@ impl ReportableOutput {
         if expected.is_unbound_explicit_candidate_output() {
             return Err(ReportableOutputError::UnboundCandidateOutput);
         }
+        if expected.is_unbound_explicit_candidate_artifact() {
+            return Err(ReportableOutputError::UnboundCandidateArtifact);
+        }
         if !is_assessed_candidate_or_artifact_output(&expected.record) {
             return Err(ReportableOutputError::MissingAssessedDataClass);
         }
@@ -304,6 +321,13 @@ impl ReportableOutputDeclaration {
         }
     }
 
+    pub(crate) fn explicit_candidate_artifact(record: OutputRecord) -> Self {
+        Self {
+            record,
+            origin: ReportableOutputOrigin::ExplicitCandidateArtifact,
+        }
+    }
+
     pub(crate) fn record(&self) -> &OutputRecord {
         &self.record
     }
@@ -315,12 +339,25 @@ impl ReportableOutputDeclaration {
                 .data_classes()
                 .contains(&DataClass::candidate_output())
     }
+
+    pub(crate) fn is_unbound_explicit_candidate_artifact(&self) -> bool {
+        self.origin == ReportableOutputOrigin::ExplicitRecord
+            && self
+                .record
+                .data_classes()
+                .contains(&DataClass::candidate_artifact())
+    }
+
+    pub(crate) fn is_bound_explicit_candidate_artifact(&self) -> bool {
+        self.origin == ReportableOutputOrigin::ExplicitCandidateArtifact
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ReportableOutputOrigin {
     DerivedFromRunnerOutput,
     ExplicitRecord,
+    ExplicitCandidateArtifact,
 }
 
 fn is_placeholder_output(record: &OutputRecord) -> bool {
@@ -397,6 +434,9 @@ pub enum ReportableOutputError {
     /// The runner explicitly declared candidate-output data without a typed-output binding.
     #[error("runner output did not derive candidate output from typed output")]
     UnboundCandidateOutput,
+    /// The runner declared candidate-artifact data through the generic output API.
+    #[error("runner output did not bind candidate artifact through artifact-output API")]
+    UnboundCandidateArtifact,
     /// The score reported output that was not the runner output being assessed.
     #[error("reportable output did not match assessed output")]
     Unrelated,
