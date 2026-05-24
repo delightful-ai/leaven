@@ -602,7 +602,7 @@ fn score_and_judge_contexts_reject_nested_output_data_class_gaps() {
 }
 
 #[test]
-fn propose_request_requires_reflection_result_and_change_schema_authority() {
+fn propose_request_rejects_missing_reflection_result_and_change_schema_authority() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
 
     let mut missing_source_refs = propose_request();

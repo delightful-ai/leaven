@@ -18,13 +18,16 @@ leaven-gepa = { workspace = true }
 leaven-kernel = { workspace = true }
 leaven-surface = { workspace = true }
 leaven-workspace = { workspace = true }
+jcs-canonicalize = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
 futures = { workspace = true }
 leaven-evidence = { workspace = true }
 leaven-population = { workspace = true }
+leaven-public-seam = { workspace = true }
 leaven-workspace-local = { workspace = true }
 tempfile = { workspace = true }
 

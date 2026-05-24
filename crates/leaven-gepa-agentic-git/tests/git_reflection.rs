@@ -4,7 +4,10 @@ use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 use std::process::Command as ProcessCommand;
 
-use leaven_agent::{AgentContextRef, AgentInstructions};
+use leaven_agent::{
+    AgentContextRef, AgentInstructions, AgentRunContext, AgentRunRequest, AgentRuntime,
+    AgentSession, OutputContract,
+};
 use leaven_agentic_git::{GitProgramMaterializer, GitProgramReadback, GitProgramStores};
 use leaven_artifact_git::{
     GitArtifactIdentityMode, GitObjectId, GitPath, GitProgramArtifact, GitRepoArtifact,
@@ -20,10 +23,14 @@ use leaven_gepa::{ReflectRequest, ReflectiveCase, ReflectiveSideInfoValue, Refle
 use leaven_gepa_agentic_git::{
     GepaGitProgramReflectionRenderer, GitProgramGepaReflectionInput,
     GitProgramGepaReflectionMaterializer, GitProgramGepaReflectionParser,
+    GitProgramPublicSeamReflectionResult, GitProgramPublicSeamStageContext,
 };
-use leaven_kernel::{AssessmentId, Budget, CandidateId, Cost, Metered, ProposerId, RunId};
+use leaven_kernel::{
+    AgentSessionId, AssessmentId, Budget, BudgetSnapshot, CandidateId, Cost, Metered, ProposerId,
+    RunId,
+};
 use leaven_population::{TopKFrontier, TopKParentSelector};
-use leaven_workspace::{WorkspaceConfig, WorkspaceFactory, WorkspacePath};
+use leaven_workspace::{WorkspaceConfig, WorkspaceFactory, WorkspacePath, WorkspaceView};
 use leaven_workspace_local::LocalWorkspaceFactory;
 
 #[test]
@@ -200,7 +207,8 @@ fn reflector_wrapper_runs_agentic_proposer_under_llvm_coverage() {
     futures::executor::block_on(async {
         let fixture = GitFixture::new();
         let seed = fixture.program_artifact();
-        let mut graph = RunGraph::<GitProblem>::new(RunId::new());
+        let run_id = RunId::new();
+        let mut graph = RunGraph::<GitProblem>::new(run_id);
         let mut budget = BudgetLedger::new(Budget::unlimited());
         let parent = {
             let mut ctx = RunContext::<GitProblem>::new(&mut graph, &mut budget);
@@ -255,6 +263,214 @@ fn reflector_wrapper_runs_agentic_proposer_under_llvm_coverage() {
             "program reflected through runtime\n"
         );
     });
+}
+
+#[test]
+fn public_seam_reflect_then_propose_stage_projection_uses_separate_agent_sessions() {
+    futures::executor::block_on(async {
+        let package = leaven_public_seam::PublicSeamPackage::active_from_repo(workspace_root())
+            .expect("public seam package loads");
+        let fixture = GitFixture::new();
+        let seed = fixture.program_artifact();
+        let run_id = RunId::new();
+        let mut graph = RunGraph::<GitProblem>::new(run_id);
+        let mut budget = BudgetLedger::new(Budget::unlimited());
+        let parent = {
+            let mut ctx = RunContext::<GitProblem>::new(&mut graph, &mut budget);
+            ctx.insert_seed(seed.clone(), 0).unwrap()
+        };
+        let input = reflection_input(seed, parent);
+        let context = public_stage_context(run_id);
+        let reflection_value = public_stage_reflection(parent);
+        let proposal_batch = run_separated_public_stage_workspace(
+            &package,
+            &fixture,
+            &input,
+            &context,
+            reflection_value,
+            &mut graph,
+            &mut budget,
+        )
+        .await;
+
+        let mut ctx = RunContext::<GitProblem>::new(&mut graph, &mut budget);
+        let proposer = PrebuiltProposalProposer::new(proposal_batch);
+        let batch = ctx.propose(&proposer, ()).await.unwrap();
+        let child = ctx
+            .apply_batch(batch.batch_id)
+            .unwrap()
+            .successful_candidates()
+            .next()
+            .unwrap();
+        let child_revision = child_revision(&ctx, child);
+        assert_eq!(
+            git_output(
+                &fixture.program_store,
+                [
+                    "show",
+                    &format!("{}:program.txt", child_revision.object_id())
+                ],
+            ),
+            "program reflected through separated public seam stages\n"
+        );
+        assert_provenance(&ctx, child, parent);
+    });
+}
+
+fn public_stage_context(run_id: RunId) -> GitProgramPublicSeamStageContext {
+    GitProgramPublicSeamStageContext::new(
+        run_id,
+        "rev_gepa_git_stage_base",
+        "fp_surface_sha256_gepa_git_stage",
+        "fp_policy_sha256_gepa_git_stage",
+        "fp_cap_sha256_gepa_git_stage",
+        "fp_schema_sha256_gepa_git_stage_patch",
+    )
+    .with_stage_call_ids("sc_gepa_git_reflect_test", "sc_gepa_git_propose_test")
+    .with_reflection_read_receipt("qrec_gepa_git_reflection_sources")
+}
+
+fn public_stage_reflection(parent: CandidateId) -> serde_json::Value {
+    GitProgramPublicSeamReflectionResult::source_backed(
+        "The selected Git program file should be edited.",
+        vec![prefixed_candidate_ref(parent)],
+        ["qrec_gepa_git_reflection_sources".to_owned()],
+        "fp_surface_sha256_gepa_git_stage",
+        "program.txt",
+    )
+    .into_value()
+}
+
+async fn run_separated_public_stage_workspace(
+    package: &leaven_public_seam::PublicSeamPackage,
+    fixture: &GitFixture,
+    input: &GitProgramGepaReflectionInput<String>,
+    context: &GitProgramPublicSeamStageContext,
+    reflection_value: serde_json::Value,
+    graph: &mut RunGraph<GitProblem>,
+    budget: &mut BudgetLedger,
+) -> ProposalBatch<GitProblem> {
+    let reflection_path = workspace_path(".leaven/reflection-result.json");
+    let materializer =
+        GitProgramGepaReflectionMaterializer::new(GitProgramMaterializer::new(fixture.stores()));
+    let parser = GitProgramGepaReflectionParser::new(GitProgramReadback::new(fixture.stores()));
+    let mut workspace = LocalWorkspaceFactory::temp()
+        .allocate(WorkspaceConfig::default())
+        .await
+        .unwrap();
+    let proposal_batch = {
+        let mut view = workspace.view();
+        materializer.materialize_input(input, &mut view).unwrap();
+        package
+            .validate_stage_payload_document(&context.reflect_request(input))
+            .expect("producer-built reflect request validates");
+
+        let budget_snapshot = RunContext::<GitProblem>::new(graph, budget).budget();
+        let reflect_session = run_reflector_stage(
+            &mut view,
+            &reflection_path,
+            &reflection_value,
+            &budget_snapshot,
+        )
+        .await;
+        let runtime_reflection: serde_json::Value =
+            serde_json::from_slice(&view.read_file(&reflection_path).unwrap()).unwrap();
+        package
+            .validate_stage_payload_document(&runtime_reflection)
+            .expect("runtime-produced reflection result validates");
+        package
+            .validate_stage_payload_document(&context.propose_request(input, &runtime_reflection))
+            .expect("producer-built propose request validates");
+
+        let propose_session =
+            run_proposer_stage(&mut view, &reflection_path, &budget_snapshot).await;
+        assert_ne!(
+            reflect_session.value.session_id,
+            propose_session.value.session_id
+        );
+
+        let parsed = {
+            let ctx_for_graph = RunContext::<GitProblem>::new(graph, budget);
+            parser
+                .parse_workspace(&mut view, input, &ctx_for_graph.graph())
+                .unwrap()
+                .value
+        };
+        let projection = context.project(input, &runtime_reflection, &parsed);
+        let handoff = package
+            .validate_reflect_propose_handoff_document(&projection.handoff)
+            .expect("separate reflect/propose handoff validates");
+        assert_eq!(handoff.reflect_stage_call_id(), "sc_gepa_git_reflect_test");
+        assert_eq!(handoff.propose_stage_call_id(), "sc_gepa_git_propose_test");
+        package
+            .validate_reflect_propose_submission_document(
+                &projection.handoff,
+                &projection.submission_plan,
+            )
+            .expect("proposal submission cites stage handoff");
+        parsed
+    };
+    workspace.cleanup().await.unwrap();
+    proposal_batch
+}
+
+async fn run_reflector_stage(
+    view: &mut WorkspaceView<'_>,
+    reflection_path: &WorkspacePath,
+    reflection_value: &serde_json::Value,
+    budget: &BudgetSnapshot,
+) -> Metered<AgentSession> {
+    let reflect_runtime =
+        leaven_agent::FakeAgentRuntime::new(vec![leaven_agent::FakeAgentAction::WriteFile {
+            path: reflection_path.clone(),
+            bytes: serde_json::to_vec_pretty(reflection_value).unwrap(),
+        }])
+        .with_id("fake/reflector".into());
+    reflect_runtime
+        .run_session(
+            view,
+            AgentRunRequest::new(
+                AgentInstructions::task("write the reflection result only"),
+                OutputContract::JsonFile {
+                    path: reflection_path.clone(),
+                    schema: None,
+                },
+            ),
+            AgentRunContext::new(AgentSessionId::new(), budget),
+        )
+        .await
+        .unwrap()
+}
+
+async fn run_proposer_stage(
+    view: &mut WorkspaceView<'_>,
+    reflection_path: &WorkspacePath,
+    budget: &BudgetSnapshot,
+) -> Metered<AgentSession> {
+    let propose_runtime = leaven_agent::FakeAgentRuntime::new(vec![
+        leaven_agent::FakeAgentAction::ReadFile {
+            path: reflection_path.clone(),
+        },
+        leaven_agent::FakeAgentAction::WriteFile {
+            path: workspace_path("repos/program/program.txt"),
+            bytes: b"program reflected through separated public seam stages\n".to_vec(),
+        },
+    ])
+    .with_id("fake/proposer".into());
+    propose_runtime
+        .run_session(
+            view,
+            AgentRunRequest::new(
+                AgentInstructions::task("consume reflection result and edit the repo"),
+                OutputContract::WorkspaceDiff {
+                    roots: vec![WorkspacePath::root()],
+                    surface_fingerprint: Some("fp_surface_sha256_gepa_git_stage".to_owned()),
+                },
+            ),
+            AgentRunContext::new(AgentSessionId::new(), budget),
+        )
+        .await
+        .unwrap()
 }
 
 fn initialize_tiny_frontier(
@@ -519,6 +735,18 @@ fn assert_instruction_context(instructions: &AgentInstructions, label: &str, pat
         }),
         "rendered agent instructions should include {label} at {path}"
     );
+}
+
+fn workspace_root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(Path::parent)
+        .expect("crate lives under workspace/crates/leaven-gepa-agentic-git")
+        .to_path_buf()
+}
+
+fn prefixed_candidate_ref(candidate: CandidateId) -> String {
+    format!("cand_{candidate}")
 }
 
 struct GitFixture {

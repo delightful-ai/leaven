@@ -117,6 +117,8 @@ where
                 .run_session(
                     &mut view,
                     AgentRunRequest {
+                        runtime: None,
+                        runtime_fingerprint: None,
                         instructions: rendered.value,
                         cwd: request.cwd.clone(),
                         output_contract: request.output_contract.clone(),

@@ -539,6 +539,7 @@ fn conformance_matrix_rows_are_unique_honest_and_reference_real_files() {
             "ps1.receipts.failed_costs",
             "ps1.replay.per_assessment",
             "ps1.schema.fingerprints",
+            "ps1.stage.reflection_proposal_split",
             "ps1.watch.deferred",
             "ps1.worker_protocol.deprecated"
         ])

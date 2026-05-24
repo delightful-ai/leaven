@@ -14,8 +14,10 @@ frontier admission.
 Behavior-bearing bridge scaffold. The crate has a deterministic GEPA
 GitProgram reflection test that materializes a parent repo, reads back a typed
 `GitProgramChange`, applies through `RunContext::propose` plus `apply_batch`,
-and records tiny EvoSkill-shaped frontier admission state. It remains an
-advanced bridge route, not an ordinary prelude/default-feature product route.
+records tiny EvoSkill-shaped frontier admission state, and projects the
+reflect-then-propose handoff into the locked public-seam stage payloads. It
+remains an advanced bridge route, not an ordinary prelude/default-feature
+product route.
 
 ## Map
 
@@ -27,7 +29,20 @@ advanced bridge route, not an ordinary prelude/default-feature product route.
   out Git program repos.
 - `parser.rs` reads final workspace state, patches, or bundles back into a
   proposal batch.
+- `public_seam_stage.rs` lowers the GEPA Git-program reflect/propose attempt
+  into locked V1 stage payloads, handoff receipts, and the proposal submission
+  plan that cites the proposer-stage receipt.
 - `reflector.rs` wraps `AgenticProposer` as a `GepaReflector`.
+
+## Public Maturity
+
+Crate-root exports for `GitProgramPublicSeamStageContext`,
+`GitProgramPublicSeamReflectionResult`, and
+`GitProgramPublicSeamStageProjection` are advanced public seam projection
+contracts for this bridge crate. They are intentionally not in
+`leaven_gepa_agentic_git::prelude`; they do not prove ACP delivery, generic
+stage payload receipts across all roles, GEPA search policy, or ordinary
+facade/default-feature maturity.
 
 ## Decision Cards
 
@@ -36,7 +51,9 @@ advanced bridge route, not an ordinary prelude/default-feature product route.
   `ReflectRequest` build-once-pass-down law, and make the parser the only
   readback path into graph proposals
   preserve: `RunContext::propose` followed by `apply_batch`, typed
-  `GitProgramChange` readback, and provider-neutral `AgentRuntime`
+  `GitProgramChange` readback, provider-neutral `AgentRuntime`, and separated
+  public-seam reflector/proposer stage payloads when proving the external
+  worker route
   avoid: adding provider flags, deriving new reflective examples inside the
   reflector, exposing graph mutation helpers, or treating workspace commits as
   admitted candidates
