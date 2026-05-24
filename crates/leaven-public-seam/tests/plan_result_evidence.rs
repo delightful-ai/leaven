@@ -29,10 +29,13 @@ fn plan_result_preserves_nested_evidence_visibility_data_classes_and_receipts() 
 fn plan_result_accepts_object_form_evidence_receipt_refs() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let mut result = evidence_backed_result();
+    let read_ref = receipt_ref_for_result(&result, "qrec_target");
+    let effect_ref = receipt_ref_for_result(&result, "lmrec_score");
+    let write_ref = receipt_ref_for_result(&result, "wrec_assessment");
     let evidence = &mut result["values"]["assessment_rows"]["items"][0]["evidence"];
-    evidence["source_receipts"]["read"] = json!([receipt_ref("qrec_target")]);
-    evidence["source_receipts"]["effect"] = json!([receipt_ref("lmrec_score")]);
-    evidence["source_receipts"]["write"] = json!([receipt_ref("wrec_assessment")]);
+    evidence["source_receipts"]["read"] = json!([read_ref]);
+    evidence["source_receipts"]["effect"] = json!([effect_ref]);
+    evidence["source_receipts"]["write"] = json!([write_ref]);
     evidence["public"]["trace_refs"][0]["receipt"] = receipt_ref("lmrec_score");
     evidence["trace_refs"][0]["receipt"] = receipt_ref("lmrec_score");
 
@@ -87,13 +90,27 @@ fn plan_result_rejects_evidence_source_receipts_that_are_missing_or_wrong_kind()
     ));
 
     let mut object_form_wrong_effect_receipt_kind = evidence_backed_result();
+    let query_ref = receipt_ref_for_result(&object_form_wrong_effect_receipt_kind, "qrec_target");
+    let effect_ref = receipt_ref_for_result(&object_form_wrong_effect_receipt_kind, "lmrec_score");
     object_form_wrong_effect_receipt_kind["values"]["assessment_rows"]["items"][0]["evidence"]["source_receipts"]
-        ["effect"] = json!([receipt_ref("qrec_target"), receipt_ref("lmrec_score")]);
+        ["effect"] = json!([query_ref, effect_ref]);
     assert!(matches!(
         package
             .validate_plan_result_document(&object_form_wrong_effect_receipt_kind)
             .unwrap_err(),
         PublicSeamError::InvalidEvidence { .. }
+    ));
+
+    let mut stale_read_fingerprint = evidence_backed_result();
+    let mut stale_ref = receipt_ref_for_result(&stale_read_fingerprint, "qrec_target");
+    stale_ref["fingerprint"] = json!("fp_receipt_sha256_stale");
+    stale_read_fingerprint["values"]["assessment_rows"]["items"][0]["evidence"]["source_receipts"]
+        ["read"] = json!([stale_ref]);
+    assert!(matches!(
+        package
+            .validate_plan_result_document(&stale_read_fingerprint)
+            .unwrap_err(),
+        PublicSeamError::InvalidPlanResult { .. }
     ));
 
     let mut undeclared_trace_receipt = evidence_backed_result();
@@ -472,6 +489,20 @@ fn receipt_ref(id: &str) -> Value {
         "kind": "receipt",
         "id": id,
         "fingerprint": "fp_receipt_sha256_evidence"
+    })
+}
+
+fn receipt_ref_for_result(result: &Value, id: &str) -> Value {
+    let receipt = result["receipts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|receipt| receipt["receipt"].as_str() == Some(id))
+        .unwrap();
+    json!({
+        "kind": "receipt",
+        "id": id,
+        "fingerprint": prefixed_jcs_hash("fp_receipt_sha256_", receipt)
     })
 }
 

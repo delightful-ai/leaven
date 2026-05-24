@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde_json::{Value, json};
 
 use crate::PublicSeamError;
-use crate::evidence::EvidenceEnvelopeDocument;
+use crate::evidence::{EvidenceEnvelopeDocument, EvidenceReceiptRef};
 
 mod helpers;
 
@@ -186,7 +186,7 @@ struct ValueAudit {
 
 fn inspect_values(
     values: &serde_json::Map<String, Value>,
-    receipt_index: &BTreeMap<String, String>,
+    receipt_index: &BTreeMap<String, ReceiptAudit>,
     replayability_summary: Replayability,
 ) -> Result<ValueAudit, PublicSeamError> {
     let mut value_kinds = Vec::with_capacity(values.len());
@@ -229,7 +229,7 @@ fn validate_value_visibility(
     value_name: &str,
     value: &serde_json::Map<String, Value>,
     value_data_classes: &BTreeSet<String>,
-    receipt_index: &BTreeMap<String, String>,
+    receipt_index: &BTreeMap<String, ReceiptAudit>,
 ) -> Result<(), PublicSeamError> {
     let mut required = BTreeSet::new();
     collect_score_output_data_classes_from_value(&Value::Object(value.clone()), &mut required)?;
@@ -408,7 +408,7 @@ fn collect_trace_ref_data_classes(
 
 fn collect_evidence_data_classes_from_value(
     value: &Value,
-    receipt_index: &BTreeMap<String, String>,
+    receipt_index: &BTreeMap<String, ReceiptAudit>,
     required: &mut BTreeSet<String>,
 ) -> Result<(), PublicSeamError> {
     match value {
@@ -443,28 +443,49 @@ fn collect_evidence_data_classes_from_value(
 
 fn validate_evidence_source_receipts(
     envelope: &EvidenceEnvelopeDocument,
-    receipt_index: &BTreeMap<String, String>,
+    receipt_index: &BTreeMap<String, ReceiptAudit>,
 ) -> Result<(), PublicSeamError> {
-    validate_evidence_receipts(envelope.read_receipts(), receipt_index, "query", "read")?;
-    validate_evidence_receipts(envelope.effect_receipts(), receipt_index, "call", "effect")?;
-    validate_evidence_receipts(envelope.write_receipts(), receipt_index, "write", "write")
+    validate_evidence_receipts(envelope.read_receipt_refs(), receipt_index, "query", "read")?;
+    validate_evidence_receipts(
+        envelope.effect_receipt_refs(),
+        receipt_index,
+        "call",
+        "effect",
+    )?;
+    validate_evidence_receipts(
+        envelope.write_receipt_refs(),
+        receipt_index,
+        "write",
+        "write",
+    )
 }
 
 fn validate_evidence_receipts(
-    receipts: &[String],
-    receipt_index: &BTreeMap<String, String>,
+    receipts: &[EvidenceReceiptRef],
+    receipt_index: &BTreeMap<String, ReceiptAudit>,
     expected_kind: &str,
     receipt_role: &str,
 ) -> Result<(), PublicSeamError> {
     for receipt in receipts {
-        let Some(kind) = receipt_index.get(receipt) else {
+        let Some(audit) = receipt_index.get(receipt.id()) else {
             return Err(invalid_result(format!(
-                "evidence {receipt_role} receipt `{receipt}` is missing from plan result receipts"
+                "evidence {receipt_role} receipt `{}` is missing from plan result receipts",
+                receipt.id()
             )));
         };
-        if kind != expected_kind {
+        if audit.kind != expected_kind {
             return Err(invalid_result(format!(
-                "evidence {receipt_role} receipt `{receipt}` references `{kind}` receipt, expected `{expected_kind}`"
+                "evidence {receipt_role} receipt `{}` references `{}` receipt, expected `{expected_kind}`",
+                receipt.id(),
+                audit.kind
+            )));
+        }
+        if let Some(fingerprint) = receipt.fingerprint()
+            && fingerprint != audit.fingerprint
+        {
+            return Err(invalid_result(format!(
+                "evidence {receipt_role} receipt `{}` fingerprint does not match plan result receipt",
+                receipt.id()
             )));
         }
     }
@@ -473,7 +494,7 @@ fn validate_evidence_receipts(
 
 fn inspect_value_receipt<'a>(
     value: &'a serde_json::Map<String, Value>,
-    receipt_index: &BTreeMap<String, String>,
+    receipt_index: &BTreeMap<String, ReceiptAudit>,
 ) -> Result<&'a str, PublicSeamError> {
     let value_kind = required_string(value.get("kind"), "value.kind")?;
     if let Some(receipt) = value.get("receipt") {
@@ -483,9 +504,10 @@ fn inspect_value_receipt<'a>(
                 "value references missing receipt `{receipt}`"
             )));
         };
-        if expected_receipt_kind(value_kind).is_some_and(|expected| receipt_kind != expected) {
+        if expected_receipt_kind(value_kind).is_some_and(|expected| receipt_kind.kind != expected) {
             return Err(invalid_result(format!(
-                "value kind `{value_kind}` cannot reference `{receipt_kind}` receipt"
+                "value kind `{value_kind}` cannot reference `{}` receipt",
+                receipt_kind.kind
             )));
         }
     }
@@ -878,7 +900,12 @@ fn has_nonzero_cost(cost: Option<&Value>) -> bool {
         .any(|value| value.as_i64().is_some_and(|n| n > 0))
 }
 
-fn receipt_index(receipts: &[Value]) -> Result<BTreeMap<String, String>, PublicSeamError> {
+struct ReceiptAudit {
+    kind: String,
+    fingerprint: String,
+}
+
+fn receipt_index(receipts: &[Value]) -> Result<BTreeMap<String, ReceiptAudit>, PublicSeamError> {
     let mut index = BTreeMap::new();
     for receipt in receipts {
         let receipt = receipt
@@ -891,7 +918,11 @@ fn receipt_index(receipts: &[Value]) -> Result<BTreeMap<String, String>, PublicS
         )?
         .to_owned();
         let kind = required_string(receipt.get("kind"), "receipt.kind")?.to_owned();
-        if index.insert(id, kind).is_some() {
+        let fingerprint = prefixed_jcs_hash("fp_receipt_sha256_", &Value::Object(receipt.clone()))?;
+        if index
+            .insert(id, ReceiptAudit { kind, fingerprint })
+            .is_some()
+        {
             return Err(invalid_result("duplicate operation receipt id"));
         }
     }

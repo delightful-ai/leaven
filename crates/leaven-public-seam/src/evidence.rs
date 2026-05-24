@@ -4,6 +4,22 @@ use serde_json::Value;
 
 use crate::PublicSeamError;
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EvidenceReceiptRef {
+    id: String,
+    fingerprint: Option<String>,
+}
+
+impl EvidenceReceiptRef {
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+
+    pub fn fingerprint(&self) -> Option<&str> {
+        self.fingerprint.as_deref()
+    }
+}
+
 /// Schema-valid public-seam evidence envelope with visibility and data-class facts.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EvidenceEnvelopeDocument {
@@ -16,6 +32,9 @@ pub struct EvidenceEnvelopeDocument {
     read_receipts: Vec<String>,
     effect_receipts: Vec<String>,
     write_receipts: Vec<String>,
+    read_receipt_refs: Vec<EvidenceReceiptRef>,
+    effect_receipt_refs: Vec<EvidenceReceiptRef>,
+    write_receipt_refs: Vec<EvidenceReceiptRef>,
 }
 
 impl EvidenceEnvelopeDocument {
@@ -90,9 +109,24 @@ impl EvidenceEnvelopeDocument {
             private_data_classes: projection.private,
             trace_data_classes: trace_facts.data_classes,
             trace_receipts: trace_facts.receipts,
-            read_receipts: source_receipts.read,
-            effect_receipts: source_receipts.effect,
-            write_receipts: source_receipts.write,
+            read_receipts: source_receipts
+                .read
+                .iter()
+                .map(|receipt| receipt.id.clone())
+                .collect(),
+            effect_receipts: source_receipts
+                .effect
+                .iter()
+                .map(|receipt| receipt.id.clone())
+                .collect(),
+            write_receipts: source_receipts
+                .write
+                .iter()
+                .map(|receipt| receipt.id.clone())
+                .collect(),
+            read_receipt_refs: source_receipts.read,
+            effect_receipt_refs: source_receipts.effect,
+            write_receipt_refs: source_receipts.write,
         })
     }
 
@@ -139,6 +173,18 @@ impl EvidenceEnvelopeDocument {
     /// Write receipt references used as evidence sources.
     pub fn write_receipts(&self) -> &[String] {
         &self.write_receipts
+    }
+
+    pub(crate) fn read_receipt_refs(&self) -> &[EvidenceReceiptRef] {
+        &self.read_receipt_refs
+    }
+
+    pub(crate) fn effect_receipt_refs(&self) -> &[EvidenceReceiptRef] {
+        &self.effect_receipt_refs
+    }
+
+    pub(crate) fn write_receipt_refs(&self) -> &[EvidenceReceiptRef] {
+        &self.write_receipt_refs
     }
 }
 
@@ -216,9 +262,9 @@ fn parse_envelope_trace_facts(
 }
 
 struct SourceReceipts {
-    read: Vec<String>,
-    effect: Vec<String>,
-    write: Vec<String>,
+    read: Vec<EvidenceReceiptRef>,
+    effect: Vec<EvidenceReceiptRef>,
+    write: Vec<EvidenceReceiptRef>,
 }
 
 fn parse_source_receipts(
@@ -228,9 +274,10 @@ fn parse_source_receipts(
         .get("source_receipts")
         .and_then(Value::as_object)
         .ok_or_else(|| invalid_evidence("source_receipts must be an object"))?;
-    let read = required_receipt_ref_vec(source_receipts.get("read"), "source_receipts.read")?;
-    let effect = required_receipt_ref_vec(source_receipts.get("effect"), "source_receipts.effect")?;
-    let write = optional_receipt_ref_vec(source_receipts.get("write"), "source_receipts.write")?;
+    let read = required_receipt_ref_facts(source_receipts.get("read"), "source_receipts.read")?;
+    let effect =
+        required_receipt_ref_facts(source_receipts.get("effect"), "source_receipts.effect")?;
+    let write = optional_receipt_ref_facts(source_receipts.get("write"), "source_receipts.write")?;
     require_receipt_family(&read, "source_receipts.read", is_read_receipt_id, "read")?;
     require_receipt_family(
         &effect,
@@ -321,17 +368,18 @@ fn validate_private_payload_ref_classes(
 
 fn validate_trace_receipts_declared(
     trace_receipts: &[String],
-    read_receipts: &[String],
-    effect_receipts: &[String],
-    write_receipts: &[String],
+    read_receipts: &[EvidenceReceiptRef],
+    effect_receipts: &[EvidenceReceiptRef],
+    write_receipts: &[EvidenceReceiptRef],
 ) -> Result<(), PublicSeamError> {
     let declared = read_receipts
         .iter()
         .chain(effect_receipts)
         .chain(write_receipts)
+        .map(EvidenceReceiptRef::id)
         .collect::<BTreeSet<_>>();
     for receipt in trace_receipts {
-        if !declared.contains(receipt) {
+        if !declared.contains(receipt.as_str()) {
             return Err(invalid_evidence(format!(
                 "evidence trace receipt `{receipt}` must be declared in source_receipts"
             )));
@@ -409,57 +457,64 @@ fn optional_string_vec(value: Option<&Value>, field: &str) -> Result<Vec<String>
     }
 }
 
-fn required_receipt_ref_vec(
+fn required_receipt_ref_facts(
     value: Option<&Value>,
     field: &str,
-) -> Result<Vec<String>, PublicSeamError> {
+) -> Result<Vec<EvidenceReceiptRef>, PublicSeamError> {
     let values = value
         .and_then(Value::as_array)
         .ok_or_else(|| invalid_evidence(format!("{field} must be an array")))?;
-    receipt_ref_vec(values, field)
+    receipt_ref_facts(values, field)
 }
 
-fn optional_receipt_ref_vec(
+fn optional_receipt_ref_facts(
     value: Option<&Value>,
     field: &str,
-) -> Result<Vec<String>, PublicSeamError> {
+) -> Result<Vec<EvidenceReceiptRef>, PublicSeamError> {
     match value {
         Some(value) => {
             let values = value
                 .as_array()
                 .ok_or_else(|| invalid_evidence(format!("{field} must be an array")))?;
-            receipt_ref_vec(values, field)
+            receipt_ref_facts(values, field)
         }
         None => Ok(Vec::new()),
     }
 }
 
-fn receipt_ref_vec(values: &[Value], field: &str) -> Result<Vec<String>, PublicSeamError> {
+fn receipt_ref_facts(
+    values: &[Value],
+    field: &str,
+) -> Result<Vec<EvidenceReceiptRef>, PublicSeamError> {
     values
         .iter()
-        .map(|value| receipt_ref_id(value, field))
+        .map(|value| receipt_ref_fact(value, field))
         .collect()
 }
 
 fn require_receipt_family(
-    receipts: &[String],
+    receipts: &[EvidenceReceiptRef],
     field: &str,
     predicate: impl Fn(&str) -> bool,
     family: &str,
 ) -> Result<(), PublicSeamError> {
     for receipt in receipts {
-        if !predicate(receipt) {
+        if !predicate(receipt.id()) {
             return Err(invalid_evidence(format!(
-                "{field} must contain {family} receipt refs, got `{receipt}`"
+                "{field} must contain {family} receipt refs, got `{}`",
+                receipt.id()
             )));
         }
     }
     Ok(())
 }
 
-fn receipt_ref_id(value: &Value, field: &str) -> Result<String, PublicSeamError> {
+fn receipt_ref_fact(value: &Value, field: &str) -> Result<EvidenceReceiptRef, PublicSeamError> {
     if let Some(id) = value.as_str() {
-        return Ok(id.to_owned());
+        return Ok(EvidenceReceiptRef {
+            id: id.to_owned(),
+            fingerprint: None,
+        });
     }
     let object = value
         .as_object()
@@ -469,11 +524,20 @@ fn receipt_ref_id(value: &Value, field: &str) -> Result<String, PublicSeamError>
             "{field} receipt ref object must have kind `receipt`"
         )));
     }
-    object
+    let id = object
         .get("id")
         .and_then(Value::as_str)
         .map(ToOwned::to_owned)
-        .ok_or_else(|| invalid_evidence(format!("{field} receipt ref object must carry id")))
+        .ok_or_else(|| invalid_evidence(format!("{field} receipt ref object must carry id")))?;
+    let fingerprint = object
+        .get("fingerprint")
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned);
+    Ok(EvidenceReceiptRef { id, fingerprint })
+}
+
+fn receipt_ref_id(value: &Value, field: &str) -> Result<String, PublicSeamError> {
+    Ok(receipt_ref_fact(value, field)?.id)
 }
 
 fn is_read_receipt_id(receipt: &str) -> bool {
