@@ -470,6 +470,8 @@ backpressure, or runtime watch support.
   request, reflector example data-class gaps for nested score outputs,
   unreceipted or diagnosis-free reflection results, diagnosis entries without
   carried source refs, dropped reflection source refs in proposer payloads,
+  object-form candidate refs whose optional `run` is substituted while keeping
+  the same candidate id,
   one-stage reflect/propose handoff substitutions, stale or mismatched embedded
   reflection results, missing or mismatched stage receipt bindings, mismatched
   run/capability facts, and change proposals without allowed change schema

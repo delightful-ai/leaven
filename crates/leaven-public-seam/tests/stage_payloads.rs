@@ -125,6 +125,37 @@ fn stage_payloads_preserve_object_form_info_and_receipt_refs() {
 }
 
 #[test]
+fn stage_payloads_reject_object_form_candidate_run_substitution() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut reflect = reflect_request();
+    reflect["parent"] = object_form_candidate_ref();
+    reflect["source_refs"] = json!([object_form_candidate_ref_with_run("run_other")]);
+    reflect["examples"][0]["source_refs"] =
+        json!([object_form_candidate_ref_with_run("run_other")]);
+    assert!(matches!(
+        package
+            .validate_stage_payload_document(&reflect)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+
+    let mut handoff = reflect_propose_handoff();
+    handoff["reflect_request"]["parent"] = object_form_candidate_ref();
+    handoff["reflect_request"]["source_refs"] = json!([object_form_candidate_ref()]);
+    handoff["reflect_request"]["examples"][0]["source_refs"] = json!([object_form_candidate_ref()]);
+    handoff["propose_request"]["parent"] = object_form_candidate_ref_with_run("run_other");
+    handoff["propose_request"]["source_refs"] =
+        json!([object_form_candidate_ref_with_run("run_other")]);
+    assert!(matches!(
+        package
+            .validate_reflect_propose_handoff_document(&handoff)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+}
+
+#[test]
 fn reflect_request_rejects_case_target_projection() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let mut payload = reflect_request();
@@ -1142,9 +1173,13 @@ fn output_record(summary: &str) -> Value {
 }
 
 fn object_form_candidate_ref() -> Value {
+    object_form_candidate_ref_with_run("run_stagepayload")
+}
+
+fn object_form_candidate_ref_with_run(run: &str) -> Value {
     json!({
         "kind": "candidate",
-        "run": "run_stagepayload",
+        "run": run,
         "id": "cand_stagepayload_parent"
     })
 }
