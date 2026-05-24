@@ -106,6 +106,7 @@ pub fn validate_call_with_dependency_classes(
     call_kind: &str,
     call: &Value,
     deps: &std::collections::BTreeMap<String, Value>,
+    dependency_classes: &BTreeSet<String>,
     capability: &CapabilityDocument,
 ) -> Result<(), PublicSeamError> {
     let call = call
@@ -113,7 +114,7 @@ pub fn validate_call_with_dependency_classes(
         .ok_or_else(|| invalid_authority("call must be an object"))?;
     let declares_input_classes = call.contains_key("input_classes");
     let declared_input_classes = string_set(call.get("input_classes"), "input_classes")?;
-    let dependency_input_classes = dependency_data_classes(deps)?;
+    let dependency_input_classes = dependency_data_classes(deps, dependency_classes)?;
     if declares_input_classes {
         for data_class in &dependency_input_classes {
             if !declared_input_classes.contains(data_class) {
@@ -162,8 +163,9 @@ pub fn validate_call_with_dependency_classes(
 
 fn dependency_data_classes(
     deps: &std::collections::BTreeMap<String, Value>,
+    dependency_classes: &BTreeSet<String>,
 ) -> Result<BTreeSet<String>, PublicSeamError> {
-    let mut classes = BTreeSet::new();
+    let mut classes = dependency_classes.clone();
     for value in deps.values() {
         collect_data_classes(value, &mut classes)?;
     }
@@ -183,6 +185,11 @@ fn collect_data_classes(
         }
     }
     for field in [
+        "public",
+        "private",
+        "score",
+        "output",
+        "evidence",
         "blob_ref",
         "transcript_ref",
         "stdout_ref",
@@ -190,12 +197,32 @@ fn collect_data_classes(
         "payload_ref",
     ] {
         if let Some(value) = object.get(field) {
+            if matches!(field, "public" | "private")
+                && let Some(projection) = value.as_object()
+                && let Some(data_classes) = projection.get("data_classes")
+            {
+                classes.extend(string_set(Some(data_classes), "data_classes")?);
+            }
             collect_data_classes(value, classes)?;
+        }
+    }
+    for field in ["items", "outputs", "commands"] {
+        if let Some(values) = object.get(field).and_then(Value::as_array) {
+            for value in values {
+                collect_data_classes(value, classes)?;
+            }
         }
     }
     if let Some(values) = object.get("trace_refs").and_then(Value::as_array) {
         for value in values {
             collect_trace_ref_data_classes(value, classes)?;
+        }
+    }
+    if object.get("kind").and_then(Value::as_str) == Some("workspace_listing")
+        && let Some(entries) = object.get("entries").and_then(Value::as_array)
+    {
+        for entry in entries {
+            collect_workspace_listing_entry_data_classes(entry, classes)?;
         }
     }
     if let Some(files) = object.get("files").and_then(Value::as_object) {
@@ -207,33 +234,49 @@ fn collect_data_classes(
 }
 
 fn is_seam_data_class_carrier(object: &serde_json::Map<String, Value>) -> bool {
-    matches!(
-        object.get("kind").and_then(Value::as_str),
+    match object.get("kind").and_then(Value::as_str) {
+        Some("text" | "json" | "structured") => {
+            object.contains_key("data_classes") && object.contains_key("visibility")
+        }
         Some(
             "candidate_summary"
-                | "proposal_summary"
-                | "assessment_summary"
-                | "event_summary"
-                | "graph_set"
-                | "case_record"
-                | "workspace_handle"
-                | "workspace_snapshot"
-                | "workspace_file"
-                | "workspace_diff"
-                | "workspace_listing"
-                | "lm_response"
-                | "agent_session"
-                | "sandbox_exec"
-                | "proposal_batch_receipt"
-                | "assessment_batch_receipt"
-                | "evaluation_request_receipt"
-                | "apply_receipt"
-                | "blob_ref"
-                | "text"
-                | "json"
-                | "structured"
-        )
-    ) && object.contains_key("data_classes")
+            | "proposal_summary"
+            | "assessment_summary"
+            | "event_summary"
+            | "graph_set"
+            | "case_record"
+            | "workspace_handle"
+            | "workspace_snapshot"
+            | "workspace_file"
+            | "workspace_diff"
+            | "workspace_listing"
+            | "lm_response"
+            | "agent_session"
+            | "sandbox_exec"
+            | "proposal_batch_receipt"
+            | "assessment_batch_receipt"
+            | "evaluation_request_receipt"
+            | "apply_receipt"
+            | "blob_ref",
+        ) => object.contains_key("data_classes"),
+        _ => false,
+    }
+}
+
+fn collect_workspace_listing_entry_data_classes(
+    value: &Value,
+    classes: &mut BTreeSet<String>,
+) -> Result<(), PublicSeamError> {
+    let Some(object) = value.as_object() else {
+        return Ok(());
+    };
+    if let Some(data_classes) = object.get("data_classes") {
+        classes.extend(string_set(
+            Some(data_classes),
+            "workspace_listing.entries.data_classes",
+        )?);
+    }
+    Ok(())
 }
 
 fn collect_trace_ref_data_classes(
