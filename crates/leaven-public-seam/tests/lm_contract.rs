@@ -91,6 +91,29 @@ fn lm_complete_trait_mapping_preserves_forbidden_result_tool_metadata_for_valida
     );
 }
 
+#[test]
+fn lm_complete_rejects_tool_result_message_id_drift_before_provider_call() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let lm = Arc::new(ScriptedLm::new(scripted_response(Message::assistant(
+        "trait ok",
+    ))));
+    let mut host = LmTraitHost::new(Arc::clone(&lm));
+    let mut plan = lm_plan();
+    plan["ops"][0]["call"]["messages"][2]["tool_call_id"] = json!("call_other");
+
+    let error = package
+        .execute_plan_document(&plan, &plan_execution_context(), &mut host)
+        .unwrap_err();
+
+    assert!(
+        error
+            .to_string()
+            .contains("tool message tool_call_id must match tool_result part"),
+        "unexpected error: {error:?}"
+    );
+    assert!(lm.recorded_requests.lock().unwrap().is_empty());
+}
+
 struct LmTraitHost {
     lm: Arc<ScriptedLm>,
 }
