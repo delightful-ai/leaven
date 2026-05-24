@@ -619,6 +619,7 @@ rows:
       - crates/leaven-public-seam/tests/plan_document.rs::capability_execution_denies_calls_that_drop_nested_graph_row_data_classes
       - crates/leaven-public-seam/tests/plan_document.rs::capability_execution_denies_calls_that_drop_literal_expr_data_classes
       - crates/leaven-public-seam/tests/plan_document.rs::capability_execution_denies_calls_that_drop_workspace_listing_entry_data_classes
+      - crates/leaven-public-seam/tests/plan_document.rs::write_receipts_bind_literal_dependency_data_classes_without_rewriting_values
       - crates/leaven-public-seam/tests/plan_document.rs::capability_execution_ignores_domain_json_data_classes_inside_dependencies
       - crates/leaven-public-seam/tests/evidence_envelope.rs::evidence_envelope_rejects_source_receipt_family_mismatches
       - crates/leaven-public-seam/tests/plan_result.rs::plan_result_preserves_value_visibility_data_classes
@@ -643,9 +644,17 @@ rows:
       - crates/leaven-public-seam/src/call_authority.rs::collect_workspace_listing_entry_data_classes
       - crates/leaven-public-seam/src/call_authority.rs::is_seam_data_class_carrier
       - crates/leaven-public-seam/src/plan_execution.rs::ExecutionState
+      - crates/leaven-public-seam/src/plan_execution.rs::execute_call
+      - crates/leaven-public-seam/src/plan_execution/outcomes.rs::execute_write
+      - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanEmitRunEventRequest
       - crates/leaven-public-seam/src/plan_execution/evaluate.rs::ResolvedDependencies
       - crates/leaven-public-seam/src/plan_execution/evaluate.rs::EvaluatedExpr
       - crates/leaven-public-seam/src/plan_execution/evaluate.rs::expr_data_classes
+      - crates/leaven-public-seam/src/plan_execution/receipts.rs::validate_let_receipt
+      - crates/leaven-public-seam/src/plan_execution/receipts.rs::validate_call_receipt
+      - crates/leaven-public-seam/src/plan_execution/receipts.rs::validate_write_receipt
+      - crates/leaven-public-seam/src/plan_execution/receipts.rs::dependency_data_classes
+      - crates/leaven-public-seam/src/plan_execution/receipts/helpers.rs::ReceiptValidationState
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_call_authority_document
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::execute_plan_document_with_capability
       - crates/leaven-public-seam/src/execution_authority.rs::validate

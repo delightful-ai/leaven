@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
 
 use leaven_agent::{
@@ -1298,6 +1298,7 @@ pub struct PlanEmitRunEventRequest<'a> {
     pub(super) name: &'a str,
     pub(super) write: &'a Value,
     pub(super) deps: &'a BTreeMap<String, Value>,
+    pub(super) dependency_data_classes: &'a BTreeSet<String>,
     pub(super) base_revision: &'a str,
 }
 
@@ -1315,6 +1316,12 @@ impl<'a> PlanEmitRunEventRequest<'a> {
     /// Resolved dependency bindings visible to this write.
     pub const fn deps(&self) -> &'a BTreeMap<String, Value> {
         self.deps
+    }
+
+    /// Data classes carried by dependency bindings but not necessarily present
+    /// in the host-visible JSON values.
+    pub const fn dependency_data_classes(&self) -> &'a BTreeSet<String> {
+        self.dependency_data_classes
     }
 
     /// Base graph revision supplied by the public-seam execution context.

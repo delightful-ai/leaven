@@ -928,6 +928,43 @@ fn capability_execution_denies_calls_that_drop_workspace_listing_entry_data_clas
 }
 
 #[test]
+fn write_receipts_bind_literal_dependency_data_classes_without_rewriting_values() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut plan = emit_event_from_literal_dependency_plan();
+    plan["ops"][0]["expr"]["data_classes"] = json!(["external.secret"]);
+    let context = plan_execution_context();
+    let mut host = RecordingPlanHost::default();
+
+    let report = package
+        .execute_plan_document(&plan, &context, &mut host)
+        .unwrap();
+
+    assert_eq!(host.writes, vec!["status"]);
+    assert_eq!(host.write_deps["prompt"], json!("Say ok"));
+    assert_eq!(
+        host.write_dependency_data_classes,
+        BTreeSet::from(["external.secret".to_owned()])
+    );
+    package
+        .validate_plan_execution_result(&plan, &context, report.value())
+        .unwrap();
+
+    let mut weaker_plan = plan.clone();
+    weaker_plan["ops"][0]["expr"]
+        .as_object_mut()
+        .unwrap()
+        .remove("data_classes");
+    let error = package
+        .validate_plan_execution_result(&weaker_plan, &context, report.value())
+        .unwrap_err();
+    assert!(matches!(&error, PublicSeamError::InvalidPlan { .. }));
+    assert!(
+        error.to_string().contains("request_hash"),
+        "unexpected error: {error:?}"
+    );
+}
+
+#[test]
 fn capability_execution_ignores_domain_json_data_classes_inside_dependencies() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let mut plan = typed_let_call_write_plan();
@@ -3428,6 +3465,14 @@ fn typed_let_call_write_execute_plan() -> Value {
     plan
 }
 
+fn emit_event_from_literal_dependency_plan() -> Value {
+    let mut plan = typed_let_call_write_execute_plan();
+    plan["ops"].as_array_mut().unwrap().remove(1);
+    plan["ops"][1]["deps"] = json!(["prompt"]);
+    plan["return"] = json!(["status"]);
+    plan
+}
+
 fn execute_call_only_plan() -> Value {
     let mut plan = require_cached_call_plan();
     plan["mode"] = json!({"kind": "execute"});
@@ -4025,6 +4070,7 @@ struct RecordingPlanHost {
     replayed_receipts: Vec<String>,
     call_deps: BTreeMap<String, Value>,
     write_deps: BTreeMap<String, Value>,
+    write_dependency_data_classes: BTreeSet<String>,
     workspaces: BTreeSet<String>,
     cached_hit: bool,
     fail_lm: bool,
@@ -4788,6 +4834,8 @@ impl PlanExecutionHost for RecordingPlanHost {
         assert_eq!(request.base_revision(), "rev_planexec_base");
         self.writes.push("status");
         self.write_deps = request.deps().clone();
+        self.write_dependency_data_classes
+            .clone_from(request.dependency_data_classes());
         Ok(PlanEmitRunEventOutcome::new(
             "event_plan_ir_checked",
             "rev_planexec_final",

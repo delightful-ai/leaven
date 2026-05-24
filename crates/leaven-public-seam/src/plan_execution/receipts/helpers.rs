@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{Map, Value};
 
@@ -9,6 +9,7 @@ use crate::plan_execution::{invalid_plan, object, required_string};
 
 pub(super) struct ReceiptValidationState {
     pub(super) bindings: BTreeMap<String, Value>,
+    pub(super) binding_data_classes: BTreeMap<String, BTreeSet<String>>,
     pub(super) live_workspaces: BTreeMap<String, LiveWorkspaceHandle>,
     pub(super) charges_by_receipt: BTreeMap<String, Value>,
     pub(super) errors: Vec<Value>,
@@ -31,6 +32,7 @@ impl ReceiptValidationState {
         }
         Ok(Self {
             bindings: BTreeMap::new(),
+            binding_data_classes: BTreeMap::new(),
             live_workspaces: BTreeMap::new(),
             charges_by_receipt,
             errors: errors.to_vec(),

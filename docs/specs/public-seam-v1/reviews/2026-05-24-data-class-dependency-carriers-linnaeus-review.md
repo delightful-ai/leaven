@@ -54,3 +54,33 @@ Approved evidence wording:
 Partial evidence that capability-scoped call execution denies dependency
 data-class drops for literal expression classes and selected nested public-seam
 carriers before host call execution.
+
+Second follow-up:
+
+- No blocking findings for adding additional partial evidence scoped to the
+  representative public-seam harness.
+- The prior write-path limitation is resolved for `emit_run_event` in the
+  representative harness: write execution receives dependency binding classes,
+  exposes them to `PlanEmitRunEventRequest`, and keeps host-visible dependency
+  values separate.
+- Literal `Expr.data_classes` are receipt-bound for calls and representative
+  writes: call/write request hashes include `dependency_data_classes`, and
+  receipt validation reconstructs literal binding classes before recomputing
+  those hashes.
+- `dependency_data_classes` is a side channel for classes not present in
+  host-visible JSON values. Structural nested classes are still bound through
+  the dependency values themselves; do not describe the getter as a complete
+  precomputed union of all dependency classes.
+
+Remaining blockers after second follow-up:
+
+- Full engine/evidence-layer propagation is not proven.
+- Redaction reporting is not proven.
+- ACP/provider runtime behavior is not proven.
+- All query/call/write production routes are not proven.
+
+Approved second-tranche wording:
+
+Additional partial evidence that the representative public-seam harness exposes
+literal dependency classes to `emit_run_event` hosts and binds those classes
+into call/write receipt preimages without rewriting dependency JSON values.

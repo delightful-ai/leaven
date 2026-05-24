@@ -133,10 +133,17 @@ fn validate_let_receipt(
         .ok_or_else(|| invalid_plan("let op must carry expr"))?;
     match nested_kind(expr, "expr")? {
         "literal" => {
-            let value = object(expr, "literal expr")?
+            let expr_object = object(expr, "literal expr")?;
+            let value = expr_object
                 .get("value")
                 .cloned()
                 .ok_or_else(|| invalid_plan("literal expr must carry value"))?;
+            let data_classes = expr_data_classes(expr_object)?;
+            if !data_classes.is_empty() {
+                state
+                    .binding_data_classes
+                    .insert(name.to_owned(), data_classes);
+            }
             state.bindings.insert(name.to_owned(), value);
             Ok(())
         }
@@ -165,6 +172,45 @@ fn validate_let_receipt(
             "representative Plan IR receipt verifier does not inspect `{other}` let expressions"
         ))),
     }
+}
+
+fn expr_data_classes(object: &Map<String, Value>) -> Result<BTreeSet<String>, PublicSeamError> {
+    let Some(data_classes) = object.get("data_classes") else {
+        return Ok(BTreeSet::new());
+    };
+    data_classes
+        .as_array()
+        .ok_or_else(|| invalid_plan("expr data_classes must be an array"))?
+        .iter()
+        .map(|data_class| {
+            data_class
+                .as_str()
+                .map(str::to_owned)
+                .ok_or_else(|| invalid_plan("expr data_classes entries must be strings"))
+        })
+        .collect()
+}
+
+fn dependency_data_classes(
+    op: &Map<String, Value>,
+    binding_data_classes: &BTreeMap<String, BTreeSet<String>>,
+) -> Result<BTreeSet<String>, PublicSeamError> {
+    let mut data_classes = BTreeSet::new();
+    let Some(raw) = op.get("deps") else {
+        return Ok(data_classes);
+    };
+    let raw = raw
+        .as_array()
+        .ok_or_else(|| invalid_plan("op deps must be an array"))?;
+    for dep in raw {
+        let dep = dep
+            .as_str()
+            .ok_or_else(|| invalid_plan("op deps must be binding names"))?;
+        if let Some(dep_data_classes) = binding_data_classes.get(dep) {
+            data_classes.extend(dep_data_classes.iter().cloned());
+        }
+    }
+    Ok(data_classes)
 }
 
 fn validate_graph_query_receipt(
@@ -431,6 +477,7 @@ fn validate_call_receipt(
     require_receipt_field(receipt, "kind", "call")?;
     require_receipt_field(receipt, "call_kind", call_kind)?;
     let deps = dependency_values(op_object, &state.bindings)?;
+    let dependency_data_classes = dependency_data_classes(op_object, &state.binding_data_classes)?;
     validate_call_workspace_provenance(call_kind, call, &deps, &state.live_workspaces)?;
     require_receipt_field(
         receipt,
@@ -442,7 +489,8 @@ fn validate_call_receipt(
                 "name": name,
                 "kind": call_kind,
                 "call": call,
-                "deps": deps
+                "deps": deps,
+                "dependency_data_classes": dependency_data_classes
             }),
         )?,
     )?;
@@ -1017,6 +1065,7 @@ fn validate_write_receipt(
     require_receipt_field(receipt, "write_kind", write_kind)?;
     require_receipt_field(receipt, "base_revision", &context.base_revision)?;
     let deps = dependency_values(op_object, &state.bindings)?;
+    let dependency_data_classes = dependency_data_classes(op_object, &state.binding_data_classes)?;
     require_receipt_field(
         receipt,
         "request_hash",
@@ -1028,6 +1077,7 @@ fn validate_write_receipt(
                 "kind": write_kind,
                 "write": write,
                 "deps": deps,
+                "dependency_data_classes": dependency_data_classes,
                 "base_revision": context.base_revision
             }),
         )?,

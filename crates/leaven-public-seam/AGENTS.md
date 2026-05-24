@@ -264,8 +264,13 @@ application JSON fields named `data_classes`, even inside domain records with
 their own `kind`, are domain payload rather than authorization metadata unless
 the object matches the locked public-seam value or output-record vocabulary.
 This is call-authority evidence before host call execution; write-path
-dependency propagation and receipt-bound replay reconstruction remain separate
-pending proof.
+dependency propagation is proven only for the representative `emit_run_event`
+write harness, where dependency binding classes are exposed to the host request
+without rewriting dependency JSON values. Literal `Expr.data_classes` are bound
+into representative call/write request hashes and reconstructed during receipt
+validation. This still is not full engine/evidence-layer propagation, redaction
+reporting, ACP/provider runtime behavior, or proof for every production
+query/call/write route.
 
 The
 `PublicSeamPackage::validate_plan_execution_result` route additionally proves

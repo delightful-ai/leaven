@@ -465,7 +465,7 @@ fn execute_op<H: PlanExecutionHost>(
     match required_string(op_object.get("kind"), "op.kind")? {
         "let" => execute_let(op_object, name, &deps, plan_document, context, host, state),
         "call" => execute_call(op_object, name, &deps, context, host, state, effect_context),
-        "write" => execute_write(op_object, name, &deps.values, context, host, state),
+        "write" => execute_write(op_object, name, &deps, context, host, state),
         other => Err(invalid_plan(format!(
             "unknown plan operation kind `{other}`"
         ))),
@@ -544,7 +544,8 @@ fn execute_call<H: PlanExecutionHost>(
             "name": name,
             "kind": call_kind,
             "call": call,
-            "deps": deps.values
+            "deps": deps.values,
+            "dependency_data_classes": deps.data_classes
         }),
     )?;
     match call_kind {
@@ -972,12 +973,20 @@ fn record_failed_lm_call(
 fn execute_write<H: PlanExecutionHost>(
     op_object: &Map<String, Value>,
     name: String,
-    dep_values: &BTreeMap<String, Value>,
+    deps: &ResolvedDependencies,
     context: &PlanExecutionContext,
     host: &mut H,
     state: &mut ExecutionState,
 ) -> Result<(), PublicSeamError> {
-    outcomes::execute_write(op_object, name, dep_values, context, host, state)
+    outcomes::execute_write(
+        op_object,
+        name,
+        &deps.values,
+        &deps.data_classes,
+        context,
+        host,
+        state,
+    )
 }
 
 fn execute_graph_query_expr(
