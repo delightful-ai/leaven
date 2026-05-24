@@ -147,8 +147,8 @@ with call receipts. JSON-schema agent outputs must return a parsed Plan Result
 payload, and successful call-result validation requires `agent_run` and
 `sandbox_exec` result values to carry the matching call receipt and expected
 value kind. `agent_run` values must also carry a transcript blob ref, non-empty
-command records whose receipt is bound to the enclosing session receipt, and
-cost. `sandbox_exec` with `stream_policy: blob_refs_only` must return
+command records with argv/status facts whose receipt is bound to the enclosing
+session receipt, and cost. `sandbox_exec` with `stream_policy: blob_refs_only` must return
 stdout/stderr blob refs; completed sandbox results must carry `exit_code`, must
 carry cost, and may carry captured output-file blob refs only at safe relative
 workspace paths. Both `agent_run` and `sandbox_exec` require a live unreleased,

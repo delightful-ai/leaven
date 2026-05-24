@@ -26,6 +26,7 @@ use queries::{
     workspace_query_projection, workspace_query_request, workspace_query_request_from_values,
 };
 pub use receipts::validate_plan_result_receipts;
+pub use receipts::{validate_agent_session_value, validate_sandbox_exec_value};
 
 /// Execution metadata for the advanced public-seam Plan IR harness.
 #[derive(Clone, Debug, Eq, PartialEq)]

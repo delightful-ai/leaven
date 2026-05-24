@@ -1910,6 +1910,22 @@ fn agent_run_rejects_schema_valid_sessions_without_audit_facts() {
             "agent_run command receipt",
         ),
         (
+            AgentAuditFixture::MissingCommandArgv,
+            "agent_run command record must carry argv",
+        ),
+        (
+            AgentAuditFixture::EmptyCommandArgv,
+            "agent_run command record argv must not be empty",
+        ),
+        (
+            AgentAuditFixture::NonStringCommandArgv,
+            "agent_run command argv",
+        ),
+        (
+            AgentAuditFixture::MissingCommandStatus,
+            "agent_run command status",
+        ),
+        (
             AgentAuditFixture::ForgedCommandReceipt,
             "agent_run command record receipt",
         ),
@@ -3488,6 +3504,43 @@ impl LmResponseFixture {
     }
 }
 
+fn agent_command_fixture(agent_audit: AgentAuditFixture) -> Value {
+    match agent_audit {
+        AgentAuditFixture::MissingCommandReceipt => json!({
+            "argv": ["codex"],
+            "status": "completed"
+        }),
+        AgentAuditFixture::MissingCommandArgv => json!({
+            "status": "completed",
+            "receipt": "agentrec_completion"
+        }),
+        AgentAuditFixture::EmptyCommandArgv => json!({
+            "argv": [],
+            "status": "completed",
+            "receipt": "agentrec_completion"
+        }),
+        AgentAuditFixture::NonStringCommandArgv => json!({
+            "argv": ["codex", 42],
+            "status": "completed",
+            "receipt": "agentrec_completion"
+        }),
+        AgentAuditFixture::MissingCommandStatus => json!({
+            "argv": ["codex"],
+            "receipt": "agentrec_completion"
+        }),
+        AgentAuditFixture::ForgedCommandReceipt => json!({
+            "argv": ["codex"],
+            "status": "completed",
+            "receipt": "agentrec_forged"
+        }),
+        _ => json!({
+            "argv": ["codex"],
+            "status": "completed",
+            "receipt": "agentrec_completion"
+        }),
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default)]
 enum AgentAuditFixture {
     #[default]
@@ -3495,6 +3548,10 @@ enum AgentAuditFixture {
     MissingTranscript,
     MissingCommands,
     MissingCommandReceipt,
+    MissingCommandArgv,
+    EmptyCommandArgv,
+    NonStringCommandArgv,
+    MissingCommandStatus,
     ForgedCommandReceipt,
     MissingCost,
 }
@@ -3800,29 +3857,7 @@ impl PlanExecutionHost for RecordingPlanHost {
             outcome = outcome.with_transcript_ref(blob_ref("blob_agent_transcript"));
         }
         if !matches!(self.agent_audit, AgentAuditFixture::MissingCommands) {
-            let command = match self.agent_audit {
-                AgentAuditFixture::MissingCommandReceipt => {
-                    json!({
-                        "argv": ["codex"],
-                        "status": "completed"
-                    })
-                }
-                AgentAuditFixture::ForgedCommandReceipt => {
-                    json!({
-                        "argv": ["codex"],
-                        "status": "completed",
-                        "receipt": "agentrec_forged"
-                    })
-                }
-                _ => {
-                    json!({
-                        "argv": ["codex"],
-                        "status": "completed",
-                        "receipt": "agentrec_completion"
-                    })
-                }
-            };
-            outcome = outcome.with_commands([command]);
+            outcome = outcome.with_commands([agent_command_fixture(self.agent_audit)]);
         }
         if !matches!(self.agent_audit, AgentAuditFixture::MissingCost) {
             outcome = outcome.with_cost(json!({"usd_micro": 1000}));
