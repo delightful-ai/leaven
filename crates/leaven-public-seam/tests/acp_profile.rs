@@ -544,6 +544,91 @@ fn acp_extension_results_bind_worker_methods_to_primary_kinds_and_receipts() {
 }
 
 #[test]
+fn acp_extension_results_preserve_agent_and_sandbox_blob_ref_data_classes() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut agent = agent_session_primary();
+    agent["transcript_ref"] = acp_blob_ref("blob_agent_transcript", &["transcript.raw"]);
+    agent["data_classes"] = json!(["public", "transcript.raw"]);
+    let agent_result = package
+        .validate_acp_extension_result_document(&extension_result_for(
+            "leaven/agent.run",
+            &agent,
+            &call_receipt("agent_run", "agentrec_acp"),
+            &["public", "transcript.raw"],
+        ))
+        .unwrap();
+    assert_eq!(
+        agent_result.data_classes(),
+        &["public".to_owned(), "transcript.raw".to_owned()]
+    );
+
+    let mut sandbox = sandbox_exec_primary();
+    sandbox["stdout_ref"] = acp_blob_ref("blob_stdout", &["transcript.raw"]);
+    sandbox["stderr_ref"] = acp_blob_ref("blob_stderr", &["transcript.raw"]);
+    sandbox["files"] = json!({
+        "out.txt": acp_blob_ref("blob_out", &["workspace.file"])
+    });
+    sandbox["data_classes"] = json!(["public", "transcript.raw", "workspace.file"]);
+    let sandbox_result = package
+        .validate_acp_extension_result_document(&extension_result_for(
+            "leaven/sandbox.exec",
+            &sandbox,
+            &call_receipt("sandbox_exec", "execrec_acp"),
+            &["public", "transcript.raw", "workspace.file"],
+        ))
+        .unwrap();
+    assert_eq!(
+        sandbox_result.data_classes(),
+        &[
+            "public".to_owned(),
+            "transcript.raw".to_owned(),
+            "workspace.file".to_owned()
+        ]
+    );
+}
+
+#[test]
+fn acp_extension_results_reject_agent_and_sandbox_blob_ref_data_class_gaps() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut agent_transcript_gap = agent_session_primary();
+    agent_transcript_gap["transcript_ref"] =
+        acp_blob_ref("blob_agent_transcript", &["transcript.raw"]);
+    let agent_transcript_gap = extension_result_for(
+        "leaven/agent.run",
+        &agent_transcript_gap,
+        &call_receipt("agent_run", "agentrec_acp"),
+        &["public"],
+    );
+    assert!(matches!(
+        package
+            .validate_acp_extension_result_document(&agent_transcript_gap)
+            .unwrap_err(),
+        PublicSeamError::InvalidPlanResult { .. } | PublicSeamError::InvalidScope { .. }
+    ));
+
+    let mut sandbox_stream_gap = sandbox_exec_primary();
+    sandbox_stream_gap["stdout_ref"] = acp_blob_ref("blob_stdout", &["transcript.raw"]);
+    sandbox_stream_gap["stderr_ref"] = acp_blob_ref("blob_stderr", &["transcript.raw"]);
+    sandbox_stream_gap["files"] = json!({
+        "out.txt": acp_blob_ref("blob_out", &["workspace.file"])
+    });
+    let sandbox_stream_gap = extension_result_for(
+        "leaven/sandbox.exec",
+        &sandbox_stream_gap,
+        &call_receipt("sandbox_exec", "execrec_acp"),
+        &["public"],
+    );
+    assert!(matches!(
+        package
+            .validate_acp_extension_result_document(&sandbox_stream_gap)
+            .unwrap_err(),
+        PublicSeamError::InvalidPlanResult { .. } | PublicSeamError::InvalidScope { .. }
+    ));
+}
+
+#[test]
 fn acp_extension_results_reject_cross_method_payloads_unbound_receipts_and_data_class_gaps() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
 
@@ -1146,6 +1231,16 @@ fn sandbox_exec_primary() -> Value {
         "data_classes": ["public"],
         "replayability": "fully_managed",
         "receipt": "execrec_acp"
+    })
+}
+
+fn acp_blob_ref(id: &str, data_classes: &[&str]) -> Value {
+    json!({
+        "kind": "blob_ref",
+        "id": id,
+        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "bytes": 32,
+        "data_classes": data_classes
     })
 }
 

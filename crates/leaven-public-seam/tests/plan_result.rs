@@ -346,6 +346,103 @@ fn plan_result_preserves_value_visibility_data_classes() {
     ));
 }
 
+#[test]
+fn plan_result_preserves_value_trace_and_blob_ref_data_classes() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut trace_backed = typed_success_result();
+    trace_backed["values"]["rows"]["trace_refs"] = json!([
+        {
+            "kind": "query_trace",
+            "id": "trace_rows",
+            "visibility": "redacted_transcript",
+            "data_classes": ["transcript.raw"],
+            "receipt": "qrec_rows"
+        }
+    ]);
+    trace_backed["values"]["rows"]["data_classes"] = json!(["public", "transcript.raw"]);
+    bind_result_hashes_in_place(&mut trace_backed);
+    let trace_backed = package
+        .validate_plan_result_document(&trace_backed)
+        .unwrap();
+    assert!(trace_backed.value_data_classes().contains(&(
+        "rows".to_owned(),
+        vec!["public".to_owned(), "transcript.raw".to_owned()]
+    )));
+
+    let mut blob_backed = typed_success_result();
+    blob_backed["values"]["rows"] = json!({
+        "kind": "workspace_file",
+        "path": "artifacts/output.txt",
+        "blob_ref": blob_ref("blob_workspace_file", ["workspace.file"]),
+        "graph_revision": "rev_base",
+        "data_classes": ["public", "workspace.file"],
+        "replayability": "pure_read",
+        "receipt": "qrec_rows"
+    });
+    bind_result_hashes_in_place(&mut blob_backed);
+    let blob_backed = package.validate_plan_result_document(&blob_backed).unwrap();
+    assert!(blob_backed.value_data_classes().contains(&(
+        "rows".to_owned(),
+        vec!["public".to_owned(), "workspace.file".to_owned()]
+    )));
+}
+
+#[test]
+fn plan_result_rejects_value_trace_and_blob_ref_data_class_gaps() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut missing_value_trace_class = typed_success_result();
+    missing_value_trace_class["values"]["rows"]["trace_refs"] = json!([
+        {
+            "kind": "query_trace",
+            "id": "trace_rows",
+            "visibility": "redacted_transcript",
+            "data_classes": ["transcript.raw"],
+            "receipt": "qrec_rows"
+        }
+    ]);
+    bind_result_hashes_in_place(&mut missing_value_trace_class);
+    let trace_error = package
+        .validate_plan_result_document(&missing_value_trace_class)
+        .unwrap_err();
+    assert!(matches!(
+        &trace_error,
+        PublicSeamError::InvalidPlanResult { .. }
+    ));
+    assert!(
+        trace_error
+            .to_string()
+            .contains("nested visibility data class `transcript.raw`"),
+        "{trace_error}"
+    );
+
+    let mut missing_workspace_blob_class = typed_success_result();
+    missing_workspace_blob_class["values"]["rows"] = json!({
+        "kind": "workspace_file",
+        "path": "artifacts/output.txt",
+        "blob_ref": blob_ref("blob_workspace_file", ["workspace.file"]),
+        "graph_revision": "rev_base",
+        "data_classes": ["public"],
+        "replayability": "pure_read",
+        "receipt": "qrec_rows"
+    });
+    bind_result_hashes_in_place(&mut missing_workspace_blob_class);
+    let blob_error = package
+        .validate_plan_result_document(&missing_workspace_blob_class)
+        .unwrap_err();
+    assert!(matches!(
+        &blob_error,
+        PublicSeamError::InvalidPlanResult { .. }
+    ));
+    assert!(
+        blob_error
+            .to_string()
+            .contains("nested visibility data class `workspace.file`"),
+        "{blob_error}"
+    );
+}
+
 fn typed_success_result() -> Value {
     bind_result_hashes(json!({
         "schema_version": "leaven.plan_result.v1",
@@ -561,11 +658,25 @@ fn bind_result_hashes(mut result: Value) -> Value {
     result
 }
 
+fn bind_result_hashes_in_place(result: &mut Value) {
+    *result = bind_result_hashes(std::mem::take(result));
+}
+
 fn prefixed_jcs_hash(prefix: &str, value: &Value) -> String {
     format!(
         "{prefix}{}",
         jcs_canonicalize::sha256_jcs_hex(value).unwrap()
     )
+}
+
+fn blob_ref(id: &str, data_classes: impl IntoIterator<Item = &'static str>) -> Value {
+    json!({
+        "kind": "blob_ref",
+        "id": id,
+        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "bytes": 32,
+        "data_classes": data_classes.into_iter().collect::<Vec<_>>()
+    })
 }
 
 fn typed_failure_result() -> Value {

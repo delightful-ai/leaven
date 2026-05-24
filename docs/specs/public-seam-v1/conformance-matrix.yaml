@@ -596,6 +596,7 @@ rows:
       - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_with_capability_allows_workspace_lifecycle_calls
       - crates/leaven-public-seam/tests/call_authority.rs::call_authority_accepts_lm_agent_and_sandbox_input_classes
       - crates/leaven-public-seam/tests/plan_result.rs::plan_result_preserves_value_visibility_data_classes
+      - crates/leaven-public-seam/tests/plan_result.rs::plan_result_preserves_value_trace_and_blob_ref_data_classes
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_preserves_nested_evidence_visibility_data_classes_and_receipts
     negative_test_evidence:
       - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_with_capability_checks_call_authority_before_host_effects
@@ -604,6 +605,7 @@ rows:
       - crates/leaven-public-seam/tests/call_authority.rs::call_authority_rejects_declared_forbidden_intersections_even_when_grant_allows
       - crates/leaven-public-seam/tests/call_authority.rs::call_authority_rejects_reflector_lm_call_input_classes_include_case_target
       - crates/leaven-public-seam/tests/plan_result.rs::plan_result_preserves_value_visibility_data_classes
+      - crates/leaven-public-seam/tests/plan_result.rs::plan_result_rejects_value_trace_and_blob_ref_data_class_gaps
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_evidence_source_receipts_that_are_missing_or_wrong_kind
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_nested_score_output_data_class_gaps
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_nested_score_blob_ref_data_class_gaps
@@ -617,6 +619,8 @@ rows:
       - crates/leaven-public-seam/src/result.rs::validate_value_visibility
       - crates/leaven-public-seam/src/result.rs::collect_score_output_data_classes_from_value
       - crates/leaven-public-seam/src/result.rs::collect_evidence_data_classes_from_value
+      - crates/leaven-public-seam/src/result.rs::collect_value_trace_data_classes
+      - crates/leaven-public-seam/src/result.rs::collect_value_blob_ref_data_classes
       - crates/leaven-public-seam/src/result.rs::collect_output_record_data_classes
       - crates/leaven-public-seam/src/result.rs::collect_trace_ref_data_classes
       - crates/leaven-public-seam/src/result.rs::collect_workspace_listing_data_classes
@@ -628,6 +632,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-23-evidence-visibility-current-blocker-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-effect-call-authority-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-visibility-trace-stage-provenance-partial-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-acp-value-visibility-partial-review.md
     status: pending
 
   - id: ps1.visibility.reflector_target_safe
@@ -1111,7 +1116,9 @@ rows:
     partial_contract_test_evidence:
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_require_receipts_capability_fingerprint_and_data_classes
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_bind_worker_methods_to_primary_kinds_and_receipts
+      - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_preserve_agent_and_sandbox_blob_ref_data_classes
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_reject_cross_method_payloads_unbound_receipts_and_data_class_gaps
+      - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_reject_agent_and_sandbox_blob_ref_data_class_gaps
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_reject_forged_result_hashes_for_extension_and_receiptless_primaries
     partial_contract_implementation_evidence:
       - crates/leaven-public-seam/src/acp_profile.rs::AcpExtensionResultDocument
@@ -1122,6 +1129,7 @@ rows:
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_acp_extension_result_document
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-acp-workspace-partial-follow-up-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-acp-value-visibility-partial-review.md
     status: pending
 
   - id: ps1.acp.lifecycle_backpressure
@@ -1236,6 +1244,7 @@ rows:
       - crates/leaven-public-seam/src/acp_profile.rs::extension_result_contract
       - crates/leaven-public-seam/src/acp_profile.rs::validate_receipts_for_method
       - crates/leaven-public-seam/src/acp_profile.rs::AcpExtensionResultDocument
+      - crates/leaven-public-seam/src/result.rs::collect_value_blob_ref_data_classes
       - crates/leaven-public-seam/src/acp_profile.rs::AcpPermissionRequest
       - crates/leaven-public-seam/src/capability.rs::CapabilityDocument::authorize_grant
       - crates/leaven-public-seam/src/capability.rs::CapabilityGrantRequest
@@ -1330,8 +1339,10 @@ rows:
       - crates/leaven-public-seam/tests/plan_document.rs::agent_run_lowering_preserves_workspace_diff_surface_fingerprint
       - crates/leaven-public-seam/tests/plan_document.rs::call_results_reject_missing_receipts_and_wrong_kinds_even_with_valid_hashes
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_bind_worker_methods_to_primary_kinds_and_receipts
+      - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_preserve_agent_and_sandbox_blob_ref_data_classes
       - crates/leaven-public-seam/tests/proposal_authority.rs::proposal_authority_accepts_effects_surfaces_schemas_and_apply_grants
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_reject_cross_method_payloads_unbound_receipts_and_data_class_gaps
+      - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_reject_agent_and_sandbox_blob_ref_data_class_gaps
       - crates/leaven-public-seam/tests/proposal_authority.rs::proposal_authority_rejects_submit_only_apply_and_ungranted_surface_or_effect
     partial_contract_implementation_evidence:
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanAgentRunRequest::live_workspace
@@ -1352,11 +1363,13 @@ rows:
       - crates/leaven-public-seam/src/acp_profile.rs::extension_result_contract
       - crates/leaven-public-seam/src/acp_profile.rs::validate_receipts_for_method
       - crates/leaven-public-seam/src/acp_profile.rs::AcpExtensionResultDocument
+      - crates/leaven-public-seam/src/result.rs::collect_value_blob_ref_data_classes
       - crates/leaven-public-seam/src/proposal_authority.rs::ProposalAuthorityReport
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-workspace-handle-provenance-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-effect-call-authority-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-structured-output-evaluator-authority-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-acp-value-visibility-partial-review.md
     status: pending
 
   - id: ps1.sandbox.exec_streaming
@@ -1384,7 +1397,9 @@ rows:
       - crates/leaven-public-seam/tests/plan_document.rs::call_results_reject_missing_receipts_and_wrong_kinds_even_with_valid_hashes
       - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_modes_require_cached_rejects_agent_and_sandbox_live_work
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_bind_worker_methods_to_primary_kinds_and_receipts
+      - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_preserve_agent_and_sandbox_blob_ref_data_classes
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_reject_cross_method_payloads_unbound_receipts_and_data_class_gaps
+      - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_reject_agent_and_sandbox_blob_ref_data_class_gaps
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_permissions_use_capability_grants_and_return_planerror_redactions
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_permissions_deny_ungranted_models_workspace_ops_and_commands
       - crates/leaven-public-seam/tests/capability_document.rs::grant_enforcement_rejects_ungranted_models_workspace_ops_and_commands
@@ -1409,6 +1424,7 @@ rows:
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-workspace-handle-provenance-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-effect-call-authority-partial-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-acp-value-visibility-partial-review.md
     status: pending
 
   - id: ps1.watch.deferred

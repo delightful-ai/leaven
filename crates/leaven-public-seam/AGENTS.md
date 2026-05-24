@@ -215,7 +215,9 @@ engine, template-extension host, or authorization layer.
 Crate-root exports for `PlanResultDocument` and `Replayability` are advanced
 public seam contracts. They prove active-schema plan-result envelope validation,
 typed value/receipt/error/charge classification, operation receipt timing,
-closed `PlanError` shape, and replayability roll-up at the wire-envelope layer
+closed `PlanError` shape, replayability roll-up, and monotonic value
+data-class coverage for nested score outputs, embedded evidence, top-level
+trace refs, blob refs, and workspace-listing entries at the wire-envelope layer
 only; they are not plan-run production, evaluator execution, runtime receipt
 production, graph mutation, or cache replay behavior.
 
