@@ -1624,6 +1624,8 @@ rows:
       - crates/leaven-public-seam/tests/plan_document.rs::sandbox_exec_blob_refs_only_requires_stream_blob_refs
       - crates/leaven-public-seam/tests/plan_document.rs::sandbox_exec_outcome_propagates_stream_and_file_blob_data_classes
       - crates/leaven-public-seam/tests/plan_document.rs::sandbox_exec_rejects_schema_valid_results_without_audit_facts
+      - crates/leaven-public-seam/tests/sandbox_contract.rs::sandbox_exec_can_project_provider_neutral_command_output_into_plan_result
+      - crates/leaven-public-seam/tests/sandbox_contract.rs::sandbox_exec_command_output_projection_preserves_missing_exit_for_validation
       - crates/leaven-public-seam/tests/plan_document.rs::call_results_reject_missing_receipts_and_wrong_kinds_even_with_valid_hashes
       - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_modes_require_cached_rejects_agent_and_sandbox_live_work
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_bind_worker_methods_to_primary_kinds_and_receipts
@@ -1641,8 +1643,10 @@ rows:
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanSandboxExecRequest::to_workspace_command
       - crates/leaven-public-seam/src/plan_execution/effects.rs::require_live_workspace
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanSandboxExecOutcome
+      - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanSandboxExecOutcome::from_command_output
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanSandboxExecOutcome::with_file_ref
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanSandboxExecOutcome::with_stream_refs
+      - crates/leaven-public-seam/src/plan_execution/effects.rs::cost_value
       - crates/leaven-public-seam/src/plan_execution/effects.rs::extend_data_classes_from_blob_ref
       - crates/leaven-public-seam/src/plan_execution.rs::validate_sandbox_stream_outcome
       - crates/leaven-public-seam/src/plan_execution.rs::record_sandbox_call_outcome
