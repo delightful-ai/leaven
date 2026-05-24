@@ -1,12 +1,15 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use serde_json::{Map, Value, json};
 
 use crate::{PlanResultDocument, PublicSeamError, SchemaFingerprint};
 
 mod effects;
+mod evaluate;
+mod outcomes;
 mod queries;
 mod receipts;
+mod result_value;
 
 use effects::LiveWorkspaceHandle;
 pub use effects::{
@@ -15,6 +18,7 @@ pub use effects::{
     PlanWorkspaceMaterializeOutcome, PlanWorkspaceMaterializeRequest, PlanWorkspaceReleaseOutcome,
     PlanWorkspaceReleaseRequest,
 };
+use evaluate::{EvaluatedExpr, ResolvedDependencies, evaluate_expr, resolved_dependency_values};
 pub use queries::{
     PlanCaseQueryOutcome, PlanCaseQueryRequest, PlanGraphQueryOutcome, PlanGraphQueryRequest,
     PlanGraphReadScope, PlanWorkspaceQueryOutcome, PlanWorkspaceQueryRequest,
@@ -302,7 +306,7 @@ fn execute_effects<H: PlanExecutionHost>(
         plan_id,
         context,
         final_revision: &state.final_revision,
-        replayability_summary: replayability_summary(&state.values, &state.receipts),
+        replayability_summary: result_value::replayability_summary(&state.values, &state.receipts),
         values: &state.values,
         receipts: &state.receipts,
         charges: &state.charges,
@@ -402,49 +406,6 @@ fn plan_result_value(parts: &PlanResultValue<'_>) -> Value {
         "charges": parts.charges,
         "errors": parts.errors
     })
-}
-
-fn replayability_summary(values: &Map<String, Value>, receipts: &[Value]) -> &'static str {
-    let mut rank = receipts
-        .iter()
-        .filter_map(|receipt| {
-            receipt
-                .as_object()
-                .and_then(|object| object.get("kind"))
-                .and_then(Value::as_str)
-        })
-        .filter(|kind| *kind != "query")
-        .map(|_| 1)
-        .max()
-        .unwrap_or(0);
-    for value in values.values() {
-        rank = rank.max(
-            value
-                .as_object()
-                .and_then(|object| object.get("replayability"))
-                .and_then(Value::as_str)
-                .map(replayability_rank)
-                .unwrap_or(0),
-        );
-    }
-    match rank {
-        0 => "pure_read",
-        1 => "fully_managed",
-        2 => "boundary_managed",
-        3 => "has_declared_external_effects",
-        _ => "has_untracked_external_effects",
-    }
-}
-
-fn replayability_rank(replayability: &str) -> usize {
-    match replayability {
-        "pure_read" => 0,
-        "fully_managed" => 1,
-        "boundary_managed" => 2,
-        "has_declared_external_effects" => 3,
-        "has_untracked_external_effects" => 4,
-        _ => 5,
-    }
 }
 
 struct ExecutionState {
@@ -886,68 +847,15 @@ fn record_lm_call_outcome(
     context: &PlanExecutionContext,
     state: &mut ExecutionState,
 ) -> Result<(), PublicSeamError> {
-    let receipt_id = format!("lmrec_{name}");
-    if let Some(mut error) = outcome.error {
-        error["receipt"] = json!(receipt_id);
-        error["op"] = json!(name);
-        return record_failed_lm_call(
-            FailedLmCall {
-                name: &name,
-                call_kind,
-                runtime_fingerprint: &outcome.runtime_fingerprint,
-                cost: outcome.cost.as_ref(),
-                error,
-                request_hash,
-                context,
-            },
-            state,
-        );
-    }
-    let cost = outcome
-        .cost
-        .ok_or_else(|| invalid_plan("lm_complete host outcome must carry cost"))?;
-    let mut value = json!({
-        "kind": "lm_response",
-        "message": outcome.message,
-        "graph_revision": context.base_revision,
-        "data_classes": outcome.data_classes,
-        "replayability": outcome.replayability,
-        "receipt": receipt_id,
-        "cost": cost
-    });
-    if let Some(cache) = cache {
-        value["cache"] = json!(cache);
-    }
-    if let Some(parsed) = outcome.parsed {
-        value["parsed"] = parsed;
-    }
-    let result_hash = prefixed_jcs_hash(
-        "fp_result_sha256_",
-        &json!({
-            "schema_version": "leaven.plan_call_result.v1",
-            "name": name,
-            "value": value
-        }),
-    )?;
-    let mut receipt = json!({
-        "kind": "call",
-        "receipt": receipt_id,
-        "op_var": name,
-        "started_at": context.started_at,
-        "completed_at": context.completed_at,
-        "call_kind": call_kind,
-        "request_hash": request_hash,
-        "result_hash": result_hash,
-        "runtime_fingerprint": outcome.runtime_fingerprint,
-        "status": "succeeded"
-    });
-    if let Some(cost) = value.get("cost") {
-        receipt["cost"] = cost.clone();
-    }
-    state.receipts.push(receipt);
-    state.values.insert(name.clone(), value.clone());
-    state.bindings.insert(name, value);
-    Ok(())
+    outcomes::record_lm_call_outcome(
+        name,
+        call_kind,
+        outcome,
+        cache,
+        request_hash,
+        context,
+        state,
+    )
 }
 
 fn record_agent_call_outcome(
@@ -957,35 +865,7 @@ fn record_agent_call_outcome(
     context: &PlanExecutionContext,
     state: &mut ExecutionState,
 ) -> Result<(), PublicSeamError> {
-    let receipt_id = format!("agentrec_{name}");
-    let runtime_fingerprint = outcome.runtime_fingerprint.clone();
-    let mut value = json!({
-        "kind": "agent_session",
-        "status": outcome.status,
-        "graph_revision": context.base_revision,
-        "data_classes": outcome.data_classes,
-        "replayability": outcome.replayability,
-        "receipt": receipt_id,
-        "commands": outcome.commands
-    });
-    if let Some(parsed) = outcome.parsed {
-        value["parsed"] = parsed;
-    }
-    if let Some(transcript_ref) = outcome.transcript_ref {
-        value["transcript_ref"] = transcript_ref;
-    }
-    if let Some(cost) = outcome.cost {
-        value["cost"] = cost;
-    }
-    record_successful_external_call(
-        name,
-        "agent_run",
-        value,
-        &runtime_fingerprint,
-        request_hash,
-        context,
-        state,
-    )
+    outcomes::record_agent_call_outcome(name, outcome, request_hash, context, state)
 }
 
 fn record_sandbox_call_outcome(
@@ -995,38 +875,7 @@ fn record_sandbox_call_outcome(
     context: &PlanExecutionContext,
     state: &mut ExecutionState,
 ) -> Result<(), PublicSeamError> {
-    let receipt_id = format!("execrec_{name}");
-    let runtime_fingerprint = outcome.runtime_fingerprint.clone();
-    let mut value = json!({
-        "kind": "sandbox_exec",
-        "status": outcome.status,
-        "graph_revision": context.base_revision,
-        "data_classes": outcome.data_classes,
-        "replayability": outcome.replayability,
-        "receipt": receipt_id,
-        "files": outcome.files
-    });
-    if let Some(exit_code) = outcome.exit_code {
-        value["exit_code"] = json!(exit_code);
-    }
-    if let Some(stdout_ref) = outcome.stdout_ref {
-        value["stdout_ref"] = stdout_ref;
-    }
-    if let Some(stderr_ref) = outcome.stderr_ref {
-        value["stderr_ref"] = stderr_ref;
-    }
-    if let Some(cost) = outcome.cost {
-        value["cost"] = cost;
-    }
-    record_successful_external_call(
-        name,
-        "sandbox_exec",
-        value,
-        &runtime_fingerprint,
-        request_hash,
-        context,
-        state,
-    )
+    outcomes::record_sandbox_call_outcome(name, outcome, request_hash, context, state)
 }
 
 fn record_workspace_materialize_outcome(
@@ -1036,46 +885,7 @@ fn record_workspace_materialize_outcome(
     context: &PlanExecutionContext,
     state: &mut ExecutionState,
 ) -> Result<(), PublicSeamError> {
-    let PlanWorkspaceMaterializeOutcome {
-        workspace,
-        workspace_ref,
-        lifetime,
-        data_classes,
-        replayability,
-        runtime_fingerprint,
-    } = outcome;
-    let receipt_id = format!("wrec_{name}");
-    let workspace_facts =
-        effects::workspace_ref_facts(Some(&workspace_ref), "workspace_materialize result")?;
-    if workspace_facts.id() != workspace {
-        return Err(invalid_plan(format!(
-            "workspace_materialize result workspace ref `{}` does not match host workspace `{workspace}`",
-            workspace_facts.id()
-        )));
-    }
-    state.live_workspaces.insert(
-        name.clone(),
-        LiveWorkspaceHandle::live_ref(workspace_facts, lifetime.clone()),
-    );
-    let value = json!({
-        "kind": "workspace_handle",
-        "workspace": workspace_ref,
-        "lifetime": lifetime,
-        "released": false,
-        "graph_revision": context.base_revision,
-        "data_classes": data_classes,
-        "replayability": replayability,
-        "receipt": receipt_id
-    });
-    record_successful_external_call(
-        name,
-        "workspace_materialize",
-        value,
-        &runtime_fingerprint,
-        request_hash,
-        context,
-        state,
-    )
+    outcomes::record_workspace_materialize_outcome(name, outcome, request_hash, context, state)
 }
 
 fn record_workspace_release_outcome(
@@ -1086,151 +896,21 @@ fn record_workspace_release_outcome(
     context: &PlanExecutionContext,
     state: &mut ExecutionState,
 ) -> Result<(), PublicSeamError> {
-    let PlanWorkspaceReleaseOutcome {
-        workspace,
-        workspace_ref,
-        lifetime,
-        runtime_fingerprint,
-    } = outcome;
-    let workspace_facts =
-        effects::workspace_ref_facts(Some(&workspace_ref), "workspace_release result")?;
-    if workspace_facts.id() != workspace {
-        return Err(invalid_plan(format!(
-            "workspace_release result workspace ref `{}` does not match host workspace `{workspace}`",
-            workspace_facts.id()
-        )));
-    }
-    if !workspace_facts.satisfies_request(requested_workspace) {
-        return Err(invalid_plan(format!(
-            "workspace_release result workspace `{}` does not match requested workspace `{}`",
-            workspace_facts.id(),
-            requested_workspace.id()
-        )));
-    }
-    let receipt_id = format!("wrec_{name}");
-    for handle in state.live_workspaces.values_mut() {
-        if handle.satisfies_workspace(requested_workspace) {
-            handle.release();
-        }
-    }
-    state.live_workspaces.insert(
-        name.clone(),
-        LiveWorkspaceHandle::released_ref(workspace_facts, lifetime.clone()),
-    );
-    let value = json!({
-        "kind": "workspace_handle",
-        "workspace": workspace_ref,
-        "lifetime": lifetime,
-        "released": true,
-        "receipt": receipt_id,
-        "graph_revision": context.base_revision,
-        "data_classes": ["public"],
-        "replayability": "boundary_managed"
-    });
-    record_successful_external_call(
+    outcomes::record_workspace_release_outcome(
         name,
-        "workspace_release",
-        value,
-        &runtime_fingerprint,
+        outcome,
+        requested_workspace,
         request_hash,
         context,
         state,
     )
 }
 
-fn record_successful_external_call(
-    name: String,
-    call_kind: &str,
-    value: Value,
-    runtime_fingerprint: &str,
-    request_hash: &str,
-    context: &PlanExecutionContext,
-    state: &mut ExecutionState,
-) -> Result<(), PublicSeamError> {
-    let result_hash = prefixed_jcs_hash(
-        "fp_result_sha256_",
-        &json!({
-            "schema_version": "leaven.plan_call_result.v1",
-            "name": name,
-            "value": value
-        }),
-    )?;
-    let mut receipt = json!({
-        "kind": "call",
-        "receipt": value["receipt"],
-        "op_var": name,
-        "started_at": context.started_at,
-        "completed_at": context.completed_at,
-        "call_kind": call_kind,
-        "request_hash": request_hash,
-        "result_hash": result_hash,
-        "runtime_fingerprint": runtime_fingerprint,
-        "status": "succeeded"
-    });
-    if let Some(cost) = value.get("cost") {
-        receipt["cost"] = cost.clone();
-    }
-    state.receipts.push(receipt);
-    state.values.insert(name.clone(), value.clone());
-    state.bindings.insert(name, value);
-    Ok(())
-}
-
-struct FailedLmCall<'a> {
-    name: &'a str,
-    call_kind: &'a str,
-    runtime_fingerprint: &'a str,
-    cost: Option<&'a Value>,
-    error: Value,
-    request_hash: &'a str,
-    context: &'a PlanExecutionContext,
-}
-
 fn record_failed_lm_call(
-    failure: FailedLmCall<'_>,
+    failure: outcomes::FailedLmCall<'_>,
     state: &mut ExecutionState,
 ) -> Result<(), PublicSeamError> {
-    let receipt_id = format!("lmrec_{}", failure.name);
-    let charge_receipts = if let Some(cost) = failure.cost {
-        let charge_id = format!("chargerec_{}", failure.name);
-        state.charges.push(json!({
-            "receipt": charge_id,
-            "source_receipt": receipt_id,
-            "cost": cost,
-            "ledger_scope": "plan",
-            "charged_at": failure.context.completed_at
-        }));
-        vec![charge_id]
-    } else {
-        Vec::new()
-    };
-    let result_hash = prefixed_jcs_hash(
-        "fp_result_sha256_",
-        &json!({
-            "schema_version": "leaven.plan_call_result.v1",
-            "name": failure.name,
-            "error": failure.error,
-            "cost": failure.cost,
-            "charge_receipts": charge_receipts
-        }),
-    )?;
-    state.receipts.push(json!({
-        "kind": "call",
-        "receipt": receipt_id,
-        "op_var": failure.name,
-        "started_at": failure.context.started_at,
-        "completed_at": failure.context.completed_at,
-        "call_kind": failure.call_kind,
-        "request_hash": failure.request_hash,
-        "result_hash": result_hash,
-        "runtime_fingerprint": failure.runtime_fingerprint,
-        "status": "failed",
-        "error": failure.error,
-        "cost": failure.cost,
-        "charge_receipts": charge_receipts
-    }));
-    state.errors.push(failure.error);
-    Ok(())
+    outcomes::record_failed_lm_call(failure, state)
 }
 
 fn execute_write<H: PlanExecutionHost>(
@@ -1241,158 +921,7 @@ fn execute_write<H: PlanExecutionHost>(
     host: &mut H,
     state: &mut ExecutionState,
 ) -> Result<(), PublicSeamError> {
-    let write = op_object
-        .get("write")
-        .ok_or_else(|| invalid_plan("write op must carry write"))?;
-    let write_kind = nested_kind(write, "write")?;
-    if write_kind != "emit_run_event" {
-        return Err(invalid_plan(format!(
-            "representative Plan IR harness does not execute `{write_kind}` writes"
-        )));
-    }
-    let outcome = host.emit_run_event(PlanEmitRunEventRequest {
-        name: &name,
-        write,
-        deps: dep_values,
-        base_revision: &context.base_revision,
-    })?;
-    let receipt_id = format!("wrec_{name}");
-    let request_hash = prefixed_jcs_hash(
-        "fp_request_sha256_",
-        &json!({
-            "schema_version": "leaven.plan_write_request.v1",
-            "name": name,
-            "kind": write_kind,
-            "write": write,
-            "deps": dep_values,
-            "base_revision": context.base_revision
-        }),
-    )?;
-    let result_hash = prefixed_jcs_hash(
-        "fp_result_sha256_",
-        &json!({
-            "schema_version": "leaven.plan_write_result.v1",
-            "name": name,
-            "event_id": outcome.event_id,
-            "committed_revision": outcome.committed_revision
-        }),
-    )?;
-    state.receipts.push(json!({
-        "kind": "write",
-        "receipt": receipt_id,
-        "op_var": name,
-        "started_at": context.started_at,
-        "completed_at": context.completed_at,
-        "write_kind": write_kind,
-        "request_hash": request_hash,
-        "result_hash": result_hash,
-        "base_revision": context.base_revision,
-        "committed_revision": outcome.committed_revision,
-        "status": "succeeded",
-        "event_id": outcome.event_id
-    }));
-    state.final_revision.clone_from(&outcome.committed_revision);
-    state.bindings.insert(
-        name,
-        json!({
-            "kind": "emit_run_event",
-            "event_id": outcome.event_id
-        }),
-    );
-    Ok(())
-}
-
-struct ResolvedDependencies {
-    values: BTreeMap<String, Value>,
-    live_workspaces: BTreeMap<String, LiveWorkspaceHandle>,
-}
-
-fn dependency_values(
-    op: &Map<String, Value>,
-    bindings: &BTreeMap<String, Value>,
-) -> Result<BTreeMap<String, Value>, PublicSeamError> {
-    let mut deps = BTreeMap::new();
-    let Some(raw) = op.get("deps") else {
-        return Ok(deps);
-    };
-    let raw = raw
-        .as_array()
-        .ok_or_else(|| invalid_plan("op deps must be an array"))?;
-    for dep in raw {
-        let dep = dep
-            .as_str()
-            .ok_or_else(|| invalid_plan("op deps must be binding names"))?;
-        let value = bindings
-            .get(dep)
-            .ok_or_else(|| invalid_plan(format!("op references unknown dependency `{dep}`")))?;
-        deps.insert(dep.to_owned(), value.clone());
-    }
-    Ok(deps)
-}
-
-fn resolved_dependency_values(
-    op: &Map<String, Value>,
-    state: &ExecutionState,
-) -> Result<ResolvedDependencies, PublicSeamError> {
-    let mut values = BTreeMap::new();
-    let mut live_workspaces = BTreeMap::new();
-    let Some(raw) = op.get("deps") else {
-        return Ok(ResolvedDependencies {
-            values,
-            live_workspaces,
-        });
-    };
-    let raw = raw
-        .as_array()
-        .ok_or_else(|| invalid_plan("op deps must be an array"))?;
-    for dep in raw {
-        let dep = dep
-            .as_str()
-            .ok_or_else(|| invalid_plan("op deps must be binding names"))?;
-        let value = state
-            .bindings
-            .get(dep)
-            .ok_or_else(|| invalid_plan(format!("op references unknown dependency `{dep}`")))?;
-        values.insert(dep.to_owned(), value.clone());
-        if let Some(handle) = state.live_workspaces.get(dep) {
-            live_workspaces.insert(dep.to_owned(), handle.clone());
-        }
-    }
-    Ok(ResolvedDependencies {
-        values,
-        live_workspaces,
-    })
-}
-
-struct EvaluatedExpr {
-    value: Value,
-    receipt: Option<Value>,
-}
-
-fn evaluate_expr(
-    expr: &Value,
-    name: &str,
-    deps: &ResolvedDependencies,
-    plan_document: &crate::PlanDocument,
-    context: &PlanExecutionContext,
-    host: &mut impl PlanExecutionHost,
-) -> Result<EvaluatedExpr, PublicSeamError> {
-    let object = object(expr, "expr")?;
-    match required_string(object.get("kind"), "expr.kind")? {
-        "literal" => Ok(EvaluatedExpr {
-            value: object
-                .get("value")
-                .cloned()
-                .ok_or_else(|| invalid_plan("literal expr must carry value"))?,
-            receipt: None,
-        }),
-        "graph_query" => execute_graph_query_expr(expr, name, plan_document, context, host),
-        "case_query" => execute_case_query_expr(expr, name, context, host),
-        "workspace_query" => execute_workspace_query_expr(expr, name, deps, context, host),
-        other => Err(invalid_plan(format!(
-            "representative Plan IR harness does not execute `{other}` let expressions"
-        ))),
-    }
+    outcomes::execute_write(op_object, name, dep_values, context, host, state)
 }
 
 fn execute_graph_query_expr(
@@ -1402,60 +931,7 @@ fn execute_graph_query_expr(
     context: &PlanExecutionContext,
     host: &mut impl PlanExecutionHost,
 ) -> Result<EvaluatedExpr, PublicSeamError> {
-    let scope = graph_read_scope(plan_document, context)?;
-    let outcome = host.graph_query(PlanGraphQueryRequest { name, expr, scope })?;
-    let receipt_id = format!("qrec_{name}");
-    let mut value = json!({
-        "kind": "graph_set",
-        "items": outcome.items,
-        "graph_revision": outcome.graph_revision,
-        "data_classes": outcome.data_classes,
-        "replayability": "pure_read",
-        "receipt": receipt_id
-    });
-    if let Some(next_cursor) = outcome.next_cursor {
-        value["next_cursor"] = json!(next_cursor);
-    }
-    let scope_value = graph_read_scope_value(scope);
-    let projection = object(expr, "graph_query")?
-        .get("projection")
-        .ok_or_else(|| invalid_plan("graph_query must carry projection"))?;
-    let op_hash = prefixed_jcs_hash(
-        "fp_query_sha256_",
-        &json!({
-            "schema_version": "leaven.plan_query_op.v1",
-            "name": name,
-            "expr": expr,
-            "scope": scope_value
-        }),
-    )?;
-    let result_hash = prefixed_jcs_hash(
-        "fp_result_sha256_",
-        &json!({
-            "schema_version": "leaven.plan_query_result.v1",
-            "name": name,
-            "value": value
-        }),
-    )?;
-    let read_scope_fingerprint = prefixed_jcs_hash("fp_scope_sha256_", &scope_value)?;
-    let projection_fingerprint = prefixed_jcs_hash("fp_projection_sha256_", projection)?;
-    let graph_revision = required_string(value.get("graph_revision"), "graph_revision")?.to_owned();
-    Ok(EvaluatedExpr {
-        value,
-        receipt: Some(json!({
-            "kind": "query",
-            "receipt": receipt_id,
-            "op_var": name,
-            "started_at": context.started_at,
-            "completed_at": context.completed_at,
-            "op_hash": op_hash,
-            "result_hash": result_hash,
-            "graph_revision": graph_revision,
-            "read_scope_fingerprint": read_scope_fingerprint,
-            "projection_fingerprint": projection_fingerprint,
-            "status": "succeeded"
-        })),
-    })
+    evaluate::execute_graph_query_expr(expr, name, plan_document, context, host)
 }
 
 fn execute_case_query_expr(
@@ -1464,78 +940,7 @@ fn execute_case_query_expr(
     context: &PlanExecutionContext,
     host: &mut impl PlanExecutionHost,
 ) -> Result<EvaluatedExpr, PublicSeamError> {
-    let query = object(expr, "case_query")?
-        .get("query")
-        .ok_or_else(|| invalid_plan("case_query must carry query"))?;
-    if nested_kind(query, "case_query.query")? != "load" {
-        return Err(invalid_plan(
-            "representative Plan IR harness only executes case_query.load",
-        ));
-    }
-    let include = case_query_include(query)?;
-    let outcome = host.case_query_load(PlanCaseQueryRequest { name, query })?;
-    let receipt_id = format!("qrec_{name}");
-    let mut value = json!({
-        "kind": "case_record",
-        "case": outcome.case,
-        "graph_revision": outcome.graph_revision,
-        "data_classes": outcome.data_classes,
-        "replayability": "pure_read",
-        "receipt": receipt_id
-    });
-    if let Some(input) = outcome.input {
-        require_requested_case_field(&include, "input")?;
-        value["input"] = input;
-    }
-    if let Some(target) = outcome.target {
-        require_requested_case_field(&include, "target")?;
-        value["target"] = target;
-    }
-    if let Some(metadata) = outcome.metadata {
-        require_requested_case_field(&include, "metadata")?;
-        value["metadata"] = metadata;
-    }
-    require_included_case_fields(&value, &include)?;
-    let op_hash = prefixed_jcs_hash(
-        "fp_query_sha256_",
-        &json!({
-            "schema_version": "leaven.plan_query_op.v1",
-            "name": name,
-            "expr": expr,
-            "scope": {
-                "kind": "case_query.load",
-                "base_revision": context.base_revision
-            }
-        }),
-    )?;
-    let result_hash = prefixed_jcs_hash(
-        "fp_result_sha256_",
-        &json!({
-            "schema_version": "leaven.plan_query_result.v1",
-            "name": name,
-            "value": value
-        }),
-    )?;
-    let graph_revision = required_string(value.get("graph_revision"), "graph_revision")?.to_owned();
-    Ok(EvaluatedExpr {
-        value,
-        receipt: Some(json!({
-            "kind": "query",
-            "receipt": receipt_id,
-            "op_var": name,
-            "started_at": context.started_at,
-            "completed_at": context.completed_at,
-            "op_hash": op_hash,
-            "result_hash": result_hash,
-            "graph_revision": graph_revision,
-            "read_scope_fingerprint": prefixed_jcs_hash("fp_scope_sha256_", &json!({
-                "kind": "case_query.load",
-                "base_revision": context.base_revision
-            }))?,
-            "projection_fingerprint": prefixed_jcs_hash("fp_projection_sha256_", &case_query_projection(query)?)?,
-            "status": "succeeded"
-        })),
-    })
+    evaluate::execute_case_query_expr(expr, name, context, host)
 }
 
 fn execute_workspace_query_expr(
@@ -1545,88 +950,14 @@ fn execute_workspace_query_expr(
     context: &PlanExecutionContext,
     host: &mut impl PlanExecutionHost,
 ) -> Result<EvaluatedExpr, PublicSeamError> {
-    let request = workspace_query_request(name, expr, &deps.values, &deps.live_workspaces)?;
-    let expected_kind = workspace_query_expected_value_kind(&request)?;
-    let expected_data_classes = request.expected_data_classes()?;
-    let outcome = host.workspace_query(request.clone())?;
-    let receipt_id = format!("qrec_{name}");
-    let mut value = outcome
-        .value
-        .as_object()
-        .cloned()
-        .ok_or_else(|| invalid_plan("workspace_query host outcome value must be an object"))?;
-    let value_kind = value
-        .get("kind")
-        .and_then(Value::as_str)
-        .ok_or_else(|| invalid_plan("workspace_query host outcome must carry kind"))?;
-    if value_kind != expected_kind {
-        return Err(invalid_plan(format!(
-            "workspace_query `{}` host returned `{value_kind}` instead of `{expected_kind}`",
-            request.op_kind()?
-        )));
-    }
-    validate_workspace_query_value_shape(&request, &value)?;
-    if expected_kind == "workspace_file" {
-        let classes = outcome
-            .data_classes
-            .iter()
-            .map(String::as_str)
-            .collect::<BTreeSet<_>>();
-        for expected in expected_data_classes {
-            if !classes.contains(expected) {
-                return Err(invalid_plan(format!(
-                    "workspace_query read_file result missing expected data class `{expected}`"
-                )));
-            }
-        }
-    }
-    value.insert("receipt".to_owned(), json!(receipt_id));
-    let graph_revision = outcome.graph_revision;
-    value.insert("graph_revision".to_owned(), json!(&graph_revision));
-    value.insert("data_classes".to_owned(), json!(outcome.data_classes));
-    value.insert("replayability".to_owned(), json!(outcome.replayability));
-    let value = Value::Object(value);
-    let op_hash = prefixed_jcs_hash(
-        "fp_query_sha256_",
-        &json!({
-            "schema_version": "leaven.plan_query_op.v1",
-            "name": name,
-            "expr": expr,
-            "scope": {
-                "kind": "workspace_query",
-                "workspace": request.workspace(),
-                "base_revision": context.base_revision
-            }
-        }),
-    )?;
-    let result_hash = prefixed_jcs_hash(
-        "fp_result_sha256_",
-        &json!({
-            "schema_version": "leaven.plan_query_result.v1",
-            "name": name,
-            "value": value
-        }),
-    )?;
-    Ok(EvaluatedExpr {
-        value,
-        receipt: Some(json!({
-            "kind": "query",
-            "receipt": receipt_id,
-            "op_var": name,
-            "started_at": context.started_at,
-            "completed_at": context.completed_at,
-            "op_hash": op_hash,
-            "result_hash": result_hash,
-            "graph_revision": graph_revision,
-            "read_scope_fingerprint": prefixed_jcs_hash("fp_scope_sha256_", &json!({
-                "kind": "workspace_query",
-                "workspace": request.workspace(),
-                "base_revision": context.base_revision
-            }))?,
-            "projection_fingerprint": prefixed_jcs_hash("fp_projection_sha256_", &workspace_query_projection(&request))?,
-            "status": "succeeded"
-        })),
-    })
+    evaluate::execute_workspace_query_expr(expr, name, deps, context, host)
+}
+
+fn dependency_values(
+    op: &Map<String, Value>,
+    bindings: &BTreeMap<String, Value>,
+) -> Result<BTreeMap<String, Value>, PublicSeamError> {
+    evaluate::dependency_values(op, bindings)
 }
 
 fn graph_read_scope<'a>(
