@@ -231,13 +231,72 @@ fn validate_value_visibility(
         receipt_index,
         &mut required,
     )?;
+    collect_value_trace_data_classes(value, &mut required)?;
+    collect_value_blob_ref_data_classes(value, &mut required)?;
     collect_workspace_listing_data_classes(value, &mut required)?;
     for data_class in required {
         if !value_data_classes.contains(&data_class) {
             return Err(invalid_result(format!(
-                "result value `{value_name}` data_classes must cover nested evidence data class `{data_class}`"
+                "result value `{value_name}` data_classes must cover nested visibility data class `{data_class}`"
             )));
         }
+    }
+    Ok(())
+}
+
+fn collect_value_trace_data_classes(
+    value: &serde_json::Map<String, Value>,
+    required: &mut BTreeSet<String>,
+) -> Result<(), PublicSeamError> {
+    if let Some(trace_refs) = value.get("trace_refs") {
+        collect_trace_ref_data_classes(trace_refs, "value.trace_refs", required)?;
+    }
+    Ok(())
+}
+
+fn collect_value_blob_ref_data_classes(
+    value: &serde_json::Map<String, Value>,
+    required: &mut BTreeSet<String>,
+) -> Result<(), PublicSeamError> {
+    collect_optional_blob_ref_data_classes(value.get("blob_ref"), "value.blob_ref", required)?;
+    collect_optional_blob_ref_data_classes(
+        value.get("transcript_ref"),
+        "value.transcript_ref",
+        required,
+    )?;
+    collect_optional_blob_ref_data_classes(value.get("stdout_ref"), "value.stdout_ref", required)?;
+    collect_optional_blob_ref_data_classes(value.get("stderr_ref"), "value.stderr_ref", required)?;
+    if let Some(files) = value.get("files") {
+        let files = files
+            .as_object()
+            .ok_or_else(|| invalid_result("value.files must be an object"))?;
+        for (path, blob_ref) in files {
+            collect_optional_blob_ref_data_classes(
+                Some(blob_ref),
+                &format!("value.files[{path}]"),
+                required,
+            )?;
+        }
+    }
+    Ok(())
+}
+
+fn collect_optional_blob_ref_data_classes(
+    blob_ref: Option<&Value>,
+    field: &str,
+    required: &mut BTreeSet<String>,
+) -> Result<(), PublicSeamError> {
+    let Some(blob_ref) = blob_ref else {
+        return Ok(());
+    };
+    let blob_ref = blob_ref
+        .as_object()
+        .ok_or_else(|| invalid_result(format!("{field} must be an object")))?;
+    if let Some(data_classes) = blob_ref.get("data_classes") {
+        required.extend(required_string_set(
+            Some(data_classes),
+            &format!("{field}.data_classes"),
+        )?);
     }
     Ok(())
 }
