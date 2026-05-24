@@ -1444,6 +1444,7 @@ rows:
       - crates/leaven-public-seam/tests/plan_document.rs::lm_complete_lowering_rejects_deferred_multimodal_or_extension_content
       - crates/leaven-public-seam/tests/plan_document.rs::lm_complete_rejects_schema_valid_non_final_or_oversized_responses
       - crates/leaven-public-seam/tests/lm_contract.rs::lm_complete_can_execute_through_provider_neutral_lm_trait_and_preserve_cost
+      - crates/leaven-public-seam/tests/lm_contract.rs::lm_complete_json_schema_executes_through_provider_neutral_lm_trait
       - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_rejects_failed_call_receipts_without_typed_error_and_charge_audit
       - crates/leaven-public-seam/tests/plan_document.rs::call_results_reject_missing_receipts_and_wrong_kinds_even_with_valid_hashes
       - crates/leaven-lm/tests/lm_contract.rs::request_builders_preserve_sampling_output_and_provider_hints
@@ -1456,6 +1457,7 @@ rows:
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_permissions_deny_ungranted_models_workspace_ops_and_commands
       - crates/leaven-public-seam/tests/capability_document.rs::grant_enforcement_rejects_ungranted_models_workspace_ops_and_commands
       - crates/leaven-public-seam/tests/lm_contract.rs::lm_complete_trait_mapping_preserves_forbidden_result_tool_metadata_for_validation
+      - crates/leaven-public-seam/tests/lm_contract.rs::lm_complete_json_schema_rejects_invalid_parsed_provider_payload
       - crates/leaven-public-seam/tests/lm_contract.rs::lm_complete_rejects_tool_result_message_id_drift_before_provider_call
       - crates/leaven-public-seam/tests/lm_contract.rs::lm_complete_rejects_typed_provider_hint_shape_drift_before_provider_call
     partial_contract_implementation_evidence:

@@ -9,6 +9,7 @@ use leaven_lm::{
 use leaven_public_seam::{
     PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanExecutionContext, PlanExecutionHost,
     PlanLmCompleteOutcome, PlanLmCompleteRequest, PublicSeamError, PublicSeamPackage,
+    SchemaFingerprint,
 };
 use serde_json::{Value, json};
 
@@ -101,6 +102,49 @@ fn lm_complete_trait_mapping_preserves_forbidden_result_tool_metadata_for_valida
 }
 
 #[test]
+fn lm_complete_json_schema_executes_through_provider_neutral_lm_trait() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let lm = Arc::new(ScriptedLm::new(scripted_response(Message::assistant(
+        "{\"answer\":\"ok\"}",
+    ))));
+    let mut host = LmTraitHost::new(Arc::clone(&lm));
+    let plan = lm_json_schema_plan();
+
+    let report = package
+        .execute_plan_document(&plan, &plan_execution_context(), &mut host)
+        .unwrap();
+
+    let recorded = lm.recorded_requests.lock().unwrap();
+    let request = recorded.first().expect("LM request should be recorded");
+    assert!(matches!(request.output, OutputMode::JsonSchema(_)));
+    assert_eq!(
+        report.value()["values"]["completion"]["parsed"],
+        json!({"answer": "ok"})
+    );
+}
+
+#[test]
+fn lm_complete_json_schema_rejects_invalid_parsed_provider_payload() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let lm = Arc::new(ScriptedLm::new(scripted_response(Message::assistant(
+        "{\"answer\":42}",
+    ))));
+    let mut host = LmTraitHost::new(Arc::clone(&lm));
+
+    let error = package
+        .execute_plan_document(&lm_json_schema_plan(), &plan_execution_context(), &mut host)
+        .unwrap_err();
+
+    assert!(
+        error
+            .to_string()
+            .contains("lm_complete parsed result payload failed json_schema output contract"),
+        "unexpected error: {error:?}"
+    );
+    assert_eq!(lm.recorded_requests.lock().unwrap().len(), 1);
+}
+
+#[test]
 fn lm_complete_rejects_tool_result_message_id_drift_before_provider_call() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let lm = Arc::new(ScriptedLm::new(scripted_response(Message::assistant(
@@ -178,15 +222,22 @@ impl PlanExecutionHost for LmTraitHost {
         request: PlanLmCompleteRequest<'_>,
     ) -> Result<PlanLmCompleteOutcome, PublicSeamError> {
         let lm_request = request.to_lm_request()?;
+        let expects_json_schema = matches!(lm_request.output, OutputMode::JsonSchema(_));
         let response = block_on(self.lm.complete(lm_request)).map_err(|error| {
             PublicSeamError::InvalidPlan {
                 message: error.to_string(),
             }
         })?;
-        Ok(PlanLmCompleteOutcome::from_lm_response(
-            response,
-            self.lm.fingerprint(),
-        ))
+        let parsed = if expects_json_schema {
+            Some(parsed_lm_json_schema_payload(&response.value.assistant)?)
+        } else {
+            None
+        };
+        let mut outcome = PlanLmCompleteOutcome::from_lm_response(response, self.lm.fingerprint());
+        if expects_json_schema {
+            outcome = outcome.with_parsed(parsed.expect("parsed payload exists"));
+        }
+        Ok(outcome)
     }
 
     fn emit_run_event(
@@ -197,6 +248,17 @@ impl PlanExecutionHost for LmTraitHost {
             message: format!("unexpected write `{}`", request.name()),
         })
     }
+}
+
+fn parsed_lm_json_schema_payload(message: &Message) -> Result<Value, PublicSeamError> {
+    let [MessageContentPart::Text { text }] = message.content_parts() else {
+        return Err(PublicSeamError::InvalidPlan {
+            message: "lm_complete json_schema response must carry assistant text".to_owned(),
+        });
+    };
+    serde_json::from_str(text).map_err(|error| PublicSeamError::InvalidPlan {
+        message: format!("lm_complete json_schema response was not JSON: {error}"),
+    })
 }
 
 struct ScriptedLm {
@@ -269,6 +331,24 @@ fn lm_plan() -> Value {
             "kind": "no_graph_writes"
         }
     })
+}
+
+fn lm_json_schema_plan() -> Value {
+    let mut plan = lm_plan();
+    let schema = json!({
+        "type": "object",
+        "required": ["answer"],
+        "properties": {
+            "answer": {"type": "string"}
+        },
+        "additionalProperties": false
+    });
+    plan["ops"][0]["call"]["output"] = json!({
+        "kind": "json_schema",
+        "schema": schema,
+        "schema_fingerprint": SchemaFingerprint::for_json_value(&schema).unwrap().as_str()
+    });
+    plan
 }
 
 fn lm_complete_call() -> Value {
