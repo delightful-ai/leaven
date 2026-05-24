@@ -1,0 +1,269 @@
+version: 1
+artifact_kind: leaven_goal_handoff
+status: draft
+created: 2026-05-24
+
+goal:
+  slug: leaven_py_and_acp_transport
+  original_intent:
+    user_question: >-
+      Can the full Leaven optimization surface — environment, optimizer config,
+      stages, run composition, inspection — be authored from Python over a
+      stable wire that preserves capability tokens, data-class propagation,
+      receipts, and replay, with the same wire serving future TS/Go/shell
+      workers?
+    user_should_be_able_to:
+      - >-
+        `pip install leaven` on macOS and Linux without a Rust toolchain.
+      - >-
+        Write a ~70-line EvoSkill-shaped paper repro in Python (environment,
+        optimizer config, stages, run, inspection) where the only Rust
+        knowledge required is "pick an optimizer by id."
+      - >-
+        Drop in DSPy via `dspy.configure(lm=lv.x.dspy.LeavenDSPyLM(...))`
+        without modifying existing DSPy modules.
+      - >-
+        Spawn the engine as a subprocess, talk to it over ACP stdio JSON-RPC,
+        and have capability tokens / data classes / receipts / replay all
+        preserved across the wire by the locked public-seam validators.
+      - >-
+        Use the same `leaven` binary from a CLI (`leaven query lineage`,
+        `leaven runs list`) when working in an agent-in-workspace context.
+
+spec_package:
+  package_name: leaven_python_sdk_and_acp_transport
+  governing_docs:
+    - path: docs/specs/leaven_python.md
+      role: Governing product spec for Leaven-as-Python. The one guiding truth for what we want.
+    - path: docs/specs/public-seam-v1/
+      role: Locked V1 public seam — plan IR, capability tokens, result receipts, stage payloads, evidence envelopes, ACP profile, JSON schemas.
+    - path: docs/specs/public-seam-v1/profiles/leaven_acp_profile_v1_v0.3.md
+      role: Locked Leaven ACP profile that `leaven-acp` implements in-house.
+    - path: docs/specs/public-seam-v1/conformance-matrix.yaml
+      role: Per-row proof denominator; 32/39 rows proven, 3 blocked on ACP transport.
+    - path: docs/specs/initial_library.md
+      role: Overall product architecture.
+    - path: AGENTS.md
+      role: Repo-wide routing; map entry for `leaven-acp` added during this design conversation.
+    - path: crates/AGENTS.md
+      role: Crate-family rules; topology entry for `leaven-acp` added.
+  detail_docs:
+    - path: docs/specs/public-seam-v1-lock-draft.archived/COMPREHENSIVE_DESIGN_PASS_NOTES.md
+      role: Archived design rationale; pyo3 rejection at line 29, host-language-interior at line 33, DSPy drop-in at line 735.
+    - path: docs/plans/2026-05-24-public-seam-v1-acp-transport-route.md
+      role: Original ACP transport planning note (predates the topology lock).
+    - path: docs/working-memory/leaven-py-and-acp-transport.md
+      role: Active research note; conversation synthesis + decisions log.
+    - path: docs/working-memory/leaven-py-research/
+      role: Five research files (EvoSkill glue, ACP SDK inventory, multi-language safety, prior art, Python surface sketches).
+
+designed_surface:
+  public_surface:
+    - name: leaven_acp_crate
+      user_interaction: >-
+        New Rust crate; in-house async stdio JSON-RPC transport implementing the locked Leaven ACP profile. Async rewrite of existing 1,600-LOC blocking prototype. No upstream agent-client-protocol dependency.
+    - name: leaven_binary_subcommands
+      user_interaction: >-
+        Single `leaven` binary (built by leaven-cli). `serve --stdio` hosts the engine for SDK consumers; `query lineage` / `runs list` / `artifact show` serve humans + agents-in-workspaces.
+    - name: leaven_types_python_package
+      user_interaction: >-
+        Pure code-generated typed records from `docs/specs/public-seam-v1/schemas/*.schema.json`. Used by `leaven` SDK + future TS SDK.
+    - name: leaven_python_package
+      user_interaction: >-
+        Full product surface: `@lv.evaluator`/`@lv.reflector`/`@lv.proposer`/`@lv.runner`/`@lv.scorer`/`@lv.judge` decorators; `cx.case`/`cx.workspace`/`cx.lm`/`cx.agent`/`cx.sandbox`/`cx.assessments`/`cx.proposals`/`cx.batch()` query/effect builders; `lv.environment(...)`, `lv.optimizers.gepa(...)`, `lv.cases.*`, `lv.optimize(...).run()`, `lv.runs.open(...)`. Wheel ships the leaven binary bundled.
+    - name: x_dspy_adapter_namespace
+      user_interaction: >-
+        `dspy.configure(lm=lv.x.dspy.LeavenDSPyLM(model=...))` — ~30-line drop-in over the leaven-lm neutral request/response types.
+  private_machinery_relevant_to_handoff:
+    - RunContext stays the only graph mutation authority; leaven-acp does not mutate RunGraph.
+    - leaven-public-seam validators own all wire-shape and semantic truth; leaven-acp is transport-only.
+    - Capability tokens, data-class propagation, receipts, replay are seam-side; leaven-acp transports them.
+    - Optimizer strategy state stays Rust-side (engine bindings); Python configures, doesn't author.
+    - Paper-close bring-up (manifest construction, source pinning, refusal cascades) stays Rust-side; SDK helps with typed records but doesn't relocate the bulk.
+
+intent_preservation:
+  verdict: preserved
+  reason: >-
+    The designed surface honors the original intent: ~200 lines of Python is the right target for live-run paper repros (the recurring shape), per EvoSkill agent's observation that "once paper-close gates are proven and a live run is approved, the relevant code path collapses dramatically — the live path is just evaluate(candidate, validation_split) → score." Capability/data-class/receipt/replay all preserved by the locked seam validators; multi-language wire is JSON Schema 2020-12 in the boring subset.
+  live_run_vs_bringup_distinction: >-
+    Live-run paper code IS ~200 lines and the SDK hits the target here. First-time-bring-up of a new paper (refusal cascade, source pinning, manifests) is currently a separate larger surface (~8,000+ Rust LOC in p5_skill_paper_reproductions). That bring-up code would shrink substantially with typed bring-up primitives in the SDK (refusal-cascade helpers, manifest builders, source-pinning utilities), but those primitives are V2 scope. V1 SDK targets the live-run shape; V2 absorbs bring-up.
+
+misleading_proxy_proofs:
+  - proxy: A pyo3 wrapper of leaven-run shipped as the `leaven` Python package.
+    why_insufficient: >-
+      Bypasses the wire-anchored design; rejected in archived COMPREHENSIVE_DESIGN_PASS_NOTES line 29 (manylinux wheel matrix, GIL+Tokio, language-locks Leaven). Multi-language safety would be lost.
+    forbidden_as_completion_evidence: true
+  - proxy: ACP conformance rows promoted to proven from in-process Rust tests labeled as ACP.
+    why_insufficient: >-
+      The matrix explicitly names this as fake_pass_rejected. Wire-validation evidence is not transport evidence; live process/session boundary is the gate.
+    forbidden_as_completion_evidence: true
+  - proxy: A working `@lv.evaluator` decorator but no `lv.optimize()` / `lv.environment()` / `lv.optimizers.gepa()`.
+    why_insufficient: >-
+      The eval-only framing the user explicitly rejected mid-conversation. Python SDK is the whole product surface, not a stage-authoring kit.
+    forbidden_as_completion_evidence: true
+  - proxy: leaven-types Python classes that don't validate against the same JSON Schemas the Rust engine uses.
+    why_insufficient: >-
+      Typed lipstick on schemaless drift; inverts the locked seam's main safety property and recreates MCP's schemaless-drift failure mode per prior-art research.
+    forbidden_as_completion_evidence: true
+  - proxy: Python SDK demoed against a mock engine only.
+    why_insufficient: >-
+      Doesn't prove the wire actually carries capability/receipts/data-classes across a real process boundary. The proof-of-life is a P5-shaped GEPA optimization with an agentic reflector running through Python end-to-end against a live LM provider.
+    forbidden_as_completion_evidence: true
+  - proxy: EvoSkill has a Python evaluator while the rest of the EvoSkill repro still requires 8,000+ LOC of Rust glue.
+    why_insufficient: >-
+      The original intent is full-repro authorability, not just evaluator authorability. The acceptance gate is the full live-run sketches in python-surface-sketches.md being runnable end-to-end, not just the evaluator slice.
+    forbidden_as_completion_evidence: true
+  - proxy: A small Python optimization with no agentic stage passes (the "toy" version).
+    why_insufficient: >-
+      A 20-line prompt-optimization sketch passing through Python proves the SDK runs but doesn't prove agentic-stage-over-ACP, which is the load-bearing complexity. Per the user's Q5 push: the acceptance gate is GEPA with agentic reflector, not a toy.
+    forbidden_as_completion_evidence: true
+  - proxy: Python SDK implementation begins before the concrete Python API is locked.
+    why_insufficient: >-
+      The API design slice (Phase 0 of the implementation plan) must lock function signatures, decorator semantics, builder chains, environment fields, and typed-record shapes BEFORE any Python-package code is written. Implementing against a sketch produces a Rust-mistakes-repeated-in-Python failure mode — which is the exact failure mode the SDK exists to prevent.
+    forbidden_as_completion_evidence: true
+
+spec_revisions_before_goal:
+  - update: >-
+      Annotate `docs/specs/public-seam-v1/conformance-matrix.yaml` rows ps1.acp.transport_profile, ps1.acp.extension_results, ps1.acp.lifecycle_backpressure with the new test additions from the ACP SDK code inventory (9 async live-process tests named in section 4 of `docs/working-memory/leaven-py-research/2026-05-24-acp-sdk-code-inventory.md`).
+    rationale: >-
+      The blocked rows currently have wire-validation evidence only; the matrix needs to know what async tests would promote them.
+  - update: >-
+      Reconcile the AGENTS.md hedge on `leaven-acp` ("may migrate to the official agentclientprotocol/rust-sdk after external dependency approval") with the Path B decision. Either soften the hedge to "may revisit after V1 ships" or keep as-is; both are honest, neither is implementation-blocking.
+    rationale: >-
+      The Path B decision is now load-bearing for the spec; the hedge should not imply Path A is still on the table for V1.
+
+acceptance:
+  - id: acp_transport_async_rewrite
+    claim: leaven-acp owns an async stdio JSON-RPC transport implementing the locked Leaven ACP profile, with no upstream agent-client-protocol dependency.
+    status: pending
+    proof_required:
+      kind: crate_implementation_and_tests
+      must_exercise:
+        - async dispatch with id correlation and oneshot completion
+        - cancellation propagation via tokio_util CancellationToken
+        - bounded progress queue honoring AcpSessionLifecycle backpressure policies
+        - session state machine with race-free drop ordering
+        - authenticate hook plumbing into PublicSeamPackage::authenticate_acp_session
+        - 9 new async live-process tests per the ACP SDK code inventory
+    evidence: []
+    closeout_check: No agent-client-protocol crate in Cargo.lock for V1.
+
+  - id: conformance_rows_unblocked
+    claim: The three blocked ACP conformance rows are promoted from blocked to proven via live-process evidence.
+    status: pending
+    proof_required:
+      kind: conformance_matrix_promotion
+      must_exercise:
+        - ps1.acp.transport_profile with positive and negative tests proving the engine-client/worker-agent lifecycle through real stdio JSON-RPC
+        - ps1.acp.extension_results with all V1 method-family envelopes carried over the live ACP route
+        - ps1.acp.lifecycle_backpressure with cancellation + bounded queue bound to live worker activity
+    evidence: []
+    closeout_check: No row promoted from in-process Rust tests alone.
+
+  - id: leaven_types_python_codegen
+    claim: leaven-types Python package is mechanically code-generated from docs/specs/public-seam-v1/schemas/*.schema.json and round-trips every locked-seam JSON Schema example.
+    status: pending
+    proof_required:
+      kind: package_and_round_trip_tests
+      must_exercise:
+        - typed records for plan_ir, capability, plan_result, stage_payloads, evaluation_job, evidence_envelope, acp_profile
+        - fingerprint validators preserving fp_*_sha256_* patterns
+        - round-trip tests against every example in docs/specs/public-seam-v1/examples/
+        - JS-safe maximum bound on integer fields that could exceed 2^53 (per multi-language research mitigation)
+    evidence: []
+    closeout_check: Hand-written Python classes for seam types are a regression.
+
+  - id: leaven_python_full_surface
+    claim: The leaven Python package exposes the full product surface (artifact / cases / optimizer config / environment / stages / composition / inspection), not just decorators.
+    status: pending
+    proof_required:
+      kind: surface_implementation_and_examples
+      must_exercise:
+        - decorators for all 6 stage roles
+        - cx.case / cx.workspace / cx.lm / cx.agent / cx.sandbox / cx.assessments / cx.proposals / cx.batch() query/effect builders
+        - lv.environment(...) composing workspace, lm, agent, sandbox, trust profile, budget, cache
+        - lv.optimizers.gepa(...) (and at least one other) returning typed configs
+        - lv.optimize(seed=..., train=..., val=..., test=..., optimizer=..., environment=..., runner=..., scorer=...).run() end-to-end
+        - lv.runs.open(path) inspection of completed runs
+    evidence: []
+    closeout_check: No surface from python-surface-sketches.md §2-§5 may be marked unsupported.
+
+  - id: end_to_end_proof_of_life
+    claim: A P5-shaped GEPA optimization with an agentic reflector runs through the Python SDK end-to-end against a live LM provider, producing a measurable Optimized result.
+    status: pending
+    proof_required:
+      kind: live_smoke_with_agentic_reflector
+      must_exercise:
+        - pip install leaven on macOS or Linux without Rust toolchain
+        - Python @lv.reflector function implementing an agentic reflector that materializes a workspace, runs an agent, parses typed output
+        - GEPA loop driving multiple iterations (parent selection, minibatch sampling, reflect, propose, evaluate, admit, accept)
+        - frontier admission, validation pareto state, capability/data-class/receipt all preserved end-to-end
+        - real LM provider calls (anthropic, openai, or local) through cx.lm.complete in the evaluator
+        - real agent calls (codex, claude-code, or compatible) through cx.agent.run in the reflector
+        - output is a real Optimized[SkillBank] (or smaller artifact) with measurable score improvement over the seed
+        - the full run queryable via lv.runs.open(...) with receipts, lineage, evidence intact
+    evidence: []
+    closeout_check: >-
+      Neither a mock-engine demo nor a small Python optimization without an agentic stage is sufficient. Tied to P5 milestone timeline; SDK V1 is not done until this gate passes.
+
+  - id: dspy_drop_in
+    claim: dspy.configure(lm=lv.x.dspy.LeavenDSPyLM(model=...)) works and runs an unmodified DSPy module inside a Leaven stage.
+    status: pending
+    proof_required:
+      kind: adapter_test
+      must_exercise:
+        - LeavenDSPyLM subclasses dspy.BaseLM and overrides forward(prompt, messages, **kwargs)
+        - OpenAI-chat-shaped response returned from leaven-lm neutral types
+        - dspy.Predict / dspy.ChainOfThought run unmodified through the adapter
+        - leaven-lm carries the full kwarg pass-through identified in prior-art research §6
+    evidence: []
+    closeout_check: Adapter must not require DSPy users to modify their existing code.
+
+  - id: multi_language_mitigations
+    claim: The seven mitigations from multi-language research are baked into the spec and codegen pipeline.
+    status: pending
+    proof_required:
+      kind: spec_and_test_updates
+      must_exercise:
+        - canonical-omit on None for Python serializer (no null literals on the wire)
+        - maximum 9007199254740991 on integer fields that could exceed JS safe-integer range
+        - both `@lv.evaluator(...)` decorator and `lv.register_evaluator(spec, func)` registration API
+        - x.* extension namespaces required to publish JSON Schemas alongside adapters
+        - snake_case decision documented in the schema README
+        - wire-law forbidding null literal in serialized requests in the ACP profile spec
+    evidence: []
+    closeout_check: A future TS SDK author should hit zero blockers traceable to Python-only assumptions.
+
+  - id: repo_standards_hold
+    claim: Implementation follows Leaven topology, type, error, test, and docstring doctrine.
+    status: pending
+    proof_required:
+      kind: repo_gate
+      must_exercise:
+        - cargo test -p leaven --test topology_contract
+        - new leaven-acp crate test suite
+        - just check (full repo gate)
+        - AGENTS.md updates for leaven-acp and any new crates touched
+    evidence: []
+    closeout_check: No compatibility shim, parallel old/new path, or hidden public test hole introduced.
+
+explicit_non_goals:
+  - pyo3 in-process transport for the Python SDK.
+  - Python-authored optimizers (configure existing Rust optimizers; new optimizers stay Rust-side).
+  - MCP-over-ACP in V1.
+  - watch.v1 runtime behavior (deferred from V1 per spec).
+  - Bundling benchmark catalogs (OfficeQA, SealQA, BrowseComp) inside the leaven Python package.
+  - Eliminating paper-close bring-up code (stays Rust; SDK helps with typed records but doesn't relocate the bulk).
+  - Windows support in V1.
+  - A real EvoSkill paper-close repro in this slice (that's the application; this slice is the SDK + transport an EvoSkill repro builds on).
+  - TS, Go, or shell SDKs in this slice (the wire is multi-language-safe; the SDKs follow in later slices).
+  - Adopting agent-client-protocol crate as a dependency in V1 (Path A rejected; Path B is the V1 call).
+
+decision:
+  status: set_goal
+  reason: >-
+    The specs are sufficient to implement and the alignment was confirmed by the user ("remarkably well-aligned, dude. We're good."). The proof denominator covers the full intent — wire transport, Python SDK surface, end-to-end P5-shaped GEPA+agentic-reflector live-LM proof-of-life, DSPy drop-in, multi-language safety, and repo standards. The misleading proxy proofs are named explicitly so closeout cannot hide a partial implementation behind a toy demo or a Rust-mistakes-repeated implementation. Path B (own leaven-acp) is the locked architectural choice; pyo3 and the third-party SDK are explicit non-goals.
+  governing_spec: >-
+    docs/specs/leaven_python.md is the governing product spec. Implementation orders its own work against the spec; this artifact records the acceptance gates the spec must be proven against. The P5-shaped GEPA+agentic-reflector proof-of-life is the unfakeable closeout gate per the spec's "The acceptance gate" section.
+  tied_to_p5_timeline: >-
+    Because the end_to_end_proof_of_life acceptance row requires a P5-shaped GEPA+agentic-reflector run, SDK V1 ships when both this goal's implementation work AND the P5 milestone independent work converge. The two tracks coordinate but are not strictly sequential.
