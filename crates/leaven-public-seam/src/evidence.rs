@@ -45,6 +45,14 @@ impl EvidenceEnvelopeDocument {
             &source_receipts.effect,
             &source_receipts.write,
         )?;
+        if !data_classes.is_empty() {
+            validate_declared_data_classes_cover_projection(
+                &data_classes,
+                &projection.public,
+                projection.private.as_deref(),
+                &trace_facts.data_classes,
+            )?;
+        }
         if target_derived {
             validate_target_derived_classes(
                 &data_classes,
@@ -241,6 +249,27 @@ fn parse_source_receipts(
         effect,
         write,
     })
+}
+
+fn validate_declared_data_classes_cover_projection(
+    data_classes: &[String],
+    public_data_classes: &[String],
+    private_data_classes: Option<&[String]>,
+    trace_data_classes: &[String],
+) -> Result<(), PublicSeamError> {
+    let top_level = data_classes.iter().collect::<BTreeSet<_>>();
+    for data_class in public_data_classes
+        .iter()
+        .chain(private_data_classes.into_iter().flatten())
+        .chain(trace_data_classes)
+    {
+        if !top_level.contains(data_class) {
+            return Err(invalid_evidence(format!(
+                "evidence data_classes must cover projection data class `{data_class}`"
+            )));
+        }
+    }
+    Ok(())
 }
 
 fn validate_target_derived_classes(

@@ -78,6 +78,77 @@ fn evidence_envelope_accepts_schema_valid_trace_refs_without_receipts() {
 }
 
 #[test]
+fn evidence_envelope_covers_non_target_projection_classes_when_declared() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let envelope = package
+        .validate_evidence_envelope_document(&non_target_envelope())
+        .unwrap();
+
+    assert!(!envelope.is_target_derived());
+    assert_eq!(
+        envelope.data_classes(),
+        &[
+            "candidate.output".to_owned(),
+            "scorer.private".to_owned(),
+            "transcript.raw".to_owned()
+        ]
+    );
+    assert_eq!(
+        envelope.public_data_classes(),
+        &["candidate.output".to_owned()]
+    );
+    assert_eq!(
+        envelope.private_data_classes(),
+        Some(&["scorer.private".to_owned()][..])
+    );
+    assert_eq!(
+        envelope.trace_data_classes(),
+        &["transcript.raw".to_owned()]
+    );
+
+    let mut schema_valid_without_top_level_projection = non_target_envelope();
+    schema_valid_without_top_level_projection
+        .as_object_mut()
+        .unwrap()
+        .remove("data_classes");
+    package
+        .validate_evidence_envelope_document(&schema_valid_without_top_level_projection)
+        .unwrap();
+}
+
+#[test]
+fn evidence_envelope_rejects_declared_non_target_data_class_gaps() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut missing_public = non_target_envelope();
+    missing_public["data_classes"] = json!(["scorer.private", "transcript.raw"]);
+    assert!(matches!(
+        package
+            .validate_evidence_envelope_document(&missing_public)
+            .unwrap_err(),
+        PublicSeamError::InvalidEvidence { .. }
+    ));
+
+    let mut missing_private = non_target_envelope();
+    missing_private["data_classes"] = json!(["candidate.output", "transcript.raw"]);
+    assert!(matches!(
+        package
+            .validate_evidence_envelope_document(&missing_private)
+            .unwrap_err(),
+        PublicSeamError::InvalidEvidence { .. }
+    ));
+
+    let mut missing_trace = non_target_envelope();
+    missing_trace["data_classes"] = json!(["candidate.output", "scorer.private"]);
+    assert!(matches!(
+        package
+            .validate_evidence_envelope_document(&missing_trace)
+            .unwrap_err(),
+        PublicSeamError::InvalidEvidence { .. }
+    ));
+}
+
+#[test]
 fn evidence_envelope_rejects_source_receipt_family_mismatches() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
 
@@ -366,6 +437,47 @@ fn target_derived_envelope() -> Value {
             "read": ["qrec_target"],
             "effect": ["lmrec_score"],
             "write": ["wrec_assessment"]
+        }
+    })
+}
+
+fn non_target_envelope() -> Value {
+    json!({
+        "schema_version": "leaven.evidence_envelope.v1",
+        "target_derived": false,
+        "data_classes": ["candidate.output", "scorer.private", "transcript.raw"],
+        "public": {
+            "feedback": "candidate output is well formed",
+            "data_classes": ["candidate.output"],
+            "trace_refs": [
+                {
+                    "kind": "judge_trace",
+                    "id": "trace_non_target_score",
+                    "visibility": "redacted_transcript",
+                    "data_classes": ["transcript.raw"],
+                    "receipt": "lmrec_score"
+                }
+            ]
+        },
+        "private": {
+            "visibility": "scorer_private",
+            "payload": {
+                "rubric": "private non-target scoring notes"
+            },
+            "data_classes": ["scorer.private"]
+        },
+        "redaction_policy": {
+            "optimizer": "score_and_feedback",
+            "reflector": "score_and_feedback",
+            "operator": "full"
+        },
+        "producer": {
+            "stage_call_id": "sc_evidence_non_target"
+        },
+        "source_receipts": {
+            "read": [],
+            "effect": ["lmrec_score"],
+            "write": []
         }
     })
 }

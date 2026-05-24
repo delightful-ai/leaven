@@ -731,6 +731,7 @@ rows:
       - crates/leaven-public-seam/tests/evidence_envelope.rs::evidence_envelope_preserves_visibility_data_classes_and_receipts
       - crates/leaven-public-seam/tests/evidence_envelope.rs::evidence_envelope_accepts_object_receipt_refs_and_binds_trace_receipts_to_sources
       - crates/leaven-public-seam/tests/evidence_envelope.rs::evidence_envelope_accepts_schema_valid_trace_refs_without_receipts
+      - crates/leaven-public-seam/tests/evidence_envelope.rs::evidence_envelope_covers_non_target_projection_classes_when_declared
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_preserves_nested_evidence_visibility_data_classes_and_receipts
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_accepts_object_form_evidence_receipt_refs
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_accepts_unreceipted_evidence_trace_refs
@@ -739,6 +740,7 @@ rows:
       - crates/leaven-public-seam/tests/evidence_envelope.rs::evidence_envelope_rejects_unreceipted_target_derived_evidence
       - crates/leaven-public-seam/tests/evidence_envelope.rs::evidence_envelope_rejects_source_receipt_family_mismatches
       - crates/leaven-public-seam/tests/evidence_envelope.rs::evidence_envelope_rejects_hidden_target_derivation_flag
+      - crates/leaven-public-seam/tests/evidence_envelope.rs::evidence_envelope_rejects_declared_non_target_data_class_gaps
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_evidence_source_receipts_that_are_missing_or_wrong_kind
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_nested_score_output_data_class_gaps
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_nested_score_blob_ref_data_class_gaps
@@ -752,6 +754,7 @@ rows:
       - crates/leaven-public-seam/src/evidence.rs::carries_case_target_class
       - crates/leaven-public-seam/src/evidence.rs::collect_trace_facts
       - crates/leaven-public-seam/src/evidence.rs::validate_trace_receipts_declared
+      - crates/leaven-public-seam/src/evidence.rs::validate_declared_data_classes_cover_projection
       - crates/leaven-public-seam/src/evidence.rs::require_receipt_family
       - crates/leaven-public-seam/src/evidence.rs::validate_private_payload_ref_classes
       - crates/leaven-public-seam/src/evidence.rs::collect_blob_ref_data_classes
