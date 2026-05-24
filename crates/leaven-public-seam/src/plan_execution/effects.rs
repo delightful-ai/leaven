@@ -616,6 +616,7 @@ fn lower_lm_messages(messages: &[Value]) -> Result<Messages, PublicSeamError> {
             .get("content")
             .and_then(Value::as_array)
             .ok_or_else(|| invalid_lm_call("lm message must carry content parts"))?;
+        let message_tool_call_id = object.get("tool_call_id").and_then(Value::as_str);
         let mut message = match (role, content.as_slice()) {
             (_, [part]) if part.get("kind").and_then(Value::as_str) == Some("text") => {
                 Message::new(
@@ -628,12 +629,21 @@ fn lower_lm_messages(messages: &[Value]) -> Result<Messages, PublicSeamError> {
             (Role::Tool, [part])
                 if part.get("kind").and_then(Value::as_str) == Some("tool_result") =>
             {
+                let part_tool_call_id = part
+                    .get("tool_call_id")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| {
+                        invalid_lm_call("tool_result lm content part must carry tool_call_id")
+                    })?;
+                if let Some(message_tool_call_id) = message_tool_call_id
+                    && message_tool_call_id != part_tool_call_id
+                {
+                    return Err(invalid_lm_call(
+                        "tool message tool_call_id must match tool_result part tool_call_id",
+                    ));
+                }
                 Message::tool_result(
-                    part.get("tool_call_id")
-                        .and_then(Value::as_str)
-                        .ok_or_else(|| {
-                            invalid_lm_call("tool_result lm content part must carry tool_call_id")
-                        })?,
+                    part_tool_call_id,
                     part.get("content").and_then(Value::as_str).ok_or_else(|| {
                         invalid_lm_call("tool_result lm content part must carry content")
                     })?,
@@ -645,7 +655,7 @@ fn lower_lm_messages(messages: &[Value]) -> Result<Messages, PublicSeamError> {
                 ));
             }
         };
-        if let Some(tool_call_id) = object.get("tool_call_id").and_then(Value::as_str) {
+        if let Some(tool_call_id) = message_tool_call_id {
             message = message.with_tool_call_id(tool_call_id);
         }
         if let Some(name) = object.get("name").and_then(Value::as_str) {

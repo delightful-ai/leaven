@@ -1424,6 +1424,7 @@ rows:
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_permissions_deny_ungranted_models_workspace_ops_and_commands
       - crates/leaven-public-seam/tests/capability_document.rs::grant_enforcement_rejects_ungranted_models_workspace_ops_and_commands
       - crates/leaven-public-seam/tests/lm_contract.rs::lm_complete_trait_mapping_preserves_forbidden_result_tool_metadata_for_validation
+      - crates/leaven-public-seam/tests/lm_contract.rs::lm_complete_rejects_tool_result_message_id_drift_before_provider_call
     partial_contract_implementation_evidence:
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanLmCompleteRequest::to_lm_request
       - crates/leaven-public-seam/src/plan_execution/effects.rs::lower_lm_messages
