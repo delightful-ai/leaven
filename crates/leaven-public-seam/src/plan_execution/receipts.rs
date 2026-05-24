@@ -3,7 +3,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde_json::{Map, Value, json};
 
 use super::{
-    PlanExecutionContext, case_query_projection, dependency_values, effects::workspace_ref_id,
+    PlanExecutionContext, case_query_projection, dependency_values,
+    effects::{LiveWorkspaceHandle, require_live_workspace, workspace_ref_id},
     graph_read_scope, graph_read_scope_value, invalid_plan, nested_kind, object, prefixed_jcs_hash,
     required_string, workspace_query_expected_value_kind, workspace_query_projection,
     workspace_query_request_from_values,
@@ -47,7 +48,7 @@ pub fn validate_plan_result_receipts(
         _ => {}
     }
     let receipts_by_op = receipts_by_op_var(receipts)?;
-    let mut bindings = BTreeMap::new();
+    let mut state = ReceiptValidationState::default();
     let mut seen_receipt_ops = BTreeSet::new();
     for op in ops {
         let name = required_string(object(op, "plan op")?.get("name"), "op.name")?;
@@ -60,7 +61,7 @@ pub fn validate_plan_result_receipts(
             context,
             values,
             &receipts_by_op,
-            &mut bindings,
+            &mut state,
         )?;
     }
     for op_var in receipts_by_op.keys() {
@@ -73,13 +74,19 @@ pub fn validate_plan_result_receipts(
     Ok(())
 }
 
+#[derive(Default)]
+struct ReceiptValidationState {
+    bindings: BTreeMap<String, Value>,
+    live_workspaces: BTreeMap<String, LiveWorkspaceHandle>,
+}
+
 fn validate_op_receipt(
     op: &Value,
     plan_document: &crate::PlanDocument,
     context: &PlanExecutionContext,
     values: &Map<String, Value>,
     receipts_by_op: &BTreeMap<String, &Map<String, Value>>,
-    bindings: &mut BTreeMap<String, Value>,
+    state: &mut ReceiptValidationState,
 ) -> Result<(), PublicSeamError> {
     let op_object = object(op, "plan op")?;
     let name = required_string(op_object.get("name"), "op.name")?;
@@ -91,10 +98,10 @@ fn validate_op_receipt(
             context,
             values,
             receipts_by_op,
-            bindings,
+            state,
         ),
-        "call" => validate_call_receipt(op_object, name, values, receipts_by_op, bindings),
-        "write" => validate_write_receipt(op_object, name, context, receipts_by_op, bindings),
+        "call" => validate_call_receipt(op_object, name, values, receipts_by_op, state),
+        "write" => validate_write_receipt(op_object, name, context, receipts_by_op, state),
         other => Err(invalid_plan(format!(
             "unknown plan operation kind `{other}`"
         ))),
@@ -108,7 +115,7 @@ fn validate_let_receipt(
     context: &PlanExecutionContext,
     values: &Map<String, Value>,
     receipts_by_op: &BTreeMap<String, &Map<String, Value>>,
-    bindings: &mut BTreeMap<String, Value>,
+    state: &mut ReceiptValidationState,
 ) -> Result<(), PublicSeamError> {
     let expr = op_object
         .get("expr")
@@ -119,7 +126,7 @@ fn validate_let_receipt(
                 .get("value")
                 .cloned()
                 .ok_or_else(|| invalid_plan("literal expr must carry value"))?;
-            bindings.insert(name.to_owned(), value);
+            state.bindings.insert(name.to_owned(), value);
             Ok(())
         }
         "graph_query" => validate_graph_query_receipt(
@@ -129,10 +136,10 @@ fn validate_let_receipt(
             context,
             values,
             receipts_by_op,
-            bindings,
+            state,
         ),
         "case_query" => {
-            validate_case_query_receipt(expr, name, context, values, receipts_by_op, bindings)
+            validate_case_query_receipt(expr, name, context, values, receipts_by_op, state)
         }
         "workspace_query" => validate_workspace_query_receipt(
             op_object,
@@ -141,7 +148,7 @@ fn validate_let_receipt(
             context,
             values,
             receipts_by_op,
-            bindings,
+            state,
         ),
         other => Err(invalid_plan(format!(
             "representative Plan IR receipt verifier does not inspect `{other}` let expressions"
@@ -156,7 +163,7 @@ fn validate_graph_query_receipt(
     context: &PlanExecutionContext,
     values: &Map<String, Value>,
     receipts_by_op: &BTreeMap<String, &Map<String, Value>>,
-    bindings: &mut BTreeMap<String, Value>,
+    state: &mut ReceiptValidationState,
 ) -> Result<(), PublicSeamError> {
     let Some(receipt) = receipts_by_op.get(name) else {
         return Err(invalid_plan(format!(
@@ -197,7 +204,7 @@ fn validate_graph_query_receipt(
         "projection_fingerprint",
         &prefixed_jcs_hash("fp_projection_sha256_", projection)?,
     )?;
-    bindings.insert(name.to_owned(), value.clone());
+    state.bindings.insert(name.to_owned(), value.clone());
     Ok(())
 }
 
@@ -207,7 +214,7 @@ fn validate_case_query_receipt(
     context: &PlanExecutionContext,
     values: &Map<String, Value>,
     receipts_by_op: &BTreeMap<String, &Map<String, Value>>,
-    bindings: &mut BTreeMap<String, Value>,
+    state: &mut ReceiptValidationState,
 ) -> Result<(), PublicSeamError> {
     let Some(receipt) = receipts_by_op.get(name) else {
         return Err(invalid_plan(format!(
@@ -267,7 +274,7 @@ fn validate_case_query_receipt(
             }),
         )?,
     )?;
-    bindings.insert(name.to_owned(), value.clone());
+    state.bindings.insert(name.to_owned(), value.clone());
     Ok(())
 }
 
@@ -278,7 +285,7 @@ fn validate_workspace_query_receipt(
     context: &PlanExecutionContext,
     values: &Map<String, Value>,
     receipts_by_op: &BTreeMap<String, &Map<String, Value>>,
-    bindings: &mut BTreeMap<String, Value>,
+    state: &mut ReceiptValidationState,
 ) -> Result<(), PublicSeamError> {
     let Some(receipt) = receipts_by_op.get(name) else {
         return Err(invalid_plan(format!(
@@ -291,8 +298,14 @@ fn validate_workspace_query_receipt(
             "workspace_query receipt for `{name}` must have a matching result value"
         ))
     })?;
-    let deps = dependency_values(op_object, bindings)?;
+    let deps = dependency_values(op_object, &state.bindings)?;
     let request = workspace_query_request_from_values(name, expr, &deps)?;
+    require_live_workspace(
+        request.workspace(),
+        &deps,
+        &state.live_workspaces,
+        "workspace_query",
+    )?;
     let expected_kind = workspace_query_expected_value_kind(request)?;
     let value_kind = value
         .get("kind")
@@ -370,7 +383,7 @@ fn validate_workspace_query_receipt(
             }),
         )?,
     )?;
-    bindings.insert(name.to_owned(), value.clone());
+    state.bindings.insert(name.to_owned(), value.clone());
     Ok(())
 }
 
@@ -379,7 +392,7 @@ fn validate_call_receipt(
     name: &str,
     values: &Map<String, Value>,
     receipts_by_op: &BTreeMap<String, &Map<String, Value>>,
-    bindings: &mut BTreeMap<String, Value>,
+    state: &mut ReceiptValidationState,
 ) -> Result<(), PublicSeamError> {
     let Some(receipt) = receipts_by_op.get(name) else {
         return Err(invalid_plan(format!(
@@ -392,7 +405,8 @@ fn validate_call_receipt(
     let call_kind = nested_kind(call, "call")?;
     require_receipt_field(receipt, "kind", "call")?;
     require_receipt_field(receipt, "call_kind", call_kind)?;
-    let deps = dependency_values(op_object, bindings)?;
+    let deps = dependency_values(op_object, &state.bindings)?;
+    validate_call_workspace_provenance(call_kind, call, &deps, &state.live_workspaces)?;
     require_receipt_field(
         receipt,
         "request_hash",
@@ -414,7 +428,8 @@ fn validate_call_receipt(
                     "succeeded call receipt for `{name}` must have a matching result value"
                 ))
             })?;
-            bindings.insert(name.to_owned(), value.clone());
+            update_call_workspace_provenance(name, call_kind, call, value, &deps, state)?;
+            state.bindings.insert(name.to_owned(), value.clone());
         }
         "failed" => {
             require_receipt_field(
@@ -437,12 +452,110 @@ fn validate_call_receipt(
     Ok(())
 }
 
+fn validate_call_workspace_provenance(
+    call_kind: &str,
+    call: &Value,
+    deps: &BTreeMap<String, Value>,
+    live_workspaces: &BTreeMap<String, LiveWorkspaceHandle>,
+) -> Result<(), PublicSeamError> {
+    match call_kind {
+        "agent_run" => {
+            let workspace =
+                workspace_ref_id(call.get("workspace"), "agent_run must carry workspace")?;
+            require_live_workspace(workspace, deps, live_workspaces, "agent_run")?;
+        }
+        "sandbox_exec" => {
+            let workspace =
+                workspace_ref_id(call.get("workspace"), "sandbox_exec must carry workspace")?;
+            require_live_workspace(workspace, deps, live_workspaces, "sandbox_exec")?;
+        }
+        "workspace_release" => {
+            let workspace = workspace_ref_id(
+                call.get("workspace"),
+                "workspace_release must carry workspace",
+            )?;
+            require_live_workspace(workspace, deps, live_workspaces, "workspace_release")?;
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+fn update_call_workspace_provenance(
+    name: &str,
+    call_kind: &str,
+    call: &Value,
+    value: &Value,
+    deps: &BTreeMap<String, Value>,
+    state: &mut ReceiptValidationState,
+) -> Result<(), PublicSeamError> {
+    match call_kind {
+        "workspace_materialize" => {
+            if value.get("kind").and_then(Value::as_str) == Some("workspace_handle") {
+                let workspace =
+                    workspace_ref_id(value.get("workspace"), "workspace_materialize result")?;
+                let lifetime = required_string(value.get("lifetime"), "workspace lifetime")?;
+                if value
+                    .get("released")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false)
+                {
+                    return Err(invalid_plan(
+                        "workspace_materialize result must bind an unreleased handle",
+                    ));
+                }
+                state.live_workspaces.insert(
+                    name.to_owned(),
+                    LiveWorkspaceHandle::live(workspace, lifetime),
+                );
+            }
+        }
+        "workspace_release" => {
+            let workspace = workspace_ref_id(
+                call.get("workspace"),
+                "workspace_release must carry workspace",
+            )?;
+            let live = require_live_workspace(
+                workspace,
+                deps,
+                &state.live_workspaces,
+                "workspace_release",
+            )?;
+            let lifetime = live.lifetime().to_owned();
+            let result_workspace =
+                workspace_ref_id(value.get("workspace"), "workspace_release result")?;
+            if result_workspace != workspace {
+                return Err(invalid_plan(format!(
+                    "workspace_release result workspace `{result_workspace}` does not match requested workspace `{workspace}`"
+                )));
+            }
+            let result_lifetime = required_string(value.get("lifetime"), "workspace lifetime")?;
+            if result_lifetime != lifetime {
+                return Err(invalid_plan(format!(
+                    "workspace_release result lifetime `{result_lifetime}` does not match live workspace lifetime `{lifetime}`"
+                )));
+            }
+            for handle in state.live_workspaces.values_mut() {
+                if handle.workspace() == workspace {
+                    handle.release();
+                }
+            }
+            state.live_workspaces.insert(
+                name.to_owned(),
+                LiveWorkspaceHandle::released(workspace, lifetime),
+            );
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
 fn validate_write_receipt(
     op_object: &Map<String, Value>,
     name: &str,
     context: &PlanExecutionContext,
     receipts_by_op: &BTreeMap<String, &Map<String, Value>>,
-    bindings: &mut BTreeMap<String, Value>,
+    state: &mut ReceiptValidationState,
 ) -> Result<(), PublicSeamError> {
     let Some(receipt) = receipts_by_op.get(name) else {
         return Err(invalid_plan(format!(
@@ -456,7 +569,7 @@ fn validate_write_receipt(
     require_receipt_field(receipt, "kind", "write")?;
     require_receipt_field(receipt, "write_kind", write_kind)?;
     require_receipt_field(receipt, "base_revision", &context.base_revision)?;
-    let deps = dependency_values(op_object, bindings)?;
+    let deps = dependency_values(op_object, &state.bindings)?;
     require_receipt_field(
         receipt,
         "request_hash",
@@ -486,7 +599,7 @@ fn validate_write_receipt(
                 }),
             )?,
         )?;
-        bindings.insert(
+        state.bindings.insert(
             name.to_owned(),
             json!({
                 "kind": "emit_run_event",

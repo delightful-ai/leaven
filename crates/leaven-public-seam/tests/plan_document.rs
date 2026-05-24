@@ -235,6 +235,80 @@ fn plan_execution_result_rejects_workspace_query_value_forgery_with_valid_hashes
 }
 
 #[test]
+fn plan_execution_result_rejects_literal_workspace_handle_provenance_forgery() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let context = plan_execution_context();
+    let plan = forged_workspace_handle_query_plan();
+    let value = json!({
+        "kind": "workspace_file",
+        "path": "README.md",
+        "content": "forged file",
+        "receipt": "qrec_file",
+        "graph_revision": "rev_planexec_base",
+        "data_classes": ["candidate.artifact", "public"],
+        "replayability": "boundary_managed"
+    });
+    let scope = json!({
+        "kind": "workspace_query",
+        "workspace": "ws_planexec_materialized",
+        "base_revision": "rev_planexec_base"
+    });
+    let result = json!({
+        "schema_version": "leaven.plan_result.v1",
+        "plan_id": "planforgedquery001",
+        "capability_fingerprint": "fp_cap_sha256_planexec",
+        "policy_fingerprint": "fp_policy_sha256_planexec",
+        "base_revision": "rev_planexec_base",
+        "final_revision": "rev_planexec_base",
+        "replayability_summary": "boundary_managed",
+        "values": {
+            "file": value
+        },
+        "receipts": [
+            {
+                "kind": "query",
+                "receipt": "qrec_file",
+                "op_var": "file",
+                "started_at": "2026-01-01T00:00:00Z",
+                "completed_at": "2026-01-01T00:00:01Z",
+                "op_hash": test_prefixed_jcs_hash(
+                    "fp_query_sha256_",
+                    &json!({
+                        "schema_version": "leaven.plan_query_op.v1",
+                        "name": "file",
+                        "expr": plan["ops"][1]["expr"],
+                        "scope": scope
+                    }),
+                ),
+                "read_scope_fingerprint": test_prefixed_jcs_hash("fp_scope_sha256_", &scope),
+                "projection_fingerprint": test_prefixed_jcs_hash(
+                    "fp_projection_sha256_",
+                    &json!({
+                        "workspace": "ws_planexec_materialized",
+                        "op": plan["ops"][1]["expr"]["op"]
+                    }),
+                ),
+                "graph_revision": "rev_planexec_base",
+                "result_hash": test_prefixed_jcs_hash(
+                    "fp_result_sha256_",
+                    &json!({
+                        "schema_version": "leaven.plan_query_result.v1",
+                        "name": "file",
+                        "value": value
+                    }),
+                ),
+                "status": "succeeded"
+            }
+        ],
+        "redactions": [],
+        "charges": [],
+        "errors": []
+    });
+
+    assert_plan_execution_result_rejected(&package, &plan, &context, &result);
+}
+
+#[test]
 fn plan_execution_result_rejects_missing_operation_receipts() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let context = plan_execution_context();

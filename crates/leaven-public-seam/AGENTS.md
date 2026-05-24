@@ -153,8 +153,10 @@ requires capability-authorized evaluator request scope before a `case_query.load
 host read can run. The
 `PublicSeamPackage::validate_plan_execution_result` route additionally proves
 representative query/call/write receipt hashes can be checked against the Plan
-IR and execution-context preimages instead of accepted as decorative ids. They
-also prove the
+IR and execution-context preimages instead of accepted as decorative ids, and
+that representative workspace-query receipt validation rejects literal forged
+workspace handles rather than treating hash-correct values as materialized
+provenance. They also prove the
 representative harness distinguishes `latest_at_start`, `at_revision`, and
 `since_revision` graph-read scopes plus `execute`, `dry_run`, `require_cached`,
 and `replay` mode side-effect surfaces: dry-run validates without host effects,
