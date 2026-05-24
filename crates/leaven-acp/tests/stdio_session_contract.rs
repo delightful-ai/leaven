@@ -44,6 +44,58 @@ printf '%s\n' "$LEAVEN_TEST_RESPONSE" | sed "s/__CAPABILITY_FINGERPRINT__/$LEAVE
 }
 
 #[test]
+fn stdio_session_launch_respects_worker_current_dir() {
+    let package = package();
+    let profile = profile(&package, 32, "pause_worker");
+    let script = worker_script(
+        r#"
+read request
+printf '%s\n' "$(pwd)" > "$LEAVEN_TEST_PWD_LOG"
+printf '%s\n' "$LEAVEN_TEST_RESPONSE" | sed "s/__CAPABILITY_FINGERPRINT__/$LEAVEN_CAPABILITY_FINGERPRINT/g"
+"#,
+    );
+    let pwd_log = script.path().join("pwd.log");
+    let script_path = script.path().join("worker.sh");
+    let current_dir = script.path().join("worker-cwd");
+    fs::create_dir(&current_dir).unwrap();
+    let command = AcpProcessCommand::new("/bin/sh")
+        .arg(script_path.to_str().unwrap())
+        .current_dir(&current_dir)
+        .env("LEAVEN_TEST_PWD_LOG", pwd_log.to_str().unwrap())
+        .env(
+            "LEAVEN_TEST_RESPONSE",
+            response_for(
+                "leaven/lm.complete",
+                "leaven-acp-0",
+                extension_result(
+                    "leaven/lm.complete",
+                    lm_response_primary(),
+                    call_receipt("lm_complete", "lmrec_acp"),
+                    &["completion.raw"],
+                ),
+            ),
+        );
+    let mut session = AcpStdioProcessSession::spawn(
+        package,
+        profile,
+        command,
+        "secret-token",
+        "stdio://worker/session",
+        "fp_cap_sha256_acp",
+    )
+    .unwrap();
+
+    session
+        .call_extension("leaven/lm.complete", &acp_plan_params())
+        .unwrap();
+    assert_eq!(
+        fs::canonicalize(fs::read_to_string(&pwd_log).unwrap().trim()).unwrap(),
+        fs::canonicalize(&current_dir).unwrap()
+    );
+    std::mem::forget(script);
+}
+
+#[test]
 fn stdio_session_rejects_private_mcp_or_bare_process_protocols() {
     let package = package();
     let profile = profile(&package, 32, "pause_worker");
@@ -112,6 +164,52 @@ printf '%s\n' "$LEAVEN_TEST_RESPONSE" | sed "s/__CAPABILITY_FINGERPRINT__/$LEAVE
         assert_eq!(response.method(), case.method);
         assert_eq!(response.primary_kind(), case.primary_kind);
     }
+}
+
+#[test]
+fn stdio_session_rejects_malformed_session_update_notifications() {
+    let package = package();
+    let profile = profile(&package, 32, "pause_worker");
+    let mut non_object = spawn_worker(
+        &package,
+        &profile,
+        worker_script("printf '%s\n' '[]'\n"),
+        "{}".to_owned(),
+    );
+    assert!(matches!(
+        non_object.read_next_session_update(),
+        Err(AcpTransportError::Protocol { .. })
+    ));
+
+    let mut response_shaped_update = spawn_worker(
+        &package,
+        &profile,
+        worker_script(
+            r#"
+printf '%s\n' '{"jsonrpc":"2.0","id":"progress-1","method":"session/update","params":{"message":"bad","priority":"critical"}}'
+"#,
+        ),
+        "{}".to_owned(),
+    );
+    assert!(matches!(
+        response_shaped_update.read_next_session_update(),
+        Err(AcpTransportError::Protocol { .. })
+    ));
+
+    let mut unknown_priority = spawn_worker(
+        &package,
+        &profile,
+        worker_script(
+            r#"
+printf '%s\n' '{"jsonrpc":"2.0","method":"session/update","params":{"message":"bad","priority":"urgent"}}'
+"#,
+        ),
+        "{}".to_owned(),
+    );
+    assert!(matches!(
+        unknown_priority.read_next_session_update(),
+        Err(AcpTransportError::Protocol { .. })
+    ));
 }
 
 #[test]
