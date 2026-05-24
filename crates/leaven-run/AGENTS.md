@@ -49,6 +49,13 @@ listwise output-scoring proof. They are not in `leaven_run::prelude`, not wired
 through `optimize(seed)`, and not an ordinary builder default route until the
 builder lowering and public examples deliberately adopt them.
 
+Crate-root export `artifact_identity_output` is an advanced public
+run/evaluator contract for `Score.output` artifact binding. It projects an
+artifact's own `Artifact::identity()` into a candidate-artifact reportable
+output so artifact-assessing scorers no longer rely on arbitrary
+candidate-artifact labels. It is not a renderer, surface materializer, ACP
+adapter, or ordinary prelude import.
+
 Crate-root exports for `PublicEvaluationJobContext` and
 `PublicEvaluationJobProjectionError` are advanced public seam-lowering
 contracts. Crate-root exports for `PublicFailedCallKind`,
@@ -128,14 +135,18 @@ persistence beyond the projected public-seam document.
   `RunOutput::typed(...).with_reportable_text(...)` when generated candidate
   output is assessable. If the score assesses the artifact rather than generated
   output, typed runners must use
-  `RunOutput::typed(...).with_reportable_artifact_output(...)` with a record that
-  carries `candidate.artifact`; generic
+  `RunOutput::typed(...).with_reportable_artifact_identity(&artifact)` and
+  `ScoreContext::report_artifact_identity_output()` /
+  `JudgeScoreContext::report_artifact_identity_outputs()` when the score
+  intentionally assesses the artifact itself. `artifact_identity_output(...)`
+  is a crate-root advanced public evaluator contract for this binding; it is
+  deliberately not in `leaven_run::prelude`. Generic
   `RunOutput::typed(...).with_reportable_output(...)` records are not sufficient
-  for assessed candidate/artifact output. This artifact-output API is still an
-  explicit runner declaration, not independent artifact provenance proof.
-  Explicit custom `candidate.output` records are rejected because a data-class
-  label alone does not prove they were derived from the typed runner output. The
-  runner's declaration is the metadata authority; `ScoreContext` freezes that
+  for assessed candidate/artifact output. Explicit custom `candidate.output`
+  or `candidate.artifact` records are rejected because a data-class label alone
+  does not prove they were derived from the typed runner output or actual
+  artifact identity. The runner's candidate-output declaration and the
+  artifact's identity are the metadata authorities; `ScoreContext` freezes that
   declaration before user scoring code can mutate its public fields. Every
   successful score must then
   call `Score::with_output(...)` with a `ReportableOutput` minted by the current

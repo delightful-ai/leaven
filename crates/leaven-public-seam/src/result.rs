@@ -288,6 +288,13 @@ fn validate_assessment_summary_output(
             "assessment_summary Score.output must carry candidate.output or candidate.artifact data class",
         ));
     }
+    if output.get("value").is_some_and(is_non_string_value)
+        && reportable_output_summary(output).is_none()
+    {
+        return Err(invalid_result(
+            "assessment_summary structured/json Score.output value must carry a non-empty summary for evidence projection",
+        ));
+    }
     if output
         .get("summary")
         .and_then(Value::as_str)
@@ -304,6 +311,10 @@ fn validate_assessment_summary_output(
     Err(invalid_result(
         "assessment_summary Score.output must carry reportable output content",
     ))
+}
+
+fn is_non_string_value(value: &Value) -> bool {
+    !matches!(value, Value::String(_))
 }
 
 fn has_reportable_content(value: &Value) -> bool {
@@ -339,7 +350,9 @@ fn validate_optional_assessment_summary_evidence_projection(
         .and_then(|public| public.get("summary"))
         .and_then(Value::as_str)
     else {
-        return Ok(());
+        return Err(invalid_result(
+            "assessment_summary evidence.public.summary must project Score.output summary",
+        ));
     };
     if evidence_summary == expected_summary {
         Ok(())
@@ -662,6 +675,12 @@ fn validate_evidence_receipts(
         if require_receipt_visibility && audit.trace_data_classes.is_empty() {
             return Err(invalid_result(format!(
                 "target-derived evidence {receipt_role} receipt `{}` must carry receipt trace data classes",
+                receipt.id()
+            )));
+        }
+        if require_receipt_visibility && !audit.trace_data_classes.contains("case.target") {
+            return Err(invalid_result(format!(
+                "target-derived evidence {receipt_role} receipt `{}` must carry case.target receipt trace data class",
                 receipt.id()
             )));
         }

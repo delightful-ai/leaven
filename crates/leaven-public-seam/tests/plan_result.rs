@@ -69,6 +69,7 @@ fn plan_result_accepts_assessment_summary_structured_or_numeric_score_output_val
     let mut structured = assessment_summary_result();
     structured["values"]["rows"]["items"][0]["score"]["output"] = json!({
         "kind": "structured",
+        "summary": "candidate alpha answer",
         "value": {
             "answer": "candidate alpha answer",
             "confidence": 0.9
@@ -82,6 +83,7 @@ fn plan_result_accepts_assessment_summary_structured_or_numeric_score_output_val
     let mut numeric = assessment_summary_result();
     numeric["values"]["rows"]["items"][0]["score"]["output"] = json!({
         "kind": "json",
+        "summary": "candidate alpha answer",
         "value": 42,
         "visibility": "public",
         "data_classes": ["candidate.output"]
@@ -204,6 +206,52 @@ fn plan_result_rejects_assessment_summary_without_score_output_or_evidence_truth
         error
             .to_string()
             .contains("candidate.output or candidate.artifact"),
+        "{error}"
+    );
+
+    let mut structured_dummy = assessment_summary_result();
+    structured_dummy["values"]["rows"]["items"][0]["score"]["output"] = json!({
+        "kind": "structured",
+        "value": {
+            "looks_like": "schema-valid output",
+            "but": "has no reportable projection"
+        },
+        "visibility": "public",
+        "data_classes": ["candidate.output"]
+    });
+    bind_result_hashes_in_place(&mut structured_dummy);
+    let error = package
+        .validate_plan_result_document(&structured_dummy)
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("must carry a non-empty summary for evidence projection"),
+        "{error}"
+    );
+
+    let mut missing_evidence_projection = assessment_summary_result();
+    missing_evidence_projection["values"]["rows"]["items"][0]["score"]["output"] = json!({
+        "kind": "structured",
+        "summary": "schema-valid dummy output",
+        "value": {
+            "looks_like": "schema-valid output"
+        },
+        "visibility": "public",
+        "data_classes": ["candidate.output"]
+    });
+    missing_evidence_projection["values"]["rows"]["items"][0]["evidence"]["public"]
+        .as_object_mut()
+        .unwrap()
+        .remove("summary");
+    bind_result_hashes_in_place(&mut missing_evidence_projection);
+    let error = package
+        .validate_plan_result_document(&missing_evidence_projection)
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("evidence.public.summary must project Score.output summary"),
         "{error}"
     );
 }

@@ -15,9 +15,7 @@ use leaven_core::{
 };
 use leaven_engine::{BudgetLedger, CachePolicy, Evaluator, RunContext, RunEvent, RunGraph};
 use leaven_eval::Case;
-use leaven_evidence::{
-    CaseAssessmentEvidence, DataClass, DataClassSet, OutputMetadata, OutputRecord, OutputVisibility,
-};
+use leaven_evidence::{CaseAssessmentEvidence, DataClass, OutputRecord};
 use leaven_kernel::{
     Budget, CandidateId, CaseId, ContentId, Cost, EvaluationRequestId, EvaluatorId, Fingerprint,
     ResolvedEvaluationSetId, RunId, StageId, now,
@@ -26,7 +24,7 @@ use leaven_run::{
     JudgeScoreContext, JudgingEvaluator, PublicEvaluationJobContext, PublicFailedCallKind,
     PublicFailedCallReceiptContext, PublicFailedCallReceiptProjectionError, RunCase, RunError,
     RunOutput, RunProblem, RuntimeFingerprint, Score, ScoreContext, ScoreError, ScoringEvaluator,
-    ScoringEvaluatorIdentity,
+    ScoringEvaluatorIdentity, artifact_identity_output,
 };
 use leaven_store_inline::InlineEvidenceStore;
 
@@ -702,11 +700,8 @@ fn scoring_evaluator_preserves_candidate_artifact_reportable_output() {
             Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
                 async move {
                     let answer = artifact.0 + *case.input();
-                    Ok(
-                        RunOutput::typed(TypedPrediction(answer)).with_reportable_artifact_output(
-                            candidate_artifact_output(format!("artifact answer={answer}")),
-                        ),
-                    )
+                    Ok(RunOutput::typed(TypedPrediction(answer))
+                        .with_reportable_artifact_identity(&artifact))
                 }
                 .boxed()
             }),
@@ -715,10 +710,7 @@ fn scoring_evaluator_preserves_candidate_artifact_reportable_output() {
                     async move {
                         Ok(
                             Score::new(f64::from(ctx.output.output.0), "artifact output")
-                                .with_output(ctx.report_text_output(format!(
-                                    "artifact answer={}",
-                                    ctx.output.output.0
-                                ))),
+                                .with_output(ctx.report_artifact_identity_output()),
                         )
                     }
                     .boxed()
@@ -746,7 +738,7 @@ fn scoring_evaluator_preserves_candidate_artifact_reportable_output() {
         };
         assert_eq!(
             evidence.output(),
-            &candidate_artifact_output("artifact answer=42")
+            &artifact_identity_output(&TextArtifact(40))
         );
         assert!(
             evidence
@@ -811,9 +803,9 @@ fn scoring_evaluator_rejects_generic_candidate_artifact_declaration() {
             .expect("generic candidate-artifact declarations must fail evaluation");
 
         assert!(
-            error.to_string().contains(
-                "runner output did not bind candidate artifact through artifact-output API"
-            )
+            error
+                .to_string()
+                .contains("runner output did not derive candidate artifact from artifact identity")
         );
     });
 }
@@ -1350,11 +1342,8 @@ fn judging_evaluator_preserves_candidate_artifact_reportable_outputs() {
             Arc::new(|artifact: TextArtifact, case: RunCase<i32>| {
                 async move {
                     let answer = artifact.0 + *case.input();
-                    Ok(
-                        RunOutput::typed(TypedPrediction(answer)).with_reportable_artifact_output(
-                            candidate_artifact_output(format!("artifact answer={answer}")),
-                        ),
-                    )
+                    Ok(RunOutput::typed(TypedPrediction(answer))
+                        .with_reportable_artifact_identity(&artifact))
                 }
                 .boxed()
             }),
@@ -1366,13 +1355,13 @@ fn judging_evaluator_preserves_candidate_artifact_reportable_outputs() {
                     TypedPrediction,
                 >| {
                     async move {
-                        let rendered = ctx
+                        let _total: i32 = ctx
                             .outputs
                             .iter()
-                            .map(|output| format!("artifact answer={}", output.output.output.0))
-                            .collect::<Vec<_>>()
-                            .join("|");
-                        Ok(Score::new(1.0, "judged").with_output(ctx.report_text_output(rendered)))
+                            .map(|output| output.output.output.0)
+                            .sum();
+                        Ok(Score::new(1.0, "judged")
+                            .with_output(ctx.report_artifact_identity_outputs()))
                     }
                     .boxed()
                 },
@@ -1401,7 +1390,11 @@ fn judging_evaluator_preserves_candidate_artifact_reportable_outputs() {
         };
         assert_eq!(
             evidence.output(),
-            &candidate_artifact_output("artifact answer=42|artifact answer=52")
+            &candidate_artifact_output(format!(
+                "{}|{}",
+                inline_output_text(&artifact_identity_output(&TextArtifact(40))),
+                inline_output_text(&artifact_identity_output(&TextArtifact(50)))
+            ))
         );
     });
 }
@@ -1722,9 +1715,9 @@ fn judging_evaluator_rejects_generic_candidate_artifact_declarations() {
             .expect("generic candidate-artifact group declarations must fail evaluation");
 
         assert!(
-            error.to_string().contains(
-                "runner output did not bind candidate artifact through artifact-output API"
-            )
+            error
+                .to_string()
+                .contains("runner output did not derive candidate artifact from artifact identity")
         );
     });
 }
@@ -2484,10 +2477,14 @@ fn expected_candidate_output(output: impl Into<String>) -> OutputRecord {
 }
 
 fn candidate_artifact_output(output: impl Into<String>) -> OutputRecord {
-    OutputRecord::inline(output).with_metadata(OutputMetadata::new(
-        OutputVisibility::Public,
-        DataClassSet::new([DataClass::candidate_artifact(), DataClass::public()]),
-    ))
+    OutputRecord::candidate_artifact_inline(output)
+}
+
+fn inline_output_text(output: &OutputRecord) -> &str {
+    let OutputRecord::Inline { text, .. } = output else {
+        panic!("expected inline output")
+    };
+    text
 }
 
 // Test helper. The scorer closure must produce a `Score` with context-scoped

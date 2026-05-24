@@ -2,6 +2,7 @@
 
 use std::fmt;
 
+use leaven_core::{Artifact, ArtifactIdentity};
 use leaven_eval::Case;
 use leaven_evidence::{CaseDataReadEvidence, DataClass, OutputRecord};
 use leaven_kernel::{BudgetSnapshot, CandidateId, CaseId, Cost};
@@ -74,7 +75,7 @@ impl<Out> RunOutput<Out> {
     /// assessing; otherwise the evaluator refuses successful scores because it
     /// cannot distinguish a meaningful `Score.output` from a dummy field.
     /// Use [`Self::with_reportable_text`] for candidate outputs derived from
-    /// the typed output, or [`Self::with_reportable_artifact_output`] when the
+    /// the typed output, or [`Self::with_reportable_artifact_identity`] when the
     /// score intentionally assesses the artifact itself. Generic explicit
     /// `candidate.output` and `candidate.artifact` records are rejected during
     /// evaluator lowering.
@@ -84,11 +85,11 @@ impl<Out> RunOutput<Out> {
         self
     }
 
-    /// Attaches a candidate-artifact reportable rendering for scores that assess the artifact.
+    /// Attaches the candidate artifact identity as the reportable output.
     #[must_use]
-    pub fn with_reportable_artifact_output(mut self, output: OutputRecord) -> Self {
-        self.reportable_output = Some(ReportableOutputDeclaration::explicit_candidate_artifact(
-            output,
+    pub fn with_reportable_artifact_identity<A: Artifact>(mut self, artifact: &A) -> Self {
+        self.reportable_output = Some(ReportableOutputDeclaration::derived(
+            artifact_identity_output(artifact),
         ));
         self
     }
@@ -106,6 +107,31 @@ impl<Out> RunOutput<Out> {
     pub(crate) fn reportable_output(&self) -> Option<&ReportableOutputDeclaration> {
         self.reportable_output.as_ref()
     }
+}
+
+/// Stable public score-output projection for an artifact being assessed.
+#[must_use]
+pub fn artifact_identity_output<A: Artifact>(artifact: &A) -> OutputRecord {
+    OutputRecord::candidate_artifact_inline(artifact_identity_text(artifact.identity()))
+}
+
+fn artifact_identity_text(identity: ArtifactIdentity) -> String {
+    match identity {
+        ArtifactIdentity::Content(content) => {
+            format!("artifact:content:{}", hex_bytes(content.as_bytes()))
+        }
+        ArtifactIdentity::External(label) => format!("artifact:external:{label}"),
+    }
+}
+
+fn hex_bytes(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut text = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        text.push(HEX[(byte >> 4) as usize] as char);
+        text.push(HEX[(byte & 0x0f) as usize] as char);
+    }
+    text
 }
 
 /// Failure returned by a user runner function.
@@ -321,13 +347,6 @@ impl ReportableOutputDeclaration {
         }
     }
 
-    pub(crate) fn explicit_candidate_artifact(record: OutputRecord) -> Self {
-        Self {
-            record,
-            origin: ReportableOutputOrigin::ExplicitCandidateArtifact,
-        }
-    }
-
     pub(crate) fn record(&self) -> &OutputRecord {
         &self.record
     }
@@ -347,17 +366,12 @@ impl ReportableOutputDeclaration {
                 .data_classes()
                 .contains(&DataClass::candidate_artifact())
     }
-
-    pub(crate) fn is_bound_explicit_candidate_artifact(&self) -> bool {
-        self.origin == ReportableOutputOrigin::ExplicitCandidateArtifact
-    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ReportableOutputOrigin {
     DerivedFromRunnerOutput,
     ExplicitRecord,
-    ExplicitCandidateArtifact,
 }
 
 fn is_placeholder_output(record: &OutputRecord) -> bool {
@@ -434,8 +448,8 @@ pub enum ReportableOutputError {
     /// The runner explicitly declared candidate-output data without a typed-output binding.
     #[error("runner output did not derive candidate output from typed output")]
     UnboundCandidateOutput,
-    /// The runner declared candidate-artifact data through the generic output API.
-    #[error("runner output did not bind candidate artifact through artifact-output API")]
+    /// The runner explicitly declared candidate-artifact data without deriving it from artifact identity.
+    #[error("runner output did not derive candidate artifact from artifact identity")]
     UnboundCandidateArtifact,
     /// The score reported output that was not the runner output being assessed.
     #[error("reportable output did not match assessed output")]
@@ -708,6 +722,20 @@ impl<A, I, T, Out> ScoreContext<A, I, T, Out> {
     #[must_use]
     pub fn report_text_output(&self, output: impl Into<String>) -> ReportableOutput {
         self.report_output(OutputRecord::inline(output))
+    }
+
+    /// Reports the current candidate artifact identity as the assessed output.
+    #[must_use]
+    pub fn report_artifact_identity_output(&self) -> ReportableOutput
+    where
+        A: Artifact,
+    {
+        let output = artifact_identity_output(&self.artifact);
+        ReportableOutput::new(
+            output.clone(),
+            self.output_scope.clone(),
+            Some(ReportableOutputDeclaration::derived(output)),
+        )
     }
 }
 

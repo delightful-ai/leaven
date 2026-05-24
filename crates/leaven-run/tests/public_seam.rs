@@ -11,7 +11,7 @@ use leaven_engine::{
     Evaluator, ProposalBatchReport, RunContext, RunGraph,
 };
 use leaven_evidence::{
-    CandidateAssessmentOutput, CaseAssessmentEvidence, DataClass, DataClassSet, OutputBlobAudit,
+    CandidateAssessmentOutput, CaseAssessmentEvidence, DataClassSet, OutputBlobAudit,
     OutputMetadata, OutputRecord, OutputVisibility, ScalarEvidence,
 };
 use leaven_kernel::{
@@ -456,6 +456,107 @@ fn runcontext_pairwise_and_listwise_score_outputs_project_to_public_seam_submit_
         assert_eq!(
             listwise_plan["ops"][0]["write"]["assessments"][0]["score"]["output"]["value"][2]["output"],
             "third-output"
+        );
+    });
+}
+
+#[test]
+fn runcontext_assessment_score_outputs_project_to_public_seam_plan_result() {
+    block_on(async {
+        let package = leaven_public_seam::PublicSeamPackage::active_from_repo(workspace_root())
+            .expect("public seam package loads from workspace");
+        let (mut graph, mut budget, candidates) = graph_with_run_eval_seeds();
+        let case_set = CaseSet::new(vec![leaven_eval::Case::input(CaseId::new(0), "case")]);
+        let store = InlineEvidenceStore::<CaseAssessmentEvidence>::new("inline");
+        let mut ctx =
+            RunContext::<RunProblem<TextArtifact, &'static str>>::new(&mut graph, &mut budget)
+                .with_case_set(&case_set)
+                .with_evidence_store(&store);
+        let independent = ctx
+            .evaluate_with(
+                &ScoreOutputEvaluator,
+                independent_request(vec![candidates[0]]),
+            )
+            .await
+            .unwrap();
+        let pairwise = ctx
+            .evaluate_with(
+                &PairwiseScoreOutputEvaluator,
+                independent_request(candidates[..2].to_vec()),
+            )
+            .await
+            .unwrap();
+        let listwise = ctx
+            .evaluate_with(
+                &ListwiseScoreOutputEvaluator,
+                independent_request(candidates.clone()),
+            )
+            .await
+            .unwrap();
+        let graph_view = ctx.graph();
+
+        let independent_result = assessment_receipt_context()
+            .submit_assessments_plan_result_with_evidence(&graph_view, &store, &independent)
+            .expect("independent assessment evidence projects to Plan Result");
+        package
+            .validate_plan_result_document(&independent_result)
+            .expect("independent projected Plan Result validates");
+        assert_eq!(
+            independent_result["values"]["assessment_rows"]["items"][0]["score"]["output"]["value"]
+                ["candidate"],
+            json_candidate_ref(candidates[0])
+        );
+        assert_eq!(
+            independent_result["values"]["assessment_rows"]["items"][0]["score"]["output"]["value"]
+                ["output"],
+            "candidate-output"
+        );
+
+        let pairwise_result = assessment_receipt_context()
+            .submit_assessments_plan_result_with_evidence(&graph_view, &store, &pairwise)
+            .expect("pairwise assessment evidence projects to Plan Result");
+        package
+            .validate_plan_result_document(&pairwise_result)
+            .expect("pairwise projected Plan Result validates");
+        assert_eq!(
+            pairwise_result["values"]["assessment_rows"]["items"][0]["score"]["output"]["value"][1]
+                ["candidate"],
+            json_candidate_ref(candidates[1])
+        );
+        assert_eq!(
+            pairwise_result["values"]["assessment_rows"]["items"][0]["score"]["output"]["value"][1]
+                ["output"],
+            "right-output"
+        );
+
+        let mut listwise_result = assessment_receipt_context()
+            .submit_assessments_plan_result_with_evidence(&graph_view, &store, &listwise)
+            .expect("listwise assessment evidence projects to Plan Result");
+        package
+            .validate_plan_result_document(&listwise_result)
+            .expect("listwise projected Plan Result validates");
+        assert_eq!(
+            listwise_result["values"]["assessment_rows"]["items"][0]["score"]["output"]["value"]
+                .as_array()
+                .unwrap()
+                .len(),
+            3
+        );
+
+        listwise_result["values"]["assessment_rows"]["items"][0]["score"]["output"] = serde_json::json!({
+            "kind": "text",
+            "summary": "dummy output only present to satisfy schema",
+            "visibility": "public",
+            "data_classes": ["public"]
+        });
+        let error = package
+            .validate_plan_result_document(&listwise_result)
+            .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("candidate.output or candidate.artifact"),
+            "{error}"
         );
     });
 }
@@ -1207,10 +1308,7 @@ fn case_assessment_evidence(
 }
 
 fn candidate_artifact_output(text: impl Into<String>) -> OutputRecord {
-    OutputRecord::inline(text).with_metadata(OutputMetadata::new(
-        OutputVisibility::Public,
-        DataClassSet::new([DataClass::candidate_artifact(), DataClass::public()]),
-    ))
+    OutputRecord::candidate_artifact_inline(text)
 }
 
 fn audited_candidate_blob_output() -> OutputRecord {
