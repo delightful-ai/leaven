@@ -74,6 +74,7 @@ pub struct PlanWorkspaceReleaseRequest<'a> {
     pub(super) name: &'a str,
     pub(super) call: &'a Value,
     pub(super) deps: &'a BTreeMap<String, Value>,
+    pub(super) live_workspaces: &'a BTreeMap<String, LiveWorkspaceHandle>,
 }
 
 impl<'a> PlanWorkspaceReleaseRequest<'a> {
@@ -103,8 +104,25 @@ impl<'a> PlanWorkspaceReleaseRequest<'a> {
     /// Workspace handle requested for release, proven against live dependency handles.
     pub fn live_workspace(&self) -> Result<&'a str, PublicSeamError> {
         let workspace = self.workspace()?;
-        require_live_workspace(workspace, self.deps, "workspace_release")?;
+        require_live_workspace(
+            workspace,
+            self.deps,
+            self.live_workspaces,
+            "workspace_release",
+        )?;
         Ok(workspace)
+    }
+
+    /// Lifetime attached to the live dependency handle being released.
+    pub(super) fn live_workspace_lifetime(&self) -> Result<&'a str, PublicSeamError> {
+        let workspace = self.workspace()?;
+        Ok(require_live_workspace(
+            workspace,
+            self.deps,
+            self.live_workspaces,
+            "workspace_release",
+        )?
+        .lifetime())
     }
 
     /// Whether release may force cleanup.
@@ -123,6 +141,7 @@ pub struct PlanAgentRunRequest<'a> {
     pub(super) name: &'a str,
     pub(super) call: &'a Value,
     pub(super) deps: &'a BTreeMap<String, Value>,
+    pub(super) live_workspaces: &'a BTreeMap<String, LiveWorkspaceHandle>,
 }
 
 impl<'a> PlanAgentRunRequest<'a> {
@@ -150,7 +169,7 @@ impl<'a> PlanAgentRunRequest<'a> {
     /// dependency handles.
     pub fn live_workspace(&self) -> Result<&'a str, PublicSeamError> {
         let workspace = self.workspace()?;
-        require_live_workspace(workspace, self.deps, "agent_run")?;
+        require_live_workspace(workspace, self.deps, self.live_workspaces, "agent_run")?;
         Ok(workspace)
     }
 
@@ -188,6 +207,7 @@ pub struct PlanSandboxExecRequest<'a> {
     pub(super) name: &'a str,
     pub(super) call: &'a Value,
     pub(super) deps: &'a BTreeMap<String, Value>,
+    pub(super) live_workspaces: &'a BTreeMap<String, LiveWorkspaceHandle>,
 }
 
 impl<'a> PlanSandboxExecRequest<'a> {
@@ -227,7 +247,7 @@ impl<'a> PlanSandboxExecRequest<'a> {
     /// dependency handles.
     pub fn live_workspace(&self) -> Result<&'a str, PublicSeamError> {
         let workspace = self.workspace()?;
-        require_live_workspace(workspace, self.deps, "sandbox_exec")?;
+        require_live_workspace(workspace, self.deps, self.live_workspaces, "sandbox_exec")?;
         Ok(workspace)
     }
 
@@ -428,12 +448,50 @@ pub(super) fn workspace_ref_id(
         .ok_or_else(|| invalid_call(format!("{context}: workspace ref object must carry id")))
 }
 
-pub(super) fn require_live_workspace(
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) struct LiveWorkspaceHandle {
+    workspace: String,
+    lifetime: String,
+    released: bool,
+}
+
+impl LiveWorkspaceHandle {
+    pub(super) fn live(workspace: impl Into<String>, lifetime: impl Into<String>) -> Self {
+        Self {
+            workspace: workspace.into(),
+            lifetime: lifetime.into(),
+            released: false,
+        }
+    }
+
+    pub(super) fn released(workspace: impl Into<String>, lifetime: impl Into<String>) -> Self {
+        Self {
+            workspace: workspace.into(),
+            lifetime: lifetime.into(),
+            released: true,
+        }
+    }
+
+    pub(super) fn release(&mut self) {
+        self.released = true;
+    }
+
+    pub(super) fn workspace(&self) -> &str {
+        &self.workspace
+    }
+
+    pub(super) fn lifetime(&self) -> &str {
+        &self.lifetime
+    }
+}
+
+pub(super) fn require_live_workspace<'a>(
     workspace: &str,
-    deps: &BTreeMap<String, Value>,
+    deps: &'a BTreeMap<String, Value>,
+    live_workspaces: &'a BTreeMap<String, LiveWorkspaceHandle>,
     context: &str,
-) -> Result<(), PublicSeamError> {
-    let Some(handle) = deps.values().find(|value| {
+) -> Result<&'a LiveWorkspaceHandle, PublicSeamError> {
+    let Some((dep_name, handle_value)) = deps.iter().find(|(_, value)| {
         value.get("kind").and_then(Value::as_str) == Some("workspace_handle")
             && value
                 .get("workspace")
@@ -444,16 +502,27 @@ pub(super) fn require_live_workspace(
             "{context} refused unmaterialized workspace `{workspace}`"
         )));
     };
-    if handle
-        .get("released")
-        .and_then(Value::as_bool)
-        .unwrap_or(false)
+    let Some(handle) = live_workspaces.get(dep_name) else {
+        return Err(invalid_call(format!(
+            "{context} refused unmaterialized workspace `{workspace}`"
+        )));
+    };
+    if handle.workspace != workspace {
+        return Err(invalid_call(format!(
+            "{context} refused unmaterialized workspace `{workspace}`"
+        )));
+    }
+    if handle.released
+        || handle_value
+            .get("released")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
     {
         return Err(invalid_call(format!(
             "{context} refused already released workspace `{workspace}`"
         )));
     }
-    Ok(())
+    Ok(handle)
 }
 
 fn invalid_call(message: impl Into<String>) -> PublicSeamError {

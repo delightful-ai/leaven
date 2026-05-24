@@ -1148,6 +1148,7 @@ rows:
     partial_contract_test_evidence:
       - crates/leaven-public-seam/tests/plan_document.rs::workspace_materialize_and_release_emit_typed_handles_and_receipts
       - crates/leaven-public-seam/tests/plan_document.rs::workspace_materialize_rejects_host_path_and_lifetime_substitution
+      - crates/leaven-public-seam/tests/plan_document.rs::workspace_handle_provenance_rejects_literal_forgery_and_released_reuse
       - crates/leaven-public-seam/tests/plan_document.rs::workspace_release_rejects_unmaterialized_handles_and_host_path_substitutes
       - crates/leaven-public-seam/tests/plan_document.rs::workspace_query_reads_require_live_handles_and_emit_query_receipts
       - crates/leaven-public-seam/tests/plan_document.rs::workspace_query_rejects_unmaterialized_released_and_mismatched_results
@@ -1162,6 +1163,8 @@ rows:
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanWorkspaceMaterializeOutcome
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanWorkspaceReleaseRequest
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanWorkspaceReleaseOutcome
+      - crates/leaven-public-seam/src/plan_execution/effects.rs::LiveWorkspaceHandle
+      - crates/leaven-public-seam/src/plan_execution/effects.rs::require_live_workspace
       - crates/leaven-public-seam/src/plan_execution/queries.rs::PlanWorkspaceQueryRequest
       - crates/leaven-public-seam/src/plan_execution/queries.rs::PlanWorkspaceQueryOutcome
       - crates/leaven-public-seam/src/plan_execution.rs::execute_workspace_query_expr
@@ -1177,6 +1180,7 @@ rows:
       - crates/leaven-public-seam/src/capability.rs::CapabilityGrantRequest
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-workspace-query-partial-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-23-workspace-handle-provenance-review.md
     status: pending
 
   - id: ps1.lm.contract
@@ -1248,6 +1252,7 @@ rows:
     partial_contract_test_evidence:
       - crates/leaven-public-seam/tests/plan_document.rs::agent_run_and_sandbox_exec_lower_to_owned_runtime_primitives_and_emit_receipts
       - crates/leaven-public-seam/tests/plan_document.rs::agent_run_rejects_unmaterialized_released_and_host_path_workspaces
+      - crates/leaven-public-seam/tests/plan_document.rs::workspace_handle_provenance_rejects_literal_forgery_and_released_reuse
       - crates/leaven-public-seam/tests/plan_document.rs::agent_run_lowering_preserves_json_schema_output_contract
       - crates/leaven-public-seam/tests/plan_document.rs::agent_run_lowering_preserves_workspace_diff_surface_fingerprint
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_bind_worker_methods_to_primary_kinds_and_receipts
@@ -1267,6 +1272,8 @@ rows:
       - crates/leaven-public-seam/src/acp_profile.rs::validate_receipts_for_method
       - crates/leaven-public-seam/src/acp_profile.rs::AcpExtensionResultDocument
       - crates/leaven-public-seam/src/proposal_authority.rs::ProposalAuthorityReport
+    review_evidence:
+      - docs/specs/public-seam-v1/reviews/2026-05-23-workspace-handle-provenance-review.md
     status: pending
 
   - id: ps1.sandbox.exec_streaming
@@ -1289,6 +1296,7 @@ rows:
     partial_contract_test_evidence:
       - crates/leaven-public-seam/tests/plan_document.rs::agent_run_and_sandbox_exec_lower_to_owned_runtime_primitives_and_emit_receipts
       - crates/leaven-public-seam/tests/plan_document.rs::sandbox_exec_rejects_unmaterialized_released_and_host_path_workspaces
+      - crates/leaven-public-seam/tests/plan_document.rs::workspace_handle_provenance_rejects_literal_forgery_and_released_reuse
       - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_modes_require_cached_rejects_agent_and_sandbox_live_work
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_bind_worker_methods_to_primary_kinds_and_receipts
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_reject_cross_method_payloads_unbound_receipts_and_data_class_gaps
@@ -1309,6 +1317,8 @@ rows:
       - crates/leaven-public-seam/src/acp_profile.rs::AcpPermissionRequest
       - crates/leaven-public-seam/src/capability.rs::CapabilityDocument::authorize_grant
       - crates/leaven-public-seam/src/capability.rs::CapabilityGrantRequest
+    review_evidence:
+      - docs/specs/public-seam-v1/reviews/2026-05-23-workspace-handle-provenance-review.md
     status: pending
 
   - id: ps1.watch.deferred

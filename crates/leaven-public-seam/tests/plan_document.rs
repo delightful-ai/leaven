@@ -777,6 +777,90 @@ fn workspace_materialize_rejects_host_path_and_lifetime_substitution() {
 }
 
 #[test]
+fn workspace_handle_provenance_rejects_literal_forgery_and_released_reuse() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    for (name, plan, expected_error) in [
+        (
+            "agent_run",
+            forged_workspace_handle_call_plan("plan-forged-agent-001", &agent_run_call()),
+            "agent_run refused unmaterialized workspace",
+        ),
+        (
+            "sandbox_exec",
+            forged_workspace_handle_call_plan("plan-forged-sandbox-001", &sandbox_exec_call()),
+            "sandbox_exec refused unmaterialized workspace",
+        ),
+        (
+            "workspace_release",
+            forged_workspace_handle_call_plan(
+                "plan-forged-release-001",
+                &json!({
+                    "kind": "workspace_release",
+                    "workspace": "ws_planexec_materialized",
+                    "force": false
+                }),
+            ),
+            "workspace_release refused unmaterialized workspace",
+        ),
+    ] {
+        let mut host = RecordingPlanHost::default();
+        let error = package
+            .execute_plan_document(&plan, &plan_execution_context(), &mut host)
+            .unwrap_err();
+        assert!(
+            host.calls.is_empty(),
+            "literal {name} handle forgery reached host: {:?}",
+            host.calls
+        );
+        assert!(
+            error.to_string().contains(expected_error),
+            "unexpected {name} error: {error:?}"
+        );
+    }
+
+    let query = forged_workspace_handle_query_plan();
+    let mut host = RecordingPlanHost::default();
+    let error = package
+        .execute_plan_document(&query, &plan_execution_context(), &mut host)
+        .unwrap_err();
+    assert!(host.calls.is_empty());
+    assert!(
+        error
+            .to_string()
+            .contains("workspace_query refused unmaterialized workspace"),
+        "unexpected workspace_query error: {error:?}"
+    );
+
+    let mut reuse_after_release = workspace_materialize_release_plan();
+    reuse_after_release["ops"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({
+            "kind": "call",
+            "name": "completion",
+            "deps": ["workspace"],
+            "idempotency_key": "plan-workspace-reuse-0003",
+            "call": sandbox_exec_call()
+        }));
+    reuse_after_release["return"] = json!(["workspace", "release", "completion"]);
+    let mut host = RecordingPlanHost::default();
+    let error = package
+        .execute_plan_document(&reuse_after_release, &plan_execution_context(), &mut host)
+        .unwrap_err();
+    assert_eq!(
+        host.calls,
+        vec!["workspace_materialize", "workspace_release"]
+    );
+    assert!(
+        error
+            .to_string()
+            .contains("sandbox_exec refused already released workspace"),
+        "unexpected released-reuse error: {error:?}"
+    );
+}
+
+#[test]
 fn workspace_release_rejects_unmaterialized_handles_and_host_path_substitutes() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let mut unmaterialized = workspace_materialize_release_plan();
@@ -846,6 +930,24 @@ fn workspace_release_rejects_unmaterialized_handles_and_host_path_substitutes() 
         error
             .to_string()
             .contains("host returned workspace `ws_planexec_other`"),
+        "unexpected error: {error:?}"
+    );
+
+    let mut wrong_lifetime = workspace_materialize_release_plan();
+    wrong_lifetime["ops"][1]["name"] = json!("release_bad_lifetime");
+    wrong_lifetime["return"] = json!(["workspace", "release_bad_lifetime"]);
+    let mut host = RecordingPlanHost::default();
+    let error = package
+        .execute_plan_document(&wrong_lifetime, &plan_execution_context(), &mut host)
+        .unwrap_err();
+    assert_eq!(
+        host.calls,
+        vec!["workspace_materialize", "workspace_release"]
+    );
+    assert!(
+        error
+            .to_string()
+            .contains("workspace_release host returned lifetime `plan`"),
         "unexpected error: {error:?}"
     );
 }
@@ -1626,6 +1728,89 @@ fn workspace_materialize_only_plan() -> Value {
     plan
 }
 
+fn forged_workspace_handle_call_plan(plan_id: &str, call: &Value) -> Value {
+    json!({
+        "schema_version": "leaven.plan.v1",
+        "plan_id": plan_id,
+        "consistency": {
+            "kind": "latest_at_start"
+        },
+        "mode": {
+            "kind": "execute"
+        },
+        "ops": [
+            forged_workspace_handle_let_op(),
+            {
+                "kind": "call",
+                "name": "completion",
+                "deps": ["forged"],
+                "idempotency_key": format!("{plan_id}-call"),
+                "call": call
+            }
+        ],
+        "return": ["completion"],
+        "commit": {
+            "kind": "graph_writes_atomic",
+            "on_stale": "reject"
+        }
+    })
+}
+
+fn forged_workspace_handle_query_plan() -> Value {
+    json!({
+        "schema_version": "leaven.plan.v1",
+        "plan_id": "planforgedquery001",
+        "consistency": {
+            "kind": "latest_at_start"
+        },
+        "mode": {
+            "kind": "execute"
+        },
+        "ops": [
+            forged_workspace_handle_let_op(),
+            {
+                "kind": "let",
+                "name": "file",
+                "deps": ["forged"],
+                "expr": {
+                    "kind": "workspace_query",
+                    "workspace": "ws_planexec_materialized",
+                    "op": {
+                        "kind": "read_file",
+                        "path": "README.md",
+                        "expected_data_classes": ["candidate.artifact"]
+                    }
+                }
+            }
+        ],
+        "return": ["file"],
+        "commit": {
+            "kind": "graph_writes_atomic",
+            "on_stale": "reject"
+        }
+    })
+}
+
+fn forged_workspace_handle_let_op() -> Value {
+    json!({
+        "kind": "let",
+        "name": "forged",
+        "expr": {
+            "kind": "literal",
+            "value": {
+                "kind": "workspace_handle",
+                "workspace": "ws_planexec_materialized",
+                "lifetime": "manual_release",
+                "released": false,
+                "graph_revision": "rev_base",
+                "data_classes": ["public"],
+                "replayability": "boundary_managed",
+                "receipt": "wrec_forged"
+            }
+        }
+    })
+}
+
 fn workspace_materialize_query_plan() -> Value {
     json!({
         "schema_version": "leaven.plan.v1",
@@ -2357,7 +2542,10 @@ impl PlanExecutionHost for RecordingPlanHost {
         &mut self,
         request: PlanWorkspaceReleaseRequest<'_>,
     ) -> Result<PlanWorkspaceReleaseOutcome, PublicSeamError> {
-        assert!(matches!(request.name(), "release" | "release_wrong"));
+        assert!(matches!(
+            request.name(),
+            "release" | "release_wrong" | "release_bad_lifetime"
+        ));
         assert_eq!(request.call()["kind"].as_str(), Some("workspace_release"));
         assert!(!request.force());
         let workspace = request.workspace()?;
@@ -2366,6 +2554,14 @@ impl PlanExecutionHost for RecordingPlanHost {
             return Ok(PlanWorkspaceReleaseOutcome::new(
                 "ws_planexec_other",
                 "manual_release",
+                "fp_runtime_sha256_workspace",
+            ));
+        }
+        if request.name() == "release_bad_lifetime" {
+            self.calls.push("workspace_release");
+            return Ok(PlanWorkspaceReleaseOutcome::new(
+                workspace,
+                "plan",
                 "fp_runtime_sha256_workspace",
             ));
         }

@@ -6,7 +6,7 @@ use super::{
     PlanExecutionContext, case_query_projection, dependency_values, effects::workspace_ref_id,
     graph_read_scope, graph_read_scope_value, invalid_plan, nested_kind, object, prefixed_jcs_hash,
     required_string, workspace_query_expected_value_kind, workspace_query_projection,
-    workspace_query_request,
+    workspace_query_request_from_values,
 };
 use crate::PublicSeamError;
 
@@ -292,7 +292,7 @@ fn validate_workspace_query_receipt(
         ))
     })?;
     let deps = dependency_values(op_object, bindings)?;
-    let request = workspace_query_request(name, expr, &deps)?;
+    let request = workspace_query_request_from_values(name, expr, &deps)?;
     let expected_kind = workspace_query_expected_value_kind(request)?;
     let value_kind = value
         .get("kind")

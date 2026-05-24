@@ -6,7 +6,7 @@ use crate::{CapabilityDocument, CapabilityGrantRequest, PublicSeamError};
 
 use super::{
     PlanExecutionContext,
-    effects::{require_live_workspace, workspace_ref_id},
+    effects::{LiveWorkspaceHandle, require_live_workspace, workspace_ref_id},
     invalid_plan, nested_kind, object,
 };
 
@@ -286,6 +286,17 @@ pub(super) fn workspace_query_request<'a>(
     name: &'a str,
     expr: &'a Value,
     deps: &'a BTreeMap<String, Value>,
+    live_workspaces: &'a BTreeMap<String, LiveWorkspaceHandle>,
+) -> Result<PlanWorkspaceQueryRequest<'a>, PublicSeamError> {
+    let request = workspace_query_request_from_values(name, expr, deps)?;
+    require_live_workspace(request.workspace, deps, live_workspaces, "workspace_query")?;
+    Ok(request)
+}
+
+pub(super) fn workspace_query_request_from_values<'a>(
+    name: &'a str,
+    expr: &'a Value,
+    deps: &'a BTreeMap<String, Value>,
 ) -> Result<PlanWorkspaceQueryRequest<'a>, PublicSeamError> {
     let object = object(expr, "workspace_query")?;
     let workspace = workspace_ref_id(
@@ -295,7 +306,6 @@ pub(super) fn workspace_query_request<'a>(
     let op = object
         .get("op")
         .ok_or_else(|| invalid_plan("workspace_query must carry op"))?;
-    require_live_workspace(workspace, deps, "workspace_query")?;
     Ok(PlanWorkspaceQueryRequest {
         name,
         expr,

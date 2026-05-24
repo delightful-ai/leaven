@@ -127,25 +127,27 @@ delivery, or full `ps1.lm.contract` closeout. The `PlanAgentRunRequest` and
 backend-neutral `leaven-workspace::Command` primitives, and the representative
 harness can emit typed `agent_session` and `sandbox_exec` Plan Result values
 with call receipts. Both `agent_run` and `sandbox_exec` require a live
-unreleased `workspace_handle` dependency before host execution, so host paths
-and bare workspace ids cannot satisfy either route. These routes are not agent
-provider execution, sandbox backend execution, ACP delivery, proposal parsing,
-streaming delivery, or full agent/sandbox row closeout. The
+unreleased, materialization-proven `workspace_handle` dependency before host
+execution, so host paths, bare workspace ids, and literal forged handles cannot
+satisfy either route. These routes are not agent provider execution, sandbox
+backend execution, ACP delivery, proposal parsing, streaming delivery, or full
+agent/sandbox row closeout. The
 `PlanWorkspaceMaterializeRequest` and
 `PlanWorkspaceReleaseRequest` routes lower schema-valid workspace lifecycle
 calls into typed public-seam requests and emit `workspace_handle` Plan Result
 values with call receipts; `workspace_materialize` validates host-returned
 workspace ids and lifetime echoes before binding a handle, and
 `workspace_release` validates the requested WorkspaceRef against live
-`workspace_handle` dependency values before the host can perform release,
-rejects already released handles, and still refuses host filesystem paths as
-workspace handles. `PlanWorkspaceQueryRequest` routes
+materialization-proven `workspace_handle` dependency values before the host can
+perform release, rejects already released handles, and still refuses literal
+forgeries and host filesystem paths as workspace handles. `PlanWorkspaceQueryRequest` routes
 representative schema-valid `workspace_query` reads through typed host requests,
-requires a live `workspace_handle` dependency before the host can read, and
-emits typed `workspace_file`, `workspace_listing`, `workspace_snapshot`, or
-`workspace_diff` values with query receipts. It is not workspace backend
-execution and still leaves stat/digest/git_log plus full artifact/snapshot
-backend proof pending, so it is not full workspace row closeout. The
+requires a live materialization-proven `workspace_handle` dependency before the
+host can read, and emits typed `workspace_file`, `workspace_listing`,
+`workspace_snapshot`, or `workspace_diff` values with query receipts. It is not
+workspace backend execution and still leaves stat/digest/git_log plus full
+artifact/snapshot backend proof pending, so it is not full workspace row
+closeout. The
 `PublicSeamPackage::execute_plan_document_with_capability` route
 requires capability-authorized evaluator request scope before a `case_query.load`
 host read can run. The
@@ -247,8 +249,8 @@ backpressure, or runtime watch support.
 - `tests/plan_document.rs` also proves representative `agent_run` and
   `sandbox_exec` lowering into `leaven-agent` and `leaven-workspace` primitives
   plus typed Plan Result receipt/value emission for those calls. Both routes
-  require a live unreleased `workspace_handle` dependency before the host
-  receives the request. Agent lowering preserves schema-valid
+  require a live unreleased materialization-proven `workspace_handle` dependency
+  before the host receives the request. Agent lowering preserves schema-valid
   `json_schema` output through the owning
   `leaven-agent::OutputContract::JsonSchema` primitive. This is public-seam
   harness proof only; provider runtime, sandbox backend execution, streaming
@@ -256,7 +258,8 @@ backpressure, or runtime watch support.
 - `tests/plan_document.rs` also proves representative `workspace_materialize`
   and `workspace_release` lowering, typed `workspace_handle` value emission,
   materialize host-result checks for path-shaped workspace ids and lifetime
-  substitution, release lifecycle state, call receipts, and refusal of
+  substitution, provenance tracking that rejects literal forged handles and
+  reuse after release, release lifecycle state, call receipts, and refusal of
   unmaterialized or host-path workspace substitutes. This is public-seam
   lifecycle proof only; read, list, stat, digest, git, artifact-capture, and
   snapshot behavior remain pending.
