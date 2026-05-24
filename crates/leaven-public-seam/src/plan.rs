@@ -344,7 +344,12 @@ fn validate_score_output_candidate_binding(
     output: &serde_json::Map<String, Value>,
 ) -> Result<(), PublicSeamError> {
     let Some(value) = output.get("value") else {
-        return Ok(());
+        if has_score_output_external_projection(output) {
+            return Ok(());
+        }
+        return Err(invalid_plan(
+            "submit_assessments Score.output must carry candidate-bound value or blob/trace output projection",
+        ));
     };
     match assessment_kind {
         "independent" => {
@@ -370,6 +375,14 @@ fn validate_score_output_candidate_binding(
         }
         _ => Ok(()),
     }
+}
+
+fn has_score_output_external_projection(output: &serde_json::Map<String, Value>) -> bool {
+    output.get("blob_ref").is_some()
+        || output
+            .get("trace_refs")
+            .and_then(Value::as_array)
+            .is_some_and(|trace_refs| !trace_refs.is_empty())
 }
 
 fn validate_candidate_output_entry(value: &Value, candidate: &str) -> Result<(), PublicSeamError> {
