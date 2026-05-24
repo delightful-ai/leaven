@@ -602,18 +602,27 @@ fn validate_evidence_source_receipts(
     envelope: &EvidenceEnvelopeDocument,
     receipt_index: &BTreeMap<String, ReceiptAudit>,
 ) -> Result<(), PublicSeamError> {
-    validate_evidence_receipts(envelope.read_receipt_refs(), receipt_index, "query", "read")?;
+    let envelope_data_classes = evidence_data_class_set(envelope);
+    validate_evidence_receipts(
+        envelope.read_receipt_refs(),
+        receipt_index,
+        "query",
+        "read",
+        &envelope_data_classes,
+    )?;
     validate_evidence_receipts(
         envelope.effect_receipt_refs(),
         receipt_index,
         "call",
         "effect",
+        &envelope_data_classes,
     )?;
     validate_evidence_receipts(
         envelope.write_receipt_refs(),
         receipt_index,
         "write",
         "write",
+        &envelope_data_classes,
     )
 }
 
@@ -622,6 +631,7 @@ fn validate_evidence_receipts(
     receipt_index: &BTreeMap<String, ReceiptAudit>,
     expected_kind: &str,
     receipt_role: &str,
+    envelope_data_classes: &BTreeSet<String>,
 ) -> Result<(), PublicSeamError> {
     for receipt in receipts {
         let Some(audit) = receipt_index.get(receipt.id()) else {
@@ -645,8 +655,27 @@ fn validate_evidence_receipts(
                 receipt.id()
             )));
         }
+        for data_class in &audit.trace_data_classes {
+            if !envelope_data_classes.contains(data_class) {
+                return Err(invalid_result(format!(
+                    "evidence {receipt_role} receipt `{}` trace data class `{data_class}` is not covered by evidence data_classes",
+                    receipt.id()
+                )));
+            }
+        }
     }
     Ok(())
+}
+
+fn evidence_data_class_set(envelope: &EvidenceEnvelopeDocument) -> BTreeSet<String> {
+    let mut data_classes = BTreeSet::new();
+    data_classes.extend(envelope.data_classes().iter().cloned());
+    data_classes.extend(envelope.public_data_classes().iter().cloned());
+    if let Some(private) = envelope.private_data_classes() {
+        data_classes.extend(private.iter().cloned());
+    }
+    data_classes.extend(envelope.trace_data_classes().iter().cloned());
+    data_classes
 }
 
 fn inspect_value_receipt<'a>(
@@ -1060,6 +1089,7 @@ fn has_nonzero_cost(cost: Option<&Value>) -> bool {
 struct ReceiptAudit {
     kind: String,
     fingerprint: String,
+    trace_data_classes: BTreeSet<String>,
 }
 
 fn receipt_index(receipts: &[Value]) -> Result<BTreeMap<String, ReceiptAudit>, PublicSeamError> {
@@ -1076,8 +1106,23 @@ fn receipt_index(receipts: &[Value]) -> Result<BTreeMap<String, ReceiptAudit>, P
         .to_owned();
         let kind = required_string(receipt.get("kind"), "receipt.kind")?.to_owned();
         let fingerprint = prefixed_jcs_hash("fp_receipt_sha256_", &Value::Object(receipt.clone()))?;
+        let mut trace_data_classes = BTreeSet::new();
+        if let Some(trace_refs) = receipt.get("trace_refs") {
+            collect_trace_ref_data_classes(
+                trace_refs,
+                "receipt.trace_refs",
+                &mut trace_data_classes,
+            )?;
+        }
         if index
-            .insert(id, ReceiptAudit { kind, fingerprint })
+            .insert(
+                id,
+                ReceiptAudit {
+                    kind,
+                    fingerprint,
+                    trace_data_classes,
+                },
+            )
             .is_some()
         {
             return Err(invalid_result("duplicate operation receipt id"));

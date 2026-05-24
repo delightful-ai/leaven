@@ -66,6 +66,23 @@ fn plan_result_accepts_unreceipted_evidence_trace_refs() {
 }
 
 #[test]
+fn plan_result_preserves_evidence_source_receipt_trace_visibility() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut result = evidence_backed_result();
+    result["receipts"][0]["trace_refs"] =
+        json!([receipt_trace_ref("trace_read_target", "case.target")]);
+    result["receipts"][1]["trace_refs"] =
+        json!([receipt_trace_ref("trace_lm_transcript", "transcript.raw")]);
+    result["receipts"][2]["trace_refs"] =
+        json!([receipt_trace_ref("trace_write_prompt", "prompt.raw")]);
+
+    let result = package.validate_plan_result_document(&result).unwrap();
+
+    assert_eq!(result.value_count(), 2);
+    assert_eq!(result.receipt_count(), 3);
+}
+
+#[test]
 fn plan_result_rejects_evidence_source_receipts_that_are_missing_or_wrong_kind() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
 
@@ -146,6 +163,45 @@ fn plan_result_rejects_evidence_source_receipts_that_are_missing_or_wrong_kind()
             .unwrap_err(),
         PublicSeamError::InvalidEvidence { .. }
     ));
+}
+
+#[test]
+fn plan_result_rejects_evidence_receipt_trace_visibility_conflicts() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut hidden_receipt_class = evidence_backed_result();
+    hidden_receipt_class["receipts"][1]["trace_refs"] = json!([receipt_trace_ref(
+        "trace_lm_provider_secret",
+        "external.secret"
+    )]);
+    let error = package
+        .validate_plan_result_document(&hidden_receipt_class)
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("trace data class `external.secret` is not covered by evidence data_classes"),
+        "{error}"
+    );
+
+    let mut value_visibility_gap = evidence_backed_result();
+    value_visibility_gap["receipts"][1]["trace_refs"] = json!([receipt_trace_ref(
+        "trace_lm_provider_secret",
+        "external.secret"
+    )]);
+    value_visibility_gap["values"]["assessment_rows"]["items"][0]["evidence"]["data_classes"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!("external.secret"));
+    let error = package
+        .validate_plan_result_document(&value_visibility_gap)
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("nested visibility data class `external.secret`"),
+        "{error}"
+    );
 }
 
 #[test]
@@ -513,6 +569,15 @@ fn receipt_ref(id: &str) -> Value {
         "kind": "receipt",
         "id": id,
         "fingerprint": "fp_receipt_sha256_evidence"
+    })
+}
+
+fn receipt_trace_ref(id: &str, data_class: &str) -> Value {
+    json!({
+        "kind": "receipt_trace",
+        "id": id,
+        "visibility": "redacted_transcript",
+        "data_classes": [data_class]
     })
 }
 
