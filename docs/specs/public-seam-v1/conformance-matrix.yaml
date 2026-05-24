@@ -1264,6 +1264,7 @@ rows:
       - crates/leaven-public-seam/tests/plan_document.rs::workspace_query_rejects_snapshot_git_and_artifact_result_mismatches
       - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_result_rejects_workspace_query_value_forgery_with_valid_hashes
       - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_result_rejects_literal_workspace_handle_provenance_forgery
+      - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_result_rejects_workspace_lifecycle_state_forgery_with_valid_hashes
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_bind_worker_methods_to_primary_kinds_and_receipts
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_reject_cross_method_payloads_unbound_receipts_and_data_class_gaps
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_permissions_use_capability_grants_and_return_planerror_redactions
@@ -1291,6 +1292,7 @@ rows:
       - crates/leaven-public-seam/src/plan_execution.rs::execute_workspace_query_expr
       - crates/leaven-public-seam/src/plan_execution.rs::execute_workspace_materialize_call
       - crates/leaven-public-seam/src/plan_execution/receipts.rs::validate_workspace_query_receipt
+      - crates/leaven-public-seam/src/plan_execution/receipts.rs::update_call_workspace_provenance
       - crates/leaven-public-seam/src/plan_execution.rs::record_workspace_materialize_outcome
       - crates/leaven-public-seam/src/plan_execution.rs::record_workspace_release_outcome
       - crates/leaven-public-seam/src/acp_profile.rs::extension_result_contract
@@ -1305,6 +1307,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-23-workspace-query-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-23-workspace-handle-provenance-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-workspace-query-op-specific-partial-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-workspace-lifecycle-replay-partial-review.md
     status: pending
 
   - id: ps1.lm.contract
