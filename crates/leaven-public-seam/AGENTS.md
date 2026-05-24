@@ -242,7 +242,10 @@ source-receipt preservation plus target-derived data-class coverage at the
 wire-envelope layer only. Envelope-level and public trace-ref data classes are
 part of that coverage, and target-derived evidence must also carry a read
 receipt so target-derived facts cannot pass as unreceipted policy metadata.
-This is not evaluator evidence production, redaction execution, receipt
+Evidence that carries `case.target` data classes must declare
+`target_derived=true`, so a false target-derived flag cannot hide target
+material in public, private, trace, or top-level data-class projections. This is
+not evaluator evidence production, redaction execution, receipt
 persistence, or data-class propagation through runtime stages.
 
 Crate-root exports for `EvaluationJobDocument`, `EvaluationJobKind`, and
@@ -266,8 +269,8 @@ Crate-root exports for `StagePayloadDocument`, `StagePayloadRole`, and
 active-schema stage-payload validation for role-specific reflector,
 reflection-result, proposer, runner, scorer, judge, callback, and adapter
 payloads, including target-safe reflector examples, receipted reflection
-results whose top-level source refs and any declared nested source refs back
-the diagnosis, proposal/reflection separation that preserves reflection source
+results whose top-level source refs and required nested diagnosis source refs
+back the diagnosis, proposal/reflection separation that preserves reflection source
 refs, allowed change schema declarations, target-aware scorer context binding
 to the scored case, output contexts, and payload-schema fingerprints. They are
 not an agent runtime, LM prompt renderer, ACP delivery path, proposal
@@ -347,8 +350,9 @@ backpressure, or runtime watch support.
   preserve visibility projections, projection data classes, top-level target-
   derived data classes, and read/effect/write source receipt refs at the public-
   seam validation layer. It rejects target-derived evidence without a read
-  receipt and evidence with no source receipts. It does not prove
-  evaluator/evidence runtime production or public PlanResult projection.
+  receipt, evidence with no source receipts, and envelopes that carry
+  `case.target` data classes while claiming `target_derived=false`. It does not
+  prove evaluator/evidence runtime production or public PlanResult projection.
 - `tests/evaluation_job.rs` proves active-schema EvaluationJob values preserve
   evaluator/request/candidate/case/revision/deadline/capability identity for
   independent, pairwise, and listwise shapes, rejects missing deadline,
@@ -368,10 +372,12 @@ backpressure, or runtime watch support.
 - `tests/stage_payloads.rs` proves active-schema stage payloads have a semantic
   owner for reflector, reflection result, proposer, runner, scorer, judge,
   callback, and adapter roles. It rejects reflector `case.target` data-class
-  leakage, unreceipted or diagnosis-free reflection results, dropped reflection
-  source refs in proposer payloads, and change proposals without allowed change
-  schema authority. It does not prove runtime stage lowering, ACP transport,
-  provider calls, or proposal graph mutation.
+  leakage, reflector examples whose source refs are not carried by the request,
+  unreceipted or diagnosis-free reflection results, diagnosis entries without
+  carried source refs, dropped reflection source refs in proposer payloads, and
+  change proposals without allowed change schema authority. It does not prove
+  runtime stage lowering, ACP transport, provider calls, or proposal graph
+  mutation.
 - `tests/acp_profile.rs` proves locked Leaven ACP profile semantics for pinned
   ACP version, stdio-first transport preference, Leaven-only extension methods,
   capability-action mapping, locked Plan IR/Plan Result schema bindings,

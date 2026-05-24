@@ -112,6 +112,83 @@ fn evidence_envelope_rejects_unreceipted_target_derived_evidence() {
     ));
 }
 
+#[test]
+fn evidence_envelope_rejects_hidden_target_derivation_flag() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut top_level_target_class = target_derived_envelope();
+    top_level_target_class["target_derived"] = json!(false);
+    assert!(matches!(
+        package
+            .validate_evidence_envelope_document(&top_level_target_class)
+            .unwrap_err(),
+        PublicSeamError::InvalidEvidence { .. }
+    ));
+
+    let mut public_projection_target_class = target_derived_envelope();
+    public_projection_target_class["target_derived"] = json!(false);
+    public_projection_target_class
+        .as_object_mut()
+        .unwrap()
+        .remove("data_classes");
+    public_projection_target_class["public"]["data_classes"] = json!(["case.target"]);
+    assert!(matches!(
+        package
+            .validate_evidence_envelope_document(&public_projection_target_class)
+            .unwrap_err(),
+        PublicSeamError::InvalidEvidence { .. }
+    ));
+
+    let mut private_projection_target_class = target_derived_envelope();
+    private_projection_target_class["target_derived"] = json!(false);
+    private_projection_target_class
+        .as_object_mut()
+        .unwrap()
+        .remove("data_classes");
+    private_projection_target_class["public"]["data_classes"] = json!(["public"]);
+    private_projection_target_class["private"]["data_classes"] = json!(["case.target"]);
+    assert!(matches!(
+        package
+            .validate_evidence_envelope_document(&private_projection_target_class)
+            .unwrap_err(),
+        PublicSeamError::InvalidEvidence { .. }
+    ));
+
+    let mut public_trace_target_class = target_derived_envelope();
+    public_trace_target_class["target_derived"] = json!(false);
+    public_trace_target_class
+        .as_object_mut()
+        .unwrap()
+        .remove("data_classes");
+    public_trace_target_class["public"]["data_classes"] = json!(["public"]);
+    public_trace_target_class["public"]["trace_refs"][0]["data_classes"] = json!(["case.target"]);
+    public_trace_target_class
+        .as_object_mut()
+        .unwrap()
+        .remove("trace_refs");
+    assert!(matches!(
+        package
+            .validate_evidence_envelope_document(&public_trace_target_class)
+            .unwrap_err(),
+        PublicSeamError::InvalidEvidence { .. }
+    ));
+
+    let mut top_level_trace_target_class = target_derived_envelope();
+    top_level_trace_target_class["target_derived"] = json!(false);
+    top_level_trace_target_class
+        .as_object_mut()
+        .unwrap()
+        .remove("data_classes");
+    top_level_trace_target_class["public"]["data_classes"] = json!(["public"]);
+    top_level_trace_target_class["trace_refs"][0]["data_classes"] = json!(["case.target"]);
+    assert!(matches!(
+        package
+            .validate_evidence_envelope_document(&top_level_trace_target_class)
+            .unwrap_err(),
+        PublicSeamError::InvalidEvidence { .. }
+    ));
+}
+
 fn target_derived_envelope() -> Value {
     json!({
         "schema_version": "leaven.evidence_envelope.v1",
