@@ -68,6 +68,69 @@ fn call_authority_rejects_reflector_lm_call_input_classes_include_case_target() 
     );
 }
 
+#[test]
+fn call_authority_rejects_agent_shell_or_network_beyond_execution_policy() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let capability = CapabilityDocument::from_value(call_capability()).unwrap();
+
+    let mut shell_plan = call_authority_plan();
+    shell_plan["ops"][1]["call"]["tool_policy"] = json!({
+        "allow_shell": true,
+        "network": "leaven_endpoint_only"
+    });
+    let error = package
+        .validate_call_authority_document(&shell_plan, &capability)
+        .unwrap_err();
+    assert!(
+        error.to_string().contains("agent_run allow_shell denied"),
+        "unexpected error: {error:?}"
+    );
+
+    let mut network_plan = call_authority_plan();
+    network_plan["ops"][1]["call"]["tool_policy"] = json!({
+        "allow_shell": false,
+        "network": "unrestricted"
+    });
+    let error = package
+        .validate_call_authority_document(&network_plan, &capability)
+        .unwrap_err();
+    assert!(
+        error.to_string().contains("agent_run network policy"),
+        "unexpected error: {error:?}"
+    );
+}
+
+#[test]
+fn call_authority_rejects_sandbox_exec_outside_workspace_execution_policy() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut subprocess_denied = call_capability();
+    subprocess_denied["execution_policy"]["subprocess"] = json!("deny");
+    let capability = CapabilityDocument::from_value(subprocess_denied).unwrap();
+    let error = package
+        .validate_call_authority_document(&call_authority_plan(), &capability)
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("sandbox_exec denied by execution_policy.subprocess"),
+        "unexpected error: {error:?}"
+    );
+
+    let mut unrestricted_filesystem = call_capability();
+    unrestricted_filesystem["execution_policy"]["filesystem"] = json!("unrestricted");
+    let capability = CapabilityDocument::from_value(unrestricted_filesystem).unwrap();
+    let error = package
+        .validate_call_authority_document(&call_authority_plan(), &capability)
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("sandbox_exec requires workspace_handles_only"),
+        "unexpected error: {error:?}"
+    );
+}
+
 fn call_authority_plan() -> Value {
     json!({
         "schema_version": "leaven.plan.v1",

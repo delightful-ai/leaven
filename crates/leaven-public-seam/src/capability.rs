@@ -169,6 +169,18 @@ impl CapabilityDocument {
         &self.execution_policy.profile
     }
 
+    pub(crate) fn execution_policy_network(&self) -> &str {
+        &self.execution_policy.network
+    }
+
+    pub(crate) fn execution_policy_subprocess(&self) -> &str {
+        &self.execution_policy.subprocess
+    }
+
+    pub(crate) fn execution_policy_filesystem(&self) -> &str {
+        &self.execution_policy.filesystem
+    }
+
     /// Delegation allowed action strings.
     pub fn delegation_allowed_actions(&self) -> &[String] {
         &self.delegation.allowed_actions
