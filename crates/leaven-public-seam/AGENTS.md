@@ -103,7 +103,7 @@ implementation, engine-client runtime, worker-agent runtime, provider call, or
 graph mutation route.
 
 Crate-root exports for `AcpWorkerSession`, `AcpSessionLifecycle`,
-`AcpSessionUpdate`, and `AcpSessionCancellation` are advanced public seam
+`AcpSessionState`, `AcpSessionUpdate`, and `AcpSessionCancellation` are advanced public seam
 contracts for profile-derived lifecycle facts only. They prove the
 engine-client/worker-agent role vocabulary, stdio-first session model, bounded
 progress-update queue, and cancellation state at the contract layer. They are

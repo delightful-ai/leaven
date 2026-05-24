@@ -1,6 +1,6 @@
 use leaven_public_seam::{
-    AcpAuthenticateRequest, AcpPermissionRequest, AcpSessionLifecycle, AcpWorkerSession,
-    CapabilityDocument, CapabilityRegistry, PublicSeamError, PublicSeamPackage,
+    AcpAuthenticateRequest, AcpPermissionRequest, AcpSessionLifecycle, AcpSessionState,
+    AcpWorkerSession, CapabilityDocument, CapabilityRegistry, PublicSeamError, PublicSeamPackage,
 };
 use serde_json::{Value, json};
 
@@ -56,6 +56,7 @@ fn acp_worker_session_uses_engine_client_worker_agent_inversion_and_bounded_upda
     assert_eq!(session.engine_role(), "engine_client");
     assert_eq!(session.worker_role(), "worker_agent");
     assert_eq!(session.lifecycle().max_inflight_updates(), 32);
+    assert_eq!(session.lifecycle().state(), AcpSessionState::Running);
 
     let update = session
         .lifecycle_mut()
@@ -75,7 +76,12 @@ fn acp_worker_session_uses_engine_client_worker_agent_inversion_and_bounded_upda
 
     let cancellation = session.lifecycle_mut().cancel("operator cancelled");
     assert_eq!(cancellation.reason(), "operator cancelled");
+    assert_eq!(session.lifecycle().state(), AcpSessionState::Cancelled);
     assert!(session.lifecycle().is_cancelled());
+    assert_eq!(
+        session.lifecycle_mut().cancel("ignored duplicate").reason(),
+        "operator cancelled"
+    );
     assert!(matches!(
         session
             .lifecycle_mut()

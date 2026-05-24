@@ -1063,6 +1063,7 @@ rows:
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::v1_scope
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-lifecycle-partial-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-acp-lifecycle-state-partial-review.md
     status: pending
 
   - id: ps1.acp.auth_permissions
@@ -1163,6 +1164,7 @@ rows:
       - crates/leaven-public-seam/src/acp_profile.rs::AcpProfileDocument::default_max_inflight_updates
       - crates/leaven-public-seam/src/acp_profile.rs::AcpWorkerSession
       - crates/leaven-public-seam/src/acp_profile.rs::AcpSessionLifecycle
+      - crates/leaven-public-seam/src/acp_profile.rs::AcpSessionState
       - crates/leaven-public-seam/src/acp_profile.rs::AcpSessionLifecycle::enqueue_progress
       - crates/leaven-public-seam/src/acp_profile.rs::AcpSessionLifecycle::cancel
     review_evidence:
