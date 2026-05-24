@@ -84,6 +84,7 @@ fn proposal_render(
         leaven_agent::AgentInstructions::task("Read TASK.md and edit target/current in place.");
     let output_contract = OutputContract::WorkspaceDiff {
         roots: vec![WorkspacePath::new("target/current").expect("constant path is valid")],
+        surface_fingerprint: None,
     };
     let workspace_files = vec![
         AgentContextRef {
