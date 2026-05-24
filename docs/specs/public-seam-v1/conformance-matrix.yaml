@@ -1078,6 +1078,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-score-output-candidate-binding-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-score-output-runcontext-plan-projection-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-score-output-summary-only-partial-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-score-lm-agent-json-schema-partial-review.md
     status: pending
 
   - id: ps1.evaluator.assessment_scope
@@ -1501,6 +1502,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-costful-primary-receipt-follow-up-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-evidence-stage-current-tranche-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-external-effect-policy-current-tranche-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-score-lm-agent-json-schema-partial-review.md
     status: pending
 
   - id: ps1.agent.contract
@@ -1595,6 +1597,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-agent-sandbox-receipt-stream-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-costful-primary-receipt-follow-up-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-external-effect-policy-current-tranche-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-score-lm-agent-json-schema-partial-review.md
     status: pending
 
   - id: ps1.sandbox.exec_streaming
