@@ -731,12 +731,13 @@ fn workspace_query_reads_require_live_handles_and_emit_query_receipts() {
             "workspace_list",
             "workspace_snapshot",
             "workspace_git_diff",
+            "workspace_git_status",
             "workspace_capture_artifacts"
         ]
     );
     assert_eq!(
         report.document().receipt_kinds(),
-        &["call", "query", "query", "query", "query", "query"]
+        &["call", "query", "query", "query", "query", "query", "query"]
     );
     assert_eq!(
         report.value()["values"]["file"]["kind"].as_str(),
@@ -762,6 +763,10 @@ fn workspace_query_reads_require_live_handles_and_emit_query_receipts() {
     );
     assert_eq!(
         report.value()["values"]["diff"]["kind"].as_str(),
+        Some("workspace_diff")
+    );
+    assert_eq!(
+        report.value()["values"]["status"]["kind"].as_str(),
         Some("workspace_diff")
     );
     assert_eq!(
@@ -831,6 +836,50 @@ fn workspace_query_rejects_unmaterialized_released_and_mismatched_results() {
             .contains("host returned `workspace_listing` instead of `workspace_file`"),
         "unexpected error: {error:?}"
     );
+
+    for (name, op) in [
+        (
+            "stat",
+            json!({
+                "kind": "stat",
+                "path": "README.md"
+            }),
+        ),
+        (
+            "digest",
+            json!({
+                "kind": "digest",
+                "path": "README.md",
+                "algorithm": "sha256"
+            }),
+        ),
+        (
+            "git_log",
+            json!({
+                "kind": "git_log",
+                "max_entries": 5
+            }),
+        ),
+    ] {
+        let mut unsupported = workspace_materialize_query_plan();
+        unsupported["ops"]
+            .as_array_mut()
+            .unwrap()
+            .push(workspace_query_let_op(
+                name,
+                json!("ws_planexec_materialized"),
+                op,
+            ));
+        unsupported["return"] = json!(["workspace", name]);
+        let mut host = RecordingPlanHost::default();
+        let error = package
+            .execute_plan_document(&unsupported, &plan_execution_context(), &mut host)
+            .unwrap_err();
+        assert!(
+            error.to_string().contains("does not execute"),
+            "unexpected error for {name}: {error:?}"
+        );
+    }
 }
 
 #[test]
@@ -1484,6 +1533,14 @@ fn workspace_materialize_query_plan() -> Value {
                 }),
             ),
             workspace_query_let_op(
+                "status",
+                json!("ws_planexec_materialized"),
+                json!({
+                    "kind": "git_status",
+                    "porcelain": true
+                }),
+            ),
+            workspace_query_let_op(
                 "captured",
                 json!("ws_planexec_materialized"),
                 json!({
@@ -1493,7 +1550,7 @@ fn workspace_materialize_query_plan() -> Value {
                 }),
             )
         ],
-        "return": ["workspace", "file", "listing", "snapshot", "diff", "captured"],
+        "return": ["workspace", "file", "listing", "snapshot", "diff", "status", "captured"],
         "commit": {
             "kind": "graph_writes_atomic",
             "on_stale": "reject"
@@ -2117,75 +2174,42 @@ impl PlanExecutionHost for RecordingPlanHost {
                     BTreeSet::from(["candidate.artifact"])
                 );
                 self.calls.push("workspace_read_file");
-                Ok(PlanWorkspaceQueryOutcome::new(
-                    json!({
-                        "kind": "workspace_file",
-                        "path": "README.md",
-                        "content": "workspace file"
-                    }),
-                    "rev_planexec_base",
-                )
-                .with_data_classes(["candidate.artifact".to_owned(), "public".to_owned()]))
+                Ok(workspace_query_outcome(json!({
+                    "kind": "workspace_file",
+                    "path": "README.md",
+                    "content": "workspace file"
+                })))
             }
             ("listing", "list") => {
                 assert_eq!(request.path()?, Some("."));
                 self.calls.push("workspace_list");
-                Ok(PlanWorkspaceQueryOutcome::new(
-                    json!({
-                        "kind": "workspace_listing",
-                        "entries": [
-                            {
-                                "path": "README.md",
-                                "kind": "file",
-                                "bytes": 14,
-                                "data_classes": ["candidate.artifact"]
-                            }
-                        ]
-                    }),
-                    "rev_planexec_base",
-                )
-                .with_data_classes(["candidate.artifact".to_owned(), "public".to_owned()]))
+                Ok(workspace_query_outcome(workspace_listing_value()))
             }
             ("snapshot", "snapshot") => {
                 self.calls.push("workspace_snapshot");
-                Ok(PlanWorkspaceQueryOutcome::new(
-                    json!({
-                        "kind": "workspace_snapshot",
-                        "workspace": "ws_planexec_materialized",
-                        "digest": "sha256:planexec"
-                    }),
-                    "rev_planexec_base",
-                )
-                .with_data_classes(["candidate.artifact".to_owned(), "public".to_owned()]))
+                Ok(workspace_query_outcome(json!({
+                    "kind": "workspace_snapshot",
+                    "workspace": "ws_planexec_materialized",
+                    "digest": "sha256:planexec"
+                })))
             }
             ("diff", "git_diff") => {
                 self.calls.push("workspace_git_diff");
-                Ok(PlanWorkspaceQueryOutcome::new(
-                    json!({
-                        "kind": "workspace_diff",
-                        "text": "diff --git a/README.md b/README.md"
-                    }),
-                    "rev_planexec_base",
-                )
-                .with_data_classes(["candidate.artifact".to_owned(), "public".to_owned()]))
+                Ok(workspace_query_outcome(json!({
+                    "kind": "workspace_diff",
+                    "text": "diff --git a/README.md b/README.md"
+                })))
+            }
+            ("status", "git_status") => {
+                self.calls.push("workspace_git_status");
+                Ok(workspace_query_outcome(json!({
+                    "kind": "workspace_diff",
+                    "text": " M README.md"
+                })))
             }
             ("captured", "capture_artifacts") => {
                 self.calls.push("workspace_capture_artifacts");
-                Ok(PlanWorkspaceQueryOutcome::new(
-                    json!({
-                        "kind": "workspace_listing",
-                        "entries": [
-                            {
-                                "path": "README.md",
-                                "kind": "file",
-                                "bytes": 14,
-                                "data_classes": ["candidate.artifact"]
-                            }
-                        ]
-                    }),
-                    "rev_planexec_base",
-                )
-                .with_data_classes(["candidate.artifact".to_owned(), "public".to_owned()]))
+                Ok(workspace_query_outcome(workspace_listing_value()))
             }
             ("wrong_kind", "read_file") => {
                 self.calls.push("workspace_read_file");
@@ -2299,6 +2323,25 @@ fn blob_ref(id: &'static str) -> Value {
         "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
         "bytes": 12,
         "data_classes": ["public"]
+    })
+}
+
+fn workspace_query_outcome(value: Value) -> PlanWorkspaceQueryOutcome {
+    PlanWorkspaceQueryOutcome::new(value, "rev_planexec_base")
+        .with_data_classes(["candidate.artifact".to_owned(), "public".to_owned()])
+}
+
+fn workspace_listing_value() -> Value {
+    json!({
+        "kind": "workspace_listing",
+        "entries": [
+            {
+                "path": "README.md",
+                "kind": "file",
+                "bytes": 14,
+                "data_classes": ["candidate.artifact"]
+            }
+        ]
     })
 }
 
