@@ -747,7 +747,7 @@ impl PublicSeamPackage {
             "/propose_request",
             propose,
         )?;
-        ReflectProposeHandoffDocument::from_schema_valid_values(reflect, reflection, propose)
+        ReflectProposeHandoffDocument::from_schema_valid_values(value, reflect, reflection, propose)
     }
 
     /// Validates the V1 deferred-watch marker and its finite-diff Plan IR replacement.

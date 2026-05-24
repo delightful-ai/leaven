@@ -27,16 +27,20 @@ pub struct ReflectProposeHandoffDocument {
     run: String,
     reflect_stage_call_id: String,
     propose_stage_call_id: String,
+    reflect_stage_receipt: String,
+    propose_stage_receipt: String,
     base_revision: String,
     parent: String,
     surface_fingerprint: String,
     capability_fingerprint: String,
     query_policy_fingerprint: String,
+    reflection_result_fingerprint: String,
     reflection_source_ref_count: usize,
 }
 
 impl ReflectProposeHandoffDocument {
     pub(crate) fn from_schema_valid_values(
+        handoff: &Value,
         reflect_request: &Value,
         reflection_result: &Value,
         propose_request: &Value,
@@ -96,6 +100,14 @@ impl ReflectProposeHandoffDocument {
                 "reflect and propose stages must use distinct stage_call_id values",
             ));
         }
+        let reflection_result_fingerprint =
+            prefixed_stage_payload_hash("fp_stage_payload_sha256_", reflection_result)?;
+        let (reflect_stage_receipt, propose_stage_receipt) = validate_handoff_stage_receipts(
+            handoff,
+            &reflect_stage_call_id,
+            &propose_stage_call_id,
+            &reflection_result_fingerprint,
+        )?;
 
         let reflect_source_refs = source_ref_set(reflect.get("source_refs"), "source_refs")?;
         let reflection_source_refs = source_ref_set(
@@ -114,11 +126,14 @@ impl ReflectProposeHandoffDocument {
             run,
             reflect_stage_call_id,
             propose_stage_call_id,
+            reflect_stage_receipt,
+            propose_stage_receipt,
             base_revision,
             parent,
             surface_fingerprint,
             capability_fingerprint,
             query_policy_fingerprint,
+            reflection_result_fingerprint,
             reflection_source_ref_count: reflection_source_refs.len(),
         })
     }
@@ -136,6 +151,16 @@ impl ReflectProposeHandoffDocument {
     /// Stage call id for the proposer stage.
     pub fn propose_stage_call_id(&self) -> &str {
         &self.propose_stage_call_id
+    }
+
+    /// Stage receipt proving the reflector produced the consumed reflection result.
+    pub fn reflect_stage_receipt(&self) -> &str {
+        &self.reflect_stage_receipt
+    }
+
+    /// Stage receipt proving the proposer consumed the reflected diagnosis.
+    pub fn propose_stage_receipt(&self) -> &str {
+        &self.propose_stage_receipt
     }
 
     /// Base graph revision shared by both stage requests.
@@ -161,6 +186,11 @@ impl ReflectProposeHandoffDocument {
     /// Query-policy fingerprint shared by both stage requests.
     pub fn query_policy_fingerprint(&self) -> &str {
         &self.query_policy_fingerprint
+    }
+
+    /// JCS fingerprint of the exact consumed `ReflectionResult`.
+    pub fn reflection_result_fingerprint(&self) -> &str {
+        &self.reflection_result_fingerprint
     }
 
     /// Number of source refs carried by the consumed `ReflectionResult`.
@@ -378,6 +408,7 @@ fn inspect_reflect_request(
     require_parent_source_ref(object)?;
     require_reflect_surface_context(object)?;
     require_non_empty_array(object.get("source_refs"), "source_refs")?;
+    reject_target_leakage(object.get("source_refs"), "reflector request source_refs")?;
     let top_level_source_refs = source_ref_set(object.get("source_refs"), "source_refs")?;
     let examples = required_array(object.get("examples"), "examples")?;
     if examples.is_empty() {
@@ -390,6 +421,7 @@ fn inspect_reflect_request(
             .as_object()
             .ok_or_else(|| invalid_stage_payload("reflective examples must be objects"))?;
         require_non_empty_array(example.get("source_refs"), "examples.source_refs")?;
+        reject_target_leakage(example.get("source_refs"), "reflector example source_refs")?;
         require_source_ref_coverage(
             &top_level_source_refs,
             example.get("source_refs"),
@@ -844,6 +876,157 @@ fn matching_source_ref(
     Ok(left)
 }
 
+fn validate_handoff_stage_receipts(
+    handoff: &Value,
+    reflect_stage_call_id: &str,
+    propose_stage_call_id: &str,
+    reflection_result_fingerprint: &str,
+) -> Result<(String, String), PublicSeamError> {
+    let receipts = handoff
+        .as_object()
+        .and_then(|object| object.get("stage_receipts"))
+        .and_then(Value::as_array)
+        .ok_or_else(|| {
+            invalid_stage_payload("reflect/propose handoff must carry stage_receipts")
+        })?;
+    let mut reflect_receipt = None;
+    let mut propose_receipt = None;
+    for receipt in receipts {
+        let receipt = receipt
+            .as_object()
+            .ok_or_else(|| invalid_stage_payload("stage_receipts entries must be objects"))?;
+        if required_string(receipt.get("kind"), "stage_receipts.kind")? != "stage_receipt" {
+            return Err(invalid_stage_payload(
+                "stage_receipts entries must have kind `stage_receipt`",
+            ));
+        }
+        let id = required_string(receipt.get("id"), "stage_receipts.id")?;
+        if !id.starts_with("stagerec_") {
+            return Err(invalid_stage_payload(
+                "stage receipt ids must use the `stagerec_` prefix",
+            ));
+        }
+        let stage_call_id =
+            required_string(receipt.get("stage_call_id"), "stage_receipts.stage_call_id")?;
+        let stage_role = required_string(receipt.get("stage_role"), "stage_receipts.stage_role")?;
+        if stage_call_id == reflect_stage_call_id && stage_role == "reflector" {
+            validate_reflect_receipt_produces(receipt, reflection_result_fingerprint)?;
+            reflect_receipt = Some(id.to_owned());
+        } else if stage_call_id == propose_stage_call_id && stage_role == "proposer" {
+            validate_propose_receipt_consumes(receipt, reflection_result_fingerprint)?;
+            propose_receipt = Some(id.to_owned());
+        }
+    }
+    let reflect_receipt = reflect_receipt.ok_or_else(|| {
+        invalid_stage_payload("reflect/propose handoff missing reflector stage receipt")
+    })?;
+    let propose_receipt = propose_receipt.ok_or_else(|| {
+        invalid_stage_payload("reflect/propose handoff missing proposer stage receipt")
+    })?;
+    if reflect_receipt == propose_receipt {
+        return Err(invalid_stage_payload(
+            "reflect and propose stages must use distinct stage receipt ids",
+        ));
+    }
+    let propose = receipts
+        .iter()
+        .filter_map(Value::as_object)
+        .find(|receipt| {
+            receipt.get("stage_call_id").and_then(Value::as_str) == Some(propose_stage_call_id)
+                && receipt.get("stage_role").and_then(Value::as_str) == Some("proposer")
+        })
+        .ok_or_else(|| {
+            invalid_stage_payload("reflect/propose handoff missing proposer stage receipt")
+        })?;
+    validate_propose_receipt_binds_reflect_receipt(
+        propose,
+        reflection_result_fingerprint,
+        &reflect_receipt,
+    )?;
+    Ok((reflect_receipt, propose_receipt))
+}
+
+fn validate_reflect_receipt_produces(
+    receipt: &serde_json::Map<String, Value>,
+    reflection_result_fingerprint: &str,
+) -> Result<(), PublicSeamError> {
+    let produces = receipt
+        .get("produces")
+        .and_then(Value::as_object)
+        .ok_or_else(|| invalid_stage_payload("reflector stage receipt must carry produces"))?;
+    if required_string(produces.get("kind"), "stage_receipts.produces.kind")? != "reflection_result"
+    {
+        return Err(invalid_stage_payload(
+            "reflector stage receipt must produce a reflection_result",
+        ));
+    }
+    if required_string(
+        produces.get("fingerprint"),
+        "stage_receipts.produces.fingerprint",
+    )? != reflection_result_fingerprint
+    {
+        return Err(invalid_stage_payload(
+            "reflector stage receipt must fingerprint the exact ReflectionResult",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_propose_receipt_consumes(
+    receipt: &serde_json::Map<String, Value>,
+    reflection_result_fingerprint: &str,
+) -> Result<(), PublicSeamError> {
+    let consumes = receipt
+        .get("consumes")
+        .and_then(Value::as_array)
+        .ok_or_else(|| invalid_stage_payload("proposer stage receipt must carry consumes"))?;
+    if consumes.is_empty() {
+        return Err(invalid_stage_payload(
+            "proposer stage receipt must consume the ReflectionResult",
+        ));
+    }
+    for consume in consumes {
+        let consume = consume.as_object().ok_or_else(|| {
+            invalid_stage_payload("stage receipt consumes entries must be objects")
+        })?;
+        if consume.get("kind").and_then(Value::as_str) == Some("reflection_result")
+            && consume.get("fingerprint").and_then(Value::as_str)
+                == Some(reflection_result_fingerprint)
+        {
+            return Ok(());
+        }
+    }
+    Err(invalid_stage_payload(
+        "proposer stage receipt must consume the exact ReflectionResult fingerprint",
+    ))
+}
+
+fn validate_propose_receipt_binds_reflect_receipt(
+    receipt: &serde_json::Map<String, Value>,
+    reflection_result_fingerprint: &str,
+    reflect_receipt: &str,
+) -> Result<(), PublicSeamError> {
+    let consumes = receipt
+        .get("consumes")
+        .and_then(Value::as_array)
+        .ok_or_else(|| invalid_stage_payload("proposer stage receipt must carry consumes"))?;
+    for consume in consumes {
+        let consume = consume.as_object().ok_or_else(|| {
+            invalid_stage_payload("stage receipt consumes entries must be objects")
+        })?;
+        if consume.get("kind").and_then(Value::as_str) == Some("reflection_result")
+            && consume.get("fingerprint").and_then(Value::as_str)
+                == Some(reflection_result_fingerprint)
+            && consume.get("receipt").and_then(Value::as_str) == Some(reflect_receipt)
+        {
+            return Ok(());
+        }
+    }
+    Err(invalid_stage_payload(
+        "proposer stage receipt must cite the reflector receipt for the consumed ReflectionResult",
+    ))
+}
+
 fn reject_target_leakage_value(value: &Value, context: &str) -> Result<(), PublicSeamError> {
     match value {
         Value::Object(object) => {
@@ -873,6 +1056,12 @@ fn reject_target_leakage_value(value: &Value, context: &str) -> Result<(), Publi
 
 fn contains_case_target_marker(text: &str) -> bool {
     text.to_ascii_lowercase().contains("case.target")
+}
+
+fn prefixed_stage_payload_hash(prefix: &str, value: &Value) -> Result<String, PublicSeamError> {
+    let digest = jcs_canonicalize::sha256_jcs_hex(value)
+        .map_err(|error| invalid_stage_payload(format!("stage payload hash failed: {error}")))?;
+    Ok(format!("{prefix}{digest}"))
 }
 
 fn required_string<'a>(value: Option<&'a Value>, field: &str) -> Result<&'a str, PublicSeamError> {

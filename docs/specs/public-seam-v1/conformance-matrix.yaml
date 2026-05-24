@@ -802,10 +802,16 @@ rows:
       - crates/leaven-public-seam/tests/stage_payloads.rs::propose_request_requires_reflection_result_and_change_schema_authority
       - crates/leaven-public-seam/tests/stage_payloads.rs::propose_request_rejects_reflection_source_ref_drop
       - crates/leaven-public-seam/tests/stage_payloads.rs::reflect_propose_handoff_rejects_single_prompt_and_stale_reflection_fakes
+      - crates/leaven-public-seam/tests/stage_payloads.rs::reflect_propose_handoff_rejects_missing_or_forged_stage_receipts
     partial_contract_implementation_evidence:
       - crates/leaven-public-seam/src/stage_payload.rs::StagePayloadDocument
       - crates/leaven-public-seam/src/stage_payload.rs::ReflectProposeHandoffDocument
       - crates/leaven-public-seam/src/stage_payload.rs::ReflectProposeHandoffDocument::from_schema_valid_values
+      - crates/leaven-public-seam/src/stage_payload.rs::validate_handoff_stage_receipts
+      - crates/leaven-public-seam/src/stage_payload.rs::validate_reflect_receipt_produces
+      - crates/leaven-public-seam/src/stage_payload.rs::validate_propose_receipt_consumes
+      - crates/leaven-public-seam/src/stage_payload.rs::validate_propose_receipt_binds_reflect_receipt
+      - crates/leaven-public-seam/src/stage_payload.rs::prefixed_stage_payload_hash
       - crates/leaven-public-seam/src/stage_payload.rs::inspect_propose_request
       - crates/leaven-public-seam/src/stage_payload.rs::inspect_reflection_result
       - crates/leaven-public-seam/src/stage_payload.rs::require_parent_source_ref
