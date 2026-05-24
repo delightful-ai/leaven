@@ -590,12 +590,7 @@ fn execute_call<H: PlanExecutionHost>(
                     "require_cached mode cannot prove cached execution for `agent_run` calls",
                 ));
             }
-            let outcome = host.agent_run(PlanAgentRunRequest {
-                name: &name,
-                call,
-                deps: dep_values,
-            })?;
-            record_agent_call_outcome(name, outcome, &request_hash, context, state)
+            execute_agent_run_call(host, name, call, dep_values, &request_hash, context, state)
         }
         "sandbox_exec" => {
             if mode == EffectMode::RequireCached {
@@ -603,14 +598,7 @@ fn execute_call<H: PlanExecutionHost>(
                     "require_cached mode cannot prove cached execution for `sandbox_exec` calls",
                 ));
             }
-            let request = PlanSandboxExecRequest {
-                name: &name,
-                call,
-                deps: dep_values,
-            };
-            request.live_workspace()?;
-            let outcome = host.sandbox_exec(request)?;
-            record_sandbox_call_outcome(name, outcome, &request_hash, context, state)
+            execute_sandbox_exec_call(host, name, call, dep_values, &request_hash, context, state)
         }
         "workspace_materialize" => {
             if mode == EffectMode::RequireCached {
@@ -641,6 +629,44 @@ fn execute_call<H: PlanExecutionHost>(
             "representative Plan IR harness does not execute `{call_kind}` calls"
         ))),
     }
+}
+
+fn execute_agent_run_call<H: PlanExecutionHost>(
+    host: &mut H,
+    name: String,
+    call: &Value,
+    dep_values: &BTreeMap<String, Value>,
+    request_hash: &str,
+    context: &PlanExecutionContext,
+    state: &mut ExecutionState,
+) -> Result<(), PublicSeamError> {
+    let request = PlanAgentRunRequest {
+        name: &name,
+        call,
+        deps: dep_values,
+    };
+    request.live_workspace()?;
+    let outcome = host.agent_run(request)?;
+    record_agent_call_outcome(name, outcome, request_hash, context, state)
+}
+
+fn execute_sandbox_exec_call<H: PlanExecutionHost>(
+    host: &mut H,
+    name: String,
+    call: &Value,
+    dep_values: &BTreeMap<String, Value>,
+    request_hash: &str,
+    context: &PlanExecutionContext,
+    state: &mut ExecutionState,
+) -> Result<(), PublicSeamError> {
+    let request = PlanSandboxExecRequest {
+        name: &name,
+        call,
+        deps: dep_values,
+    };
+    request.live_workspace()?;
+    let outcome = host.sandbox_exec(request)?;
+    record_sandbox_call_outcome(name, outcome, request_hash, context, state)
 }
 
 fn execute_workspace_release_call<H: PlanExecutionHost>(

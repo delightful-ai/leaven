@@ -141,6 +141,19 @@ impl<'a> PlanAgentRunRequest<'a> {
         self.deps
     }
 
+    /// Workspace handle requested for agent execution.
+    pub fn workspace(&self) -> Result<&'a str, PublicSeamError> {
+        workspace_ref_id(self.call.get("workspace"), "agent_run must carry workspace")
+    }
+
+    /// Workspace handle requested for agent execution, proven against live
+    /// dependency handles.
+    pub fn live_workspace(&self) -> Result<&'a str, PublicSeamError> {
+        let workspace = self.workspace()?;
+        require_live_workspace(workspace, self.deps, "agent_run")?;
+        Ok(workspace)
+    }
+
     /// Lowers the locked Plan IR `agent_run` call into provider-neutral agent
     /// runtime vocabulary.
     ///
