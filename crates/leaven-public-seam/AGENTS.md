@@ -225,8 +225,19 @@ the locked `workspace_diff` value family, and `capture_artifacts` requests must
 name at least one safe relative path with results corresponding to requested
 paths. `git_log` remains a broad `workspace_diff`-family projection, not a
 parsed commit-log surface.
-It is not workspace backend execution and still leaves full artifact/snapshot
-backend proof pending, so it is not full workspace row closeout. The
+`PlanWorkspaceQueryRequest::execute_on_workspace_view` can execute finite
+read/list/stat/sha256-digest/blake3-digest/snapshot/requested-path
+capture-artifact listing reads through `leaven-workspace::WorkspaceView`, giving
+hosts an owned substrate path that is not hand-written result JSON. It enforces
+`read_file.max_bytes`, `list.max_entries`, `list.recursive`, and
+`capture_artifacts.max_bytes` within the limits of the locked result shape.
+`capture_artifacts` still projects requested-path listing evidence, not a rich
+artifact bundle, because the locked result schema exposes the operation through
+the `workspace_listing` value family. Git-specific queries remain host-owned
+because the V1 workspace substrate does not expose Git preimage fields such as
+`against`, `porcelain`, or parsed log entries. This is partial finite workspace
+substrate proof, not full concrete Git/artifact/snapshot backend closeout, so it
+is not full workspace row closeout. The
 `PublicSeamPackage::execute_plan_document_with_capability` route
 checks Plan call/write authority against the supplied capability before host
 effects can run, including workspace lifecycle calls and `emit_run_event`
@@ -431,6 +442,14 @@ backpressure, or runtime watch support.
   unmaterialized or host-path workspace substitutes. This is public-seam
   lifecycle proof only; concrete workspace backend execution and full
   artifact/snapshot behavior remain pending.
+- `tests/workspace_query_contract.rs` proves finite workspace-query reads can
+  execute through the public seam into `leaven-workspace::WorkspaceView` for
+  read_file, list, stat, sha256/blake3 digest, snapshot, and requested-path
+  capture-artifact listing. It also proves read/capture byte bounds, list entry
+  bounds, and refusal of git_log/git_diff/git_status by the generic helper
+  instead of faking Git preimage truth. This is finite substrate proof only;
+  concrete Git workspace behavior and richer artifact bundle capture remain
+  host/back-end owned and pending.
 - `tests/call_authority.rs` proves schema-valid Call ops are checked against
   capability-granted input data classes and call-local forbidden data-class
   intersections before execution. It rejects `case.target` and other forbidden

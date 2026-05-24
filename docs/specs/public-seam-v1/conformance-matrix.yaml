@@ -1443,6 +1443,9 @@ rows:
       - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_result_rejects_workspace_query_value_forgery_with_valid_hashes
       - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_result_rejects_literal_workspace_handle_provenance_forgery
       - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_result_rejects_workspace_lifecycle_state_forgery_with_valid_hashes
+      - crates/leaven-public-seam/tests/workspace_query_contract.rs::workspace_query_executes_finite_reads_through_workspace_view
+      - crates/leaven-public-seam/tests/workspace_query_contract.rs::workspace_query_view_helper_enforces_bounded_controls
+      - crates/leaven-public-seam/tests/workspace_query_contract.rs::workspace_query_view_helper_rejects_git_queries_as_host_owned
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_bind_worker_methods_to_primary_kinds_and_receipts
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_reject_cross_method_payloads_unbound_receipts_and_data_class_gaps
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_permissions_use_capability_grants_and_return_planerror_redactions
@@ -1458,6 +1461,7 @@ rows:
       - crates/leaven-public-seam/src/plan_execution/effects.rs::LiveWorkspaceHandle::satisfies_workspace
       - crates/leaven-public-seam/src/plan_execution/effects.rs::require_live_workspace_ref
       - crates/leaven-public-seam/src/plan_execution/queries.rs::PlanWorkspaceQueryRequest
+      - crates/leaven-public-seam/src/plan_execution/queries.rs::PlanWorkspaceQueryRequest::execute_on_workspace_view
       - crates/leaven-public-seam/src/plan_execution/queries.rs::PlanWorkspaceQueryOutcome
       - crates/leaven-public-seam/src/plan_execution/queries.rs::workspace_query_expected_value_kind
       - crates/leaven-public-seam/src/plan_execution/queries.rs::validate_workspace_query_request_op
@@ -1490,6 +1494,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-workspace-lifecycle-replay-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-stage-workspace-result-kind-follow-up-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-sandbox-workspace-score-follow-up-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-workspace-view-query-helper-review.md
     status: pending
 
   - id: ps1.lm.contract
