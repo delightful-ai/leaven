@@ -284,6 +284,7 @@ pub struct AcpSessionLifecycle {
     next_sequence: u64,
     updates: VecDeque<AcpSessionUpdate>,
     cancellation: Option<AcpSessionCancellation>,
+    state: AcpSessionState,
 }
 
 impl AcpSessionLifecycle {
@@ -297,6 +298,7 @@ impl AcpSessionLifecycle {
             next_sequence: 0,
             updates: VecDeque::new(),
             cancellation: None,
+            state: AcpSessionState::Running,
         })
     }
 
@@ -312,7 +314,12 @@ impl AcpSessionLifecycle {
 
     /// Whether ACP session cancellation has been requested.
     pub const fn is_cancelled(&self) -> bool {
-        self.cancellation.is_some()
+        matches!(self.state, AcpSessionState::Cancelled)
+    }
+
+    /// Current session lifecycle state.
+    pub const fn state(&self) -> AcpSessionState {
+        self.state
     }
 
     /// Cancellation facts, when the session has been cancelled.
@@ -358,11 +365,21 @@ impl AcpSessionLifecycle {
             self.cancellation = Some(AcpSessionCancellation {
                 reason: reason.into(),
             });
+            self.state = AcpSessionState::Cancelled;
         }
         self.cancellation
             .as_ref()
             .expect("cancellation set before return")
     }
+}
+
+/// Profile-level ACP session lifecycle state.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AcpSessionState {
+    /// The worker session accepts progress updates.
+    Running,
+    /// ACP cancellation has been requested for the session.
+    Cancelled,
 }
 
 /// One ACP session progress update.
