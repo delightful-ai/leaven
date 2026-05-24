@@ -21,6 +21,154 @@ pub struct StagePayloadDocument {
     payload_schema: Option<String>,
 }
 
+/// Validated reflect-then-propose handoff across separate public-seam stages.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ReflectProposeHandoffDocument {
+    run: String,
+    reflect_stage_call_id: String,
+    propose_stage_call_id: String,
+    base_revision: String,
+    parent: String,
+    surface_fingerprint: String,
+    capability_fingerprint: String,
+    query_policy_fingerprint: String,
+    reflection_source_ref_count: usize,
+}
+
+impl ReflectProposeHandoffDocument {
+    pub(crate) fn from_schema_valid_values(
+        reflect_request: &Value,
+        reflection_result: &Value,
+        propose_request: &Value,
+    ) -> Result<Self, PublicSeamError> {
+        let reflect = StagePayloadDocument::from_schema_valid_value(reflect_request)?;
+        let reflection = StagePayloadDocument::from_schema_valid_value(reflection_result)?;
+        let propose = StagePayloadDocument::from_schema_valid_value(propose_request)?;
+        if reflect.role() != StagePayloadRole::Reflector {
+            return Err(invalid_stage_payload(
+                "reflect/propose handoff must start with ReflectRequest",
+            ));
+        }
+        if reflection.role() != StagePayloadRole::ReflectionResult {
+            return Err(invalid_stage_payload(
+                "reflect/propose handoff must carry ReflectionResult",
+            ));
+        }
+        if propose.role() != StagePayloadRole::Proposer {
+            return Err(invalid_stage_payload(
+                "reflect/propose handoff must end with ProposeRequest",
+            ));
+        }
+
+        let reflect = required_object(reflect_request, "reflect_request")?;
+        let reflection = required_object(reflection_result, "reflection_result")?;
+        let propose = required_object(propose_request, "propose_request")?;
+
+        let embedded_reflection = propose.get("reflection_result").ok_or_else(|| {
+            invalid_stage_payload("propose request must embed the consumed ReflectionResult")
+        })?;
+        if embedded_reflection != reflection_result {
+            return Err(invalid_stage_payload(
+                "propose request must consume the exact ReflectionResult in the handoff",
+            ));
+        }
+
+        let run = matching_string(reflect, propose, "run")?;
+        let base_revision = matching_string(reflect, propose, "base_revision")?;
+        let surface_fingerprint = matching_string(reflect, propose, "surface_fingerprint")?;
+        let capability_fingerprint = matching_string(reflect, propose, "capability_fingerprint")?;
+        let query_policy_fingerprint =
+            matching_string(reflect, propose, "query_policy_fingerprint")?;
+        let parent = matching_source_ref(reflect, propose, "parent")?;
+
+        let reflect_stage_call_id = required_string(
+            reflect.get("stage_call_id"),
+            "reflect_request.stage_call_id",
+        )?
+        .to_owned();
+        let propose_stage_call_id = required_string(
+            propose.get("stage_call_id"),
+            "propose_request.stage_call_id",
+        )?
+        .to_owned();
+        if reflect_stage_call_id == propose_stage_call_id {
+            return Err(invalid_stage_payload(
+                "reflect and propose stages must use distinct stage_call_id values",
+            ));
+        }
+
+        let reflect_source_refs = source_ref_set(reflect.get("source_refs"), "source_refs")?;
+        let reflection_source_refs = source_ref_set(
+            reflection.get("source_refs"),
+            "reflection_result.source_refs",
+        )?;
+        for source_ref in &reflection_source_refs {
+            if !reflect_source_refs.contains(source_ref) {
+                return Err(invalid_stage_payload(format!(
+                    "reflect request source_refs must cover reflection source ref `{source_ref}`"
+                )));
+            }
+        }
+
+        Ok(Self {
+            run,
+            reflect_stage_call_id,
+            propose_stage_call_id,
+            base_revision,
+            parent,
+            surface_fingerprint,
+            capability_fingerprint,
+            query_policy_fingerprint,
+            reflection_source_ref_count: reflection_source_refs.len(),
+        })
+    }
+
+    /// Run id shared by the reflect and propose stages.
+    pub fn run(&self) -> &str {
+        &self.run
+    }
+
+    /// Stage call id for the reflector stage.
+    pub fn reflect_stage_call_id(&self) -> &str {
+        &self.reflect_stage_call_id
+    }
+
+    /// Stage call id for the proposer stage.
+    pub fn propose_stage_call_id(&self) -> &str {
+        &self.propose_stage_call_id
+    }
+
+    /// Base graph revision shared by both stage requests.
+    pub fn base_revision(&self) -> &str {
+        &self.base_revision
+    }
+
+    /// Normalized parent candidate ref shared by both stage requests.
+    pub fn parent(&self) -> &str {
+        &self.parent
+    }
+
+    /// Surface fingerprint shared by both stage requests.
+    pub fn surface_fingerprint(&self) -> &str {
+        &self.surface_fingerprint
+    }
+
+    /// Capability fingerprint shared by both stage requests.
+    pub fn capability_fingerprint(&self) -> &str {
+        &self.capability_fingerprint
+    }
+
+    /// Query-policy fingerprint shared by both stage requests.
+    pub fn query_policy_fingerprint(&self) -> &str {
+        &self.query_policy_fingerprint
+    }
+
+    /// Number of source refs carried by the consumed `ReflectionResult`.
+    pub const fn reflection_source_ref_count(&self) -> usize {
+        self.reflection_source_ref_count
+    }
+}
+
 impl StagePayloadDocument {
     pub(crate) fn from_schema_valid_value(value: &Value) -> Result<Self, PublicSeamError> {
         let object = value
@@ -593,6 +741,52 @@ fn reject_target_leakage(value: Option<&Value>, context: &str) -> Result<(), Pub
         return Ok(());
     };
     reject_target_leakage_value(value, context)
+}
+
+fn required_object<'a>(
+    value: &'a Value,
+    field: &str,
+) -> Result<&'a serde_json::Map<String, Value>, PublicSeamError> {
+    value
+        .as_object()
+        .ok_or_else(|| invalid_stage_payload(format!("{field} must be an object")))
+}
+
+fn matching_string(
+    left: &serde_json::Map<String, Value>,
+    right: &serde_json::Map<String, Value>,
+    field: &str,
+) -> Result<String, PublicSeamError> {
+    let left = required_string(left.get(field), field)?;
+    let right = required_string(right.get(field), field)?;
+    if left != right {
+        return Err(invalid_stage_payload(format!(
+            "reflect/propose handoff field `{field}` must match"
+        )));
+    }
+    Ok(left.to_owned())
+}
+
+fn matching_source_ref(
+    left: &serde_json::Map<String, Value>,
+    right: &serde_json::Map<String, Value>,
+    field: &str,
+) -> Result<String, PublicSeamError> {
+    let left = source_ref_key(
+        left.get(field)
+            .ok_or_else(|| invalid_stage_payload(format!("missing `{field}`")))?,
+    )?;
+    let right = source_ref_key(
+        right
+            .get(field)
+            .ok_or_else(|| invalid_stage_payload(format!("missing `{field}`")))?,
+    )?;
+    if left != right {
+        return Err(invalid_stage_payload(format!(
+            "reflect/propose handoff field `{field}` must match"
+        )));
+    }
+    Ok(left)
 }
 
 fn reject_target_leakage_value(value: &Value, context: &str) -> Result<(), PublicSeamError> {

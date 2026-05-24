@@ -792,11 +792,15 @@ rows:
       - crates/leaven-public-seam/tests/stage_payloads.rs::stage_payloads_validate_all_role_specific_payload_shapes_with_provenance
       - crates/leaven-public-seam/tests/stage_payloads.rs::active_reflect_then_propose_example_validates_through_semantic_stage_payloads
       - crates/leaven-public-seam/tests/stage_payloads.rs::stage_payloads_preserve_object_form_info_and_receipt_refs
+      - crates/leaven-public-seam/tests/stage_payloads.rs::reflect_propose_handoff_binds_distinct_stage_calls_and_exact_reflection_result
     negative_test_evidence:
       - crates/leaven-public-seam/tests/stage_payloads.rs::propose_request_requires_reflection_result_and_change_schema_authority
       - crates/leaven-public-seam/tests/stage_payloads.rs::propose_request_rejects_reflection_source_ref_drop
+      - crates/leaven-public-seam/tests/stage_payloads.rs::reflect_propose_handoff_rejects_single_prompt_and_stale_reflection_fakes
     implementation_evidence:
       - crates/leaven-public-seam/src/stage_payload.rs::StagePayloadDocument
+      - crates/leaven-public-seam/src/stage_payload.rs::ReflectProposeHandoffDocument
+      - crates/leaven-public-seam/src/stage_payload.rs::ReflectProposeHandoffDocument::from_schema_valid_values
       - crates/leaven-public-seam/src/stage_payload.rs::inspect_propose_request
       - crates/leaven-public-seam/src/stage_payload.rs::inspect_reflection_result
       - crates/leaven-public-seam/src/stage_payload.rs::require_parent_source_ref
@@ -804,6 +808,7 @@ rows:
       - crates/leaven-public-seam/src/stage_payload.rs::source_ref_set
       - crates/leaven-public-seam/src/stage_payload.rs::candidate_ref_key
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_stage_payload_document
+      - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_reflect_propose_handoff_document
       - crates/leaven-public-seam/AGENTS.md
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-stage-payload-current-blocker-review.md
