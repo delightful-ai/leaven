@@ -5,8 +5,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 import re
+import signal
 import subprocess
 import time
 
@@ -128,6 +130,36 @@ def test_commands(workspace_root: Path) -> list[tuple[str, list[str]]]:
     return commands
 
 
+def run_with_deadline(label: str, command: list[str], cwd: Path, deadline: float) -> int:
+    remaining = deadline - time.perf_counter()
+    if remaining <= 0:
+        print(f"error: no SLA time remains before starting {label}", flush=True)
+        return 1
+
+    process = subprocess.Popen(command, cwd=cwd, start_new_session=True)
+    try:
+        return process.wait(timeout=remaining)
+    except subprocess.TimeoutExpired:
+        print(
+            f"error: {label} exceeded remaining suite SLA "
+            f"({remaining:.2f}s); terminating command",
+            flush=True,
+        )
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            return process.wait()
+        try:
+            process.wait(timeout=2.0)
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            process.wait()
+        return 1
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Run the full test suite and fail if it exceeds the runtime SLA."
@@ -141,12 +173,13 @@ def main() -> int:
     args = parser.parse_args()
 
     started = time.perf_counter()
+    deadline = started + args.sla_seconds
     workspace_root = Path.cwd()
     for label, command in test_commands(workspace_root):
         print(f"running {label}: {' '.join(command)}", flush=True)
-        result = subprocess.run(command, check=False)
-        if result.returncode != 0:
-            return result.returncode
+        returncode = run_with_deadline(label, command, workspace_root, deadline)
+        if returncode != 0:
+            return returncode
 
     elapsed = time.perf_counter() - started
     print(f"test suite runtime: {elapsed:.2f}s (SLA < {args.sla_seconds:.2f}s)")

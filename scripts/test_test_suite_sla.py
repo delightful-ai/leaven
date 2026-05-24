@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import importlib.util
 import pathlib
+import sys
 import tempfile
+import time
 import unittest
 
 
@@ -51,6 +53,24 @@ class DoctestDetectionTests(unittest.TestCase):
             )
 
             self.assertTrue(MODULE.package_has_rust_doctest(root))
+
+
+class SuiteDeadlineTests(unittest.TestCase):
+    def test_command_deadline_kills_slow_subprocess(self) -> None:
+        started = time.perf_counter()
+        result = MODULE.run_with_deadline(
+            "slow test command",
+            [
+                sys.executable,
+                "-c",
+                "import time; time.sleep(10)",
+            ],
+            pathlib.Path.cwd(),
+            started + 0.1,
+        )
+
+        self.assertEqual(result, 1)
+        self.assertLess(time.perf_counter() - started, 3.0)
 
 
 if __name__ == "__main__":
