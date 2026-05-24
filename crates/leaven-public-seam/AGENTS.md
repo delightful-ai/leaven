@@ -301,8 +301,12 @@ typed value/receipt/error/charge classification, operation receipt timing,
 closed `PlanError` shape, replayability roll-up, and monotonic value
 data-class coverage for nested score outputs, embedded evidence, top-level
 trace refs, blob refs, and workspace-listing entries at the wire-envelope layer
-only; they are not plan-run production, evaluator execution, runtime receipt
-production, graph mutation, or cache replay behavior.
+only. `graph_set` assessment summaries must carry a `Score.output` with
+candidate output/artifact data classes plus an `EvidenceEnvelope` whose source
+receipts are present in the Plan Result receipt set; a graph row shaped like an
+assessment without output/evidence truth is rejected. These exports are not
+plan-run production, evaluator execution, runtime receipt production, graph
+mutation, or cache replay behavior.
 
 Crate-root export `EvidenceEnvelopeDocument` is an advanced public seam
 contract. It proves active-schema evidence-envelope visibility, data-class, and
@@ -384,10 +388,13 @@ backpressure, or runtime watch support.
   operations, mismatched `since_revision` event-source bases, and schema-valid
   placeholder `submit_assessments` score outputs before execution. Its
   `Score.output` checks require candidate/artifact data classes, a matching
-  `evidence.public.summary` projection, and either a candidate-bound value
-  matching the assessment's `candidate` / `candidates` field or an explicit
-  blob/trace output projection. This rejects unbound, summary-only, and
-  mismatched-candidate schema dummies, but it is
+  `evidence.public.summary` projection, an embedded evidence envelope that
+  passes the same semantic evidence checks as standalone evidence, assessment-
+  level declarations for every evidence read/effect source receipt, and either
+  a candidate-bound value matching the assessment's `candidate` / `candidates`
+  field or an explicit blob/trace output projection. This rejects unbound,
+  summary-only, mismatched-candidate, unreceipted-evidence, undeclared-receipt,
+  and assessment-write-receipt schema dummies, but it is
   still self-declared public-seam document validation, not proof that the value
   is the actual candidate/artifact output assessed, and not provider or ACP
   runtime proof. Its execution-result verifier
@@ -505,7 +512,9 @@ backpressure, or runtime watch support.
 - `tests/plan_result.rs` proves active-schema Plan Result envelopes carry typed
   success and failure values, query/call/write audit receipts, errors, charges,
   capability and policy fingerprints, receipt timing, data classes, and closed
-  `PlanError` values at the public-seam validation layer. It also rejects
+  `PlanError` values at the public-seam validation layer. It also proves
+  `graph_set` assessment summaries cannot omit `Score.output` or carry
+  unreceipted/semantically invalid evidence envelopes, and rejects
   same-prefix `result_hash` values that do not bind the referenced query, call,
   `submit_assessments`, or generic write result value, and paid failed calls
   whose linked charge receipts are missing, point elsewhere, or do not cover the

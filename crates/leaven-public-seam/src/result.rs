@@ -201,6 +201,7 @@ fn inspect_values(
         let value_kind = inspect_value_receipt(value_object, receipt_index)?;
         let data_classes = optional_string_set(value_object.get("data_classes"), "data_classes")?;
         validate_value_visibility(name, value_object, &data_classes, receipt_index)?;
+        validate_graph_set_assessment_summaries(value_object, receipt_index)?;
         value_kinds.push(value_kind.to_owned());
         value_data_classes.push((name.to_owned(), data_classes.into_iter().collect()));
         value_replayability.push(required_replayability(value_object.get("replayability"))?);
@@ -223,6 +224,116 @@ fn inspect_values(
         assessment_batch_replayability,
         assessment_batches,
     })
+}
+
+fn validate_graph_set_assessment_summaries(
+    value: &serde_json::Map<String, Value>,
+    receipt_index: &BTreeMap<String, ReceiptAudit>,
+) -> Result<(), PublicSeamError> {
+    if value.get("kind").and_then(Value::as_str) != Some("graph_set") {
+        return Ok(());
+    }
+    let Some(items) = value.get("items").and_then(Value::as_array) else {
+        return Ok(());
+    };
+    for item in items {
+        let Some(item_object) = item.as_object() else {
+            continue;
+        };
+        if item_object.get("kind").and_then(Value::as_str) == Some("assessment_summary") {
+            validate_assessment_summary(item_object, receipt_index)?;
+        }
+    }
+    Ok(())
+}
+
+fn validate_assessment_summary(
+    item: &serde_json::Map<String, Value>,
+    receipt_index: &BTreeMap<String, ReceiptAudit>,
+) -> Result<(), PublicSeamError> {
+    let score = item
+        .get("score")
+        .and_then(Value::as_object)
+        .ok_or_else(|| invalid_result("assessment_summary must carry score"))?;
+    let output = score
+        .get("output")
+        .and_then(Value::as_object)
+        .ok_or_else(|| invalid_result("assessment_summary score must carry Score.output"))?;
+    validate_assessment_summary_output(output)?;
+
+    let evidence = item
+        .get("evidence")
+        .ok_or_else(|| invalid_result("assessment_summary must carry evidence"))?;
+    let envelope =
+        EvidenceEnvelopeDocument::from_schema_valid_value(evidence).map_err(|source| {
+            invalid_result(format!("assessment_summary evidence invalid: {source}"))
+        })?;
+    validate_evidence_source_receipts(&envelope, receipt_index)?;
+    if let Some(summary) = reportable_output_summary(output) {
+        validate_optional_assessment_summary_evidence_projection(evidence, summary)?;
+    }
+    Ok(())
+}
+
+fn validate_assessment_summary_output(
+    output: &serde_json::Map<String, Value>,
+) -> Result<(), PublicSeamError> {
+    let data_classes =
+        optional_string_set(output.get("data_classes"), "Score.output.data_classes")?;
+    let carries_assessed_output = data_classes
+        .iter()
+        .any(|class| matches!(class.as_str(), "candidate.output" | "candidate.artifact"));
+    if !carries_assessed_output {
+        return Err(invalid_result(
+            "assessment_summary Score.output must carry candidate.output or candidate.artifact data class",
+        ));
+    }
+    if reportable_output_summary(output).is_some()
+        || output.get("blob_ref").is_some()
+        || output
+            .get("trace_refs")
+            .and_then(Value::as_array)
+            .is_some_and(|trace_refs| !trace_refs.is_empty())
+    {
+        return Ok(());
+    }
+    Err(invalid_result(
+        "assessment_summary Score.output must carry reportable output content",
+    ))
+}
+
+fn reportable_output_summary(output: &serde_json::Map<String, Value>) -> Option<&str> {
+    output
+        .get("summary")
+        .and_then(Value::as_str)
+        .filter(|summary| !summary.trim().is_empty())
+        .or_else(|| {
+            output
+                .get("value")
+                .and_then(Value::as_str)
+                .filter(|text| !text.trim().is_empty())
+        })
+}
+
+fn validate_optional_assessment_summary_evidence_projection(
+    evidence: &Value,
+    expected_summary: &str,
+) -> Result<(), PublicSeamError> {
+    let Some(evidence_summary) = evidence
+        .get("public")
+        .and_then(Value::as_object)
+        .and_then(|public| public.get("summary"))
+        .and_then(Value::as_str)
+    else {
+        return Ok(());
+    };
+    if evidence_summary == expected_summary {
+        Ok(())
+    } else {
+        Err(invalid_result(
+            "assessment_summary Score.output must match evidence.public.summary",
+        ))
+    }
 }
 
 fn validate_value_visibility(
