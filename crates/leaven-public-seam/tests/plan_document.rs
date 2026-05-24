@@ -1204,6 +1204,36 @@ fn sandbox_exec_blob_refs_only_requires_stream_blob_refs() {
 }
 
 #[test]
+fn sandbox_exec_outcome_propagates_stream_and_file_blob_data_classes() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut host = RecordingPlanHost {
+        sandbox_stream: SandboxStreamFixture::NonPublicBlobDataClasses,
+        ..RecordingPlanHost::default()
+    };
+    let plan = sandbox_exec_workspace_plan();
+
+    let report = package
+        .execute_plan_document(&plan, &plan_execution_context(), &mut host)
+        .unwrap();
+
+    assert_eq!(
+        report.value()["values"]["completion"]["data_classes"],
+        json!(["public", "workspace.file", "transcript.raw"])
+    );
+
+    let mut missing_stream_class = report.value().clone();
+    missing_stream_class["values"]["completion"]["data_classes"] =
+        json!(["public", "workspace.file"]);
+    rebind_call_result_hash(&mut missing_stream_class, 1, "completion");
+    assert_plan_execution_or_result_rejected(
+        &package,
+        &plan,
+        &plan_execution_context(),
+        &missing_stream_class,
+    );
+}
+
+#[test]
 fn workspace_materialize_and_release_emit_typed_handles_and_receipts() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let mut plan = workspace_materialize_release_plan();
@@ -3785,6 +3815,7 @@ enum SandboxStreamFixture {
     EmptyComponentFilePath,
     MissingCost,
     MissingStreamRefs,
+    NonPublicBlobDataClasses,
 }
 
 impl SandboxStreamFixture {
@@ -3796,7 +3827,8 @@ impl SandboxStreamFixture {
             | Self::EmptyFilePath
             | Self::EmptyComponentFilePath
             | Self::MissingCost
-            | Self::MissingStreamRefs => "buffer",
+            | Self::MissingStreamRefs
+            | Self::NonPublicBlobDataClasses => "buffer",
             Self::BlobRefsOnly | Self::MissingBlobRefs => "blob_refs_only",
         }
     }
@@ -3809,7 +3841,8 @@ impl SandboxStreamFixture {
             | Self::ParentFilePath
             | Self::EmptyFilePath
             | Self::EmptyComponentFilePath
-            | Self::MissingCost => true,
+            | Self::MissingCost
+            | Self::NonPublicBlobDataClasses => true,
             Self::MissingBlobRefs | Self::MissingStreamRefs => false,
         }
     }
@@ -4130,7 +4163,7 @@ impl PlanExecutionHost for RecordingPlanHost {
         assert_eq!(command.limits.timeout.unwrap().as_secs(), 1);
         self.calls.push("sandbox");
         let mut outcome = PlanSandboxExecOutcome::completed("fp_runtime_sha256_sandbox")
-            .with_file_ref("out.txt", blob_ref("blob_sandbox_output_file"));
+            .with_file_ref("out.txt", self.sandbox_blob_ref("blob_sandbox_output_file"));
         match self.sandbox_stream {
             SandboxStreamFixture::AbsoluteFilePath => {
                 outcome = outcome.with_file_ref("/tmp/secret.txt", blob_ref("blob_sandbox_secret"));
@@ -4151,8 +4184,8 @@ impl PlanExecutionHost for RecordingPlanHost {
         }
         if self.sandbox_stream.includes_stream_refs() {
             outcome = outcome.with_stream_refs(
-                blob_ref("blob_sandbox_stdout"),
-                blob_ref("blob_sandbox_stderr"),
+                self.sandbox_blob_ref("blob_sandbox_stdout"),
+                self.sandbox_blob_ref("blob_sandbox_stderr"),
             );
         }
         Ok(outcome)
@@ -4324,6 +4357,22 @@ impl PlanExecutionHost for RecordingPlanHost {
 }
 
 impl RecordingPlanHost {
+    fn sandbox_blob_ref(&self, id: &'static str) -> Value {
+        if matches!(
+            self.sandbox_stream,
+            SandboxStreamFixture::NonPublicBlobDataClasses
+        ) {
+            let data_classes = if id == "blob_sandbox_output_file" {
+                &["workspace.file"][..]
+            } else {
+                &["transcript.raw"][..]
+            };
+            blob_ref_with_data_classes(id, data_classes)
+        } else {
+            blob_ref(id)
+        }
+    }
+
     fn workspace_read_file(
         &mut self,
         request: PlanWorkspaceQueryRequest<'_>,
@@ -4778,12 +4827,16 @@ fn evaluator_capability_value(package: &PublicSeamPackage) -> Value {
 }
 
 fn blob_ref(id: &'static str) -> Value {
+    blob_ref_with_data_classes(id, &["public"])
+}
+
+fn blob_ref_with_data_classes(id: &'static str, data_classes: &[&str]) -> Value {
     json!({
         "kind": "blob_ref",
         "id": id,
         "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
         "bytes": 12,
-        "data_classes": ["public"]
+        "data_classes": data_classes
     })
 }
 
