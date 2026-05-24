@@ -132,11 +132,12 @@ definitions, model role, sampling stop sequences, provider hints, final-message
 output, and JSON-schema output. JSON-schema LM outputs must return a parsed
 Plan Result payload, and successful call-result validation requires an
 `lm_complete` result to be an `lm_response` value carrying the matching call
-receipt with an assistant-authored text final response. Result-side tool
-metadata, tool results, extension content, and oversized `final_message` text
-are rejected by the seam instead of being accepted as generic schema-valid
-`LmMessage` values. Request-side extension/multimodal content is rejected rather
-than silently downgraded to text. It still requires a concrete model before
+receipt, matching value/receipt cost, and an assistant-authored text final
+response. Result-side tool metadata, tool results, extension content, and
+oversized `final_message` text are rejected by the seam instead of being
+accepted as generic schema-valid `LmMessage` values. Request-side
+extension/multimodal content is rejected rather than silently downgraded to
+text. It still requires a concrete model before
 provider execution and is not provider runtime execution, streaming, ACP
 delivery, or full `ps1.lm.contract` closeout. The `PlanAgentRunRequest` and
 `PlanSandboxExecRequest` routes lower schema-valid `agent_run` and

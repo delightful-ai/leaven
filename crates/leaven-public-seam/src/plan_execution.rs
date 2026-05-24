@@ -888,13 +888,17 @@ fn record_lm_call_outcome(
             state,
         );
     }
+    let cost = outcome
+        .cost
+        .ok_or_else(|| invalid_plan("lm_complete host outcome must carry cost"))?;
     let mut value = json!({
         "kind": "lm_response",
         "message": outcome.message,
         "graph_revision": context.base_revision,
         "data_classes": outcome.data_classes,
         "replayability": outcome.replayability,
-        "receipt": receipt_id
+        "receipt": receipt_id,
+        "cost": cost
     });
     if let Some(cache) = cache {
         value["cache"] = json!(cache);
@@ -910,7 +914,7 @@ fn record_lm_call_outcome(
             "value": value
         }),
     )?;
-    state.receipts.push(json!({
+    let mut receipt = json!({
         "kind": "call",
         "receipt": receipt_id,
         "op_var": name,
@@ -921,7 +925,11 @@ fn record_lm_call_outcome(
         "result_hash": result_hash,
         "runtime_fingerprint": outcome.runtime_fingerprint,
         "status": "succeeded"
-    }));
+    });
+    if let Some(cost) = value.get("cost") {
+        receipt["cost"] = cost.clone();
+    }
+    state.receipts.push(receipt);
     state.values.insert(name.clone(), value.clone());
     state.bindings.insert(name, value);
     Ok(())

@@ -934,6 +934,23 @@ fn plan_execution_modes_require_cached_uses_cache_and_refuses_live_misses() {
         report.value()["values"]["completion"]["cache"].as_str(),
         Some("hit")
     );
+
+    let mut missing_cost_hit = RecordingPlanHost {
+        cached_hit: true,
+        omit_lm_cost: true,
+        ..RecordingPlanHost::default()
+    };
+    let error = package
+        .execute_plan_document(&plan, &plan_execution_context(), &mut missing_cost_hit)
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("lm_complete host outcome must carry cost"),
+        "unexpected error: {error:?}"
+    );
+    assert!(missing_cost_hit.calls.is_empty());
+    assert_eq!(missing_cost_hit.cached_calls, vec!["completion"]);
 }
 
 #[test]
@@ -2199,6 +2216,7 @@ fn lm_complete_rejects_schema_valid_non_final_or_oversized_responses() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     assert_lm_live_response_fakes_rejected(&package);
     assert_lm_forged_response_fakes_rejected(&package);
+    assert_lm_cost_binding_fakes_rejected(&package);
 }
 
 fn assert_lm_live_response_fakes_rejected(package: &PublicSeamPackage) {
@@ -2344,6 +2362,70 @@ fn assert_lm_forged_response_fakes_rejected(package: &PublicSeamPackage) {
         &max_bytes_plan,
         &plan_execution_context(),
         &forged_oversized,
+    );
+}
+
+fn assert_lm_cost_binding_fakes_rejected(package: &PublicSeamPackage) {
+    let mut plan = typed_let_call_write_plan();
+    plan["mode"] = json!({"kind": "execute"});
+    plan["commit"] = json!({
+        "kind": "graph_writes_atomic",
+        "on_stale": "reject"
+    });
+
+    let mut missing_cost_host = RecordingPlanHost {
+        omit_lm_cost: true,
+        ..RecordingPlanHost::default()
+    };
+    let error = package
+        .execute_plan_document(&plan, &plan_execution_context(), &mut missing_cost_host)
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("lm_complete host outcome must carry cost"),
+        "unexpected error: {error:?}"
+    );
+
+    let report = package
+        .execute_plan_document(
+            &plan,
+            &plan_execution_context(),
+            &mut RecordingPlanHost::default(),
+        )
+        .unwrap();
+    let mut missing_value_cost = report.value().clone();
+    missing_value_cost["values"]["completion"]
+        .as_object_mut()
+        .unwrap()
+        .remove("cost");
+    rebind_call_result_hash(&mut missing_value_cost, 0, "completion");
+    assert_plan_execution_result_rejected(
+        package,
+        &plan,
+        &plan_execution_context(),
+        &missing_value_cost,
+    );
+
+    let mut missing_receipt_cost = report.value().clone();
+    missing_receipt_cost["receipts"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("cost");
+    assert_plan_execution_result_rejected(
+        package,
+        &plan,
+        &plan_execution_context(),
+        &missing_receipt_cost,
+    );
+
+    let mut mismatched_receipt_cost = report.value().clone();
+    mismatched_receipt_cost["receipts"][0]["cost"] = json!({"input_tokens": 1, "output_tokens": 1});
+    assert_plan_execution_result_rejected(
+        package,
+        &plan,
+        &plan_execution_context(),
+        &mismatched_receipt_cost,
     );
 }
 
@@ -3485,6 +3567,7 @@ struct RecordingPlanHost {
     workspaces: BTreeSet<String>,
     cached_hit: bool,
     fail_lm: bool,
+    omit_lm_cost: bool,
     structured_parsed: StructuredParsedFixture,
     lm_response: LmResponseFixture,
     agent_audit: AgentAuditFixture,
@@ -3825,6 +3908,9 @@ impl PlanExecutionHost for RecordingPlanHost {
         }
         let mut outcome =
             PlanLmCompleteOutcome::new(self.lm_response.message(), "fp_runtime_sha256_planexec");
+        if !self.omit_lm_cost {
+            outcome = outcome.with_cost(json!({"input_tokens": 7, "output_tokens": 3}));
+        }
         if request.call()["output"]["kind"].as_str() == Some("json_schema") {
             match self.structured_parsed {
                 StructuredParsedFixture::Valid => {
@@ -3860,6 +3946,9 @@ impl PlanExecutionHost for RecordingPlanHost {
                 }),
                 "fp_runtime_sha256_planexec",
             );
+            if !self.omit_lm_cost {
+                outcome = outcome.with_cost(json!({"input_tokens": 7, "output_tokens": 3}));
+            }
             if request.call()["output"]["kind"].as_str() == Some("json_schema") {
                 match self.structured_parsed {
                     StructuredParsedFixture::Valid => {
