@@ -312,7 +312,9 @@ Crate-root exports for `PublicOutputRecord`, `OutputRecordDocument`, and
 `PublicBlobRef` are advanced public seam contracts. They prove reusable
 `leaven-evidence` output records can be projected into the locked
 `common.schema.json#/$defs/OutputRecord` wire shape with visibility,
-data-classes, and blob audit metadata. They are not proof that evaluator
+data-classes, and blob audit metadata. Audited evidence blob records can supply
+that metadata directly; unaudited `OutputRecord::blob(...)` values still need an
+explicit `PublicBlobRef` at projection time. They are not proof that evaluator
 runtimes produce those records for every assessment shape.
 
 Crate-root exports for `StagePayloadDocument`, `ReflectProposeHandoffDocument`,

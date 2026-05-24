@@ -7,7 +7,8 @@ use leaven_evidence::{
     AgentPatchMergeTreeError, AgentPatchMergeTreeEvidence, AgentTrajectoryAnalysisKind,
     AgentTrajectoryAnalysisRecord, AgentTrajectoryCorpusError, AgentTrajectoryCorpusEvidence,
     AgentTrajectoryEvidence, AgentTrajectoryEvidenceInput, AgentTrajectoryOutcome, CommandEvidence,
-    CommandRecord, DataClass, DataClassSet, OutputMetadata, OutputRecord, OutputVisibility,
+    CommandRecord, DataClass, DataClassSet, OutputBlobAudit, OutputMetadata, OutputRecord,
+    OutputVisibility,
 };
 use leaven_kernel::{AgentSessionId, BlobRef, CaseId, FingerprintBuilder};
 
@@ -38,6 +39,37 @@ fn command_output_can_be_blob_backed() {
     assert_eq!(
         OutputRecord::blob(reference.clone()),
         OutputRecord::blob(reference)
+    );
+}
+
+#[test]
+fn audited_blob_output_carries_public_audit_facts() {
+    let output = OutputRecord::audited_blob(
+        BlobRef {
+            store: "blob-store".to_owned(),
+            key: "stdout/0".to_owned(),
+        },
+        OutputBlobAudit::new(
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            128,
+        )
+        .unwrap(),
+    );
+
+    let audit = output.blob_audit().expect("audited blob carries metadata");
+    assert_eq!(
+        audit.sha256(),
+        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    );
+    assert_eq!(audit.bytes(), 128);
+    assert!(OutputBlobAudit::new("not-a-sha", 128).is_err());
+    assert!(
+        OutputRecord::blob(BlobRef {
+            store: "blob-store".to_owned(),
+            key: "stdout/1".to_owned(),
+        })
+        .blob_audit()
+        .is_none()
     );
 }
 

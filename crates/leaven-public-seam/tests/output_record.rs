@@ -1,4 +1,6 @@
-use leaven_evidence::{DataClass, DataClassSet, OutputMetadata, OutputRecord, OutputVisibility};
+use leaven_evidence::{
+    DataClass, DataClassSet, OutputBlobAudit, OutputMetadata, OutputRecord, OutputVisibility,
+};
 use leaven_kernel::BlobRef;
 use leaven_public_seam::{PublicBlobRef, PublicSeamError, PublicSeamPackage};
 use serde_json::json;
@@ -69,6 +71,50 @@ fn output_record_rejects_placeholder_or_under_described_blob_outputs() {
             .unwrap_err(),
         PublicSeamError::ExampleValidation { .. }
     ));
+}
+
+#[test]
+fn output_record_projects_audited_blob_without_external_metadata() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let blob = OutputRecord::audited_blob(
+        BlobRef {
+            store: "file".to_owned(),
+            key: "answers/42.txt".to_owned(),
+        },
+        OutputBlobAudit::new(
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            42,
+        )
+        .unwrap()
+        .with_media_type("text/plain")
+        .with_uri("leaven-blob://answers/42.txt"),
+    )
+    .with_metadata(OutputMetadata::new(
+        OutputVisibility::Public,
+        DataClassSet::new([DataClass::candidate_output(), DataClass::public()]),
+    ));
+
+    let projected = package
+        .project_output_record(&blob, None)
+        .expect("audited blob output carries enough public seam facts");
+
+    assert_eq!(
+        projected.as_value(),
+        &json!({
+            "kind": "blob_ref",
+            "blob_ref": {
+                "kind": "blob_ref",
+                "id": "blob_cd28ffaa6d6a549defa9f69964204e156c1f8ddfc65f39729643df3b6557e54d",
+                "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                "bytes": 42,
+                "media_type": "text/plain",
+                "uri": "leaven-blob://answers/42.txt",
+                "data_classes": ["candidate.output", "public"]
+            },
+            "visibility": "public",
+            "data_classes": ["candidate.output", "public"]
+        })
+    );
 }
 
 #[test]

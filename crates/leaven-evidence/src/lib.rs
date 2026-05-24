@@ -88,7 +88,8 @@ pub use json::JsonEvidence;
 pub use listwise::{ListwiseRankingEvidence, RankingItem};
 pub use mixed::MixedEvidence;
 pub use output::{
-    DataClass, DataClassError, DataClassSet, OutputMetadata, OutputRecord, OutputVisibility,
+    DataClass, DataClassError, DataClassSet, OutputBlobAudit, OutputBlobAuditError, OutputMetadata,
+    OutputRecord, OutputVisibility,
 };
 pub use pairwise::{PairwiseJudgment, PairwiseJudgmentEvidence};
 pub use rollout::{PairedRolloutEvidence, PairedRolloutEvidenceError, RolloutGroupOutcome};
@@ -110,9 +111,10 @@ pub mod prelude {
         AttachmentKind, AttributableEvidence, CandidateAssessmentOutput,
         CandidateAssessmentOutputError, CaseAssessmentEvidence, CaseOutcome, CasewiseEvidence,
         CommandEvidence, CommandRecord, DataClass, DataClassSet, DiffEvidence, Direction,
-        JsonEvidence, ListwiseRankingEvidence, MixedEvidence, OutputMetadata, OutputRecord,
-        OutputVisibility, PairedRolloutEvidence, PairwiseJudgmentEvidence, RolloutGroupOutcome,
-        ScalarEvidence, ScalarEvidenceError, ScoreVectorEvidence, SkillTrajectoryUseEvidence,
+        JsonEvidence, ListwiseRankingEvidence, MixedEvidence, OutputBlobAudit,
+        OutputBlobAuditError, OutputMetadata, OutputRecord, OutputVisibility,
+        PairedRolloutEvidence, PairwiseJudgmentEvidence, RolloutGroupOutcome, ScalarEvidence,
+        ScalarEvidenceError, ScoreVectorEvidence, SkillTrajectoryUseEvidence,
         SkillTrajectoryUseEvidenceError, SkillUseConfidence, SkillUseEvent, SkillUseEvidence,
         SkillUseKind, SkillUseSource, StringEvidence,
     };

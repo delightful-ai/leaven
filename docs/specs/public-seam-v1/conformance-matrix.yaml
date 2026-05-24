@@ -1026,7 +1026,9 @@ rows:
       - crates/leaven-run/tests/optimize_builder.rs::run_builder_typed_output_uses_score_supplied_report_output
       - crates/leaven-run/tests/public_seam.rs::runcontext_assessment_score_outputs_project_to_public_seam_submit_assessments_plan
       - crates/leaven-run/tests/public_seam.rs::runcontext_assessment_artifact_score_outputs_project_to_public_seam_submit_assessments_plan
+      - crates/leaven-run/tests/public_seam.rs::runcontext_blob_score_outputs_project_to_public_seam_submit_assessments_plan
       - crates/leaven-run/tests/public_seam.rs::runcontext_pairwise_and_listwise_score_outputs_project_to_public_seam_submit_assessments_plan
+      - crates/leaven-public-seam/tests/output_record.rs::output_record_projects_audited_blob_without_external_metadata
       - crates/leaven-public-seam/tests/plan_document.rs::submit_assessments_score_outputs_cover_all_assessment_shapes
       - crates/leaven-public-seam/tests/plan_document.rs::submit_assessments_accepts_candidate_artifact_score_output_class
       - crates/leaven-run/tests/scoring_evaluator.rs::scoring_evaluator_rejects_missing_reportable_output_for_typed_runner_outputs
@@ -1044,6 +1046,7 @@ rows:
       - crates/leaven-run/tests/scoring_evaluator.rs::judging_evaluator_rejects_generic_candidate_artifact_declarations
       - crates/leaven-run/tests/scoring_evaluator.rs::judging_evaluator_rejects_same_context_dummy_report_output
       - crates/leaven-run/tests/scoring_evaluator.rs::judging_evaluator_rejects_report_output_from_another_candidate_group
+      - crates/leaven-evidence/tests/command.rs::audited_blob_output_carries_public_audit_facts
       - crates/leaven-run/tests/public_seam.rs::assessment_score_output_plan_projection_rejects_missing_stored_evidence
       - crates/leaven-run/tests/public_seam.rs::assessment_score_output_plan_projection_rejects_unsupported_shapes_and_outputs
       - crates/leaven-public-seam/tests/plan_document.rs::submit_assessments_rejects_missing_or_placeholder_score_output
@@ -1060,13 +1063,17 @@ rows:
       - crates/leaven-run/src/evaluator.rs::evaluate_judge_job
       - crates/leaven-run/src/evaluator.rs::assessed_candidate_outputs
       - crates/leaven-evidence/src/output.rs::OutputRecord::candidate_inline
+      - crates/leaven-evidence/src/output.rs::OutputRecord::audited_blob
+      - crates/leaven-evidence/src/output.rs::OutputBlobAudit
       - crates/leaven-evidence/src/feedback.rs::CandidateAssessmentOutput
       - crates/leaven-run/src/public_seam/assessment_write.rs::PublicAssessmentWriteReceiptContext::submit_assessments_plan_document
       - crates/leaven-run/src/public_seam/assessment_write.rs::assessment_plan_entry
       - crates/leaven-run/src/public_seam/assessment_write.rs::score_output
+      - crates/leaven-run/src/public_seam/assessment_write.rs::blob_ref_value
       - crates/leaven-run/src/public_seam/assessment_write.rs::grouped_candidate_output_values
       - crates/leaven-run/src/public_seam/assessment_write.rs::candidate_output_value
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::project_output_record
+      - crates/leaven-public-seam/src/output.rs::PublicBlobRef::from_evidence_blob
       - crates/leaven-public-seam/src/plan.rs::PlanDocument::assessment_score_output_count
       - crates/leaven-public-seam/src/plan.rs::validate_score_output_candidate_binding
       - crates/leaven-public-seam/src/plan.rs::validate_score_output_evidence_projection

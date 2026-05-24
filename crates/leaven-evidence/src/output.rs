@@ -182,6 +182,87 @@ impl OutputMetadata {
     }
 }
 
+/// Audit metadata for a blob-backed reportable output.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct OutputBlobAudit {
+    sha256: String,
+    bytes: u64,
+    media_type: Option<String>,
+    uri: Option<String>,
+}
+
+impl OutputBlobAudit {
+    /// Builds validated blob audit metadata.
+    pub fn new(sha256: impl Into<String>, bytes: u64) -> Result<Self, OutputBlobAuditError> {
+        let sha256 = sha256.into();
+        if !is_lower_hex_sha256(&sha256) {
+            return Err(OutputBlobAuditError::InvalidSha256 { sha256 });
+        }
+        Ok(Self {
+            sha256,
+            bytes,
+            media_type: None,
+            uri: None,
+        })
+    }
+
+    /// Adds media-type metadata.
+    #[must_use]
+    pub fn with_media_type(mut self, media_type: impl Into<String>) -> Self {
+        self.media_type = Some(media_type.into());
+        self
+    }
+
+    /// Adds a public URI for this blob.
+    #[must_use]
+    pub fn with_uri(mut self, uri: impl Into<String>) -> Self {
+        self.uri = Some(uri.into());
+        self
+    }
+
+    /// Content SHA-256 in lower hex.
+    #[must_use]
+    pub fn sha256(&self) -> &str {
+        &self.sha256
+    }
+
+    /// Blob byte length.
+    #[must_use]
+    pub const fn bytes(&self) -> u64 {
+        self.bytes
+    }
+
+    /// Optional media type.
+    #[must_use]
+    pub fn media_type(&self) -> Option<&str> {
+        self.media_type.as_deref()
+    }
+
+    /// Optional public URI.
+    #[must_use]
+    pub fn uri(&self) -> Option<&str> {
+        self.uri.as_deref()
+    }
+}
+
+fn is_lower_hex_sha256(value: &str) -> bool {
+    value.len() == 64
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+}
+
+/// Invalid blob audit metadata.
+#[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
+pub enum OutputBlobAuditError {
+    /// SHA-256 was not lower-hex encoded.
+    #[error("blob audit sha256 must be 64 lower-hex characters")]
+    InvalidSha256 {
+        /// Invalid value.
+        sha256: String,
+    },
+}
+
 /// Command or report output carried inline or by external blob reference.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum OutputRecord {
@@ -198,6 +279,9 @@ pub enum OutputRecord {
     BlobRef {
         /// Blob reference.
         reference: BlobRef,
+        /// Optional audit metadata for public-seam projections.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        audit: Option<OutputBlobAudit>,
         /// Visibility and data-class facts.
         metadata: OutputMetadata,
     },
@@ -239,6 +323,17 @@ impl OutputRecord {
     pub fn blob(reference: BlobRef) -> Self {
         Self::BlobRef {
             reference,
+            audit: None,
+            metadata: OutputMetadata::public(),
+        }
+    }
+
+    /// Builds a public blob-backed output record with audit metadata.
+    #[must_use]
+    pub fn audited_blob(reference: BlobRef, audit: OutputBlobAudit) -> Self {
+        Self::BlobRef {
+            reference,
+            audit: Some(audit),
             metadata: OutputMetadata::public(),
         }
     }
@@ -262,6 +357,15 @@ impl OutputRecord {
     pub const fn metadata(&self) -> &OutputMetadata {
         match self {
             Self::Inline { metadata, .. } | Self::BlobRef { metadata, .. } => metadata,
+        }
+    }
+
+    /// Blob audit metadata, when the output is blob-backed and auditable.
+    #[must_use]
+    pub const fn blob_audit(&self) -> Option<&OutputBlobAudit> {
+        match self {
+            Self::BlobRef { audit, .. } => audit.as_ref(),
+            Self::Inline { .. } => None,
         }
     }
 
