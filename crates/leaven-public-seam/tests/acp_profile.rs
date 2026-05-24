@@ -1254,6 +1254,21 @@ fn acp_extension_results_reject_cross_method_payloads_unbound_receipts_and_data_
             | PublicSeamError::InvalidScope { .. }
     ));
 
+    let wrong_workspace_primary = extension_result_for(
+        "leaven/workspace.read_file",
+        &workspace_diff_primary(),
+        &query_receipt("qrec_workspace_file"),
+        &["workspace.file"],
+    );
+    assert!(matches!(
+        package
+            .validate_acp_extension_result_document(&wrong_workspace_primary)
+            .unwrap_err(),
+        PublicSeamError::ExampleValidation { .. }
+            | PublicSeamError::InvalidPlanResult { .. }
+            | PublicSeamError::InvalidScope { .. }
+    ));
+
     let mut unbound_primary = agent_session_primary();
     unbound_primary["receipt"] = json!("agentrec_acp");
     let unbound_receipt = extension_result_for(
