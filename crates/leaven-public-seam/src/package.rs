@@ -1,25 +1,22 @@
-use std::collections::{BTreeSet, HashMap};
+use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use jsonschema::{Retrieve, Uri};
 use serde::Deserialize;
 use serde_json::Value;
 
 use crate::{
-    CallAuthorityReport, ConformanceMatrix, ConformanceRow, DeferredWatchReplacement,
-    EvaluationJobDocument, EvaluationRequestReceiptDocument, EvidenceEnvelopeDocument,
-    MatrixRowStatus, OutputRecordDocument, PinnedDialectEvaluator, PlanDocument,
-    PlanResultDocument, ProposalAuthorityReport, PublicSeamError, ReflectProposeHandoffDocument,
-    StagePayloadDocument,
+    CallAuthorityReport, ConformanceMatrix, DeferredWatchReplacement, EvaluationJobDocument,
+    EvaluationRequestReceiptDocument, EvidenceEnvelopeDocument, OutputRecordDocument,
+    PinnedDialectEvaluator, PlanDocument, PlanResultDocument, ProposalAuthorityReport,
+    PublicSeamError, ReflectProposeHandoffDocument, StagePayloadDocument,
 };
 
 mod support;
+mod validation;
 
 use support::{
-    backtick_tokens, conformance_case_id, ensure_exists, evidence_is_only_known_fake_passes,
-    is_active_package_path, is_canonical_active_package, looks_like_denial_test, read_json,
-    read_manifest, read_yaml,
+    backtick_tokens, is_active_package_path, is_canonical_active_package, read_manifest,
 };
 
 const ACTIVE_PACKAGE_RELATIVE: &str = "docs/specs/public-seam-v1";
@@ -325,7 +322,7 @@ impl PublicSeamPackage {
 
     /// Builds and checks the active contract inventory from the manifest.
     pub fn inventory(&self) -> Result<ContractInventory, PublicSeamError> {
-        self.inventory_for_manifest(&self.manifest)
+        validation::inventory_for_manifest(self, &self.manifest)
     }
 
     /// Builds inventory using an override manifest value, for negative tests.
@@ -338,156 +335,34 @@ impl PublicSeamPackage {
                 message: error.to_string(),
             }
         })?;
-        self.inventory_for_manifest(&manifest)
+        validation::inventory_for_manifest(self, &manifest)
     }
 
     /// Loads one active schema by manifest file name.
     pub fn schema_json(&self, name: &str) -> Result<Value, PublicSeamError> {
-        if !self.manifest.schemas.iter().any(|schema| schema == name) {
-            return Err(PublicSeamError::MissingContractFile {
-                path: self.root.join("schemas").join(name),
-            });
-        }
-        read_json(self.root.join("schemas").join(name))
+        validation::schema_json(self, name)
     }
 
     /// Compiles a JSON Schema value as Draft 2020-12.
     pub fn compile_schema_value(&self, name: &str, value: &Value) -> Result<(), PublicSeamError> {
-        jsonschema::draft202012::meta::validate(value).map_err(|error| {
-            PublicSeamError::InvalidSchema {
-                name: name.to_owned(),
-                message: error.to_string(),
-            }
-        })?;
-        jsonschema::draft202012::options()
-            .with_retriever(self.schema_retriever()?)
-            .build(value)
-            .map_err(|error| PublicSeamError::InvalidSchema {
-                name: name.to_owned(),
-                message: error.to_string(),
-            })?;
-        Ok(())
+        validation::compile_schema_value(self, name, value)
     }
 
     /// Compiles every active schema and validates the active examples.
     pub fn validate_contract_package(&self) -> Result<ValidationReport, PublicSeamError> {
-        let inventory = self.inventory()?;
-        let mut compiled_schemas = Vec::new();
-        for name in &self.manifest.schemas {
-            let schema = self.schema_json(name)?;
-            self.compile_schema_value(name, &schema)?;
-            compiled_schemas.push(name.clone());
-        }
-
-        let mut validated_examples = Vec::new();
-        let capability = self.root.join("examples").join(CAPABILITY_EXAMPLE);
-        let capability_value = read_json(&capability)?;
-        self.validate_value_against_schema(
-            &capability,
-            "leaven.capability.v1.schema.json",
-            "",
-            &capability_value,
-        )?;
-        validated_examples.push(ValidatedExample {
-            example: capability,
-            schema: "leaven.capability.v1.schema.json".to_owned(),
-            pointer: String::new(),
-        });
-
-        let reflect_propose = self.root.join("examples").join(REFLECT_PROPOSE_EXAMPLE);
-        let reflect_value = read_json(&reflect_propose)?;
-        for pointer in ["/reflect_request", "/reflection_result", "/propose_request"] {
-            let value = reflect_value.pointer(pointer).ok_or_else(|| {
-                PublicSeamError::ExampleValidation {
-                    example: reflect_propose.clone(),
-                    schema: "leaven.stage_payloads.v1.schema.json".to_owned(),
-                    pointer: pointer.to_owned(),
-                    message: "example pointer missing".to_owned(),
-                }
-            })?;
-            self.validate_value_against_schema(
-                &reflect_propose,
-                "leaven.stage_payloads.v1.schema.json",
-                pointer,
-                value,
-            )?;
-            validated_examples.push(ValidatedExample {
-                example: reflect_propose.clone(),
-                schema: "leaven.stage_payloads.v1.schema.json".to_owned(),
-                pointer: pointer.to_owned(),
-            });
-        }
-        self.validate_reflect_propose_handoff_document(&reflect_value)?;
-
-        debug_assert_eq!(inventory.schema_paths.len(), compiled_schemas.len());
-        Ok(ValidationReport {
-            compiled_schemas,
-            validated_examples,
-        })
+        validation::validate_contract_package(self)
     }
 
     /// Loads the conformance matrix.
     pub fn conformance_matrix(&self) -> Result<ConformanceMatrix, PublicSeamError> {
-        let path = self.root.join(&self.manifest.conformance_matrix);
-        let matrix = read_yaml::<ConformanceMatrix>(&path)?;
-        if matrix.rows.is_empty() {
-            return Err(PublicSeamError::InvalidMatrix {
-                message: "matrix has no rows".to_owned(),
-            });
-        }
-        let mut ids = BTreeSet::new();
-        for row in &matrix.rows {
-            if !ids.insert(row.id.clone()) {
-                return Err(PublicSeamError::InvalidMatrix {
-                    message: format!("duplicate row id `{}`", row.id),
-                });
-            }
-        }
-        Ok(matrix)
+        validation::conformance_matrix(self)
     }
 
     /// Loads the active conformance-test denominator from the manifest notes.
     pub fn conformance_test_denominator(
         &self,
     ) -> Result<ConformanceTestDenominator, PublicSeamError> {
-        let note = self
-            .manifest
-            .notes
-            .iter()
-            .find(|note| note.ends_with("CONFORMANCE_TESTS_v0.3.md"))
-            .ok_or_else(|| PublicSeamError::InvalidManifest {
-                message: "manifest does not list CONFORMANCE_TESTS_v0.3.md".to_owned(),
-            })?;
-        let mut path = self.root.join(note);
-        if !path.exists() {
-            path = self.root.join("notes").join(note);
-        }
-        let source = fs::read_to_string(&path).map_err(|source| PublicSeamError::Io {
-            path: path.clone(),
-            source,
-        })?;
-        let mut cases = Vec::new();
-        for line in source.lines() {
-            let line = line.trim();
-            if line.is_empty() || line.starts_with('#') {
-                continue;
-            }
-            let (kind, text) = if let Some(rest) = line.strip_prefix("Reject ") {
-                (ConformanceTestKind::Reject, rest)
-            } else if let Some(rest) = line.strip_prefix("Accept ") {
-                (ConformanceTestKind::Accept, rest)
-            } else {
-                return Err(PublicSeamError::InvalidMatrix {
-                    message: format!("unrecognized conformance test line `{line}`"),
-                });
-            };
-            cases.push(ConformanceTestCase {
-                id: conformance_case_id(kind, text),
-                kind,
-                text: line.to_owned(),
-            });
-        }
-        Ok(ConformanceTestDenominator { cases })
+        validation::conformance_test_denominator(self)
     }
 
     /// Checks that matrix spec references resolve in the repository.
@@ -495,28 +370,7 @@ impl PublicSeamPackage {
         &self,
         matrix: &ConformanceMatrix,
     ) -> Result<(), PublicSeamError> {
-        for row in &matrix.rows {
-            for reference in &row.spec_refs {
-                self.ensure_matrix_reference(&row.id, reference)?;
-            }
-            for reference in row
-                .implementation_evidence
-                .iter()
-                .chain(row.partial_contract_implementation_evidence.iter())
-                .chain(row.review_evidence.iter())
-            {
-                self.ensure_matrix_reference(&row.id, reference)?;
-            }
-            for reference in row
-                .positive_test_evidence
-                .iter()
-                .chain(row.negative_test_evidence.iter())
-                .chain(row.partial_contract_test_evidence.iter())
-            {
-                self.ensure_test_reference(&row.id, reference)?;
-            }
-        }
-        Ok(())
+        validation::validate_matrix_references(self, matrix)
     }
 
     /// Audits proven row evidence so schema-only or topology-only closeouts cannot pass.
@@ -524,177 +378,7 @@ impl PublicSeamPackage {
         &self,
         matrix: &ConformanceMatrix,
     ) -> Result<(), PublicSeamError> {
-        self.validate_matrix_references(matrix)?;
-        let denominator = self.conformance_test_denominator()?;
-        let mut mapped_cases = BTreeSet::new();
-        for row in &matrix.rows {
-            for case_id in &row.conformance_tests {
-                mapped_cases.insert(case_id.as_str());
-            }
-        }
-        for case in &denominator.cases {
-            if !mapped_cases.contains(case.id.as_str()) {
-                return Err(PublicSeamError::InvalidMatrix {
-                    message: format!(
-                        "conformance test `{}` is not mapped to a matrix row",
-                        case.id
-                    ),
-                });
-            }
-        }
-        for row in &matrix.rows {
-            Self::validate_blocked_status(row)?;
-            if row.status != MatrixRowStatus::Proven {
-                Self::validate_non_proven_evidence(row)?;
-                continue;
-            }
-            if row.implementation_evidence.is_empty() {
-                return Err(PublicSeamError::InvalidMatrix {
-                    message: format!("row `{}` is proven without implementation evidence", row.id),
-                });
-            }
-            if row.review_evidence.is_empty() {
-                return Err(PublicSeamError::InvalidMatrix {
-                    message: format!("row `{}` is proven without review evidence", row.id),
-                });
-            }
-            if row.fake_pass_rejected.trim().is_empty() {
-                return Err(PublicSeamError::InvalidMatrix {
-                    message: format!("row `{}` does not name the fake pass it rejects", row.id),
-                });
-            }
-            if evidence_is_only_known_fake_passes(&row.implementation_evidence) {
-                return Err(PublicSeamError::InvalidMatrix {
-                    message: format!(
-                        "row `{}` implementation evidence is only schema/example/topology/matrix proof",
-                        row.id
-                    ),
-                });
-            }
-            if row.minimum_closeout_level.requires_denial_evidence() {
-                if row.positive_test_evidence.is_empty() {
-                    return Err(PublicSeamError::InvalidMatrix {
-                        message: format!("row `{}` lacks positive test evidence", row.id),
-                    });
-                }
-                if row.negative_test_evidence.is_empty() {
-                    return Err(PublicSeamError::InvalidMatrix {
-                        message: format!("row `{}` lacks negative test evidence", row.id),
-                    });
-                }
-                for reference in row
-                    .positive_test_evidence
-                    .iter()
-                    .chain(row.negative_test_evidence.iter())
-                {
-                    self.ensure_test_reference(&row.id, reference)?;
-                }
-                for reference in &row.negative_test_evidence {
-                    Self::ensure_denial_test_reference(&row.id, reference)?;
-                }
-            }
-        }
-        Ok(())
-    }
-
-    fn validate_blocked_status(row: &ConformanceRow) -> Result<(), PublicSeamError> {
-        if row.status != MatrixRowStatus::Blocked && !row.blocked_on.is_empty() {
-            return Err(PublicSeamError::InvalidMatrix {
-                message: format!(
-                    "row `{}` carries blocked_on prerequisites but is not blocked",
-                    row.id
-                ),
-            });
-        }
-        if row.status == MatrixRowStatus::Blocked
-            && (row.blocked_on.is_empty()
-                || row
-                    .blocked_on
-                    .iter()
-                    .any(|prerequisite| prerequisite.trim().is_empty()))
-        {
-            return Err(PublicSeamError::InvalidMatrix {
-                message: format!(
-                    "row `{}` is blocked without concrete blocked_on prerequisites",
-                    row.id
-                ),
-            });
-        }
-        Ok(())
-    }
-
-    fn validate_non_proven_evidence(row: &ConformanceRow) -> Result<(), PublicSeamError> {
-        if !row.positive_test_evidence.is_empty()
-            || !row.negative_test_evidence.is_empty()
-            || !row.implementation_evidence.is_empty()
-        {
-            return Err(PublicSeamError::InvalidMatrix {
-                message: format!(
-                    "row `{}` is not proven but uses closeout evidence fields instead of partial_contract evidence",
-                    row.id
-                ),
-            });
-        }
-        Ok(())
-    }
-
-    fn ensure_matrix_reference(
-        &self,
-        row_id: &str,
-        reference: &str,
-    ) -> Result<(), PublicSeamError> {
-        let path_part = reference
-            .split_once("::")
-            .map_or(reference, |(path, _)| path);
-        let path = self.repo_root.join(path_part);
-        if path.exists() {
-            Ok(())
-        } else {
-            Err(PublicSeamError::InvalidMatrix {
-                message: format!("row `{row_id}` references missing `{reference}`"),
-            })
-        }
-    }
-
-    fn ensure_test_reference(&self, row_id: &str, reference: &str) -> Result<(), PublicSeamError> {
-        let (path_part, symbol) =
-            reference
-                .split_once("::")
-                .ok_or_else(|| PublicSeamError::InvalidMatrix {
-                    message: format!("row `{row_id}` test evidence `{reference}` has no symbol"),
-                })?;
-        let path = self.repo_root.join(path_part);
-        let source = fs::read_to_string(&path).map_err(|source| PublicSeamError::Io {
-            path: path.clone(),
-            source,
-        })?;
-        let symbol = symbol.rsplit("::").next().unwrap_or(symbol);
-        if source.contains(&format!("fn {symbol}(")) {
-            Ok(())
-        } else {
-            Err(PublicSeamError::InvalidMatrix {
-                message: format!("row `{row_id}` test evidence `{reference}` is missing"),
-            })
-        }
-    }
-
-    fn ensure_denial_test_reference(row_id: &str, reference: &str) -> Result<(), PublicSeamError> {
-        let (_, symbol) =
-            reference
-                .split_once("::")
-                .ok_or_else(|| PublicSeamError::InvalidMatrix {
-                    message: format!("row `{row_id}` test evidence `{reference}` has no symbol"),
-                })?;
-        let symbol = symbol.rsplit("::").next().unwrap_or(symbol);
-        if looks_like_denial_test(symbol) {
-            Ok(())
-        } else {
-            Err(PublicSeamError::InvalidMatrix {
-                message: format!(
-                    "row `{row_id}` negative test evidence `{reference}` does not look like denial evidence"
-                ),
-            })
-        }
+        validation::audit_conformance_evidence(self, matrix)
     }
 
     /// Returns the locked V1 scope, refusing manifest drift.
@@ -758,7 +442,7 @@ impl PublicSeamPackage {
         pointer: &str,
         value: &Value,
     ) -> Result<(), PublicSeamError> {
-        self.validate_value_against_schema(&self.root.join(schema), schema, pointer, value)
+        validation::validate_arbitrary_value(self, schema, pointer, value)
     }
 
     /// Projects a reusable evidence output record through the public-seam wire shape.
@@ -789,18 +473,7 @@ impl PublicSeamPackage {
         &self,
         value: &Value,
     ) -> Result<OutputRecordDocument, PublicSeamError> {
-        let schema = serde_json::json!({
-            "$schema": "https://json-schema.org/draft/2020-12/schema",
-            "$ref": "https://schemas.leaven.dev/v1/v0.3/common.schema.json#/$defs/OutputRecord"
-        });
-        self.validate_value_against_schema_value(
-            &self.root.join("schemas/common.schema.json"),
-            "common.schema.json#/$defs/OutputRecord",
-            "/output_record",
-            &schema,
-            value,
-        )?;
-        OutputRecordDocument::from_schema_valid_value(value.clone())
+        validation::validate_output_record_value(self, value)
     }
 
     /// Validates a Plan IR document through the active V1 schema and semantic seam checks.
@@ -1098,104 +771,5 @@ impl PublicSeamPackage {
     /// Returns the evaluator for pinned public-seam replay mini-languages.
     pub fn pinned_dialects(&self) -> PinnedDialectEvaluator {
         PinnedDialectEvaluator
-    }
-
-    fn inventory_for_manifest(
-        &self,
-        manifest: &Manifest,
-    ) -> Result<ContractInventory, PublicSeamError> {
-        let goal_gate = self.root.join(&manifest.goal_gate);
-        let matrix = self.root.join(&manifest.conformance_matrix);
-        ensure_exists(&goal_gate)?;
-        ensure_exists(&matrix)?;
-
-        let mut schema_paths = Vec::new();
-        let mut schemas_used_by_harness = BTreeSet::new();
-        for schema in &manifest.schemas {
-            let path = self.root.join("schemas").join(schema);
-            ensure_exists(&path)?;
-            schema_paths.push(path);
-            schemas_used_by_harness.insert(schema.clone());
-        }
-
-        let mut profiles = Vec::new();
-        for profile in &manifest.profiles {
-            let path = self.root.join("profiles").join(profile);
-            ensure_exists(&path)?;
-            profiles.push(path);
-        }
-
-        Ok(ContractInventory {
-            schema_paths,
-            goal_gate,
-            matrix,
-            profiles,
-            schemas_used_by_harness,
-        })
-    }
-
-    fn schema_retriever(&self) -> Result<SchemaRetriever, PublicSeamError> {
-        let mut schemas = HashMap::new();
-        for name in &self.manifest.schemas {
-            let value = self.schema_json(name)?;
-            schemas.insert(name.clone(), value.clone());
-            if let Some(id) = value.get("$id").and_then(Value::as_str) {
-                schemas.insert(id.to_owned(), value);
-            }
-        }
-        Ok(SchemaRetriever { schemas })
-    }
-
-    fn validate_value_against_schema(
-        &self,
-        example: &Path,
-        schema: &str,
-        pointer: &str,
-        value: &Value,
-    ) -> Result<(), PublicSeamError> {
-        let schema_value = self.schema_json(schema)?;
-        self.validate_value_against_schema_value(example, schema, pointer, &schema_value, value)
-    }
-
-    fn validate_value_against_schema_value(
-        &self,
-        example: &Path,
-        schema: &str,
-        pointer: &str,
-        schema_value: &Value,
-        value: &Value,
-    ) -> Result<(), PublicSeamError> {
-        let validator = jsonschema::draft202012::options()
-            .with_retriever(self.schema_retriever()?)
-            .build(schema_value)
-            .map_err(|error| PublicSeamError::InvalidSchema {
-                name: schema.to_owned(),
-                message: error.to_string(),
-            })?;
-        validator
-            .validate(value)
-            .map_err(|error| PublicSeamError::ExampleValidation {
-                example: example.to_path_buf(),
-                schema: schema.to_owned(),
-                pointer: pointer.to_owned(),
-                message: error.to_string(),
-            })
-    }
-}
-
-#[derive(Clone, Debug)]
-struct SchemaRetriever {
-    schemas: HashMap<String, Value>,
-}
-
-impl Retrieve for SchemaRetriever {
-    fn retrieve(
-        &self,
-        uri: &Uri<String>,
-    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
-        self.schemas
-            .get(uri.as_str())
-            .cloned()
-            .ok_or_else(|| format!("schema not found: {uri}").into())
     }
 }
