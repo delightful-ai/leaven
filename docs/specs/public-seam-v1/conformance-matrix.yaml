@@ -613,6 +613,7 @@ rows:
       - crates/leaven-public-seam/tests/call_authority.rs::call_authority_rejects_forbidden_input_classes_before_execution
       - crates/leaven-public-seam/tests/call_authority.rs::call_authority_rejects_declared_forbidden_intersections_even_when_grant_allows
       - crates/leaven-public-seam/tests/call_authority.rs::call_authority_rejects_reflector_lm_call_input_classes_include_case_target
+      - crates/leaven-public-seam/tests/evidence_envelope.rs::evidence_envelope_rejects_source_receipt_family_mismatches
       - crates/leaven-public-seam/tests/plan_result.rs::plan_result_preserves_value_visibility_data_classes
       - crates/leaven-public-seam/tests/plan_result.rs::plan_result_rejects_value_trace_and_blob_ref_data_class_gaps
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_evidence_source_receipts_that_are_missing_or_wrong_kind
@@ -639,6 +640,7 @@ rows:
       - crates/leaven-public-seam/src/plan_execution/effects.rs::extend_data_classes_from_blob_ref
       - crates/leaven-public-seam/src/evidence.rs::EvidenceEnvelopeDocument
       - crates/leaven-public-seam/src/evidence.rs::EvidenceEnvelopeDocument::trace_data_classes
+      - crates/leaven-public-seam/src/evidence.rs::require_receipt_family
       - crates/leaven-public-seam/src/evidence.rs::validate_private_payload_ref_classes
       - crates/leaven-public-seam/src/evidence.rs::collect_blob_ref_data_classes
       - crates/leaven-public-seam/src/stage_payload.rs::require_output_record_data_class_coverage
@@ -725,6 +727,7 @@ rows:
     negative_test_evidence:
       - crates/leaven-public-seam/tests/evidence_envelope.rs::evidence_envelope_rejects_target_derived_data_class_gaps
       - crates/leaven-public-seam/tests/evidence_envelope.rs::evidence_envelope_rejects_unreceipted_target_derived_evidence
+      - crates/leaven-public-seam/tests/evidence_envelope.rs::evidence_envelope_rejects_source_receipt_family_mismatches
       - crates/leaven-public-seam/tests/evidence_envelope.rs::evidence_envelope_rejects_hidden_target_derivation_flag
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_evidence_source_receipts_that_are_missing_or_wrong_kind
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_nested_score_output_data_class_gaps
@@ -739,6 +742,7 @@ rows:
       - crates/leaven-public-seam/src/evidence.rs::carries_case_target_class
       - crates/leaven-public-seam/src/evidence.rs::collect_trace_facts
       - crates/leaven-public-seam/src/evidence.rs::validate_trace_receipts_declared
+      - crates/leaven-public-seam/src/evidence.rs::require_receipt_family
       - crates/leaven-public-seam/src/evidence.rs::validate_private_payload_ref_classes
       - crates/leaven-public-seam/src/evidence.rs::collect_blob_ref_data_classes
       - crates/leaven-public-seam/src/evidence.rs::receipt_ref_id

@@ -78,6 +78,51 @@ fn evidence_envelope_accepts_schema_valid_trace_refs_without_receipts() {
 }
 
 #[test]
+fn evidence_envelope_rejects_source_receipt_family_mismatches() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    for (field, value, expected) in [
+        (
+            "read",
+            json!(["lmrec_score"]),
+            "source_receipts.read must contain read receipt refs",
+        ),
+        (
+            "effect",
+            json!(["qrec_target"]),
+            "source_receipts.effect must contain effect receipt refs",
+        ),
+        (
+            "write",
+            json!(["qrec_target"]),
+            "source_receipts.write must contain write receipt refs",
+        ),
+    ] {
+        let mut envelope = target_derived_envelope();
+        envelope["source_receipts"][field] = value;
+        let error = package
+            .validate_evidence_envelope_document(&envelope)
+            .unwrap_err();
+        assert!(
+            error.to_string().contains(expected),
+            "expected `{expected}` in {error:?}"
+        );
+    }
+
+    let mut object_form_wrong_effect = target_derived_envelope();
+    object_form_wrong_effect["source_receipts"]["effect"] = json!([receipt_ref("qrec_target")]);
+    let error = package
+        .validate_evidence_envelope_document(&object_form_wrong_effect)
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("source_receipts.effect must contain effect receipt refs"),
+        "unexpected error: {error:?}"
+    );
+}
+
+#[test]
 fn evidence_envelope_rejects_target_derived_data_class_gaps() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
 

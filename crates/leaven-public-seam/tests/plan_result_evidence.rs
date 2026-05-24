@@ -83,7 +83,7 @@ fn plan_result_rejects_evidence_source_receipts_that_are_missing_or_wrong_kind()
         package
             .validate_plan_result_document(&wrong_effect_receipt_kind)
             .unwrap_err(),
-        PublicSeamError::InvalidPlanResult { .. }
+        PublicSeamError::InvalidEvidence { .. }
     ));
 
     let mut object_form_wrong_effect_receipt_kind = evidence_backed_result();
@@ -93,7 +93,7 @@ fn plan_result_rejects_evidence_source_receipts_that_are_missing_or_wrong_kind()
         package
             .validate_plan_result_document(&object_form_wrong_effect_receipt_kind)
             .unwrap_err(),
-        PublicSeamError::InvalidPlanResult { .. }
+        PublicSeamError::InvalidEvidence { .. }
     ));
 
     let mut undeclared_trace_receipt = evidence_backed_result();
