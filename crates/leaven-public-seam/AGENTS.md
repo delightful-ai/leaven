@@ -103,13 +103,14 @@ implementation, engine-client runtime, worker-agent runtime, provider call, or
 graph mutation route.
 
 Crate-root exports for `AcpWorkerSession`, `AcpSessionLifecycle`,
-`AcpSessionState`, `AcpSessionUpdate`, and `AcpSessionCancellation` are advanced public seam
-contracts for profile-derived lifecycle facts only. They prove the
-engine-client/worker-agent role vocabulary, stdio-first session model, bounded
-progress-update queue, and cancellation state at the contract layer. They are
-not stdio JSON-RPC I/O, process startup, provider execution, full ACP lifecycle
-control, or production backpressure policy; `flow_control.backpressure`
-strategy-specific behavior is not implemented by these primitives.
+`AcpSessionState`, `AcpSessionUpdate`, `AcpSessionCancellation`,
+`AcpBackpressure`, `AcpProgressPriority`, and `AcpProgressDisposition` are
+advanced public seam contracts for profile-derived lifecycle facts only. They
+prove the engine-client/worker-agent role vocabulary, stdio-first session
+model, bounded progress-update queue, cancellation state, and locked
+`flow_control.backpressure` strategy at the contract layer. They are not stdio
+JSON-RPC I/O, process startup, provider execution, full ACP lifecycle control,
+or production worker scheduling.
 
 Crate-root exports for `PlanDocument`, `PlanOperationKind`,
 `PlanExecutionContext`, `PlanExecutionHost`, `PlanExecutionReport`,

@@ -1090,6 +1090,7 @@ rows:
       - crates/leaven-public-seam/tests/contract_package.rs::acp_profile_rejects_mcp_bridge_legacy_worker_protocol_and_watch_runtime
     partial_contract_implementation_evidence:
       - crates/leaven-public-seam/src/acp_profile.rs::AcpProfileDocument
+      - crates/leaven-public-seam/src/acp_profile.rs::AcpBackpressure
       - crates/leaven-public-seam/src/acp_profile.rs::AcpExtensionMethod
       - crates/leaven-public-seam/src/acp_profile.rs::AcpWorkerSession
       - crates/leaven-public-seam/src/acp_profile.rs::extension_methods
@@ -1098,6 +1099,7 @@ rows:
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-lifecycle-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-lifecycle-state-partial-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-acp-backpressure-strategy-review.md
     status: pending
 
   - id: ps1.acp.auth_permissions
@@ -1199,15 +1201,23 @@ rows:
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_profile_rejects_mcp_latest_nonstdio_human_granting_and_unbounded_updates
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_worker_session_uses_engine_client_worker_agent_inversion_and_bounded_updates
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_lifecycle_rejects_unbounded_or_overproducing_progress_queues
+      - crates/leaven-public-seam/tests/acp_profile.rs::acp_lifecycle_applies_profile_backpressure_strategies
     partial_contract_implementation_evidence:
       - crates/leaven-public-seam/src/acp_profile.rs::AcpProfileDocument::default_max_inflight_updates
+      - crates/leaven-public-seam/src/acp_profile.rs::AcpProfileDocument::backpressure
+      - crates/leaven-public-seam/src/acp_profile.rs::AcpBackpressure
       - crates/leaven-public-seam/src/acp_profile.rs::AcpWorkerSession
       - crates/leaven-public-seam/src/acp_profile.rs::AcpSessionLifecycle
+      - crates/leaven-public-seam/src/acp_profile.rs::AcpSessionLifecycle::from_profile
       - crates/leaven-public-seam/src/acp_profile.rs::AcpSessionState
       - crates/leaven-public-seam/src/acp_profile.rs::AcpSessionLifecycle::enqueue_progress
+      - crates/leaven-public-seam/src/acp_profile.rs::AcpSessionLifecycle::offer_progress
       - crates/leaven-public-seam/src/acp_profile.rs::AcpSessionLifecycle::cancel
+      - crates/leaven-public-seam/src/acp_profile.rs::AcpProgressPriority
+      - crates/leaven-public-seam/src/acp_profile.rs::AcpProgressDisposition
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-lifecycle-partial-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-acp-backpressure-strategy-review.md
     status: pending
 
   - id: ps1.acp.no_mcp_v1
@@ -1609,6 +1619,7 @@ rows:
       - crates/leaven-public-seam/tests/contract_package.rs::public_seam_routes_reject_ordinary_facade_leaks
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-public-route-maturity-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-acp-backpressure-strategy-review.md
     status: proven
 
   - id: ps1.harness.negative_denominator

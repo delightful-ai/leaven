@@ -20,10 +20,10 @@ mod stage_payload;
 mod watch;
 
 pub use acp_profile::{
-    AcpAuthenticateRequest, AcpAuthenticatedSession, AcpExtensionMethod,
+    AcpAuthenticateRequest, AcpAuthenticatedSession, AcpBackpressure, AcpExtensionMethod,
     AcpExtensionResultDocument, AcpPermissionDecision, AcpPermissionRequest, AcpProfileDocument,
-    AcpSessionCancellation, AcpSessionLifecycle, AcpSessionState, AcpSessionUpdate,
-    AcpWorkerSession,
+    AcpProgressDisposition, AcpProgressPriority, AcpSessionCancellation, AcpSessionLifecycle,
+    AcpSessionState, AcpSessionUpdate, AcpWorkerSession,
 };
 pub use call_authority::CallAuthorityReport;
 pub use capability::{

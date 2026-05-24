@@ -15,6 +15,7 @@ pub struct AcpProfileDocument {
     transports: Vec<String>,
     extension_methods: Vec<AcpExtensionMethod>,
     default_max_inflight_updates: u64,
+    backpressure: AcpBackpressure,
 }
 
 impl AcpProfileDocument {
@@ -71,12 +72,17 @@ impl AcpProfileDocument {
             .get("default_max_inflight_updates")
             .and_then(Value::as_u64)
             .ok_or_else(|| invalid_acp("flow_control.default_max_inflight_updates is required"))?;
+        let backpressure = AcpBackpressure::from_wire(required_string(
+            flow_control.get("backpressure"),
+            "flow_control.backpressure",
+        )?)?;
 
         Ok(Self {
             pinned_acp_version,
             transports,
             extension_methods,
             default_max_inflight_updates,
+            backpressure,
         })
     }
 
@@ -98,6 +104,11 @@ impl AcpProfileDocument {
     /// Bounded update queue capacity advertised by the profile.
     pub const fn default_max_inflight_updates(&self) -> u64 {
         self.default_max_inflight_updates
+    }
+
+    /// Backpressure strategy required by the locked ACP profile.
+    pub const fn backpressure(&self) -> AcpBackpressure {
+        self.backpressure
     }
 
     /// Looks up one extension method by name.
@@ -142,6 +153,39 @@ impl AcpExtensionMethod {
     /// Whether the method declares receipt-producing results.
     pub const fn produces_receipt(&self) -> bool {
         self.produces_receipt
+    }
+}
+
+/// Locked ACP progress-update backpressure strategy.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AcpBackpressure {
+    /// Pause worker progress until the engine acknowledges queued updates.
+    PauseWorker,
+    /// Drop noncritical progress updates while preserving critical updates.
+    DropNoncriticalUpdates,
+    /// Disconnect the session when the bounded update queue is overproduced.
+    Disconnect,
+}
+
+impl AcpBackpressure {
+    fn from_wire(value: &str) -> Result<Self, PublicSeamError> {
+        match value {
+            "pause_worker" => Ok(Self::PauseWorker),
+            "drop_noncritical_updates" => Ok(Self::DropNoncriticalUpdates),
+            "disconnect" => Ok(Self::Disconnect),
+            other => Err(invalid_acp(format!(
+                "unknown ACP backpressure strategy `{other}`"
+            ))),
+        }
+    }
+
+    /// Wire spelling from the locked ACP profile.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::PauseWorker => "pause_worker",
+            Self::DropNoncriticalUpdates => "drop_noncritical_updates",
+            Self::Disconnect => "disconnect",
+        }
     }
 }
 
@@ -230,8 +274,6 @@ pub struct AcpWorkerSession {
 impl AcpWorkerSession {
     /// Starts a public-seam ACP worker session model from a validated profile.
     pub fn start(profile: &AcpProfileDocument) -> Result<Self, PublicSeamError> {
-        let max_inflight_updates = usize::try_from(profile.default_max_inflight_updates())
-            .map_err(|_| invalid_acp("ACP max inflight updates does not fit this platform"))?;
         let transport = profile
             .transports()
             .first()
@@ -243,7 +285,7 @@ impl AcpWorkerSession {
             transport,
             engine_role: "engine_client".to_owned(),
             worker_role: "worker_agent".to_owned(),
-            lifecycle: AcpSessionLifecycle::bounded(max_inflight_updates)?,
+            lifecycle: AcpSessionLifecycle::from_profile(profile)?,
         })
     }
 
@@ -282,6 +324,7 @@ impl AcpWorkerSession {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AcpSessionLifecycle {
     max_inflight_updates: usize,
+    backpressure: AcpBackpressure,
     next_sequence: u64,
     updates: VecDeque<AcpSessionUpdate>,
     cancellation: Option<AcpSessionCancellation>,
@@ -289,13 +332,23 @@ pub struct AcpSessionLifecycle {
 }
 
 impl AcpSessionLifecycle {
-    /// Builds a bounded ACP update lifecycle.
-    pub fn bounded(max_inflight_updates: usize) -> Result<Self, PublicSeamError> {
+    /// Builds a bounded ACP update lifecycle from the validated profile.
+    pub fn from_profile(profile: &AcpProfileDocument) -> Result<Self, PublicSeamError> {
+        let max_inflight_updates = usize::try_from(profile.default_max_inflight_updates())
+            .map_err(|_| invalid_acp("ACP max inflight updates does not fit this platform"))?;
+        Self::bounded(max_inflight_updates, profile.backpressure())
+    }
+
+    fn bounded(
+        max_inflight_updates: usize,
+        backpressure: AcpBackpressure,
+    ) -> Result<Self, PublicSeamError> {
         if max_inflight_updates == 0 {
             return Err(invalid_acp("ACP update queue bound must be non-zero"));
         }
         Ok(Self {
             max_inflight_updates,
+            backpressure,
             next_sequence: 0,
             updates: VecDeque::new(),
             cancellation: None,
@@ -306,6 +359,11 @@ impl AcpSessionLifecycle {
     /// Maximum in-flight progress updates allowed before backpressure is applied.
     pub const fn max_inflight_updates(&self) -> usize {
         self.max_inflight_updates
+    }
+
+    /// Backpressure strategy governing the bounded update queue.
+    pub const fn backpressure(&self) -> AcpBackpressure {
+        self.backpressure
     }
 
     /// Current number of queued progress updates.
@@ -333,15 +391,50 @@ impl AcpSessionLifecycle {
         &mut self,
         message: impl Into<String>,
     ) -> Result<&AcpSessionUpdate, PublicSeamError> {
+        match self.offer_progress(message, AcpProgressPriority::Critical)? {
+            AcpProgressDisposition::Enqueued(_) => Ok(self
+                .updates
+                .back()
+                .expect("enqueued critical update must be observable")),
+            AcpProgressDisposition::DroppedNoncritical => Err(invalid_acp(
+                "ACP critical progress update cannot be dropped as noncritical",
+            )),
+            AcpProgressDisposition::Disconnected(reason) => Err(invalid_acp(reason)),
+        }
+    }
+
+    /// Offers one progress update with explicit priority.
+    pub fn offer_progress(
+        &mut self,
+        message: impl Into<String>,
+        priority: AcpProgressPriority,
+    ) -> Result<AcpProgressDisposition, PublicSeamError> {
         if self.is_cancelled() {
             return Err(invalid_acp(
                 "ACP session updates are refused after session cancellation",
             ));
         }
         if self.updates.len() >= self.max_inflight_updates {
-            return Err(invalid_acp(
-                "ACP session update queue is full; worker must apply backpressure",
-            ));
+            return match self.backpressure {
+                AcpBackpressure::PauseWorker => Err(invalid_acp(
+                    "ACP session update queue is full; worker must pause",
+                )),
+                AcpBackpressure::DropNoncriticalUpdates
+                    if priority == AcpProgressPriority::Noncritical =>
+                {
+                    Ok(AcpProgressDisposition::DroppedNoncritical)
+                }
+                AcpBackpressure::DropNoncriticalUpdates => Err(invalid_acp(
+                    "ACP session update queue is full; worker must pause critical updates",
+                )),
+                AcpBackpressure::Disconnect => {
+                    let cancellation =
+                        self.cancel("ACP session disconnected after update overflow");
+                    Ok(AcpProgressDisposition::Disconnected(
+                        cancellation.reason().to_owned(),
+                    ))
+                }
+            };
         }
         let update = AcpSessionUpdate {
             sequence: self.next_sequence,
@@ -349,10 +442,12 @@ impl AcpSessionLifecycle {
         };
         self.next_sequence += 1;
         self.updates.push_back(update);
-        Ok(self
-            .updates
-            .back()
-            .expect("pushed update must be observable"))
+        Ok(AcpProgressDisposition::Enqueued(
+            self.updates
+                .back()
+                .expect("pushed update must be observable")
+                .clone(),
+        ))
     }
 
     /// Acknowledges the oldest in-flight progress update.
@@ -372,6 +467,26 @@ impl AcpSessionLifecycle {
             .as_ref()
             .expect("cancellation set before return")
     }
+}
+
+/// Priority of one ACP progress update under backpressure.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AcpProgressPriority {
+    /// Critical updates must be delivered or force producer backpressure.
+    Critical,
+    /// Noncritical updates may be dropped when the profile allows it.
+    Noncritical,
+}
+
+/// Result of offering one ACP progress update.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum AcpProgressDisposition {
+    /// The update entered the bounded queue.
+    Enqueued(AcpSessionUpdate),
+    /// The profile dropped a noncritical update at the queue boundary.
+    DroppedNoncritical,
+    /// The profile disconnected the session at the queue boundary.
+    Disconnected(String),
 }
 
 /// Profile-level ACP session lifecycle state.
