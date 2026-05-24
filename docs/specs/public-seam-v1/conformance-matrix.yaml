@@ -373,6 +373,7 @@ rows:
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-result-receipt-replay-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-23-runcontext-write-tranche-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-acp-evidence-stage-current-tranche-review.md
     status: proven
 
   - id: ps1.receipts.failed_costs
@@ -411,6 +412,7 @@ rows:
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-result-receipt-replay-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-23-result-envelope-failed-cost-target-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-acp-evidence-stage-current-tranche-review.md
     status: proven
 
   - id: ps1.replay.per_assessment
@@ -654,6 +656,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-value-visibility-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-stage-evidence-provenance-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-stage-evidence-typed-data-class-follow-up-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-acp-evidence-stage-current-tranche-review.md
     status: pending
 
   - id: ps1.visibility.reflector_target_safe
@@ -701,6 +704,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-stage-evidence-provenance-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-stage-evidence-typed-data-class-follow-up-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-stage-receipt-ref-follow-up-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-acp-evidence-stage-current-tranche-review.md
     status: pending
 
   - id: ps1.evidence.visibility_receipts
@@ -762,6 +766,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-stage-evidence-provenance-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-stage-evidence-typed-data-class-follow-up-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-evidence-receipt-ref-trace-follow-up-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-acp-evidence-stage-current-tranche-review.md
     status: pending
 
   - id: ps1.stage.reflection_proposal_split
@@ -801,6 +806,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-visibility-trace-stage-provenance-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-stage-evidence-provenance-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-stage-evidence-typed-data-class-follow-up-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-acp-evidence-stage-current-tranche-review.md
     status: pending
 
   - id: ps1.stage.payload_receipts
@@ -853,6 +859,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-23-stage-payload-current-blocker-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-stage-evidence-provenance-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-stage-evidence-typed-data-class-follow-up-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-acp-evidence-stage-current-tranche-review.md
     status: pending
 
   - id: ps1.proposal.surface_authority
@@ -1264,6 +1271,7 @@ rows:
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-lifecycle-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-backpressure-strategy-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-acp-evidence-stage-current-tranche-review.md
     status: pending
 
   - id: ps1.acp.no_mcp_v1
@@ -1446,6 +1454,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-lm-result-contract-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-lm-success-cost-binding-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-costful-primary-receipt-follow-up-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-acp-evidence-stage-current-tranche-review.md
     status: pending
 
   - id: ps1.agent.contract
