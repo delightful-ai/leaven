@@ -7,10 +7,11 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use crate::{
-    CallAuthorityReport, ConformanceMatrix, DeferredWatchReplacement, EvaluationJobDocument,
-    EvaluationRequestReceiptDocument, EvidenceEnvelopeDocument, MatrixRowStatus,
-    OutputRecordDocument, PinnedDialectEvaluator, PlanDocument, PlanResultDocument,
-    ProposalAuthorityReport, PublicSeamError, ReflectProposeHandoffDocument, StagePayloadDocument,
+    CallAuthorityReport, ConformanceMatrix, ConformanceRow, DeferredWatchReplacement,
+    EvaluationJobDocument, EvaluationRequestReceiptDocument, EvidenceEnvelopeDocument,
+    MatrixRowStatus, OutputRecordDocument, PinnedDialectEvaluator, PlanDocument,
+    PlanResultDocument, ProposalAuthorityReport, PublicSeamError, ReflectProposeHandoffDocument,
+    StagePayloadDocument,
 };
 
 mod support;
@@ -542,26 +543,9 @@ impl PublicSeamPackage {
             }
         }
         for row in &matrix.rows {
+            Self::validate_blocked_status(row)?;
             if row.status != MatrixRowStatus::Proven {
-                if !row.positive_test_evidence.is_empty()
-                    || !row.negative_test_evidence.is_empty()
-                    || !row.implementation_evidence.is_empty()
-                {
-                    return Err(PublicSeamError::InvalidMatrix {
-                        message: format!(
-                            "row `{}` is not proven but uses closeout evidence fields instead of partial_contract evidence",
-                            row.id
-                        ),
-                    });
-                }
-                if row.status == MatrixRowStatus::Blocked && row.blocked_on.is_empty() {
-                    return Err(PublicSeamError::InvalidMatrix {
-                        message: format!(
-                            "row `{}` is blocked without blocked_on prerequisites",
-                            row.id
-                        ),
-                    });
-                }
+                Self::validate_non_proven_evidence(row)?;
                 continue;
             }
             if row.implementation_evidence.is_empty() {
@@ -609,6 +593,47 @@ impl PublicSeamPackage {
                     Self::ensure_denial_test_reference(&row.id, reference)?;
                 }
             }
+        }
+        Ok(())
+    }
+
+    fn validate_blocked_status(row: &ConformanceRow) -> Result<(), PublicSeamError> {
+        if row.status != MatrixRowStatus::Blocked && !row.blocked_on.is_empty() {
+            return Err(PublicSeamError::InvalidMatrix {
+                message: format!(
+                    "row `{}` carries blocked_on prerequisites but is not blocked",
+                    row.id
+                ),
+            });
+        }
+        if row.status == MatrixRowStatus::Blocked
+            && (row.blocked_on.is_empty()
+                || row
+                    .blocked_on
+                    .iter()
+                    .any(|prerequisite| prerequisite.trim().is_empty()))
+        {
+            return Err(PublicSeamError::InvalidMatrix {
+                message: format!(
+                    "row `{}` is blocked without concrete blocked_on prerequisites",
+                    row.id
+                ),
+            });
+        }
+        Ok(())
+    }
+
+    fn validate_non_proven_evidence(row: &ConformanceRow) -> Result<(), PublicSeamError> {
+        if !row.positive_test_evidence.is_empty()
+            || !row.negative_test_evidence.is_empty()
+            || !row.implementation_evidence.is_empty()
+        {
+            return Err(PublicSeamError::InvalidMatrix {
+                message: format!(
+                    "row `{}` is not proven but uses closeout evidence fields instead of partial_contract evidence",
+                    row.id
+                ),
+            });
         }
         Ok(())
     }

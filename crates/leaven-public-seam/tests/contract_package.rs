@@ -691,7 +691,7 @@ fn conformance_evidence_audit_rejects_pending_rows_with_closeout_evidence_fields
 }
 
 #[test]
-fn conformance_evidence_audit_requires_blocked_rows_to_name_prerequisites() {
+fn conformance_evidence_audit_rejects_blocked_rows_without_named_prerequisites() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let mut matrix = package.conformance_matrix().unwrap();
     let row = matrix
@@ -707,6 +707,41 @@ fn conformance_evidence_audit_requires_blocked_rows_to_name_prerequisites() {
     assert!(matches!(error, PublicSeamError::InvalidMatrix { .. }));
     assert!(error.to_string().contains("ps1.acp.transport_profile"));
     assert!(error.to_string().contains("blocked_on prerequisites"));
+
+    let row = matrix
+        .rows
+        .iter_mut()
+        .find(|row| row.id == "ps1.acp.transport_profile")
+        .unwrap();
+    row.blocked_on = vec!["   ".to_owned()];
+
+    let error = package.audit_conformance_evidence(&matrix).unwrap_err();
+    assert!(matches!(error, PublicSeamError::InvalidMatrix { .. }));
+    assert!(error.to_string().contains("ps1.acp.transport_profile"));
+    assert!(error.to_string().contains("blocked_on prerequisites"));
+}
+
+#[test]
+fn conformance_evidence_audit_rejects_stale_blocked_on_for_non_blocked_rows() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut matrix = package.conformance_matrix().unwrap();
+    let row = matrix
+        .rows
+        .iter_mut()
+        .find(|row| row.id == "ps1.stage.payload_receipts")
+        .unwrap();
+    assert_eq!(row.status, MatrixRowStatus::Pending);
+    row.blocked_on = vec!["stale prerequisite".to_owned()];
+
+    let error = package.audit_conformance_evidence(&matrix).unwrap_err();
+
+    assert!(matches!(error, PublicSeamError::InvalidMatrix { .. }));
+    assert!(error.to_string().contains("ps1.stage.payload_receipts"));
+    assert!(
+        error
+            .to_string()
+            .contains("blocked_on prerequisites but is not blocked")
+    );
 }
 
 #[test]
@@ -813,6 +848,7 @@ fn conformance_evidence_audit_requires_denial_evidence_for_integrated_surface_ro
         .unwrap();
 
     row.status = MatrixRowStatus::Proven;
+    row.blocked_on.clear();
     row.implementation_evidence =
         vec!["crates/leaven-public-seam/src/package.rs::PublicSeamPackage::v1_scope".to_owned()];
     row.review_evidence = vec![
