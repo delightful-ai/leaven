@@ -26,6 +26,43 @@ fn plan_result_preserves_nested_evidence_visibility_data_classes_and_receipts() 
 }
 
 #[test]
+fn plan_result_accepts_object_form_evidence_receipt_refs() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut result = evidence_backed_result();
+    let evidence = &mut result["values"]["assessment_rows"]["items"][0]["evidence"];
+    evidence["source_receipts"]["read"] = json!([receipt_ref("qrec_target")]);
+    evidence["source_receipts"]["effect"] = json!([receipt_ref("lmrec_score")]);
+    evidence["source_receipts"]["write"] = json!([receipt_ref("wrec_assessment")]);
+    evidence["public"]["trace_refs"][0]["receipt"] = receipt_ref("lmrec_score");
+    evidence["trace_refs"][0]["receipt"] = receipt_ref("lmrec_score");
+
+    let result = package.validate_plan_result_document(&result).unwrap();
+
+    assert_eq!(result.value_count(), 2);
+    assert_eq!(result.receipt_count(), 3);
+}
+
+#[test]
+fn plan_result_accepts_unreceipted_evidence_trace_refs() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut result = evidence_backed_result();
+    let evidence = &mut result["values"]["assessment_rows"]["items"][0]["evidence"];
+    evidence["public"]["trace_refs"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("receipt");
+    evidence["trace_refs"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("receipt");
+
+    let result = package.validate_plan_result_document(&result).unwrap();
+
+    assert_eq!(result.value_count(), 2);
+    assert_eq!(result.receipt_count(), 3);
+}
+
+#[test]
 fn plan_result_rejects_evidence_source_receipts_that_are_missing_or_wrong_kind() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
 
@@ -41,12 +78,32 @@ fn plan_result_rejects_evidence_source_receipts_that_are_missing_or_wrong_kind()
 
     let mut wrong_effect_receipt_kind = evidence_backed_result();
     wrong_effect_receipt_kind["values"]["assessment_rows"]["items"][0]["evidence"]["source_receipts"]
-        ["effect"] = json!(["qrec_target"]);
+        ["effect"] = json!(["qrec_target", "lmrec_score"]);
     assert!(matches!(
         package
             .validate_plan_result_document(&wrong_effect_receipt_kind)
             .unwrap_err(),
         PublicSeamError::InvalidPlanResult { .. }
+    ));
+
+    let mut object_form_wrong_effect_receipt_kind = evidence_backed_result();
+    object_form_wrong_effect_receipt_kind["values"]["assessment_rows"]["items"][0]["evidence"]["source_receipts"]
+        ["effect"] = json!([receipt_ref("qrec_target"), receipt_ref("lmrec_score")]);
+    assert!(matches!(
+        package
+            .validate_plan_result_document(&object_form_wrong_effect_receipt_kind)
+            .unwrap_err(),
+        PublicSeamError::InvalidPlanResult { .. }
+    ));
+
+    let mut undeclared_trace_receipt = evidence_backed_result();
+    undeclared_trace_receipt["values"]["assessment_rows"]["items"][0]["evidence"]["source_receipts"]
+        ["effect"] = json!([]);
+    assert!(matches!(
+        package
+            .validate_plan_result_document(&undeclared_trace_receipt)
+            .unwrap_err(),
+        PublicSeamError::InvalidEvidence { .. }
     ));
 }
 
@@ -407,6 +464,14 @@ fn target_derived_evidence() -> Value {
             "effect": ["lmrec_score"],
             "write": ["wrec_assessment"]
         }
+    })
+}
+
+fn receipt_ref(id: &str) -> Value {
+    json!({
+        "kind": "receipt",
+        "id": id,
+        "fingerprint": "fp_receipt_sha256_evidence"
     })
 }
 

@@ -30,6 +30,51 @@ fn evidence_envelope_preserves_visibility_data_classes_and_receipts() {
     assert_eq!(envelope.read_receipts(), &["qrec_target".to_owned()]);
     assert_eq!(envelope.effect_receipts(), &["lmrec_score".to_owned()]);
     assert_eq!(envelope.write_receipts(), &["wrec_assessment".to_owned()]);
+    assert_eq!(envelope.trace_receipts(), &["lmrec_score".to_owned()]);
+}
+
+#[test]
+fn evidence_envelope_accepts_object_receipt_refs_and_binds_trace_receipts_to_sources() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut envelope = target_derived_envelope();
+    envelope["source_receipts"]["read"] = json!([receipt_ref("qrec_target")]);
+    envelope["source_receipts"]["effect"] = json!([receipt_ref("lmrec_score")]);
+    envelope["source_receipts"]["write"] = json!([receipt_ref("wrec_assessment")]);
+    envelope["public"]["trace_refs"][0]["receipt"] = receipt_ref("lmrec_score");
+    envelope["trace_refs"][0]["receipt"] = receipt_ref("lmrec_score");
+
+    let envelope = package
+        .validate_evidence_envelope_document(&envelope)
+        .unwrap();
+
+    assert_eq!(envelope.read_receipts(), &["qrec_target".to_owned()]);
+    assert_eq!(envelope.effect_receipts(), &["lmrec_score".to_owned()]);
+    assert_eq!(envelope.write_receipts(), &["wrec_assessment".to_owned()]);
+    assert_eq!(envelope.trace_receipts(), &["lmrec_score".to_owned()]);
+}
+
+#[test]
+fn evidence_envelope_accepts_schema_valid_trace_refs_without_receipts() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut envelope = target_derived_envelope();
+    envelope["public"]["trace_refs"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("receipt");
+    envelope["trace_refs"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("receipt");
+
+    let envelope = package
+        .validate_evidence_envelope_document(&envelope)
+        .unwrap();
+
+    assert!(envelope.trace_receipts().is_empty());
+    assert_eq!(
+        envelope.trace_data_classes(),
+        &["prompt.raw".to_owned(), "transcript.raw".to_owned()]
+    );
 }
 
 #[test]
@@ -139,6 +184,15 @@ fn evidence_envelope_rejects_unreceipted_target_derived_evidence() {
     assert!(matches!(
         package
             .validate_evidence_envelope_document(&no_receipt_sources)
+            .unwrap_err(),
+        PublicSeamError::InvalidEvidence { .. }
+    ));
+
+    let mut undeclared_trace_receipt = target_derived_envelope();
+    undeclared_trace_receipt["source_receipts"]["effect"] = json!([]);
+    assert!(matches!(
+        package
+            .validate_evidence_envelope_document(&undeclared_trace_receipt)
             .unwrap_err(),
         PublicSeamError::InvalidEvidence { .. }
     ));
@@ -268,6 +322,14 @@ fn target_derived_envelope() -> Value {
             "effect": ["lmrec_score"],
             "write": ["wrec_assessment"]
         }
+    })
+}
+
+fn receipt_ref(id: &str) -> Value {
+    json!({
+        "kind": "receipt",
+        "id": id,
+        "fingerprint": "fp_receipt_sha256_evidence"
     })
 }
 
