@@ -17,6 +17,11 @@ Root `AGENTS.md` owns the full routing map. This file adds local crate-family ru
   schema fingerprints, matrix harness data, and deferred-marker enforcement. It
   must not absorb worker runtime, provider lowering, graph mutation, or
   generated-struct-only proof.
+- ACP transport: `leaven-acp` owns the hot stdio process/session transport for
+  the locked public seam. It starts external workers and carries JSON-RPC over
+  stdin/stdout, while delegating Leaven method/result truth back to
+  `leaven-public-seam`. It must not become an MCP bridge, provider runtime, or
+  graph mutation layer.
 - Optimizers: `leaven-gepa`, `leaven-mipro`, `leaven-textgrad`, and `leaven-trace` own strategy state and search rhythm when behavior is real. Several are scaffold/reserved today; read leaf maturity warnings before using public names as proof. Do not move optimizer-specific policy into `leaven-engine`.
 - Edge/domain adapters: current workspace adapters are `leaven-cuda` and `leaven-python`; they bridge domains without changing the core topology.
 - `leaven-dsrs` is a quarantined orphan directory, not a workspace crate. Do not treat it as an edge-adapter precedent until it has a manifest, `src/lib.rs`, topology coverage, and a local boundary file that says what it owns.
@@ -45,12 +50,12 @@ cross-family rules that apply before you know a leaf's details.
 - Agent runtime leaves keep provider CLI/protocol details local; generic session
   vocabulary stays in `leaven-agent`, command substrate in
   `leaven-agent-command`, and stage parsing in `leaven-agentic`.
-- A future ACP transport leaf for the locked public seam should be a hot
+- The ACP transport leaf for the locked public seam is `leaven-acp`, a hot
   agent/worker transport adapter, not a public-seam wire-contract bucket. It
-  may use the official `agentclientprotocol/rust-sdk` for stdio JSON-RPC and
-  process/session mechanics, but Leaven method/result authority stays in
-  `leaven-public-seam`, graph mutation stays in `leaven-engine` through
-  `RunContext`, and MCP-over-ACP remains out of V1.
+  may migrate to the official `agentclientprotocol/rust-sdk` for stdio JSON-RPC
+  and process/session mechanics after external dependency approval, but Leaven
+  method/result authority stays in `leaven-public-seam`, graph mutation stays
+  in `leaven-engine` through `RunContext`, and MCP-over-ACP remains out of V1.
 - Placeholder artifact/optimizer/render/domain leaves may keep public
   reservation names only when the crate-local file says they are scaffolding.
   Before exposing one through defaults, replace the placeholder with

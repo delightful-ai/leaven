@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import subprocess
 from pathlib import Path
@@ -22,6 +23,7 @@ MILESTONE_PACKAGES = [
     "p3_gepa_parity",
     "p4_meta_harness_lite",
     "p5_evoskill_iteration",
+    "p5_skill_paper_reproductions",
     "p6_optimizer_policy_self_opt",
     "p7_self_optimization_kernel",
     "p8_aime_gepa",
@@ -137,7 +139,7 @@ def main() -> int:
     if result.returncode != 0:
         return result.returncode
 
-    coverage = load_lcov_coverage(lcov_path)
+    coverage = load_lcov_coverage(lcov_path, excluded_package_roots())
     lines = coverage["lines"]
     branches = coverage["branches"]
 
@@ -185,7 +187,34 @@ def exclude_args() -> list[str]:
     return args
 
 
-def load_lcov_coverage(path: Path) -> dict[str, Any]:
+def excluded_package_roots() -> list[Path]:
+    metadata = subprocess.run(
+        ["cargo", "metadata", "--no-deps", "--format-version", "1"],
+        check=False,
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+    if metadata.returncode != 0:
+        raise SystemExit(metadata.returncode)
+    packages = json.loads(metadata.stdout)["packages"]
+    return [
+        Path(package["manifest_path"]).parent
+        for package in packages
+        if package["name"] in MILESTONE_PACKAGES
+    ]
+
+
+def is_under(path: Path, roots: list[Path]) -> bool:
+    for root in roots:
+        try:
+            path.relative_to(root)
+        except ValueError:
+            continue
+        return True
+    return False
+
+
+def load_lcov_coverage(path: Path, excluded_roots: list[Path]) -> dict[str, Any]:
     line_count = 0
     line_covered = 0
     branch_count = 0
@@ -197,7 +226,11 @@ def load_lcov_coverage(path: Path) -> dict[str, Any]:
             current_source = Path(line[3:])
             test_ranges = source_test_ranges(current_source)
             continue
-        if current_source is None or TEST_SOURCE_RE.search(current_source.as_posix()):
+        if (
+            current_source is None
+            or TEST_SOURCE_RE.search(current_source.as_posix())
+            or is_under(current_source, excluded_roots)
+        ):
             continue
         if line.startswith("DA:"):
             raw_line, hits, *_ = line[3:].split(",")
