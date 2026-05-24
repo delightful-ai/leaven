@@ -137,7 +137,8 @@ Crate-root exports for `PlanDocument`, `PlanOperationKind`,
 `PlanSandboxExecRequest`, `PlanSandboxExecOutcome`,
 `PlanWorkspaceMaterializeRequest`, `PlanWorkspaceMaterializeOutcome`,
 `PlanWorkspaceReleaseRequest`, `PlanWorkspaceReleaseOutcome`,
-`PlanEmitRunEventRequest`, `PlanEmitRunEventOutcome`, `CallAuthorityReport`, and
+`PlanEmitRunEventRequest`, `PlanEmitRunEventOutcome`, `CallAuthorityReport`,
+`CallAuthorityError`, `CallAuthorityDenial`, `CallAuthorityDenialKind`, and
 `ProposalAuthorityReport` are advanced public seam contracts. They prove
 active-schema Plan IR document validation and Let/Call/Write family
 classification plus representative lowering/execution of literal Let,
@@ -268,9 +269,15 @@ dependency propagation is proven only for the representative `emit_run_event`
 write harness, where dependency binding classes are exposed to the host request
 without rewriting dependency JSON values. Literal `Expr.data_classes` are bound
 into representative call/write request hashes and reconstructed during receipt
-validation. This still is not full engine/evidence-layer propagation, redaction
-reporting, ACP/provider runtime behavior, or proof for every production
-query/call/write route.
+validation. Public call-authority validation reports typed
+`CallAuthorityDenial` data-class refusals with redaction class names for
+capability-forbidden input classes, call-local `forbidden_input_classes`, and
+reflector LM target egress. Reflector LM target-egress checks cover both
+capability subject role and call-local `model_role: "reflector"` so a broad
+grant on a non-reflector subject cannot hide target egress behind the grant.
+This still is not full engine/evidence-layer propagation, Plan Result
+`Redaction` wire-object reporting, ACP/provider runtime behavior, or proof for
+every production query/call/write route.
 
 The
 `PublicSeamPackage::validate_plan_execution_result` route additionally proves
@@ -475,8 +482,10 @@ backpressure, or runtime watch support.
 - `tests/call_authority.rs` proves schema-valid Call ops are checked against
   capability-granted input data classes and call-local forbidden data-class
   intersections before execution. It rejects `case.target` and other forbidden
-  classes even when the Plan IR schema itself accepts the call shape. It does
-  not execute LM, agent, sandbox, or human-review runtimes.
+  classes even when the Plan IR schema itself accepts the call shape, and it
+  reports typed call-authority redaction facts. It does not produce Plan Result
+  `Redaction` wire objects or execute LM, agent, sandbox, or human-review
+  runtimes.
 - `tests/proposal_authority.rs` proves schema-valid proposal writes are checked
   against capability-granted proposal effects, change schemas, surface
   fingerprints, and apply permission. It rejects submit-only apply attempts,

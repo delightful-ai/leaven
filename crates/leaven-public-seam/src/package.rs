@@ -6,11 +6,11 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use crate::{
-    CallAuthorityReport, ConformanceMatrix, DeferredWatchReplacement, EvaluationJobDocument,
-    EvaluationRequestReceiptDocument, EvidenceEnvelopeDocument, OutputRecordDocument,
-    PinnedDialectEvaluator, PlanDocument, PlanResultDocument, ProposalAuthorityReport,
-    PublicSeamError, ReflectProposeHandoffDocument, ReflectProposeSubmissionDocument,
-    StagePayloadDocument,
+    CallAuthorityError, CallAuthorityReport, ConformanceMatrix, DeferredWatchReplacement,
+    EvaluationJobDocument, EvaluationRequestReceiptDocument, EvidenceEnvelopeDocument,
+    OutputRecordDocument, PinnedDialectEvaluator, PlanDocument, PlanResultDocument,
+    ProposalAuthorityReport, PublicSeamError, ReflectProposeHandoffDocument,
+    ReflectProposeSubmissionDocument, StagePayloadDocument,
 };
 
 mod support;
@@ -572,8 +572,9 @@ impl PublicSeamPackage {
         &self,
         plan: &Value,
         capability: &crate::CapabilityDocument,
-    ) -> Result<CallAuthorityReport, PublicSeamError> {
-        self.validate_plan_document(plan)?;
+    ) -> Result<CallAuthorityReport, CallAuthorityError> {
+        self.validate_plan_document(plan)
+            .map_err(CallAuthorityError::from)?;
         crate::call_authority::validate(plan, capability)
     }
 

@@ -27,7 +27,9 @@ pub use acp_profile::{
     AcpProgressPriority, AcpSessionCancellation, AcpSessionLifecycle, AcpSessionState,
     AcpSessionUpdate, AcpStdioWorkerLaunch, AcpWorkerSession,
 };
-pub use call_authority::CallAuthorityReport;
+pub use call_authority::{
+    CallAuthorityDenial, CallAuthorityDenialKind, CallAuthorityError, CallAuthorityReport,
+};
 pub use capability::{
     AuthorizedGrant, CapabilityBudgetLedger, CapabilityBudgetProjectionError,
     CapabilityBudgetReservation, CapabilityBudgetUsage, CapabilityDelegation, CapabilityDenial,
