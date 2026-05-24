@@ -53,6 +53,9 @@ pub struct ConformanceRow {
     /// Review evidence paths for proven rows.
     #[serde(default)]
     pub review_evidence: Vec<String>,
+    /// Missing decisions or dependencies that prevent row closeout.
+    #[serde(default)]
+    pub blocked_on: Vec<String>,
     /// Minimum closeout level required by the row.
     pub minimum_closeout_level: MinimumCloseoutLevel,
     /// The fake pass this row explicitly rejects.
