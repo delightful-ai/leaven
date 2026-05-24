@@ -1173,6 +1173,8 @@ rows:
       - crates/leaven-public-seam/src/acp_profile.rs::AcpPermissionRequest
       - crates/leaven-public-seam/src/capability.rs::CapabilityDocument::authorize_grant
       - crates/leaven-public-seam/src/capability.rs::CapabilityGrantRequest
+    review_evidence:
+      - docs/specs/public-seam-v1/reviews/2026-05-23-workspace-query-partial-review.md
     status: pending
 
   - id: ps1.lm.contract
