@@ -603,11 +603,13 @@ fn execute_call<H: PlanExecutionHost>(
                     "require_cached mode cannot prove cached execution for `sandbox_exec` calls",
                 ));
             }
-            let outcome = host.sandbox_exec(PlanSandboxExecRequest {
+            let request = PlanSandboxExecRequest {
                 name: &name,
                 call,
                 deps: dep_values,
-            })?;
+            };
+            request.live_workspace()?;
+            let outcome = host.sandbox_exec(request)?;
             record_sandbox_call_outcome(name, outcome, &request_hash, context, state)
         }
         "workspace_materialize" => {

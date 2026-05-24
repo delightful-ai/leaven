@@ -103,26 +103,7 @@ impl<'a> PlanWorkspaceReleaseRequest<'a> {
     /// Workspace handle requested for release, proven against live dependency handles.
     pub fn live_workspace(&self) -> Result<&'a str, PublicSeamError> {
         let workspace = self.workspace()?;
-        let Some(handle) = self.deps.values().find(|value| {
-            value.get("kind").and_then(Value::as_str) == Some("workspace_handle")
-                && value
-                    .get("workspace")
-                    .and_then(|value| workspace_ref_id(Some(value), "workspace handle").ok())
-                    == Some(workspace)
-        }) else {
-            return Err(invalid_call(format!(
-                "workspace_release refused unmaterialized workspace `{workspace}`"
-            )));
-        };
-        if handle
-            .get("released")
-            .and_then(Value::as_bool)
-            .unwrap_or(false)
-        {
-            return Err(invalid_call(format!(
-                "workspace_release refused already released workspace `{workspace}`"
-            )));
-        }
+        require_live_workspace(workspace, self.deps, "workspace_release")?;
         Ok(workspace)
     }
 
@@ -219,6 +200,22 @@ impl<'a> PlanSandboxExecRequest<'a> {
             .get("stream_policy")
             .and_then(Value::as_str)
             .unwrap_or("buffer")
+    }
+
+    /// Workspace handle requested for sandbox execution.
+    pub fn workspace(&self) -> Result<&'a str, PublicSeamError> {
+        workspace_ref_id(
+            self.call.get("workspace"),
+            "sandbox_exec must carry workspace",
+        )
+    }
+
+    /// Workspace handle requested for sandbox execution, proven against live
+    /// dependency handles.
+    pub fn live_workspace(&self) -> Result<&'a str, PublicSeamError> {
+        let workspace = self.workspace()?;
+        require_live_workspace(workspace, self.deps, "sandbox_exec")?;
+        Ok(workspace)
     }
 
     /// Lowers the locked Plan IR `sandbox_exec` call into backend-neutral
@@ -416,6 +413,34 @@ pub(super) fn workspace_ref_id(
         .get("id")
         .and_then(Value::as_str)
         .ok_or_else(|| invalid_call(format!("{context}: workspace ref object must carry id")))
+}
+
+pub(super) fn require_live_workspace(
+    workspace: &str,
+    deps: &BTreeMap<String, Value>,
+    context: &str,
+) -> Result<(), PublicSeamError> {
+    let Some(handle) = deps.values().find(|value| {
+        value.get("kind").and_then(Value::as_str) == Some("workspace_handle")
+            && value
+                .get("workspace")
+                .and_then(|value| workspace_ref_id(Some(value), "workspace handle").ok())
+                == Some(workspace)
+    }) else {
+        return Err(invalid_call(format!(
+            "{context} refused unmaterialized workspace `{workspace}`"
+        )));
+    };
+    if handle
+        .get("released")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        return Err(invalid_call(format!(
+            "{context} refused already released workspace `{workspace}`"
+        )));
+    }
+    Ok(())
 }
 
 fn invalid_call(message: impl Into<String>) -> PublicSeamError {

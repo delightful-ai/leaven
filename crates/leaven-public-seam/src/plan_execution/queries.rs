@@ -4,7 +4,11 @@ use serde_json::{Value, json};
 
 use crate::{CapabilityDocument, CapabilityGrantRequest, PublicSeamError};
 
-use super::{PlanExecutionContext, effects::workspace_ref_id, invalid_plan, nested_kind, object};
+use super::{
+    PlanExecutionContext,
+    effects::{require_live_workspace, workspace_ref_id},
+    invalid_plan, nested_kind, object,
+};
 
 /// Lowered graph-read consistency scope for a Plan IR `graph_query`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -291,7 +295,7 @@ pub(super) fn workspace_query_request<'a>(
     let op = object
         .get("op")
         .ok_or_else(|| invalid_plan("workspace_query must carry op"))?;
-    validate_live_workspace(workspace, deps, "workspace_query")?;
+    require_live_workspace(workspace, deps, "workspace_query")?;
     Ok(PlanWorkspaceQueryRequest {
         name,
         expr,
@@ -299,34 +303,6 @@ pub(super) fn workspace_query_request<'a>(
         op,
         deps,
     })
-}
-
-fn validate_live_workspace(
-    workspace: &str,
-    deps: &BTreeMap<String, Value>,
-    context: &str,
-) -> Result<(), PublicSeamError> {
-    let Some(handle) = deps.values().find(|value| {
-        value.get("kind").and_then(Value::as_str) == Some("workspace_handle")
-            && value
-                .get("workspace")
-                .and_then(|value| workspace_ref_id(Some(value), "workspace handle").ok())
-                == Some(workspace)
-    }) else {
-        return Err(invalid_plan(format!(
-            "{context} refused unmaterialized workspace `{workspace}`"
-        )));
-    };
-    if handle
-        .get("released")
-        .and_then(Value::as_bool)
-        .unwrap_or(false)
-    {
-        return Err(invalid_plan(format!(
-            "{context} refused already released workspace `{workspace}`"
-        )));
-    }
-    Ok(())
 }
 
 pub(super) fn workspace_query_expected_value_kind(
