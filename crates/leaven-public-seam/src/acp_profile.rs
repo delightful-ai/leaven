@@ -5,6 +5,7 @@ use serde_json::{Value, json};
 use crate::{
     CapabilityDocument, CapabilityGrantRequest, CapabilityLimitUsage, CapabilityRegistry,
     PublicSeamError,
+    plan_error::{is_closed_plan_error_code, receipt_ref_id},
     plan_execution::{validate_agent_session_value, validate_sandbox_exec_value},
 };
 
@@ -616,8 +617,10 @@ impl AcpSessionLifecycle {
                     "ACP session update queue is full; worker must pause critical updates",
                 )),
                 AcpBackpressure::Disconnect => {
-                    let cancellation =
-                        self.cancel("ACP session disconnected after update overflow");
+                    let reason = "ACP session disconnected after update overflow";
+                    let receipt = format!("acprec_disconnect_{}", self.next_sequence);
+                    let error = cancellation_plan_error(&receipt, "cancelled", reason);
+                    let cancellation = self.cancel_with_error(reason, receipt, error)?;
                     Ok(AcpProgressDisposition::Disconnected(
                         cancellation.reason().to_owned(),
                     ))
@@ -643,17 +646,27 @@ impl AcpSessionLifecycle {
         self.updates.pop_front()
     }
 
-    /// Cancels the ACP session through lifecycle state instead of progress logs.
-    pub fn cancel(&mut self, reason: impl Into<String>) -> &AcpSessionCancellation {
+    /// Cancels the ACP session with an auditable receipt and closed `PlanError`.
+    pub fn cancel_with_error(
+        &mut self,
+        reason: impl Into<String>,
+        receipt: impl Into<String>,
+        error: Value,
+    ) -> Result<&AcpSessionCancellation, PublicSeamError> {
         if self.cancellation.is_none() {
+            let receipt = receipt.into();
+            validate_cancellation_error(&receipt, &error)?;
             self.cancellation = Some(AcpSessionCancellation {
                 reason: reason.into(),
+                receipt,
+                error,
             });
             self.state = AcpSessionState::Cancelled;
         }
-        self.cancellation
+        Ok(self
+            .cancellation
             .as_ref()
-            .expect("cancellation set before return")
+            .expect("cancellation set before return"))
     }
 }
 
@@ -709,6 +722,8 @@ impl AcpSessionUpdate {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AcpSessionCancellation {
     reason: String,
+    receipt: String,
+    error: Value,
 }
 
 impl AcpSessionCancellation {
@@ -716,6 +731,70 @@ impl AcpSessionCancellation {
     pub fn reason(&self) -> &str {
         &self.reason
     }
+
+    /// Receipt that audits the ACP session cancellation.
+    pub fn receipt(&self) -> &str {
+        &self.receipt
+    }
+
+    /// Closed `PlanError` associated with the ACP session cancellation.
+    pub const fn error(&self) -> &Value {
+        &self.error
+    }
+}
+
+fn cancellation_plan_error(receipt: &str, code: &str, message: &str) -> Value {
+    json!({
+        "code": code,
+        "message": message,
+        "receipt": receipt
+    })
+}
+
+fn validate_cancellation_error(receipt: &str, error: &Value) -> Result<(), PublicSeamError> {
+    if receipt.trim().is_empty() {
+        return Err(invalid_acp("ACP cancellation receipt must be non-empty"));
+    }
+    let object = error
+        .as_object()
+        .ok_or_else(|| invalid_acp("ACP cancellation error must be a PlanError object"))?;
+    for key in object.keys() {
+        if !matches!(
+            key.as_str(),
+            "code" | "message" | "op" | "path" | "receipt" | "retryable" | "details"
+        ) {
+            return Err(invalid_acp(format!(
+                "ACP cancellation error carries unknown PlanError field `{key}`"
+            )));
+        }
+    }
+    let code = required_string(object.get("code"), "cancellation error code")?;
+    if !is_closed_plan_error_code(code) {
+        return Err(invalid_acp(
+            "ACP cancellation error code must be a closed PlanError code",
+        ));
+    }
+    let message = object
+        .get("message")
+        .and_then(Value::as_str)
+        .ok_or_else(|| invalid_acp("ACP cancellation error must carry message"))?;
+    if message.trim().is_empty() {
+        return Err(invalid_acp(
+            "ACP cancellation error must carry non-empty message",
+        ));
+    }
+    let error_receipt = object
+        .get("receipt")
+        .ok_or_else(|| invalid_acp("ACP cancellation error receipt must be present"))
+        .and_then(|receipt| {
+            receipt_ref_id(receipt, "ACP cancellation error receipt").map_err(invalid_acp)
+        })?;
+    if error_receipt != receipt {
+        return Err(invalid_acp(
+            "ACP cancellation error receipt must match cancellation receipt",
+        ));
+    }
+    Ok(())
 }
 
 impl AcpPermissionRequest {

@@ -13,6 +13,7 @@ mod matrix;
 mod output;
 mod package;
 mod plan;
+mod plan_error;
 mod plan_execution;
 mod proposal_authority;
 mod result;
