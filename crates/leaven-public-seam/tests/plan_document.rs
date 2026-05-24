@@ -2187,6 +2187,10 @@ fn agent_run_rejects_schema_valid_sessions_without_audit_facts() {
             "agent_run command status",
         ),
         (
+            AgentAuditFixture::InvalidCommandStatus,
+            "agent_run command status `success` is not a V1 command status",
+        ),
+        (
             AgentAuditFixture::ForgedCommandReceipt,
             "agent_run command record receipt",
         ),
@@ -3993,6 +3997,11 @@ fn agent_command_fixture(agent_audit: AgentAuditFixture) -> Value {
             "argv": ["codex"],
             "receipt": "agentrec_completion"
         }),
+        AgentAuditFixture::InvalidCommandStatus => json!({
+            "argv": ["codex"],
+            "status": "success",
+            "receipt": "agentrec_completion"
+        }),
         AgentAuditFixture::ForgedCommandReceipt => json!({
             "argv": ["codex"],
             "status": "completed",
@@ -4028,6 +4037,7 @@ enum AgentAuditFixture {
     EmptyCommandArgv,
     NonStringCommandArgv,
     MissingCommandStatus,
+    InvalidCommandStatus,
     ForgedCommandReceipt,
     MissingCost,
 }

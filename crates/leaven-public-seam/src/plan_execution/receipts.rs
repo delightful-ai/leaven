@@ -808,7 +808,12 @@ fn validate_agent_command_record(command: &Map<String, Value>) -> Result<(), Pub
     for arg in argv {
         required_string(Some(arg), "agent_run command argv")?;
     }
-    required_string(command.get("status"), "agent_run command status")?;
+    let status = required_string(command.get("status"), "agent_run command status")?;
+    if !matches!(status, "completed" | "failed" | "cancelled" | "timeout") {
+        return Err(invalid_plan(format!(
+            "agent_run command status `{status}` is not a V1 command status"
+        )));
+    }
     Ok(())
 }
 
