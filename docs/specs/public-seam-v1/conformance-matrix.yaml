@@ -941,6 +941,8 @@ rows:
       - crates/leaven-run/tests/scoring_evaluator.rs::scoring_evaluator_preserves_candidate_artifact_reportable_output
       - crates/leaven-run/tests/scoring_evaluator.rs::judging_evaluator_preserves_candidate_artifact_reportable_outputs
       - crates/leaven-run/tests/optimize_builder.rs::run_builder_typed_output_uses_score_supplied_report_output
+      - crates/leaven-run/tests/public_seam.rs::runcontext_assessment_score_outputs_project_to_public_seam_submit_assessments_plan
+      - crates/leaven-run/tests/public_seam.rs::runcontext_assessment_artifact_score_outputs_project_to_public_seam_submit_assessments_plan
       - crates/leaven-public-seam/tests/plan_document.rs::submit_assessments_score_outputs_cover_all_assessment_shapes
       - crates/leaven-public-seam/tests/plan_document.rs::submit_assessments_accepts_candidate_artifact_score_output_class
     negative_test_evidence:
@@ -959,6 +961,8 @@ rows:
       - crates/leaven-run/tests/scoring_evaluator.rs::judging_evaluator_rejects_generic_candidate_artifact_declarations
       - crates/leaven-run/tests/scoring_evaluator.rs::judging_evaluator_rejects_same_context_dummy_report_output
       - crates/leaven-run/tests/scoring_evaluator.rs::judging_evaluator_rejects_report_output_from_another_candidate_group
+      - crates/leaven-run/tests/public_seam.rs::assessment_score_output_plan_projection_rejects_missing_stored_evidence
+      - crates/leaven-run/tests/public_seam.rs::assessment_score_output_plan_projection_rejects_unsupported_shapes_and_outputs
       - crates/leaven-public-seam/tests/plan_document.rs::submit_assessments_rejects_missing_or_placeholder_score_output
     implementation_evidence:
       - crates/leaven-run/src/evidence.rs::RunOutput::with_reportable_output
@@ -971,6 +975,9 @@ rows:
       - crates/leaven-run/src/evaluator.rs::evaluate_job
       - crates/leaven-run/src/evaluator.rs::evaluate_judge_job
       - crates/leaven-evidence/src/output.rs::OutputRecord::candidate_inline
+      - crates/leaven-run/src/public_seam/assessment_write.rs::PublicAssessmentWriteReceiptContext::submit_assessments_plan_document
+      - crates/leaven-run/src/public_seam/assessment_write.rs::assessment_plan_entry
+      - crates/leaven-run/src/public_seam/assessment_write.rs::independent_score_output
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::project_output_record
       - crates/leaven-public-seam/src/plan.rs::PlanDocument::assessment_score_output_count
       - crates/leaven-public-seam/src/plan.rs::validate_score_output_evidence_projection
@@ -980,6 +987,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-23-score-output-current-blocker-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-structured-output-evaluator-authority-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-score-output-candidate-binding-partial-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-score-output-runcontext-plan-projection-review.md
     status: pending
 
   - id: ps1.evaluator.assessment_scope

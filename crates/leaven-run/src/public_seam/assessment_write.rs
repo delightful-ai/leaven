@@ -1,8 +1,11 @@
 use std::collections::BTreeSet;
 
 use leaven_core::OptimizationProblem;
+use leaven_engine::AssessmentView;
 use leaven_engine::{EvaluationReport, RunGraphView};
+use leaven_evidence::{CaseAssessmentEvidence, DataClass, OutputRecord, OutputVisibility};
 use leaven_kernel::{AssessmentId, EvaluationRequestId};
+use leaven_store::{EvidenceStore, StoreError};
 use serde_json::{Value, json};
 use thiserror::Error;
 
@@ -142,6 +145,71 @@ impl PublicAssessmentWriteReceiptContext {
         }))
     }
 
+    /// Projects graph-backed assessment evidence into a locked `submit_assessments` Plan document.
+    ///
+    /// This is the public-seam Plan IR counterpart to
+    /// [`Self::submit_assessments_plan_result`]. It refuses to synthesize
+    /// assessment rows from ids alone: every assessment must belong to the
+    /// report request and its stored `CaseAssessmentEvidence` must be readable
+    /// before a `Score.output` field is emitted.
+    pub fn submit_assessments_plan_document<P>(
+        &self,
+        graph: &RunGraphView<'_, P>,
+        evidence_store: &dyn EvidenceStore<CaseAssessmentEvidence>,
+        report: &EvaluationReport,
+    ) -> Result<Value, PublicAssessmentWriteReceiptProjectionError>
+    where
+        P: OptimizationProblem<Evidence = CaseAssessmentEvidence>,
+    {
+        if report.assessment_ids.is_empty() {
+            return Err(PublicAssessmentWriteReceiptProjectionError::EmptyAssessmentBatch);
+        }
+        graph
+            .evaluation_request(report.request_id)
+            .ok_or(PublicAssessmentWriteReceiptProjectionError::RequestNotInGraph)?;
+        let mut assessments = Vec::with_capacity(report.assessment_ids.len());
+        for assessment_id in &report.assessment_ids {
+            let assessment = graph
+                .assessment(*assessment_id)
+                .ok_or(PublicAssessmentWriteReceiptProjectionError::AssessmentNotInGraph)?;
+            if assessment.request_id() != report.request_id {
+                return Err(PublicAssessmentWriteReceiptProjectionError::AssessmentRequestMismatch);
+            }
+            let evidence = evidence_store
+                .get(assessment.evidence_ref())
+                .map_err(
+                    |source| PublicAssessmentWriteReceiptProjectionError::EvidenceLoad { source },
+                )?;
+            assessments.push(assessment_plan_entry(&assessment, &evidence)?);
+        }
+        Ok(json!({
+            "schema_version": "leaven.plan.v1",
+            "plan_id": self.plan_id,
+            "consistency": {
+                "kind": "latest_at_start"
+            },
+            "mode": {
+                "kind": "dry_run"
+            },
+            "ops": [
+                {
+                    "kind": "write",
+                    "name": "assessments",
+                    "idempotency_key": format!("{}-submit-assessments", self.plan_id),
+                    "write": {
+                        "kind": "submit_assessments",
+                        "evaluation_request_id": evaluation_request_ref(report.request_id),
+                        "assessments": assessments
+                    }
+                }
+            ],
+            "return": ["assessments"],
+            "commit": {
+                "kind": "no_graph_writes"
+            }
+        }))
+    }
+
     fn submit_assessments_request_hash(
         report: &EvaluationReport,
     ) -> Result<String, PublicAssessmentWriteReceiptProjectionError> {
@@ -174,6 +242,19 @@ pub enum PublicAssessmentWriteReceiptProjectionError {
     /// A reported assessment belongs to a different evaluation request.
     #[error("assessment write projection assessment request mismatch")]
     AssessmentRequestMismatch,
+    /// Stored case-assessment evidence could not be loaded.
+    #[error("assessment write projection could not load assessment evidence")]
+    EvidenceLoad {
+        /// Store-layer failure while loading the evidence payload.
+        #[source]
+        source: StoreError,
+    },
+    /// The projection does not yet support the assessment shape.
+    #[error("assessment write projection only supports independent assessment score outputs")]
+    UnsupportedAssessmentShape,
+    /// The projection does not yet support this output record shape.
+    #[error("assessment write projection only supports inline score outputs")]
+    UnsupportedScoreOutput,
     /// JCS/SHA-256 fingerprint computation failed.
     #[error("assessment write fingerprinting failed: {message}")]
     Fingerprint {
@@ -208,6 +289,106 @@ fn plan_write_result_hash(
     )
 }
 
+fn assessment_plan_entry(
+    assessment: &AssessmentView<'_>,
+    evidence: &CaseAssessmentEvidence,
+) -> Result<Value, PublicAssessmentWriteReceiptProjectionError> {
+    let candidate = assessment
+        .independent_candidate()
+        .ok_or(PublicAssessmentWriteReceiptProjectionError::UnsupportedAssessmentShape)?;
+    let output = independent_score_output(candidate, evidence.output())?;
+    Ok(json!({
+        "kind": "independent",
+        "candidate": candidate_ref(candidate),
+        "score": {
+            "value": evidence.score().score(),
+            "output": output
+        },
+        "evidence": {
+            "schema_version": "leaven.evidence_envelope.v1",
+            "target_derived": false,
+            "public": {
+                "summary": output_summary(evidence.output())?,
+                "data_classes": ["public"]
+            },
+            "redaction_policy": {
+                "optimizer": "score_only",
+                "reflector": "score_only",
+                "operator": "score_only"
+            },
+            "producer": {
+                "stage_call_id": "sc_public_assessment_projection"
+            },
+            "source_receipts": {
+                "read": [],
+                "effect": []
+            }
+        },
+        "replayability": "fully_managed"
+    }))
+}
+
+fn independent_score_output(
+    candidate: leaven_kernel::CandidateId,
+    output: &OutputRecord,
+) -> Result<Value, PublicAssessmentWriteReceiptProjectionError> {
+    let OutputRecord::Inline { text, metadata, .. } = output else {
+        return Err(PublicAssessmentWriteReceiptProjectionError::UnsupportedScoreOutput);
+    };
+    let data_classes = metadata.data_classes();
+    let value_field = if data_classes.contains(&DataClass::candidate_output()) {
+        "output"
+    } else if data_classes.contains(&DataClass::candidate_artifact()) {
+        "artifact"
+    } else {
+        return Err(PublicAssessmentWriteReceiptProjectionError::UnsupportedScoreOutput);
+    };
+    let mut value = json!({
+        "candidate": candidate_ref(candidate)
+    });
+    value
+        .as_object_mut()
+        .expect("candidate output JSON is object")
+        .insert(value_field.to_owned(), json!(text));
+    Ok(json!({
+        "kind": "structured",
+        "summary": text,
+        "value": value,
+        "visibility": visibility_wire(metadata.visibility()),
+        "data_classes": data_classes_wire(data_classes)
+    }))
+}
+
+fn output_summary(
+    output: &OutputRecord,
+) -> Result<&str, PublicAssessmentWriteReceiptProjectionError> {
+    match output {
+        OutputRecord::Inline { text, .. } => Ok(text),
+        OutputRecord::BlobRef { .. } => {
+            Err(PublicAssessmentWriteReceiptProjectionError::UnsupportedScoreOutput)
+        }
+    }
+}
+
+fn visibility_wire(visibility: OutputVisibility) -> &'static str {
+    match visibility {
+        OutputVisibility::Public => "public",
+        OutputVisibility::OptimizerVisible => "optimizer_visible",
+        OutputVisibility::ReflectorVisible => "reflector_visible",
+        OutputVisibility::EvaluatorOnly => "evaluator_only",
+        OutputVisibility::OperatorOnly => "operator_only",
+        OutputVisibility::Private => "private",
+        OutputVisibility::Redacted => "redacted",
+    }
+}
+
+fn data_classes_wire(data_classes: &leaven_evidence::DataClassSet) -> Vec<&str> {
+    data_classes
+        .iter()
+        .map(leaven_evidence::DataClass::as_str)
+        .collect()
+}
+
 fn sorted_assessment_refs(ids: &[AssessmentId]) -> Vec<String> {
     ids.iter()
         .copied()
@@ -219,6 +400,10 @@ fn sorted_assessment_refs(ids: &[AssessmentId]) -> Vec<String> {
 
 fn assessment_ref(id: AssessmentId) -> String {
     uuid_ref("assess", id.as_uuid())
+}
+
+fn candidate_ref(id: leaven_kernel::CandidateId) -> String {
+    uuid_ref("cand", id.as_uuid())
 }
 
 fn evaluation_request_ref(id: EvaluationRequestId) -> String {
