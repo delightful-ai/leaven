@@ -842,6 +842,7 @@ fn execute_workspace_release_call<H: PlanExecutionHost>(
         deps: &deps.values,
         live_workspaces: &deps.live_workspaces,
     };
+    let requested_workspace = request.workspace_ref()?;
     let workspace = request.live_workspace()?.to_owned();
     let lifetime = request.live_workspace_lifetime()?.to_owned();
     let outcome = host.workspace_release(request)?;
@@ -857,7 +858,14 @@ fn execute_workspace_release_call<H: PlanExecutionHost>(
             outcome.lifetime
         )));
     }
-    record_workspace_release_outcome(name, outcome, request_hash, context, state)
+    record_workspace_release_outcome(
+        name,
+        outcome,
+        &requested_workspace,
+        request_hash,
+        context,
+        state,
+    )
 }
 
 fn is_workspace_id(value: &str) -> bool {
@@ -1073,6 +1081,7 @@ fn record_workspace_materialize_outcome(
 fn record_workspace_release_outcome(
     name: String,
     outcome: PlanWorkspaceReleaseOutcome,
+    requested_workspace: &effects::WorkspaceRefFacts,
     request_hash: &str,
     context: &PlanExecutionContext,
     state: &mut ExecutionState,
@@ -1083,12 +1092,6 @@ fn record_workspace_release_outcome(
         lifetime,
         runtime_fingerprint,
     } = outcome;
-    let receipt_id = format!("wrec_{name}");
-    for handle in state.live_workspaces.values_mut() {
-        if handle.workspace() == workspace {
-            handle.release();
-        }
-    }
     let workspace_facts =
         effects::workspace_ref_facts(Some(&workspace_ref), "workspace_release result")?;
     if workspace_facts.id() != workspace {
@@ -1096,6 +1099,19 @@ fn record_workspace_release_outcome(
             "workspace_release result workspace ref `{}` does not match host workspace `{workspace}`",
             workspace_facts.id()
         )));
+    }
+    if !workspace_facts.satisfies_request(requested_workspace) {
+        return Err(invalid_plan(format!(
+            "workspace_release result workspace `{}` does not match requested workspace `{}`",
+            workspace_facts.id(),
+            requested_workspace.id()
+        )));
+    }
+    let receipt_id = format!("wrec_{name}");
+    for handle in state.live_workspaces.values_mut() {
+        if handle.satisfies_workspace(requested_workspace) {
+            handle.release();
+        }
     }
     state.live_workspaces.insert(
         name.clone(),
