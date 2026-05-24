@@ -1180,6 +1180,7 @@ rows:
       - crates/leaven-public-seam/src/acp_profile.rs::validate_primary_kind
       - crates/leaven-public-seam/src/acp_profile.rs::validate_receipts_for_method
       - crates/leaven-public-seam/src/acp_profile.rs::validate_effect_primary_audit
+      - crates/leaven-public-seam/src/acp_profile.rs::validate_effect_primary_receipt
       - crates/leaven-public-seam/src/acp_profile.rs::validate_effect_primary_cost
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_acp_extension_result_document
     review_evidence:
@@ -1187,6 +1188,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-value-visibility-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-agent-sandbox-acp-audit-follow-up-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-agent-sandbox-receipt-stream-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-acp-costful-primary-receipt-follow-up-review.md
     status: pending
 
   - id: ps1.acp.lifecycle_backpressure
@@ -1394,6 +1396,7 @@ rows:
       - crates/leaven-lm-openai/src/client.rs::OpenAiLm::to_wire_request
       - crates/leaven-public-seam/src/acp_profile.rs::extension_result_contract
       - crates/leaven-public-seam/src/acp_profile.rs::validate_receipts_for_method
+      - crates/leaven-public-seam/src/acp_profile.rs::validate_effect_primary_receipt
       - crates/leaven-public-seam/src/acp_profile.rs::AcpExtensionResultDocument
       - crates/leaven-public-seam/src/acp_profile.rs::AcpPermissionRequest
       - crates/leaven-public-seam/src/capability.rs::CapabilityGrantRequest
@@ -1402,6 +1405,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-structured-output-evaluator-authority-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-lm-result-contract-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-lm-success-cost-binding-partial-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-acp-costful-primary-receipt-follow-up-review.md
     status: pending
 
   - id: ps1.agent.contract
@@ -1465,6 +1469,7 @@ rows:
       - crates/leaven-public-seam/src/acp_profile.rs::extension_result_contract
       - crates/leaven-public-seam/src/acp_profile.rs::validate_receipts_for_method
       - crates/leaven-public-seam/src/acp_profile.rs::validate_effect_primary_audit
+      - crates/leaven-public-seam/src/acp_profile.rs::validate_effect_primary_receipt
       - crates/leaven-public-seam/src/acp_profile.rs::validate_effect_primary_cost
       - crates/leaven-public-seam/src/acp_profile.rs::AcpExtensionResultDocument
       - crates/leaven-public-seam/src/result.rs::collect_value_blob_ref_data_classes
@@ -1477,6 +1482,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-agent-sandbox-audit-results-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-agent-sandbox-acp-audit-follow-up-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-agent-sandbox-receipt-stream-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-acp-costful-primary-receipt-follow-up-review.md
     status: pending
 
   - id: ps1.sandbox.exec_streaming
@@ -1532,6 +1538,7 @@ rows:
       - crates/leaven-public-seam/src/acp_profile.rs::extension_result_contract
       - crates/leaven-public-seam/src/acp_profile.rs::validate_receipts_for_method
       - crates/leaven-public-seam/src/acp_profile.rs::validate_effect_primary_audit
+      - crates/leaven-public-seam/src/acp_profile.rs::validate_effect_primary_receipt
       - crates/leaven-public-seam/src/acp_profile.rs::validate_effect_primary_cost
       - crates/leaven-public-seam/src/acp_profile.rs::AcpExtensionResultDocument
       - crates/leaven-public-seam/src/acp_profile.rs::AcpPermissionRequest
@@ -1544,6 +1551,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-agent-sandbox-audit-results-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-agent-sandbox-acp-audit-follow-up-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-agent-sandbox-receipt-stream-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-acp-costful-primary-receipt-follow-up-review.md
     status: pending
 
   - id: ps1.watch.deferred
