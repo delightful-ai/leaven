@@ -232,6 +232,54 @@ fn plan_execution_result_rejects_workspace_query_value_forgery_with_valid_hashes
         }),
     ));
     assert_plan_execution_result_rejected(&package, &plan, &context, &missing_class);
+
+    let mut stat_wrong_path = package
+        .execute_plan_document(&plan, &context, &mut RecordingPlanHost::default())
+        .unwrap()
+        .value()
+        .clone();
+    stat_wrong_path["values"]["stat"]["entries"][0]["path"] = json!("src/lib.rs");
+    stat_wrong_path["receipts"][3]["result_hash"] = json!(test_prefixed_jcs_hash(
+        "fp_result_sha256_",
+        &json!({
+            "schema_version": "leaven.plan_query_result.v1",
+            "name": "stat",
+            "value": stat_wrong_path["values"]["stat"]
+        }),
+    ));
+    assert_plan_execution_result_rejected(&package, &plan, &context, &stat_wrong_path);
+
+    let mut digest_wrong_algorithm = package
+        .execute_plan_document(&plan, &context, &mut RecordingPlanHost::default())
+        .unwrap()
+        .value()
+        .clone();
+    digest_wrong_algorithm["values"]["digest"]["digest"] = json!("blake3:readme");
+    digest_wrong_algorithm["receipts"][4]["result_hash"] = json!(test_prefixed_jcs_hash(
+        "fp_result_sha256_",
+        &json!({
+            "schema_version": "leaven.plan_query_result.v1",
+            "name": "digest",
+            "value": digest_wrong_algorithm["values"]["digest"]
+        }),
+    ));
+    assert_plan_execution_result_rejected(&package, &plan, &context, &digest_wrong_algorithm);
+
+    let mut digest_wrong_workspace = package
+        .execute_plan_document(&plan, &context, &mut RecordingPlanHost::default())
+        .unwrap()
+        .value()
+        .clone();
+    digest_wrong_workspace["values"]["digest"]["workspace"] = json!("ws_planexec_other");
+    digest_wrong_workspace["receipts"][4]["result_hash"] = json!(test_prefixed_jcs_hash(
+        "fp_result_sha256_",
+        &json!({
+            "schema_version": "leaven.plan_query_result.v1",
+            "name": "digest",
+            "value": digest_wrong_workspace["values"]["digest"]
+        }),
+    ));
+    assert_plan_execution_result_rejected(&package, &plan, &context, &digest_wrong_workspace);
 }
 
 #[test]
