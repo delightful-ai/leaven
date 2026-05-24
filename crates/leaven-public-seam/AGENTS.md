@@ -159,18 +159,27 @@ workspace ids and lifetime echoes before binding a handle, and
 `workspace_release` validates the requested WorkspaceRef against live
 materialization-proven `workspace_handle` dependency values before the host can
 perform release, rejects already released handles, and still refuses literal
-forgeries and host filesystem paths as workspace handles. `PlanWorkspaceQueryRequest` routes
-representative schema-valid `workspace_query` reads through typed host requests,
-requires a live materialization-proven `workspace_handle` dependency before the
-host can read, and emits typed `workspace_file`, `workspace_listing`,
-`workspace_snapshot`, or `workspace_diff` values with query receipts. `stat`
-projects as a `workspace_listing`, `digest` as a `workspace_snapshot`, and
-`git_log` as a `workspace_diff` because the locked result schema has those
-workspace-read value families rather than separate stat/digest/log value kinds.
-Within that broad family mapping, `stat` still binds the result to the
-requested path and `digest` still binds the result to the requested algorithm
-and workspace id. `git_log` remains a broad `workspace_diff`-family projection,
-not a parsed commit-log surface.
+forgeries and host filesystem paths as workspace handles.
+`PlanWorkspaceQueryRequest` routes representative schema-valid
+`workspace_query` reads through typed host requests, requires a live
+materialization-proven `workspace_handle` dependency before the host can read,
+rejects absolute/traversal-shaped workspace paths at the seam, and emits typed
+`workspace_file`, `workspace_listing`, `workspace_snapshot`, or `workspace_diff`
+values with query receipts. `stat` projects as a `workspace_listing`, `digest`
+as a `workspace_snapshot`, and `git_log` as a `workspace_diff` because the
+locked result schema has those workspace-read value families rather than
+separate stat/digest/log value kinds. Within that broad family mapping, `stat`
+still binds the result to the requested path and `digest` still binds the
+result to the requested algorithm and workspace id; the locked result schema
+does not carry the digest request path, so digest path-level backend truth
+remains pending. `read_file` binds the returned file value to the requested path
+and requires content or a blob ref. `list` results must stay under the requested
+path, `snapshot` results must bind the requested workspace and carry a digest,
+`git_log`/`git_diff`/`git_status` results must carry text or a blob ref inside
+the locked `workspace_diff` value family, and `capture_artifacts` requests must
+name at least one safe relative path with results corresponding to requested
+paths. `git_log` remains a broad `workspace_diff`-family projection, not a
+parsed commit-log surface.
 It is not workspace backend execution and still leaves full artifact/snapshot
 backend proof pending, so it is not full workspace row closeout. The
 `PublicSeamPackage::execute_plan_document_with_capability` route

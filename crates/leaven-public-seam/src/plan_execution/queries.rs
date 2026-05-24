@@ -306,13 +306,15 @@ pub(super) fn workspace_query_request_from_values<'a>(
     let op = object
         .get("op")
         .ok_or_else(|| invalid_plan("workspace_query must carry op"))?;
-    Ok(PlanWorkspaceQueryRequest {
+    let request = PlanWorkspaceQueryRequest {
         name,
         expr,
         workspace,
         op,
         deps,
-    })
+    };
+    validate_workspace_query_request_op(request)?;
+    Ok(request)
 }
 
 pub(super) fn workspace_query_expected_value_kind(
@@ -334,10 +336,64 @@ pub(super) fn validate_workspace_query_value_shape(
     value: &Map<String, Value>,
 ) -> Result<(), PublicSeamError> {
     match request.op_kind()? {
+        "read_file" => validate_workspace_read_file_value(request, value),
+        "list" => validate_workspace_list_value(request, value),
         "stat" => validate_workspace_stat_value(request, value),
         "digest" => validate_workspace_digest_value(request, value),
-        _ => Ok(()),
+        "snapshot" => validate_workspace_snapshot_value(request, value),
+        "git_log" | "git_diff" | "git_status" => validate_workspace_diff_value(request, value),
+        "capture_artifacts" => validate_workspace_capture_artifacts_value(request, value),
+        other => Err(invalid_plan(format!(
+            "unknown workspace_query op `{other}`"
+        ))),
     }
+}
+
+fn validate_workspace_read_file_value(
+    request: PlanWorkspaceQueryRequest<'_>,
+    value: &Map<String, Value>,
+) -> Result<(), PublicSeamError> {
+    let requested_path = request
+        .path()?
+        .ok_or_else(|| invalid_plan("workspace_query read_file must carry path"))?;
+    validate_workspace_path("workspace_query read_file path", requested_path)?;
+    let path = value
+        .get("path")
+        .and_then(Value::as_str)
+        .ok_or_else(|| invalid_plan("workspace_query read_file result must carry path"))?;
+    validate_workspace_path("workspace_query read_file result path", path)?;
+    if path != requested_path {
+        return Err(invalid_plan(format!(
+            "workspace_query read_file result path `{path}` does not match requested `{requested_path}`"
+        )));
+    }
+    if value.get("content").is_none() && value.get("blob_ref").is_none() {
+        return Err(invalid_plan(
+            "workspace_query read_file result must carry content or blob_ref",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_workspace_list_value(
+    request: PlanWorkspaceQueryRequest<'_>,
+    value: &Map<String, Value>,
+) -> Result<(), PublicSeamError> {
+    let requested_path = request
+        .path()?
+        .ok_or_else(|| invalid_plan("workspace_query list must carry path"))?;
+    validate_workspace_path("workspace_query list path", requested_path)?;
+    let entries = workspace_listing_entries(value, "list")?;
+    for entry in entries {
+        let entry_path = workspace_listing_entry_path(entry, "list")?;
+        validate_workspace_path("workspace_query list entry path", entry_path)?;
+        if !path_is_at_or_below(entry_path, requested_path) {
+            return Err(invalid_plan(format!(
+                "workspace_query list result path `{entry_path}` is outside requested `{requested_path}`"
+            )));
+        }
+    }
+    Ok(())
 }
 
 fn validate_workspace_stat_value(
@@ -347,20 +403,15 @@ fn validate_workspace_stat_value(
     let requested_path = request
         .path()?
         .ok_or_else(|| invalid_plan("workspace_query stat must carry path"))?;
-    let entries = value
-        .get("entries")
-        .and_then(Value::as_array)
-        .ok_or_else(|| invalid_plan("workspace_query stat result must carry entries"))?;
+    validate_workspace_path("workspace_query stat path", requested_path)?;
+    let entries = workspace_listing_entries(value, "stat")?;
     if entries.len() != 1 {
         return Err(invalid_plan(
             "workspace_query stat result must carry exactly one listing entry",
         ));
     }
-    let entry_path = entries[0]
-        .as_object()
-        .and_then(|entry| entry.get("path"))
-        .and_then(Value::as_str)
-        .ok_or_else(|| invalid_plan("workspace_query stat entry must carry path"))?;
+    let entry_path = workspace_listing_entry_path(&entries[0], "stat")?;
+    validate_workspace_path("workspace_query stat entry path", entry_path)?;
     if entry_path != requested_path {
         return Err(invalid_plan(format!(
             "workspace_query stat result path `{entry_path}` does not match requested `{requested_path}`"
@@ -373,6 +424,10 @@ fn validate_workspace_digest_value(
     request: PlanWorkspaceQueryRequest<'_>,
     value: &Map<String, Value>,
 ) -> Result<(), PublicSeamError> {
+    let requested_path = request
+        .path()?
+        .ok_or_else(|| invalid_plan("workspace_query digest must carry path"))?;
+    validate_workspace_path("workspace_query digest path", requested_path)?;
     let algorithm = request
         .op()
         .get("algorithm")
@@ -395,6 +450,187 @@ fn validate_workspace_digest_value(
         return Err(invalid_plan(format!(
             "workspace_query digest result workspace `{workspace}` does not match requested `{}`",
             request.workspace()
+        )));
+    }
+    Ok(())
+}
+
+fn validate_workspace_snapshot_value(
+    request: PlanWorkspaceQueryRequest<'_>,
+    value: &Map<String, Value>,
+) -> Result<(), PublicSeamError> {
+    validate_workspace_snapshot_workspace(request, value, "snapshot")?;
+    if value.get("digest").and_then(Value::as_str).is_none() {
+        return Err(invalid_plan(
+            "workspace_query snapshot result must carry digest",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_workspace_diff_value(
+    request: PlanWorkspaceQueryRequest<'_>,
+    value: &Map<String, Value>,
+) -> Result<(), PublicSeamError> {
+    if value.get("text").and_then(Value::as_str).is_none() && value.get("blob_ref").is_none() {
+        return Err(invalid_plan(format!(
+            "workspace_query {} result must carry text or blob_ref",
+            request.op_kind()?
+        )));
+    }
+    Ok(())
+}
+
+fn validate_workspace_capture_artifacts_value(
+    request: PlanWorkspaceQueryRequest<'_>,
+    value: &Map<String, Value>,
+) -> Result<(), PublicSeamError> {
+    let requested = workspace_capture_requested_paths(request)?;
+    let entries = workspace_listing_entries(value, "capture_artifacts")?;
+    for entry in entries {
+        let entry_path = workspace_listing_entry_path(entry, "capture_artifacts")?;
+        validate_workspace_path("workspace_query capture_artifacts entry path", entry_path)?;
+        if !requested
+            .iter()
+            .any(|requested_path| path_is_at_or_below(entry_path, requested_path))
+        {
+            return Err(invalid_plan(format!(
+                "workspace_query capture_artifacts result path `{entry_path}` was not requested"
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn validate_workspace_query_request_op(
+    request: PlanWorkspaceQueryRequest<'_>,
+) -> Result<(), PublicSeamError> {
+    match request.op_kind()? {
+        "read_file" => {
+            let path = request
+                .path()?
+                .ok_or_else(|| invalid_plan("workspace_query read_file must carry path"))?;
+            validate_workspace_path("workspace_query read_file path", path)?;
+        }
+        "list" => {
+            let path = request
+                .path()?
+                .ok_or_else(|| invalid_plan("workspace_query list must carry path"))?;
+            validate_workspace_path("workspace_query list path", path)?;
+        }
+        "stat" => {
+            let path = request
+                .path()?
+                .ok_or_else(|| invalid_plan("workspace_query stat must carry path"))?;
+            validate_workspace_path("workspace_query stat path", path)?;
+        }
+        "digest" => {
+            let path = request
+                .path()?
+                .ok_or_else(|| invalid_plan("workspace_query digest must carry path"))?;
+            validate_workspace_path("workspace_query digest path", path)?;
+        }
+        "snapshot" | "git_log" | "git_diff" | "git_status" => {}
+        "capture_artifacts" => {
+            workspace_capture_requested_paths(request)?;
+        }
+        other => {
+            return Err(invalid_plan(format!(
+                "unknown workspace_query op `{other}`"
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn workspace_capture_requested_paths(
+    request: PlanWorkspaceQueryRequest<'_>,
+) -> Result<BTreeSet<&str>, PublicSeamError> {
+    let mut requested = BTreeSet::new();
+    let paths = request
+        .op()
+        .get("paths")
+        .and_then(Value::as_array)
+        .ok_or_else(|| invalid_plan("workspace_query capture_artifacts must carry paths"))?;
+    if paths.is_empty() {
+        return Err(invalid_plan(
+            "workspace_query capture_artifacts must request at least one path",
+        ));
+    }
+    for path in paths {
+        let path = path.as_str().ok_or_else(|| {
+            invalid_plan("workspace_query capture_artifacts paths must be strings")
+        })?;
+        validate_workspace_path("workspace_query capture_artifacts path", path)?;
+        requested.insert(path);
+    }
+    Ok(requested)
+}
+
+fn validate_workspace_snapshot_workspace(
+    request: PlanWorkspaceQueryRequest<'_>,
+    value: &Map<String, Value>,
+    op: &str,
+) -> Result<(), PublicSeamError> {
+    let workspace = value
+        .get("workspace")
+        .and_then(Value::as_str)
+        .ok_or_else(|| invalid_plan(format!("workspace_query {op} result must carry workspace")))?;
+    if workspace != request.workspace() {
+        return Err(invalid_plan(format!(
+            "workspace_query {op} result workspace `{workspace}` does not match requested `{}`",
+            request.workspace()
+        )));
+    }
+    Ok(())
+}
+
+fn workspace_listing_entries<'a>(
+    value: &'a Map<String, Value>,
+    op: &str,
+) -> Result<&'a Vec<Value>, PublicSeamError> {
+    value
+        .get("entries")
+        .and_then(Value::as_array)
+        .ok_or_else(|| invalid_plan(format!("workspace_query {op} result must carry entries")))
+}
+
+fn workspace_listing_entry_path<'a>(
+    entry: &'a Value,
+    op: &str,
+) -> Result<&'a str, PublicSeamError> {
+    entry
+        .as_object()
+        .and_then(|entry| entry.get("path"))
+        .and_then(Value::as_str)
+        .ok_or_else(|| invalid_plan(format!("workspace_query {op} entry must carry path")))
+}
+
+fn path_is_at_or_below(path: &str, root: &str) -> bool {
+    let root = root.trim_end_matches('/');
+    if root == "." || root.is_empty() {
+        return true;
+    }
+    path == root
+        || path
+            .strip_prefix(root)
+            .is_some_and(|suffix| suffix.starts_with('/'))
+}
+
+fn validate_workspace_path(field: &str, path: &str) -> Result<(), PublicSeamError> {
+    if path == "." {
+        return Ok(());
+    }
+    if path.is_empty()
+        || path.starts_with('/')
+        || path.starts_with('~')
+        || path.contains('\\')
+        || path
+            .split('/')
+            .any(|segment| segment.is_empty() || segment == "." || segment == "..")
+    {
+        return Err(invalid_plan(format!(
+            "{field} must be a relative workspace path without traversal"
         )));
     }
     Ok(())

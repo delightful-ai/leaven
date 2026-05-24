@@ -1228,7 +1228,8 @@ rows:
       - crates/leaven-public-seam/tests/plan_document.rs::workspace_release_rejects_unmaterialized_handles_and_host_path_substitutes
       - crates/leaven-public-seam/tests/plan_document.rs::workspace_query_reads_require_live_handles_and_emit_query_receipts
       - crates/leaven-public-seam/tests/plan_document.rs::workspace_query_rejects_unmaterialized_released_and_mismatched_results
-      - crates/leaven-public-seam/tests/plan_document.rs::workspace_query_rejects_stat_digest_and_git_log_result_mismatches
+      - crates/leaven-public-seam/tests/plan_document.rs::workspace_query_rejects_file_listing_stat_and_digest_result_mismatches
+      - crates/leaven-public-seam/tests/plan_document.rs::workspace_query_rejects_snapshot_git_and_artifact_result_mismatches
       - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_result_rejects_workspace_query_value_forgery_with_valid_hashes
       - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_result_rejects_literal_workspace_handle_provenance_forgery
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_bind_worker_methods_to_primary_kinds_and_receipts
@@ -1246,6 +1247,15 @@ rows:
       - crates/leaven-public-seam/src/plan_execution/queries.rs::PlanWorkspaceQueryRequest
       - crates/leaven-public-seam/src/plan_execution/queries.rs::PlanWorkspaceQueryOutcome
       - crates/leaven-public-seam/src/plan_execution/queries.rs::workspace_query_expected_value_kind
+      - crates/leaven-public-seam/src/plan_execution/queries.rs::validate_workspace_query_request_op
+      - crates/leaven-public-seam/src/plan_execution/queries.rs::validate_workspace_query_value_shape
+      - crates/leaven-public-seam/src/plan_execution/queries.rs::validate_workspace_read_file_value
+      - crates/leaven-public-seam/src/plan_execution/queries.rs::validate_workspace_list_value
+      - crates/leaven-public-seam/src/plan_execution/queries.rs::validate_workspace_snapshot_value
+      - crates/leaven-public-seam/src/plan_execution/queries.rs::validate_workspace_diff_value
+      - crates/leaven-public-seam/src/plan_execution/queries.rs::validate_workspace_capture_artifacts_value
+      - crates/leaven-public-seam/src/plan_execution/queries.rs::workspace_capture_requested_paths
+      - crates/leaven-public-seam/src/plan_execution/queries.rs::validate_workspace_path
       - crates/leaven-public-seam/src/plan_execution.rs::execute_workspace_query_expr
       - crates/leaven-public-seam/src/plan_execution.rs::execute_workspace_materialize_call
       - crates/leaven-public-seam/src/plan_execution/receipts.rs::validate_workspace_query_receipt
@@ -1262,6 +1272,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-23-acp-workspace-partial-follow-up-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-23-workspace-query-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-23-workspace-handle-provenance-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-workspace-query-op-specific-partial-review.md
     status: pending
 
   - id: ps1.lm.contract
