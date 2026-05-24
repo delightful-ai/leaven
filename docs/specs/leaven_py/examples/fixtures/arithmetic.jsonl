@@ -1,0 +1,8 @@
+{"id": "ar-0001", "input": {"question": "2 + 3"}, "target": {"answer": "5"}, "metadata": {"difficulty": "trivial"}}
+{"id": "ar-0002", "input": {"question": "7 * 8"}, "target": {"answer": "56"}, "metadata": {"difficulty": "easy"}}
+{"id": "ar-0003", "input": {"question": "144 / 12"}, "target": {"answer": "12"}, "metadata": {"difficulty": "easy"}}
+{"id": "ar-0004", "input": {"question": "17 + 26"}, "target": {"answer": "43"}, "metadata": {"difficulty": "easy"}}
+{"id": "ar-0005", "input": {"question": "19 * 23"}, "target": {"answer": "437"}, "metadata": {"difficulty": "medium"}}
+{"id": "ar-0006", "input": {"question": "1024 / 32"}, "target": {"answer": "32"}, "metadata": {"difficulty": "medium"}}
+{"id": "ar-0007", "input": {"question": "((4 + 5) * 6) - 7"}, "target": {"answer": "47"}, "metadata": {"difficulty": "medium"}}
+{"id": "ar-0008", "input": {"question": "13 * 17"}, "target": {"answer": "221"}, "metadata": {"difficulty": "medium"}}

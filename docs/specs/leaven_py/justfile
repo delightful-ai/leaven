@@ -1,0 +1,12 @@
+# Local commands — run from docs/specs/leaven_py/
+
+default:
+    @just --list
+
+sync:
+    uv sync
+
+check:
+    uv run ruff check src/leaven examples
+    uv run ty src/leaven
+    uv run python -c "import leaven; import py_compile; from pathlib import Path; [py_compile.compile(p) for p in Path('examples').glob('*.py')]"

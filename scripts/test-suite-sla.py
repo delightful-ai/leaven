@@ -53,6 +53,10 @@ NON_RUST_FENCE_LANGUAGES = {
     "yml",
 }
 
+TEST_MARKER_RE = re.compile(
+    r"#\s*\[\s*(?:tokio::)?test\b|proptest!|rstest\b|test_case\b|quickcheck\b"
+)
+
 
 def package_has_rust_doctest(package_root: Path) -> bool:
     """Return whether package Rust docs contain a Rust doctest code fence."""
@@ -88,6 +92,32 @@ def rust_source_has_doctest(path: Path) -> bool:
         if not first.startswith("edition"):
             return True
     return False
+
+
+def rust_source_has_test_marker(path: Path) -> bool:
+    try:
+        return bool(TEST_MARKER_RE.search(path.read_text(encoding="utf-8")))
+    except UnicodeDecodeError:
+        return False
+
+
+def package_source_has_test_marker(package_root: Path) -> bool:
+    src = package_root / "src"
+    if not src.exists():
+        return False
+    return any(rust_source_has_test_marker(path) for path in src.rglob("*.rs"))
+
+
+def target_has_tests(message: dict[str, object], package_root: Path) -> bool:
+    target = message["target"]
+    assert isinstance(target, dict)
+    kinds = set(target.get("kind", []))
+    src_path = target.get("src_path")
+    if "test" in kinds:
+        return isinstance(src_path, str) and rust_source_has_test_marker(Path(src_path))
+    if kinds.intersection({"lib", "bin", "proc-macro"}):
+        return package_source_has_test_marker(package_root)
+    return True
 
 
 def workspace_doctest_commands(workspace_root: Path) -> list[tuple[str, list[str]]]:
@@ -201,7 +231,10 @@ def discover_workspace_test_binaries(
             continue
         package_id = message["package_id"]
         target_name = message["target"]["name"]
-        binaries.append((target_name, Path(executable), package_roots[package_id]))
+        package_root = package_roots[package_id]
+        if not target_has_tests(message, package_root):
+            continue
+        binaries.append((target_name, Path(executable), package_root))
     return binaries
 
 
@@ -255,12 +288,24 @@ def run_workspace_test_binaries(workspace_root: Path, deadline: float) -> int:
 
         remaining = deadline - time.perf_counter()
         if remaining <= 0:
+            slow_running = sorted(
+                (
+                    (time.perf_counter() - started_at, target_name)
+                    for _, target_name, started_at in running
+                ),
+                reverse=True,
+            )
+            running_summary = ", ".join(
+                f"{name} {elapsed:.1f}s" for elapsed, name in slow_running[:8]
+            )
             print(
                 "error: workspace libtest binaries exceeded suite SLA "
                 f"after {completed}/{len(binaries)} binaries; "
                 f"{len(running)} running and {len(queued)} queued",
                 flush=True,
             )
+            if running_summary:
+                print(f"slowest running binaries: {running_summary}", flush=True)
             for process, _, _ in running:
                 terminate_process_group(process)
             return 1

@@ -1,0 +1,135 @@
+"""`lv.environment(...)` — compose workspace, LM(s), agent(s), sandbox, trust, budget, cache.
+
+The environment is one of the four required inputs to `lv.optimize(...)`. It
+declares how the run reaches the outside world. Capability tokens, data-class
+defaults, and budget enforcement all derive from the environment + trust
+profile.
+
+`lv.environment(...)` builds a full environment. `lv.environment.local(...)`
+is a convenience for the minimal local case. `lv.environment.cache.*` namespaces
+cache constructors so `lv.environment(cache=lv.environment.cache.off())` reads
+naturally.
+"""
+
+from __future__ import annotations
+
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict
+
+from .agent.config import AgentConfig
+from .budget import Budget
+from .lm.config import LmConfig
+from .sandbox.config import SandboxConfig
+from .trust import TrustProfile
+from .workspace.config import WorkspaceConfig
+from .workspace.local import local as workspace_local
+
+CacheBackend = Literal["sqlite_default", "memory_only", "off"]
+
+
+class Cache(BaseModel):
+    """Cache config for the run."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    backend: CacheBackend = "sqlite_default"
+    path: str | None = None
+    """Cache file path; None = engine default under `.leaven/cache/`."""
+
+
+class _CacheNamespace:
+    """The `lv.environment.cache.*` namespace."""
+
+    @staticmethod
+    def sqlite_default(path: str | None = None) -> Cache:
+        """SQLite-backed durable cache (engine default)."""
+        return Cache(backend="sqlite_default", path=path)
+
+    @staticmethod
+    def memory_only() -> Cache:
+        """In-memory only cache; lost between runs."""
+        return Cache(backend="memory_only")
+
+    @staticmethod
+    def off() -> Cache:
+        """No cache; every call re-executes."""
+        return Cache(backend="off")
+
+
+class Environment(BaseModel):
+    """A composed environment. Pass to `lv.optimize(environment=...)`."""
+
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True, extra="forbid")
+
+    workspace: WorkspaceConfig
+    lm: LmConfig | list[LmConfig] | dict[str, LmConfig]
+    agent: AgentConfig | list[AgentConfig] | dict[str, AgentConfig] | None = None
+    sandbox: SandboxConfig | None = None
+    trust_profile: TrustProfile = TrustProfile.MANAGED_SANDBOX
+    budget: Budget | None = None
+    cache_config: Cache | None = None
+
+
+class _EnvironmentBuilder:
+    """Callable namespace: `lv.environment(...)` plus `.local()` and `.cache`."""
+
+    cache: _CacheNamespace = _CacheNamespace()
+
+    def __call__(
+        self,
+        *,
+        workspace: WorkspaceConfig,
+        lm: LmConfig | list[LmConfig] | dict[str, LmConfig],
+        agent: AgentConfig | list[AgentConfig] | dict[str, AgentConfig] | None = None,
+        sandbox: SandboxConfig | None = None,
+        trust_profile: TrustProfile | str = TrustProfile.MANAGED_SANDBOX,
+        budget: Budget | None = None,
+        cache: Cache | None = None,
+    ) -> Environment:
+        """Compose an environment.
+
+        `lm` accepts one config, a list (for fallback ordering), or a dict (for
+        role binding: `{"grader": ..., "reflector": ...}`). Same for `agent`.
+
+        `trust_profile` accepts the enum or the string form (`"managed_sandbox"`).
+
+        `cache` defaults to engine-managed SQLite if omitted; pass
+        `lv.environment.cache.off()` to disable.
+        """
+        profile = (
+            trust_profile
+            if isinstance(trust_profile, TrustProfile)
+            else TrustProfile(trust_profile)
+        )
+        return Environment(
+            workspace=workspace,
+            lm=lm,
+            agent=agent,
+            sandbox=sandbox,
+            trust_profile=profile,
+            budget=budget,
+            cache_config=cache,
+        )
+
+    def local(self, *, budget: Budget | None = None) -> Environment:
+        """Convenience: a minimal local-machine environment with a mock LM.
+
+        Useful for smoke tests of authoring code. Real LMs and agents must be
+        wired through full `lv.environment(...)`.
+        """
+        from .lm.mock import mock
+
+        return self(
+            workspace=workspace_local(),
+            lm=mock(responses=["[mock]"]),
+            trust_profile=TrustProfile.TRUSTED_LOCAL_OPERATOR,
+            budget=budget,
+        )
+
+
+environment = _EnvironmentBuilder()
+"""The composition entry: `lv.environment(...)` for full, `lv.environment.local(...)`
+for a minimal local convenience, `lv.environment.cache.*` for cache config."""
+
+__all__ = ["Cache", "CacheBackend", "Environment", "environment"]
