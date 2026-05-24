@@ -3282,10 +3282,12 @@ dependencies = [
  "bytes",
  "futures",
  "hex",
+ "jcs-canonicalize",
  "leaven-agent",
  "leaven-core",
  "leaven-engine",
  "leaven-kernel",
+ "leaven-public-seam",
  "leaven-render",
  "leaven-store",
  "leaven-store-inline",
@@ -3527,6 +3529,7 @@ name = "leaven-gepa-agentic-git"
 version = "0.0.0"
 dependencies = [
  "futures",
+ "jcs-canonicalize",
  "leaven-agent",
  "leaven-agentic",
  "leaven-agentic-git",
@@ -3537,10 +3540,12 @@ dependencies = [
  "leaven-gepa",
  "leaven-kernel",
  "leaven-population",
+ "leaven-public-seam",
  "leaven-surface",
  "leaven-workspace",
  "leaven-workspace-local",
  "serde",
+ "serde_json",
  "tempfile",
  "thiserror 2.0.18",
 ]

@@ -120,6 +120,8 @@ impl ReflectionWorkspace {
                 .run_session(
                     &mut view,
                     AgentRunRequest {
+                        runtime: None,
+                        runtime_fingerprint: None,
                         instructions: AgentInstructions::task(format!(
                             "Read TASK.md and edit {} in place.",
                             self.layout.mutable_root.as_str()

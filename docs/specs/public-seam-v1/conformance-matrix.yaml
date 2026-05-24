@@ -863,20 +863,31 @@ rows:
       without a ReflectionResult is rejected.
     fake_pass_rejected: One generic agent prompt that both critiques and writes.
     minimum_closeout_level: semantic_denial
-    partial_contract_test_evidence:
-      - crates/leaven-public-seam/tests/stage_payloads.rs::stage_payloads_validate_all_role_specific_payload_shapes_with_provenance
-      - crates/leaven-public-seam/tests/stage_payloads.rs::active_reflect_then_propose_example_validates_through_semantic_stage_payloads
-      - crates/leaven-public-seam/tests/stage_payloads.rs::stage_payloads_preserve_object_form_info_and_receipt_refs
-      - crates/leaven-public-seam/tests/stage_payloads.rs::stage_payloads_reject_object_form_candidate_run_substitution
+    positive_test_evidence:
+      - crates/leaven-agentic/tests/public_seam_stage.rs::agentic_reflect_propose_handoff_lowers_through_locked_public_seam_owner
+      - crates/leaven-gepa-agentic-git/tests/git_reflection.rs::public_seam_reflect_then_propose_stage_projection_uses_separate_agent_sessions
       - crates/leaven-public-seam/tests/stage_payloads.rs::reflect_propose_handoff_binds_distinct_stage_calls_and_exact_reflection_result
-      - crates/leaven-public-seam/tests/stage_payloads.rs::propose_request_requires_reflection_result_and_change_schema_authority
+      - crates/leaven-public-seam/tests/stage_payloads.rs::reflect_propose_submission_binds_proposal_effects_to_cited_handoff
+    negative_test_evidence:
+      - crates/leaven-agentic/tests/public_seam_stage.rs::agentic_reflect_propose_handoff_rejects_single_prompt_and_stale_reflection_fakes
+      - crates/leaven-public-seam/tests/stage_payloads.rs::propose_request_rejects_missing_reflection_result_and_change_schema_authority
       - crates/leaven-public-seam/tests/stage_payloads.rs::propose_request_rejects_reflection_source_ref_drop
       - crates/leaven-public-seam/tests/stage_payloads.rs::reflect_propose_handoff_rejects_single_prompt_and_stale_reflection_fakes
       - crates/leaven-public-seam/tests/stage_payloads.rs::reflect_propose_handoff_rejects_missing_or_forged_stage_receipts
-      - crates/leaven-public-seam/tests/stage_payloads.rs::reflect_propose_submission_binds_proposal_effects_to_cited_handoff
       - crates/leaven-public-seam/tests/stage_payloads.rs::reflect_propose_submission_rejects_mutation_without_cited_handoff
-    partial_contract_implementation_evidence:
-      - crates/leaven-public-seam/src/stage_payload.rs::StagePayloadDocument
+    implementation_evidence:
+      - crates/leaven-agentic/src/public_seam_stage.rs::PublicStagePayloadIdentity
+      - crates/leaven-agentic/src/public_seam_stage.rs::ReflectRequestPayload
+      - crates/leaven-agentic/src/public_seam_stage.rs::ReflectionResultPayload
+      - crates/leaven-agentic/src/public_seam_stage.rs::ProposeRequestPayload
+      - crates/leaven-agentic/src/public_seam_stage.rs::ReflectProposeHandoffPayload
+      - crates/leaven-agentic/AGENTS.md
+      - crates/leaven-gepa-agentic-git/src/public_seam_stage.rs::GitProgramPublicSeamStageContext
+      - crates/leaven-gepa-agentic-git/src/public_seam_stage.rs::GitProgramPublicSeamStageContext::reflect_request
+      - crates/leaven-gepa-agentic-git/src/public_seam_stage.rs::GitProgramPublicSeamStageContext::propose_request
+      - crates/leaven-gepa-agentic-git/src/public_seam_stage.rs::GitProgramPublicSeamStageContext::project
+      - crates/leaven-gepa-agentic-git/src/public_seam_stage.rs::GitProgramPublicSeamReflectionResult
+      - crates/leaven-gepa-agentic-git/AGENTS.md
       - crates/leaven-public-seam/src/stage_payload.rs::ReflectProposeHandoffDocument
       - crates/leaven-public-seam/src/stage_payload.rs::ReflectProposeSubmissionDocument
       - crates/leaven-public-seam/src/stage_payload.rs::ReflectProposeHandoffDocument::from_schema_valid_values
@@ -913,7 +924,9 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-stage-evidence-sartre-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-assessment-evidence-galileo-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-stage-submission-binding-aquinas-review.md
-    status: pending
+      - docs/specs/public-seam-v1/reviews/2026-05-24-agentic-stage-split-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-stage-reflect-propose-producer-lovelace-review.md
+    status: proven
 
   - id: ps1.stage.payload_receipts
     area: stage_payloads
@@ -938,7 +951,7 @@ rows:
       - crates/leaven-public-seam/tests/stage_payloads.rs::reflection_result_requires_receipted_source_visible_evidence
       - crates/leaven-public-seam/tests/stage_payloads.rs::reflection_result_rejects_unproven_diagnosis_without_sources
       - crates/leaven-public-seam/tests/stage_payloads.rs::reflect_request_rejects_parent_source_or_surface_context_gaps
-      - crates/leaven-public-seam/tests/stage_payloads.rs::propose_request_requires_reflection_result_and_change_schema_authority
+      - crates/leaven-public-seam/tests/stage_payloads.rs::propose_request_rejects_missing_reflection_result_and_change_schema_authority
       - crates/leaven-public-seam/tests/stage_payloads.rs::propose_request_rejects_reflection_source_ref_drop
       - crates/leaven-public-seam/tests/stage_payloads.rs::stage_score_contexts_reject_public_only_assessed_outputs
       - crates/leaven-public-seam/tests/stage_payloads.rs::score_and_judge_contexts_reject_nested_output_data_class_gaps
@@ -946,7 +959,21 @@ rows:
       - crates/leaven-public-seam/tests/stage_payloads.rs::callback_and_adapter_payloads_reject_missing_payload_schema
       - crates/leaven-public-seam/tests/stage_payloads.rs::reflect_propose_submission_binds_proposal_effects_to_cited_handoff
       - crates/leaven-public-seam/tests/stage_payloads.rs::reflect_propose_submission_rejects_mutation_without_cited_handoff
+      - crates/leaven-agentic/tests/public_seam_stage.rs::agentic_reflect_propose_handoff_lowers_through_locked_public_seam_owner
+      - crates/leaven-agentic/tests/public_seam_stage.rs::agentic_reflect_propose_handoff_rejects_single_prompt_and_stale_reflection_fakes
+      - crates/leaven-gepa-agentic-git/tests/git_reflection.rs::public_seam_reflect_then_propose_stage_projection_uses_separate_agent_sessions
     partial_contract_implementation_evidence:
+      - crates/leaven-agentic/src/public_seam_stage.rs::PublicStagePayloadIdentity
+      - crates/leaven-agentic/src/public_seam_stage.rs::ReflectRequestPayload
+      - crates/leaven-agentic/src/public_seam_stage.rs::ReflectionResultPayload
+      - crates/leaven-agentic/src/public_seam_stage.rs::ProposeRequestPayload
+      - crates/leaven-agentic/src/public_seam_stage.rs::ReflectProposeHandoffPayload
+      - crates/leaven-agentic/AGENTS.md
+      - crates/leaven-gepa-agentic-git/src/public_seam_stage.rs::GitProgramPublicSeamStageContext
+      - crates/leaven-gepa-agentic-git/src/public_seam_stage.rs::GitProgramPublicSeamStageContext::reflect_request
+      - crates/leaven-gepa-agentic-git/src/public_seam_stage.rs::GitProgramPublicSeamStageContext::propose_request
+      - crates/leaven-gepa-agentic-git/src/public_seam_stage.rs::GitProgramPublicSeamStageContext::project
+      - crates/leaven-gepa-agentic-git/src/public_seam_stage.rs::GitProgramPublicSeamReflectionResult
       - crates/leaven-public-seam/src/stage_payload.rs::StagePayloadDocument
       - crates/leaven-public-seam/src/stage_payload.rs::ReflectProposeSubmissionDocument
       - crates/leaven-public-seam/src/stage_payload.rs::inspect_reflect_request
@@ -984,6 +1011,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-stage-evidence-sartre-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-assessment-evidence-galileo-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-stage-submission-binding-aquinas-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-stage-reflect-propose-producer-lovelace-review.md
     status: pending
 
   - id: ps1.proposal.surface_authority

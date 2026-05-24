@@ -25,7 +25,9 @@ thiserror = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 hex = { workspace = true }
+jcs-canonicalize = { workspace = true }
 
 [dev-dependencies]
+leaven-public-seam = { workspace = true }
 leaven-store-inline = { workspace = true }
 leaven-workspace-local = { workspace = true }

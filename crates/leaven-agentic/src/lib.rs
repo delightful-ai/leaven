@@ -10,6 +10,7 @@ mod inspection;
 mod parser;
 mod preflight;
 mod proposer;
+mod public_seam_stage;
 mod repair;
 mod repairing_proposer;
 
@@ -43,6 +44,11 @@ pub use preflight::{
     PresenterDryRun, ScorerDryRun,
 };
 pub use proposer::{AgenticProposer, AgenticProposerConfig};
+pub use public_seam_stage::{
+    ProposeRequestPayload, PublicStagePayloadError, PublicStagePayloadIdentity,
+    PublicStagePayloadIdentityFields, ReflectProposeHandoffPayload, ReflectRequestPayload,
+    ReflectionResultPayload,
+};
 pub use repair::{
     PROPOSAL_REPAIR_ATTEMPTS_METADATA_KEY, ProposalRepairAttemptOutcome,
     ProposalRepairAttemptRecord,

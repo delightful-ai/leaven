@@ -18,6 +18,11 @@ provider protocol details or optimizer-specific search rhythm.
   vocabulary.
 - `ProposalParser`, `EvidenceParser`, and `EvaluationInputBuilder` are the
   import seams from runtime/session facts into typed Leaven outputs.
+- `PublicStagePayloadIdentity`, `ReflectRequestPayload`,
+  `ReflectionResultPayload`, `ProposeRequestPayload`, and
+  `ReflectProposeHandoffPayload` lower generic agentic reflection/proposal
+  stages into the locked public-seam stage-payload wire contract without
+  making this crate the public-seam validator or graph mutation authority.
 - `GoalLoop`, `GoalHandoff`, `GoalSpecCheck`, `GoalStagePlan`,
   `GoalSpecCheckRequest`, `GoalStagePlanRequest`, `GoalExecutionRequest`, and
   the `Goal*Signature` types are the typed pre-goal API for persistent agent
@@ -47,12 +52,25 @@ provider protocol details or optimizer-specific search rhythm.
   policy, and workload evaluator behavior.
 - `crates/leaven-agentic/tests/repairing_proposer.rs` proves bounded repair
   loops, repair metadata, inspection, and exhausted repair behavior.
+- `crates/leaven-agentic/tests/public_seam_stage.rs` proves agentic-owned
+  reflection/proposal stage lowering crosses the locked public-seam owner with
+  separate ReflectRequest, ReflectionResult, ProposeRequest, and binding stage
+  receipts.
 - `crates/leaven-agentic/tests/goal_handoff.rs` proves the pre-goal checklist,
   typed request/output helpers, next-stage planning, and execution prompt
   contracts.
 - `docs/specs/agentic_stage_runtime.md` owns the generic runtime/stage split.
 - Run `cargo nextest run -p leaven-agentic` to prove generic agentic adapter
   behavior.
+
+## Public Maturity
+
+Crate-root exports for `PublicStagePayloadIdentity`,
+`ReflectRequestPayload`, `ReflectionResultPayload`,
+`ProposeRequestPayload`, and `ReflectProposeHandoffPayload` are advanced public
+seam-lowering contracts for adapter authors. They are intentionally not in
+`leaven_agentic::prelude`; they do not prove ACP transport, graph mutation,
+provider execution, or the broader `ps1.stage.payload_receipts` row.
 
 ## Decision Cards
 - when: turning an agent session or workspace mutation into a proposal
@@ -91,8 +109,10 @@ provider protocol details or optimizer-specific search rhythm.
   the ACP profile that delivers Leaven extension methods to workers. The
   structural split between reflection (diagnosis) and proposal (graph mutation
   intent) is governing judgment; preserve it when shaping adapter parsers and
-  goal-loop handoff prompts. Lowering this crate's adapters onto the locked
-  seam is not yet done.
+  goal-loop handoff prompts. This crate now owns generic reflect/propose
+  stage-payload lowering helpers for adapter authors, but that is not ACP
+  transport, provider execution, graph mutation authority, or full payload-role
+  closeout.
 - Agent workspace mutation is not graph mutation. Only parser-produced
   proposals or assessments enter the graph through `RunContext`.
 - Agentic evaluators are nondeterministic by default. Do not make evaluation

@@ -10,12 +10,17 @@
 mod input;
 mod materializer;
 mod parser;
+mod public_seam_stage;
 mod reflector;
 mod renderer;
 
 pub use input::GitProgramGepaReflectionInput;
 pub use materializer::GitProgramGepaReflectionMaterializer;
 pub use parser::GitProgramGepaReflectionParser;
+pub use public_seam_stage::{
+    GitProgramPublicSeamReflectionResult, GitProgramPublicSeamStageContext,
+    GitProgramPublicSeamStageProjection,
+};
 pub use reflector::GepaGitProgramAgenticReflector;
 pub use renderer::GepaGitProgramReflectionRenderer;
 
