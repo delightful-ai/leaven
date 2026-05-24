@@ -345,9 +345,13 @@ reflection source refs, active reflect-then-propose handoff binding with
 distinct reflector/proposer stage call ids, exact `ReflectionResult`
 consumption, shared run/revision/parent/surface/capability/query-policy facts,
 allowed change schema declarations, target-aware scorer context binding to the
-scored case, output contexts, and payload-schema fingerprints. They are not an
-agent runtime, LM prompt renderer, ACP delivery path, proposal application
-engine, or proof that every optimizer/runtime producer emits these payloads.
+scored case, score/judge output contexts that at least declare assessed
+candidate or artifact output data classes, and payload-schema fingerprints.
+That data-class declaration is necessary seam metadata; it is not independent
+proof that arbitrary stage JSON is the actual candidate/artifact output being
+assessed. They are not an agent runtime, LM prompt renderer, ACP delivery path,
+proposal application engine, or proof that every optimizer/runtime producer
+emits these payloads.
 
 Crate-root export `DeferredWatchReplacement` is an advanced public seam
 contract. It proves that the V1 deferred watch marker can route only to a finite
@@ -454,9 +458,11 @@ backpressure, or runtime watch support.
   entries without carried source refs, dropped reflection source refs in
   proposer payloads, one-stage reflect/propose handoff substitutions, stale or
   mismatched embedded reflection results, mismatched run/capability facts, and
-  change proposals without allowed change schema authority. It does not prove
-  runtime stage lowering, ACP transport, provider calls, or proposal graph
-  mutation.
+  change proposals without allowed change schema authority. It also rejects
+  public-only scorer and judge outputs that satisfy schema shape but do not
+  declare candidate/artifact output provenance. It does not prove runtime stage
+  lowering, ACP transport, provider calls, proposal graph mutation, or
+  independent output-identity truth for arbitrary stage JSON.
 - `tests/acp_profile.rs` proves locked Leaven ACP profile semantics for pinned
   ACP version, stdio-first transport preference, Leaven-only extension methods,
   capability-action mapping, locked Plan IR/Plan Result schema bindings,

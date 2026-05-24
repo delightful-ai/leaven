@@ -417,6 +417,13 @@ fn inspect_reflect_request(
             "reflector example data_classes",
             "score output data class",
         )?;
+        require_assessed_output_data_class(
+            example
+                .get("score")
+                .and_then(|score| score.as_object())
+                .and_then(|score| score.get("output")),
+            "reflector example score output",
+        )?;
         for data_class in example_data_classes {
             if contains_case_target_marker(&data_class) {
                 return Err(invalid_stage_payload(
@@ -636,6 +643,31 @@ fn require_output_record_data_class_coverage(
     Ok(())
 }
 
+fn require_assessed_output_data_class(
+    value: Option<&Value>,
+    context: &str,
+) -> Result<(), PublicSeamError> {
+    let output = value
+        .and_then(Value::as_object)
+        .ok_or_else(|| invalid_stage_payload(format!("{context} must be an object")))?;
+    let data_classes = output
+        .get("data_classes")
+        .and_then(Value::as_array)
+        .ok_or_else(|| invalid_stage_payload(format!("{context} must carry data_classes")))?;
+    let carries_assessed_output = data_classes.iter().any(|class| {
+        matches!(
+            class.as_str(),
+            Some("candidate.output" | "candidate.artifact")
+        )
+    });
+    if !carries_assessed_output {
+        return Err(invalid_stage_payload(format!(
+            "{context} must carry candidate.output or candidate.artifact data class"
+        )));
+    }
+    Ok(())
+}
+
 fn collect_output_record_data_classes(
     value: Option<&Value>,
     field: &str,
@@ -687,6 +719,7 @@ fn inspect_runner_request(object: &serde_json::Map<String, Value>) -> Result<(),
 fn inspect_score_context(object: &serde_json::Map<String, Value>) -> Result<(), PublicSeamError> {
     require_field(object, "capability_fingerprint")?;
     require_field(object, "output")?;
+    require_assessed_output_data_class(object.get("output"), "score context output")?;
     if let Some(target_handle) = object.get("target_handle") {
         let target_handle = required_string(Some(target_handle), "target_handle")?;
         let case = required_string(object.get("case"), "case")?;
@@ -705,6 +738,9 @@ fn inspect_judge_context(object: &serde_json::Map<String, Value>) -> Result<(), 
         return Err(invalid_stage_payload(
             "judge context must carry assessed outputs",
         ));
+    }
+    for output in required_array(object.get("outputs"), "outputs")? {
+        require_assessed_output_data_class(Some(output), "judge context output")?;
     }
     Ok(())
 }

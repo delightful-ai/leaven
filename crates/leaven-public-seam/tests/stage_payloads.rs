@@ -458,6 +458,45 @@ fn score_context_rejects_target_handle_for_unrelated_case() {
 }
 
 #[test]
+fn stage_score_contexts_reject_public_only_assessed_outputs() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut reflect_public_only = reflect_request();
+    reflect_public_only["examples"][0]["data_classes"] = json!(["case.input", "public"]);
+    reflect_public_only["examples"][0]["score"]["output"]["data_classes"] = json!(["public"]);
+    assert!(matches!(
+        package
+            .validate_stage_payload_document(&reflect_public_only)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+
+    let mut scorer_public_only = score_context();
+    scorer_public_only["output"]["data_classes"] = json!(["public"]);
+    assert!(matches!(
+        package
+            .validate_stage_payload_document(&scorer_public_only)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+
+    let mut judge_public_only = judge_context();
+    judge_public_only["outputs"][1]["data_classes"] = json!(["public"]);
+    assert!(matches!(
+        package
+            .validate_stage_payload_document(&judge_public_only)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+
+    let mut scorer_artifact = score_context();
+    scorer_artifact["output"]["data_classes"] = json!(["candidate.artifact", "public"]);
+    package
+        .validate_stage_payload_document(&scorer_artifact)
+        .unwrap();
+}
+
+#[test]
 fn propose_request_requires_reflection_result_and_change_schema_authority() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
 
