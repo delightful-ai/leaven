@@ -59,6 +59,31 @@ fn evidence_envelope_rejects_target_derived_data_class_gaps() {
     ));
 }
 
+#[test]
+fn evidence_envelope_rejects_unreceipted_target_derived_evidence() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut missing_target_read = target_derived_envelope();
+    missing_target_read["source_receipts"]["read"] = json!([]);
+    assert!(matches!(
+        package
+            .validate_evidence_envelope_document(&missing_target_read)
+            .unwrap_err(),
+        PublicSeamError::InvalidEvidence { .. }
+    ));
+
+    let mut no_receipt_sources = target_derived_envelope();
+    no_receipt_sources["source_receipts"]["read"] = json!([]);
+    no_receipt_sources["source_receipts"]["effect"] = json!([]);
+    no_receipt_sources["source_receipts"]["write"] = json!([]);
+    assert!(matches!(
+        package
+            .validate_evidence_envelope_document(&no_receipt_sources)
+            .unwrap_err(),
+        PublicSeamError::InvalidEvidence { .. }
+    ));
+}
+
 fn target_derived_envelope() -> Value {
     json!({
         "schema_version": "leaven.evidence_envelope.v1",

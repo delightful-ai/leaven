@@ -188,8 +188,10 @@ production, graph mutation, or cache replay behavior.
 Crate-root export `EvidenceEnvelopeDocument` is an advanced public seam
 contract. It proves active-schema evidence-envelope visibility, data-class, and
 source-receipt preservation plus target-derived data-class coverage at the
-wire-envelope layer only; it is not evaluator evidence production, redaction
-execution, receipt persistence, or data-class propagation through runtime stages.
+wire-envelope layer only. Target-derived evidence must also carry a read receipt
+so target-derived facts cannot pass as unreceipted policy metadata. This is not
+evaluator evidence production, redaction execution, receipt persistence, or
+data-class propagation through runtime stages.
 
 Crate-root exports for `EvaluationJobDocument`, `EvaluationJobKind`, and
 `EvaluationRequestReceiptDocument` are advanced public seam contracts. They
@@ -212,10 +214,11 @@ Crate-root exports for `StagePayloadDocument`, `StagePayloadRole`, and
 active-schema stage-payload validation for role-specific reflector,
 reflection-result, proposer, runner, scorer, judge, callback, and adapter
 payloads, including target-safe reflector examples, receipted reflection
-results, proposal reflection/result separation, allowed change schema
-declarations, output contexts, and payload-schema fingerprints. They are not an
-agent runtime, LM prompt renderer, ACP delivery path, proposal application
-engine, or proof that every optimizer/runtime producer emits these payloads.
+results with source-backed diagnosis, proposal reflection/result separation
+that preserves reflection source refs, allowed change schema declarations,
+output contexts, and payload-schema fingerprints. They are not an agent runtime,
+LM prompt renderer, ACP delivery path, proposal application engine, or proof
+that every optimizer/runtime producer emits these payloads.
 
 Crate-root export `DeferredWatchReplacement` is an advanced public seam
 contract. It proves that the V1 deferred watch marker can route only to a finite
@@ -286,8 +289,9 @@ backpressure, or runtime watch support.
 - `tests/evidence_envelope.rs` proves active-schema EvidenceEnvelope values
   preserve visibility projections, projection data classes, top-level target-
   derived data classes, and read/effect/write source receipt refs at the public-
-  seam validation layer. It does not prove evaluator/evidence runtime production
-  or public PlanResult projection.
+  seam validation layer. It rejects target-derived evidence without a read
+  receipt and evidence with no source receipts. It does not prove
+  evaluator/evidence runtime production or public PlanResult projection.
 - `tests/evaluation_job.rs` proves active-schema EvaluationJob values preserve
   evaluator/request/candidate/case/revision/deadline/capability identity for
   independent, pairwise, and listwise shapes, rejects missing deadline,
@@ -307,9 +311,10 @@ backpressure, or runtime watch support.
 - `tests/stage_payloads.rs` proves active-schema stage payloads have a semantic
   owner for reflector, reflection result, proposer, runner, scorer, judge,
   callback, and adapter roles. It rejects reflector `case.target` data-class
-  leakage, unreceipted reflection results, and change proposals without allowed
-  change schema authority. It does not prove runtime stage lowering, ACP
-  transport, provider calls, or proposal graph mutation.
+  leakage, unreceipted or diagnosis-free reflection results, dropped reflection
+  source refs in proposer payloads, and change proposals without allowed change
+  schema authority. It does not prove runtime stage lowering, ACP transport,
+  provider calls, or proposal graph mutation.
 - `tests/acp_profile.rs` proves locked Leaven ACP profile semantics for pinned
   ACP version, stdio-first transport preference, Leaven-only extension methods,
   capability-action mapping, bounded update declarations, programmatic

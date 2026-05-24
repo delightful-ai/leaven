@@ -195,6 +195,39 @@ fn reflection_result_requires_receipted_source_visible_evidence() {
 }
 
 #[test]
+fn reflection_result_rejects_unproven_diagnosis_without_sources() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut no_source_backed_diagnosis = reflection_result();
+    no_source_backed_diagnosis["failure_modes"] = json!([]);
+    no_source_backed_diagnosis["surface_suggestions"] = json!([]);
+    assert!(matches!(
+        package
+            .validate_stage_payload_document(&no_source_backed_diagnosis)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+
+    let mut unproven_failure_mode = reflection_result();
+    unproven_failure_mode["failure_modes"][0]["source_refs"] = json!([]);
+    assert!(matches!(
+        package
+            .validate_stage_payload_document(&unproven_failure_mode)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+
+    let mut unproven_surface_suggestion = reflection_result();
+    unproven_surface_suggestion["surface_suggestions"][0]["source_refs"] = json!([]);
+    assert!(matches!(
+        package
+            .validate_stage_payload_document(&unproven_surface_suggestion)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+}
+
+#[test]
 fn propose_request_requires_reflection_result_and_change_schema_authority() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
 
@@ -244,6 +277,20 @@ fn propose_request_requires_reflection_result_and_change_schema_authority() {
             .validate_stage_payload_document(&wrong_bridge)
             .unwrap_err(),
         PublicSeamError::ExampleValidation { .. } | PublicSeamError::InvalidStagePayload { .. }
+    ));
+}
+
+#[test]
+fn propose_request_rejects_reflection_source_ref_drop() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut dropped_reflection_source = propose_request();
+    dropped_reflection_source["source_refs"] = json!(["cand_unrelated"]);
+    assert!(matches!(
+        package
+            .validate_stage_payload_document(&dropped_reflection_source)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
     ));
 }
 
