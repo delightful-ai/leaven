@@ -99,8 +99,9 @@ opaque capability tokens through the capability registry; authenticated-session
 binding for programmatic permission decisions against capability grants; typed
 denial envelopes; locked Plan IR/Plan Result schema binding for profile
 methods; JSON-RPC 2.0 request/response envelope binding for Leaven extension
-methods; and schema-backed, hash-bound extension-result envelopes at the
-wire-contract layer only. Generic ACP `extension` primaries are checked against
+methods with closed top-level request/response members; and schema-backed,
+hash-bound extension-result envelopes at the wire-contract layer only. Generic
+ACP `extension` primaries are checked against
 the locked schema branch and ACP envelope fields, while concrete PlanResult
 value kinds still run the full PlanResult semantic validator. LM, agent, and
 sandbox ACP extension primaries additionally bind their cost object to the

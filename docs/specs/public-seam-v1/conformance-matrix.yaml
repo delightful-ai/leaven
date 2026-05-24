@@ -727,7 +727,7 @@ rows:
       whose receipt visibility conflicts with its value visibility, is rejected.
     fake_pass_rejected: Treating visibility as policy metadata that never reaches results.
     minimum_closeout_level: semantic_denial
-    positive_test_evidence:
+    partial_contract_test_evidence:
       - crates/leaven-public-seam/tests/evidence_envelope.rs::evidence_envelope_preserves_visibility_data_classes_and_receipts
       - crates/leaven-public-seam/tests/evidence_envelope.rs::evidence_envelope_accepts_object_receipt_refs_and_binds_trace_receipts_to_sources
       - crates/leaven-public-seam/tests/evidence_envelope.rs::evidence_envelope_accepts_schema_valid_trace_refs_without_receipts
@@ -735,7 +735,6 @@ rows:
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_preserves_nested_evidence_visibility_data_classes_and_receipts
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_accepts_object_form_evidence_receipt_refs
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_accepts_unreceipted_evidence_trace_refs
-    negative_test_evidence:
       - crates/leaven-public-seam/tests/evidence_envelope.rs::evidence_envelope_rejects_target_derived_data_class_gaps
       - crates/leaven-public-seam/tests/evidence_envelope.rs::evidence_envelope_rejects_unreceipted_target_derived_evidence
       - crates/leaven-public-seam/tests/evidence_envelope.rs::evidence_envelope_rejects_source_receipt_family_mismatches
@@ -746,7 +745,7 @@ rows:
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_nested_score_blob_ref_data_class_gaps
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_nested_trace_ref_data_class_gaps
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_nested_evidence_hidden_target_derivation_flag
-    implementation_evidence:
+    partial_contract_implementation_evidence:
       - crates/leaven-public-seam/src/evidence.rs::EvidenceEnvelopeDocument
       - crates/leaven-public-seam/src/evidence.rs::EvidenceEnvelopeDocument::from_schema_valid_value
       - crates/leaven-public-seam/src/evidence.rs::EvidenceEnvelopeDocument::trace_data_classes
@@ -791,16 +790,15 @@ rows:
       without a ReflectionResult is rejected.
     fake_pass_rejected: One generic agent prompt that both critiques and writes.
     minimum_closeout_level: semantic_denial
-    positive_test_evidence:
+    partial_contract_test_evidence:
       - crates/leaven-public-seam/tests/stage_payloads.rs::stage_payloads_validate_all_role_specific_payload_shapes_with_provenance
       - crates/leaven-public-seam/tests/stage_payloads.rs::active_reflect_then_propose_example_validates_through_semantic_stage_payloads
       - crates/leaven-public-seam/tests/stage_payloads.rs::stage_payloads_preserve_object_form_info_and_receipt_refs
       - crates/leaven-public-seam/tests/stage_payloads.rs::reflect_propose_handoff_binds_distinct_stage_calls_and_exact_reflection_result
-    negative_test_evidence:
       - crates/leaven-public-seam/tests/stage_payloads.rs::propose_request_requires_reflection_result_and_change_schema_authority
       - crates/leaven-public-seam/tests/stage_payloads.rs::propose_request_rejects_reflection_source_ref_drop
       - crates/leaven-public-seam/tests/stage_payloads.rs::reflect_propose_handoff_rejects_single_prompt_and_stale_reflection_fakes
-    implementation_evidence:
+    partial_contract_implementation_evidence:
       - crates/leaven-public-seam/src/stage_payload.rs::StagePayloadDocument
       - crates/leaven-public-seam/src/stage_payload.rs::ReflectProposeHandoffDocument
       - crates/leaven-public-seam/src/stage_payload.rs::ReflectProposeHandoffDocument::from_schema_valid_values
@@ -1155,6 +1153,7 @@ rows:
       - crates/leaven-public-seam/src/acp_profile.rs::AcpStdioWorkerLaunch
       - crates/leaven-public-seam/src/acp_profile.rs::AcpJsonRpcRequestDocument
       - crates/leaven-public-seam/src/acp_profile.rs::AcpJsonRpcResponseDocument
+      - crates/leaven-public-seam/src/acp_profile.rs::require_jsonrpc_members
       - crates/leaven-public-seam/src/acp_profile.rs::extension_methods
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_acp_profile_document
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_acp_jsonrpc_request_document
@@ -1246,6 +1245,7 @@ rows:
       - crates/leaven-public-seam/src/acp_profile.rs::validate_effect_primary_receipt
       - crates/leaven-public-seam/src/acp_profile.rs::validate_effect_primary_cost
       - crates/leaven-public-seam/src/acp_profile.rs::AcpJsonRpcResponseDocument
+      - crates/leaven-public-seam/src/acp_profile.rs::require_jsonrpc_members
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_acp_extension_result_document
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_acp_jsonrpc_response_document
     review_evidence:
