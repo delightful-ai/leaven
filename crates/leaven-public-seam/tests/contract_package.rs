@@ -643,6 +643,32 @@ fn conformance_evidence_audit_rejects_fake_closeout_for_denial_rows() {
 }
 
 #[test]
+fn conformance_matrix_reference_check_rejects_stale_pending_test_symbols() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut matrix = package.conformance_matrix().unwrap();
+    let row = matrix
+        .rows
+        .iter_mut()
+        .find(|row| row.id == "ps1.stage.payload_receipts")
+        .unwrap();
+    assert_eq!(row.status, MatrixRowStatus::Pending);
+    row.positive_test_evidence = vec![
+        "crates/leaven-public-seam/tests/stage_payloads.rs::stage_payloads_preserve_object_form_info_refs"
+            .to_owned(),
+    ];
+
+    let error = package.validate_matrix_references(&matrix).unwrap_err();
+
+    assert!(matches!(error, PublicSeamError::InvalidMatrix { .. }));
+    assert!(error.to_string().contains("ps1.stage.payload_receipts"));
+    assert!(
+        error
+            .to_string()
+            .contains("stage_payloads_preserve_object_form_info_refs")
+    );
+}
+
+#[test]
 fn conformance_evidence_audit_rejects_happy_path_only_denial_rows() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let mut matrix = package.conformance_matrix().unwrap();

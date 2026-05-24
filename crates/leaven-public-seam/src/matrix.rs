@@ -41,9 +41,15 @@ pub struct ConformanceRow {
     /// Negative executable test evidence for proven semantic-denial rows.
     #[serde(default)]
     pub negative_test_evidence: Vec<String>,
+    /// Partial executable test evidence for pending rows.
+    #[serde(default)]
+    pub partial_contract_test_evidence: Vec<String>,
     /// Implementation evidence paths for proven rows.
     #[serde(default)]
     pub implementation_evidence: Vec<String>,
+    /// Partial implementation evidence paths for pending rows.
+    #[serde(default)]
+    pub partial_contract_implementation_evidence: Vec<String>,
     /// Review evidence paths for proven rows.
     #[serde(default)]
     pub review_evidence: Vec<String>,

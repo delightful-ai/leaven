@@ -500,9 +500,18 @@ impl PublicSeamPackage {
             for reference in row
                 .implementation_evidence
                 .iter()
+                .chain(row.partial_contract_implementation_evidence.iter())
                 .chain(row.review_evidence.iter())
             {
                 self.ensure_matrix_reference(&row.id, reference)?;
+            }
+            for reference in row
+                .positive_test_evidence
+                .iter()
+                .chain(row.negative_test_evidence.iter())
+                .chain(row.partial_contract_test_evidence.iter())
+            {
+                self.ensure_test_reference(&row.id, reference)?;
             }
         }
         Ok(())

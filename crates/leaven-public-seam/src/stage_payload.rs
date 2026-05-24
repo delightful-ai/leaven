@@ -10,6 +10,7 @@ pub struct StagePayloadDocument {
     role: StagePayloadRole,
     source_ref_count: usize,
     read_receipt_count: usize,
+    read_receipts: Vec<String>,
     data_classes: Vec<String>,
     capability_fingerprint: Option<String>,
     query_policy_fingerprint: Option<String>,
@@ -27,7 +28,8 @@ impl StagePayloadDocument {
             .ok_or_else(|| invalid_stage_payload("stage payload must be an object"))?;
         let role = StagePayloadRole::parse(required_string(object.get("role"), "role")?)?;
         let source_ref_count = array_len(object.get("source_refs"), "source_refs")?;
-        let read_receipt_count = array_len(object.get("read_receipts"), "read_receipts")?;
+        let read_receipts = receipt_ref_ids(object.get("read_receipts"), "read_receipts")?;
+        let read_receipt_count = read_receipts.len();
         let data_classes = string_array(object.get("data_classes"), "data_classes")?;
         let capability_fingerprint = optional_string(object.get("capability_fingerprint"))?;
         let query_policy_fingerprint = optional_string(object.get("query_policy_fingerprint"))?;
@@ -66,6 +68,7 @@ impl StagePayloadDocument {
             role,
             source_ref_count,
             read_receipt_count,
+            read_receipts,
             data_classes,
             capability_fingerprint,
             query_policy_fingerprint,
@@ -90,6 +93,11 @@ impl StagePayloadDocument {
     /// Number of read receipts carried by the payload.
     pub const fn read_receipt_count(&self) -> usize {
         self.read_receipt_count
+    }
+
+    /// Normalized read receipt refs carried by the payload.
+    pub fn read_receipts(&self) -> &[String] {
+        &self.read_receipts
     }
 
     /// Data classes carried by the payload.
@@ -294,6 +302,7 @@ fn inspect_reflection_result(
             "reflection_result must carry read receipts",
         ));
     }
+    require_read_receipt_refs(object.get("read_receipts"), "read_receipts")?;
     if data_classes.is_empty() {
         return Err(invalid_stage_payload(
             "reflection_result must carry data classes",
@@ -660,6 +669,55 @@ fn source_ref_key(value: &Value) -> Result<String, PublicSeamError> {
             "stage payload source ref is not JCS canonicalizable: {error}"
         ))
     })
+}
+
+fn receipt_ref_ids(value: Option<&Value>, field: &str) -> Result<Vec<String>, PublicSeamError> {
+    let Some(value) = value else {
+        return Ok(Vec::new());
+    };
+    let values = value.as_array().ok_or_else(|| {
+        invalid_stage_payload(format!("stage payload field `{field}` must be an array"))
+    })?;
+    values
+        .iter()
+        .map(|value| receipt_ref_id(value, field))
+        .collect()
+}
+
+fn require_read_receipt_refs(value: Option<&Value>, field: &str) -> Result<(), PublicSeamError> {
+    for receipt in receipt_ref_ids(value, field)? {
+        if !is_read_receipt_id(&receipt) {
+            return Err(invalid_stage_payload(format!(
+                "stage payload field `{field}` must contain read receipt refs, got `{receipt}`"
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn receipt_ref_id(value: &Value, field: &str) -> Result<String, PublicSeamError> {
+    if let Some(id) = value.as_str() {
+        return Ok(id.to_owned());
+    }
+    let object = value
+        .as_object()
+        .ok_or_else(|| invalid_stage_payload(format!("{field} entries must be receipt refs")))?;
+    if object.get("kind").and_then(Value::as_str) != Some("receipt") {
+        return Err(invalid_stage_payload(format!(
+            "{field} receipt ref object must have kind `receipt`"
+        )));
+    }
+    object
+        .get("id")
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned)
+        .ok_or_else(|| invalid_stage_payload(format!("{field} receipt ref object must carry id")))
+}
+
+fn is_read_receipt_id(receipt: &str) -> bool {
+    receipt.starts_with("qrec_")
+        || receipt.starts_with("caseread_")
+        || receipt.starts_with("wsread_")
 }
 
 fn invalid_stage_payload(message: impl Into<String>) -> PublicSeamError {
