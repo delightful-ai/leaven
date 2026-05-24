@@ -22,7 +22,11 @@ behavior.
 - Schema compilation and example validation against the active manifest.
 - Capability documents resolved from opaque handles, including subject
   fingerprint, binding, expiry, revocation, renewal, grants, and aggregate
-  budget truth.
+  budget truth. Capability document validation also enforces locked
+  subject/grant invariants that JSON Schema cannot encode: runner/reflector
+  stage-call subjects cannot receive target-bearing grants, and
+  `evaluation_stage_call` assessment-submit grants must stay within the
+  subject evaluation request.
 - Grant-envelope authorization for action, resource selectors, case fields,
   partitions, schemas, surface fingerprints, data classes, and per-grant limits.
 - RFC 8785 JCS plus SHA-256 schema fingerprint values such as
@@ -55,7 +59,8 @@ package, not proof that the runtime rows they describe have product behavior.
 
 Crate-root exports for `CapabilityDocument`, `CapabilityRegistry`, and
 `CapabilityError` are advanced public seam contracts. They prove token-to-
-document authority resolution only; they are not ACP authentication or
+document authority resolution plus mint-time subject/grant semantic checks
+only; they are not ACP authentication, runtime evaluator closeout, or
 budget-ledger product routes.
 
 Crate-root exports for `CapabilityGrantRequest`, `CapabilityLimitUsage`,
