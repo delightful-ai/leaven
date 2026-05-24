@@ -80,6 +80,15 @@ impl EvidenceEnvelopeDocument {
                     "target-derived evidence must carry read receipts",
                 ));
             }
+        } else if carries_case_target_class(
+            &data_classes,
+            &public_data_classes,
+            private_data_classes.as_deref(),
+            &trace_data_classes,
+        ) {
+            return Err(invalid_evidence(
+                "evidence carrying case.target data classes must declare target_derived=true",
+            ));
         }
         if read_receipts.is_empty() && effect_receipts.is_empty() && write_receipts.is_empty() {
             return Err(invalid_evidence(
@@ -166,6 +175,20 @@ fn validate_target_derived_classes(
         }
     }
     Ok(())
+}
+
+fn carries_case_target_class(
+    data_classes: &[String],
+    public_data_classes: &[String],
+    private_data_classes: Option<&[String]>,
+    trace_data_classes: &[String],
+) -> bool {
+    data_classes
+        .iter()
+        .chain(public_data_classes)
+        .chain(private_data_classes.into_iter().flatten())
+        .chain(trace_data_classes)
+        .any(|data_class| data_class.starts_with("case.target"))
 }
 
 fn collect_trace_data_classes(value: &Value, field: &str) -> Result<Vec<String>, PublicSeamError> {

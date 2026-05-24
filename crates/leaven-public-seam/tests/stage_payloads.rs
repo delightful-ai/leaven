@@ -79,6 +79,29 @@ fn stage_payloads_validate_all_role_specific_payload_shapes_with_provenance() {
 }
 
 #[test]
+fn stage_payloads_preserve_object_form_info_refs() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut reflect = reflect_request();
+    reflect["source_refs"] = json!([object_form_candidate_ref()]);
+    reflect["examples"][0]["source_refs"] = json!([object_form_candidate_ref()]);
+    package.validate_stage_payload_document(&reflect).unwrap();
+
+    let mut reflection = reflection_result();
+    reflection["source_refs"] = json!([object_form_candidate_ref()]);
+    reflection["failure_modes"][0]["source_refs"] = json!([object_form_candidate_ref()]);
+    reflection["surface_suggestions"][0]["source_refs"] = json!([object_form_candidate_ref()]);
+    package
+        .validate_stage_payload_document(&reflection)
+        .unwrap();
+
+    let mut propose = propose_request();
+    propose["source_refs"] = json!([object_form_candidate_ref()]);
+    propose["reflection_result"] = reflection;
+    package.validate_stage_payload_document(&propose).unwrap();
+}
+
+#[test]
 fn reflect_request_rejects_case_target_projection() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let mut payload = reflect_request();
@@ -158,6 +181,15 @@ fn reflect_request_rejects_missing_source_refs_or_query_policy() {
         PublicSeamError::InvalidStagePayload { .. }
     ));
 
+    let mut uncarried_example_source_ref = reflect_request();
+    uncarried_example_source_ref["source_refs"] = json!(["cand_unrelated"]);
+    assert!(matches!(
+        package
+            .validate_stage_payload_document(&uncarried_example_source_ref)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+
     let mut missing_query_policy = reflect_request();
     missing_query_policy
         .as_object_mut()
@@ -217,11 +249,44 @@ fn reflection_result_rejects_unproven_diagnosis_without_sources() {
         PublicSeamError::InvalidStagePayload { .. }
     ));
 
+    let mut missing_failure_source_refs = reflection_result();
+    missing_failure_source_refs["failure_modes"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("source_refs");
+    assert!(matches!(
+        package
+            .validate_stage_payload_document(&missing_failure_source_refs)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+
     let mut unproven_surface_suggestion = reflection_result();
     unproven_surface_suggestion["surface_suggestions"][0]["source_refs"] = json!([]);
     assert!(matches!(
         package
             .validate_stage_payload_document(&unproven_surface_suggestion)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+
+    let mut missing_surface_source_refs = reflection_result();
+    missing_surface_source_refs["surface_suggestions"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("source_refs");
+    assert!(matches!(
+        package
+            .validate_stage_payload_document(&missing_surface_source_refs)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+
+    let mut uncarried_diagnosis_source_ref = reflection_result();
+    uncarried_diagnosis_source_ref["failure_modes"][0]["source_refs"] = json!(["cand_unrelated"]);
+    assert!(matches!(
+        package
+            .validate_stage_payload_document(&uncarried_diagnosis_source_ref)
             .unwrap_err(),
         PublicSeamError::InvalidStagePayload { .. }
     ));
@@ -545,6 +610,14 @@ fn output_record(summary: &str) -> Value {
         "value": summary,
         "visibility": "public",
         "data_classes": ["candidate.output"]
+    })
+}
+
+fn object_form_candidate_ref() -> Value {
+    json!({
+        "kind": "candidate",
+        "run": "run_stagepayload",
+        "id": "cand_stagepayload_parent"
     })
 }
 

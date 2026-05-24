@@ -220,12 +220,19 @@ fn inspect_reflect_request(
         ));
     }
     require_non_empty_array(object.get("source_refs"), "source_refs")?;
+    let top_level_source_refs = source_ref_set(object.get("source_refs"), "source_refs")?;
     let examples = required_array(object.get("examples"), "examples")?;
     for example in examples {
         let example = example
             .as_object()
             .ok_or_else(|| invalid_stage_payload("reflective examples must be objects"))?;
         require_non_empty_array(example.get("source_refs"), "examples.source_refs")?;
+        require_source_ref_coverage(
+            &top_level_source_refs,
+            example.get("source_refs"),
+            "reflector request source_refs",
+            "reflective example source ref",
+        )?;
         reject_target_leakage(example.get("input"), "reflector example input")?;
         reject_target_leakage(example.get("output"), "reflector example output")?;
         reject_target_leakage(example.get("feedback"), "reflector example feedback")?;
@@ -290,7 +297,7 @@ fn inspect_propose_request(
             "propose request must consume a ReflectionResult payload",
         ));
     }
-    let reflection_source_refs = string_set(
+    let reflection_source_refs = source_ref_set(
         reflection_value
             .as_object()
             .and_then(|object| object.get("source_refs")),
@@ -330,12 +337,25 @@ fn validate_reflection_diagnosis_sources(
             "reflection_result must carry source-backed diagnosis",
         ));
     }
-    require_nested_source_refs(object.get("failure_modes"), "failure_modes")?;
-    require_nested_source_refs(object.get("surface_suggestions"), "surface_suggestions")?;
+    let top_level_source_refs = source_ref_set(object.get("source_refs"), "source_refs")?;
+    require_nested_source_refs(
+        &top_level_source_refs,
+        object.get("failure_modes"),
+        "failure_modes",
+    )?;
+    require_nested_source_refs(
+        &top_level_source_refs,
+        object.get("surface_suggestions"),
+        "surface_suggestions",
+    )?;
     Ok(())
 }
 
-fn require_nested_source_refs(value: Option<&Value>, field: &str) -> Result<(), PublicSeamError> {
+fn require_nested_source_refs(
+    top_level_source_refs: &BTreeSet<String>,
+    value: Option<&Value>,
+    field: &str,
+) -> Result<(), PublicSeamError> {
     let Some(value) = value else {
         return Ok(());
     };
@@ -348,8 +368,28 @@ fn require_nested_source_refs(value: Option<&Value>, field: &str) -> Result<(), 
                 "stage payload field `{field}` entries must be objects"
             ))
         })?;
-        if item.get("source_refs").is_some() {
-            require_non_empty_array(item.get("source_refs"), &format!("{field}.source_refs"))?;
+        require_non_empty_array(item.get("source_refs"), &format!("{field}.source_refs"))?;
+        require_source_ref_coverage(
+            top_level_source_refs,
+            item.get("source_refs"),
+            "reflection_result source_refs",
+            &format!("{field} source ref"),
+        )?;
+    }
+    Ok(())
+}
+
+fn require_source_ref_coverage(
+    top_level_source_refs: &BTreeSet<String>,
+    nested_source_refs: Option<&Value>,
+    top_level_field: &str,
+    nested_label: &str,
+) -> Result<(), PublicSeamError> {
+    for source_ref in source_ref_set(nested_source_refs, nested_label)? {
+        if !top_level_source_refs.contains(&source_ref) {
+            return Err(invalid_stage_payload(format!(
+                "{top_level_field} must cover {nested_label} `{source_ref}`"
+            )));
         }
     }
     Ok(())
@@ -359,7 +399,7 @@ fn require_reflection_source_refs(
     propose: &serde_json::Map<String, Value>,
     reflection_source_refs: BTreeSet<String>,
 ) -> Result<(), PublicSeamError> {
-    let propose_source_refs = string_set(propose.get("source_refs"), "source_refs")?;
+    let propose_source_refs = source_ref_set(propose.get("source_refs"), "source_refs")?;
     for source_ref in reflection_source_refs {
         if !propose_source_refs.contains(&source_ref) {
             return Err(invalid_stage_payload(format!(
@@ -526,8 +566,25 @@ fn string_array(value: Option<&Value>, field: &str) -> Result<Vec<String>, Publi
     )
 }
 
-fn string_set(value: Option<&Value>, field: &str) -> Result<BTreeSet<String>, PublicSeamError> {
-    Ok(string_array(value, field)?.into_iter().collect())
+fn source_ref_set(value: Option<&Value>, field: &str) -> Result<BTreeSet<String>, PublicSeamError> {
+    let Some(value) = value else {
+        return Ok(BTreeSet::new());
+    };
+    let values = value.as_array().ok_or_else(|| {
+        invalid_stage_payload(format!("stage payload field `{field}` must be an array"))
+    })?;
+    values
+        .iter()
+        .map(source_ref_key)
+        .collect::<Result<BTreeSet<_>, _>>()
+}
+
+fn source_ref_key(value: &Value) -> Result<String, PublicSeamError> {
+    jcs_canonicalize::sha256_jcs_hex(value).map_err(|error| {
+        invalid_stage_payload(format!(
+            "stage payload source ref is not JCS canonicalizable: {error}"
+        ))
+    })
 }
 
 fn invalid_stage_payload(message: impl Into<String>) -> PublicSeamError {

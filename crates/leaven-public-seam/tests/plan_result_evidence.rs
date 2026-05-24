@@ -151,6 +151,22 @@ fn plan_result_rejects_nested_trace_ref_data_class_gaps() {
 }
 
 #[test]
+fn plan_result_rejects_nested_evidence_hidden_target_derivation_flag() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut hidden_target = evidence_backed_result();
+    hidden_target["values"]["assessment_rows"]["items"][0]["evidence"]["target_derived"] =
+        json!(false);
+
+    assert!(matches!(
+        package
+            .validate_plan_result_document(&hidden_target)
+            .unwrap_err(),
+        PublicSeamError::InvalidEvidence { .. }
+    ));
+}
+
+#[test]
 fn plan_result_rejects_submit_assessment_result_hashes_that_do_not_bind_values() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
 
