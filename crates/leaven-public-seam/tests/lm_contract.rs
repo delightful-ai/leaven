@@ -53,6 +53,15 @@ fn lm_complete_can_execute_through_provider_neutral_lm_trait_and_preserve_cost()
         request.provider_hints.values["cache:key"],
         json!("lm-contract")
     );
+    assert_eq!(
+        request.provider_hints.prompt_cache_key.as_deref(),
+        Some("suite-stable")
+    );
+    assert_eq!(request.provider_hints.store, Some(false));
+    assert_eq!(
+        request.provider_hints.metadata["split"].as_str(),
+        "validation"
+    );
 
     assert_eq!(
         report.value()["values"]["completion"]["message"]["content"][0]["text"],
@@ -112,6 +121,45 @@ fn lm_complete_rejects_tool_result_message_id_drift_before_provider_call() {
         "unexpected error: {error:?}"
     );
     assert!(lm.recorded_requests.lock().unwrap().is_empty());
+}
+
+#[test]
+fn lm_complete_rejects_typed_provider_hint_shape_drift_before_provider_call() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    for (field, replacement, expected) in [
+        (
+            "prompt_cache_key",
+            json!(["not", "a", "string"]),
+            "provider_hints.prompt_cache_key must be a string",
+        ),
+        (
+            "store",
+            json!("false"),
+            "provider_hints.store must be a boolean",
+        ),
+        (
+            "metadata",
+            json!({"split": 1}),
+            "provider_hints.metadata values must be strings",
+        ),
+    ] {
+        let lm = Arc::new(ScriptedLm::new(scripted_response(Message::assistant(
+            "trait ok",
+        ))));
+        let mut host = LmTraitHost::new(Arc::clone(&lm));
+        let mut plan = lm_plan();
+        plan["ops"][0]["call"]["provider_hints"][field] = replacement;
+
+        let error = package
+            .execute_plan_document(&plan, &plan_execution_context(), &mut host)
+            .unwrap_err();
+
+        assert!(
+            error.to_string().contains(expected),
+            "unexpected error for {field}: {error:?}"
+        );
+        assert!(lm.recorded_requests.lock().unwrap().is_empty());
+    }
 }
 
 struct LmTraitHost {
@@ -267,7 +315,12 @@ fn lm_complete_call() -> Value {
             "max_bytes": 256
         },
         "provider_hints": {
-            "cache:key": "lm-contract"
+            "cache:key": "lm-contract",
+            "prompt_cache_key": "suite-stable",
+            "store": false,
+            "metadata": {
+                "split": "validation"
+            }
         },
         "input_classes": ["public"]
     })
