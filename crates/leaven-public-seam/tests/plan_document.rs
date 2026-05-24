@@ -1543,9 +1543,57 @@ fn workspace_query_rejects_unmaterialized_released_and_mismatched_results() {
 }
 
 #[test]
-fn workspace_query_rejects_stat_digest_and_git_log_result_mismatches() {
+fn workspace_query_rejects_file_listing_stat_and_digest_result_mismatches() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    assert_file_listing_stat_workspace_query_mismatches(&package);
+    assert_digest_workspace_query_mismatches(&package);
+}
+
+fn assert_file_listing_stat_workspace_query_mismatches(package: &PublicSeamPackage) {
     for (name, op, expected) in [
+        (
+            "read_file_wrong_path",
+            json!({
+                "kind": "read_file",
+                "path": "README.md",
+                "expected_data_classes": ["candidate.artifact"]
+            }),
+            "read_file result path `src/lib.rs` does not match requested `README.md`",
+        ),
+        (
+            "read_file_missing_body",
+            json!({
+                "kind": "read_file",
+                "path": "README.md",
+                "expected_data_classes": ["candidate.artifact"]
+            }),
+            "read_file result must carry content or blob_ref",
+        ),
+        (
+            "read_file_unsafe_result_path",
+            json!({
+                "kind": "read_file",
+                "path": "README.md",
+                "expected_data_classes": ["candidate.artifact"]
+            }),
+            "read_file result path must be a relative workspace path without traversal",
+        ),
+        (
+            "list_outside_path",
+            json!({
+                "kind": "list",
+                "path": "src"
+            }),
+            "list result path `README.md` is outside requested `src`",
+        ),
+        (
+            "list_unsafe_request_path",
+            json!({
+                "kind": "list",
+                "path": "src/../README.md"
+            }),
+            "list path must be a relative workspace path without traversal",
+        ),
         (
             "stat_wrong_kind",
             json!({
@@ -1587,6 +1635,13 @@ fn workspace_query_rejects_stat_digest_and_git_log_result_mismatches() {
             }),
             "stat result must carry exactly one listing entry",
         ),
+    ] {
+        assert_workspace_query_mismatch(package, name, op, expected);
+    }
+}
+
+fn assert_digest_workspace_query_mismatches(package: &PublicSeamPackage) {
+    for (name, op, expected) in [
         (
             "digest_wrong_algorithm",
             json!({
@@ -1606,25 +1661,112 @@ fn workspace_query_rejects_stat_digest_and_git_log_result_mismatches() {
             "digest result workspace `ws_planexec_other` does not match requested `ws_planexec_materialized`",
         ),
     ] {
-        let mut mismatch = workspace_materialize_query_plan();
-        mismatch["ops"]
-            .as_array_mut()
-            .unwrap()
-            .push(workspace_query_let_op(
-                name,
-                json!("ws_planexec_materialized"),
-                op,
-            ));
-        mismatch["return"] = json!(["workspace", name]);
-        let mut host = RecordingPlanHost::default();
-        let error = package
-            .execute_plan_document(&mismatch, &plan_execution_context(), &mut host)
-            .unwrap_err();
-        assert!(
-            error.to_string().contains(expected),
-            "unexpected error for {name}: {error:?}"
-        );
+        assert_workspace_query_mismatch(package, name, op, expected);
     }
+}
+
+#[test]
+fn workspace_query_rejects_snapshot_git_and_artifact_result_mismatches() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    for (name, op, expected) in [
+        (
+            "snapshot_wrong_workspace",
+            json!({
+                "kind": "snapshot"
+            }),
+            "snapshot result workspace `ws_planexec_other` does not match requested `ws_planexec_materialized`",
+        ),
+        (
+            "snapshot_missing_digest",
+            json!({
+                "kind": "snapshot"
+            }),
+            "snapshot result must carry digest",
+        ),
+        (
+            "git_log_missing_body",
+            json!({
+                "kind": "git_log",
+                "max_entries": 5
+            }),
+            "git_log result must carry text or blob_ref",
+        ),
+        (
+            "git_diff_missing_body",
+            json!({
+                "kind": "git_diff",
+                "against": "seed"
+            }),
+            "git_diff result must carry text or blob_ref",
+        ),
+        (
+            "git_status_missing_body",
+            json!({
+                "kind": "git_status"
+            }),
+            "git_status result must carry text or blob_ref",
+        ),
+        (
+            "capture_unrequested_path",
+            json!({
+                "kind": "capture_artifacts",
+                "paths": ["README.md"]
+            }),
+            "capture_artifacts result path `src/lib.rs` was not requested",
+        ),
+        (
+            "capture_unsafe_request_path",
+            json!({
+                "kind": "capture_artifacts",
+                "paths": ["src/../README.md"]
+            }),
+            "capture_artifacts path must be a relative workspace path without traversal",
+        ),
+        (
+            "capture_unsafe_result_path",
+            json!({
+                "kind": "capture_artifacts",
+                "paths": ["README.md"]
+            }),
+            "capture_artifacts entry path must be a relative workspace path without traversal",
+        ),
+        (
+            "capture_empty_paths",
+            json!({
+                "kind": "capture_artifacts",
+                "paths": []
+            }),
+            "capture_artifacts must request at least one path",
+        ),
+    ] {
+        assert_workspace_query_mismatch(&package, name, op, expected);
+    }
+}
+
+fn assert_workspace_query_mismatch(
+    package: &PublicSeamPackage,
+    name: &str,
+    op: Value,
+    expected: &str,
+) {
+    let mut mismatch = workspace_materialize_query_plan();
+    mismatch["ops"]
+        .as_array_mut()
+        .unwrap()
+        .push(workspace_query_let_op(
+            name,
+            json!("ws_planexec_materialized"),
+            op,
+        ));
+    mismatch["return"] = json!(["workspace", name]);
+    let mut host = RecordingPlanHost::default();
+    let error = package
+        .execute_plan_document(&mismatch, &plan_execution_context(), &mut host)
+        .unwrap_err();
+    assert!(
+        error.to_string().contains(expected),
+        "unexpected error for {name}: {error:?}"
+    );
 }
 
 #[test]
@@ -3442,77 +3584,7 @@ impl PlanExecutionHost for RecordingPlanHost {
             ("diff", "git_diff") => Ok(self.workspace_git_diff()),
             ("status", "git_status") => Ok(self.workspace_git_status()),
             ("captured", "capture_artifacts") => Ok(self.workspace_capture_artifacts()),
-            ("wrong_kind", "read_file") => {
-                self.calls.push("workspace_read_file");
-                Ok(PlanWorkspaceQueryOutcome::new(
-                    json!({
-                        "kind": "workspace_listing",
-                        "entries": []
-                    }),
-                    "rev_planexec_base",
-                ))
-            }
-            ("stat_wrong_kind", "stat") | ("digest_wrong_kind", "digest") => {
-                self.calls.push("workspace_read_file");
-                Ok(workspace_query_outcome(json!({
-                    "kind": "workspace_file",
-                    "path": "README.md",
-                    "content": "wrong type"
-                })))
-            }
-            ("stat_wrong_path", "stat") => {
-                self.calls.push("workspace_stat");
-                Ok(workspace_query_outcome(json!({
-                    "kind": "workspace_listing",
-                    "entries": [{
-                        "path": "src/lib.rs",
-                        "kind": "file",
-                        "bytes": 128,
-                        "data_classes": ["candidate.artifact"]
-                    }]
-                })))
-            }
-            ("stat_multi_entry", "stat") => {
-                self.calls.push("workspace_stat");
-                Ok(workspace_query_outcome(json!({
-                    "kind": "workspace_listing",
-                    "entries": [
-                        {
-                            "path": "README.md",
-                            "kind": "file",
-                            "bytes": 128,
-                            "data_classes": ["candidate.artifact"]
-                        },
-                        {
-                            "path": "src/lib.rs",
-                            "kind": "file",
-                            "bytes": 256,
-                            "data_classes": ["candidate.artifact"]
-                        }
-                    ]
-                })))
-            }
-            ("digest_wrong_algorithm", "digest") => {
-                self.calls.push("workspace_digest");
-                Ok(workspace_query_outcome(json!({
-                    "kind": "workspace_snapshot",
-                    "workspace": "ws_planexec_materialized",
-                    "digest": "blake3:readme"
-                })))
-            }
-            ("digest_wrong_workspace", "digest") => {
-                self.calls.push("workspace_digest");
-                Ok(workspace_query_outcome(json!({
-                    "kind": "workspace_snapshot",
-                    "workspace": "ws_planexec_other",
-                    "digest": "sha256:readme"
-                })))
-            }
-            ("git_log_wrong_kind", "git_log") => {
-                self.calls.push("workspace_git_log");
-                Ok(workspace_query_outcome(workspace_listing_value()))
-            }
-            other => panic!("unexpected workspace query: {other:?}"),
+            other => Ok(self.workspace_query_mismatch(other)),
         }
     }
 
@@ -3665,6 +3737,183 @@ impl RecordingPlanHost {
     fn workspace_capture_artifacts(&mut self) -> PlanWorkspaceQueryOutcome {
         self.calls.push("workspace_capture_artifacts");
         workspace_query_outcome(workspace_listing_value())
+    }
+
+    fn workspace_query_mismatch(&mut self, query: (&str, &str)) -> PlanWorkspaceQueryOutcome {
+        match query.1 {
+            "read_file" | "list" | "stat" | "digest" => self.workspace_file_listing_mismatch(query),
+            "snapshot" | "git_log" | "git_diff" | "git_status" | "capture_artifacts" => {
+                self.workspace_snapshot_artifact_mismatch(query)
+            }
+            _ => panic!("unexpected workspace query: {query:?}"),
+        }
+    }
+
+    fn workspace_file_listing_mismatch(
+        &mut self,
+        query: (&str, &str),
+    ) -> PlanWorkspaceQueryOutcome {
+        match query {
+            ("wrong_kind", "read_file") => {
+                self.calls.push("workspace_read_file");
+                PlanWorkspaceQueryOutcome::new(
+                    json!({"kind": "workspace_listing", "entries": []}),
+                    "rev_planexec_base",
+                )
+            }
+            ("read_file_wrong_path", "read_file") => {
+                self.calls.push("workspace_read_file");
+                workspace_query_outcome(json!({
+                    "kind": "workspace_file",
+                    "path": "src/lib.rs",
+                    "content": "wrong file"
+                }))
+            }
+            ("read_file_missing_body", "read_file") => {
+                self.calls.push("workspace_read_file");
+                workspace_query_outcome(json!({
+                    "kind": "workspace_file",
+                    "path": "README.md"
+                }))
+            }
+            ("read_file_unsafe_result_path", "read_file") => {
+                self.calls.push("workspace_read_file");
+                workspace_query_outcome(json!({
+                    "kind": "workspace_file",
+                    "path": "/tmp/README.md",
+                    "content": "host path"
+                }))
+            }
+            ("list_outside_path", "list") => {
+                self.calls.push("workspace_list");
+                workspace_query_outcome(workspace_listing_value())
+            }
+            ("stat_wrong_kind", "stat") | ("digest_wrong_kind", "digest") => {
+                self.calls.push("workspace_read_file");
+                workspace_query_outcome(json!({
+                    "kind": "workspace_file",
+                    "path": "README.md",
+                    "content": "wrong type"
+                }))
+            }
+            ("stat_wrong_path", "stat") => {
+                self.calls.push("workspace_stat");
+                workspace_query_outcome(json!({
+                    "kind": "workspace_listing",
+                    "entries": [{
+                        "path": "src/lib.rs",
+                        "kind": "file",
+                        "bytes": 128,
+                        "data_classes": ["candidate.artifact"]
+                    }]
+                }))
+            }
+            ("stat_multi_entry", "stat") => {
+                self.calls.push("workspace_stat");
+                workspace_query_outcome(json!({
+                    "kind": "workspace_listing",
+                    "entries": [
+                        {
+                            "path": "README.md",
+                            "kind": "file",
+                            "bytes": 128,
+                            "data_classes": ["candidate.artifact"]
+                        },
+                        {
+                            "path": "src/lib.rs",
+                            "kind": "file",
+                            "bytes": 256,
+                            "data_classes": ["candidate.artifact"]
+                        }
+                    ]
+                }))
+            }
+            ("digest_wrong_algorithm", "digest") => {
+                self.calls.push("workspace_digest");
+                workspace_query_outcome(json!({
+                    "kind": "workspace_snapshot",
+                    "workspace": "ws_planexec_materialized",
+                    "digest": "blake3:readme"
+                }))
+            }
+            ("digest_wrong_workspace", "digest") => {
+                self.calls.push("workspace_digest");
+                workspace_query_outcome(json!({
+                    "kind": "workspace_snapshot",
+                    "workspace": "ws_planexec_other",
+                    "digest": "sha256:readme"
+                }))
+            }
+            other => panic!("unexpected workspace query: {other:?}"),
+        }
+    }
+
+    fn workspace_snapshot_artifact_mismatch(
+        &mut self,
+        query: (&str, &str),
+    ) -> PlanWorkspaceQueryOutcome {
+        match query {
+            ("snapshot_wrong_workspace", "snapshot") => {
+                self.calls.push("workspace_snapshot");
+                workspace_query_outcome(json!({
+                    "kind": "workspace_snapshot",
+                    "workspace": "ws_planexec_other",
+                    "digest": "sha256:planexec"
+                }))
+            }
+            ("snapshot_missing_digest", "snapshot") => {
+                self.calls.push("workspace_snapshot");
+                workspace_query_outcome(json!({
+                    "kind": "workspace_snapshot",
+                    "workspace": "ws_planexec_materialized"
+                }))
+            }
+            ("git_log_wrong_kind", "git_log") => {
+                self.calls.push("workspace_git_log");
+                workspace_query_outcome(workspace_listing_value())
+            }
+            ("git_log_missing_body", "git_log") => {
+                self.calls.push("workspace_git_log");
+                workspace_query_outcome(json!({"kind": "workspace_diff"}))
+            }
+            ("git_diff_missing_body", "git_diff") => {
+                self.calls.push("workspace_git_diff");
+                workspace_query_outcome(json!({"kind": "workspace_diff"}))
+            }
+            ("git_status_missing_body", "git_status") => {
+                self.calls.push("workspace_git_status");
+                workspace_query_outcome(json!({"kind": "workspace_diff"}))
+            }
+            ("capture_unrequested_path", "capture_artifacts") => {
+                self.calls.push("workspace_capture_artifacts");
+                workspace_query_outcome(json!({
+                    "kind": "workspace_listing",
+                    "entries": [{
+                        "path": "src/lib.rs",
+                        "kind": "file",
+                        "bytes": 256,
+                        "data_classes": ["candidate.artifact"]
+                    }]
+                }))
+            }
+            ("capture_unsafe_result_path", "capture_artifacts") => {
+                self.calls.push("workspace_capture_artifacts");
+                workspace_query_outcome(json!({
+                    "kind": "workspace_listing",
+                    "entries": [{
+                        "path": "README.md/../secret.txt",
+                        "kind": "file",
+                        "bytes": 64,
+                        "data_classes": ["candidate.artifact"]
+                    }]
+                }))
+            }
+            ("capture_empty_paths", "capture_artifacts") => {
+                self.calls.push("workspace_capture_artifacts");
+                workspace_query_outcome(workspace_listing_value())
+            }
+            other => panic!("unexpected workspace query: {other:?}"),
+        }
     }
 }
 
