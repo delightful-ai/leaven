@@ -470,12 +470,15 @@ rows:
     negative_test_evidence:
       - crates/leaven-public-seam/tests/capability_document.rs::capability_resolution_rejects_bare_missing_expired_revoked_and_mismatched_tokens
       - crates/leaven-public-seam/tests/capability_document.rs::capability_documents_must_satisfy_locked_schema_not_partial_struct_shape
+      - crates/leaven-public-seam/tests/capability_document.rs::capability_documents_reject_role_purpose_invariant_violations_at_mint_time
     implementation_evidence:
       - crates/leaven-public-seam/src/capability.rs::CapabilityDocument::from_value
+      - crates/leaven-public-seam/src/capability.rs::CapabilityDocument::validate_subject_grant_invariants
       - crates/leaven-public-seam/src/capability.rs::CapabilityRegistry::resolve_opaque_for_new_operation
       - crates/leaven-public-seam/src/capability.rs::Grant
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-capability-document-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-capability-mint-time-invariants-zeno-review.md
     status: proven
 
   - id: ps1.capability.grant_enforcement
@@ -500,8 +503,10 @@ rows:
       - crates/leaven-public-seam/tests/capability_document.rs::grant_enforcement_rejects_under_specified_requests
       - crates/leaven-public-seam/tests/capability_document.rs::grant_enforcement_rejects_action_resource_case_schema_data_class_and_limits
       - crates/leaven-public-seam/tests/capability_document.rs::grant_enforcement_rejects_timeout_and_row_limit_overruns
+      - crates/leaven-public-seam/tests/capability_document.rs::capability_documents_reject_role_purpose_invariant_violations_at_mint_time
     implementation_evidence:
       - crates/leaven-public-seam/src/capability.rs::CapabilityDocument::authorize_grant
+      - crates/leaven-public-seam/src/capability.rs::CapabilityDocument::validate_subject_grant_invariants
       - crates/leaven-public-seam/src/capability.rs::CapabilityGrantRequest
       - crates/leaven-public-seam/src/capability.rs::CapabilityLimitUsage
       - crates/leaven-public-seam/src/capability.rs::CapabilityDenial
@@ -509,6 +514,7 @@ rows:
       - crates/leaven-public-seam/AGENTS.md
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-capability-grant-enforcement-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-capability-mint-time-invariants-zeno-review.md
     status: proven
 
   - id: ps1.capability.delegation_attenuates

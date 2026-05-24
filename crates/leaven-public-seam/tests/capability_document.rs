@@ -162,6 +162,49 @@ fn capability_documents_must_satisfy_locked_schema_not_partial_struct_shape() {
 }
 
 #[test]
+fn capability_documents_reject_role_purpose_invariant_violations_at_mint_time() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut runner_target = example_capability(&package);
+    runner_target["subject"] = json!({
+        "kind": "stage_call",
+        "run": "run_demo",
+        "stage_call_id": "sc_runner",
+        "role": "runner"
+    });
+    assert_invalid_document_contains(
+        CapabilityDocument::from_value(runner_target),
+        "runner capability must not grant case.target",
+    );
+
+    for target_grant in [
+        target_case_field_capability(&package),
+        target_input_class_capability(&package),
+        target_egress_capability(&package),
+    ] {
+        let mut reflector_target = target_grant;
+        reflector_target["subject"] = json!({
+            "kind": "stage_call",
+            "run": "run_demo",
+            "stage_call_id": "sc_reflector",
+            "role": "reflector"
+        });
+        assert_invalid_document_contains(
+            CapabilityDocument::from_value(reflector_target),
+            "reflector capability must not grant case.target",
+        );
+    }
+
+    let mut wrong_evaluation_request = example_capability(&package);
+    wrong_evaluation_request["grants"][2]["resource"]["evaluation_request_id"] =
+        json!("evalreq_other");
+    assert_invalid_document_contains(
+        CapabilityDocument::from_value(wrong_evaluation_request),
+        "assessment.submit grant must match evaluation_stage_call evaluation_request_id",
+    );
+}
+
+#[test]
 fn allowed_grant_request_returns_capability_fingerprint_and_effective_limits() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let document = CapabilityDocument::from_value(example_capability(&package)).unwrap();
@@ -936,12 +979,48 @@ fn full_power_child_capability(package: &PublicSeamPackage) -> Value {
     value
 }
 
+fn target_case_field_capability(package: &PublicSeamPackage) -> Value {
+    let mut value = example_capability(package);
+    value["grants"][0]["constraints"]["target_egress"] = json!("none");
+    value["grants"][0]["constraints"]["allowed_input_classes"] = json!(["case.input"]);
+    value
+}
+
+fn target_input_class_capability(package: &PublicSeamPackage) -> Value {
+    let mut value = example_capability(package);
+    value["grants"][0]["constraints"]["case_fields"] = json!(["input", "metadata"]);
+    value["grants"][0]["constraints"]["target_egress"] = json!("none");
+    value
+}
+
+fn target_egress_capability(package: &PublicSeamPackage) -> Value {
+    let mut value = example_capability(package);
+    value["grants"][0]["constraints"]["case_fields"] = json!(["input", "metadata"]);
+    value["grants"][0]["constraints"]["allowed_input_classes"] = json!(["case.input"]);
+    value
+}
+
 fn assert_denied<T: std::fmt::Debug>(
     result: Result<T, leaven_public_seam::CapabilityDenial>,
     kind: CapabilityDenialKind,
 ) {
     let denial = result.unwrap_err();
     assert_eq!(denial.kind(), kind, "{denial:?}");
+}
+
+fn assert_invalid_document_contains<T: std::fmt::Debug>(
+    result: Result<T, CapabilityError>,
+    needle: &str,
+) {
+    match result.unwrap_err() {
+        CapabilityError::InvalidDocument { message } => {
+            assert!(
+                message.contains(needle),
+                "expected `{message}` to contain `{needle}`"
+            );
+        }
+        other => panic!("expected InvalidDocument, got {other:?}"),
+    }
 }
 
 fn assert_delegation_denied(parent: &CapabilityDocument, child: Value) {

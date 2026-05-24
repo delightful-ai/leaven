@@ -56,7 +56,7 @@ fn call_authority_rejects_declared_forbidden_intersections_even_when_grant_allow
 #[test]
 fn call_authority_rejects_reflector_lm_call_input_classes_include_case_target() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
-    let capability = CapabilityDocument::from_value(call_capability_allowing_target()).unwrap();
+    let capability = CapabilityDocument::from_value(call_capability()).unwrap();
     let mut plan = call_authority_plan();
     plan["ops"][0]["call"]["input_classes"] = json!(["case.input", "case.target"]);
     plan["ops"][0]["call"]["forbidden_input_classes"] = json!([]);
@@ -76,9 +76,7 @@ fn call_authority_rejects_reflector_lm_call_input_classes_include_case_target() 
 #[test]
 fn call_authority_rejects_reflector_model_role_case_target_with_non_reflector_subject() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
-    let mut capability_value = call_capability_allowing_target();
-    capability_value["subject"]["role"] = json!("proposer");
-    let capability = CapabilityDocument::from_value(capability_value).unwrap();
+    let capability = CapabilityDocument::from_value(call_capability_allowing_target()).unwrap();
     let mut plan = call_authority_plan();
     plan["ops"][0]["call"]["input_classes"] = json!(["case.input", "case.target"]);
     plan["ops"][0]["call"]["forbidden_input_classes"] = json!([]);
@@ -274,6 +272,7 @@ fn call_capability() -> Value {
 
 fn call_capability_allowing_target() -> Value {
     let mut value = base_capability();
+    value["subject"]["role"] = json!("proposer");
     value["grants"] = json!([
         {
             "action": "lm.complete",

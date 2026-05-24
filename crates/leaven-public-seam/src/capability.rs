@@ -301,9 +301,69 @@ impl CapabilityDocument {
                 message: "non-delegable capability must have max_depth 0".to_owned(),
             });
         }
-        let _ = &self.subject;
+        self.validate_subject_grant_invariants()?;
         let _ = self.expiry_behavior;
         let _ = self.delegation.must_attenuate;
+        Ok(())
+    }
+
+    fn validate_subject_grant_invariants(&self) -> Result<(), CapabilityError> {
+        let subject = self.subject.as_object().ok_or_else(|| {
+            invalid_document("capability subject must be a locked subject object")
+        })?;
+        match subject.get("kind").and_then(Value::as_str) {
+            Some("stage_call") => match subject.get("role").and_then(Value::as_str) {
+                Some("runner") => self.ensure_stage_role_cannot_receive_target("runner"),
+                Some("reflector") => self.ensure_stage_role_cannot_receive_target("reflector"),
+                _ => Ok(()),
+            },
+            Some("evaluation_stage_call") => {
+                let evaluation_request_id = subject
+                    .get("evaluation_request_id")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| {
+                        invalid_document(
+                            "evaluation_stage_call subject must carry evaluation_request_id",
+                        )
+                    })?;
+                self.ensure_assessment_submit_matches_evaluation_request(evaluation_request_id)
+            }
+            Some("operator") => Ok(()),
+            Some(other) => Err(invalid_document(format!(
+                "capability subject kind `{other}` is not in the locked V1 subject set"
+            ))),
+            None => Err(invalid_document("capability subject must carry kind")),
+        }
+    }
+
+    fn ensure_stage_role_cannot_receive_target(&self, role: &str) -> Result<(), CapabilityError> {
+        for grant in &self.grants {
+            if grant_receives_target(grant) {
+                return Err(invalid_document(format!(
+                    "{role} capability must not grant case.target fields or egress"
+                )));
+            }
+        }
+        Ok(())
+    }
+
+    fn ensure_assessment_submit_matches_evaluation_request(
+        &self,
+        evaluation_request_id: &str,
+    ) -> Result<(), CapabilityError> {
+        for grant in &self.grants {
+            if grant.action == "assessment.submit"
+                && grant
+                    .resource
+                    .get("evaluation_request_id")
+                    .and_then(Value::as_str)
+                    != Some(evaluation_request_id)
+            {
+                return Err(invalid_document(
+                    "assessment.submit grant must match evaluation_stage_call evaluation_request_id",
+                ));
+            }
+        }
         Ok(())
     }
 }
@@ -944,6 +1004,22 @@ fn string_set(value: Option<&Value>) -> BTreeSet<String> {
         .filter_map(Value::as_str)
         .map(str::to_owned)
         .collect()
+}
+
+fn grant_receives_target(grant: &Grant) -> bool {
+    string_set(grant.constraints.get("case_fields")).contains("target")
+        || string_set(grant.constraints.get("allowed_input_classes")).contains("case.target")
+        || grant
+            .constraints
+            .get("target_egress")
+            .and_then(Value::as_str)
+            .is_some_and(|egress| !matches!(egress, "none" | "denied"))
+}
+
+fn invalid_document(message: impl Into<String>) -> CapabilityError {
+    CapabilityError::InvalidDocument {
+        message: message.into(),
+    }
 }
 
 #[derive(Clone, Debug, Deserialize)]
