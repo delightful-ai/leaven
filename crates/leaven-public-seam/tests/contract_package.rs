@@ -525,6 +525,7 @@ fn conformance_matrix_rows_are_unique_honest_and_reference_real_files() {
             "ps1.evaluator.assessment_scope",
             "ps1.evaluator.job_identity",
             "ps1.evaluator.target_reads",
+            "ps1.evidence.visibility_receipts",
             "ps1.graph.runcontext_mutation_only",
             "ps1.harness.negative_denominator",
             "ps1.plan.ir_family",

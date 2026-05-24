@@ -410,7 +410,8 @@ fn evidence_backed_result() -> Value {
                 "graph_revision": "rev_base",
                 "status": "succeeded",
                 "read_scope_fingerprint": "fp_scope_sha256_target",
-                "projection_fingerprint": "fp_projection_sha256_target"
+                "projection_fingerprint": "fp_projection_sha256_target",
+                "trace_refs": [receipt_trace_ref("trace_read_target", "case.target")]
             },
             {
                 "kind": "call",

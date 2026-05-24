@@ -609,6 +609,7 @@ fn validate_evidence_source_receipts(
         "query",
         "read",
         &envelope_data_classes,
+        envelope.is_target_derived(),
     )?;
     validate_evidence_receipts(
         envelope.effect_receipt_refs(),
@@ -616,6 +617,7 @@ fn validate_evidence_source_receipts(
         "call",
         "effect",
         &envelope_data_classes,
+        false,
     )?;
     validate_evidence_receipts(
         envelope.write_receipt_refs(),
@@ -623,6 +625,7 @@ fn validate_evidence_source_receipts(
         "write",
         "write",
         &envelope_data_classes,
+        false,
     )
 }
 
@@ -632,6 +635,7 @@ fn validate_evidence_receipts(
     expected_kind: &str,
     receipt_role: &str,
     envelope_data_classes: &BTreeSet<String>,
+    require_receipt_visibility: bool,
 ) -> Result<(), PublicSeamError> {
     for receipt in receipts {
         let Some(audit) = receipt_index.get(receipt.id()) else {
@@ -652,6 +656,12 @@ fn validate_evidence_receipts(
         {
             return Err(invalid_result(format!(
                 "evidence {receipt_role} receipt `{}` fingerprint does not match plan result receipt",
+                receipt.id()
+            )));
+        }
+        if require_receipt_visibility && audit.trace_data_classes.is_empty() {
+            return Err(invalid_result(format!(
+                "target-derived evidence {receipt_role} receipt `{}` must carry receipt trace data classes",
                 receipt.id()
             )));
         }
