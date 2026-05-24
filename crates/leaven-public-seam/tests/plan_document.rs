@@ -798,6 +798,7 @@ fn capability_execution_ignores_domain_json_data_classes_inside_dependencies() {
     plan["ops"][0]["expr"]["value"] = json!({
         "question": "Say ok",
         "payload": {
+            "kind": "application_record",
             "data_classes": ["external.secret"]
         }
     });
@@ -816,8 +817,11 @@ fn capability_execution_ignores_domain_json_data_classes_inside_dependencies() {
 
     assert_eq!(host.calls, vec!["completion"]);
     assert_eq!(
-        host.call_deps["prompt"]["payload"]["data_classes"],
-        json!(["external.secret"])
+        host.call_deps["prompt"]["payload"],
+        json!({
+            "kind": "application_record",
+            "data_classes": ["external.secret"]
+        })
     );
 }
 
