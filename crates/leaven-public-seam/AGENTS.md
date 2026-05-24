@@ -171,10 +171,11 @@ the transcript blob ref that made the transcript durable. JSON-schema agent
 outputs must return a parsed Plan Result payload, and successful call-result
 validation requires `agent_run` and `sandbox_exec` result values to carry the
 matching call receipt and expected value kind. `agent_run` values must also
-carry a transcript blob ref, non-empty command records with argv/status facts
-whose receipt is bound to the enclosing session receipt, and cost matched by
-the call receipt. `sandbox_exec` with `stream_policy: blob_refs_only` must
-return stdout/stderr blob refs; completed sandbox results must carry
+carry a transcript blob ref, non-empty command records with argv plus finite V1
+command status facts whose receipt is bound to the enclosing session receipt,
+and cost matched by the call receipt. `sandbox_exec` with
+`stream_policy: blob_refs_only` must return stdout/stderr blob refs; completed
+sandbox results must carry
 `exit_code`, must carry cost matched by the call receipt, and may carry captured
 output-file blob refs only at safe relative workspace paths after the host binds
 declared bytes and SHA-256 to the captured file bytes. Agent transcript
@@ -396,9 +397,11 @@ backpressure, or runtime watch support.
   require a live unreleased materialization-proven `workspace_handle` dependency
   before the host receives the request. Agent lowering preserves schema-valid
   `json_schema` output through the owning
-  `leaven-agent::OutputContract::JsonSchema` primitive. This is public-seam
-  harness proof only; provider runtime, sandbox backend execution, streaming
-  delivery, and proposal parsing remain pending.
+  `leaven-agent::OutputContract::JsonSchema` primitive, and agent session audit
+  validation rejects missing command receipts, invalid argv, arbitrary command
+  status strings, and command programs outside declared `allowed_commands`.
+  This is public-seam harness proof only; provider runtime, sandbox backend
+  execution, streaming delivery, and proposal parsing remain pending.
 - `tests/plan_document.rs` also proves representative `workspace_materialize`
   and `workspace_release` lowering, typed `workspace_handle` value emission,
   materialize host-result checks for path-shaped workspace ids and lifetime
