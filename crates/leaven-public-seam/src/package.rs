@@ -543,6 +543,17 @@ impl PublicSeamPackage {
         }
         for row in &matrix.rows {
             if row.status != MatrixRowStatus::Proven {
+                if !row.positive_test_evidence.is_empty()
+                    || !row.negative_test_evidence.is_empty()
+                    || !row.implementation_evidence.is_empty()
+                {
+                    return Err(PublicSeamError::InvalidMatrix {
+                        message: format!(
+                            "row `{}` is not proven but uses closeout evidence fields instead of partial_contract evidence",
+                            row.id
+                        ),
+                    });
+                }
                 continue;
             }
             if row.implementation_evidence.is_empty() {

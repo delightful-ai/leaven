@@ -600,7 +600,7 @@ rows:
       execution and reports redactions.
     fake_pass_rejected: Checking data classes only at initial case read.
     minimum_closeout_level: semantic_denial
-    positive_test_evidence:
+    partial_contract_test_evidence:
       - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_with_capability_checks_call_authority_before_host_effects
       - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_with_capability_allows_workspace_lifecycle_calls
       - crates/leaven-public-seam/tests/call_authority.rs::call_authority_accepts_lm_agent_and_sandbox_input_classes
@@ -609,7 +609,6 @@ rows:
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_preserves_nested_evidence_visibility_data_classes_and_receipts
       - crates/leaven-public-seam/tests/agent_contract.rs::agent_run_can_project_provider_neutral_agent_session_into_plan_result
       - crates/leaven-public-seam/tests/plan_document.rs::sandbox_exec_outcome_propagates_stream_and_file_blob_data_classes
-    negative_test_evidence:
       - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_with_capability_checks_call_authority_before_host_effects
       - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_with_capability_allows_workspace_lifecycle_calls
       - crates/leaven-public-seam/tests/call_authority.rs::call_authority_rejects_forbidden_input_classes_before_execution
@@ -625,7 +624,7 @@ rows:
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_nested_evidence_hidden_target_derivation_flag
       - crates/leaven-public-seam/tests/agent_contract.rs::agent_run_can_project_provider_neutral_agent_session_into_plan_result
       - crates/leaven-public-seam/tests/plan_document.rs::sandbox_exec_outcome_propagates_stream_and_file_blob_data_classes
-    implementation_evidence:
+    partial_contract_implementation_evidence:
       - crates/leaven-public-seam/src/call_authority.rs::CallAuthorityReport
       - crates/leaven-public-seam/src/call_authority.rs::validate
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_call_authority_document
@@ -679,18 +678,17 @@ rows:
       data classes are denied.
     fake_pass_rejected: Hiding targets in side_info or prompt text after projection.
     minimum_closeout_level: semantic_denial
-    positive_test_evidence:
+    partial_contract_test_evidence:
       - crates/leaven-public-seam/tests/stage_payloads.rs::stage_payloads_validate_all_role_specific_payload_shapes_with_provenance
       - crates/leaven-public-seam/tests/stage_payloads.rs::active_reflect_then_propose_example_validates_through_semantic_stage_payloads
       - crates/leaven-public-seam/tests/stage_payloads.rs::stage_payloads_preserve_object_form_info_and_receipt_refs
-    negative_test_evidence:
       - crates/leaven-public-seam/tests/call_authority.rs::call_authority_rejects_reflector_lm_call_input_classes_include_case_target
       - crates/leaven-public-seam/tests/stage_payloads.rs::reflect_request_rejects_case_target_projection
       - crates/leaven-public-seam/tests/stage_payloads.rs::reflect_request_rejects_hidden_case_target_material
       - crates/leaven-public-seam/tests/stage_payloads.rs::reflect_request_rejects_missing_source_refs_or_query_policy
       - crates/leaven-public-seam/tests/stage_payloads.rs::reflect_request_rejects_parent_source_or_surface_context_gaps
       - crates/leaven-public-seam/tests/stage_payloads.rs::reflection_result_rejects_unproven_diagnosis_without_sources
-    implementation_evidence:
+    partial_contract_implementation_evidence:
       - crates/leaven-public-seam/src/stage_payload.rs::StagePayloadDocument
       - crates/leaven-public-seam/src/stage_payload.rs::inspect_reflect_request
       - crates/leaven-public-seam/src/stage_payload.rs::require_parent_source_ref
@@ -837,11 +835,10 @@ rows:
       outside allowed_effects are rejected.
     fake_pass_rejected: Payload enums with no provenance or policy binding.
     minimum_closeout_level: semantic_denial
-    positive_test_evidence:
+    partial_contract_test_evidence:
       - crates/leaven-public-seam/tests/stage_payloads.rs::stage_payloads_validate_all_role_specific_payload_shapes_with_provenance
       - crates/leaven-public-seam/tests/stage_payloads.rs::active_reflect_then_propose_example_validates_through_semantic_stage_payloads
       - crates/leaven-public-seam/tests/stage_payloads.rs::stage_payloads_preserve_object_form_info_and_receipt_refs
-    negative_test_evidence:
       - crates/leaven-public-seam/tests/stage_payloads.rs::reflection_result_requires_receipted_source_visible_evidence
       - crates/leaven-public-seam/tests/stage_payloads.rs::reflection_result_rejects_unproven_diagnosis_without_sources
       - crates/leaven-public-seam/tests/stage_payloads.rs::reflect_request_rejects_parent_source_or_surface_context_gaps
@@ -849,7 +846,7 @@ rows:
       - crates/leaven-public-seam/tests/stage_payloads.rs::propose_request_rejects_reflection_source_ref_drop
       - crates/leaven-public-seam/tests/stage_payloads.rs::runner_request_rejects_case_target_material
       - crates/leaven-public-seam/tests/stage_payloads.rs::callback_and_adapter_payloads_reject_missing_payload_schema
-    implementation_evidence:
+    partial_contract_implementation_evidence:
       - crates/leaven-public-seam/src/stage_payload.rs::StagePayloadDocument
       - crates/leaven-public-seam/src/stage_payload.rs::inspect_reflect_request
       - crates/leaven-public-seam/src/stage_payload.rs::inspect_reflection_result
@@ -1021,7 +1018,7 @@ rows:
       the assessed candidate is rejected or fails contract tests.
     fake_pass_rejected: Adding a dummy output field solely to satisfy schema validation.
     minimum_closeout_level: semantic_denial
-    positive_test_evidence:
+    partial_contract_test_evidence:
       - crates/leaven-run/tests/scoring_evaluator.rs::runtime_score_outputs_project_through_public_seam_for_all_assessment_shapes
       - crates/leaven-run/tests/scoring_evaluator.rs::judging_evaluator_preserves_pairwise_and_listwise_report_outputs
       - crates/leaven-run/tests/scoring_evaluator.rs::scoring_evaluator_preserves_candidate_artifact_reportable_output
@@ -1031,7 +1028,6 @@ rows:
       - crates/leaven-run/tests/public_seam.rs::runcontext_assessment_artifact_score_outputs_project_to_public_seam_submit_assessments_plan
       - crates/leaven-public-seam/tests/plan_document.rs::submit_assessments_score_outputs_cover_all_assessment_shapes
       - crates/leaven-public-seam/tests/plan_document.rs::submit_assessments_accepts_candidate_artifact_score_output_class
-    negative_test_evidence:
       - crates/leaven-run/tests/scoring_evaluator.rs::scoring_evaluator_rejects_missing_reportable_output_for_typed_runner_outputs
       - crates/leaven-run/tests/scoring_evaluator.rs::scoring_evaluator_rejects_empty_placeholder_report_output
       - crates/leaven-run/tests/scoring_evaluator.rs::scoring_evaluator_rejects_typed_score_output_without_runner_declaration
@@ -1051,7 +1047,7 @@ rows:
       - crates/leaven-run/tests/public_seam.rs::assessment_score_output_plan_projection_rejects_unsupported_shapes_and_outputs
       - crates/leaven-public-seam/tests/plan_document.rs::submit_assessments_rejects_missing_or_placeholder_score_output
       - crates/leaven-public-seam/tests/plan_document.rs::submit_assessments_rejects_summary_only_score_output_dummies
-    implementation_evidence:
+    partial_contract_implementation_evidence:
       - crates/leaven-run/src/evidence.rs::RunOutput::with_reportable_output
       - crates/leaven-run/src/evidence.rs::Score::with_output
       - crates/leaven-run/src/evidence.rs::ReportableOutput::into_record
@@ -1782,6 +1778,7 @@ rows:
       - crates/leaven-public-seam/tests/contract_package.rs::conformance_evidence_audit_rejects_matrix_only_closeout_even_with_test_links
       - crates/leaven-public-seam/tests/contract_package.rs::conformance_evidence_audit_rejects_weak_test_function_as_negative_evidence
       - crates/leaven-public-seam/tests/contract_package.rs::conformance_evidence_audit_requires_denial_evidence_for_integrated_surface_rows
+      - crates/leaven-public-seam/tests/contract_package.rs::conformance_evidence_audit_rejects_pending_rows_with_closeout_evidence_fields
     implementation_evidence:
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::conformance_test_denominator
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::audit_conformance_evidence
