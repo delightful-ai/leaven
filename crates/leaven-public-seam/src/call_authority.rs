@@ -195,7 +195,7 @@ fn collect_data_classes(
     }
     if let Some(values) = object.get("trace_refs").and_then(Value::as_array) {
         for value in values {
-            collect_data_classes(value, classes)?;
+            collect_trace_ref_data_classes(value, classes)?;
         }
     }
     if let Some(files) = object.get("files").and_then(Value::as_object) {
@@ -207,7 +207,48 @@ fn collect_data_classes(
 }
 
 fn is_seam_data_class_carrier(object: &serde_json::Map<String, Value>) -> bool {
-    object.contains_key("kind") && object.contains_key("data_classes")
+    matches!(
+        object.get("kind").and_then(Value::as_str),
+        Some(
+            "candidate_summary"
+                | "proposal_summary"
+                | "assessment_summary"
+                | "event_summary"
+                | "graph_set"
+                | "case_record"
+                | "workspace_handle"
+                | "workspace_snapshot"
+                | "workspace_file"
+                | "workspace_diff"
+                | "workspace_listing"
+                | "lm_response"
+                | "agent_session"
+                | "sandbox_exec"
+                | "proposal_batch_receipt"
+                | "assessment_batch_receipt"
+                | "evaluation_request_receipt"
+                | "apply_receipt"
+                | "blob_ref"
+                | "text"
+                | "json"
+                | "structured"
+        )
+    ) && object.contains_key("data_classes")
+}
+
+fn collect_trace_ref_data_classes(
+    value: &Value,
+    classes: &mut BTreeSet<String>,
+) -> Result<(), PublicSeamError> {
+    let Some(object) = value.as_object() else {
+        return Ok(());
+    };
+    if object.contains_key("visibility") {
+        if let Some(data_classes) = object.get("data_classes") {
+            classes.extend(string_set(Some(data_classes), "trace_refs.data_classes")?);
+        }
+    }
+    Ok(())
 }
 
 fn validate_execution_policy(

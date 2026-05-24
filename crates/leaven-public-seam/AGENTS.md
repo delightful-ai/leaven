@@ -240,7 +240,9 @@ against the capability grant. A call may not drop `case.target` or another
 forbidden dependency class by relabeling only its own declared inputs. The
 collector is limited to recognized seam wire metadata carriers and nested
 blob/trace/reference fields; arbitrary application JSON fields named
-`data_classes` are domain payload, not authorization metadata.
+`data_classes`, even inside domain records with their own `kind`, are domain
+payload rather than authorization metadata unless the kind is part of the
+locked public-seam value vocabulary.
 
 The
 `PublicSeamPackage::validate_plan_execution_result` route additionally proves
