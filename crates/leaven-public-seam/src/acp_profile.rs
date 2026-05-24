@@ -13,6 +13,9 @@ use crate::{
 pub struct AcpProfileDocument {
     pinned_acp_version: String,
     transports: Vec<String>,
+    token_env: String,
+    endpoint_env: String,
+    fingerprint_env: String,
     extension_methods: Vec<AcpExtensionMethod>,
     default_max_inflight_updates: u64,
     backpressure: AcpBackpressure,
@@ -34,6 +37,30 @@ impl AcpProfileDocument {
                 "Leaven V1 ACP profile must prefer stdio_jsonrpc first",
             ));
         }
+        let auth = object
+            .get("auth")
+            .and_then(Value::as_object)
+            .ok_or_else(|| invalid_acp("ACP profile must declare auth"))?;
+        require_const(
+            auth.get("token_env"),
+            "LEAVEN_CAPABILITY_TOKEN",
+            "auth.token_env",
+        )?;
+        require_const(
+            auth.get("endpoint_env"),
+            "LEAVEN_ENDPOINT",
+            "auth.endpoint_env",
+        )?;
+        require_const(
+            auth.get("fingerprint_env"),
+            "LEAVEN_CAPABILITY_FINGERPRINT",
+            "auth.fingerprint_env",
+        )?;
+        require_const(
+            auth.get("authenticate_maps_to"),
+            "leaven.capability.v1",
+            "auth.authenticate_maps_to",
+        )?;
         let permission = object
             .get("permission_model")
             .and_then(Value::as_object)
@@ -80,6 +107,9 @@ impl AcpProfileDocument {
         Ok(Self {
             pinned_acp_version,
             transports,
+            token_env: "LEAVEN_CAPABILITY_TOKEN".to_owned(),
+            endpoint_env: "LEAVEN_ENDPOINT".to_owned(),
+            fingerprint_env: "LEAVEN_CAPABILITY_FINGERPRINT".to_owned(),
             extension_methods,
             default_max_inflight_updates,
             backpressure,
@@ -94,6 +124,21 @@ impl AcpProfileDocument {
     /// Transport bindings in preference order.
     pub fn transports(&self) -> &[String] {
         &self.transports
+    }
+
+    /// Environment variable that carries the opaque capability bearer token.
+    pub fn token_env(&self) -> &str {
+        &self.token_env
+    }
+
+    /// Environment variable that carries the ACP endpoint.
+    pub fn endpoint_env(&self) -> &str {
+        &self.endpoint_env
+    }
+
+    /// Environment variable that carries the expected capability fingerprint.
+    pub fn fingerprint_env(&self) -> &str {
+        &self.fingerprint_env
     }
 
     /// Leaven ACP extension methods.
@@ -269,6 +314,149 @@ pub struct AcpWorkerSession {
     engine_role: String,
     worker_role: String,
     lifecycle: AcpSessionLifecycle,
+}
+
+/// Stdio ACP worker launch environment with a redacted artifact projection.
+#[derive(Clone, Eq, PartialEq)]
+pub struct AcpStdioWorkerLaunch {
+    transport: String,
+    engine_role: String,
+    worker_role: String,
+    token_env: String,
+    endpoint_env: String,
+    fingerprint_env: String,
+    bearer_token: String,
+    endpoint: String,
+    capability_fingerprint: String,
+    worker_env: BTreeMap<String, String>,
+}
+
+impl AcpStdioWorkerLaunch {
+    /// Builds the stdio launch environment for a validated ACP worker session.
+    pub fn new(
+        profile: &AcpProfileDocument,
+        session: &AcpWorkerSession,
+        bearer_token: impl Into<String>,
+        endpoint: impl Into<String>,
+        capability_fingerprint: impl Into<String>,
+    ) -> Result<Self, PublicSeamError> {
+        if session.transport() != "stdio_jsonrpc" {
+            return Err(invalid_acp(
+                "ACP stdio worker launch requires stdio_jsonrpc transport",
+            ));
+        }
+        let bearer_token = bearer_token.into();
+        let endpoint = endpoint.into();
+        let capability_fingerprint = capability_fingerprint.into();
+        if bearer_token.trim().is_empty() {
+            return Err(invalid_acp(
+                "ACP stdio worker launch requires a non-empty bearer token",
+            ));
+        }
+        if endpoint.trim().is_empty() {
+            return Err(invalid_acp(
+                "ACP stdio worker launch requires a non-empty endpoint",
+            ));
+        }
+        if capability_fingerprint.trim().is_empty() {
+            return Err(invalid_acp(
+                "ACP stdio worker launch requires a capability fingerprint",
+            ));
+        }
+        let mut worker_env = BTreeMap::new();
+        worker_env.insert(profile.token_env().to_owned(), bearer_token.clone());
+        worker_env.insert(profile.endpoint_env().to_owned(), endpoint.clone());
+        worker_env.insert(
+            profile.fingerprint_env().to_owned(),
+            capability_fingerprint.clone(),
+        );
+        Ok(Self {
+            transport: session.transport().to_owned(),
+            engine_role: session.engine_role().to_owned(),
+            worker_role: session.worker_role().to_owned(),
+            token_env: profile.token_env().to_owned(),
+            endpoint_env: profile.endpoint_env().to_owned(),
+            fingerprint_env: profile.fingerprint_env().to_owned(),
+            bearer_token,
+            endpoint,
+            capability_fingerprint,
+            worker_env,
+        })
+    }
+
+    /// Transport used by the worker launch.
+    pub fn transport(&self) -> &str {
+        &self.transport
+    }
+
+    /// ACP role of the Leaven engine.
+    pub fn engine_role(&self) -> &str {
+        &self.engine_role
+    }
+
+    /// ACP role of the external worker.
+    pub fn worker_role(&self) -> &str {
+        &self.worker_role
+    }
+
+    /// Environment passed to the worker process.
+    pub fn worker_env(&self) -> &BTreeMap<String, String> {
+        &self.worker_env
+    }
+
+    /// Artifact-safe launch facts. The bearer token is intentionally omitted.
+    pub fn artifact_env(&self) -> BTreeMap<String, String> {
+        BTreeMap::from([
+            (self.endpoint_env.clone(), self.endpoint.clone()),
+            (
+                self.fingerprint_env.clone(),
+                self.capability_fingerprint.clone(),
+            ),
+        ])
+    }
+
+    /// Rejects persisted launch facts that still contain the bearer token.
+    pub fn validate_artifact_env(
+        &self,
+        artifact_env: &BTreeMap<String, String>,
+    ) -> Result<(), PublicSeamError> {
+        if artifact_env.contains_key(&self.token_env) {
+            Err(invalid_acp(
+                "ACP worker launch artifacts must not persist LEAVEN_CAPABILITY_TOKEN",
+            ))
+        } else if artifact_env
+            .values()
+            .any(|value| value.contains(&self.bearer_token))
+        {
+            Err(invalid_acp(
+                "ACP worker launch artifacts must not persist the bearer secret value",
+            ))
+        } else {
+            Ok(())
+        }
+    }
+}
+
+impl std::fmt::Debug for AcpStdioWorkerLaunch {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut worker_env = self.worker_env.clone();
+        if let Some(token) = worker_env.get_mut(&self.token_env) {
+            "<redacted>".clone_into(token);
+        }
+        formatter
+            .debug_struct("AcpStdioWorkerLaunch")
+            .field("transport", &self.transport)
+            .field("engine_role", &self.engine_role)
+            .field("worker_role", &self.worker_role)
+            .field("token_env", &self.token_env)
+            .field("endpoint_env", &self.endpoint_env)
+            .field("fingerprint_env", &self.fingerprint_env)
+            .field("bearer_token", &"<redacted>")
+            .field("endpoint", &self.endpoint)
+            .field("capability_fingerprint", &self.capability_fingerprint)
+            .field("worker_env", &worker_env)
+            .finish()
+    }
 }
 
 impl AcpWorkerSession {
