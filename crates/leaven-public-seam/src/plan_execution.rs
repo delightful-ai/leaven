@@ -1121,7 +1121,7 @@ fn record_successful_external_call(
             "value": value
         }),
     )?;
-    state.receipts.push(json!({
+    let mut receipt = json!({
         "kind": "call",
         "receipt": value["receipt"],
         "op_var": name,
@@ -1132,7 +1132,11 @@ fn record_successful_external_call(
         "result_hash": result_hash,
         "runtime_fingerprint": runtime_fingerprint,
         "status": "succeeded"
-    }));
+    });
+    if let Some(cost) = value.get("cost") {
+        receipt["cost"] = cost.clone();
+    }
+    state.receipts.push(receipt);
     state.values.insert(name.clone(), value.clone());
     state.bindings.insert(name, value);
     Ok(())
