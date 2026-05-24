@@ -1264,13 +1264,6 @@ struct ExtensionResultContract {
 
 fn extension_result_contract(method: &str) -> Result<ExtensionResultContract, PublicSeamError> {
     const EXTENSION: &[&str] = &["extension"];
-    const WORKSPACE_READ: &[&str] = &[
-        "workspace_file",
-        "workspace_diff",
-        "workspace_listing",
-        "workspace_snapshot",
-        "extension",
-    ];
     match method {
         "leaven/graph.query"
         | "leaven/case.load"
@@ -1284,19 +1277,24 @@ fn extension_result_contract(method: &str) -> Result<ExtensionResultContract, Pu
             primary_kinds: &["workspace_handle"],
             receipt: ReceiptExpectation::Call("workspace_materialize"),
         }),
-        "leaven/workspace.snapshot" => Ok(ExtensionResultContract {
+        "leaven/workspace.snapshot" | "leaven/workspace.digest" => Ok(ExtensionResultContract {
             primary_kinds: &["workspace_snapshot"],
             receipt: ReceiptExpectation::Query,
         }),
+        "leaven/workspace.read_file" => Ok(ExtensionResultContract {
+            primary_kinds: &["workspace_file"],
+            receipt: ReceiptExpectation::Query,
+        }),
         "leaven/workspace.list"
-        | "leaven/workspace.read_file"
         | "leaven/workspace.stat"
-        | "leaven/workspace.digest"
-        | "leaven/workspace.git_log"
-        | "leaven/workspace.git_diff"
-        | "leaven/workspace.git_status"
         | "leaven/workspace.capture_artifacts" => Ok(ExtensionResultContract {
-            primary_kinds: WORKSPACE_READ,
+            primary_kinds: &["workspace_listing"],
+            receipt: ReceiptExpectation::Query,
+        }),
+        "leaven/workspace.git_log"
+        | "leaven/workspace.git_diff"
+        | "leaven/workspace.git_status" => Ok(ExtensionResultContract {
+            primary_kinds: &["workspace_diff"],
             receipt: ReceiptExpectation::Query,
         }),
         "leaven/workspace.release" => Ok(ExtensionResultContract {
