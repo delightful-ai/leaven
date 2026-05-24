@@ -1,7 +1,7 @@
 use leaven_public_seam::{
     AcpAuthenticateRequest, AcpBackpressure, AcpPermissionRequest, AcpProgressDisposition,
-    AcpProgressPriority, AcpSessionLifecycle, AcpSessionState, AcpWorkerSession,
-    CapabilityDocument, CapabilityRegistry, PublicSeamError, PublicSeamPackage,
+    AcpProgressPriority, AcpSessionLifecycle, AcpSessionState, AcpStdioWorkerLaunch,
+    AcpWorkerSession, CapabilityDocument, CapabilityRegistry, PublicSeamError, PublicSeamPackage,
 };
 use serde_json::{Value, json};
 
@@ -13,6 +13,9 @@ fn acp_profile_validates_pinned_stdio_leaven_methods_and_bounded_updates() {
         .unwrap();
 
     assert_eq!(profile.pinned_acp_version(), "0.4.0");
+    assert_eq!(profile.token_env(), "LEAVEN_CAPABILITY_TOKEN");
+    assert_eq!(profile.endpoint_env(), "LEAVEN_ENDPOINT");
+    assert_eq!(profile.fingerprint_env(), "LEAVEN_CAPABILITY_FINGERPRINT");
     assert_eq!(
         profile.transports(),
         &["stdio_jsonrpc".to_owned(), "unix_socket_jsonrpc".to_owned()]
@@ -43,6 +46,110 @@ fn acp_profile_validates_pinned_stdio_leaven_methods_and_bounded_updates() {
             .unwrap()
             .produces_receipt()
     );
+}
+
+#[test]
+fn acp_stdio_worker_launch_uses_profile_env_and_redacts_bearer_artifacts() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let profile = package
+        .validate_acp_profile_document(&acp_profile())
+        .unwrap();
+    let session = AcpWorkerSession::start(&profile).unwrap();
+
+    let launch = AcpStdioWorkerLaunch::new(
+        &profile,
+        &session,
+        "secret-token",
+        "stdio://worker/session",
+        "fp_cap_sha256_launch",
+    )
+    .unwrap();
+
+    assert_eq!(launch.transport(), "stdio_jsonrpc");
+    assert_eq!(launch.engine_role(), "engine_client");
+    assert_eq!(launch.worker_role(), "worker_agent");
+    assert_eq!(
+        launch.worker_env().get("LEAVEN_CAPABILITY_TOKEN"),
+        Some(&"secret-token".to_owned())
+    );
+    assert_eq!(
+        launch.worker_env().get("LEAVEN_ENDPOINT"),
+        Some(&"stdio://worker/session".to_owned())
+    );
+    assert_eq!(
+        launch.worker_env().get("LEAVEN_CAPABILITY_FINGERPRINT"),
+        Some(&"fp_cap_sha256_launch".to_owned())
+    );
+
+    let artifact_env = launch.artifact_env();
+    assert!(!artifact_env.contains_key("LEAVEN_CAPABILITY_TOKEN"));
+    assert_eq!(
+        artifact_env.get("LEAVEN_ENDPOINT"),
+        Some(&"stdio://worker/session".to_owned())
+    );
+    launch.validate_artifact_env(&artifact_env).unwrap();
+
+    assert!(matches!(
+        launch
+            .validate_artifact_env(launch.worker_env())
+            .unwrap_err(),
+        PublicSeamError::InvalidScope { .. }
+    ));
+
+    let mut renamed_token_leak = artifact_env.clone();
+    renamed_token_leak.insert("OTHER_TOKEN".to_owned(), "secret-token".to_owned());
+    assert!(matches!(
+        launch
+            .validate_artifact_env(&renamed_token_leak)
+            .unwrap_err(),
+        PublicSeamError::InvalidScope { .. }
+    ));
+
+    let mut bearer_header_leak = artifact_env;
+    bearer_header_leak.insert("Authorization".to_owned(), "Bearer secret-token".to_owned());
+    assert!(matches!(
+        launch
+            .validate_artifact_env(&bearer_header_leak)
+            .unwrap_err(),
+        PublicSeamError::InvalidScope { .. }
+    ));
+
+    let mut composite_value_leak = launch.artifact_env();
+    composite_value_leak.insert(
+        "COMMAND".to_owned(),
+        "run --header 'Authorization: Bearer secret-token'".to_owned(),
+    );
+    assert!(matches!(
+        launch
+            .validate_artifact_env(&composite_value_leak)
+            .unwrap_err(),
+        PublicSeamError::InvalidScope { .. }
+    ));
+
+    let debug = format!("{launch:?}");
+    assert!(!debug.contains("secret-token"));
+    assert!(debug.contains("<redacted>"));
+}
+
+#[test]
+fn acp_stdio_worker_launch_rejects_missing_required_launch_facts() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let profile = package
+        .validate_acp_profile_document(&acp_profile())
+        .unwrap();
+    let session = AcpWorkerSession::start(&profile).unwrap();
+
+    for (token, endpoint, fingerprint) in [
+        ("", "stdio://worker/session", "fp_cap_sha256_launch"),
+        ("secret-token", "", "fp_cap_sha256_launch"),
+        ("secret-token", "stdio://worker/session", ""),
+    ] {
+        assert!(matches!(
+            AcpStdioWorkerLaunch::new(&profile, &session, token, endpoint, fingerprint)
+                .unwrap_err(),
+            PublicSeamError::InvalidScope { .. }
+        ));
+    }
 }
 
 #[test]

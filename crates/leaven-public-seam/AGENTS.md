@@ -117,6 +117,14 @@ model, bounded progress-update queue, cancellation state, and locked
 JSON-RPC I/O, process startup, provider execution, full ACP lifecycle control,
 or production worker scheduling.
 
+Crate-root export `AcpStdioWorkerLaunch` is an advanced public seam contract
+for the locked stdio ACP launch environment only. It proves the profile-owned
+`LEAVEN_CAPABILITY_TOKEN`, `LEAVEN_ENDPOINT`, and
+`LEAVEN_CAPABILITY_FINGERPRINT` environment bindings, engine-client/
+worker-agent role facts, and bearer-token redaction from run-artifact launch
+facts. It is not stdio JSON-RPC I/O, process spawning, provider execution,
+session supervision, or a full ACP transport implementation.
+
 Crate-root exports for `PlanDocument`, `PlanOperationKind`,
 `PlanExecutionContext`, `PlanExecutionHost`, `PlanExecutionReport`,
 `PlanGraphReadScope`, `PlanGraphQueryRequest`, `PlanGraphQueryOutcome`,

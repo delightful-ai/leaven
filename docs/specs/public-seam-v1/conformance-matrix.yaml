@@ -1101,6 +1101,8 @@ rows:
     minimum_closeout_level: integrated_surface
     partial_contract_test_evidence:
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_profile_validates_pinned_stdio_leaven_methods_and_bounded_updates
+      - crates/leaven-public-seam/tests/acp_profile.rs::acp_stdio_worker_launch_uses_profile_env_and_redacts_bearer_artifacts
+      - crates/leaven-public-seam/tests/acp_profile.rs::acp_stdio_worker_launch_rejects_missing_required_launch_facts
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_worker_session_uses_engine_client_worker_agent_inversion_and_bounded_updates
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_profile_rejects_mcp_latest_nonstdio_human_granting_and_unbounded_updates
       - crates/leaven-public-seam/tests/contract_package.rs::acp_profile_rejects_mcp_bridge_legacy_worker_protocol_and_watch_runtime
@@ -1109,6 +1111,7 @@ rows:
       - crates/leaven-public-seam/src/acp_profile.rs::AcpBackpressure
       - crates/leaven-public-seam/src/acp_profile.rs::AcpExtensionMethod
       - crates/leaven-public-seam/src/acp_profile.rs::AcpWorkerSession
+      - crates/leaven-public-seam/src/acp_profile.rs::AcpStdioWorkerLaunch
       - crates/leaven-public-seam/src/acp_profile.rs::extension_methods
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_acp_profile_document
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::v1_scope
@@ -1116,6 +1119,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-lifecycle-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-lifecycle-state-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-backpressure-strategy-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-acp-stdio-launch-partial-review.md
     status: pending
 
   - id: ps1.acp.auth_permissions
