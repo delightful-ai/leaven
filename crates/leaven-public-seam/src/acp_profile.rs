@@ -1147,6 +1147,9 @@ fn validate_effect_primary_audit(
 ) -> Result<(), PublicSeamError> {
     let expected_receipt_id = required_string(expected_receipt.get("receipt"), "receipt.receipt")?;
     match method {
+        "leaven/lm.complete" => {
+            validate_effect_primary_cost("lm_complete", primary, expected_receipt)
+        }
         "leaven/agent.run" => {
             let primary_receipt = required_string(primary.get("receipt"), "primary.receipt")?;
             if primary_receipt != expected_receipt_id {
@@ -1184,7 +1187,9 @@ fn validate_effect_primary_cost(
         (None, Some(_)) => Err(invalid_acp(format!(
             "ACP extension result {call_kind} call receipt cost must have a matching primary cost"
         ))),
-        (None, None) => Ok(()),
+        (None, None) => Err(invalid_acp(format!(
+            "ACP extension result {call_kind} primary must carry cost"
+        ))),
     }
 }
 

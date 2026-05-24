@@ -730,6 +730,39 @@ fn acp_extension_results_reject_agent_and_sandbox_blob_ref_data_class_gaps() {
 }
 
 #[test]
+fn acp_extension_results_reject_lm_cost_audit_gaps() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut missing_primary_cost = lm_response_primary();
+    missing_primary_cost.as_object_mut().unwrap().remove("cost");
+    let error = package
+        .validate_acp_extension_result_document(&extension_result_for(
+            "leaven/lm.complete",
+            &missing_primary_cost,
+            &call_receipt("lm_complete", "lmrec_acp"),
+            &["completion.raw"],
+        ))
+        .unwrap_err();
+    assert!(error.to_string().contains("cost"));
+
+    let mut mismatched_receipt_cost = extension_result_for(
+        "leaven/lm.complete",
+        &lm_response_primary(),
+        &call_receipt("lm_complete", "lmrec_acp"),
+        &["completion.raw"],
+    );
+    mismatched_receipt_cost["receipts"][0]["cost"] = json!({"usd_micro": 1});
+    let error = package
+        .validate_acp_extension_result_document(&mismatched_receipt_cost)
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("lm_complete primary cost must match call receipt cost")
+    );
+}
+
+#[test]
 fn acp_extension_results_reject_agent_audit_gaps() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
 
@@ -1493,6 +1526,7 @@ fn lm_response_primary() -> Value {
             "content": [{"kind": "text", "text": "ok"}]
         },
         "graph_revision": "rev_acp",
+        "cost": {"usd_micro": 42, "lm_calls": 1},
         "data_classes": ["completion.raw"],
         "replayability": "fully_managed",
         "receipt": "lmrec_acp"
@@ -1695,6 +1729,7 @@ fn call_receipt(call_kind: &str, receipt: &str) -> Value {
         "status": "succeeded"
     });
     match call_kind {
+        "lm_complete" => value["cost"] = json!({"usd_micro": 42, "lm_calls": 1}),
         "agent_run" => value["cost"] = json!({"usd_micro": 1000, "agent_calls": 1}),
         "sandbox_exec" => value["cost"] = json!({"usd_micro": 10, "sandbox_calls": 1}),
         _ => {}
