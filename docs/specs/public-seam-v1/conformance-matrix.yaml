@@ -1153,6 +1153,7 @@ rows:
       - crates/leaven-public-seam/tests/plan_document.rs::workspace_query_reads_require_live_handles_and_emit_query_receipts
       - crates/leaven-public-seam/tests/plan_document.rs::workspace_query_rejects_unmaterialized_released_and_mismatched_results
       - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_result_rejects_workspace_query_value_forgery_with_valid_hashes
+      - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_result_rejects_literal_workspace_handle_provenance_forgery
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_bind_worker_methods_to_primary_kinds_and_receipts
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_reject_cross_method_payloads_unbound_receipts_and_data_class_gaps
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_permissions_use_capability_grants_and_return_planerror_redactions
