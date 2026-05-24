@@ -1894,6 +1894,127 @@ fn agent_run_lowering_preserves_workspace_diff_surface_fingerprint() {
 }
 
 #[test]
+fn agent_run_rejects_schema_valid_sessions_without_audit_facts() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    for (agent_audit, expected) in [
+        (
+            AgentAuditFixture::MissingTranscript,
+            "agent_run result value must carry transcript_ref",
+        ),
+        (
+            AgentAuditFixture::MissingCommands,
+            "agent_run result value must carry at least one command record",
+        ),
+        (
+            AgentAuditFixture::MissingCommandReceipt,
+            "agent_run command receipt",
+        ),
+        (
+            AgentAuditFixture::ForgedCommandReceipt,
+            "agent_run command record receipt",
+        ),
+        (
+            AgentAuditFixture::MissingCost,
+            "agent_run result value must carry cost",
+        ),
+    ] {
+        let mut host = RecordingPlanHost {
+            agent_audit,
+            ..RecordingPlanHost::default()
+        };
+        let error = package
+            .execute_plan_document(
+                &agent_run_workspace_plan(&agent_run_call()),
+                &plan_execution_context(),
+                &mut host,
+            )
+            .unwrap_err();
+        assert!(
+            error.to_string().contains(expected),
+            "unexpected error for {agent_audit:?}: {error:?}"
+        );
+    }
+}
+
+#[test]
+fn sandbox_exec_rejects_schema_valid_results_without_audit_facts() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    for (sandbox_stream, expected) in [
+        (
+            SandboxStreamFixture::AbsoluteFilePath,
+            "sandbox_exec result file path must be relative workspace path",
+        ),
+        (
+            SandboxStreamFixture::ParentFilePath,
+            "sandbox_exec result file path must be relative workspace path",
+        ),
+        (
+            SandboxStreamFixture::EmptyFilePath,
+            "sandbox_exec result file path must be relative workspace path",
+        ),
+        (
+            SandboxStreamFixture::EmptyComponentFilePath,
+            "sandbox_exec result file path must be relative workspace path",
+        ),
+        (
+            SandboxStreamFixture::MissingCost,
+            "sandbox_exec result value must carry cost",
+        ),
+    ] {
+        let mut host = RecordingPlanHost {
+            sandbox_stream,
+            ..RecordingPlanHost::default()
+        };
+        let error = package
+            .execute_plan_document(
+                &sandbox_exec_workspace_plan(),
+                &plan_execution_context(),
+                &mut host,
+            )
+            .unwrap_err();
+        assert!(
+            error.to_string().contains(expected),
+            "unexpected error for {sandbox_stream:?}: {error:?}"
+        );
+    }
+
+    let plan = sandbox_exec_workspace_plan();
+    let mut forged = package
+        .execute_plan_document(
+            &plan,
+            &plan_execution_context(),
+            &mut RecordingPlanHost::default(),
+        )
+        .unwrap()
+        .value()
+        .clone();
+    forged["values"]["completion"]
+        .as_object_mut()
+        .unwrap()
+        .remove("exit_code");
+    rebind_call_result_hash(&mut forged, 1, "completion");
+    assert_plan_execution_result_rejected(&package, &plan, &plan_execution_context(), &forged);
+
+    let mut no_artifacts = package
+        .execute_plan_document(
+            &plan,
+            &plan_execution_context(),
+            &mut RecordingPlanHost::default(),
+        )
+        .unwrap()
+        .value()
+        .clone();
+    no_artifacts["values"]["completion"]
+        .as_object_mut()
+        .unwrap()
+        .remove("files");
+    rebind_call_result_hash(&mut no_artifacts, 1, "completion");
+    package
+        .validate_plan_execution_result(&plan, &plan_execution_context(), &no_artifacts)
+        .unwrap();
+}
+
+#[test]
 fn plan_execution_modes_replay_uses_receipts_without_live_host_effects() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let mut plan = typed_let_call_write_plan();
@@ -3111,6 +3232,7 @@ struct RecordingPlanHost {
     cached_hit: bool,
     fail_lm: bool,
     structured_parsed: StructuredParsedFixture,
+    agent_audit: AgentAuditFixture,
     sandbox_stream: SandboxStreamFixture,
 }
 
@@ -3122,25 +3244,52 @@ enum StructuredParsedFixture {
     Invalid,
 }
 
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Debug, Default)]
+enum AgentAuditFixture {
+    #[default]
+    Complete,
+    MissingTranscript,
+    MissingCommands,
+    MissingCommandReceipt,
+    ForgedCommandReceipt,
+    MissingCost,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
 enum SandboxStreamFixture {
     #[default]
     Buffered,
     BlobRefsOnly,
     MissingBlobRefs,
+    AbsoluteFilePath,
+    ParentFilePath,
+    EmptyFilePath,
+    EmptyComponentFilePath,
+    MissingCost,
 }
 
 impl SandboxStreamFixture {
     fn expected_policy(self) -> &'static str {
         match self {
-            Self::Buffered => "buffer",
+            Self::Buffered
+            | Self::AbsoluteFilePath
+            | Self::ParentFilePath
+            | Self::EmptyFilePath
+            | Self::EmptyComponentFilePath
+            | Self::MissingCost => "buffer",
             Self::BlobRefsOnly | Self::MissingBlobRefs => "blob_refs_only",
         }
     }
 
     fn includes_stream_refs(self) -> bool {
         match self {
-            Self::Buffered | Self::BlobRefsOnly => true,
+            Self::Buffered
+            | Self::BlobRefsOnly
+            | Self::AbsoluteFilePath
+            | Self::ParentFilePath
+            | Self::EmptyFilePath
+            | Self::EmptyComponentFilePath
+            | Self::MissingCost => true,
             Self::MissingBlobRefs => false,
         }
     }
@@ -3412,14 +3561,38 @@ impl PlanExecutionHost for RecordingPlanHost {
             other => panic!("unexpected agent output kind: {other:?}"),
         }
         self.calls.push("agent");
-        let mut outcome = PlanAgentRunOutcome::completed("fp_runtime_sha256_agent")
-            .with_transcript_ref(blob_ref("blob_agent_transcript"))
-            .with_commands([json!({
-                "argv": ["codex"],
-                "status": "completed",
-                "receipt": "agentrec_completion"
-            })])
-            .with_cost(json!({"usd_micro": 1000}));
+        let mut outcome = PlanAgentRunOutcome::completed("fp_runtime_sha256_agent");
+        if !matches!(self.agent_audit, AgentAuditFixture::MissingTranscript) {
+            outcome = outcome.with_transcript_ref(blob_ref("blob_agent_transcript"));
+        }
+        if !matches!(self.agent_audit, AgentAuditFixture::MissingCommands) {
+            let command = match self.agent_audit {
+                AgentAuditFixture::MissingCommandReceipt => {
+                    json!({
+                        "argv": ["codex"],
+                        "status": "completed"
+                    })
+                }
+                AgentAuditFixture::ForgedCommandReceipt => {
+                    json!({
+                        "argv": ["codex"],
+                        "status": "completed",
+                        "receipt": "agentrec_forged"
+                    })
+                }
+                _ => {
+                    json!({
+                        "argv": ["codex"],
+                        "status": "completed",
+                        "receipt": "agentrec_completion"
+                    })
+                }
+            };
+            outcome = outcome.with_commands([command]);
+        }
+        if !matches!(self.agent_audit, AgentAuditFixture::MissingCost) {
+            outcome = outcome.with_cost(json!({"usd_micro": 1000}));
+        }
         if request.call()["output"]["kind"].as_str() == Some("json_schema") {
             match self.structured_parsed {
                 StructuredParsedFixture::Valid => {
@@ -3463,8 +3636,25 @@ impl PlanExecutionHost for RecordingPlanHost {
         assert_eq!(command.limits.timeout.unwrap().as_secs(), 1);
         self.calls.push("sandbox");
         let mut outcome = PlanSandboxExecOutcome::completed("fp_runtime_sha256_sandbox")
-            .with_file_ref("out.txt", blob_ref("blob_sandbox_output_file"))
-            .with_cost(json!({"usd_micro": 10}));
+            .with_file_ref("out.txt", blob_ref("blob_sandbox_output_file"));
+        match self.sandbox_stream {
+            SandboxStreamFixture::AbsoluteFilePath => {
+                outcome = outcome.with_file_ref("/tmp/secret.txt", blob_ref("blob_sandbox_secret"));
+            }
+            SandboxStreamFixture::ParentFilePath => {
+                outcome = outcome.with_file_ref("../secret.txt", blob_ref("blob_sandbox_secret"));
+            }
+            SandboxStreamFixture::EmptyFilePath => {
+                outcome = outcome.with_file_ref("", blob_ref("blob_sandbox_secret"));
+            }
+            SandboxStreamFixture::EmptyComponentFilePath => {
+                outcome = outcome.with_file_ref("out//secret.txt", blob_ref("blob_sandbox_secret"));
+            }
+            _ => {}
+        }
+        if !matches!(self.sandbox_stream, SandboxStreamFixture::MissingCost) {
+            outcome = outcome.with_cost(json!({"usd_micro": 10}));
+        }
         if self.sandbox_stream.includes_stream_refs() {
             outcome = outcome.with_stream_refs(
                 blob_ref("blob_sandbox_stdout"),

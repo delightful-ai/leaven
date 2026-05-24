@@ -1358,6 +1358,7 @@ rows:
       - crates/leaven-public-seam/tests/plan_document.rs::workspace_handle_provenance_rejects_literal_forgery_and_released_reuse
       - crates/leaven-public-seam/tests/plan_document.rs::agent_run_lowering_preserves_json_schema_output_contract
       - crates/leaven-public-seam/tests/plan_document.rs::agent_run_lowering_preserves_workspace_diff_surface_fingerprint
+      - crates/leaven-public-seam/tests/plan_document.rs::agent_run_rejects_schema_valid_sessions_without_audit_facts
       - crates/leaven-public-seam/tests/plan_document.rs::call_results_reject_missing_receipts_and_wrong_kinds_even_with_valid_hashes
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_bind_worker_methods_to_primary_kinds_and_receipts
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_preserve_agent_and_sandbox_blob_ref_data_classes
@@ -1377,6 +1378,7 @@ rows:
       - crates/leaven-public-seam/src/fingerprint.rs::SchemaFingerprint::for_json_value
       - crates/leaven-public-seam/src/plan_execution.rs::record_agent_call_outcome
       - crates/leaven-public-seam/src/plan_execution/receipts.rs::validate_successful_call_result_value
+      - crates/leaven-public-seam/src/plan_execution/receipts.rs::validate_agent_session_value
       - crates/leaven-public-seam/src/plan_execution/receipts.rs::validate_structured_output_value
       - crates/leaven-agent/src/session.rs::AgentRunRequest
       - crates/leaven-agent/src/session.rs::AgentSession
@@ -1391,6 +1393,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-effect-call-authority-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-structured-output-evaluator-authority-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-value-visibility-partial-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-agent-sandbox-audit-results-partial-review.md
     status: pending
 
   - id: ps1.sandbox.exec_streaming
@@ -1415,6 +1418,7 @@ rows:
       - crates/leaven-public-seam/tests/plan_document.rs::sandbox_exec_rejects_unmaterialized_released_and_host_path_workspaces
       - crates/leaven-public-seam/tests/plan_document.rs::workspace_handle_provenance_rejects_literal_forgery_and_released_reuse
       - crates/leaven-public-seam/tests/plan_document.rs::sandbox_exec_blob_refs_only_requires_stream_blob_refs
+      - crates/leaven-public-seam/tests/plan_document.rs::sandbox_exec_rejects_schema_valid_results_without_audit_facts
       - crates/leaven-public-seam/tests/plan_document.rs::call_results_reject_missing_receipts_and_wrong_kinds_even_with_valid_hashes
       - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_modes_require_cached_rejects_agent_and_sandbox_live_work
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_bind_worker_methods_to_primary_kinds_and_receipts
@@ -1434,6 +1438,7 @@ rows:
       - crates/leaven-public-seam/src/plan_execution.rs::record_sandbox_call_outcome
       - crates/leaven-public-seam/src/plan_execution/receipts.rs::validate_successful_call_result_value
       - crates/leaven-public-seam/src/plan_execution/receipts.rs::validate_sandbox_stream_value
+      - crates/leaven-public-seam/src/plan_execution/receipts.rs::validate_sandbox_exec_value
       - crates/leaven-workspace/src/command.rs::Command
       - crates/leaven-workspace/src/command.rs::CommandLimits
       - crates/leaven-public-seam/src/acp_profile.rs::extension_result_contract
@@ -1446,6 +1451,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-23-workspace-handle-provenance-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-effect-call-authority-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-value-visibility-partial-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-agent-sandbox-audit-results-partial-review.md
     status: pending
 
   - id: ps1.watch.deferred
