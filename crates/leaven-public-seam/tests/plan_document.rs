@@ -548,6 +548,49 @@ fn plan_execution_result_rejects_literal_workspace_handle_provenance_forgery() {
 }
 
 #[test]
+fn plan_execution_result_rejects_workspace_lifecycle_state_forgery_with_valid_hashes() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let context = plan_execution_context();
+    let plan = workspace_materialize_release_plan();
+    let result = package
+        .execute_plan_document(&plan, &context, &mut RecordingPlanHost::default())
+        .unwrap()
+        .value()
+        .clone();
+
+    let mut wrong_materialize_lifetime = result.clone();
+    wrong_materialize_lifetime["values"]["workspace"]["lifetime"] = json!("plan");
+    rebind_call_result_hash(&mut wrong_materialize_lifetime, 0, "workspace");
+    assert_plan_execution_result_rejected(&package, &plan, &context, &wrong_materialize_lifetime);
+
+    let mut missing_materialize_released = result.clone();
+    missing_materialize_released["values"]["workspace"]
+        .as_object_mut()
+        .unwrap()
+        .remove("released");
+    rebind_call_result_hash(&mut missing_materialize_released, 0, "workspace");
+    assert_plan_execution_result_rejected(&package, &plan, &context, &missing_materialize_released);
+
+    let mut already_released_materialize = result.clone();
+    already_released_materialize["values"]["workspace"]["released"] = json!(true);
+    rebind_call_result_hash(&mut already_released_materialize, 0, "workspace");
+    assert_plan_execution_result_rejected(&package, &plan, &context, &already_released_materialize);
+
+    let mut unreleased_release = result.clone();
+    unreleased_release["values"]["release"]["released"] = json!(false);
+    rebind_call_result_hash(&mut unreleased_release, 1, "release");
+    assert_plan_execution_result_rejected(&package, &plan, &context, &unreleased_release);
+
+    let mut missing_release_released = result;
+    missing_release_released["values"]["release"]
+        .as_object_mut()
+        .unwrap()
+        .remove("released");
+    rebind_call_result_hash(&mut missing_release_released, 1, "release");
+    assert_plan_execution_result_rejected(&package, &plan, &context, &missing_release_released);
+}
+
+#[test]
 fn plan_execution_result_rejects_missing_operation_receipts() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let context = plan_execution_context();

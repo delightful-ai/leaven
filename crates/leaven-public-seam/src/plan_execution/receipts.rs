@@ -748,11 +748,20 @@ fn update_call_workspace_provenance(
                 let workspace =
                     workspace_ref_id(value.get("workspace"), "workspace_materialize result")?;
                 let lifetime = required_string(value.get("lifetime"), "workspace lifetime")?;
-                if value
+                let requested_lifetime =
+                    required_string(call.get("lifetime"), "workspace_materialize lifetime")?;
+                if lifetime != requested_lifetime {
+                    return Err(invalid_plan(format!(
+                        "workspace_materialize result lifetime `{lifetime}` does not match requested lifetime `{requested_lifetime}`"
+                    )));
+                }
+                let released = value
                     .get("released")
                     .and_then(Value::as_bool)
-                    .unwrap_or(false)
-                {
+                    .ok_or_else(|| {
+                        invalid_plan("workspace_materialize result must carry released")
+                    })?;
+                if released {
                     return Err(invalid_plan(
                         "workspace_materialize result must bind an unreleased handle",
                     ));
@@ -787,6 +796,15 @@ fn update_call_workspace_provenance(
                 return Err(invalid_plan(format!(
                     "workspace_release result lifetime `{result_lifetime}` does not match live workspace lifetime `{lifetime}`"
                 )));
+            }
+            let released = value
+                .get("released")
+                .and_then(Value::as_bool)
+                .ok_or_else(|| invalid_plan("workspace_release result must carry released"))?;
+            if !released {
+                return Err(invalid_plan(
+                    "workspace_release result must bind a released handle",
+                ));
             }
             for handle in state.live_workspaces.values_mut() {
                 if handle.workspace() == workspace {
