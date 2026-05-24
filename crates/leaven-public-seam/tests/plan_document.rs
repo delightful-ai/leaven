@@ -124,6 +124,47 @@ fn plan_ir_family_lowers_and_executes_let_call_write_through_public_seam_owner()
 }
 
 #[test]
+fn plan_execution_with_capability_checks_call_authority_before_host_effects() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut plan = typed_let_call_write_plan();
+    plan["mode"] = json!({"kind": "execute"});
+    plan["commit"] = json!({
+        "kind": "graph_writes_atomic",
+        "on_stale": "reject"
+    });
+
+    let mut allowed_host = RecordingPlanHost::default();
+    package
+        .execute_plan_document_with_capability(
+            &plan,
+            &plan_execution_context(),
+            &call_execution_capability(&["public"], &[]),
+            &mut allowed_host,
+        )
+        .unwrap();
+    assert_eq!(allowed_host.calls, vec!["completion"]);
+    assert_eq!(allowed_host.writes, vec!["status"]);
+
+    let mut denied_plan = plan;
+    denied_plan["ops"][1]["call"]["input_classes"] = json!(["public", "case.target"]);
+    let mut denied_host = RecordingPlanHost::default();
+    let error = package
+        .execute_plan_document_with_capability(
+            &denied_plan,
+            &plan_execution_context(),
+            &call_execution_capability(&["public"], &["case.target"]),
+            &mut denied_host,
+        )
+        .unwrap_err();
+    assert!(
+        error.to_string().contains("lm_complete"),
+        "unexpected error: {error:?}"
+    );
+    assert!(denied_host.calls.is_empty());
+    assert!(denied_host.writes.is_empty());
+}
+
+#[test]
 fn plan_execution_result_rejects_receipt_hashes_unbound_from_plan_preimages() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let context = plan_execution_context();
@@ -3247,6 +3288,71 @@ fn target_denied_evaluator_capability(package: &PublicSeamPackage) -> Capability
     let mut value = evaluator_capability_value(package);
     value["grants"][0]["constraints"]["case_fields"] = json!(["input", "metadata"]);
     CapabilityDocument::from_value(value).unwrap()
+}
+
+fn call_execution_capability(allowed: &[&str], forbidden: &[&str]) -> CapabilityDocument {
+    CapabilityDocument::from_value(json!({
+        "schema_version": "leaven.capability.v1",
+        "jti": "jti_planexec_call_authority",
+        "capability_fingerprint": "fp_cap_sha256_planexec",
+        "policy_fingerprint": "fp_policy_sha256_planexec",
+        "subject_fingerprint": "fp_subject_sha256_planexec",
+        "issuer": {
+            "kind": "run_engine",
+            "id": "engine_local"
+        },
+        "subject": {
+            "kind": "stage_call",
+            "run": "run_demo",
+            "stage_call_id": "sc_planexec_call_authority",
+            "role": "scorer"
+        },
+        "audience": ["leaven.acp.worker"],
+        "issued_at": "2026-05-23T00:00:00Z",
+        "expires_at": "2026-05-23T00:20:00Z",
+        "expiry_behavior": "drain_inflight_no_new_ops",
+        "token_binding": {
+            "kind": "opaque_lookup",
+            "token_id": "ltok_planexec_call_authority"
+        },
+        "revocation": {
+            "mode": "issuer_epoch",
+            "revocation_epoch": 7,
+            "check": "on_every_request"
+        },
+        "renewal": {
+            "mode": "renew_before_expiry",
+            "max_extensions": 2,
+            "max_total_lifetime_s": 3600
+        },
+        "grants": [
+            {
+                "action": "lm.complete",
+                "resource": {},
+                "constraints": {
+                    "allowed_input_classes": allowed,
+                    "forbidden_input_classes": forbidden,
+                    "purposes": ["test.plan_ir"],
+                    "model_roles": ["reflector"]
+                }
+            }
+        ],
+        "budgets": {},
+        "execution_policy": {
+            "profile": "managed_sandbox",
+            "network": "leaven_endpoint_only",
+            "subprocess": "deny_except_sandbox_exec",
+            "filesystem": "workspace_handles_only",
+            "byo_effects": "forbidden"
+        },
+        "delegation": {
+            "may_delegate": false,
+            "max_depth": 0,
+            "must_attenuate": true,
+            "allowed_actions": []
+        }
+    }))
+    .unwrap()
 }
 
 fn evaluator_capability_value(package: &PublicSeamPackage) -> Value {
