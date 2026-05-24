@@ -2681,6 +2681,48 @@ fn submit_assessments_rejects_missing_or_placeholder_score_output() {
 }
 
 #[test]
+fn submit_assessments_rejects_summary_only_score_output_dummies() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    for (assessment_index, data_class, summary) in [
+        (
+            0,
+            "candidate.output",
+            "dummy independent output only present to satisfy schema",
+        ),
+        (
+            1,
+            "candidate.output",
+            "dummy pairwise output only present to satisfy schema",
+        ),
+        (
+            2,
+            "candidate.output",
+            "dummy listwise output only present to satisfy schema",
+        ),
+        (
+            0,
+            "candidate.artifact",
+            "dummy artifact output only present to satisfy schema",
+        ),
+    ] {
+        let mut document = submit_assessments_plan();
+        document["ops"][0]["write"]["assessments"][assessment_index]["score"]["output"] = json!({
+            "kind": "text",
+            "summary": summary,
+            "visibility": "public",
+            "data_classes": [data_class]
+        });
+        document["ops"][0]["write"]["assessments"][assessment_index]["evidence"] =
+            evidence_envelope(summary);
+        assert!(matches!(
+            package.validate_plan_document(&document).unwrap_err(),
+            PublicSeamError::InvalidPlan { .. }
+        ));
+    }
+}
+
+#[test]
 fn submit_assessments_rejects_missing_assessment_score_or_replayability() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
 

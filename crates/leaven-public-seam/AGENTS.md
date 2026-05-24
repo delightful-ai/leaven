@@ -303,9 +303,10 @@ backpressure, or runtime watch support.
   operations, mismatched `since_revision` event-source bases, and schema-valid
   placeholder `submit_assessments` score outputs before execution. Its
   `Score.output` checks require candidate/artifact data classes, a matching
-  `evidence.public.summary` projection, and, when an inline `value` is present,
-  a candidate-bound value matching the assessment's `candidate` / `candidates`
-  field. This rejects unbound and mismatched-candidate schema dummies, but it is
+  `evidence.public.summary` projection, and either a candidate-bound value
+  matching the assessment's `candidate` / `candidates` field or an explicit
+  blob/trace output projection. This rejects unbound, summary-only, and
+  mismatched-candidate schema dummies, but it is
   still self-declared public-seam document validation, not proof that the value
   is the actual candidate/artifact output assessed, and not provider or ACP
   runtime proof. Its execution-result verifier
