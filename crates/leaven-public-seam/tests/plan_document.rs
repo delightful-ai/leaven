@@ -741,6 +741,42 @@ fn workspace_materialize_and_release_emit_typed_handles_and_receipts() {
 }
 
 #[test]
+fn workspace_materialize_rejects_host_path_and_lifetime_substitution() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut host_path = workspace_materialize_only_plan();
+    host_path["ops"][0]["name"] = json!("workspace_path");
+    host_path["return"] = json!(["workspace_path"]);
+    let mut host = RecordingPlanHost::default();
+    let error = package
+        .execute_plan_document(&host_path, &plan_execution_context(), &mut host)
+        .unwrap_err();
+    assert_eq!(host.calls, vec!["workspace_materialize"]);
+    assert!(
+        error
+            .to_string()
+            .contains("workspace_materialize host returned invalid workspace"),
+        "unexpected error: {error:?}"
+    );
+
+    let mut wrong_lifetime = workspace_materialize_only_plan();
+    wrong_lifetime["ops"][0]["name"] = json!("workspace_bad_lifetime");
+    wrong_lifetime["ops"][0]["call"]["lifetime"] = json!("plan");
+    wrong_lifetime["return"] = json!(["workspace_bad_lifetime"]);
+    let mut host = RecordingPlanHost::default();
+    let error = package
+        .execute_plan_document(&wrong_lifetime, &plan_execution_context(), &mut host)
+        .unwrap_err();
+    assert_eq!(host.calls, vec!["workspace_materialize"]);
+    assert!(
+        error
+            .to_string()
+            .contains("workspace_materialize host returned lifetime `manual_release`"),
+        "unexpected error: {error:?}"
+    );
+}
+
+#[test]
 fn workspace_release_rejects_unmaterialized_handles_and_host_path_substitutes() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let mut unmaterialized = workspace_materialize_release_plan();
@@ -1583,6 +1619,13 @@ fn workspace_materialize_release_plan() -> Value {
     })
 }
 
+fn workspace_materialize_only_plan() -> Value {
+    let mut plan = workspace_materialize_release_plan();
+    plan["ops"].as_array_mut().unwrap().truncate(1);
+    plan["return"] = json!(["workspace"]);
+    plan
+}
+
 fn workspace_materialize_query_plan() -> Value {
     json!({
         "schema_version": "leaven.plan.v1",
@@ -2269,7 +2312,10 @@ impl PlanExecutionHost for RecordingPlanHost {
         &mut self,
         request: PlanWorkspaceMaterializeRequest<'_>,
     ) -> Result<PlanWorkspaceMaterializeOutcome, PublicSeamError> {
-        assert_eq!(request.name(), "workspace");
+        assert!(matches!(
+            request.name(),
+            "workspace" | "workspace_path" | "workspace_bad_lifetime"
+        ));
         assert_eq!(
             request.call()["kind"].as_str(),
             Some("workspace_materialize")
@@ -2277,13 +2323,32 @@ impl PlanExecutionHost for RecordingPlanHost {
         assert_eq!(request.candidate()?, "cand_planexec");
         assert_eq!(request.surface(), Some("program"));
         assert_eq!(request.mode()?, "copy_on_write");
-        assert_eq!(request.lifetime()?, "manual_release");
+        let requested_lifetime = request.lifetime()?;
+        if request.name() == "workspace_bad_lifetime" {
+            assert_eq!(requested_lifetime, "plan");
+        } else {
+            assert_eq!(requested_lifetime, "manual_release");
+        }
         self.calls.push("workspace_materialize");
+        if request.name() == "workspace_path" {
+            return Ok(PlanWorkspaceMaterializeOutcome::new(
+                "/tmp/leaven-workspace",
+                requested_lifetime,
+                "fp_runtime_sha256_workspace",
+            ));
+        }
+        if request.name() == "workspace_bad_lifetime" {
+            return Ok(PlanWorkspaceMaterializeOutcome::new(
+                "ws_planexec_materialized",
+                "manual_release",
+                "fp_runtime_sha256_workspace",
+            ));
+        }
         self.workspaces
             .insert("ws_planexec_materialized".to_owned());
         Ok(PlanWorkspaceMaterializeOutcome::new(
             "ws_planexec_materialized",
-            "manual_release",
+            requested_lifetime,
             "fp_runtime_sha256_workspace",
         ))
     }
