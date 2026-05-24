@@ -833,6 +833,13 @@ impl PlanLmCompleteOutcome {
         self.parsed = Some(parsed);
         self
     }
+
+    /// Attaches a cost object.
+    #[must_use]
+    pub fn with_cost(mut self, cost: Value) -> Self {
+        self.cost = Some(cost);
+        self
+    }
 }
 
 /// Host outcome for a typed `agent_run` call.

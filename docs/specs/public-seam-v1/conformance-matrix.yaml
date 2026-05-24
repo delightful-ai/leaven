@@ -1351,9 +1351,11 @@ rows:
       - crates/leaven-public-seam/src/plan_execution/effects.rs::lower_lm_output
       - crates/leaven-public-seam/src/plan_execution/effects.rs::lower_provider_hints
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanLmCompleteOutcome::with_parsed
+      - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanLmCompleteOutcome::with_cost
       - crates/leaven-public-seam/src/plan_execution.rs::validate_structured_output_contract
       - crates/leaven-public-seam/src/plan_execution.rs::validate_structured_output_outcome
       - crates/leaven-public-seam/src/plan_execution.rs::validate_json_schema_output_payload
+      - crates/leaven-public-seam/src/plan_execution.rs::record_lm_call_outcome
       - crates/leaven-public-seam/src/fingerprint.rs::SchemaFingerprint::for_json_value
       - crates/leaven-public-seam/src/plan_execution/receipts.rs::validate_successful_call_result_value
       - crates/leaven-public-seam/src/plan_execution/receipts.rs::validate_lm_response_value
@@ -1374,6 +1376,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-effect-call-authority-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-structured-output-evaluator-authority-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-lm-result-contract-partial-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-lm-success-cost-binding-partial-review.md
     status: pending
 
   - id: ps1.agent.contract

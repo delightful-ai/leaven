@@ -449,6 +449,7 @@ fn validate_call_receipt(
                 call_kind,
                 call,
                 value,
+                receipt,
                 required_string(receipt.get("receipt"), "receipt.receipt")?,
             )?;
             update_call_workspace_provenance(name, call_kind, call, value, &deps, state)?;
@@ -480,6 +481,7 @@ fn validate_successful_call_result_value(
     call_kind: &str,
     call: &Value,
     value: &Value,
+    receipt: &Map<String, Value>,
     receipt_id: &str,
 ) -> Result<(), PublicSeamError> {
     let value = object(value, "call result value")?;
@@ -495,7 +497,7 @@ fn validate_successful_call_result_value(
         )));
     }
     require_receipt_field(value, "receipt", receipt_id)?;
-    validate_lm_response_value(call_kind, call, value)?;
+    validate_lm_response_value(call_kind, call, value, receipt)?;
     validate_structured_output_value(call_kind, call, value)?;
     validate_sandbox_stream_value(call, value)?;
     validate_agent_session_value(call_kind, value, receipt_id)?;
@@ -518,9 +520,21 @@ fn validate_lm_response_value(
     call_kind: &str,
     call: &Value,
     value: &Map<String, Value>,
+    receipt: &Map<String, Value>,
 ) -> Result<(), PublicSeamError> {
     if call_kind != "lm_complete" {
         return Ok(());
+    }
+    let cost = value
+        .get("cost")
+        .ok_or_else(|| invalid_plan("lm_complete result value must carry cost"))?;
+    let receipt_cost = receipt
+        .get("cost")
+        .ok_or_else(|| invalid_plan("lm_complete call receipt must carry cost"))?;
+    if receipt_cost != cost {
+        return Err(invalid_plan(
+            "lm_complete call receipt cost must match result value cost",
+        ));
     }
     let message = value
         .get("message")
