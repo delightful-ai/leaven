@@ -427,6 +427,7 @@ fn plan_result_value(parts: &PlanResultValue<'_>) -> Value {
 
 struct ExecutionState {
     bindings: BTreeMap<String, Value>,
+    binding_data_classes: BTreeMap<String, BTreeSet<String>>,
     live_workspaces: BTreeMap<String, LiveWorkspaceHandle>,
     values: Map<String, Value>,
     receipts: Vec<Value>,
@@ -439,6 +440,7 @@ impl ExecutionState {
     fn new(base_revision: &str) -> Self {
         Self {
             bindings: BTreeMap::new(),
+            binding_data_classes: BTreeMap::new(),
             live_workspaces: BTreeMap::new(),
             values: Map::new(),
             receipts: Vec::new(),
@@ -504,6 +506,11 @@ fn execute_let(
     ) {
         state.values.insert(name.clone(), evaluated.value.clone());
     }
+    if !evaluated.data_classes.is_empty() {
+        state
+            .binding_data_classes
+            .insert(name.clone(), evaluated.data_classes);
+    }
     state.bindings.insert(name, evaluated.value);
     Ok(())
 }
@@ -526,6 +533,7 @@ fn execute_call<H: PlanExecutionHost>(
             call_kind,
             call,
             &deps.values,
+            &deps.data_classes,
             capability,
         )?;
     }

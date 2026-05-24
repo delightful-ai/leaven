@@ -791,6 +791,143 @@ fn capability_execution_denies_calls_that_drop_dependency_data_classes() {
 }
 
 #[test]
+fn capability_execution_denies_calls_that_drop_nested_agent_command_data_classes() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut plan = typed_let_call_write_plan();
+    plan["mode"] = json!({"kind": "execute"});
+    plan["ops"][0]["expr"]["value"] = literal_agent_session_with_command_output_classes();
+    plan["ops"].as_array_mut().unwrap().pop();
+    plan["return"] = json!(["completion"]);
+    let mut host = RecordingPlanHost::default();
+
+    let error = package
+        .execute_plan_document_with_capability(
+            &plan,
+            &plan_execution_context(),
+            &call_execution_capability(&["public"], &["transcript.raw"], false),
+            &mut host,
+        )
+        .unwrap_err();
+
+    assert!(
+        error
+            .to_string()
+            .contains("call `lm_complete` omitted dependency data class `transcript.raw`"),
+        "unexpected error: {error:?}"
+    );
+    assert!(host.calls.is_empty());
+
+    plan["ops"][1]["call"]["input_classes"] = json!(["public", "transcript.raw"]);
+    let mut host = RecordingPlanHost::default();
+    package
+        .execute_plan_document_with_capability(
+            &plan,
+            &plan_execution_context(),
+            &call_execution_capability(&["public", "transcript.raw"], &[], false),
+            &mut host,
+        )
+        .unwrap();
+    assert_eq!(host.calls, vec!["completion"]);
+}
+
+#[test]
+fn capability_execution_denies_calls_that_drop_nested_graph_row_data_classes() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut plan = typed_let_call_write_plan();
+    plan["mode"] = json!({"kind": "execute"});
+    plan["ops"][0]["expr"]["value"] = literal_assessment_graph_set();
+    plan["ops"].as_array_mut().unwrap().pop();
+    plan["return"] = json!(["completion"]);
+    let mut host = RecordingPlanHost::default();
+
+    let error = package
+        .execute_plan_document_with_capability(
+            &plan,
+            &plan_execution_context(),
+            &call_execution_capability(&["public"], &["candidate.output"], false),
+            &mut host,
+        )
+        .unwrap_err();
+
+    assert!(
+        error
+            .to_string()
+            .contains("call `lm_complete` omitted dependency data class `candidate.output`"),
+        "unexpected error: {error:?}"
+    );
+    assert!(host.calls.is_empty());
+}
+
+#[test]
+fn capability_execution_denies_calls_that_drop_literal_expr_data_classes() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut plan = typed_let_call_write_plan();
+    plan["mode"] = json!({"kind": "execute"});
+    plan["ops"][0]["expr"]["data_classes"] = json!(["external.secret"]);
+    plan["ops"].as_array_mut().unwrap().pop();
+    plan["return"] = json!(["completion"]);
+    let mut host = RecordingPlanHost::default();
+
+    let error = package
+        .execute_plan_document_with_capability(
+            &plan,
+            &plan_execution_context(),
+            &call_execution_capability(&["public"], &["external.secret"], false),
+            &mut host,
+        )
+        .unwrap_err();
+
+    assert!(
+        error
+            .to_string()
+            .contains("call `lm_complete` omitted dependency data class `external.secret`"),
+        "unexpected error: {error:?}"
+    );
+    assert!(host.calls.is_empty());
+
+    plan["ops"][1]["call"]["input_classes"] = json!(["external.secret", "public"]);
+    let mut host = RecordingPlanHost::default();
+    package
+        .execute_plan_document_with_capability(
+            &plan,
+            &plan_execution_context(),
+            &call_execution_capability(&["external.secret", "public"], &[], false),
+            &mut host,
+        )
+        .unwrap();
+    assert_eq!(host.calls, vec!["completion"]);
+    assert_eq!(host.call_deps["prompt"], json!("Say ok"));
+}
+
+#[test]
+fn capability_execution_denies_calls_that_drop_workspace_listing_entry_data_classes() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut plan = typed_let_call_write_plan();
+    plan["mode"] = json!({"kind": "execute"});
+    plan["ops"][0]["expr"]["value"] = literal_workspace_listing_with_entry_classes();
+    plan["ops"].as_array_mut().unwrap().pop();
+    plan["return"] = json!(["completion"]);
+    let mut host = RecordingPlanHost::default();
+
+    let error = package
+        .execute_plan_document_with_capability(
+            &plan,
+            &plan_execution_context(),
+            &call_execution_capability(&["public"], &["workspace.secret"], false),
+            &mut host,
+        )
+        .unwrap_err();
+
+    assert!(
+        error
+            .to_string()
+            .contains("call `lm_complete` omitted dependency data class `workspace.secret`"),
+        "unexpected error: {error:?}"
+    );
+    assert!(host.calls.is_empty());
+}
+
+#[test]
 fn capability_execution_ignores_domain_json_data_classes_inside_dependencies() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let mut plan = typed_let_call_write_plan();
@@ -823,6 +960,22 @@ fn capability_execution_ignores_domain_json_data_classes_inside_dependencies() {
             "data_classes": ["external.secret"]
         })
     );
+
+    plan["ops"][0]["expr"]["value"] = json!({
+        "kind": "text",
+        "data_classes": ["external.secret"],
+        "body": "domain payload, not a public-seam OutputRecord"
+    });
+    let mut host = RecordingPlanHost::default();
+    package
+        .execute_plan_document_with_capability(
+            &plan,
+            &plan_execution_context(),
+            &call_execution_capability(&["public"], &["external.secret"], false),
+            &mut host,
+        )
+        .unwrap();
+    assert_eq!(host.calls, vec!["completion"]);
 }
 
 #[test]
@@ -3988,6 +4141,74 @@ fn agent_command_blob_ref(id: &'static str) -> Value {
         "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
         "bytes": 0,
         "data_classes": ["transcript.raw"]
+    })
+}
+
+fn literal_agent_session_with_command_output_classes() -> Value {
+    json!({
+        "kind": "agent_session",
+        "session": "ags_literalseam",
+        "status": "succeeded",
+        "transcript_ref": agent_command_blob_ref("blob_literal_agent_transcript"),
+        "commands": [
+            {
+                "argv": ["codex"],
+                "status": "completed",
+                "receipt": "agentrec_literal_command",
+                "stdout_ref": agent_command_blob_ref("blob_literal_agent_stdout"),
+                "stderr_ref": agent_command_blob_ref("blob_literal_agent_stderr")
+            }
+        ],
+        "graph_revision": "rev_planexec_base",
+        "data_classes": ["public"],
+        "replayability": "has_declared_external_effects",
+        "receipt": "agentrec_literal_session",
+        "cost": {"usd_micro": 1}
+    })
+}
+
+fn literal_assessment_graph_set() -> Value {
+    json!({
+        "kind": "graph_set",
+        "items": [
+            {
+                "kind": "assessment_summary",
+                "assessment": "assess_literal_dependency",
+                "score": {
+                    "value": 1.0,
+                    "output": {
+                        "kind": "text",
+                        "summary": "candidate answer",
+                        "value": "candidate answer",
+                        "visibility": "public",
+                        "data_classes": ["candidate.output"]
+                    }
+                },
+                "evidence": evidence_envelope("candidate answer")
+            }
+        ],
+        "graph_revision": "rev_planexec_base",
+        "data_classes": ["public"],
+        "replayability": "pure_read",
+        "receipt": "qrec_literal_assessment"
+    })
+}
+
+fn literal_workspace_listing_with_entry_classes() -> Value {
+    json!({
+        "kind": "workspace_listing",
+        "entries": [
+            {
+                "path": "secrets.txt",
+                "kind": "file",
+                "bytes": 12,
+                "data_classes": ["workspace.secret"]
+            }
+        ],
+        "graph_revision": "rev_planexec_base",
+        "data_classes": ["public"],
+        "replayability": "pure_read",
+        "receipt": "qrec_literal_listing"
     })
 }
 

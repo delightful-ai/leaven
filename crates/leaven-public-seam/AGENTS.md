@@ -254,12 +254,18 @@ static Plan IR gate. Before any capability-scoped call reaches the host, the
 seam collects `data_classes` from resolved dependency values, requires the call
 to declare those classes in `input_classes`, and authorizes the effective union
 against the capability grant. A call may not drop `case.target` or another
-forbidden dependency class by relabeling only its own declared inputs. The
-collector is limited to recognized seam wire metadata carriers and nested
-blob/trace/reference fields; arbitrary application JSON fields named
-`data_classes`, even inside domain records with their own `kind`, are domain
-payload rather than authorization metadata unless the kind is part of the
-locked public-seam value vocabulary.
+forbidden dependency class by relabeling only its own declared inputs. Literal
+`Expr.data_classes` travel as separate binding metadata so the host-visible
+dependency value is not rewritten just to satisfy authority checks. The
+collector is limited to recognized seam wire metadata carriers, output-record
+shapes, workspace listing entries, graph rows, nested blob refs, command refs,
+trace refs, evidence projections, and stage/result output fields. Arbitrary
+application JSON fields named `data_classes`, even inside domain records with
+their own `kind`, are domain payload rather than authorization metadata unless
+the object matches the locked public-seam value or output-record vocabulary.
+This is call-authority evidence before host call execution; write-path
+dependency propagation and receipt-bound replay reconstruction remain separate
+pending proof.
 
 The
 `PublicSeamPackage::validate_plan_execution_result` route additionally proves

@@ -14,6 +14,7 @@ use crate::PublicSeamError;
 
 pub(super) struct ResolvedDependencies {
     pub(super) values: BTreeMap<String, Value>,
+    pub(super) data_classes: BTreeSet<String>,
     pub(super) live_workspaces: BTreeMap<String, LiveWorkspaceHandle>,
 }
 
@@ -49,12 +50,14 @@ pub(super) fn resolved_dependency_values(
     let Some(raw) = op.get("deps") else {
         return Ok(ResolvedDependencies {
             values,
+            data_classes: BTreeSet::new(),
             live_workspaces,
         });
     };
     let raw = raw
         .as_array()
         .ok_or_else(|| invalid_plan("op deps must be an array"))?;
+    let mut data_classes = BTreeSet::new();
     for dep in raw {
         let dep = dep
             .as_str()
@@ -64,18 +67,25 @@ pub(super) fn resolved_dependency_values(
             .get(dep)
             .ok_or_else(|| invalid_plan(format!("op references unknown dependency `{dep}`")))?;
         values.insert(dep.to_owned(), value.clone());
+        if let Some(dep_data_classes) = state.binding_data_classes.get(dep) {
+            dep_data_classes.iter().cloned().for_each(|data_class| {
+                data_classes.insert(data_class);
+            });
+        }
         if let Some(handle) = state.live_workspaces.get(dep) {
             live_workspaces.insert(dep.to_owned(), handle.clone());
         }
     }
     Ok(ResolvedDependencies {
         values,
+        data_classes,
         live_workspaces,
     })
 }
 
 pub(super) struct EvaluatedExpr {
     pub(super) value: Value,
+    pub(super) data_classes: BTreeSet<String>,
     pub(super) receipt: Option<Value>,
 }
 
@@ -94,6 +104,7 @@ pub(super) fn evaluate_expr(
                 .get("value")
                 .cloned()
                 .ok_or_else(|| invalid_plan("literal expr must carry value"))?,
+            data_classes: expr_data_classes(object)?,
             receipt: None,
         }),
         "graph_query" => super::execute_graph_query_expr(expr, name, plan_document, context, host),
@@ -103,6 +114,23 @@ pub(super) fn evaluate_expr(
             "representative Plan IR harness does not execute `{other}` let expressions"
         ))),
     }
+}
+
+fn expr_data_classes(object: &Map<String, Value>) -> Result<BTreeSet<String>, PublicSeamError> {
+    let Some(data_classes) = object.get("data_classes") else {
+        return Ok(BTreeSet::new());
+    };
+    data_classes
+        .as_array()
+        .ok_or_else(|| invalid_plan("expr data_classes must be an array"))?
+        .iter()
+        .map(|data_class| {
+            data_class
+                .as_str()
+                .map(str::to_owned)
+                .ok_or_else(|| invalid_plan("expr data_classes entries must be strings"))
+        })
+        .collect()
 }
 
 pub(super) fn execute_graph_query_expr(
@@ -152,6 +180,7 @@ pub(super) fn execute_graph_query_expr(
     let graph_revision = required_string(value.get("graph_revision"), "graph_revision")?.to_owned();
     Ok(EvaluatedExpr {
         value,
+        data_classes: BTreeSet::new(),
         receipt: Some(json!({
             "kind": "query",
             "receipt": receipt_id,
@@ -229,6 +258,7 @@ pub(super) fn execute_case_query_expr(
     let graph_revision = required_string(value.get("graph_revision"), "graph_revision")?.to_owned();
     Ok(EvaluatedExpr {
         value,
+        data_classes: BTreeSet::new(),
         receipt: Some(json!({
             "kind": "query",
             "receipt": receipt_id,
@@ -319,6 +349,7 @@ pub(super) fn execute_workspace_query_expr(
     )?;
     Ok(EvaluatedExpr {
         value,
+        data_classes: BTreeSet::new(),
         receipt: Some(json!({
             "kind": "query",
             "receipt": receipt_id,

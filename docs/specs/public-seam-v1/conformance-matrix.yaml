@@ -615,6 +615,10 @@ rows:
       - crates/leaven-public-seam/tests/call_authority.rs::call_authority_rejects_declared_forbidden_intersections_even_when_grant_allows
       - crates/leaven-public-seam/tests/call_authority.rs::call_authority_rejects_reflector_lm_call_input_classes_include_case_target
       - crates/leaven-public-seam/tests/plan_document.rs::capability_execution_denies_calls_that_drop_dependency_data_classes
+      - crates/leaven-public-seam/tests/plan_document.rs::capability_execution_denies_calls_that_drop_nested_agent_command_data_classes
+      - crates/leaven-public-seam/tests/plan_document.rs::capability_execution_denies_calls_that_drop_nested_graph_row_data_classes
+      - crates/leaven-public-seam/tests/plan_document.rs::capability_execution_denies_calls_that_drop_literal_expr_data_classes
+      - crates/leaven-public-seam/tests/plan_document.rs::capability_execution_denies_calls_that_drop_workspace_listing_entry_data_classes
       - crates/leaven-public-seam/tests/plan_document.rs::capability_execution_ignores_domain_json_data_classes_inside_dependencies
       - crates/leaven-public-seam/tests/evidence_envelope.rs::evidence_envelope_rejects_source_receipt_family_mismatches
       - crates/leaven-public-seam/tests/plan_result.rs::plan_result_preserves_value_visibility_data_classes
@@ -636,6 +640,12 @@ rows:
       - crates/leaven-public-seam/src/call_authority.rs::validate
       - crates/leaven-public-seam/src/call_authority.rs::validate_call_with_dependency_classes
       - crates/leaven-public-seam/src/call_authority.rs::collect_data_classes
+      - crates/leaven-public-seam/src/call_authority.rs::collect_workspace_listing_entry_data_classes
+      - crates/leaven-public-seam/src/call_authority.rs::is_seam_data_class_carrier
+      - crates/leaven-public-seam/src/plan_execution.rs::ExecutionState
+      - crates/leaven-public-seam/src/plan_execution/evaluate.rs::ResolvedDependencies
+      - crates/leaven-public-seam/src/plan_execution/evaluate.rs::EvaluatedExpr
+      - crates/leaven-public-seam/src/plan_execution/evaluate.rs::expr_data_classes
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_call_authority_document
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::execute_plan_document_with_capability
       - crates/leaven-public-seam/src/execution_authority.rs::validate
@@ -668,6 +678,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-stage-workspace-result-kind-follow-up-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-public-seam-tranche-plato-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-assessment-evidence-galileo-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-data-class-dependency-carriers-linnaeus-review.md
     status: pending
 
   - id: ps1.visibility.reflector_target_safe
