@@ -85,6 +85,38 @@ fn evidence_envelope_rejects_target_derived_data_class_gaps() {
             .unwrap_err(),
         PublicSeamError::InvalidEvidence { .. }
     ));
+
+    let mut missing_private_payload_ref_projection = target_derived_envelope();
+    missing_private_payload_ref_projection["private"]["payload_ref"] = json!({
+        "kind": "blob_ref",
+        "id": "blob_private_payload",
+        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "bytes": 32,
+        "data_classes": ["external.secret"]
+    });
+    assert!(matches!(
+        package
+            .validate_evidence_envelope_document(&missing_private_payload_ref_projection)
+            .unwrap_err(),
+        PublicSeamError::InvalidEvidence { .. }
+    ));
+
+    let mut missing_top_level_private_payload_ref_projection = target_derived_envelope();
+    missing_top_level_private_payload_ref_projection["private"]["data_classes"] =
+        json!(["scorer.private", "external.secret"]);
+    missing_top_level_private_payload_ref_projection["private"]["payload_ref"] = json!({
+        "kind": "blob_ref",
+        "id": "blob_private_payload",
+        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "bytes": 32,
+        "data_classes": ["external.secret"]
+    });
+    assert!(matches!(
+        package
+            .validate_evidence_envelope_document(&missing_top_level_private_payload_ref_projection)
+            .unwrap_err(),
+        PublicSeamError::InvalidEvidence { .. }
+    ));
 }
 
 #[test]

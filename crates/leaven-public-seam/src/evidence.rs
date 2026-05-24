@@ -42,6 +42,17 @@ impl EvidenceEnvelopeDocument {
                 required_string_vec(private.get("data_classes"), "private.data_classes")
             })
             .transpose()?;
+        let private_payload_data_classes = object
+            .get("private")
+            .and_then(Value::as_object)
+            .and_then(|private| private.get("payload_ref"))
+            .map(|payload_ref| collect_blob_ref_data_classes(payload_ref, "private.payload_ref"))
+            .transpose()?
+            .unwrap_or_default();
+        validate_private_payload_ref_classes(
+            private_data_classes.as_deref(),
+            &private_payload_data_classes,
+        )?;
         let trace_data_classes = public
             .get("trace_refs")
             .map(|trace_refs| collect_trace_data_classes(trace_refs, "public.trace_refs"))
@@ -177,6 +188,24 @@ fn validate_target_derived_classes(
     Ok(())
 }
 
+fn validate_private_payload_ref_classes(
+    private_data_classes: Option<&[String]>,
+    private_payload_data_classes: &[String],
+) -> Result<(), PublicSeamError> {
+    let Some(private_data_classes) = private_data_classes else {
+        return Ok(());
+    };
+    let private_data_classes = private_data_classes.iter().collect::<BTreeSet<_>>();
+    for data_class in private_payload_data_classes {
+        if !private_data_classes.contains(data_class) {
+            return Err(invalid_evidence(format!(
+                "private.data_classes must cover private payload_ref data class `{data_class}`"
+            )));
+        }
+    }
+    Ok(())
+}
+
 fn carries_case_target_class(
     data_classes: &[String],
     public_data_classes: &[String],
@@ -189,6 +218,16 @@ fn carries_case_target_class(
         .chain(private_data_classes.into_iter().flatten())
         .chain(trace_data_classes)
         .any(|data_class| data_class.starts_with("case.target"))
+}
+
+fn collect_blob_ref_data_classes(
+    value: &Value,
+    field: &str,
+) -> Result<Vec<String>, PublicSeamError> {
+    let blob = value
+        .as_object()
+        .ok_or_else(|| invalid_evidence(format!("{field} must be an object")))?;
+    optional_string_vec(blob.get("data_classes"), "blob_ref.data_classes")
 }
 
 fn collect_trace_data_classes(value: &Value, field: &str) -> Result<Vec<String>, PublicSeamError> {

@@ -627,6 +627,10 @@ rows:
       - crates/leaven-public-seam/src/result.rs::collect_workspace_listing_data_classes
       - crates/leaven-public-seam/src/evidence.rs::EvidenceEnvelopeDocument
       - crates/leaven-public-seam/src/evidence.rs::EvidenceEnvelopeDocument::trace_data_classes
+      - crates/leaven-public-seam/src/evidence.rs::validate_private_payload_ref_classes
+      - crates/leaven-public-seam/src/evidence.rs::collect_blob_ref_data_classes
+      - crates/leaven-public-seam/src/stage_payload.rs::require_output_record_data_class_coverage
+      - crates/leaven-public-seam/src/stage_payload.rs::collect_output_record_data_classes
       - crates/leaven-public-seam/AGENTS.md
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-result-receipt-replay-review.md
@@ -635,6 +639,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-visibility-trace-stage-provenance-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-value-visibility-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-stage-evidence-provenance-partial-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-stage-evidence-typed-data-class-follow-up-review.md
     status: pending
 
   - id: ps1.visibility.reflector_target_safe
@@ -670,12 +675,14 @@ rows:
       - crates/leaven-public-seam/src/stage_payload.rs::StagePayloadDocument
       - crates/leaven-public-seam/src/stage_payload.rs::inspect_reflect_request
       - crates/leaven-public-seam/src/stage_payload.rs::reject_target_leakage
+      - crates/leaven-public-seam/src/stage_payload.rs::require_output_record_data_class_coverage
       - crates/leaven-public-seam/src/stage_payload.rs::validate_reflection_diagnosis_sources
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_stage_payload_document
       - crates/leaven-public-seam/AGENTS.md
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-stage-payload-current-blocker-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-stage-evidence-provenance-partial-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-stage-evidence-typed-data-class-follow-up-review.md
     status: pending
 
   - id: ps1.evidence.visibility_receipts
@@ -713,6 +720,8 @@ rows:
       - crates/leaven-public-seam/src/evidence.rs::EvidenceEnvelopeDocument::trace_data_classes
       - crates/leaven-public-seam/src/evidence.rs::carries_case_target_class
       - crates/leaven-public-seam/src/evidence.rs::collect_trace_data_classes
+      - crates/leaven-public-seam/src/evidence.rs::validate_private_payload_ref_classes
+      - crates/leaven-public-seam/src/evidence.rs::collect_blob_ref_data_classes
       - crates/leaven-public-seam/src/result.rs::validate_value_visibility
       - crates/leaven-public-seam/src/result.rs::collect_score_output_data_classes_from_value
       - crates/leaven-public-seam/src/result.rs::collect_evidence_data_classes_from_value
@@ -724,6 +733,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-23-evidence-visibility-current-blocker-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-visibility-trace-stage-provenance-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-stage-evidence-provenance-partial-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-stage-evidence-typed-data-class-follow-up-review.md
     status: pending
 
   - id: ps1.stage.reflection_proposal_split
@@ -761,6 +771,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-23-stage-payload-current-blocker-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-visibility-trace-stage-provenance-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-stage-evidence-provenance-partial-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-stage-evidence-typed-data-class-follow-up-review.md
     status: pending
 
   - id: ps1.stage.payload_receipts
@@ -791,10 +802,12 @@ rows:
       - crates/leaven-public-seam/tests/stage_payloads.rs::callback_and_adapter_payloads_reject_missing_payload_schema
     implementation_evidence:
       - crates/leaven-public-seam/src/stage_payload.rs::StagePayloadDocument
+      - crates/leaven-public-seam/src/stage_payload.rs::inspect_reflect_request
       - crates/leaven-public-seam/src/stage_payload.rs::inspect_reflection_result
       - crates/leaven-public-seam/src/stage_payload.rs::validate_reflection_diagnosis_sources
       - crates/leaven-public-seam/src/stage_payload.rs::inspect_propose_request
       - crates/leaven-public-seam/src/stage_payload.rs::require_reflection_source_refs
+      - crates/leaven-public-seam/src/stage_payload.rs::require_output_record_data_class_coverage
       - crates/leaven-public-seam/src/stage_payload.rs::source_ref_set
       - crates/leaven-public-seam/src/stage_payload.rs::inspect_runner_request
       - crates/leaven-public-seam/src/stage_payload.rs::inspect_schema_bound_payload
@@ -805,6 +818,7 @@ rows:
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-stage-payload-current-blocker-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-stage-evidence-provenance-partial-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-stage-evidence-typed-data-class-follow-up-review.md
     status: pending
 
   - id: ps1.proposal.surface_authority
