@@ -513,7 +513,10 @@ mod tests {
         let mut view = workspace.view();
         let request = AgentRunRequest::new(
             AgentInstructions::task("finish"),
-            OutputContract::WorkspaceDiff { roots: Vec::new() },
+            OutputContract::WorkspaceDiff {
+                roots: Vec::new(),
+                surface_fingerprint: None,
+            },
         );
         let budget = BudgetSnapshot::default();
 
@@ -547,7 +550,10 @@ mod tests {
                 &mut view,
                 AgentRunRequest::new(
                     AgentInstructions::task("x"),
-                    OutputContract::WorkspaceDiff { roots: Vec::new() },
+                    OutputContract::WorkspaceDiff {
+                        roots: Vec::new(),
+                        surface_fingerprint: None,
+                    },
                 ),
                 AgentRunContext::new(AgentSessionId::new(), &budget),
             )

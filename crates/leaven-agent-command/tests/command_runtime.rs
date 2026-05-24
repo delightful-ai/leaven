@@ -288,7 +288,10 @@ fn command_runtime_exposes_identity_capabilities_fingerprint_and_respects_cancel
                 &mut workspace.view(),
                 AgentRunRequest::new(
                     AgentInstructions::task("cancel"),
-                    OutputContract::WorkspaceDiff { roots: vec![] },
+                    OutputContract::WorkspaceDiff {
+                        roots: vec![],
+                        surface_fingerprint: None,
+                    },
                 ),
                 AgentRunContext::new(AgentSessionId::new(), &BudgetSnapshot::default())
                     .with_cancellation(CancellationRef::from_flag(&cancelled)),
@@ -384,7 +387,10 @@ fn stdout_session_parser_records_nonzero_exit_as_failed_session() {
                 &mut workspace.view(),
                 AgentRunRequest::new(
                     AgentInstructions::task("fail"),
-                    OutputContract::WorkspaceDiff { roots: vec![] },
+                    OutputContract::WorkspaceDiff {
+                        roots: vec![],
+                        surface_fingerprint: None,
+                    },
                 ),
                 AgentRunContext::new(AgentSessionId::new(), &BudgetSnapshot::default()),
             )
@@ -446,7 +452,10 @@ fn command_runtime_surfaces_parser_and_workspace_failures_as_runtime_errors() {
                 &mut workspace.view(),
                 AgentRunRequest::new(
                     AgentInstructions::task("parse"),
-                    OutputContract::WorkspaceDiff { roots: vec![] },
+                    OutputContract::WorkspaceDiff {
+                        roots: vec![],
+                        surface_fingerprint: None,
+                    },
                 ),
                 AgentRunContext::new(AgentSessionId::new(), &BudgetSnapshot::default()),
             )
