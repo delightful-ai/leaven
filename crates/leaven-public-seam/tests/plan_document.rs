@@ -577,21 +577,73 @@ fn agent_run_and_sandbox_exec_lower_to_owned_runtime_primitives_and_emit_receipt
     let mut sandbox_host = RecordingPlanHost::default();
     let sandbox_report = package
         .execute_plan_document(
-            &execute_external_call_plan(sandbox_exec_call()),
+            &sandbox_exec_workspace_plan(),
             &plan_execution_context(),
             &mut sandbox_host,
         )
         .unwrap();
-    assert_eq!(sandbox_host.calls, vec!["sandbox"]);
-    assert_eq!(sandbox_report.document().receipt_kinds(), &["call"]);
+    assert_eq!(sandbox_host.calls, vec!["workspace_materialize", "sandbox"]);
+    assert_eq!(sandbox_report.document().receipt_kinds(), &["call", "call"]);
     assert_eq!(
         sandbox_report.value()["values"]["completion"]["kind"].as_str(),
         Some("sandbox_exec")
     );
     assert_eq!(
-        sandbox_report.value()["receipts"][0]["receipt"].as_str(),
+        sandbox_report.value()["receipts"][1]["receipt"].as_str(),
         Some("execrec_completion")
     );
+}
+
+#[test]
+fn sandbox_exec_rejects_unmaterialized_released_and_host_path_workspaces() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut unmaterialized = sandbox_exec_workspace_plan();
+    unmaterialized["ops"][1]["call"]["workspace"] = json!("ws_unmaterialized");
+    let mut host = RecordingPlanHost::default();
+    let error = package
+        .execute_plan_document(&unmaterialized, &plan_execution_context(), &mut host)
+        .unwrap_err();
+    assert_eq!(host.calls, vec!["workspace_materialize"]);
+    assert!(
+        error
+            .to_string()
+            .contains("sandbox_exec refused unmaterialized workspace"),
+        "unexpected error: {error:?}"
+    );
+
+    let mut released = workspace_materialize_release_plan();
+    released["ops"].as_array_mut().unwrap().push(json!({
+        "kind": "call",
+        "name": "completion",
+        "deps": ["release"],
+        "idempotency_key": "plan-sandbox-workspace-0003",
+        "call": sandbox_exec_call()
+    }));
+    released["return"] = json!(["workspace", "release", "completion"]);
+    let mut host = RecordingPlanHost::default();
+    let error = package
+        .execute_plan_document(&released, &plan_execution_context(), &mut host)
+        .unwrap_err();
+    assert_eq!(
+        host.calls,
+        vec!["workspace_materialize", "workspace_release"]
+    );
+    assert!(
+        error
+            .to_string()
+            .contains("sandbox_exec refused already released workspace"),
+        "unexpected error: {error:?}"
+    );
+
+    let mut host_path = sandbox_exec_workspace_plan();
+    host_path["ops"][1]["call"]["workspace"] = json!("/tmp/leaven-workspace");
+    assert!(matches!(
+        package
+            .validate_plan_document(&host_path)
+            .expect_err("host paths are not WorkspaceRef values"),
+        PublicSeamError::ExampleValidation { .. }
+    ));
 }
 
 #[test]
@@ -1573,6 +1625,34 @@ fn workspace_materialize_call_op(idempotency_key: &str) -> Value {
     })
 }
 
+fn sandbox_exec_workspace_plan() -> Value {
+    json!({
+        "schema_version": "leaven.plan.v1",
+        "plan_id": "plansandboxworkspace001",
+        "consistency": {
+            "kind": "latest_at_start"
+        },
+        "mode": {
+            "kind": "execute"
+        },
+        "ops": [
+            workspace_materialize_call_op("plan-sandbox-workspace-0001"),
+            {
+                "kind": "call",
+                "name": "completion",
+                "deps": ["workspace"],
+                "idempotency_key": "plan-sandbox-workspace-0002",
+                "call": sandbox_exec_call()
+            }
+        ],
+        "return": ["workspace", "completion"],
+        "commit": {
+            "kind": "graph_writes_atomic",
+            "on_stale": "reject"
+        }
+    })
+}
+
 fn workspace_query_let_op(
     name: &str,
     workspace: impl serde::Serialize,
@@ -1619,7 +1699,7 @@ fn agent_run_call() -> Value {
 fn sandbox_exec_call() -> Value {
     json!({
         "kind": "sandbox_exec",
-        "workspace": "ws_planexec",
+        "workspace": "ws_planexec_materialized",
         "argv": ["python", "-c", "print('ok')"],
         "cwd": "work",
         "env": {
@@ -2075,6 +2155,11 @@ impl PlanExecutionHost for RecordingPlanHost {
     ) -> Result<PlanSandboxExecOutcome, PublicSeamError> {
         assert_eq!(request.name(), "completion");
         assert_eq!(request.call()["kind"].as_str(), Some("sandbox_exec"));
+        assert_eq!(request.live_workspace()?, "ws_planexec_materialized");
+        assert_eq!(
+            request.deps()["workspace"]["workspace"].as_str(),
+            Some("ws_planexec_materialized")
+        );
         assert_eq!(request.stream_policy(), "buffer");
         let command = request.to_workspace_command()?;
         assert_eq!(command.program, "python");

@@ -126,9 +126,12 @@ delivery, or full `ps1.lm.contract` closeout. The `PlanAgentRunRequest` and
 `sandbox_exec` calls into provider-neutral `leaven-agent::AgentRunRequest` and
 backend-neutral `leaven-workspace::Command` primitives, and the representative
 harness can emit typed `agent_session` and `sandbox_exec` Plan Result values
-with call receipts. These routes are not agent provider execution, sandbox
-backend execution, ACP delivery, proposal parsing, streaming delivery, or full
-agent/sandbox row closeout. The `PlanWorkspaceMaterializeRequest` and
+with call receipts. `sandbox_exec` also requires a live unreleased
+`workspace_handle` dependency before host command execution, so host paths and
+bare workspace ids cannot satisfy the route. These routes are not agent
+provider execution, sandbox backend execution, ACP delivery, proposal parsing,
+streaming delivery, or full agent/sandbox row closeout. The
+`PlanWorkspaceMaterializeRequest` and
 `PlanWorkspaceReleaseRequest` routes lower schema-valid workspace lifecycle
 calls into typed public-seam requests and emit `workspace_handle` Plan Result
 values with call receipts; `workspace_release` validates the requested
@@ -241,8 +244,10 @@ backpressure, or runtime watch support.
   delivery rows remain pending until reviewed as their own tranche.
 - `tests/plan_document.rs` also proves representative `agent_run` and
   `sandbox_exec` lowering into `leaven-agent` and `leaven-workspace` primitives
-  plus typed Plan Result receipt/value emission for those calls. Agent lowering
-  preserves schema-valid `json_schema` output through the owning
+  plus typed Plan Result receipt/value emission for those calls. Sandbox
+  lowering requires a live unreleased `workspace_handle` dependency before the
+  host receives the command. Agent lowering preserves schema-valid
+  `json_schema` output through the owning
   `leaven-agent::OutputContract::JsonSchema` primitive. This is public-seam
   harness proof only; provider runtime, sandbox backend execution, streaming
   delivery, and proposal parsing remain pending.
