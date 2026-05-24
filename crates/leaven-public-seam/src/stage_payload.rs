@@ -222,6 +222,11 @@ fn inspect_reflect_request(
     require_non_empty_array(object.get("source_refs"), "source_refs")?;
     let top_level_source_refs = source_ref_set(object.get("source_refs"), "source_refs")?;
     let examples = required_array(object.get("examples"), "examples")?;
+    if examples.is_empty() {
+        return Err(invalid_stage_payload(
+            "reflector request must carry target-safe examples",
+        ));
+    }
     for example in examples {
         let example = example
             .as_object()
@@ -238,8 +243,24 @@ fn inspect_reflect_request(
         reject_target_leakage(example.get("feedback"), "reflector example feedback")?;
         reject_target_leakage(example.get("side_info"), "reflector example side_info")?;
         reject_target_leakage(example.get("score"), "reflector example score")?;
-        for data_class in string_array(example.get("data_classes"), "examples.data_classes")? {
-            if data_class == "case.target" {
+        let example_data_classes =
+            string_array(example.get("data_classes"), "examples.data_classes")?;
+        if example_data_classes.is_empty() {
+            return Err(invalid_stage_payload(
+                "reflector examples must carry data classes",
+            ));
+        }
+        require_output_record_data_class_coverage(
+            &example_data_classes,
+            example
+                .get("score")
+                .and_then(|score| score.as_object())
+                .and_then(|score| score.get("output")),
+            "reflector example data_classes",
+            "score output data class",
+        )?;
+        for data_class in example_data_classes {
+            if contains_case_target_marker(&data_class) {
                 return Err(invalid_stage_payload(
                     "reflector examples must not carry case.target data classes",
                 ));
@@ -408,6 +429,60 @@ fn require_reflection_source_refs(
         }
     }
     Ok(())
+}
+
+fn require_output_record_data_class_coverage(
+    carrier: &[String],
+    value: Option<&Value>,
+    top_level_field: &str,
+    nested_label: &str,
+) -> Result<(), PublicSeamError> {
+    for data_class in collect_output_record_data_classes(value, nested_label)? {
+        if !carrier.contains(&data_class) {
+            return Err(invalid_stage_payload(format!(
+                "{top_level_field} must cover {nested_label} `{data_class}`"
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn collect_output_record_data_classes(
+    value: Option<&Value>,
+    field: &str,
+) -> Result<BTreeSet<String>, PublicSeamError> {
+    let mut data_classes = BTreeSet::new();
+    let Some(value) = value else {
+        return Ok(data_classes);
+    };
+    let output = value
+        .as_object()
+        .ok_or_else(|| invalid_stage_payload(format!("{field} must be an object")))?;
+    if let Some(classes) = output.get("data_classes") {
+        data_classes.extend(string_array(Some(classes), field)?);
+    }
+    if let Some(blob_ref) = output.get("blob_ref") {
+        let blob_ref = blob_ref
+            .as_object()
+            .ok_or_else(|| invalid_stage_payload(format!("{field} blob_ref must be an object")))?;
+        if let Some(classes) = blob_ref.get("data_classes") {
+            data_classes.extend(string_array(Some(classes), field)?);
+        }
+    }
+    if let Some(trace_refs) = output.get("trace_refs") {
+        let trace_refs = trace_refs
+            .as_array()
+            .ok_or_else(|| invalid_stage_payload(format!("{field} trace_refs must be an array")))?;
+        for trace in trace_refs {
+            let trace = trace.as_object().ok_or_else(|| {
+                invalid_stage_payload(format!("{field} trace_refs entries must be objects"))
+            })?;
+            if let Some(classes) = trace.get("data_classes") {
+                data_classes.extend(string_array(Some(classes), field)?);
+            }
+        }
+    }
+    Ok(data_classes)
 }
 
 fn inspect_runner_request(object: &serde_json::Map<String, Value>) -> Result<(), PublicSeamError> {

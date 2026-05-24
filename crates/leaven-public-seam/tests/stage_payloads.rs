@@ -163,6 +163,15 @@ fn reflect_request_rejects_hidden_case_target_material() {
 fn reflect_request_rejects_missing_source_refs_or_query_policy() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
 
+    let mut empty_examples = reflect_request();
+    empty_examples["examples"] = json!([]);
+    assert!(matches!(
+        package
+            .validate_stage_payload_document(&empty_examples)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+
     let mut missing_top_source_refs = reflect_request();
     missing_top_source_refs["source_refs"] = json!([]);
     assert!(matches!(
@@ -180,6 +189,66 @@ fn reflect_request_rejects_missing_source_refs_or_query_policy() {
             .unwrap_err(),
         PublicSeamError::InvalidStagePayload { .. }
     ));
+
+    let mut missing_example_data_classes = reflect_request();
+    missing_example_data_classes["examples"][0]["data_classes"] = json!([]);
+    assert!(matches!(
+        package
+            .validate_stage_payload_document(&missing_example_data_classes)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+
+    let mut score_output_data_class_gap = reflect_request();
+    score_output_data_class_gap["examples"][0]["score"]["output"]["data_classes"] =
+        json!(["candidate.output", "external.secret"]);
+    assert!(matches!(
+        package
+            .validate_stage_payload_document(&score_output_data_class_gap)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+
+    let mut score_output_blob_ref_gap = reflect_request();
+    score_output_blob_ref_gap["examples"][0]["score"]["output"]["blob_ref"] = json!({
+        "kind": "blob_ref",
+        "id": "blob_score_output",
+        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "bytes": 32,
+        "data_classes": ["external.secret"]
+    });
+    assert!(matches!(
+        package
+            .validate_stage_payload_document(&score_output_blob_ref_gap)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+
+    let mut score_output_trace_ref_gap = reflect_request();
+    score_output_trace_ref_gap["examples"][0]["score"]["output"]["trace_refs"] = json!([
+        {
+            "kind": "runner_trace",
+            "id": "trace_score_output",
+            "visibility": "redacted_completion",
+            "data_classes": ["completion.raw"],
+            "receipt": "lmrec_score"
+        }
+    ]);
+    assert!(matches!(
+        package
+            .validate_stage_payload_document(&score_output_trace_ref_gap)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+
+    let mut domain_value_data_classes = reflect_request();
+    domain_value_data_classes["examples"][0]["score"]["output"]["value"] = json!({
+        "domain_label": "classification",
+        "data_classes": ["external.secret"]
+    });
+    package
+        .validate_stage_payload_document(&domain_value_data_classes)
+        .unwrap();
 
     let mut uncarried_example_source_ref = reflect_request();
     uncarried_example_source_ref["source_refs"] = json!(["cand_unrelated"]);
@@ -356,6 +425,25 @@ fn propose_request_requires_reflection_result_and_change_schema_authority() {
             .validate_stage_payload_document(&wrong_bridge)
             .unwrap_err(),
         PublicSeamError::ExampleValidation { .. } | PublicSeamError::InvalidStagePayload { .. }
+    ));
+
+    let mut unreceipted_reflection = propose_request();
+    unreceipted_reflection["reflection_result"]["read_receipts"] = json!([]);
+    assert!(matches!(
+        package
+            .validate_stage_payload_document(&unreceipted_reflection)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+
+    let mut diagnosis_free_reflection = propose_request();
+    diagnosis_free_reflection["reflection_result"]["failure_modes"] = json!([]);
+    diagnosis_free_reflection["reflection_result"]["surface_suggestions"] = json!([]);
+    assert!(matches!(
+        package
+            .validate_stage_payload_document(&diagnosis_free_reflection)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
     ));
 }
 
