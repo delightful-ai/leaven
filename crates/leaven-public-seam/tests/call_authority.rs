@@ -151,10 +151,23 @@ fn call_authority_rejects_sandbox_exec_outside_workspace_execution_policy() {
             .contains("sandbox_exec requires workspace_handles_only"),
         "unexpected error: {error:?}"
     );
+
+    let mut network_denied = call_capability();
+    network_denied["execution_policy"]["network"] = json!("deny");
+    let capability = CapabilityDocument::from_value(network_denied).unwrap();
+    let error = package
+        .validate_call_authority_document(&call_authority_plan(), &capability)
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("sandbox_exec denied by execution_policy.network"),
+        "unexpected error: {error:?}"
+    );
 }
 
 #[test]
-fn call_authority_checks_agent_allowed_commands_against_grants() {
+fn call_authority_rejects_agent_allowed_commands_outside_grants() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
 
     let mut allowed_plan = call_authority_plan();

@@ -237,6 +237,11 @@ pub fn execute_plan<H: PlanExecutionHost>(
             "workspace_query execution requires capability-authorized Plan execution",
         ));
     }
+    if let Some(call_kind) = plan_contains_capability_bound_effect(plan)? {
+        return Err(invalid_plan(format!(
+            "{call_kind} execution requires capability-authorized Plan execution"
+        )));
+    }
     execute_authorized_plan(plan, plan_document, context, host, None)
 }
 
@@ -350,6 +355,31 @@ fn dry_run_result(plan: &Value, context: &PlanExecutionContext) -> Result<Value,
         charges: &[],
         errors: &[],
     }))
+}
+
+fn plan_contains_capability_bound_effect(
+    plan: &Value,
+) -> Result<Option<&'static str>, PublicSeamError> {
+    let plan_object = object(plan, "plan")?;
+    let ops = plan_object
+        .get("ops")
+        .and_then(Value::as_array)
+        .ok_or_else(|| invalid_plan("plan ops must be an array"))?;
+    for op in ops {
+        let op_object = object(op, "plan op")?;
+        if op_object.get("kind").and_then(Value::as_str) != Some("call") {
+            continue;
+        }
+        let call = op_object
+            .get("call")
+            .ok_or_else(|| invalid_plan("call op must carry call"))?;
+        match nested_kind(call, "call")? {
+            "agent_run" => return Ok(Some("agent_run")),
+            "sandbox_exec" => return Ok(Some("sandbox_exec")),
+            _ => {}
+        }
+    }
+    Ok(None)
 }
 
 fn replay_result<H: PlanExecutionHost>(
