@@ -11,7 +11,7 @@ use super::{
     workspace_query_expected_value_kind, workspace_query_projection,
     workspace_query_request_from_values,
 };
-use crate::PublicSeamError;
+use crate::{PublicSeamError, plan_error};
 
 pub fn validate_plan_result_receipts(
     plan: &Value,
@@ -33,6 +33,14 @@ pub fn validate_plan_result_receipts(
         .get("receipts")
         .and_then(Value::as_array)
         .ok_or_else(|| invalid_plan("plan result receipts must be an array"))?;
+    let charges = result_object
+        .get("charges")
+        .and_then(Value::as_array)
+        .ok_or_else(|| invalid_plan("plan result charges must be an array"))?;
+    let errors = result_object
+        .get("errors")
+        .and_then(Value::as_array)
+        .ok_or_else(|| invalid_plan("plan result errors must be an array"))?;
     match plan_document.mode_kind() {
         "dry_run" => {
             if receipts.is_empty() {
@@ -50,7 +58,7 @@ pub fn validate_plan_result_receipts(
         _ => {}
     }
     let receipts_by_op = receipts_by_op_var(receipts)?;
-    let mut state = ReceiptValidationState::default();
+    let mut state = ReceiptValidationState::new(charges, errors)?;
     let mut seen_receipt_ops = BTreeSet::new();
     for op in ops {
         let name = required_string(object(op, "plan op")?.get("name"), "op.name")?;
@@ -76,10 +84,35 @@ pub fn validate_plan_result_receipts(
     Ok(())
 }
 
-#[derive(Default)]
 struct ReceiptValidationState {
     bindings: BTreeMap<String, Value>,
     live_workspaces: BTreeMap<String, LiveWorkspaceHandle>,
+    charges_by_receipt: BTreeMap<String, Value>,
+    errors: Vec<Value>,
+}
+
+impl ReceiptValidationState {
+    fn new(charges: &[Value], errors: &[Value]) -> Result<Self, PublicSeamError> {
+        let mut charges_by_receipt = BTreeMap::new();
+        for charge in charges {
+            let charge = object(charge, "charge receipt")?;
+            let receipt = required_string(charge.get("receipt"), "charge.receipt")?;
+            if charges_by_receipt
+                .insert(receipt.to_owned(), Value::Object(charge.clone()))
+                .is_some()
+            {
+                return Err(invalid_plan(format!(
+                    "multiple charge receipts use id `{receipt}`"
+                )));
+            }
+        }
+        Ok(Self {
+            bindings: BTreeMap::new(),
+            live_workspaces: BTreeMap::new(),
+            charges_by_receipt,
+            errors: errors.to_vec(),
+        })
+    }
 }
 
 fn validate_op_receipt(
@@ -456,6 +489,7 @@ fn validate_call_receipt(
             state.bindings.insert(name.to_owned(), value.clone());
         }
         "failed" => {
+            validate_failed_call_receipt(name, receipt, state)?;
             require_receipt_field(
                 receipt,
                 "result_hash",
@@ -503,6 +537,68 @@ fn validate_successful_call_result_value(
     validate_sandbox_stream_value(call, value)?;
     validate_agent_session_value(call_kind, value, receipt_id)?;
     validate_sandbox_exec_value(call_kind, value)?;
+    Ok(())
+}
+
+fn validate_failed_call_receipt(
+    name: &str,
+    receipt: &Map<String, Value>,
+    state: &ReceiptValidationState,
+) -> Result<(), PublicSeamError> {
+    let receipt_id = required_string(receipt.get("receipt"), "receipt.receipt")?;
+    let error = receipt
+        .get("error")
+        .and_then(Value::as_object)
+        .ok_or_else(|| {
+            invalid_plan(format!(
+                "failed call receipt for `{name}` must carry typed PlanError"
+            ))
+        })?;
+    plan_error::validate_closed_plan_error(error).map_err(invalid_plan)?;
+    let error_receipt = plan_error::plan_error_receipt_id(error).map_err(invalid_plan)?;
+    if error_receipt != receipt_id {
+        return Err(invalid_plan(
+            "failed call PlanError receipt must match call receipt",
+        ));
+    }
+    if !state
+        .errors
+        .iter()
+        .any(|value| value.as_object() == Some(error))
+    {
+        return Err(invalid_plan(format!(
+            "failed call receipt for `{name}` PlanError must appear in top-level errors"
+        )));
+    }
+
+    let charge_receipts = receipt
+        .get("charge_receipts")
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or(&[]);
+    if receipt.get("cost").is_some() {
+        if charge_receipts.is_empty() {
+            return Err(invalid_plan(format!(
+                "failed paid call receipt for `{name}` must carry charge_receipts"
+            )));
+        }
+        for charge_ref in charge_receipts {
+            let charge_id = charge_ref.as_str().ok_or_else(|| {
+                invalid_plan("failed call charge_receipts entries must be receipt ids")
+            })?;
+            let charge = state.charges_by_receipt.get(charge_id).ok_or_else(|| {
+                invalid_plan(format!(
+                    "failed call charge receipt `{charge_id}` is not present in top-level charges"
+                ))
+            })?;
+            let charge = object(charge, "charge receipt")?;
+            require_receipt_field(charge, "source_receipt", receipt_id)?;
+        }
+    } else if !charge_receipts.is_empty() {
+        return Err(invalid_plan(format!(
+            "failed uncharged call receipt for `{name}` must not carry charge_receipts"
+        )));
+    }
     Ok(())
 }
 

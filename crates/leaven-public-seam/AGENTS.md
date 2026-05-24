@@ -112,8 +112,9 @@ Crate-root exports for `AcpWorkerSession`, `AcpSessionLifecycle`,
 `AcpBackpressure`, `AcpProgressPriority`, and `AcpProgressDisposition` are
 advanced public seam contracts for profile-derived lifecycle facts only. They
 prove the engine-client/worker-agent role vocabulary, stdio-first session
-model, bounded progress-update queue, cancellation state, and locked
-`flow_control.backpressure` strategy at the contract layer. They are not stdio
+model, bounded progress-update queue, receipt-bound cancellation PlanError
+facts, and locked `flow_control.backpressure` strategy at the contract layer.
+They are not stdio
 JSON-RPC I/O, process startup, provider execution, full ACP lifecycle control,
 or production worker scheduling.
 

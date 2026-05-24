@@ -801,6 +801,22 @@ fn assert_plan_execution_result_rejected(
     ));
 }
 
+fn assert_plan_execution_result_error_contains(
+    package: &PublicSeamPackage,
+    plan: &Value,
+    context: &PlanExecutionContext,
+    result: &Value,
+    expected: &str,
+) {
+    let error = package
+        .validate_plan_execution_result(plan, context, result)
+        .unwrap_err();
+    assert!(
+        error.to_string().contains(expected),
+        "expected `{expected}` in {error:?}"
+    );
+}
+
 fn assert_plan_execution_or_result_rejected(
     package: &PublicSeamPackage,
     plan: &Value,
@@ -866,6 +882,26 @@ fn rebind_call_result_hash(result: &mut Value, receipt_index: usize, name: &str)
             "schema_version": "leaven.plan_call_result.v1",
             "name": name,
             "value": value
+        }),
+    ));
+}
+
+fn rebind_failed_call_result_hash(result: &mut Value, receipt_index: usize, name: &str) {
+    let receipt = &result["receipts"][receipt_index];
+    let error = receipt.get("error").cloned();
+    let cost = receipt.get("cost").cloned();
+    let charge_receipts = receipt
+        .get("charge_receipts")
+        .cloned()
+        .unwrap_or_else(|| json!([]));
+    result["receipts"][receipt_index]["result_hash"] = json!(test_prefixed_jcs_hash(
+        "fp_result_sha256_",
+        &json!({
+            "schema_version": "leaven.plan_call_result.v1",
+            "name": name,
+            "error": error,
+            "cost": cost,
+            "charge_receipts": charge_receipts
         }),
     ));
 }
@@ -2223,6 +2259,57 @@ fn plan_execution_produces_failed_paid_lm_call_and_charge_receipts() {
     assert_eq!(
         report.value()["charges"][0]["source_receipt"].as_str(),
         Some("lmrec_completion")
+    );
+}
+
+#[test]
+fn plan_execution_rejects_failed_call_receipts_without_typed_error_and_charge_audit() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let plan = execute_call_only_plan();
+    let context = plan_execution_context();
+    let mut host = RecordingPlanHost {
+        fail_lm: true,
+        ..RecordingPlanHost::default()
+    };
+    let report = package
+        .execute_plan_document(&plan, &context, &mut host)
+        .unwrap();
+
+    let mut missing_error = report.value().clone();
+    missing_error["receipts"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("error");
+    missing_error["errors"] = json!([]);
+    rebind_failed_call_result_hash(&mut missing_error, 0, "completion");
+    assert_plan_execution_result_error_contains(
+        &package,
+        &plan,
+        &context,
+        &missing_error,
+        "failed call receipt for `completion` must carry typed PlanError",
+    );
+
+    let mut mismatched_error_receipt = report.value().clone();
+    mismatched_error_receipt["receipts"][0]["error"]["receipt"] = json!("lmrec_other");
+    mismatched_error_receipt["errors"][0]["receipt"] = json!("lmrec_other");
+    rebind_failed_call_result_hash(&mut mismatched_error_receipt, 0, "completion");
+    assert_plan_execution_result_error_contains(
+        &package,
+        &plan,
+        &context,
+        &mismatched_error_receipt,
+        "failed call PlanError receipt must match call receipt",
+    );
+
+    let mut missing_top_level_error = report.value().clone();
+    missing_top_level_error["errors"] = json!([]);
+    assert_plan_execution_result_error_contains(
+        &package,
+        &plan,
+        &context,
+        &missing_top_level_error,
+        "failed call receipt for `completion` PlanError must appear in top-level errors",
     );
 }
 

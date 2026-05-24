@@ -187,12 +187,33 @@ fn acp_worker_session_uses_engine_client_worker_agent_inversion_and_bounded_upda
         "scorer started"
     );
 
-    let cancellation = session.lifecycle_mut().cancel("operator cancelled");
+    let cancellation = session
+        .lifecycle_mut()
+        .cancel_with_error(
+            "operator cancelled",
+            "acprec_operator_cancel",
+            plan_error("acprec_operator_cancel", "cancelled", "operator cancelled"),
+        )
+        .unwrap();
     assert_eq!(cancellation.reason(), "operator cancelled");
+    assert_eq!(cancellation.receipt(), "acprec_operator_cancel");
+    assert_eq!(cancellation.error()["code"], json!("cancelled"));
+    assert_eq!(
+        cancellation.error()["receipt"],
+        json!("acprec_operator_cancel")
+    );
     assert_eq!(session.lifecycle().state(), AcpSessionState::Cancelled);
     assert!(session.lifecycle().is_cancelled());
     assert_eq!(
-        session.lifecycle_mut().cancel("ignored duplicate").reason(),
+        session
+            .lifecycle_mut()
+            .cancel_with_error(
+                "ignored duplicate",
+                "acprec_duplicate_cancel",
+                plan_error("acprec_duplicate_cancel", "cancelled", "ignored duplicate"),
+            )
+            .unwrap()
+            .reason(),
         "operator cancelled"
     );
     assert!(matches!(
@@ -202,6 +223,80 @@ fn acp_worker_session_uses_engine_client_worker_agent_inversion_and_bounded_upda
             .unwrap_err(),
         PublicSeamError::InvalidScope { .. }
     ));
+}
+
+#[test]
+fn acp_lifecycle_cancellation_requires_receipts_and_closed_plan_errors() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let profile = package
+        .validate_acp_profile_document(&acp_profile())
+        .unwrap();
+    let mut lifecycle = AcpSessionLifecycle::from_profile(&profile).unwrap();
+
+    for (receipt, error, expected) in [
+        (
+            "",
+            plan_error("acprec_cancel", "cancelled", "operator cancelled"),
+            "ACP cancellation receipt must be non-empty",
+        ),
+        (
+            "acprec_cancel",
+            json!({"code": "cancelled"}),
+            "ACP cancellation error must carry message",
+        ),
+        (
+            "acprec_cancel",
+            plan_error("acprec_other", "cancelled", "operator cancelled"),
+            "ACP cancellation error receipt must match cancellation receipt",
+        ),
+        (
+            "acprec_cancel",
+            plan_error("acprec_cancel", "not_a_closed_code", "operator cancelled"),
+            "ACP cancellation error code must be a closed PlanError code",
+        ),
+    ] {
+        let error = lifecycle
+            .cancel_with_error("operator cancelled", receipt, error)
+            .unwrap_err();
+        assert!(
+            error.to_string().contains(expected),
+            "expected `{expected}` in {error:?}"
+        );
+        assert_eq!(lifecycle.state(), AcpSessionState::Running);
+    }
+
+    let cancellation = lifecycle
+        .cancel_with_error(
+            "operator cancelled",
+            "acprec_cancel",
+            plan_error("acprec_cancel", "cancelled", "operator cancelled"),
+        )
+        .unwrap();
+    assert_eq!(cancellation.receipt(), "acprec_cancel");
+    assert_eq!(cancellation.error()["code"], json!("cancelled"));
+    assert_eq!(cancellation.error()["message"], json!("operator cancelled"));
+
+    let mut object_ref_lifecycle = AcpSessionLifecycle::from_profile(&profile).unwrap();
+    let cancellation = object_ref_lifecycle
+        .cancel_with_error(
+            "operator cancelled",
+            "acprec_object_cancel",
+            json!({
+                "code": "cancelled",
+                "message": "operator cancelled",
+                "receipt": {
+                    "kind": "receipt",
+                    "id": "acprec_object_cancel",
+                    "fingerprint": "fp_receipt_sha256_cancel"
+                }
+            }),
+        )
+        .unwrap();
+    assert_eq!(cancellation.receipt(), "acprec_object_cancel");
+    assert_eq!(
+        cancellation.error()["receipt"]["id"],
+        json!("acprec_object_cancel")
+    );
 }
 
 #[test]
@@ -284,6 +379,13 @@ fn acp_lifecycle_applies_profile_backpressure_strategies() {
             if reason == "ACP session disconnected after update overflow"
     ));
     assert_eq!(disconnect_lifecycle.state(), AcpSessionState::Cancelled);
+    let cancellation = disconnect_lifecycle.cancellation().unwrap();
+    assert_eq!(cancellation.receipt(), "acprec_disconnect_1");
+    assert_eq!(cancellation.error()["code"], json!("cancelled"));
+    assert_eq!(
+        cancellation.error()["receipt"],
+        json!("acprec_disconnect_1")
+    );
 
     let mut enqueue_disconnect = AcpSessionLifecycle::from_profile(&disconnect_profile).unwrap();
     let first = enqueue_disconnect.enqueue_progress("first").unwrap();
@@ -1473,6 +1575,14 @@ fn extension_method(method: &str, action: &str) -> Value {
         "result_schema": "leaven.plan_result.v1.schema.json",
         "required_action": action,
         "produces_receipt": true
+    })
+}
+
+fn plan_error(receipt: &str, code: &str, message: &str) -> Value {
+    json!({
+        "code": code,
+        "message": message,
+        "receipt": receipt
     })
 }
 

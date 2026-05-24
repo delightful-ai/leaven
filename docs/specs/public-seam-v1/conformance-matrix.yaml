@@ -303,6 +303,7 @@ rows:
     negative_test_evidence:
       - crates/leaven-public-seam/tests/plan_result.rs::plan_result_rejects_generic_or_untyped_result_payloads
       - crates/leaven-public-seam/tests/plan_result.rs::plan_result_rejects_receipts_without_audit_timing
+      - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_rejects_failed_call_receipts_without_typed_error_and_charge_audit
     implementation_evidence:
       - crates/leaven-public-seam/src/result.rs::PlanResultDocument
       - crates/leaven-public-seam/src/result.rs::PlanResultDocument::from_schema_valid_value
@@ -314,6 +315,8 @@ rows:
       - crates/leaven-public-seam/src/plan_execution.rs::plan_result_value
       - crates/leaven-public-seam/src/plan_execution.rs::record_lm_call_outcome
       - crates/leaven-public-seam/src/plan_execution.rs::record_failed_lm_call
+      - crates/leaven-public-seam/src/plan_execution/receipts.rs::validate_failed_call_receipt
+      - crates/leaven-public-seam/src/plan_error.rs::validate_closed_plan_error
       - crates/leaven-public-seam/AGENTS.md
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-result-receipt-replay-review.md
@@ -348,6 +351,7 @@ rows:
       - crates/leaven-public-seam/tests/plan_result.rs::plan_result_rejects_decorative_or_wrong_kind_receipt_refs
       - crates/leaven-public-seam/tests/plan_result.rs::plan_result_rejects_decorative_audit_currency_receipts
       - crates/leaven-public-seam/tests/plan_result.rs::plan_result_rejects_same_prefix_result_hashes_that_do_not_bind_values
+      - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_rejects_failed_call_receipts_without_typed_error_and_charge_audit
       - crates/leaven-public-seam/tests/evaluation_job.rs::evaluation_request_receipt_rejects_decorative_or_unbound_hashes
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_evidence_source_receipts_that_are_missing_or_wrong_kind
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_submit_assessment_result_hashes_that_do_not_bind_values
@@ -391,6 +395,7 @@ rows:
       - crates/leaven-public-seam/tests/plan_result.rs::plan_result_accepts_typed_success_and_failure_envelopes
     negative_test_evidence:
       - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_result_rejects_missing_operation_receipts
+      - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_rejects_failed_call_receipts_without_typed_error_and_charge_audit
       - crates/leaven-public-seam/tests/plan_result.rs::plan_result_rejects_failed_call_costs_without_charge_receipts
     implementation_evidence:
       - crates/leaven-engine/src/context/run_context.rs::RunContext::charge_failed_evaluation_cost
@@ -401,6 +406,8 @@ rows:
       - crates/leaven-public-seam/src/result.rs::is_failed_call_with_cost
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanLmCompleteOutcome
       - crates/leaven-public-seam/src/plan_execution.rs::execute_plan
+      - crates/leaven-public-seam/src/plan_execution/receipts.rs::validate_failed_call_receipt
+      - crates/leaven-public-seam/src/plan_error.rs::validate_closed_plan_error
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-result-receipt-replay-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-23-result-envelope-failed-cost-target-review.md
@@ -1226,6 +1233,7 @@ rows:
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_worker_session_uses_engine_client_worker_agent_inversion_and_bounded_updates
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_lifecycle_rejects_unbounded_or_overproducing_progress_queues
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_lifecycle_applies_profile_backpressure_strategies
+      - crates/leaven-public-seam/tests/acp_profile.rs::acp_lifecycle_cancellation_requires_receipts_and_closed_plan_errors
     partial_contract_implementation_evidence:
       - crates/leaven-public-seam/src/acp_profile.rs::AcpProfileDocument::default_max_inflight_updates
       - crates/leaven-public-seam/src/acp_profile.rs::AcpProfileDocument::backpressure
@@ -1236,7 +1244,10 @@ rows:
       - crates/leaven-public-seam/src/acp_profile.rs::AcpSessionState
       - crates/leaven-public-seam/src/acp_profile.rs::AcpSessionLifecycle::enqueue_progress
       - crates/leaven-public-seam/src/acp_profile.rs::AcpSessionLifecycle::offer_progress
-      - crates/leaven-public-seam/src/acp_profile.rs::AcpSessionLifecycle::cancel
+      - crates/leaven-public-seam/src/acp_profile.rs::AcpSessionLifecycle::cancel_with_error
+      - crates/leaven-public-seam/src/acp_profile.rs::AcpSessionCancellation::receipt
+      - crates/leaven-public-seam/src/acp_profile.rs::AcpSessionCancellation::error
+      - crates/leaven-public-seam/src/acp_profile.rs::validate_cancellation_error
       - crates/leaven-public-seam/src/acp_profile.rs::AcpProgressPriority
       - crates/leaven-public-seam/src/acp_profile.rs::AcpProgressDisposition
     review_evidence:
@@ -1373,6 +1384,7 @@ rows:
       - crates/leaven-public-seam/tests/plan_document.rs::lm_complete_lowering_rejects_deferred_multimodal_or_extension_content
       - crates/leaven-public-seam/tests/plan_document.rs::lm_complete_rejects_schema_valid_non_final_or_oversized_responses
       - crates/leaven-public-seam/tests/lm_contract.rs::lm_complete_can_execute_through_provider_neutral_lm_trait_and_preserve_cost
+      - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_rejects_failed_call_receipts_without_typed_error_and_charge_audit
       - crates/leaven-public-seam/tests/plan_document.rs::call_results_reject_missing_receipts_and_wrong_kinds_even_with_valid_hashes
       - crates/leaven-lm/tests/lm_contract.rs::request_builders_preserve_sampling_output_and_provider_hints
       - crates/leaven-lm-openai/tests/openai_mapping.rs::openai_request_lowers_developer_tool_messages_tools_and_final_message_output
@@ -1398,6 +1410,8 @@ rows:
       - crates/leaven-public-seam/src/plan_execution.rs::validate_structured_output_outcome
       - crates/leaven-public-seam/src/plan_execution.rs::validate_json_schema_output_payload
       - crates/leaven-public-seam/src/plan_execution.rs::record_lm_call_outcome
+      - crates/leaven-public-seam/src/plan_execution/receipts.rs::validate_failed_call_receipt
+      - crates/leaven-public-seam/src/plan_error.rs::validate_closed_plan_error
       - crates/leaven-public-seam/src/fingerprint.rs::SchemaFingerprint::for_json_value
       - crates/leaven-public-seam/src/plan_execution/receipts.rs::validate_successful_call_result_value
       - crates/leaven-public-seam/src/plan_execution/receipts.rs::validate_lm_response_value
