@@ -691,6 +691,25 @@ fn conformance_evidence_audit_rejects_pending_rows_with_closeout_evidence_fields
 }
 
 #[test]
+fn conformance_evidence_audit_requires_blocked_rows_to_name_prerequisites() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut matrix = package.conformance_matrix().unwrap();
+    let row = matrix
+        .rows
+        .iter_mut()
+        .find(|row| row.id == "ps1.acp.transport_profile")
+        .unwrap();
+    row.status = MatrixRowStatus::Blocked;
+    row.blocked_on.clear();
+
+    let error = package.audit_conformance_evidence(&matrix).unwrap_err();
+
+    assert!(matches!(error, PublicSeamError::InvalidMatrix { .. }));
+    assert!(error.to_string().contains("ps1.acp.transport_profile"));
+    assert!(error.to_string().contains("blocked_on prerequisites"));
+}
+
+#[test]
 fn conformance_evidence_audit_rejects_happy_path_only_denial_rows() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let mut matrix = package.conformance_matrix().unwrap();

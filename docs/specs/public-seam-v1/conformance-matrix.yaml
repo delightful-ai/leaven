@@ -1163,7 +1163,9 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-backpressure-strategy-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-stdio-launch-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-stage-evidence-jsonrpc-handoff-partial-review.md
-    status: pending
+    blocked_on:
+      - A production ACP process/session transport owner must execute JSON-RPC over stdio and prove the engine-client/worker-agent lifecycle through the public route; the current evidence is wire-contract validation only.
+    status: blocked
 
   - id: ps1.acp.auth_permissions
     area: acp
@@ -1255,7 +1257,9 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-costful-primary-receipt-follow-up-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-stage-workspace-result-kind-follow-up-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-stage-evidence-jsonrpc-handoff-partial-review.md
-    status: pending
+    blocked_on:
+      - A production ACP process/session transport owner must carry extension-result envelopes over the ACP route for all V1 method families; the current evidence rejects bare payloads at the wire-contract layer only.
+    status: blocked
 
   - id: ps1.acp.lifecycle_backpressure
     area: acp
@@ -1298,7 +1302,9 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-lifecycle-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-backpressure-strategy-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-evidence-stage-current-tranche-review.md
-    status: pending
+    blocked_on:
+      - A production ACP process/session transport owner must bind cancellation and bounded progress queues to live worker activity; the current evidence proves profile-derived lifecycle vocabulary only.
+    status: blocked
 
   - id: ps1.acp.no_mcp_v1
     area: acp

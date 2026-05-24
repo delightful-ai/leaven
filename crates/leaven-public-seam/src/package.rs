@@ -554,6 +554,14 @@ impl PublicSeamPackage {
                         ),
                     });
                 }
+                if row.status == MatrixRowStatus::Blocked && row.blocked_on.is_empty() {
+                    return Err(PublicSeamError::InvalidMatrix {
+                        message: format!(
+                            "row `{}` is blocked without blocked_on prerequisites",
+                            row.id
+                        ),
+                    });
+                }
                 continue;
             }
             if row.implementation_evidence.is_empty() {
