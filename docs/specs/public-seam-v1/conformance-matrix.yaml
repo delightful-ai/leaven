@@ -1380,6 +1380,7 @@ rows:
       - crates/leaven-public-seam/tests/plan_document.rs::workspace_handle_provenance_rejects_literal_forgery_and_released_reuse
       - crates/leaven-public-seam/tests/plan_document.rs::workspace_release_rejects_unmaterialized_handles_and_host_path_substitutes
       - crates/leaven-public-seam/tests/workspace_ref_contract.rs::workspace_lifecycle_rejects_object_ref_run_substitution_before_release_host_work
+      - crates/leaven-public-seam/tests/workspace_ref_contract.rs::workspace_lifecycle_rejects_bare_id_release_of_object_ref_handle
       - crates/leaven-public-seam/tests/plan_document.rs::workspace_query_reads_require_live_handles_and_emit_query_receipts
       - crates/leaven-public-seam/tests/plan_document.rs::workspace_query_rejects_unmaterialized_released_and_mismatched_results
       - crates/leaven-public-seam/tests/plan_document.rs::workspace_query_rejects_file_listing_stat_and_digest_result_mismatches
