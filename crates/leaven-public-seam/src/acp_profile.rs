@@ -717,9 +717,7 @@ impl AcpExtensionResultDocument {
         validate_receipts_for_method(&method, receipts)?;
         validate_primary_result_hash(&method, primary_value, receipts)?;
         let expected_receipt = expected_receipt_for_method(&method, receipts)?;
-        let expected_receipt_id =
-            required_string(expected_receipt.get("receipt"), "receipt.receipt")?;
-        validate_effect_primary_audit(&method, primary, expected_receipt_id)?;
+        validate_effect_primary_audit(&method, primary, expected_receipt)?;
         if let Some(primary_receipt) = primary.get("receipt").and_then(Value::as_str) {
             ensure_primary_receipt_is_carried(primary_receipt, receipts)?;
         }
@@ -1145,8 +1143,9 @@ fn validate_primary_result_hash(
 fn validate_effect_primary_audit(
     method: &str,
     primary: &serde_json::Map<String, Value>,
-    expected_receipt_id: &str,
+    expected_receipt: &serde_json::Map<String, Value>,
 ) -> Result<(), PublicSeamError> {
+    let expected_receipt_id = required_string(expected_receipt.get("receipt"), "receipt.receipt")?;
     match method {
         "leaven/agent.run" => {
             let primary_receipt = required_string(primary.get("receipt"), "primary.receipt")?;
@@ -1155,7 +1154,8 @@ fn validate_effect_primary_audit(
                     "ACP extension result primary receipt `{primary_receipt}` does not match expected receipt `{expected_receipt_id}`"
                 )));
             }
-            validate_agent_session_value("agent_run", primary, expected_receipt_id)
+            validate_agent_session_value("agent_run", primary, expected_receipt_id)?;
+            validate_effect_primary_cost("agent_run", primary, expected_receipt)
         }
         "leaven/sandbox.exec" => {
             let primary_receipt = required_string(primary.get("receipt"), "primary.receipt")?;
@@ -1164,9 +1164,27 @@ fn validate_effect_primary_audit(
                     "ACP extension result primary receipt `{primary_receipt}` does not match expected receipt `{expected_receipt_id}`"
                 )));
             }
-            validate_sandbox_exec_value("sandbox_exec", primary)
+            validate_sandbox_exec_value("sandbox_exec", primary)?;
+            validate_effect_primary_cost("sandbox_exec", primary, expected_receipt)
         }
         _ => Ok(()),
+    }
+}
+
+fn validate_effect_primary_cost(
+    call_kind: &str,
+    primary: &serde_json::Map<String, Value>,
+    receipt: &serde_json::Map<String, Value>,
+) -> Result<(), PublicSeamError> {
+    match (primary.get("cost"), receipt.get("cost")) {
+        (Some(primary_cost), Some(receipt_cost)) if primary_cost == receipt_cost => Ok(()),
+        (Some(_), _) => Err(invalid_acp(format!(
+            "ACP extension result {call_kind} primary cost must match call receipt cost"
+        ))),
+        (None, Some(_)) => Err(invalid_acp(format!(
+            "ACP extension result {call_kind} call receipt cost must have a matching primary cost"
+        ))),
+        (None, None) => Ok(()),
     }
 }
 
