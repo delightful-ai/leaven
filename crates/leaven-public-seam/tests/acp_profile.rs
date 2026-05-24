@@ -1,6 +1,7 @@
 use leaven_public_seam::{
-    AcpAuthenticateRequest, AcpPermissionRequest, AcpSessionLifecycle, AcpSessionState,
-    AcpWorkerSession, CapabilityDocument, CapabilityRegistry, PublicSeamError, PublicSeamPackage,
+    AcpAuthenticateRequest, AcpBackpressure, AcpPermissionRequest, AcpProgressDisposition,
+    AcpProgressPriority, AcpSessionLifecycle, AcpSessionState, AcpWorkerSession,
+    CapabilityDocument, CapabilityRegistry, PublicSeamError, PublicSeamPackage,
 };
 use serde_json::{Value, json};
 
@@ -17,6 +18,7 @@ fn acp_profile_validates_pinned_stdio_leaven_methods_and_bounded_updates() {
         &["stdio_jsonrpc".to_owned(), "unix_socket_jsonrpc".to_owned()]
     );
     assert_eq!(profile.default_max_inflight_updates(), 32);
+    assert_eq!(profile.backpressure(), AcpBackpressure::PauseWorker);
     assert_eq!(
         profile.extension_methods().len(),
         locked_profile_methods().len()
@@ -56,6 +58,10 @@ fn acp_worker_session_uses_engine_client_worker_agent_inversion_and_bounded_upda
     assert_eq!(session.engine_role(), "engine_client");
     assert_eq!(session.worker_role(), "worker_agent");
     assert_eq!(session.lifecycle().max_inflight_updates(), 32);
+    assert_eq!(
+        session.lifecycle().backpressure(),
+        AcpBackpressure::PauseWorker
+    );
     assert_eq!(session.lifecycle().state(), AcpSessionState::Running);
 
     let update = session
@@ -93,12 +99,22 @@ fn acp_worker_session_uses_engine_client_worker_agent_inversion_and_bounded_upda
 
 #[test]
 fn acp_lifecycle_rejects_unbounded_or_overproducing_progress_queues() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut unbounded_profile = acp_profile();
+    unbounded_profile["flow_control"]["default_max_inflight_updates"] = json!(0);
     assert!(matches!(
-        AcpSessionLifecycle::bounded(0).unwrap_err(),
-        PublicSeamError::InvalidScope { .. }
+        package
+            .validate_acp_profile_document(&unbounded_profile)
+            .unwrap_err(),
+        PublicSeamError::ExampleValidation { .. } | PublicSeamError::InvalidScope { .. }
     ));
 
-    let mut lifecycle = AcpSessionLifecycle::bounded(1).unwrap();
+    let mut one_slot_profile = acp_profile();
+    one_slot_profile["flow_control"]["default_max_inflight_updates"] = json!(1);
+    let one_slot_profile = package
+        .validate_acp_profile_document(&one_slot_profile)
+        .unwrap();
+    let mut lifecycle = AcpSessionLifecycle::from_profile(&one_slot_profile).unwrap();
     lifecycle.enqueue_progress("first").unwrap();
     assert!(matches!(
         lifecycle.enqueue_progress("second").unwrap_err(),
@@ -109,6 +125,85 @@ fn acp_lifecycle_rejects_unbounded_or_overproducing_progress_queues() {
         "first"
     );
     lifecycle.enqueue_progress("after ack").unwrap();
+}
+
+#[test]
+fn acp_lifecycle_applies_profile_backpressure_strategies() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut drop_profile = acp_profile();
+    drop_profile["flow_control"]["default_max_inflight_updates"] = json!(1);
+    drop_profile["flow_control"]["backpressure"] = json!("drop_noncritical_updates");
+    let drop_profile = package
+        .validate_acp_profile_document(&drop_profile)
+        .unwrap();
+    assert_eq!(
+        drop_profile.backpressure(),
+        AcpBackpressure::DropNoncriticalUpdates
+    );
+    let mut drop_lifecycle = AcpSessionLifecycle::from_profile(&drop_profile).unwrap();
+    drop_lifecycle.enqueue_progress("first").unwrap();
+    assert!(matches!(
+        drop_lifecycle
+            .offer_progress("noncritical", AcpProgressPriority::Noncritical)
+            .unwrap(),
+        AcpProgressDisposition::DroppedNoncritical
+    ));
+    assert_eq!(drop_lifecycle.inflight_updates(), 1);
+    assert!(matches!(
+        drop_lifecycle
+            .offer_progress("critical", AcpProgressPriority::Critical)
+            .unwrap_err(),
+        PublicSeamError::InvalidScope { .. }
+    ));
+
+    let mut disconnect_profile = acp_profile();
+    disconnect_profile["flow_control"]["default_max_inflight_updates"] = json!(1);
+    disconnect_profile["flow_control"]["backpressure"] = json!("disconnect");
+    let disconnect_profile = package
+        .validate_acp_profile_document(&disconnect_profile)
+        .unwrap();
+    assert_eq!(
+        disconnect_profile.backpressure(),
+        AcpBackpressure::Disconnect
+    );
+    let mut disconnect_lifecycle = AcpSessionLifecycle::from_profile(&disconnect_profile).unwrap();
+    disconnect_lifecycle.enqueue_progress("first").unwrap();
+    assert!(matches!(
+        disconnect_lifecycle
+            .offer_progress("overflow", AcpProgressPriority::Critical)
+            .unwrap(),
+        AcpProgressDisposition::Disconnected(reason)
+            if reason == "ACP session disconnected after update overflow"
+    ));
+    assert_eq!(disconnect_lifecycle.state(), AcpSessionState::Cancelled);
+
+    let mut enqueue_disconnect = AcpSessionLifecycle::from_profile(&disconnect_profile).unwrap();
+    let first = enqueue_disconnect.enqueue_progress("first").unwrap();
+    assert_eq!(first.message(), "first");
+    let error = enqueue_disconnect.enqueue_progress("second").unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("ACP session disconnected after update overflow"),
+        "unexpected enqueue disconnect error: {error:?}"
+    );
+    assert_eq!(enqueue_disconnect.state(), AcpSessionState::Cancelled);
+    assert_eq!(enqueue_disconnect.inflight_updates(), 1);
+    assert_eq!(
+        enqueue_disconnect
+            .acknowledge_oldest_update()
+            .unwrap()
+            .message(),
+        "first"
+    );
+
+    let mut unknown = acp_profile();
+    unknown["flow_control"]["backpressure"] = json!("spin_forever");
+    assert!(matches!(
+        package.validate_acp_profile_document(&unknown).unwrap_err(),
+        PublicSeamError::ExampleValidation { .. } | PublicSeamError::InvalidScope { .. }
+    ));
 }
 
 #[test]
