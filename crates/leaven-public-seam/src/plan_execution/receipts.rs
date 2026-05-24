@@ -3,8 +3,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde_json::{Map, Value, json};
 
 use super::{
-    PlanExecutionContext, case_query_projection, dependency_values, graph_read_scope,
-    graph_read_scope_value, invalid_plan, nested_kind, object, prefixed_jcs_hash, required_string,
+    PlanExecutionContext, case_query_projection, dependency_values, effects::workspace_ref_id,
+    graph_read_scope, graph_read_scope_value, invalid_plan, nested_kind, object, prefixed_jcs_hash,
+    required_string, workspace_query_projection, workspace_query_request,
 };
 use crate::PublicSeamError;
 
@@ -132,6 +133,15 @@ fn validate_let_receipt(
         "case_query" => {
             validate_case_query_receipt(expr, name, context, values, receipts_by_op, bindings)
         }
+        "workspace_query" => validate_workspace_query_receipt(
+            op_object,
+            expr,
+            name,
+            context,
+            values,
+            receipts_by_op,
+            bindings,
+        ),
         other => Err(invalid_plan(format!(
             "representative Plan IR receipt verifier does not inspect `{other}` let expressions"
         ))),
@@ -243,6 +253,78 @@ fn validate_case_query_receipt(
         receipt,
         "projection_fingerprint",
         &prefixed_jcs_hash("fp_projection_sha256_", &case_query_projection(query)?)?,
+    )?;
+    require_receipt_field(
+        receipt,
+        "result_hash",
+        &prefixed_jcs_hash(
+            "fp_result_sha256_",
+            &json!({
+                "schema_version": "leaven.plan_query_result.v1",
+                "name": name,
+                "value": value
+            }),
+        )?,
+    )?;
+    bindings.insert(name.to_owned(), value.clone());
+    Ok(())
+}
+
+fn validate_workspace_query_receipt(
+    op_object: &Map<String, Value>,
+    expr: &Value,
+    name: &str,
+    context: &PlanExecutionContext,
+    values: &Map<String, Value>,
+    receipts_by_op: &BTreeMap<String, &Map<String, Value>>,
+    bindings: &mut BTreeMap<String, Value>,
+) -> Result<(), PublicSeamError> {
+    let Some(receipt) = receipts_by_op.get(name) else {
+        return Err(invalid_plan(format!(
+            "workspace_query operation `{name}` must carry a query receipt"
+        )));
+    };
+    require_receipt_field(receipt, "kind", "query")?;
+    let value = values.get(name).ok_or_else(|| {
+        invalid_plan(format!(
+            "workspace_query receipt for `{name}` must have a matching result value"
+        ))
+    })?;
+    let deps = dependency_values(op_object, bindings)?;
+    let request = workspace_query_request(name, expr, &deps)?;
+    let scope = json!({
+        "kind": "workspace_query",
+        "workspace": workspace_ref_id(
+            object(expr, "workspace_query")?.get("workspace"),
+            "workspace_query must carry workspace"
+        )?,
+        "base_revision": context.base_revision
+    });
+    require_receipt_field(
+        receipt,
+        "op_hash",
+        &prefixed_jcs_hash(
+            "fp_query_sha256_",
+            &json!({
+                "schema_version": "leaven.plan_query_op.v1",
+                "name": name,
+                "expr": expr,
+                "scope": scope
+            }),
+        )?,
+    )?;
+    require_receipt_field(
+        receipt,
+        "read_scope_fingerprint",
+        &prefixed_jcs_hash("fp_scope_sha256_", &scope)?,
+    )?;
+    require_receipt_field(
+        receipt,
+        "projection_fingerprint",
+        &prefixed_jcs_hash(
+            "fp_projection_sha256_",
+            &workspace_query_projection(request),
+        )?,
     )?;
     require_receipt_field(
         receipt,
