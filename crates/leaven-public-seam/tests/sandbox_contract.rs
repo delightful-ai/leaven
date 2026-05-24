@@ -1,9 +1,9 @@
 use leaven_kernel::{Cost, Fingerprint, Metered};
 use leaven_public_seam::{
-    PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanExecutionContext, PlanExecutionHost,
-    PlanLmCompleteOutcome, PlanLmCompleteRequest, PlanSandboxExecOutcome, PlanSandboxExecRequest,
-    PlanWorkspaceMaterializeOutcome, PlanWorkspaceMaterializeRequest, PublicSeamError,
-    PublicSeamPackage,
+    CapabilityDocument, PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanExecutionContext,
+    PlanExecutionHost, PlanLmCompleteOutcome, PlanLmCompleteRequest, PlanSandboxExecOutcome,
+    PlanSandboxExecRequest, PlanWorkspaceMaterializeOutcome, PlanWorkspaceMaterializeRequest,
+    PublicSeamError, PublicSeamPackage,
 };
 use leaven_workspace::{CapturedOutput, CommandOutput, ExitStatus, WorkspacePath};
 use serde_json::{Value, json};
@@ -14,9 +14,10 @@ fn sandbox_exec_can_project_provider_neutral_command_output_into_plan_result() {
     let mut host = SandboxHost::new(ExitStatus { code: Some(7) });
 
     let report = package
-        .execute_plan_document(
+        .execute_plan_document_with_capability(
             &sandbox_workspace_plan(),
             &plan_execution_context(),
+            &sandbox_contract_capability(),
             &mut host,
         )
         .unwrap();
@@ -56,14 +57,37 @@ fn sandbox_exec_can_project_provider_neutral_command_output_into_plan_result() {
 }
 
 #[test]
-fn sandbox_exec_command_output_projection_preserves_missing_exit_for_validation() {
+fn sandbox_exec_denies_no_capability_execution_before_host_effects() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
-    let mut host = SandboxHost::new(ExitStatus { code: None });
+    let mut host = SandboxHost::new(ExitStatus { code: Some(0) });
 
     let error = package
         .execute_plan_document(
             &sandbox_workspace_plan(),
             &plan_execution_context(),
+            &mut host,
+        )
+        .unwrap_err();
+
+    assert!(host.calls.is_empty());
+    assert!(
+        error
+            .to_string()
+            .contains("sandbox_exec execution requires capability-authorized Plan execution"),
+        "unexpected error: {error:?}"
+    );
+}
+
+#[test]
+fn sandbox_exec_command_output_projection_rejects_missing_exit_during_validation() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut host = SandboxHost::new(ExitStatus { code: None });
+
+    let error = package
+        .execute_plan_document_with_capability(
+            &sandbox_workspace_plan(),
+            &plan_execution_context(),
+            &sandbox_contract_capability(),
             &mut host,
         )
         .unwrap_err();
@@ -83,9 +107,10 @@ fn sandbox_exec_command_output_projection_rejects_unbound_stream_blob_refs() {
     let mut host = SandboxHost::new(ExitStatus { code: Some(0) }).with_corrupt_stdout_ref();
 
     let error = package
-        .execute_plan_document(
+        .execute_plan_document_with_capability(
             &sandbox_workspace_plan(),
             &plan_execution_context(),
+            &sandbox_contract_capability(),
             &mut host,
         )
         .unwrap_err();
@@ -105,9 +130,10 @@ fn sandbox_exec_rejects_captured_file_refs_outside_output_contract() {
     let mut host = SandboxHost::new(ExitStatus { code: Some(0) }).with_wrong_output_path();
 
     let error = package
-        .execute_plan_document(
+        .execute_plan_document_with_capability(
             &sandbox_workspace_plan(),
             &plan_execution_context(),
+            &sandbox_contract_capability(),
             &mut host,
         )
         .unwrap_err();
@@ -122,7 +148,7 @@ fn sandbox_exec_rejects_captured_file_refs_outside_output_contract() {
 }
 
 #[test]
-fn sandbox_exec_output_file_refs_must_bind_captured_bytes() {
+fn sandbox_exec_output_file_refs_reject_unbound_captured_bytes() {
     let bad_bytes = PlanSandboxExecOutcome::from_command_output_with_file_refs(
         Metered::new(
             command_output_with_file(b"actual file\n", false),
@@ -206,7 +232,12 @@ fn sandbox_exec_rejects_unsafe_output_contract_paths_before_host_execution() {
         let mut host = SandboxHost::new(ExitStatus { code: Some(0) });
 
         let error = package
-            .execute_plan_document(&plan, &plan_execution_context(), &mut host)
+            .execute_plan_document_with_capability(
+                &plan,
+                &plan_execution_context(),
+                &sandbox_contract_capability(),
+                &mut host,
+            )
             .unwrap_err();
 
         assert!(
@@ -220,7 +251,7 @@ fn sandbox_exec_rejects_unsafe_output_contract_paths_before_host_execution() {
 }
 
 #[test]
-fn sandbox_exec_command_output_projection_requires_captured_output_file_refs() {
+fn sandbox_exec_command_output_projection_rejects_missing_captured_output_file_refs() {
     let missing_ref = PlanSandboxExecOutcome::from_command_output(
         Metered::new(
             command_output_with_file(b"artifact\n", false),
@@ -530,6 +561,84 @@ fn plan_execution_context() -> PlanExecutionContext {
         "2026-05-24T00:00:00Z",
         "2026-05-24T00:00:01Z",
     )
+}
+
+fn sandbox_contract_capability() -> CapabilityDocument {
+    CapabilityDocument::from_value(json!({
+        "schema_version": "leaven.capability.v1",
+        "jti": "jti_sandbox_contract",
+        "capability_fingerprint": "fp_cap_sha256_sandboxcontract",
+        "policy_fingerprint": "fp_policy_sha256_sandboxcontract",
+        "subject_fingerprint": "fp_subject_sha256_sandboxcontract",
+        "issuer": {
+            "kind": "run_engine",
+            "id": "engine_local"
+        },
+        "subject": {
+            "kind": "stage_call",
+            "run": "run_sandbox_contract",
+            "stage_call_id": "sc_sandbox_contract",
+            "role": "scorer"
+        },
+        "audience": ["leaven.acp.worker"],
+        "issued_at": "2026-05-24T00:00:00Z",
+        "expires_at": "2026-05-24T00:20:00Z",
+        "expiry_behavior": "drain_inflight_no_new_ops",
+        "token_binding": {
+            "kind": "opaque_lookup",
+            "token_id": "ltok_sandbox_contract"
+        },
+        "revocation": {
+            "mode": "issuer_epoch",
+            "revocation_epoch": 7,
+            "check": "on_every_request"
+        },
+        "renewal": {
+            "mode": "renew_before_expiry",
+            "max_extensions": 2,
+            "max_total_lifetime_s": 3600
+        },
+        "grants": [
+            {
+                "action": "workspace.materialize",
+                "resource": {
+                    "candidate_ids": ["cand_planexec"]
+                },
+                "constraints": {
+                    "workspace_ops": ["materialize"]
+                }
+            },
+            {
+                "action": "sandbox.exec",
+                "resource": {
+                    "workspace_ids": ["ws_sandbox_contract"]
+                },
+                "constraints": {
+                    "allowed_input_classes": ["public"],
+                    "workspace_ops": ["exec"],
+                    "allowed_commands": ["python"]
+                },
+                "limits": {
+                    "timeout_s": 1
+                }
+            }
+        ],
+        "budgets": {},
+        "execution_policy": {
+            "profile": "managed_sandbox",
+            "network": "leaven_endpoint_only",
+            "subprocess": "deny_except_sandbox_exec",
+            "filesystem": "workspace_handles_only",
+            "byo_effects": "forbidden"
+        },
+        "delegation": {
+            "may_delegate": false,
+            "max_depth": 0,
+            "must_attenuate": true,
+            "allowed_actions": []
+        }
+    }))
+    .unwrap()
 }
 
 fn workspace_root() -> std::path::PathBuf {

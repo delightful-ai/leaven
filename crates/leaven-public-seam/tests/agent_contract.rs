@@ -1,10 +1,10 @@
 use leaven_agent::{AgentSession, CommandRecord};
 use leaven_kernel::{AgentSessionId, Cost, Fingerprint, Metered};
 use leaven_public_seam::{
-    AgentCommandOutputRefs, PlanAgentRunOutcome, PlanAgentRunRequest, PlanEmitRunEventOutcome,
-    PlanEmitRunEventRequest, PlanExecutionContext, PlanExecutionHost, PlanLmCompleteOutcome,
-    PlanLmCompleteRequest, PlanWorkspaceMaterializeOutcome, PlanWorkspaceMaterializeRequest,
-    PublicSeamError, PublicSeamPackage, SchemaFingerprint,
+    AgentCommandOutputRefs, CapabilityDocument, PlanAgentRunOutcome, PlanAgentRunRequest,
+    PlanEmitRunEventOutcome, PlanEmitRunEventRequest, PlanExecutionContext, PlanExecutionHost,
+    PlanLmCompleteOutcome, PlanLmCompleteRequest, PlanWorkspaceMaterializeOutcome,
+    PlanWorkspaceMaterializeRequest, PublicSeamError, PublicSeamPackage, SchemaFingerprint,
 };
 use leaven_workspace::{CapturedOutput, Command, CommandOutput, ExitStatus, WorkspacePath};
 use serde_json::{Value, json};
@@ -16,9 +16,10 @@ fn agent_run_can_project_provider_neutral_agent_session_into_plan_result() {
     let mut host = AgentSessionHost::new(scripted_agent_session("codex"));
 
     let report = package
-        .execute_plan_document(
+        .execute_plan_document_with_capability(
             &agent_run_workspace_plan(),
             &plan_execution_context(),
+            &agent_contract_capability(),
             &mut host,
         )
         .unwrap();
@@ -91,14 +92,37 @@ fn agent_run_can_project_provider_neutral_agent_session_into_plan_result() {
 }
 
 #[test]
-fn agent_session_projection_preserves_invalid_command_argv_for_validation() {
+fn agent_run_denies_no_capability_execution_before_host_effects() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
-    let mut host = AgentSessionHost::new(scripted_agent_session(""));
+    let mut host = AgentSessionHost::new(scripted_agent_session("codex"));
 
     let error = package
         .execute_plan_document(
             &agent_run_workspace_plan(),
             &plan_execution_context(),
+            &mut host,
+        )
+        .unwrap_err();
+
+    assert!(host.calls.is_empty());
+    assert!(
+        error
+            .to_string()
+            .contains("agent_run execution requires capability-authorized Plan execution"),
+        "unexpected error: {error:?}"
+    );
+}
+
+#[test]
+fn agent_session_projection_rejects_invalid_command_argv_during_validation() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut host = AgentSessionHost::new(scripted_agent_session(""));
+
+    let error = package
+        .execute_plan_document_with_capability(
+            &agent_run_workspace_plan(),
+            &plan_execution_context(),
+            &agent_contract_capability(),
             &mut host,
         )
         .unwrap_err();
@@ -110,7 +134,7 @@ fn agent_session_projection_preserves_invalid_command_argv_for_validation() {
 }
 
 #[test]
-fn agent_session_command_output_refs_must_bind_captured_bytes_and_files() {
+fn agent_session_command_output_refs_reject_unbound_captured_bytes_and_files() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     for (session, fixture, expected) in [
         (
@@ -162,9 +186,10 @@ fn agent_session_command_output_refs_must_bind_captured_bytes_and_files() {
         let mut host = AgentSessionHost::new(session).with_command_output_refs(fixture);
 
         let error = package
-            .execute_plan_document(
+            .execute_plan_document_with_capability(
                 &agent_run_workspace_plan(),
                 &plan_execution_context(),
+                &agent_contract_capability(),
                 &mut host,
             )
             .unwrap_err();
@@ -184,7 +209,12 @@ fn agent_run_json_schema_executes_through_provider_neutral_agent_contract() {
     let plan = agent_run_json_schema_plan();
 
     let report = package
-        .execute_plan_document(&plan, &plan_execution_context(), &mut host)
+        .execute_plan_document_with_capability(
+            &plan,
+            &plan_execution_context(),
+            &agent_contract_json_schema_capability(),
+            &mut host,
+        )
         .unwrap();
 
     let request = host.agent_requests.first().unwrap();
@@ -205,9 +235,10 @@ fn agent_run_json_schema_rejects_invalid_parsed_provider_payload() {
         AgentSessionHost::new(scripted_agent_session("codex")).with_parsed(json!({"answer": 42}));
 
     let error = package
-        .execute_plan_document(
+        .execute_plan_document_with_capability(
             &agent_run_json_schema_plan(),
             &plan_execution_context(),
+            &agent_contract_json_schema_capability(),
             &mut host,
         )
         .unwrap_err();
@@ -484,20 +515,24 @@ fn agent_run_workspace_plan() -> Value {
 
 fn agent_run_json_schema_plan() -> Value {
     let mut plan = agent_run_workspace_plan();
-    let schema = json!({
-        "type": "object",
-        "required": ["answer"],
-        "properties": {
-            "answer": {"type": "string"}
-        },
-        "additionalProperties": false
-    });
+    let schema = agent_output_schema();
     plan["ops"][1]["call"]["output"] = json!({
         "kind": "json_schema",
         "schema": schema,
         "schema_fingerprint": SchemaFingerprint::for_json_value(&schema).unwrap().as_str()
     });
     plan
+}
+
+fn agent_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "required": ["answer"],
+        "properties": {
+            "answer": {"type": "string"}
+        },
+        "additionalProperties": false
+    })
 }
 
 fn blob_ref(id: &'static str) -> Value {
@@ -535,6 +570,94 @@ fn plan_execution_context() -> PlanExecutionContext {
         "2026-05-24T00:00:00Z",
         "2026-05-24T00:00:01Z",
     )
+}
+
+fn agent_contract_capability() -> CapabilityDocument {
+    CapabilityDocument::from_value(agent_contract_capability_value()).unwrap()
+}
+
+fn agent_contract_json_schema_capability() -> CapabilityDocument {
+    let schema = agent_output_schema();
+    let schema_fingerprint = SchemaFingerprint::for_json_value(&schema).unwrap();
+    let mut value = agent_contract_capability_value();
+    value["grants"][1]["constraints"]["schemas"] = json!([schema_fingerprint.as_str()]);
+    CapabilityDocument::from_value(value).unwrap()
+}
+
+fn agent_contract_capability_value() -> Value {
+    json!({
+        "schema_version": "leaven.capability.v1",
+        "jti": "jti_agent_contract",
+        "capability_fingerprint": "fp_cap_sha256_agentcontract",
+        "policy_fingerprint": "fp_policy_sha256_agentcontract",
+        "subject_fingerprint": "fp_subject_sha256_agentcontract",
+        "issuer": {
+            "kind": "run_engine",
+            "id": "engine_local"
+        },
+        "subject": {
+            "kind": "stage_call",
+            "run": "run_agent_contract",
+            "stage_call_id": "sc_agent_contract",
+            "role": "proposer"
+        },
+        "audience": ["leaven.acp.worker"],
+        "issued_at": "2026-05-24T00:00:00Z",
+        "expires_at": "2026-05-24T00:20:00Z",
+        "expiry_behavior": "drain_inflight_no_new_ops",
+        "token_binding": {
+            "kind": "opaque_lookup",
+            "token_id": "ltok_agent_contract"
+        },
+        "revocation": {
+            "mode": "issuer_epoch",
+            "revocation_epoch": 7,
+            "check": "on_every_request"
+        },
+        "renewal": {
+            "mode": "renew_before_expiry",
+            "max_extensions": 2,
+            "max_total_lifetime_s": 3600
+        },
+        "grants": [
+            {
+                "action": "workspace.materialize",
+                "resource": {
+                    "candidate_ids": ["cand_planexec"]
+                },
+                "constraints": {
+                    "workspace_ops": ["materialize"]
+                }
+            },
+            {
+                "action": "agent.run",
+                "resource": {
+                    "workspace_ids": ["ws_planexec_materialized"]
+                },
+                "constraints": {
+                    "allowed_input_classes": ["public"]
+                },
+                "limits": {
+                    "timeout_s": 30,
+                    "max_usd_micro": 1000
+                }
+            }
+        ],
+        "budgets": {},
+        "execution_policy": {
+            "profile": "managed_sandbox",
+            "network": "leaven_endpoint_only",
+            "subprocess": "deny_except_sandbox_exec",
+            "filesystem": "workspace_handles_only",
+            "byo_effects": "forbidden"
+        },
+        "delegation": {
+            "may_delegate": false,
+            "max_depth": 0,
+            "must_attenuate": true,
+            "allowed_actions": []
+        }
+    })
 }
 
 fn workspace_root() -> std::path::PathBuf {

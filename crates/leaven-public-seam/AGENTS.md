@@ -188,11 +188,15 @@ provider execution and is not live provider execution, ACP delivery, or runtime
 streaming delivery. The `PlanAgentRunRequest` and `PlanSandboxExecRequest`
 routes likewise expose already-lowered provider-neutral
 `leaven-agent::AgentRunRequest` and backend-neutral `leaven-workspace::Command`
-primitives to hosts instead of raw `agent_run`/`sandbox_exec` call JSON, and the
-representative harness can emit typed `agent_session` and `sandbox_exec` Plan
-Result values with call receipts. Agent request lowering preserves the Plan IR
-runtime selector and optional runtime fingerprint; when a fingerprint is
-declared, the Plan Result call receipt must come back from that fingerprint.
+primitives to hosts instead of raw `agent_run`/`sandbox_exec` call JSON. These
+calls are only executable through
+`PublicSeamPackage::execute_plan_document_with_capability`; the no-capability
+Plan execution route rejects them before workspace materialization, agent host
+calls, or sandbox host calls. The representative harness can emit typed
+`agent_session` and `sandbox_exec` Plan Result values with call receipts. Agent
+request lowering preserves the Plan IR runtime selector and optional runtime
+fingerprint; when a fingerprint is declared, the Plan Result call receipt must
+come back from that fingerprint.
 `PlanAgentRunOutcome::from_agent_session_with_command_output_refs` projects
 provider-neutral `leaven_agent::AgentSession` plus metered `leaven-kernel` cost
 into the Plan Result outcome shape, while requiring the host to provide the
@@ -493,6 +497,10 @@ backpressure, or runtime watch support.
   `leaven-agent::OutputContract::JsonSchema` primitive, and agent session audit
   validation rejects missing command receipts, invalid argv, arbitrary command
   status strings, and command programs outside declared `allowed_commands`.
+  The public execution route also rejects `agent_run`/`sandbox_exec` without a
+  capability document, while the capability route checks workspace ids, input
+  classes, schema/surface grants, execution policy, subprocess permissions, and
+  command grants before host execution.
   This is public-seam harness proof only; provider runtime, sandbox backend
   execution, streaming delivery, and proposal parsing remain pending.
 - `tests/plan_document.rs` also proves representative `workspace_materialize`

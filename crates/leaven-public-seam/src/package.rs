@@ -487,9 +487,14 @@ impl PublicSeamPackage {
     ///
     /// This path validates the active V1 plan schema before honoring the
     /// declared execution mode, lowering typed Let/Call/Write operations when
-    /// effects are allowed, delegating graph reads, effectful operations, or
-    /// replay lookups to `host`, and validating the produced Plan Result
-    /// through the active V1 result schema.
+    /// effects are allowed, delegating graph reads, non-capability-bound
+    /// effects, or replay lookups to `host`, and validating the produced Plan
+    /// Result through the active V1 result schema.
+    ///
+    /// Capability-scoped reads and externally owned execution effects such as
+    /// `case_query`, `workspace_query`, `agent_run`, and `sandbox_exec` must use
+    /// [`Self::execute_plan_document_with_capability`] so authority is checked
+    /// before host reads, agent sessions, or sandbox commands can run.
     pub fn execute_plan_document<H: crate::PlanExecutionHost>(
         &self,
         value: &Value,
@@ -510,7 +515,7 @@ impl PublicSeamPackage {
         Ok(crate::PlanExecutionReport::new(result, document))
     }
 
-    /// Executes a Plan IR document after authorizing capability-scoped case reads.
+    /// Executes a Plan IR document after authorizing capability-scoped reads and effects.
     pub fn execute_plan_document_with_capability<H: crate::PlanExecutionHost>(
         &self,
         value: &Value,

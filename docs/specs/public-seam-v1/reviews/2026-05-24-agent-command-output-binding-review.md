@@ -40,7 +40,7 @@ The malformed-result tests no longer use a public unbound builder. They execute
 a valid bound agent result, mutate the Plan Result into schema-valid forged
 cases, rebind the result hash, and validate the forged result.
 
-`crates/leaven-public-seam/tests/agent_contract.rs::agent_session_command_output_refs_must_bind_captured_bytes_and_files`
+`crates/leaven-public-seam/tests/agent_contract.rs::agent_session_command_output_refs_reject_unbound_captured_bytes_and_files`
 covers missing command-output ref sets, wrong stdout hash, wrong stdout byte
 count, wrong stderr hash, missing output-file refs, extra output-file refs,
 wrong output-file hash, truncated stdout, and truncated stderr.

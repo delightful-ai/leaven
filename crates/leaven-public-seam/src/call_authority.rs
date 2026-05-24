@@ -441,6 +441,11 @@ fn validate_agent_execution_policy(
 fn validate_sandbox_execution_policy(
     capability: &CapabilityDocument,
 ) -> Result<(), PublicSeamError> {
+    if capability.execution_policy_network() == "deny" {
+        return Err(invalid_authority(
+            "sandbox_exec denied by execution_policy.network",
+        ));
+    }
     if capability.execution_policy_subprocess() == "deny" {
         return Err(invalid_authority(
             "sandbox_exec denied by execution_policy.subprocess",

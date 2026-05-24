@@ -516,6 +516,7 @@ fn conformance_matrix_rows_are_unique_honest_and_reference_real_files() {
         BTreeSet::from([
             "ps1.authority.active_package_only",
             "ps1.authority.manifest_inventory",
+            "ps1.agent.contract",
             "ps1.capability.aggregate_budgets",
             "ps1.capability.document_truth",
             "ps1.capability.delegation_attenuates",
@@ -541,6 +542,7 @@ fn conformance_matrix_rows_are_unique_honest_and_reference_real_files() {
             "ps1.receipts.failed_costs",
             "ps1.replay.per_assessment",
             "ps1.schema.fingerprints",
+            "ps1.sandbox.exec_streaming",
             "ps1.stage.reflection_proposal_split",
             "ps1.stage.payload_receipts",
             "ps1.visibility.data_class_propagation",
@@ -657,8 +659,10 @@ fn conformance_matrix_reference_check_rejects_stale_pending_test_symbols() {
     let row = matrix
         .rows
         .iter_mut()
-        .find(|row| row.id == "ps1.agent.contract")
+        .find(|row| row.id == "ps1.acp.transport_profile")
         .unwrap();
+    row.status = MatrixRowStatus::Pending;
+    row.blocked_on.clear();
     assert_eq!(row.status, MatrixRowStatus::Pending);
     row.positive_test_evidence = vec![
         "crates/leaven-public-seam/tests/stage_payloads.rs::stage_payloads_preserve_object_form_info_refs"
@@ -668,7 +672,7 @@ fn conformance_matrix_reference_check_rejects_stale_pending_test_symbols() {
     let error = package.validate_matrix_references(&matrix).unwrap_err();
 
     assert!(matches!(error, PublicSeamError::InvalidMatrix { .. }));
-    assert!(error.to_string().contains("ps1.agent.contract"));
+    assert!(error.to_string().contains("ps1.acp.transport_profile"));
     assert!(
         error
             .to_string()
@@ -683,8 +687,10 @@ fn conformance_evidence_audit_rejects_pending_rows_with_closeout_evidence_fields
     let row = matrix
         .rows
         .iter_mut()
-        .find(|row| row.id == "ps1.agent.contract")
+        .find(|row| row.id == "ps1.acp.transport_profile")
         .unwrap();
+    row.status = MatrixRowStatus::Pending;
+    row.blocked_on.clear();
     assert_eq!(row.status, MatrixRowStatus::Pending);
     row.positive_test_evidence = vec![
         "crates/leaven-public-seam/tests/stage_payloads.rs::stage_payloads_validate_all_role_specific_payload_shapes_with_provenance"
@@ -694,7 +700,7 @@ fn conformance_evidence_audit_rejects_pending_rows_with_closeout_evidence_fields
     let error = package.audit_conformance_evidence(&matrix).unwrap_err();
 
     assert!(matches!(error, PublicSeamError::InvalidMatrix { .. }));
-    assert!(error.to_string().contains("ps1.agent.contract"));
+    assert!(error.to_string().contains("ps1.acp.transport_profile"));
     assert!(error.to_string().contains("partial_contract evidence"));
 }
 
@@ -736,15 +742,16 @@ fn conformance_evidence_audit_rejects_stale_blocked_on_for_non_blocked_rows() {
     let row = matrix
         .rows
         .iter_mut()
-        .find(|row| row.id == "ps1.agent.contract")
+        .find(|row| row.id == "ps1.acp.transport_profile")
         .unwrap();
+    row.status = MatrixRowStatus::Pending;
     assert_eq!(row.status, MatrixRowStatus::Pending);
     row.blocked_on = vec!["stale prerequisite".to_owned()];
 
     let error = package.audit_conformance_evidence(&matrix).unwrap_err();
 
     assert!(matches!(error, PublicSeamError::InvalidMatrix { .. }));
-    assert!(error.to_string().contains("ps1.agent.contract"));
+    assert!(error.to_string().contains("ps1.acp.transport_profile"));
     assert!(
         error
             .to_string()

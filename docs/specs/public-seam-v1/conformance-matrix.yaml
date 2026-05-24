@@ -1739,35 +1739,40 @@ rows:
       ungranted surface fingerprint is rejected.
     fake_pass_rejected: Treating agent stdout as a proposal without receipts.
     minimum_closeout_level: semantic_denial
-    partial_contract_test_evidence:
+    positive_test_evidence:
       - crates/leaven-public-seam/tests/plan_document.rs::agent_run_and_sandbox_exec_lower_to_owned_runtime_primitives_and_emit_receipts
-      - crates/leaven-public-seam/tests/plan_document.rs::agent_run_rejects_unmaterialized_released_and_host_path_workspaces
-      - crates/leaven-public-seam/tests/plan_document.rs::workspace_handle_provenance_rejects_literal_forgery_and_released_reuse
       - crates/leaven-public-seam/tests/plan_document.rs::agent_run_lowering_preserves_json_schema_output_contract
       - crates/leaven-public-seam/tests/plan_document.rs::agent_run_lowering_preserves_workspace_diff_surface_fingerprint
       - crates/leaven-public-seam/tests/plan_document.rs::agent_run_preserves_runtime_selector_and_rejects_fingerprint_mismatch
-      - crates/leaven-public-seam/tests/plan_document.rs::agent_run_rejects_schema_valid_sessions_without_audit_facts
       - crates/leaven-public-seam/tests/agent_contract.rs::agent_run_can_project_provider_neutral_agent_session_into_plan_result
       - crates/leaven-public-seam/tests/agent_contract.rs::agent_run_json_schema_executes_through_provider_neutral_agent_contract
-      - crates/leaven-public-seam/tests/agent_contract.rs::agent_session_command_output_refs_must_bind_captured_bytes_and_files
-      - crates/leaven-public-seam/tests/plan_document.rs::call_results_reject_missing_receipts_and_wrong_kinds_even_with_valid_hashes
-      - crates/leaven-public-seam/tests/proposal_authority.rs::proposal_authority_rejects_agent_session_effect_without_matching_receipt
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_bind_worker_methods_to_primary_kinds_and_receipts
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_preserve_agent_and_sandbox_blob_ref_data_classes
-      - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_reject_agent_audit_gaps
       - crates/leaven-public-seam/tests/proposal_authority.rs::proposal_authority_accepts_effects_surfaces_schemas_and_apply_grants
+      - crates/leaven-public-seam/tests/plan_document.rs::agent_run_lowering_defaults_missing_tool_policy_to_no_shell
+      - crates/leaven-agent/tests/runtime_contract.rs::agent_run_request_preserves_requested_runtime_identity
+      - crates/leaven-agent/tests/runtime_contract.rs::agent_tool_policy_defaults_to_no_shell_or_commands
+    negative_test_evidence:
+      - crates/leaven-public-seam/tests/agent_contract.rs::agent_run_denies_no_capability_execution_before_host_effects
+      - crates/leaven-public-seam/tests/plan_document.rs::agent_run_rejects_unmaterialized_released_and_host_path_workspaces
+      - crates/leaven-public-seam/tests/plan_document.rs::workspace_handle_provenance_rejects_literal_forgery_and_released_reuse
+      - crates/leaven-public-seam/tests/plan_document.rs::agent_run_rejects_schema_valid_sessions_without_audit_facts
+      - crates/leaven-public-seam/tests/agent_contract.rs::agent_session_command_output_refs_reject_unbound_captured_bytes_and_files
+      - crates/leaven-public-seam/tests/plan_document.rs::call_results_reject_missing_receipts_and_wrong_kinds_even_with_valid_hashes
+      - crates/leaven-public-seam/tests/proposal_authority.rs::proposal_authority_rejects_agent_session_effect_without_matching_receipt
+      - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_reject_agent_audit_gaps
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_reject_cross_method_payloads_unbound_receipts_and_data_class_gaps
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_reject_agent_and_sandbox_blob_ref_data_class_gaps
       - crates/leaven-public-seam/tests/proposal_authority.rs::proposal_authority_rejects_submit_only_apply_and_ungranted_surface_or_effect
-      - crates/leaven-public-seam/tests/agent_contract.rs::agent_session_projection_preserves_invalid_command_argv_for_validation
+      - crates/leaven-public-seam/tests/agent_contract.rs::agent_session_projection_rejects_invalid_command_argv_during_validation
       - crates/leaven-public-seam/tests/agent_contract.rs::agent_run_json_schema_rejects_invalid_parsed_provider_payload
       - crates/leaven-public-seam/tests/call_authority.rs::call_authority_rejects_agent_shell_or_network_beyond_execution_policy
-      - crates/leaven-public-seam/tests/call_authority.rs::call_authority_checks_agent_allowed_commands_against_grants
-      - crates/leaven-public-seam/tests/plan_document.rs::agent_run_lowering_defaults_missing_tool_policy_to_no_shell
-      - crates/leaven-public-seam/tests/plan_document.rs::agent_run_result_commands_must_match_declared_allowed_commands
-      - crates/leaven-agent/tests/runtime_contract.rs::agent_run_request_preserves_requested_runtime_identity
-      - crates/leaven-agent/tests/runtime_contract.rs::agent_tool_policy_defaults_to_no_shell_or_commands
-    partial_contract_implementation_evidence:
+      - crates/leaven-public-seam/tests/call_authority.rs::call_authority_rejects_agent_allowed_commands_outside_grants
+      - crates/leaven-public-seam/tests/plan_document.rs::agent_run_result_rejects_commands_outside_declared_allowed_commands
+    implementation_evidence:
+      - crates/leaven-public-seam/src/plan_execution.rs::plan_contains_capability_bound_effect
+      - crates/leaven-public-seam/src/plan_execution.rs::execute_plan
+      - crates/leaven-public-seam/src/plan_execution.rs::execute_plan_with_capability
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanAgentRunRequest::live_workspace
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanAgentRunRequest::runtime
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanAgentRunRequest::runtime_fingerprint
@@ -1826,7 +1831,8 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-public-seam-tranche-plato-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-agent-command-output-binding-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-typed-effect-request-cutover-dewey-review.md
-    status: pending
+      - docs/specs/public-seam-v1/reviews/2026-05-24-agent-sandbox-family-ohm-review.md
+    status: proven
 
   - id: ps1.sandbox.exec_streaming
     area: sandbox
@@ -1845,32 +1851,37 @@ rows:
       and execution policy before command execution.
     fake_pass_rejected: Running host shell commands and attaching logs afterward.
     minimum_closeout_level: semantic_denial
-    partial_contract_test_evidence:
+    positive_test_evidence:
       - crates/leaven-public-seam/tests/plan_document.rs::agent_run_and_sandbox_exec_lower_to_owned_runtime_primitives_and_emit_receipts
-      - crates/leaven-public-seam/tests/plan_document.rs::sandbox_exec_rejects_unmaterialized_released_and_host_path_workspaces
-      - crates/leaven-public-seam/tests/plan_document.rs::workspace_handle_provenance_rejects_literal_forgery_and_released_reuse
       - crates/leaven-public-seam/tests/plan_document.rs::sandbox_exec_blob_refs_only_requires_stream_blob_refs
       - crates/leaven-public-seam/tests/plan_document.rs::sandbox_exec_outcome_propagates_stream_and_file_blob_data_classes
-      - crates/leaven-public-seam/tests/plan_document.rs::sandbox_exec_rejects_schema_valid_results_without_audit_facts
       - crates/leaven-public-seam/tests/sandbox_contract.rs::sandbox_exec_can_project_provider_neutral_command_output_into_plan_result
-      - crates/leaven-public-seam/tests/sandbox_contract.rs::sandbox_exec_command_output_projection_rejects_unbound_stream_blob_refs
-      - crates/leaven-public-seam/tests/sandbox_contract.rs::sandbox_exec_output_file_refs_must_bind_captured_bytes
-      - crates/leaven-public-seam/tests/sandbox_contract.rs::sandbox_exec_command_output_projection_requires_captured_output_file_refs
-      - crates/leaven-public-seam/tests/sandbox_contract.rs::sandbox_exec_rejects_unsafe_output_contract_paths_before_host_execution
-      - crates/leaven-public-seam/tests/sandbox_contract.rs::sandbox_exec_command_output_projection_preserves_missing_exit_for_validation
-      - crates/leaven-public-seam/tests/plan_document.rs::call_results_reject_missing_receipts_and_wrong_kinds_even_with_valid_hashes
-      - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_modes_require_cached_rejects_agent_and_sandbox_live_work
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_bind_worker_methods_to_primary_kinds_and_receipts
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_preserve_agent_and_sandbox_blob_ref_data_classes
+      - crates/leaven-public-seam/tests/acp_profile.rs::acp_permissions_use_capability_grants_and_return_planerror_redactions
+    negative_test_evidence:
+      - crates/leaven-public-seam/tests/sandbox_contract.rs::sandbox_exec_denies_no_capability_execution_before_host_effects
+      - crates/leaven-public-seam/tests/plan_document.rs::sandbox_exec_rejects_unmaterialized_released_and_host_path_workspaces
+      - crates/leaven-public-seam/tests/plan_document.rs::workspace_handle_provenance_rejects_literal_forgery_and_released_reuse
+      - crates/leaven-public-seam/tests/plan_document.rs::sandbox_exec_rejects_schema_valid_results_without_audit_facts
+      - crates/leaven-public-seam/tests/sandbox_contract.rs::sandbox_exec_command_output_projection_rejects_unbound_stream_blob_refs
+      - crates/leaven-public-seam/tests/sandbox_contract.rs::sandbox_exec_output_file_refs_reject_unbound_captured_bytes
+      - crates/leaven-public-seam/tests/sandbox_contract.rs::sandbox_exec_command_output_projection_rejects_missing_captured_output_file_refs
+      - crates/leaven-public-seam/tests/sandbox_contract.rs::sandbox_exec_rejects_unsafe_output_contract_paths_before_host_execution
+      - crates/leaven-public-seam/tests/sandbox_contract.rs::sandbox_exec_command_output_projection_rejects_missing_exit_during_validation
+      - crates/leaven-public-seam/tests/plan_document.rs::call_results_reject_missing_receipts_and_wrong_kinds_even_with_valid_hashes
+      - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_modes_require_cached_rejects_agent_and_sandbox_live_work
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_reject_sandbox_audit_gaps
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_reject_cross_method_payloads_unbound_receipts_and_data_class_gaps
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_reject_agent_and_sandbox_blob_ref_data_class_gaps
-      - crates/leaven-public-seam/tests/acp_profile.rs::acp_permissions_use_capability_grants_and_return_planerror_redactions
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_permissions_deny_ungranted_models_workspace_ops_and_commands
       - crates/leaven-public-seam/tests/capability_document.rs::grant_enforcement_rejects_ungranted_models_workspace_ops_and_commands
       - crates/leaven-public-seam/tests/call_authority.rs::call_authority_rejects_sandbox_exec_outside_workspace_execution_policy
       - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_with_capability_denies_sandbox_policy_before_host_effects
-    partial_contract_implementation_evidence:
+    implementation_evidence:
+      - crates/leaven-public-seam/src/plan_execution.rs::plan_contains_capability_bound_effect
+      - crates/leaven-public-seam/src/plan_execution.rs::execute_plan
+      - crates/leaven-public-seam/src/plan_execution.rs::execute_plan_with_capability
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanSandboxExecRequest::live_workspace
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanSandboxExecRequest::workspace_command
       - crates/leaven-public-seam/src/plan_execution/effects.rs::lower_sandbox_exec_call
@@ -1899,6 +1910,7 @@ rows:
       - crates/leaven-public-seam/src/acp_profile/extension_result.rs::validate_effect_primary_cost
       - crates/leaven-public-seam/src/call_authority.rs::validate_execution_policy
       - crates/leaven-public-seam/src/call_authority.rs::validate_sandbox_execution_policy
+      - crates/leaven-public-seam/src/capability.rs::CapabilityDocument::execution_policy_network
       - crates/leaven-public-seam/src/capability.rs::CapabilityDocument::execution_policy_subprocess
       - crates/leaven-public-seam/src/capability.rs::CapabilityDocument::execution_policy_filesystem
       - crates/leaven-public-seam/src/acp_profile/extension_result.rs::AcpExtensionResultDocument
@@ -1918,7 +1930,8 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-public-seam-tranche-plato-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-sandbox-output-file-binding-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-typed-effect-request-cutover-dewey-review.md
-    status: pending
+      - docs/specs/public-seam-v1/reviews/2026-05-24-agent-sandbox-family-ohm-review.md
+    status: proven
 
   - id: ps1.watch.deferred
     area: deferred

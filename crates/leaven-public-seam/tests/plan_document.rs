@@ -354,6 +354,30 @@ fn plan_execution_with_capability_denies_sandbox_policy_before_host_effects() {
     assert!(host.calls.is_empty());
     assert!(host.cached_calls.is_empty());
     assert!(host.writes.is_empty());
+
+    let mut capability = sandbox_exec_capability_value();
+    capability["execution_policy"]["network"] = json!("deny");
+    let capability = CapabilityDocument::from_value(capability).unwrap();
+
+    let mut host = RecordingPlanHost::default();
+    let error = package
+        .execute_plan_document_with_capability(
+            &sandbox_exec_workspace_plan(),
+            &plan_execution_context(),
+            &capability,
+            &mut host,
+        )
+        .unwrap_err();
+
+    assert!(
+        error
+            .to_string()
+            .contains("sandbox_exec denied by execution_policy.network"),
+        "unexpected error: {error:?}"
+    );
+    assert!(host.calls.is_empty());
+    assert!(host.cached_calls.is_empty());
+    assert!(host.writes.is_empty());
 }
 
 #[test]
@@ -1465,10 +1489,12 @@ fn agent_run_and_sandbox_exec_lower_to_owned_runtime_primitives_and_emit_receipt
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
 
     let mut agent_host = RecordingPlanHost::default();
+    let agent_plan = agent_run_workspace_plan(&agent_run_call());
     let agent_report = package
-        .execute_plan_document(
-            &agent_run_workspace_plan(&agent_run_call()),
+        .execute_plan_document_with_capability(
+            &agent_plan,
             &plan_execution_context(),
+            &effect_execution_capability_for_plan(&agent_plan),
             &mut agent_host,
         )
         .unwrap();
@@ -1484,10 +1510,12 @@ fn agent_run_and_sandbox_exec_lower_to_owned_runtime_primitives_and_emit_receipt
     );
 
     let mut sandbox_host = RecordingPlanHost::default();
+    let sandbox_plan = sandbox_exec_workspace_plan();
     let sandbox_report = package
-        .execute_plan_document(
-            &sandbox_exec_workspace_plan(),
+        .execute_plan_document_with_capability(
+            &sandbox_plan,
             &plan_execution_context(),
+            &effect_execution_capability_for_plan(&sandbox_plan),
             &mut sandbox_host,
         )
         .unwrap();
@@ -1515,9 +1543,10 @@ fn agent_run_lowering_defaults_missing_tool_policy_to_no_shell() {
     let mut host = RecordingPlanHost::default();
 
     package
-        .execute_plan_document(
+        .execute_plan_document_with_capability(
             &agent_run_workspace_plan(&call),
             &plan_execution_context(),
+            &effect_execution_capability_for_plan(&agent_run_workspace_plan(&call)),
             &mut host,
         )
         .unwrap();
@@ -1526,16 +1555,17 @@ fn agent_run_lowering_defaults_missing_tool_policy_to_no_shell() {
 }
 
 #[test]
-fn agent_run_result_commands_must_match_declared_allowed_commands() {
+fn agent_run_result_rejects_commands_outside_declared_allowed_commands() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let mut call = agent_run_call();
     call["tool_policy"]["allowed_commands"] = json!(["python"]);
     let mut host = RecordingPlanHost::default();
 
     let error = package
-        .execute_plan_document(
+        .execute_plan_document_with_capability(
             &agent_run_workspace_plan(&call),
             &plan_execution_context(),
+            &effect_execution_capability_for_plan(&agent_run_workspace_plan(&call)),
             &mut host,
         )
         .unwrap_err();
@@ -1592,7 +1622,12 @@ fn agent_run_rejects_unmaterialized_released_and_host_path_workspaces() {
     unmaterialized["ops"][1]["call"]["workspace"] = json!("ws_unmaterialized");
     let mut host = RecordingPlanHost::default();
     let error = package
-        .execute_plan_document(&unmaterialized, &plan_execution_context(), &mut host)
+        .execute_plan_document_with_capability(
+            &unmaterialized,
+            &plan_execution_context(),
+            &effect_execution_capability_for_plan(&unmaterialized),
+            &mut host,
+        )
         .unwrap_err();
     assert_eq!(host.calls, vec!["workspace_materialize"]);
     assert!(
@@ -1613,7 +1648,12 @@ fn agent_run_rejects_unmaterialized_released_and_host_path_workspaces() {
     released["return"] = json!(["workspace", "release", "completion"]);
     let mut host = RecordingPlanHost::default();
     let error = package
-        .execute_plan_document(&released, &plan_execution_context(), &mut host)
+        .execute_plan_document_with_capability(
+            &released,
+            &plan_execution_context(),
+            &effect_execution_capability_for_plan(&released),
+            &mut host,
+        )
         .unwrap_err();
     assert_eq!(
         host.calls,
@@ -1644,7 +1684,12 @@ fn sandbox_exec_rejects_unmaterialized_released_and_host_path_workspaces() {
     unmaterialized["ops"][1]["call"]["workspace"] = json!("ws_unmaterialized");
     let mut host = RecordingPlanHost::default();
     let error = package
-        .execute_plan_document(&unmaterialized, &plan_execution_context(), &mut host)
+        .execute_plan_document_with_capability(
+            &unmaterialized,
+            &plan_execution_context(),
+            &effect_execution_capability_for_plan(&unmaterialized),
+            &mut host,
+        )
         .unwrap_err();
     assert_eq!(host.calls, vec!["workspace_materialize"]);
     assert!(
@@ -1665,7 +1710,12 @@ fn sandbox_exec_rejects_unmaterialized_released_and_host_path_workspaces() {
     released["return"] = json!(["workspace", "release", "completion"]);
     let mut host = RecordingPlanHost::default();
     let error = package
-        .execute_plan_document(&released, &plan_execution_context(), &mut host)
+        .execute_plan_document_with_capability(
+            &released,
+            &plan_execution_context(),
+            &effect_execution_capability_for_plan(&released),
+            &mut host,
+        )
         .unwrap_err();
     assert_eq!(
         host.calls,
@@ -1699,7 +1749,12 @@ fn sandbox_exec_blob_refs_only_requires_stream_blob_refs() {
         ..RecordingPlanHost::default()
     };
     let report = package
-        .execute_plan_document(&plan, &plan_execution_context(), &mut host)
+        .execute_plan_document_with_capability(
+            &plan,
+            &plan_execution_context(),
+            &effect_execution_capability_for_plan(&plan),
+            &mut host,
+        )
         .unwrap();
     assert_eq!(
         report.value()["values"]["completion"]["stdout_ref"]["kind"].as_str(),
@@ -1715,7 +1770,12 @@ fn sandbox_exec_blob_refs_only_requires_stream_blob_refs() {
         ..RecordingPlanHost::default()
     };
     let error = package
-        .execute_plan_document(&plan, &plan_execution_context(), &mut missing_refs_host)
+        .execute_plan_document_with_capability(
+            &plan,
+            &plan_execution_context(),
+            &effect_execution_capability_for_plan(&plan),
+            &mut missing_refs_host,
+        )
         .unwrap_err();
     assert!(
         error
@@ -1724,13 +1784,21 @@ fn sandbox_exec_blob_refs_only_requires_stream_blob_refs() {
         "unexpected error: {error:?}"
     );
 
-    let mut forged = report.value().clone();
+    assert_sandbox_stream_result_rejects_forgery(&package, &plan, report.value());
+}
+
+fn assert_sandbox_stream_result_rejects_forgery(
+    package: &PublicSeamPackage,
+    plan: &Value,
+    result: &Value,
+) {
+    let mut forged = result.clone();
     forged["values"]["completion"]
         .as_object_mut()
         .unwrap()
         .remove("stdout_ref");
     rebind_call_result_hash(&mut forged, 1, "completion");
-    assert_plan_execution_result_rejected(&package, &plan, &plan_execution_context(), &forged);
+    assert_plan_execution_result_rejected(package, plan, &plan_execution_context(), &forged);
 }
 
 #[test]
@@ -1743,7 +1811,12 @@ fn sandbox_exec_outcome_propagates_stream_and_file_blob_data_classes() {
     let plan = sandbox_exec_workspace_plan();
 
     let report = package
-        .execute_plan_document(&plan, &plan_execution_context(), &mut host)
+        .execute_plan_document_with_capability(
+            &plan,
+            &plan_execution_context(),
+            &effect_execution_capability_for_plan(&plan),
+            &mut host,
+        )
         .unwrap();
 
     assert_eq!(
@@ -1770,7 +1843,12 @@ fn workspace_materialize_and_release_emit_typed_handles_and_receipts() {
     let mut host = RecordingPlanHost::default();
 
     let report = package
-        .execute_plan_document(&plan, &plan_execution_context(), &mut host)
+        .execute_plan_document_with_capability(
+            &plan,
+            &plan_execution_context(),
+            &effect_execution_capability_for_plan(&plan),
+            &mut host,
+        )
         .unwrap();
 
     assert_eq!(
@@ -1866,7 +1944,12 @@ fn workspace_handle_provenance_rejects_literal_forgery_and_released_reuse() {
     ] {
         let mut host = RecordingPlanHost::default();
         let error = package
-            .execute_plan_document(&plan, &plan_execution_context(), &mut host)
+            .execute_plan_document_with_capability(
+                &plan,
+                &plan_execution_context(),
+                &effect_execution_capability_for_plan(&plan),
+                &mut host,
+            )
             .unwrap_err();
         assert!(
             host.calls.is_empty(),
@@ -1911,7 +1994,12 @@ fn workspace_handle_provenance_rejects_literal_forgery_and_released_reuse() {
     reuse_after_release["return"] = json!(["workspace", "release", "completion"]);
     let mut host = RecordingPlanHost::default();
     let error = package
-        .execute_plan_document(&reuse_after_release, &plan_execution_context(), &mut host)
+        .execute_plan_document_with_capability(
+            &reuse_after_release,
+            &plan_execution_context(),
+            &effect_execution_capability_for_plan(&reuse_after_release),
+            &mut host,
+        )
         .unwrap_err();
     assert_eq!(
         host.calls,
@@ -2488,7 +2576,12 @@ fn agent_run_lowering_preserves_json_schema_output_contract() {
     let mut host = RecordingPlanHost::default();
 
     let report = package
-        .execute_plan_document(&plan, &plan_execution_context(), &mut host)
+        .execute_plan_document_with_capability(
+            &plan,
+            &plan_execution_context(),
+            &effect_execution_capability_for_plan(&plan),
+            &mut host,
+        )
         .unwrap();
 
     assert_eq!(host.calls, vec!["workspace_materialize", "agent"]);
@@ -2502,7 +2595,12 @@ fn agent_run_lowering_preserves_json_schema_output_contract() {
         ..RecordingPlanHost::default()
     };
     let error = package
-        .execute_plan_document(&plan, &plan_execution_context(), &mut missing_parsed_host)
+        .execute_plan_document_with_capability(
+            &plan,
+            &plan_execution_context(),
+            &effect_execution_capability_for_plan(&plan),
+            &mut missing_parsed_host,
+        )
         .unwrap_err();
     assert!(
         error
@@ -2518,7 +2616,12 @@ fn agent_run_lowering_preserves_json_schema_output_contract() {
         .remove("schema");
     let mut host = RecordingPlanHost::default();
     let error = package
-        .execute_plan_document(&missing_inline_schema, &plan_execution_context(), &mut host)
+        .execute_plan_document_with_capability(
+            &missing_inline_schema,
+            &plan_execution_context(),
+            &effect_execution_capability_for_plan(&missing_inline_schema),
+            &mut host,
+        )
         .unwrap_err();
     assert!(
         error
@@ -2533,9 +2636,10 @@ fn agent_run_lowering_preserves_json_schema_output_contract() {
         json!("fp_schema_sha256_0000000000000000000000000000000000000000000000000000000000000000");
     let mut host = RecordingPlanHost::default();
     let error = package
-        .execute_plan_document(
+        .execute_plan_document_with_capability(
             &mismatched_fingerprint,
             &plan_execution_context(),
+            &effect_execution_capability_for_plan(&mismatched_fingerprint),
             &mut host,
         )
         .unwrap_err();
@@ -2552,7 +2656,12 @@ fn agent_run_lowering_preserves_json_schema_output_contract() {
         ..RecordingPlanHost::default()
     };
     let error = package
-        .execute_plan_document(&plan, &plan_execution_context(), &mut invalid_parsed_host)
+        .execute_plan_document_with_capability(
+            &plan,
+            &plan_execution_context(),
+            &effect_execution_capability_for_plan(&plan),
+            &mut invalid_parsed_host,
+        )
         .unwrap_err();
     assert!(
         error
@@ -2565,20 +2674,28 @@ fn agent_run_lowering_preserves_json_schema_output_contract() {
         vec!["workspace_materialize", "agent"]
     );
 
-    let mut forged = report.value().clone();
+    assert_agent_json_schema_result_rejects_forgery(&package, &plan, report.value());
+}
+
+fn assert_agent_json_schema_result_rejects_forgery(
+    package: &PublicSeamPackage,
+    plan: &Value,
+    result: &Value,
+) {
+    let mut forged = result.clone();
     forged["values"]["completion"]
         .as_object_mut()
         .unwrap()
         .remove("parsed");
     rebind_call_result_hash(&mut forged, 1, "completion");
-    assert_plan_execution_result_rejected(&package, &plan, &plan_execution_context(), &forged);
+    assert_plan_execution_result_rejected(package, plan, &plan_execution_context(), &forged);
 
-    let mut forged_invalid = report.value().clone();
+    let mut forged_invalid = result.clone();
     forged_invalid["values"]["completion"]["parsed"] = json!(["not", "an", "object"]);
     rebind_call_result_hash(&mut forged_invalid, 1, "completion");
     assert_plan_execution_result_rejected(
-        &package,
-        &plan,
+        package,
+        plan,
         &plan_execution_context(),
         &forged_invalid,
     );
@@ -2597,7 +2714,12 @@ fn agent_run_lowering_preserves_workspace_diff_surface_fingerprint() {
     let mut host = RecordingPlanHost::default();
 
     package
-        .execute_plan_document(&plan, &plan_execution_context(), &mut host)
+        .execute_plan_document_with_capability(
+            &plan,
+            &plan_execution_context(),
+            &effect_execution_capability_for_plan(&plan),
+            &mut host,
+        )
         .unwrap();
 
     assert_eq!(host.calls, vec!["workspace_materialize", "agent"]);
@@ -2611,7 +2733,12 @@ fn agent_run_preserves_runtime_selector_and_rejects_fingerprint_mismatch() {
     let mut host = RecordingPlanHost::default();
 
     package
-        .execute_plan_document(&plan, &plan_execution_context(), &mut host)
+        .execute_plan_document_with_capability(
+            &plan,
+            &plan_execution_context(),
+            &effect_execution_capability_for_plan(&plan),
+            &mut host,
+        )
         .unwrap();
 
     let mut mismatched = agent_run_workspace_plan(&agent_run_call());
@@ -2619,7 +2746,12 @@ fn agent_run_preserves_runtime_selector_and_rejects_fingerprint_mismatch() {
         json!("fp_runtime_sha256_ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
     let mut host = RecordingPlanHost::default();
     let error = package
-        .execute_plan_document(&mismatched, &plan_execution_context(), &mut host)
+        .execute_plan_document_with_capability(
+            &mismatched,
+            &plan_execution_context(),
+            &effect_execution_capability_for_plan(&mismatched),
+            &mut host,
+        )
         .unwrap_err();
     assert!(
         error
@@ -2688,9 +2820,10 @@ fn agent_run_rejects_schema_valid_sessions_without_audit_facts() {
         ),
     ] {
         let mut result = package
-            .execute_plan_document(
+            .execute_plan_document_with_capability(
                 &plan,
                 &plan_execution_context(),
+                &effect_execution_capability_for_plan(&plan),
                 &mut RecordingPlanHost::default(),
             )
             .unwrap()
@@ -2718,9 +2851,10 @@ fn sandbox_exec_rejects_schema_valid_results_without_audit_facts() {
             ..RecordingPlanHost::default()
         };
         let error = package
-            .execute_plan_document(
+            .execute_plan_document_with_capability(
                 &sandbox_exec_workspace_plan(),
                 &plan_execution_context(),
+                &effect_execution_capability_for_plan(&sandbox_exec_workspace_plan()),
                 &mut host,
             )
             .unwrap_err();
@@ -2732,9 +2866,10 @@ fn sandbox_exec_rejects_schema_valid_results_without_audit_facts() {
 
     let plan = sandbox_exec_workspace_plan();
     let mut forged = package
-        .execute_plan_document(
+        .execute_plan_document_with_capability(
             &plan,
             &plan_execution_context(),
+            &effect_execution_capability_for_plan(&plan),
             &mut RecordingPlanHost::default(),
         )
         .unwrap()
@@ -2748,9 +2883,10 @@ fn sandbox_exec_rejects_schema_valid_results_without_audit_facts() {
     assert_plan_execution_result_rejected(&package, &plan, &plan_execution_context(), &forged);
 
     let mut no_stream_refs = package
-        .execute_plan_document(
+        .execute_plan_document_with_capability(
             &plan,
             &plan_execution_context(),
+            &effect_execution_capability_for_plan(&plan),
             &mut RecordingPlanHost::default(),
         )
         .unwrap()
@@ -2771,9 +2907,10 @@ fn sandbox_exec_rejects_schema_valid_results_without_audit_facts() {
     assert_sandbox_exec_rejects_missing_receipt_cost(&package, &plan);
 
     let mut no_artifacts = package
-        .execute_plan_document(
+        .execute_plan_document_with_capability(
             &plan,
             &plan_execution_context(),
+            &effect_execution_capability_for_plan(&plan),
             &mut RecordingPlanHost::default(),
         )
         .unwrap()
@@ -2791,9 +2928,10 @@ fn sandbox_exec_rejects_schema_valid_results_without_audit_facts() {
 
 fn assert_sandbox_exec_rejects_missing_receipt_cost(package: &PublicSeamPackage, plan: &Value) {
     let mut missing_receipt_cost = package
-        .execute_plan_document(
+        .execute_plan_document_with_capability(
             plan,
             &plan_execution_context(),
+            &effect_execution_capability_for_plan(plan),
             &mut RecordingPlanHost::default(),
         )
         .unwrap()
@@ -5737,6 +5875,152 @@ fn sandbox_exec_capability_value() -> Value {
             }
         }),
     ])
+}
+
+struct EffectCapabilityFacts {
+    agent_workspaces: BTreeSet<String>,
+    sandbox_workspaces: BTreeSet<String>,
+    agent_commands: BTreeSet<String>,
+    schemas: Vec<String>,
+    surfaces: Vec<String>,
+}
+
+fn effect_execution_capability_for_plan(plan: &Value) -> CapabilityDocument {
+    let facts = effect_capability_facts(plan);
+    let mut agent_constraints = json!({"allowed_input_classes": ["public"]});
+    if !facts.agent_commands.is_empty() {
+        agent_constraints["allowed_commands"] = json!(facts.agent_commands);
+    }
+    if !facts.schemas.is_empty() {
+        agent_constraints["schemas"] = json!(facts.schemas);
+    }
+    if !facts.surfaces.is_empty() {
+        agent_constraints["allowed_surfaces"] = json!(facts.surfaces);
+    }
+
+    CapabilityDocument::from_value(base_execution_capability(&[
+        json!({
+            "action": "workspace.materialize",
+            "resource": {
+                "candidate_ids": ["cand_planexec"]
+            },
+            "constraints": {
+                "workspace_ops": ["materialize"]
+            }
+        }),
+        json!({
+            "action": "workspace.release",
+            "resource": {
+                "workspace_ids": ["ws_planexec_materialized"]
+            },
+            "constraints": {
+                "workspace_ops": ["release"]
+            }
+        }),
+        json!({
+            "action": "agent.run",
+            "resource": {
+                "workspace_ids": facts.agent_workspaces
+            },
+            "constraints": agent_constraints,
+            "limits": {
+                "timeout_s": 30,
+                "max_usd_micro": 1000
+            }
+        }),
+        json!({
+            "action": "sandbox.exec",
+            "resource": {
+                "workspace_ids": facts.sandbox_workspaces
+            },
+            "constraints": {
+                "allowed_input_classes": ["public"],
+                "workspace_ops": ["exec"],
+                "allowed_commands": ["python"]
+            },
+            "limits": {
+                "timeout_s": 1
+            }
+        }),
+    ]))
+    .unwrap()
+}
+
+fn effect_capability_facts(plan: &Value) -> EffectCapabilityFacts {
+    let mut facts = EffectCapabilityFacts {
+        agent_workspaces: BTreeSet::new(),
+        sandbox_workspaces: BTreeSet::new(),
+        agent_commands: BTreeSet::new(),
+        schemas: Vec::new(),
+        surfaces: Vec::new(),
+    };
+    for op in plan
+        .get("ops")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        let Some(call) = op.get("call").and_then(Value::as_object) else {
+            continue;
+        };
+        match call.get("kind").and_then(Value::as_str) {
+            Some("agent_run") => {
+                if let Some(workspace) = call.get("workspace").and_then(Value::as_str) {
+                    facts.agent_workspaces.insert(workspace.to_owned());
+                }
+                collect_agent_capability_constraints(call, &mut facts);
+            }
+            Some("sandbox_exec") => {
+                if let Some(workspace) = call.get("workspace").and_then(Value::as_str) {
+                    facts.sandbox_workspaces.insert(workspace.to_owned());
+                }
+            }
+            _ => {}
+        }
+    }
+    if facts.agent_workspaces.is_empty() {
+        facts
+            .agent_workspaces
+            .insert("ws_planexec_materialized".to_owned());
+    }
+    if facts.sandbox_workspaces.is_empty() {
+        facts
+            .sandbox_workspaces
+            .insert("ws_planexec_materialized".to_owned());
+    }
+    facts
+}
+
+fn collect_agent_capability_constraints(
+    call: &serde_json::Map<String, Value>,
+    facts: &mut EffectCapabilityFacts,
+) {
+    if let Some(commands) = call
+        .get("tool_policy")
+        .and_then(Value::as_object)
+        .and_then(|policy| policy.get("allowed_commands"))
+        .and_then(Value::as_array)
+    {
+        facts
+            .agent_commands
+            .extend(commands.iter().filter_map(Value::as_str).map(str::to_owned));
+    }
+    let Some(output) = call.get("output").and_then(Value::as_object) else {
+        return;
+    };
+    match output.get("kind").and_then(Value::as_str) {
+        Some("json_schema") => {
+            if let Some(schema) = output.get("schema_fingerprint").and_then(Value::as_str) {
+                facts.schemas.push(schema.to_owned());
+            }
+        }
+        Some("workspace_diff") => {
+            if let Some(surface) = output.get("surface_fingerprint").and_then(Value::as_str) {
+                facts.surfaces.push(surface.to_owned());
+            }
+        }
+        _ => {}
+    }
 }
 
 fn assessment_submit_capability(
