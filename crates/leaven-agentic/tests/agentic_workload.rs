@@ -391,7 +391,10 @@ fn preflight_checks_output_contract_shape_without_running_runtime() {
     assert!(empty_files.has_errors());
 
     let empty_diff = AgentRunPreflight::new()
-        .output_contract(&OutputContract::WorkspaceDiff { roots: Vec::new() })
+        .output_contract(&OutputContract::WorkspaceDiff {
+            roots: Vec::new(),
+            surface_fingerprint: None,
+        })
         .check();
     assert!(empty_diff.findings().iter().any(|finding| {
         finding.severity == PreflightSeverity::Warning
@@ -434,6 +437,7 @@ fn preflight_checks_output_contract_shape_without_running_runtime() {
     let diff_roots = AgentRunPreflight::new()
         .output_contract(&OutputContract::WorkspaceDiff {
             roots: vec![WorkspacePath::new("skills").unwrap()],
+            surface_fingerprint: None,
         })
         .check();
     assert!(!diff_roots.has_errors());

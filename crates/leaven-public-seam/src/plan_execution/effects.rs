@@ -94,10 +94,36 @@ impl<'a> PlanWorkspaceReleaseRequest<'a> {
 
     /// Workspace handle requested for release.
     pub fn workspace(&self) -> Result<&'a str, PublicSeamError> {
-        self.call
-            .get("workspace")
-            .and_then(Value::as_str)
-            .ok_or_else(|| invalid_call("workspace_release must carry workspace"))
+        workspace_ref_id(
+            self.call.get("workspace"),
+            "workspace_release must carry workspace",
+        )
+    }
+
+    /// Workspace handle requested for release, proven against live dependency handles.
+    pub fn live_workspace(&self) -> Result<&'a str, PublicSeamError> {
+        let workspace = self.workspace()?;
+        let Some(handle) = self.deps.values().find(|value| {
+            value.get("kind").and_then(Value::as_str) == Some("workspace_handle")
+                && value
+                    .get("workspace")
+                    .and_then(|value| workspace_ref_id(Some(value), "workspace handle").ok())
+                    == Some(workspace)
+        }) else {
+            return Err(invalid_call(format!(
+                "workspace_release refused unmaterialized workspace `{workspace}`"
+            )));
+        };
+        if handle
+            .get("released")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+        {
+            return Err(invalid_call(format!(
+                "workspace_release refused already released workspace `{workspace}`"
+            )));
+        }
+        Ok(workspace)
     }
 
     /// Whether release may force cleanup.
@@ -284,6 +310,15 @@ fn lower_agent_output_contract(
         }
         Some("workspace_diff") => Ok(OutputContract::WorkspaceDiff {
             roots: vec![WorkspacePath::root()],
+            surface_fingerprint: Some(
+                object
+                    .get("surface_fingerprint")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| {
+                        invalid_call("workspace_diff output must carry surface_fingerprint")
+                    })?
+                    .to_owned(),
+            ),
         }),
         Some("json_schema") => Ok(OutputContract::JsonSchema {
             schema_fingerprint: object
@@ -358,6 +393,29 @@ fn workspace_path(path: &str, context: &str) -> Result<WorkspacePath, PublicSeam
         return Ok(WorkspacePath::root());
     }
     WorkspacePath::new(path).map_err(|error| invalid_call(format!("{context}: {error}")))
+}
+
+fn workspace_ref_id(
+    value: Option<&Value>,
+    context: impl Into<String>,
+) -> Result<&str, PublicSeamError> {
+    let context = context.into();
+    let value = value.ok_or_else(|| invalid_call(context.clone()))?;
+    if let Some(workspace) = value.as_str() {
+        return Ok(workspace);
+    }
+    let object = value.as_object().ok_or_else(|| {
+        invalid_call(format!("{context}: workspace ref must be string or object"))
+    })?;
+    if object.get("kind").and_then(Value::as_str) != Some("workspace") {
+        return Err(invalid_call(format!(
+            "{context}: workspace ref object must have kind `workspace`"
+        )));
+    }
+    object
+        .get("id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| invalid_call(format!("{context}: workspace ref object must carry id")))
 }
 
 fn invalid_call(message: impl Into<String>) -> PublicSeamError {

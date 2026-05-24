@@ -78,6 +78,7 @@ pub enum OutputContract {
     FinalMessage,
     WorkspaceDiff {
         roots: Vec<WorkspacePath>,
+        surface_fingerprint: Option<String>,
     },
 }
 
@@ -294,6 +295,6 @@ pub fn validate_output_contract(
                 ))
             }
         }
-        OutputContract::WorkspaceDiff { roots: _ } => Ok(Vec::new()),
+        OutputContract::WorkspaceDiff { .. } => Ok(Vec::new()),
     }
 }

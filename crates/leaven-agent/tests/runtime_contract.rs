@@ -189,7 +189,10 @@ fn fake_runtime_respects_cancellation_before_actions() {
                 &mut view,
                 AgentRunRequest::new(
                     AgentInstructions::task("cancel"),
-                    OutputContract::WorkspaceDiff { roots: Vec::new() },
+                    OutputContract::WorkspaceDiff {
+                        roots: Vec::new(),
+                        surface_fingerprint: None,
+                    },
                 ),
                 AgentRunContext::new(AgentSessionId::new(), &budget)
                     .with_cancellation(CancellationRef::from_flag(&cancelled)),
@@ -323,6 +326,7 @@ fn fake_runtime_records_backend_commands_without_host_paths() {
                     AgentInstructions::task("run"),
                     OutputContract::WorkspaceDiff {
                         roots: vec![WorkspacePath::new("case").unwrap()],
+                        surface_fingerprint: None,
                     },
                 ),
                 AgentRunContext::new(AgentSessionId::new(), &BudgetSnapshot::default()),

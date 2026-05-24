@@ -592,23 +592,47 @@ fn execute_call<H: PlanExecutionHost>(
             })?;
             record_workspace_materialize_outcome(name, outcome, &request_hash, context, state)
         }
-        "workspace_release" => {
-            if mode == EffectMode::RequireCached {
-                return Err(invalid_plan(
-                    "require_cached mode cannot prove cached execution for `workspace_release` calls",
-                ));
-            }
-            let outcome = host.workspace_release(PlanWorkspaceReleaseRequest {
-                name: &name,
-                call,
-                deps: dep_values,
-            })?;
-            record_workspace_release_outcome(name, outcome, &request_hash, context, state)
-        }
+        "workspace_release" if mode == EffectMode::RequireCached => Err(invalid_plan(
+            "require_cached mode cannot prove cached execution for `workspace_release` calls",
+        )),
+        "workspace_release" => execute_workspace_release_call(
+            host,
+            name,
+            call,
+            dep_values,
+            &request_hash,
+            context,
+            state,
+        ),
         _ => Err(invalid_plan(format!(
             "representative Plan IR harness does not execute `{call_kind}` calls"
         ))),
     }
+}
+
+fn execute_workspace_release_call<H: PlanExecutionHost>(
+    host: &mut H,
+    name: String,
+    call: &Value,
+    dep_values: &BTreeMap<String, Value>,
+    request_hash: &str,
+    context: &PlanExecutionContext,
+    state: &mut ExecutionState,
+) -> Result<(), PublicSeamError> {
+    let request = PlanWorkspaceReleaseRequest {
+        name: &name,
+        call,
+        deps: dep_values,
+    };
+    let workspace = request.live_workspace()?.to_owned();
+    let outcome = host.workspace_release(request)?;
+    if outcome.workspace != workspace {
+        return Err(invalid_plan(format!(
+            "workspace_release host returned workspace `{}` for requested workspace `{workspace}`",
+            outcome.workspace
+        )));
+    }
+    record_workspace_release_outcome(name, outcome, request_hash, context, state)
 }
 
 fn record_lm_call_outcome(

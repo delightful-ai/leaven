@@ -1237,6 +1237,7 @@ rows:
     partial_contract_test_evidence:
       - crates/leaven-public-seam/tests/plan_document.rs::agent_run_and_sandbox_exec_lower_to_owned_runtime_primitives_and_emit_receipts
       - crates/leaven-public-seam/tests/plan_document.rs::agent_run_lowering_preserves_json_schema_output_contract
+      - crates/leaven-public-seam/tests/plan_document.rs::agent_run_lowering_preserves_workspace_diff_surface_fingerprint
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_bind_worker_methods_to_primary_kinds_and_receipts
       - crates/leaven-public-seam/tests/proposal_authority.rs::proposal_authority_accepts_effects_surfaces_schemas_and_apply_grants
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_reject_cross_method_payloads_unbound_receipts_and_data_class_gaps
