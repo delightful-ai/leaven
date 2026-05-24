@@ -561,14 +561,8 @@ impl WorkspaceRefFacts {
 
     pub(super) fn satisfies_request(&self, requested: &Self) -> bool {
         self.id == requested.id
-            && requested
-                .run
-                .as_ref()
-                .is_none_or(|run| self.run.as_ref() == Some(run))
-            && requested
-                .snapshot_fingerprint
-                .as_ref()
-                .is_none_or(|snapshot| self.snapshot_fingerprint.as_ref() == Some(snapshot))
+            && self.run == requested.run
+            && self.snapshot_fingerprint == requested.snapshot_fingerprint
     }
 }
 

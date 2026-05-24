@@ -94,6 +94,28 @@ fn workspace_lifecycle_does_not_collapse_same_id_distinct_object_refs() {
     );
 }
 
+#[test]
+fn workspace_lifecycle_rejects_bare_id_release_of_object_ref_handle() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut host = WorkspaceRefHost::default();
+
+    let error = package
+        .execute_plan_document(
+            &workspace_object_ref_plan(&json!(WORKSPACE_ID)),
+            &plan_execution_context(),
+            &mut host,
+        )
+        .unwrap_err();
+
+    assert!(
+        error
+            .to_string()
+            .contains("workspace_release refused unmaterialized workspace"),
+        "unexpected error: {error:?}"
+    );
+    assert_eq!(host.calls, vec!["workspace_materialize"]);
+}
+
 #[derive(Default)]
 struct WorkspaceRefHost {
     calls: Vec<&'static str>,
