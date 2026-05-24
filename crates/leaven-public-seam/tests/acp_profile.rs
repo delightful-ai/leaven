@@ -755,6 +755,14 @@ fn acp_extension_results_reject_sandbox_audit_gaps() {
             "completed sandbox_exec result value must carry exit_code",
         ),
         (
+            sandbox_exec_primary_without("stdout_ref"),
+            "completed sandbox_exec result value must carry stdout_ref and stderr_ref",
+        ),
+        (
+            sandbox_exec_primary_without("stderr_ref"),
+            "completed sandbox_exec result value must carry stdout_ref and stderr_ref",
+        ),
+        (
             sandbox_exec_primary_with_file("/tmp/out.txt"),
             "sandbox_exec result file path must be relative workspace path",
         ),
@@ -1446,6 +1454,8 @@ fn sandbox_exec_primary() -> Value {
         "status": "completed",
         "exit_code": 0,
         "cost": {"usd_micro": 10, "sandbox_calls": 1},
+        "stdout_ref": acp_blob_ref("blob_sandbox_stdout", &["public"]),
+        "stderr_ref": acp_blob_ref("blob_sandbox_stderr", &["public"]),
         "graph_revision": "rev_acp",
         "data_classes": ["public"],
         "replayability": "fully_managed",

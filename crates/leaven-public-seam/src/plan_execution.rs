@@ -786,6 +786,13 @@ fn validate_sandbox_stream_outcome(
             "sandbox_exec blob_refs_only stream policy requires stdout_ref and stderr_ref",
         ));
     }
+    if outcome.status == "completed"
+        && (outcome.stdout_ref.is_none() || outcome.stderr_ref.is_none())
+    {
+        return Err(invalid_plan(
+            "completed sandbox_exec result value must carry stdout_ref and stderr_ref",
+        ));
+    }
     Ok(())
 }
 

@@ -697,11 +697,17 @@ pub fn validate_sandbox_exec_value(
     if value.get("cost").is_none() {
         return Err(invalid_plan("sandbox_exec result value must carry cost"));
     }
-    if required_string(value.get("status"), "sandbox_exec status")? == "completed"
-        && value.get("exit_code").and_then(Value::as_i64).is_none()
-    {
+    let status = required_string(value.get("status"), "sandbox_exec status")?;
+    if status == "completed" && value.get("exit_code").and_then(Value::as_i64).is_none() {
         return Err(invalid_plan(
             "completed sandbox_exec result value must carry exit_code",
+        ));
+    }
+    if status == "completed"
+        && (!value.contains_key("stdout_ref") || !value.contains_key("stderr_ref"))
+    {
+        return Err(invalid_plan(
+            "completed sandbox_exec result value must carry stdout_ref and stderr_ref",
         ));
     }
     if let Some(files) = value.get("files") {

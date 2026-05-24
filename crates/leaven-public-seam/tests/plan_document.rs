@@ -2036,6 +2036,10 @@ fn sandbox_exec_rejects_schema_valid_results_without_audit_facts() {
             SandboxStreamFixture::MissingCost,
             "sandbox_exec result value must carry cost",
         ),
+        (
+            SandboxStreamFixture::MissingStreamRefs,
+            "completed sandbox_exec result value must carry stdout_ref and stderr_ref",
+        ),
     ] {
         let mut host = RecordingPlanHost {
             sandbox_stream,
@@ -2070,6 +2074,27 @@ fn sandbox_exec_rejects_schema_valid_results_without_audit_facts() {
         .remove("exit_code");
     rebind_call_result_hash(&mut forged, 1, "completion");
     assert_plan_execution_result_rejected(&package, &plan, &plan_execution_context(), &forged);
+
+    let mut no_stream_refs = package
+        .execute_plan_document(
+            &plan,
+            &plan_execution_context(),
+            &mut RecordingPlanHost::default(),
+        )
+        .unwrap()
+        .value()
+        .clone();
+    no_stream_refs["values"]["completion"]
+        .as_object_mut()
+        .unwrap()
+        .remove("stdout_ref");
+    rebind_call_result_hash(&mut no_stream_refs, 1, "completion");
+    assert_plan_execution_result_rejected(
+        &package,
+        &plan,
+        &plan_execution_context(),
+        &no_stream_refs,
+    );
 
     let mut no_artifacts = package
         .execute_plan_document(
@@ -3735,6 +3760,7 @@ enum SandboxStreamFixture {
     EmptyFilePath,
     EmptyComponentFilePath,
     MissingCost,
+    MissingStreamRefs,
 }
 
 impl SandboxStreamFixture {
@@ -3745,7 +3771,8 @@ impl SandboxStreamFixture {
             | Self::ParentFilePath
             | Self::EmptyFilePath
             | Self::EmptyComponentFilePath
-            | Self::MissingCost => "buffer",
+            | Self::MissingCost
+            | Self::MissingStreamRefs => "buffer",
             Self::BlobRefsOnly | Self::MissingBlobRefs => "blob_refs_only",
         }
     }
@@ -3759,7 +3786,7 @@ impl SandboxStreamFixture {
             | Self::EmptyFilePath
             | Self::EmptyComponentFilePath
             | Self::MissingCost => true,
-            Self::MissingBlobRefs => false,
+            Self::MissingBlobRefs | Self::MissingStreamRefs => false,
         }
     }
 }
