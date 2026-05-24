@@ -1084,6 +1084,48 @@ fn agent_run_and_sandbox_exec_lower_to_owned_runtime_primitives_and_emit_receipt
 }
 
 #[test]
+fn agent_run_lowering_defaults_missing_tool_policy_to_no_shell() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut call = agent_run_call();
+    call.as_object_mut().unwrap().remove("tool_policy");
+    let mut host = RecordingPlanHost::default();
+
+    package
+        .execute_plan_document(
+            &agent_run_workspace_plan(&call),
+            &plan_execution_context(),
+            &mut host,
+        )
+        .unwrap();
+
+    assert_eq!(host.calls, vec!["workspace_materialize", "agent"]);
+}
+
+#[test]
+fn agent_run_result_commands_must_match_declared_allowed_commands() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut call = agent_run_call();
+    call["tool_policy"]["allowed_commands"] = json!(["python"]);
+    let mut host = RecordingPlanHost::default();
+
+    let error = package
+        .execute_plan_document(
+            &agent_run_workspace_plan(&call),
+            &plan_execution_context(),
+            &mut host,
+        )
+        .unwrap_err();
+
+    assert!(
+        error
+            .to_string()
+            .contains("agent_run command `codex` is outside declared allowed_commands"),
+        "unexpected error: {error:?}"
+    );
+    assert_eq!(host.calls, vec!["workspace_materialize", "agent"]);
+}
+
+#[test]
 fn call_results_reject_missing_receipts_and_wrong_kinds_even_with_valid_hashes() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let context = plan_execution_context();
@@ -3903,6 +3945,17 @@ fn agent_command_fixture(agent_audit: AgentAuditFixture) -> Value {
     }
 }
 
+fn string_array_field(object: Option<&serde_json::Map<String, Value>>, field: &str) -> Vec<String> {
+    object
+        .and_then(|object| object.get(field))
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .map(str::to_owned)
+        .collect()
+}
+
 #[derive(Clone, Copy, Debug, Default)]
 enum AgentAuditFixture {
     #[default]
@@ -4183,8 +4236,22 @@ impl PlanExecutionHost for RecordingPlanHost {
         );
         assert_eq!(agent_request.instructions.task, "Inspect the plan output.");
         assert_eq!(agent_request.cwd.as_str(), "");
-        assert!(!agent_request.tool_policy.allow_shell);
-        assert_eq!(agent_request.tool_policy.allowed_tools, vec!["read_file"]);
+        let tool_policy = request.call().get("tool_policy").and_then(Value::as_object);
+        assert_eq!(
+            agent_request.tool_policy.allow_shell,
+            tool_policy
+                .and_then(|policy| policy.get("allow_shell"))
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+        );
+        assert_eq!(
+            agent_request.tool_policy.allowed_tools,
+            string_array_field(tool_policy, "allowed_tools")
+        );
+        assert_eq!(
+            agent_request.tool_policy.allowed_commands,
+            string_array_field(tool_policy, "allowed_commands")
+        );
         assert_eq!(agent_request.limits.max_turns, Some(4));
         match request.call()["output"]["kind"].as_str() {
             Some("final_message") => assert!(matches!(

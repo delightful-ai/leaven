@@ -535,7 +535,7 @@ fn validate_successful_call_result_value(
     validate_lm_response_value(call_kind, call, value, receipt)?;
     validate_structured_output_value(call_kind, call, value)?;
     validate_sandbox_stream_value(call, value)?;
-    validate_agent_session_value(call_kind, value, receipt_id)?;
+    validate_agent_session_value(call_kind, Some(call), value, receipt_id)?;
     validate_sandbox_exec_value(call_kind, value)?;
     Ok(())
 }
@@ -751,6 +751,7 @@ fn validate_sandbox_stream_value(
 
 pub fn validate_agent_session_value(
     call_kind: &str,
+    call: Option<&Value>,
     value: &Map<String, Value>,
     receipt_id: &str,
 ) -> Result<(), PublicSeamError> {
@@ -774,6 +775,7 @@ pub fn validate_agent_session_value(
     for command in commands {
         let command = object(command, "agent_run command record")?;
         validate_agent_command_record(command)?;
+        validate_agent_command_policy(call, command)?;
         let command_receipt = required_string(command.get("receipt"), "agent_run command receipt")?;
         if command_receipt != receipt_id {
             return Err(invalid_plan(format!(
@@ -785,6 +787,47 @@ pub fn validate_agent_session_value(
         return Err(invalid_plan("agent_run result value must carry cost"));
     }
     Ok(())
+}
+
+fn validate_agent_command_policy(
+    call: Option<&Value>,
+    command: &Map<String, Value>,
+) -> Result<(), PublicSeamError> {
+    let allowed_commands = call
+        .and_then(|call| call.get("tool_policy"))
+        .and_then(Value::as_object)
+        .and_then(|policy| policy.get("allowed_commands"))
+        .and_then(Value::as_array)
+        .map(|commands| {
+            commands
+                .iter()
+                .map(|command| {
+                    command.as_str().map(str::to_owned).ok_or_else(|| {
+                        invalid_plan("agent_run allowed_commands entries must be strings")
+                    })
+                })
+                .collect::<Result<BTreeSet<_>, _>>()
+        })
+        .transpose()?
+        .unwrap_or_default();
+    if allowed_commands.is_empty() {
+        return Ok(());
+    }
+    let argv = command
+        .get("argv")
+        .and_then(Value::as_array)
+        .ok_or_else(|| invalid_plan("agent_run command record must carry argv"))?;
+    let program = argv
+        .first()
+        .and_then(Value::as_str)
+        .ok_or_else(|| invalid_plan("agent_run command record argv must not be empty"))?;
+    if allowed_commands.contains(program) {
+        Ok(())
+    } else {
+        Err(invalid_plan(format!(
+            "agent_run command `{program}` is outside declared allowed_commands"
+        )))
+    }
 }
 
 fn validate_agent_command_record(command: &Map<String, Value>) -> Result<(), PublicSeamError> {

@@ -1465,6 +1465,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-lm-success-cost-binding-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-costful-primary-receipt-follow-up-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-evidence-stage-current-tranche-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-external-effect-policy-current-tranche-review.md
     status: pending
 
   - id: ps1.agent.contract
@@ -1504,6 +1505,9 @@ rows:
       - crates/leaven-public-seam/tests/agent_contract.rs::agent_session_projection_preserves_invalid_command_argv_for_validation
       - crates/leaven-public-seam/tests/call_authority.rs::call_authority_rejects_agent_shell_or_network_beyond_execution_policy
       - crates/leaven-public-seam/tests/call_authority.rs::call_authority_checks_agent_allowed_commands_against_grants
+      - crates/leaven-public-seam/tests/plan_document.rs::agent_run_lowering_defaults_missing_tool_policy_to_no_shell
+      - crates/leaven-public-seam/tests/plan_document.rs::agent_run_result_commands_must_match_declared_allowed_commands
+      - crates/leaven-agent/tests/runtime_contract.rs::agent_tool_policy_defaults_to_no_shell_or_commands
     partial_contract_implementation_evidence:
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanAgentRunRequest::live_workspace
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanAgentRunRequest::to_agent_run_request
@@ -1520,13 +1524,16 @@ rows:
       - crates/leaven-public-seam/src/plan_execution.rs::record_agent_call_outcome
       - crates/leaven-public-seam/src/plan_execution/receipts.rs::validate_successful_call_result_value
       - crates/leaven-public-seam/src/plan_execution/receipts.rs::validate_agent_session_value
+      - crates/leaven-public-seam/src/plan_execution/receipts.rs::validate_agent_command_policy
       - crates/leaven-public-seam/src/plan_execution/receipts.rs::validate_agent_command_record
       - crates/leaven-public-seam/src/plan_execution/receipts.rs::validate_external_call_cost_binding
       - crates/leaven-public-seam/src/plan_execution/receipts.rs::validate_structured_output_value
       - crates/leaven-public-seam/src/proposal_authority.rs::validate_agent_session_effect_receipts
       - crates/leaven-agent/src/session.rs::AgentRunRequest
       - crates/leaven-agent/src/session.rs::AgentSession
+      - crates/leaven-agent/src/session.rs::AgentToolPolicy
       - crates/leaven-agent/src/session.rs::OutputContract
+      - crates/leaven-agent/AGENTS.md
       - crates/leaven-public-seam/src/acp_profile.rs::extension_result_contract
       - crates/leaven-public-seam/src/acp_profile.rs::validate_receipts_for_method
       - crates/leaven-public-seam/src/acp_profile.rs::validate_effect_primary_audit
@@ -1550,6 +1557,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-agent-sandbox-acp-audit-follow-up-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-agent-sandbox-receipt-stream-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-costful-primary-receipt-follow-up-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-external-effect-policy-current-tranche-review.md
     status: pending
 
   - id: ps1.sandbox.exec_streaming
@@ -1625,6 +1633,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-agent-sandbox-acp-audit-follow-up-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-agent-sandbox-receipt-stream-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-costful-primary-receipt-follow-up-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-external-effect-policy-current-tranche-review.md
     status: pending
 
   - id: ps1.watch.deferred
