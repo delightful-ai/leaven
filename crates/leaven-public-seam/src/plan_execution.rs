@@ -231,7 +231,7 @@ pub fn execute_plan<H: PlanExecutionHost>(
             "case_query.load execution requires capability-authorized Plan execution",
         ));
     }
-    execute_authorized_plan(plan, plan_document, context, host)
+    execute_authorized_plan(plan, plan_document, context, host, None)
 }
 
 pub fn execute_plan_with_capability<H: PlanExecutionHost>(
@@ -242,7 +242,7 @@ pub fn execute_plan_with_capability<H: PlanExecutionHost>(
     host: &mut H,
 ) -> Result<Value, PublicSeamError> {
     validate_case_query_authority(plan, context, capability)?;
-    execute_authorized_plan(plan, plan_document, context, host)
+    execute_authorized_plan(plan, plan_document, context, host, Some(capability))
 }
 
 fn execute_authorized_plan<H: PlanExecutionHost>(
@@ -250,9 +250,17 @@ fn execute_authorized_plan<H: PlanExecutionHost>(
     plan_document: &crate::PlanDocument,
     context: &PlanExecutionContext,
     host: &mut H,
+    capability: Option<&crate::CapabilityDocument>,
 ) -> Result<Value, PublicSeamError> {
     match plan_document.mode_kind() {
-        "execute" => execute_effects(plan, plan_document, context, host, EffectMode::Live),
+        "execute" => execute_effects(
+            plan,
+            plan_document,
+            context,
+            host,
+            EffectMode::Live,
+            capability,
+        ),
         "dry_run" => dry_run_result(plan, context),
         "require_cached" => execute_effects(
             plan,
@@ -260,6 +268,7 @@ fn execute_authorized_plan<H: PlanExecutionHost>(
             context,
             host,
             EffectMode::RequireCached,
+            capability,
         ),
         "replay" => replay_result(plan, context, host),
         other => Err(invalid_plan(format!(
@@ -274,12 +283,19 @@ enum EffectMode {
     RequireCached,
 }
 
+#[derive(Clone, Copy, Debug)]
+struct EffectContext<'a> {
+    mode: EffectMode,
+    capability: Option<&'a crate::CapabilityDocument>,
+}
+
 fn execute_effects<H: PlanExecutionHost>(
     plan: &Value,
     plan_document: &crate::PlanDocument,
     context: &PlanExecutionContext,
     host: &mut H,
     mode: EffectMode,
+    capability: Option<&crate::CapabilityDocument>,
 ) -> Result<Value, PublicSeamError> {
     if plan_document.commit_kind() == "no_graph_writes"
         && plan_document
@@ -297,9 +313,10 @@ fn execute_effects<H: PlanExecutionHost>(
         .ok_or_else(|| invalid_plan("plan ops must be an array"))?;
     let plan_id = required_string(plan_object.get("plan_id"), "plan_id")?;
     let mut state = ExecutionState::new(&context.base_revision);
+    let effect_context = EffectContext { mode, capability };
 
     for op in ops {
-        execute_op(op, plan_document, context, host, &mut state, mode)?;
+        execute_op(op, plan_document, context, host, &mut state, effect_context)?;
     }
 
     Ok(plan_result_value(&PlanResultValue {
@@ -438,14 +455,14 @@ fn execute_op<H: PlanExecutionHost>(
     context: &PlanExecutionContext,
     host: &mut H,
     state: &mut ExecutionState,
-    mode: EffectMode,
+    effect_context: EffectContext<'_>,
 ) -> Result<(), PublicSeamError> {
     let op_object = object(op, "plan op")?;
     let name = required_string(op_object.get("name"), "op.name")?.to_owned();
     let deps = resolved_dependency_values(op_object, state)?;
     match required_string(op_object.get("kind"), "op.kind")? {
         "let" => execute_let(op_object, name, &deps, plan_document, context, host, state),
-        "call" => execute_call(op_object, name, &deps, context, host, state, mode),
+        "call" => execute_call(op_object, name, &deps, context, host, state, effect_context),
         "write" => execute_write(op_object, name, &deps.values, context, host, state),
         other => Err(invalid_plan(format!(
             "unknown plan operation kind `{other}`"
@@ -498,12 +515,20 @@ fn execute_call<H: PlanExecutionHost>(
     context: &PlanExecutionContext,
     host: &mut H,
     state: &mut ExecutionState,
-    mode: EffectMode,
+    effect_context: EffectContext<'_>,
 ) -> Result<(), PublicSeamError> {
     let call = op_object
         .get("call")
         .ok_or_else(|| invalid_plan("call op must carry call"))?;
     let call_kind = nested_kind(call, "call")?;
+    if let Some(capability) = effect_context.capability {
+        crate::call_authority::validate_call_with_dependency_classes(
+            call_kind,
+            call,
+            &deps.values,
+            capability,
+        )?;
+    }
     let request_hash = prefixed_jcs_hash(
         "fp_request_sha256_",
         &json!({
@@ -522,7 +547,7 @@ fn execute_call<H: PlanExecutionHost>(
                 call,
                 deps: &deps.values,
             };
-            let (outcome, cache) = match mode {
+            let (outcome, cache) = match effect_context.mode {
                 EffectMode::Live => (host.lm_complete(request)?, None),
                 EffectMode::RequireCached => {
                     let outcome = host.cached_lm_complete(request)?.ok_or_else(|| {
@@ -545,7 +570,7 @@ fn execute_call<H: PlanExecutionHost>(
             )
         }
         "agent_run" => {
-            if mode == EffectMode::RequireCached {
+            if effect_context.mode == EffectMode::RequireCached {
                 return Err(invalid_plan(
                     "require_cached mode cannot prove cached execution for `agent_run` calls",
                 ));
@@ -553,7 +578,7 @@ fn execute_call<H: PlanExecutionHost>(
             execute_agent_run_call(host, name, call, deps, &request_hash, context, state)
         }
         "sandbox_exec" => {
-            if mode == EffectMode::RequireCached {
+            if effect_context.mode == EffectMode::RequireCached {
                 return Err(invalid_plan(
                     "require_cached mode cannot prove cached execution for `sandbox_exec` calls",
                 ));
@@ -561,7 +586,7 @@ fn execute_call<H: PlanExecutionHost>(
             execute_sandbox_exec_call(host, name, call, deps, &request_hash, context, state)
         }
         "workspace_materialize" => {
-            if mode == EffectMode::RequireCached {
+            if effect_context.mode == EffectMode::RequireCached {
                 return Err(invalid_plan(
                     "require_cached mode cannot prove cached execution for `workspace_materialize` calls",
                 ));
@@ -576,9 +601,11 @@ fn execute_call<H: PlanExecutionHost>(
                 state,
             )
         }
-        "workspace_release" if mode == EffectMode::RequireCached => Err(invalid_plan(
-            "require_cached mode cannot prove cached execution for `workspace_release` calls",
-        )),
+        "workspace_release" if effect_context.mode == EffectMode::RequireCached => {
+            Err(invalid_plan(
+                "require_cached mode cannot prove cached execution for `workspace_release` calls",
+            ))
+        }
         "workspace_release" => {
             execute_workspace_release_call(host, name, call, deps, &request_hash, context, state)
         }
