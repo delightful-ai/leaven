@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{Map, Value, json};
 
@@ -370,6 +370,7 @@ pub(super) fn execute_write<H: PlanExecutionHost>(
     op_object: &Map<String, Value>,
     name: String,
     dep_values: &BTreeMap<String, Value>,
+    dependency_data_classes: &BTreeSet<String>,
     context: &PlanExecutionContext,
     host: &mut H,
     state: &mut ExecutionState,
@@ -387,6 +388,7 @@ pub(super) fn execute_write<H: PlanExecutionHost>(
         name: &name,
         write,
         deps: dep_values,
+        dependency_data_classes,
         base_revision: &context.base_revision,
     })?;
     let receipt_id = format!("wrec_{name}");
@@ -398,6 +400,7 @@ pub(super) fn execute_write<H: PlanExecutionHost>(
             "kind": write_kind,
             "write": write,
             "deps": dep_values,
+            "dependency_data_classes": dependency_data_classes,
             "base_revision": context.base_revision
         }),
     )?;
