@@ -72,6 +72,24 @@ fn agentic_reflect_propose_handoff_rejects_single_prompt_and_stale_reflection_fa
         }
     ));
 
+    let target_leaking_reflect = ReflectRequestPayload::new(
+        identity("sc_reflect_agentic"),
+        "input_validation",
+        [json!({
+            "case": "case_visible_empty",
+            "input": {"text": ""},
+            "output": "materialized case.target answer",
+            "score": {"value": 0.0, "output": output_record("leaked target")},
+            "source_refs": ["cand_parent"],
+            "data_classes": ["case.input", "case.target"]
+        })],
+    )
+    .unwrap_err();
+    assert!(matches!(
+        target_leaking_reflect,
+        PublicStagePayloadError::TargetLeakage { field: "examples" }
+    ));
+
     let propose = ProposeRequestPayload::from_reflection(
         identity("sc_propose_agentic"),
         reflection.clone(),
