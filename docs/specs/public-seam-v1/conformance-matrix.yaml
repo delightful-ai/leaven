@@ -1605,6 +1605,7 @@ rows:
       - crates/leaven-public-seam/tests/plan_document.rs::agent_run_rejects_schema_valid_sessions_without_audit_facts
       - crates/leaven-public-seam/tests/agent_contract.rs::agent_run_can_project_provider_neutral_agent_session_into_plan_result
       - crates/leaven-public-seam/tests/agent_contract.rs::agent_run_json_schema_executes_through_provider_neutral_agent_contract
+      - crates/leaven-public-seam/tests/agent_contract.rs::agent_session_command_output_refs_must_bind_captured_bytes_and_files
       - crates/leaven-public-seam/tests/plan_document.rs::call_results_reject_missing_receipts_and_wrong_kinds_even_with_valid_hashes
       - crates/leaven-public-seam/tests/proposal_authority.rs::proposal_authority_rejects_agent_session_effect_without_matching_receipt
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_bind_worker_methods_to_primary_kinds_and_receipts
@@ -1626,8 +1627,9 @@ rows:
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanAgentRunRequest::to_agent_run_request
       - crates/leaven-public-seam/src/plan_execution/effects.rs::require_live_workspace_ref
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanAgentRunOutcome
-      - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanAgentRunOutcome::from_agent_session
-      - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanAgentRunOutcome::with_transcript_ref
+      - crates/leaven-public-seam/src/plan_execution/effects.rs::AgentCommandOutputRefs
+      - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanAgentRunOutcome::from_agent_session_with_command_output_refs
+      - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanAgentRunOutcome::command_value_with_output_refs
       - crates/leaven-public-seam/src/plan_execution/effects.rs::extend_data_classes_from_blob_ref
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanAgentRunOutcome::with_parsed
       - crates/leaven-public-seam/src/plan_execution.rs::validate_structured_output_contract
@@ -1673,6 +1675,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-external-effect-policy-current-tranche-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-score-lm-agent-json-schema-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-public-seam-tranche-plato-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-agent-command-output-binding-review.md
     status: pending
 
   - id: ps1.sandbox.exec_streaming

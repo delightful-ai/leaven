@@ -799,10 +799,41 @@ pub struct PlanAgentRunOutcome {
     pub(super) cost: Option<Value>,
 }
 
+/// Blob refs for one observed command inside a provider-neutral agent session.
+///
+/// These refs are supplied by the host after it persists the observed command
+/// streams/files. The seam verifies the refs against the captured bytes before
+/// they can appear in a public `agent_session` value.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AgentCommandOutputRefs {
+    stdout_ref: Value,
+    stderr_ref: Value,
+    file_refs: BTreeMap<WorkspacePath, Value>,
+}
+
+impl AgentCommandOutputRefs {
+    /// Creates refs for stdout and stderr captured by an agent command.
+    #[must_use]
+    pub fn new(stdout_ref: Value, stderr_ref: Value) -> Self {
+        Self {
+            stdout_ref,
+            stderr_ref,
+            file_refs: BTreeMap::new(),
+        }
+    }
+
+    /// Attaches a persisted blob ref for one captured output file.
+    #[must_use]
+    pub fn with_output_file(mut self, path: WorkspacePath, blob_ref: Value) -> Self {
+        self.file_refs.insert(path, blob_ref);
+        self
+    }
+}
+
 impl PlanAgentRunOutcome {
     /// Creates a completed agent session outcome.
     #[must_use]
-    pub fn completed(runtime_fingerprint: impl Into<String>) -> Self {
+    fn completed(runtime_fingerprint: impl Into<String>) -> Self {
         Self {
             status: "completed".to_owned(),
             parsed: None,
@@ -816,33 +847,50 @@ impl PlanAgentRunOutcome {
     }
 
     /// Creates an agent session outcome from provider-neutral agent evidence.
-    #[must_use]
-    pub fn from_agent_session(
+    ///
+    /// Every command observed in the session must have stdout/stderr refs, and
+    /// every captured command output file must have an exact path-matched blob
+    /// ref. This prevents hosts from treating unbound stdout as a proposal or
+    /// attaching unrelated blobs after the agent has run.
+    pub fn from_agent_session_with_command_output_refs(
         session: leaven_kernel::Metered<leaven_agent::AgentSession>,
         runtime_fingerprint: leaven_kernel::Fingerprint,
         transcript_ref: Value,
         session_receipt: impl Into<String>,
-    ) -> Self {
+        command_output_refs: impl IntoIterator<Item = AgentCommandOutputRefs>,
+    ) -> Result<Self, PublicSeamError> {
         let leaven_kernel::Metered { value, cost } = session;
         let session_receipt = session_receipt.into();
-        Self::completed(format!(
+        let command_output_refs = command_output_refs.into_iter().collect::<Vec<_>>();
+        if command_output_refs.len() != value.commands.len() {
+            return Err(invalid_call(format!(
+                "agent session has {} commands but {} command output ref sets",
+                value.commands.len(),
+                command_output_refs.len()
+            )));
+        }
+        let mut outcome = Self::completed(format!(
             "fp_runtime_sha256_{}",
             fingerprint_hex(runtime_fingerprint)
         ))
         .with_status(agent::agent_status_value(&value.status))
         .with_transcript_ref(transcript_ref)
-        .with_commands(
-            value
-                .commands
-                .iter()
-                .map(|command| agent::agent_command_value(command, &session_receipt)),
-        )
-        .with_cost(cost_value(&cost))
+        .with_cost(cost_value(&cost));
+        let commands = value
+            .commands
+            .iter()
+            .zip(command_output_refs)
+            .enumerate()
+            .map(|(index, (command, refs))| {
+                outcome.command_value_with_output_refs(index, command, &session_receipt, refs)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(outcome.with_commands(commands))
     }
 
     /// Attaches a transcript blob reference.
     #[must_use]
-    pub fn with_transcript_ref(mut self, transcript_ref: Value) -> Self {
+    fn with_transcript_ref(mut self, transcript_ref: Value) -> Self {
         extend_data_classes_from_blob_ref(&mut self.data_classes, &transcript_ref);
         self.transcript_ref = Some(transcript_ref);
         self
@@ -857,14 +905,18 @@ impl PlanAgentRunOutcome {
 
     /// Attaches command audit records.
     #[must_use]
-    pub fn with_commands(mut self, commands: impl IntoIterator<Item = Value>) -> Self {
-        self.commands = commands.into_iter().collect();
+    fn with_commands(mut self, commands: impl IntoIterator<Item = Value>) -> Self {
+        self.commands.clear();
+        for command in commands {
+            extend_data_classes_from_agent_command(&mut self.data_classes, &command);
+            self.commands.push(command);
+        }
         self
     }
 
     /// Attaches a cost object.
     #[must_use]
-    pub fn with_cost(mut self, cost: Value) -> Self {
+    fn with_cost(mut self, cost: Value) -> Self {
         self.cost = Some(cost);
         self
     }
@@ -873,6 +925,98 @@ impl PlanAgentRunOutcome {
     fn with_status(mut self, status: impl Into<String>) -> Self {
         self.status = status.into();
         self
+    }
+
+    fn command_value_with_output_refs(
+        &mut self,
+        index: usize,
+        command: &leaven_agent::CommandRecord,
+        receipt: &str,
+        refs: AgentCommandOutputRefs,
+    ) -> Result<Value, PublicSeamError> {
+        if command.output.stdout.truncated {
+            return Err(invalid_call(format!(
+                "agent command {index} stdout capture is truncated and cannot be bound to a blob ref"
+            )));
+        }
+        validate_stream_blob_ref(
+            &refs.stdout_ref,
+            &command.output.stdout.bytes,
+            &format!("agent command {index} stdout"),
+        )?;
+        if command.output.stderr.truncated {
+            return Err(invalid_call(format!(
+                "agent command {index} stderr capture is truncated and cannot be bound to a blob ref"
+            )));
+        }
+        validate_stream_blob_ref(
+            &refs.stderr_ref,
+            &command.output.stderr.bytes,
+            &format!("agent command {index} stderr"),
+        )?;
+        extend_data_classes_from_blob_ref(&mut self.data_classes, &refs.stdout_ref);
+        extend_data_classes_from_blob_ref(&mut self.data_classes, &refs.stderr_ref);
+
+        let mut file_refs = refs.file_refs;
+        for path in file_refs.keys() {
+            if !command.output.output_files.contains_key(path) {
+                return Err(invalid_call(format!(
+                    "agent command {index} output file `{}` blob ref does not match a captured command output file",
+                    path.as_str()
+                )));
+            }
+        }
+
+        let mut files = serde_json::Map::new();
+        for (path, captured) in &command.output.output_files {
+            if captured.truncated {
+                return Err(invalid_call(format!(
+                    "agent command {index} output file `{}` capture is truncated and cannot be bound to a blob ref",
+                    path.as_str()
+                )));
+            }
+            let blob_ref = file_refs.remove(path).ok_or_else(|| {
+                invalid_call(format!(
+                    "agent command {index} output file `{}` is missing a blob ref",
+                    path.as_str()
+                ))
+            })?;
+            validate_stream_blob_ref(
+                &blob_ref,
+                &captured.bytes,
+                &format!("agent command {index} output file `{}`", path.as_str()),
+            )?;
+            extend_data_classes_from_blob_ref(&mut self.data_classes, &blob_ref);
+            files.insert(path.as_str().to_owned(), blob_ref);
+        }
+
+        let mut value = agent::agent_command_value(command, receipt);
+        let object = value
+            .as_object_mut()
+            .expect("agent command values are JSON objects");
+        object.insert("stdout_ref".to_owned(), refs.stdout_ref);
+        object.insert("stderr_ref".to_owned(), refs.stderr_ref);
+        if !files.is_empty() {
+            object.insert("files".to_owned(), Value::Object(files));
+        }
+        Ok(value)
+    }
+}
+
+fn extend_data_classes_from_agent_command(data_classes: &mut Vec<String>, command: &Value) {
+    let Some(command) = command.as_object() else {
+        return;
+    };
+    if let Some(stdout_ref) = command.get("stdout_ref") {
+        extend_data_classes_from_blob_ref(data_classes, stdout_ref);
+    }
+    if let Some(stderr_ref) = command.get("stderr_ref") {
+        extend_data_classes_from_blob_ref(data_classes, stderr_ref);
+    }
+    if let Some(files) = command.get("files").and_then(Value::as_object) {
+        for blob_ref in files.values() {
+            extend_data_classes_from_blob_ref(data_classes, blob_ref);
+        }
     }
 }
 

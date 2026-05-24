@@ -164,22 +164,26 @@ delivery, or full `ps1.lm.contract` closeout. The `PlanAgentRunRequest` and
 `sandbox_exec` calls into provider-neutral `leaven-agent::AgentRunRequest` and
 backend-neutral `leaven-workspace::Command` primitives, and the representative
 harness can emit typed `agent_session` and `sandbox_exec` Plan Result values
-with call receipts. `PlanAgentRunOutcome::from_agent_session` projects
+with call receipts. `PlanAgentRunOutcome::from_agent_session_with_command_output_refs` projects
 provider-neutral `leaven_agent::AgentSession` plus metered `leaven-kernel` cost
-into the Plan Result outcome shape, while still requiring the host to provide
-the transcript blob ref that made the transcript durable. JSON-schema agent
-outputs must return a parsed Plan Result payload, and successful call-result
-validation requires `agent_run` and `sandbox_exec` result values to carry the
-matching call receipt and expected value kind. `agent_run` values must also
-carry a transcript blob ref, non-empty command records with argv plus finite V1
-command status facts whose receipt is bound to the enclosing session receipt,
-and cost matched by the call receipt. `sandbox_exec` with
+into the Plan Result outcome shape, while requiring the host to provide the
+transcript blob ref that made the transcript durable and stdout/stderr/file
+blob refs for every observed command output. Those command refs are verified
+against captured `leaven-workspace::CommandOutput` bytes before they can be
+emitted, so unbound agent stdout cannot masquerade as proposal evidence.
+JSON-schema agent outputs must return a parsed Plan Result payload, and
+successful call-result validation requires `agent_run` and `sandbox_exec`
+result values to carry the matching call receipt and expected value kind.
+`agent_run` values must also carry a transcript blob ref, non-empty command
+records with argv plus finite V1 command status facts, stdout/stderr blob refs,
+safe relative output-file blob refs where captured, command refs bound to the
+enclosing session receipt, and cost matched by the call receipt. `sandbox_exec` with
 `stream_policy: blob_refs_only` must return stdout/stderr blob refs; completed
 sandbox results must carry
 `exit_code`, must carry cost matched by the call receipt, and may carry captured
 output-file blob refs only at safe relative workspace paths after the host binds
 declared bytes and SHA-256 to file bytes captured on the provider-neutral
-`leaven-workspace::CommandOutput`. Agent transcript
+`leaven-workspace::CommandOutput`. Agent transcript/command
 blob refs and sandbox stdout/stderr/file blob refs are monotonically projected
 into the top-level Plan Result value `data_classes` by the seam-owned outcome
 builders, and forged results that drop those nested classes are rejected by
