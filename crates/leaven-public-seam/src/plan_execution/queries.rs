@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 
 use crate::{CapabilityDocument, CapabilityGrantRequest, PublicSeamError};
 
@@ -327,6 +327,77 @@ pub(super) fn workspace_query_expected_value_kind(
             "unknown workspace_query op `{other}`"
         ))),
     }
+}
+
+pub(super) fn validate_workspace_query_value_shape(
+    request: PlanWorkspaceQueryRequest<'_>,
+    value: &Map<String, Value>,
+) -> Result<(), PublicSeamError> {
+    match request.op_kind()? {
+        "stat" => validate_workspace_stat_value(request, value),
+        "digest" => validate_workspace_digest_value(request, value),
+        _ => Ok(()),
+    }
+}
+
+fn validate_workspace_stat_value(
+    request: PlanWorkspaceQueryRequest<'_>,
+    value: &Map<String, Value>,
+) -> Result<(), PublicSeamError> {
+    let requested_path = request
+        .path()?
+        .ok_or_else(|| invalid_plan("workspace_query stat must carry path"))?;
+    let entries = value
+        .get("entries")
+        .and_then(Value::as_array)
+        .ok_or_else(|| invalid_plan("workspace_query stat result must carry entries"))?;
+    if entries.len() != 1 {
+        return Err(invalid_plan(
+            "workspace_query stat result must carry exactly one listing entry",
+        ));
+    }
+    let entry_path = entries[0]
+        .as_object()
+        .and_then(|entry| entry.get("path"))
+        .and_then(Value::as_str)
+        .ok_or_else(|| invalid_plan("workspace_query stat entry must carry path"))?;
+    if entry_path != requested_path {
+        return Err(invalid_plan(format!(
+            "workspace_query stat result path `{entry_path}` does not match requested `{requested_path}`"
+        )));
+    }
+    Ok(())
+}
+
+fn validate_workspace_digest_value(
+    request: PlanWorkspaceQueryRequest<'_>,
+    value: &Map<String, Value>,
+) -> Result<(), PublicSeamError> {
+    let algorithm = request
+        .op()
+        .get("algorithm")
+        .and_then(Value::as_str)
+        .ok_or_else(|| invalid_plan("workspace_query digest must carry algorithm"))?;
+    let digest = value
+        .get("digest")
+        .and_then(Value::as_str)
+        .ok_or_else(|| invalid_plan("workspace_query digest result must carry digest"))?;
+    if !digest.starts_with(&format!("{algorithm}:")) {
+        return Err(invalid_plan(format!(
+            "workspace_query digest result `{digest}` does not match requested algorithm `{algorithm}`"
+        )));
+    }
+    let workspace = value
+        .get("workspace")
+        .and_then(Value::as_str)
+        .ok_or_else(|| invalid_plan("workspace_query digest result must carry workspace"))?;
+    if workspace != request.workspace() {
+        return Err(invalid_plan(format!(
+            "workspace_query digest result workspace `{workspace}` does not match requested `{}`",
+            request.workspace()
+        )));
+    }
+    Ok(())
 }
 
 pub(super) fn workspace_query_projection(request: PlanWorkspaceQueryRequest<'_>) -> Value {

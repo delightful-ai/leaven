@@ -22,8 +22,8 @@ pub use queries::{
 use queries::{
     case_query_include, case_query_projection, plan_contains_case_query,
     require_included_case_fields, require_requested_case_field, validate_case_query_authority,
-    workspace_query_expected_value_kind, workspace_query_projection, workspace_query_request,
-    workspace_query_request_from_values,
+    validate_workspace_query_value_shape, workspace_query_expected_value_kind,
+    workspace_query_projection, workspace_query_request, workspace_query_request_from_values,
 };
 pub use receipts::validate_plan_result_receipts;
 
@@ -1381,6 +1381,7 @@ fn execute_workspace_query_expr(
             request.op_kind()?
         )));
     }
+    validate_workspace_query_value_shape(request, &value)?;
     if expected_kind == "workspace_file" {
         let classes = outcome
             .data_classes

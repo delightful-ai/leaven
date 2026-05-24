@@ -3,11 +3,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde_json::{Map, Value, json};
 
 use super::{
-    PlanExecutionContext, case_query_projection, dependency_values,
+    PlanExecutionContext, PlanWorkspaceQueryRequest, case_query_projection, dependency_values,
     effects::{LiveWorkspaceHandle, require_live_workspace, workspace_ref_id},
     graph_read_scope, graph_read_scope_value, invalid_plan, nested_kind, object, prefixed_jcs_hash,
-    required_string, workspace_query_expected_value_kind, workspace_query_projection,
-    workspace_query_request_from_values,
+    required_string, validate_workspace_query_value_shape, workspace_query_expected_value_kind,
+    workspace_query_projection, workspace_query_request_from_values,
 };
 use crate::PublicSeamError;
 
@@ -317,26 +317,11 @@ fn validate_workspace_query_receipt(
             request.op_kind()?
         )));
     }
-    if expected_kind == "workspace_file" {
-        let data_classes = value
-            .get("data_classes")
-            .and_then(Value::as_array)
-            .ok_or_else(|| invalid_plan("workspace_query file result must carry data_classes"))?
-            .iter()
-            .map(|value| {
-                value.as_str().ok_or_else(|| {
-                    invalid_plan("workspace_query file result data_classes must be strings")
-                })
-            })
-            .collect::<Result<BTreeSet<_>, _>>()?;
-        for expected in request.expected_data_classes()? {
-            if !data_classes.contains(expected) {
-                return Err(invalid_plan(format!(
-                    "workspace_query read_file result missing expected data class `{expected}`"
-                )));
-            }
-        }
-    }
+    let value_object = value
+        .as_object()
+        .ok_or_else(|| invalid_plan("workspace_query result value must be an object"))?;
+    validate_workspace_query_value_shape(request, value_object)?;
+    validate_workspace_file_data_classes(request, expected_kind, value)?;
     let scope = json!({
         "kind": "workspace_query",
         "workspace": workspace_ref_id(
@@ -384,6 +369,35 @@ fn validate_workspace_query_receipt(
         )?,
     )?;
     state.bindings.insert(name.to_owned(), value.clone());
+    Ok(())
+}
+
+fn validate_workspace_file_data_classes(
+    request: PlanWorkspaceQueryRequest<'_>,
+    expected_kind: &str,
+    value: &Value,
+) -> Result<(), PublicSeamError> {
+    if expected_kind != "workspace_file" {
+        return Ok(());
+    }
+    let data_classes = value
+        .get("data_classes")
+        .and_then(Value::as_array)
+        .ok_or_else(|| invalid_plan("workspace_query file result must carry data_classes"))?
+        .iter()
+        .map(|value| {
+            value.as_str().ok_or_else(|| {
+                invalid_plan("workspace_query file result data_classes must be strings")
+            })
+        })
+        .collect::<Result<BTreeSet<_>, _>>()?;
+    for expected in request.expected_data_classes()? {
+        if !data_classes.contains(expected) {
+            return Err(invalid_plan(format!(
+                "workspace_query read_file result missing expected data class `{expected}`"
+            )));
+        }
+    }
     Ok(())
 }
 

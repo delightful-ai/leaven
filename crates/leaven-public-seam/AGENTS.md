@@ -150,6 +150,10 @@ host can read, and emits typed `workspace_file`, `workspace_listing`,
 projects as a `workspace_listing`, `digest` as a `workspace_snapshot`, and
 `git_log` as a `workspace_diff` because the locked result schema has those
 workspace-read value families rather than separate stat/digest/log value kinds.
+Within that broad family mapping, `stat` still binds the result to the
+requested path and `digest` still binds the result to the requested algorithm
+and workspace id. `git_log` remains a broad `workspace_diff`-family projection,
+not a parsed commit-log surface.
 It is not workspace backend execution and still leaves full artifact/snapshot
 backend proof pending, so it is not full workspace row closeout. The
 `PublicSeamPackage::execute_plan_document_with_capability` route
@@ -216,8 +220,10 @@ Crate-root exports for `StagePayloadDocument`, `StagePayloadRole`, and
 active-schema stage-payload validation for role-specific reflector,
 reflection-result, proposer, runner, scorer, judge, callback, and adapter
 payloads, including target-safe reflector examples, receipted reflection
-results with source-backed diagnosis, proposal reflection/result separation
-that preserves reflection source refs, allowed change schema declarations,
+results whose top-level source refs back the diagnosis, non-empty nested
+diagnosis source refs when the optional nested field is present, proposal
+reflection/result separation that preserves reflection source refs, allowed
+change schema declarations,
 output contexts, and payload-schema fingerprints. They are not an agent runtime,
 LM prompt renderer, ACP delivery path, proposal application engine, or proof
 that every optimizer/runtime producer emits these payloads.
@@ -324,13 +330,16 @@ backpressure, or runtime watch support.
   decisions bound to authenticated sessions, `PlanError`/redaction denials,
   active-schema extension-result primary/receipt payloads across the full
   locked callback surface, method-specific primary value families,
-  receipt-category binding, primary receipt binding, JCS `result_hash` binding,
+  receipt-category binding, ACP-envelope JCS `result_hash` binding even for
+  locked-schema primary values that cannot carry their own receipt field,
+  primary receipt binding when the primary schema includes a receipt,
   and monotonic result data-class coverage. It rejects MCP/private-process substitutes,
   unpinned/latest ACP versions, non-stdio-first transport drift,
   human/always-grant permission substitutes, unbounded update declarations,
   archived/private schema bindings, bare method-specific result payloads,
   cross-method payloads, wrong receipt classes, unschematized primary/receipt
-  payloads, unbound or forged result hashes, unbound primary receipts, and
+  payloads, unbound or forged result hashes including generic extension and
+  receiptless workspace primaries, unbound primary receipts, and
   result data-class gaps. It does not prove ACP process startup,
   engine-client/worker-agent runtime inversion, cancellation, progress updates,
   backpressure behavior, provider calls, or worker lifecycle control.
