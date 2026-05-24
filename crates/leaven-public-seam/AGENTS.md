@@ -364,27 +364,33 @@ explicit `PublicBlobRef` at projection time. They are not proof that evaluator
 runtimes produce those records for every assessment shape.
 
 Crate-root exports for `StagePayloadDocument`, `ReflectProposeHandoffDocument`,
-`StagePayloadRole`, and `StageProposalEffect` are advanced public seam
-contracts. They prove active-schema stage-payload validation for role-specific
-reflector, reflection-result, proposer, runner, scorer, judge, callback, and
-adapter payloads, including non-empty target-safe reflector examples whose
-source refs and nested score-output data classes are carried by the request,
-reflector source refs that cannot hide `case.target` markers, receipted
-reflection results whose top-level source refs and required nested diagnosis
-source refs back the diagnosis, proposal/reflection separation that preserves
-reflection source refs, active reflect-then-propose handoff binding with
-distinct reflector/proposer stage call ids, exact `ReflectionResult`
-consumption, stage receipts that fingerprint the produced reflection result and
-bind proposer consumption back to the reflector receipt, shared
-run/revision/parent/surface/capability/query-policy facts, allowed change
-schema declarations, target-aware scorer context binding to the scored case,
-score/judge output contexts that at least declare assessed candidate or
-artifact output data classes, and payload-schema fingerprints.
+`ReflectProposeSubmissionDocument`, `StagePayloadRole`, and
+`StageProposalEffect` are advanced public seam contracts. They prove
+active-schema stage-payload validation for role-specific reflector,
+reflection-result, proposer, runner, scorer, judge, callback, and adapter
+payloads, including non-empty target-safe reflector examples whose source refs
+and nested score-output data classes are carried by the request, reflector
+source refs that cannot hide `case.target` markers, receipted reflection results
+whose top-level source refs and required nested diagnosis source refs back the
+diagnosis, proposal/reflection separation that preserves reflection source
+refs, active reflect-then-propose handoff binding with distinct
+reflector/proposer stage call ids, exact `ReflectionResult` consumption, stage
+receipts that fingerprint the produced reflection result and bind proposer
+consumption back to the reflector receipt, proposal submissions that cite that
+proposer receipt in a top-level literal array and preserve reflection read
+receipts, reflected parent causal input, allowed effects, allowed change
+schemas, and change target/surface facts, shared
+run/revision/parent/surface/capability/query-policy facts, allowed change schema
+declarations, target-aware scorer context binding to the scored case,
+score/judge output contexts that at least declare assessed candidate or artifact
+output data classes, and payload-schema fingerprints.
 That data-class declaration is necessary seam metadata; it is not independent
 proof that arbitrary stage JSON is the actual candidate/artifact output being
-assessed. They are not an agent runtime, LM prompt renderer, ACP delivery path,
-proposal application engine, or proof that every optimizer/runtime producer
-emits these payloads.
+assessed. The proposal-submission check is an exact cited-handoff validation,
+not a typed schema-level provenance edge or capability authorization proof.
+They are not an agent runtime, LM prompt renderer, ACP delivery path, proposal
+application engine, RunContext graph mutation proof, receipt-store persistence
+proof, or proof that every optimizer/runtime producer emits these payloads.
 
 Crate-root export `DeferredWatchReplacement` is an advanced public seam
 contract. It proves that the V1 deferred watch marker can route only to a finite

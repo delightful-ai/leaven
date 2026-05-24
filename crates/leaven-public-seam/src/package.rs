@@ -9,7 +9,8 @@ use crate::{
     CallAuthorityReport, ConformanceMatrix, DeferredWatchReplacement, EvaluationJobDocument,
     EvaluationRequestReceiptDocument, EvidenceEnvelopeDocument, OutputRecordDocument,
     PinnedDialectEvaluator, PlanDocument, PlanResultDocument, ProposalAuthorityReport,
-    PublicSeamError, ReflectProposeHandoffDocument, StagePayloadDocument,
+    PublicSeamError, ReflectProposeHandoffDocument, ReflectProposeSubmissionDocument,
+    StagePayloadDocument,
 };
 
 mod support;
@@ -748,6 +749,21 @@ impl PublicSeamPackage {
             propose,
         )?;
         ReflectProposeHandoffDocument::from_schema_valid_values(value, reflect, reflection, propose)
+    }
+
+    /// Validates proposal writes against the exact separate reflect/propose stage handoff they cite.
+    pub fn validate_reflect_propose_submission_document(
+        &self,
+        handoff: &Value,
+        proposal_plan: &Value,
+    ) -> Result<ReflectProposeSubmissionDocument, PublicSeamError> {
+        let handoff_document = self.validate_reflect_propose_handoff_document(handoff)?;
+        self.validate_plan_document(proposal_plan)?;
+        ReflectProposeSubmissionDocument::from_valid_handoff_and_plan(
+            handoff_document,
+            handoff,
+            proposal_plan,
+        )
     }
 
     /// Validates the V1 deferred-watch marker and its finite-diff Plan IR replacement.

@@ -825,14 +825,24 @@ rows:
       - crates/leaven-public-seam/tests/stage_payloads.rs::propose_request_rejects_reflection_source_ref_drop
       - crates/leaven-public-seam/tests/stage_payloads.rs::reflect_propose_handoff_rejects_single_prompt_and_stale_reflection_fakes
       - crates/leaven-public-seam/tests/stage_payloads.rs::reflect_propose_handoff_rejects_missing_or_forged_stage_receipts
+      - crates/leaven-public-seam/tests/stage_payloads.rs::reflect_propose_submission_binds_proposal_effects_to_cited_handoff
+      - crates/leaven-public-seam/tests/stage_payloads.rs::reflect_propose_submission_rejects_mutation_without_cited_handoff
     partial_contract_implementation_evidence:
       - crates/leaven-public-seam/src/stage_payload.rs::StagePayloadDocument
       - crates/leaven-public-seam/src/stage_payload.rs::ReflectProposeHandoffDocument
+      - crates/leaven-public-seam/src/stage_payload.rs::ReflectProposeSubmissionDocument
       - crates/leaven-public-seam/src/stage_payload.rs::ReflectProposeHandoffDocument::from_schema_valid_values
+      - crates/leaven-public-seam/src/stage_payload.rs::ReflectProposeSubmissionDocument::from_valid_handoff_and_plan
       - crates/leaven-public-seam/src/stage_payload.rs::validate_handoff_stage_receipts
       - crates/leaven-public-seam/src/stage_payload.rs::validate_reflect_receipt_produces
       - crates/leaven-public-seam/src/stage_payload.rs::validate_propose_receipt_consumes
       - crates/leaven-public-seam/src/stage_payload.rs::validate_propose_receipt_binds_reflect_receipt
+      - crates/leaven-public-seam/src/stage_payload.rs::validate_submit_proposal_batch_for_handoff
+      - crates/leaven-public-seam/src/stage_payload.rs::validate_proposal_stage_provenance
+      - crates/leaven-public-seam/src/stage_payload.rs::validate_proposal_reflection_read_receipts
+      - crates/leaven-public-seam/src/stage_payload.rs::validate_proposal_causal_parent
+      - crates/leaven-public-seam/src/stage_payload.rs::validate_change_effect_for_handoff
+      - crates/leaven-public-seam/src/stage_payload.rs::validate_agent_session_proposal_receipt
       - crates/leaven-public-seam/src/stage_payload.rs::prefixed_stage_payload_hash
       - crates/leaven-public-seam/src/stage_payload.rs::inspect_propose_request
       - crates/leaven-public-seam/src/stage_payload.rs::inspect_reflection_result
@@ -842,6 +852,7 @@ rows:
       - crates/leaven-public-seam/src/stage_payload.rs::candidate_ref_key
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_stage_payload_document
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_reflect_propose_handoff_document
+      - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_reflect_propose_submission_document
       - crates/leaven-public-seam/AGENTS.md
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-stage-payload-current-blocker-review.md
@@ -853,6 +864,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-stage-evidence-jsonrpc-handoff-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-stage-evidence-sartre-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-assessment-evidence-galileo-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-stage-submission-binding-aquinas-review.md
     status: pending
 
   - id: ps1.stage.payload_receipts
@@ -884,8 +896,11 @@ rows:
       - crates/leaven-public-seam/tests/stage_payloads.rs::score_and_judge_contexts_reject_nested_output_data_class_gaps
       - crates/leaven-public-seam/tests/stage_payloads.rs::runner_request_rejects_case_target_material
       - crates/leaven-public-seam/tests/stage_payloads.rs::callback_and_adapter_payloads_reject_missing_payload_schema
+      - crates/leaven-public-seam/tests/stage_payloads.rs::reflect_propose_submission_binds_proposal_effects_to_cited_handoff
+      - crates/leaven-public-seam/tests/stage_payloads.rs::reflect_propose_submission_rejects_mutation_without_cited_handoff
     partial_contract_implementation_evidence:
       - crates/leaven-public-seam/src/stage_payload.rs::StagePayloadDocument
+      - crates/leaven-public-seam/src/stage_payload.rs::ReflectProposeSubmissionDocument
       - crates/leaven-public-seam/src/stage_payload.rs::inspect_reflect_request
       - crates/leaven-public-seam/src/stage_payload.rs::inspect_reflection_result
       - crates/leaven-public-seam/src/stage_payload.rs::receipt_ref_id
@@ -901,9 +916,16 @@ rows:
       - crates/leaven-public-seam/src/stage_payload.rs::candidate_ref_key
       - crates/leaven-public-seam/src/stage_payload.rs::inspect_runner_request
       - crates/leaven-public-seam/src/stage_payload.rs::inspect_schema_bound_payload
+      - crates/leaven-public-seam/src/stage_payload.rs::validate_submit_proposal_batch_for_handoff
+      - crates/leaven-public-seam/src/stage_payload.rs::validate_proposal_stage_provenance
+      - crates/leaven-public-seam/src/stage_payload.rs::validate_proposal_reflection_read_receipts
+      - crates/leaven-public-seam/src/stage_payload.rs::validate_proposal_causal_parent
+      - crates/leaven-public-seam/src/stage_payload.rs::validate_change_effect_for_handoff
+      - crates/leaven-public-seam/src/stage_payload.rs::validate_agent_session_proposal_receipt
       - crates/leaven-public-seam/src/stage_payload.rs::require_non_empty_array
       - crates/leaven-public-seam/src/stage_payload.rs::reject_target_leakage
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_stage_payload_document
+      - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::validate_reflect_propose_submission_document
       - crates/leaven-public-seam/AGENTS.md
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-stage-payload-current-blocker-review.md
@@ -913,6 +935,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-public-seam-tranche-plato-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-stage-evidence-sartre-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-assessment-evidence-galileo-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-stage-submission-binding-aquinas-review.md
     status: pending
 
   - id: ps1.proposal.surface_authority
