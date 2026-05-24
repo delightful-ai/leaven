@@ -301,7 +301,7 @@ pub struct PlanLmCompleteOutcome {
 
 impl PlanLmCompleteOutcome {
     /// Creates an LM response outcome.
-    pub fn new(message: Value, runtime_fingerprint: impl Into<String>) -> Self {
+    fn new(message: Value, runtime_fingerprint: impl Into<String>) -> Self {
         Self {
             message,
             parsed: None,
@@ -350,20 +350,6 @@ impl PlanLmCompleteOutcome {
         }
     }
 
-    /// Overrides the data classes carried by the LM response value.
-    #[must_use]
-    pub fn with_data_classes(mut self, data_classes: impl IntoIterator<Item = String>) -> Self {
-        self.data_classes = data_classes.into_iter().collect();
-        self
-    }
-
-    /// Overrides the replayability classification carried by the LM response value.
-    #[must_use]
-    pub fn with_replayability(mut self, replayability: impl Into<String>) -> Self {
-        self.replayability = replayability.into();
-        self
-    }
-
     /// Attaches the parsed payload required by JSON-schema output contracts.
     #[must_use]
     pub fn with_parsed(mut self, parsed: Value) -> Self {
@@ -373,7 +359,7 @@ impl PlanLmCompleteOutcome {
 
     /// Attaches a cost object.
     #[must_use]
-    pub fn with_cost(mut self, cost: Value) -> Self {
+    fn with_cost(mut self, cost: Value) -> Self {
         self.cost = Some(cost);
         self
     }

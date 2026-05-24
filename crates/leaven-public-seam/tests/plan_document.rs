@@ -1103,23 +1103,6 @@ fn plan_execution_modes_require_cached_uses_cache_and_refuses_live_misses() {
         report.value()["values"]["completion"]["cache"].as_str(),
         Some("hit")
     );
-
-    let mut missing_cost_hit = RecordingPlanHost {
-        cached_hit: true,
-        omit_lm_cost: true,
-        ..RecordingPlanHost::default()
-    };
-    let error = package
-        .execute_plan_document(&plan, &plan_execution_context(), &mut missing_cost_hit)
-        .unwrap_err();
-    assert!(
-        error
-            .to_string()
-            .contains("lm_complete host outcome must carry cost"),
-        "unexpected error: {error:?}"
-    );
-    assert!(missing_cost_hit.calls.is_empty());
-    assert_eq!(missing_cost_hit.cached_calls, vec!["completion"]);
 }
 
 #[test]
@@ -2546,59 +2529,8 @@ fn lm_complete_lowering_rejects_deferred_multimodal_or_extension_content() {
 #[test]
 fn lm_complete_rejects_schema_valid_non_final_or_oversized_responses() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
-    assert_lm_live_response_fakes_rejected(&package);
     assert_lm_forged_response_fakes_rejected(&package);
     assert_lm_cost_binding_fakes_rejected(&package);
-}
-
-fn assert_lm_live_response_fakes_rejected(package: &PublicSeamPackage) {
-    for (lm_response, expected) in [
-        (
-            LmResponseFixture::WrongRole,
-            "lm_complete result message role `user` must be assistant",
-        ),
-        (
-            LmResponseFixture::ToolResult,
-            "lm_complete result content kind `tool_result` is not a V1 final response",
-        ),
-        (
-            LmResponseFixture::ExtensionContent,
-            "lm_complete result content kind `extension` is not a V1 final response",
-        ),
-        (
-            LmResponseFixture::ToolMetadata,
-            "lm_complete result message must not carry tool_call_id or name",
-        ),
-        (
-            LmResponseFixture::NamedMetadata,
-            "lm_complete result message must not carry tool_call_id or name",
-        ),
-        (
-            LmResponseFixture::OversizedFinal,
-            "lm_complete final_message result exceeds max_bytes 2",
-        ),
-    ] {
-        let mut plan = typed_let_call_write_plan();
-        plan["mode"] = json!({"kind": "execute"});
-        plan["commit"] = json!({
-            "kind": "graph_writes_atomic",
-            "on_stale": "reject"
-        });
-        if matches!(lm_response, LmResponseFixture::OversizedFinal) {
-            plan["ops"][1]["call"]["output"]["max_bytes"] = json!(2);
-        }
-        let mut host = RecordingPlanHost {
-            lm_response,
-            ..RecordingPlanHost::default()
-        };
-        let error = package
-            .execute_plan_document(&plan, &plan_execution_context(), &mut host)
-            .unwrap_err();
-        assert!(
-            error.to_string().contains(expected),
-            "unexpected error for {lm_response:?}: {error:?}"
-        );
-    }
 }
 
 fn assert_lm_forged_response_fakes_rejected(package: &PublicSeamPackage) {
@@ -2704,20 +2636,6 @@ fn assert_lm_cost_binding_fakes_rejected(package: &PublicSeamPackage) {
         "kind": "graph_writes_atomic",
         "on_stale": "reject"
     });
-
-    let mut missing_cost_host = RecordingPlanHost {
-        omit_lm_cost: true,
-        ..RecordingPlanHost::default()
-    };
-    let error = package
-        .execute_plan_document(&plan, &plan_execution_context(), &mut missing_cost_host)
-        .unwrap_err();
-    assert!(
-        error
-            .to_string()
-            .contains("lm_complete host outcome must carry cost"),
-        "unexpected error: {error:?}"
-    );
 
     let report = package
         .execute_plan_document(
@@ -3957,9 +3875,7 @@ struct RecordingPlanHost {
     workspaces: BTreeSet<String>,
     cached_hit: bool,
     fail_lm: bool,
-    omit_lm_cost: bool,
     structured_parsed: StructuredParsedFixture,
-    lm_response: LmResponseFixture,
     sandbox_stream: SandboxStreamFixture,
 }
 
@@ -3969,96 +3885,6 @@ enum StructuredParsedFixture {
     Valid,
     Omit,
     Invalid,
-}
-
-#[derive(Clone, Copy, Debug, Default)]
-enum LmResponseFixture {
-    #[default]
-    FinalText,
-    WrongRole,
-    ToolResult,
-    ExtensionContent,
-    ToolMetadata,
-    NamedMetadata,
-    OversizedFinal,
-}
-
-impl LmResponseFixture {
-    fn message(self) -> Value {
-        match self {
-            Self::FinalText => json!({
-                "role": "assistant",
-                "content": [
-                    {
-                        "kind": "text",
-                        "text": "ok"
-                    }
-                ]
-            }),
-            Self::WrongRole => json!({
-                "role": "user",
-                "content": [
-                    {
-                        "kind": "text",
-                        "text": "ok"
-                    }
-                ]
-            }),
-            Self::ToolResult => json!({
-                "role": "assistant",
-                "content": [
-                    {
-                        "kind": "tool_result",
-                        "tool_call_id": "call_lookup_1",
-                        "content": "{\"hint\":\"ok\"}"
-                    }
-                ]
-            }),
-            Self::ExtensionContent => json!({
-                "role": "assistant",
-                "content": [
-                    {
-                        "kind": "extension",
-                        "namespace": "leaven.media",
-                        "op": "image_output",
-                        "schema_fingerprint": "fp_schema_sha256_imageoutput",
-                        "payload": {
-                            "image": "blob://image"
-                        }
-                    }
-                ]
-            }),
-            Self::ToolMetadata => json!({
-                "role": "assistant",
-                "tool_call_id": "call_lookup_1",
-                "content": [
-                    {
-                        "kind": "text",
-                        "text": "ok"
-                    }
-                ]
-            }),
-            Self::NamedMetadata => json!({
-                "role": "assistant",
-                "name": "assistant_alias",
-                "content": [
-                    {
-                        "kind": "text",
-                        "text": "ok"
-                    }
-                ]
-            }),
-            Self::OversizedFinal => json!({
-                "role": "assistant",
-                "content": [
-                    {
-                        "kind": "text",
-                        "text": "too long"
-                    }
-                ]
-            }),
-        }
-    }
 }
 
 fn agent_command_fixture(agent_audit: AgentAuditFixture) -> Value {
@@ -4181,6 +4007,23 @@ fn agent_session() -> leaven_kernel::Metered<leaven_agent::AgentSession> {
     leaven_kernel::Metered::new(
         session,
         leaven_kernel::Cost::custom("usd_micro", 1000.0).unwrap(),
+    )
+}
+
+fn lm_response(text: &str) -> leaven_kernel::Metered<leaven_lm::LmResponse> {
+    let usage = leaven_lm::TokenUsage {
+        input_tokens: 7,
+        output_tokens: 3,
+        ..leaven_lm::TokenUsage::default()
+    };
+    leaven_kernel::Metered::new(
+        leaven_lm::LmResponse::new(leaven_lm::Message::assistant(text), usage).unwrap(),
+        leaven_kernel::Cost {
+            llm_calls: 1,
+            prompt_tokens: 7,
+            completion_tokens: 3,
+            ..leaven_kernel::Cost::zero()
+        },
     )
 }
 
@@ -4389,11 +4232,10 @@ impl PlanExecutionHost for RecordingPlanHost {
                 100,
             ));
         }
-        let mut outcome =
-            PlanLmCompleteOutcome::new(self.lm_response.message(), "fp_runtime_sha256_planexec");
-        if !self.omit_lm_cost {
-            outcome = outcome.with_cost(json!({"input_tokens": 7, "output_tokens": 3}));
-        }
+        let mut outcome = PlanLmCompleteOutcome::from_lm_response(
+            lm_response("ok"),
+            leaven_kernel::Fingerprint::from_bytes([0x1e; 32]),
+        );
         if request.call()["output"]["kind"].as_str() == Some("json_schema") {
             match self.structured_parsed {
                 StructuredParsedFixture::Valid => {
@@ -4417,21 +4259,10 @@ impl PlanExecutionHost for RecordingPlanHost {
         self.cached_calls.push("completion");
         self.call_deps = request.deps().clone();
         if self.cached_hit {
-            let mut outcome = PlanLmCompleteOutcome::new(
-                json!({
-                    "role": "assistant",
-                    "content": [
-                        {
-                            "kind": "text",
-                            "text": "cached ok"
-                        }
-                    ]
-                }),
-                "fp_runtime_sha256_planexec",
+            let mut outcome = PlanLmCompleteOutcome::from_lm_response(
+                lm_response("cached ok"),
+                leaven_kernel::Fingerprint::from_bytes([0x1e; 32]),
             );
-            if !self.omit_lm_cost {
-                outcome = outcome.with_cost(json!({"input_tokens": 7, "output_tokens": 3}));
-            }
             if request.call()["output"]["kind"].as_str() == Some("json_schema") {
                 match self.structured_parsed {
                     StructuredParsedFixture::Valid => {

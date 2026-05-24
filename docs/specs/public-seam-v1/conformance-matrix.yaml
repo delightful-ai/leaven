@@ -1544,7 +1544,6 @@ rows:
       - crates/leaven-public-seam/src/plan_execution/effects/lm.rs::lower_provider_hints
       - crates/leaven-public-seam/src/plan_execution/effects/lm.rs::PlanLmCompleteOutcome::from_lm_response
       - crates/leaven-public-seam/src/plan_execution/effects/lm.rs::PlanLmCompleteOutcome::with_parsed
-      - crates/leaven-public-seam/src/plan_execution/effects/lm.rs::PlanLmCompleteOutcome::with_cost
       - crates/leaven-public-seam/src/plan_execution.rs::validate_structured_output_contract
       - crates/leaven-public-seam/src/plan_execution.rs::validate_structured_output_outcome
       - crates/leaven-public-seam/src/plan_execution.rs::validate_json_schema_output_payload
@@ -1577,6 +1576,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-acp-evidence-stage-current-tranche-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-external-effect-policy-current-tranche-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-score-lm-agent-json-schema-partial-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-lm-success-construction-hard-cutover-review.md
     status: pending
 
   - id: ps1.agent.contract

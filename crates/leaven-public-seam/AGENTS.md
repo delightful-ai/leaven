@@ -149,8 +149,9 @@ while preserving developer/user/tool messages, tool-result ids, tool
 definitions, model role, sampling stop sequences, provider hints, final-message
 output, and JSON-schema output. `PlanLmCompleteOutcome::from_lm_response`
 projects provider-neutral `leaven_lm::LmResponse` plus metered `leaven-kernel`
-cost into the Plan Result outcome shape without requiring hosts to hand-write
-LM response JSON. JSON-schema LM outputs must return a parsed Plan Result
+cost into the Plan Result outcome shape; successful LM outcomes are not
+publicly constructible from hand-written response JSON or ad hoc cost fields.
+JSON-schema LM outputs must return a parsed Plan Result
 payload, and successful call-result validation requires an `lm_complete` result
 to be an `lm_response` value carrying the matching call receipt, matching
 value/receipt cost, and an assistant-authored text final response. Result-side
