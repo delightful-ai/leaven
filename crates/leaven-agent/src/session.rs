@@ -71,6 +71,10 @@ pub enum OutputContract {
         path: WorkspacePath,
         schema: Option<JsonSchemaRef>,
     },
+    JsonSchema {
+        schema_fingerprint: String,
+        schema: serde_json::Value,
+    },
     FinalMessage,
     WorkspaceDiff {
         roots: Vec<WorkspacePath>,
@@ -272,7 +276,7 @@ pub fn validate_output_contract(
             })?;
             Ok(vec![path.clone()])
         }
-        OutputContract::FinalMessage => {
+        OutputContract::JsonSchema { .. } | OutputContract::FinalMessage => {
             let has_assistant_message = session.transcript.events.iter().any(|event| {
                 matches!(
                     event,
@@ -286,7 +290,7 @@ pub fn validate_output_contract(
                 Ok(Vec::new())
             } else {
                 Err(AgentRuntimeError::OutputContract(
-                    "final assistant message was required".to_owned(),
+                    "final assistant message was required for output contract".to_owned(),
                 ))
             }
         }

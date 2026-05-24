@@ -10,7 +10,9 @@ GEPA, skill banks, run graphs, or optimizer rhythm.
 ## Map
 - `AgentRuntime` runs one session and returns `Metered<AgentSession>`.
 - `AgentRunRequest` is execution vocabulary: instructions, cwd, output contract,
-  environment, tool policy, and limits.
+  environment, tool policy, and limits. `OutputContract::JsonSchema` preserves
+  structured final-message requirements by schema fingerprint and schema body;
+  it is not a workspace JSON file path.
 - `AgentRunContext` is not `RunContext`; it carries execution facts such as
   session id, budget snapshot, and cancellation.
 - `AgentSession` is fact, not interpretation. Stage parsers decide whether
@@ -64,6 +66,9 @@ GEPA, skill banks, run graphs, or optimizer rhythm.
   bridge.
 - `FakeAgentRuntime` is a contract-test helper, not a provider architecture.
   New real providers should implement `AgentRuntime` in provider leaves.
+- `OutputContract::JsonSchema` validates the same final-assistant-message
+  presence as `FinalMessage`; provider leaves own actual schema-constrained
+  decoding/enforcement until a runtime-specific verifier is added.
 - `OutputContract::WorkspaceDiff` does not parse diffs and does not create
   artifacts. It only states what kind of output the runtime should leave for a
   stage-owned parser.

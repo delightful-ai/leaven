@@ -225,6 +225,10 @@ fn fake_runtime_reports_output_contract_violations_with_sources() {
                 path: missing.clone(),
                 schema: None,
             },
+            OutputContract::JsonSchema {
+                schema_fingerprint: "fp_schema_sha256_agentout".to_owned(),
+                schema: serde_json::json!({"type": "object"}),
+            },
             OutputContract::FinalMessage,
         ] {
             let mut workspace = memory_workspace();
@@ -244,7 +248,10 @@ fn fake_runtime_reports_output_contract_violations_with_sources() {
                     assert!(source.to_string().contains("missing"));
                 }
                 AgentRuntimeError::OutputContract(message) => {
-                    assert_eq!(message, "final assistant message was required");
+                    assert_eq!(
+                        message,
+                        "final assistant message was required for output contract"
+                    );
                 }
                 other => panic!("unexpected error: {other:?}"),
             }
