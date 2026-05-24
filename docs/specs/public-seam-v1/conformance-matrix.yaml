@@ -1026,6 +1026,7 @@ rows:
       - crates/leaven-run/tests/optimize_builder.rs::run_builder_typed_output_uses_score_supplied_report_output
       - crates/leaven-run/tests/public_seam.rs::runcontext_assessment_score_outputs_project_to_public_seam_submit_assessments_plan
       - crates/leaven-run/tests/public_seam.rs::runcontext_assessment_artifact_score_outputs_project_to_public_seam_submit_assessments_plan
+      - crates/leaven-run/tests/public_seam.rs::runcontext_pairwise_and_listwise_score_outputs_project_to_public_seam_submit_assessments_plan
       - crates/leaven-public-seam/tests/plan_document.rs::submit_assessments_score_outputs_cover_all_assessment_shapes
       - crates/leaven-public-seam/tests/plan_document.rs::submit_assessments_accepts_candidate_artifact_score_output_class
       - crates/leaven-run/tests/scoring_evaluator.rs::scoring_evaluator_rejects_missing_reportable_output_for_typed_runner_outputs
@@ -1057,10 +1058,14 @@ rows:
       - crates/leaven-run/src/evaluator.rs::JudgeScoreContext::report_output
       - crates/leaven-run/src/evaluator.rs::evaluate_job
       - crates/leaven-run/src/evaluator.rs::evaluate_judge_job
+      - crates/leaven-run/src/evaluator.rs::assessed_candidate_outputs
       - crates/leaven-evidence/src/output.rs::OutputRecord::candidate_inline
+      - crates/leaven-evidence/src/feedback.rs::CandidateAssessmentOutput
       - crates/leaven-run/src/public_seam/assessment_write.rs::PublicAssessmentWriteReceiptContext::submit_assessments_plan_document
       - crates/leaven-run/src/public_seam/assessment_write.rs::assessment_plan_entry
-      - crates/leaven-run/src/public_seam/assessment_write.rs::independent_score_output
+      - crates/leaven-run/src/public_seam/assessment_write.rs::score_output
+      - crates/leaven-run/src/public_seam/assessment_write.rs::grouped_candidate_output_values
+      - crates/leaven-run/src/public_seam/assessment_write.rs::candidate_output_value
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::project_output_record
       - crates/leaven-public-seam/src/plan.rs::PlanDocument::assessment_score_output_count
       - crates/leaven-public-seam/src/plan.rs::validate_score_output_candidate_binding

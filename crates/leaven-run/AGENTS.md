@@ -65,8 +65,10 @@ Result write receipts. `PublicAssessmentWriteReceiptContext` also projects
 graph-backed independent assessment evidence from the configured evidence store
 into locked `submit_assessments` Plan IR so `Score.output` is sourced from the
 stored `CaseAssessmentEvidence` payload rather than a raw caller-supplied JSON
-row. Pairwise/listwise score-output Plan IR projection and blob-backed score
-output projection remain explicit scaffolding. These routes project
+row. Pairwise/listwise score-output Plan IR projection uses evidence-layer
+candidate-bound assessed outputs; blob-backed score output projection remains
+explicit scaffolding until public blob metadata is available at this lowering
+boundary. These routes project
 engine-recorded evaluation request identity, `request_evaluation` Plan Result
 receipts, engine `RunContext` budget-charge/error event pairs, and graph-backed
 assessment/proposal write reports into locked public-seam wire documents for

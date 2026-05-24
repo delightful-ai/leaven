@@ -3,8 +3,10 @@ use std::collections::BTreeSet;
 use leaven_core::OptimizationProblem;
 use leaven_engine::AssessmentView;
 use leaven_engine::{EvaluationReport, RunGraphView};
-use leaven_evidence::{CaseAssessmentEvidence, DataClass, OutputRecord, OutputVisibility};
-use leaven_kernel::{AssessmentId, EvaluationRequestId};
+use leaven_evidence::{
+    CandidateAssessmentOutput, CaseAssessmentEvidence, DataClass, OutputRecord, OutputVisibility,
+};
+use leaven_kernel::{AssessmentId, CandidateId, EvaluationRequestId};
 use leaven_store::{EvidenceStore, StoreError};
 use serde_json::{Value, json};
 use thiserror::Error;
@@ -250,7 +252,7 @@ pub enum PublicAssessmentWriteReceiptProjectionError {
         source: StoreError,
     },
     /// The projection does not yet support the assessment shape.
-    #[error("assessment write projection only supports independent assessment score outputs")]
+    #[error("assessment write projection does not support this assessment shape")]
     UnsupportedAssessmentShape,
     /// The projection does not yet support this output record shape.
     #[error("assessment write projection only supports inline score outputs")]
@@ -293,13 +295,10 @@ fn assessment_plan_entry(
     assessment: &AssessmentView<'_>,
     evidence: &CaseAssessmentEvidence,
 ) -> Result<Value, PublicAssessmentWriteReceiptProjectionError> {
-    let candidate = assessment
-        .independent_candidate()
-        .ok_or(PublicAssessmentWriteReceiptProjectionError::UnsupportedAssessmentShape)?;
-    let output = independent_score_output(candidate, evidence.output())?;
-    Ok(json!({
-        "kind": "independent",
-        "candidate": candidate_ref(candidate),
+    let shape = AssessmentPlanShape::from_assessment(assessment)?;
+    let output = score_output(&shape, evidence)?;
+    let mut entry = json!({
+        "kind": shape.kind(),
         "score": {
             "value": evidence.score().score(),
             "output": output
@@ -325,11 +324,108 @@ fn assessment_plan_entry(
             }
         },
         "replayability": "fully_managed"
+    });
+    shape.insert_candidate_fields(&mut entry);
+    Ok(entry)
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum AssessmentPlanShape {
+    Independent(CandidateId),
+    Pairwise(Vec<CandidateId>),
+    Listwise(Vec<CandidateId>),
+}
+
+impl AssessmentPlanShape {
+    fn from_assessment(
+        assessment: &AssessmentView<'_>,
+    ) -> Result<Self, PublicAssessmentWriteReceiptProjectionError> {
+        if let Some(candidate) = assessment.independent_candidate() {
+            return Ok(Self::Independent(candidate));
+        }
+        if let Some((left, right)) = assessment.pairwise_candidates() {
+            return Ok(Self::Pairwise(vec![left, right]));
+        }
+        if let Some(candidates) = assessment.listwise_candidates() {
+            return Ok(Self::Listwise(candidates.to_vec()));
+        }
+        Err(PublicAssessmentWriteReceiptProjectionError::UnsupportedAssessmentShape)
+    }
+
+    const fn kind(&self) -> &'static str {
+        match self {
+            Self::Independent(_) => "independent",
+            Self::Pairwise(_) => "pairwise",
+            Self::Listwise(_) => "listwise",
+        }
+    }
+
+    fn candidates(&self) -> &[CandidateId] {
+        match self {
+            Self::Independent(candidate) => std::slice::from_ref(candidate),
+            Self::Pairwise(candidates) | Self::Listwise(candidates) => candidates,
+        }
+    }
+
+    fn insert_candidate_fields(&self, entry: &mut Value) {
+        let object = entry
+            .as_object_mut()
+            .expect("assessment plan entry is object");
+        match self {
+            Self::Independent(candidate) => {
+                object.insert("candidate".to_owned(), json!(candidate_ref(*candidate)));
+            }
+            Self::Pairwise(candidates) | Self::Listwise(candidates) => {
+                object.insert("candidates".to_owned(), json!(candidate_refs(candidates)));
+            }
+        }
+    }
+}
+
+fn score_output(
+    shape: &AssessmentPlanShape,
+    evidence: &CaseAssessmentEvidence,
+) -> Result<Value, PublicAssessmentWriteReceiptProjectionError> {
+    let summary = output_summary(evidence.output())?;
+    let value = match shape {
+        AssessmentPlanShape::Independent(candidate) => {
+            candidate_output_value(*candidate, evidence.output())?
+        }
+        AssessmentPlanShape::Pairwise(_) | AssessmentPlanShape::Listwise(_) => {
+            grouped_candidate_output_values(shape.candidates(), evidence.candidate_outputs())?
+        }
+    };
+    Ok(json!({
+        "kind": "structured",
+        "summary": summary,
+        "value": value,
+        "visibility": visibility_wire(evidence.output().metadata().visibility()),
+        "data_classes": data_classes_wire(evidence.output().metadata().data_classes())
     }))
 }
 
-fn independent_score_output(
-    candidate: leaven_kernel::CandidateId,
+fn grouped_candidate_output_values(
+    candidates: &[CandidateId],
+    outputs: &[CandidateAssessmentOutput],
+) -> Result<Value, PublicAssessmentWriteReceiptProjectionError> {
+    if outputs.len() != candidates.len() {
+        return Err(PublicAssessmentWriteReceiptProjectionError::UnsupportedScoreOutput);
+    }
+    candidates
+        .iter()
+        .zip(outputs)
+        .map(|(candidate, output)| {
+            if output.candidate() != *candidate {
+                return Err(PublicAssessmentWriteReceiptProjectionError::UnsupportedScoreOutput);
+            }
+            candidate_output_value(*candidate, output.output())
+        })
+        .collect::<Result<Vec<_>, _>>()
+        .map(Value::Array)
+}
+
+fn candidate_output_value(
+    candidate: CandidateId,
     output: &OutputRecord,
 ) -> Result<Value, PublicAssessmentWriteReceiptProjectionError> {
     let OutputRecord::Inline { text, metadata, .. } = output else {
@@ -350,13 +446,7 @@ fn independent_score_output(
         .as_object_mut()
         .expect("candidate output JSON is object")
         .insert(value_field.to_owned(), json!(text));
-    Ok(json!({
-        "kind": "structured",
-        "summary": text,
-        "value": value,
-        "visibility": visibility_wire(metadata.visibility()),
-        "data_classes": data_classes_wire(data_classes)
-    }))
+    Ok(value)
 }
 
 fn output_summary(
@@ -404,6 +494,10 @@ fn assessment_ref(id: AssessmentId) -> String {
 
 fn candidate_ref(id: leaven_kernel::CandidateId) -> String {
     uuid_ref("cand", id.as_uuid())
+}
+
+fn candidate_refs(ids: &[CandidateId]) -> Vec<String> {
+    ids.iter().copied().map(candidate_ref).collect()
 }
 
 fn evaluation_request_ref(id: EvaluationRequestId) -> String {
