@@ -99,8 +99,17 @@ schema-backed, hash-bound extension-result envelopes at the wire-contract layer
 only. Generic ACP `extension` primaries are checked against the locked schema
 branch and ACP envelope fields, while concrete PlanResult value kinds still run
 the full PlanResult semantic validator. They are not an ACP process
-implementation, session lifecycle, transport backpressure loop, engine-client
-runtime, worker-agent runtime, provider call, or graph mutation route.
+implementation, engine-client runtime, worker-agent runtime, provider call, or
+graph mutation route.
+
+Crate-root exports for `AcpWorkerSession`, `AcpSessionLifecycle`,
+`AcpSessionUpdate`, and `AcpSessionCancellation` are advanced public seam
+contracts for profile-derived lifecycle facts only. They prove the
+engine-client/worker-agent role vocabulary, stdio-first session model, bounded
+progress-update queue, and cancellation state at the contract layer. They are
+not stdio JSON-RPC I/O, process startup, provider execution, full ACP lifecycle
+control, or production backpressure policy; `flow_control.backpressure`
+strategy-specific behavior is not implemented by these primitives.
 
 Crate-root exports for `PlanDocument`, `PlanOperationKind`,
 `PlanExecutionContext`, `PlanExecutionHost`, `PlanExecutionReport`,
@@ -348,8 +357,10 @@ backpressure, or runtime watch support.
 - `tests/acp_profile.rs` proves locked Leaven ACP profile semantics for pinned
   ACP version, stdio-first transport preference, Leaven-only extension methods,
   capability-action mapping, locked Plan IR/Plan Result schema bindings,
-  bounded update declarations, programmatic capability-grant permission
-  decisions bound to authenticated sessions, `PlanError`/redaction denials,
+  bounded update declarations, profile-derived engine-client/worker-agent
+  session facts, bounded progress-update queue behavior, lifecycle cancellation
+  state, programmatic capability-grant permission decisions bound to authenticated
+  sessions, `PlanError`/redaction denials,
   active-schema extension-result primary/receipt payloads across the full
   locked callback surface, method-specific primary value families,
   receipt-category binding, ACP-envelope JCS `result_hash` binding even for
@@ -363,8 +374,7 @@ backpressure, or runtime watch support.
   payloads, unbound or forged result hashes including generic extension and
   receiptless workspace primaries, unbound primary receipts, and
   result data-class gaps. It does not prove ACP process startup,
-  engine-client/worker-agent runtime inversion, cancellation, progress updates,
-  backpressure behavior, provider calls, or worker lifecycle control.
+  stdio JSON-RPC I/O, provider calls, or full worker lifecycle control.
 - `tests/plan_result.rs` proves active-schema Plan Result envelopes carry typed
   success and failure values, query/call/write audit receipts, errors, charges,
   capability and policy fingerprints, receipt timing, data classes, and closed

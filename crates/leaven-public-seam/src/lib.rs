@@ -22,6 +22,7 @@ mod watch;
 pub use acp_profile::{
     AcpAuthenticateRequest, AcpAuthenticatedSession, AcpExtensionMethod,
     AcpExtensionResultDocument, AcpPermissionDecision, AcpPermissionRequest, AcpProfileDocument,
+    AcpSessionCancellation, AcpSessionLifecycle, AcpSessionUpdate, AcpWorkerSession,
 };
 pub use call_authority::CallAuthorityReport;
 pub use capability::{

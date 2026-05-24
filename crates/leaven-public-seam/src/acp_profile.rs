@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use serde_json::{Value, json};
 
@@ -213,6 +213,187 @@ impl AcpAuthenticatedSession {
     /// JWT id of the resolved capability document.
     pub fn jti(&self) -> &str {
         &self.jti
+    }
+}
+
+/// Profile-derived ACP worker session facts for lifecycle/backpressure validation.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AcpWorkerSession {
+    pinned_acp_version: String,
+    transport: String,
+    engine_role: String,
+    worker_role: String,
+    lifecycle: AcpSessionLifecycle,
+}
+
+impl AcpWorkerSession {
+    /// Starts a public-seam ACP worker session model from a validated profile.
+    pub fn start(profile: &AcpProfileDocument) -> Result<Self, PublicSeamError> {
+        let max_inflight_updates = usize::try_from(profile.default_max_inflight_updates())
+            .map_err(|_| invalid_acp("ACP max inflight updates does not fit this platform"))?;
+        let transport = profile
+            .transports()
+            .first()
+            .filter(|transport| transport.as_str() == "stdio_jsonrpc")
+            .ok_or_else(|| invalid_acp("ACP worker session must start on stdio_jsonrpc transport"))?
+            .clone();
+        Ok(Self {
+            pinned_acp_version: profile.pinned_acp_version().to_owned(),
+            transport,
+            engine_role: "engine_client".to_owned(),
+            worker_role: "worker_agent".to_owned(),
+            lifecycle: AcpSessionLifecycle::bounded(max_inflight_updates)?,
+        })
+    }
+
+    /// Pinned ACP version used for this session.
+    pub fn pinned_acp_version(&self) -> &str {
+        &self.pinned_acp_version
+    }
+
+    /// Transport binding used to start this session.
+    pub fn transport(&self) -> &str {
+        &self.transport
+    }
+
+    /// ACP role of the Leaven engine.
+    pub fn engine_role(&self) -> &str {
+        &self.engine_role
+    }
+
+    /// ACP role of the external worker.
+    pub fn worker_role(&self) -> &str {
+        &self.worker_role
+    }
+
+    /// Lifecycle and progress-update state for this session.
+    pub const fn lifecycle(&self) -> &AcpSessionLifecycle {
+        &self.lifecycle
+    }
+
+    /// Mutable lifecycle and progress-update state for this session.
+    pub fn lifecycle_mut(&mut self) -> &mut AcpSessionLifecycle {
+        &mut self.lifecycle
+    }
+}
+
+/// Bounded ACP progress-update queue plus session cancellation state.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AcpSessionLifecycle {
+    max_inflight_updates: usize,
+    next_sequence: u64,
+    updates: VecDeque<AcpSessionUpdate>,
+    cancellation: Option<AcpSessionCancellation>,
+}
+
+impl AcpSessionLifecycle {
+    /// Builds a bounded ACP update lifecycle.
+    pub fn bounded(max_inflight_updates: usize) -> Result<Self, PublicSeamError> {
+        if max_inflight_updates == 0 {
+            return Err(invalid_acp("ACP update queue bound must be non-zero"));
+        }
+        Ok(Self {
+            max_inflight_updates,
+            next_sequence: 0,
+            updates: VecDeque::new(),
+            cancellation: None,
+        })
+    }
+
+    /// Maximum in-flight progress updates allowed before backpressure is applied.
+    pub const fn max_inflight_updates(&self) -> usize {
+        self.max_inflight_updates
+    }
+
+    /// Current number of queued progress updates.
+    pub fn inflight_updates(&self) -> usize {
+        self.updates.len()
+    }
+
+    /// Whether ACP session cancellation has been requested.
+    pub const fn is_cancelled(&self) -> bool {
+        self.cancellation.is_some()
+    }
+
+    /// Cancellation facts, when the session has been cancelled.
+    pub const fn cancellation(&self) -> Option<&AcpSessionCancellation> {
+        self.cancellation.as_ref()
+    }
+
+    /// Enqueues one ACP progress update or returns bounded-queue backpressure.
+    pub fn enqueue_progress(
+        &mut self,
+        message: impl Into<String>,
+    ) -> Result<&AcpSessionUpdate, PublicSeamError> {
+        if self.is_cancelled() {
+            return Err(invalid_acp(
+                "ACP session updates are refused after session cancellation",
+            ));
+        }
+        if self.updates.len() >= self.max_inflight_updates {
+            return Err(invalid_acp(
+                "ACP session update queue is full; worker must apply backpressure",
+            ));
+        }
+        let update = AcpSessionUpdate {
+            sequence: self.next_sequence,
+            message: message.into(),
+        };
+        self.next_sequence += 1;
+        self.updates.push_back(update);
+        Ok(self
+            .updates
+            .back()
+            .expect("pushed update must be observable"))
+    }
+
+    /// Acknowledges the oldest in-flight progress update.
+    pub fn acknowledge_oldest_update(&mut self) -> Option<AcpSessionUpdate> {
+        self.updates.pop_front()
+    }
+
+    /// Cancels the ACP session through lifecycle state instead of progress logs.
+    pub fn cancel(&mut self, reason: impl Into<String>) -> &AcpSessionCancellation {
+        if self.cancellation.is_none() {
+            self.cancellation = Some(AcpSessionCancellation {
+                reason: reason.into(),
+            });
+        }
+        self.cancellation
+            .as_ref()
+            .expect("cancellation set before return")
+    }
+}
+
+/// One ACP session progress update.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AcpSessionUpdate {
+    sequence: u64,
+    message: String,
+}
+
+impl AcpSessionUpdate {
+    /// Monotone sequence number within one session.
+    pub const fn sequence(&self) -> u64 {
+        self.sequence
+    }
+
+    /// Human-readable progress update.
+    pub fn message(&self) -> &str {
+        &self.message
+    }
+}
+
+/// ACP session cancellation facts.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AcpSessionCancellation {
+    reason: String,
+}
+
+impl AcpSessionCancellation {
+    /// Cancellation reason.
+    pub fn reason(&self) -> &str {
+        &self.reason
     }
 }
 
