@@ -113,6 +113,24 @@ fn sandbox_exec_output_file_refs_must_bind_captured_bytes() {
         "unexpected error: {error:?}"
     );
 
+    let bad_sha = PlanSandboxExecOutcome::completed("fp_runtime_sha256_sandbox").with_file_ref(
+        "out.txt",
+        blob_ref(
+            "blob_sandbox_file",
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            12,
+            &["workspace.file"],
+        ),
+        b"actual file\n",
+    );
+    let error = bad_sha.expect_err("file refs must bind sha256 to captured bytes");
+    assert!(
+        error.to_string().contains(
+            "sandbox output file `out.txt` blob ref sha256 does not match captured output"
+        ),
+        "unexpected error: {error:?}"
+    );
+
     let bad_path = PlanSandboxExecOutcome::completed("fp_runtime_sha256_sandbox").with_file_ref(
         "../secret.txt",
         blob_ref(

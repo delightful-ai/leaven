@@ -174,23 +174,40 @@ fn collect_data_classes(
     value: &Value,
     classes: &mut BTreeSet<String>,
 ) -> Result<(), PublicSeamError> {
-    match value {
-        Value::Object(object) => {
-            if let Some(data_classes) = object.get("data_classes") {
-                classes.extend(string_set(Some(data_classes), "data_classes")?);
-            }
-            for value in object.values() {
-                collect_data_classes(value, classes)?;
-            }
+    let Some(object) = value.as_object() else {
+        return Ok(());
+    };
+    if is_seam_data_class_carrier(object) {
+        if let Some(data_classes) = object.get("data_classes") {
+            classes.extend(string_set(Some(data_classes), "data_classes")?);
         }
-        Value::Array(values) => {
-            for value in values {
-                collect_data_classes(value, classes)?;
-            }
+    }
+    for field in [
+        "blob_ref",
+        "transcript_ref",
+        "stdout_ref",
+        "stderr_ref",
+        "payload_ref",
+    ] {
+        if let Some(value) = object.get(field) {
+            collect_data_classes(value, classes)?;
         }
-        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {}
+    }
+    if let Some(values) = object.get("trace_refs").and_then(Value::as_array) {
+        for value in values {
+            collect_data_classes(value, classes)?;
+        }
+    }
+    if let Some(files) = object.get("files").and_then(Value::as_object) {
+        for value in files.values() {
+            collect_data_classes(value, classes)?;
+        }
     }
     Ok(())
+}
+
+fn is_seam_data_class_carrier(object: &serde_json::Map<String, Value>) -> bool {
+    object.contains_key("kind") && object.contains_key("data_classes")
 }
 
 fn validate_execution_policy(
