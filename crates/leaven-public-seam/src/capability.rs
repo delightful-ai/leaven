@@ -464,7 +464,7 @@ pub struct CapabilityGrantRequest {
     models: BTreeSet<String>,
     model_roles: BTreeSet<String>,
     workspace_ops: BTreeSet<String>,
-    command: Option<String>,
+    commands: BTreeSet<String>,
     schemas: BTreeSet<String>,
     surface: Option<String>,
     limits: CapabilityLimitUsage,
@@ -538,7 +538,7 @@ impl CapabilityGrantRequest {
     /// Sets the command requested by an agent or sandbox operation.
     #[must_use]
     pub fn with_command(mut self, command: impl Into<String>) -> Self {
-        self.command = Some(command.into());
+        self.commands.insert(command.into());
         self
     }
 
@@ -709,10 +709,10 @@ fn ensure_constraints(
         &request.workspace_ops,
         CapabilityDenialKind::Resource,
     )?;
-    ensure_optional_one(
+    ensure_allowed_set(
         grant,
         "allowed_commands",
-        request.command.as_deref(),
+        &request.commands,
         CapabilityDenialKind::Resource,
     )?;
     ensure_schema_constraint(grant, &request.schemas)?;

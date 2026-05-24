@@ -222,6 +222,17 @@ fn add_call_dimensions(
                     json!(workspace_ref_id(Some(workspace), "agent_run")?),
                 );
             }
+            if let Some(tool_policy) = call.get("tool_policy").and_then(Value::as_object)
+                && let Some(commands) = tool_policy
+                    .get("allowed_commands")
+                    .and_then(Value::as_array)
+            {
+                for command in commands {
+                    request = request.with_command(command.as_str().ok_or_else(|| {
+                        invalid_authority("agent_run allowed_commands entries must be strings")
+                    })?);
+                }
+            }
             if let Some(limits) = call.get("limits").and_then(Value::as_object) {
                 request = request.with_limits(limit_usage(limits));
             }

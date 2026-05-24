@@ -1503,6 +1503,7 @@ rows:
       - crates/leaven-public-seam/tests/proposal_authority.rs::proposal_authority_rejects_submit_only_apply_and_ungranted_surface_or_effect
       - crates/leaven-public-seam/tests/agent_contract.rs::agent_session_projection_preserves_invalid_command_argv_for_validation
       - crates/leaven-public-seam/tests/call_authority.rs::call_authority_rejects_agent_shell_or_network_beyond_execution_policy
+      - crates/leaven-public-seam/tests/call_authority.rs::call_authority_checks_agent_allowed_commands_against_grants
     partial_contract_implementation_evidence:
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanAgentRunRequest::live_workspace
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanAgentRunRequest::to_agent_run_request
@@ -1539,6 +1540,7 @@ rows:
       - crates/leaven-public-seam/src/call_authority.rs::validate_network_request
       - crates/leaven-public-seam/src/capability.rs::CapabilityDocument::execution_policy_network
       - crates/leaven-public-seam/src/capability.rs::CapabilityDocument::execution_policy_subprocess
+      - crates/leaven-public-seam/src/capability.rs::CapabilityGrantRequest::with_command
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-workspace-handle-provenance-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-effect-call-authority-partial-review.md
