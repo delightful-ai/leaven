@@ -221,7 +221,7 @@ impl PlanExecutionHost for LmTraitHost {
         &mut self,
         request: PlanLmCompleteRequest<'_>,
     ) -> Result<PlanLmCompleteOutcome, PublicSeamError> {
-        let lm_request = request.to_lm_request()?;
+        let lm_request = request.lm_request().clone();
         let expects_json_schema = matches!(lm_request.output, OutputMode::JsonSchema(_));
         let response = block_on(self.lm.complete(lm_request)).map_err(|error| {
             PublicSeamError::InvalidPlan {

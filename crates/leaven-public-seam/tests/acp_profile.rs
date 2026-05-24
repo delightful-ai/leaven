@@ -1809,7 +1809,7 @@ fn acp_capability() -> Value {
             "kind": "stage_call",
             "run": "run_demo",
             "stage_call_id": "sc_acp",
-            "role": "reflector"
+            "role": "proposer"
         },
         "audience": ["leaven.acp.worker"],
         "issued_at": "2026-05-23T00:00:00Z",

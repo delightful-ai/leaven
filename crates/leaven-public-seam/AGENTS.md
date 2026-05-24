@@ -43,7 +43,12 @@ behavior.
   schema fingerprints are public-seam wire identifiers, not cache behavior
   fingerprints.
 - Graph mutation remains private to `leaven-engine` through `RunContext`.
-- ACP process/session behavior belongs in the future worker transport owner.
+- ACP process/session behavior belongs in a hot worker transport owner, not in
+  this crate. The current route note is
+  `docs/plans/2026-05-24-public-seam-v1-acp-transport-route.md`: use the
+  official `agentclientprotocol/rust-sdk` as transport substrate only, keep the
+  Leaven `leaven/*` method/result contract here, and prove transport behavior
+  with black-box subprocess tests before promoting ACP rows.
 - Provider/runtime lowering belongs in `leaven-lm*`, `leaven-agent*`, and
   workspace crates.
 
@@ -134,6 +139,11 @@ worker-agent role facts, and bearer-token redaction from run-artifact launch
 facts. It is not stdio JSON-RPC I/O, process spawning, provider execution,
 session supervision, or a full ACP transport implementation.
 
+Codex app-server is a provider runtime leaf, not ACP transport proof by itself.
+A Codex-backed path can count as ACP evidence only when it crosses a real ACP
+process/session boundary and returns locked Leaven extension results through
+this crate's validators.
+
 Crate-root exports for `PlanDocument`, `PlanOperationKind`,
 `PlanExecutionContext`, `PlanExecutionHost`, `PlanExecutionReport`,
 `PlanGraphReadScope`, `PlanGraphQueryRequest`, `PlanGraphQueryOutcome`,
@@ -149,11 +159,13 @@ active-schema Plan IR document validation and Let/Call/Write family
 classification plus representative lowering/execution of literal Let,
 `graph_query` reads, `case_query.load` reads, `lm_complete` Call, and
 `emit_run_event` Write into a validated Plan Result with query/call/write
-receipts. The `PlanLmCompleteRequest::to_lm_request` route lowers
-schema-valid `lm_complete` calls into provider-neutral `leaven-lm` vocabulary
-while preserving developer/user/tool messages, tool-result ids, tool
-definitions, model role, sampling stop sequences, provider hints, final-message
-output, and JSON-schema output. `PlanLmCompleteOutcome::from_lm_response`
+receipts. The execution harness lowers schema-valid `lm_complete` calls into
+provider-neutral `leaven-lm` vocabulary before invoking the host, so hosts
+receive a `PlanLmCompleteRequest` exposing the lowered `LmRequest` rather than
+raw call JSON. That route preserves developer/user/tool messages,
+tool-result ids, tool definitions, model role, sampling stop sequences,
+provider hints, final-message output, and JSON-schema output.
+`PlanLmCompleteOutcome::from_lm_response`
 projects provider-neutral `leaven_lm::LmResponse` plus metered `leaven-kernel`
 cost into the Plan Result outcome shape; successful LM outcomes are not
 publicly constructible from hand-written response JSON or ad hoc cost fields.
@@ -164,14 +176,18 @@ value/receipt cost, and an assistant-authored text final response. Result-side
 tool metadata, tool results, extension content, and oversized `final_message`
 text are rejected by the seam instead of being accepted as generic schema-valid
 `LmMessage` values. Request-side extension/multimodal content is rejected
-rather than silently downgraded to text. It still requires a concrete model
-before provider execution and is not provider runtime execution, streaming, ACP
-delivery, or full `ps1.lm.contract` closeout. The `PlanAgentRunRequest` and
-`PlanSandboxExecRequest` routes lower schema-valid `agent_run` and
-`sandbox_exec` calls into provider-neutral `leaven-agent::AgentRunRequest` and
-backend-neutral `leaven-workspace::Command` primitives, and the representative
-harness can emit typed `agent_session` and `sandbox_exec` Plan Result values
-with call receipts. `PlanAgentRunOutcome::from_agent_session_with_command_output_refs` projects
+rather than silently downgraded to text, and streaming-shaped LM requests are
+rejected before host execution. It still requires a concrete model before
+provider execution and is not live provider execution, ACP delivery, or runtime
+streaming delivery. The `PlanAgentRunRequest` and `PlanSandboxExecRequest`
+routes likewise expose already-lowered provider-neutral
+`leaven-agent::AgentRunRequest` and backend-neutral `leaven-workspace::Command`
+primitives to hosts instead of raw `agent_run`/`sandbox_exec` call JSON, and the
+representative harness can emit typed `agent_session` and `sandbox_exec` Plan
+Result values with call receipts. Agent request lowering preserves the Plan IR
+runtime selector and optional runtime fingerprint; when a fingerprint is
+declared, the Plan Result call receipt must come back from that fingerprint.
+`PlanAgentRunOutcome::from_agent_session_with_command_output_refs` projects
 provider-neutral `leaven_agent::AgentSession` plus metered `leaven-kernel` cost
 into the Plan Result outcome shape, while requiring the host to provide the
 transcript blob ref that made the transcript durable and stdout/stderr/file
@@ -615,3 +631,6 @@ backpressure, or runtime watch support.
   row explicitly says `shape_only`.
 - Do not add generated structs that round-trip JSON but are never executable and
   call that the seam.
+- Do not cite Codex app-server provider connectivity, `AgentRuntime` tests, or
+  `FakeAgentRuntime` behavior as ACP transport evidence unless the test uses the
+  ACP transport adapter and a child process over stdio JSON-RPC.

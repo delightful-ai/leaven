@@ -551,11 +551,7 @@ fn execute_call<H: PlanExecutionHost>(
     match call_kind {
         "lm_complete" => {
             validate_structured_output_contract(call, "lm_complete")?;
-            let request = PlanLmCompleteRequest {
-                name: &name,
-                call,
-                deps: &deps.values,
-            };
+            let request = PlanLmCompleteRequest::new(&name, call, &deps.values)?;
             let (outcome, cache) = match effect_context.mode {
                 EffectMode::Live => (host.lm_complete(request)?, None),
                 EffectMode::RequireCached => {
@@ -633,15 +629,19 @@ fn execute_agent_run_call<H: PlanExecutionHost>(
     context: &PlanExecutionContext,
     state: &mut ExecutionState,
 ) -> Result<(), PublicSeamError> {
-    let request = PlanAgentRunRequest {
-        name: &name,
-        call,
-        deps: &deps.values,
-        live_workspaces: &deps.live_workspaces,
-    };
     validate_structured_output_contract(call, "agent_run")?;
+    let request = PlanAgentRunRequest::new(&name, call, &deps.values, &deps.live_workspaces)?;
     request.live_workspace()?;
+    let expected_runtime_fingerprint = request.runtime_fingerprint().map(str::to_owned);
     let outcome = host.agent_run(request)?;
+    if let Some(expected_runtime_fingerprint) = expected_runtime_fingerprint
+        && outcome.runtime_fingerprint != expected_runtime_fingerprint
+    {
+        return Err(invalid_plan(format!(
+            "agent_run outcome runtime_fingerprint `{}` did not match requested `{expected_runtime_fingerprint}`",
+            outcome.runtime_fingerprint
+        )));
+    }
     validate_structured_output_outcome(call, outcome.parsed.as_ref(), "agent_run")?;
     record_agent_call_outcome(name, outcome, request_hash, context, state)
 }
@@ -655,17 +655,12 @@ fn execute_sandbox_exec_call<H: PlanExecutionHost>(
     context: &PlanExecutionContext,
     state: &mut ExecutionState,
 ) -> Result<(), PublicSeamError> {
-    let request = PlanSandboxExecRequest {
-        name: &name,
-        call,
-        deps: &deps.values,
-        live_workspaces: &deps.live_workspaces,
-    };
+    let request = PlanSandboxExecRequest::new(&name, call, &deps.values, &deps.live_workspaces)?;
     request.live_workspace()?;
     let expected_output_files = request
-        .to_workspace_command()?
+        .workspace_command()
         .output_files
-        .into_iter()
+        .iter()
         .map(|path| path.as_str().to_owned())
         .collect::<BTreeSet<_>>();
     let outcome = host.sandbox_exec(request)?;

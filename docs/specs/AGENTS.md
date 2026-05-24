@@ -57,6 +57,10 @@ The top of the stack is:
 - Specs marked `implementation spec` can govern a slice even before the whole product story is solved, but still require code/test proof before public maturity claims.
 - Do not route from directory presence alone. `crates/leaven-dsrs` is currently an orphan placeholder rather than a workspace crate, while `crates/leaven/tests/topology_contract.rs` is the executable inventory guard.
 - Provider-adapter specs such as Codex CLI/app-server own provider boundaries only. They do not move agent, engine, GEPA, or skill concepts into provider crates.
+- Codex app-server is a provider runtime path, not ACP public-seam proof. It can
+  support an ACP worker only when routed through the locked public-seam ACP
+  transport adapter and black-box process/session tests. Do not use
+  app-server-specific success to promote `public-seam-v1` ACP rows.
 - Eval/GEPA nomenclature specs distinguish public product words from lowered machinery. Do not expose lowered graph/eval vocabulary at the Layer 1 user surface.
 - GEPA loop semantics come from `gepa_reference_behavior.md`. AIME, DSPy,
   optimize-anything, and Leaven-plus profiles may refine model/data/operator

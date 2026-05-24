@@ -324,7 +324,7 @@ impl PlanExecutionHost for SandboxHost {
     ) -> Result<PlanSandboxExecOutcome, PublicSeamError> {
         assert_eq!(request.live_workspace()?, "ws_sandbox_contract");
         assert_eq!(request.stream_policy(), "blob_refs_only");
-        let command = request.to_workspace_command()?;
+        let command = request.workspace_command().clone();
         self.commands.push(command);
         self.calls.push("sandbox");
         let stdout_ref = if self.corrupt_stdout_ref {

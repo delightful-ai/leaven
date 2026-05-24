@@ -2364,6 +2364,32 @@ fn agent_run_lowering_preserves_workspace_diff_surface_fingerprint() {
 }
 
 #[test]
+fn agent_run_preserves_runtime_selector_and_rejects_fingerprint_mismatch() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut plan = agent_run_workspace_plan(&agent_run_call());
+    plan["ops"][1]["call"]["runtime"] = json!("codex/app-server");
+    let mut host = RecordingPlanHost::default();
+
+    package
+        .execute_plan_document(&plan, &plan_execution_context(), &mut host)
+        .unwrap();
+
+    let mut mismatched = agent_run_workspace_plan(&agent_run_call());
+    mismatched["ops"][1]["call"]["runtime_fingerprint"] =
+        json!("fp_runtime_sha256_ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+    let mut host = RecordingPlanHost::default();
+    let error = package
+        .execute_plan_document(&mismatched, &plan_execution_context(), &mut host)
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("agent_run outcome runtime_fingerprint"),
+        "unexpected error: {error:?}"
+    );
+}
+
+#[test]
 fn agent_run_rejects_schema_valid_sessions_without_audit_facts() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let plan = agent_run_workspace_plan(&agent_run_call());
@@ -2715,6 +2741,38 @@ fn lm_complete_lowering_rejects_deferred_multimodal_or_extension_content() {
     );
     assert!(host.calls.is_empty());
     assert!(host.writes.is_empty());
+}
+
+#[test]
+fn lm_complete_rejects_streaming_request_shapes_before_provider_call() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    for (field, value) in [
+        ("stream", json!(true)),
+        ("output", json!({"kind": "streaming"})),
+    ] {
+        let mut plan = typed_let_call_write_plan();
+        plan["mode"] = json!({"kind": "execute"});
+        plan["commit"] = json!({
+            "kind": "graph_writes_atomic",
+            "on_stale": "reject"
+        });
+        plan["ops"][1]["call"][field] = value;
+        let mut host = RecordingPlanHost::default();
+
+        let error = package
+            .execute_plan_document(&plan, &plan_execution_context(), &mut host)
+            .unwrap_err();
+
+        assert!(
+            matches!(
+                error,
+                PublicSeamError::ExampleValidation { .. } | PublicSeamError::InvalidPlan { .. }
+            ),
+            "unexpected error for {field}: {error:?}"
+        );
+        assert!(host.calls.is_empty());
+        assert!(host.writes.is_empty());
+    }
 }
 
 #[test]
@@ -4302,17 +4360,6 @@ fn agent_command_output_refs() -> AgentCommandOutputRefs {
     )
 }
 
-fn string_array_field(object: Option<&serde_json::Map<String, Value>>, field: &str) -> Vec<String> {
-    object
-        .and_then(|object| object.get(field))
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_str)
-        .map(str::to_owned)
-        .collect()
-}
-
 #[derive(Clone, Copy, Debug, Default)]
 enum AgentAuditFixture {
     #[default]
@@ -4437,8 +4484,7 @@ impl PlanExecutionHost for RecordingPlanHost {
         request: PlanLmCompleteRequest<'_>,
     ) -> Result<PlanLmCompleteOutcome, PublicSeamError> {
         assert_eq!(request.name(), "completion");
-        assert_eq!(request.call()["kind"].as_str(), Some("lm_complete"));
-        let lm_request = request.to_lm_request()?;
+        let lm_request = request.lm_request();
         assert_eq!(lm_request.model.as_str(), "gpt-4.1-mini");
         assert_eq!(
             lm_request
@@ -4469,27 +4515,18 @@ impl PlanExecutionHost for RecordingPlanHost {
             lm_request.provider_hints.values.get("cache:key"),
             Some(&json!("planexec-stable"))
         );
-        match request.call()["output"]["kind"].as_str() {
-            Some("final_message") => assert!(matches!(
-                lm_request.output,
-                OutputMode::FinalMessage {
-                    max_bytes
-                } if max_bytes == request.call()["output"]["max_bytes"].as_u64()
-            )),
-            Some("json_schema") => match lm_request.output {
-                OutputMode::JsonSchema(schema) => {
-                    assert_eq!(
-                        schema.name,
-                        request.call()["output"]["schema_fingerprint"]
-                            .as_str()
-                            .unwrap()
-                    );
-                    assert_eq!(schema.schema["required"], json!(["answer"]));
-                    assert!(schema.strict);
-                }
-                other => panic!("unexpected LM output mode: {other:?}"),
-            },
-            other => panic!("unexpected plan output kind: {other:?}"),
+        match &lm_request.output {
+            OutputMode::FinalMessage { max_bytes } => {
+                assert!(
+                    matches!(*max_bytes, Some(2 | 1024)),
+                    "unexpected final_message max_bytes: {max_bytes:?}"
+                );
+            }
+            OutputMode::JsonSchema(schema) => {
+                assert_eq!(schema.schema["required"], json!(["answer"]));
+                assert!(schema.strict);
+            }
+            other => panic!("unexpected LM output mode: {other:?}"),
         }
         self.calls.push("completion");
         self.call_deps = request.deps().clone();
@@ -4504,7 +4541,7 @@ impl PlanExecutionHost for RecordingPlanHost {
             lm_response("ok"),
             leaven_kernel::Fingerprint::from_bytes([0x1e; 32]),
         );
-        if request.call()["output"]["kind"].as_str() == Some("json_schema") {
+        if matches!(lm_request.output, OutputMode::JsonSchema(_)) {
             match self.structured_parsed {
                 StructuredParsedFixture::Valid => {
                     outcome = outcome.with_parsed(json!({"answer": "ok"}));
@@ -4523,7 +4560,7 @@ impl PlanExecutionHost for RecordingPlanHost {
         request: PlanLmCompleteRequest<'_>,
     ) -> Result<Option<PlanLmCompleteOutcome>, PublicSeamError> {
         assert_eq!(request.name(), "completion");
-        assert_eq!(request.call()["kind"].as_str(), Some("lm_complete"));
+        let lm_request = request.lm_request();
         self.cached_calls.push("completion");
         self.call_deps = request.deps().clone();
         if self.cached_hit {
@@ -4531,7 +4568,7 @@ impl PlanExecutionHost for RecordingPlanHost {
                 lm_response("cached ok"),
                 leaven_kernel::Fingerprint::from_bytes([0x1e; 32]),
             );
-            if request.call()["output"]["kind"].as_str() == Some("json_schema") {
+            if matches!(lm_request.output, OutputMode::JsonSchema(_)) {
                 match self.structured_parsed {
                     StructuredParsedFixture::Valid => {
                         outcome = outcome.with_parsed(json!({"answer": "cached ok"}));
@@ -4553,74 +4590,65 @@ impl PlanExecutionHost for RecordingPlanHost {
         request: PlanAgentRunRequest<'_>,
     ) -> Result<PlanAgentRunOutcome, PublicSeamError> {
         assert_eq!(request.name(), "completion");
-        assert_eq!(request.call()["kind"].as_str(), Some("agent_run"));
         assert_eq!(request.live_workspace()?, "ws_planexec_materialized");
         assert_eq!(
             request.deps()["workspace"]["workspace"].as_str(),
             Some("ws_planexec_materialized")
         );
-        let agent_request = request.to_agent_run_request()?;
+        let agent_request = request.agent_run_request();
+        assert_eq!(
+            request.runtime().map(leaven_kernel::AgentRuntimeId::as_str),
+            Some(agent_request.runtime.as_ref().unwrap().as_str())
+        );
+        assert!(matches!(
+            agent_request
+                .runtime
+                .as_ref()
+                .map(leaven_kernel::AgentRuntimeId::as_str),
+            Some("codex" | "codex/app-server")
+        ));
         assert_eq!(
             agent_request.instructions.system.as_deref(),
             Some("Stay within the workspace.")
         );
         assert_eq!(agent_request.instructions.task, "Inspect the plan output.");
         assert_eq!(agent_request.cwd.as_str(), "");
-        let tool_policy = request.call().get("tool_policy").and_then(Value::as_object);
-        assert_eq!(
-            agent_request.tool_policy.allow_shell,
-            tool_policy
-                .and_then(|policy| policy.get("allow_shell"))
-                .and_then(Value::as_bool)
-                .unwrap_or(false)
+        assert!(!agent_request.tool_policy.allow_shell);
+        assert!(
+            agent_request.tool_policy.allowed_tools.is_empty()
+                || agent_request.tool_policy.allowed_tools == vec!["read_file".to_owned()],
+            "unexpected allowed tools: {:?}",
+            agent_request.tool_policy.allowed_tools
         );
-        assert_eq!(
-            agent_request.tool_policy.allowed_tools,
-            string_array_field(tool_policy, "allowed_tools")
-        );
-        assert_eq!(
-            agent_request.tool_policy.allowed_commands,
-            string_array_field(tool_policy, "allowed_commands")
+        assert!(
+            agent_request.tool_policy.allowed_commands.is_empty()
+                || agent_request.tool_policy.allowed_commands == vec!["python".to_owned()],
+            "unexpected allowed commands: {:?}",
+            agent_request.tool_policy.allowed_commands
         );
         assert_eq!(agent_request.limits.max_turns, Some(4));
-        match request.call()["output"]["kind"].as_str() {
-            Some("final_message") => assert!(matches!(
-                agent_request.output_contract,
-                leaven_agent::OutputContract::FinalMessage
-            )),
-            Some("json_schema") => match agent_request.output_contract {
-                leaven_agent::OutputContract::JsonSchema {
-                    schema_fingerprint,
-                    schema,
-                } => {
-                    assert_eq!(
-                        schema_fingerprint,
-                        request.call()["output"]["schema_fingerprint"]
-                            .as_str()
-                            .unwrap()
-                    );
-                    assert_eq!(schema["type"], "object");
-                }
-                other => panic!("unexpected agent output contract: {other:?}"),
-            },
-            Some("workspace_diff") => match agent_request.output_contract {
-                leaven_agent::OutputContract::WorkspaceDiff {
-                    roots,
-                    surface_fingerprint,
-                } => {
-                    assert_eq!(
-                        roots.first().map(leaven_workspace::WorkspacePath::as_str),
-                        Some("")
-                    );
-                    assert_eq!(
-                        surface_fingerprint.as_deref(),
-                        Some("fp_surface_sha256_agentdiff")
-                    );
-                }
-                other => panic!("unexpected agent output contract: {other:?}"),
-            },
-            other => panic!("unexpected agent output kind: {other:?}"),
-        }
+        let expects_json_schema = match &agent_request.output_contract {
+            leaven_agent::OutputContract::FinalMessage => false,
+            leaven_agent::OutputContract::JsonSchema { schema, .. } => {
+                assert_eq!(schema["type"], "object");
+                true
+            }
+            leaven_agent::OutputContract::WorkspaceDiff {
+                roots,
+                surface_fingerprint,
+            } => {
+                assert_eq!(
+                    roots.first().map(leaven_workspace::WorkspacePath::as_str),
+                    Some("")
+                );
+                assert_eq!(
+                    surface_fingerprint.as_deref(),
+                    Some("fp_surface_sha256_agentdiff")
+                );
+                false
+            }
+            other => panic!("unexpected agent output contract: {other:?}"),
+        };
         self.calls.push("agent");
         let mut outcome = PlanAgentRunOutcome::from_agent_session_with_command_output_refs(
             agent_session(),
@@ -4629,7 +4657,7 @@ impl PlanExecutionHost for RecordingPlanHost {
             "agentrec_completion",
             [agent_command_output_refs()],
         )?;
-        if request.call()["output"]["kind"].as_str() == Some("json_schema") {
+        if expects_json_schema {
             match self.structured_parsed {
                 StructuredParsedFixture::Valid => {
                     outcome = outcome.with_parsed(json!({"status": "ok"}));
@@ -4648,7 +4676,6 @@ impl PlanExecutionHost for RecordingPlanHost {
         request: PlanSandboxExecRequest<'_>,
     ) -> Result<PlanSandboxExecOutcome, PublicSeamError> {
         assert_eq!(request.name(), "completion");
-        assert_eq!(request.call()["kind"].as_str(), Some("sandbox_exec"));
         assert_eq!(request.live_workspace()?, "ws_planexec_materialized");
         assert_eq!(
             request.deps()["workspace"]["workspace"].as_str(),
@@ -4658,7 +4685,7 @@ impl PlanExecutionHost for RecordingPlanHost {
             request.stream_policy(),
             self.sandbox_stream.expected_policy()
         );
-        let command = request.to_workspace_command()?;
+        let command = request.workspace_command();
         assert_eq!(command.program, "python");
         assert_eq!(command.args, vec!["-c", "print('ok')"]);
         assert_eq!(

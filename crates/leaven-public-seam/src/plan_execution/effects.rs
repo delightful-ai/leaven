@@ -4,6 +4,7 @@ use std::time::Duration;
 use leaven_agent::{
     AgentInstructions, AgentLimits, AgentRunRequest, AgentToolPolicy, OutputContract,
 };
+use leaven_kernel::AgentRuntimeId;
 use leaven_workspace::{Command, CommandOutput, WorkspacePath};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -146,23 +147,37 @@ impl<'a> PlanWorkspaceReleaseRequest<'a> {
 }
 
 /// Lowered `agent_run` request passed to a plan execution host.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct PlanAgentRunRequest<'a> {
     pub(super) name: &'a str,
-    pub(super) call: &'a Value,
     pub(super) deps: &'a BTreeMap<String, Value>,
     pub(super) live_workspaces: &'a BTreeMap<String, LiveWorkspaceHandle>,
+    workspace: WorkspaceRefFacts,
+    agent_request: AgentRunRequest,
 }
 
 impl<'a> PlanAgentRunRequest<'a> {
+    pub(super) fn new(
+        name: &'a str,
+        call: &'a Value,
+        deps: &'a BTreeMap<String, Value>,
+        live_workspaces: &'a BTreeMap<String, LiveWorkspaceHandle>,
+    ) -> Result<Self, PublicSeamError> {
+        Ok(Self {
+            name,
+            deps,
+            live_workspaces,
+            workspace: workspace_ref_facts(
+                call.get("workspace"),
+                "agent_run must carry workspace",
+            )?,
+            agent_request: lower_agent_run_call(call)?,
+        })
+    }
+
     /// Operation binding name.
     pub const fn name(&self) -> &'a str {
         self.name
-    }
-
-    /// Typed `agent_run` call body from the Plan IR.
-    pub const fn call(&self) -> &'a Value {
-        self.call
     }
 
     /// Resolved dependency bindings visible to this call.
@@ -171,70 +186,83 @@ impl<'a> PlanAgentRunRequest<'a> {
     }
 
     /// Workspace handle requested for agent execution.
-    pub fn workspace(&self) -> Result<&'a str, PublicSeamError> {
-        workspace_ref_id(self.call.get("workspace"), "agent_run must carry workspace")
-    }
-
-    pub(super) fn workspace_ref(&self) -> Result<WorkspaceRefFacts, PublicSeamError> {
-        workspace_ref_facts(self.call.get("workspace"), "agent_run must carry workspace")
+    pub fn workspace(&self) -> &str {
+        self.workspace.id()
     }
 
     /// Workspace handle requested for agent execution, proven against live
     /// dependency handles.
     pub fn live_workspace(&self) -> Result<&'a str, PublicSeamError> {
-        let workspace = self.workspace_ref()?;
-        Ok(
-            require_live_workspace_ref(&workspace, self.deps, self.live_workspaces, "agent_run")?
-                .workspace(),
-        )
+        Ok(require_live_workspace_ref(
+            &self.workspace,
+            self.deps,
+            self.live_workspaces,
+            "agent_run",
+        )?
+        .workspace())
     }
 
-    /// Lowers the locked Plan IR `agent_run` call into provider-neutral agent
-    /// runtime vocabulary.
-    ///
-    /// This preserves only the output contracts currently owned by
-    /// `leaven-agent`; unsupported schema-valid contracts return an explicit
-    /// error instead of being treated as an unstructured final message.
-    pub fn to_agent_run_request(&self) -> Result<AgentRunRequest, PublicSeamError> {
-        let instructions = lower_agent_instructions(required_object(
-            self.call,
-            "instructions",
-            "agent_run must carry instructions",
-        )?)?;
-        let output_contract = lower_agent_output_contract(required_object(
-            self.call,
-            "output",
-            "agent_run must carry output contract",
-        )?)?;
-        let mut request = AgentRunRequest::new(instructions, output_contract);
-        if let Some(policy) = self.call.get("tool_policy").and_then(Value::as_object) {
-            request.tool_policy = lower_agent_tool_policy(policy)?;
-        }
-        if let Some(limits) = self.call.get("limits").and_then(Value::as_object) {
-            request.limits = lower_agent_limits(limits)?;
-        }
-        Ok(request)
+    /// Provider-neutral agent request already lowered by the public seam before
+    /// host execution.
+    pub const fn agent_run_request(&self) -> &AgentRunRequest {
+        &self.agent_request
+    }
+
+    /// Runtime selector requested by the Plan IR.
+    pub fn runtime(&self) -> Option<&AgentRuntimeId> {
+        self.agent_request.runtime.as_ref()
+    }
+
+    /// Expected runtime fingerprint requested by the Plan IR, when supplied.
+    pub fn runtime_fingerprint(&self) -> Option<&str> {
+        self.agent_request.runtime_fingerprint.as_deref()
+    }
+
+    /// Consumes the request wrapper and returns the provider-neutral agent
+    /// request already lowered by the public seam.
+    pub fn into_agent_run_request(self) -> AgentRunRequest {
+        self.agent_request
     }
 }
 
 /// Lowered `sandbox_exec` request passed to a plan execution host.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct PlanSandboxExecRequest<'a> {
     pub(super) name: &'a str,
-    pub(super) call: &'a Value,
     pub(super) deps: &'a BTreeMap<String, Value>,
     pub(super) live_workspaces: &'a BTreeMap<String, LiveWorkspaceHandle>,
+    workspace: WorkspaceRefFacts,
+    stream_policy: String,
+    command: Command,
 }
 
 impl<'a> PlanSandboxExecRequest<'a> {
+    pub(super) fn new(
+        name: &'a str,
+        call: &'a Value,
+        deps: &'a BTreeMap<String, Value>,
+        live_workspaces: &'a BTreeMap<String, LiveWorkspaceHandle>,
+    ) -> Result<Self, PublicSeamError> {
+        Ok(Self {
+            name,
+            deps,
+            live_workspaces,
+            workspace: workspace_ref_facts(
+                call.get("workspace"),
+                "sandbox_exec must carry workspace",
+            )?,
+            stream_policy: call
+                .get("stream_policy")
+                .and_then(Value::as_str)
+                .unwrap_or("buffer")
+                .to_owned(),
+            command: lower_sandbox_exec_call(call)?,
+        })
+    }
+
     /// Operation binding name.
     pub const fn name(&self) -> &'a str {
         self.name
-    }
-
-    /// Typed `sandbox_exec` call body from the Plan IR.
-    pub const fn call(&self) -> &'a Value {
-        self.call
     }
 
     /// Resolved dependency bindings visible to this call.
@@ -245,98 +273,123 @@ impl<'a> PlanSandboxExecRequest<'a> {
     /// Requested stream policy, defaulting to buffered output.
     #[must_use]
     pub fn stream_policy(&self) -> &str {
-        self.call
-            .get("stream_policy")
-            .and_then(Value::as_str)
-            .unwrap_or("buffer")
+        &self.stream_policy
     }
 
     /// Workspace handle requested for sandbox execution.
-    pub fn workspace(&self) -> Result<&'a str, PublicSeamError> {
-        workspace_ref_id(
-            self.call.get("workspace"),
-            "sandbox_exec must carry workspace",
-        )
-    }
-
-    pub(super) fn workspace_ref(&self) -> Result<WorkspaceRefFacts, PublicSeamError> {
-        workspace_ref_facts(
-            self.call.get("workspace"),
-            "sandbox_exec must carry workspace",
-        )
+    pub fn workspace(&self) -> &str {
+        self.workspace.id()
     }
 
     /// Workspace handle requested for sandbox execution, proven against live
     /// dependency handles.
     pub fn live_workspace(&self) -> Result<&'a str, PublicSeamError> {
-        let workspace = self.workspace_ref()?;
-        Ok(
-            require_live_workspace_ref(
-                &workspace,
-                self.deps,
-                self.live_workspaces,
-                "sandbox_exec",
-            )?
-            .workspace(),
-        )
+        Ok(require_live_workspace_ref(
+            &self.workspace,
+            self.deps,
+            self.live_workspaces,
+            "sandbox_exec",
+        )?
+        .workspace())
     }
 
-    /// Lowers the locked Plan IR `sandbox_exec` call into backend-neutral
-    /// workspace command vocabulary.
-    pub fn to_workspace_command(&self) -> Result<Command, PublicSeamError> {
-        let argv = self
-            .call
-            .get("argv")
-            .and_then(Value::as_array)
-            .ok_or_else(|| invalid_call("sandbox_exec must carry argv"))?;
-        let program = argv
-            .first()
-            .and_then(Value::as_str)
-            .ok_or_else(|| invalid_call("sandbox_exec argv must start with program"))?;
-        let mut command = Command::new(program);
-        command.args = argv
-            .iter()
-            .skip(1)
-            .map(|value| {
-                value
-                    .as_str()
-                    .map(str::to_owned)
-                    .ok_or_else(|| invalid_call("sandbox_exec argv entries must be strings"))
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        if let Some(cwd) = self.call.get("cwd").and_then(Value::as_str) {
-            command.cwd = Some(workspace_path(cwd, "sandbox_exec cwd")?);
-        }
-        if let Some(env) = self.call.get("env").and_then(Value::as_object) {
-            command.env = env
-                .iter()
-                .map(|(key, value)| {
-                    Ok((
-                        key.clone(),
-                        value
-                            .as_str()
-                            .ok_or_else(|| invalid_call("sandbox_exec env values must be strings"))?
-                            .to_owned(),
-                    ))
-                })
-                .collect::<Result<BTreeMap<_, _>, PublicSeamError>>()?;
-        }
-        lower_sandbox_output_contract(
-            required_object(
-                self.call,
-                "output",
-                "sandbox_exec must carry output contract",
-            )?,
-            &mut command,
-        )?;
-        command.limits.timeout = Some(Duration::from_secs(
-            self.call
-                .get("timeout_s")
-                .and_then(Value::as_u64)
-                .ok_or_else(|| invalid_call("sandbox_exec must carry timeout_s"))?,
-        ));
-        Ok(command)
+    /// Backend-neutral workspace command already lowered by the public seam
+    /// before host execution.
+    pub const fn workspace_command(&self) -> &Command {
+        &self.command
     }
+
+    /// Consumes the request wrapper and returns the backend-neutral workspace
+    /// command already lowered by the public seam.
+    pub fn into_workspace_command(self) -> Command {
+        self.command
+    }
+}
+
+/// Lowers the locked Plan IR `agent_run` call into provider-neutral agent
+/// runtime vocabulary.
+///
+/// This preserves only the output contracts currently owned by `leaven-agent`;
+/// unsupported schema-valid contracts return an explicit error before any host
+/// can execute the call.
+fn lower_agent_run_call(call: &Value) -> Result<AgentRunRequest, PublicSeamError> {
+    let runtime = call
+        .get("runtime")
+        .and_then(Value::as_str)
+        .ok_or_else(|| invalid_call("agent_run must carry runtime"))?;
+    let instructions = lower_agent_instructions(required_object(
+        call,
+        "instructions",
+        "agent_run must carry instructions",
+    )?)?;
+    let output_contract = lower_agent_output_contract(required_object(
+        call,
+        "output",
+        "agent_run must carry output contract",
+    )?)?;
+    let mut request = AgentRunRequest::new(instructions, output_contract);
+    request = request.with_runtime(runtime.to_owned());
+    if let Some(runtime_fingerprint) = call.get("runtime_fingerprint").and_then(Value::as_str) {
+        request = request.with_runtime_fingerprint(runtime_fingerprint.to_owned());
+    }
+    if let Some(policy) = call.get("tool_policy").and_then(Value::as_object) {
+        request.tool_policy = lower_agent_tool_policy(policy)?;
+    }
+    if let Some(limits) = call.get("limits").and_then(Value::as_object) {
+        request.limits = lower_agent_limits(limits)?;
+    }
+    Ok(request)
+}
+
+/// Lowers the locked Plan IR `sandbox_exec` call into backend-neutral workspace
+/// command vocabulary before any host can execute it.
+fn lower_sandbox_exec_call(call: &Value) -> Result<Command, PublicSeamError> {
+    let argv = call
+        .get("argv")
+        .and_then(Value::as_array)
+        .ok_or_else(|| invalid_call("sandbox_exec must carry argv"))?;
+    let program = argv
+        .first()
+        .and_then(Value::as_str)
+        .ok_or_else(|| invalid_call("sandbox_exec argv must start with program"))?;
+    let mut command = Command::new(program);
+    command.args = argv
+        .iter()
+        .skip(1)
+        .map(|value| {
+            value
+                .as_str()
+                .map(str::to_owned)
+                .ok_or_else(|| invalid_call("sandbox_exec argv entries must be strings"))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    if let Some(cwd) = call.get("cwd").and_then(Value::as_str) {
+        command.cwd = Some(workspace_path(cwd, "sandbox_exec cwd")?);
+    }
+    if let Some(env) = call.get("env").and_then(Value::as_object) {
+        command.env = env
+            .iter()
+            .map(|(key, value)| {
+                Ok((
+                    key.clone(),
+                    value
+                        .as_str()
+                        .ok_or_else(|| invalid_call("sandbox_exec env values must be strings"))?
+                        .to_owned(),
+                ))
+            })
+            .collect::<Result<BTreeMap<_, _>, PublicSeamError>>()?;
+    }
+    lower_sandbox_output_contract(
+        required_object(call, "output", "sandbox_exec must carry output contract")?,
+        &mut command,
+    )?;
+    command.limits.timeout = Some(Duration::from_secs(
+        call.get("timeout_s")
+            .and_then(Value::as_u64)
+            .ok_or_else(|| invalid_call("sandbox_exec must carry timeout_s"))?,
+    ));
+    Ok(command)
 }
 
 fn lower_agent_instructions(

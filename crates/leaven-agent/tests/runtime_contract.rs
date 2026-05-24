@@ -16,6 +16,27 @@ use leaven_workspace::{
 };
 
 #[test]
+fn agent_run_request_preserves_requested_runtime_identity() {
+    let request = AgentRunRequest::new(
+        AgentInstructions::task("preserve runtime"),
+        OutputContract::FinalMessage,
+    )
+    .with_runtime(AgentRuntimeId::from("codex/app-server".to_owned()))
+    .with_runtime_fingerprint(
+        "fp_runtime_sha256_1111111111111111111111111111111111111111111111111111111111111111",
+    );
+
+    assert_eq!(
+        request.runtime.as_ref().map(AgentRuntimeId::as_str),
+        Some("codex/app-server")
+    );
+    assert_eq!(
+        request.runtime_fingerprint.as_deref(),
+        Some("fp_runtime_sha256_1111111111111111111111111111111111111111111111111111111111111111")
+    );
+}
+
+#[test]
 fn fake_runtime_executes_actions_and_validates_file_contract() {
     futures::executor::block_on(async {
         let mut workspace = memory_workspace();

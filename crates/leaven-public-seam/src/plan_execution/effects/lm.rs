@@ -11,19 +11,27 @@ use crate::PublicSeamError;
 
 pub struct PlanLmCompleteRequest<'a> {
     pub(in crate::plan_execution) name: &'a str,
-    pub(in crate::plan_execution) call: &'a Value,
     pub(in crate::plan_execution) deps: &'a BTreeMap<String, Value>,
+    lm_request: LmRequest,
 }
 
 impl<'a> PlanLmCompleteRequest<'a> {
+    pub(in crate::plan_execution) fn new(
+        name: &'a str,
+        call: &'a Value,
+        deps: &'a BTreeMap<String, Value>,
+    ) -> Result<Self, PublicSeamError> {
+        let lm_request = lower_lm_call(call)?;
+        Ok(Self {
+            name,
+            deps,
+            lm_request,
+        })
+    }
+
     /// Operation binding name.
     pub const fn name(&self) -> &'a str {
         self.name
-    }
-
-    /// Typed `lm_complete` call body from the Plan IR.
-    pub const fn call(&self) -> &'a Value {
-        self.call
     }
 
     /// Resolved dependency bindings visible to this call.
@@ -31,42 +39,51 @@ impl<'a> PlanLmCompleteRequest<'a> {
         self.deps
     }
 
-    /// Lowers the locked Plan IR `lm_complete` call into provider-neutral LM
-    /// vocabulary.
-    ///
-    /// This rejects V1-deferred or extension-only LM content instead of
-    /// silently downgrading it to text.
-    pub fn to_lm_request(&self) -> Result<LmRequest, PublicSeamError> {
-        let model = self
-            .call
-            .get("model")
-            .and_then(Value::as_str)
-            .ok_or_else(|| invalid_lm_call("lm_complete lowering requires explicit model"))?;
-        let messages = lower_lm_messages(
-            self.call
-                .get("messages")
-                .and_then(Value::as_array)
-                .ok_or_else(|| invalid_lm_call("lm_complete must carry messages"))?,
-        )?;
-        let mut request = LmRequest::new(ModelName::new(model), messages).with_output(
-            lower_lm_output(self.call.get("output").ok_or_else(|| {
-                invalid_lm_call("lm_complete lowering requires output contract")
-            })?)?,
-        );
-        if let Some(model_role) = self.call.get("model_role").and_then(Value::as_str) {
-            request = request.with_model_role(model_role);
-        }
-        if let Some(sampling) = self.call.get("sampling") {
-            request = request.with_sampling(lower_lm_sampling(sampling)?);
-        }
-        if let Some(tools) = self.call.get("tools").and_then(Value::as_array) {
-            request = request.with_tools(lower_lm_tools(tools)?);
-        }
-        if let Some(provider_hints) = self.call.get("provider_hints") {
-            request = request.with_provider_hints(lower_provider_hints(provider_hints)?);
-        }
-        Ok(request)
+    /// Provider-neutral LM request already lowered by the public seam before
+    /// host execution.
+    pub const fn lm_request(&self) -> &LmRequest {
+        &self.lm_request
     }
+
+    /// Consumes the request wrapper and returns the provider-neutral LM request
+    /// already lowered by the public seam.
+    pub fn into_lm_request(self) -> LmRequest {
+        self.lm_request
+    }
+}
+
+/// Lowers the locked Plan IR `lm_complete` call into provider-neutral LM
+/// vocabulary.
+///
+/// This rejects V1-deferred or extension-only LM content before any host can
+/// execute the call, instead of relying on each host to opt in to lowering.
+fn lower_lm_call(call: &Value) -> Result<LmRequest, PublicSeamError> {
+    let model = call
+        .get("model")
+        .and_then(Value::as_str)
+        .ok_or_else(|| invalid_lm_call("lm_complete lowering requires explicit model"))?;
+    let messages = lower_lm_messages(
+        call.get("messages")
+            .and_then(Value::as_array)
+            .ok_or_else(|| invalid_lm_call("lm_complete must carry messages"))?,
+    )?;
+    let mut request = LmRequest::new(ModelName::new(model), messages)
+        .with_output(lower_lm_output(call.get("output").ok_or_else(|| {
+            invalid_lm_call("lm_complete lowering requires output contract")
+        })?)?);
+    if let Some(model_role) = call.get("model_role").and_then(Value::as_str) {
+        request = request.with_model_role(model_role);
+    }
+    if let Some(sampling) = call.get("sampling") {
+        request = request.with_sampling(lower_lm_sampling(sampling)?);
+    }
+    if let Some(tools) = call.get("tools").and_then(Value::as_array) {
+        request = request.with_tools(lower_lm_tools(tools)?);
+    }
+    if let Some(provider_hints) = call.get("provider_hints") {
+        request = request.with_provider_hints(lower_provider_hints(provider_hints)?);
+    }
+    Ok(request)
 }
 
 fn lower_lm_messages(messages: &[Value]) -> Result<Messages, PublicSeamError> {
