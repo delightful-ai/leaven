@@ -14,9 +14,13 @@ fn plan_result_preserves_nested_evidence_visibility_data_classes_and_receipts() 
     assert!(result.value_data_classes().contains(&(
         "assessment_rows".to_owned(),
         vec![
+            "candidate.artifact".to_owned(),
             "candidate.output".to_owned(),
             "case.target".to_owned(),
-            "public".to_owned()
+            "completion.raw".to_owned(),
+            "prompt.raw".to_owned(),
+            "public".to_owned(),
+            "transcript.raw".to_owned()
         ]
     )));
 }
@@ -51,12 +55,96 @@ fn plan_result_rejects_nested_score_output_data_class_gaps() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
 
     let mut missing_candidate_output = evidence_backed_result();
-    missing_candidate_output["values"]["assessment_rows"]["data_classes"] =
-        json!(["case.target", "public"]);
+    missing_candidate_output["values"]["assessment_rows"]["data_classes"] = json!([
+        "candidate.artifact",
+        "case.target",
+        "completion.raw",
+        "prompt.raw",
+        "public",
+        "transcript.raw"
+    ]);
 
     assert!(matches!(
         package
             .validate_plan_result_document(&missing_candidate_output)
+            .unwrap_err(),
+        PublicSeamError::InvalidPlanResult { .. }
+    ));
+}
+
+#[test]
+fn plan_result_rejects_nested_score_blob_ref_data_class_gaps() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut missing_blob_class = evidence_backed_result();
+    missing_blob_class["values"]["assessment_rows"]["data_classes"] = json!([
+        "candidate.output",
+        "case.target",
+        "completion.raw",
+        "prompt.raw",
+        "public",
+        "transcript.raw"
+    ]);
+
+    assert!(matches!(
+        package
+            .validate_plan_result_document(&missing_blob_class)
+            .unwrap_err(),
+        PublicSeamError::InvalidPlanResult { .. }
+    ));
+}
+
+#[test]
+fn plan_result_rejects_nested_trace_ref_data_class_gaps() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut missing_score_trace_class = evidence_backed_result();
+    missing_score_trace_class["values"]["assessment_rows"]["data_classes"] = json!([
+        "candidate.output",
+        "candidate.artifact",
+        "case.target",
+        "prompt.raw",
+        "public",
+        "transcript.raw"
+    ]);
+
+    assert!(matches!(
+        package
+            .validate_plan_result_document(&missing_score_trace_class)
+            .unwrap_err(),
+        PublicSeamError::InvalidPlanResult { .. }
+    ));
+
+    let mut missing_evidence_trace_class = evidence_backed_result();
+    missing_evidence_trace_class["values"]["assessment_rows"]["data_classes"] = json!([
+        "candidate.output",
+        "candidate.artifact",
+        "case.target",
+        "completion.raw",
+        "prompt.raw",
+        "public"
+    ]);
+
+    assert!(matches!(
+        package
+            .validate_plan_result_document(&missing_evidence_trace_class)
+            .unwrap_err(),
+        PublicSeamError::InvalidPlanResult { .. }
+    ));
+
+    let mut missing_evidence_top_level_trace_class = evidence_backed_result();
+    missing_evidence_top_level_trace_class["values"]["assessment_rows"]["data_classes"] = json!([
+        "candidate.output",
+        "candidate.artifact",
+        "case.target",
+        "completion.raw",
+        "public",
+        "transcript.raw"
+    ]);
+
+    assert!(matches!(
+        package
+            .validate_plan_result_document(&missing_evidence_top_level_trace_class)
             .unwrap_err(),
         PublicSeamError::InvalidPlanResult { .. }
     ));
@@ -106,19 +194,21 @@ fn evidence_backed_result() -> Value {
                         "assessment": "assess_evidence",
                         "score": {
                             "value": 1.0,
-                            "output": {
-                                "kind": "text",
-                                "summary": "model answer matched target",
-                                "value": "model answer matched target",
-                                "visibility": "public",
-                                "data_classes": ["candidate.output"]
-                            }
+                            "output": score_output_record()
                         },
                         "evidence": target_derived_evidence()
                     }
                 ],
                 "graph_revision": "rev_final",
-                "data_classes": ["candidate.output", "case.target", "public"],
+                "data_classes": [
+                    "candidate.output",
+                    "candidate.artifact",
+                    "case.target",
+                    "completion.raw",
+                    "prompt.raw",
+                    "public",
+                    "transcript.raw"
+                ],
                 "replayability": "has_declared_external_effects"
             },
             "assessment_batch": {
@@ -184,6 +274,32 @@ fn evidence_backed_result() -> Value {
     }))
 }
 
+fn score_output_record() -> Value {
+    json!({
+        "kind": "text",
+        "summary": "model answer matched target",
+        "value": "model answer matched target",
+        "visibility": "public",
+        "data_classes": ["candidate.output"],
+        "blob_ref": {
+            "kind": "blob_ref",
+            "id": "blob_candidate_artifact",
+            "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "bytes": 32,
+            "data_classes": ["candidate.artifact"]
+        },
+        "trace_refs": [
+            {
+                "kind": "runner_completion",
+                "id": "trace_candidate_output",
+                "visibility": "redacted_completion",
+                "data_classes": ["completion.raw"],
+                "receipt": "lmrec_score"
+            }
+        ]
+    })
+}
+
 fn bind_result_hashes(mut result: Value) -> Value {
     let values = result["values"].as_object().unwrap().clone();
     for receipt in result["receipts"].as_array_mut().unwrap() {
@@ -239,11 +355,29 @@ fn target_derived_evidence() -> Value {
     json!({
         "schema_version": "leaven.evidence_envelope.v1",
         "target_derived": true,
-        "data_classes": ["case.target"],
+        "data_classes": ["case.target", "prompt.raw", "transcript.raw"],
         "public": {
             "feedback": "matched target",
-            "data_classes": ["case.target"]
+            "data_classes": ["case.target"],
+            "trace_refs": [
+                {
+                    "kind": "judge_trace",
+                    "id": "trace_target_feedback",
+                    "visibility": "redacted_transcript",
+                    "data_classes": ["transcript.raw"],
+                    "receipt": "lmrec_score"
+                }
+            ]
         },
+        "trace_refs": [
+            {
+                "kind": "prompt_trace",
+                "id": "trace_target_prompt",
+                "visibility": "redacted_prompt",
+                "data_classes": ["prompt.raw"],
+                "receipt": "lmrec_score"
+            }
+        ],
         "redaction_policy": {
             "optimizer": "score_only",
             "reflector": "score_only",

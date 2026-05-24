@@ -383,6 +383,15 @@ fn inspect_runner_request(object: &serde_json::Map<String, Value>) -> Result<(),
 fn inspect_score_context(object: &serde_json::Map<String, Value>) -> Result<(), PublicSeamError> {
     require_field(object, "capability_fingerprint")?;
     require_field(object, "output")?;
+    if let Some(target_handle) = object.get("target_handle") {
+        let target_handle = required_string(Some(target_handle), "target_handle")?;
+        let case = required_string(object.get("case"), "case")?;
+        if target_handle != case {
+            return Err(invalid_stage_payload(
+                "score context target_handle must bind to the scored case",
+            ));
+        }
+    }
     Ok(())
 }
 

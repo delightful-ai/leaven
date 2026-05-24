@@ -11,6 +11,7 @@ pub struct EvidenceEnvelopeDocument {
     data_classes: Vec<String>,
     public_data_classes: Vec<String>,
     private_data_classes: Option<Vec<String>>,
+    trace_data_classes: Vec<String>,
     read_receipts: Vec<String>,
     effect_receipts: Vec<String>,
     write_receipts: Vec<String>,
@@ -41,6 +42,22 @@ impl EvidenceEnvelopeDocument {
                 required_string_vec(private.get("data_classes"), "private.data_classes")
             })
             .transpose()?;
+        let trace_data_classes = public
+            .get("trace_refs")
+            .map(|trace_refs| collect_trace_data_classes(trace_refs, "public.trace_refs"))
+            .transpose()?
+            .unwrap_or_default();
+        let top_level_trace_data_classes = object
+            .get("trace_refs")
+            .map(|trace_refs| collect_trace_data_classes(trace_refs, "trace_refs"))
+            .transpose()?
+            .unwrap_or_default();
+        let trace_data_classes = trace_data_classes
+            .into_iter()
+            .chain(top_level_trace_data_classes)
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>();
         let source_receipts = object
             .get("source_receipts")
             .and_then(Value::as_object)
@@ -56,6 +73,7 @@ impl EvidenceEnvelopeDocument {
                 &data_classes,
                 &public_data_classes,
                 private_data_classes.as_deref(),
+                &trace_data_classes,
             )?;
             if read_receipts.is_empty() {
                 return Err(invalid_evidence(
@@ -73,6 +91,7 @@ impl EvidenceEnvelopeDocument {
             data_classes,
             public_data_classes,
             private_data_classes,
+            trace_data_classes,
             read_receipts,
             effect_receipts,
             write_receipts,
@@ -99,6 +118,11 @@ impl EvidenceEnvelopeDocument {
         self.private_data_classes.as_deref()
     }
 
+    /// Data classes carried by public trace references.
+    pub fn trace_data_classes(&self) -> &[String] {
+        &self.trace_data_classes
+    }
+
     /// Read receipt references used as evidence sources.
     pub fn read_receipts(&self) -> &[String] {
         &self.read_receipts
@@ -119,6 +143,7 @@ fn validate_target_derived_classes(
     data_classes: &[String],
     public_data_classes: &[String],
     private_data_classes: Option<&[String]>,
+    trace_data_classes: &[String],
 ) -> Result<(), PublicSeamError> {
     let top_level = data_classes.iter().collect::<BTreeSet<_>>();
     if !top_level
@@ -132,6 +157,7 @@ fn validate_target_derived_classes(
     for data_class in public_data_classes
         .iter()
         .chain(private_data_classes.into_iter().flatten())
+        .chain(trace_data_classes)
     {
         if !top_level.contains(data_class) {
             return Err(invalid_evidence(format!(
@@ -140,6 +166,25 @@ fn validate_target_derived_classes(
         }
     }
     Ok(())
+}
+
+fn collect_trace_data_classes(value: &Value, field: &str) -> Result<Vec<String>, PublicSeamError> {
+    let traces = value
+        .as_array()
+        .ok_or_else(|| invalid_evidence(format!("{field} must be an array")))?;
+    let mut data_classes = BTreeSet::new();
+    for trace in traces {
+        let trace = trace
+            .as_object()
+            .ok_or_else(|| invalid_evidence(format!("{field} entries must be objects")))?;
+        if let Some(trace_data_classes) = trace.get("data_classes") {
+            data_classes.extend(optional_string_vec(
+                Some(trace_data_classes),
+                "trace.data_classes",
+            )?);
+        }
+    }
+    Ok(data_classes.into_iter().collect())
 }
 
 fn required_string_vec(value: Option<&Value>, field: &str) -> Result<Vec<String>, PublicSeamError> {

@@ -279,10 +279,7 @@ fn collect_score_output_data_classes_from_value(
                 .and_then(|score| score.get("output"))
                 .and_then(Value::as_object)
             {
-                required.extend(required_string_set(
-                    output.get("data_classes"),
-                    "score.output.data_classes",
-                )?);
+                collect_output_record_data_classes(output, required)?;
             }
             for value in object.values() {
                 collect_score_output_data_classes_from_value(value, required)?;
@@ -297,6 +294,50 @@ fn collect_score_output_data_classes_from_value(
         }
         _ => Ok(()),
     }
+}
+
+fn collect_output_record_data_classes(
+    output: &serde_json::Map<String, Value>,
+    required: &mut BTreeSet<String>,
+) -> Result<(), PublicSeamError> {
+    required.extend(required_string_set(
+        output.get("data_classes"),
+        "score.output.data_classes",
+    )?);
+    if let Some(blob_ref) = output.get("blob_ref").and_then(Value::as_object)
+        && let Some(data_classes) = blob_ref.get("data_classes")
+    {
+        required.extend(required_string_set(
+            Some(data_classes),
+            "score.output.blob_ref.data_classes",
+        )?);
+    }
+    if let Some(trace_refs) = output.get("trace_refs") {
+        collect_trace_ref_data_classes(trace_refs, "score.output.trace_refs", required)?;
+    }
+    Ok(())
+}
+
+fn collect_trace_ref_data_classes(
+    trace_refs: &Value,
+    field: &str,
+    required: &mut BTreeSet<String>,
+) -> Result<(), PublicSeamError> {
+    let trace_refs = trace_refs
+        .as_array()
+        .ok_or_else(|| invalid_result(format!("{field} must be an array")))?;
+    for trace_ref in trace_refs {
+        let trace_ref = trace_ref
+            .as_object()
+            .ok_or_else(|| invalid_result(format!("{field} entries must be objects")))?;
+        if let Some(data_classes) = trace_ref.get("data_classes") {
+            required.extend(required_string_set(
+                Some(data_classes),
+                &format!("{field}.data_classes"),
+            )?);
+        }
+    }
+    Ok(())
 }
 
 fn collect_evidence_data_classes_from_value(
@@ -315,6 +356,7 @@ fn collect_evidence_data_classes_from_value(
             if let Some(private) = envelope.private_data_classes() {
                 required.extend(private.iter().cloned());
             }
+            required.extend(envelope.trace_data_classes().iter().cloned());
             validate_evidence_source_receipts(&envelope, receipt_index)
         }
         Value::Object(object) => {
