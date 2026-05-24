@@ -6,6 +6,11 @@
     "stage_call_id": "sc_reflect_01",
     "base_revision": "rev_001",
     "parent": "cand_parent",
+    "part": {
+      "path": "/input_validation"
+    },
+    "part_label": "input_validation",
+    "surface_fingerprint": "fp_surface_sha256_skill",
     "examples": [
       {
         "case": "case_demo_visible",
@@ -97,6 +102,7 @@
     "stage_call_id": "sc_propose_01",
     "base_revision": "rev_001",
     "parent": "cand_parent",
+    "surface_fingerprint": "fp_surface_sha256_skill",
     "reflection_result": {
       "schema_version": "leaven.stage_payloads.v1",
       "role": "reflection_result",

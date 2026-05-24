@@ -87,6 +87,7 @@ fn stage_payloads_preserve_object_form_info_and_receipt_refs() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
 
     let mut reflect = reflect_request();
+    reflect["parent"] = object_form_candidate_ref();
     reflect["source_refs"] = json!([object_form_candidate_ref()]);
     reflect["examples"][0]["source_refs"] = json!([object_form_candidate_ref()]);
     package.validate_stage_payload_document(&reflect).unwrap();
@@ -105,6 +106,7 @@ fn stage_payloads_preserve_object_form_info_and_receipt_refs() {
     );
 
     let mut propose = propose_request();
+    propose["parent"] = object_form_candidate_ref();
     propose["source_refs"] = json!([object_form_candidate_ref()]);
     propose["reflection_result"] = reflection;
     package.validate_stage_payload_document(&propose).unwrap();
@@ -282,6 +284,46 @@ fn reflect_request_rejects_missing_source_refs_or_query_policy() {
 }
 
 #[test]
+fn reflect_request_rejects_parent_source_or_surface_context_gaps() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut parent_not_in_source_refs = reflect_request();
+    parent_not_in_source_refs["source_refs"] = json!(["cand_unrelated"]);
+    parent_not_in_source_refs["examples"][0]["source_refs"] = json!(["cand_unrelated"]);
+    assert!(matches!(
+        package
+            .validate_stage_payload_document(&parent_not_in_source_refs)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+
+    let mut missing_surface_fingerprint = reflect_request();
+    missing_surface_fingerprint
+        .as_object_mut()
+        .unwrap()
+        .remove("surface_fingerprint");
+    assert!(matches!(
+        package
+            .validate_stage_payload_document(&missing_surface_fingerprint)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+
+    let mut missing_part_context = reflect_request();
+    missing_part_context.as_object_mut().unwrap().remove("part");
+    missing_part_context
+        .as_object_mut()
+        .unwrap()
+        .remove("part_label");
+    assert!(matches!(
+        package
+            .validate_stage_payload_document(&missing_part_context)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+}
+
+#[test]
 fn reflection_result_requires_receipted_source_visible_evidence() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
 
@@ -424,6 +466,27 @@ fn propose_request_requires_reflection_result_and_change_schema_authority() {
     assert!(matches!(
         package
             .validate_stage_payload_document(&missing_query_policy)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+
+    let mut missing_surface_fingerprint = propose_request();
+    missing_surface_fingerprint
+        .as_object_mut()
+        .unwrap()
+        .remove("surface_fingerprint");
+    assert!(matches!(
+        package
+            .validate_stage_payload_document(&missing_surface_fingerprint)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+
+    let mut parent_not_in_source_refs = propose_request();
+    parent_not_in_source_refs["source_refs"] = json!(["cand_unrelated"]);
+    assert!(matches!(
+        package
+            .validate_stage_payload_document(&parent_not_in_source_refs)
             .unwrap_err(),
         PublicSeamError::InvalidStagePayload { .. }
     ));
