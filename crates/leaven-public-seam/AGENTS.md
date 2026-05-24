@@ -134,9 +134,13 @@ calls into typed public-seam requests and emit `workspace_handle` Plan Result
 values with call receipts; `workspace_release` validates the requested
 WorkspaceRef against live `workspace_handle` dependency values before the host
 can perform release, rejects already released handles, and still refuses host
-filesystem paths as workspace handles. They are not workspace backend execution, file
-read/list/stat/digest/git operations, artifact capture, snapshot production, or
-full workspace row closeout. The
+filesystem paths as workspace handles. `PlanWorkspaceQueryRequest` routes
+representative schema-valid `workspace_query` reads through typed host requests,
+requires a live `workspace_handle` dependency before the host can read, and
+emits typed `workspace_file`, `workspace_listing`, `workspace_snapshot`, or
+`workspace_diff` values with query receipts. It is not workspace backend
+execution and still leaves stat/digest/git_log plus full artifact/snapshot
+backend proof pending, so it is not full workspace row closeout. The
 `PublicSeamPackage::execute_plan_document_with_capability` route
 requires capability-authorized evaluator request scope before a `case_query.load`
 host read can run. The

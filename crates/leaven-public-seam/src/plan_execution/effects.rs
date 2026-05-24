@@ -395,7 +395,7 @@ fn workspace_path(path: &str, context: &str) -> Result<WorkspacePath, PublicSeam
     WorkspacePath::new(path).map_err(|error| invalid_call(format!("{context}: {error}")))
 }
 
-fn workspace_ref_id(
+pub(super) fn workspace_ref_id(
     value: Option<&Value>,
     context: impl Into<String>,
 ) -> Result<&str, PublicSeamError> {

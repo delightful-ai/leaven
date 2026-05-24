@@ -1,10 +1,10 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{Value, json};
 
 use crate::{CapabilityDocument, CapabilityGrantRequest, PublicSeamError};
 
-use super::{PlanExecutionContext, invalid_plan, nested_kind, object};
+use super::{PlanExecutionContext, effects::workspace_ref_id, invalid_plan, nested_kind, object};
 
 /// Lowered graph-read consistency scope for a Plan IR `graph_query`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -152,6 +152,112 @@ impl PlanCaseQueryOutcome {
     }
 }
 
+/// Lowered `workspace_query` request passed to a plan execution host.
+#[derive(Clone, Copy, Debug)]
+pub struct PlanWorkspaceQueryRequest<'a> {
+    pub(super) name: &'a str,
+    pub(super) expr: &'a Value,
+    pub(super) workspace: &'a str,
+    pub(super) op: &'a Value,
+    pub(super) deps: &'a BTreeMap<String, Value>,
+}
+
+impl<'a> PlanWorkspaceQueryRequest<'a> {
+    /// Operation binding name.
+    pub const fn name(&self) -> &'a str {
+        self.name
+    }
+
+    /// Typed `workspace_query` expression body from the Plan IR.
+    pub const fn expr(&self) -> &'a Value {
+        self.expr
+    }
+
+    /// Workspace handle requested for the read.
+    pub const fn workspace(&self) -> &'a str {
+        self.workspace
+    }
+
+    /// Workspace query operation.
+    pub const fn op(&self) -> &'a Value {
+        self.op
+    }
+
+    /// Resolved dependency bindings visible to this query.
+    pub const fn deps(&self) -> &'a BTreeMap<String, Value> {
+        self.deps
+    }
+
+    /// Workspace query operation kind.
+    pub fn op_kind(&self) -> Result<&'a str, PublicSeamError> {
+        self.op
+            .get("kind")
+            .and_then(Value::as_str)
+            .ok_or_else(|| invalid_plan("workspace_query op must carry kind"))
+    }
+
+    /// Workspace path requested by path-shaped operations.
+    pub fn path(&self) -> Result<Option<&'a str>, PublicSeamError> {
+        match self.op.get("path") {
+            Some(Value::String(path)) => Ok(Some(path)),
+            Some(_) => Err(invalid_plan("workspace_query path must be a string")),
+            None => Ok(None),
+        }
+    }
+
+    /// Expected data classes declared by `read_file`.
+    pub fn expected_data_classes(&self) -> Result<BTreeSet<&'a str>, PublicSeamError> {
+        let Some(values) = self.op.get("expected_data_classes") else {
+            return Ok(BTreeSet::new());
+        };
+        values
+            .as_array()
+            .ok_or_else(|| invalid_plan("workspace_query expected_data_classes must be an array"))?
+            .iter()
+            .map(|value| {
+                value.as_str().ok_or_else(|| {
+                    invalid_plan("workspace_query expected data classes must be strings")
+                })
+            })
+            .collect()
+    }
+}
+
+/// Host outcome for a typed `workspace_query` read.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanWorkspaceQueryOutcome {
+    pub(super) value: Value,
+    pub(super) graph_revision: String,
+    pub(super) data_classes: Vec<String>,
+    pub(super) replayability: String,
+}
+
+impl PlanWorkspaceQueryOutcome {
+    /// Creates a workspace read outcome whose kind-specific fields live in `value`.
+    pub fn new(value: Value, graph_revision: impl Into<String>) -> Self {
+        Self {
+            value,
+            graph_revision: graph_revision.into(),
+            data_classes: vec!["public".to_owned()],
+            replayability: "boundary_managed".to_owned(),
+        }
+    }
+
+    /// Overrides the data classes carried by the workspace value.
+    #[must_use]
+    pub fn with_data_classes(mut self, data_classes: impl IntoIterator<Item = String>) -> Self {
+        self.data_classes = data_classes.into_iter().collect();
+        self
+    }
+
+    /// Overrides the replayability classification carried by the workspace value.
+    #[must_use]
+    pub fn with_replayability(mut self, replayability: impl Into<String>) -> Self {
+        self.replayability = replayability.into();
+        self
+    }
+}
+
 pub(super) fn case_query_include(query: &Value) -> Result<BTreeSet<&str>, PublicSeamError> {
     let include = query
         .get("include")
@@ -170,6 +276,82 @@ pub(super) fn case_query_include(query: &Value) -> Result<BTreeSet<&str>, Public
         fields.insert(field);
     }
     Ok(fields)
+}
+
+pub(super) fn workspace_query_request<'a>(
+    name: &'a str,
+    expr: &'a Value,
+    deps: &'a BTreeMap<String, Value>,
+) -> Result<PlanWorkspaceQueryRequest<'a>, PublicSeamError> {
+    let object = object(expr, "workspace_query")?;
+    let workspace = workspace_ref_id(
+        object.get("workspace"),
+        "workspace_query must carry workspace",
+    )?;
+    let op = object
+        .get("op")
+        .ok_or_else(|| invalid_plan("workspace_query must carry op"))?;
+    validate_live_workspace(workspace, deps, "workspace_query")?;
+    Ok(PlanWorkspaceQueryRequest {
+        name,
+        expr,
+        workspace,
+        op,
+        deps,
+    })
+}
+
+fn validate_live_workspace(
+    workspace: &str,
+    deps: &BTreeMap<String, Value>,
+    context: &str,
+) -> Result<(), PublicSeamError> {
+    let Some(handle) = deps.values().find(|value| {
+        value.get("kind").and_then(Value::as_str) == Some("workspace_handle")
+            && value
+                .get("workspace")
+                .and_then(|value| workspace_ref_id(Some(value), "workspace handle").ok())
+                == Some(workspace)
+    }) else {
+        return Err(invalid_plan(format!(
+            "{context} refused unmaterialized workspace `{workspace}`"
+        )));
+    };
+    if handle
+        .get("released")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        return Err(invalid_plan(format!(
+            "{context} refused already released workspace `{workspace}`"
+        )));
+    }
+    Ok(())
+}
+
+pub(super) fn workspace_query_expected_value_kind(
+    request: PlanWorkspaceQueryRequest<'_>,
+) -> Result<&'static str, PublicSeamError> {
+    match request.op_kind()? {
+        "snapshot" => Ok("workspace_snapshot"),
+        "list" | "capture_artifacts" => Ok("workspace_listing"),
+        "read_file" => Ok("workspace_file"),
+        "git_diff" | "git_status" => Ok("workspace_diff"),
+        "stat" | "digest" | "git_log" => Err(invalid_plan(format!(
+            "representative Plan IR harness does not execute `{}` workspace_query ops yet",
+            request.op_kind()?
+        ))),
+        other => Err(invalid_plan(format!(
+            "unknown workspace_query op `{other}`"
+        ))),
+    }
+}
+
+pub(super) fn workspace_query_projection(request: PlanWorkspaceQueryRequest<'_>) -> Value {
+    json!({
+        "workspace": request.workspace(),
+        "op": request.op()
+    })
 }
 
 pub(super) fn require_requested_case_field(

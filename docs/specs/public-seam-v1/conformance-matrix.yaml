@@ -1148,6 +1148,8 @@ rows:
     partial_contract_test_evidence:
       - crates/leaven-public-seam/tests/plan_document.rs::workspace_materialize_and_release_emit_typed_handles_and_receipts
       - crates/leaven-public-seam/tests/plan_document.rs::workspace_release_rejects_unmaterialized_handles_and_host_path_substitutes
+      - crates/leaven-public-seam/tests/plan_document.rs::workspace_query_reads_require_live_handles_and_emit_query_receipts
+      - crates/leaven-public-seam/tests/plan_document.rs::workspace_query_rejects_unmaterialized_released_and_mismatched_results
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_bind_worker_methods_to_primary_kinds_and_receipts
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_reject_cross_method_payloads_unbound_receipts_and_data_class_gaps
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_permissions_use_capability_grants_and_return_planerror_redactions
@@ -1158,6 +1160,9 @@ rows:
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanWorkspaceMaterializeOutcome
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanWorkspaceReleaseRequest
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanWorkspaceReleaseOutcome
+      - crates/leaven-public-seam/src/plan_execution/queries.rs::PlanWorkspaceQueryRequest
+      - crates/leaven-public-seam/src/plan_execution/queries.rs::PlanWorkspaceQueryOutcome
+      - crates/leaven-public-seam/src/plan_execution.rs::execute_workspace_query_expr
       - crates/leaven-public-seam/src/plan_execution.rs::record_workspace_materialize_outcome
       - crates/leaven-public-seam/src/plan_execution.rs::record_workspace_release_outcome
       - crates/leaven-public-seam/src/acp_profile.rs::extension_result_contract

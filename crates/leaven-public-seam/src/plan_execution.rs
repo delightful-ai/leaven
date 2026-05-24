@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{Map, Value, json};
 
@@ -16,11 +16,12 @@ pub use effects::{
 };
 pub use queries::{
     PlanCaseQueryOutcome, PlanCaseQueryRequest, PlanGraphQueryOutcome, PlanGraphQueryRequest,
-    PlanGraphReadScope,
+    PlanGraphReadScope, PlanWorkspaceQueryOutcome, PlanWorkspaceQueryRequest,
 };
 use queries::{
     case_query_include, case_query_projection, plan_contains_case_query,
     require_included_case_fields, require_requested_case_field, validate_case_query_authority,
+    workspace_query_expected_value_kind, workspace_query_projection, workspace_query_request,
 };
 pub use receipts::validate_plan_result_receipts;
 
@@ -125,6 +126,17 @@ pub trait PlanExecutionHost {
         let _ = request;
         Err(invalid_plan(
             "Plan execution host does not provide case_query.load reads",
+        ))
+    }
+
+    /// Executes a typed `workspace_query` read.
+    fn workspace_query(
+        &mut self,
+        request: PlanWorkspaceQueryRequest<'_>,
+    ) -> Result<PlanWorkspaceQueryOutcome, PublicSeamError> {
+        let _ = request;
+        Err(invalid_plan(
+            "Plan execution host does not provide workspace_query reads",
         ))
     }
 
@@ -466,7 +478,15 @@ fn execute_op<H: PlanExecutionHost>(
     let name = required_string(op_object.get("name"), "op.name")?.to_owned();
     let dep_values = dependency_values(op_object, &state.bindings)?;
     match required_string(op_object.get("kind"), "op.kind")? {
-        "let" => execute_let(op_object, name, plan_document, context, host, state),
+        "let" => execute_let(
+            op_object,
+            name,
+            &dep_values,
+            plan_document,
+            context,
+            host,
+            state,
+        ),
         "call" => execute_call(op_object, name, &dep_values, context, host, state, mode),
         "write" => execute_write(op_object, name, &dep_values, context, host, state),
         other => Err(invalid_plan(format!(
@@ -478,6 +498,7 @@ fn execute_op<H: PlanExecutionHost>(
 fn execute_let(
     op_object: &Map<String, Value>,
     name: String,
+    dep_values: &BTreeMap<String, Value>,
     plan_document: &crate::PlanDocument,
     context: &PlanExecutionContext,
     host: &mut impl PlanExecutionHost,
@@ -486,7 +507,7 @@ fn execute_let(
     let expr = op_object
         .get("expr")
         .ok_or_else(|| invalid_plan("let op must carry expr"))?;
-    let evaluated = evaluate_expr(expr, &name, plan_document, context, host)?;
+    let evaluated = evaluate_expr(expr, &name, dep_values, plan_document, context, host)?;
     if let Some(receipt) = evaluated.receipt {
         state.receipts.push(receipt);
     }
@@ -495,7 +516,17 @@ fn execute_let(
         .as_object()
         .and_then(|object| object.get("kind"))
         .and_then(Value::as_str);
-    if matches!(value_kind, Some("graph_set" | "case_record")) {
+    if matches!(
+        value_kind,
+        Some(
+            "graph_set"
+                | "case_record"
+                | "workspace_snapshot"
+                | "workspace_file"
+                | "workspace_diff"
+                | "workspace_listing"
+        )
+    ) {
         state.values.insert(name.clone(), evaluated.value.clone());
     }
     state.bindings.insert(name, evaluated.value);
@@ -1034,6 +1065,7 @@ struct EvaluatedExpr {
 fn evaluate_expr(
     expr: &Value,
     name: &str,
+    dep_values: &BTreeMap<String, Value>,
     plan_document: &crate::PlanDocument,
     context: &PlanExecutionContext,
     host: &mut impl PlanExecutionHost,
@@ -1049,6 +1081,7 @@ fn evaluate_expr(
         }),
         "graph_query" => execute_graph_query_expr(expr, name, plan_document, context, host),
         "case_query" => execute_case_query_expr(expr, name, context, host),
+        "workspace_query" => execute_workspace_query_expr(expr, name, dep_values, context, host),
         other => Err(invalid_plan(format!(
             "representative Plan IR harness does not execute `{other}` let expressions"
         ))),
@@ -1193,6 +1226,96 @@ fn execute_case_query_expr(
                 "base_revision": context.base_revision
             }))?,
             "projection_fingerprint": prefixed_jcs_hash("fp_projection_sha256_", &case_query_projection(query)?)?,
+            "status": "succeeded"
+        })),
+    })
+}
+
+fn execute_workspace_query_expr(
+    expr: &Value,
+    name: &str,
+    dep_values: &BTreeMap<String, Value>,
+    context: &PlanExecutionContext,
+    host: &mut impl PlanExecutionHost,
+) -> Result<EvaluatedExpr, PublicSeamError> {
+    let request = workspace_query_request(name, expr, dep_values)?;
+    let expected_kind = workspace_query_expected_value_kind(request)?;
+    let expected_data_classes = request.expected_data_classes()?;
+    let outcome = host.workspace_query(request)?;
+    let receipt_id = format!("qrec_{name}");
+    let mut value = outcome
+        .value
+        .as_object()
+        .cloned()
+        .ok_or_else(|| invalid_plan("workspace_query host outcome value must be an object"))?;
+    let value_kind = value
+        .get("kind")
+        .and_then(Value::as_str)
+        .ok_or_else(|| invalid_plan("workspace_query host outcome must carry kind"))?;
+    if value_kind != expected_kind {
+        return Err(invalid_plan(format!(
+            "workspace_query `{}` host returned `{value_kind}` instead of `{expected_kind}`",
+            request.op_kind()?
+        )));
+    }
+    if expected_kind == "workspace_file" {
+        let classes = outcome
+            .data_classes
+            .iter()
+            .map(String::as_str)
+            .collect::<BTreeSet<_>>();
+        for expected in expected_data_classes {
+            if !classes.contains(expected) {
+                return Err(invalid_plan(format!(
+                    "workspace_query read_file result missing expected data class `{expected}`"
+                )));
+            }
+        }
+    }
+    value.insert("receipt".to_owned(), json!(receipt_id));
+    let graph_revision = outcome.graph_revision;
+    value.insert("graph_revision".to_owned(), json!(&graph_revision));
+    value.insert("data_classes".to_owned(), json!(outcome.data_classes));
+    value.insert("replayability".to_owned(), json!(outcome.replayability));
+    let value = Value::Object(value);
+    let op_hash = prefixed_jcs_hash(
+        "fp_query_sha256_",
+        &json!({
+            "schema_version": "leaven.plan_query_op.v1",
+            "name": name,
+            "expr": expr,
+            "scope": {
+                "kind": "workspace_query",
+                "workspace": request.workspace(),
+                "base_revision": context.base_revision
+            }
+        }),
+    )?;
+    let result_hash = prefixed_jcs_hash(
+        "fp_result_sha256_",
+        &json!({
+            "schema_version": "leaven.plan_query_result.v1",
+            "name": name,
+            "value": value
+        }),
+    )?;
+    Ok(EvaluatedExpr {
+        value,
+        receipt: Some(json!({
+            "kind": "query",
+            "receipt": receipt_id,
+            "op_var": name,
+            "started_at": context.started_at,
+            "completed_at": context.completed_at,
+            "op_hash": op_hash,
+            "result_hash": result_hash,
+            "graph_revision": graph_revision,
+            "read_scope_fingerprint": prefixed_jcs_hash("fp_scope_sha256_", &json!({
+                "kind": "workspace_query",
+                "workspace": request.workspace(),
+                "base_revision": context.base_revision
+            }))?,
+            "projection_fingerprint": prefixed_jcs_hash("fp_projection_sha256_", &workspace_query_projection(request))?,
             "status": "succeeded"
         })),
     })

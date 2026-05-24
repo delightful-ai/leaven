@@ -7,7 +7,8 @@ use leaven_public_seam::{
     PlanExecutionHost, PlanGraphQueryOutcome, PlanGraphQueryRequest, PlanGraphReadScope,
     PlanLmCompleteOutcome, PlanLmCompleteRequest, PlanOperationKind, PlanSandboxExecOutcome,
     PlanSandboxExecRequest, PlanWorkspaceMaterializeOutcome, PlanWorkspaceMaterializeRequest,
-    PlanWorkspaceReleaseOutcome, PlanWorkspaceReleaseRequest, PublicSeamError, PublicSeamPackage,
+    PlanWorkspaceQueryOutcome, PlanWorkspaceQueryRequest, PlanWorkspaceReleaseOutcome,
+    PlanWorkspaceReleaseRequest, PublicSeamError, PublicSeamPackage,
 };
 use serde_json::{Value, json};
 
@@ -636,6 +637,132 @@ fn workspace_release_rejects_unmaterialized_handles_and_host_path_substitutes() 
             .contains("workspace_release refused already released workspace"),
         "unexpected error: {error:?}"
     );
+
+    let mut mismatched_host = workspace_materialize_release_plan();
+    mismatched_host["ops"][1]["name"] = json!("release_wrong");
+    mismatched_host["return"] = json!(["workspace", "release_wrong"]);
+    let mut host = RecordingPlanHost::default();
+    let error = package
+        .execute_plan_document(&mismatched_host, &plan_execution_context(), &mut host)
+        .unwrap_err();
+    assert_eq!(
+        host.calls,
+        vec!["workspace_materialize", "workspace_release"]
+    );
+    assert!(
+        error
+            .to_string()
+            .contains("host returned workspace `ws_planexec_other`"),
+        "unexpected error: {error:?}"
+    );
+}
+
+#[test]
+fn workspace_query_reads_require_live_handles_and_emit_query_receipts() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+    let mut host = RecordingPlanHost::default();
+
+    let report = package
+        .execute_plan_document(
+            &workspace_materialize_query_plan(),
+            &plan_execution_context(),
+            &mut host,
+        )
+        .unwrap();
+
+    assert_eq!(
+        host.calls,
+        vec![
+            "workspace_materialize",
+            "workspace_read_file",
+            "workspace_list"
+        ]
+    );
+    assert_eq!(
+        report.document().receipt_kinds(),
+        &["call", "query", "query"]
+    );
+    assert_eq!(
+        report.value()["values"]["file"]["kind"].as_str(),
+        Some("workspace_file")
+    );
+    assert_eq!(
+        report.value()["values"]["file"]["data_classes"]
+            .as_array()
+            .unwrap(),
+        &json!(["candidate.artifact", "public"]).as_array().unwrap()[..]
+    );
+    assert_eq!(
+        report.value()["values"]["listing"]["kind"].as_str(),
+        Some("workspace_listing")
+    );
+    assert_eq!(
+        report.value()["values"]["listing"]["entries"][0]["data_classes"][0].as_str(),
+        Some("candidate.artifact")
+    );
+}
+
+#[test]
+fn workspace_query_rejects_unmaterialized_released_and_mismatched_results() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut unmaterialized = workspace_materialize_query_plan();
+    unmaterialized["ops"][1]["expr"]["workspace"] = json!("ws_unmaterialized");
+    let mut host = RecordingPlanHost::default();
+    let error = package
+        .execute_plan_document(&unmaterialized, &plan_execution_context(), &mut host)
+        .unwrap_err();
+    assert_eq!(host.calls, vec!["workspace_materialize"]);
+    assert!(
+        error
+            .to_string()
+            .contains("workspace_query refused unmaterialized workspace"),
+        "unexpected error: {error:?}"
+    );
+
+    let mut released = workspace_materialize_release_plan();
+    released["ops"].as_array_mut().unwrap().push(json!({
+        "kind": "let",
+        "name": "file",
+        "deps": ["release"],
+        "expr": {
+            "kind": "workspace_query",
+            "workspace": "ws_planexec_materialized",
+            "op": {
+                "kind": "read_file",
+                "path": "README.md",
+                "expected_data_classes": ["candidate.artifact"]
+            }
+        }
+    }));
+    released["return"] = json!(["workspace", "release", "file"]);
+    let mut host = RecordingPlanHost::default();
+    let error = package
+        .execute_plan_document(&released, &plan_execution_context(), &mut host)
+        .unwrap_err();
+    assert_eq!(
+        host.calls,
+        vec!["workspace_materialize", "workspace_release"]
+    );
+    assert!(
+        error
+            .to_string()
+            .contains("workspace_query refused already released workspace"),
+        "unexpected error: {error:?}"
+    );
+
+    let mut mismatch = workspace_materialize_query_plan();
+    mismatch["ops"][1]["name"] = json!("wrong_kind");
+    let mut host = RecordingPlanHost::default();
+    let error = package
+        .execute_plan_document(&mismatch, &plan_execution_context(), &mut host)
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("host returned `workspace_listing` instead of `workspace_file`"),
+        "unexpected error: {error:?}"
+    );
 }
 
 #[test]
@@ -1239,6 +1366,71 @@ fn workspace_materialize_release_plan() -> Value {
     })
 }
 
+fn workspace_materialize_query_plan() -> Value {
+    json!({
+        "schema_version": "leaven.plan.v1",
+        "plan_id": "planworkspacequery001",
+        "consistency": {
+            "kind": "latest_at_start"
+        },
+        "mode": {
+            "kind": "execute"
+        },
+        "ops": [
+            {
+                "kind": "call",
+                "name": "workspace",
+                "idempotency_key": "plan-workspace-query-0001",
+                "call": {
+                    "kind": "workspace_materialize",
+                    "candidate": "cand_planexec",
+                    "surface": "program",
+                    "mode": "copy_on_write",
+                    "lifetime": "manual_release"
+                }
+            },
+            {
+                "kind": "let",
+                "name": "file",
+                "deps": ["workspace"],
+                "expr": {
+                    "kind": "workspace_query",
+                    "workspace": {
+                        "kind": "workspace",
+                        "run": "run_demo",
+                        "id": "ws_planexec_materialized"
+                    },
+                    "op": {
+                        "kind": "read_file",
+                        "path": "README.md",
+                        "expected_data_classes": ["candidate.artifact"]
+                    }
+                }
+            },
+            {
+                "kind": "let",
+                "name": "listing",
+                "deps": ["workspace"],
+                "expr": {
+                    "kind": "workspace_query",
+                    "workspace": "ws_planexec_materialized",
+                    "op": {
+                        "kind": "list",
+                        "path": ".",
+                        "recursive": false,
+                        "max_entries": 10
+                    }
+                }
+            }
+        ],
+        "return": ["workspace", "file", "listing"],
+        "commit": {
+            "kind": "graph_writes_atomic",
+            "on_stale": "reject"
+        }
+    })
+}
+
 fn agent_run_call() -> Value {
     json!({
         "kind": "agent_run",
@@ -1775,10 +1967,18 @@ impl PlanExecutionHost for RecordingPlanHost {
         &mut self,
         request: PlanWorkspaceReleaseRequest<'_>,
     ) -> Result<PlanWorkspaceReleaseOutcome, PublicSeamError> {
-        assert_eq!(request.name(), "release");
+        assert!(matches!(request.name(), "release" | "release_wrong"));
         assert_eq!(request.call()["kind"].as_str(), Some("workspace_release"));
         assert!(!request.force());
         let workspace = request.workspace()?;
+        if request.name() == "release_wrong" {
+            self.calls.push("workspace_release");
+            return Ok(PlanWorkspaceReleaseOutcome::new(
+                "ws_planexec_other",
+                "manual_release",
+                "fp_runtime_sha256_workspace",
+            ));
+        }
         if !self.workspaces.remove(workspace) {
             return Err(PublicSeamError::InvalidPlan {
                 message: format!(
@@ -1796,6 +1996,66 @@ impl PlanExecutionHost for RecordingPlanHost {
             "manual_release",
             "fp_runtime_sha256_workspace",
         ))
+    }
+
+    fn workspace_query(
+        &mut self,
+        request: PlanWorkspaceQueryRequest<'_>,
+    ) -> Result<PlanWorkspaceQueryOutcome, PublicSeamError> {
+        assert_eq!(request.workspace(), "ws_planexec_materialized");
+        assert_eq!(
+            request.deps()["workspace"]["workspace"].as_str(),
+            Some("ws_planexec_materialized")
+        );
+        match (request.name(), request.op_kind()?) {
+            ("file", "read_file") => {
+                assert_eq!(request.path()?, Some("README.md"));
+                assert_eq!(
+                    request.expected_data_classes()?,
+                    BTreeSet::from(["candidate.artifact"])
+                );
+                self.calls.push("workspace_read_file");
+                Ok(PlanWorkspaceQueryOutcome::new(
+                    json!({
+                        "kind": "workspace_file",
+                        "path": "README.md",
+                        "content": "workspace file"
+                    }),
+                    "rev_planexec_base",
+                )
+                .with_data_classes(["candidate.artifact".to_owned(), "public".to_owned()]))
+            }
+            ("listing", "list") => {
+                assert_eq!(request.path()?, Some("."));
+                self.calls.push("workspace_list");
+                Ok(PlanWorkspaceQueryOutcome::new(
+                    json!({
+                        "kind": "workspace_listing",
+                        "entries": [
+                            {
+                                "path": "README.md",
+                                "kind": "file",
+                                "bytes": 14,
+                                "data_classes": ["candidate.artifact"]
+                            }
+                        ]
+                    }),
+                    "rev_planexec_base",
+                )
+                .with_data_classes(["candidate.artifact".to_owned(), "public".to_owned()]))
+            }
+            ("wrong_kind", "read_file") => {
+                self.calls.push("workspace_read_file");
+                Ok(PlanWorkspaceQueryOutcome::new(
+                    json!({
+                        "kind": "workspace_listing",
+                        "entries": []
+                    }),
+                    "rev_planexec_base",
+                ))
+            }
+            other => panic!("unexpected workspace query: {other:?}"),
+        }
     }
 
     fn emit_run_event(
