@@ -156,6 +156,14 @@ impl CapabilityDocument {
         &self.audience
     }
 
+    pub(crate) fn subject_stage_role(&self) -> Option<&str> {
+        self.subject
+            .as_object()
+            .filter(|subject| subject.get("kind").and_then(Value::as_str) == Some("stage_call"))
+            .and_then(|subject| subject.get("role"))
+            .and_then(Value::as_str)
+    }
+
     /// Execution policy profile.
     pub fn execution_policy_profile(&self) -> &str {
         &self.execution_policy.profile
