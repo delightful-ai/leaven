@@ -9,7 +9,8 @@ GEPA, skill banks, run graphs, or optimizer rhythm.
 
 ## Map
 - `AgentRuntime` runs one session and returns `Metered<AgentSession>`.
-- `AgentRunRequest` is execution vocabulary: instructions, cwd, output contract,
+- `AgentRunRequest` is execution vocabulary: requested runtime identity,
+  optional expected runtime fingerprint, instructions, cwd, output contract,
   environment, tool policy, and limits. `OutputContract::JsonSchema` preserves
   structured final-message requirements by schema fingerprint and schema body;
   it is not a workspace JSON file path.

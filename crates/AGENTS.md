@@ -45,6 +45,12 @@ cross-family rules that apply before you know a leaf's details.
 - Agent runtime leaves keep provider CLI/protocol details local; generic session
   vocabulary stays in `leaven-agent`, command substrate in
   `leaven-agent-command`, and stage parsing in `leaven-agentic`.
+- A future ACP transport leaf for the locked public seam should be a hot
+  agent/worker transport adapter, not a public-seam wire-contract bucket. It
+  may use the official `agentclientprotocol/rust-sdk` for stdio JSON-RPC and
+  process/session mechanics, but Leaven method/result authority stays in
+  `leaven-public-seam`, graph mutation stays in `leaven-engine` through
+  `RunContext`, and MCP-over-ACP remains out of V1.
 - Placeholder artifact/optimizer/render/domain leaves may keep public
   reservation names only when the crate-local file says they are scaffolding.
   Before exposing one through defaults, replace the placeholder with

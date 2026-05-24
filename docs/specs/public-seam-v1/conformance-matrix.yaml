@@ -1575,6 +1575,7 @@ rows:
       - crates/leaven-public-seam/tests/plan_document.rs::plan_ir_family_lowers_and_executes_let_call_write_through_public_seam_owner
       - crates/leaven-public-seam/tests/plan_document.rs::lm_complete_lowering_preserves_json_schema_output_and_provider_hints
       - crates/leaven-public-seam/tests/plan_document.rs::lm_complete_lowering_rejects_deferred_multimodal_or_extension_content
+      - crates/leaven-public-seam/tests/plan_document.rs::lm_complete_rejects_streaming_request_shapes_before_provider_call
       - crates/leaven-public-seam/tests/plan_document.rs::lm_complete_rejects_schema_valid_non_final_or_oversized_responses
       - crates/leaven-public-seam/tests/lm_contract.rs::lm_complete_can_execute_through_provider_neutral_lm_trait_and_preserve_cost
       - crates/leaven-public-seam/tests/lm_contract.rs::lm_complete_json_schema_executes_through_provider_neutral_lm_trait
@@ -1594,7 +1595,8 @@ rows:
       - crates/leaven-public-seam/tests/lm_contract.rs::lm_complete_rejects_tool_result_message_id_drift_before_provider_call
       - crates/leaven-public-seam/tests/lm_contract.rs::lm_complete_rejects_typed_provider_hint_shape_drift_before_provider_call
     partial_contract_implementation_evidence:
-      - crates/leaven-public-seam/src/plan_execution/effects/lm.rs::PlanLmCompleteRequest::to_lm_request
+      - crates/leaven-public-seam/src/plan_execution/effects/lm.rs::PlanLmCompleteRequest::lm_request
+      - crates/leaven-public-seam/src/plan_execution/effects/lm.rs::lower_lm_call
       - crates/leaven-public-seam/src/plan_execution/effects/lm.rs::lower_lm_messages
       - crates/leaven-public-seam/src/plan_execution/effects/lm.rs::lower_lm_tools
       - crates/leaven-public-seam/src/plan_execution/effects/lm.rs::lower_lm_sampling
@@ -1635,6 +1637,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-external-effect-policy-current-tranche-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-score-lm-agent-json-schema-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-lm-success-construction-hard-cutover-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-typed-effect-request-cutover-dewey-review.md
     status: pending
 
   - id: ps1.agent.contract
@@ -1660,6 +1663,7 @@ rows:
       - crates/leaven-public-seam/tests/plan_document.rs::workspace_handle_provenance_rejects_literal_forgery_and_released_reuse
       - crates/leaven-public-seam/tests/plan_document.rs::agent_run_lowering_preserves_json_schema_output_contract
       - crates/leaven-public-seam/tests/plan_document.rs::agent_run_lowering_preserves_workspace_diff_surface_fingerprint
+      - crates/leaven-public-seam/tests/plan_document.rs::agent_run_preserves_runtime_selector_and_rejects_fingerprint_mismatch
       - crates/leaven-public-seam/tests/plan_document.rs::agent_run_rejects_schema_valid_sessions_without_audit_facts
       - crates/leaven-public-seam/tests/agent_contract.rs::agent_run_can_project_provider_neutral_agent_session_into_plan_result
       - crates/leaven-public-seam/tests/agent_contract.rs::agent_run_json_schema_executes_through_provider_neutral_agent_contract
@@ -1679,10 +1683,15 @@ rows:
       - crates/leaven-public-seam/tests/call_authority.rs::call_authority_checks_agent_allowed_commands_against_grants
       - crates/leaven-public-seam/tests/plan_document.rs::agent_run_lowering_defaults_missing_tool_policy_to_no_shell
       - crates/leaven-public-seam/tests/plan_document.rs::agent_run_result_commands_must_match_declared_allowed_commands
+      - crates/leaven-agent/tests/runtime_contract.rs::agent_run_request_preserves_requested_runtime_identity
       - crates/leaven-agent/tests/runtime_contract.rs::agent_tool_policy_defaults_to_no_shell_or_commands
     partial_contract_implementation_evidence:
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanAgentRunRequest::live_workspace
-      - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanAgentRunRequest::to_agent_run_request
+      - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanAgentRunRequest::runtime
+      - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanAgentRunRequest::runtime_fingerprint
+      - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanAgentRunRequest::agent_run_request
+      - crates/leaven-public-seam/src/plan_execution/effects.rs::lower_agent_run_call
+      - crates/leaven-public-seam/src/plan_execution.rs::execute_agent_run_call
       - crates/leaven-public-seam/src/plan_execution/effects.rs::require_live_workspace_ref
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanAgentRunOutcome
       - crates/leaven-public-seam/src/plan_execution/effects.rs::AgentCommandOutputRefs
@@ -1734,6 +1743,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-score-lm-agent-json-schema-partial-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-public-seam-tranche-plato-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-agent-command-output-binding-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-typed-effect-request-cutover-dewey-review.md
     status: pending
 
   - id: ps1.sandbox.exec_streaming
@@ -1780,7 +1790,8 @@ rows:
       - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_with_capability_denies_sandbox_policy_before_host_effects
     partial_contract_implementation_evidence:
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanSandboxExecRequest::live_workspace
-      - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanSandboxExecRequest::to_workspace_command
+      - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanSandboxExecRequest::workspace_command
+      - crates/leaven-public-seam/src/plan_execution/effects.rs::lower_sandbox_exec_call
       - crates/leaven-public-seam/src/plan_execution/effects.rs::require_live_workspace_ref
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanSandboxExecOutcome
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanSandboxExecOutcome::from_command_output
@@ -1824,6 +1835,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-sandbox-workspace-score-follow-up-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-public-seam-tranche-plato-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-sandbox-output-file-binding-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-typed-effect-request-cutover-dewey-review.md
     status: pending
 
   - id: ps1.watch.deferred

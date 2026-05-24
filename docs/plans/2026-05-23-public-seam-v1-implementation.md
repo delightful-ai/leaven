@@ -2,6 +2,11 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
+Status note, 2026-05-24: this plan records the first wire-contract-owner slice.
+ACP process/session implementation is covered by
+`docs/plans/2026-05-24-public-seam-v1-acp-transport-route.md` and must not be
+inferred from this plan's `leaven-public-seam` harness work.
+
 **Goal:** Make the locked `docs/specs/public-seam-v1` package executable through an owning Rust seam surface without claiming unimplemented worker runtime rows.
 
 **Architecture:** Add `crates/leaven-public-seam` as the public-seam wire-contract owner. The first slice proves active package authority, manifest inventory, schema compilation, RFC 8785 + SHA-256 schema fingerprints, matrix row structure, and deferred markers; worker execution, ACP runtime, and graph mutation rows stay pending until their real surfaces exist.

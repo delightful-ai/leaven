@@ -285,7 +285,12 @@ impl PlanExecutionHost for AgentSessionHost {
         request: PlanAgentRunRequest<'_>,
     ) -> Result<PlanAgentRunOutcome, PublicSeamError> {
         assert_eq!(request.live_workspace()?, "ws_planexec_materialized");
-        self.agent_requests.push(request.to_agent_run_request()?);
+        assert_eq!(
+            request.runtime().map(leaven_kernel::AgentRuntimeId::as_str),
+            Some("codex")
+        );
+        self.agent_requests
+            .push(request.agent_run_request().clone());
         self.calls.push("agent");
         let mut outcome = PlanAgentRunOutcome::from_agent_session_with_command_output_refs(
             self.session.clone(),

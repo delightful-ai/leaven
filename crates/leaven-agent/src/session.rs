@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 
-use leaven_kernel::{AgentSessionId, BudgetSnapshot};
+use leaven_kernel::{AgentRuntimeId, AgentSessionId, BudgetSnapshot};
 use leaven_workspace::{WorkspacePath, WorkspaceView};
 use serde::{Deserialize, Serialize};
 
@@ -15,6 +15,8 @@ use crate::{
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct AgentRunRequest {
+    pub runtime: Option<AgentRuntimeId>,
+    pub runtime_fingerprint: Option<String>,
     pub instructions: AgentInstructions,
     pub cwd: WorkspacePath,
     pub output_contract: OutputContract,
@@ -27,6 +29,8 @@ impl AgentRunRequest {
     #[must_use]
     pub fn new(instructions: AgentInstructions, output_contract: OutputContract) -> Self {
         Self {
+            runtime: None,
+            runtime_fingerprint: None,
             instructions,
             cwd: WorkspacePath::root(),
             output_contract,
@@ -34,6 +38,18 @@ impl AgentRunRequest {
             tool_policy: AgentToolPolicy::default(),
             limits: AgentLimits::default(),
         }
+    }
+
+    #[must_use]
+    pub fn with_runtime(mut self, runtime: impl Into<AgentRuntimeId>) -> Self {
+        self.runtime = Some(runtime.into());
+        self
+    }
+
+    #[must_use]
+    pub fn with_runtime_fingerprint(mut self, runtime_fingerprint: impl Into<String>) -> Self {
+        self.runtime_fingerprint = Some(runtime_fingerprint.into());
+        self
     }
 }
 
