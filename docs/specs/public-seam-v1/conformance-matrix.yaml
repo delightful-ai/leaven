@@ -1076,6 +1076,7 @@ rows:
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_require_receipts_capability_fingerprint_and_data_classes
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_bind_worker_methods_to_primary_kinds_and_receipts
       - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_reject_cross_method_payloads_unbound_receipts_and_data_class_gaps
+      - crates/leaven-public-seam/tests/acp_profile.rs::acp_extension_results_reject_forged_result_hashes_for_extension_and_receiptless_primaries
     partial_contract_implementation_evidence:
       - crates/leaven-public-seam/src/acp_profile.rs::AcpExtensionResultDocument
       - crates/leaven-public-seam/src/acp_profile.rs::AcpExtensionResultDocument::synthetic_plan_result

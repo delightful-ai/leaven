@@ -383,9 +383,11 @@ impl AcpExtensionResultDocument {
         if data_classes.is_empty() {
             return Err(invalid_acp("ACP extension result must carry data classes"));
         }
-        let primary = object
+        let primary_value = object
             .get("primary")
-            .and_then(Value::as_object)
+            .ok_or_else(|| invalid_acp("ACP extension result must carry primary object"))?;
+        let primary = primary_value
+            .as_object()
             .ok_or_else(|| invalid_acp("ACP extension result must carry primary object"))?;
         let primary_kind = required_string(primary.get("kind"), "primary.kind")?.to_owned();
         validate_primary_kind(&method, &primary_kind)?;
@@ -399,6 +401,7 @@ impl AcpExtensionResultDocument {
             }
         }
         validate_receipts_for_method(&method, receipts)?;
+        validate_primary_result_hash(&method, primary_value, receipts)?;
         if let Some(primary_receipt) = primary.get("receipt").and_then(Value::as_str) {
             ensure_primary_receipt_is_carried(primary_receipt, receipts)?;
         }
@@ -783,6 +786,60 @@ fn validate_receipts_for_method(method: &str, receipts: &[Value]) -> Result<(), 
     }
 }
 
+fn validate_primary_result_hash(
+    method: &str,
+    primary: &Value,
+    receipts: &[Value],
+) -> Result<(), PublicSeamError> {
+    let receipt = expected_receipt_for_method(method, receipts)?;
+    let schema_version = match required_string(receipt.get("kind"), "receipt.kind")? {
+        "query" => "leaven.plan_query_result.v1",
+        "call" => "leaven.plan_call_result.v1",
+        "write" => "leaven.plan_write_result.v1",
+        other => {
+            return Err(invalid_acp(format!(
+                "ACP extension result receipt kind `{other}` cannot bind primary value"
+            )));
+        }
+    };
+    let op_name = receipt
+        .get("op_var")
+        .and_then(Value::as_str)
+        .unwrap_or("primary");
+    let expected = prefixed_jcs_hash(
+        "fp_result_sha256_",
+        &json!({
+            "schema_version": schema_version,
+            "name": op_name,
+            "value": primary
+        }),
+    )?;
+    let actual = required_string(receipt.get("result_hash"), "receipt.result_hash")?;
+    if actual != expected {
+        let receipt_id = required_string(receipt.get("receipt"), "receipt.receipt")?;
+        return Err(invalid_acp(format!(
+            "ACP extension result receipt `{receipt_id}` result_hash does not bind primary value"
+        )));
+    }
+    Ok(())
+}
+
+fn expected_receipt_for_method<'a>(
+    method: &str,
+    receipts: &'a [Value],
+) -> Result<&'a serde_json::Map<String, Value>, PublicSeamError> {
+    let expectation = extension_result_contract(method)?.receipt;
+    receipts
+        .iter()
+        .find(|receipt| receipt_matches(receipt, expectation))
+        .and_then(Value::as_object)
+        .ok_or_else(|| {
+            invalid_acp(format!(
+                "ACP extension result method `{method}` is missing its expected receipt"
+            ))
+        })
+}
+
 fn receipt_matches(receipt: &Value, expectation: ReceiptExpectation) -> bool {
     let Some(object) = receipt.as_object() else {
         return false;
@@ -952,4 +1009,12 @@ fn invalid_acp(message: impl Into<String>) -> PublicSeamError {
     PublicSeamError::InvalidScope {
         message: message.into(),
     }
+}
+
+fn prefixed_jcs_hash(prefix: &str, value: &Value) -> Result<String, PublicSeamError> {
+    Ok(format!(
+        "{prefix}{}",
+        jcs_canonicalize::sha256_jcs_hex(value)
+            .map_err(|error| invalid_acp(format!("failed to hash ACP result value: {error}")))?
+    ))
 }

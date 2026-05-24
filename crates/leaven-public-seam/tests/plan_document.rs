@@ -1200,6 +1200,40 @@ fn workspace_query_rejects_stat_digest_and_git_log_result_mismatches() {
             }),
             "host returned `workspace_listing` instead of `workspace_diff`",
         ),
+        (
+            "stat_wrong_path",
+            json!({
+                "kind": "stat",
+                "path": "README.md"
+            }),
+            "stat result path `src/lib.rs` does not match requested `README.md`",
+        ),
+        (
+            "stat_multi_entry",
+            json!({
+                "kind": "stat",
+                "path": "README.md"
+            }),
+            "stat result must carry exactly one listing entry",
+        ),
+        (
+            "digest_wrong_algorithm",
+            json!({
+                "kind": "digest",
+                "path": "README.md",
+                "algorithm": "sha256"
+            }),
+            "digest result `blake3:readme` does not match requested algorithm `sha256`",
+        ),
+        (
+            "digest_wrong_workspace",
+            json!({
+                "kind": "digest",
+                "path": "README.md",
+                "algorithm": "sha256"
+            }),
+            "digest result workspace `ws_planexec_other` does not match requested `ws_planexec_materialized`",
+        ),
     ] {
         let mut mismatch = workspace_materialize_query_plan();
         mismatch["ops"]
@@ -2728,6 +2762,54 @@ impl PlanExecutionHost for RecordingPlanHost {
                     "kind": "workspace_file",
                     "path": "README.md",
                     "content": "wrong type"
+                })))
+            }
+            ("stat_wrong_path", "stat") => {
+                self.calls.push("workspace_stat");
+                Ok(workspace_query_outcome(json!({
+                    "kind": "workspace_listing",
+                    "entries": [{
+                        "path": "src/lib.rs",
+                        "kind": "file",
+                        "bytes": 128,
+                        "data_classes": ["candidate.artifact"]
+                    }]
+                })))
+            }
+            ("stat_multi_entry", "stat") => {
+                self.calls.push("workspace_stat");
+                Ok(workspace_query_outcome(json!({
+                    "kind": "workspace_listing",
+                    "entries": [
+                        {
+                            "path": "README.md",
+                            "kind": "file",
+                            "bytes": 128,
+                            "data_classes": ["candidate.artifact"]
+                        },
+                        {
+                            "path": "src/lib.rs",
+                            "kind": "file",
+                            "bytes": 256,
+                            "data_classes": ["candidate.artifact"]
+                        }
+                    ]
+                })))
+            }
+            ("digest_wrong_algorithm", "digest") => {
+                self.calls.push("workspace_digest");
+                Ok(workspace_query_outcome(json!({
+                    "kind": "workspace_snapshot",
+                    "workspace": "ws_planexec_materialized",
+                    "digest": "blake3:readme"
+                })))
+            }
+            ("digest_wrong_workspace", "digest") => {
+                self.calls.push("workspace_digest");
+                Ok(workspace_query_outcome(json!({
+                    "kind": "workspace_snapshot",
+                    "workspace": "ws_planexec_other",
+                    "digest": "sha256:readme"
                 })))
             }
             ("git_log_wrong_kind", "git_log") => {

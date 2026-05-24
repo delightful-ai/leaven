@@ -544,16 +544,6 @@ fn acp_extension_results_reject_cross_method_payloads_unbound_receipts_and_data_
         PublicSeamError::InvalidScope { .. }
     ));
 
-    let mut forged_same_kind_receipt = extension_result();
-    forged_same_kind_receipt["receipts"][0]["result_hash"] =
-        json!("fp_result_sha256_same_kind_unbound");
-    assert!(matches!(
-        package
-            .validate_acp_extension_result_document(&forged_same_kind_receipt)
-            .unwrap_err(),
-        PublicSeamError::InvalidPlanResult { .. }
-    ));
-
     let mut malformed_extension_primary = extension_result_for(
         "leaven/graph.query",
         &extension_primary("graph.query"),
@@ -570,6 +560,65 @@ fn acp_extension_results_reject_cross_method_payloads_unbound_receipts_and_data_
             .unwrap_err(),
         PublicSeamError::ExampleValidation { .. }
     ));
+}
+
+#[test]
+fn acp_extension_results_reject_forged_result_hashes_for_extension_and_receiptless_primaries() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut forged_same_kind_receipt = extension_result();
+    forged_same_kind_receipt["receipts"][0]["result_hash"] =
+        json!("fp_result_sha256_same_kind_unbound");
+    assert!(matches!(
+        package
+            .validate_acp_extension_result_document(&forged_same_kind_receipt)
+            .unwrap_err(),
+        PublicSeamError::InvalidPlanResult { .. } | PublicSeamError::InvalidScope { .. }
+    ));
+
+    let mut forged_generic_extension_hash = extension_result_for(
+        "leaven/graph.query",
+        &extension_primary("graph.query"),
+        &query_receipt("qrec_graph"),
+        &["public"],
+    );
+    forged_generic_extension_hash["receipts"][0]["result_hash"] =
+        json!("fp_result_sha256_same_kind_unbound");
+    assert!(matches!(
+        package
+            .validate_acp_extension_result_document(&forged_generic_extension_hash)
+            .unwrap_err(),
+        PublicSeamError::InvalidScope { .. }
+    ));
+
+    for (method, primary, receipt) in [
+        (
+            "leaven/workspace.snapshot",
+            workspace_snapshot_primary(),
+            query_receipt("qrec_workspace_snapshot"),
+        ),
+        (
+            "leaven/workspace.list",
+            workspace_listing_primary(),
+            query_receipt("qrec_workspace_list"),
+        ),
+        (
+            "leaven/workspace.git_diff",
+            workspace_diff_primary(),
+            query_receipt("qrec_workspace_git_diff"),
+        ),
+    ] {
+        let mut forged_receiptless_primary =
+            extension_result_for(method, &primary, &receipt, &["workspace.file"]);
+        forged_receiptless_primary["receipts"][0]["result_hash"] =
+            json!("fp_result_sha256_same_kind_unbound");
+        assert!(matches!(
+            package
+                .validate_acp_extension_result_document(&forged_receiptless_primary)
+                .unwrap_err(),
+            PublicSeamError::InvalidScope { .. }
+        ));
+    }
 }
 
 fn acp_profile() -> Value {
