@@ -6,7 +6,9 @@ use crate::{CapabilityDocument, CapabilityGrantRequest, PublicSeamError};
 
 use super::{
     PlanExecutionContext,
-    effects::{LiveWorkspaceHandle, require_live_workspace, workspace_ref_id},
+    effects::{
+        LiveWorkspaceHandle, WorkspaceRefFacts, require_live_workspace_ref, workspace_ref_facts,
+    },
     invalid_plan, nested_kind, object,
 };
 
@@ -157,11 +159,11 @@ impl PlanCaseQueryOutcome {
 }
 
 /// Lowered `workspace_query` request passed to a plan execution host.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct PlanWorkspaceQueryRequest<'a> {
     pub(super) name: &'a str,
     pub(super) expr: &'a Value,
-    pub(super) workspace: &'a str,
+    pub(super) workspace: WorkspaceRefFacts,
     pub(super) op: &'a Value,
     pub(super) deps: &'a BTreeMap<String, Value>,
 }
@@ -178,8 +180,12 @@ impl<'a> PlanWorkspaceQueryRequest<'a> {
     }
 
     /// Workspace handle requested for the read.
-    pub const fn workspace(&self) -> &'a str {
-        self.workspace
+    pub fn workspace(&self) -> &str {
+        self.workspace.id()
+    }
+
+    pub(super) const fn workspace_ref(&self) -> &WorkspaceRefFacts {
+        &self.workspace
     }
 
     /// Workspace query operation.
@@ -289,7 +295,12 @@ pub(super) fn workspace_query_request<'a>(
     live_workspaces: &'a BTreeMap<String, LiveWorkspaceHandle>,
 ) -> Result<PlanWorkspaceQueryRequest<'a>, PublicSeamError> {
     let request = workspace_query_request_from_values(name, expr, deps)?;
-    require_live_workspace(request.workspace, deps, live_workspaces, "workspace_query")?;
+    require_live_workspace_ref(
+        request.workspace_ref(),
+        deps,
+        live_workspaces,
+        "workspace_query",
+    )?;
     Ok(request)
 }
 
@@ -299,7 +310,7 @@ pub(super) fn workspace_query_request_from_values<'a>(
     deps: &'a BTreeMap<String, Value>,
 ) -> Result<PlanWorkspaceQueryRequest<'a>, PublicSeamError> {
     let object = object(expr, "workspace_query")?;
-    let workspace = workspace_ref_id(
+    let workspace = workspace_ref_facts(
         object.get("workspace"),
         "workspace_query must carry workspace",
     )?;
@@ -313,12 +324,12 @@ pub(super) fn workspace_query_request_from_values<'a>(
         op,
         deps,
     };
-    validate_workspace_query_request_op(request)?;
+    validate_workspace_query_request_op(&request)?;
     Ok(request)
 }
 
 pub(super) fn workspace_query_expected_value_kind(
-    request: PlanWorkspaceQueryRequest<'_>,
+    request: &PlanWorkspaceQueryRequest<'_>,
 ) -> Result<&'static str, PublicSeamError> {
     match request.op_kind()? {
         "snapshot" | "digest" => Ok("workspace_snapshot"),
@@ -332,7 +343,7 @@ pub(super) fn workspace_query_expected_value_kind(
 }
 
 pub(super) fn validate_workspace_query_value_shape(
-    request: PlanWorkspaceQueryRequest<'_>,
+    request: &PlanWorkspaceQueryRequest<'_>,
     value: &Map<String, Value>,
 ) -> Result<(), PublicSeamError> {
     match request.op_kind()? {
@@ -350,7 +361,7 @@ pub(super) fn validate_workspace_query_value_shape(
 }
 
 fn validate_workspace_read_file_value(
-    request: PlanWorkspaceQueryRequest<'_>,
+    request: &PlanWorkspaceQueryRequest<'_>,
     value: &Map<String, Value>,
 ) -> Result<(), PublicSeamError> {
     let requested_path = request
@@ -376,7 +387,7 @@ fn validate_workspace_read_file_value(
 }
 
 fn validate_workspace_list_value(
-    request: PlanWorkspaceQueryRequest<'_>,
+    request: &PlanWorkspaceQueryRequest<'_>,
     value: &Map<String, Value>,
 ) -> Result<(), PublicSeamError> {
     let requested_path = request
@@ -397,7 +408,7 @@ fn validate_workspace_list_value(
 }
 
 fn validate_workspace_stat_value(
-    request: PlanWorkspaceQueryRequest<'_>,
+    request: &PlanWorkspaceQueryRequest<'_>,
     value: &Map<String, Value>,
 ) -> Result<(), PublicSeamError> {
     let requested_path = request
@@ -421,7 +432,7 @@ fn validate_workspace_stat_value(
 }
 
 fn validate_workspace_digest_value(
-    request: PlanWorkspaceQueryRequest<'_>,
+    request: &PlanWorkspaceQueryRequest<'_>,
     value: &Map<String, Value>,
 ) -> Result<(), PublicSeamError> {
     let requested_path = request
@@ -456,7 +467,7 @@ fn validate_workspace_digest_value(
 }
 
 fn validate_workspace_snapshot_value(
-    request: PlanWorkspaceQueryRequest<'_>,
+    request: &PlanWorkspaceQueryRequest<'_>,
     value: &Map<String, Value>,
 ) -> Result<(), PublicSeamError> {
     validate_workspace_snapshot_workspace(request, value, "snapshot")?;
@@ -469,7 +480,7 @@ fn validate_workspace_snapshot_value(
 }
 
 fn validate_workspace_diff_value(
-    request: PlanWorkspaceQueryRequest<'_>,
+    request: &PlanWorkspaceQueryRequest<'_>,
     value: &Map<String, Value>,
 ) -> Result<(), PublicSeamError> {
     if value.get("text").and_then(Value::as_str).is_none() && value.get("blob_ref").is_none() {
@@ -482,7 +493,7 @@ fn validate_workspace_diff_value(
 }
 
 fn validate_workspace_capture_artifacts_value(
-    request: PlanWorkspaceQueryRequest<'_>,
+    request: &PlanWorkspaceQueryRequest<'_>,
     value: &Map<String, Value>,
 ) -> Result<(), PublicSeamError> {
     let requested = workspace_capture_requested_paths(request)?;
@@ -503,7 +514,7 @@ fn validate_workspace_capture_artifacts_value(
 }
 
 fn validate_workspace_query_request_op(
-    request: PlanWorkspaceQueryRequest<'_>,
+    request: &PlanWorkspaceQueryRequest<'_>,
 ) -> Result<(), PublicSeamError> {
     match request.op_kind()? {
         "read_file" => {
@@ -543,9 +554,9 @@ fn validate_workspace_query_request_op(
     Ok(())
 }
 
-fn workspace_capture_requested_paths(
-    request: PlanWorkspaceQueryRequest<'_>,
-) -> Result<BTreeSet<&str>, PublicSeamError> {
+fn workspace_capture_requested_paths<'a>(
+    request: &'a PlanWorkspaceQueryRequest<'a>,
+) -> Result<BTreeSet<&'a str>, PublicSeamError> {
     let mut requested = BTreeSet::new();
     let paths = request
         .op()
@@ -568,7 +579,7 @@ fn workspace_capture_requested_paths(
 }
 
 fn validate_workspace_snapshot_workspace(
-    request: PlanWorkspaceQueryRequest<'_>,
+    request: &PlanWorkspaceQueryRequest<'_>,
     value: &Map<String, Value>,
     op: &str,
 ) -> Result<(), PublicSeamError> {
@@ -636,7 +647,7 @@ fn validate_workspace_path(field: &str, path: &str) -> Result<(), PublicSeamErro
     Ok(())
 }
 
-pub(super) fn workspace_query_projection(request: PlanWorkspaceQueryRequest<'_>) -> Value {
+pub(super) fn workspace_query_projection(request: &PlanWorkspaceQueryRequest<'_>) -> Value {
     json!({
         "workspace": request.workspace(),
         "op": request.op()

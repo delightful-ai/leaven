@@ -1367,9 +1367,11 @@ rows:
     minimum_closeout_level: semantic_denial
     partial_contract_test_evidence:
       - crates/leaven-public-seam/tests/plan_document.rs::workspace_materialize_and_release_emit_typed_handles_and_receipts
+      - crates/leaven-public-seam/tests/workspace_ref_contract.rs::workspace_lifecycle_preserves_and_enforces_object_refs
       - crates/leaven-public-seam/tests/plan_document.rs::workspace_materialize_rejects_host_path_and_lifetime_substitution
       - crates/leaven-public-seam/tests/plan_document.rs::workspace_handle_provenance_rejects_literal_forgery_and_released_reuse
       - crates/leaven-public-seam/tests/plan_document.rs::workspace_release_rejects_unmaterialized_handles_and_host_path_substitutes
+      - crates/leaven-public-seam/tests/workspace_ref_contract.rs::workspace_lifecycle_rejects_object_ref_run_substitution_before_release_host_work
       - crates/leaven-public-seam/tests/plan_document.rs::workspace_query_reads_require_live_handles_and_emit_query_receipts
       - crates/leaven-public-seam/tests/plan_document.rs::workspace_query_rejects_unmaterialized_released_and_mismatched_results
       - crates/leaven-public-seam/tests/plan_document.rs::workspace_query_rejects_file_listing_stat_and_digest_result_mismatches
@@ -1387,8 +1389,9 @@ rows:
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanWorkspaceMaterializeOutcome
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanWorkspaceReleaseRequest
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanWorkspaceReleaseOutcome
+      - crates/leaven-public-seam/src/plan_execution/effects.rs::WorkspaceRefFacts
       - crates/leaven-public-seam/src/plan_execution/effects.rs::LiveWorkspaceHandle
-      - crates/leaven-public-seam/src/plan_execution/effects.rs::require_live_workspace
+      - crates/leaven-public-seam/src/plan_execution/effects.rs::require_live_workspace_ref
       - crates/leaven-public-seam/src/plan_execution/queries.rs::PlanWorkspaceQueryRequest
       - crates/leaven-public-seam/src/plan_execution/queries.rs::PlanWorkspaceQueryOutcome
       - crates/leaven-public-seam/src/plan_execution/queries.rs::workspace_query_expected_value_kind
@@ -1550,7 +1553,7 @@ rows:
     partial_contract_implementation_evidence:
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanAgentRunRequest::live_workspace
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanAgentRunRequest::to_agent_run_request
-      - crates/leaven-public-seam/src/plan_execution/effects.rs::require_live_workspace
+      - crates/leaven-public-seam/src/plan_execution/effects.rs::require_live_workspace_ref
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanAgentRunOutcome
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanAgentRunOutcome::from_agent_session
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanAgentRunOutcome::with_transcript_ref
@@ -1641,7 +1644,7 @@ rows:
     partial_contract_implementation_evidence:
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanSandboxExecRequest::live_workspace
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanSandboxExecRequest::to_workspace_command
-      - crates/leaven-public-seam/src/plan_execution/effects.rs::require_live_workspace
+      - crates/leaven-public-seam/src/plan_execution/effects.rs::require_live_workspace_ref
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanSandboxExecOutcome
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanSandboxExecOutcome::from_command_output
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanSandboxExecOutcome::with_file_ref

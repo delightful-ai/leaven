@@ -195,7 +195,10 @@ workspace ids and lifetime echoes before binding a handle, and
 `workspace_release` validates the requested WorkspaceRef against live
 materialization-proven `workspace_handle` dependency values before the host can
 perform release, rejects already released handles, and still refuses literal
-forgeries and host filesystem paths as workspace handles. Result replay
+forgeries and host filesystem paths as workspace handles. WorkspaceRef object
+form is not collapsed to a bare id: when a caller supplies `run` or
+`snapshot_fingerprint`, those fields must match the materialized handle before
+release, agent, sandbox, or workspace query execution can proceed. Result replay
 validation also rechecks lifecycle state: materialize results must explicitly
 bind an unreleased handle with the requested lifetime, and release results must
 explicitly bind the same live handle as released.
