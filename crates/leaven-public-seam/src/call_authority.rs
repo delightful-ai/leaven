@@ -17,6 +17,14 @@ pub enum CallAuthorityDenialKind {
     DataClass,
 }
 
+impl CallAuthorityDenialKind {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::DataClass => "data_class",
+        }
+    }
+}
+
 /// Typed call-authority denial with redaction facts.
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
 #[error("call authority denied by {kind:?}: {message}")]
@@ -67,7 +75,11 @@ impl From<CallAuthorityError> for PublicSeamError {
     fn from(error: CallAuthorityError) -> Self {
         match error {
             CallAuthorityError::InvalidPlan(error) => error,
-            CallAuthorityError::Denied(denial) => invalid_authority(denial.to_string()),
+            CallAuthorityError::Denied(denial) => Self::CallAuthorityDenied {
+                kind: denial.kind().as_str().to_owned(),
+                message: denial.message().to_owned(),
+                redactions: denial.redactions().to_vec(),
+            },
         }
     }
 }

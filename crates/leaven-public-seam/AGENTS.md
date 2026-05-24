@@ -280,9 +280,12 @@ capability-forbidden input classes, call-local `forbidden_input_classes`, and
 reflector LM target egress. Reflector LM target-egress checks cover both
 capability subject role and call-local `model_role: "reflector"` so a broad
 grant on a non-reflector subject cannot hide target egress behind the grant.
-This still is not full engine/evidence-layer propagation, Plan Result
-`Redaction` wire-object reporting, ACP/provider runtime behavior, or proof for
-every production query/call/write route.
+Representative capability-scoped plan execution preserves those data-class
+redaction facts in `PublicSeamError::CallAuthorityDenied` when dependency-side
+classes are denied before any host call runs. This still is not full
+engine/evidence-layer propagation, Plan Result `Redaction` wire-object
+reporting, ACP/provider runtime behavior, or proof for every production
+query/call/write route.
 
 The
 `PublicSeamPackage::validate_plan_execution_result` route additionally proves

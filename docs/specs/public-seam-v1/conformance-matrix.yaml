@@ -648,6 +648,7 @@ rows:
       - crates/leaven-public-seam/src/call_authority.rs::CallAuthorityError
       - crates/leaven-public-seam/src/call_authority.rs::CallAuthorityDenial
       - crates/leaven-public-seam/src/call_authority.rs::CallAuthorityDenialKind
+      - crates/leaven-public-seam/src/error.rs::PublicSeamError::CallAuthorityDenied
       - crates/leaven-public-seam/src/call_authority.rs::validate
       - crates/leaven-public-seam/src/call_authority.rs::validate_call_with_dependency_classes
       - crates/leaven-public-seam/src/call_authority.rs::call_denial_from_capability
@@ -701,6 +702,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-24-assessment-evidence-galileo-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-data-class-dependency-carriers-linnaeus-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-call-authority-redaction-denials-cicero-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-call-authority-execution-redaction-error-kepler-review.md
     status: pending
 
   - id: ps1.visibility.reflector_target_safe
