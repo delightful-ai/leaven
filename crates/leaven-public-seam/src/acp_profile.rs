@@ -1148,29 +1148,34 @@ fn validate_effect_primary_audit(
     let expected_receipt_id = required_string(expected_receipt.get("receipt"), "receipt.receipt")?;
     match method {
         "leaven/lm.complete" => {
+            validate_effect_primary_receipt(primary, expected_receipt_id)?;
             validate_effect_primary_cost("lm_complete", primary, expected_receipt)
         }
         "leaven/agent.run" => {
-            let primary_receipt = required_string(primary.get("receipt"), "primary.receipt")?;
-            if primary_receipt != expected_receipt_id {
-                return Err(invalid_acp(format!(
-                    "ACP extension result primary receipt `{primary_receipt}` does not match expected receipt `{expected_receipt_id}`"
-                )));
-            }
+            validate_effect_primary_receipt(primary, expected_receipt_id)?;
             validate_agent_session_value("agent_run", primary, expected_receipt_id)?;
             validate_effect_primary_cost("agent_run", primary, expected_receipt)
         }
         "leaven/sandbox.exec" => {
-            let primary_receipt = required_string(primary.get("receipt"), "primary.receipt")?;
-            if primary_receipt != expected_receipt_id {
-                return Err(invalid_acp(format!(
-                    "ACP extension result primary receipt `{primary_receipt}` does not match expected receipt `{expected_receipt_id}`"
-                )));
-            }
+            validate_effect_primary_receipt(primary, expected_receipt_id)?;
             validate_sandbox_exec_value("sandbox_exec", primary)?;
             validate_effect_primary_cost("sandbox_exec", primary, expected_receipt)
         }
         _ => Ok(()),
+    }
+}
+
+fn validate_effect_primary_receipt(
+    primary: &serde_json::Map<String, Value>,
+    expected_receipt_id: &str,
+) -> Result<(), PublicSeamError> {
+    let primary_receipt = required_string(primary.get("receipt"), "primary.receipt")?;
+    if primary_receipt == expected_receipt_id {
+        Ok(())
+    } else {
+        Err(invalid_acp(format!(
+            "ACP extension result primary receipt `{primary_receipt}` does not match expected receipt `{expected_receipt_id}`"
+        )))
     }
 }
 

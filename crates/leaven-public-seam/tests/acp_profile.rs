@@ -760,6 +760,27 @@ fn acp_extension_results_reject_lm_cost_audit_gaps() {
             .to_string()
             .contains("lm_complete primary cost must match call receipt cost")
     );
+
+    let mut mismatched_primary_receipt = lm_response_primary();
+    mismatched_primary_receipt["receipt"] = json!("lmrec_other");
+    let mut mismatched_result = extension_result_for(
+        "leaven/lm.complete",
+        &mismatched_primary_receipt,
+        &call_receipt("lm_complete", "lmrec_acp"),
+        &["completion.raw"],
+    );
+    push_receipt_bound_to_primary(
+        &mut mismatched_result,
+        call_receipt("lm_complete", "lmrec_other"),
+    );
+    let error = package
+        .validate_acp_extension_result_document(&mismatched_result)
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("does not match expected receipt")
+    );
 }
 
 #[test]
