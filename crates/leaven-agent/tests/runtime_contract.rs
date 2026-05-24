@@ -371,6 +371,7 @@ fn agent_session_round_trips_for_durable_evidence() {
         timeout: Some(std::time::Duration::from_secs(30)),
         max_stdout_bytes: Some(8),
         max_stderr_bytes: Some(4),
+        max_output_file_bytes: None,
     };
 
     let mut session = AgentSession::succeeded(session_id);

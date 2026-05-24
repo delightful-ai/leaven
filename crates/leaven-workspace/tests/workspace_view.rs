@@ -134,14 +134,26 @@ fn workspace_view_delegates_commands_to_backend_with_scoped_cwd() {
             command.args = vec!["ok".to_owned()];
             command.cwd = Some(WorkspacePath::new("work").unwrap());
             command
+                .output_files
+                .push(WorkspacePath::new("out.txt").unwrap());
+            command
         })
         .unwrap();
 
     assert_eq!(output.status.code, Some(0));
     assert_eq!(output.stdout.bytes, b"ok");
+    assert_eq!(
+        output
+            .output_files
+            .get(&WorkspacePath::new("out.txt").unwrap())
+            .unwrap()
+            .bytes,
+        b"file"
+    );
     let recorded = commands.lock().unwrap();
     assert_eq!(recorded.len(), 1);
     assert_eq!(recorded[0].cwd.as_ref().unwrap().as_str(), "candidate/work");
+    assert_eq!(recorded[0].output_files[0].as_str(), "candidate/out.txt");
     drop(recorded);
 
     let output = view.run_command(Command::new("pwd")).unwrap();
@@ -601,13 +613,19 @@ impl WorkspaceBackend for TestBackend {
 
     fn run_command(&mut self, command: Command) -> Result<CommandOutput, WorkspaceError> {
         self.commands.lock().unwrap().push(command);
-        Ok(CommandOutput {
+        let mut output = CommandOutput {
             status: ExitStatus { code: Some(0) },
             stdout: CapturedOutput::new(b"ok".to_vec(), None),
             stderr: CapturedOutput::empty(),
             output_files: BTreeMap::new(),
             duration: std::time::Duration::ZERO,
-        })
+        };
+        for path in &self.commands.lock().unwrap().last().unwrap().output_files {
+            output
+                .output_files
+                .insert(path.clone(), CapturedOutput::new(b"file".to_vec(), None));
+        }
+        Ok(output)
     }
 
     fn cleanup(self: Box<Self>) -> BoxFuture<'static, Result<(), WorkspaceError>> {

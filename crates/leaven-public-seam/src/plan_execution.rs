@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{Map, Value, json};
 
@@ -653,8 +653,14 @@ fn execute_sandbox_exec_call<H: PlanExecutionHost>(
         live_workspaces: &deps.live_workspaces,
     };
     request.live_workspace()?;
+    let expected_output_files = request
+        .to_workspace_command()?
+        .output_files
+        .into_iter()
+        .map(|path| path.as_str().to_owned())
+        .collect::<BTreeSet<_>>();
     let outcome = host.sandbox_exec(request)?;
-    validate_sandbox_stream_outcome(call, &outcome)?;
+    validate_sandbox_stream_outcome(call, &outcome, &expected_output_files)?;
     record_sandbox_call_outcome(name, outcome, request_hash, context, state)
 }
 
@@ -762,6 +768,7 @@ fn validate_json_schema_output_payload(
 fn validate_sandbox_stream_outcome(
     call: &Value,
     outcome: &PlanSandboxExecOutcome,
+    expected_output_files: &BTreeSet<String>,
 ) -> Result<(), PublicSeamError> {
     if call
         .get("stream_policy")
@@ -780,6 +787,20 @@ fn validate_sandbox_stream_outcome(
         return Err(invalid_plan(
             "completed sandbox_exec result value must carry stdout_ref and stderr_ref",
         ));
+    }
+    let actual_output_files = outcome.files.keys().cloned().collect::<BTreeSet<_>>();
+    if &actual_output_files != expected_output_files {
+        let missing = expected_output_files
+            .difference(&actual_output_files)
+            .cloned()
+            .collect::<Vec<_>>();
+        let extra = actual_output_files
+            .difference(expected_output_files)
+            .cloned()
+            .collect::<Vec<_>>();
+        return Err(invalid_plan(format!(
+            "sandbox_exec output file refs must match output contract paths; missing={missing:?} extra={extra:?}"
+        )));
     }
     Ok(())
 }

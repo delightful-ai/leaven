@@ -284,9 +284,10 @@ ACP extension results must preserve them. This is still public-seam harness
 validation, not a claim that a production sandbox runtime or streaming
 transport has shipped.
 
-Captured sandbox output-file refs are host-supplied but byte-bound at the seam:
-`PlanSandboxExecOutcome::with_file_ref` requires the captured bytes and rejects
-SHA-256, byte-count, or workspace-path mismatches before the value can be
+Captured sandbox output-file refs are byte-bound through
+`leaven-workspace::CommandOutput`: the public outcome constructor requires every
+captured file to have a matching blob ref, rejects extra file refs, rejects
+truncated captures, and checks SHA-256 and byte counts before the value can be
 recorded. Replayed foreign Plan Results can still validate only the locked wire
 facts they carry; production file capture remains a sandbox backend concern.
 

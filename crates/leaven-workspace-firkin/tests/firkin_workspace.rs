@@ -74,6 +74,7 @@ fn backend_routes_file_and_command_operations_to_workspace_root() {
             timeout: Some(Duration::from_secs(2)),
             max_stdout_bytes: Some(16),
             max_stderr_bytes: Some(8),
+            max_output_file_bytes: None,
         };
         let output = view.run_command(command).unwrap();
 
@@ -129,6 +130,7 @@ fn backend_preserves_command_output_byte_limits() {
             timeout: None,
             max_stdout_bytes: Some(6),
             max_stderr_bytes: Some(7),
+            max_output_file_bytes: None,
         };
         let output = view.run_command(command).unwrap();
 

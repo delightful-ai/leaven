@@ -4,7 +4,7 @@ use std::time::Duration;
 use leaven_agent::{
     AgentInstructions, AgentLimits, AgentRunRequest, AgentToolPolicy, OutputContract,
 };
-use leaven_workspace::{Command, CommandLimits, CommandOutput, WorkspacePath};
+use leaven_workspace::{Command, CommandOutput, WorkspacePath};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
@@ -321,15 +321,20 @@ impl<'a> PlanSandboxExecRequest<'a> {
                 })
                 .collect::<Result<BTreeMap<_, _>, PublicSeamError>>()?;
         }
-        command.limits = CommandLimits {
-            timeout: Some(Duration::from_secs(
-                self.call
-                    .get("timeout_s")
-                    .and_then(Value::as_u64)
-                    .ok_or_else(|| invalid_call("sandbox_exec must carry timeout_s"))?,
-            )),
-            ..CommandLimits::default()
-        };
+        lower_sandbox_output_contract(
+            required_object(
+                self.call,
+                "output",
+                "sandbox_exec must carry output contract",
+            )?,
+            &mut command,
+        )?;
+        command.limits.timeout = Some(Duration::from_secs(
+            self.call
+                .get("timeout_s")
+                .and_then(Value::as_u64)
+                .ok_or_else(|| invalid_call("sandbox_exec must carry timeout_s"))?,
+        ));
         Ok(command)
     }
 }
@@ -392,6 +397,35 @@ fn lower_agent_output_contract(
             "unsupported agent_run output contract `{other}`"
         ))),
         None => Err(invalid_call("agent_run output contract must carry kind")),
+    }
+}
+
+fn lower_sandbox_output_contract(
+    object: &serde_json::Map<String, Value>,
+    command: &mut Command,
+) -> Result<(), PublicSeamError> {
+    match object.get("kind").and_then(Value::as_str) {
+        Some("files") => {
+            command.output_files = object
+                .get("paths")
+                .and_then(Value::as_array)
+                .ok_or_else(|| invalid_call("files output contract must carry paths"))?
+                .iter()
+                .map(|path| {
+                    let path = path
+                        .as_str()
+                        .ok_or_else(|| invalid_call("files output paths must be strings"))?;
+                    workspace_path(path, "files output path")
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            command.limits.max_output_file_bytes = object.get("max_bytes").and_then(Value::as_u64);
+            Ok(())
+        }
+        Some("final_message" | "json_schema" | "workspace_diff") => Ok(()),
+        Some(other) => Err(invalid_call(format!(
+            "unsupported sandbox_exec output contract `{other}`"
+        ))),
+        None => Err(invalid_call("sandbox_exec output contract must carry kind")),
     }
 }
 
@@ -950,7 +984,7 @@ impl PlanSandboxExecOutcome {
 
     /// Attaches stdout and stderr blob references.
     #[must_use]
-    pub fn with_stream_refs(mut self, stdout_ref: Value, stderr_ref: Value) -> Self {
+    fn with_stream_refs(mut self, stdout_ref: Value, stderr_ref: Value) -> Self {
         extend_data_classes_from_blob_ref(&mut self.data_classes, &stdout_ref);
         extend_data_classes_from_blob_ref(&mut self.data_classes, &stderr_ref);
         self.stdout_ref = Some(stdout_ref);
@@ -959,7 +993,7 @@ impl PlanSandboxExecOutcome {
     }
 
     /// Attaches a captured output file blob reference after binding its byte audit.
-    pub fn with_file_ref(
+    fn with_file_ref(
         mut self,
         path: impl Into<String>,
         blob_ref: Value,
