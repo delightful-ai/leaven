@@ -624,6 +624,9 @@ rows:
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_nested_score_blob_ref_data_class_gaps
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_nested_trace_ref_data_class_gaps
       - crates/leaven-public-seam/tests/plan_result_evidence.rs::plan_result_rejects_nested_evidence_hidden_target_derivation_flag
+      - crates/leaven-public-seam/tests/plan_document.rs::submit_assessments_rejects_schema_valid_but_semantically_invalid_evidence
+      - crates/leaven-public-seam/tests/plan_result.rs::plan_result_accepts_assessment_summary_with_score_output_and_evidence_envelope
+      - crates/leaven-public-seam/tests/plan_result.rs::plan_result_rejects_assessment_summary_without_score_output_or_evidence_truth
       - crates/leaven-public-seam/tests/agent_contract.rs::agent_run_can_project_provider_neutral_agent_session_into_plan_result
       - crates/leaven-public-seam/tests/plan_document.rs::sandbox_exec_outcome_propagates_stream_and_file_blob_data_classes
     partial_contract_implementation_evidence:
@@ -776,6 +779,10 @@ rows:
       - crates/leaven-public-seam/src/result.rs::validate_evidence_receipts
       - crates/leaven-public-seam/src/result.rs::ReceiptAudit
       - crates/leaven-public-seam/src/result.rs::receipt_index
+      - crates/leaven-public-seam/src/plan.rs::validate_assessment_evidence
+      - crates/leaven-public-seam/src/plan.rs::validate_assessment_evidence_receipt_declarations
+      - crates/leaven-public-seam/src/result.rs::validate_assessment_summary
+      - crates/leaven-public-seam/src/result.rs::validate_optional_assessment_summary_evidence_projection
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-result-receipt-replay-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-23-evidence-visibility-current-blocker-review.md
@@ -1080,6 +1087,9 @@ rows:
       - crates/leaven-run/tests/public_seam.rs::assessment_score_output_plan_projection_rejects_unsupported_shapes_and_outputs
       - crates/leaven-public-seam/tests/plan_document.rs::submit_assessments_rejects_missing_or_placeholder_score_output
       - crates/leaven-public-seam/tests/plan_document.rs::submit_assessments_rejects_summary_only_score_output_dummies
+      - crates/leaven-public-seam/tests/plan_document.rs::submit_assessments_rejects_schema_valid_but_semantically_invalid_evidence
+      - crates/leaven-public-seam/tests/plan_result.rs::plan_result_accepts_assessment_summary_with_score_output_and_evidence_envelope
+      - crates/leaven-public-seam/tests/plan_result.rs::plan_result_rejects_assessment_summary_without_score_output_or_evidence_truth
     partial_contract_implementation_evidence:
       - crates/leaven-run/src/evidence.rs::RunOutput::with_reportable_output
       - crates/leaven-run/src/evidence.rs::Score::with_output
@@ -1104,8 +1114,15 @@ rows:
       - crates/leaven-public-seam/src/package.rs::PublicSeamPackage::project_output_record
       - crates/leaven-public-seam/src/output.rs::PublicBlobRef::from_evidence_blob
       - crates/leaven-public-seam/src/plan.rs::PlanDocument::assessment_score_output_count
+      - crates/leaven-public-seam/src/plan.rs::PlanDocument::assessment_evidence_count
       - crates/leaven-public-seam/src/plan.rs::validate_score_output_candidate_binding
       - crates/leaven-public-seam/src/plan.rs::validate_score_output_evidence_projection
+      - crates/leaven-public-seam/src/plan.rs::validate_assessment_evidence
+      - crates/leaven-public-seam/src/plan.rs::validate_assessment_evidence_receipt_declarations
+      - crates/leaven-public-seam/src/result.rs::validate_graph_set_assessment_summaries
+      - crates/leaven-public-seam/src/result.rs::validate_assessment_summary
+      - crates/leaven-public-seam/src/result.rs::validate_assessment_summary_output
+      - crates/leaven-public-seam/src/result.rs::validate_optional_assessment_summary_evidence_projection
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-score-output-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-23-score-output-candidate-binding-review.md

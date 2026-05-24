@@ -681,10 +681,11 @@ fn assessment_arbitrary_values_with_prose_field_plan() -> Value {
                                     "stage_call_id": "sc_dialect"
                                 },
                                 "source_receipts": {
-                                    "read": [],
+                                    "read": ["qrec_dialect_assessment"],
                                     "effect": []
                                 }
                             },
+                            "read_receipts": ["qrec_dialect_assessment"],
                             "replayability": "pure_read"
                         }
                     ]

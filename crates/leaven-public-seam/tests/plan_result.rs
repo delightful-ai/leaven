@@ -45,6 +45,24 @@ fn plan_result_accepts_query_call_and_write_receipts_as_audit_currency() {
 }
 
 #[test]
+fn plan_result_accepts_assessment_summary_with_score_output_and_evidence_envelope() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let result = package
+        .validate_plan_result_document(&assessment_summary_result())
+        .unwrap();
+
+    assert_eq!(result.value_kinds(), &["graph_set"]);
+    assert_eq!(
+        result.value_data_classes(),
+        &[(
+            "rows".to_owned(),
+            vec!["candidate.output".to_owned(), "public".to_owned()]
+        )]
+    );
+}
+
+#[test]
 fn plan_result_rejects_generic_or_untyped_result_payloads() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
 
@@ -101,6 +119,65 @@ fn plan_result_rejects_generic_or_untyped_result_payloads() {
             .unwrap_err(),
         PublicSeamError::ExampleValidation { .. }
     ));
+}
+
+#[test]
+fn plan_result_rejects_assessment_summary_without_score_output_or_evidence_truth() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut missing_score = assessment_summary_result();
+    missing_score["values"]["rows"]["items"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("score");
+    bind_result_hashes_in_place(&mut missing_score);
+    assert!(matches!(
+        package
+            .validate_plan_result_document(&missing_score)
+            .unwrap_err(),
+        PublicSeamError::InvalidPlanResult { .. }
+    ));
+
+    let mut missing_evidence = assessment_summary_result();
+    missing_evidence["values"]["rows"]["items"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("evidence");
+    bind_result_hashes_in_place(&mut missing_evidence);
+    assert!(matches!(
+        package
+            .validate_plan_result_document(&missing_evidence)
+            .unwrap_err(),
+        PublicSeamError::InvalidPlanResult { .. }
+    ));
+
+    let mut unreceipted_evidence = assessment_summary_result();
+    unreceipted_evidence["values"]["rows"]["items"][0]["evidence"]["source_receipts"]["read"] =
+        json!([]);
+    bind_result_hashes_in_place(&mut unreceipted_evidence);
+    let error = package
+        .validate_plan_result_document(&unreceipted_evidence)
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("evidence source_receipts must carry at least one receipt"),
+        "{error}"
+    );
+
+    let mut dropped_output_class = assessment_summary_result();
+    dropped_output_class["values"]["rows"]["items"][0]["score"]["output"]["data_classes"] =
+        json!(["public"]);
+    bind_result_hashes_in_place(&mut dropped_output_class);
+    let error = package
+        .validate_plan_result_document(&dropped_output_class)
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("candidate.output or candidate.artifact"),
+        "{error}"
+    );
 }
 
 #[test]
@@ -464,6 +541,81 @@ fn typed_success_result() -> Value {
                 ],
                 "graph_revision": "rev_base",
                 "data_classes": ["public"],
+                "replayability": "pure_read",
+                "receipt": "qrec_rows"
+            }
+        },
+        "receipts": [
+            {
+                "kind": "query",
+                "receipt": "qrec_rows",
+                "op_var": "rows",
+                "started_at": "2026-05-23T12:00:00Z",
+                "completed_at": "2026-05-23T12:00:01Z",
+                "op_hash": "fp_query_sha256_rows",
+                "result_hash": "fp_result_sha256_rows",
+                "graph_revision": "rev_base",
+                "status": "succeeded",
+                "read_scope_fingerprint": "fp_scope_sha256_read",
+                "projection_fingerprint": "fp_projection_sha256_rows"
+            }
+        ],
+        "redactions": [],
+        "charges": [],
+        "errors": []
+    }))
+}
+
+fn assessment_summary_result() -> Value {
+    bind_result_hashes(json!({
+        "schema_version": "leaven.plan_result.v1",
+        "plan_id": "result_assessment_summary001",
+        "capability_fingerprint": "fp_cap_sha256_resultcap",
+        "policy_fingerprint": "fp_policy_sha256_resultpolicy",
+        "base_revision": "rev_base",
+        "final_revision": "rev_base",
+        "replayability_summary": "pure_read",
+        "values": {
+            "rows": {
+                "kind": "graph_set",
+                "items": [
+                    {
+                        "kind": "assessment_summary",
+                        "assessment": "assess_alpha",
+                        "score": {
+                            "value": 1.0,
+                            "output": {
+                                "kind": "text",
+                                "summary": "candidate alpha answer",
+                                "value": "candidate alpha answer",
+                                "visibility": "public",
+                                "data_classes": ["candidate.output"]
+                            }
+                        },
+                        "evidence": {
+                            "schema_version": "leaven.evidence_envelope.v1",
+                            "target_derived": false,
+                            "public": {
+                                "summary": "candidate alpha answer",
+                                "data_classes": ["public"]
+                            },
+                            "redaction_policy": {
+                                "optimizer": "score_only",
+                                "reflector": "score_only",
+                                "operator": "score_only"
+                            },
+                            "producer": {
+                                "stage_call_id": "sc_assessment_summary"
+                            },
+                            "source_receipts": {
+                                "read": ["qrec_rows"],
+                                "effect": []
+                            }
+                        }
+                    }
+                ],
+                "graph_revision": "rev_base",
+                "data_classes": ["candidate.output", "public"],
                 "replayability": "pure_read",
                 "receipt": "qrec_rows"
             }

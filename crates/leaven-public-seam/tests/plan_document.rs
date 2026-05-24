@@ -3000,6 +3000,7 @@ fn submit_assessments_score_outputs_cover_all_assessment_shapes() {
         .unwrap();
 
     assert_eq!(document.assessment_score_output_count(), 3);
+    assert_eq!(document.assessment_evidence_count(), 3);
     assert_eq!(document.independent_assessment_score_output_count(), 1);
     assert_eq!(document.pairwise_assessment_score_output_count(), 1);
     assert_eq!(document.listwise_assessment_score_output_count(), 1);
@@ -3169,6 +3170,73 @@ fn submit_assessments_rejects_missing_assessment_score_or_replayability() {
             .unwrap_err(),
         PublicSeamError::ExampleValidation { .. }
     ));
+}
+
+#[test]
+fn submit_assessments_rejects_schema_valid_but_semantically_invalid_evidence() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut no_source_receipts = submit_assessments_plan();
+    no_source_receipts["ops"][0]["write"]["assessments"][0]["evidence"]["source_receipts"]["read"] =
+        json!([]);
+    let error = package
+        .validate_plan_document(&no_source_receipts)
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("evidence source_receipts must carry at least one receipt")
+    );
+
+    let mut hidden_target = submit_assessments_plan();
+    hidden_target["ops"][0]["write"]["assessments"][0]["evidence"]["public"]["data_classes"] =
+        json!(["case.target"]);
+    let error = package.validate_plan_document(&hidden_target).unwrap_err();
+    assert!(error.to_string().contains("target_derived=true"));
+
+    let mut target_without_classes = submit_assessments_plan();
+    target_without_classes["ops"][0]["write"]["assessments"][0]["evidence"]["target_derived"] =
+        json!(true);
+    target_without_classes["ops"][0]["write"]["assessments"][0]["evidence"]["data_classes"] =
+        json!(["public"]);
+    let error = package
+        .validate_plan_document(&target_without_classes)
+        .unwrap_err();
+    assert!(error.to_string().contains("target-derived evidence"));
+
+    let mut undeclared_read_receipt = submit_assessments_plan();
+    undeclared_read_receipt["ops"][0]["write"]["assessments"][0]["read_receipts"] =
+        json!(["qrec_other_source"]);
+    let error = package
+        .validate_plan_document(&undeclared_read_receipt)
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("must be declared by the assessment"),
+        "{error}"
+    );
+
+    let mut wrong_declared_family = submit_assessments_plan();
+    wrong_declared_family["ops"][0]["write"]["assessments"][0]["read_receipts"] =
+        json!(["lmrec_not_a_read"]);
+    let error = package
+        .validate_plan_document(&wrong_declared_family)
+        .unwrap_err();
+    assert!(error.to_string().contains("read receipt refs"), "{error}");
+
+    let mut undeclarable_write_receipt = submit_assessments_plan();
+    undeclarable_write_receipt["ops"][0]["write"]["assessments"][0]["evidence"]["source_receipts"]
+        ["write"] = json!(["wrec_hidden_write"]);
+    let error = package
+        .validate_plan_document(&undeclarable_write_receipt)
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("cannot be declared by an assessment"),
+        "{error}"
+    );
 }
 
 fn typed_let_call_write_plan() -> Value {
@@ -3751,6 +3819,7 @@ fn submit_assessments_plan() -> Value {
                             },
                             "score": score_with_output("independent answer"),
                             "evidence": evidence_envelope("independent answer"),
+                            "read_receipts": ["qrec_score_output_source"],
                             "replayability": "pure_read"
                         },
                         {
@@ -3776,6 +3845,7 @@ fn submit_assessments_plan() -> Value {
                                 "winner": "cand_a"
                             },
                             "evidence": evidence_envelope("pairwise compared candidate outputs"),
+                            "read_receipts": ["qrec_score_output_source"],
                             "replayability": "pure_read"
                         },
                         {
@@ -3800,6 +3870,7 @@ fn submit_assessments_plan() -> Value {
                             },
                             "ranking": ["cand_a", "cand_b", "cand_c"],
                             "evidence": evidence_envelope("listwise ranked candidate outputs"),
+                            "read_receipts": ["qrec_score_output_source"],
                             "replayability": "pure_read"
                         }
                     ]
@@ -3884,7 +3955,7 @@ fn evidence_envelope(summary: &'static str) -> Value {
             "stage_call_id": "sc_score_output"
         },
         "source_receipts": {
-            "read": [],
+            "read": ["qrec_score_output_source"],
             "effect": []
         }
     })

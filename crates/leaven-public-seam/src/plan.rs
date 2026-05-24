@@ -1,5 +1,8 @@
+use std::collections::BTreeSet;
+
 use serde_json::Value;
 
+use crate::evidence::EvidenceEnvelopeDocument;
 use crate::{PinnedDialectEvaluator, PublicSeamError};
 
 /// Schema-valid public-seam Plan IR document classified by core operation family.
@@ -169,6 +172,11 @@ impl PlanDocument {
         self.assessment_score_outputs.total()
     }
 
+    /// Number of assessment evidence envelopes semantically validated.
+    pub fn assessment_evidence_count(&self) -> usize {
+        self.assessment_score_outputs.evidence_envelopes
+    }
+
     /// Number of independent assessment `Score.output` values semantically validated.
     pub fn independent_assessment_score_output_count(&self) -> usize {
         self.assessment_score_outputs.independent
@@ -218,6 +226,7 @@ struct AssessmentScoreOutputUsage {
     independent: usize,
     pairwise: usize,
     listwise: usize,
+    evidence_envelopes: usize,
 }
 
 impl AssessmentScoreOutputUsage {
@@ -243,6 +252,7 @@ impl AssessmentScoreOutputUsage {
                 .ok_or_else(|| {
                     invalid_plan("submit_assessments score must carry a reportable output")
                 })?;
+            validate_assessment_evidence(object)?;
             validate_assessment_candidates(kind, object)?;
             validate_score_output(kind, object, output)?;
             match kind {
@@ -251,6 +261,7 @@ impl AssessmentScoreOutputUsage {
                 "listwise" => self.listwise += 1,
                 other => return Err(invalid_plan(format!("unknown assessment kind `{other}`"))),
             }
+            self.evidence_envelopes += 1;
         }
         Ok(())
     }
@@ -258,6 +269,113 @@ impl AssessmentScoreOutputUsage {
     const fn total(&self) -> usize {
         self.independent + self.pairwise + self.listwise
     }
+}
+
+fn validate_assessment_evidence(
+    assessment: &serde_json::Map<String, Value>,
+) -> Result<(), PublicSeamError> {
+    let evidence = assessment
+        .get("evidence")
+        .ok_or_else(|| invalid_plan("submit_assessments assessment must carry evidence"))?;
+    let envelope =
+        EvidenceEnvelopeDocument::from_schema_valid_value(evidence).map_err(|source| {
+            invalid_plan(format!(
+                "submit_assessments evidence must satisfy EvidenceEnvelope semantics: {source}"
+            ))
+        })?;
+    validate_assessment_evidence_receipt_declarations(assessment, &envelope)?;
+    Ok(())
+}
+
+fn validate_assessment_evidence_receipt_declarations(
+    assessment: &serde_json::Map<String, Value>,
+    envelope: &EvidenceEnvelopeDocument,
+) -> Result<(), PublicSeamError> {
+    let read_receipts = receipt_ref_ids(assessment.get("read_receipts"), "read_receipts")?;
+    let effect_receipts = receipt_ref_ids(assessment.get("effect_receipts"), "effect_receipts")?;
+    for receipt in envelope.read_receipts() {
+        if !read_receipts.contains(receipt) {
+            return Err(invalid_plan(format!(
+                "submit_assessments evidence read receipt `{receipt}` must be declared by the assessment"
+            )));
+        }
+    }
+    for receipt in envelope.effect_receipts() {
+        if !effect_receipts.contains(receipt) {
+            return Err(invalid_plan(format!(
+                "submit_assessments evidence effect receipt `{receipt}` must be declared by the assessment"
+            )));
+        }
+    }
+    if let Some(receipt) = envelope.write_receipts().first() {
+        return Err(invalid_plan(format!(
+            "submit_assessments evidence write receipt `{receipt}` cannot be declared by an assessment"
+        )));
+    }
+    Ok(())
+}
+
+fn receipt_ref_ids(
+    value: Option<&Value>,
+    field: &str,
+) -> Result<BTreeSet<String>, PublicSeamError> {
+    let Some(value) = value else {
+        return Ok(BTreeSet::new());
+    };
+    let values = value
+        .as_array()
+        .ok_or_else(|| invalid_plan(format!("submit_assessments `{field}` must be an array")))?;
+    values
+        .iter()
+        .map(|value| receipt_ref_id(value, field))
+        .collect()
+}
+
+fn receipt_ref_id(value: &Value, field: &str) -> Result<String, PublicSeamError> {
+    if let Some(id) = value.as_str() {
+        return validate_receipt_family(id, field);
+    }
+    let object = value.as_object().ok_or_else(|| {
+        invalid_plan(format!(
+            "submit_assessments `{field}` entries must be receipt refs"
+        ))
+    })?;
+    if object.get("kind").and_then(Value::as_str) != Some("receipt") {
+        return Err(invalid_plan(format!(
+            "submit_assessments `{field}` receipt ref object must have kind `receipt`"
+        )));
+    }
+    let id = object.get("id").and_then(Value::as_str).ok_or_else(|| {
+        invalid_plan(format!(
+            "submit_assessments `{field}` receipt ref object must carry id"
+        ))
+    })?;
+    validate_receipt_family(id, field)
+}
+
+fn validate_receipt_family(id: &str, field: &str) -> Result<String, PublicSeamError> {
+    match field {
+        "read_receipts" if !is_read_receipt_id(id) => Err(invalid_plan(format!(
+            "submit_assessments read_receipts must contain read receipt refs, got `{id}`"
+        ))),
+        "effect_receipts" if !is_effect_receipt_id(id) => Err(invalid_plan(format!(
+            "submit_assessments effect_receipts must contain effect receipt refs, got `{id}`"
+        ))),
+        _ => Ok(id.to_owned()),
+    }
+}
+
+fn is_read_receipt_id(receipt: &str) -> bool {
+    receipt.starts_with("qrec_")
+        || receipt.starts_with("caseread_")
+        || receipt.starts_with("wsread_")
+}
+
+fn is_effect_receipt_id(receipt: &str) -> bool {
+    receipt.starts_with("lmrec_")
+        || receipt.starts_with("agentrec_")
+        || receipt.starts_with("execrec_")
+        || receipt.starts_with("humanrec_")
 }
 
 fn validate_score_output(
