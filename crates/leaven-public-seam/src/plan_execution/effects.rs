@@ -8,7 +8,7 @@ use leaven_lm::{
     JsonSchemaOutput, LmRequest, LmTool, Message, Messages, ModelName, OutputMode, ProviderHints,
     Role, SamplingOptions,
 };
-use leaven_workspace::{Command, CommandLimits, WorkspacePath};
+use leaven_workspace::{Command, CommandLimits, CommandOutput, WorkspacePath};
 use serde_json::{Value, json};
 
 use crate::PublicSeamError;
@@ -982,7 +982,29 @@ fn cost_value(cost: &leaven_kernel::Cost) -> Value {
     if cost.metric_calls > 0 {
         object.insert("metric_calls".to_owned(), json!(cost.metric_calls));
     }
+    insert_count_cost_axis(&mut object, cost, "agent_calls");
+    insert_count_cost_axis(&mut object, cost, "sandbox_calls");
+    insert_count_cost_axis(&mut object, cost, "usd_micro");
+    insert_count_cost_axis(&mut object, cost, "human_review_usd_micro");
+    insert_count_cost_axis(&mut object, cost, "wall_ms");
     Value::Object(object)
+}
+
+fn insert_count_cost_axis(
+    object: &mut serde_json::Map<String, Value>,
+    cost: &leaven_kernel::Cost,
+    axis: &str,
+) {
+    let Some(amount) = cost.other.get(axis) else {
+        return;
+    };
+    let amount = amount.as_f64();
+    if amount > 0.0
+        && amount.fract() == 0.0
+        && let Ok(amount) = amount.to_string().parse::<u64>()
+    {
+        object.insert(axis.to_owned(), json!(amount));
+    }
 }
 
 fn fingerprint_hex(fingerprint: leaven_kernel::Fingerprint) -> String {
@@ -1162,6 +1184,25 @@ impl PlanSandboxExecOutcome {
             runtime_fingerprint: runtime_fingerprint.into(),
             cost: None,
         }
+    }
+
+    /// Creates a sandbox outcome from provider-neutral workspace command output.
+    #[must_use]
+    pub fn from_command_output(
+        output: leaven_kernel::Metered<CommandOutput>,
+        runtime_fingerprint: leaven_kernel::Fingerprint,
+        stdout_ref: Value,
+        stderr_ref: Value,
+    ) -> Self {
+        let leaven_kernel::Metered { value, cost } = output;
+        let mut outcome = Self::completed(format!(
+            "fp_runtime_sha256_{}",
+            fingerprint_hex(runtime_fingerprint)
+        ));
+        outcome.exit_code = value.status.code.map(i64::from);
+        outcome
+            .with_stream_refs(stdout_ref, stderr_ref)
+            .with_cost(cost_value(&cost))
     }
 
     /// Attaches stdout and stderr blob references.
