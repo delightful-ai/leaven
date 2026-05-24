@@ -180,6 +180,22 @@ fn reflect_request_rejects_hidden_case_target_material() {
             .unwrap_err(),
         PublicSeamError::InvalidStagePayload { .. }
     ));
+
+    let mut source_ref_target_marker = reflect_request();
+    source_ref_target_marker["source_refs"] = json!([
+        "cand_stagepayload_parent",
+        {
+            "kind": "external",
+            "namespace": "case.target",
+            "id": "hidden_answer"
+        }
+    ]);
+    assert!(matches!(
+        package
+            .validate_stage_payload_document(&source_ref_target_marker)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
 }
 
 #[test]
@@ -665,6 +681,14 @@ fn reflect_propose_handoff_binds_distinct_stage_calls_and_exact_reflection_resul
     assert_eq!(handoff.run(), "run_stagepayload");
     assert_eq!(handoff.reflect_stage_call_id(), "sc_reflect_stagepayload");
     assert_eq!(handoff.propose_stage_call_id(), "sc_propose_stagepayload");
+    assert_eq!(
+        handoff.reflect_stage_receipt(),
+        "stagerec_reflect_stagepayload"
+    );
+    assert_eq!(
+        handoff.propose_stage_receipt(),
+        "stagerec_propose_stagepayload"
+    );
     assert_eq!(handoff.base_revision(), "rev_stagepayload_base");
     assert_eq!(handoff.parent(), "candidate:cand_stagepayload_parent");
     assert_eq!(
@@ -678,6 +702,11 @@ fn reflect_propose_handoff_binds_distinct_stage_calls_and_exact_reflection_resul
     assert_eq!(
         handoff.query_policy_fingerprint(),
         "fp_policy_sha256_stagepayload"
+    );
+    assert!(
+        handoff
+            .reflection_result_fingerprint()
+            .starts_with("fp_stage_payload_sha256_")
     );
     assert_eq!(handoff.reflection_source_ref_count(), 1);
 }
@@ -782,6 +811,43 @@ fn reflect_propose_handoff_rejects_single_prompt_and_stale_reflection_fakes() {
 }
 
 #[test]
+fn reflect_propose_handoff_rejects_missing_or_forged_stage_receipts() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut missing_stage_receipts = reflect_propose_handoff();
+    missing_stage_receipts
+        .as_object_mut()
+        .unwrap()
+        .remove("stage_receipts");
+    assert!(matches!(
+        package
+            .validate_reflect_propose_handoff_document(&missing_stage_receipts)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+
+    let mut mismatched_reflection_fingerprint = reflect_propose_handoff();
+    mismatched_reflection_fingerprint["stage_receipts"][0]["produces"]["fingerprint"] =
+        json!("fp_stage_payload_sha256_wrong");
+    assert!(matches!(
+        package
+            .validate_reflect_propose_handoff_document(&mismatched_reflection_fingerprint)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+
+    let mut receiptless_propose_consumption = reflect_propose_handoff();
+    receiptless_propose_consumption["stage_receipts"][1]["consumes"][0]["receipt"] =
+        json!("stagerec_unrelated");
+    assert!(matches!(
+        package
+            .validate_reflect_propose_handoff_document(&receiptless_propose_consumption)
+            .unwrap_err(),
+        PublicSeamError::InvalidStagePayload { .. }
+    ));
+}
+
+#[test]
 fn runner_request_rejects_case_target_material() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
 
@@ -859,11 +925,52 @@ fn active_reflect_then_propose_example_validates_through_semantic_stage_payloads
 }
 
 fn reflect_propose_handoff() -> Value {
+    let reflection = reflection_result();
+    let stage_receipts = stage_receipts(&reflection);
+    let mut propose = propose_request();
+    propose["reflection_result"] = reflection.clone();
     json!({
         "reflect_request": reflect_request(),
-        "reflection_result": reflection_result(),
-        "propose_request": propose_request()
+        "reflection_result": reflection,
+        "propose_request": propose,
+        "stage_receipts": stage_receipts
     })
+}
+
+fn stage_receipts(reflection: &Value) -> Value {
+    let fingerprint = stage_payload_fingerprint(reflection);
+    json!([
+        {
+            "kind": "stage_receipt",
+            "id": "stagerec_reflect_stagepayload",
+            "stage_call_id": "sc_reflect_stagepayload",
+            "stage_role": "reflector",
+            "produces": {
+                "kind": "reflection_result",
+                "fingerprint": fingerprint
+            }
+        },
+        {
+            "kind": "stage_receipt",
+            "id": "stagerec_propose_stagepayload",
+            "stage_call_id": "sc_propose_stagepayload",
+            "stage_role": "proposer",
+            "consumes": [
+                {
+                    "kind": "reflection_result",
+                    "fingerprint": fingerprint,
+                    "receipt": "stagerec_reflect_stagepayload"
+                }
+            ]
+        }
+    ])
+}
+
+fn stage_payload_fingerprint(value: &Value) -> String {
+    format!(
+        "fp_stage_payload_sha256_{}",
+        jcs_canonicalize::sha256_jcs_hex(value).unwrap()
+    )
 }
 
 fn reflect_request() -> Value {

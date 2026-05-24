@@ -341,18 +341,21 @@ runtimes produce those records for every assessment shape.
 
 Crate-root exports for `StagePayloadDocument`, `ReflectProposeHandoffDocument`,
 `StagePayloadRole`, and `StageProposalEffect` are advanced public seam
-contracts. They prove active-schema stage-payload validation for role-specific reflector,
-reflection-result, proposer, runner, scorer, judge, callback, and adapter
-payloads, including non-empty target-safe reflector examples whose source refs
-and nested score-output data classes are carried by the request, receipted
+contracts. They prove active-schema stage-payload validation for role-specific
+reflector, reflection-result, proposer, runner, scorer, judge, callback, and
+adapter payloads, including non-empty target-safe reflector examples whose
+source refs and nested score-output data classes are carried by the request,
+reflector source refs that cannot hide `case.target` markers, receipted
 reflection results whose top-level source refs and required nested diagnosis
 source refs back the diagnosis, proposal/reflection separation that preserves
 reflection source refs, active reflect-then-propose handoff binding with
 distinct reflector/proposer stage call ids, exact `ReflectionResult`
-consumption, shared run/revision/parent/surface/capability/query-policy facts,
-allowed change schema declarations, target-aware scorer context binding to the
-scored case, score/judge output contexts that at least declare assessed
-candidate or artifact output data classes, and payload-schema fingerprints.
+consumption, stage receipts that fingerprint the produced reflection result and
+bind proposer consumption back to the reflector receipt, shared
+run/revision/parent/surface/capability/query-policy facts, allowed change
+schema declarations, target-aware scorer context binding to the scored case,
+score/judge output contexts that at least declare assessed candidate or
+artifact output data classes, and payload-schema fingerprints.
 That data-class declaration is necessary seam metadata; it is not independent
 proof that arbitrary stage JSON is the actual candidate/artifact output being
 assessed. They are not an agent runtime, LM prompt renderer, ACP delivery path,
@@ -460,19 +463,20 @@ backpressure, or runtime watch support.
 - `tests/stage_payloads.rs` proves active-schema stage payloads have a semantic
   owner for reflector, reflection result, proposer, runner, scorer, judge,
   callback, and adapter roles. It rejects reflector `case.target` data-class
-  leakage, empty reflector example sets, reflector examples whose source refs
-  are not carried by the request, reflector example data-class gaps for nested
-  score outputs, unreceipted or diagnosis-free reflection results, diagnosis
-  entries without carried source refs, dropped reflection source refs in
-  proposer payloads, one-stage reflect/propose handoff substitutions, stale or
-  mismatched embedded reflection results, mismatched run/capability facts, and
-  change proposals without allowed change schema authority. It also rejects
-  public-only scorer and judge outputs that satisfy schema shape but do not
-  declare candidate/artifact output provenance, plus scorer and judge outputs
-  whose nested blob or trace data classes are not covered by the enclosing
-  output record. It does not prove runtime stage lowering, ACP transport,
-  provider calls, proposal graph mutation, or independent output-identity truth
-  for arbitrary stage JSON.
+  leakage, target markers hidden in reflector source refs, empty reflector
+  example sets, reflector examples whose source refs are not carried by the
+  request, reflector example data-class gaps for nested score outputs,
+  unreceipted or diagnosis-free reflection results, diagnosis entries without
+  carried source refs, dropped reflection source refs in proposer payloads,
+  one-stage reflect/propose handoff substitutions, stale or mismatched embedded
+  reflection results, missing or mismatched stage receipt bindings, mismatched
+  run/capability facts, and change proposals without allowed change schema
+  authority. It also rejects public-only scorer and judge outputs that satisfy
+  schema shape but do not declare candidate/artifact output provenance, plus
+  scorer and judge outputs whose nested blob or trace data classes are not
+  covered by the enclosing output record. It does not prove runtime stage
+  lowering, ACP transport, provider calls, proposal graph mutation, or
+  independent output-identity truth for arbitrary stage JSON.
 - `tests/acp_profile.rs` proves locked Leaven ACP profile semantics for pinned
   ACP version, stdio-first transport preference, Leaven-only extension methods,
   capability-action mapping, locked Plan IR/Plan Result schema bindings,

@@ -150,5 +150,30 @@
     ],
     "query_policy_fingerprint": "fp_policy_sha256_demo",
     "capability_fingerprint": "fp_cap_sha256_demo"
-  }
+  },
+  "stage_receipts": [
+    {
+      "kind": "stage_receipt",
+      "id": "stagerec_reflect_demo",
+      "stage_call_id": "sc_reflect_01",
+      "stage_role": "reflector",
+      "produces": {
+        "kind": "reflection_result",
+        "fingerprint": "fp_stage_payload_sha256_9f3c3a686ae9e46b33936c8a4332246be132cda60e518077881d3c48803015e0"
+      }
+    },
+    {
+      "kind": "stage_receipt",
+      "id": "stagerec_propose_demo",
+      "stage_call_id": "sc_propose_01",
+      "stage_role": "proposer",
+      "consumes": [
+        {
+          "kind": "reflection_result",
+          "fingerprint": "fp_stage_payload_sha256_9f3c3a686ae9e46b33936c8a4332246be132cda60e518077881d3c48803015e0",
+          "receipt": "stagerec_reflect_demo"
+        }
+      ]
+    }
+  ]
 }
