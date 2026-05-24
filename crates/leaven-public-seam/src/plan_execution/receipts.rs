@@ -5,7 +5,7 @@ use serde_json::{Map, Value, json};
 
 use super::{
     PlanExecutionContext, PlanWorkspaceQueryRequest, case_query_projection, dependency_values,
-    effects::{LiveWorkspaceHandle, require_live_workspace, workspace_ref_id},
+    effects::{LiveWorkspaceHandle, require_live_workspace_ref, workspace_ref_facts},
     graph_read_scope, graph_read_scope_value, invalid_plan, nested_kind, object, prefixed_jcs_hash,
     required_string, validate_json_schema_output_payload, validate_workspace_query_value_shape,
     workspace_query_expected_value_kind, workspace_query_projection,
@@ -335,13 +335,13 @@ fn validate_workspace_query_receipt(
     })?;
     let deps = dependency_values(op_object, &state.bindings)?;
     let request = workspace_query_request_from_values(name, expr, &deps)?;
-    require_live_workspace(
-        request.workspace(),
+    require_live_workspace_ref(
+        request.workspace_ref(),
         &deps,
         &state.live_workspaces,
         "workspace_query",
     )?;
-    let expected_kind = workspace_query_expected_value_kind(request)?;
+    let expected_kind = workspace_query_expected_value_kind(&request)?;
     let value_kind = value
         .get("kind")
         .and_then(Value::as_str)
@@ -355,14 +355,14 @@ fn validate_workspace_query_receipt(
     let value_object = value
         .as_object()
         .ok_or_else(|| invalid_plan("workspace_query result value must be an object"))?;
-    validate_workspace_query_value_shape(request, value_object)?;
-    validate_workspace_file_data_classes(request, expected_kind, value)?;
+    validate_workspace_query_value_shape(&request, value_object)?;
+    validate_workspace_file_data_classes(&request, expected_kind, value)?;
     let scope = json!({
         "kind": "workspace_query",
-        "workspace": workspace_ref_id(
-            object(expr, "workspace_query")?.get("workspace"),
-            "workspace_query must carry workspace"
-        )?,
+        "workspace": object(expr, "workspace_query")?
+            .get("workspace")
+            .cloned()
+            .ok_or_else(|| invalid_plan("workspace_query must carry workspace"))?,
         "base_revision": context.base_revision
     });
     require_receipt_field(
@@ -388,7 +388,7 @@ fn validate_workspace_query_receipt(
         "projection_fingerprint",
         &prefixed_jcs_hash(
             "fp_projection_sha256_",
-            &workspace_query_projection(request),
+            &workspace_query_projection(&request),
         )?,
     )?;
     require_receipt_field(
@@ -408,7 +408,7 @@ fn validate_workspace_query_receipt(
 }
 
 fn validate_workspace_file_data_classes(
-    request: PlanWorkspaceQueryRequest<'_>,
+    request: &PlanWorkspaceQueryRequest<'_>,
     expected_kind: &str,
     value: &Value,
 ) -> Result<(), PublicSeamError> {
@@ -894,20 +894,20 @@ fn validate_call_workspace_provenance(
     match call_kind {
         "agent_run" => {
             let workspace =
-                workspace_ref_id(call.get("workspace"), "agent_run must carry workspace")?;
-            require_live_workspace(workspace, deps, live_workspaces, "agent_run")?;
+                workspace_ref_facts(call.get("workspace"), "agent_run must carry workspace")?;
+            require_live_workspace_ref(&workspace, deps, live_workspaces, "agent_run")?;
         }
         "sandbox_exec" => {
             let workspace =
-                workspace_ref_id(call.get("workspace"), "sandbox_exec must carry workspace")?;
-            require_live_workspace(workspace, deps, live_workspaces, "sandbox_exec")?;
+                workspace_ref_facts(call.get("workspace"), "sandbox_exec must carry workspace")?;
+            require_live_workspace_ref(&workspace, deps, live_workspaces, "sandbox_exec")?;
         }
         "workspace_release" => {
-            let workspace = workspace_ref_id(
+            let workspace = workspace_ref_facts(
                 call.get("workspace"),
                 "workspace_release must carry workspace",
             )?;
-            require_live_workspace(workspace, deps, live_workspaces, "workspace_release")?;
+            require_live_workspace_ref(&workspace, deps, live_workspaces, "workspace_release")?;
         }
         _ => {}
     }
@@ -926,7 +926,7 @@ fn update_call_workspace_provenance(
         "workspace_materialize" => {
             if value.get("kind").and_then(Value::as_str) == Some("workspace_handle") {
                 let workspace =
-                    workspace_ref_id(value.get("workspace"), "workspace_materialize result")?;
+                    workspace_ref_facts(value.get("workspace"), "workspace_materialize result")?;
                 let lifetime = required_string(value.get("lifetime"), "workspace lifetime")?;
                 let requested_lifetime =
                     required_string(call.get("lifetime"), "workspace_materialize lifetime")?;
@@ -948,27 +948,29 @@ fn update_call_workspace_provenance(
                 }
                 state.live_workspaces.insert(
                     name.to_owned(),
-                    LiveWorkspaceHandle::live(workspace, lifetime),
+                    LiveWorkspaceHandle::live_ref(workspace, lifetime),
                 );
             }
         }
         "workspace_release" => {
-            let workspace = workspace_ref_id(
+            let workspace = workspace_ref_facts(
                 call.get("workspace"),
                 "workspace_release must carry workspace",
             )?;
-            let live = require_live_workspace(
-                workspace,
+            let live = require_live_workspace_ref(
+                &workspace,
                 deps,
                 &state.live_workspaces,
                 "workspace_release",
             )?;
             let lifetime = live.lifetime().to_owned();
             let result_workspace =
-                workspace_ref_id(value.get("workspace"), "workspace_release result")?;
-            if result_workspace != workspace {
+                workspace_ref_facts(value.get("workspace"), "workspace_release result")?;
+            if !result_workspace.satisfies_request(&workspace) {
                 return Err(invalid_plan(format!(
-                    "workspace_release result workspace `{result_workspace}` does not match requested workspace `{workspace}`"
+                    "workspace_release result workspace `{}` does not match requested workspace `{}`",
+                    result_workspace.id(),
+                    workspace.id()
                 )));
             }
             let result_lifetime = required_string(value.get("lifetime"), "workspace lifetime")?;
@@ -987,13 +989,13 @@ fn update_call_workspace_provenance(
                 ));
             }
             for handle in state.live_workspaces.values_mut() {
-                if handle.workspace() == workspace {
+                if handle.workspace() == workspace.id() {
                     handle.release();
                 }
             }
             state.live_workspaces.insert(
                 name.to_owned(),
-                LiveWorkspaceHandle::released(workspace, lifetime),
+                LiveWorkspaceHandle::released_ref(result_workspace, lifetime),
             );
         }
         _ => {}

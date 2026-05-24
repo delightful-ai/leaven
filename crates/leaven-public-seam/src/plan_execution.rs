@@ -1030,19 +1030,28 @@ fn record_workspace_materialize_outcome(
 ) -> Result<(), PublicSeamError> {
     let PlanWorkspaceMaterializeOutcome {
         workspace,
+        workspace_ref,
         lifetime,
         data_classes,
         replayability,
         runtime_fingerprint,
     } = outcome;
     let receipt_id = format!("wrec_{name}");
+    let workspace_facts =
+        effects::workspace_ref_facts(Some(&workspace_ref), "workspace_materialize result")?;
+    if workspace_facts.id() != workspace {
+        return Err(invalid_plan(format!(
+            "workspace_materialize result workspace ref `{}` does not match host workspace `{workspace}`",
+            workspace_facts.id()
+        )));
+    }
     state.live_workspaces.insert(
         name.clone(),
-        LiveWorkspaceHandle::live(workspace.clone(), lifetime.clone()),
+        LiveWorkspaceHandle::live_ref(workspace_facts, lifetime.clone()),
     );
     let value = json!({
         "kind": "workspace_handle",
-        "workspace": workspace,
+        "workspace": workspace_ref,
         "lifetime": lifetime,
         "released": false,
         "graph_revision": context.base_revision,
@@ -1070,6 +1079,7 @@ fn record_workspace_release_outcome(
 ) -> Result<(), PublicSeamError> {
     let PlanWorkspaceReleaseOutcome {
         workspace,
+        workspace_ref,
         lifetime,
         runtime_fingerprint,
     } = outcome;
@@ -1079,13 +1089,21 @@ fn record_workspace_release_outcome(
             handle.release();
         }
     }
+    let workspace_facts =
+        effects::workspace_ref_facts(Some(&workspace_ref), "workspace_release result")?;
+    if workspace_facts.id() != workspace {
+        return Err(invalid_plan(format!(
+            "workspace_release result workspace ref `{}` does not match host workspace `{workspace}`",
+            workspace_facts.id()
+        )));
+    }
     state.live_workspaces.insert(
         name.clone(),
-        LiveWorkspaceHandle::released(workspace.clone(), lifetime.clone()),
+        LiveWorkspaceHandle::released_ref(workspace_facts, lifetime.clone()),
     );
     let value = json!({
         "kind": "workspace_handle",
-        "workspace": workspace,
+        "workspace": workspace_ref,
         "lifetime": lifetime,
         "released": true,
         "receipt": receipt_id,
@@ -1512,9 +1530,9 @@ fn execute_workspace_query_expr(
     host: &mut impl PlanExecutionHost,
 ) -> Result<EvaluatedExpr, PublicSeamError> {
     let request = workspace_query_request(name, expr, &deps.values, &deps.live_workspaces)?;
-    let expected_kind = workspace_query_expected_value_kind(request)?;
+    let expected_kind = workspace_query_expected_value_kind(&request)?;
     let expected_data_classes = request.expected_data_classes()?;
-    let outcome = host.workspace_query(request)?;
+    let outcome = host.workspace_query(request.clone())?;
     let receipt_id = format!("qrec_{name}");
     let mut value = outcome
         .value
@@ -1531,7 +1549,7 @@ fn execute_workspace_query_expr(
             request.op_kind()?
         )));
     }
-    validate_workspace_query_value_shape(request, &value)?;
+    validate_workspace_query_value_shape(&request, &value)?;
     if expected_kind == "workspace_file" {
         let classes = outcome
             .data_classes
@@ -1589,7 +1607,7 @@ fn execute_workspace_query_expr(
                 "workspace": request.workspace(),
                 "base_revision": context.base_revision
             }))?,
-            "projection_fingerprint": prefixed_jcs_hash("fp_projection_sha256_", &workspace_query_projection(request))?,
+            "projection_fingerprint": prefixed_jcs_hash("fp_projection_sha256_", &workspace_query_projection(&request))?,
             "status": "succeeded"
         })),
     })

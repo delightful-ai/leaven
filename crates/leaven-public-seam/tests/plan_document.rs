@@ -183,12 +183,7 @@ fn plan_execution_with_capability_checks_call_authority_before_host_effects() {
 #[test]
 fn plan_execution_with_capability_allows_workspace_lifecycle_calls() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
-    let mut plan = workspace_materialize_release_plan();
-    plan["ops"][1]["call"]["workspace"] = json!({
-        "kind": "workspace",
-        "run": "run_demo",
-        "id": "ws_planexec_materialized"
-    });
+    let plan = workspace_materialize_release_plan();
 
     let mut host = RecordingPlanHost::default();
     package
@@ -1342,12 +1337,7 @@ fn sandbox_exec_outcome_propagates_stream_and_file_blob_data_classes() {
 #[test]
 fn workspace_materialize_and_release_emit_typed_handles_and_receipts() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
-    let mut plan = workspace_materialize_release_plan();
-    plan["ops"][1]["call"]["workspace"] = json!({
-        "kind": "workspace",
-        "run": "run_demo",
-        "id": "ws_planexec_materialized"
-    });
+    let plan = workspace_materialize_release_plan();
     let mut host = RecordingPlanHost::default();
 
     let report = package
@@ -3384,11 +3374,7 @@ fn workspace_query_plan_ops() -> Vec<Value> {
         workspace_materialize_call_op("plan-workspace-query-0001"),
         workspace_query_let_op(
             "file",
-            json!({
-                    "kind": "workspace",
-                    "run": "run_demo",
-                    "id": "ws_planexec_materialized"
-            }),
+            workspace.clone(),
             json!({
                 "kind": "read_file",
                 "path": "README.md",
@@ -4474,12 +4460,12 @@ impl PlanExecutionHost for RecordingPlanHost {
             Some("ws_planexec_materialized")
         );
         match (request.name(), request.op_kind()?) {
-            ("file", "read_file") => self.workspace_read_file(request),
-            ("listing", "list") => self.workspace_list(request),
-            ("stat", "stat") => self.workspace_stat(request),
-            ("digest", "digest") => self.workspace_digest(request),
+            ("file", "read_file") => self.workspace_read_file(&request),
+            ("listing", "list") => self.workspace_list(&request),
+            ("stat", "stat") => self.workspace_stat(&request),
+            ("digest", "digest") => self.workspace_digest(&request),
             ("snapshot", "snapshot") => Ok(self.workspace_snapshot()),
-            ("log", "git_log") => Ok(self.workspace_git_log(request)),
+            ("log", "git_log") => Ok(self.workspace_git_log(&request)),
             ("diff", "git_diff") => Ok(self.workspace_git_diff()),
             ("status", "git_status") => Ok(self.workspace_git_status()),
             ("captured", "capture_artifacts") => Ok(self.workspace_capture_artifacts()),
@@ -4557,7 +4543,7 @@ impl RecordingPlanHost {
 
     fn workspace_read_file(
         &mut self,
-        request: PlanWorkspaceQueryRequest<'_>,
+        request: &PlanWorkspaceQueryRequest<'_>,
     ) -> Result<PlanWorkspaceQueryOutcome, PublicSeamError> {
         assert_eq!(request.path()?, Some("README.md"));
         assert_eq!(
@@ -4574,7 +4560,7 @@ impl RecordingPlanHost {
 
     fn workspace_list(
         &mut self,
-        request: PlanWorkspaceQueryRequest<'_>,
+        request: &PlanWorkspaceQueryRequest<'_>,
     ) -> Result<PlanWorkspaceQueryOutcome, PublicSeamError> {
         assert_eq!(request.path()?, Some("."));
         self.calls.push("workspace_list");
@@ -4583,7 +4569,7 @@ impl RecordingPlanHost {
 
     fn workspace_stat(
         &mut self,
-        request: PlanWorkspaceQueryRequest<'_>,
+        request: &PlanWorkspaceQueryRequest<'_>,
     ) -> Result<PlanWorkspaceQueryOutcome, PublicSeamError> {
         assert_eq!(request.path()?, Some("README.md"));
         self.calls.push("workspace_stat");
@@ -4600,7 +4586,7 @@ impl RecordingPlanHost {
 
     fn workspace_digest(
         &mut self,
-        request: PlanWorkspaceQueryRequest<'_>,
+        request: &PlanWorkspaceQueryRequest<'_>,
     ) -> Result<PlanWorkspaceQueryOutcome, PublicSeamError> {
         assert_eq!(request.path()?, Some("README.md"));
         assert_eq!(request.op()["algorithm"].as_str(), Some("sha256"));
@@ -4623,7 +4609,7 @@ impl RecordingPlanHost {
 
     fn workspace_git_log(
         &mut self,
-        request: PlanWorkspaceQueryRequest<'_>,
+        request: &PlanWorkspaceQueryRequest<'_>,
     ) -> PlanWorkspaceQueryOutcome {
         assert_eq!(request.op()["max_entries"].as_u64(), Some(5));
         self.calls.push("workspace_git_log");

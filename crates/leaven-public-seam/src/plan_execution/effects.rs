@@ -101,23 +101,30 @@ impl<'a> PlanWorkspaceReleaseRequest<'a> {
         )
     }
 
+    pub(super) fn workspace_ref(&self) -> Result<WorkspaceRefFacts, PublicSeamError> {
+        workspace_ref_facts(
+            self.call.get("workspace"),
+            "workspace_release must carry workspace",
+        )
+    }
+
     /// Workspace handle requested for release, proven against live dependency handles.
     pub fn live_workspace(&self) -> Result<&'a str, PublicSeamError> {
-        let workspace = self.workspace()?;
-        require_live_workspace(
-            workspace,
+        let workspace = self.workspace_ref()?;
+        Ok(require_live_workspace_ref(
+            &workspace,
             self.deps,
             self.live_workspaces,
             "workspace_release",
-        )?;
-        Ok(workspace)
+        )?
+        .workspace())
     }
 
     /// Lifetime attached to the live dependency handle being released.
     pub(super) fn live_workspace_lifetime(&self) -> Result<&'a str, PublicSeamError> {
-        let workspace = self.workspace()?;
-        Ok(require_live_workspace(
-            workspace,
+        let workspace = self.workspace_ref()?;
+        Ok(require_live_workspace_ref(
+            &workspace,
             self.deps,
             self.live_workspaces,
             "workspace_release",
@@ -165,12 +172,18 @@ impl<'a> PlanAgentRunRequest<'a> {
         workspace_ref_id(self.call.get("workspace"), "agent_run must carry workspace")
     }
 
+    pub(super) fn workspace_ref(&self) -> Result<WorkspaceRefFacts, PublicSeamError> {
+        workspace_ref_facts(self.call.get("workspace"), "agent_run must carry workspace")
+    }
+
     /// Workspace handle requested for agent execution, proven against live
     /// dependency handles.
     pub fn live_workspace(&self) -> Result<&'a str, PublicSeamError> {
-        let workspace = self.workspace()?;
-        require_live_workspace(workspace, self.deps, self.live_workspaces, "agent_run")?;
-        Ok(workspace)
+        let workspace = self.workspace_ref()?;
+        Ok(
+            require_live_workspace_ref(&workspace, self.deps, self.live_workspaces, "agent_run")?
+                .workspace(),
+        )
     }
 
     /// Lowers the locked Plan IR `agent_run` call into provider-neutral agent
@@ -243,12 +256,26 @@ impl<'a> PlanSandboxExecRequest<'a> {
         )
     }
 
+    pub(super) fn workspace_ref(&self) -> Result<WorkspaceRefFacts, PublicSeamError> {
+        workspace_ref_facts(
+            self.call.get("workspace"),
+            "sandbox_exec must carry workspace",
+        )
+    }
+
     /// Workspace handle requested for sandbox execution, proven against live
     /// dependency handles.
     pub fn live_workspace(&self) -> Result<&'a str, PublicSeamError> {
-        let workspace = self.workspace()?;
-        require_live_workspace(workspace, self.deps, self.live_workspaces, "sandbox_exec")?;
-        Ok(workspace)
+        let workspace = self.workspace_ref()?;
+        Ok(
+            require_live_workspace_ref(
+                &workspace,
+                self.deps,
+                self.live_workspaces,
+                "sandbox_exec",
+            )?
+            .workspace(),
+        )
     }
 
     /// Lowers the locked Plan IR `sandbox_exec` call into backend-neutral
@@ -461,24 +488,139 @@ pub(super) fn workspace_ref_id(
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) struct WorkspaceRefFacts {
+    id: String,
+    run: Option<String>,
+    snapshot_fingerprint: Option<String>,
+}
+
+impl WorkspaceRefFacts {
+    fn from_id(id: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            run: None,
+            snapshot_fingerprint: None,
+        }
+    }
+
+    fn from_value(
+        value: Option<&Value>,
+        context: impl Into<String>,
+    ) -> Result<Self, PublicSeamError> {
+        let context = context.into();
+        let value = value.ok_or_else(|| invalid_call(context.clone()))?;
+        if let Some(workspace) = value.as_str() {
+            return Ok(Self::from_id(workspace));
+        }
+        let object = value.as_object().ok_or_else(|| {
+            invalid_call(format!("{context}: workspace ref must be string or object"))
+        })?;
+        if object.get("kind").and_then(Value::as_str) != Some("workspace") {
+            return Err(invalid_call(format!(
+                "{context}: workspace ref object must have kind `workspace`"
+            )));
+        }
+        let id = object
+            .get("id")
+            .and_then(Value::as_str)
+            .ok_or_else(|| invalid_call(format!("{context}: workspace ref object must carry id")))?
+            .to_owned();
+        let run = optional_string(object.get("run"), "workspace ref run")?;
+        let snapshot_fingerprint = optional_string(
+            object.get("snapshot_fingerprint"),
+            "workspace ref snapshot_fingerprint",
+        )?;
+        Ok(Self {
+            id,
+            run,
+            snapshot_fingerprint,
+        })
+    }
+
+    pub(super) fn id(&self) -> &str {
+        &self.id
+    }
+
+    fn to_value(&self) -> Value {
+        if self.run.is_none() && self.snapshot_fingerprint.is_none() {
+            return Value::String(self.id.clone());
+        }
+        let mut value = json!({
+            "kind": "workspace",
+            "id": self.id
+        });
+        if let Some(run) = &self.run {
+            value["run"] = json!(run);
+        }
+        if let Some(snapshot_fingerprint) = &self.snapshot_fingerprint {
+            value["snapshot_fingerprint"] = json!(snapshot_fingerprint);
+        }
+        value
+    }
+
+    pub(super) fn satisfies_request(&self, requested: &Self) -> bool {
+        self.id == requested.id
+            && requested
+                .run
+                .as_ref()
+                .is_none_or(|run| self.run.as_ref() == Some(run))
+            && requested
+                .snapshot_fingerprint
+                .as_ref()
+                .is_none_or(|snapshot| self.snapshot_fingerprint.as_ref() == Some(snapshot))
+    }
+}
+
+pub(super) fn workspace_ref_facts(
+    value: Option<&Value>,
+    context: impl Into<String>,
+) -> Result<WorkspaceRefFacts, PublicSeamError> {
+    WorkspaceRefFacts::from_value(value, context)
+}
+
+fn workspace_ref_object(
+    workspace: &str,
+    run: Option<String>,
+    snapshot_fingerprint: Option<String>,
+) -> Value {
+    WorkspaceRefFacts {
+        id: workspace.to_owned(),
+        run,
+        snapshot_fingerprint,
+    }
+    .to_value()
+}
+
+fn optional_string(value: Option<&Value>, field: &str) -> Result<Option<String>, PublicSeamError> {
+    value
+        .map(|value| {
+            value
+                .as_str()
+                .map(str::to_owned)
+                .ok_or_else(|| invalid_call(format!("{field} must be a string")))
+        })
+        .transpose()
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct LiveWorkspaceHandle {
-    workspace: String,
+    workspace: WorkspaceRefFacts,
     lifetime: String,
     released: bool,
 }
 
 impl LiveWorkspaceHandle {
-    pub(super) fn live(workspace: impl Into<String>, lifetime: impl Into<String>) -> Self {
+    pub(super) fn live_ref(workspace: WorkspaceRefFacts, lifetime: impl Into<String>) -> Self {
         Self {
-            workspace: workspace.into(),
+            workspace,
             lifetime: lifetime.into(),
             released: false,
         }
     }
 
-    pub(super) fn released(workspace: impl Into<String>, lifetime: impl Into<String>) -> Self {
+    pub(super) fn released_ref(workspace: WorkspaceRefFacts, lifetime: impl Into<String>) -> Self {
         Self {
-            workspace: workspace.into(),
+            workspace,
             lifetime: lifetime.into(),
             released: true,
         }
@@ -489,7 +631,7 @@ impl LiveWorkspaceHandle {
     }
 
     pub(super) fn workspace(&self) -> &str {
-        &self.workspace
+        self.workspace.id()
     }
 
     pub(super) fn lifetime(&self) -> &str {
@@ -497,8 +639,8 @@ impl LiveWorkspaceHandle {
     }
 }
 
-pub(super) fn require_live_workspace<'a>(
-    workspace: &str,
+pub(super) fn require_live_workspace_ref<'a>(
+    requested: &WorkspaceRefFacts,
     deps: &'a BTreeMap<String, Value>,
     live_workspaces: &'a BTreeMap<String, LiveWorkspaceHandle>,
     context: &str,
@@ -507,21 +649,24 @@ pub(super) fn require_live_workspace<'a>(
         value.get("kind").and_then(Value::as_str) == Some("workspace_handle")
             && value
                 .get("workspace")
-                .and_then(|value| workspace_ref_id(Some(value), "workspace handle").ok())
-                == Some(workspace)
+                .and_then(|value| workspace_ref_facts(Some(value), "workspace handle").ok())
+                .is_some_and(|available| available.satisfies_request(requested))
     }) else {
         return Err(invalid_call(format!(
-            "{context} refused unmaterialized workspace `{workspace}`"
+            "{context} refused unmaterialized workspace `{}`",
+            requested.id()
         )));
     };
     let Some(handle) = live_workspaces.get(dep_name) else {
         return Err(invalid_call(format!(
-            "{context} refused unmaterialized workspace `{workspace}`"
+            "{context} refused unmaterialized workspace `{}`",
+            requested.id()
         )));
     };
-    if handle.workspace != workspace {
+    if !handle.workspace.satisfies_request(requested) {
         return Err(invalid_call(format!(
-            "{context} refused unmaterialized workspace `{workspace}`"
+            "{context} refused unmaterialized workspace `{}`",
+            requested.id()
         )));
     }
     if handle.released
@@ -531,7 +676,8 @@ pub(super) fn require_live_workspace<'a>(
             .unwrap_or(false)
     {
         return Err(invalid_call(format!(
-            "{context} refused already released workspace `{workspace}`"
+            "{context} refused already released workspace `{}`",
+            requested.id()
         )));
     }
     Ok(handle)
@@ -1235,6 +1381,7 @@ impl PlanSandboxExecOutcome {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PlanWorkspaceMaterializeOutcome {
     pub(super) workspace: String,
+    pub(super) workspace_ref: Value,
     pub(super) lifetime: String,
     pub(super) data_classes: Vec<String>,
     pub(super) replayability: String,
@@ -1249,13 +1396,29 @@ impl PlanWorkspaceMaterializeOutcome {
         lifetime: impl Into<String>,
         runtime_fingerprint: impl Into<String>,
     ) -> Self {
+        let workspace = workspace.into();
         Self {
-            workspace: workspace.into(),
+            workspace_ref: Value::String(workspace.clone()),
+            workspace,
             lifetime: lifetime.into(),
             data_classes: vec!["public".to_owned()],
             replayability: "boundary_managed".to_owned(),
             runtime_fingerprint: runtime_fingerprint.into(),
         }
+    }
+
+    #[must_use]
+    pub fn with_workspace_object_ref(
+        mut self,
+        run: Option<impl Into<String>>,
+        snapshot_fingerprint: Option<impl Into<String>>,
+    ) -> Self {
+        self.workspace_ref = workspace_ref_object(
+            &self.workspace,
+            run.map(Into::into),
+            snapshot_fingerprint.map(Into::into),
+        );
+        self
     }
 }
 
@@ -1263,6 +1426,7 @@ impl PlanWorkspaceMaterializeOutcome {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PlanWorkspaceReleaseOutcome {
     pub(super) workspace: String,
+    pub(super) workspace_ref: Value,
     pub(super) lifetime: String,
     pub(super) runtime_fingerprint: String,
 }
@@ -1275,11 +1439,27 @@ impl PlanWorkspaceReleaseOutcome {
         lifetime: impl Into<String>,
         runtime_fingerprint: impl Into<String>,
     ) -> Self {
+        let workspace = workspace.into();
         Self {
-            workspace: workspace.into(),
+            workspace_ref: Value::String(workspace.clone()),
+            workspace,
             lifetime: lifetime.into(),
             runtime_fingerprint: runtime_fingerprint.into(),
         }
+    }
+
+    #[must_use]
+    pub fn with_workspace_object_ref(
+        mut self,
+        run: Option<impl Into<String>>,
+        snapshot_fingerprint: Option<impl Into<String>>,
+    ) -> Self {
+        self.workspace_ref = workspace_ref_object(
+            &self.workspace,
+            run.map(Into::into),
+            snapshot_fingerprint.map(Into::into),
+        );
+        self
     }
 }
 
