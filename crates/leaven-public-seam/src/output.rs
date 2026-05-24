@@ -1,6 +1,7 @@
 //! Public-seam wire lowering for reusable output records.
 
-use leaven_evidence::{DataClassSet, OutputRecord, OutputVisibility};
+use leaven_evidence::{DataClassSet, OutputBlobAudit, OutputRecord, OutputVisibility};
+use leaven_kernel::BlobRef;
 use serde_json::{Value, json};
 
 use crate::PublicSeamError;
@@ -66,6 +67,35 @@ impl PublicBlobRef {
         }
         value
     }
+
+    fn from_evidence_blob(
+        reference: &BlobRef,
+        audit: &OutputBlobAudit,
+        data_classes: &DataClassSet,
+    ) -> Self {
+        let mut blob = Self::new(
+            public_blob_id(reference),
+            audit.sha256(),
+            audit.bytes(),
+            data_classes.clone(),
+        );
+        if let Some(media_type) = audit.media_type() {
+            blob = blob.with_media_type(media_type);
+        }
+        if let Some(uri) = audit.uri() {
+            blob = blob.with_uri(uri);
+        }
+        blob
+    }
+}
+
+fn public_blob_id(reference: &BlobRef) -> String {
+    let digest = jcs_canonicalize::sha256_jcs_hex(&json!({
+        "store": reference.store,
+        "key": reference.key
+    }))
+    .expect("blob reference JSON is canonicalizable");
+    format!("blob_{digest}")
 }
 
 /// Schema-valid public-seam `OutputRecord` wire projection.
@@ -136,10 +166,21 @@ pub fn output_record_wire_value(
                 "data_classes": data_classes_wire(metadata.data_classes())
             }))
         }
-        OutputRecord::BlobRef { .. } => {
-            let blob = blob.ok_or_else(|| PublicSeamError::InvalidOutputRecord {
-                message: "blob output record requires public blob metadata".to_owned(),
-            })?;
+        OutputRecord::BlobRef {
+            reference, audit, ..
+        } => {
+            let projected_blob;
+            let blob = if let Some(blob) = blob {
+                blob
+            } else if let Some(audit) = audit {
+                projected_blob =
+                    PublicBlobRef::from_evidence_blob(reference, audit, metadata.data_classes());
+                &projected_blob
+            } else {
+                return Err(PublicSeamError::InvalidOutputRecord {
+                    message: "blob output record requires public blob metadata".to_owned(),
+                });
+            };
             Ok(json!({
                 "kind": "blob_ref",
                 "blob_ref": blob.as_value(),

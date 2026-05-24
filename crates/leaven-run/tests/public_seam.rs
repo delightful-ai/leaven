@@ -9,8 +9,8 @@ use leaven_engine::{
     ProposalBatchReport, RunContext, RunGraph,
 };
 use leaven_evidence::{
-    CandidateAssessmentOutput, CaseAssessmentEvidence, DataClass, DataClassSet, OutputMetadata,
-    OutputRecord, OutputVisibility, ScalarEvidence,
+    CandidateAssessmentOutput, CaseAssessmentEvidence, DataClass, DataClassSet, OutputBlobAudit,
+    OutputMetadata, OutputRecord, OutputVisibility, ScalarEvidence,
 };
 use leaven_kernel::{
     AssessmentId, Budget, CandidateId, CaseId, ContentId, Cost, EvaluatorId, Fingerprint,
@@ -248,6 +248,52 @@ fn runcontext_assessment_artifact_score_outputs_project_to_public_seam_submit_as
             plan["ops"][0]["write"]["assessments"][0]["score"]["output"]["value"]["artifact"],
             "candidate-artifact"
         );
+    });
+}
+
+#[test]
+fn runcontext_blob_score_outputs_project_to_public_seam_submit_assessments_plan() {
+    block_on(async {
+        let package = leaven_public_seam::PublicSeamPackage::active_from_repo(workspace_root())
+            .expect("public seam package loads from workspace");
+        let (mut graph, mut budget, candidate) = graph_with_run_eval_seed();
+        let case_set = CaseSet::new(vec![leaven_eval::Case::input(CaseId::new(0), "case")]);
+        let store = InlineEvidenceStore::<CaseAssessmentEvidence>::new("inline");
+        let mut ctx =
+            RunContext::<RunProblem<TextArtifact, &'static str>>::new(&mut graph, &mut budget)
+                .with_case_set(&case_set)
+                .with_evidence_store(&store);
+        let report = ctx
+            .evaluate_with(
+                &AuditedBlobScoreOutputEvaluator,
+                independent_request(vec![candidate]),
+            )
+            .await
+            .unwrap();
+        let graph_view = ctx.graph();
+        let plan = assessment_receipt_context()
+            .submit_assessments_plan_document(&graph_view, &store, &report)
+            .expect("audited blob-backed score output projects to Plan IR");
+
+        let document = package
+            .validate_plan_document(&plan)
+            .expect("projected blob-backed submit_assessments Plan IR validates");
+        assert_eq!(document.assessment_score_output_count(), 1);
+        let output = &plan["ops"][0]["write"]["assessments"][0]["score"]["output"];
+        assert_eq!(
+            output["summary"],
+            "blob inline:score-output sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa bytes=24"
+        );
+        assert_eq!(
+            output["blob_ref"]["id"],
+            "blob_395a63f4cf693eacb1f4d465e871bd77adda4dccd7c2c446550c9d11d04a8f64"
+        );
+        assert_eq!(
+            output["blob_ref"]["data_classes"],
+            serde_json::json!(["candidate.output", "public"])
+        );
+        assert_eq!(output["value"]["candidate"], json_candidate_ref(candidate));
+        assert_eq!(output["value"]["output"], output["blob_ref"]);
     });
 }
 
@@ -945,6 +991,44 @@ impl Evaluator<RunProblem<TextArtifact, &'static str>> for BlobScoreOutputEvalua
     }
 }
 
+struct AuditedBlobScoreOutputEvaluator;
+
+impl Evaluator<RunProblem<TextArtifact, &'static str>> for AuditedBlobScoreOutputEvaluator {
+    fn id(&self) -> EvaluatorId {
+        EvaluatorId::PRIMARY
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        Fingerprint::from_bytes([45; 32])
+    }
+
+    async fn evaluate(
+        &self,
+        request: ResolvedEvaluationRequest,
+        _ctx: EvaluationContext<'_, RunProblem<TextArtifact, &'static str>>,
+    ) -> Result<Metered<Vec<Assessment<RunProblem<TextArtifact, &'static str>>>>, EvaluationError>
+    {
+        let leaven_core::ResolvedRequestKind::Independent { candidates } = request.kind else {
+            return Err(EvaluationError::Message("unsupported request".to_owned()));
+        };
+        Ok(Metered::new(
+            candidates
+                .into_iter()
+                .map(|candidate| {
+                    Ok(Assessment::Independent {
+                        candidate,
+                        target: AssessmentTarget::Unscoped,
+                        evidence: case_assessment_evidence(audited_candidate_blob_output())?,
+                        cost: Cost::zero(),
+                        metadata: MetadataBag::new(),
+                    })
+                })
+                .collect::<Result<Vec<_>, EvaluationError>>()?,
+            Cost::zero(),
+        ))
+    }
+}
+
 struct PublicOnlyScoreOutputEvaluator;
 
 impl Evaluator<RunProblem<TextArtifact, &'static str>> for PublicOnlyScoreOutputEvaluator {
@@ -995,6 +1079,24 @@ fn candidate_artifact_output(text: impl Into<String>) -> OutputRecord {
     OutputRecord::inline(text).with_metadata(OutputMetadata::new(
         OutputVisibility::Public,
         DataClassSet::new([DataClass::candidate_artifact(), DataClass::public()]),
+    ))
+}
+
+fn audited_candidate_blob_output() -> OutputRecord {
+    OutputRecord::audited_blob(
+        leaven_kernel::BlobRef {
+            store: "inline".to_owned(),
+            key: "score-output".to_owned(),
+        },
+        OutputBlobAudit::new(
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            24,
+        )
+        .expect("test blob audit is valid"),
+    )
+    .with_metadata(OutputMetadata::new(
+        OutputVisibility::Public,
+        DataClassSet::public_candidate_output(),
     ))
 }
 

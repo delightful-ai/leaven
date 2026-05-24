@@ -4,7 +4,8 @@ use leaven_core::OptimizationProblem;
 use leaven_engine::AssessmentView;
 use leaven_engine::{EvaluationReport, RunGraphView};
 use leaven_evidence::{
-    CandidateAssessmentOutput, CaseAssessmentEvidence, DataClass, OutputRecord, OutputVisibility,
+    CandidateAssessmentOutput, CaseAssessmentEvidence, DataClass, OutputBlobAudit, OutputRecord,
+    OutputVisibility,
 };
 use leaven_kernel::{AssessmentId, CandidateId, EvaluationRequestId};
 use leaven_store::{EvidenceStore, StoreError};
@@ -255,7 +256,9 @@ pub enum PublicAssessmentWriteReceiptProjectionError {
     #[error("assessment write projection does not support this assessment shape")]
     UnsupportedAssessmentShape,
     /// The projection does not yet support this output record shape.
-    #[error("assessment write projection only supports inline score outputs")]
+    #[error(
+        "assessment write projection requires candidate/artifact inline output or audited blob output"
+    )]
     UnsupportedScoreOutput,
     /// JCS/SHA-256 fingerprint computation failed.
     #[error("assessment write fingerprinting failed: {message}")]
@@ -395,13 +398,20 @@ fn score_output(
             grouped_candidate_output_values(shape.candidates(), evidence.candidate_outputs())?
         }
     };
-    Ok(json!({
+    let mut output = json!({
         "kind": "structured",
         "summary": summary,
         "value": value,
         "visibility": visibility_wire(evidence.output().metadata().visibility()),
         "data_classes": data_classes_wire(evidence.output().metadata().data_classes())
-    }))
+    });
+    if let Some(blob_ref) = blob_ref_value(evidence.output())? {
+        output
+            .as_object_mut()
+            .expect("score output JSON is object")
+            .insert("blob_ref".to_owned(), blob_ref);
+    }
+    Ok(output)
 }
 
 fn grouped_candidate_output_values(
@@ -428,10 +438,7 @@ fn candidate_output_value(
     candidate: CandidateId,
     output: &OutputRecord,
 ) -> Result<Value, PublicAssessmentWriteReceiptProjectionError> {
-    let OutputRecord::Inline { text, metadata, .. } = output else {
-        return Err(PublicAssessmentWriteReceiptProjectionError::UnsupportedScoreOutput);
-    };
-    let data_classes = metadata.data_classes();
+    let data_classes = output.metadata().data_classes();
     let value_field = if data_classes.contains(&DataClass::candidate_output()) {
         "output"
     } else if data_classes.contains(&DataClass::candidate_artifact()) {
@@ -439,25 +446,91 @@ fn candidate_output_value(
     } else {
         return Err(PublicAssessmentWriteReceiptProjectionError::UnsupportedScoreOutput);
     };
+    let output_value = match output {
+        OutputRecord::Inline { text, .. } => json!(text),
+        OutputRecord::BlobRef { .. } => blob_ref_value(output)?
+            .ok_or(PublicAssessmentWriteReceiptProjectionError::UnsupportedScoreOutput)?,
+    };
     let mut value = json!({
         "candidate": candidate_ref(candidate)
     });
     value
         .as_object_mut()
         .expect("candidate output JSON is object")
-        .insert(value_field.to_owned(), json!(text));
+        .insert(value_field.to_owned(), output_value);
     Ok(value)
 }
 
 fn output_summary(
     output: &OutputRecord,
-) -> Result<&str, PublicAssessmentWriteReceiptProjectionError> {
+) -> Result<String, PublicAssessmentWriteReceiptProjectionError> {
     match output {
-        OutputRecord::Inline { text, .. } => Ok(text),
-        OutputRecord::BlobRef { .. } => {
-            Err(PublicAssessmentWriteReceiptProjectionError::UnsupportedScoreOutput)
+        OutputRecord::Inline { text, .. } => Ok(text.clone()),
+        OutputRecord::BlobRef {
+            reference, audit, ..
+        } => {
+            let audit = audit
+                .as_ref()
+                .ok_or(PublicAssessmentWriteReceiptProjectionError::UnsupportedScoreOutput)?;
+            Ok(format!(
+                "blob {}:{} sha256={} bytes={}",
+                reference.store,
+                reference.key,
+                audit.sha256(),
+                audit.bytes()
+            ))
         }
     }
+}
+
+fn blob_ref_value(
+    output: &OutputRecord,
+) -> Result<Option<Value>, PublicAssessmentWriteReceiptProjectionError> {
+    let OutputRecord::BlobRef {
+        reference, audit, ..
+    } = output
+    else {
+        return Ok(None);
+    };
+    let audit = audit
+        .as_ref()
+        .ok_or(PublicAssessmentWriteReceiptProjectionError::UnsupportedScoreOutput)?;
+    Ok(Some(public_blob_ref_value(
+        reference,
+        audit,
+        output.metadata().data_classes(),
+    )))
+}
+
+fn public_blob_ref_value(
+    reference: &leaven_kernel::BlobRef,
+    audit: &OutputBlobAudit,
+    data_classes: &leaven_evidence::DataClassSet,
+) -> Value {
+    let mut value = json!({
+        "kind": "blob_ref",
+        "id": public_blob_id(reference),
+        "sha256": audit.sha256(),
+        "bytes": audit.bytes(),
+        "data_classes": data_classes_wire(data_classes)
+    });
+    let object = value.as_object_mut().expect("blob ref JSON is object");
+    if let Some(media_type) = audit.media_type() {
+        object.insert("media_type".to_owned(), json!(media_type));
+    }
+    if let Some(uri) = audit.uri() {
+        object.insert("uri".to_owned(), json!(uri));
+    }
+    value
+}
+
+fn public_blob_id(reference: &leaven_kernel::BlobRef) -> String {
+    let digest = jcs_canonicalize::sha256_jcs_hex(&json!({
+        "store": reference.store,
+        "key": reference.key
+    }))
+    .expect("blob reference JSON is canonicalizable");
+    format!("blob_{digest}")
 }
 
 fn visibility_wire(visibility: OutputVisibility) -> &'static str {
