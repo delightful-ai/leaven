@@ -134,10 +134,12 @@ streaming delivery, or full agent/sandbox row closeout. The
 `PlanWorkspaceMaterializeRequest` and
 `PlanWorkspaceReleaseRequest` routes lower schema-valid workspace lifecycle
 calls into typed public-seam requests and emit `workspace_handle` Plan Result
-values with call receipts; `workspace_release` validates the requested
-WorkspaceRef against live `workspace_handle` dependency values before the host
-can perform release, rejects already released handles, and still refuses host
-filesystem paths as workspace handles. `PlanWorkspaceQueryRequest` routes
+values with call receipts; `workspace_materialize` validates host-returned
+workspace ids and lifetime echoes before binding a handle, and
+`workspace_release` validates the requested WorkspaceRef against live
+`workspace_handle` dependency values before the host can perform release,
+rejects already released handles, and still refuses host filesystem paths as
+workspace handles. `PlanWorkspaceQueryRequest` routes
 representative schema-valid `workspace_query` reads through typed host requests,
 requires a live `workspace_handle` dependency before the host can read, and
 emits typed `workspace_file`, `workspace_listing`, `workspace_snapshot`, or
@@ -253,10 +255,11 @@ backpressure, or runtime watch support.
   delivery, and proposal parsing remain pending.
 - `tests/plan_document.rs` also proves representative `workspace_materialize`
   and `workspace_release` lowering, typed `workspace_handle` value emission,
-  release lifecycle state, call receipts, and refusal of unmaterialized or host-
-  path workspace substitutes. This is public-seam lifecycle proof only; read,
-  list, stat, digest, git, artifact-capture, and snapshot behavior remain
-  pending.
+  materialize host-result checks for path-shaped workspace ids and lifetime
+  substitution, release lifecycle state, call receipts, and refusal of
+  unmaterialized or host-path workspace substitutes. This is public-seam
+  lifecycle proof only; read, list, stat, digest, git, artifact-capture, and
+  snapshot behavior remain pending.
 - `tests/call_authority.rs` proves schema-valid Call ops are checked against
   capability-granted input data classes and call-local forbidden data-class
   intersections before execution. It rejects `case.target` and other forbidden

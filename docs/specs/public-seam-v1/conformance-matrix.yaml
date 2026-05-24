@@ -1147,6 +1147,7 @@ rows:
     minimum_closeout_level: semantic_denial
     partial_contract_test_evidence:
       - crates/leaven-public-seam/tests/plan_document.rs::workspace_materialize_and_release_emit_typed_handles_and_receipts
+      - crates/leaven-public-seam/tests/plan_document.rs::workspace_materialize_rejects_host_path_and_lifetime_substitution
       - crates/leaven-public-seam/tests/plan_document.rs::workspace_release_rejects_unmaterialized_handles_and_host_path_substitutes
       - crates/leaven-public-seam/tests/plan_document.rs::workspace_query_reads_require_live_handles_and_emit_query_receipts
       - crates/leaven-public-seam/tests/plan_document.rs::workspace_query_rejects_unmaterialized_released_and_mismatched_results
@@ -1164,6 +1165,7 @@ rows:
       - crates/leaven-public-seam/src/plan_execution/queries.rs::PlanWorkspaceQueryRequest
       - crates/leaven-public-seam/src/plan_execution/queries.rs::PlanWorkspaceQueryOutcome
       - crates/leaven-public-seam/src/plan_execution.rs::execute_workspace_query_expr
+      - crates/leaven-public-seam/src/plan_execution.rs::execute_workspace_materialize_call
       - crates/leaven-public-seam/src/plan_execution/receipts.rs::validate_workspace_query_receipt
       - crates/leaven-public-seam/src/plan_execution.rs::record_workspace_materialize_outcome
       - crates/leaven-public-seam/src/plan_execution.rs::record_workspace_release_outcome

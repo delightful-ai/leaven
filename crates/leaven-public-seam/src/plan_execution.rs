@@ -606,12 +606,15 @@ fn execute_call<H: PlanExecutionHost>(
                     "require_cached mode cannot prove cached execution for `workspace_materialize` calls",
                 ));
             }
-            let outcome = host.workspace_materialize(PlanWorkspaceMaterializeRequest {
-                name: &name,
+            execute_workspace_materialize_call(
+                host,
+                name,
                 call,
-                deps: dep_values,
-            })?;
-            record_workspace_materialize_outcome(name, outcome, &request_hash, context, state)
+                dep_values,
+                &request_hash,
+                context,
+                state,
+            )
         }
         "workspace_release" if mode == EffectMode::RequireCached => Err(invalid_plan(
             "require_cached mode cannot prove cached execution for `workspace_release` calls",
@@ -669,6 +672,37 @@ fn execute_sandbox_exec_call<H: PlanExecutionHost>(
     record_sandbox_call_outcome(name, outcome, request_hash, context, state)
 }
 
+fn execute_workspace_materialize_call<H: PlanExecutionHost>(
+    host: &mut H,
+    name: String,
+    call: &Value,
+    dep_values: &BTreeMap<String, Value>,
+    request_hash: &str,
+    context: &PlanExecutionContext,
+    state: &mut ExecutionState,
+) -> Result<(), PublicSeamError> {
+    let request = PlanWorkspaceMaterializeRequest {
+        name: &name,
+        call,
+        deps: dep_values,
+    };
+    let lifetime = request.lifetime()?.to_owned();
+    let outcome = host.workspace_materialize(request)?;
+    if !is_workspace_id(&outcome.workspace) {
+        return Err(invalid_plan(format!(
+            "workspace_materialize host returned invalid workspace `{}`",
+            outcome.workspace
+        )));
+    }
+    if outcome.lifetime != lifetime {
+        return Err(invalid_plan(format!(
+            "workspace_materialize host returned lifetime `{}` for requested lifetime `{lifetime}`",
+            outcome.lifetime
+        )));
+    }
+    record_workspace_materialize_outcome(name, outcome, request_hash, context, state)
+}
+
 fn execute_workspace_release_call<H: PlanExecutionHost>(
     host: &mut H,
     name: String,
@@ -692,6 +726,15 @@ fn execute_workspace_release_call<H: PlanExecutionHost>(
         )));
     }
     record_workspace_release_outcome(name, outcome, request_hash, context, state)
+}
+
+fn is_workspace_id(value: &str) -> bool {
+    value.strip_prefix("ws_").is_some_and(|suffix| {
+        !suffix.is_empty()
+            && suffix.bytes().all(|byte| {
+                byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'.' | b':' | b'-')
+            })
+    })
 }
 
 fn record_lm_call_outcome(
