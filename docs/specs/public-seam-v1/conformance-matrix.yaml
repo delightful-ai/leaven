@@ -955,6 +955,7 @@ rows:
       - docs/specs/public-seam-v1/reviews/2026-05-23-score-output-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-23-score-output-candidate-binding-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-23-score-output-current-blocker-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-structured-output-evaluator-authority-review.md
     status: pending
 
   - id: ps1.evaluator.assessment_scope
@@ -978,6 +979,7 @@ rows:
     positive_test_evidence:
       - crates/leaven-engine/tests/context_services.rs::evaluate_with_resolves_sets_stores_evidence_and_emits_events
       - crates/leaven-engine/tests/context_services.rs::pairwise_and_listwise_evaluations_record_non_independent_targets
+      - crates/leaven-public-seam/tests/plan_document.rs::plan_execution_with_capability_gates_evaluator_writes_before_host_effects
       - crates/leaven-public-seam/tests/plan_result_replayability.rs::per_assessment_replayability_rolls_up_from_each_assessment
       - crates/leaven-run/tests/public_seam.rs::runcontext_assessments_project_to_public_seam_submit_assessment_receipts
     negative_test_evidence:
@@ -991,11 +993,13 @@ rows:
       - crates/leaven-public-seam/src/result.rs::validate_submit_assessment_receipts
       - crates/leaven-public-seam/src/result.rs::inspect_assessment_batch_value
       - crates/leaven-public-seam/src/plan.rs::AssessmentScoreOutputUsage::inspect_submit_assessments
+      - crates/leaven-public-seam/src/execution_authority.rs::validate_submit_assessments
       - crates/leaven-run/src/public_seam/assessment_write.rs::PublicAssessmentWriteReceiptContext::submit_assessments_plan_result
       - crates/leaven-run/AGENTS.md
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-assessment-scope-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-23-runcontext-write-tranche-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-structured-output-evaluator-authority-review.md
     status: proven
 
   - id: ps1.acp.transport_profile
@@ -1247,7 +1251,10 @@ rows:
       - crates/leaven-public-seam/src/plan_execution/effects.rs::lower_lm_output
       - crates/leaven-public-seam/src/plan_execution/effects.rs::lower_provider_hints
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanLmCompleteOutcome::with_parsed
+      - crates/leaven-public-seam/src/plan_execution.rs::validate_structured_output_contract
       - crates/leaven-public-seam/src/plan_execution.rs::validate_structured_output_outcome
+      - crates/leaven-public-seam/src/plan_execution.rs::validate_json_schema_output_payload
+      - crates/leaven-public-seam/src/fingerprint.rs::SchemaFingerprint::for_json_value
       - crates/leaven-public-seam/src/plan_execution/receipts.rs::validate_successful_call_result_value
       - crates/leaven-public-seam/src/plan_execution/receipts.rs::validate_structured_output_value
       - crates/leaven-lm/src/request.rs::LmRequest
@@ -1264,6 +1271,7 @@ rows:
       - crates/leaven-public-seam/src/capability.rs::CapabilityGrantRequest
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-24-effect-call-authority-partial-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-structured-output-evaluator-authority-review.md
     status: pending
 
   - id: ps1.agent.contract
@@ -1300,7 +1308,10 @@ rows:
       - crates/leaven-public-seam/src/plan_execution/effects.rs::require_live_workspace
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanAgentRunOutcome
       - crates/leaven-public-seam/src/plan_execution/effects.rs::PlanAgentRunOutcome::with_parsed
+      - crates/leaven-public-seam/src/plan_execution.rs::validate_structured_output_contract
       - crates/leaven-public-seam/src/plan_execution.rs::validate_structured_output_outcome
+      - crates/leaven-public-seam/src/plan_execution.rs::validate_json_schema_output_payload
+      - crates/leaven-public-seam/src/fingerprint.rs::SchemaFingerprint::for_json_value
       - crates/leaven-public-seam/src/plan_execution.rs::record_agent_call_outcome
       - crates/leaven-public-seam/src/plan_execution/receipts.rs::validate_successful_call_result_value
       - crates/leaven-public-seam/src/plan_execution/receipts.rs::validate_structured_output_value
@@ -1314,6 +1325,7 @@ rows:
     review_evidence:
       - docs/specs/public-seam-v1/reviews/2026-05-23-workspace-handle-provenance-review.md
       - docs/specs/public-seam-v1/reviews/2026-05-24-effect-call-authority-partial-review.md
+      - docs/specs/public-seam-v1/reviews/2026-05-24-structured-output-evaluator-authority-review.md
     status: pending
 
   - id: ps1.sandbox.exec_streaming

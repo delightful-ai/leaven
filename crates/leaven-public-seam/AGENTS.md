@@ -183,6 +183,13 @@ loads supplied receipts without live call/write host effects. The call-authority
 route checks plan Call `input_classes` against call-local and
 capability-declared forbidden classes before execution, and refuses reflector
 LM calls that carry `case.target` input classes even when a grant is too broad.
+JSON-schema LM and agent output contracts are executable harness contracts:
+inline schemas are compiled before host effects, and returned or replayed
+`parsed` payloads must validate against the requested schema. The inline schema
+must match `schema_fingerprint`, so capability authority cannot be checked
+against one schema while execution validates a weaker inline schema. This is
+still not provider/runtime proof for structured output enforcement outside the
+public-seam harness.
 The proposal authority
 route checks `submit_proposal_batch` and `apply_proposal_batch` writes against
 capability-granted effects, surfaces, schemas, and apply permission. They are

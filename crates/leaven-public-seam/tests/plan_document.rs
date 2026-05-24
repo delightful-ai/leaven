@@ -221,6 +221,100 @@ fn plan_execution_with_capability_allows_workspace_lifecycle_calls() {
 }
 
 #[test]
+fn plan_execution_with_capability_gates_evaluator_writes_before_host_effects() {
+    let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
+
+    let mut assessment_host = RecordingPlanHost::default();
+    let assessment_report = package
+        .execute_plan_document_with_capability(
+            &submit_assessments_plan(),
+            &plan_execution_context(),
+            &assessment_submit_capability("evalreq_score_output", Some(3)),
+            &mut assessment_host,
+        )
+        .unwrap();
+    assert_eq!(assessment_report.document().receipt_count(), 0);
+    assert!(assessment_host.calls.is_empty());
+    assert!(assessment_host.writes.is_empty());
+
+    let mut wrong_eval_host = RecordingPlanHost::default();
+    let error = package
+        .execute_plan_document_with_capability(
+            &submit_assessments_plan(),
+            &plan_execution_context(),
+            &assessment_submit_capability("evalreq_other", Some(3)),
+            &mut wrong_eval_host,
+        )
+        .unwrap_err();
+    assert!(
+        error.to_string().contains("assessment submit denied"),
+        "unexpected error: {error:?}"
+    );
+    assert!(wrong_eval_host.calls.is_empty());
+    assert!(wrong_eval_host.writes.is_empty());
+
+    let mut row_limit_host = RecordingPlanHost::default();
+    let error = package
+        .execute_plan_document_with_capability(
+            &submit_assessments_plan(),
+            &plan_execution_context(),
+            &assessment_submit_capability("evalreq_score_output", Some(2)),
+            &mut row_limit_host,
+        )
+        .unwrap_err();
+    assert!(
+        error.to_string().contains("assessment submit denied"),
+        "unexpected error: {error:?}"
+    );
+    assert!(row_limit_host.calls.is_empty());
+    assert!(row_limit_host.writes.is_empty());
+
+    let mut evaluation_host = RecordingPlanHost::default();
+    package
+        .execute_plan_document_with_capability(
+            &request_evaluation_plan(),
+            &plan_execution_context(),
+            &evaluation_request_capability(&["cand_a"], &["validation"]),
+            &mut evaluation_host,
+        )
+        .unwrap();
+    assert!(evaluation_host.calls.is_empty());
+    assert!(evaluation_host.writes.is_empty());
+
+    let mut wrong_candidate_host = RecordingPlanHost::default();
+    let error = package
+        .execute_plan_document_with_capability(
+            &request_evaluation_plan(),
+            &plan_execution_context(),
+            &evaluation_request_capability(&["cand_other"], &["validation"]),
+            &mut wrong_candidate_host,
+        )
+        .unwrap_err();
+    assert!(
+        error.to_string().contains("evaluation request denied"),
+        "unexpected error: {error:?}"
+    );
+    assert!(wrong_candidate_host.calls.is_empty());
+    assert!(wrong_candidate_host.writes.is_empty());
+
+    let mut wrong_purpose_host = RecordingPlanHost::default();
+    let error = package
+        .execute_plan_document_with_capability(
+            &request_evaluation_plan(),
+            &plan_execution_context(),
+            &evaluation_request_capability(&["cand_a"], &["diagnostic"]),
+            &mut wrong_purpose_host,
+        )
+        .unwrap_err();
+    assert!(
+        error.to_string().contains("evaluation request denied"),
+        "unexpected error: {error:?}"
+    );
+    assert!(wrong_purpose_host.calls.is_empty());
+    assert!(wrong_purpose_host.writes.is_empty());
+}
+
+#[test]
 fn plan_execution_result_rejects_receipt_hashes_unbound_from_plan_preimages() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let context = plan_execution_context();
@@ -683,6 +777,42 @@ fn test_prefixed_jcs_hash(prefix: &str, value: &Value) -> String {
         "{prefix}{}",
         jcs_canonicalize::sha256_jcs_hex(value).unwrap()
     )
+}
+
+fn lm_answer_output_contract() -> Value {
+    let schema = json!({
+        "type": "object",
+        "properties": {
+            "answer": {
+                "type": "string"
+            }
+        },
+        "required": ["answer"],
+        "additionalProperties": false
+    });
+    json!({
+        "kind": "json_schema",
+        "schema_fingerprint": test_prefixed_jcs_hash("fp_schema_sha256_", &schema),
+        "schema": schema
+    })
+}
+
+fn agent_status_output_contract() -> Value {
+    let schema = json!({
+        "type": "object",
+        "properties": {
+            "status": {
+                "type": "string"
+            }
+        },
+        "required": ["status"],
+        "additionalProperties": false
+    });
+    json!({
+        "kind": "json_schema",
+        "schema_fingerprint": test_prefixed_jcs_hash("fp_schema_sha256_", &schema),
+        "schema": schema
+    })
 }
 
 fn rebind_call_result_hash(result: &mut Value, receipt_index: usize, name: &str) {
@@ -1501,13 +1631,7 @@ fn workspace_query_rejects_stat_digest_and_git_log_result_mismatches() {
 fn agent_run_lowering_preserves_json_schema_output_contract() {
     let package = PublicSeamPackage::active_from_repo(workspace_root()).unwrap();
     let mut call = agent_run_call();
-    call["output"] = json!({
-        "kind": "json_schema",
-        "schema_fingerprint": "fp_schema_sha256_agentoutput",
-        "schema": {
-            "type": "object"
-        }
-    });
+    call["output"] = agent_status_output_contract();
     let plan = agent_run_workspace_plan(&call);
     let mut host = RecordingPlanHost::default();
 
@@ -1522,7 +1646,7 @@ fn agent_run_lowering_preserves_json_schema_output_contract() {
     );
 
     let mut missing_parsed_host = RecordingPlanHost {
-        omit_structured_parsed: true,
+        structured_parsed: StructuredParsedFixture::Omit,
         ..RecordingPlanHost::default()
     };
     let error = package
@@ -1535,6 +1659,60 @@ fn agent_run_lowering_preserves_json_schema_output_contract() {
         "unexpected error: {error:?}"
     );
 
+    let mut missing_inline_schema = plan.clone();
+    missing_inline_schema["ops"][1]["call"]["output"]
+        .as_object_mut()
+        .unwrap()
+        .remove("schema");
+    let mut host = RecordingPlanHost::default();
+    let error = package
+        .execute_plan_document(&missing_inline_schema, &plan_execution_context(), &mut host)
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("agent_run json_schema output must carry inline schema"),
+        "unexpected error: {error:?}"
+    );
+    assert_eq!(host.calls, vec!["workspace_materialize"]);
+
+    let mut mismatched_fingerprint = plan.clone();
+    mismatched_fingerprint["ops"][1]["call"]["output"]["schema_fingerprint"] =
+        json!("fp_schema_sha256_0000000000000000000000000000000000000000000000000000000000000000");
+    let mut host = RecordingPlanHost::default();
+    let error = package
+        .execute_plan_document(
+            &mismatched_fingerprint,
+            &plan_execution_context(),
+            &mut host,
+        )
+        .unwrap_err();
+    assert!(
+        error.to_string().contains(
+            "agent_run json_schema output schema_fingerprint does not match inline schema"
+        ),
+        "unexpected error: {error:?}"
+    );
+    assert_eq!(host.calls, vec!["workspace_materialize"]);
+
+    let mut invalid_parsed_host = RecordingPlanHost {
+        structured_parsed: StructuredParsedFixture::Invalid,
+        ..RecordingPlanHost::default()
+    };
+    let error = package
+        .execute_plan_document(&plan, &plan_execution_context(), &mut invalid_parsed_host)
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("agent_run parsed result payload failed json_schema output contract"),
+        "unexpected error: {error:?}"
+    );
+    assert_eq!(
+        invalid_parsed_host.calls,
+        vec!["workspace_materialize", "agent"]
+    );
+
     let mut forged = report.value().clone();
     forged["values"]["completion"]
         .as_object_mut()
@@ -1542,6 +1720,16 @@ fn agent_run_lowering_preserves_json_schema_output_contract() {
         .remove("parsed");
     rebind_call_result_hash(&mut forged, 1, "completion");
     assert_plan_execution_result_rejected(&package, &plan, &plan_execution_context(), &forged);
+
+    let mut forged_invalid = report.value().clone();
+    forged_invalid["values"]["completion"]["parsed"] = json!(["not", "an", "object"]);
+    rebind_call_result_hash(&mut forged_invalid, 1, "completion");
+    assert_plan_execution_result_rejected(
+        &package,
+        &plan,
+        &plan_execution_context(),
+        &forged_invalid,
+    );
 }
 
 #[test]
@@ -1693,20 +1881,7 @@ fn lm_complete_lowering_preserves_json_schema_output_and_provider_hints() {
         "kind": "graph_writes_atomic",
         "on_stale": "reject"
     });
-    plan["ops"][1]["call"]["output"] = json!({
-        "kind": "json_schema",
-        "schema_fingerprint": "fp_schema_sha256_lmanswer",
-        "schema": {
-            "type": "object",
-            "properties": {
-                "answer": {
-                    "type": "string"
-                }
-            },
-            "required": ["answer"],
-            "additionalProperties": false
-        }
-    });
+    plan["ops"][1]["call"]["output"] = lm_answer_output_contract();
     let mut host = RecordingPlanHost::default();
 
     let report = package
@@ -1721,7 +1896,7 @@ fn lm_complete_lowering_preserves_json_schema_output_and_provider_hints() {
     );
 
     let mut missing_parsed_host = RecordingPlanHost {
-        omit_structured_parsed: true,
+        structured_parsed: StructuredParsedFixture::Omit,
         ..RecordingPlanHost::default()
     };
     let error = package
@@ -1734,6 +1909,57 @@ fn lm_complete_lowering_preserves_json_schema_output_and_provider_hints() {
         "unexpected error: {error:?}"
     );
 
+    let mut invalid_parsed_host = RecordingPlanHost {
+        structured_parsed: StructuredParsedFixture::Invalid,
+        ..RecordingPlanHost::default()
+    };
+    let error = package
+        .execute_plan_document(&plan, &plan_execution_context(), &mut invalid_parsed_host)
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("lm_complete parsed result payload failed json_schema output contract"),
+        "unexpected error: {error:?}"
+    );
+    assert_eq!(invalid_parsed_host.calls, vec!["completion"]);
+
+    let mut missing_inline_schema = plan.clone();
+    missing_inline_schema["ops"][1]["call"]["output"]
+        .as_object_mut()
+        .unwrap()
+        .remove("schema");
+    let mut host = RecordingPlanHost::default();
+    let error = package
+        .execute_plan_document(&missing_inline_schema, &plan_execution_context(), &mut host)
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("lm_complete json_schema output must carry inline schema"),
+        "unexpected error: {error:?}"
+    );
+    assert!(host.calls.is_empty());
+
+    let mut mismatched_fingerprint = plan.clone();
+    mismatched_fingerprint["ops"][1]["call"]["output"]["schema_fingerprint"] =
+        json!("fp_schema_sha256_0000000000000000000000000000000000000000000000000000000000000000");
+    let mut host = RecordingPlanHost::default();
+    let error = package
+        .execute_plan_document(
+            &mismatched_fingerprint,
+            &plan_execution_context(),
+            &mut host,
+        )
+        .unwrap_err();
+    assert!(
+        error.to_string().contains(
+            "lm_complete json_schema output schema_fingerprint does not match inline schema"
+        ),
+        "unexpected error: {error:?}"
+    );
+    assert!(host.calls.is_empty());
+
     let mut forged = report.value().clone();
     forged["values"]["completion"]
         .as_object_mut()
@@ -1741,6 +1967,16 @@ fn lm_complete_lowering_preserves_json_schema_output_and_provider_hints() {
         .remove("parsed");
     rebind_call_result_hash(&mut forged, 0, "completion");
     assert_plan_execution_result_rejected(&package, &plan, &plan_execution_context(), &forged);
+
+    let mut forged_invalid = report.value().clone();
+    forged_invalid["values"]["completion"]["parsed"] = json!({"answer": 42});
+    rebind_call_result_hash(&mut forged_invalid, 0, "completion");
+    assert_plan_execution_result_rejected(
+        &package,
+        &plan,
+        &plan_execution_context(),
+        &forged_invalid,
+    );
 }
 
 #[test]
@@ -2611,6 +2847,44 @@ fn submit_assessments_plan() -> Value {
     })
 }
 
+fn request_evaluation_plan() -> Value {
+    json!({
+        "schema_version": "leaven.plan.v1",
+        "plan_id": "planevalrequest001",
+        "consistency": {
+            "kind": "latest_at_start"
+        },
+        "mode": {
+            "kind": "dry_run"
+        },
+        "ops": [
+            {
+                "kind": "write",
+                "name": "evaluation",
+                "idempotency_key": "evaluation-request-0001",
+                "write": {
+                    "kind": "request_evaluation",
+                    "request": {
+                        "shape": "independent",
+                        "candidates": ["cand_a"],
+                        "set": {
+                            "kind": "named",
+                            "name": "validation"
+                        },
+                        "granularity": "per_case",
+                        "purpose": "validation",
+                        "evaluator": "eval_score_v1"
+                    }
+                }
+            }
+        ],
+        "return": ["evaluation"],
+        "commit": {
+            "kind": "no_graph_writes"
+        }
+    })
+}
+
 fn score_with_output(summary: &'static str) -> Value {
     json!({
         "value": 1.0,
@@ -2660,8 +2934,16 @@ struct RecordingPlanHost {
     workspaces: BTreeSet<String>,
     cached_hit: bool,
     fail_lm: bool,
-    omit_structured_parsed: bool,
+    structured_parsed: StructuredParsedFixture,
     sandbox_stream: SandboxStreamFixture,
+}
+
+#[derive(Clone, Copy, Default)]
+enum StructuredParsedFixture {
+    #[default]
+    Valid,
+    Omit,
+    Invalid,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -2808,7 +3090,12 @@ impl PlanExecutionHost for RecordingPlanHost {
             )),
             Some("json_schema") => match lm_request.output {
                 OutputMode::JsonSchema(schema) => {
-                    assert_eq!(schema.name, "fp_schema_sha256_lmanswer");
+                    assert_eq!(
+                        schema.name,
+                        request.call()["output"]["schema_fingerprint"]
+                            .as_str()
+                            .unwrap()
+                    );
                     assert_eq!(schema.schema["required"], json!(["answer"]));
                     assert!(schema.strict);
                 }
@@ -2837,10 +3124,16 @@ impl PlanExecutionHost for RecordingPlanHost {
             }),
             "fp_runtime_sha256_planexec",
         );
-        if request.call()["output"]["kind"].as_str() == Some("json_schema")
-            && !self.omit_structured_parsed
-        {
-            outcome = outcome.with_parsed(json!({"answer": "ok"}));
+        if request.call()["output"]["kind"].as_str() == Some("json_schema") {
+            match self.structured_parsed {
+                StructuredParsedFixture::Valid => {
+                    outcome = outcome.with_parsed(json!({"answer": "ok"}));
+                }
+                StructuredParsedFixture::Invalid => {
+                    outcome = outcome.with_parsed(json!({"answer": 42}));
+                }
+                StructuredParsedFixture::Omit => {}
+            }
         }
         Ok(outcome)
     }
@@ -2866,10 +3159,16 @@ impl PlanExecutionHost for RecordingPlanHost {
                 }),
                 "fp_runtime_sha256_planexec",
             );
-            if request.call()["output"]["kind"].as_str() == Some("json_schema")
-                && !self.omit_structured_parsed
-            {
-                outcome = outcome.with_parsed(json!({"answer": "cached ok"}));
+            if request.call()["output"]["kind"].as_str() == Some("json_schema") {
+                match self.structured_parsed {
+                    StructuredParsedFixture::Valid => {
+                        outcome = outcome.with_parsed(json!({"answer": "cached ok"}));
+                    }
+                    StructuredParsedFixture::Invalid => {
+                        outcome = outcome.with_parsed(json!({"answer": 42}));
+                    }
+                    StructuredParsedFixture::Omit => {}
+                }
             }
             Ok(Some(outcome))
         } else {
@@ -2908,7 +3207,12 @@ impl PlanExecutionHost for RecordingPlanHost {
                     schema_fingerprint,
                     schema,
                 } => {
-                    assert_eq!(schema_fingerprint, "fp_schema_sha256_agentoutput");
+                    assert_eq!(
+                        schema_fingerprint,
+                        request.call()["output"]["schema_fingerprint"]
+                            .as_str()
+                            .unwrap()
+                    );
                     assert_eq!(schema["type"], "object");
                 }
                 other => panic!("unexpected agent output contract: {other:?}"),
@@ -2940,10 +3244,16 @@ impl PlanExecutionHost for RecordingPlanHost {
                 "receipt": "agentrec_completion"
             })])
             .with_cost(json!({"usd_micro": 1000}));
-        if request.call()["output"]["kind"].as_str() == Some("json_schema")
-            && !self.omit_structured_parsed
-        {
-            outcome = outcome.with_parsed(json!({"status": "ok"}));
+        if request.call()["output"]["kind"].as_str() == Some("json_schema") {
+            match self.structured_parsed {
+                StructuredParsedFixture::Valid => {
+                    outcome = outcome.with_parsed(json!({"status": "ok"}));
+                }
+                StructuredParsedFixture::Invalid => {
+                    outcome = outcome.with_parsed(json!(["not", "an", "object"]));
+                }
+                StructuredParsedFixture::Omit => {}
+            }
         }
         Ok(outcome)
     }
@@ -3405,6 +3715,38 @@ fn workspace_lifecycle_capability(include_release: bool) -> CapabilityDocument {
         }));
     }
     CapabilityDocument::from_value(base_execution_capability(&grants)).unwrap()
+}
+
+fn assessment_submit_capability(
+    evaluation_request_id: &str,
+    max_rows: Option<u64>,
+) -> CapabilityDocument {
+    let mut grant = json!({
+        "action": "assessment.submit",
+        "resource": {
+            "evaluation_request_id": evaluation_request_id
+        },
+        "constraints": {}
+    });
+    if let Some(max_rows) = max_rows {
+        grant["limits"] = json!({
+            "max_rows": max_rows
+        });
+    }
+    CapabilityDocument::from_value(base_execution_capability(&[grant])).unwrap()
+}
+
+fn evaluation_request_capability(candidate_ids: &[&str], purposes: &[&str]) -> CapabilityDocument {
+    CapabilityDocument::from_value(base_execution_capability(&[json!({
+        "action": "evaluation.request",
+        "resource": {
+            "candidate_ids": candidate_ids
+        },
+        "constraints": {
+            "purposes": purposes
+        }
+    })]))
+    .unwrap()
 }
 
 fn base_execution_capability(grants: &[Value]) -> Value {
