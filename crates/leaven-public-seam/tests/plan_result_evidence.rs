@@ -184,6 +184,19 @@ fn plan_result_rejects_evidence_receipt_trace_visibility_conflicts() {
         "{error}"
     );
 
+    let mut missing_target_receipt_class = evidence_backed_result();
+    missing_target_receipt_class["receipts"][0]["trace_refs"][0]["data_classes"] =
+        json!(["public"]);
+    let error = package
+        .validate_plan_result_document(&missing_target_receipt_class)
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("must carry case.target receipt trace data class"),
+        "{error}"
+    );
+
     let mut value_visibility_gap = evidence_backed_result();
     value_visibility_gap["receipts"][1]["trace_refs"] = json!([receipt_trace_ref(
         "trace_lm_provider_secret",

@@ -75,7 +75,10 @@ stored `CaseAssessmentEvidence` payload rather than a raw caller-supplied JSON
 row. Pairwise/listwise score-output Plan IR projection uses evidence-layer
 candidate-bound assessed outputs; blob-backed score output projection requires
 evidence-layer `OutputBlobAudit` metadata before it will emit public
-`Score.output.blob_ref` content. These routes project
+`Score.output.blob_ref` content. Plan Result projection with evidence is
+stricter than Plan IR projection: it only emits evidence query receipts from
+real `CaseDataReadEvidence` records and refuses to invent synthetic source
+receipts for an otherwise unreceipted assessment. These routes project
 engine-recorded evaluation request identity, `request_evaluation` Plan Result
 receipts, engine `RunContext` budget-charge/error event pairs, and graph-backed
 assessment/proposal write reports into locked public-seam wire documents for
